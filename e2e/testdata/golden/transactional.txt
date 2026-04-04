@@ -7,4 +7,7 @@ A new sign-in was detected on your account.
 [1mLocation:[0m Anchorage, Alaska
 [1mTime:[0m January 1, 2026 at 10:00 AM
 
-If this was you, no action is needed. If not, please [38;2;136;192;208m[review your account][0m[38;2;97;110;136m(https://example.com/security)[0m.
+If this was you, no action is needed. If not, please [38;2;136;192;208mreview your account[0m[38;2;97;110;136m[^1][0m.
+
+[38;2;97;110;136m────────────────────────────────────────────────────────────────────────────────[0m
+[38;2;97;110;136m[^1]:[0m [38;2;97;110;136mhttps://example.com/security[0m

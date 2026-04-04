@@ -6,14 +6,23 @@ import (
 	"strings"
 )
 
+// linkTextMarker wraps link text so styleFootnotes can identify it precisely.
+const linkTextMarker = "\x00LT\x00"
+
 // Regexes for reference-style link processing.
 var (
-	// reRefDef matches pandoc reference definitions: "  [label]: url"
-	reRefDef = regexp.MustCompile(`(?m)^ {0,3}\[([^\]]+)\]:\s+(.+)$`)
-	// reRefShortcut matches shortcut reference [text] in body (not followed by : which is a def)
-	reRefShortcut = regexp.MustCompile(`\[([^\]]+)\](?:\[(\d+)\])?`)
+	// reRefDef matches pandoc reference definitions: "  [label]: url" or "  [label]:" (empty URL)
+	reRefDef = regexp.MustCompile(`(?m)^ {0,3}\[([^\]]+)\]:\s*(.*)$`)
+	// reRefShortcut matches shortcut reference [text] in body, optionally with [N] or []
+	reRefShortcut = regexp.MustCompile(`\[([^\]]+)\](?:\[(\d*)\])?`)
 	// reAutolink matches autolinks <https://...>
 	reAutolink = regexp.MustCompile(`<(https?://[^>]+)>`)
+	// reImageRef matches image-link references like [![alt]][ref] in reference-style output
+	reImageRef = regexp.MustCompile(`!\[([^\]]*)\]`)
+	// reImageLinkRef matches image wrapped in link: [![alt]][ref]
+	reImageLinkRef = regexp.MustCompile(`\[!\[([^\]]*)\]\](?:\[(\d+)\])?`)
+	// reEmptyTextRef matches empty-text reference links: [][ref]
+	reEmptyTextRef = regexp.MustCompile(`\[\]\[(\d+)\]`)
 )
 
 // refDef holds a parsed reference definition.
@@ -25,13 +34,12 @@ type refDef struct {
 // convertToFootnotes transforms pandoc reference-style links into footnote
 // syntax. Returns the transformed body text and a slice of "[^N]: url" strings.
 // Self-referencing links (where label looks like a URL) become plain URLs.
+// Image references, empty-text links, and empty-URL links are cleaned up.
 func convertToFootnotes(text string) (string, []string) {
-	// Split into body and reference definitions.
-	// Ref defs are indented lines at the end matching [label]: url.
 	lines := strings.Split(text, "\n")
 	var defs []refDef
 
-	// Scan from bottom to find ref def block.
+	// Scan from bottom to find ref def block. Allow empty URL defs.
 	i := len(lines) - 1
 	for i >= 0 && strings.TrimSpace(lines[i]) == "" {
 		i--
@@ -41,7 +49,7 @@ func convertToFootnotes(text string) (string, []string) {
 		if groups == nil {
 			break
 		}
-		defs = append(defs, refDef{label: groups[1], url: groups[2]})
+		defs = append(defs, refDef{label: groups[1], url: strings.TrimSpace(groups[2])})
 		i--
 	}
 	bodyLines := lines[:i+1]
@@ -53,17 +61,28 @@ func convertToFootnotes(text string) (string, []string) {
 
 	body := strings.Join(bodyLines, "\n")
 
-	// Build label-to-def mapping and assign footnote numbers.
-	// Self-referencing links (label is a URL) are excluded.
+	// Categorize defs: URL defs get footnote numbers; others are skipped.
+	// Track which labels to strip (empty URL, image path, self-ref).
 	type numberedRef struct {
 		num int
 		url string
 	}
 	labelMap := make(map[string]numberedRef)
+	stripLabels := make(map[string]bool) // labels to strip brackets from in body
 	var refs []string
 	n := 0
 	for _, d := range defs {
+		if d.url == "" {
+			// Empty URL def: strip brackets from body text.
+			stripLabels[d.label] = true
+			continue
+		}
+		if !isURL(d.url) {
+			// Non-URL def (e.g., image path): will clean up in body.
+			continue
+		}
 		if isSelfRef(d.label, d.url) {
+			stripLabels[d.label] = true
 			continue
 		}
 		n++
@@ -71,7 +90,16 @@ func convertToFootnotes(text string) (string, []string) {
 		refs = append(refs, fmt.Sprintf("[^%d]: %s", n, d.url))
 	}
 
-	// Replace body references with footnote markers.
+	// Remove image-link references [![alt]][ref] from body.
+	body = reImageLinkRef.ReplaceAllString(body, "")
+
+	// Remove standalone image references ![alt] from body.
+	body = reImageRef.ReplaceAllString(body, "")
+
+	// Remove empty-text reference links [][ref] from body.
+	body = reEmptyTextRef.ReplaceAllString(body, "")
+
+	// Replace body references with footnote markers or strip brackets.
 	body = reRefShortcut.ReplaceAllStringFunc(body, func(m string) string {
 		groups := reRefShortcut.FindStringSubmatch(m)
 		if groups == nil {
@@ -83,17 +111,17 @@ func convertToFootnotes(text string) (string, []string) {
 		// For [text][N] form, the numeric label is the explicit reference; prefer it.
 		if numericLabel != "" {
 			if ref, ok := labelMap[numericLabel]; ok {
-				return label + fmt.Sprintf("[^%d]", ref.num)
+				return linkTextMarker + label + linkTextMarker + fmt.Sprintf("[^%d]", ref.num)
 			}
 		}
 
 		// For plain [text] form, look up by label.
 		if ref, ok := labelMap[label]; ok {
-			return label + fmt.Sprintf("[^%d]", ref.num)
+			return linkTextMarker + label + linkTextMarker + fmt.Sprintf("[^%d]", ref.num)
 		}
 
-		// Self-referencing: strip brackets.
-		if isURL(label) {
+		// Strip brackets for empty-URL, self-ref, or URL-looking labels.
+		if stripLabels[label] || isURL(label) {
 			return label
 		}
 
@@ -114,15 +142,16 @@ type footnoteColors struct {
 	Reset    string
 }
 
-// reFootnoteInBody matches "linktext[^N]" in body text for coloring.
-var reFootnoteInBody = regexp.MustCompile(`(\S[^\[]*?)\[\^(\d+)\]`)
+// reFootnoteMarker matches "[^N]" markers in body text for dimming.
+var reFootnoteMarker = regexp.MustCompile(`\[\^(\d+)\]`)
 
 // styleFootnotes applies ANSI colors to footnote-annotated text.
-// Body link text gets link color, [^N] markers get dim color.
+// Link text (wrapped in linkTextMarker) gets link color, [^N] markers get dim color.
 // A separator and colored reference section are appended.
 func styleFootnotes(body string, refs []string, cols int, colors *footnoteColors) string {
 	if len(refs) == 0 {
-		return body
+		// Strip any stray markers if present.
+		return strings.ReplaceAll(body, linkTextMarker, "")
 	}
 
 	lt := ""
@@ -142,16 +171,11 @@ func styleFootnotes(body string, refs []string, cols int, colors *footnoteColors
 		r = "\033[" + colors.Reset + "m"
 	}
 
-	// Color body: link text + dimmed marker.
-	body = reFootnoteInBody.ReplaceAllStringFunc(body, func(m string) string {
-		groups := reFootnoteInBody.FindStringSubmatch(m)
-		if groups == nil {
-			return m
-		}
-		text := groups[1]
-		num := groups[2]
-		return lt + text + r + dim + "[^" + num + "]" + r
-	})
+	// Color link text: replace marker pairs with ANSI link text color.
+	body = replaceLinkTextMarkers(body, lt, r)
+
+	// Dim footnote markers [^N].
+	body = reFootnoteMarker.ReplaceAllString(body, dim+"[^${1}]"+r)
 
 	// Build reference section.
 	var sb strings.Builder
@@ -167,6 +191,26 @@ func styleFootnotes(body string, refs []string, cols int, colors *footnoteColors
 		label := ref[:colonIdx]
 		url := ref[colonIdx+2:]
 		sb.WriteString(dim + label + ":" + r + " " + lu + url + r + "\n")
+	}
+	return sb.String()
+}
+
+// replaceLinkTextMarkers converts linkTextMarker pairs to ANSI color sequences.
+// First marker emits lt (link text color), second emits r (reset).
+func replaceLinkTextMarkers(text, lt, r string) string {
+	parts := strings.Split(text, linkTextMarker)
+	var sb strings.Builder
+	for i, part := range parts {
+		if i == 0 {
+			sb.WriteString(part)
+			continue
+		}
+		if i%2 == 1 {
+			sb.WriteString(lt)
+		} else {
+			sb.WriteString(r)
+		}
+		sb.WriteString(part)
 	}
 	return sb.String()
 }

@@ -324,9 +324,10 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 
 	// Footnote conversion and styling
 	body, refs := convertToFootnotes(md)
+	dimColor, _ := palette.HexToANSI(p.Get("FG_DIM"))
 	fc := &footnoteColors{
 		LinkText: p.Get("C_LINK_TEXT"),
-		Dim:      p.Get("FG_DIM"),
+		Dim:      dimColor,
 		LinkURL:  p.Get("C_LINK_URL"),
 		Reset:    "0",
 	}

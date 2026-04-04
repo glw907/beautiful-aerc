@@ -6,6 +6,7 @@ import (
 )
 
 func TestConvertToFootnotes(t *testing.T) {
+	m := linkTextMarker
 	tests := []struct {
 		name     string
 		input    string
@@ -15,19 +16,19 @@ func TestConvertToFootnotes(t *testing.T) {
 		{
 			"single link",
 			"Click [here] to continue.\n\n  [here]: https://example.com\n",
-			"Click here[^1] to continue.",
+			"Click " + m + "here" + m + "[^1] to continue.",
 			[]string{"[^1]: https://example.com"},
 		},
 		{
 			"multiple links",
 			"Visit [home] and [about].\n\n  [home]: https://example.com\n  [about]: https://example.com/about\n",
-			"Visit home[^1] and about[^2].",
+			"Visit " + m + "home" + m + "[^1] and " + m + "about" + m + "[^2].",
 			[]string{"[^1]: https://example.com", "[^2]: https://example.com/about"},
 		},
 		{
 			"duplicate link text with numeric fallback",
 			"[Click here] and [Click here][1]\n\n  [Click here]: https://example.com/a\n  [1]: https://example.com/b\n",
-			"Click here[^1] and Click here[^2]",
+			m + "Click here" + m + "[^1] and " + m + "Click here" + m + "[^2]",
 			[]string{"[^1]: https://example.com/a", "[^2]: https://example.com/b"},
 		},
 		{
@@ -82,9 +83,10 @@ func TestStyleFootnotes(t *testing.T) {
 		LinkURL:  "38;2;97;110;136",
 		Reset:    "0",
 	}
+	m := linkTextMarker
 
 	t.Run("body link text colored", func(t *testing.T) {
-		body := "click here[^1] to go"
+		body := m + "click here" + m + "[^1] to go"
 		refs := []string{"[^1]: https://example.com"}
 		got := styleFootnotes(body, refs, 40, colors)
 		if !strings.Contains(got, "\033[38;2;136;192;208mclick here\033[0m") {
@@ -93,7 +95,7 @@ func TestStyleFootnotes(t *testing.T) {
 	})
 
 	t.Run("footnote marker dimmed", func(t *testing.T) {
-		body := "click here[^1] to go"
+		body := m + "click here" + m + "[^1] to go"
 		refs := []string{"[^1]: https://example.com"}
 		got := styleFootnotes(body, refs, 40, colors)
 		if !strings.Contains(got, "\033[38;2;97;110;136m[^1]\033[0m") {
@@ -102,7 +104,7 @@ func TestStyleFootnotes(t *testing.T) {
 	})
 
 	t.Run("separator line present", func(t *testing.T) {
-		body := "text[^1]"
+		body := m + "text" + m + "[^1]"
 		refs := []string{"[^1]: https://example.com"}
 		got := styleFootnotes(body, refs, 40, colors)
 		if !strings.Contains(got, strings.Repeat("─", 40)) {
@@ -111,7 +113,7 @@ func TestStyleFootnotes(t *testing.T) {
 	})
 
 	t.Run("reference URL colored", func(t *testing.T) {
-		body := "text[^1]"
+		body := m + "text" + m + "[^1]"
 		refs := []string{"[^1]: https://example.com"}
 		got := styleFootnotes(body, refs, 40, colors)
 		if !strings.Contains(got, "\033[38;2;97;110;136mhttps://example.com\033[0m") {
@@ -127,6 +129,20 @@ func TestStyleFootnotes(t *testing.T) {
 		}
 		if got != "just text" {
 			t.Errorf("body changed: %q", got)
+		}
+	})
+
+	t.Run("only link text is colored not surrounding text", func(t *testing.T) {
+		body := "see " + m + "here" + m + "[^1] for details"
+		refs := []string{"[^1]: https://example.com"}
+		got := styleFootnotes(body, refs, 40, colors)
+		// "see " should NOT be colored
+		if strings.Contains(got, "\033[38;2;136;192;208msee") {
+			t.Errorf("surrounding text should not be colored: %q", got)
+		}
+		// "here" SHOULD be colored
+		if !strings.Contains(got, "\033[38;2;136;192;208mhere\033[0m") {
+			t.Errorf("link text not colored: %q", got)
 		}
 	})
 }
