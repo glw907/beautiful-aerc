@@ -87,6 +87,25 @@ internal/filter/plain.go          # detect HTML-in-plain, route or wrap
 | `html` | html-to-text (sh + perl + sed) | Yes, as subprocess |
 | `plain` | wrap-plain (sh) | Delegates to `html` when HTML detected, otherwise execs `wrap \| colorize` |
 
+### Link display modes
+
+The `html` subcommand supports two link rendering modes:
+
+- **markdown** (default) - `[Check activity](https://...)` with ANSI
+  styling (colored link text, dimmed URL). URLs are visible and
+  ctrl+clickable in kitty.
+- **clean** (`--clean-links`) - `Check activity` - link text only,
+  URLs hidden. Matches aerc's default w3m behavior for users who
+  prefer a cleaner reading experience.
+
+```ini
+# aerc.conf - markdown links (default)
+text/html=beautiful-aerc html
+
+# aerc.conf - clean links (text only, no URLs)
+text/html=beautiful-aerc html --clean-links
+```
+
 ### What the Go binary absorbs
 
 - All sed/perl regex cleanup (pandoc artifacts, zero-width chars, whitespace)
@@ -229,6 +248,37 @@ Both generic, ship as-is.
 - `fastmail-*.age` - personal, not shipped
 - `fastmail-password`, `fastmail-dav-password` - personal, not shipped
 
+## Testing
+
+### Unit tests
+
+Table-driven tests alongside each Go source file. Cover palette
+parsing, header formatting, whitespace cleanup, link styling,
+markdown highlighting.
+
+### E2E test fixtures
+
+Real-world email HTML saved as fixtures in `e2e/testdata/`. The Go
+binary is built once and each test pipes a fixture through a
+subcommand, comparing output against golden files. Fixture categories:
+
+- **Marketing spam** - zero-width preheader characters, layout tables,
+  tracking URLs (e.g., Reebelo newsletters)
+- **Transactional** - Google security alerts, password resets
+- **Developer** - GitHub notification emails with nested links,
+  code blocks, diff content
+- **Plain conversation** - simple text replies, quoted threads
+- **Edge cases** - empty link text, image-only links, deeply nested
+  tables, HTML-in-plain-text MIME parts
+
+Golden files capture expected rendered output for each fixture.
+`--update-golden` flag regenerates them.
+
+### Live verification
+
+After the Go binary is integrated, verify rendering in aerc via tmux
+capture on a selection of real messages across the fixture categories.
+
 ## Runtime dependencies
 
 - `aerc` (email client)
@@ -276,6 +326,7 @@ Audience: users who want to understand how email renders. Covers:
 - The three subcommands and what each does
 - HTML pipeline stages (pandoc conversion, artifact cleanup,
   markdown highlighting, link styling)
+- Link display modes (markdown vs. clean) and how to configure
 - Header formatting (reorder, colorize, address wrapping, separator)
 - Plain text handling (HTML detection, reflow, colorize)
 - How palette.sh tokens map to visual output
