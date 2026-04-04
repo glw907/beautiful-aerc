@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/glw907/beautiful-aerc/internal/filter"
@@ -30,8 +31,13 @@ func loadPalette() (*palette.Palette, error) {
 	binPath, _ := os.Executable()
 	genDir := ""
 	if binPath != "" {
-		// .local/bin/beautiful-aerc -> .config/aerc/generated
-		genDir = binPath + "/../../.config/aerc/generated"
+		// Resolve symlinks, then navigate: .local/bin/ -> .config/aerc/generated
+		resolved, err := filepath.EvalSymlinks(binPath)
+		if err == nil {
+			binPath = resolved
+		}
+		binDir := filepath.Dir(binPath)
+		genDir = filepath.Join(binDir, "..", "..", ".config", "aerc", "generated")
 	}
 	path, err := palette.FindPath(genDir)
 	if err != nil {
