@@ -1,3 +1,4 @@
+// Package palette parses generated palette files and exposes color tokens.
 package palette
 
 import (

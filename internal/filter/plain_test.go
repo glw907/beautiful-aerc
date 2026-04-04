@@ -1,6 +1,9 @@
 package filter
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDetectHTML(t *testing.T) {
 	tests := []struct {
@@ -16,7 +19,7 @@ func TestDetectHTML(t *testing.T) {
 		{"has span", "text <span>styled</span> text", true},
 		{"has p tag", "<p>paragraph</p>", true},
 		{"angle bracket in text", "x < y and y > z", false},
-		{"html deep in file", "line1\nline2\n" + repeatString("normal\n", 50) + "<div>late html</div>", false},
+		{"html deep in file", "line1\nline2\n" + strings.Repeat("normal\n", 50) + "<div>late html</div>", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -26,12 +29,4 @@ func TestDetectHTML(t *testing.T) {
 			}
 		})
 	}
-}
-
-func repeatString(s string, n int) string {
-	out := ""
-	for i := 0; i < n; i++ {
-		out += s
-	}
-	return out
 }

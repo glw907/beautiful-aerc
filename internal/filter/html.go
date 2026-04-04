@@ -1,4 +1,3 @@
-// Package filter implements aerc email content filters.
 package filter
 
 import (
@@ -56,7 +55,8 @@ var (
 	reRuleDashes = regexp.MustCompile(`(?m)^-{3,}$`)
 	reRuleUnders = regexp.MustCompile(`(?m)^_{3,}$`)
 	reLink       = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
-	reANSI       = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	reANSI             = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	reInlineWhitespace = regexp.MustCompile(`\s*\n\s*`)
 )
 
 // boldPlaceholder is used to hide bold markers during italic processing.
@@ -114,7 +114,7 @@ func joinMultilineLinks(text string) string {
 		}
 		linkText := groups[1]
 		url := groups[2]
-		linkText = regexp.MustCompile(`\s*\n\s*`).ReplaceAllString(linkText, " ")
+		linkText = reInlineWhitespace.ReplaceAllString(linkText, " ")
 		return "[" + linkText + "](" + url + ")"
 	})
 }

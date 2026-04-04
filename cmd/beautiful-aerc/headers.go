@@ -56,12 +56,17 @@ func colorsFromPalette(p *palette.Palette) *filter.ColorSet {
 	ansiFG, _ := palette.HexToANSI(fgBase)
 	ansiDim, _ := palette.HexToANSI(fgDim)
 
-	return &filter.ColorSet{
-		HdrKey: "\033[1;" + ansiKey + "m",
-		HdrFG:  "\033[" + ansiFG + "m",
-		HdrDim: "\033[" + ansiDim + "m",
-		Reset:  "\033[0m",
+	cs := &filter.ColorSet{Reset: p.Reset()}
+	if ansiKey != "" {
+		cs.HdrKey = "\033[1;" + ansiKey + "m"
 	}
+	if ansiFG != "" {
+		cs.HdrFG = "\033[" + ansiFG + "m"
+	}
+	if ansiDim != "" {
+		cs.HdrDim = "\033[" + ansiDim + "m"
+	}
+	return cs
 }
 
 // termCols returns the terminal column count from AERC_COLUMNS or a default of 80.
