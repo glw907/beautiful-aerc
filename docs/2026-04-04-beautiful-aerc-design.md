@@ -246,6 +246,51 @@ Both generic, ship as-is.
 - Go 1.23+ (matches aerc's go.mod)
 - `make`
 
+## Documentation
+
+Four docs, each with a clear audience:
+
+### README.md (repo root)
+
+Audience: anyone who finds the repo. Covers:
+- What beautiful-aerc is (one paragraph + screenshot)
+- What it looks like (2-3 screenshots showing themes)
+- Prerequisites (aerc, pandoc, Go)
+- Install steps (clone, build, generate theme, stow, configure account)
+- Quick usage overview
+- Links to other docs
+
+### docs/themes.md
+
+Audience: users who want to customize or create themes. Covers:
+- The 16 semantic color slots and what each controls
+- Markdown token format (slot references + style modifiers)
+- How to create a custom theme file
+- Running the generator and what it produces
+- Override mechanism (editing below the marker line)
+- Updating kitty and nvim-mail colors to match
+
+### docs/filters.md
+
+Audience: users who want to understand how email renders. Covers:
+- The three subcommands and what each does
+- HTML pipeline stages (pandoc conversion, artifact cleanup,
+  markdown highlighting, link styling)
+- Header formatting (reorder, colorize, address wrapping, separator)
+- Plain text handling (HTML detection, reflow, colorize)
+- How palette.sh tokens map to visual output
+- Troubleshooting (missing colors, broken rendering)
+
+### docs/contributing.md
+
+Audience: developers who want to improve or extend the project. Covers:
+- Go project layout (cmd/, internal/, why each package exists)
+- How to build and test (`make check`)
+- Architecture: how aerc calls the binary, stdin/stdout protocol
+- How to add a new filter stage
+- How to add a new theme
+- Code conventions (matches the project's Go style)
+
 ## Future ideas (not in scope)
 
 - Install script that asks questions and personalizes accounts.conf,
