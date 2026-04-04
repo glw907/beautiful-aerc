@@ -1,8 +1,8 @@
 
-## [38;2;136;192;208m[1;38;2;163;190;140mBig Sale![0m
+## [1;38;2;163;190;140mBig Sale![0m
 
-Check out our [amazing deals][0m[38;2;97;110;136m(https://example.com/sale)[0m today.
+Check out our [38;2;136;192;208m[amazing deals][0m[38;2;97;110;136m(https://example.com/sale)[0m today.
 
-Don't miss [38;2;136;192;208m[1m50% off[0m everything in store.
+Don't miss [1m50% off[0m everything in store.
 
-[Unsubscribe][0m[38;2;97;110;136m(https://example.com/unsubscribe)[0m
+[38;2;136;192;208m[Unsubscribe][0m[38;2;97;110;136m(https://example.com/unsubscribe)[0m

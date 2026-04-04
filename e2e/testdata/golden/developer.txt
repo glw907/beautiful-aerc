@@ -2,8 +2,8 @@
 [38;2;136;192;208m[@user][0m[38;2;97;110;136m(https://github.com/user)[0m commented on
 [38;2;136;192;208m[#123][0m[38;2;97;110;136m(https://github.com/org/repo/pull/123)[0m:
 
-[38;2;136;192;208m[36m> This looks good. One suggestion: consider using `fmt.Errorf` instead of[0m
-[36m> `errors.New` for better context.[0m
+> This looks good. One suggestion: consider using `fmt.Errorf` instead of
+> `errors.New` for better context.
 
 You can view the full discussion
-[here][0m[38;2;97;110;136m(https://github.com/org/repo/pull/123#issuecomment-456)[0m.
+[38;2;136;192;208m[here][0m[38;2;97;110;136m(https://github.com/org/repo/pull/123#issuecomment-456)[0m.

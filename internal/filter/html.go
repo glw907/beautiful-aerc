@@ -360,6 +360,15 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int, cleanLinks boo
 	md = normalizeListIndent(md)
 	md = normalizeWhitespace(md)
 
+	// Link styling (before markdown highlighting so ANSI codes from
+	// heading/bold wrapping don't confuse the link regex)
+	lc := &linkColors{
+		Text:  p.Get("C_LINK_TEXT"),
+		URL:   p.Get("C_LINK_URL"),
+		Reset: "0",
+	}
+	md = styleLinks(md, lc, cleanLinks)
+
 	// Markdown syntax highlighting
 	mc := &markdownColors{
 		Heading: p.Get("C_HEADING"),
@@ -369,20 +378,6 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int, cleanLinks boo
 		Reset:   "0",
 	}
 	md = highlightMarkdown(md, mc)
-
-	// Colorize (aerc built-in URL/email highlighter)
-	md, err = runColorize(md)
-	if err != nil {
-		return fmt.Errorf("colorize: %w", err)
-	}
-
-	// Second perl stage: link styling
-	lc := &linkColors{
-		Text:  p.Get("C_LINK_TEXT"),
-		URL:   p.Get("C_LINK_URL"),
-		Reset: "0",
-	}
-	md = styleLinks(md, lc, cleanLinks)
 
 	// Write leading newline + result
 	if _, err := fmt.Fprint(w, "\n"+md); err != nil {
