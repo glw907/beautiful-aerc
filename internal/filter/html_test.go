@@ -47,6 +47,30 @@ func TestCleanImages(t *testing.T) {
 	}
 }
 
+func TestNormalizeListIndent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"8 space indent", "        - item one", "- item one"},
+		{"4 space indent", "    - item two", "- item two"},
+		{"normal list", "- item three", "- item three"},
+		{"asterisk list", "        * item", "* item"},
+		{"plus list", "        + item", "+ item"},
+		{"3 space no change", "   - not enough", "   - not enough"},
+		{"preserves content after", "        - item\n  continuation", "- item\n  continuation"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeListIndent(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeWhitespace(t *testing.T) {
 	tests := []struct {
 		name  string

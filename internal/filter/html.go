@@ -3,6 +3,7 @@ package filter
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"os/exec"
@@ -55,6 +56,7 @@ var (
 	reRuleDashes = regexp.MustCompile(`(?m)^-{3,}$`)
 	reRuleUnders = regexp.MustCompile(`(?m)^_{3,}$`)
 	reLink       = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+	reListIndent       = regexp.MustCompile(`(?m)^[ ]{4,}([-*+] )`)
 	reANSI             = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	reInlineWhitespace = regexp.MustCompile(`\s*\n\s*`)
 )
@@ -117,6 +119,12 @@ func joinMultilineLinks(text string) string {
 		linkText = reInlineWhitespace.ReplaceAllString(linkText, " ")
 		return "[" + linkText + "](" + url + ")"
 	})
+}
+
+// normalizeListIndent strips excessive indentation from list items that
+// pandoc emits when converting deeply nested HTML structures.
+func normalizeListIndent(text string) string {
+	return reListIndent.ReplaceAllString(text, "$1")
 }
 
 // normalizeWhitespace collapses non-breaking spaces, zero-width characters,
@@ -344,10 +352,12 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int, cleanLinks boo
 		return fmt.Errorf("pandoc conversion: %w", err)
 	}
 
-	// First perl stage: cleanup
+	// Post-pandoc cleanup
+	md = html.UnescapeString(md)
 	md = cleanPandocArtifacts(md)
 	md = cleanImages(md)
 	md = joinMultilineLinks(md)
+	md = normalizeListIndent(md)
 	md = normalizeWhitespace(md)
 
 	// Markdown syntax highlighting
