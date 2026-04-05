@@ -131,6 +131,66 @@ func TestHTMLFixtures(t *testing.T) {
 	}
 }
 
+func TestSaveHTMLFixture(t *testing.T) {
+	corpusDir := filepath.Join(t.TempDir(), "corpus")
+
+	input, err := os.ReadFile("testdata/simple.html")
+	if err != nil {
+		t.Fatalf("reading fixture: %v", err)
+	}
+
+	// AERC_CONFIG points to a dir; FindDir does AERC_CONFIG/../../corpus
+	// So we need aercDir to be 2 levels deep under corpusDir's parent
+	aercDir := filepath.Join(corpusDir, ".config", "aerc")
+	os.MkdirAll(aercDir, 0755)
+
+	cmd := exec.Command(binary, "save")
+	cmd.Stdin = bytes.NewReader(input)
+	cmd.Env = append(os.Environ(),
+		"AERC_CONFIG="+aercDir,
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running save: %v\noutput: %s", err, out)
+	}
+
+	// Verify a .html file was created in the corpus dir
+	matches, _ := filepath.Glob(filepath.Join(corpusDir, "corpus", "*.html"))
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 html file in corpus, got %d", len(matches))
+	}
+
+	saved, _ := os.ReadFile(matches[0])
+	if !bytes.Equal(saved, input) {
+		t.Error("saved content does not match input")
+	}
+}
+
+func TestSavePlainText(t *testing.T) {
+	corpusDir := filepath.Join(t.TempDir(), "corpus")
+	aercDir := filepath.Join(corpusDir, ".config", "aerc")
+	os.MkdirAll(aercDir, 0755)
+
+	input := []byte("Hello, this is a plain text email.\n")
+
+	cmd := exec.Command(binary, "save")
+	cmd.Stdin = bytes.NewReader(input)
+	cmd.Env = append(os.Environ(),
+		"AERC_CONFIG="+aercDir,
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running save: %v\noutput: %s", err, out)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(corpusDir, "corpus", "*.txt"))
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 txt file in corpus, got %d", len(matches))
+	}
+}
+
 func TestHeadersFixture(t *testing.T) {
 	input := "From: Alice <alice@example.com>\r\nTo: Bob <bob@example.com>, Charlie <charlie@example.com>\r\nDate: Mon, 01 Jan 2026 00:00:00 +0000\r\nSubject: Test Message\r\nX-Mailer: test\r\n\r\n"
 
