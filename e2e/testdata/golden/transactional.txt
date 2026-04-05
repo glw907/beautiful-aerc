@@ -3,9 +3,9 @@
 
 A new sign-in was detected on your account.
 
-Device:[1m Linux Desktop[0m
+[1mDevice:[0m Linux Desktop
 [1mLocation:[0m Anchorage, Alaska
-Time: January 1, 2026 at 10:00 AM
+[1mTime:[0m January 1, 2026 at 10:00 AM
 
 If this was you, no action is needed. If not, please [38;2;136;192;208mreview your account[0m[38;2;97;110;136m[^1][0m.
 

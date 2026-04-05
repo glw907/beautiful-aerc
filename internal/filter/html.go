@@ -31,7 +31,8 @@ var (
 	reTrailingBackslash = regexp.MustCompile(`(?m)\\\n`)
 	reEscapedPunct      = regexp.MustCompile(`\\([^\w\s])`)
 	// Stray bold markers on a line by themselves (pandoc decorative artifact).
-	reStrayBold = regexp.MustCompile(`(?m)^\*\*\s*\n?`)
+	// The $ before \n? anchors to end-of-line so lines like **text** are preserved.
+	reStrayBold = regexp.MustCompile(`(?m)^\*\*\s*$\n?`)
 	reListItem  = regexp.MustCompile(`^[-*+]\s`)
 	// Unicode space variants: NBSP, en/em space, thin/hair space, etc.
 	reNBSP            = regexp.MustCompile(`[\x{a0}\x{2000}-\x{200a}]+`)
