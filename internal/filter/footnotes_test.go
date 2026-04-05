@@ -110,6 +110,12 @@ func TestConvertToFootnotes(t *testing.T) {
 			[]footnoteRef{{1, "https://example.com"}},
 		},
 		{
+			"ref def with title continuation line",
+			"[Click here][1]\n\n  [1]: https://example.com\n    \"Example\"\n",
+			m + "Click here" + m + "[^1]",
+			[]footnoteRef{{1, "https://example.com"}},
+		},
+		{
 			"unresolved ref brackets stripped",
 			"Hello [unknown ref] world.\n",
 			"Hello unknown ref world.",

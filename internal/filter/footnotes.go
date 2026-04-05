@@ -13,6 +13,8 @@ const linkTextMarker = "\x00LT\x00"
 var (
 	// reRefDef matches pandoc reference definitions: "  [label]: url" or "  [label]:" (empty URL)
 	reRefDef = regexp.MustCompile(`(?m)^ {0,3}\[([^\]]+)\]:\s*(.*)$`)
+	// reRefTitle matches pandoc ref def title continuation: '    "title"'
+	reRefTitle = regexp.MustCompile(`^\s+"[^"]*"\s*$`)
 	// reRefShortcut matches shortcut reference [text] in body, optionally with [N] or []
 	reRefShortcut = regexp.MustCompile(`\[([^\]]+)\](?:\[(\d*)\])?`)
 	// reAutolink matches autolinks <https://...>
@@ -51,6 +53,11 @@ func convertToFootnotes(text string) (string, []footnoteRef) {
 		i--
 	}
 	for i >= 0 {
+		// Skip title continuation lines (e.g. '    "Facebook"')
+		if reRefTitle.MatchString(lines[i]) {
+			i--
+			continue
+		}
 		groups := reRefDef.FindStringSubmatch(lines[i])
 		if groups == nil {
 			break
@@ -157,6 +164,9 @@ func convertToFootnotes(text string) (string, []footnoteRef) {
 
 	// Convert autolinks to plain URLs.
 	body = reAutolink.ReplaceAllString(body, "$1")
+
+	// Collapse blank lines left behind by image stripping.
+	body = reExcessiveBlank.ReplaceAllString(body, "\n\n")
 
 	return body, refs
 }

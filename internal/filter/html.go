@@ -36,10 +36,11 @@ var (
 	reExcessiveBlank  = regexp.MustCompile(`\n{3,}`)
 	reLeadingBlank    = regexp.MustCompile(`\A\n+`)
 	reHeading         = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)$`)
-	reBold            = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	reBold            = regexp.MustCompile(`(?s)\*\*(.+?)\*\*`)
 	// italic: matches *text* where * is not adjacent to another *
 	// handled via bold-placeholder approach; this regex matches single *
-	reItalic     = regexp.MustCompile(`\*([^*\n]+?)\*`)
+	// (?s) allows matching across newlines for multiline emphasis
+	reItalic     = regexp.MustCompile(`(?s)\*([^*]+?)\*`)
 	reRuleDashes = regexp.MustCompile(`(?m)^-{3,}$`)
 	reRuleUnders = regexp.MustCompile(`(?m)^_{3,}$`)
 	reListIndent = regexp.MustCompile(`(?m)^[ ]{4,}([-*+] )`)
