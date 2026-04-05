@@ -79,12 +79,16 @@ var (
 // boldPlaceholder is used to hide bold markers during italic processing.
 const boldPlaceholder = "\x00BOLD\x00"
 
-// cleanMozAttributes removes Mozilla-specific HTML attributes (sed stage).
-func cleanMozAttributes(html string) string {
-	html = reMozClass.ReplaceAllString(html, "")
-	html = reMozDataAttr.ReplaceAllString(html, "")
-	html = reMozAttr.ReplaceAllString(html, "")
-	return html
+// prepareHTML cleans the raw HTML before pandoc conversion: strips
+// Mozilla-specific attributes, hidden elements (display:none divs),
+// and zero-size tracking images.
+func prepareHTML(body string) string {
+	body = reMozClass.ReplaceAllString(body, "")
+	body = reMozDataAttr.ReplaceAllString(body, "")
+	body = reMozAttr.ReplaceAllString(body, "")
+	body = stripHiddenElements(body)
+	body = reZeroImg.ReplaceAllString(body, "")
+	return body
 }
 
 // stripHiddenElements removes <div> elements whose inline style contains
@@ -130,14 +134,6 @@ func stripHiddenElements(body string) string {
 	return body
 }
 
-// stripZeroImages removes <img> tags with zero width or height before pandoc
-// conversion. Bank of America and similar senders embed these tracking pixels
-// inline between text fragments (e.g. "myhealth." + <img/> + "bankofamerica."
-// + <img/> + "com"), causing pandoc to split content across paragraphs.
-func stripZeroImages(body string) string {
-	return reZeroImg.ReplaceAllString(body, "")
-}
-
 // cleanPandocArtifacts removes trailing backslash line-breaks,
 // backslash-escaped punctuation, stray bold markers, and superscript
 // caret markers (^text^) that pandoc emits for HTML <sup> elements.
@@ -179,11 +175,29 @@ func normalizeBoldMarkers(text string) string {
 	return strings.Join(paragraphs, "\n\n")
 }
 
-// compactLooseLists removes blank lines between consecutive list items.
-// Pandoc emits "loose" lists (blank line between items) for HTML <li>
-// elements, which double-spaces the rendered output unnecessarily.
-func compactLooseLists(text string) string {
+// normalizeLists handles all list cleanup: converts Unicode bullets to
+// markdown items, strips excessive indentation from deeply nested HTML,
+// and compacts pandoc's loose lists (blank lines between items).
+func normalizeLists(text string) string {
+	// Phase 1: Per-line fixes — convert Unicode bullets to markdown items
+	// and strip excessive indentation (4+ spaces before list markers).
 	lines := strings.Split(text, "\n")
+	inBulletItem := false
+	for i, line := range lines {
+		if replaced := reUnicodeBullet.ReplaceAllString(line, "- "); replaced != line {
+			lines[i] = replaced
+			inBulletItem = true
+		} else if inBulletItem {
+			if strings.TrimSpace(line) == "" {
+				inBulletItem = false
+			} else {
+				lines[i] = "  " + line
+			}
+		}
+		lines[i] = reListIndent.ReplaceAllString(lines[i], "$1")
+	}
+
+	// Phase 3: Compact loose lists (drop blank lines between items).
 	var out []string
 	inList := false
 	pendingBlanks := 0
@@ -220,34 +234,6 @@ func compactLooseLists(text string) string {
 		flush()
 	}
 	return strings.Join(out, "\n")
-}
-
-// normalizeUnicodeBullets converts lines starting with Unicode bullet
-// characters (●, •, etc.) into markdown list items with proper
-// continuation-line indentation. Marketing emails often use these
-// instead of <li> elements.
-func normalizeUnicodeBullets(text string) string {
-	lines := strings.Split(text, "\n")
-	inItem := false
-	for i, line := range lines {
-		if replaced := reUnicodeBullet.ReplaceAllString(line, "- "); replaced != line {
-			lines[i] = replaced
-			inItem = true
-		} else if inItem {
-			if strings.TrimSpace(line) == "" {
-				inItem = false
-			} else {
-				lines[i] = "  " + line
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-// normalizeListIndent strips excessive indentation from list items that
-// pandoc emits when converting deeply nested HTML structures.
-func normalizeListIndent(text string) string {
-	return reListIndent.ReplaceAllString(text, "$1")
 }
 
 // normalizeWhitespace collapses non-breaking spaces, zero-width characters,
@@ -443,19 +429,13 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
-	// sed stage: strip Mozilla-specific HTML attributes, hidden elements,
-	// and zero-size tracking images before handing off to pandoc.
-	cleaned := cleanMozAttributes(string(raw))
-	cleaned = stripHiddenElements(cleaned)
-	cleaned = stripZeroImages(cleaned)
+	cleaned := prepareHTML(string(raw))
 
-	// Find lua filter
 	luaFilter, err := findLuaFilter()
 	if err != nil {
 		return fmt.Errorf("finding lua filter: %w", err)
 	}
 
-	// Run pandoc
 	md, err := runPandoc(strings.NewReader(cleaned), luaFilter, cols)
 	if err != nil {
 		return fmt.Errorf("pandoc conversion: %w", err)
@@ -465,9 +445,7 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 	md = html.UnescapeString(md)
 	md = cleanPandocArtifacts(md)
 	md = normalizeBoldMarkers(md)
-	md = normalizeUnicodeBullets(md)
-	md = normalizeListIndent(md)
-	md = compactLooseLists(md)
+	md = normalizeLists(md)
 	md = normalizeWhitespace(md)
 
 	// Footnote conversion and styling

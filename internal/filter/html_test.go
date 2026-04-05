@@ -94,12 +94,13 @@ func TestNormalizeBoldMarkers(t *testing.T) {
 	}
 }
 
-func TestNormalizeUnicodeBullets(t *testing.T) {
+func TestNormalizeLists(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 		want  string
 	}{
+		// Unicode bullet conversion
 		{"filled circle", "● Item one", "- Item one"},
 		{"bullet", "• Item two", "- Item two"},
 		{"leading whitespace", "  ● Item", "- Item"},
@@ -110,23 +111,15 @@ func TestNormalizeUnicodeBullets(t *testing.T) {
 		{"continuation indented", "● First line\nsecond line", "- First line\n  second line"},
 		{"continuation stops at blank", "● Item\ncont\n\nNext para", "- Item\n  cont\n\nNext para"},
 		{"multi-item continuation", "● A\nwrap\n● B\nwrap", "- A\n  wrap\n- B\n  wrap"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeUnicodeBullets(tt.input)
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCompactLooseLists(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
+		// Indent normalization
+		{"8 space indent", "        - item one", "- item one"},
+		{"4 space indent", "    - item two", "- item two"},
+		{"normal list", "- item three", "- item three"},
+		{"asterisk list", "        * item", "* item"},
+		{"plus list", "        + item", "+ item"},
+		{"3 space no change", "   - not enough", "   - not enough"},
+		{"preserves content after", "        - item\n  continuation", "- item\n  continuation"},
+		// Loose list compaction
 		{"single item unchanged", "- item one", "- item one"},
 		{"tight list unchanged", "- one\n- two\n- three", "- one\n- two\n- three"},
 		{"loose list compacted", "- one\n\n- two\n\n- three", "- one\n- two\n- three"},
@@ -141,31 +134,7 @@ func TestCompactLooseLists(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := compactLooseLists(tt.input)
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestNormalizeListIndent(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"8 space indent", "        - item one", "- item one"},
-		{"4 space indent", "    - item two", "- item two"},
-		{"normal list", "- item three", "- item three"},
-		{"asterisk list", "        * item", "* item"},
-		{"plus list", "        + item", "+ item"},
-		{"3 space no change", "   - not enough", "   - not enough"},
-		{"preserves content after", "        - item\n  continuation", "- item\n  continuation"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeListIndent(tt.input)
+			got := normalizeLists(tt.input)
 			if got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
