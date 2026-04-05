@@ -41,7 +41,10 @@ var (
 	reExcessiveBlank  = regexp.MustCompile(`\n{3,}`)
 	reLeadingBlank    = regexp.MustCompile(`\A\n+`)
 	reHeading         = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)$`)
-	reBold            = regexp.MustCompile(`(?s)\*\*(.+?)\*\*`)
+	// reBold matches **text** allowing newlines. normalizeBoldMarkers strips
+	// unpaired markers before this runs, so cross-paragraph matches cannot
+	// occur: any ** that would span a blank line has already been removed.
+	reBold = regexp.MustCompile(`(?s)\*\*(.+?)\*\*`)
 	// italic: matches *text* allowing newlines within a paragraph but not
 	// across paragraph breaks (double newlines), preventing stray * from
 	// pandoc \* escaping from bleeding italic across paragraphs.
@@ -71,6 +74,33 @@ func cleanPandocArtifacts(text string) string {
 	text = reEscapedPunct.ReplaceAllString(text, "$1")
 	text = reStrayBold.ReplaceAllString(text, "")
 	return text
+}
+
+// normalizeBoldMarkers ensures bold markers (**) are balanced within each
+// paragraph. It handles two pandoc artifacts:
+//
+//  1. Cross-paragraph bold: pandoc emits ** that opens in one paragraph and
+//     closes in another. Since reBold no longer uses (?s), these would render
+//     as stray markers. This function strips any unpaired trailing ** per
+//     paragraph, which also eliminates them.
+//
+//  2. Unpaired trailing **: pandoc sometimes emits a ** at the end of a phrase
+//     with no matching opener. The odd-count check strips the last one.
+func normalizeBoldMarkers(text string) string {
+	paragraphs := strings.Split(text, "\n\n")
+	for i, para := range paragraphs {
+		// Count ** occurrences (not escaped, just literal occurrences).
+		// strings.Count counts non-overlapping instances of "**".
+		count := strings.Count(para, "**")
+		if count%2 == 0 {
+			// Balanced; nothing to do.
+			continue
+		}
+		// Odd count: strip the last occurrence of ** in this paragraph.
+		idx := strings.LastIndex(para, "**")
+		paragraphs[i] = para[:idx] + para[idx+2:]
+	}
+	return strings.Join(paragraphs, "\n\n")
 }
 
 // compactLooseLists removes blank lines between consecutive list items.
@@ -352,6 +382,7 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 	// Post-pandoc cleanup
 	md = html.UnescapeString(md)
 	md = cleanPandocArtifacts(md)
+	md = normalizeBoldMarkers(md)
 	md = normalizeUnicodeBullets(md)
 	md = normalizeListIndent(md)
 	md = compactLooseLists(md)

@@ -30,6 +30,63 @@ func TestCleanPandocArtifacts(t *testing.T) {
 	}
 }
 
+func TestNormalizeBoldMarkers(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"balanced bold unchanged",
+			"this is **bold** text",
+			"this is **bold** text",
+		},
+		{
+			"unpaired trailing marker stripped",
+			"Additional resources**",
+			"Additional resources",
+		},
+		{
+			"unpaired leading marker stripped",
+			"ClouDNS** received notification",
+			"ClouDNS received notification",
+		},
+		{
+			"cross-paragraph bold split",
+			"Build faster**\n\n**Explore Workers",
+			"Build faster\n\nExplore Workers",
+		},
+		{
+			"balanced across same paragraph unchanged",
+			"See **bold text** here",
+			"See **bold text** here",
+		},
+		{
+			"multiple balanced in one para unchanged",
+			"**a** and **b**",
+			"**a** and **b**",
+		},
+		{
+			"three markers: last stripped",
+			"**bold** and stray**",
+			"**bold** and stray",
+		},
+		{
+			"no markers unchanged",
+			"plain text\n\nanother paragraph",
+			"plain text\n\nanother paragraph",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeBoldMarkers(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeUnicodeBullets(t *testing.T) {
 	tests := []struct {
 		name  string
