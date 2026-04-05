@@ -114,7 +114,10 @@ func Run(links []filter.FootnoteLink, w io.Writer, cols int, colors *Colors) (st
 		return "", fmt.Errorf("setting raw mode: %w", err)
 	}
 	defer restore(tty.Fd(), oldState)
+	defer fmt.Fprint(w, "\033[?25h") // restore cursor on exit
 
+	// Hide cursor and clear screen for initial draw.
+	fmt.Fprint(w, "\033[?25l\033[2J")
 	selected := 0
 	render(w, links, selected, cols, labelWidth, colors)
 
@@ -175,9 +178,12 @@ func Run(links []filter.FootnoteLink, w io.Writer, cols int, colors *Colors) (st
 }
 
 func render(w io.Writer, links []filter.FootnoteLink, selected, cols, labelWidth int, colors *Colors) {
-	fmt.Fprint(w, "\033[2J\033[H")
+	// Move cursor home and overwrite in place to avoid flicker.
+	fmt.Fprint(w, "\033[H")
+	fmt.Fprintln(w)
 	for i, l := range links {
-		fmt.Fprintln(w, FormatLine(i+1, l, i == selected, cols, labelWidth, colors))
+		// Clear line before writing to remove stale content.
+		fmt.Fprintf(w, "\033[2K%s\n", FormatLine(i+1, l, i == selected, cols, labelWidth, colors))
 	}
 }
 
