@@ -77,3 +77,14 @@ make vet       # go vet
 make check     # vet + test (gate before commits)
 make install   # install to ~/.local/bin/
 ```
+
+## Corpus
+
+`corpus/` holds raw email parts (HTML or plain text) flagged for
+rendering issues. Save emails from aerc with `b` in the viewer.
+The `/fix-corpus` skill batch-processes accumulated corpus emails.
+
+## Filter Testing
+
+See `.claude/docs/tmux-testing.md` for patterns to render emails
+through the filter and verify output via tmux.
