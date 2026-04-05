@@ -7,6 +7,6 @@
 You can view the full discussion [38;2;136;192;208mhere[0m[38;2;97;110;136m[^3][0m.
 
 [38;2;97;110;136m────────────────────────────────────────────────────────────────────────────────[0m
-[38;2;97;110;136m[^1]:[0m [38;2;97;110;136mhttps://github.com/user[0m
-[38;2;97;110;136m[^2]:[0m [38;2;97;110;136mhttps://github.com/org/repo/pull/123[0m
-[38;2;97;110;136m[^3]:[0m [38;2;97;110;136mhttps://github.com/org/repo/pull/123#issuecomment-456[0m
+[38;2;97;110;136m[^1]:[0m [38;2;97;110;136m]8;;https://github.com/user\https://github.com/user]8;;\[0m
+[38;2;97;110;136m[^2]:[0m [38;2;97;110;136m]8;;https://github.com/org/repo/pull/123\https://github.com/org/repo/pull/123]8;;\[0m
+[38;2;97;110;136m[^3]:[0m [38;2;97;110;136m]8;;https://github.com/org/repo/pull/123#issuecomment-456\https://github.com/org/repo/pull/123#issuecomment-456]8;;\[0m

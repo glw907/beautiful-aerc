@@ -10,4 +10,4 @@ A new sign-in was detected on your account.
 If this was you, no action is needed. If not, please [38;2;136;192;208mreview your account[0m[38;2;97;110;136m[^1][0m.
 
 [38;2;97;110;136m────────────────────────────────────────────────────────────────────────────────[0m
-[38;2;97;110;136m[^1]:[0m [38;2;97;110;136mhttps://example.com/security[0m
+[38;2;97;110;136m[^1]:[0m [38;2;97;110;136m]8;;https://example.com/security\https://example.com/security]8;;\[0m

@@ -19,6 +19,8 @@ func TestExtractURLs(t *testing.T) {
 		{"no URLs", "just plain text", nil},
 		{"URL with query params", "Go to https://example.com/page?foo=bar&baz=1", []string{"https://example.com/page?foo=bar&baz=1"}},
 		{"strips ANSI codes from URLs", "Visit \033[38;2;97;110;136mhttps://example.com\033[0m today", []string{"https://example.com"}},
+		{"extracts full URL from OSC 8 hyperlink", "\033]8;;https://example.com/very/long/path\033\\https://example.com/ver…\033]8;;\033\\", []string{"https://example.com/very/long/path"}},
+		{"OSC 8 and plain URLs deduped", "see https://example.com and \033]8;;https://example.com\033\\example\033]8;;\033\\", []string{"https://example.com"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

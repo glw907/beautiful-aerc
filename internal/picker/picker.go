@@ -14,24 +14,41 @@ import (
 )
 
 var (
-	reURL  = regexp.MustCompile(`https?://[^\s>)\]]+`)
-	reANSI = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	reURL      = regexp.MustCompile(`https?://[^\s>)\]]+`)
+	reOSC8Link = regexp.MustCompile(`\x1b\]8;;([^\x1b]*)\x1b\\([^\x1b]*)\x1b\]8;;\x1b\\`)
+	reOSC8     = regexp.MustCompile(`\x1b\]8;;[^\x1b]*\x1b\\`)
+	reANSI     = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 )
 
 // ExtractURLs finds all unique URLs in text, preserving order.
-// Strips ANSI escape codes and trailing punctuation.
+// Extracts full URLs from OSC 8 hyperlinks first, then strips all
+// escape sequences and finds remaining plain-text URLs.
 func ExtractURLs(text string) []string {
-	clean := reANSI.ReplaceAllString(text, "")
-	matches := reURL.FindAllString(clean, -1)
 	seen := make(map[string]bool)
 	var urls []string
-	for _, u := range matches {
+	add := func(u string) {
 		u = strings.TrimRight(u, ".,;:!?")
-		if seen[u] {
-			continue
+		if u == "" || seen[u] {
+			return
 		}
 		seen[u] = true
 		urls = append(urls, u)
+	}
+
+	// Extract full URLs from OSC 8 hyperlink hrefs.
+	for _, m := range reOSC8Link.FindAllStringSubmatch(text, -1) {
+		if m[1] != "" {
+			add(m[1])
+		}
+	}
+
+	// Strip full OSC 8 hyperlink spans (open + display + close), then
+	// any remaining bare OSC 8 tags, then ANSI codes.
+	clean := reOSC8Link.ReplaceAllString(text, "")
+	clean = reOSC8.ReplaceAllString(clean, "")
+	clean = reANSI.ReplaceAllString(clean, "")
+	for _, u := range reURL.FindAllString(clean, -1) {
+		add(u)
 	}
 	return urls
 }

@@ -214,12 +214,32 @@ func TestStyleFootnotes(t *testing.T) {
 		}
 	})
 
-	t.Run("reference URL colored", func(t *testing.T) {
+	t.Run("reference URL colored with OSC 8 hyperlink", func(t *testing.T) {
 		body := m + "text" + m + "[^1]"
 		refs := []footnoteRef{{1, "https://example.com"}}
 		got := styleFootnotes(body, refs, 40, colors)
-		if !strings.Contains(got, "\033[38;2;97;110;136mhttps://example.com\033[0m") {
-			t.Errorf("URL not colored: %q", got)
+		// URL should be wrapped in OSC 8 hyperlink escape sequences.
+		want := "\033[38;2;97;110;136m\033]8;;https://example.com\033\\https://example.com\033]8;;\033\\\033[0m"
+		if !strings.Contains(got, want) {
+			t.Errorf("URL not colored with OSC 8 hyperlink:\ngot:  %q\nwant substring: %q", got, want)
+		}
+	})
+
+	t.Run("long URL truncated visually", func(t *testing.T) {
+		body := m + "text" + m + "[^1]"
+		longURL := "https://example.com/very/long/path/that/exceeds/the/column/width"
+		refs := []footnoteRef{{1, longURL}}
+		cols := 30
+		got := styleFootnotes(body, refs, cols, colors)
+		// Full URL should be in OSC 8 escape (clickable).
+		if !strings.Contains(got, "\033]8;;"+longURL+"\033\\") {
+			t.Errorf("full URL not in OSC 8 hyperlink: %q", got)
+		}
+		// Display text should be truncated: "[^1]: " is 6 chars, leaving 24 for URL.
+		maxDisplay := cols - len("[^1]: ")
+		truncated := longURL[:maxDisplay-1] + "…"
+		if !strings.Contains(got, truncated) {
+			t.Errorf("URL not visually truncated:\ngot:  %q\nwant substring: %q", got, truncated)
 		}
 	})
 

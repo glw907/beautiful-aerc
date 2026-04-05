@@ -247,7 +247,20 @@ func styleFootnotes(body string, refs []footnoteRef, cols int, colors *footnoteC
 	sb.WriteString(body)
 	sb.WriteString("\n" + dim + strings.Repeat("─", cols) + r + "\n")
 	for _, ref := range refs {
-		sb.WriteString(fmt.Sprintf("%s[^%d]:%s %s%s%s\n", dim, ref.num, r, lu, ref.url, r))
+		// Prefix "[^N]: " width — must match the format string below.
+		prefixLen := len(fmt.Sprintf("[^%d]: ", ref.num))
+		maxURL := cols - prefixLen
+		display := ref.url
+		if maxURL > 0 && len(display) > maxURL {
+			if maxURL > 1 {
+				display = display[:maxURL-1] + "…"
+			} else {
+				display = "…"
+			}
+		}
+		// OSC 8 wraps full URL for click support; display may be truncated.
+		sb.WriteString(fmt.Sprintf("%s[^%d]:%s %s\033]8;;%s\033\\%s\033]8;;\033\\%s\n",
+			dim, ref.num, r, lu, ref.url, display, r))
 	}
 	return sb.String()
 }
