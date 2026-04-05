@@ -5,64 +5,25 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/glw907/beautiful-aerc/internal/filter"
 	"github.com/glw907/beautiful-aerc/internal/palette"
 )
-
-var (
-	reURL      = regexp.MustCompile(`https?://[^\s>)\]"<]+`)
-	reOSC8Link = regexp.MustCompile(`\x1b\]8;;([^\x1b]*)\x1b\\([^\x1b]*)\x1b\]8;;\x1b\\`)
-	reOSC8     = regexp.MustCompile(`\x1b\]8;;[^\x1b]*\x1b\\`)
-	reANSI     = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-)
-
-// ExtractURLs finds all unique URLs in text, preserving order.
-// Extracts full URLs from OSC 8 hyperlinks first, then strips all
-// escape sequences and finds remaining plain-text URLs.
-func ExtractURLs(text string) []string {
-	seen := make(map[string]bool)
-	var urls []string
-	add := func(u string) {
-		u = strings.TrimRight(u, ".,;:!?")
-		if u == "" || seen[u] {
-			return
-		}
-		seen[u] = true
-		urls = append(urls, u)
-	}
-
-	// Extract full URLs from OSC 8 hyperlink hrefs.
-	for _, m := range reOSC8Link.FindAllStringSubmatch(text, -1) {
-		if m[1] != "" {
-			add(m[1])
-		}
-	}
-
-	// Strip full OSC 8 hyperlink spans (open + display + close), then
-	// any remaining bare OSC 8 tags, then ANSI codes.
-	clean := reOSC8Link.ReplaceAllString(text, "")
-	clean = reOSC8.ReplaceAllString(clean, "")
-	clean = reANSI.ReplaceAllString(clean, "")
-	for _, u := range reURL.FindAllString(clean, -1) {
-		add(u)
-	}
-	return urls
-}
 
 // Colors holds ANSI escape sequences for the picker UI.
 type Colors struct {
 	Number   string // shortcut number (1-9, 0)
-	URL      string // URL text
+	Label    string // link label text
+	URL      string // URL text (dim)
 	Selected string // highlighted line (bg + fg)
 	Reset    string
 }
 
-// FormatLine renders a single picker line with number, URL, and selection state.
-func FormatLine(index int, url string, selected bool, colors *Colors) string {
+// FormatLine renders a single picker line with number, label, and truncated URL.
+func FormatLine(index int, link filter.FootnoteLink, selected bool, cols int, labelWidth int, colors *Colors) string {
 	shortcut := " "
 	if index >= 1 && index <= 9 {
 		shortcut = fmt.Sprintf("%d", index)
@@ -70,15 +31,36 @@ func FormatLine(index int, url string, selected bool, colors *Colors) string {
 		shortcut = "0"
 	}
 
-	if selected {
-		return fmt.Sprintf("%s %s  %s%s", colors.Selected, shortcut, url, colors.Reset)
+	label := link.Label
+	if len(label) > labelWidth {
+		label = label[:labelWidth-1] + "…"
 	}
-	return fmt.Sprintf(" %s%s%s  %s%s%s", colors.Number, shortcut, colors.Reset, colors.URL, url, colors.Reset)
+
+	// Fixed columns: " N  " (4) + label + "  " (2) + url
+	urlWidth := cols - 4 - labelWidth - 2
+	url := link.URL
+	if urlWidth > 0 && len(url) > urlWidth {
+		if urlWidth > 1 {
+			url = url[:urlWidth-1] + "…"
+		} else {
+			url = "…"
+		}
+	}
+
+	if selected {
+		return fmt.Sprintf("%s %s  %-*s  %s%s",
+			colors.Selected, shortcut, labelWidth, label, url, colors.Reset)
+	}
+	return fmt.Sprintf(" %s%s%s  %s%-*s%s  %s%s%s",
+		colors.Number, shortcut, colors.Reset,
+		colors.Label, labelWidth, label, colors.Reset,
+		colors.URL, url, colors.Reset)
 }
 
 // ColorsFromPalette builds picker colors from a loaded palette.
 func ColorsFromPalette(p *palette.Palette) *Colors {
 	numColor, _ := palette.HexToANSI(p.Get("ACCENT_PRIMARY"))
+	labelColor, _ := palette.HexToANSI(p.Get("FG_PRIMARY"))
 	urlColor, _ := palette.HexToANSI(p.Get("FG_DIM"))
 	selBG, _ := palette.HexToANSI(p.Get("BG_SELECTION"))
 	selFG, _ := palette.HexToANSI(p.Get("FG_BRIGHT"))
@@ -86,6 +68,9 @@ func ColorsFromPalette(p *palette.Palette) *Colors {
 	c := &Colors{Reset: "\033[0m"}
 	if numColor != "" {
 		c.Number = "\033[" + numColor + "m"
+	}
+	if labelColor != "" {
+		c.Label = "\033[" + labelColor + "m"
 	}
 	if urlColor != "" {
 		c.URL = "\033[" + urlColor + "m"
@@ -97,18 +82,25 @@ func ColorsFromPalette(p *palette.Palette) *Colors {
 	return c
 }
 
-// Run reads message content from r, extracts URLs, and runs the interactive
-// picker. Keyboard input is read from /dev/tty so stdin can be a pipe.
-// Returns the selected URL or empty string if cancelled.
-func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
-	input, err := io.ReadAll(r)
-	if err != nil {
-		return "", fmt.Errorf("reading input: %w", err)
+const maxLabelWidth = 30
+
+// Run reads message content from r, extracts footnoted links, and runs the
+// interactive picker. Keyboard input is read from /dev/tty so stdin can be
+// a pipe. Returns the selected URL or empty string if cancelled.
+func Run(links []filter.FootnoteLink, w io.Writer, cols int, colors *Colors) (string, error) {
+	if len(links) == 0 {
+		return "", nil
 	}
 
-	urls := ExtractURLs(string(input))
-	if len(urls) == 0 {
-		return "", nil
+	// Compute label column width from longest label, capped.
+	labelWidth := 0
+	for _, l := range links {
+		if len(l.Label) > labelWidth {
+			labelWidth = len(l.Label)
+		}
+	}
+	if labelWidth > maxLabelWidth {
+		labelWidth = maxLabelWidth
 	}
 
 	tty, err := os.Open("/dev/tty")
@@ -124,7 +116,7 @@ func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
 	defer restore(tty.Fd(), oldState)
 
 	selected := 0
-	render(w, urls, selected, colors)
+	render(w, links, selected, cols, labelWidth, colors)
 
 	buf := make([]byte, 3)
 	for {
@@ -138,23 +130,23 @@ func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
 		// 1-9: instant select
 		if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 			idx := int(key[0] - '0' - 1)
-			if idx < len(urls) {
-				return urls[idx], nil
+			if idx < len(links) {
+				return links[idx].URL, nil
 			}
 			continue
 		}
 
 		// 0: select 10th
 		if len(key) == 1 && key[0] == '0' {
-			if len(urls) >= 10 {
-				return urls[9], nil
+			if len(links) >= 10 {
+				return links[9].URL, nil
 			}
 			continue
 		}
 
 		// Enter: select current
 		if len(key) == 1 && (key[0] == '\r' || key[0] == '\n') {
-			return urls[selected], nil
+			return links[selected].URL, nil
 		}
 
 		// q or Escape: cancel
@@ -164,9 +156,9 @@ func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
 
 		// j or down arrow: next
 		if (len(key) == 1 && key[0] == 'j') || (len(key) == 3 && key[0] == 27 && key[1] == '[' && key[2] == 'B') {
-			if selected < len(urls)-1 {
+			if selected < len(links)-1 {
 				selected++
-				render(w, urls, selected, colors)
+				render(w, links, selected, cols, labelWidth, colors)
 			}
 			continue
 		}
@@ -175,17 +167,17 @@ func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
 		if (len(key) == 1 && key[0] == 'k') || (len(key) == 3 && key[0] == 27 && key[1] == '[' && key[2] == 'A') {
 			if selected > 0 {
 				selected--
-				render(w, urls, selected, colors)
+				render(w, links, selected, cols, labelWidth, colors)
 			}
 			continue
 		}
 	}
 }
 
-func render(w io.Writer, urls []string, selected int, colors *Colors) {
+func render(w io.Writer, links []filter.FootnoteLink, selected, cols, labelWidth int, colors *Colors) {
 	fmt.Fprint(w, "\033[2J\033[H")
-	for i, u := range urls {
-		fmt.Fprintln(w, FormatLine(i+1, u, i == selected, colors))
+	for i, l := range links {
+		fmt.Fprintln(w, FormatLine(i+1, l, i == selected, cols, labelWidth, colors))
 	}
 }
 

@@ -3,6 +3,7 @@ package filter
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -199,6 +200,44 @@ func convertToFootnotes(text string) (string, []footnoteRef) {
 	body = reLeadingBlank.ReplaceAllString(body, "")
 
 	return body, refs
+}
+
+// FootnoteLink holds a labeled URL extracted from footnote conversion output.
+type FootnoteLink struct {
+	Label string
+	URL   string
+}
+
+// reLabeledRef matches linkTextMarker-wrapped label followed by [^N].
+var reLabeledRef = regexp.MustCompile(`\x00LT\x00([^\x00]+)\x00LT\x00\[\^(\d+)\]`)
+
+// ExtractFootnoteLinks parses the pre-styled body (containing linkTextMarker
+// pairs) and footnote refs to produce labeled URL pairs.
+func ExtractFootnoteLinks(body string, refs []footnoteRef) []FootnoteLink {
+	refMap := make(map[int]string, len(refs))
+	for _, r := range refs {
+		refMap[r.num] = r.url
+	}
+
+	seen := make(map[string]bool)
+	var links []FootnoteLink
+	for _, m := range reLabeledRef.FindAllStringSubmatch(body, -1) {
+		label := strings.TrimSpace(m[1])
+		num, err := strconv.Atoi(m[2])
+		if err != nil {
+			continue
+		}
+		url, ok := refMap[num]
+		if !ok || label == "" {
+			continue
+		}
+		if seen[url] {
+			continue
+		}
+		seen[url] = true
+		links = append(links, FootnoteLink{Label: label, URL: url})
+	}
+	return links
 }
 
 // footnoteColors holds ANSI parameter strings for footnote styling.

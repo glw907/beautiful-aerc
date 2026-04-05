@@ -269,6 +269,58 @@ func TestStyleFootnotes(t *testing.T) {
 	})
 }
 
+func TestExtractFootnoteLinks(t *testing.T) {
+	m := linkTextMarker
+	tests := []struct {
+		name     string
+		body     string
+		refs     []footnoteRef
+		wantLinks []FootnoteLink
+	}{
+		{
+			"single link",
+			"Click " + m + "here" + m + "[^1] to go.",
+			[]footnoteRef{{1, "https://example.com"}},
+			[]FootnoteLink{{Label: "here", URL: "https://example.com"}},
+		},
+		{
+			"multiple links",
+			"Visit " + m + "home" + m + "[^1] and " + m + "about" + m + "[^2].",
+			[]footnoteRef{{1, "https://example.com"}, {2, "https://example.com/about"}},
+			[]FootnoteLink{
+				{Label: "home", URL: "https://example.com"},
+				{Label: "about", URL: "https://example.com/about"},
+			},
+		},
+		{
+			"duplicate URLs deduped",
+			m + "link A" + m + "[^1] and " + m + "link B" + m + "[^2]",
+			[]footnoteRef{{1, "https://example.com"}, {2, "https://example.com"}},
+			[]FootnoteLink{{Label: "link A", URL: "https://example.com"}},
+		},
+		{
+			"no markers returns nil",
+			"just plain text",
+			[]footnoteRef{{1, "https://example.com"}},
+			nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractFootnoteLinks(tt.body, tt.refs)
+			if len(got) != len(tt.wantLinks) {
+				t.Errorf("count: got %d, want %d\ngot: %v", len(got), len(tt.wantLinks), got)
+				return
+			}
+			for i, want := range tt.wantLinks {
+				if got[i] != want {
+					t.Errorf("[%d]: got %v, want %v", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
 func TestStripEmphasis(t *testing.T) {
 	tests := []struct {
 		name  string

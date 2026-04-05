@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 
@@ -20,15 +19,14 @@ func newPickLinkCmd() *cobra.Command {
 				return err
 			}
 
-			// Run raw HTML through the filter to get clean footnoted output.
-			var filtered bytes.Buffer
 			cols := termCols()
-			if err := filter.HTML(os.Stdin, &filtered, p, cols); err != nil {
+			links, err := filter.HTMLLinks(os.Stdin, cols)
+			if err != nil {
 				return err
 			}
 
 			colors := picker.ColorsFromPalette(p)
-			url, err := picker.Run(&filtered, os.Stderr, colors)
+			url, err := picker.Run(links, os.Stderr, cols, colors)
 			if err != nil {
 				return err
 			}

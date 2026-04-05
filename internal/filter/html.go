@@ -415,41 +415,58 @@ func findLuaFilter() (string, error) {
 	return "", fmt.Errorf("unwrap-tables.lua not found (checked: %s)", strings.Join(candidates, ", "))
 }
 
-// HTML converts an HTML email body to styled text, writing to w.
-// It runs the pandoc pipeline, cleans up artifacts, converts links to
-// footnotes, and highlights markdown syntax using palette p.
-// cols sets pandoc's column width.
-func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
+// htmlToFootnotes runs the HTML-to-markdown pipeline through footnote
+// conversion, returning the pre-styled body and footnote refs.
+func htmlToFootnotes(r io.Reader, cols int) (string, []footnoteRef, error) {
 	if cols < 1 {
 		cols = 72
 	}
 
 	raw, err := io.ReadAll(r)
 	if err != nil {
-		return fmt.Errorf("reading input: %w", err)
+		return "", nil, fmt.Errorf("reading input: %w", err)
 	}
 
 	cleaned := prepareHTML(string(raw))
 
 	luaFilter, err := findLuaFilter()
 	if err != nil {
-		return fmt.Errorf("finding lua filter: %w", err)
+		return "", nil, fmt.Errorf("finding lua filter: %w", err)
 	}
 
 	md, err := runPandoc(strings.NewReader(cleaned), luaFilter, cols)
 	if err != nil {
-		return fmt.Errorf("pandoc conversion: %w", err)
+		return "", nil, fmt.Errorf("pandoc conversion: %w", err)
 	}
 
-	// Post-pandoc cleanup
 	md = html.UnescapeString(md)
 	md = cleanPandocArtifacts(md)
 	md = normalizeBoldMarkers(md)
 	md = normalizeLists(md)
 	md = normalizeWhitespace(md)
 
-	// Footnote conversion and styling
 	body, refs := convertToFootnotes(md)
+	return body, refs, nil
+}
+
+// HTMLLinks extracts labeled footnote links from an HTML email.
+func HTMLLinks(r io.Reader, cols int) ([]FootnoteLink, error) {
+	body, refs, err := htmlToFootnotes(r, cols)
+	if err != nil {
+		return nil, err
+	}
+	return ExtractFootnoteLinks(body, refs), nil
+}
+
+// HTML reads raw HTML email from r, converts it to markdown with
+// footnotes, and highlights markdown syntax using palette p.
+// cols sets pandoc's column width.
+func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
+	body, refs, err := htmlToFootnotes(r, cols)
+	if err != nil {
+		return err
+	}
+
 	dimColor, _ := palette.HexToANSI(p.Get("FG_DIM"))
 	fc := &footnoteColors{
 		LinkText: p.Get("C_LINK_TEXT"),
@@ -457,7 +474,7 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 		LinkURL:  p.Get("C_LINK_URL"),
 		Reset:    "0",
 	}
-	md = styleFootnotes(body, refs, cols, fc)
+	styled := styleFootnotes(body, refs, cols, fc)
 
 	// Markdown syntax highlighting
 	mc := &markdownColors{
@@ -467,10 +484,10 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 		Rule:    p.Get("C_RULE"),
 		Reset:   "0",
 	}
-	md = highlightMarkdown(md, mc)
+	styled = highlightMarkdown(styled, mc)
 
 	// Write leading newline + result
-	if _, err := fmt.Fprint(w, "\n"+md); err != nil {
+	if _, err := fmt.Fprint(w, "\n"+styled); err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
 	return nil
