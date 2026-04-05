@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	reURL      = regexp.MustCompile(`https?://[^\s>)\]]+`)
+	reURL      = regexp.MustCompile(`https?://[^\s>)\]"<]+`)
 	reOSC8Link = regexp.MustCompile(`\x1b\]8;;([^\x1b]*)\x1b\\([^\x1b]*)\x1b\]8;;\x1b\\`)
 	reOSC8     = regexp.MustCompile(`\x1b\]8;;[^\x1b]*\x1b\\`)
 	reANSI     = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -97,7 +97,8 @@ func ColorsFromPalette(p *palette.Palette) *Colors {
 	return c
 }
 
-// Run reads stdin, extracts URLs, and runs the interactive picker.
+// Run reads message content from r, extracts URLs, and runs the interactive
+// picker. Keyboard input is read from /dev/tty so stdin can be a pipe.
 // Returns the selected URL or empty string if cancelled.
 func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
 	input, err := io.ReadAll(r)
@@ -110,18 +111,24 @@ func Run(r io.Reader, w io.Writer, colors *Colors) (string, error) {
 		return "", nil
 	}
 
-	oldState, err := makeRaw(os.Stdin.Fd())
+	tty, err := os.Open("/dev/tty")
+	if err != nil {
+		return "", fmt.Errorf("opening /dev/tty: %w", err)
+	}
+	defer tty.Close()
+
+	oldState, err := makeRaw(tty.Fd())
 	if err != nil {
 		return "", fmt.Errorf("setting raw mode: %w", err)
 	}
-	defer restore(os.Stdin.Fd(), oldState)
+	defer restore(tty.Fd(), oldState)
 
 	selected := 0
 	render(w, urls, selected, colors)
 
 	buf := make([]byte, 3)
 	for {
-		n, err := os.Stdin.Read(buf)
+		n, err := tty.Read(buf)
 		if err != nil {
 			return "", nil
 		}
