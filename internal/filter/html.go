@@ -33,7 +33,10 @@ var (
 	// Stray bold markers on a line by themselves (pandoc decorative artifact).
 	// The $ before \n? anchors to end-of-line so lines like **text** are preserved.
 	reStrayBold = regexp.MustCompile(`(?m)^\*\*\s*$\n?`)
-	reListItem  = regexp.MustCompile(`^[-*+]\s`)
+	// reConsecutiveBold matches **** (close+reopen bold with nothing between).
+	// Pandoc emits this from consecutive <strong> blocks separated by <br>.
+	reConsecutiveBold = regexp.MustCompile(`\*{4,}`)
+	reListItem        = regexp.MustCompile(`^[-*+]\s`)
 	// Unicode space variants: NBSP, en/em space, thin/hair space, etc.
 	reNBSP            = regexp.MustCompile(`[\x{a0}\x{2000}-\x{200a}]+`)
 	// Invisible filler: zero-width, joiners, soft hyphen, word joiner, etc.
@@ -41,7 +44,11 @@ var (
 	reBlankLineSpaces = regexp.MustCompile(`(?m)^ +$`)
 	reExcessiveBlank  = regexp.MustCompile(`\n{3,}`)
 	reLeadingBlank    = regexp.MustCompile(`\A\n+`)
-	reHeading         = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)$`)
+	// reNestedHeading matches pandoc heading markers repeated from nested <hN> tags.
+	reNestedHeading = regexp.MustCompile(`(?m)^(#{1,6})\s+(?:#{1,6}\s+)+`)
+	// reEmptyHeading matches heading lines with no content (from empty <hN> tags).
+	reEmptyHeading = regexp.MustCompile(`(?m)^#{1,6}[ \t]*$\n?`)
+	reHeading      = regexp.MustCompile(`(?m)^(#{1,6})[ \t]+(.*)$`)
 	// reBold matches **text** allowing newlines. normalizeBoldMarkers strips
 	// unpaired markers before this runs, so cross-paragraph matches cannot
 	// occur: any ** that would span a blank line has already been removed.
@@ -137,8 +144,11 @@ func stripZeroImages(body string) string {
 func cleanPandocArtifacts(text string) string {
 	text = reTrailingBackslash.ReplaceAllString(text, "\n")
 	text = reEscapedPunct.ReplaceAllString(text, "$1")
+	text = reConsecutiveBold.ReplaceAllString(text, "**")
 	text = reStrayBold.ReplaceAllString(text, "")
 	text = reSuperscript.ReplaceAllString(text, "$1")
+	text = reNestedHeading.ReplaceAllString(text, "$1 ")
+	text = reEmptyHeading.ReplaceAllString(text, "")
 	return text
 }
 
@@ -309,6 +319,9 @@ func wrapLines(content, open, close string) string {
 	}
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
+		if line == "" {
+			continue
+		}
 		lines[i] = open + line + close
 	}
 	return strings.Join(lines, "\n")

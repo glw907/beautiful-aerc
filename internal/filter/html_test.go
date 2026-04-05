@@ -18,6 +18,13 @@ func TestCleanPandocArtifacts(t *testing.T) {
 		{"stray bold with backslash", "text\n**\\\n**\nnext", "text\nnext"},
 		{"stray bold at end no newline", "text\n**", "text\n"},
 		{"real bold preserved", "this is **bold** text", "this is **bold** text"},
+		{"consecutive bold collapsed", "**Contact us**\n****Please do not reply**", "**Contact us**\n**Please do not reply**"},
+		{"six stars collapsed", "text******more", "text**more"},
+		{"nested heading collapsed", "### ### Quilted art piece", "### Quilted art piece"},
+		{"nested heading h2", "## ## ## Section", "## Section"},
+		{"single heading preserved", "### Normal heading", "### Normal heading"},
+		{"empty heading stripped", "text\n###  \nnext", "text\nnext"},
+		{"empty heading at end", "text\n### ", "text\n"},
 		{"no change", "normal text", "normal text"},
 	}
 	for _, tt := range tests {
