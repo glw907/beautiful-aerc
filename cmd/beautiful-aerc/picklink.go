@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/glw907/beautiful-aerc/internal/filter"
@@ -32,7 +33,11 @@ func newPickLinkCmd() *cobra.Command {
 				return err
 			}
 			if url != "" {
-				open := exec.Command("xdg-open", url)
+				name := "xdg-open"
+				if strings.HasPrefix(url, "mailto:") {
+					name = "aerc"
+				}
+				open := exec.Command(name, url)
 				open.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 				return open.Start()
 			}
