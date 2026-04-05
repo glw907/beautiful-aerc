@@ -1,0 +1,104 @@
+---
+name: fix-corpus
+description: Batch review and fix emails with rendering issues saved in corpus/
+---
+
+# Fix Corpus
+
+Batch triage and fix rendering issues in emails saved to `corpus/`.
+
+## Prerequisites
+
+- Emails saved via `beautiful-aerc save` (keybinding `b` in aerc viewer)
+- At least a few corpus files to make batch processing worthwhile
+
+## Workflow
+
+### 1. Scan corpus
+
+List all files in `corpus/`, grouped by type:
+
+```bash
+ls -la corpus/*.html corpus/*.txt 2>/dev/null
+```
+
+If empty, tell the user and stop.
+
+### 2. Preview each email
+
+For each corpus file, render it through the filter and show the output.
+Use the tmux pattern from `.claude/docs/tmux-testing.md`:
+
+```bash
+tmux kill-session -t corpus-review 2>/dev/null
+tmux new-session -d -s corpus-review -x 80 -y 40
+```
+
+For each file:
+
+```bash
+# Render through appropriate filter
+cat corpus/<file> \
+  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc beautiful-aerc html \
+  | tmux load-buffer - \
+  && tmux paste-buffer -t corpus-review
+tmux capture-pane -t corpus-review -p
+```
+
+Use `beautiful-aerc html` for `.html` files and `beautiful-aerc plain`
+for `.txt` files.
+
+Show the rendered output to the user. If the issue is not obvious,
+ask: "What's wrong with this one?"
+
+### 3. Triage by pattern
+
+After reviewing all emails, group issues by root cause. Look for
+commonality before making fixes -- the holistic approach produces
+better code than fixing one email at a time.
+
+Present the grouped issues to the user for confirmation before
+proceeding.
+
+### 4. Fix pipeline code
+
+Make changes to `internal/filter/` to address the identified patterns.
+Add test cases for each fix in the corresponding `_test.go` files.
+
+### 5. Verify
+
+Re-render all corpus emails and confirm fixes. Also re-run the
+full test suite to check for regressions:
+
+```bash
+make check
+```
+
+### 6. Quality gates
+
+Run the standard quality passes:
+- `make check` (vet + tests)
+- `/go-review` (Go convention review)
+- `/simplify` (code quality review)
+
+### 7. Ship
+
+```bash
+/ship
+```
+
+This commits, pushes, and installs the updated binary.
+
+### 8. Cleanup
+
+Ask the user:
+- Should any fixed emails become e2e test fixtures? If yes, copy to
+  `e2e/testdata/` and generate golden files with
+  `go test ./e2e/ -update-golden`.
+- Remove fixed emails from `corpus/`?
+
+Clean up the tmux session:
+
+```bash
+tmux kill-session -t corpus-review 2>/dev/null
+```
