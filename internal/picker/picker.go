@@ -61,27 +61,19 @@ func FormatLine(index int, link filter.FootnoteLink, selected bool, cols int, la
 
 // ColorsFromPalette builds picker colors from a loaded palette.
 func ColorsFromPalette(p *palette.Palette) *Colors {
-	c := &Colors{Reset: "\033[0m"}
-	if v := p.ANSI("C_PICKER_NUM"); v != "" {
-		c.Number = v
-	}
-	if v := p.ANSI("C_PICKER_LABEL"); v != "" {
-		c.Label = v
-	}
-	if v := p.ANSI("C_PICKER_URL"); v != "" {
-		c.URL = v
+	c := &Colors{
+		Number: p.ANSI("C_PICKER_NUM"),
+		Label:  p.ANSI("C_PICKER_LABEL"),
+		URL:    p.ANSI("C_PICKER_URL"),
+		Marker: p.ANSI("C_MSG_MARKER"),
+		Title:  p.ANSI("C_MSG_TITLE_ACCENT"),
+		Reset:  p.Reset(),
 	}
 	selBG := p.Get("C_PICKER_SEL_BG")
 	selFG := p.Get("C_PICKER_SEL_FG")
 	if selBG != "" && selFG != "" {
 		bgParam := strings.Replace(selBG, "38;2;", "48;2;", 1)
 		c.Selected = "\033[" + bgParam + "m\033[" + selFG + "m"
-	}
-	if v := p.ANSI("C_MSG_MARKER"); v != "" {
-		c.Marker = v
-	}
-	if v := p.ANSI("C_MSG_TITLE_ACCENT"); v != "" {
-		c.Title = v
 	}
 	return c
 }
@@ -200,20 +192,21 @@ func render(w io.Writer, links []filter.FootnoteLink, selected, rows, cols, labe
 		pad = 1
 	}
 
-	// Move cursor home and overwrite in place to avoid flicker.
-	fmt.Fprint(w, "\033[H")
+	// Build the entire frame in a buffer for a single write syscall.
+	var buf strings.Builder
+	buf.WriteString("\033[H")
 	for range pad {
-		fmt.Fprint(w, "\033[2K\n")
+		buf.WriteString("\033[2K\n")
 	}
-	fmt.Fprintf(w, "\033[2K %s#%s %s%s%s\n", colors.Marker, colors.Reset, colors.Title, pickerHeading, colors.Reset)
-	fmt.Fprint(w, "\033[2K\n")
+	fmt.Fprintf(&buf, "\033[2K %s#%s %s%s%s\n", colors.Marker, colors.Reset, colors.Title, pickerHeading, colors.Reset)
+	buf.WriteString("\033[2K\n")
 	for i, l := range links {
-		fmt.Fprintf(w, "\033[2K%s\n", FormatLine(i+1, l, i == selected, cols, labelWidth, colors))
+		fmt.Fprintf(&buf, "\033[2K%s\n", FormatLine(i+1, l, i == selected, cols, labelWidth, colors))
 	}
-	// Clear remaining lines below the list.
 	for i := pad + blockHeight; i < rows; i++ {
-		fmt.Fprint(w, "\033[2K\n")
+		buf.WriteString("\033[2K\n")
 	}
+	fmt.Fprint(w, buf.String())
 }
 
 func makeRaw(fd uintptr) (*unix.Termios, error) {

@@ -144,24 +144,29 @@ func TestHTMLFixtures(t *testing.T) {
 	}
 }
 
+// setupSaveTest creates the directory structure needed for save tests.
+// Returns the AERC_CONFIG dir and the target corpus dir where files land.
+// Pre-creates the corpus dir so FindDir picks it over ~/corpus.
+func setupSaveTest(t *testing.T) (aercDir, corpusDir string) {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), "save")
+	aercDir = filepath.Join(root, ".config", "aerc")
+	corpusDir = filepath.Join(root, "corpus")
+	if err := os.MkdirAll(aercDir, 0755); err != nil {
+		t.Fatalf("creating test dir: %v", err)
+	}
+	if err := os.MkdirAll(corpusDir, 0755); err != nil {
+		t.Fatalf("creating corpus dir: %v", err)
+	}
+	return aercDir, corpusDir
+}
+
 func TestSaveHTMLFixture(t *testing.T) {
-	corpusDir := filepath.Join(t.TempDir(), "corpus")
+	aercDir, corpusDir := setupSaveTest(t)
 
 	input, err := os.ReadFile("testdata/simple.html")
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
-	}
-
-	// AERC_CONFIG points to a dir; FindDir does AERC_CONFIG/../../corpus
-	// So we need aercDir to be 2 levels deep under corpusDir's parent.
-	// Pre-create the target corpus dir so FindDir picks it over ~/corpus.
-	aercDir := filepath.Join(corpusDir, ".config", "aerc")
-	targetCorpus := filepath.Join(corpusDir, "corpus")
-	if err := os.MkdirAll(aercDir, 0755); err != nil {
-		t.Fatalf("creating test dir: %v", err)
-	}
-	if err := os.MkdirAll(targetCorpus, 0755); err != nil {
-		t.Fatalf("creating corpus dir: %v", err)
 	}
 
 	cmd := exec.Command(binary, "save")
@@ -175,8 +180,7 @@ func TestSaveHTMLFixture(t *testing.T) {
 		t.Fatalf("running save: %v\noutput: %s", err, out)
 	}
 
-	// Verify a .html file was created in the corpus dir
-	matches, err := filepath.Glob(filepath.Join(targetCorpus, "*.html"))
+	matches, err := filepath.Glob(filepath.Join(corpusDir, "*.html"))
 	if err != nil {
 		t.Fatalf("globbing corpus: %v", err)
 	}
@@ -194,15 +198,7 @@ func TestSaveHTMLFixture(t *testing.T) {
 }
 
 func TestSavePlainText(t *testing.T) {
-	corpusDir := filepath.Join(t.TempDir(), "corpus")
-	aercDir := filepath.Join(corpusDir, ".config", "aerc")
-	targetCorpus := filepath.Join(corpusDir, "corpus")
-	if err := os.MkdirAll(aercDir, 0755); err != nil {
-		t.Fatalf("creating test dir: %v", err)
-	}
-	if err := os.MkdirAll(targetCorpus, 0755); err != nil {
-		t.Fatalf("creating corpus dir: %v", err)
-	}
+	aercDir, corpusDir := setupSaveTest(t)
 
 	input := []byte("Hello, this is a plain text email.\n")
 
@@ -217,7 +213,7 @@ func TestSavePlainText(t *testing.T) {
 		t.Fatalf("running save: %v\noutput: %s", err, out)
 	}
 
-	matches, err := filepath.Glob(filepath.Join(targetCorpus, "*.txt"))
+	matches, err := filepath.Glob(filepath.Join(corpusDir, "*.txt"))
 	if err != nil {
 		t.Fatalf("globbing corpus: %v", err)
 	}
