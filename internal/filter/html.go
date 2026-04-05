@@ -63,6 +63,10 @@ var (
 	// its inline style. Used by stripHiddenElements to find the start of a
 	// hidden section; nesting-aware removal handles finding the matching close.
 	reHiddenDivOpen = regexp.MustCompile(`(?i)<div[^>]+style="[^"]*display:\s*none[^"]*"[^>]*>`)
+	// reZeroImg matches <img> tags with zero width or height (tracking pixels).
+	// Bank of America and similar senders embed these between URL parts,
+	// causing pandoc to split the URL across multiple paragraphs.
+	reZeroImg = regexp.MustCompile(`(?i)<img[^>]*(?:width:\s*0|height:\s*0|width="0"|height="0")[^>]*/?>`)
 )
 
 // boldPlaceholder is used to hide bold markers during italic processing.
@@ -117,6 +121,14 @@ func stripHiddenElements(body string) string {
 		body = body[:start] + body[end:]
 	}
 	return body
+}
+
+// stripZeroImages removes <img> tags with zero width or height before pandoc
+// conversion. Bank of America and similar senders embed these tracking pixels
+// inline between text fragments (e.g. "myhealth." + <img/> + "bankofamerica."
+// + <img/> + "com"), causing pandoc to split content across paragraphs.
+func stripZeroImages(body string) string {
+	return reZeroImg.ReplaceAllString(body, "")
 }
 
 // cleanPandocArtifacts removes trailing backslash line-breaks,
@@ -418,9 +430,11 @@ func HTML(r io.Reader, w io.Writer, p *palette.Palette, cols int) error {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
-	// sed stage: strip Mozilla-specific HTML attributes and hidden elements
+	// sed stage: strip Mozilla-specific HTML attributes, hidden elements,
+	// and zero-size tracking images before handing off to pandoc.
 	cleaned := cleanMozAttributes(string(raw))
 	cleaned = stripHiddenElements(cleaned)
+	cleaned = stripZeroImages(cleaned)
 
 	// Find lua filter
 	luaFilter, err := findLuaFilter()
