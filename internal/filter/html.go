@@ -119,10 +119,7 @@ func highlightMarkdown(text string, colors *markdownColors) string {
 	// Italic: now safe to match single * because ** has been replaced
 	text = reItalic.ReplaceAllStringFunc(text, func(m string) string {
 		groups := reItalic.FindStringSubmatch(m)
-		if groups == nil {
-			return m
-		}
-		return it + groups[1] + r
+		return wrapLines(groups[1], it, r)
 	})
 
 	// Restore bold placeholders: pairs of placeholder tokens wrap content.
@@ -136,6 +133,19 @@ func highlightMarkdown(text string, colors *markdownColors) string {
 	return text
 }
 
+// wrapLines makes ANSI styling work in aerc's per-line viewer by
+// re-emitting open/close codes around each line of content.
+func wrapLines(content, open, close string) string {
+	if !strings.Contains(content, "\n") {
+		return open + content + close
+	}
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = open + line + close
+	}
+	return strings.Join(lines, "\n")
+}
+
 // replaceMarkerPairs splits text on sentinel and alternates open/close ANSI
 // sequences at each boundary. Odd splits get open, even splits get close.
 func replaceMarkerPairs(text, sentinel, open, close string) string {
@@ -147,11 +157,13 @@ func replaceMarkerPairs(text, sentinel, open, close string) string {
 			continue
 		}
 		if i%2 == 1 {
-			sb.WriteString(open)
-		} else {
-			sb.WriteString(close)
+			// Opening: wrap each line so aerc's per-line viewer sees codes.
+			sb.WriteString(wrapLines(part, open, close))
 		}
-		sb.WriteString(part)
+		// Even parts (after close) are plain text, written directly.
+		if i%2 == 0 {
+			sb.WriteString(part)
+		}
 	}
 	return sb.String()
 }

@@ -105,18 +105,22 @@ func TestHighlightMarkdown(t *testing.T) {
 			"should contain italic ANSI + text",
 		},
 		{
-			"multiline bold",
+			"multiline bold per-line codes",
 			"**line one\nline two**",
-			func(s string) bool { return strings.Contains(s, "\033[1m") && strings.Contains(s, "line one\nline two") },
-			"should bold across newlines",
+			func(s string) bool {
+				return strings.Contains(s, "\033[1mline one\033[0m") &&
+					strings.Contains(s, "\033[1mline two\033[0m")
+			},
+			"should bold each line independently",
 		},
 		{
-			"multiline bold italic",
+			"multiline bold italic per-line codes",
 			"***line one\nline two***",
 			func(s string) bool {
-				return strings.Contains(s, "\033[1m") && strings.Contains(s, "\033[3m")
+				return strings.Contains(s, "\033[1m\033[3mline one\033[0m\033[0m") &&
+					strings.Contains(s, "\033[1m\033[3mline two\033[0m\033[0m")
 			},
-			"should apply both bold and italic across newlines",
+			"should apply both bold and italic to each line",
 		},
 		{
 			"horizontal rule dashes",
