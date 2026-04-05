@@ -125,6 +125,25 @@ C_LINK_TEXT="$(resolve_token "$C_LINK_TEXT")"
 C_LINK_URL="$(resolve_token "$C_LINK_URL")"
 C_RULE="$(resolve_token "$C_RULE")"
 C_RESET="0"
+
+# -- Header tokens (ANSI) --
+C_HDR_KEY="$(resolve_token "$C_HDR_KEY")"
+C_HDR_VALUE="$(resolve_token "$C_HDR_VALUE")"
+C_HDR_DIM="$(resolve_token "$C_HDR_DIM")"
+
+# -- Picker tokens (ANSI) --
+C_PICKER_NUM="$(resolve_token "$C_PICKER_NUM")"
+C_PICKER_LABEL="$(resolve_token "$C_PICKER_LABEL")"
+C_PICKER_URL="$(resolve_token "$C_PICKER_URL")"
+C_PICKER_SEL_BG="$(resolve_token "$C_PICKER_SEL_BG")"
+C_PICKER_SEL_FG="$(resolve_token "$C_PICKER_SEL_FG")"
+
+# -- Message UI tokens (ANSI) --
+C_MSG_MARKER="$(resolve_token "$C_MSG_MARKER")"
+C_MSG_TITLE_SUCCESS="$(resolve_token "$C_MSG_TITLE_SUCCESS")"
+C_MSG_TITLE_ACCENT="$(resolve_token "$C_MSG_TITLE_ACCENT")"
+C_MSG_DETAIL="$(resolve_token "$C_MSG_DETAIL")"
+C_MSG_DIM="$(resolve_token "$C_MSG_DIM")"
 EOF
 
 # -- Write styleset --
