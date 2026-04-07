@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# aerc-save-email: Save the current email part to the corpus directory.
+# Pipe from aerc via :pipe -m aerc-save-email
+#
+# Reads stdin, writes a timestamped file (HTML or plain text) to
+# the corpus/ directory at the project root. Used for collecting
+# test fixtures and debugging rendering issues.
+
+set -euo pipefail
+
+# Locate corpus directory: AERC_CONFIG/../../../corpus, or ~/corpus
+if [[ -n "${AERC_CONFIG:-}" ]]; then
+    corpus_dir="$(cd "$AERC_CONFIG/../.." 2>/dev/null && pwd)/corpus"
+else
+    corpus_dir="$HOME/corpus"
+fi
+mkdir -p "$corpus_dir"
+
+# Read stdin into a temp file
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp"
+
+if [[ ! -s "$tmp" ]]; then
+    echo "aerc-save-email: no input" >&2
+    exit 1
+fi
+
+# Detect HTML by checking the first 1024 bytes for common markers
+ext="txt"
+if head -c 1024 "$tmp" | grep -qiE '<html|<head|<body|<!doctype|<table'; then
+    ext="html"
+fi
+
+# Timestamped filename with collision avoidance
+stamp="$(date +%Y%m%d-%H%M%S)"
+name="${stamp}.${ext}"
+path="${corpus_dir}/${name}"
+if [[ -e "$path" ]]; then
+    i=2
+    while [[ -e "${corpus_dir}/${stamp}-${i}.${ext}" ]]; do
+        ((i++))
+    done
+    name="${stamp}-${i}.${ext}"
+    path="${corpus_dir}/${name}"
+fi
+
+cp "$tmp" "$path"
+
+# Count pending files
+pending="$(find "$corpus_dir" -maxdepth 1 -type f | wc -l)"
+
+# Summary (matches the vertical centering style of the old Go version)
+rows="${AERC_ROWS:-24}"
+pad=$(( (rows - 4) / 3 ))
+printf '\033[?25l'
+printf '\n%.0s' $(seq 1 "$pad")
+printf ' # SAVED TO CORPUS\n'
+printf '\n'
+printf ' %s\n' "$name"
+printf ' %d pending\n' "$pending"
