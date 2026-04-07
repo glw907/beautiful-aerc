@@ -426,13 +426,36 @@ vim.keymap.set("n", "<leader>x", "<cmd>cq<cr>", { desc = "Abort compose" })
 
 
 vim.keymap.set("n", "<leader>sig", function()
-  local sig = {
-    "-- ",
-    "**Geoffrey L. Wright**  ",
-    "h 907-277-9397 | m 907-317-8472 (sporadic)",
+  -- Read signature from file. Look for signature.md in the aerc config
+  -- directory, falling back to a default if not found.
+  local sig_paths = {
+    vim.fn.expand("~/.config/aerc/signature.md"),
   }
+  local sig_lines = nil
+  for _, path in ipairs(sig_paths) do
+    local f = io.open(path, "r")
+    if f then
+      local content = f:read("*a")
+      f:close()
+      sig_lines = { "-- " }
+      for line in content:gmatch("([^\n]*)\n?") do
+        if line ~= "" or sig_lines then
+          sig_lines[#sig_lines + 1] = line
+        end
+      end
+      -- Trim trailing empty lines
+      while #sig_lines > 0 and sig_lines[#sig_lines] == "" do
+        sig_lines[#sig_lines] = nil
+      end
+      break
+    end
+  end
+  if not sig_lines then
+    vim.notify("No signature.md found in ~/.config/aerc/", vim.log.levels.WARN)
+    return
+  end
   local row = vim.api.nvim_win_get_cursor(0)[1]
-  vim.api.nvim_buf_set_lines(0, row, row, false, sig)
+  vim.api.nvim_buf_set_lines(0, row, row, false, sig_lines)
 end, { desc = "Insert email signature" })
 
 -- Insert-mode undo breakpoints: pressing punctuation ends the current undo chunk.
