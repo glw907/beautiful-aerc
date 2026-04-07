@@ -11,6 +11,8 @@ import (
 
 const defaultAPIURL = "https://api.anthropic.com/v1/messages"
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 type apiRequest struct {
 	Model     string       `json:"model"`
 	MaxTokens int          `json:"max_tokens"`
@@ -62,8 +64,7 @@ func CallAPI(url, apiKey, model, systemPrompt, text string) (string, error) {
 	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("call API: %w", err)
 	}

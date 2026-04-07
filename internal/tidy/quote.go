@@ -38,57 +38,34 @@ func SplitQuoted(input string) (author string, quoted []QuotedBlock) {
 
 	lines := strings.Split(body, "\n")
 
-	// Build the author lines (quoted lines become blank) and collect quoted blocks.
 	authorLines := make([]string, len(lines))
-	copy(authorLines, lines)
-
 	var blocks []QuotedBlock
+	hasNonBlankAuthor := false
+
 	i := 0
 	for i < len(lines) {
 		if !isQuoted(lines[i]) {
+			authorLines[i] = lines[i]
+			if strings.TrimSpace(lines[i]) != "" {
+				hasNonBlankAuthor = true
+			}
 			i++
 			continue
 		}
-		// Start of a quoted block.
 		start := i
 		var blockLines []string
 		for i < len(lines) && isQuoted(lines[i]) {
 			blockLines = append(blockLines, lines[i])
-			authorLines[i] = "" // replace with blank in author view
+			authorLines[i] = ""
 			i++
 		}
 		blocks = append(blocks, QuotedBlock{StartLine: start, Lines: blockLines})
 	}
 
-	// Determine if author is effectively empty (only whitespace lines remain).
-	allBlank := true
-	for _, l := range authorLines {
-		if strings.TrimSpace(l) != "" {
-			allBlank = false
-			break
-		}
-	}
-	// If any quoted blocks exist and all non-quoted content is blank, return
-	// empty author. But we still return the blank-line structure when there is
-	// actual whitespace-only non-quoted content mixed with quotes.
-	// The spec says: "If all lines are quoted (or only whitespace remains),
-	// author is empty string." — only emit empty when we have quoted blocks
-	// and nothing non-whitespace remains in author.
-	if len(blocks) > 0 && allBlank {
-		// Check that every original line was either quoted or whitespace-only.
-		onlyQuotedOrBlank := true
-		for _, l := range lines {
-			if !isQuoted(l) && strings.TrimSpace(l) != "" {
-				onlyQuotedOrBlank = false
-				break
-			}
-		}
-		if onlyQuotedOrBlank {
-			return "", blocks
-		}
+	if len(blocks) > 0 && !hasNonBlankAuthor {
+		return "", blocks
 	}
 
-	// Reconstruct author string.
 	authorStr := strings.Join(authorLines, "\n")
 	if trailingNewline {
 		authorStr += "\n"

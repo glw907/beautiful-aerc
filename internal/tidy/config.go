@@ -1,6 +1,7 @@
 package tidy
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -78,9 +79,7 @@ func LoadConfig(path string) (Config, error) {
 		return Config{}, fmt.Errorf("load config: %w", err)
 	}
 
-	// Decode into a separate struct so we can detect which fields were set.
-	// We decode directly into cfg so unset fields keep their default values.
-	if _, err := toml.Decode(string(data), &cfg); err != nil {
+	if _, err := toml.NewDecoder(bytes.NewReader(data)).Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
@@ -102,56 +101,33 @@ func ApplyRuleOverrides(cfg *Config, overrides []string) error {
 		if !ok {
 			return fmt.Errorf("rule override %q: missing '='", o)
 		}
+		var dst *bool
 		switch key {
 		case "spelling":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.Spelling = b
+			dst = &cfg.Rules.Spelling
 		case "grammar":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.Grammar = b
+			dst = &cfg.Rules.Grammar
 		case "punctuation":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.Punctuation = b
+			dst = &cfg.Rules.Punctuation
 		case "whitespace":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.Whitespace = b
+			dst = &cfg.Rules.Whitespace
 		case "capitalization":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.Capitalization = b
+			dst = &cfg.Rules.Capitalization
 		case "repeated_words":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.RepeatedWords = b
+			dst = &cfg.Rules.RepeatedWords
 		case "missing_punctuation":
-			b, err := parseBool(key, val)
-			if err != nil {
-				return err
-			}
-			cfg.Rules.MissingPunctuation = b
+			dst = &cfg.Rules.MissingPunctuation
 		case "oxford_comma":
 			if err := validateOxfordComma(val); err != nil {
 				return err
 			}
 			cfg.Rules.OxfordComma = val
+			continue
 		default:
 			return fmt.Errorf("rule override: unknown key %q", key)
+		}
+		if err := setBool(dst, key, val); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -167,11 +143,9 @@ func ApplyStyleOverrides(cfg *Config, overrides []string) error {
 		}
 		switch key {
 		case "em_dash_spaces":
-			b, err := parseBool(key, val)
-			if err != nil {
+			if err := setBool(&cfg.Style.EmDashSpaces, key, val); err != nil {
 				return err
 			}
-			cfg.Style.EmDashSpaces = b
 		case "ellipsis":
 			if err := validateEllipsis(val); err != nil {
 				return err
@@ -242,10 +216,11 @@ func validateEllipsis(v string) error {
 	}
 }
 
-func parseBool(key, val string) (bool, error) {
+func setBool(dst *bool, key, val string) error {
 	b, err := strconv.ParseBool(val)
 	if err != nil {
-		return false, fmt.Errorf("rule override %q: invalid bool value %q", key, val)
+		return fmt.Errorf("override %q: invalid bool value %q", key, val)
 	}
-	return b, nil
+	*dst = b
+	return nil
 }
