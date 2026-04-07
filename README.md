@@ -1,10 +1,11 @@
 # beautiful-aerc
 
-beautiful-aerc is a themeable, distributable email setup for the [aerc](https://aerc-mail.org/) email client. It ships a Go filter binary that replaces aerc's default shell-based filter pipeline, a theme system that generates consistent colors across aerc's UI and message viewer, and optional integration configs for kitty terminal and nvim-mail compose editor. The whole thing installs as a single GNU Stow package.
+beautiful-aerc is a themeable, distributable email setup for the [aerc](https://aerc-mail.org/) email client. It ships two Go binaries -- one for message rendering filters and one for Fastmail JMAP operations -- plus a theme system, aerc configuration, and optional integration configs for kitty terminal and nvim-mail compose editor. The whole thing installs as a single GNU Stow package.
 
 ## What's included
 
-- **Go binary** - four subcommands (`headers`, `html`, `plain`, `pick-link`) that aerc calls to render every message and provide link navigation. Replaces a tangle of shell scripts, awk, sed, and perl. Noticeably faster message rendering.
+- **beautiful-aerc binary** - subcommands (`headers`, `html`, `plain`, `pick-link`, `save`) that aerc calls to render every message, provide link navigation, and save emails for debugging. Replaces a tangle of shell scripts, awk, sed, and perl. Noticeably faster message rendering.
+- **fastmail-cli binary** - subcommands for Fastmail JMAP operations: mail filter rule management (`rules interactive`, `rules add`, `rules sweep`, `rules count`, `rules export`), masked email address deletion (`masked delete`), and folder listing (`folders`). Designed to be called from aerc keybindings.
 - **Theme system** - 16-slot semantic color definitions that generate both an aerc styleset (UI colors) and a palette file (message rendering colors) from one source file.
 - **Three built-in themes** - Nord, Solarized Dark, and Gruvbox Dark.
 - **aerc config** - `aerc.conf` and `binds.conf` ready to use, with comments. `accounts.conf.example` as a starting point.
@@ -18,6 +19,7 @@ beautiful-aerc is a themeable, distributable email setup for the [aerc](https://
 - [pandoc](https://pandoc.org/) (HTML-to-markdown conversion, called at runtime)
 - Go 1.23+ (build only)
 - GNU Stow (install only)
+- A [Fastmail](https://www.fastmail.com/) account with API token (for fastmail-cli commands)
 
 Optional:
 
@@ -34,11 +36,11 @@ git clone https://github.com/glw907/beautiful-aerc.git
 cd beautiful-aerc
 ```
 
-**2. Build the binary**
+**2. Build the binaries**
 
 ```sh
 make build
-make install   # installs to ~/.local/bin/
+make install   # installs both binaries to ~/.local/bin/
 ```
 
 **3. Generate a theme**
@@ -133,6 +135,47 @@ The picker uses theme colors from your palette. Configure the keybinding in `bin
 <Tab> = :menu -dc 'beautiful-aerc pick-link' :open-link
 ```
 
+## Fastmail integration
+
+The `fastmail-cli` binary provides Fastmail JMAP operations designed to be called from aerc keybindings. It requires a `FASTMAIL_API_TOKEN` environment variable.
+
+### Mail filter rules
+
+Create filter rules interactively from the message you're viewing:
+
+| Key | Action |
+|-----|--------|
+| `ff` | Create rule from sender address |
+| `fs` | Create rule from subject |
+| `ft` | Create rule from recipient address |
+
+Each binding pipes the current message to `fastmail-cli rules interactive`, which extracts the relevant header, shows a folder picker, creates the rule, and optionally sweeps existing matching messages.
+
+You can also manage rules directly:
+
+```sh
+fastmail-cli rules add --search "from:news@example.com" --folder Newsletters
+fastmail-cli rules sweep --search "from:news@example.com" --folder Newsletters
+fastmail-cli rules count --search "from:news@example.com"
+fastmail-cli rules export
+```
+
+### Masked email addresses
+
+Delete a Fastmail masked email address (soft-delete via JMAP):
+
+| Key | Action |
+|-----|--------|
+| `md` | Delete the masked address and the message |
+
+The `md` binding pipes the message to `fastmail-cli masked delete`, which extracts the To/Cc addresses, finds the matching masked email, confirms via prompt, deletes it, then deletes the message in aerc.
+
+### Folder listing
+
+```sh
+fastmail-cli folders    # list custom (non-role) mailboxes
+```
+
 ## Switching themes
 
 Re-run the generator with a different theme file:
@@ -172,4 +215,5 @@ The kitty color block in `kitty-mail.conf` should match your chosen theme. See [
 
 - [docs/themes.md](docs/themes.md) - color slots, custom themes, the generator, and override mechanism
 - [docs/filters.md](docs/filters.md) - full pipeline description, link modes, troubleshooting
+- [docs/styling.md](docs/styling.md) - visual hierarchy, layout patterns, color token usage
 - [docs/contributing.md](docs/contributing.md) - project layout, adding filters, adding themes, testing
