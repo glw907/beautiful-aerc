@@ -8,7 +8,8 @@ the beautiful-aerc repo as a third binary.
 ## CLI Interface
 
 ```
-tidytext                              # read stdin, write stdout
+tidytext                              # show help
+echo "text" | tidytext                # piped stdin, write stdout
 tidytext message.txt                  # read file, write stdout
 tidytext --in-place message.txt       # modify file directly
 tidytext --no-config                  # all defaults, skip config file
@@ -17,10 +18,10 @@ tidytext --rule spelling=false        # override a single rule
 tidytext --style em_dash_spaces=true  # override a single style
 ```
 
-Stdin/stdout is the primary mode. When given a file path argument,
-reads that file instead of stdin. `--in-place` writes back to the
-file via temp file + rename. Without `--in-place`, file mode writes
-to stdout.
+Running `tidytext` with no arguments and no piped stdin shows help.
+When stdin is a pipe or file argument is provided, it processes
+input. `--in-place` writes back to the file via temp file + rename.
+Without `--in-place`, file mode writes to stdout.
 
 Flags override config file values. `--no-config` ignores the config
 file entirely and uses built-in defaults.
