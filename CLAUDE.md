@@ -25,16 +25,19 @@ conform. Key rules:
 ```
 cmd/beautiful-aerc/    CLI wiring: filters, picker, save (cobra)
 cmd/fastmail-cli/      CLI wiring: rules, masked, folders (cobra)
+cmd/tidytext/          CLI wiring: fix, config (cobra)
 internal/palette/      Parse generated/palette.sh, expose color tokens
 internal/filter/       Filter implementations (headers, html, plain) + footnote rendering
 internal/picker/       Link picker UI (pick-link subcommand)
 internal/corpus/       Save email parts to timestamped files
+internal/tidy/         Prose tidying: config, prompt, API, quote handling
 internal/jmap/         JMAP session auth, mail operations, masked email operations
 internal/header/       RFC 2822 header parsing (from, subject, to/cc)
 internal/rules/        Local JSON rule file operations
 e2e/                   End-to-end tests for beautiful-aerc (build binary, pipe fixtures)
 e2e/testdata/          HTML email fixtures + golden output files
 e2e-fastmail/          End-to-end tests for fastmail-cli
+e2e-tidytext/          End-to-end tests for tidytext
 .config/aerc/          aerc configuration files
 .config/aerc/themes/   Theme source files + generator script
 .config/aerc/generated/ Generated palette.sh (produced by generator)
@@ -149,14 +152,58 @@ Fastmail JMAP CLI, built as a second binary from the same module.
     AERC_RULES_FILE          Path to rules file (default: ~/.config/aerc/mailrules.json)
     AERC_RULES_EXPORT_DEST   Export destination (default: ~/Documents/mailrules.json)
 
+## tidytext
+
+Claude-powered prose tidier, built as a third binary from the same
+module. Fixes spelling, grammar, and punctuation without altering
+meaning or the author's style.
+
+### Command Structure
+
+    tidytext
+      fix           Fix spelling, grammar, and punctuation
+      config        Show effective configuration
+        init          Create default config file
+
+### Usage
+
+    tidytext                              # show help
+    echo "text" | tidytext fix            # piped stdin
+    tidytext fix message.txt              # read file
+    tidytext fix --in-place message.txt   # modify file directly
+    tidytext fix --no-config              # skip config, use defaults
+    tidytext fix --rule spelling=false    # override a rule
+    tidytext fix --style em_dash_spaces=true
+    tidytext config                       # show current config
+    tidytext config init                  # create default config
+
+### Config
+
+Location: `~/.config/tidytext/config.toml`
+
+If the file does not exist, all rules are enabled with defaults.
+Users only need to specify what they want to change.
+
+### Environment Variables
+
+    ANTHROPIC_API_KEY    Claude API key (required for fix command)
+    TIDYTEXT_API_URL     Override API endpoint (testing only)
+
+### nvim-mail Integration
+
+`<leader>t` runs tidytext on the compose buffer body (excluding
+headers and signature). Changed words are highlighted with teal
+undercurl extmarks (`EmailTidyChange` highlight group) that clear
+on next edit.
+
 ## Build
 
 ```
-make build     # build both binaries
+make build     # build all three binaries
 make test      # run tests
 make vet       # go vet
 make check     # vet + test (gate before commits)
-make install   # install both to ~/.local/bin/
+make install   # install all three to ~/.local/bin/
 ```
 
 ## Corpus
