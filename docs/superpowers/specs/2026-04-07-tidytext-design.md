@@ -25,6 +25,34 @@ to stdout.
 Flags override config file values. `--no-config` ignores the config
 file entirely and uses built-in defaults.
 
+### Command Help
+
+Cobra generates help from the command metadata. The root command
+should produce output along these lines:
+
+```
+Tidy prose with AI-powered spelling, grammar, and punctuation fixes.
+
+Reads text from stdin or a file, fixes errors using Claude, and
+writes the corrected text to stdout. Quoted lines (> prefixed) and
+code blocks are preserved unchanged. Returns original text on any
+error.
+
+Config: ~/.config/tidytext/config.toml
+
+Usage:
+  tidytext [file] [flags]
+
+Flags:
+      --config string   config file (default ~/.config/tidytext/config.toml)
+      --in-place        modify file in place
+      --no-config       skip config file, use defaults
+      --rule strings    override a rule (e.g. spelling=false)
+      --style strings   override a style (e.g. em_dash_spaces=true)
+  -h, --help            help for tidytext
+  -v, --version         version for tidytext
+```
+
 ## Core Flow
 
 1. Read input (stdin or file)
