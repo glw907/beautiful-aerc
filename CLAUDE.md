@@ -215,11 +215,21 @@ corpus emails.
 
 ## Personal Config
 
-The author's personal configs (with all optional bindings enabled)
-live in `~/.dotfiles/` (workstation repo, `beautiful-aerc` stow
-package). This project ships working defaults with optional bindings
-commented out. When configs change in this project, the corresponding
-personal configs in `~/.dotfiles/` may also need updating.
+This project ships working defaults that any user can stow directly
+from their clone. The author's personal configs live in
+`~/.dotfiles/beautiful-aerc/` (workstation repo) as a real stow
+package — not a symlink to this project. Personal differences from
+repo defaults:
+
+- `binds.conf` — all optional bindings enabled (fastmail-cli,
+  aerc-save-email)
+- `signature.md` — real signature (repo ships `.example` only)
+- `mailrules.json` — personal mail rules (not in this repo)
+- `accounts.conf` — personal credentials (repo ships `.example` only)
+
+When configs change in this project, the corresponding personal
+configs in `~/.dotfiles/beautiful-aerc/` need manual sync. The Go
+binaries are installed via `make install` (not stowed).
 
 ## Filter Testing
 
