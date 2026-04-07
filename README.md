@@ -1,31 +1,34 @@
 # beautiful-aerc
 
-beautiful-aerc is a themeable, distributable email setup for the [aerc](https://aerc-mail.org/) email client. It ships two Go binaries -- one for message rendering filters and one for Fastmail JMAP operations -- plus a theme system, aerc configuration, and optional integration configs for kitty terminal and nvim-mail compose editor. The whole thing installs as a single GNU Stow package.
+A themeable, productive email environment for the [aerc](https://aerc-mail.org/) email client.
 
-## What's included
+aerc is a powerful terminal email client, but out of the box it relies on shell scripts and external tools for message rendering, has limited theming support, and requires significant configuration work to reach daily-driver quality. beautiful-aerc provides a complete, cohesive setup: fast Go-based message rendering, a semantic theme system, an interactive link picker, and optional integrations for Fastmail, prose editing, and Neovim — everything needed to make aerc a polished, productive environment.
 
-- **beautiful-aerc binary** - subcommands (`headers`, `html`, `plain`, `pick-link`, `save`) that aerc calls to render every message, provide link navigation, and save emails for debugging. Replaces a tangle of shell scripts, awk, sed, and perl. Noticeably faster message rendering.
-- **fastmail-cli binary** - subcommands for Fastmail JMAP operations: mail filter rule management (`rules interactive`, `rules add`, `rules sweep`, `rules count`, `rules export`), masked email address deletion (`masked delete`), and folder listing (`folders`). Designed to be called from aerc keybindings.
-- **Theme system** - 16-slot semantic color definitions that generate both an aerc styleset (UI colors) and a palette file (message rendering colors) from one source file.
-- **Three built-in themes** - Nord, Solarized Dark, and Gruvbox Dark.
-- **aerc config** - `aerc.conf` and `binds.conf` ready to use, with comments. `accounts.conf.example` as a starting point.
-- **nvim-mail config** - Neovim profile for composing messages in aerc, with a custom `aercmail` syntax file.
-- **kitty config** - Terminal profile for launching aerc in a dedicated kitty window.
-- **Launcher scripts** - `mail` (kitty + aerc) and `nvim-mail` (Neovim with the mail profile).
+## Components
+
+- **mailrender** — message rendering filters (`headers`, `html`, `plain`). Replaces a tangle of shell scripts, awk, sed, and perl with a single fast Go binary. Noticeably faster rendering on complex HTML emails.
+- **pick-link** — interactive URL picker for the message viewer. Press Tab to open, use 1–9 for instant selection or j/k to navigate.
+- **fastmail-cli** — Fastmail JMAP CLI for mail filter rules, masked email management, and folder listing. Designed to be called from aerc keybindings. *(Optional — Fastmail users only.)*
+- **tidytext** — Claude-powered prose tidier for the compose editor. Fixes spelling, grammar, and punctuation without altering meaning or style. *(Optional — requires Anthropic API key.)*
+- **aerc-save-email** — dev utility for saving raw email parts to a test corpus. *(Optional — development use.)*
+- **nvim-mail** — Neovim compose editor profile with custom `aercmail` syntax highlighting, hard-wrap at 72 characters, spell check, and tidytext integration.
+- **aerc config** — `aerc.conf` and `binds.conf` ready to use. Includes a semantic theme system with three built-in themes, aerc stylesets, Nerd Font icons for message flags and folder names, and clean thread display.
+- **kitty config** — Terminal profile for launching aerc in a dedicated kitty window.
 
 ## Prerequisites
 
-- [aerc](https://aerc-mail.org/) (email client)
-- [pandoc](https://pandoc.org/) (HTML-to-markdown conversion, called at runtime)
+- [aerc](https://aerc-mail.org/)
+- [pandoc](https://pandoc.org/) (called at runtime for HTML conversion)
 - Go 1.23+ (build only)
 - GNU Stow (install only)
-- A [Fastmail](https://www.fastmail.com/) account with API token (for fastmail-cli commands)
 
 Optional:
 
-- [kitty](https://sw.kovidgoyal.net/kitty/) for the `mail` launcher script
-- [Neovim](https://neovim.io/) for the nvim-mail compose editor
-- [khard](https://github.com/lucc/khard) for address book completion
+- [kitty](https://sw.kovidgoyal.net/kitty/) — for the `mail` launcher script
+- [Neovim](https://neovim.io/) 0.10+ — for the nvim-mail compose editor
+- [khard](https://github.com/lucc/khard) — for address book completion in the compose editor
+- Fastmail account with API token — for fastmail-cli
+- Anthropic API key — for tidytext
 
 ## Install
 
@@ -36,11 +39,11 @@ git clone https://github.com/glw907/beautiful-aerc.git
 cd beautiful-aerc
 ```
 
-**2. Build the binaries**
+**2. Build and install the four binaries**
 
 ```sh
 make build
-make install   # installs both binaries to ~/.local/bin/
+make install   # installs mailrender, pick-link, fastmail-cli, tidytext to ~/.local/bin/
 ```
 
 **3. Generate a theme**
@@ -53,18 +56,16 @@ themes/generate themes/nord.sh
 ```
 
 This writes two files:
-- `generated/palette.sh` - color tokens for the Go binary
-- `stylesets/nord` - aerc styleset with hex values
+- `generated/palette.sh` — color tokens for the Go binaries
+- `stylesets/nord` — aerc styleset with hex values
 
 **4. Install with Stow**
-
-From your dotfiles directory (or directly):
 
 ```sh
 stow beautiful-aerc
 ```
 
-Or, if you're symlinking from `~/Projects/`:
+Or, if symlinking from `~/Projects/`:
 
 ```sh
 ln -s ~/Projects/beautiful-aerc ~/.dotfiles/beautiful-aerc
@@ -80,25 +81,23 @@ cp ~/.config/aerc/accounts.conf.example ~/.config/aerc/accounts.conf
 
 **6. Set the styleset name in aerc.conf**
 
-Open `~/.config/aerc/aerc.conf` and set `styleset-name` to match the theme you generated:
-
 ```ini
 styleset-name=nord
 ```
 
 ## How email renders
 
-aerc routes every message through the filters defined in `aerc.conf`:
+aerc routes every message through filters defined in `aerc.conf`:
 
 ```ini
-.headers=beautiful-aerc headers
-text/html=beautiful-aerc html
-text/plain=beautiful-aerc plain
+.headers=mailrender headers
+text/html=mailrender html
+text/plain=mailrender plain
 ```
 
-- **headers** - reorders headers (From, To, Date, Subject), colorizes field names, wraps long address lines, and prints a separator line.
-- **html** - calls pandoc to convert HTML to markdown, cleans up pandoc artifacts, renders links as footnote references with a numbered URL section at the bottom, and applies syntax highlighting for headings, bold, and italic.
-- **plain** - detects HTML-in-plain-text MIME parts (common with some clients) and routes them through the HTML pipeline. Otherwise pipes through aerc's built-in `wrap | colorize`.
+- **headers** — reorders headers (From, To, Cc, Bcc, Date, Subject), colorizes field names, wraps long address lines, and prints a separator line.
+- **html** — calls pandoc to convert HTML to markdown, cleans up pandoc artifacts, renders links as footnote references with a numbered URL section at the bottom, and applies syntax highlighting for headings, bold, and italic.
+- **plain** — detects HTML-in-plain-text MIME parts (sent by some clients) and routes them through the HTML pipeline. Otherwise pipes through aerc's built-in `wrap | colorize`.
 
 See [docs/filters.md](docs/filters.md) for the full pipeline description.
 
@@ -117,103 +116,93 @@ See https://myaccount.google.com/notifications
 [^2]: https://accounts.google.com/AccountChooser?Email=...
 ```
 
-Link text is colored, footnote markers are dimmed. Self-referencing links (where the display text is the URL) render as plain URLs with no footnote.
+Link text is colored; footnote markers are dimmed. Self-referencing links (where the display text is the URL) render as plain URLs with no footnote.
 
 ## Link picker
 
-Press Tab in the message viewer to open the link picker. It lists all URLs in the current message with numbered shortcuts:
+Press Tab in the message viewer to open an interactive URL picker. All URLs from the current message are listed with numbered shortcuts:
 
-- 1-9 instantly opens that link
-- 0 opens the 10th link
-- j/k or arrows to navigate, Enter to select
-- q or Escape to cancel
+- **1–9, 0** — instantly open that link (0 opens the 10th)
+- **j/k or arrows** — move selection
+- **Enter** — open selected link
+- **q or Escape** — cancel
 
-The picker uses theme colors from your palette. Configure the keybinding in `binds.conf`:
+The keybinding in `binds.conf`:
 
 ```ini
 [view]
-<Tab> = :menu -dc 'beautiful-aerc pick-link' :open-link
+<Tab> = :pipe pick-link<Enter>
 ```
 
-## Fastmail integration
+## Theme system
 
-The `fastmail-cli` binary provides Fastmail JMAP operations designed to be called from aerc keybindings. It requires a `FASTMAIL_API_TOKEN` environment variable.
+Themes are defined as 16 semantic color slots in a shell file under `.config/aerc/themes/`. A single generator command produces both the aerc styleset (UI colors) and the palette file (message rendering colors and markdown tokens):
 
-### Mail filter rules
+```sh
+cd ~/.config/aerc
+themes/generate themes/nord.sh
+```
 
-Create filter rules interactively from the message you're viewing:
+Three themes are included: **Nord**, **Solarized Dark**, and **Gruvbox Dark**.
 
-| Key | Action |
-|-----|--------|
-| `ff` | Create rule from sender address |
-| `fs` | Create rule from subject |
-| `ft` | Create rule from recipient address |
+To switch themes, re-run the generator with a different theme file and update `styleset-name` in `aerc.conf`. Any customizations you made below the override marker in `generated/palette.sh` or the styleset are preserved across regeneration.
 
-Each binding pipes the current message to `fastmail-cli rules interactive`, which extracts the relevant header, shows a folder picker, creates the rule, and optionally sweeps existing matching messages.
+To create your own theme, copy one of the built-in files, adjust the hex values, and run the generator. The color slots map to semantic roles (primary background, selection, accent, error, etc.) so changes propagate consistently across the entire UI.
 
-You can also manage rules directly:
+See [docs/themes.md](docs/themes.md) for the full token reference and theme file format.
+
+## Optional components
+
+### fastmail-cli
+
+For Fastmail users, `fastmail-cli` provides JMAP operations designed to be called from aerc keybindings. Set `FASTMAIL_API_TOKEN` in your environment, then use the bindings in `binds.conf` (commented out by default):
+
+- **ff / fs / ft** — create a filter rule from sender address, subject, or recipient
+- **md** — delete a masked email address and the message that used it
+
+Rules can also be managed from the command line:
 
 ```sh
 fastmail-cli rules add --search "from:news@example.com" --folder Newsletters
 fastmail-cli rules sweep --search "from:news@example.com" --folder Newsletters
-fastmail-cli rules count --search "from:news@example.com"
-fastmail-cli rules export
+fastmail-cli folders   # list custom mailboxes
 ```
 
-### Masked email addresses
+### tidytext
 
-Delete a Fastmail masked email address (soft-delete via JMAP):
-
-| Key | Action |
-|-----|--------|
-| `md` | Delete the masked address and the message |
-
-The `md` binding pipes the message to `fastmail-cli masked delete`, which extracts the To/Cc addresses, finds the matching masked email, confirms via prompt, deletes it, then deletes the message in aerc.
-
-### Folder listing
+`tidytext` pipes text through Claude Haiku to fix spelling, grammar, and punctuation without altering meaning or style. Set `ANTHROPIC_API_KEY` in your environment.
 
 ```sh
-fastmail-cli folders    # list custom (non-role) mailboxes
+echo "Plese review the attatchd documnt." | tidytext fix
+# → Please review the attached document.
 ```
 
-## Switching themes
+In nvim-mail, `<leader>t` runs tidytext on the compose buffer body. Changed words are highlighted with undercurl extmarks that clear on the next edit.
 
-Re-run the generator with a different theme file:
-
-```sh
-cd ~/.config/aerc
-themes/generate themes/solarized-dark.sh
-```
-
-Then update `styleset-name` in `aerc.conf` to match:
-
-```ini
-styleset-name=solarized-dark
-```
-
-Any customizations you made below the override marker in `generated/palette.sh` or the styleset file are preserved across regeneration.
-
-See [docs/themes.md](docs/themes.md) for the full theme system, including how to create your own theme.
-
-## Optional components
+The keybinding in `binds.conf` is commented out by default — uncomment it if you install tidytext and set the API key.
 
 ### nvim-mail
 
-The `nvim-mail` Neovim profile is configured as the compose editor in `aerc.conf`. It provides a focused writing environment with syntax highlighting for the `aercmail` format (headers + body) and a dedicated set of plugins.
+A dedicated Neovim profile for composing email in aerc. It provides:
 
-To use it, Neovim must be installed and `nvim-mail` must be on your `$PATH` (the stow package puts it at `~/.local/bin/nvim-mail`).
+- Custom `aercmail` syntax highlighting (header keys, address fields, quoted text)
+- Hard-wrap at 72 characters with RFC 3676 format=flowed support
+- Spell check on body text, skipping headers and quoted lines
+- tidytext integration via `<leader>t`
+- Address header reformatting and quoted text reflow on buffer open
+- Signature insertion via `<leader>sig` — copy `signature.md.example` to `signature.md` and edit it
 
-Edit `~/.config/nvim-mail/init.lua` to set your signature.
+Requires Neovim 0.10+. The stow package puts `nvim-mail` at `~/.local/bin/nvim-mail`.
 
 ### kitty terminal
 
-The `mail` launcher script opens aerc in a dedicated kitty window with a separate profile (`kitty-mail.conf`). Run it from a launcher or bind it to a keyboard shortcut.
+The `mail` launcher script opens aerc in a dedicated kitty window using `kitty-mail.conf`. Bind it to a keyboard shortcut or application launcher for quick access.
 
-The kitty color block in `kitty-mail.conf` should match your chosen theme. See [docs/themes.md](docs/themes.md) for details on keeping kitty and nvim-mail colors in sync.
+The kitty color block in `kitty-mail.conf` uses the same Nord hex values as the theme. If you switch themes, update the kitty color block to match. See [docs/themes.md](docs/themes.md) for details.
 
 ## Further reading
 
-- [docs/themes.md](docs/themes.md) - color slots, custom themes, the generator, and override mechanism
-- [docs/filters.md](docs/filters.md) - full pipeline description, link modes, troubleshooting
-- [docs/styling.md](docs/styling.md) - visual hierarchy, layout patterns, color token usage
-- [docs/contributing.md](docs/contributing.md) - project layout, adding filters, adding themes, testing
+- [docs/themes.md](docs/themes.md) — color slots, custom themes, the generator, and override mechanism
+- [docs/filters.md](docs/filters.md) — full pipeline description, link modes, troubleshooting
+- [docs/styling.md](docs/styling.md) — visual hierarchy, layout patterns, color token usage
+- [docs/contributing.md](docs/contributing.md) — project layout, adding filters, adding themes, testing
