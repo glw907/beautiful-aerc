@@ -23,18 +23,18 @@ conform. Key rules:
 ## Project Structure
 
 ```
-cmd/beautiful-aerc/    CLI wiring: filters, picker, save (cobra)
+cmd/mailrender/        CLI wiring: filters (cobra)
+cmd/pick-link/         CLI wiring: interactive URL picker (cobra)
 cmd/fastmail-cli/      CLI wiring: rules, masked, folders (cobra)
 cmd/tidytext/          CLI wiring: fix, config (cobra)
 internal/palette/      Parse generated/palette.sh, expose color tokens
 internal/filter/       Filter implementations (headers, html, plain) + footnote rendering
-internal/picker/       Link picker UI (pick-link subcommand)
-internal/corpus/       Save email parts to timestamped files
+internal/picker/       Link picker UI
 internal/tidy/         Prose tidying: config, prompt, API, quote handling
 internal/jmap/         JMAP session auth, mail operations, masked email operations
 internal/header/       RFC 2822 header parsing (from, subject, to/cc)
 internal/rules/        Local JSON rule file operations
-e2e/                   End-to-end tests for beautiful-aerc (build binary, pipe fixtures)
+e2e/                   End-to-end tests for mailrender (build binary, pipe fixtures)
 e2e/testdata/          HTML email fixtures + golden output files
 e2e-fastmail/          End-to-end tests for fastmail-cli
 e2e-tidytext/          End-to-end tests for tidytext
@@ -45,7 +45,7 @@ e2e-tidytext/          End-to-end tests for tidytext
 .config/aerc/filters/  pandoc Lua filter (unwrap-tables.lua)
 .config/nvim-mail/     Neovim compose editor profile
 .config/kitty/         kitty terminal profile for mail
-.local/bin/            Launcher scripts (mail, nvim-mail)
+.local/bin/            Launcher scripts (mail, nvim-mail, aerc-save-email)
 ```
 
 ## aerc Filter Protocol
@@ -78,16 +78,16 @@ palette.
 
 ## Link Picker
 
-The `pick-link` subcommand provides an interactive URL picker for
-the message viewer. It is invoked via `:pipe` so aerc feeds the raw
-message on stdin.
+`pick-link` is a standalone binary that provides an interactive URL
+picker for the message viewer. It is invoked via `:pipe` so aerc feeds
+the raw message on stdin.
 
 **Pipeline:** raw HTML → `filter.HTML` (same filter the viewer uses)
 → extract URLs from footnotes and plain text → interactive picker
 → `xdg-open` selected URL.
 
 **Keybinding** (in `[view]` section of `binds.conf`):
-- `Tab` — open the link picker (`pick-link`)
+- `Tab` — open the link picker (`:pipe pick-link<Enter>`)
 - `Ctrl-l` — manually type a URL to open (`open-link`)
 
 **Picker controls:**
@@ -199,18 +199,27 @@ on next edit.
 ## Build
 
 ```
-make build     # build all three binaries
+make build     # build all four binaries
 make test      # run tests
 make vet       # go vet
 make check     # vet + test (gate before commits)
-make install   # install all three to ~/.local/bin/
+make install   # install all four to ~/.local/bin/
 ```
 
 ## Corpus
 
 `corpus/` holds raw email parts (HTML or plain text) flagged for
-rendering issues. Save emails from aerc with `b` in the viewer.
-The `/fix-corpus` skill batch-processes accumulated corpus emails.
+rendering issues. Save emails from aerc using the `aerc-save-email`
+shell script. The `/fix-corpus` skill batch-processes accumulated
+corpus emails.
+
+## Personal Config
+
+The author's personal configs (with all optional bindings enabled)
+live in `~/.dotfiles/` (workstation repo, `beautiful-aerc` stow
+package). This project ships working defaults with optional bindings
+commented out. When configs change in this project, the corresponding
+personal configs in `~/.dotfiles/` may also need updating.
 
 ## Filter Testing
 

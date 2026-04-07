@@ -4,14 +4,15 @@
 
 ```
 beautiful-aerc/
-  cmd/beautiful-aerc/        CLI entry point for filters (cobra wiring only)
+  cmd/mailrender/            CLI entry point for filters (cobra wiring only)
     main.go                  calls newRootCmd().Execute()
     root.go                  cobra root command, adds subcommands
     headers.go               headers subcommand: flags -> filter.Headers()
     html.go                  html subcommand: flags -> filter.HTML()
     plain.go                 plain subcommand: flags -> filter.Plain()
-    pick-link.go             pick-link subcommand: flags -> picker.Run()
-    save.go                  save subcommand: flags -> corpus.Save()
+  cmd/pick-link/             CLI entry point for URL picker (cobra wiring only)
+    main.go                  calls newRootCmd().Execute()
+    root.go                  cobra root command, runs picker directly
   cmd/fastmail-cli/          CLI entry point for JMAP operations (cobra wiring only)
     main.go                  calls newRootCmd().Execute()
     root.go                  cobra root command, adds rules/masked/folders
@@ -34,8 +35,6 @@ beautiful-aerc/
     footnotes.go             footnote conversion (convertToFootnotes, styleFootnotes)
   internal/picker/
     picker.go                interactive URL picker UI with vim-style navigation
-  internal/corpus/
-    corpus.go                save email parts to timestamped files
   internal/jmap/
     session.go               JMAP session auth, Call/CallWith methods
     email.go                 QueryInbox, MoveEmails
@@ -46,7 +45,7 @@ beautiful-aerc/
   internal/rules/
     rules.go                 Load, Save, Add rules to local JSON file
   e2e/
-    e2e_test.go              builds beautiful-aerc binary in TestMain, pipes fixtures
+    e2e_test.go              builds mailrender binary in TestMain, pipes fixtures
     testdata/                HTML email fixtures
       golden/                expected output files
   e2e-fastmail/
@@ -60,9 +59,9 @@ beautiful-aerc/
     filters/                 unwrap-tables.lua pandoc filter
 ```
 
-The repo builds two binaries from one Go module. The boundary between `cmd/` and `internal/` is strict: `cmd/` contains only cobra wiring and flag parsing. All logic lives in `internal/`. This makes functions directly testable without subprocess invocation.
+The repo builds four binaries from one Go module (mailrender, pick-link, fastmail-cli, tidytext). The boundary between `cmd/` and `internal/` is strict: `cmd/` contains only cobra wiring and flag parsing. All logic lives in `internal/`. This makes functions directly testable without subprocess invocation.
 
-## How aerc calls the binary
+## How aerc calls the filter binary
 
 aerc invokes filter commands as shell commands. The protocol is simple:
 
@@ -71,7 +70,7 @@ aerc invokes filter commands as shell commands. The protocol is simple:
 - `AERC_COLUMNS` environment variable carries the terminal width as a string
 - Non-zero exit causes aerc to show an error
 
-The binary reads `AERC_COLUMNS` in each subcommand and falls back to 80 if not set or not parseable.
+mailrender reads `AERC_COLUMNS` in each subcommand and falls back to 80 if not set or not parseable.
 
 For the `.headers` filter, aerc sends RFC 2822 headers (key: value, with continuation lines for folded headers). The blank line that separates headers from body is included in stdin.
 
@@ -80,12 +79,12 @@ For `text/html`, aerc sends the raw HTML body. For `text/plain`, it sends the ra
 ## Build and test
 
 ```sh
-make build    # build both binaries (beautiful-aerc + fastmail-cli)
+make build    # build all four binaries
 make vet      # go vet ./...
 make test     # go test ./...
 make check    # vet + test (required before commits)
-make install  # install both binaries to ~/.local/bin/
-make clean    # remove both binaries
+make install  # install all four binaries to ~/.local/bin/
+make clean    # remove all binaries
 ```
 
 `make check` is the gate. Both `vet` and `test` must pass before committing.
@@ -181,9 +180,9 @@ The project `CLAUDE.md` at the repo root includes the full mandatory conventions
 
 ## E2E tests
 
-There are two e2e test suites: `e2e/` for beautiful-aerc (filter rendering with golden file comparison) and `e2e-fastmail/` for fastmail-cli (rule and extract operations against temp filesystems). Both build their respective binary once in `TestMain`.
+There are two e2e test suites: `e2e/` for mailrender (filter rendering with golden file comparison) and `e2e-fastmail/` for fastmail-cli (rule and extract operations against temp filesystems). Both build their respective binary once in `TestMain`.
 
-The beautiful-aerc e2e tests pipe each fixture through a subcommand and compare output against golden files.
+The mailrender e2e tests pipe each fixture through a subcommand and compare output against golden files.
 
 **Fixture categories in `e2e/testdata/`:**
 
