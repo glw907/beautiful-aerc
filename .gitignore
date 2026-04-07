@@ -1,4 +1,5 @@
 /beautiful-aerc
+/fastmail-cli
 .config/aerc/accounts.conf
 .config/aerc/fastmail-*.age
 .config/aerc/mailrules.json

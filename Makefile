@@ -1,7 +1,6 @@
-BINARY := beautiful-aerc
-
 build:
-	go build -o $(BINARY) ./cmd/beautiful-aerc
+	go build -o beautiful-aerc ./cmd/beautiful-aerc
+	go build -o fastmail-cli ./cmd/fastmail-cli
 
 test:
 	go test ./...
@@ -14,10 +13,11 @@ lint:
 
 install:
 	GOBIN=$(HOME)/.local/bin go install ./cmd/beautiful-aerc
+	GOBIN=$(HOME)/.local/bin go install ./cmd/fastmail-cli
 
 check: vet test
 
 clean:
-	rm -f $(BINARY)
+	rm -f beautiful-aerc fastmail-cli
 
 .PHONY: build test vet lint install check clean

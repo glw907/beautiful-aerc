@@ -23,12 +23,18 @@ conform. Key rules:
 ## Project Structure
 
 ```
-cmd/beautiful-aerc/    CLI wiring (cobra root + subcommands)
+cmd/beautiful-aerc/    CLI wiring: filters, picker, save (cobra)
+cmd/fastmail-cli/      CLI wiring: rules, masked, folders (cobra)
 internal/palette/      Parse generated/palette.sh, expose color tokens
 internal/filter/       Filter implementations (headers, html, plain) + footnote rendering
 internal/picker/       Link picker UI (pick-link subcommand)
-e2e/                   End-to-end tests (build binary, pipe fixtures)
+internal/corpus/       Save email parts to timestamped files
+internal/jmap/         JMAP session auth, mail operations, masked email operations
+internal/header/       RFC 2822 header parsing (from, subject, to/cc)
+internal/rules/        Local JSON rule file operations
+e2e/                   End-to-end tests for beautiful-aerc (build binary, pipe fixtures)
 e2e/testdata/          HTML email fixtures + golden output files
+e2e-fastmail/          End-to-end tests for fastmail-cli
 .config/aerc/          aerc configuration files
 .config/aerc/themes/   Theme source files + generator script
 .config/aerc/generated/ Generated palette.sh (produced by generator)
@@ -117,14 +123,40 @@ reference and theme file format.
   against golden files in `e2e/testdata/golden/`
 - **Live verification:** tmux-based aerc testing (see global CLAUDE.md)
 
+## fastmail-cli
+
+Fastmail JMAP CLI, built as a second binary from the same module.
+
+### Command Structure
+
+    fastmail-cli
+      rules         Manage mail filter rules
+        interactive   Full interactive filter creation flow
+        add           Add a filter rule
+        sweep         Move matching messages
+        count         Count matching messages
+        export        Copy rules to export destination
+        export-check  Check if export is needed
+        extract       Extract header fields from a message
+      masked        Manage masked email addresses
+        delete        Delete a masked email address
+      folders       List custom mailboxes
+      version       Print version
+
+### Environment Variables
+
+    FASTMAIL_API_TOKEN       Fastmail API token (required for JMAP commands)
+    AERC_RULES_FILE          Path to rules file (default: ~/.config/aerc/mailrules.json)
+    AERC_RULES_EXPORT_DEST   Export destination (default: ~/Documents/mailrules.json)
+
 ## Build
 
 ```
-make build     # build binary
+make build     # build both binaries
 make test      # run tests
 make vet       # go vet
 make check     # vet + test (gate before commits)
-make install   # install to ~/.local/bin/
+make install   # install both to ~/.local/bin/
 ```
 
 ## Corpus
