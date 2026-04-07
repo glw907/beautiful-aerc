@@ -1,5 +1,8 @@
-/beautiful-aerc
+/mailrender
+/pick-link
 /fastmail-cli
+/tidytext
+.config/aerc/signature.md
 .config/aerc/accounts.conf
 .config/aerc/fastmail-*.age
 .config/aerc/mailrules.json
