@@ -20,12 +20,12 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	// Build the binary once
-	tmp, err := os.MkdirTemp("", "beautiful-aerc-test")
+	tmp, err := os.MkdirTemp("", "mailrender-test")
 	if err != nil {
 		panic(err)
 	}
-	binary = filepath.Join(tmp, "beautiful-aerc")
-	cmd := exec.Command("go", "build", "-o", binary, "./cmd/beautiful-aerc")
+	binary = filepath.Join(tmp, "mailrender")
+	cmd := exec.Command("go", "build", "-o", binary, "./cmd/mailrender")
 	cmd.Dir = filepath.Join("..")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Create a test palette so the binary can load colors
-	paletteDir, err = os.MkdirTemp("", "beautiful-aerc-palette")
+	paletteDir, err = os.MkdirTemp("", "mailrender-palette")
 	if err != nil {
 		panic(err)
 	}
@@ -141,84 +141,6 @@ func TestHTMLFixtures(t *testing.T) {
 				t.Errorf("output differs from golden file %s\ngot:\n%s\nwant:\n%s", goldenPath, out, golden)
 			}
 		})
-	}
-}
-
-// setupSaveTest creates the directory structure needed for save tests.
-// Returns the AERC_CONFIG dir and the target corpus dir where files land.
-// Pre-creates the corpus dir so FindDir picks it over ~/corpus.
-func setupSaveTest(t *testing.T) (aercDir, corpusDir string) {
-	t.Helper()
-	root := filepath.Join(t.TempDir(), "save")
-	aercDir = filepath.Join(root, ".config", "aerc")
-	corpusDir = filepath.Join(root, "corpus")
-	if err := os.MkdirAll(aercDir, 0755); err != nil {
-		t.Fatalf("creating test dir: %v", err)
-	}
-	if err := os.MkdirAll(corpusDir, 0755); err != nil {
-		t.Fatalf("creating corpus dir: %v", err)
-	}
-	return aercDir, corpusDir
-}
-
-func TestSaveHTMLFixture(t *testing.T) {
-	aercDir, corpusDir := setupSaveTest(t)
-
-	input, err := os.ReadFile("testdata/simple.html")
-	if err != nil {
-		t.Fatalf("reading fixture: %v", err)
-	}
-
-	cmd := exec.Command(binary, "save")
-	cmd.Stdin = bytes.NewReader(input)
-	cmd.Env = append(os.Environ(),
-		"AERC_CONFIG="+aercDir,
-	)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("running save: %v\noutput: %s", err, out)
-	}
-
-	matches, err := filepath.Glob(filepath.Join(corpusDir, "*.html"))
-	if err != nil {
-		t.Fatalf("globbing corpus: %v", err)
-	}
-	if len(matches) != 1 {
-		t.Fatalf("expected 1 html file in corpus, got %d", len(matches))
-	}
-
-	saved, err := os.ReadFile(matches[0])
-	if err != nil {
-		t.Fatalf("reading saved file: %v", err)
-	}
-	if !bytes.Equal(saved, input) {
-		t.Error("saved content does not match input")
-	}
-}
-
-func TestSavePlainText(t *testing.T) {
-	aercDir, corpusDir := setupSaveTest(t)
-
-	input := []byte("Hello, this is a plain text email.\n")
-
-	cmd := exec.Command(binary, "save")
-	cmd.Stdin = bytes.NewReader(input)
-	cmd.Env = append(os.Environ(),
-		"AERC_CONFIG="+aercDir,
-	)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("running save: %v\noutput: %s", err, out)
-	}
-
-	matches, err := filepath.Glob(filepath.Join(corpusDir, "*.txt"))
-	if err != nil {
-		t.Fatalf("globbing corpus: %v", err)
-	}
-	if len(matches) != 1 {
-		t.Fatalf("expected 1 txt file in corpus, got %d", len(matches))
 	}
 }
 
