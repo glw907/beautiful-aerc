@@ -88,118 +88,6 @@ vim.opt.swapfile = false
 -- Enable 24-bit color so Nord theme hex values render correctly.
 vim.opt.termguicolors = true
 
--- Quote reflow
---
--- When aerc opens a reply, the quoted text from the original message often
--- has irregular line breaks from the sender's client. reflow_quoted() fixes
--- this by joining consecutive quoted lines at the same quote level into
--- paragraphs, then re-wrapping each paragraph at 72 columns with a
--- consistent "> " prefix. This runs once on buffer open via VimEnter.
---
--- Blank quoted lines are preserved as paragraph breaks. Lines with only
--- decorative characters (e.g., "--- Original Message ---") are truncated to
--- the terminal width and emitted as-is without joining.
-
--- Extract the raw quote prefix from a line (e.g., "> > " or ">").
-local function get_quote_prefix(line)
-  return line:match("^(>[ >]*%s?)")
-end
-
--- Normalize a prefix to just its ">" characters for level comparison.
--- ">> " and "> > " are both level 2 — this strips spaces for comparison.
-local function normalize_prefix(prefix)
-  if not prefix then return nil end
-  return prefix:gsub("[^>]", "")
-end
-
--- Word-wrap `text` to fit within `width` columns, prefixed by `prefix`.
--- Returns a list of wrapped lines. Each line starts with `prefix`.
--- Breaks only at spaces — never mid-word.
-local function wrap_text(text, prefix, width)
-  local result = {}
-  local avail = width - vim.fn.strdisplaywidth(prefix)
-  while vim.fn.strdisplaywidth(text) > avail do
-    local chars = vim.fn.split(text, [[\zs]])
-    local break_idx = nil
-    local w = 0
-    for ci, ch in ipairs(chars) do
-      w = w + vim.fn.strdisplaywidth(ch)
-      if w > avail then break end
-      if ch == " " then break_idx = ci end
-    end
-    if not break_idx then break end
-    local first = table.concat(chars, "", 1, break_idx)
-    result[#result + 1] = prefix .. first:gsub("%s+$", "")
-    text = table.concat(chars, "", break_idx + 1):gsub("^%s+", "")
-  end
-  if #text > 0 then
-    result[#result + 1] = prefix .. text
-  end
-  return result
-end
-
--- Reflow all quoted blocks in `lines`, returning the updated line list.
--- Consecutive quoted lines at the same level are joined into one paragraph
--- and re-wrapped. Quote levels are identified by the number of ">" characters.
-local function reflow_quoted(lines, width)
-  local result = {}
-  local i = 1
-  while i <= #lines do
-    local prefix = get_quote_prefix(lines[i])
-    if prefix then
-      local level = normalize_prefix(prefix)
-      -- Build canonical prefix: "> " for single, "> > " for nested, etc.
-      local canon = string.rep("> ", #level - 1) .. "> "
-      local text = lines[i]:sub(#prefix + 1)
-      -- Blank quoted line = paragraph break, emit and advance
-      if text:match("^%s*$") then
-        result[#result + 1] = canon:gsub("%s+$", "")
-        i = i + 1
-      -- Decorative line (no letters/digits) = truncate to width, emit standalone
-      elseif not text:match("[%w]") then
-        local chars = vim.fn.split(text, [[\zs]])
-        local avail = width - vim.fn.strdisplaywidth(canon)
-        local truncated = {}
-        local w = 0
-        for _, ch in ipairs(chars) do
-          w = w + vim.fn.strdisplaywidth(ch)
-          if w > avail then break end
-          truncated[#truncated + 1] = ch
-        end
-        result[#result + 1] = canon .. table.concat(truncated)
-        i = i + 1
-      else
-        -- Join consecutive lines at the same quote level
-        local j = i + 1
-        while j <= #lines do
-          local next_prefix = get_quote_prefix(lines[j])
-          local next_level = normalize_prefix(next_prefix)
-          if next_level ~= level then break end
-          local next_text = lines[j]:sub(#next_prefix + 1)
-          -- Blank quoted line = paragraph break
-          if next_text:match("^%s*$") then break end
-          -- Decorative line = paragraph break
-          if not next_text:match("[%w]") then break end
-          text = text:gsub("%s+$", "") .. " " .. next_text:gsub("^%s+", "")
-          j = j + 1
-        end
-        -- Re-wrap the joined paragraph
-        text = text:gsub("^%s+", ""):gsub("%s+$", "")
-        local wrapped = wrap_text(text, canon, width)
-        for _, wl in ipairs(wrapped) do
-          result[#result + 1] = wl
-        end
-        i = j
-      end
-    else
-      result[#result + 1] = lines[i]
-      i = i + 1
-    end
-  end
-  return result
-end
-
-
 -- Custom filetype
 --
 -- We use a custom filetype "aercmail" instead of Neovim's built-in "mail"
@@ -216,106 +104,33 @@ vim.api.nvim_create_autocmd("VimEnter", {
 -- Buffer preparation (VimEnter)
 --
 -- Runs once when the compose buffer opens. Normalizes the RFC 2822 headers
--- that aerc wrote into the buffer, then positions the cursor for writing.
+-- and reflows quoted text via the compose-prep binary, then positions the
+-- cursor for writing.
 --
--- Steps:
---   1. Unfold RFC 2822 continuation lines (lines starting with whitespace
---      are joined to the preceding header line — RFC 2822 allows long header
---      values to be folded across multiple lines with leading whitespace).
---   2. Strip bare angle brackets from address headers. Addresses like
---      "<email@dom>" with no preceding name become "email@dom". Named
---      addresses like "Name <email@dom>" are left unchanged.
---   3. Re-fold To/Cc/Bcc lines at recipient boundaries, filling to 72 columns.
---      Each "Name <email>" stays as a unit; continuation lines are indented
---      to align under the first address.
---   4. Reflow quoted text (see reflow_quoted above).
---   5. Insert two blank buffer lines before the headers and render visual
+-- compose-prep performs: unfold continuation lines, strip bare angle brackets,
+-- re-fold address headers at 72 columns, inject empty Cc/Bcc, reflow quoted
+-- text. If compose-prep is not installed or fails, the buffer is left
+-- unchanged — usable but not pretty.
+--
+-- After normalization:
+--   1. Insert two blank buffer lines before the headers and render visual
 --      separator lines (─ × 72) above and below the header block using
 --      extmark overlays. These are display-only; BufWritePre strips them
 --      before saving (see below).
---   6. Position the cursor between the bottom separator and the quoted text,
+--   2. Position the cursor between the bottom separator and the quoted text,
 --      with blank lines above and below, and enter insert mode.
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-
-    -- Unfold RFC 2822 continuation lines (leading whitespace) into single lines
-    local unfolded = {}
-    for _, line in ipairs(lines) do
-      if line:match("^[ \t]") and #unfolded > 0 then
-        unfolded[#unfolded] = unfolded[#unfolded] .. " " .. line:match("^%s*(.*)")
-      else
-        unfolded[#unfolded + 1] = line
-      end
+    -- Normalize headers and reflow quoted text via compose-prep.
+    -- If compose-prep is not installed or fails, the buffer is left
+    -- unchanged — usable but not pretty.
+    local raw_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local result = vim.fn.systemlist("compose-prep", raw_lines)
+    if vim.v.shell_error == 0 and #result > 0 then
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, result)
+    else
+      result = raw_lines
     end
-
-    -- Strip angle brackets from bare <email> (no name) in address headers.
-    -- Pattern ([,:])(%s*)<([^>]+)> matches addresses preceded by ":" or ","
-    -- (i.e., no name before the angle bracket). "Name <email>" is unchanged
-    -- because the character before "<" is a letter, not ":" or ",".
-    for i, line in ipairs(unfolded) do
-      if line:match("^[A-Za-z-]+:") then
-        unfolded[i] = line:gsub("([,:])(%s*)<([^>]+)>", "%1%2%3")
-      end
-    end
-
-    -- Re-fold address headers at recipient boundaries (fill to ~72 cols).
-    -- Only To/Cc/Bcc are re-folded; other headers (From, Subject, etc.)
-    -- are left as-is.
-    local result = {}
-    local max_width = 72
-    for _, line in ipairs(unfolded) do
-      local key, value
-      for _, k in ipairs({ "To", "Cc", "Bcc" }) do
-        local pattern = "^(" .. k .. "):%s*(.*)"
-        key, value = line:match(pattern)
-        if key then break end
-      end
-      if key and value and value:find(",") then
-        local indent = string.rep(" ", #key + 2)
-        local recipients = {}
-        for addr in (value .. ","):gmatch("(.-),%s*") do
-          if addr ~= "" then
-            recipients[#recipients + 1] = addr
-          end
-        end
-        local cur = key .. ": " .. recipients[1]
-        for j = 2, #recipients do
-          local candidate = cur .. ", " .. recipients[j]
-          if #candidate <= max_width then
-            cur = candidate
-          else
-            result[#result + 1] = cur .. ","
-            cur = indent .. recipients[j]
-          end
-        end
-        result[#result + 1] = cur
-      else
-        result[#result + 1] = line
-      end
-    end
-
-    -- Ensure Cc: and Bcc: headers are present (aerc omits empty ones).
-    -- Insert after the last To:/To-continuation line so header order is
-    -- From, To, Cc, Bcc, Subject.
-    local has_cc, has_bcc = false, false
-    local to_end = nil
-    for i, line in ipairs(result) do
-      if line:match("^Cc:") then has_cc = true end
-      if line:match("^Bcc:") then has_bcc = true end
-      if line:match("^To:") then to_end = i end
-      -- Continuation lines (indented) after To: are still part of To:
-      if to_end and i > to_end and line:match("^%s") and not line:match("^%S") then
-        to_end = i
-      end
-    end
-    if to_end then
-      if not has_bcc then table.insert(result, to_end + 1, "Bcc:") end
-      if not has_cc then table.insert(result, to_end + 1, "Cc:") end
-    end
-
-    -- Reflow quoted text (joins jagged lines, re-wraps at 72 columns)
-    result = reflow_quoted(result, 72)
 
     -- Add blank line + separator line above headers.
     -- Two blank lines are inserted at the top; extmarks will overlay them
@@ -325,12 +140,11 @@ vim.api.nvim_create_autocmd("VimEnter", {
     table.insert(result, 1, "")  -- blank line at top
 
     vim.api.nvim_buf_set_lines(0, 0, -1, false, result)
-    lines = result
 
     -- Find the first blank line after the headers (marks end of header block)
     local header_end = nil
-    for i = 3, #lines do  -- skip the two lines we added
-      if lines[i] == "" then
+    for i = 3, #result do  -- skip the two lines we added
+      if result[i] == "" then
         header_end = i
         break
       end
@@ -370,9 +184,10 @@ vim.api.nvim_create_autocmd("VimEnter", {
       end
 
       if to_empty and to_line_nr then
-        -- New compose or forward: append at end of To: line
-        vim.api.nvim_win_set_cursor(0, { to_line_nr, 0 })
-        vim.cmd("normal! A")
+        -- New compose or forward: set line to "To: " and cursor after space
+        vim.api.nvim_buf_set_lines(0, to_line_nr - 1, to_line_nr, false, { "To: " })
+        vim.api.nvim_win_set_cursor(0, { to_line_nr, 3 })
+        vim.cmd("startinsert!")
       else
         -- Reply: cursor in body between separator and quoted text
         vim.api.nvim_win_set_cursor(0, { header_end + 2, 0 })
