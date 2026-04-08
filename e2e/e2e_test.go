@@ -12,7 +12,7 @@ import (
 
 var (
 	binary       string
-	paletteDir   string
+	configDir    string
 	updateGolden = flag.Bool("update-golden", false, "regenerate golden files")
 )
 
@@ -32,54 +32,63 @@ func TestMain(m *testing.M) {
 		panic("build failed: " + err.Error())
 	}
 
-	// Create a test palette so the binary can load colors
-	paletteDir, err = os.MkdirTemp("", "mailrender-palette")
+	// Create test config directory with theme + aerc.conf
+	configDir, err = os.MkdirTemp("", "mailrender-config")
 	if err != nil {
 		panic(err)
 	}
-	genDir := filepath.Join(paletteDir, "generated")
-	os.MkdirAll(genDir, 0755)
-	palette := `BG_BASE=#2e3440
-BG_ELEVATED=#3b4252
-BG_SELECTION=#394353
-BG_BORDER=#49576b
-FG_BASE=#d8dee9
-FG_BRIGHT=#e5e9f0
-FG_BRIGHTEST=#eceff4
-FG_DIM=#616e88
-ACCENT_PRIMARY=#81a1c1
-ACCENT_SECONDARY=#88c0d0
-ACCENT_TERTIARY=#8fbcbb
-COLOR_ERROR=#bf616a
-COLOR_WARNING=#d08770
-COLOR_SUCCESS=#a3be8c
-COLOR_INFO=#ebcb8b
-COLOR_SPECIAL=#b48ead
-C_HEADING="1;38;2;163;190;140"
-C_BOLD="1"
-C_ITALIC="3"
-C_LINK_TEXT="38;2;136;192;208"
-C_LINK_URL="38;2;97;110;136"
-C_RULE="38;2;97;110;136"
-C_RESET="0"
-C_HDR_KEY="38;2;129;161;193;1"
-C_HDR_VALUE="38;2;216;222;233"
-C_HDR_DIM="38;2;97;110;136"
-C_PICKER_NUM="38;2;129;161;193"
-C_PICKER_LABEL="38;2;216;222;233"
-C_PICKER_URL="38;2;97;110;136"
-C_PICKER_SEL_BG="38;2;57;67;83"
-C_PICKER_SEL_FG="38;2;229;233;240"
-C_MSG_MARKER="38;2;97;110;136;1"
-C_MSG_TITLE_SUCCESS="38;2;163;190;140;1"
-C_MSG_TITLE_ACCENT="38;2;129;161;193;1"
-C_MSG_DETAIL="38;2;216;222;233"
-C_MSG_DIM="38;2;97;110;136"
-`
-	os.WriteFile(filepath.Join(genDir, "palette.sh"), []byte(palette), 0644)
 
-	// Copy unwrap-tables.lua into the test palette dir so the binary can find it
-	filterDir := filepath.Join(paletteDir, "filters")
+	// Write aerc.conf
+	os.WriteFile(filepath.Join(configDir, "aerc.conf"), []byte("[ui]\nstyleset-name=test\n"), 0644)
+
+	// Write TOML theme matching the old test palette values
+	themesDir := filepath.Join(configDir, "themes")
+	os.MkdirAll(themesDir, 0755)
+	themeContent := `name = "test"
+
+[colors]
+bg_base = "#2e3440"
+bg_elevated = "#3b4252"
+bg_selection = "#394353"
+bg_border = "#49576b"
+fg_base = "#d8dee9"
+fg_bright = "#e5e9f0"
+fg_brightest = "#eceff4"
+fg_dim = "#616e88"
+accent_primary = "#81a1c1"
+accent_secondary = "#88c0d0"
+accent_tertiary = "#8fbcbb"
+color_error = "#bf616a"
+color_warning = "#d08770"
+color_success = "#a3be8c"
+color_info = "#ebcb8b"
+color_special = "#b48ead"
+
+[tokens]
+heading = { color = "color_success", bold = true }
+bold = { bold = true }
+italic = { italic = true }
+link_text = { color = "accent_secondary" }
+link_url = { color = "fg_dim" }
+rule = { color = "fg_dim" }
+hdr_key = { color = "accent_primary", bold = true }
+hdr_value = { color = "fg_base" }
+hdr_dim = { color = "fg_dim" }
+picker_num = { color = "accent_primary" }
+picker_label = { color = "fg_base" }
+picker_url = { color = "fg_dim" }
+picker_sel_bg = { color = "bg_selection" }
+picker_sel_fg = { color = "fg_bright" }
+msg_marker = { color = "fg_dim", bold = true }
+msg_title_success = { color = "color_success", bold = true }
+msg_title_accent = { color = "accent_primary", bold = true }
+msg_detail = { color = "fg_base" }
+msg_dim = { color = "fg_dim" }
+`
+	os.WriteFile(filepath.Join(themesDir, "test.toml"), []byte(themeContent), 0644)
+
+	// Copy unwrap-tables.lua into the test config dir so the binary can find it
+	filterDir := filepath.Join(configDir, "filters")
 	os.MkdirAll(filterDir, 0755)
 	luaSrc := filepath.Join("..", ".config", "aerc", "filters", "unwrap-tables.lua")
 	luaData, err := os.ReadFile(luaSrc)
@@ -92,7 +101,7 @@ C_MSG_DIM="38;2;97;110;136"
 
 	code := m.Run()
 	os.RemoveAll(tmp)
-	os.RemoveAll(paletteDir)
+	os.RemoveAll(configDir)
 	os.Exit(code)
 }
 
@@ -117,7 +126,7 @@ func TestHTMLFixtures(t *testing.T) {
 			cmd.Stdin = bytes.NewReader(input)
 			cmd.Env = append(os.Environ(),
 				"AERC_COLUMNS=80",
-				"AERC_CONFIG="+paletteDir,
+				"AERC_CONFIG="+configDir,
 			)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -151,7 +160,7 @@ func TestHeadersFixture(t *testing.T) {
 	cmd.Stdin = strings.NewReader(input)
 	cmd.Env = append(os.Environ(),
 		"AERC_COLUMNS=80",
-		"AERC_CONFIG="+paletteDir,
+		"AERC_CONFIG="+configDir,
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
