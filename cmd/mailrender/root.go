@@ -11,5 +11,6 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newHeadersCmd())
 	cmd.AddCommand(newHTMLCmd())
 	cmd.AddCommand(newPlainCmd())
+	cmd.AddCommand(newThemesCmd())
 	return cmd
 }
