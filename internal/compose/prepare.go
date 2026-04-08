@@ -42,6 +42,7 @@ func Prepare(input []byte, opts Options) []byte {
 
 	headers = unfoldHeaders(headers)
 	headers = stripBrackets(headers)
+	headers = foldAddresses(headers)
 
 	var result []string
 	result = append(result, headers...)
