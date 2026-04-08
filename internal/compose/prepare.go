@@ -41,6 +41,7 @@ func Prepare(input []byte, opts Options) []byte {
 	body := lines[boundary+1:]
 
 	headers = unfoldHeaders(headers)
+	headers = stripBrackets(headers)
 
 	var result []string
 	result = append(result, headers...)
