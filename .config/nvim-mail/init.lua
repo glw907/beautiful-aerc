@@ -295,6 +295,25 @@ vim.api.nvim_create_autocmd("VimEnter", {
       end
     end
 
+    -- Ensure Cc: and Bcc: headers are present (aerc omits empty ones).
+    -- Insert after the last To:/To-continuation line so header order is
+    -- From, To, Cc, Bcc, Subject.
+    local has_cc, has_bcc = false, false
+    local to_end = nil
+    for i, line in ipairs(result) do
+      if line:match("^Cc:") then has_cc = true end
+      if line:match("^Bcc:") then has_bcc = true end
+      if line:match("^To:") then to_end = i end
+      -- Continuation lines (indented) after To: are still part of To:
+      if to_end and i > to_end and line:match("^%s") and not line:match("^%S") then
+        to_end = i
+      end
+    end
+    if to_end then
+      if not has_bcc then table.insert(result, to_end + 1, "Bcc:") end
+      if not has_cc then table.insert(result, to_end + 1, "Cc:") end
+    end
+
     -- Reflow quoted text (joins jagged lines, re-wraps at 72 columns)
     result = reflow_quoted(result, 72)
 
