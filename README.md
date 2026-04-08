@@ -11,6 +11,7 @@ aerc is a powerful terminal email client, but out of the box it relies on shell 
 - **fastmail-cli** — Fastmail JMAP CLI for mail filter rules, masked email management, and folder listing. Designed to be called from aerc keybindings. *(Optional — Fastmail users only.)*
 - **tidytext** — Claude-powered prose tidier for the compose editor. Fixes spelling, grammar, and punctuation without altering meaning or style. *(Optional — requires Anthropic API key.)*
 - **aerc-save-email** — dev utility for saving raw email parts to a test corpus. *(Optional — development use.)*
+- **compose-prep** — Compose buffer normalizer: RFC 2822 header unfolding, bare bracket stripping, address folding at 72 columns, Cc/Bcc header injection, and quoted text reflow. Falls back gracefully if not installed.
 - **nvim-mail** — Neovim compose editor profile with custom `aercmail` syntax highlighting, hard-wrap at 72 characters, spell check, and tidytext integration.
 - **aerc config** — `aerc.conf` and `binds.conf` ready to use. Includes a semantic theme system with three built-in themes, aerc stylesets, Nerd Font icons for message flags and folder names, and clean thread display.
 - **kitty config** — Terminal profile for launching aerc in a dedicated kitty window.
@@ -190,7 +191,7 @@ A dedicated Neovim profile for composing email in aerc. It provides:
 - Spell check on body text, skipping headers and quoted lines
 - Telescope-powered contact picker with fuzzy search (`<C-k>` in insert mode, `<leader>k` in normal mode) — requires [khard](https://github.com/lucc/khard) with CardDAV contacts synced via vdirsyncer
 - tidytext integration via `<leader>t`
-- Address header reformatting and quoted text reflow on buffer open
+- Compose buffer normalization via `compose-prep` — RFC 2822 header processing and quoted text reflow on buffer open
 - Smart cursor positioning: new compose and forward land on the `To:` line; replies land in the body
 - Signature insertion via `<leader>sig` — copy `signature.md.example` to `signature.md` and edit it
 

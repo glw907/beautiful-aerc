@@ -27,6 +27,8 @@ cmd/mailrender/        CLI wiring: filters (cobra)
 cmd/pick-link/         CLI wiring: interactive URL picker (cobra)
 cmd/fastmail-cli/      CLI wiring: rules, masked, folders (cobra)
 cmd/tidytext/          CLI wiring: fix, config (cobra)
+cmd/compose-prep/      CLI wiring: compose buffer normalizer (cobra)
+internal/compose/      Compose buffer normalization pipeline
 internal/palette/      Parse generated/palette.sh, expose color tokens
 internal/filter/       Filter implementations (headers, html, plain) + footnote rendering
 internal/picker/       Link picker UI
@@ -197,10 +199,35 @@ headers and signature). Changed words are highlighted with teal
 undercurl extmarks (`EmailTidyChange` highlight group) that clear
 on next edit.
 
+## compose-prep
+
+Stdin/stdout buffer normalizer for the nvim-mail compose editor.
+Reads an aerc compose buffer from stdin, normalizes headers and
+reflows quoted text, writes the result to stdout. Called by
+nvim-mail's VimEnter autocmd via `vim.fn.systemlist`.
+
+### Pipeline
+
+1. **Unfold** RFC 2822 continuation lines (space/tab prefix)
+2. **Strip brackets** from bare `<email>` addresses (uses `net/mail`)
+3. **Fold** To/Cc/Bcc at 72-column recipient boundaries
+4. **Inject** empty Cc:/Bcc: headers when absent
+5. **Reflow** quoted text paragraphs at 72 columns
+
+### Flags
+
+    --no-cc-bcc    Suppress empty Cc/Bcc header injection
+    --debug        Write diagnostic messages to stderr
+
+### Error Behavior
+
+On any processing error, the original input is passed through
+unchanged. Exit code is always 0. The compose window always opens.
+
 ## Build
 
 ```
-make build     # build all four binaries
+make build     # build all five binaries
 make test      # run tests
 make vet       # go vet
 make check     # vet + test (gate before commits)
