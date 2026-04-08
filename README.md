@@ -47,18 +47,15 @@ make build
 make install   # installs mailrender, pick-link, fastmail-cli, tidytext to ~/.local/bin/
 ```
 
-**3. Generate a theme**
+**3. Generate a styleset**
 
-Pick one of the three built-in themes and run the generator from inside `.config/aerc/`:
+Pick one of the three built-in themes and generate the aerc styleset:
 
 ```sh
-cd .config/aerc
-themes/generate themes/nord.sh
+mailrender themes generate nord
 ```
 
-This writes two files:
-- `generated/palette.sh` — color tokens for the Go binaries
-- `stylesets/nord` — aerc styleset with hex values
+This produces `stylesets/Nord` in your aerc config directory.
 
 **4. Install with Stow**
 
@@ -137,18 +134,17 @@ The keybinding in `binds.conf`:
 
 ## Theme system
 
-Themes are defined as 16 semantic color slots in a shell file under `.config/aerc/themes/`. A single generator command produces both the aerc styleset (UI colors) and the palette file (message rendering colors and markdown tokens):
+Themes are defined as 16 semantic color slots in a TOML file under `.config/aerc/themes/`. Go binaries read the active theme directly at runtime. A separate command generates the aerc styleset (UI colors):
 
 ```sh
-cd ~/.config/aerc
-themes/generate themes/nord.sh
+mailrender themes generate nord
 ```
 
 Three themes are included: **Nord**, **Solarized Dark**, and **Gruvbox Dark**.
 
-To switch themes, re-run the generator with a different theme file and update `styleset-name` in `aerc.conf`. Any customizations you made below the override marker in `generated/palette.sh` or the styleset are preserved across regeneration.
+To switch themes, set `styleset-name` in `aerc.conf` to the theme name and run `mailrender themes generate`.
 
-To create your own theme, copy one of the built-in files, adjust the hex values, and run the generator. The color slots map to semantic roles (primary background, selection, accent, error, etc.) so changes propagate consistently across the entire UI.
+To create your own theme, copy one of the built-in `.toml` files, adjust the hex values, and run the generator. The color slots map to semantic roles (primary background, selection, accent, error, etc.) so changes propagate consistently across the entire UI.
 
 See [docs/themes.md](docs/themes.md) for the full token reference and theme file format.
 
@@ -205,7 +201,7 @@ The kitty color block in `kitty-mail.conf` uses the same Nord hex values as the 
 
 ## Further reading
 
-- [docs/themes.md](docs/themes.md) — color slots, custom themes, the generator, and override mechanism
+- [docs/themes.md](docs/themes.md) — color slots, custom themes, and theme management
 - [docs/filters.md](docs/filters.md) — full pipeline description, link modes, troubleshooting
 - [docs/styling.md](docs/styling.md) — visual hierarchy, layout patterns, color token usage
 - [docs/contributing.md](docs/contributing.md) — project layout, adding filters, adding themes, testing

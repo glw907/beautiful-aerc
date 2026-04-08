@@ -29,7 +29,7 @@ cmd/fastmail-cli/      CLI wiring: rules, masked, folders (cobra)
 cmd/tidytext/          CLI wiring: fix, config (cobra)
 cmd/compose-prep/      CLI wiring: compose buffer normalizer (cobra)
 internal/compose/      Compose buffer normalization pipeline
-internal/palette/      Parse generated/palette.sh, expose color tokens
+internal/theme/        Load TOML theme files, resolve color tokens to ANSI
 internal/filter/       Filter implementations (headers, html, plain) + footnote rendering
 internal/picker/       Link picker UI
 internal/tidy/         Prose tidying: config, prompt, API, quote handling
@@ -41,8 +41,7 @@ e2e/testdata/          HTML email fixtures + golden output files
 e2e-fastmail/          End-to-end tests for fastmail-cli
 e2e-tidytext/          End-to-end tests for tidytext
 .config/aerc/          aerc configuration files
-.config/aerc/themes/   Theme source files + generator script
-.config/aerc/generated/ Generated palette.sh (produced by generator)
+.config/aerc/themes/   TOML theme files (nord.toml, solarized-dark.toml, gruvbox-dark.toml)
 .config/aerc/stylesets/ Generated aerc stylesets
 .config/aerc/filters/  pandoc Lua filter (unwrap-tables.lua)
 .config/nvim-mail/     Neovim compose editor profile
@@ -62,21 +61,19 @@ aerc calls filters as shell commands. Each filter:
 
 ## Theme System
 
-Theme files (`.config/aerc/themes/*.sh`) define 16 semantic hex color
-slots + markdown tokens. The generator (`themes/generate`) reads a
-theme file and produces `generated/palette.sh` (ANSI tokens for the
-Go binary) and `stylesets/<name>` (aerc UI colors).
+Theme files (`.config/aerc/themes/*.toml`) define 16 semantic hex color
+slots + TOML token definitions. Go binaries read `.toml` theme files
+directly at runtime, resolving color references and style modifiers at
+startup. The active theme is determined by `styleset-name` in
+`aerc.conf`.
 
-The Go binary reads `palette.sh` at runtime for all color tokens.
-It finds palette.sh by checking: `$AERC_CONFIG/generated/palette.sh`,
-then relative to binary, then `~/.config/aerc/generated/palette.sh`.
-If not found, it exits with a clear error.
+To generate an aerc styleset from a theme: `mailrender themes generate`.
+To generate for a specific theme: `mailrender themes generate nord`.
 
 **Never hardcode ANSI color codes or style modifiers (bold, italic,
 underline) in Go source.** All text styling must use composite
-palette tokens defined in the theme file. If a UI element needs
-styling, add a token to the theme and reference it through the
-palette.
+tokens defined in the theme file. If a UI element needs styling,
+add a token to the theme and reference it through the theme package.
 
 ## Link Picker
 
