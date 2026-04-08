@@ -351,16 +351,17 @@ vim.api.nvim_create_autocmd("VimEnter", {
       end
 
       if to_empty and to_line_nr then
-        -- New compose or forward: cursor at end of To: line
-        local to_line = vim.api.nvim_buf_get_lines(0, to_line_nr - 1, to_line_nr, false)[1]
-        vim.api.nvim_win_set_cursor(0, { to_line_nr, #to_line })
+        -- New compose or forward: append at end of To: line
+        vim.api.nvim_win_set_cursor(0, { to_line_nr, 0 })
+        vim.cmd("normal! A")
       else
         -- Reply: cursor in body between separator and quoted text
         vim.api.nvim_win_set_cursor(0, { header_end + 2, 0 })
+        vim.cmd("startinsert")
       end
+    else
+      vim.cmd("startinsert")
     end
-
-    vim.cmd("startinsert")
   end,
 })
 
