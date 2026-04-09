@@ -284,6 +284,7 @@ func Markdown(r io.Reader, w io.Writer, cols int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
+	md = reflowMarkdown(md, 72)
 
 	if _, err := fmt.Fprint(w, md+"\n"); err != nil {
 		return fmt.Errorf("writing output: %w", err)
