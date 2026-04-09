@@ -137,11 +137,38 @@ func isParagraph(block string) bool {
 	return true
 }
 
+// markdownTokens splits text into words, keeping markdown link syntax
+// [text](#) as atomic units so link text is never split across lines.
+func markdownTokens(text string) []string {
+	raw := strings.Fields(text)
+	var tokens []string
+	for i := 0; i < len(raw); i++ {
+		w := raw[i]
+		// Start of a markdown link: [word or [word word...](#)
+		if strings.HasPrefix(w, "[") && !strings.Contains(w, "](") {
+			// Accumulate words until we find one ending with ](#) or similar
+			link := w
+			for i+1 < len(raw) {
+				next := raw[i+1]
+				link += " " + next
+				i++
+				if strings.Contains(next, "](") {
+					break
+				}
+			}
+			tokens = append(tokens, link)
+			continue
+		}
+		tokens = append(tokens, w)
+	}
+	return tokens
+}
+
 // reflowParagraph joins all lines into one and re-wraps using minimum-
 // raggedness dynamic programming. This avoids the orphaned short words
 // that greedy wrapping produces (e.g., "offered\nby").
 func reflowParagraph(text string, width int) string {
-	words := strings.Fields(text)
+	words := markdownTokens(text)
 	if len(words) == 0 {
 		return ""
 	}
@@ -313,8 +340,8 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
-	md = reflowMarkdown(md, wrapWidth)
 	md, urls := extractLinks(md)
+	md = reflowMarkdown(md, wrapWidth)
 
 	style := t.GlamourStyle()
 	renderer, err := glamour.NewTermRenderer(

@@ -334,6 +334,51 @@ func TestReflowParagraph(t *testing.T) {
 	}
 }
 
+func TestMarkdownTokensKeepsLinksAtomic(t *testing.T) {
+	input := "Visit our [Help Center](#) or reply."
+	tokens := markdownTokens(input)
+	for _, tok := range tokens {
+		if tok == "[Help" || tok == "Center](#)" {
+			t.Errorf("link text split into separate tokens: %q", tokens)
+			break
+		}
+	}
+	found := false
+	for _, tok := range tokens {
+		if tok == "[Help Center](#)" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected atomic [Help Center](#) token, got: %q", tokens)
+	}
+}
+
+func TestReflowKeepsLinkTextTogether(t *testing.T) {
+	input := "Questions? Visit our [Help Center](#) or reply to this email for help."
+	got := reflowParagraph(input, 78)
+	if strings.Contains(got, "[Help\n") || strings.Contains(got, "Help\nCenter") {
+		t.Errorf("link text split across lines:\n%s", got)
+	}
+}
+
+func TestHTMLParagraphSpacing(t *testing.T) {
+	th := testTheme(t)
+	input := `<p>First paragraph.</p><p>Second paragraph.</p><p>Third paragraph.</p>`
+	var buf bytes.Buffer
+	if err := HTML(strings.NewReader(input), &buf, th, 80); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(buf.String())
+	// Paragraphs should be separated by blank lines.
+	if !strings.Contains(plain, "First paragraph.\n\n") {
+		t.Errorf("missing blank line between first and second paragraphs:\n%q", plain)
+	}
+	if !strings.Contains(plain, "Second paragraph.\n\n") {
+		t.Errorf("missing blank line between second and third paragraphs:\n%q", plain)
+	}
+}
+
 func TestReflowMarkdownPreservesNonParagraphs(t *testing.T) {
 	input := "# Heading\n\nParagraph text that is long enough to need wrapping at seventy-eight columns for proper display.\n\n- list item\n\n> blockquote"
 	got := reflowMarkdown(input, 78)
