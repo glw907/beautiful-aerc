@@ -241,3 +241,11 @@ The Go binaries are installed via `make install` (not stowed).
 
 See `.claude/docs/tmux-testing.md` for patterns to render emails
 through the filter and verify output via tmux.
+
+**MANDATORY: When the user reports a rendering problem, always
+verify the fix against the live email.** Fetch the raw HTML via
+the Fastmail JMAP API (see memory for access details), pipe it
+through the rebuilt binary, and confirm the issue is resolved
+before declaring it fixed. Do not rely solely on unit tests or
+synthetic fixtures — real marketing emails have tracking URLs,
+layout tables, and encoding quirks that fixtures may not capture.
