@@ -167,10 +167,15 @@ func Markdown(r io.Reader, w io.Writer, cols int) error {
 	return nil
 }
 
+// wrapWidth is the fixed line width for rendered email, matching the
+// standard email prose width. Using a fixed width rather than the
+// terminal width avoids awkward reflows when the pane is very wide
+// or very narrow.
+const wrapWidth = 78
+
 // HTML reads raw HTML email from r, converts it to markdown, and renders
-// it to styled ANSI output via Glamour using theme t. cols sets the
-// terminal width for wrapping.
-func HTML(r io.Reader, w io.Writer, t *theme.Theme, cols int) error {
+// it to styled ANSI output via Glamour using theme t.
+func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 	raw, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
@@ -187,7 +192,7 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, cols int) error {
 	style := t.GlamourStyle()
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),
-		glamour.WithWordWrap(cols),
+		glamour.WithWordWrap(wrapWidth),
 	)
 	if err != nil {
 		return fmt.Errorf("creating renderer: %w", err)
