@@ -10,6 +10,32 @@ import (
 	"golang.org/x/net/html"
 )
 
+// imageStripPlugin removes <img> tags from the output, emitting only the
+// alt text (if any). Terminals cannot display images, and marketing emails
+// embed dozens of product images whose URLs are pure noise. For image-links
+// (<a><img></a>), the commonmark plugin handles the <a> — this plugin just
+// ensures the <img> inside renders as alt text instead of ![alt](url).
+type imageStripPlugin struct{}
+
+func (p *imageStripPlugin) Name() string { return "image-strip" }
+
+func (p *imageStripPlugin) Init(conv *converter.Converter) error {
+	conv.Register.RendererFor("img", converter.TagTypeInline,
+		p.renderImg, converter.PriorityEarly)
+	return nil
+}
+
+func (p *imageStripPlugin) renderImg(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	for _, attr := range n.Attr {
+		if attr.Key == "alt" && strings.TrimSpace(attr.Val) != "" {
+			w.WriteString(strings.TrimSpace(attr.Val))
+			return converter.RenderSuccess
+		}
+	}
+	// No alt text — emit nothing.
+	return converter.RenderSuccess
+}
+
 // layoutTablePlugin flattens HTML tables that lack <th> elements (layout
 // tables) into sequential paragraphs. Tables with <th> elements (data
 // tables) pass through to the table plugin for pipe table rendering.
@@ -71,6 +97,7 @@ func newConverter() *converter.Converter {
 			commonmark.NewCommonmarkPlugin(),
 			table.NewTablePlugin(),
 			&layoutTablePlugin{},
+			&imageStripPlugin{},
 		),
 	)
 }

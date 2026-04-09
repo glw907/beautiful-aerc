@@ -1,4 +1,4 @@
-Image link: [38;2;136;192;208mLogo /logo.png[0m https://example.com                                  
+Image link: [38;2;136;192;208mLogo[0m https://example.com                                            
                                                                                 
 Empty link: https://example.com                                                 
                                                                                 
