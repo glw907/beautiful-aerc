@@ -1,13 +1,47 @@
-# Copy this file to accounts.conf and fill in your details.
 #
-# See aerc-accounts(5) for all options.
+# aerc account configuration — beautiful-aerc
+#
+# Copy this file to accounts.conf and fill in your details:
+#   cp accounts.conf.example accounts.conf
+#
+# This file contains your mail server credentials and is excluded from
+# git (see .gitignore). Never commit accounts.conf.
+#
+# aerc supports multiple mail protocols. The example below uses JMAP
+# (a modern, fast mail protocol used by Fastmail and others). IMAP
+# works too — see `man aerc-accounts` for IMAP examples.
+#
+# Common providers:
+#   Fastmail — JMAP:  jmap://you@fastmail.com (recommended)
+#              IMAP:  imaps://you@fastmail.com
+#   Gmail    — IMAP:  imaps://you@gmail.com (requires app password)
+#   Other    — check your provider's IMAP/SMTP settings
+#
+# For all options: `man aerc-accounts`
+#
 
 [Mail]
+# source: where to fetch mail from
 source = jmap://you@example.com
+
+# Credential helper (optional but recommended):
+# Instead of storing your password in this file, use a helper that
+# retrieves it from your system keychain or a password manager.
+# Example: source-cred-cmd = secret-tool lookup email you@example.com
 # source-cred-cmd = your-credential-helper
+
+# outgoing: where to send mail through
 outgoing = jmap://you@example.com
 # outgoing-cred-cmd = your-credential-helper
+
+# default: which folder to show when aerc starts
 default = Inbox
+
+# from: your display name and email address for sent messages
 from = Your Name <you@example.com>
+
+# copy-to: save sent messages to this folder
 copy-to = Sent
+
+# cache-headers: cache message headers locally for faster browsing
 cache-headers = true
