@@ -99,12 +99,20 @@ for readers who want to go deeper.
    why it exists.
 
    1. Go binaries (core)
-      - **mailrender** — the filter pipeline. Replaces aerc's
-        basic `colorize` and `plaintext` filters with a
-        multi-stage pipeline that produces clean markdown from
-        messy HTML. Why Go: the pipeline has 8+ stages (pre-clean,
-        pandoc, artifact cleanup, footnotes, ANSI styling) that
-        would be fragile as chained shell commands.
+      - **mailrender** — the filter pipeline, and the heart of
+        the project. This is where the hard work happens.
+        Email HTML is the messiest markup on the internet —
+        every sender generates it differently, there are no
+        real standards in practice, and the edge cases are
+        endless (layout tables, tracking pixels, invisible
+        divs, broken nesting, Unicode abuse). mailrender is an
+        8+ stage pipeline that tames all of this into clean,
+        readable markdown. It handles headers, HTML, and plain
+        text, each with their own subcommand. Why Go: a
+        pipeline this complex (pre-clean, pandoc orchestration,
+        artifact cleanup, footnote conversion, ANSI styling)
+        would be fragile and unmaintainable as chained shell
+        commands.
       - **compose-prep** — normalizes the compose buffer before
         nvim-mail opens it (unfold headers, strip brackets, reflow
         quoted text). Why Go: RFC 2822 header parsing and
