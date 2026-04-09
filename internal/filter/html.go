@@ -100,6 +100,98 @@ func normalizeWhitespace(text string) string {
 	return text
 }
 
+// reflowMarkdown reflows plain paragraphs in markdown text to the given width
+// using minimum-raggedness line breaking. Headings, lists, blockquotes, table
+// rows, and code blocks are left untouched.
+func reflowMarkdown(text string, width int) string {
+	blocks := strings.Split(text, "\n\n")
+	for i, block := range blocks {
+		if isParagraph(block) {
+			blocks[i] = reflowParagraph(block, width)
+		}
+	}
+	return strings.Join(blocks, "\n\n")
+}
+
+// isParagraph returns true if the block is a plain text paragraph (not a
+// heading, list, blockquote, table, or code fence).
+func isParagraph(block string) bool {
+	lines := strings.Split(block, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed[0] == '#' || trimmed[0] == '>' || trimmed[0] == '|' ||
+			trimmed[0] == '*' || trimmed[0] == '-' || trimmed[0] == '+' ||
+			strings.HasPrefix(trimmed, "```") ||
+			strings.HasPrefix(trimmed, "---") ||
+			strings.HasPrefix(trimmed, "===") {
+			return false
+		}
+	}
+	return true
+}
+
+// reflowParagraph joins all lines into one and re-wraps using minimum-
+// raggedness dynamic programming. This avoids the orphaned short words
+// that greedy wrapping produces (e.g., "offered\nby").
+func reflowParagraph(text string, width int) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return ""
+	}
+	n := len(words)
+
+	// wordLen[i] = visible length of word i.
+	wordLen := make([]int, n)
+	for i, w := range words {
+		wordLen[i] = len(w)
+	}
+
+	// cost[i] = minimum cost to set words[i:] into lines.
+	// breaks[i] = index of first word on the next line after the line starting at i.
+	const inf = 1<<62
+	cost := make([]int, n+1)
+	breaks := make([]int, n)
+	cost[n] = 0
+
+	for i := n - 1; i >= 0; i-- {
+		lineLen := -1 // will become 0 after first word adds +1 for space
+		best := inf
+		bestBreak := n
+		for j := i; j < n; j++ {
+			lineLen += 1 + wordLen[j] // +1 for space (first iteration: -1+1=0)
+			if lineLen > width && j > i {
+				break
+			}
+			var c int
+			if j == n-1 {
+				// Last line: no penalty.
+				c = cost[j+1]
+			} else {
+				slack := width - lineLen
+				c = slack*slack + cost[j+1]
+			}
+			if c < best {
+				best = c
+				bestBreak = j + 1
+			}
+		}
+		cost[i] = best
+		breaks[i] = bestBreak
+	}
+
+	// Reconstruct lines from break points.
+	var lines []string
+	for i := 0; i < n; {
+		j := breaks[i]
+		lines = append(lines, strings.Join(words[i:j], " "))
+		i = j
+	}
+	return strings.Join(lines, "\n")
+}
+
 // extractLinks extracts URLs from markdown links in order, strips empty-text
 // links, and replaces all link URLs with # so Glamour styles the text without
 // displaying URLs. Returns the cleaned text and the ordered URL list.
@@ -219,12 +311,13 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
+	md = reflowMarkdown(md, wrapWidth)
 	md, urls := extractLinks(md)
 
 	style := t.GlamourStyle()
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),
-		glamour.WithWordWrap(wrapWidth),
+		glamour.WithWordWrap(0),
 	)
 	if err != nil {
 		return fmt.Errorf("creating renderer: %w", err)

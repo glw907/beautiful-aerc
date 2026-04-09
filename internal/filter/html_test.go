@@ -265,6 +265,89 @@ func TestHTMLWrapWidth(t *testing.T) {
 	}
 }
 
+func TestReflowParagraph(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		width int
+		check func(t *testing.T, got string)
+	}{
+		{
+			name:  "even distribution avoids orphans",
+			input: "This is a test of the minimum raggedness algorithm that should distribute words evenly across lines rather than greedily filling each line and leaving a short runt at the end.",
+			width: 60,
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				lines := strings.Split(got, "\n")
+				for i, line := range lines {
+					if len(line) > 60 {
+						t.Errorf("line %d exceeds 60 chars: %q (%d)", i+1, line, len(line))
+					}
+					// No orphaned short word on a non-final line.
+					if i < len(lines)-1 && len(strings.TrimSpace(line)) > 0 && len(strings.TrimSpace(line)) <= 5 {
+						t.Errorf("orphaned short fragment %q on line %d", strings.TrimSpace(line), i+1)
+					}
+				}
+			},
+		},
+		{
+			name:  "respects width limit",
+			input: "The Stock Investing Account is a limited-discretion investment product offered by Wealthfront Advisers LLC, an SEC-registered investment advisor.",
+			width: 78,
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				for i, line := range strings.Split(got, "\n") {
+					if len(line) > 78 {
+						t.Errorf("line %d exceeds 78 chars: %q (%d)", i+1, line, len(line))
+					}
+				}
+			},
+		},
+		{
+			name:  "short text unchanged",
+			input: "Hello world",
+			width: 78,
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				if got != "Hello world" {
+					t.Errorf("got %q, want %q", got, "Hello world")
+				}
+			},
+		},
+		{
+			name:  "empty input",
+			input: "",
+			width: 78,
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				if got != "" {
+					t.Errorf("got %q, want empty", got)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := reflowParagraph(tt.input, tt.width)
+			tt.check(t, got)
+		})
+	}
+}
+
+func TestReflowMarkdownPreservesNonParagraphs(t *testing.T) {
+	input := "# Heading\n\nParagraph text that is long enough to need wrapping at seventy-eight columns for proper display.\n\n- list item\n\n> blockquote"
+	got := reflowMarkdown(input, 78)
+	if !strings.HasPrefix(got, "# Heading") {
+		t.Error("heading should be preserved")
+	}
+	if !strings.Contains(got, "- list item") {
+		t.Error("list should be preserved")
+	}
+	if !strings.Contains(got, "> blockquote") {
+		t.Error("blockquote should be preserved")
+	}
+}
+
 func TestStripANSI(t *testing.T) {
 	tests := []struct {
 		name  string
