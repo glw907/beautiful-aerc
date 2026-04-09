@@ -16,13 +16,12 @@ func TestFoldAddresses(t *testing.T) {
 			want:  []string{"To: alice@dom, bob@dom"},
 		},
 		{
-			name: "long list wraps at 72 columns",
+			name: "three recipients fit within 120 columns",
 			input: []string{
 				"To: Alice Example <alice@example.com>, Bob Example <bob@example.com>, Charlie Example <charlie@example.com>",
 			},
 			want: []string{
-				`To: "Alice Example" <alice@example.com>, "Bob Example" <bob@example.com>,`,
-				`    "Charlie Example" <charlie@example.com>`,
+				`To: "Alice Example" <alice@example.com>, "Bob Example" <bob@example.com>, "Charlie Example" <charlie@example.com>`,
 			},
 		},
 		{
@@ -36,24 +35,23 @@ func TestFoldAddresses(t *testing.T) {
 			want:  []string{"Subject: This is a very long subject line that exceeds seventy-two characters easily"},
 		},
 		{
-			name: "Cc indent matches key length",
+			name: "Cc three recipients fit on one line",
 			input: []string{
 				"Cc: Alice Example <alice@example.com>, Bob Example <bob@example.com>, Charlie Example <charlie@example.com>",
 			},
 			want: []string{
-				`Cc: "Alice Example" <alice@example.com>, "Bob Example" <bob@example.com>,`,
-				`    "Charlie Example" <charlie@example.com>`,
+				`Cc: "Alice Example" <alice@example.com>, "Bob Example" <bob@example.com>, "Charlie Example" <charlie@example.com>`,
 			},
 		},
 		{
-			name: "Bcc indent matches key length",
+			name: "Bcc wraps at 120 columns",
 			input: []string{
-				"Bcc: Alice Example <alice@example.com>, Bob Example <bob@example.com>, Charlie Example <charlie@example.com>",
+				"Bcc: Alice Longername <alice@example.com>, Bob Longername <bob@example.com>, Charlie Longername <charlie@example.com>, Diana Longername <diana@example.com>, Eve Longername <eve@example.com>",
 			},
 			want: []string{
-				`Bcc: "Alice Example" <alice@example.com>,`,
-				`     "Bob Example" <bob@example.com>,`,
-				`     "Charlie Example" <charlie@example.com>`,
+				`Bcc: "Alice Longername" <alice@example.com>, "Bob Longername" <bob@example.com>,`,
+				`     "Charlie Longername" <charlie@example.com>, "Diana Longername" <diana@example.com>,`,
+				`     "Eve Longername" <eve@example.com>`,
 			},
 		},
 		{

@@ -11,7 +11,7 @@ aerc is a powerful terminal email client, but out of the box it relies on shell 
 - **fastmail-cli** — Fastmail JMAP CLI for mail filter rules, masked email management, and folder listing. Designed to be called from aerc keybindings. *(Optional — Fastmail users only.)*
 - **tidytext** — Claude-powered prose tidier for the compose editor. Fixes spelling, grammar, and punctuation without altering meaning or style. *(Optional — requires Anthropic API key.)*
 - **aerc-save-email** — dev utility for saving raw email parts to a test corpus. *(Optional — development use.)*
-- **compose-prep** — Compose buffer normalizer: RFC 2822 header unfolding, bare bracket stripping, address folding at 72 columns, Cc/Bcc header injection, and quoted text reflow. Falls back gracefully if not installed.
+- **compose-prep** — Compose buffer normalizer: RFC 2822 header unfolding, bare bracket stripping, address folding at 120 columns, Cc/Bcc header injection, and quoted text reflow. Falls back gracefully if not installed.
 - **nvim-mail** — Neovim compose editor profile with custom `aercmail` syntax highlighting, hard-wrap at 72 characters, spell check, and tidytext integration.
 - **aerc config** — `aerc.conf` and `binds.conf` ready to use. Includes a semantic theme system with three built-in themes, aerc stylesets, Nerd Font icons for message flags and folder names, and clean thread display.
 - **kitty config** — Terminal profile for launching aerc in a dedicated kitty window.

@@ -206,7 +206,7 @@ nvim-mail's VimEnter autocmd via `vim.fn.systemlist`.
 
 1. **Unfold** RFC 2822 continuation lines (space/tab prefix)
 2. **Strip brackets** from bare `<email>` addresses (uses `net/mail`)
-3. **Fold** To/Cc/Bcc at 72-column recipient boundaries
+3. **Fold** To/Cc/Bcc at 120-column recipient boundaries
 4. **Inject** empty Cc:/Bcc: headers when absent
 5. **Reflow** quoted text paragraphs at 72 columns
 

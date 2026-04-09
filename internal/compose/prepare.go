@@ -3,6 +3,7 @@ package compose
 import "strings"
 
 const maxWidth = 72
+const headerWidth = 120
 
 // Options controls compose-prep behavior.
 type Options struct {

@@ -12,7 +12,7 @@ import (
 var foldableHeaders = map[string]bool{"to": true, "cc": true, "bcc": true}
 
 // foldAddresses wraps To, Cc, and Bcc headers at recipient boundaries
-// to fit within 72 columns. Continuation lines are indented to align
+// to fit within headerWidth (120) columns. Continuation lines are indented to align
 // under the first address. Single-recipient and non-address headers
 // pass through unchanged.
 func foldAddresses(headers []string) []string {
@@ -38,7 +38,7 @@ func foldAddresses(headers []string) []string {
 		cur := key + ": " + formatted[0]
 		for j := 1; j < len(formatted); j++ {
 			candidate := cur + ", " + formatted[j]
-			if runewidth.StringWidth(candidate) <= maxWidth {
+			if runewidth.StringWidth(candidate) <= headerWidth {
 				cur = candidate
 			} else {
 				result = append(result, cur+",")

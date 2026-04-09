@@ -90,12 +90,9 @@ func TestPrepare(t *testing.T) {
 				"Hello everyone.",
 			),
 			opts: Options{InjectCcBcc: true},
-			// NOTE: net/mail quotes these names. Also, the folding depends on
-			// actual string widths. Run the test, check actual output, adjust.
 			want: join(
 				"From: author@example.com",
-				`To: "Alice" <alice@example.com>, "Bob" <bob@example.com>,`,
-				`    "Charlie" <charlie@example.com>`,
+				`To: "Alice" <alice@example.com>, "Bob" <bob@example.com>, "Charlie" <charlie@example.com>`,
 				"Cc:",
 				"Bcc:",
 				"Subject: Group",
