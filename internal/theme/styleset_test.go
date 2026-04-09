@@ -36,7 +36,6 @@ func TestGenerateStyleset(t *testing.T) {
 		{"diff add", "diff_add.fg=#a3be8c"},
 		{"diff del", "diff_del.fg=#bf616a"},
 		{"border", "border.fg=#49576b"},
-		{"ui section", "[ui]"},
 		{"viewer section", "[viewer]"},
 	}
 	for _, c := range checks {

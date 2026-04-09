@@ -12,8 +12,6 @@ const stylesetTemplate = `#
 # Re-generate with: mailrender themes generate
 #
 
-[ui]
-
 *.default=true
 *.normal=true
 
