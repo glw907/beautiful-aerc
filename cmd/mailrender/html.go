@@ -12,12 +12,12 @@ func newHTMLCmd() *cobra.Command {
 		Use:   "html",
 		Short: "Convert HTML email to styled markdown",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p, err := loadPalette()
+			t, err := loadTheme()
 			if err != nil {
 				return err
 			}
 			cols := termCols()
-			return filter.HTML(os.Stdin, os.Stdout, p, cols)
+			return filter.HTML(os.Stdin, os.Stdout, t, cols)
 		},
 	}
 	return cmd

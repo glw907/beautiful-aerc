@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/glw907/beautiful-aerc/internal/filter"
-	"github.com/glw907/beautiful-aerc/internal/palette"
+	"github.com/glw907/beautiful-aerc/internal/theme"
 )
 
 // Colors holds ANSI escape sequences for the picker UI.
@@ -59,18 +59,18 @@ func FormatLine(index int, link filter.FootnoteLink, selected bool, cols int, la
 		colors.URL, url, colors.Reset)
 }
 
-// ColorsFromPalette builds picker colors from a loaded palette.
-func ColorsFromPalette(p *palette.Palette) *Colors {
+// ColorsFromTheme builds picker colors from a loaded theme.
+func ColorsFromTheme(t *theme.Theme) *Colors {
 	c := &Colors{
-		Number: p.ANSI("C_PICKER_NUM"),
-		Label:  p.ANSI("C_PICKER_LABEL"),
-		URL:    p.ANSI("C_PICKER_URL"),
-		Marker: p.ANSI("C_MSG_MARKER"),
-		Title:  p.ANSI("C_MSG_TITLE_ACCENT"),
-		Reset:  p.Reset(),
+		Number: t.ANSI("picker_num"),
+		Label:  t.ANSI("picker_label"),
+		URL:    t.ANSI("picker_url"),
+		Marker: t.ANSI("msg_marker"),
+		Title:  t.ANSI("msg_title_accent"),
+		Reset:  t.Reset(),
 	}
-	selBG := p.Get("C_PICKER_SEL_BG")
-	selFG := p.Get("C_PICKER_SEL_FG")
+	selBG := t.Raw("picker_sel_bg")
+	selFG := t.Raw("picker_sel_fg")
 	if selBG != "" && selFG != "" {
 		bgParam := strings.Replace(selBG, "38;2;", "48;2;", 1)
 		c.Selected = "\033[" + bgParam + "m\033[" + selFG + "m"

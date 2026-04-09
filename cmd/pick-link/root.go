@@ -3,14 +3,13 @@ package main
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/glw907/beautiful-aerc/internal/filter"
-	"github.com/glw907/beautiful-aerc/internal/palette"
 	"github.com/glw907/beautiful-aerc/internal/picker"
+	"github.com/glw907/beautiful-aerc/internal/theme"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +19,7 @@ func newRootCmd() *cobra.Command {
 		Short:        "Interactive URL picker for aerc email messages",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p, err := loadPalette()
+			t, err := loadTheme()
 			if err != nil {
 				return err
 			}
@@ -31,7 +30,7 @@ func newRootCmd() *cobra.Command {
 				return err
 			}
 
-			colors := picker.ColorsFromPalette(p)
+			colors := picker.ColorsFromTheme(t)
 			url, err := picker.Run(links, cols, colors)
 			if err != nil {
 				return err
@@ -51,25 +50,13 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-// loadPalette finds and loads the palette file relative to the binary location.
-// Duplicated from cmd/mailrender — pick-link is a standalone binary with no
-// shared cmd/ package.
-func loadPalette() (*palette.Palette, error) {
-	binPath, _ := os.Executable()
-	genDir := ""
-	if binPath != "" {
-		resolved, err := filepath.EvalSymlinks(binPath)
-		if err == nil {
-			binPath = resolved
-		}
-		binDir := filepath.Dir(binPath)
-		genDir = filepath.Join(binDir, "..", "..", ".config", "aerc", "generated")
-	}
-	path, err := palette.FindPath(genDir)
+// loadTheme finds and loads the active theme via aerc.conf.
+func loadTheme() (*theme.Theme, error) {
+	path, err := theme.FindPath()
 	if err != nil {
 		return nil, err
 	}
-	return palette.Load(path)
+	return theme.Load(path)
 }
 
 // termCols returns the terminal column count from AERC_COLUMNS or a default of 80.

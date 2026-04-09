@@ -16,8 +16,8 @@ func TestExtractFrom(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("extract from failed: %v\nstderr: %s", r.err, r.stderr)
 	}
-	if r.stdout != "seanwalsh144@gmail.com" {
-		t.Errorf("stdout = %q, want %q", r.stdout, "seanwalsh144@gmail.com")
+	if r.stdout != "jane.doe@example.com" {
+		t.Errorf("stdout = %q, want %q", r.stdout, "jane.doe@example.com")
 	}
 }
 
@@ -31,8 +31,8 @@ func TestExtractSubject(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("extract subject failed: %v\nstderr: %s", r.err, r.stderr)
 	}
-	if strings.TrimSpace(r.stdout) != "Should have been adult class" {
-		t.Errorf("stdout = %q, want %q", r.stdout, "Should have been adult class")
+	if strings.TrimSpace(r.stdout) != "Weekend sailing schedule" {
+		t.Errorf("stdout = %q, want %q", r.stdout, "Weekend sailing schedule")
 	}
 }
 
@@ -58,11 +58,11 @@ func TestExtractTo(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 addresses, got %d: %v", len(lines), lines)
 	}
-	if lines[0] != "matt.flickinger@aksailingclub.org" {
-		t.Errorf("first address = %q, want matt.flickinger@aksailingclub.org", lines[0])
+	if lines[0] != "bob.smith@example.org" {
+		t.Errorf("first address = %q, want bob.smith@example.org", lines[0])
 	}
-	if lines[1] != "program-committee@aksailingclub.org" {
-		t.Errorf("second address = %q, want program-committee@aksailingclub.org", lines[1])
+	if lines[1] != "team@example.org" {
+		t.Errorf("second address = %q, want team@example.org", lines[1])
 	}
 }
 

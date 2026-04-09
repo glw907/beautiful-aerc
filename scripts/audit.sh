@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# audit.sh - Batch audit of HTML email blobs through beautiful-aerc html filter
+# audit.sh - Batch audit of HTML email blobs through mailrender html filter
 # Reads blobs from aerc's JMAP cache, clusters by source signature,
 # renders up to N samples per cluster, and writes results to audit-output/.
 
 set -euo pipefail
 
 # Defaults
-BLOB_DIR="$HOME/.cache/aerc/907.life/blobs"
+BLOB_DIR="$HOME/.cache/aerc/blobs"
 MAX_PER_SOURCE=2
 OUTPUT_DIR="audit-output"
-BINARY="./beautiful-aerc"
+BINARY="./mailrender"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Batch audit HTML email blobs through the beautiful-aerc html filter.
+Batch audit HTML email blobs through the mailrender html filter.
 
 Options:
   -b DIR   Blob directory (default: $BLOB_DIR)

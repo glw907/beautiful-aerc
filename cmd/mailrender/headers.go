@@ -2,11 +2,10 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/glw907/beautiful-aerc/internal/filter"
-	"github.com/glw907/beautiful-aerc/internal/palette"
+	"github.com/glw907/beautiful-aerc/internal/theme"
 	"github.com/spf13/cobra"
 )
 
@@ -15,62 +14,45 @@ func newHeadersCmd() *cobra.Command {
 		Use:   "headers",
 		Short: "Format and colorize email headers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p, err := loadPalette()
+			t, err := loadTheme()
 			if err != nil {
 				return err
 			}
 			cols := termCols()
-			return filter.Headers(os.Stdin, os.Stdout, colorsFromPalette(p), cols)
+			return filter.Headers(os.Stdin, os.Stdout, colorsFromTheme(t), cols)
 		},
 	}
 	return cmd
 }
 
-// loadPalette finds and loads the palette file relative to the binary location.
-func loadPalette() (*palette.Palette, error) {
-	binPath, _ := os.Executable()
-	genDir := ""
-	if binPath != "" {
-		// Resolve symlinks, then navigate: .local/bin/ -> .config/aerc/generated
-		resolved, err := filepath.EvalSymlinks(binPath)
-		if err == nil {
-			binPath = resolved
-		}
-		binDir := filepath.Dir(binPath)
-		genDir = filepath.Join(binDir, "..", "..", ".config", "aerc", "generated")
-	}
-	path, err := palette.FindPath(genDir)
+// loadTheme finds and loads the active theme via aerc.conf.
+func loadTheme() (*theme.Theme, error) {
+	path, err := theme.FindPath()
 	if err != nil {
 		return nil, err
 	}
-	return palette.Load(path)
+	return theme.Load(path)
 }
 
-// colorsFromPalette builds a ColorSet from palette entries.
-func colorsFromPalette(p *palette.Palette) *filter.ColorSet {
+// colorsFromTheme builds a ColorSet from theme tokens.
+func colorsFromTheme(t *theme.Theme) *filter.ColorSet {
 	return &filter.ColorSet{
-		HdrKey: p.ANSI("C_HDR_KEY"),
-		HdrFG:  p.ANSI("C_HDR_VALUE"),
-		HdrDim: p.ANSI("C_HDR_DIM"),
-		Reset:  p.Reset(),
+		HdrKey: t.ANSI("hdr_key"),
+		HdrFG:  t.ANSI("hdr_value"),
+		HdrDim: t.ANSI("hdr_dim"),
+		Reset:  t.Reset(),
 	}
 }
 
 // termCols returns the terminal column count from AERC_COLUMNS or a default of 80.
 func termCols() int {
-	if s := os.Getenv("AERC_COLUMNS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return n
-		}
+	s := os.Getenv("AERC_COLUMNS")
+	if s == "" {
+		return 80
 	}
-	return 80
-}
-
-func termRows() int {
-	if s := os.Getenv("AERC_ROWS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return n
-		}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 80
 	}
-	return 24
+	return n
 }

@@ -1,27 +1,27 @@
 # Filters
 
-beautiful-aerc replaces aerc's default filter pipeline with a single Go binary that handles header rendering, HTML messages, and plain text. Each subcommand reads from stdin and writes ANSI-styled text to stdout, which is aerc's filter protocol.
+mailrender replaces aerc's default filter pipeline with a single Go binary that handles header rendering, HTML messages, and plain text. Each subcommand reads from stdin and writes ANSI-styled text to stdout, following aerc's filter protocol.
 
 ## The three subcommands
 
 | Subcommand | aerc hook | Calls pandoc? |
 |------------|-----------|---------------|
-| `beautiful-aerc headers` | `.headers` | No |
-| `beautiful-aerc html` | `text/html` | Yes |
-| `beautiful-aerc plain` | `text/plain` | No (unless HTML detected) |
+| `mailrender headers` | `.headers` | No |
+| `mailrender html` | `text/html` | Yes |
+| `mailrender plain` | `text/plain` | No (unless HTML detected) |
 
 These are configured in `aerc.conf`:
 
 ```ini
 [filters]
-.headers=beautiful-aerc headers
-text/html=beautiful-aerc html
-text/plain=beautiful-aerc plain
+.headers=mailrender headers
+text/html=mailrender html
+text/plain=mailrender plain
 ```
 
 ## HTML pipeline
 
-When aerc opens an HTML message, it pipes the raw HTML body to `beautiful-aerc html`. The pipeline runs in stages:
+When aerc opens an HTML message, it pipes the raw HTML body to `mailrender html`. The pipeline runs in stages:
 
 **1. Artifact cleanup (pre-pandoc)**
 
@@ -38,7 +38,7 @@ The binary calls pandoc as a subprocess:
 pandoc -f html -t markdown --wrap=none -L unwrap-tables.lua
 ```
 
-`unwrap-tables.lua` is a pandoc Lua filter that flattens nested HTML tables into plain text instead of letting pandoc render them as markdown tables. Marketing emails often use layout tables, not data tables - this produces much cleaner output.
+`unwrap-tables.lua` is a pandoc Lua filter (embedded in the binary) that flattens nested HTML tables into plain text instead of letting pandoc render them as markdown tables. Marketing emails often use layout tables, not data tables - this produces much cleaner output.
 
 **3. Artifact cleanup (post-pandoc)**
 
@@ -57,12 +57,12 @@ Image and empty-link cleanup happens inside `convertToFootnotes` rather than as 
 
 The cleaned markdown is scanned line by line. Elements matching markdown syntax get ANSI color applied:
 
-- Lines starting with `#`, `##`, `###` get `C_HEADING` color
-- `**text**` spans get `C_BOLD` style
-- `_text_` spans get `C_ITALIC` style
-- Horizontal rules (`---`, `***`, `___`) get `C_RULE` color
+- Lines starting with `#`, `##`, `###` get heading color
+- `**text**` spans get bold style
+- `_text_` spans get italic style
+- Horizontal rules (`---`, `***`, `___`) get rule color
 
-Colors come from `generated/palette.sh`. See [docs/themes.md](themes.md) for the token reference.
+Colors come from the active TOML theme file. See [docs/themes.md](themes.md) for the token reference.
 
 **5. Footnote-style links**
 
@@ -99,15 +99,15 @@ A dimmed separator and numbered reference section follow the body:
 ```
 
 Colors used:
-- Link text: `C_LINK_TEXT`
-- Footnote markers `[^N]`: `FG_DIM` (converted from hex to ANSI)
-- Separator: `FG_DIM`
-- Reference labels `[^N]:`: `FG_DIM`
-- Reference URLs: `C_LINK_URL`
+- Link text: `link_text` token
+- Footnote markers `[^N]`: `msg_dim` token
+- Separator: `msg_dim` token
+- Reference labels `[^N]:`: `msg_dim` token
+- Reference URLs: `link_url` token
 
 ## Link picker
 
-The `beautiful-aerc pick-link` subcommand provides keyboard-driven URL selection. It reads text from stdin, extracts all URLs, and presents a numbered list.
+`pick-link` is a standalone binary that provides keyboard-driven URL selection. It is invoked via `:pipe` so aerc feeds the raw message on stdin. The binary runs the HTML filter internally to extract footnoted URLs, then opens a full-screen picker UI on `/dev/tty` (alternate screen buffer, raw terminal mode).
 
 Interaction:
 - Keys 1-9 instantly select that link
@@ -116,22 +116,20 @@ Interaction:
 - Enter to select the highlighted link
 - q or Escape to cancel
 
-The selected URL is printed to stdout.
+The selected URL is opened via `xdg-open`.
 
 Keybinding in `binds.conf`:
 
 ```ini
 [view]
-<Tab> = :menu -dc 'beautiful-aerc pick-link' :open-link
+<Tab> = :pipe pick-link<Enter>
 ```
 
-aerc's `:menu` pipes the current message through the command and uses the output as the argument to `:open-link`.
-
-Picker colors come from palette.sh:
-- Number: `C_PICKER_NUM`
-- Label: `C_PICKER_LABEL`
-- URL text: `C_PICKER_URL`
-- Selected line: `C_PICKER_SEL_BG` + `C_PICKER_SEL_FG`
+Picker colors come from the active theme file:
+- Number: `picker_num` token
+- Label: `picker_label` token
+- URL text: `picker_url` token
+- Selected line: `picker_sel_bg` + `picker_sel_fg` tokens
 
 ## Header formatting
 
@@ -151,7 +149,7 @@ All other headers are suppressed. This is a deliberate design choice - aerc's ra
 
 **Colorization**
 
-Header field names (From, To, Date, Subject) are styled with `C_HDR_KEY`. Field values use `C_HDR_VALUE`. Angle brackets around email addresses use `C_HDR_DIM`.
+Header field names (From, To, Date, Subject) are styled with the `hdr_key` token. Field values use the `hdr_value` token. Angle brackets around email addresses use the `hdr_dim` token.
 
 **Address wrapping**
 
@@ -159,7 +157,7 @@ Long address lists (To, Cc) wrap to a continuation indent that aligns with the s
 
 **Separator**
 
-A horizontal separator line is printed after the headers, using `BG_BORDER` color, before the message body appears.
+A horizontal separator line is printed after the headers, using `bg_border` color, before the message body appears.
 
 **aerc.conf note**
 
@@ -174,48 +172,45 @@ header-layout=X-Collapse
 
 ## Plain text handling
 
-The `text/plain` filter checks the first 50 lines of the message body for HTML tags (`<div>`, `<html>`, `<body>`, `<table>`, `<span>`, `<br>`, `<p>`). If found, it treats the message as HTML and routes it through the same pipeline as `beautiful-aerc html`.
+The `text/plain` filter checks the first 50 lines of the message body for HTML tags (`<div>`, `<html>`, `<body>`, `<table>`, `<span>`, `<br>`, `<p>`). If found, it treats the message as HTML and routes it through the same pipeline as `mailrender html`.
 
 This handles a common case where some mail clients send plain text MIME parts that contain full HTML markup.
 
 If no HTML is detected, the filter pipes the text through aerc's built-in `wrap | colorize` for standard plain text reflow and color rendering.
 
-## How palette.sh tokens map to visual output
+## How theme tokens map to visual output
 
-The Go binary loads `generated/palette.sh` at startup. Each color token in that file is a pre-resolved ANSI parameter string, for example:
+The Go binary loads the active TOML theme file at startup. Theme
+discovery reads `styleset-name` from `aerc.conf`, then looks for
+`themes/<name>.toml` relative to the config directory.
 
-```sh
-C_HEADING="1;38;2;163;190;140"   # bold + RGB green
-C_LINK_TEXT="38;2;136;192;208"   # RGB cyan
-C_LINK_URL="38;2;97;110;136"     # RGB dark gray
-```
+Each token in the theme file is resolved to an ANSI SGR parameter
+string at load time. For example, a token `heading = { color =
+"color_success", bold = true }` with `color_success = "#a3be8c"`
+resolves to `38;2;163;190;140;1`. These are wrapped as
+`\033[<value>m` and inserted around the relevant text. The binary
+always resets with `\033[0m` after each styled span to avoid color
+bleed.
 
-These are wrapped as `\033[<value>m` and inserted around the relevant text. The binary always resets with `\033[0m` after each styled span to avoid color bleed.
+The theme lookup path:
 
-The palette lookup path, in order:
+1. `$AERC_CONFIG/aerc.conf` -> read `styleset-name` -> `themes/<name>.toml`
+2. `~/.config/aerc/aerc.conf` -> same
 
-1. `$AERC_CONFIG/generated/palette.sh`
-2. Relative to the binary: `../../.config/aerc/generated/palette.sh`
-3. `~/.config/aerc/generated/palette.sh`
-
-If none of these exist, the binary exits with:
-
-```
-palette not found - run themes/generate to set up your theme
-```
+If `aerc.conf` is not found, `styleset-name` is missing, or the
+theme file does not exist, the binary exits with a clear error.
 
 ## Troubleshooting
 
 **All output is unstyled / no colors**
 
-The binary could not find `generated/palette.sh`. Run the generator:
+The binary could not find the theme file. Verify:
 
-```sh
-cd ~/.config/aerc
-themes/generate themes/nord.sh
-```
+1. `styleset-name=nord` is set in `aerc.conf`
+2. `themes/nord.toml` exists in the same directory as `aerc.conf`
 
-Then verify the file exists at `~/.config/aerc/generated/palette.sh`.
+If using `$AERC_CONFIG`, verify it points to the directory containing
+`aerc.conf`.
 
 **HTML messages show raw HTML or markdown source**
 
@@ -239,24 +234,19 @@ header-layout=X-Collapse
 
 **Marketing emails have garbled table content**
 
-The `unwrap-tables.lua` filter is missing or not being found by pandoc. Check that `.config/aerc/filters/unwrap-tables.lua` exists and that the `html` filter command in `aerc.conf` passes it via `-L`:
-
-The binary passes `unwrap-tables.lua` by resolving a path relative to its own location. If the binary is installed via `go install` to `$GOBIN`, the Lua filter path may not resolve. The binary looks for the Lua filter alongside the stow-installed config files. Verify with:
+The `unwrap-tables.lua` pandoc filter is embedded in the `mailrender` binary. If you see garbled tables, verify that pandoc is installed and on `$PATH`:
 
 ```sh
-beautiful-aerc html < /dev/null
+mailrender html < /dev/null
 ```
-
-If it errors about the Lua filter, check that stow has linked the `.config/aerc/filters/` directory correctly.
 
 **Colors look wrong after switching themes**
 
-Regenerate the palette and restart aerc:
+Regenerate the styleset and restart aerc:
 
 ```sh
-cd ~/.config/aerc
-themes/generate themes/solarized-dark.sh
+mailrender themes generate
 # Then reopen aerc
 ```
 
-The binary reads `palette.sh` at startup, not on every message. Aerc must be restarted after changing themes.
+The binary reads the theme file at startup, not on every message. Aerc must be restarted after changing themes.

@@ -7,10 +7,10 @@ human visual inspection.
 
 ```bash
 # HTML email
-cat corpus/20260404-143022.html | beautiful-aerc html
+cat corpus/20260404-143022.html | mailrender html
 
 # Plain text email
-cat corpus/20260404-143022.txt | beautiful-aerc plain
+cat corpus/20260404-143022.txt | mailrender plain
 ```
 
 ## Preview in tmux (simulates aerc viewer)
@@ -21,7 +21,7 @@ tmux new-session -d -s test -x 80 -y 40
 
 # Render and display
 cat corpus/file.html \
-  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc beautiful-aerc html \
+  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc mailrender html \
   | tmux load-buffer - \
   && tmux paste-buffer -t test
 
@@ -48,6 +48,6 @@ Strip ANSI codes for text comparison:
 
 ```bash
 cat corpus/file.html \
-  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc beautiful-aerc html \
+  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc mailrender html \
   | sed 's/\x1b\[[0-9;]*m//g' > /tmp/rendered.txt
 ```

@@ -1,0 +1,40 @@
+name = "Gruvbox Dark"
+
+[colors]
+bg_base = "#282828"
+bg_elevated = "#3c3836"
+bg_selection = "#3c3836"
+bg_border = "#665c54"
+fg_base = "#ebdbb2"
+fg_bright = "#fbf1c7"
+fg_brightest = "#fbf1c7"
+fg_dim = "#928374"
+accent_primary = "#83a598"
+accent_secondary = "#8ec07c"
+accent_tertiary = "#8ec07c"
+color_error = "#fb4934"
+color_warning = "#fe8019"
+color_success = "#b8bb26"
+color_info = "#fabd2f"
+color_special = "#d3869b"
+
+[tokens]
+heading = { color = "color_success", bold = true }
+bold = { bold = true }
+italic = { italic = true }
+link_text = { color = "accent_secondary" }
+link_url = { color = "fg_dim" }
+rule = { color = "fg_dim" }
+hdr_key = { color = "accent_primary", bold = true }
+hdr_value = { color = "fg_base" }
+hdr_dim = { color = "fg_dim" }
+picker_num = { color = "accent_primary" }
+picker_label = { color = "fg_base" }
+picker_url = { color = "fg_dim" }
+picker_sel_bg = { color = "bg_selection" }
+picker_sel_fg = { color = "fg_bright" }
+msg_marker = { color = "fg_dim", bold = true }
+msg_title_success = { color = "color_success", bold = true }
+msg_title_accent = { color = "accent_primary", bold = true }
+msg_detail = { color = "fg_base" }
+msg_dim = { color = "fg_dim" }

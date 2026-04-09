@@ -2,12 +2,14 @@
 /pick-link
 /fastmail-cli
 /tidytext
+/compose-prep
 .config/aerc/signature.md
 .config/aerc/accounts.conf
 .config/aerc/fastmail-*.age
 .config/aerc/mailrules.json
-.config/aerc/generated/palette.sh
 .config/aerc/stylesets/*
 !.config/aerc/stylesets/.gitkeep
+.claude/memory/
+.claude/hookify.*.local.md
 audit-output/
 corpus/

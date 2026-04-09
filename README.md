@@ -11,6 +11,7 @@ aerc is a powerful terminal email client, but out of the box it relies on shell 
 - **fastmail-cli** — Fastmail JMAP CLI for mail filter rules, masked email management, and folder listing. Designed to be called from aerc keybindings. *(Optional — Fastmail users only.)*
 - **tidytext** — Claude-powered prose tidier for the compose editor. Fixes spelling, grammar, and punctuation without altering meaning or style. *(Optional — requires Anthropic API key.)*
 - **aerc-save-email** — dev utility for saving raw email parts to a test corpus. *(Optional — development use.)*
+- **compose-prep** — Compose buffer normalizer: RFC 2822 header unfolding, bare bracket stripping, address folding at 72 columns, Cc/Bcc header injection, and quoted text reflow. Falls back gracefully if not installed.
 - **nvim-mail** — Neovim compose editor profile with custom `aercmail` syntax highlighting, hard-wrap at 72 characters, spell check, and tidytext integration.
 - **aerc config** — `aerc.conf` and `binds.conf` ready to use. Includes a semantic theme system with three built-in themes, aerc stylesets, Nerd Font icons for message flags and folder names, and clean thread display.
 - **kitty config** — Terminal profile for launching aerc in a dedicated kitty window.
@@ -19,7 +20,7 @@ aerc is a powerful terminal email client, but out of the box it relies on shell 
 
 - [aerc](https://aerc-mail.org/)
 - [pandoc](https://pandoc.org/) (called at runtime for HTML conversion)
-- Go 1.23+ (build only)
+- Go 1.25+ (build only)
 - GNU Stow (install only)
 
 Optional:
@@ -39,25 +40,22 @@ git clone https://github.com/glw907/beautiful-aerc.git
 cd beautiful-aerc
 ```
 
-**2. Build and install the four binaries**
+**2. Build and install the five binaries**
 
 ```sh
 make build
-make install   # installs mailrender, pick-link, fastmail-cli, tidytext to ~/.local/bin/
+make install   # installs mailrender, pick-link, fastmail-cli, tidytext, compose-prep to ~/.local/bin/
 ```
 
-**3. Generate a theme**
+**3. Generate a styleset**
 
-Pick one of the three built-in themes and run the generator from inside `.config/aerc/`:
+Pick one of the three built-in themes and generate the aerc styleset:
 
 ```sh
-cd .config/aerc
-themes/generate themes/nord.sh
+mailrender themes generate nord
 ```
 
-This writes two files:
-- `generated/palette.sh` — color tokens for the Go binaries
-- `stylesets/nord` — aerc styleset with hex values
+This produces `stylesets/Nord` in your aerc config directory.
 
 **4. Install with Stow**
 
@@ -136,18 +134,17 @@ The keybinding in `binds.conf`:
 
 ## Theme system
 
-Themes are defined as 16 semantic color slots in a shell file under `.config/aerc/themes/`. A single generator command produces both the aerc styleset (UI colors) and the palette file (message rendering colors and markdown tokens):
+Themes are defined as 16 semantic color slots in a TOML file under `.config/aerc/themes/`. Go binaries read the active theme directly at runtime. A separate command generates the aerc styleset (UI colors):
 
 ```sh
-cd ~/.config/aerc
-themes/generate themes/nord.sh
+mailrender themes generate nord
 ```
 
 Three themes are included: **Nord**, **Solarized Dark**, and **Gruvbox Dark**.
 
-To switch themes, re-run the generator with a different theme file and update `styleset-name` in `aerc.conf`. Any customizations you made below the override marker in `generated/palette.sh` or the styleset are preserved across regeneration.
+To switch themes, set `styleset-name` in `aerc.conf` to the theme name and run `mailrender themes generate`.
 
-To create your own theme, copy one of the built-in files, adjust the hex values, and run the generator. The color slots map to semantic roles (primary background, selection, accent, error, etc.) so changes propagate consistently across the entire UI.
+To create your own theme, copy one of the built-in `.toml` files, adjust the hex values, and run the generator. The color slots map to semantic roles (primary background, selection, accent, error, etc.) so changes propagate consistently across the entire UI.
 
 See [docs/themes.md](docs/themes.md) for the full token reference and theme file format.
 
@@ -190,7 +187,7 @@ A dedicated Neovim profile for composing email in aerc. It provides:
 - Spell check on body text, skipping headers and quoted lines
 - Telescope-powered contact picker with fuzzy search (`<C-k>` in insert mode, `<leader>k` in normal mode) — requires [khard](https://github.com/lucc/khard) with CardDAV contacts synced via vdirsyncer
 - tidytext integration via `<leader>t`
-- Address header reformatting and quoted text reflow on buffer open
+- Compose buffer normalization via `compose-prep` — RFC 2822 header processing and quoted text reflow on buffer open
 - Smart cursor positioning: new compose and forward land on the `To:` line; replies land in the body
 - Signature insertion via `<leader>sig` — copy `signature.md.example` to `signature.md` and edit it
 
@@ -204,7 +201,7 @@ The kitty color block in `kitty-mail.conf` uses the same Nord hex values as the 
 
 ## Further reading
 
-- [docs/themes.md](docs/themes.md) — color slots, custom themes, the generator, and override mechanism
+- [docs/themes.md](docs/themes.md) — color slots, custom themes, and theme management
 - [docs/filters.md](docs/filters.md) — full pipeline description, link modes, troubleshooting
 - [docs/styling.md](docs/styling.md) — visual hierarchy, layout patterns, color token usage
 - [docs/contributing.md](docs/contributing.md) — project layout, adding filters, adding themes, testing

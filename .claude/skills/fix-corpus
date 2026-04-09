@@ -9,7 +9,7 @@ Batch triage and fix rendering issues in emails saved to `corpus/`.
 
 ## Prerequisites
 
-- Emails saved via `beautiful-aerc save` (keybinding `b` in aerc viewer)
+- Emails saved via `mailrender save` (keybinding `b` in aerc viewer)
 - At least a few corpus files to make batch processing worthwhile
 
 ## Workflow
@@ -39,13 +39,13 @@ For each file:
 ```bash
 # Render through appropriate filter
 cat corpus/<file> \
-  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc beautiful-aerc html \
+  | AERC_COLUMNS=80 AERC_CONFIG=~/.config/aerc mailrender html \
   | tmux load-buffer - \
   && tmux paste-buffer -t corpus-review
 tmux capture-pane -t corpus-review -p
 ```
 
-Use `beautiful-aerc html` for `.html` files and `beautiful-aerc plain`
+Use `mailrender html` for `.html` files and `mailrender plain`
 for `.txt` files.
 
 Show the rendered output to the user. If the issue is not obvious,

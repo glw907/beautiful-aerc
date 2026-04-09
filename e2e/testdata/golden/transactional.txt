@@ -1,5 +1,5 @@
 
-## [1;38;2;163;190;140mSecurity alert[0m
+## [38;2;163;190;140;1mSecurity alert[0m
 
 A new sign-in was detected on your account.
 

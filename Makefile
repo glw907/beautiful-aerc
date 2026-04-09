@@ -3,6 +3,7 @@ build:
 	go build -o pick-link ./cmd/pick-link
 	go build -o fastmail-cli ./cmd/fastmail-cli
 	go build -o tidytext ./cmd/tidytext
+	go build -o compose-prep ./cmd/compose-prep
 
 test:
 	go test ./...
@@ -18,10 +19,11 @@ install:
 	GOBIN=$(HOME)/.local/bin go install ./cmd/pick-link
 	GOBIN=$(HOME)/.local/bin go install ./cmd/fastmail-cli
 	GOBIN=$(HOME)/.local/bin go install ./cmd/tidytext
+	GOBIN=$(HOME)/.local/bin go install ./cmd/compose-prep
 
 check: vet test
 
 clean:
-	rm -f mailrender pick-link fastmail-cli tidytext
+	rm -f mailrender pick-link fastmail-cli tidytext compose-prep
 
 .PHONY: build test vet lint install check clean
