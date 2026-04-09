@@ -152,7 +152,7 @@ func TestStripHiddenElements(t *testing.T) {
 	}
 }
 
-func TestMarkLinks(t *testing.T) {
+func TestExtractLinks(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -181,7 +181,7 @@ func TestMarkLinks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, urls := markLinks(tt.input)
+			_, urls := extractLinks(tt.input)
 			if len(urls) != len(tt.wantURLs) {
 				t.Fatalf("got %d URLs, want %d", len(urls), len(tt.wantURLs))
 			}
@@ -194,20 +194,26 @@ func TestMarkLinks(t *testing.T) {
 	}
 }
 
-func TestResolveLinks(t *testing.T) {
-	// Simulate what Glamour produces from marked text
-	input := "Visit \x1b[38;2;0;0;255m\x020;Example\x03\x1b[0m today."
+func TestExtractLinksCleanMarkdown(t *testing.T) {
+	input := "See [A](https://a.com) and [B](https://b.com)."
+	cleaned, _ := extractLinks(input)
+	if cleaned != "See [A](#) and [B](#)." {
+		t.Errorf("got %q, want URLs replaced with #", cleaned)
+	}
+}
+
+func TestInjectOSC8(t *testing.T) {
+	linkStyle := "\x1b[38;2;0;0;255m"
+	// Simulate Glamour output: styled link text between linkStyle and reset
+	input := "Visit " + linkStyle + "Example\x1b[0m today."
 	urls := []string{"https://example.com"}
-	got := resolveLinks(input, urls)
+	got := injectOSC8(input, urls, linkStyle)
 
 	if !strings.Contains(got, "\x1b]8;;https://example.com\x1b\\") {
 		t.Error("missing OSC 8 open sequence")
 	}
 	if !strings.Contains(got, "\x1b]8;;\x1b\\") {
 		t.Error("missing OSC 8 close sequence")
-	}
-	if strings.Contains(got, "\x02") || strings.Contains(got, "\x03") {
-		t.Error("markers should be replaced")
 	}
 }
 
@@ -228,6 +234,34 @@ func TestHTMLLinksClickable(t *testing.T) {
 	}
 	if !strings.Contains(out, "\x1b]8;;https://tracking.example.com/click?id=abc123\x1b\\") {
 		t.Error("OSC 8 hyperlink should be present")
+	}
+}
+
+func TestHTMLWrapWidth(t *testing.T) {
+	th := testTheme(t)
+	// Long paragraph that will wrap — no line should exceed wrapWidth
+	// visible characters, and no word should be orphaned (single short
+	// word alone on a non-final line).
+	input := `<p>The Stock Investing Account is a limited-discretion investment product offered by Wealthfront Advisers LLC, an SEC-registered investment advisor. Brokerage products and services are provided by Wealthfront Brokerage LLC, Member FINRA/SIPC.</p>`
+	var buf bytes.Buffer
+	if err := HTML(strings.NewReader(input), &buf, th, 80); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(buf.String())
+	lines := strings.Split(strings.TrimRight(plain, "\n"), "\n")
+	for i, line := range lines {
+		visible := strings.TrimRight(line, " ")
+		if len(visible) > wrapWidth {
+			t.Errorf("line %d exceeds %d chars: %q (%d)", i+1, wrapWidth, visible, len(visible))
+		}
+		// Orphan check: a non-final, non-blank line with <= 3 visible
+		// chars followed by a non-blank line indicates a bad wrap.
+		if i < len(lines)-1 && len(visible) > 0 && len(visible) <= 3 {
+			next := strings.TrimRight(lines[i+1], " ")
+			if len(next) > 0 {
+				t.Errorf("orphaned word %q on line %d", visible, i+1)
+			}
+		}
 	}
 }
 

@@ -111,6 +111,37 @@ func (t *Theme) Raw(name string) string {
 	return t.tokens[name]
 }
 
+// GlamourLinkStyle returns the ANSI sequence Glamour uses for link text,
+// built from the link_text token definition. Returns "" if link_text is
+// not defined.
+func (t *Theme) GlamourLinkStyle() string {
+	def, ok := t.tokenDefs["link_text"]
+	if !ok {
+		return ""
+	}
+	var parts []string
+	if def.Color != "" {
+		hex := t.colors[def.Color]
+		ansi, err := hexToANSI(hex)
+		if err == nil {
+			parts = append(parts, ansi)
+		}
+	}
+	if def.Bold {
+		parts = append(parts, "1")
+	}
+	if def.Italic {
+		parts = append(parts, "3")
+	}
+	if def.Underline {
+		parts = append(parts, "4")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "\x1b[" + strings.Join(parts, ";") + "m"
+}
+
 // resolveToken converts a token definition to an ANSI SGR parameter string.
 func resolveToken(def tokenDefinition, colors map[string]string) (string, error) {
 	var parts []string

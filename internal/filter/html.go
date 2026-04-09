@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -33,9 +32,6 @@ var (
 	// Markdown link patterns for URL extraction.
 	reMdLink      = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 	reEmptyMdLink = regexp.MustCompile(`\[\]\([^)]+\)`)
-
-	// Marker replacement after Glamour rendering.
-	reLinkMarkerOpen = regexp.MustCompile("\x02(\\d+);")
 )
 
 // prepareHTML cleans the raw HTML before conversion: strips Mozilla-specific
@@ -104,40 +100,76 @@ func normalizeWhitespace(text string) string {
 	return text
 }
 
-// markLinks replaces markdown [text](url) with [STX+idx+text+ETX](#) and
-// returns the modified text plus the extracted URLs. Glamour suppresses
-// display of fragment-only URLs (#) while still styling the link text.
-// The STX/ETX markers survive Glamour rendering and are replaced with
-// OSC 8 hyperlink sequences by resolveLinks. Empty-text links [](url)
-// are removed entirely — they have no useful display content.
-func markLinks(text string) (string, []string) {
+// extractLinks extracts URLs from markdown links in order, strips empty-text
+// links, and replaces all link URLs with # so Glamour styles the text without
+// displaying URLs. Returns the cleaned text and the ordered URL list.
+func extractLinks(text string) (string, []string) {
 	text = reEmptyMdLink.ReplaceAllString(text, "")
 	var urls []string
-	idx := 0
-	marked := reMdLink.ReplaceAllStringFunc(text, func(match string) string {
+	cleaned := reMdLink.ReplaceAllStringFunc(text, func(match string) string {
 		sub := reMdLink.FindStringSubmatch(match)
 		urls = append(urls, sub[2])
-		result := fmt.Sprintf("[\x02%d;%s\x03](#)", idx, sub[1])
-		idx++
-		return result
+		return "[" + sub[1] + "](#)"
 	})
-	return marked, urls
+	return cleaned, urls
 }
 
-// resolveLinks replaces STX/ETX markers in Glamour's ANSI output with
-// OSC 8 hyperlink open/close sequences, making styled link text clickable
-// in terminals that support OSC 8 (kitty, WezTerm, foot, etc.).
-func resolveLinks(text string, urls []string) string {
-	text = reLinkMarkerOpen.ReplaceAllStringFunc(text, func(match string) string {
-		sub := reLinkMarkerOpen.FindStringSubmatch(match)
-		idx, err := strconv.Atoi(sub[1])
-		if err != nil || idx >= len(urls) {
-			return ""
+// injectOSC8 wraps Glamour's styled link text spans with OSC 8 hyperlink
+// sequences. It finds link-styled ANSI spans (identified by the linkStyle
+// prefix) and wraps consecutive runs with OSC 8 open/close, consuming URLs
+// in order from the extracted list.
+func injectOSC8(text string, urls []string, linkStyle string) string {
+	if len(urls) == 0 || linkStyle == "" {
+		return text
+	}
+
+	var b strings.Builder
+	b.Grow(len(text) + len(urls)*64)
+
+	urlIdx := 0
+	inLink := false
+	i := 0
+	for i < len(text) {
+		// Check for link style opening sequence.
+		if urlIdx < len(urls) && strings.HasPrefix(text[i:], linkStyle) {
+			if !inLink {
+				// Start a new OSC 8 region.
+				inLink = true
+				fmt.Fprintf(&b, "\x1b]8;;%s\x1b\\", urls[urlIdx])
+			}
+			b.WriteString(linkStyle)
+			i += len(linkStyle)
+			continue
 		}
-		return fmt.Sprintf("\x1b]8;;%s\x1b\\", urls[idx])
-	})
-	text = strings.ReplaceAll(text, "\x03", "\x1b]8;;\x1b\\")
-	return text
+
+		// Check for ANSI reset — may end a link span.
+		if inLink && strings.HasPrefix(text[i:], "\x1b[0m") {
+			b.WriteString("\x1b[0m")
+			i += 4
+			// Look ahead: if the next non-reset content re-opens with
+			// linkStyle, this is a word-wrapped continuation of the same
+			// link. Otherwise the link has ended.
+			rest := text[i:]
+			// Skip any resets or whitespace-only content before next style.
+			if !strings.HasPrefix(rest, linkStyle) &&
+				!strings.HasPrefix(rest, "\x1b[0m") {
+				// Link ended — close OSC 8.
+				b.WriteString("\x1b]8;;\x1b\\")
+				inLink = false
+				urlIdx++
+			}
+			continue
+		}
+
+		b.WriteByte(text[i])
+		i++
+	}
+
+	// Close any trailing open link.
+	if inLink {
+		b.WriteString("\x1b]8;;\x1b\\")
+	}
+	return b.String()
 }
 
 // stripANSI removes ANSI escape sequences (CSI and OSC 8) from s.
@@ -187,7 +219,7 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
-	md, urls := markLinks(md)
+	md, urls := extractLinks(md)
 
 	style := t.GlamourStyle()
 	renderer, err := glamour.NewTermRenderer(
@@ -202,7 +234,7 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 	if err != nil {
 		return fmt.Errorf("rendering markdown: %w", err)
 	}
-	styled = resolveLinks(styled, urls)
+	styled = injectOSC8(styled, urls, t.GlamourLinkStyle())
 
 	if _, err := fmt.Fprint(w, styled); err != nil {
 		return fmt.Errorf("writing output: %w", err)
