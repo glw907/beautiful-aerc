@@ -9,6 +9,7 @@
 .config/aerc/mailrules.json
 .config/aerc/stylesets/*
 !.config/aerc/stylesets/.gitkeep
+.config/aerc/generated/
 .claude/memory/
 .claude/hookify.*.local.md
 audit-output/

@@ -1,0 +1,4 @@
+{
+  "_comment": "Mail filter rules for fastmail-cli. Copy to mailrules.json to use. See: fastmail-cli rules --help",
+  "rules": []
+}
