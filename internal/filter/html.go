@@ -32,6 +32,9 @@ var (
 	// Markdown link patterns for URL extraction.
 	reMdLink      = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 	reEmptyMdLink = regexp.MustCompile(`\[\]\([^)]+\)`)
+
+	// Ordered list item: "1.", "2)", etc.
+	reOrderedList = regexp.MustCompile(`^\d+[.)]`)
 )
 
 // prepareHTML cleans the raw HTML before conversion: strips Mozilla-specific
@@ -126,7 +129,8 @@ func isParagraph(block string) bool {
 			trimmed[0] == '*' || trimmed[0] == '-' || trimmed[0] == '+' ||
 			strings.HasPrefix(trimmed, "```") ||
 			strings.HasPrefix(trimmed, "---") ||
-			strings.HasPrefix(trimmed, "===") {
+			strings.HasPrefix(trimmed, "===") ||
+			reOrderedList.MatchString(trimmed) {
 			return false
 		}
 	}
@@ -143,31 +147,29 @@ func reflowParagraph(text string, width int) string {
 	}
 	n := len(words)
 
-	// wordLen[i] = visible length of word i.
 	wordLen := make([]int, n)
 	for i, w := range words {
 		wordLen[i] = len(w)
 	}
 
-	// cost[i] = minimum cost to set words[i:] into lines.
-	// breaks[i] = index of first word on the next line after the line starting at i.
-	const inf = 1<<62
+	// Minimum-raggedness DP: cost[i] = min cost for words[i:],
+	// breaks[i] = first word on the next line after the line starting at i.
+	const inf = 1 << 62
 	cost := make([]int, n+1)
 	breaks := make([]int, n)
 	cost[n] = 0
 
 	for i := n - 1; i >= 0; i-- {
-		lineLen := -1 // will become 0 after first word adds +1 for space
+		lineLen := -1
 		best := inf
 		bestBreak := n
 		for j := i; j < n; j++ {
-			lineLen += 1 + wordLen[j] // +1 for space (first iteration: -1+1=0)
+			lineLen += 1 + wordLen[j]
 			if lineLen > width && j > i {
 				break
 			}
 			var c int
 			if j == n-1 {
-				// Last line: no penalty.
 				c = cost[j+1]
 			} else {
 				slack := width - lineLen
@@ -182,7 +184,6 @@ func reflowParagraph(text string, width int) string {
 		breaks[i] = bestBreak
 	}
 
-	// Reconstruct lines from break points.
 	var lines []string
 	for i := 0; i < n; {
 		j := breaks[i]
@@ -284,7 +285,7 @@ func Markdown(r io.Reader, w io.Writer, cols int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
-	md = reflowMarkdown(md, 72)
+	md = reflowMarkdown(md, cols)
 
 	if _, err := fmt.Fprint(w, md+"\n"); err != nil {
 		return fmt.Errorf("writing output: %w", err)
