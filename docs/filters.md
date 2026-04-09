@@ -182,40 +182,37 @@ If no HTML is detected, the filter pipes the text through aerc's built-in `wrap 
 
 ## How palette.sh tokens map to visual output
 
-The Go binary loads `generated/palette.sh` at startup. Each color token in that file is a pre-resolved ANSI parameter string, for example:
+The Go binary loads the active TOML theme file at startup. Theme
+discovery reads `styleset-name` from `aerc.conf`, then looks for
+`themes/<name>.toml` relative to the config directory.
 
-```sh
-C_HEADING="1;38;2;163;190;140"   # bold + RGB green
-C_LINK_TEXT="38;2;136;192;208"   # RGB cyan
-C_LINK_URL="38;2;97;110;136"     # RGB dark gray
-```
+Each token in the theme file is resolved to an ANSI SGR parameter
+string at load time. For example, a token `heading = { color =
+"color_success", bold = true }` with `color_success = "#a3be8c"`
+resolves to `38;2;163;190;140;1`. These are wrapped as
+`\033[<value>m` and inserted around the relevant text. The binary
+always resets with `\033[0m` after each styled span to avoid color
+bleed.
 
-These are wrapped as `\033[<value>m` and inserted around the relevant text. The binary always resets with `\033[0m` after each styled span to avoid color bleed.
+The theme lookup path:
 
-The palette lookup path, in order:
+1. `$AERC_CONFIG/aerc.conf` → read `styleset-name` → `themes/<name>.toml`
+2. `~/.config/aerc/aerc.conf` → same
 
-1. `$AERC_CONFIG/generated/palette.sh`
-2. Relative to the binary: `../../.config/aerc/generated/palette.sh`
-3. `~/.config/aerc/generated/palette.sh`
-
-If none of these exist, the binary exits with:
-
-```
-palette not found - run themes/generate to set up your theme
-```
+If `aerc.conf` is not found, `styleset-name` is missing, or the
+theme file does not exist, the binary exits with a clear error.
 
 ## Troubleshooting
 
 **All output is unstyled / no colors**
 
-The binary could not find `generated/palette.sh`. Run the generator:
+The binary could not find the theme file. Verify:
 
-```sh
-cd ~/.config/aerc
-themes/generate themes/nord.sh
-```
+1. `styleset-name=nord` is set in `aerc.conf`
+2. `themes/nord.toml` exists in the same directory as `aerc.conf`
 
-Then verify the file exists at `~/.config/aerc/generated/palette.sh`.
+If using `$AERC_CONFIG`, verify it points to the directory containing
+`aerc.conf`.
 
 **HTML messages show raw HTML or markdown source**
 
@@ -251,12 +248,11 @@ If it errors about the Lua filter, check that stow has linked the `.config/aerc/
 
 **Colors look wrong after switching themes**
 
-Regenerate the palette and restart aerc:
+Regenerate the styleset and restart aerc:
 
 ```sh
-cd ~/.config/aerc
-themes/generate themes/solarized-dark.sh
+mailrender themes generate
 # Then reopen aerc
 ```
 
-The binary reads `palette.sh` at startup, not on every message. Aerc must be restarted after changing themes.
+The binary reads the theme file at startup, not on every message. Aerc must be restarted after changing themes.

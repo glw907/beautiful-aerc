@@ -56,12 +56,3 @@ func termCols() int {
 	}
 	return n
 }
-
-func termRows() int {
-	if s := os.Getenv("AERC_ROWS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 24
-}
