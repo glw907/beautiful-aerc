@@ -358,12 +358,14 @@ func TestFindPathNoThemeFile(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "aerc.conf"), []byte(aercConf), 0644)
 	os.MkdirAll(filepath.Join(dir, "themes"), 0755)
 	t.Setenv("AERC_CONFIG", dir)
-	_, err := FindPath()
+	path, err := FindPath()
+	if err != nil {
+		t.Fatalf("FindPath: %v", err)
+	}
+	// FindPath returns the expected path; Load fails because the file is missing.
+	_, err = Load(path)
 	if err == nil {
 		t.Fatal("expected error when theme file not found")
-	}
-	if !strings.Contains(err.Error(), "missing.toml") {
-		t.Errorf("error = %q, want mention of missing.toml", err)
 	}
 }
 

@@ -152,11 +152,7 @@ func FindPath() (string, error) {
 		return "", err
 	}
 
-	path := filepath.Join(confDir, "themes", name+".toml")
-	if _, err := os.Stat(path); err != nil {
-		return "", fmt.Errorf("theme file not found: %s", path)
-	}
-	return path, nil
+	return filepath.Join(confDir, "themes", name+".toml"), nil
 }
 
 // FindConfigDir returns the directory containing aerc.conf.

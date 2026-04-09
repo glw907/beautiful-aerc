@@ -154,5 +154,8 @@ func WriteStyleset(t *Theme, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0644)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing styleset %s: %w", path, err)
+	}
+	return nil
 }
