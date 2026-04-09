@@ -84,15 +84,14 @@ func countChangedLines(a, b string) int {
 	aLines := strings.Split(strings.TrimSuffix(a, "\n"), "\n")
 	bLines := strings.Split(strings.TrimSuffix(b, "\n"), "\n")
 
-	max := len(aLines)
-	if len(bLines) > max {
-		max = len(bLines)
+	n := len(aLines)
+	if len(bLines) > n {
+		n = len(bLines)
 	}
 
 	changed := 0
-	for i := 0; i < max; i++ {
-		aLine := ""
-		bLine := ""
+	for i := range n {
+		var aLine, bLine string
 		if i < len(aLines) {
 			aLine = aLines[i]
 		}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/glw907/beautiful-aerc/internal/theme"
@@ -61,7 +62,7 @@ func Plain(r io.Reader, w io.Writer, t *theme.Theme, cols int) error {
 
 	colStr := "80"
 	if cols > 0 {
-		colStr = fmt.Sprintf("%d", cols)
+		colStr = strconv.Itoa(cols)
 	}
 
 	wrap := exec.Command("wrap", "-w", colStr, "-r")

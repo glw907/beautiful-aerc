@@ -9,10 +9,9 @@ import (
 func main() {
 	cmd := newRootCmd()
 	if err := cmd.Execute(); err != nil {
-		if errors.Is(err, errNoExportNeeded) {
-			os.Exit(1)
+		if !errors.Is(err, errNoExportNeeded) {
+			fmt.Fprintln(os.Stderr, err)
 		}
-		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

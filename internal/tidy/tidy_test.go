@@ -168,4 +168,3 @@ func TestTidy_APIError(t *testing.T) {
 		t.Errorf("message = %q, want suffix ', text unchanged'", result.Message)
 	}
 }
-

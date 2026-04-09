@@ -32,8 +32,8 @@ func TestCallAPI(t *testing.T) {
 			}
 			w.Header().Set("content-type", "application/json")
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
-					t.Errorf("encode response: %v", err)
-				}
+				t.Errorf("encode response: %v", err)
+			}
 		}))
 		defer srv.Close()
 
@@ -78,10 +78,10 @@ func TestCallAPI(t *testing.T) {
 			w.Header().Set("content-type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			if err := json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]string{"message": "internal server error"},
-				}); err != nil {
-					t.Errorf("encode response: %v", err)
-				}
+				"error": map[string]string{"message": "internal server error"},
+			}); err != nil {
+				t.Errorf("encode response: %v", err)
+			}
 		}))
 		defer srv.Close()
 
@@ -97,7 +97,9 @@ func TestCallAPI(t *testing.T) {
 	t.Run("empty content", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("content-type", "application/json")
-			json.NewEncoder(w).Encode(apiResponse{Content: []contentBlock{}}) //nolint:errcheck
+			if err := json.NewEncoder(w).Encode(apiResponse{Content: []contentBlock{}}); err != nil {
+				t.Errorf("encode response: %v", err)
+			}
 		}))
 		defer srv.Close()
 
