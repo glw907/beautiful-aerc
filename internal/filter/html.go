@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -34,7 +35,6 @@ var (
 
 	// Marker replacement after Glamour rendering.
 	reLinkMarkerOpen = regexp.MustCompile("\x02(\\d+);")
-
 )
 
 // prepareHTML cleans the raw HTML before conversion: strips Mozilla-specific
@@ -127,14 +127,11 @@ func markLinks(text string) (string, []string) {
 func resolveLinks(text string, urls []string) string {
 	text = reLinkMarkerOpen.ReplaceAllStringFunc(text, func(match string) string {
 		sub := reLinkMarkerOpen.FindStringSubmatch(match)
-		idx := 0
-		for _, c := range sub[1] {
-			idx = idx*10 + int(c-'0')
+		idx, err := strconv.Atoi(sub[1])
+		if err != nil || idx >= len(urls) {
+			return ""
 		}
-		if idx < len(urls) {
-			return fmt.Sprintf("\x1b]8;;%s\x1b\\", urls[idx])
-		}
-		return ""
+		return fmt.Sprintf("\x1b]8;;%s\x1b\\", urls[idx])
 	})
 	text = strings.ReplaceAll(text, "\x03", "\x1b]8;;\x1b\\")
 	return text
