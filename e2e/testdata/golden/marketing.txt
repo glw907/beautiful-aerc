@@ -1,12 +1,12 @@
-[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208mShop the Collection[0m                                                             
+[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m]8;;https://tracking.example.com/click?id=hero123\Shop the Collection]8;;\[0m                                                           
                                                                                 
 [38;2;163;190;140;1m[0m[38;2;163;190;140;1m[0m[38;2;163;190;140;1mBig Sale[0m[38;2;163;190;140;1m![0m                                                                       
-Check out our [38;2;136;192;208mamazing deals[0m today.                                              
+Check out our [38;2;136;192;208m]8;;https://tracking.example.com/click?id=abc&redirect=https%3A%2F%2Fexample.com%2Fsale\amazing deals]8;;\[0m today.                                            
                                                                                 
 Don't miss [1m50% off[0m everything in store.                                         
                                                                                 
 Premium Jacket                                                                  
                                                                                 
-Our [38;2;136;192;208mPremium Jacket[0m is back in stock.                                            
+Our [38;2;136;192;208m]8;;https://tracking.example.com/click?id=product1\Premium Jacket]8;;\[0m is back in stock.                                          
                                                                                 
-[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208mUnsubscribe[0m | [38;2;136;192;208mPreferences[0m                                                       
+[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m]8;;https://example.com/unsubscribe\Unsubscribe]8;;\[0m | [38;2;136;192;208m]8;;https://example.com/preferences\Preferences]8;;\[0m                                                   

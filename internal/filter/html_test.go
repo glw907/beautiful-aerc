@@ -152,56 +152,77 @@ func TestStripHiddenElements(t *testing.T) {
 	}
 }
 
-func TestStripLinkURLs(t *testing.T) {
+func TestMarkLinks(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name     string
+		input    string
+		wantURLs []string
 	}{
 		{
-			"standard link",
+			"single link",
 			"Visit [Example](https://example.com) today.",
-			"Visit [Example](#) today.",
-		},
-		{
-			"tracking URL",
-			"[Click here](https://tracking.example.com/click?id=abc&redirect=https%3A%2F%2Fexample.com)",
-			"[Click here](#)",
+			[]string{"https://example.com"},
 		},
 		{
 			"multiple links",
 			"See [A](https://a.com) and [B](https://b.com).",
-			"See [A](#) and [B](#).",
+			[]string{"https://a.com", "https://b.com"},
 		},
 		{
 			"no links",
 			"Plain text with no links.",
-			"Plain text with no links.",
+			nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stripLinkURLs(tt.input)
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
+			_, urls := markLinks(tt.input)
+			if len(urls) != len(tt.wantURLs) {
+				t.Fatalf("got %d URLs, want %d", len(urls), len(tt.wantURLs))
+			}
+			for i, u := range urls {
+				if u != tt.wantURLs[i] {
+					t.Errorf("URL[%d] = %q, want %q", i, u, tt.wantURLs[i])
+				}
 			}
 		})
 	}
 }
 
-func TestHTMLLinkURLsNotVisible(t *testing.T) {
+func TestResolveLinks(t *testing.T) {
+	// Simulate what Glamour produces from marked text
+	input := "Visit \x1b[38;2;0;0;255m\x020;Example\x03\x1b[0m today."
+	urls := []string{"https://example.com"}
+	got := resolveLinks(input, urls)
+
+	if !strings.Contains(got, "\x1b]8;;https://example.com\x1b\\") {
+		t.Error("missing OSC 8 open sequence")
+	}
+	if !strings.Contains(got, "\x1b]8;;\x1b\\") {
+		t.Error("missing OSC 8 close sequence")
+	}
+	if strings.Contains(got, "\x02") || strings.Contains(got, "\x03") {
+		t.Error("markers should be replaced")
+	}
+}
+
+func TestHTMLLinksClickable(t *testing.T) {
 	th := testTheme(t)
 	input := `<p>Check <a href="https://tracking.example.com/click?id=abc123">this product</a> out.</p>`
 	var buf bytes.Buffer
 	if err := HTML(strings.NewReader(input), &buf, th, 80); err != nil {
 		t.Fatal(err)
 	}
-	plain := stripANSI(buf.String())
+	out := buf.String()
+	plain := stripANSI(out)
 	if !strings.Contains(plain, "this product") {
 		t.Error("link text should be preserved")
 	}
 	if strings.Contains(plain, "tracking.example.com") {
-		t.Error("tracking URL should not appear in output")
+		t.Error("tracking URL should not appear as visible text")
+	}
+	if !strings.Contains(out, "\x1b]8;;https://tracking.example.com/click?id=abc123\x1b\\") {
+		t.Error("OSC 8 hyperlink should be present")
 	}
 }
 

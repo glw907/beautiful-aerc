@@ -18,6 +18,7 @@ var (
 	reHiddenDivOpen = regexp.MustCompile(`(?i)<div[^>]+style="[^"]*display:\s*none[^"]*"[^>]*>`)
 	reZeroImg       = regexp.MustCompile(`(?i)<img[^>]*(?:width:\s*0|height:\s*0|width="0"|height="0")[^>]*/?>`)
 	reANSI          = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	reOSC8          = regexp.MustCompile(`\x1b\]8;[^\x1b]*\x1b\\`)
 
 	// Post-conversion whitespace normalization: strip invisible filler
 	// characters that email senders embed for preheader text, collapse
@@ -28,11 +29,12 @@ var (
 	reExcessiveBlanks = regexp.MustCompile(`\n{3,}`)
 	reLeadingBlanks = regexp.MustCompile(`\A\n+`)
 
-	// Markdown link URL replacement: [text](url) → [text](#). Glamour
-	// renders link URLs as visible inline text, which produces noise
-	// from tracking URLs. Replacing with # preserves link styling
-	// while suppressing the URL display.
-	reMdLink = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+	// Markdown link pattern for URL extraction.
+	reMdLink = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+
+	// Marker replacement after Glamour rendering.
+	reLinkMarkerOpen = regexp.MustCompile("\x02(\\d+);")
+
 )
 
 // prepareHTML cleans the raw HTML before conversion: strips Mozilla-specific
@@ -101,14 +103,46 @@ func normalizeWhitespace(text string) string {
 	return text
 }
 
-// stripLinkURLs replaces markdown link URLs with # so Glamour styles
-// the link text without displaying the (often lengthy tracking) URL.
-func stripLinkURLs(text string) string {
-	return reMdLink.ReplaceAllString(text, "[$1](#)")
+// markLinks replaces markdown [text](url) with [STX+idx+text+ETX](#) and
+// returns the modified text plus the extracted URLs. Glamour suppresses
+// display of fragment-only URLs (#) while still styling the link text.
+// The STX/ETX markers survive Glamour rendering and are replaced with
+// OSC 8 hyperlink sequences by resolveLinks.
+func markLinks(text string) (string, []string) {
+	var urls []string
+	idx := 0
+	marked := reMdLink.ReplaceAllStringFunc(text, func(match string) string {
+		sub := reMdLink.FindStringSubmatch(match)
+		urls = append(urls, sub[2])
+		result := fmt.Sprintf("[\x02%d;%s\x03](#)", idx, sub[1])
+		idx++
+		return result
+	})
+	return marked, urls
 }
 
-// stripANSI removes ANSI escape sequences from s.
+// resolveLinks replaces STX/ETX markers in Glamour's ANSI output with
+// OSC 8 hyperlink open/close sequences, making styled link text clickable
+// in terminals that support OSC 8 (kitty, WezTerm, foot, etc.).
+func resolveLinks(text string, urls []string) string {
+	text = reLinkMarkerOpen.ReplaceAllStringFunc(text, func(match string) string {
+		sub := reLinkMarkerOpen.FindStringSubmatch(match)
+		idx := 0
+		for _, c := range sub[1] {
+			idx = idx*10 + int(c-'0')
+		}
+		if idx < len(urls) {
+			return fmt.Sprintf("\x1b]8;;%s\x1b\\", urls[idx])
+		}
+		return ""
+	})
+	text = strings.ReplaceAll(text, "\x03", "\x1b]8;;\x1b\\")
+	return text
+}
+
+// stripANSI removes ANSI escape sequences (CSI and OSC 8) from s.
 func stripANSI(s string) string {
+	s = reOSC8.ReplaceAllString(s, "")
 	return reANSI.ReplaceAllString(s, "")
 }
 
@@ -148,7 +182,7 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, cols int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
-	md = stripLinkURLs(md)
+	md, urls := markLinks(md)
 
 	style := t.GlamourStyle()
 	renderer, err := glamour.NewTermRenderer(
@@ -163,6 +197,7 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, cols int) error {
 	if err != nil {
 		return fmt.Errorf("rendering markdown: %w", err)
 	}
+	styled = resolveLinks(styled, urls)
 
 	if _, err := fmt.Fprint(w, styled); err != nil {
 		return fmt.Errorf("writing output: %w", err)

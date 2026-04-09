@@ -1,6 +1,6 @@
-[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m@user[0m commented on [38;2;136;192;208m#123[0m:                                                        
+[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m]8;;https://github.com/user\@user]8;;\[0m commented on [38;2;136;192;208m]8;;https://github.com/org/repo/pull/123\#123]8;;\[0m:                                                    
                                                                                 
 This looks good. One suggestion: consider using fmt.Errorf instead of errors.New
 for better context.                                                             
                                                                                 
-You can view the full discussion [38;2;136;192;208mhere[0m.                                          
+You can view the full discussion [38;2;136;192;208m]8;;https://github.com/org/repo/pull/123#issuecomment-456\here]8;;\[0m.                                        
