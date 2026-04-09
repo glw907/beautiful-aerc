@@ -1,9 +1,26 @@
--- nvim-mail: Neovim profile for composing email in aerc.
--- Isolated via NVIM_APPNAME=nvim-mail. See docs/filters.md for details.
+-- nvim-mail: Neovim profile for composing email in aerc
+--
+-- This is a dedicated Neovim configuration, completely isolated from
+-- your regular Neovim setup via NVIM_APPNAME. It provides:
+--
+--   - Custom syntax highlighting for email headers and quoted text
+--   - Hard-wrap at 72 characters with format-flowed support
+--   - Spell check on body text (skips headers and quoted lines)
+--   - Fuzzy contact picker via khard + Telescope
+--   - Prose tidying via tidytext (optional, requires Anthropic API key)
+--
+-- Plugins install automatically on first launch — just open a compose
+-- window and wait a few seconds. See docs/nvim-mail.md for the full
+-- compose workflow.
 
 vim.g.mapleader = " "
 
--- Bootstrap lazy.nvim
+-- Plugin management: lazy.nvim
+--
+-- lazy.nvim is a modern Neovim plugin manager. The bootstrap block
+-- below auto-installs it on first launch, then it installs all the
+-- plugins listed in the setup() call. You don't need to do anything
+-- manually.
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then
   vim.fn.system({
@@ -15,6 +32,8 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 require("lazy").setup({
+  -- nord.nvim: Nord color scheme, matching the aerc theme.
+  -- Loads first (priority=1000) so all UI elements use Nord colors.
   {
     "shaunsingh/nord.nvim",
     priority = 1000,
@@ -22,22 +41,32 @@ require("lazy").setup({
       vim.cmd.colorscheme("nord")
     end,
   },
+  -- telescope.nvim: Fuzzy finder framework. Powers the contact picker —
+  -- search your address book by typing a few letters of a name.
+  -- plenary.nvim is a required utility library.
   {
     "nvim-telescope/telescope.nvim",
     dependencies = { "nvim-lua/plenary.nvim" },
   },
+  -- which-key.nvim: Shows available keybindings when you press the
+  -- leader key (Space) and wait. Helps you discover what's available
+  -- without memorizing everything. Loads lazily to keep startup fast.
   {
     "folke/which-key.nvim",
     event = "VeryLazy",
   },
 }, { ui = { border = "none" } })
 
--- Editor settings: prose composition, not code editing
+-- Editor settings: optimized for prose composition, not code.
+--
+-- These create a comfortable writing environment: automatic line
+-- wrapping at 72 characters, spell check, and a clean distraction-free
+-- display with no line numbers, no status bar, and no mode indicator.
 vim.opt.wrap = true
 vim.opt.linebreak = true
 vim.opt.textwidth = 72
 vim.opt.formatoptions = "tcrqwn"
-vim.opt.breakat = " \t" -- only break at spaces/tabs, not punctuation
+vim.opt.breakat = " \t"
 vim.opt.spell = true
 vim.opt.spelllang = "en_us"
 vim.opt.number = false
@@ -53,15 +82,24 @@ vim.opt.breakindentopt = "shift:2"
 vim.opt.swapfile = false
 vim.opt.termguicolors = true
 
--- Custom filetype avoids built-in "mail" highlight group conflicts
+-- Custom filetype: "aercmail"
+--
+-- We use a custom filetype instead of the built-in "mail" type because
+-- mail's syntax definitions conflict with our custom highlighting for
+-- headers and quoted text.
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
     vim.bo.filetype = "aercmail"
   end,
 })
 
--- Buffer preparation: normalize headers and reflow quoted text via compose-prep,
--- then add visual separator lines and position cursor.
+-- Buffer preparation on open
+--
+-- When aerc opens the compose editor, the raw buffer has RFC 2822
+-- formatted headers (folded continuation lines, bare angle brackets,
+-- etc.). This pipes the buffer through compose-prep to normalize
+-- headers and reflow quoted text, then adds visual separator lines
+-- and positions the cursor.
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
     local raw_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -72,12 +110,12 @@ vim.api.nvim_create_autocmd("VimEnter", {
       result = raw_lines
     end
 
-    -- Insert blank lines at top for separator extmarks
+    -- Insert blank lines at top for decorative separator extmarks
     table.insert(result, 1, "")
     table.insert(result, 1, "")
     vim.api.nvim_buf_set_lines(0, 0, -1, false, result)
 
-    -- Find end of header block (first blank line after headers)
+    -- Find the blank line that separates headers from body
     local header_end = nil
     for i = 3, #result do
       if result[i] == "" then
@@ -87,10 +125,10 @@ vim.api.nvim_create_autocmd("VimEnter", {
     end
 
     if header_end then
+      -- Draw decorative separator lines above and below the headers
       local ns = vim.api.nvim_create_namespace("mail_header_sep")
       local sep = string.rep("─", 72)
 
-      -- Overlay separator lines above and below headers
       vim.api.nvim_buf_set_extmark(0, ns, 1, 0, {
         virt_text = { { sep, "mailHeaderKey" } },
         virt_text_pos = "overlay",
@@ -100,10 +138,13 @@ vim.api.nvim_create_autocmd("VimEnter", {
         virt_text_pos = "overlay",
       })
 
-      -- Add blank lines after headers for cursor landing zone
+      -- Add blank lines after headers for the cursor landing zone
       vim.api.nvim_buf_set_lines(0, header_end, header_end, false, { "", "", "" })
 
-      -- Cursor placement: empty To: → land on To: line; populated → land in body
+      -- Cursor placement:
+      -- Empty To: (new compose/forward) → land on To: line, ready to
+      --   type a recipient or press Ctrl-k for the contact picker
+      -- Populated To: (reply) → land in the body, ready to type
       local to_line_nr = nil
       local to_empty = false
       for i = 3, header_end - 1 do
@@ -129,7 +170,12 @@ vim.api.nvim_create_autocmd("VimEnter", {
   end,
 })
 
--- Strip decorative blank lines before headers on save so aerc sees valid RFC 2822
+-- Save cleanup: strip decorative blank lines before headers
+--
+-- The buffer preparation above inserts blank lines for the separator
+-- extmarks. This removes them before saving so aerc sees valid RFC 2822
+-- headers starting on line 1. Without this, aerc fails with "no valid
+-- From: address found".
 vim.api.nvim_create_autocmd("BufWritePre", {
   callback = function()
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -146,7 +192,13 @@ vim.api.nvim_create_autocmd("BufWritePre", {
   end,
 })
 
--- Tidytext: Claude-powered prose tidier. Requires tidytext binary and ANTHROPIC_API_KEY.
+-- Tidytext: Claude-powered prose tidier (optional)
+--
+-- Runs AI-powered spelling, grammar, and punctuation fixes on the email
+-- body (skipping headers and signature). Changed words are highlighted
+-- with teal undercurl marks that clear on the next edit.
+--
+-- Requires: tidytext binary (make install) and ANTHROPIC_API_KEY env var.
 vim.api.nvim_set_hl(0, "EmailTidyChange", { undercurl = true, sp = "#8fbcbb" })
 
 local function run_tidy()
@@ -218,7 +270,7 @@ local function run_tidy()
     end
   end
 
-  -- Clear highlights on next edit
+  -- Clear highlights on the next edit
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
     buffer = 0,
     once = true,
@@ -243,12 +295,22 @@ end
 vim.keymap.set("n", "<leader>t", run_tidy, { desc = "Tidy prose (tidytext)" })
 
 -- Keybindings
+--
+-- Space is the leader key (set at the top of this file). Press Space
+-- and wait to see all available bindings via which-key.
 
 vim.keymap.set("n", "<leader>s", function()
   vim.opt.spell = not vim.opt.spell:get()
 end, { desc = "Toggle spell check" })
 
 -- Save and quit with spellcheck prompt
+--
+-- Before exiting, checks for misspelled words in the body (skipping
+-- headers, quoted lines, and signature). If misspellings are found,
+-- you get three options:
+--   (s)pellcheck — jump to the first misspelled word
+--   (y)es — send anyway
+--   (n)o — stay in the editor
 vim.keymap.set("n", "<leader>q", function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local body_start = 1
@@ -289,9 +351,12 @@ vim.keymap.set("n", "<leader>q", function()
   end
 end, { desc = "Save and quit" })
 
+-- Abort compose — exits with non-zero code so aerc closes the compose
+-- tab immediately without sending.
 vim.keymap.set("n", "<leader>x", "<cmd>cq<cr>", { desc = "Abort compose" })
 
--- Insert signature from ~/.config/aerc/signature.md
+-- Insert your email signature from ~/.config/aerc/signature.md
+-- Copy signature.md.example to signature.md and customize it.
 vim.keymap.set("n", "<leader>sig", function()
   local sig_paths = {
     vim.fn.expand("~/.config/aerc/signature.md"),
@@ -320,18 +385,26 @@ vim.keymap.set("n", "<leader>sig", function()
   vim.api.nvim_buf_set_lines(0, row, row, false, sig_lines)
 end, { desc = "Insert email signature" })
 
--- Undo breakpoints at punctuation so `u` undoes smaller chunks
+-- Undo breakpoints: pressing . , ! ? : creates an undo point so that
+-- pressing 'u' undoes smaller chunks instead of the whole paragraph.
 for _, ch in ipairs({ ".", ",", "!", "?", ":" }) do
   vim.keymap.set("i", ch, ch .. "<C-g>u", { desc = "Undo breakpoint at " .. ch })
 end
 
+-- Spell navigation
 vim.keymap.set("n", "<leader>]", "]s", { desc = "Next misspelled word" })
 vim.keymap.set("n", "<leader>[", "[s", { desc = "Prev misspelled word" })
 vim.keymap.set("n", "<leader>z", "z=", { desc = "Spelling suggestions" })
 vim.keymap.set("n", "<leader>r", "gqip", { desc = "Reflow paragraph" })
 
--- khard contact picker via Telescope
--- Requires: khard with CardDAV contacts synced via vdirsyncer
+-- Contact picker: search your address book with fuzzy matching
+--
+-- Requires khard (https://github.com/lucc/khard) with contacts synced
+-- via vdirsyncer. Press <leader>k in normal mode or Ctrl-k in insert
+-- mode. Type to filter contacts, Enter to insert, Escape to cancel.
+--
+-- On To:/Cc:/Bcc: lines, automatically prepends ", " when the line
+-- already has a recipient.
 local function khard_pick(reenter_insert)
   local raw = vim.fn.systemlist("khard email --parsable 2>/dev/null")
   local entries = {}
@@ -372,7 +445,6 @@ local function khard_pick(reenter_insert)
         local pos = vim.api.nvim_win_get_cursor(0)
         local buf_line = vim.api.nvim_buf_get_lines(0, pos[1] - 1, pos[1], false)[1]
 
-        -- Auto-prepend ", " on address headers that already have a recipient
         local on_address_header = buf_line:match("^To:%s*.+")
           or buf_line:match("^Cc:%s*.+")
           or buf_line:match("^Bcc:%s*.+")
