@@ -2,6 +2,13 @@
 
 > Project issue tracker. Managed by `/log-issue`.
 
+## Someday
+
+- [ ] **#5** Built-in bubbletea compose editor `#poplar` `#v2` *(2026-04-10)*
+  Pine-style built-in compose using `bubbles/textarea` for body + custom header fields. Alternative to `$EDITOR` for users who want a seamless, zero-dependency compose experience. Would be a bubbletea showcase piece. Design after external editor flow (Pass 9) is stable.
+- [ ] **#6** Neovim companion plugin for poplar `#poplar` `#v2` *(2026-04-10)*
+  Email browsing within neovim (folder list, message list, viewer as buffers), telescope pickers, compose integration, poplar command passthrough. Requires IPC/RPC interface in poplar. Design when core client is stable.
+
 ## Medium
 
 - [ ] **#1** Clean up pick-link references from live docs `#improvement` `#docs` *(2026-04-09)*

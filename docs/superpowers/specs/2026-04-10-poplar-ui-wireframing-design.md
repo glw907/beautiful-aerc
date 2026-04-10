@@ -23,7 +23,7 @@ pass where it first appears.
 |---|--------|-------------|------|
 | 1 | Folder + Message List | Default view. Sidebar (folders with icons + unread counts) + message list (flags, sender, subject, date). One per account. Not closeable. | 2.5b |
 | 2 | Message Viewer | Opens in a new tab on Enter. Header block + rendered body in a scrollable viewport. Closeable. | 2.5b |
-| 3 | Compose (external) | Suspends bubbletea, launches nvim-mail via `tea.ExecProcess`. Not a poplar screen — poplar disappears and reappears. | 9 |
+| 3 | Compose (external) | Suspends bubbletea, launches `$EDITOR` via `tea.ExecProcess` (default: `micro`). Not a poplar screen — poplar disappears and reappears. | 9 |
 
 ### Overlays / Pickers
 
