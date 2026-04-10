@@ -48,10 +48,11 @@ func (a *JMAPAdapter) Connect(ctx context.Context) error {
 	return nil
 }
 
-// Disconnect stops the message pump.
+// Disconnect sends a disconnect action and stops the message pump.
 func (a *JMAPAdapter) Disconnect() error {
+	err := a.doAction(&types.Disconnect{})
 	close(a.done)
-	return a.doAction(&types.Disconnect{})
+	return err
 }
 
 // ListFolders returns all mail folders from the server.
