@@ -1,7 +1,9 @@
-]8;;https://github.com/user\[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m@user[0m]8;;\ commented on
-]8;;https://github.com/org/repo/pull/123\[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m#123[0m]8;;\:
 
-This looks good. One suggestion: consider using fmt.Errorf instead of errors.New for better context.
+[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m@user[0m ([38;2;97;110;136mhttps://github.com/user[0m) commented on
+[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208m#123[0m ([38;2;97;110;136mhttps://github.com/org/repo/pull/123[0m):
+
+[38;2;143;188;187m[0m[38;2;143;188;187m[0m│ [38;2;143;188;187mThis looks good. One suggestion: consider using [0m[38;2;143;188;187mfmt.Errorf[0m[38;2;143;188;187m instead[0m[38;2;143;188;187m of[0m
+[0m[38;2;143;188;187m[0m[38;2;143;188;187m[0m│ [38;2;143;188;187merrors.New[0m[38;2;143;188;187m for better[0m[38;2;143;188;187m context.[0m
 
 You can view the full discussion
-]8;;https://github.com/org/repo/pull/123#issuecomment-456\[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208mhere[0m]8;;\.
+[38;2;136;192;208m[0m[38;2;136;192;208m[0m[38;2;136;192;208mhere[0m ([38;2;97;110;136mhttps://github.com/org/repo/pull/123#issuecomment-456[0m).

@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -26,14 +27,31 @@ func (p *imageStripPlugin) Init(conv *converter.Converter) error {
 }
 
 func (p *imageStripPlugin) renderImg(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if isSmallImage(n) {
+		return converter.RenderSuccess
+	}
 	for _, attr := range n.Attr {
 		if attr.Key == "alt" && strings.TrimSpace(attr.Val) != "" {
 			w.WriteString(strings.TrimSpace(attr.Val))
 			return converter.RenderSuccess
 		}
 	}
-	// No alt text — emit nothing.
 	return converter.RenderSuccess
+}
+
+// isSmallImage returns true if the image has explicit width or height
+// attributes at or below 24px. Such images are decorative (icons, dots,
+// progress indicators) and their alt text is noise.
+func isSmallImage(n *html.Node) bool {
+	for _, attr := range n.Attr {
+		if attr.Key == "width" || attr.Key == "height" {
+			px, err := strconv.Atoi(strings.TrimSuffix(attr.Val, "px"))
+			if err == nil && px <= 24 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // layoutTablePlugin flattens HTML tables that lack <th> elements (layout

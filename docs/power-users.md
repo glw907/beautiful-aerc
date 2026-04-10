@@ -11,7 +11,6 @@ For getting started, see the [README](../README.md). For the compose editor, see
 - [Header filter](#header-filter)
 - [Plain text filter](#plain-text-filter)
 - [Footnote system](#footnote-system)
-- [Link picker architecture](#link-picker-architecture)
 - [Theme token resolution](#theme-token-resolution)
 - [Known edge cases](#known-edge-cases)
 - [Troubleshooting](#troubleshooting)
@@ -29,11 +28,11 @@ mailrender reads `AERC_COLUMNS` in each subcommand and falls back to 80 if not s
 
 The three filter hooks in `aerc.conf`:
 
-| Subcommand | aerc hook | Input | Calls pandoc? |
-|------------|-----------|-------|---------------|
-| `mailrender headers` | `.headers` | Raw RFC 2822 headers | No |
-| `mailrender html` | `text/html` | Raw HTML body | Yes |
-| `mailrender plain` | `text/plain` | Raw plain text body | No (unless HTML detected) |
+| Subcommand | aerc hook | Input |
+|------------|-----------|-------|
+| `mailrender headers` | `.headers` | Raw RFC 2822 headers |
+| `mailrender html` | `text/html` | Raw HTML body |
+| `mailrender plain` | `text/plain` | Raw plain text body |
 
 For the `.headers` filter, aerc sends the full RFC 2822 headers (key: value lines, with continuation lines for folded headers). The blank line separating headers from body is included in stdin.
 
@@ -43,49 +42,24 @@ For `text/html`, aerc sends the raw HTML body. For `text/plain`, it sends the ra
 
 When aerc opens an HTML message, it pipes the raw HTML body to `mailrender html`. The pipeline runs in sequential stages, each transforming the content:
 
-### 1. Pre-pandoc cleanup
+### 1. prepareHTML
 
-Before passing HTML to pandoc, the binary strips known junk that produces bad markdown:
+Before conversion, the binary strips known junk:
 
-- **Mozilla attributes** — `class="moz-..."` and `data-moz-do-not-send` attributes that cause pandoc to emit escaped spans
-- **Hidden elements** — `display:none` divs are removed using a nesting-aware approach (see [Known edge cases](#known-edge-cases)). Responsive emails often embed a hidden duplicate of the entire body.
-- **Tracking pixels** — `<img>` tags with zero width or height are stripped. Some senders embed these *inside* hyperlink text, causing pandoc to split URLs across paragraphs.
+- **Mozilla attributes** — `class="moz-..."` and `data-moz-do-not-send` attributes that would pollute the markdown output
+- **Hidden elements** — `display:none` divs are removed using a nesting-aware depth-tracking loop (see [Known edge cases](#known-edge-cases)). Responsive emails often embed a hidden duplicate of the entire body.
+- **Zero-size images** — `<img>` tags with zero width or height are stripped. Some senders embed these *inside* hyperlink text.
 
-### 2. Pandoc conversion
+### 2. convertHTML
 
-The binary calls pandoc as a subprocess:
+The cleaned HTML is converted to markdown using the [`github.com/JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) library with three custom plugins:
 
-```sh
-pandoc -f html -t markdown --reference-links --wrap=none -L unwrap-tables.lua
-```
+- **commonmark plugin** — standard CommonMark markdown output
+- **table plugin** — data tables (those with `<th>` headers) become GFM pipe tables
+- **layoutTablePlugin** — detects layout tables (no `<th>`) and flattens each `<td>` cell into a separate paragraph. Marketing emails use `<table>` for layout, not data — without this, you'd see garbled grid tables everywhere.
+- **imageStripPlugin** — `<img>` tags emit only their alt text (if any), or nothing. Images with explicit width/height at or below 24px are suppressed entirely (decorative icons).
 
-`unwrap-tables.lua` is a pandoc Lua filter embedded in the mailrender binary (written to a temp file for pandoc to use). It flattens nested HTML layout tables into plain text instead of letting pandoc render them as markdown grid tables. Marketing emails use `<table>` for layout, not data — without this filter, you'd see garbled grid tables everywhere.
-
-`--reference-links` produces reference-style markdown links, which the footnote converter (stage 6) transforms into numbered footnotes.
-
-### 3. Pandoc artifact cleanup
-
-pandoc's markdown output contains artifacts that don't render cleanly in a terminal:
-
-- Trailing backslashes at line ends (pandoc's hard line-break marker)
-- Backslash-escaped punctuation (`\.`, `\-`, `\[`, `\'`, `\|`, `\"`, `\--`)
-- Superscript caret markers (`^text^`) from HTML `<sup>` elements
-- Nested heading markers (`## ##` from nested `<hN>` tags)
-- Empty heading lines (from empty `<hN>` tags)
-- Consecutive bold markers (`****`) from adjacent `<strong>` blocks separated by `<br>`
-- Stray bold markers (`**` on a line by themselves)
-
-### 4. Bold normalization
-
-pandoc sometimes emits `**` bold markers that open in one paragraph and close in another (from consecutive `<strong>` blocks separated by `<br>`). `normalizeBoldMarkers` scans each paragraph for unpaired `**` and strips the dangling marker so bold doesn't bleed across paragraph boundaries.
-
-### 5. List normalization
-
-- Unicode bullet characters (`●`, `•`, `◦`, `◆`, `▪`, `▸`, `‣`, `⁃`) are converted to standard `-` markers
-- Over-indented list items (4+ spaces) are reduced to standard 2-space indent
-- Loose lists (blank lines between items) are compacted
-
-### 6. Whitespace normalization
+### 3. normalizeWhitespace
 
 - Non-breaking spaces (NBSP `\u00a0`) and typographic spaces (`\u2000`–`\u200a`) are replaced with regular spaces
 - Zero-width characters (`\u200b`–`\u200d`, `\u2060`–`\u2064`, `\ufeff`, `\u00ad`, `\u034f`, `\u180e`) are removed entirely
@@ -93,38 +67,29 @@ pandoc sometimes emits `**` bold markers that open in one paragraph and close in
 - Three or more consecutive blank lines are collapsed to two
 - Leading blank lines are removed
 
-### 7. Footnote conversion
+### 4. deduplicateBlocks
 
-`convertToFootnotes` transforms pandoc's reference-style links into numbered footnote syntax:
+Consecutive paragraph blocks with the same visible text are collapsed to one. Comparison ignores markdown link URLs, so image-links with different tracking parameters but the same alt text are treated as duplicates.
 
-- Numbers references sequentially (`[^1]`, `[^2]`, etc.)
-- Replaces body references with colored link text and dimmed footnote markers
-- Strips emphasis markers from link display text (pandoc wraps linked `<em>` text in `*...*`)
-- Renders images with alt text as `[image: alt text]` labels
-- Removes images without alt text
-- Strips brackets from unresolved references
-- Deduplicates adjacent identical footnote anchors (caused by tracking link wrappers)
-- Self-referencing links (where the display text matches the URL) render as plain URLs with no footnote
+### 5. stripEmptyLinks
 
-### 8. Footnote styling
+Markdown links with empty text — `[](url)` — are removed entirely.
 
-`styleFootnotes` applies ANSI colors to the footnote reference section:
+### 6. collapseShortBlocks
 
-- Separator line in dim color
-- Reference labels (`[^N]:`) in dim color
-- Reference URLs in link color
-- OSC 8 hyperlink escape sequences wrap each URL so terminals can make them clickable even when the display text is truncated
+Runs of three or more consecutive short plain-text blocks (under 25 characters each, no markdown syntax) are joined onto a single line separated by ` · `. This handles navigation bars, step trackers, and tag lists that come from flattened table cells and were never meant to be read vertically.
 
-### 9. Markdown highlighting
+### 7. unflattenQuotes
 
-The final pass walks lines and applies ANSI color to markdown syntax:
+Detects Outlook-style flattened quoted replies: paragraphs containing an attribution line (`Person wrote:`) followed by inline `&gt;` markers where line breaks originally were. Reconstructs them as proper markdown blockquotes with `> ` prefixes.
 
-- `#`, `##`, `###` heading lines get heading color
-- `**text**` spans get bold style
-- `*text*` spans get italic style
-- Horizontal rules (`---`, `___`) get rule color
+### 8. reflowMarkdown
 
-All colors come from the active TOML theme file via resolved tokens.
+Plain paragraphs and blockquotes are rewrapped to 78 columns using minimum-raggedness dynamic programming. Headings, tables, lists, and code fences are left untouched.
+
+### 9. Glamour rendering
+
+The markdown is rendered to styled ANSI output by [Glamour](https://github.com/charmbracelet/glamour) using a style derived from the active TOML theme. Headings, bold, italic, links, and blockquotes are all styled via Glamour's style document, which is built from the theme's color slots at startup.
 
 ## Header filter
 
@@ -171,35 +136,6 @@ Links are the trickiest part of rendering HTML email in a terminal. Inline URLs 
 | Reference labels `[^N]:` | `msg_dim` |
 | Reference URLs | `link_url` |
 
-## Link picker architecture
-
-`pick-link` is a standalone binary that provides keyboard-driven URL selection from the message viewer.
-
-**How it's invoked:** The keybinding `<Tab> = :pipe pick-link<Enter>` in `binds.conf` tells aerc to pipe the raw message to pick-link's stdin.
-
-**Pipeline:**
-
-1. Reads the raw message from stdin
-2. Runs the HTML filter internally (`filter.HTML`) to extract clean footnoted URLs — the same filter the viewer uses
-3. Parses the footnote reference section to extract URL list
-4. Opens a full-screen picker UI on `/dev/tty` (not stdin, since stdin is the piped message)
-5. User selects a URL
-6. Opens the URL via `xdg-open` (or hands `mailto:` links back to aerc)
-
-**Why `/dev/tty`?** stdin is the piped message content, so the picker reads keyboard input directly from the terminal device (`/dev/tty`). This is a common pattern for interactive filters that receive data on stdin.
-
-**Why an alternate screen buffer?** The picker uses the terminal's alternate screen buffer (the same mechanism `vim`, `less`, and other full-screen programs use) so the picker UI doesn't pollute the terminal scrollback. When you close the picker, the original screen is restored.
-
-**Picker controls:**
-
-- Keys `1`-`9` instantly select that link (no Enter needed)
-- Key `0` selects the 10th link
-- `j`/`k` or arrow keys to navigate
-- `Enter` to select the highlighted link
-- `q` or `Escape` to cancel
-
-**Colors:** The picker reads the same TOML theme file as mailrender. Tokens: `picker_num` (digits), `picker_label` (link text), `picker_url` (URL text), `picker_sel_bg` and `picker_sel_fg` (selected row).
-
 ## Theme token resolution
 
 The Go binaries load the active TOML theme file at startup. Here's how that works:
@@ -236,23 +172,19 @@ These issues were encountered and solved during pipeline development on real ema
 
 - **Nesting-aware hidden div removal** — Responsive HTML emails (Apple receipts, etc.) embed a hidden duplicate of the body in a `display:none` div with many nested inner `<div>` tags. A simple regex closes at the first inner `</div>`. Fixed with a depth-tracking loop that counts `<div>` opens and `</div>` closes.
 
-- **Tracking pixels inside URLs** — Bank of America embeds 1x1 tracking `<img>` tags inside hyperlink text, causing pandoc to split a single URL across paragraphs. Fixed with pre-pandoc stripping of zero-size `<img>` tags.
+- **Tracking pixels inside URLs** — Bank of America embeds 1x1 tracking `<img>` tags inside hyperlink text. Fixed with pre-conversion stripping of zero-size `<img>` tags in `prepareHTML`.
 
-- **Multi-line `![](url)` images** — pandoc splits long image URLs across lines. Handled with multi-line regex matching.
+- **Image-link fragments** — `[![alt](img) text](url)` patterns (GitHub annotations) leave broken fragments after image stripping. The `imageStripPlugin` emits only the alt text, so the surrounding link is handled normally by the commonmark plugin.
 
-- **Pandoc backslash escapes** — All punctuation escaping (`\[`, `\]`, `\*`, `\'`, `\|`, `\"`, `\--`, etc.) is removed in artifact cleanup.
+- **Empty-URL links** — `[](url)` links with no text are removed by `stripEmptyLinks`.
 
-- **Image-link fragments** — `[![alt](img) text](url)` patterns (GitHub annotations) leave broken fragments after image stripping. Fixed with a dedicated regex that extracts alt text and preserves the outer link URL.
+- **Grid tables from layout HTML** — Marketing emails use `<table>` for layout. The `layoutTablePlugin` detects tables without `<th>` headers and flattens each cell into a paragraph instead of rendering a grid table.
 
-- **Empty-URL links** — `[text]()` from tracking redirects that pandoc can't resolve are reduced to plain text.
+- **Flattened Outlook quotes** — Outlook mobile flattens quoted reply text into a single `<p>` with literal `&gt;` markers where line breaks were. `unflattenQuotes` detects the `wrote: &gt;` pattern and reconstructs proper markdown blockquotes.
 
-- **Grid tables from layout HTML** — Marketing emails use `<table>` for layout, which pandoc renders as grid tables. Fixed with the `unwrap-tables.lua` Lua filter.
+- **Duplicate content blocks** — Some email templates render the same content twice (e.g. for responsive display). `deduplicateBlocks` removes consecutive blocks with identical visible text.
 
-- **Hidden divs and tracking images** — Pre-clean stage removes `display:none` elements (nesting-aware) and zero-size `<img>` tags before pandoc sees them.
-
-- **Bold bleed across paragraphs** — pandoc emits `**` markers that open in one paragraph and close in another. Fixed with per-paragraph bold marker balancing.
-
-- **Duplicate footnote anchors** — Tracking link wrappers cause pandoc to emit the same `[^N]` anchor twice in a row. Fixed with position-aware deduplication.
+- **Navigation bar noise** — Flattened table cells for nav bars, step trackers, and tag lists produce a stream of tiny one-word blocks. `collapseShortBlocks` joins runs of three or more into a single ` · `-separated line.
 
 ### Problem sender patterns
 
@@ -264,7 +196,7 @@ Sender types that stress the pipeline — useful for regression testing:
 | Remind.com | Bare `rmd.me/` URLs with no `https://` scheme |
 | GitHub notifications | Image-links, multi-line link text, tracking redirects → empty URLs |
 | Google Calendar invites | Image buttons for RSVP, empty-URL links |
-| Thunderbird senders | `class="moz-*"` attributes pollute pandoc output |
+| Thunderbird senders | `class="moz-*"` attributes pollute converter output; stripped in `prepareHTML` |
 | Apple receipts | Complex nested tables, heavy inline styles, hidden duplicate body |
 | Newsletters | HTML with no paragraph breaks in their text/plain part |
 | Callcentric | Angle-bracket autolink URLs (`<https://...>`) |
@@ -280,16 +212,15 @@ The binary couldn't find the theme file. Check:
 2. `themes/nord.toml` exists in the same directory as `aerc.conf`
 3. If using `$AERC_CONFIG`, verify it points to the directory containing `aerc.conf`
 
-### HTML messages show raw HTML or markdown source
+### HTML messages show raw HTML or an error
 
-pandoc is not installed or not on `$PATH`. Install it:
+`mailrender html` failed. Run the filter manually to see the error:
 
 ```sh
-sudo apt install pandoc    # Debian/Ubuntu
-brew install pandoc        # macOS
+echo "<html><body><p>test</p></body></html>" | mailrender html
 ```
 
-Verify: `pandoc --version`
+Check that the `mailrender` binary is installed (`make install`) and on `$PATH`.
 
 ### Headers appear twice
 
@@ -302,7 +233,9 @@ header-layout=X-Collapse
 
 ### Marketing emails have garbled table content
 
-The `unwrap-tables.lua` pandoc filter is embedded in the `mailrender` binary and written to a temp file at runtime. Verify pandoc is installed and on `$PATH`:
+The `layoutTablePlugin` should flatten layout tables automatically. If you're seeing grid tables, the table in question likely has `<th>` header cells — the plugin treats those as data tables and passes them to the standard table renderer. Inspect the raw HTML to confirm.
+
+Verify the filter is running correctly:
 
 ```sh
 echo "<html><body><p>test</p></body></html>" | mailrender html

@@ -1,7 +1,8 @@
-Image link: ]8;;https://example.com\[38;2;136;192;208mLogo[0m]8;;\
+
+Image link: [38;2;136;192;208mLogo[0m ([38;2;97;110;136mhttps://example.com[0m)
 
 Empty link:
 
-Empty URL: ]8;;https://example.com\[38;2;136;192;208mClick here[0m]8;;\ 
+Empty URL: [38;2;136;192;208mClick here[0m ()
 
-Normal link: [38;2;136;192;208mVisit site[0m
+Normal link: [38;2;136;192;208mVisit site[0m ([38;2;97;110;136mhttps://example.com[0m)

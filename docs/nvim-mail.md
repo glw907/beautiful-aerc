@@ -132,7 +132,7 @@ aerc shows a review screen with these options:
 | `a` | Attach a file |
 | `d` | Detach (remove) an attachment |
 
-Press `y` to send. aerc converts your markdown body to HTML using pandoc, then sends both versions as a multipart message. Recipients with GUI clients see the HTML; recipients with CLI clients see your plain text.
+Press `y` to send. aerc converts your markdown body to HTML using `mailrender to-html`, then sends both versions as a multipart message. Recipients with GUI clients see the HTML; recipients with CLI clients see your plain text.
 
 ### 7. Abort anytime
 

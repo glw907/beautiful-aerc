@@ -22,7 +22,6 @@ A themeable, productive email environment for the [aerc](https://aerc-mail.org/)
 - [Install](#install)
 - [How email renders](#how-email-renders)
 - [Footnote-style links](#footnote-style-links)
-- [Link picker](#link-picker)
 - [Theme system](#theme-system)
 - [Composing email with nvim-mail](#composing-email-with-nvim-mail)
 - [Optional components](#optional-components)
@@ -78,16 +77,7 @@ beautiful-aerc bridges that gap. It gives you the same clean, structured email e
      file: docs/images/footnote-links.png
 -->
 
-- **An interactive link picker** for opening URLs from emails. Press Tab, pick a link by number, done.
-
-<!-- screenshot: Link picker UI
-     size: 80x30 terminal
-     show: The pick-link UI in an alternate screen buffer, showing
-           numbered URLs with the selection highlight on one of them.
-     file: docs/images/link-picker.png
--->
-
-- **A semantic theme system** with three built-in themes (Nord, Solarized Dark, Gruvbox Dark) that colors everything consistently — the UI, the message viewer, the link picker, and the compose editor.
+- **A semantic theme system** with three built-in themes (Nord, Solarized Dark, Gruvbox Dark) that colors everything consistently — the UI, the message viewer, and the compose editor.
 
 <!-- screenshot: Theme comparison
      size: Three panels stacked vertically or side by side
@@ -118,7 +108,7 @@ aerc's filter protocol is simple and powerful: any program that reads stdin and 
 
 But most email on the internet is HTML. aerc's default approach is to shell out to `w3m` or `lynx`, which produces functional but rough output — you lose document structure, links are hard to follow, and there's no theming.
 
-beautiful-aerc replaces these defaults with purpose-built Go binaries. Why Go instead of more shell scripts? For simple filters, shell works great — aerc's design encourages that. But the problems we're solving (multi-stage HTML cleanup, RFC 2822 header parsing, interactive terminal UIs, consistent theming across tools) need things that shell scripts struggle with: proper Unicode handling, structured error handling, shared code between tools, and the ability to build real TUI applications. Go gives us single compiled binaries with no runtime dependencies — easy to install, easy to maintain.
+beautiful-aerc replaces these defaults with purpose-built Go binaries. Why Go instead of more shell scripts? For simple filters, shell works great — aerc's design encourages that. But the problems we're solving (multi-stage HTML cleanup, RFC 2822 header parsing, consistent theming across tools) need things that shell scripts struggle with: proper Unicode handling, structured error handling, shared code between tools. Go gives us single compiled binaries with no runtime dependencies — easy to install, easy to maintain.
 
 ### Go binaries (core)
 
@@ -139,8 +129,8 @@ reZeroWidth = regexp.MustCompile(`[\x{ad}\x{34f}\x{180e}\x{200b}-\x{200d}\x{2060
 
 ```go
 // Bank of America (and others) embed 1x1 tracking pixel <img> tags
-// literally inside hyperlink text. This causes pandoc to split a
-// single URL across multiple disconnected paragraphs.
+// literally inside hyperlink text. This causes the HTML-to-markdown
+// converter to split a single URL across multiple paragraphs.
 reZeroImg = regexp.MustCompile(
     `(?i)<img[^>]*(?:width:\s*0|height:\s*0|width="0"|height="0")[^>]*/?>`)
 ```
@@ -176,8 +166,6 @@ func stripHiddenElements(body string) string {
 }
 ```
 
-**pick-link** — Interactive URL picker for the message viewer. Reads the raw message, runs the HTML filter internally to extract clean footnoted URLs, then opens a full-screen picker UI where you select a link by number or with j/k navigation. Opens URLs via `xdg-open`.
-
 ### Go binaries (optional)
 
 **fastmail-cli** — Fastmail JMAP CLI for mail filter rules, masked email management, and folder listing. Designed to be called from aerc keybindings. *(Fastmail users only.)*
@@ -196,7 +184,6 @@ The project also ships working configuration files and launcher scripts, install
 ## Prerequisites
 
 - [aerc](https://aerc-mail.org/) — the email client itself
-- [pandoc](https://pandoc.org/) — called at runtime by mailrender to convert HTML to markdown
 - [Go](https://go.dev/) 1.25+ — needed to build the binaries (not needed at runtime)
 - [GNU Stow](https://www.gnu.org/software/stow/) — symlink manager for installing the config files
 
@@ -220,7 +207,7 @@ cd beautiful-aerc
 
 **2. Build and install the binaries**
 
-This builds all five Go binaries and installs them to `~/.local/bin/` (make sure that's on your `PATH`):
+This builds all three Go binaries and installs them to `~/.local/bin/` (make sure that's on your `PATH`):
 
 ```sh
 make build
@@ -281,7 +268,7 @@ text/plain = mailrender plain
 When you open an email, here's what happens:
 
 - **headers** — Receives the raw RFC 2822 headers. Reorders them (From, To, Cc, Date, Subject), colorizes field names, wraps long address lines to fit the terminal width, and prints a separator line below.
-- **html** — Receives the raw HTML body. Cleans up sender-specific junk, calls pandoc to convert to markdown, cleans pandoc artifacts, converts links to numbered footnotes, and applies ANSI syntax highlighting for headings, bold, italic, and rules.
+- **html** — Receives the raw HTML body. Cleans up sender-specific junk, converts to markdown via a Go HTML-to-markdown library, cleans conversion artifacts, converts links to numbered footnotes, and renders styled output via Glamour with ANSI syntax highlighting for headings, bold, italic, and rules.
 - **plain** — Receives the raw plain text body. Checks whether it's actually HTML in disguise (some clients send full HTML in a text/plain MIME part) and routes it through the HTML pipeline if so. Otherwise uses aerc's built-in `wrap | colorize`.
 
 ## Footnote-style links
@@ -301,18 +288,7 @@ See https://myaccount.google.com/notifications
 
 Link text is colored; footnote markers are dimmed. Self-referencing links (where the display text is the URL itself) render as plain URLs with no footnote — no point adding a reference that just repeats itself.
 
-Long URLs in the reference section are visually truncated to fit the terminal width, but the full URL is embedded in an [OSC 8 hyperlink](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) so terminals that support it (kitty, iTerm2, etc.) can still make the truncated text clickable.
-
-## Link picker
-
-Press **Tab** in the message viewer to open an interactive URL picker. All links from the current message are listed with numbered shortcuts:
-
-- **1-9, 0** — instantly open that link (0 opens the 10th)
-- **j/k** or arrow keys — move the selection
-- **Enter** — open the selected link
-- **q** or **Escape** — cancel
-
-The picker runs the HTML filter internally to extract the same clean footnoted URLs you see in the viewer. Selected URLs open via `xdg-open` (your system's default browser).
+Long URLs in the reference section are visually truncated to fit the terminal width, but the full URL is embedded in an [OSC 8 hyperlink](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) so terminals that support it (kitty, iTerm2, etc.) can still make the truncated text clickable. Ctrl+click opens any URL in the browser via kitty's `mouse_map`.
 
 ## Theme system
 

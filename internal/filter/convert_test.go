@@ -70,6 +70,18 @@ func TestConvertHTMLImageStripping(t *testing.T) {
 			want:    "Shop Now",
 			notWant: "cdn.example.com",
 		},
+		{
+			name:    "small image alt text stripped",
+			html:    `<p>Text</p><img width="19" height="19" alt="Pending" src="https://cdn.example.com/dot.gif">`,
+			want:    "Text",
+			notWant: "Pending",
+		},
+		{
+			name:    "large image alt text preserved",
+			html:    `<img width="200" alt="Product Photo" src="https://cdn.example.com/product.jpg">`,
+			want:    "Product Photo",
+			notWant: "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

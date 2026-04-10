@@ -152,88 +152,46 @@ func TestStripHiddenElements(t *testing.T) {
 	}
 }
 
-func TestExtractLinks(t *testing.T) {
+func TestStripEmptyLinks(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantURLs []string
+		name  string
+		input string
+		want  string
 	}{
-		{
-			"single link",
-			"Visit [Example](https://example.com) today.",
-			[]string{"https://example.com"},
-		},
-		{
-			"multiple links",
-			"See [A](https://a.com) and [B](https://b.com).",
-			[]string{"https://a.com", "https://b.com"},
-		},
 		{
 			"empty text link stripped",
 			"Title\n\n[](https://tracking.example.com/click?id=abc)\n\nBody",
-			nil,
+			"Title\n\n\n\nBody",
 		},
 		{
-			"no links",
-			"Plain text with no links.",
-			nil,
+			"normal link preserved",
+			"Visit [Example](https://example.com) today.",
+			"Visit [Example](https://example.com) today.",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, urls := extractLinks(tt.input)
-			if len(urls) != len(tt.wantURLs) {
-				t.Fatalf("got %d URLs, want %d", len(urls), len(tt.wantURLs))
-			}
-			for i, u := range urls {
-				if u != tt.wantURLs[i] {
-					t.Errorf("URL[%d] = %q, want %q", i, u, tt.wantURLs[i])
-				}
+			got := stripEmptyLinks(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestExtractLinksCleanMarkdown(t *testing.T) {
-	input := "See [A](https://a.com) and [B](https://b.com)."
-	cleaned, _ := extractLinks(input)
-	if cleaned != "See [A](#) and [B](#)." {
-		t.Errorf("got %q, want URLs replaced with #", cleaned)
-	}
-}
-
-func TestInjectOSC8(t *testing.T) {
-	linkStyle := "\x1b[38;2;0;0;255m"
-	// Simulate Glamour output: styled link text between linkStyle and reset
-	input := "Visit " + linkStyle + "Example\x1b[0m today."
-	urls := []string{"https://example.com"}
-	got := injectOSC8(input, urls, linkStyle)
-
-	if !strings.Contains(got, "\x1b]8;;https://example.com\x1b\\") {
-		t.Error("missing OSC 8 open sequence")
-	}
-	if !strings.Contains(got, "\x1b]8;;\x1b\\") {
-		t.Error("missing OSC 8 close sequence")
-	}
-}
-
-func TestHTMLLinksClickable(t *testing.T) {
+func TestHTMLLinksVisible(t *testing.T) {
 	th := testTheme(t)
-	input := `<p>Check <a href="https://tracking.example.com/click?id=abc123">this product</a> out.</p>`
+	input := `<p>Check <a href="https://example.com/product">this product</a> out.</p>`
 	var buf bytes.Buffer
 	if err := HTML(strings.NewReader(input), &buf, th, 80); err != nil {
 		t.Fatal(err)
 	}
-	out := buf.String()
-	plain := stripANSI(out)
+	plain := stripANSI(buf.String())
 	if !strings.Contains(plain, "this product") {
 		t.Error("link text should be preserved")
 	}
-	if strings.Contains(plain, "tracking.example.com") {
-		t.Error("tracking URL should not appear as visible text")
-	}
-	if !strings.Contains(out, "\x1b]8;;https://tracking.example.com/click?id=abc123\x1b\\") {
-		t.Error("OSC 8 hyperlink should be present")
+	if !strings.Contains(plain, "example.com") {
+		t.Error("URL should be visible for terminal click detection")
 	}
 }
 
@@ -369,7 +327,7 @@ func TestHTMLParagraphSpacing(t *testing.T) {
 	if err := HTML(strings.NewReader(input), &buf, th, 80); err != nil {
 		t.Fatal(err)
 	}
-	plain := stripANSI(buf.String())
+	plain := stripTrailingSpaces(stripANSI(buf.String()))
 	// Paragraphs should be separated by blank lines.
 	if !strings.Contains(plain, "First paragraph.\n\n") {
 		t.Errorf("missing blank line between first and second paragraphs:\n%q", plain)
@@ -393,6 +351,90 @@ func TestReflowMarkdownPreservesNonParagraphs(t *testing.T) {
 	}
 }
 
+func TestDeduplicateBlocks(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"consecutive identical blocks collapsed",
+			"[Product](https://example.com)\n\n[Product](https://example.com)\n\n[Product](https://example.com)",
+			"[Product](https://example.com)",
+		},
+		{
+			"same text different URLs collapsed",
+			"[Product](https://track.com/1)\n\n[Product](https://track.com/2)\n\n[Product](https://track.com/3)",
+			"[Product](https://track.com/1)",
+		},
+		{
+			"different blocks preserved",
+			"[A](https://a.com)\n\n[B](https://b.com)\n\n[C](https://c.com)",
+			"[A](https://a.com)\n\n[B](https://b.com)\n\n[C](https://c.com)",
+		},
+		{
+			"non-adjacent duplicates preserved",
+			"Alpha\n\nBeta\n\nAlpha",
+			"Alpha\n\nBeta\n\nAlpha",
+		},
+		{
+			"mixed repeated and unique",
+			"Header\n\n[Img](url1)\n\n[Img](url2)\n\n[Img](url3)\n\nBody text",
+			"Header\n\n[Img](url1)\n\nBody text",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deduplicateBlocks(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollapseShortBlocks(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"step tracker collapsed",
+			"Ordered\n\nShipped\n\nOut for delivery\n\nDelivered",
+			"Ordered · Shipped · Out for delivery · Delivered",
+		},
+		{
+			"two short blocks not collapsed",
+			"Hello\n\nWorld",
+			"Hello\n\nWorld",
+		},
+		{
+			"mixed short and long preserved",
+			"Ordered\n\nShipped\n\nDelivered\n\nThis is a real paragraph with actual content.",
+			"Ordered · Shipped · Delivered\n\nThis is a real paragraph with actual content.",
+		},
+		{
+			"links not collapsed",
+			"[A](https://a.com)\n\n[B](https://b.com)\n\n[C](https://c.com)",
+			"[A](https://a.com)\n\n[B](https://b.com)\n\n[C](https://c.com)",
+		},
+		{
+			"headings not collapsed",
+			"# One\n\n# Two\n\n# Three",
+			"# One\n\n# Two\n\n# Three",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collapseShortBlocks(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStripANSI(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -411,4 +453,149 @@ func TestStripANSI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompactLineRuns(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "signature block compacted",
+			input: "Sincerely,\n\nJane Doe\n\nDirector of Sales\n\nAcme Corp",
+			want:  "Sincerely,\n\nJane Doe  \nDirector of Sales  \nAcme Corp",
+		},
+		{
+			name:  "sentences stay separate",
+			input: "First point.\n\nSecond point.\n\nThird point.",
+			want:  "First point.\n\nSecond point.\n\nThird point.",
+		},
+		{
+			name:  "short run under threshold",
+			input: "Line A\n\nLine B",
+			want:  "Line A\n\nLine B",
+		},
+		{
+			name:  "contact block with links",
+			input: "p: 555-1234\n\ne: [a@b.com](mailto:a@b.com)\n\nw: [site.com](http://site.com)",
+			want:  "p: 555-1234  \ne: [a@b.com](mailto:a@b.com)  \nw: [site.com](http://site.com)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := compactLineRuns(tt.input)
+			if got != tt.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsParagraphSkipsHardBreaks(t *testing.T) {
+	block := "Line one  \nLine two  \nLine three"
+	if isParagraph(block) {
+		t.Error("block with hard breaks should not be a paragraph")
+	}
+}
+
+func TestUnflattenQuotes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "html entity markers",
+			input: "On Mon, Person wrote: &gt; Hello &gt; &gt; How are you &gt; doing today",
+			want:  "On Mon, Person wrote:\n\n> Hello\n>\n> How are you doing today",
+		},
+		{
+			name:  "literal gt markers",
+			input: "Person wrote: > Hello > > Goodbye",
+			want:  "Person wrote:\n\n> Hello\n>\n> Goodbye",
+		},
+		{
+			name:  "no quotes unchanged",
+			input: "Just a regular paragraph with no quotes.",
+			want:  "Just a regular paragraph with no quotes.",
+		},
+		{
+			name:  "preserves surrounding blocks",
+			input: "First paragraph.\n\nPerson wrote: &gt; Quoted text\n\nLast paragraph.",
+			want:  "First paragraph.\n\nPerson wrote:\n\n> Quoted text\n\nLast paragraph.",
+		},
+		{
+			name:  "multiple continuation lines",
+			input: "Person wrote: &gt; Line one &gt; line two &gt; line three",
+			want:  "Person wrote:\n\n> Line one line two line three",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := unflattenQuotes(tt.input)
+			if got != tt.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsBlockquote(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"single quote line", "> Hello", true},
+		{"multi-line with separator", "> Hello\n>\n> World", true},
+		{"plain text", "Hello world", false},
+		{"mixed", "> Quoted\nNot quoted", false},
+		{"bare separator only", ">", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isBlockquote(tt.input)
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReflowBlockquote(t *testing.T) {
+	input := "> Short line.\n>\n> This is a longer paragraph that should be reflowed to fit within the width minus the blockquote prefix."
+	got := reflowBlockquote(input, 40)
+
+	// Every non-empty line must start with "> " or be bare ">"
+	for _, line := range strings.Split(got, "\n") {
+		if line == "" {
+			continue
+		}
+		if line != ">" && !strings.HasPrefix(line, "> ") {
+			t.Errorf("line missing blockquote prefix: %q", line)
+		}
+	}
+
+	// No content line should exceed 40 chars
+	for _, line := range strings.Split(got, "\n") {
+		if len(line) > 40 {
+			t.Errorf("line exceeds width: %q (%d chars)", line, len(line))
+		}
+	}
+
+	// Paragraph separator must be preserved
+	if !strings.Contains(got, "\n>\n") {
+		t.Error("paragraph separator lost")
+	}
+}
+
+// stripTrailingSpaces removes trailing whitespace from each line.
+// Glamour pads lines to the word wrap width with spaces.
+func stripTrailingSpaces(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " ")
+	}
+	return strings.Join(lines, "\n")
 }

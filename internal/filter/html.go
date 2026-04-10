@@ -29,7 +29,7 @@ var (
 	reExcessiveBlanks = regexp.MustCompile(`\n{3,}`)
 	reLeadingBlanks = regexp.MustCompile(`\A\n+`)
 
-	// Markdown link patterns for URL extraction.
+	// Markdown link patterns.
 	reMdLink      = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 	reEmptyMdLink = regexp.MustCompile(`\[\]\([^)]+\)`)
 
@@ -103,24 +103,150 @@ func normalizeWhitespace(text string) string {
 	return text
 }
 
-// reflowMarkdown reflows plain paragraphs in markdown text to the given width
-// using minimum-raggedness line breaking. Headings, lists, blockquotes, table
-// rows, and code blocks are left untouched.
+// unflattenQuotes detects email attribution lines followed by inline >
+// markers and reconstructs them as proper markdown blockquotes. Outlook
+// mobile (and some other clients) flatten quoted reply text into a single
+// <p> with literal &gt; characters where line breaks originally were.
+// The html-to-markdown library preserves these as "&gt;" entities.
+//
+// Input:  "Person wrote: &gt; line1 &gt; &gt; line2 &gt; line3"
+// Output: "Person wrote:\n\n> line1\n>\n> line2 line3"
+func unflattenQuotes(text string) string {
+	blocks := strings.Split(text, "\n\n")
+	for i, block := range blocks {
+		// Match "wrote:" followed by either "&gt;" or ">" quote markers.
+		wroteIdx, sep := findQuoteStart(block)
+		if wroteIdx < 0 {
+			continue
+		}
+
+		attribution := block[:wroteIdx+len("wrote:")]
+		rest := strings.TrimSpace(block[wroteIdx+len("wrote:"):])
+		rest = strings.TrimPrefix(rest, sep+" ")
+
+		// Split on " <sep> " to find original line boundaries. Parts
+		// starting with "<sep> " indicate a paragraph break (from the
+		// original "> \n> " that became " > > " when flattened).
+		splitOn := " " + sep + " "
+		parts := strings.Split(rest, splitOn)
+
+		var paragraphs [][]string
+		current := []string{parts[0]}
+
+		for j := 1; j < len(parts); j++ {
+			part := parts[j]
+			if strings.HasPrefix(part, sep+" ") {
+				if len(current) > 0 {
+					paragraphs = append(paragraphs, current)
+				}
+				current = []string{strings.TrimPrefix(part, sep+" ")}
+			} else {
+				current = append(current, part)
+			}
+		}
+		if len(current) > 0 {
+			paragraphs = append(paragraphs, current)
+		}
+
+		var quoteLines []string
+		for j, para := range paragraphs {
+			quoteLines = append(quoteLines, "> "+strings.Join(para, " "))
+			if j < len(paragraphs)-1 {
+				quoteLines = append(quoteLines, ">")
+			}
+		}
+
+		blocks[i] = attribution + "\n\n" + strings.Join(quoteLines, "\n")
+	}
+	return strings.Join(blocks, "\n\n")
+}
+
+// findQuoteStart locates "wrote:" followed by inline quote markers in a
+// block. Returns the index of "wrote:" and the separator string ("&gt;"
+// or ">"), or -1 if not found.
+func findQuoteStart(block string) (int, string) {
+	if idx := strings.Index(block, "wrote: &gt; "); idx >= 0 {
+		return idx, "&gt;"
+	}
+	if idx := strings.Index(block, "wrote: > "); idx >= 0 {
+		return idx, ">"
+	}
+	return -1, ""
+}
+
+// isBlockquote returns true if every non-empty line starts with "> " or is
+// a bare ">" (paragraph separator within a blockquote).
+func isBlockquote(block string) bool {
+	hasQuote := false
+	for _, line := range strings.Split(block, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == ">" || strings.HasPrefix(trimmed, "> ") {
+			hasQuote = true
+			continue
+		}
+		return false
+	}
+	return hasQuote
+}
+
+// reflowBlockquote strips the outermost "> " prefix, recursively reflows
+// the inner content (which may itself contain blockquotes), then re-adds
+// the prefix. Bare ">" lines become empty lines in the inner content,
+// acting as block separators for the recursive reflowMarkdown call.
+func reflowBlockquote(block string, width int) string {
+	innerWidth := width - 2 // account for "> " prefix
+
+	var innerLines []string
+	for _, line := range strings.Split(block, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == ">" {
+			innerLines = append(innerLines, "")
+		} else if strings.HasPrefix(trimmed, "> ") {
+			innerLines = append(innerLines, trimmed[2:])
+		}
+	}
+	inner := strings.Join(innerLines, "\n")
+
+	reflowed := reflowMarkdown(inner, innerWidth)
+
+	var result []string
+	for _, line := range strings.Split(reflowed, "\n") {
+		if line == "" {
+			result = append(result, ">")
+		} else {
+			result = append(result, "> "+line)
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
+// reflowMarkdown reflows plain paragraphs and blockquotes in markdown text
+// to the given width using minimum-raggedness line breaking. Headings,
+// table rows, lists, and code blocks are left untouched.
 func reflowMarkdown(text string, width int) string {
 	blocks := strings.Split(text, "\n\n")
 	for i, block := range blocks {
 		if isParagraph(block) {
 			blocks[i] = reflowParagraph(block, width)
+		} else if isBlockquote(block) {
+			blocks[i] = reflowBlockquote(block, width)
 		}
 	}
 	return strings.Join(blocks, "\n\n")
 }
 
 // isParagraph returns true if the block is a plain text paragraph (not a
-// heading, list, blockquote, table, or code fence).
+// heading, list, blockquote, table, code fence, or block with hard breaks).
 func isParagraph(block string) bool {
 	lines := strings.Split(block, "\n")
 	for _, line := range lines {
+		// Trailing double-space = markdown hard break. Don't reflow.
+		if strings.HasSuffix(line, "  ") {
+			return false
+		}
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
@@ -197,6 +323,12 @@ func reflowParagraph(text string, width int) string {
 			}
 			var c int
 			if j == n-1 {
+				// Last line: no penalty for short lines.
+				c = cost[j+1]
+			} else if lineLen > width {
+				// Over-width token (e.g. long URL): allow it alone
+				// on a line with no penalty so it doesn't distort
+				// the layout of surrounding text.
 				c = cost[j+1]
 			} else {
 				slack := width - lineLen
@@ -220,76 +352,141 @@ func reflowParagraph(text string, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// extractLinks extracts URLs from markdown links in order, strips empty-text
-// links, and replaces all link URLs with # so Glamour styles the text without
-// displaying URLs. Returns the cleaned text and the ordered URL list.
-func extractLinks(text string) (string, []string) {
-	text = reEmptyMdLink.ReplaceAllString(text, "")
-	var urls []string
-	cleaned := reMdLink.ReplaceAllStringFunc(text, func(match string) string {
-		sub := reMdLink.FindStringSubmatch(match)
-		urls = append(urls, sub[2])
-		return "[" + sub[1] + "](#)"
-	})
-	return cleaned, urls
+// blockKey returns a normalized form of a block for deduplication.
+// Markdown link URLs are stripped so blocks differing only in URL
+// (e.g. tracking variants of the same image-link) compare equal.
+func blockKey(block string) string {
+	return reMdLink.ReplaceAllString(block, "[$1](#)")
 }
 
-// injectOSC8 wraps Glamour's styled link text spans with OSC 8 hyperlink
-// sequences. It finds link-styled ANSI spans (identified by the linkStyle
-// prefix) and wraps consecutive runs with OSC 8 open/close, consuming URLs
-// in order from the extracted list.
-func injectOSC8(text string, urls []string, linkStyle string) string {
-	if len(urls) == 0 || linkStyle == "" {
-		return text
-	}
-
-	var b strings.Builder
-	b.Grow(len(text) + len(urls)*64)
-
-	urlIdx := 0
-	inLink := false
-	i := 0
-	for i < len(text) {
-		// Check for link style opening sequence.
-		if urlIdx < len(urls) && strings.HasPrefix(text[i:], linkStyle) {
-			if !inLink {
-				// Start a new OSC 8 region.
-				inLink = true
-				fmt.Fprintf(&b, "\x1b]8;;%s\x1b\\", urls[urlIdx])
-			}
-			b.WriteString(linkStyle)
-			i += len(linkStyle)
+// deduplicateBlocks collapses consecutive blocks with the same visible
+// text into a single occurrence. Comparison ignores markdown link URLs
+// so image-links with different tracking URLs but the same alt text are
+// treated as duplicates.
+func deduplicateBlocks(text string) string {
+	blocks := strings.Split(text, "\n\n")
+	var out []string
+	prevKey := ""
+	for _, block := range blocks {
+		if block == "" {
 			continue
 		}
-
-		// Check for ANSI reset — may end a link span.
-		if inLink && strings.HasPrefix(text[i:], "\x1b[0m") {
-			b.WriteString("\x1b[0m")
-			i += 4
-			// Look ahead: if the next non-reset content re-opens with
-			// linkStyle, this is a word-wrapped continuation of the same
-			// link. Otherwise the link has ended.
-			rest := text[i:]
-			// Skip any resets or whitespace-only content before next style.
-			if !strings.HasPrefix(rest, linkStyle) &&
-				!strings.HasPrefix(rest, "\x1b[0m") {
-				// Link ended — close OSC 8.
-				b.WriteString("\x1b]8;;\x1b\\")
-				inLink = false
-				urlIdx++
-			}
+		key := blockKey(block)
+		if key == prevKey {
 			continue
 		}
+		prevKey = key
+		out = append(out, block)
+	}
+	return strings.Join(out, "\n\n")
+}
 
-		b.WriteByte(text[i])
-		i++
+// mergeBlockRuns groups consecutive blocks matching pred into runs and
+// joins runs of minRun or more using sep. Shorter runs pass through.
+func mergeBlockRuns(text string, pred func(string) bool, minRun int, sep string) string {
+	blocks := strings.Split(text, "\n\n")
+	var out []string
+	var run []string
+
+	flush := func() {
+		if len(run) >= minRun {
+			out = append(out, strings.Join(run, sep))
+		} else {
+			out = append(out, run...)
+		}
+		run = nil
 	}
 
-	// Close any trailing open link.
-	if inLink {
-		b.WriteString("\x1b]8;;\x1b\\")
+	for _, block := range blocks {
+		if pred(block) {
+			run = append(run, block)
+		} else {
+			if len(run) > 0 {
+				flush()
+			}
+			out = append(out, block)
+		}
 	}
-	return b.String()
+	if len(run) > 0 {
+		flush()
+	}
+	return strings.Join(out, "\n\n")
+}
+
+// collapseShortBlocks joins runs of 3+ consecutive short, plain-text
+// blocks into a single line separated by " · ". This handles content
+// from flattened table cells that was never meant to be read vertically
+// — navigation bars, step trackers, tag lists, etc.
+func collapseShortBlocks(text string) string {
+	return mergeBlockRuns(text, isShortPlain, 3, " · ")
+}
+
+// isShortPlain returns true if the block is a single line of plain text
+// under 25 characters with no markdown syntax. Blocks that look like
+// sentences (ending with punctuation) are excluded — those are real
+// content, not table cell fragments.
+func isShortPlain(block string) bool {
+	if strings.Contains(block, "\n") || len(block) > 25 || len(block) == 0 {
+		return false
+	}
+	// Reject blocks with markdown syntax: links, headings, bold,
+	// italic, list markers, blockquotes.
+	if block[0] == '#' || block[0] == '>' || block[0] == '-' ||
+		block[0] == '*' || block[0] == '+' {
+		return false
+	}
+	if strings.Contains(block, "](") || strings.Contains(block, "**") {
+		return false
+	}
+	if reOrderedList.MatchString(block) {
+		return false
+	}
+	// Sentences end with punctuation — real content, not cell fragments.
+	last := block[len(block)-1]
+	if last == '.' || last == '!' || last == '?' || last == ':' || last == ';' {
+		return false
+	}
+	return true
+}
+
+// compactLineRuns joins runs of 3+ consecutive single-line short blocks
+// into a single block using markdown hard breaks (two trailing spaces).
+// This handles email signatures and contact blocks where each line is a
+// separate <p> in the HTML source but should render as tight lines.
+func compactLineRuns(text string) string {
+	return mergeBlockRuns(text, isCompactLine, 3, "  \n")
+}
+
+// isCompactLine returns true for a single-line block whose visible text
+// is under 80 characters and that is not a markdown block element or a
+// sentence ending with punctuation. Visible length strips markdown link
+// syntax since [text](url) renders as just "text".
+func isCompactLine(block string) bool {
+	if strings.Contains(block, "\n") || len(block) == 0 {
+		return false
+	}
+	visible := reMdLink.ReplaceAllString(block, "$1")
+	if len(visible) > 80 {
+		return false
+	}
+	if block[0] == '#' || block[0] == '>' || block[0] == '|' ||
+		block[0] == '-' || block[0] == '*' || block[0] == '+' ||
+		strings.HasPrefix(block, "```") ||
+		strings.HasPrefix(block, "---") ||
+		strings.HasPrefix(block, "===") ||
+		reOrderedList.MatchString(block) {
+		return false
+	}
+	last := block[len(block)-1]
+	if last == '.' || last == '!' || last == '?' || last == ':' || last == ';' || last == ',' {
+		return false
+	}
+	return true
+}
+
+// stripEmptyLinks removes markdown links with empty text like [](url).
+func stripEmptyLinks(text string) string {
+	return reEmptyMdLink.ReplaceAllString(text, "")
 }
 
 // stripANSI removes ANSI escape sequences (CSI and OSC 8) from s.
@@ -312,6 +509,7 @@ func Markdown(r io.Reader, w io.Writer, cols int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
+	md = unflattenQuotes(md)
 	md = reflowMarkdown(md, cols)
 
 	if _, err := fmt.Fprint(w, md+"\n"); err != nil {
@@ -340,7 +538,11 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 		return fmt.Errorf("converting html: %w", err)
 	}
 	md = normalizeWhitespace(md)
-	md, urls := extractLinks(md)
+	md = deduplicateBlocks(md)
+	md = stripEmptyLinks(md)
+	md = collapseShortBlocks(md)
+	md = unflattenQuotes(md)
+	md = compactLineRuns(md)
 	md = reflowMarkdown(md, wrapWidth)
 
 	style := t.GlamourStyle()
@@ -356,9 +558,9 @@ func HTML(r io.Reader, w io.Writer, t *theme.Theme, _ int) error {
 	if err != nil {
 		return fmt.Errorf("rendering markdown: %w", err)
 	}
-	styled = injectOSC8(styled, urls, t.GlamourLinkStyle())
 
-	if _, err := fmt.Fprint(w, styled); err != nil {
+	// Leading newline separates body from the header filter's separator line.
+	if _, err := fmt.Fprint(w, "\n"+styled); err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
 	return nil

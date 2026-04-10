@@ -23,6 +23,7 @@ func (t *Theme) GlamourStyle() ansi.StyleConfig {
 	}
 
 	if hdr := t.glamourPrimitive("heading"); hdr != nil {
+		hdr.BlockSuffix = "\n"
 		block := ansi.StyleBlock{StylePrimitive: *hdr}
 		style.H1 = block
 		style.H2 = block
@@ -44,8 +45,39 @@ func (t *Theme) GlamourStyle() ansi.StyleConfig {
 		style.LinkText = *s
 	}
 
+	if s := t.glamourPrimitive("link_url"); s != nil {
+		s.BlockPrefix = "("
+		s.BlockSuffix = ")"
+		style.Link = *s
+	}
+
 	if s := t.glamourPrimitive("rule"); s != nil {
 		style.HorizontalRule = *s
+	}
+
+	// Blockquote: use a "│ " indent token colored with accent_tertiary,
+	// matching the quote styling in the aerc styleset.
+	style.BlockQuote = ansi.StyleBlock{
+		Indent:      ptr(uint(1)),
+		IndentToken: ptr("│ "),
+	}
+	if color, ok := t.colors["accent_tertiary"]; ok {
+		style.BlockQuote.StylePrimitive = ansi.StylePrimitive{
+			Color: ptr(color),
+		}
+	}
+
+	// List styling. Glamour doesn't support hanging indent for
+	// wrapped list items (issue #56, #314), so continuation lines
+	// align with the bullet rather than the text. Good enough.
+	style.List = ansi.StyleList{
+		LevelIndent: 2,
+	}
+	style.Item = ansi.StylePrimitive{
+		BlockPrefix: "- ",
+	}
+	style.Enumeration = ansi.StylePrimitive{
+		BlockPrefix: ". ",
 	}
 
 	return style
