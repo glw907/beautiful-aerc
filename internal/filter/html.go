@@ -28,6 +28,11 @@ var (
 
 	// Ordered list item: "1.", "2)", etc.
 	reOrderedList = regexp.MustCompile(`^\d+[.)]`)
+
+	// Paren-style list items: "1)" or "1\)" → "1."
+	// Handles both top-level and blockquote-prefixed lines.
+	reParenList = regexp.MustCompile(`(?m)^((?:>\s?)*)(\d+)\\?\)\s`)
+
 )
 
 // prepareHTML cleans the raw HTML before conversion: strips Mozilla-specific
@@ -94,6 +99,12 @@ func normalizeWhitespace(text string) string {
 	text = reExcessiveBlanks.ReplaceAllString(text, "\n\n")
 	text = reLeadingBlanks.ReplaceAllString(text, "")
 	return text
+}
+
+// normalizeListMarkers converts paren-style list items (1), 2), 1\))
+// to standard markdown (1., 2.) so the block parser recognizes them.
+func normalizeListMarkers(text string) string {
+	return reParenList.ReplaceAllString(text, "${1}${2}. ")
 }
 
 // unflattenQuotes detects email attribution lines followed by inline >
@@ -491,6 +502,7 @@ func CleanHTML(html string) string {
 		return html
 	}
 	md = normalizeWhitespace(md)
+	md = normalizeListMarkers(md)
 	md = deduplicateBlocks(md)
 	md = stripEmptyLinks(md)
 	md = collapseShortBlocks(md)

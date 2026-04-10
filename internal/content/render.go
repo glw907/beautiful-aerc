@@ -19,11 +19,30 @@ func RenderBody(blocks []Block, t *theme.CompiledTheme, width int) string {
 		w = maxBodyWidth
 	}
 
-	var sections []string
-	for _, block := range blocks {
-		sections = append(sections, renderBlock(block, t, w))
+	return joinRenderedBlocks(blocks, t, w)
+}
+
+// joinRenderedBlocks renders blocks and joins them with appropriate
+// separators: single newline between consecutive list items, double
+// newline between all other blocks.
+func joinRenderedBlocks(blocks []Block, t *theme.CompiledTheme, width int) string {
+	if len(blocks) == 0 {
+		return ""
 	}
-	return strings.Join(sections, "\n\n")
+	var b strings.Builder
+	for i, block := range blocks {
+		if i > 0 {
+			_, prevIsList := blocks[i-1].(ListItem)
+			_, currIsList := block.(ListItem)
+			if prevIsList && currIsList {
+				b.WriteString("\n")
+			} else {
+				b.WriteString("\n\n")
+			}
+		}
+		b.WriteString(renderBlock(block, t, width))
+	}
+	return b.String()
 }
 
 func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
@@ -45,11 +64,7 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 			style = t.DeepQuote
 		}
 		prefix := "> " // single level; structural nesting handles depth
-		var inner []string
-		for _, child := range b.Blocks {
-			inner = append(inner, renderBlock(child, t, width-len(prefix)))
-		}
-		content := strings.Join(inner, "\n\n")
+		content := joinRenderedBlocks(b.Blocks, t, width-len(prefix))
 		var lines []string
 		for _, line := range strings.Split(content, "\n") {
 			if line == "" {
