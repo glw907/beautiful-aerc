@@ -153,3 +153,86 @@ across the entire forked worker codebase. Single-account use (Passes
 2-10) is unaffected. Will need to be addressed for multi-account
 support in Pass 11.
 **Date:** 2026-04-09 (Pass 2)
+
+### Better Pine, not Better Mutt
+**Decision:** Poplar is opinionated and visually attractive out of
+the box. Not configurable in v1. Users who want maximum
+configurability should use aerc or mutt.
+**Rationale:** Lowest possible learning curve for a vim-literate
+user. Pine's "it just works" philosophy with modern aesthetics.
+**Date:** 2026-04-10
+
+### Idiomatic bubbletea showcase
+**Decision:** Poplar code should be reference-quality bubbletea.
+When there's a choice between a plain approach and one that
+demonstrates a compelling framework capability, lean toward the
+showcase — as long as it serves the UX.
+**Rationale:** Attract bubbletea contributors. Prove the framework
+scales to a real, complex application. Extractable patterns (theme
+bridge, tab manager, focus cycling, toast system) benefit the
+community.
+**Date:** 2026-04-10
+
+### Vim-first keybindings
+**Decision:** Full vim motion set (j/k, gg/G, C-d/C-u, C-f/C-b,
+zo/zc/za), vim visual mode for multi-select (v), `g`-prefix for
+folder jumps (gi/gd/gs/ga/gx/gt). Not configurable in v1.
+**Rationale:** Vim motions are the universal TUI convention (mutt,
+aerc, lazygit, k9s all agree). Assuming vim literacy lets the
+command footer focus on email-specific actions instead of wasting
+space on navigation hints.
+**Date:** 2026-04-10
+
+### Curated command footer over full help
+**Decision:** Footer shows only email-specific keybindings (triage,
+reply, compose, search, command). Vim navigation and thread folding
+are silent. Full reference via `?` popover.
+**Rationale:** Vim users don't need to be told about j/k. Footer
+real estate is precious — use it for email workflow discovery. The
+`?` popover provides the complete reference when needed.
+**Date:** 2026-04-10
+
+### Folder groups without headers
+**Decision:** Three folder groups (Primary, Disposal, Custom)
+separated by blank lines in the sidebar. No rendered group headers.
+**Rationale:** The grouping is self-evident from folder names and
+icons. Headers would label the obvious and add visual noise. Groups
+exist in the data model for sort order and `g`-prefix jumps.
+**Date:** 2026-04-10
+
+### Provider folder name normalization
+**Decision:** Poplar displays canonical folder names (Inbox, Sent,
+Trash) regardless of provider naming ([Gmail]/Sent Mail, Sent Items,
+etc.). Recognition via case-insensitive matching against known
+aliases.
+**Rationale:** Users shouldn't see provider implementation details.
+Canonical names work across providers and match the `g`-prefix
+jump mnemonics.
+**Date:** 2026-04-10
+
+### Hand-rolled sidebar over bubbles/list
+**Decision:** Sidebar uses `lipgloss.JoinVertical` with custom
+row rendering, not `bubbles/list`.
+**Rationale:** `bubbles/list` lacks native section/group support.
+Hand-rolled is the idiomatic approach — Charm's own apps use the
+same technique for grouped sidebars. Allows full control over
+selection styling (left thick border + background fill), unread
+count badge alignment, and group spacing.
+**Date:** 2026-04-10
+
+### Mock backend for prototype
+**Decision:** `internal/mail/mock.go` implements `mail.Backend`
+with hardcoded data. Stays in the codebase permanently.
+**Rationale:** Enables the prototype (Pass 2.5b) without backend
+dependencies. Useful long-term for development, testing, and demos.
+Pass 3 swaps mock for real JMAP adapter — no throwaway code.
+**Date:** 2026-04-10
+
+### Per-screen prototype sub-passes
+**Decision:** Pass 2.5b broken into 7 sub-passes, one screen at a
+time: chrome shell, sidebar, message list, viewer, help popover,
+status/toast, command mode.
+**Rationale:** Each screen is a learning opportunity about bubbletea
+idioms. Lessons from building the sidebar inform the message list.
+Incremental validation — each sub-pass produces a testable result.
+**Date:** 2026-04-10
