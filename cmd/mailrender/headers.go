@@ -1,58 +1,46 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"strconv"
 
-	"github.com/glw907/beautiful-aerc/internal/filter"
+	"github.com/glw907/beautiful-aerc/internal/content"
 	"github.com/glw907/beautiful-aerc/internal/theme"
 	"github.com/spf13/cobra"
 )
 
 func newHeadersCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "headers",
-		Short: "Format and colorize email headers",
+		Short: "Render email headers with styling",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			t, err := loadTheme()
-			if err != nil {
-				return err
-			}
 			cols := termCols()
-			return filter.Headers(os.Stdin, os.Stdout, colorsFromTheme(t), cols)
+			raw, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("read stdin: %w", err)
+			}
+			h := content.ParseHeaders(string(raw))
+			result := content.RenderHeaders(h, selectedTheme(), cols)
+			fmt.Fprint(os.Stdout, result)
+			return nil
 		},
 	}
-	return cmd
 }
 
-// loadTheme finds and loads the active theme via aerc.conf.
-func loadTheme() (*theme.Theme, error) {
-	path, err := theme.FindPath()
-	if err != nil {
-		return nil, err
-	}
-	return theme.Load(path)
-}
-
-// colorsFromTheme builds a ColorSet from theme tokens.
-func colorsFromTheme(t *theme.Theme) *filter.ColorSet {
-	return &filter.ColorSet{
-		HdrKey: t.ANSI("hdr_key"),
-		HdrFG:  t.ANSI("hdr_value"),
-		HdrDim: t.ANSI("hdr_dim"),
-		Reset:  t.Reset(),
-	}
-}
-
-// termCols returns the terminal column count from AERC_COLUMNS or a default of 80.
+// termCols reads the terminal width from AERC_COLUMNS, defaulting to 80.
 func termCols() int {
-	s := os.Getenv("AERC_COLUMNS")
-	if s == "" {
-		return 80
+	if s := os.Getenv("AERC_COLUMNS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
 	}
-	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 {
-		return 80
-	}
-	return n
+	return 80
+}
+
+// selectedTheme returns the active compiled theme.
+// For now, always Nord. A --theme flag can be added later.
+func selectedTheme() *theme.CompiledTheme {
+	return theme.Nord
 }

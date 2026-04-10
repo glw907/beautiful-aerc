@@ -1,24 +1,30 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"os"
 
+	"github.com/glw907/beautiful-aerc/internal/content"
 	"github.com/glw907/beautiful-aerc/internal/filter"
 	"github.com/spf13/cobra"
 )
 
 func newHTMLCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "html",
-		Short: "Convert HTML email to styled markdown",
+		Short: "Render HTML email to styled terminal output",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			t, err := loadTheme()
-			if err != nil {
-				return err
-			}
 			cols := termCols()
-			return filter.HTML(os.Stdin, os.Stdout, t, cols)
+			raw, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("read stdin: %w", err)
+			}
+			md := filter.CleanHTML(string(raw))
+			blocks := content.ParseBlocks(md)
+			result := content.RenderBody(blocks, selectedTheme(), cols)
+			fmt.Fprint(os.Stdout, "\n"+result)
+			return nil
 		},
 	}
-	return cmd
 }

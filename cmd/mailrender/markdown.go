@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"os"
 
 	"github.com/glw907/beautiful-aerc/internal/filter"
@@ -8,13 +10,17 @@ import (
 )
 
 func newMarkdownCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "markdown",
-		Short: "Convert HTML email to clean markdown (for reply templates)",
+		Short: "Convert HTML email to clean markdown",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cols := termCols()
-			return filter.Markdown(os.Stdin, os.Stdout, cols)
+			raw, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("read stdin: %w", err)
+			}
+			md := filter.CleanHTML(string(raw))
+			fmt.Fprintln(os.Stdout, md)
+			return nil
 		},
 	}
-	return cmd
 }
