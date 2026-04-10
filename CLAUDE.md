@@ -42,9 +42,10 @@ ANY Go code.** Key rules:
 cmd/mailrender/        CLI: filters, themes, compose (cobra)
 cmd/fastmail-cli/      CLI: rules, masked, folders (cobra)
 cmd/tidytext/          CLI: fix, config (cobra)
-internal/filter/       Filter implementations (headers, html, plain)
+internal/filter/       Content pipeline: CleanHTML, CleanPlain (raw email -> markdown)
+internal/content/      Block model + lipgloss renderer (ParseBlocks, RenderBody, RenderHeaders)
 internal/compose/      Compose buffer normalization (mailrender compose)
-internal/theme/        TOML theme files -> ANSI tokens
+internal/theme/        Compiled lipgloss themes (Palette -> CompiledTheme)
 internal/tidy/         Prose tidying: config, prompt, API
 internal/jmap/         JMAP session, mail ops, masked email
 internal/header/       RFC 2822 header parsing
@@ -61,34 +62,33 @@ aerc calls filters as shell commands. Each filter:
 - Writes ANSI-styled text to **stdout**
 - Has access to `AERC_COLUMNS` env var (terminal width)
 
-## Charmbracelet Libraries (Glamour, Bubbletea, Lipgloss)
+## Charmbracelet Libraries (Bubbletea, Lipgloss)
 
-**Read the library docs before writing custom code.** Check
-`~/go/pkg/mod/github.com/charmbracelet/glamour@*/` for style
-guides, READMEs, and source. Glamour and lipgloss handle most
-styling, link rendering, and layout natively. Do not build
-custom ANSI manipulation when a library feature already exists.
+**Read the library docs before writing custom code.** Lipgloss
+handles all styling. Do not build custom ANSI manipulation when
+a library feature already exists.
 
 ## Theme System
 
-Theme files (`.config/aerc/themes/*.toml`) define 16 semantic hex
-color slots + token definitions. Go binaries read `.toml` files
-directly at runtime. Active theme from `styleset-name` in `aerc.conf`.
+Themes are compiled Go values in `internal/theme/`. Each theme
+is a `Palette` (16 hex colors) → `NewCompiledTheme()` →
+`*CompiledTheme` with lipgloss.Style fields. Three built-in
+themes: Nord, SolarizedDark, GruvboxDark.
 
-**Never hardcode ANSI color codes in Go source.** All styling must
-use tokens from the theme file via the theme package.
+**Never hardcode ANSI color codes in Go source.** All styling
+must use lipgloss styles from `CompiledTheme`.
 
 Generate aerc styleset: `mailrender themes generate [name]`.
 See `docs/styling.md` for visual hierarchy and `docs/themes.md`
-for the token reference.
+for the theme reference.
 
 ## Build
 
 ```
-make build     # build all three binaries
+make build     # build all four binaries
 make test      # run tests
 make check     # vet + test (gate before commits)
-make install   # install all three to ~/.local/bin/
+make install   # install all four to ~/.local/bin/
 ```
 
 ## Testing

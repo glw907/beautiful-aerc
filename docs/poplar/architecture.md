@@ -18,8 +18,9 @@ protocol handling (IMAP + JMAP).
 | Forked workers | `internal/aercfork/worker/` | Forked aerc IMAP + JMAP workers |
 | Forked models | `internal/aercfork/models/` | Forked aerc data types |
 | Forked support | `internal/aercfork/{log,parse,xdg,auth,keepalive}/` | Forked aerc support libraries |
-| Rendering | `internal/filter/` | Existing HTML/plain/header filters (shared with mailrender) |
-| Themes | `internal/theme/` | Existing TOML theme loader (shared with all binaries) |
+| Content pipeline | `internal/filter/` | CleanHTML/CleanPlain: raw email → normalized markdown |
+| Block model | `internal/content/` | ParseBlocks, RenderBody, ParseHeaders, RenderHeaders |
+| Themes | `internal/theme/` | Compiled lipgloss themes (Nord, SolarizedDark, GruvboxDark) |
 | Compose | `internal/compose/` | Existing compose buffer normalization (shared with mailrender) |
 | Config | `internal/config/` | Poplar config parsing (accounts, UI, keybindings) |
 
@@ -50,12 +51,16 @@ effort for marginal benefit. nvim-mail already provides the exact
 compose UX we want. Simplifies the UI significantly.
 **Date:** 2026-04-09
 
-### Lipgloss styles from theme TOML
-**Decision:** UI chrome uses lipgloss styles derived from the same
-theme TOML files that drive mailrender's ANSI tokens.
-**Rationale:** One theme file controls the entire visual experience.
-Switching themes changes both message rendering and UI chrome.
-**Date:** 2026-04-09
+### Compiled lipgloss themes over TOML
+**Decision:** Themes are compiled Go values (`Palette` → `NewCompiledTheme`
+→ `*CompiledTheme` with lipgloss.Style fields), not runtime TOML files.
+Glamour dependency removed entirely.
+**Rationale:** Follows Charm conventions (lipgloss styles as Go values).
+Eliminates runtime file discovery, TOML parsing errors, and the
+glamour→lipgloss impedance mismatch. Three-layer pipeline: filter
+(CleanHTML/CleanPlain) → content (ParseBlocks) → renderer (RenderBody
+with lipgloss). Poplar and mailrender share the same compiled themes.
+**Date:** 2026-04-10 (Pass 2.5-render)
 
 ### Command footer in all tabs
 **Decision:** Every tab displays a persistent footer showing available

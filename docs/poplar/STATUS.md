@@ -1,7 +1,8 @@
 # Poplar Status
 
-**Current state:** Pass 2 complete. Lipgloss migration spec and plan
-written, ready for execution. UI design spec pending review.
+**Current state:** Pass 2.5-render complete. Lipgloss migration done —
+glamour replaced with lipgloss block model and compiled themes. UI
+design spec pending review.
 
 ## Passes
 
@@ -9,7 +10,7 @@ written, ready for execution. UI design spec pending review.
 |------|------|--------|
 | 1 | Scaffold + Fork | done |
 | 2 | Backend Adapter + Connect | done |
-| 2.5-render | Lipgloss migration: block model + compiled themes | pending |
+| 2.5-render | Lipgloss migration: block model + compiled themes | done |
 | 2.5a | Text wireframes for all screens | pending |
 | 2.5b-1 | Prototype: chrome shell | pending |
 | 2.5b-2 | Prototype: sidebar | pending |
@@ -39,20 +40,18 @@ written, ready for execution. UI design spec pending review.
 
 ### Next steps
 
-1. **Execute Pass 2.5-render** — lipgloss migration (15 tasks,
-   5 phases). Replaces glamour + TOML themes with lipgloss block
-   model and compiled themes. Prerequisite for all prototype passes.
-2. **User reviews UI design spec** — review
+1. **User reviews UI design spec** — review
    `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
    and approve or request changes
-3. **Write implementation plan for Pass 2.5a** (text wireframes)
-4. **Execute Pass 2.5a** — draw text wireframes for all 20 UI elements
+2. **Write implementation plan for Pass 2.5a** (text wireframes)
+3. **Execute Pass 2.5a** — draw text wireframes for all 20 UI elements
 
 ### Next starter prompt
 
-> Execute the lipgloss migration plan at
-> `docs/superpowers/plans/2026-04-10-mailrender-lipgloss.md`.
-> Start from Task 1. See `docs/poplar/STATUS.md` for context.
+> Review the UI design spec at
+> `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
+> and then write the implementation plan for Pass 2.5a (text wireframes).
+> See `docs/poplar/STATUS.md` for context.
 
 ### Pass-end checklist
 
