@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current state:** Pass 2.5-fix done. First-level blockquote wrapping
-fixed (BACKLOG #7). UI design spec pending review.
+**Current state:** Pass 2.5a done. Text wireframes for all 20 UI
+elements complete. Ready for prototype implementation (Pass 2.5b).
 
 ## Passes
 
@@ -11,7 +11,7 @@ fixed (BACKLOG #7). UI design spec pending review.
 | 2 | Backend Adapter + Connect | done |
 | 2.5-render | Lipgloss migration: block model + compiled themes | done |
 | 2.5-fix | Fix first-level blockquote wrapping (BACKLOG #7) | done |
-| 2.5a | Text wireframes for all screens | pending |
+| 2.5a | Text wireframes for all screens | done |
 | 2.5b-1 | Prototype: chrome shell | pending |
 | 2.5b-2 | Prototype: sidebar | pending |
 | 2.5b-3 | Prototype: message list | pending |
@@ -35,23 +35,27 @@ fixed (BACKLOG #7). UI design spec pending review.
 - [Lipgloss migration plan](../superpowers/plans/2026-04-10-mailrender-lipgloss.md)
 - [Pass 1 plan](../superpowers/plans/2026-04-09-poplar-pass1-scaffold.md)
 - [Pass 2 plan](../superpowers/plans/2026-04-09-poplar-pass2-backend-adapter.md)
+- [Pass 2.5a wireframe plan](../superpowers/plans/2026-04-10-poplar-wireframes.md)
+- [Wireframes](../poplar/wireframes.md)
 
 ## Continuing Development
 
 ### Next steps
 
-1. **User reviews UI design spec** — review
-   `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
+1. **User reviews wireframes** — review `docs/poplar/wireframes.md`
    and approve or request changes
-2. **Write implementation plan for Pass 2.5a** (text wireframes)
-3. **Execute Pass 2.5a** — draw text wireframes for all 20 UI elements
+2. **Write implementation plan for Pass 2.5b-1** (chrome shell)
+3. **Execute Pass 2.5b-1** — tab bar, status bar, command footer,
+   focus cycling, theme-to-lipgloss bridge
 
 ### Next starter prompt
 
-> Start Pass 2.5a: text wireframes. Read the UI design spec at
-> `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
+> Start Pass 2.5b-1: chrome shell prototype. Read the wireframes at
+> `docs/poplar/wireframes.md`, the UI design spec at
+> `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`,
 > and the architecture doc at `docs/poplar/architecture.md`. Write a
-> plan first, then draw text wireframes for all 20 UI elements.
+> plan first, then build the chrome shell: tab bar, status bar,
+> command footer, focus cycling, and theme-to-lipgloss bridge.
 
 ### Pass-end checklist
 
