@@ -120,6 +120,107 @@ func TestRenderBodyRule(t *testing.T) {
 	}
 }
 
+func TestRenderHeaders(t *testing.T) {
+	h := ParsedHeaders{
+		From:    []Address{{Name: "Alice", Email: "alice@example.com"}},
+		To:      []Address{{Name: "Bob", Email: "bob@example.com"}},
+		Date:    "Mon, 5 Jan 2026",
+		Subject: "Hello World",
+	}
+	result := RenderHeaders(h, theme.Nord, 80)
+	visible := stripANSITest(result)
+	if !strings.Contains(visible, "From:") {
+		t.Error("missing From header")
+	}
+	if !strings.Contains(visible, "Alice") {
+		t.Error("missing From name")
+	}
+	if !strings.Contains(visible, "Subject:") {
+		t.Error("missing Subject header")
+	}
+	if !strings.Contains(visible, "Hello World") {
+		t.Error("missing Subject value")
+	}
+}
+
+func TestRenderHeadersOrder(t *testing.T) {
+	h := ParsedHeaders{
+		From:    []Address{{Name: "Alice", Email: "alice@example.com"}},
+		To:      []Address{{Name: "Bob", Email: "bob@example.com"}},
+		Date:    "Mon, 5 Jan 2026",
+		Subject: "Test",
+	}
+	result := RenderHeaders(h, theme.Nord, 80)
+	visible := stripANSITest(result)
+	fromIdx := strings.Index(visible, "From:")
+	toIdx := strings.Index(visible, "To:")
+	dateIdx := strings.Index(visible, "Date:")
+	subjectIdx := strings.Index(visible, "Subject:")
+
+	if fromIdx > toIdx {
+		t.Error("From should appear before To")
+	}
+	if toIdx > dateIdx {
+		t.Error("To should appear before Date")
+	}
+	if dateIdx > subjectIdx {
+		t.Error("Date should appear before Subject")
+	}
+}
+
+func TestRenderHeadersSkipsEmpty(t *testing.T) {
+	h := ParsedHeaders{
+		From:    []Address{{Name: "Alice", Email: "alice@example.com"}},
+		Subject: "Test",
+	}
+	result := RenderHeaders(h, theme.Nord, 80)
+	visible := stripANSITest(result)
+	if strings.Contains(visible, "To:") {
+		t.Error("should not render empty To header")
+	}
+	if strings.Contains(visible, "Cc:") {
+		t.Error("should not render empty Cc header")
+	}
+}
+
+func TestRenderHeadersSeparator(t *testing.T) {
+	h := ParsedHeaders{
+		From:    []Address{{Email: "alice@example.com"}},
+		Subject: "Test",
+	}
+	result := RenderHeaders(h, theme.Nord, 80)
+	if !strings.Contains(result, "─") {
+		t.Error("missing separator line")
+	}
+}
+
+func TestRenderHeadersAddressWrap(t *testing.T) {
+	var addrs []Address
+	for i := 0; i < 10; i++ {
+		addrs = append(addrs, Address{
+			Name:  "Recipient Name",
+			Email: "recipient@example.com",
+		})
+	}
+	h := ParsedHeaders{
+		From:    []Address{{Email: "sender@example.com"}},
+		To:      addrs,
+		Subject: "Test",
+	}
+	result := RenderHeaders(h, theme.Nord, 80)
+	visible := stripANSITest(result)
+	lines := strings.Split(visible, "\n")
+	toLines := 0
+	for _, line := range lines {
+		if strings.Contains(line, "Recipient") {
+			toLines++
+		}
+	}
+	if toLines < 2 {
+		t.Errorf("expected To: to wrap across multiple lines, got %d", toLines)
+	}
+}
+
 // stripANSITest removes ANSI escape sequences for visible length checks.
 func stripANSITest(s string) string {
 	var out strings.Builder

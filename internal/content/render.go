@@ -1,6 +1,7 @@
 package content
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -131,4 +132,84 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+// RenderHeaders renders parsed headers into a styled string.
+// Headers use the full terminal width for address wrapping.
+func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
+	var lines []string
+
+	if len(h.From) > 0 {
+		lines = append(lines, renderHeaderAddresses("From", h.From, t, width)...)
+	}
+	if len(h.To) > 0 {
+		lines = append(lines, renderHeaderAddresses("To", h.To, t, width)...)
+	}
+	if len(h.Cc) > 0 {
+		lines = append(lines, renderHeaderAddresses("Cc", h.Cc, t, width)...)
+	}
+	if len(h.Bcc) > 0 {
+		lines = append(lines, renderHeaderAddresses("Bcc", h.Bcc, t, width)...)
+	}
+	if h.Date != "" {
+		lines = append(lines, renderHeaderScalar("Date", h.Date, t))
+	}
+	if h.Subject != "" {
+		lines = append(lines, renderHeaderScalar("Subject", h.Subject, t))
+	}
+
+	sep := t.HeaderDim.Render(strings.Repeat("─", width))
+	lines = append(lines, sep)
+
+	return strings.Join(lines, "\n")
+}
+
+func renderHeaderScalar(key, value string, t *theme.CompiledTheme) string {
+	return t.HeaderKey.Render(key+":") + " " + t.HeaderValue.Render(value)
+}
+
+func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int) []string {
+	keyStr := t.HeaderKey.Render(key + ":")
+	indent := strings.Repeat(" ", len(key)+2)
+
+	var formatted []string
+	for _, a := range addrs {
+		if a.Name != "" {
+			formatted = append(formatted, fmt.Sprintf("%s %s",
+				t.HeaderValue.Render(a.Name),
+				t.HeaderDim.Render("<"+a.Email+">")))
+		} else {
+			formatted = append(formatted, t.HeaderValue.Render(a.Email))
+		}
+	}
+
+	var lines []string
+	current := keyStr + " "
+	currentVisible := len(key) + 2
+
+	for i, addr := range formatted {
+		addrVisible := len(addrs[i].Name) + len(addrs[i].Email) + 3
+		if addrs[i].Name == "" {
+			addrVisible = len(addrs[i].Email)
+		}
+
+		sep := ""
+		sepLen := 0
+		if i > 0 {
+			sep = ", "
+			sepLen = 2
+		}
+
+		if currentVisible+sepLen+addrVisible > width && i > 0 {
+			lines = append(lines, current)
+			current = indent + addr
+			currentVisible = len(indent) + addrVisible
+		} else {
+			current += sep + addr
+			currentVisible += sepLen + addrVisible
+		}
+	}
+	lines = append(lines, current)
+
+	return lines
 }
