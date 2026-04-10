@@ -1,7 +1,8 @@
 # Poplar Status
 
-**Current state:** Pass 2.5-render complete. Lipgloss migration done —
-glamour replaced with lipgloss block model and compiled themes. UI
+**Current state:** Pass 2.5-render done with post-migration fixes
+committed (wrapping, spacing, entities). One open rendering issue:
+first-level blockquote wrapping for HTML emails (BACKLOG #7). UI
 design spec pending review.
 
 ## Passes
@@ -11,6 +12,7 @@ design spec pending review.
 | 1 | Scaffold + Fork | done |
 | 2 | Backend Adapter + Connect | done |
 | 2.5-render | Lipgloss migration: block model + compiled themes | done |
+| 2.5-fix | Fix first-level blockquote wrapping (BACKLOG #7) | pending |
 | 2.5a | Text wireframes for all screens | pending |
 | 2.5b-1 | Prototype: chrome shell | pending |
 | 2.5b-2 | Prototype: sidebar | pending |
@@ -40,18 +42,22 @@ design spec pending review.
 
 ### Next steps
 
-1. **User reviews UI design spec** — review
+1. **Pass 2.5-fix**: Design and fix first-level blockquote wrapping
+   (BACKLOG #7). Needs a design spec before implementation.
+2. **User reviews UI design spec** — review
    `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
    and approve or request changes
-2. **Write implementation plan for Pass 2.5a** (text wireframes)
-3. **Execute Pass 2.5a** — draw text wireframes for all 20 UI elements
+3. **Write implementation plan for Pass 2.5a** (text wireframes)
+4. **Execute Pass 2.5a** — draw text wireframes for all 20 UI elements
 
 ### Next starter prompt
 
-> Review the UI design spec at
-> `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
-> and then write the implementation plan for Pass 2.5a (text wireframes).
-> See `docs/poplar/STATUS.md` for context.
+> Fix BACKLOG #7: first-level blockquote wrapping for HTML emails.
+> Read `BACKLOG.md` for the full problem description and constraints.
+> Write a design spec first, then implement. Test against the Yahoo
+> email "Re: Draft Survey - Boat Builder Search Committee" from
+> jmnsailor@yahoo.com and the plain text email "Re: small business
+> group" from geoff@907.life (which already works and must not regress).
 
 ### Pass-end checklist
 
