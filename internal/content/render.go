@@ -44,7 +44,7 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 		if b.Level > 1 {
 			style = t.DeepQuote
 		}
-		prefix := strings.Repeat("> ", b.Level)
+		prefix := "> " // single level; structural nesting handles depth
 		var inner []string
 		for _, child := range b.Blocks {
 			inner = append(inner, renderBlock(child, t, width-len(prefix)))

@@ -193,6 +193,52 @@ func TestRenderHeadersAddressWrap(t *testing.T) {
 	}
 }
 
+func TestRenderBodyNestedBlockquotePrefix(t *testing.T) {
+	// Nested blockquote should render with correct prefix depth,
+	// not double-count from both Level field and structural nesting.
+	blocks := []Block{
+		Blockquote{Level: 1, Blocks: []Block{
+			Paragraph{Spans: []Span{Text{Content: "level one"}}},
+			Blockquote{Level: 2, Blocks: []Block{
+				Paragraph{Spans: []Span{Text{Content: "level two"}}},
+			}},
+		}},
+	}
+	result := RenderBody(blocks, theme.Nord, 80)
+	visible := stripANSITest(result)
+
+	// Level 1 content should have "> " prefix (one level)
+	if !strings.Contains(visible, "> level one") {
+		t.Errorf("expected '> level one', got:\n%s", visible)
+	}
+	// Level 2 content should have "> > " prefix (two levels), not "> > > "
+	if !strings.Contains(visible, "> > level two") {
+		t.Errorf("expected '> > level two', got:\n%s", visible)
+	}
+	if strings.Contains(visible, "> > > level two") {
+		t.Error("triple-nested prefix found — Level double-counting bug")
+	}
+}
+
+func TestRenderBodyImpliedQuoteWrapping(t *testing.T) {
+	// End-to-end: parse markdown with missing first-level blockquote,
+	// then render and verify the output has correct quoting.
+	input := "Reply text\n\nOn Mon, Alice wrote:\nFirst level content\n\n> Inner quoted"
+	blocks := ParseBlocks(input)
+	result := RenderBody(blocks, theme.Nord, 80)
+	visible := stripANSITest(result)
+
+	if !strings.Contains(visible, "Reply text") {
+		t.Error("missing reply text")
+	}
+	if !strings.Contains(visible, "> First level content") {
+		t.Errorf("first-level content should be quoted:\n%s", visible)
+	}
+	if !strings.Contains(visible, "> > Inner quoted") {
+		t.Errorf("inner content should be double-quoted:\n%s", visible)
+	}
+}
+
 // stripANSITest removes ANSI escape sequences for visible length checks.
 func stripANSITest(s string) string {
 	var out strings.Builder

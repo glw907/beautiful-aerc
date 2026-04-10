@@ -229,6 +229,82 @@ func TestParseBlocksBlockquoteLevel(t *testing.T) {
 	}
 }
 
+func TestWrapImpliedQuotes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		types []blockKind
+	}{
+		{
+			name:  "attribution followed by paragraph wraps",
+			input: "Reply text\n\nOn Mon, Jan 5, Alice wrote:\nUnquoted content",
+			types: []blockKind{kindParagraph, kindQuoteAttribution, kindBlockquote},
+		},
+		{
+			name:  "attribution followed by blockquote unchanged",
+			input: "Reply text\n\nOn Mon, Jan 5, Alice wrote:\n> Quoted content",
+			types: []blockKind{kindParagraph, kindQuoteAttribution, kindBlockquote},
+		},
+		{
+			name:  "no attribution unchanged",
+			input: "Just a paragraph",
+			types: []blockKind{kindParagraph},
+		},
+		{
+			name:  "attribution at end unchanged",
+			input: "Text\n\nOn Mon, Jan 5, Alice wrote:",
+			types: []blockKind{kindParagraph, kindQuoteAttribution},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			blocks := ParseBlocks(tt.input)
+			if len(blocks) != len(tt.types) {
+				t.Fatalf("block count: got %d, want %d\nblocks: %v", len(blocks), len(tt.types), blocks)
+			}
+			for i, b := range blocks {
+				if b.blockType() != tt.types[i] {
+					t.Errorf("block[%d]: got kind %d, want %d", i, b.blockType(), tt.types[i])
+				}
+			}
+		})
+	}
+}
+
+func TestWrapImpliedQuotesIncrementsLevels(t *testing.T) {
+	// Simulate Yahoo-style HTML: attribution + unquoted text + already-quoted inner thread
+	input := "Reply\n\nOn Mon, Alice wrote:\nFirst level text\n\n> On Sun, Bob wrote:\n> Inner text"
+	blocks := ParseBlocks(input)
+	if len(blocks) != 3 {
+		t.Fatalf("block count: got %d, want 3", len(blocks))
+	}
+
+	// Block 2 should be a Blockquote wrapping everything after the attribution
+	bq, ok := blocks[2].(Blockquote)
+	if !ok {
+		t.Fatalf("block[2]: got %T, want Blockquote", blocks[2])
+	}
+	if bq.Level != 1 {
+		t.Errorf("wrapper level: got %d, want 1", bq.Level)
+	}
+
+	// Inside the wrapper: Paragraph + Blockquote{Level: 2}
+	if len(bq.Blocks) < 2 {
+		t.Fatalf("inner block count: got %d, want >=2", len(bq.Blocks))
+	}
+	if _, ok := bq.Blocks[0].(Paragraph); !ok {
+		t.Errorf("inner[0]: got %T, want Paragraph", bq.Blocks[0])
+	}
+
+	innerBQ, ok := bq.Blocks[1].(Blockquote)
+	if !ok {
+		t.Fatalf("inner[1]: got %T, want Blockquote", bq.Blocks[1])
+	}
+	if innerBQ.Level != 2 {
+		t.Errorf("inner blockquote level: got %d, want 2 (incremented from 1)", innerBQ.Level)
+	}
+}
+
 func TestParseBlocksCorpus(t *testing.T) {
 	fixtures, err := filepath.Glob("../../e2e/testdata/*.html")
 	if err != nil {

@@ -18,7 +18,57 @@ var (
 
 // ParseBlocks parses normalized markdown into email-aware block types.
 func ParseBlocks(markdown string) []Block {
-	return parseBlocksAtLevel(markdown, 1)
+	blocks := parseBlocksAtLevel(markdown, 1)
+	return wrapImpliedQuotes(blocks)
+}
+
+// wrapImpliedQuotes fixes HTML emails where the first reply level lacks
+// a <blockquote> tag. When a QuoteAttribution at the top level is
+// followed by non-Blockquote content, all subsequent blocks are wrapped
+// in a Blockquote{Level: 1}. Only triggers at the top level to avoid
+// compounding nesting on recursive attributions.
+func wrapImpliedQuotes(blocks []Block) []Block {
+	// Find the first QuoteAttribution.
+	attrIdx := -1
+	for i, b := range blocks {
+		if _, ok := b.(QuoteAttribution); ok {
+			attrIdx = i
+			break
+		}
+	}
+	if attrIdx < 0 || attrIdx+1 >= len(blocks) {
+		return blocks
+	}
+
+	// If the first block after the attribution is already a Blockquote,
+	// the HTML had a proper <blockquote> tag — no wrapping needed.
+	if _, ok := blocks[attrIdx+1].(Blockquote); ok {
+		return blocks
+	}
+
+	// Wrap all blocks after the attribution in a level-1 Blockquote.
+	// Existing Blockquotes within get their levels incremented.
+	inner := make([]Block, len(blocks[attrIdx+1:]))
+	for i, b := range blocks[attrIdx+1:] {
+		inner[i] = incrementQuoteLevels(b)
+	}
+
+	result := make([]Block, attrIdx+1, attrIdx+2)
+	copy(result, blocks[:attrIdx+1])
+	result = append(result, Blockquote{Level: 1, Blocks: inner})
+	return result
+}
+
+func incrementQuoteLevels(b Block) Block {
+	bq, ok := b.(Blockquote)
+	if !ok {
+		return b
+	}
+	inner := make([]Block, len(bq.Blocks))
+	for i, child := range bq.Blocks {
+		inner[i] = incrementQuoteLevels(child)
+	}
+	return Blockquote{Level: bq.Level + 1, Blocks: inner}
 }
 
 func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
