@@ -174,6 +174,19 @@ points to.
 - Not as libraries (overengineering), but as clear, self-contained
   patterns
 
+**Spotlight bubbletea features:**
+- Poplar should serve as a showcase for what bubbletea can do.
+  When there's a choice between a plain approach and one that
+  demonstrates a compelling bubbletea/lipgloss/bubbles capability,
+  lean toward the showcase — as long as it serves the user experience
+- Examples: lipgloss adaptive colors, half-block borders, styled
+  inline ranges, `tea.ExecProcess` for editor handoff, `tea.Batch`
+  for concurrent commands, viewport with scroll percentage,
+  context-sensitive help via `bubbles/help` KeyMap swapping
+- The goal is that someone browsing the source thinks "I want to
+  build something with bubbletea" — poplar is the proof it scales
+  to a real application
+
 ## 4. Enforcement
 
 ### Extended Elm Conventions
@@ -217,7 +230,7 @@ without context.
 | 1 | Scaffold + Fork | `make build` compiles *(done)* |
 | 2 | Backend Adapter + Connect | `poplar` prints folder list *(done)* |
 | **2.5a** | **Text wireframes** | **Wireframes in spec, reviewed and approved** |
-| **2.5b** | **Bubbletea prototype** | **All screens navigable, themed, footers with keybind hints** |
+| **2.5b** | **Bubbletea prototype (7 sub-passes, one screen at a time)** | **All screens navigable, themed, footers with keybind hints** |
 | 3 | Wire to live backend | Live folders, real messages, real rendering |
 | 6 | Triage actions | Delete, archive, flag with undo |
 | 7 | Command mode + search | `:move`, `:search`, folder picker |
@@ -236,6 +249,25 @@ without context.
   day one.
 - **Pass 10 becomes Config only.** Keybindings are already wired in
   2.5b.
+- **Pass 2.5b is broken into 7 sub-passes**, one screen at a time.
+  Each sub-pass produces a working increment. Lessons from each
+  inform the next.
+
+### Pass 2.5b Sub-Passes
+
+| Sub-Pass | Screen | What's Built | Gate |
+|----------|--------|-------------|------|
+| 2.5b-1 | Chrome shell | Tab bar, status bar, command footer, focus cycling, theme-to-lipgloss bridge. Empty content area. | Themed shell renders, Tab cycles focus, footer shows hints |
+| 2.5b-2 | Sidebar | Folder list with groups, icons, unread counts, selection, `g`-prefix jumps | Navigate folders with j/k, folder jumps work, groups spaced |
+| 2.5b-3 | Message list | Columns, threading, cursor, multi-select, mock data | Browse messages, thread fold/unfold, `v` select works |
+| 2.5b-4 | Message viewer | Viewer tab, scrollable viewport, header block, sample rendered body | Enter opens viewer, scroll works, q closes tab |
+| 2.5b-5 | Help popover | `?` overlay with context-sensitive grouped keybindings | `?` shows correct bindings per context, Escape closes |
+| 2.5b-6 | Status/toast | Toast, undo bar, error banner, mock triage actions triggering them | `d`/`a` show undo bar, errors persist, toasts auto-dismiss |
+| 2.5b-7 | Command mode | `:` input, tab completion, `:move` triggers folder picker overlay | Commands execute, folder picker renders and selects |
+
+The chrome shell comes first because every other component lives
+inside it. Each subsequent sub-pass adds one component to the
+working shell.
 
 ### Docs Evolution
 
