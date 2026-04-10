@@ -94,8 +94,11 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 
 	if e.From != "" {
 		addrs, err := mail.ParseAddressList(e.From)
-		if err != nil || len(addrs) == 0 {
+		if err != nil {
 			return nil, fmt.Errorf("account %q: parsing from address: %w", e.Name, err)
+		}
+		if len(addrs) == 0 {
+			return nil, fmt.Errorf("account %q: from address is empty", e.Name)
 		}
 		acct.From = addrs[0]
 	}

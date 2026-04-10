@@ -40,9 +40,11 @@ func (a *JMAPAdapter) Connect(ctx context.Context) error {
 	go a.pump()
 
 	if err := a.doAction(&types.Configure{Config: a.config}); err != nil {
+		close(a.done)
 		return fmt.Errorf("configuring worker: %w", err)
 	}
 	if err := a.doAction(&types.Connect{}); err != nil {
+		close(a.done)
 		return fmt.Errorf("connecting: %w", err)
 	}
 	return nil
@@ -144,20 +146,7 @@ func (a *JMAPAdapter) pump() {
 
 // doAction sends an action to the worker and blocks until Done or Error.
 func (a *JMAPAdapter) doAction(msg types.WorkerMessage) error {
-	ch := make(chan error, 1)
-	a.w.PostAction(msg, func(resp types.WorkerMessage) {
-		switch r := resp.(type) {
-		case *types.Done:
-			ch <- nil
-		case *types.Error:
-			ch <- r.Error
-		case *types.ConnError:
-			ch <- r.Error
-		case *types.Unsupported:
-			ch <- fmt.Errorf("unsupported operation")
-		}
-	})
-	return <-ch
+	return a.doCollect(msg, func(types.WorkerMessage) {})
 }
 
 // doCollect sends an action and calls collect for each intermediate
