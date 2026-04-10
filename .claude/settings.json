@@ -1,1 +1,74 @@
-{}
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "enabledPlugins": {
+    "pr-review-toolkit@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/claude-md-size.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/filter-live-verify.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/dotfiles-sync.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/elm-architecture-lint.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/claude-md-size.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/filter-live-verify.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/dotfiles-sync.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/elm-architecture-lint.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/make-check-before-commit.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
