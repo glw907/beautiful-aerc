@@ -201,3 +201,55 @@ but no `┃` border — the border only appears in the focused state.
   with j/k scrolling. No scrollbar.
 - **Footer (when focused):**
   `Enter:open  c:compose  ::cmd`
+
+---
+
+## 4. Message List (#1 — right panel)
+
+### Default with cursor and threading
+
+```
+ 󰇮  Alice Johnson            Re: Project update for Q2 launch          10:32 AM
+▐󰇮  Bob Smith                 Weekly standup notes                       9:15 AM
+ 󰑚  Carol White               Re: Budget review                        Yesterday
+     Dave Chen                 Meeting minutes from Monday                 Apr 07
+ 󰈻  Eve Martinez              Quarterly report draft                      Apr 06
+     Frank Lee                 Re: Server migration plan                   Apr 05
+     ├─ Grace Kim              └─ Re: Server migration plan                Apr 05
+     │  └─ Frank Lee              Re: Server migration plan                Apr 05
+     Hannah Park               New office supplies order                   Apr 04
+     Ivan Petrov                Conference travel request                  Apr 03
+```
+
+### Column layout
+
+```
+←2→  ←──────── 22 ────────→  ←──────── fill ─────────────────────→  ←── 12 ──→
+ FL  SENDER                   SUBJECT                                 DATE
+```
+
+No column header row is rendered in the actual UI — the header
+above is for wireframe reference only.
+
+**Annotations:**
+
+- **Cursor:** `▐` right-half block in `accent_primary` at left
+  edge of current row + full-width `bg_selection` background.
+- **Columns:** flags (2), sender (22), subject (fill), date (12).
+  Double-space column separator.
+- **Unread rows:** `󰇮` envelope icon in flags column. Sender in
+  `accent_tertiary` bold. Subject in `accent_tertiary`.
+- **Read rows:** No flag icon (blank). Sender and subject in
+  `fg_dim`.
+- **Replied:** `󰑚` reply icon in `color_special`.
+- **Flagged:** `󰈻` flag icon in `color_warning`.
+- **Thread prefixes:** Rendered in subject column. `├─`
+  has-siblings, `└─` last-sibling, `│` stem. Thread chars
+  in `fg_dim`.
+- **Date format:** Today = time (`10:32 AM`), this week =
+  `Yesterday`/day name, older = `Mon DD`, previous year =
+  `Mon DD, YYYY`. Right-aligned.
+- **Sender truncation:** Long names truncated with `…` at
+  column boundary.
+- **Sort:** Newest first by default. Inbox/Notifications
+  override to oldest first (chronological).
