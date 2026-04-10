@@ -13,3 +13,4 @@
 .claude/hookify.*.local.md
 audit-output/
 corpus/
+.worktrees/
