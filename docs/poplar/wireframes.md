@@ -253,3 +253,75 @@ above is for wireframe reference only.
   column boundary.
 - **Sort:** Newest first by default. Inbox/Notifications
   override to oldest first (chronological).
+
+---
+
+## 5. Message Viewer (#2)
+
+Full-width viewer in its own tab. No sidebar — the viewer uses
+the entire content area.
+
+```
+╭─ 󰇰 Inbox ─┬─ Re: Project update for Q2 launch ─┬─────────────────────────────────────────────────────────────╮
+│                                                                                                               │
+│  From:     Alice Johnson <alice@example.com>                                                                  │
+│  To:       Geoff Wright <geoff@907.life>                                                                      │
+│  Date:     Thu, 10 Apr 2026 10:32:07 -0600                                                                    │
+│  Subject:  Re: Project update for Q2 launch                                                                   │
+│  ─────────────────────────────────────────────────────────────────────────────────────────────────────         │
+│                                                                                                               │
+│  Hey Geoff,                                                                                                   │
+│                                                                                                               │
+│  Just wanted to follow up on the Q2 launch timeline. I've attached the                                        │
+│  updated project plan with the revised milestones.                                                            │
+│                                                                                                               │
+│  ## Key changes                                                                                               │
+│                                                                                                               │
+│  - Beta release moved to April 15                                                                             │
+│  - QA window extended by one week                                                                             │
+│  - Launch date is now May 1                                                                                   │
+│                                                                                                               │
+│  Let me know if you have any concerns about the new timeline.                                                 │
+│                                                                                                               │
+│  > On Apr 9, 2026, Geoff Wright wrote:                                                                        │
+│  > Can you send me the updated project plan? I want to review the                                              │
+│  > milestones before our meeting on Friday.                                                                    │
+│                                                                                                               │
+│  Best,                                                                                                        │
+│  Alice                                                                                                        │
+│                                                                                                               │
+│                                                                                                               │
+│                                                                                                               │
+│                                                                                                               │
+│                                                                                                               │
+│                                                                                                               │
+│                                                                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Re: Project update for Q2 launch · 100%                                                            ● connected│
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ d:del  a:archive  s:star  r:reply  R:all  f:fwd  Tab:links  q:close                                          │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+**Annotations:**
+
+- **Full width:** Viewer uses entire content area (no sidebar
+  split). Opens in a new tab — the account folder tab remains
+  available via `1` or tab switching.
+- **Header block:** Rendered by the existing header filter
+  (shared with mailrender). Keys in `accent_primary` bold,
+  values in `fg_base`, `<email>` in angle brackets in `fg_dim`.
+  Separator `─` line in `fg_dim` below headers.
+- **Body:** Rendered by the content pipeline (`ParseBlocks` →
+  `RenderBody`). Lipgloss styles from compiled theme. Headings
+  in `color_success` bold. Blockquotes prefixed with `>` in
+  `accent_tertiary` (level 1) or `fg_dim` (level 2+). Links
+  in `accent_primary` underline.
+- **Viewport:** `bubbles/viewport`. Scroll percentage in status
+  bar. `j/k` lines, `C-d/C-u` half page, `C-f/C-b` full page,
+  `gg/G` top/bottom.
+- **Left margin:** 2-char indent for body content readability.
+- **Status bar:** Message subject + scroll percentage.
+- **Footer:** Viewer-specific bindings. `Tab:links` replaces
+  `/:search`. `q:close` added. No `?:help` — `?` still works
+  but isn't shown (footer space is precious).
