@@ -1,0 +1,32 @@
+// Package poplar provides poplar-specific types shared across the application.
+package poplar
+
+import (
+	"time"
+
+	"github.com/emersion/go-message/mail"
+)
+
+// AccountConfig holds the configuration for a single email account.
+// This replaces aerc's config.AccountConfig with only the fields
+// that the forked workers actually use.
+type AccountConfig struct {
+	Name           string
+	Backend        string
+	Source         string
+	Params         map[string]string
+	Folders        []string
+	FoldersExclude []string
+	Headers        []string
+	HeadersExclude []string
+	CheckMail      time.Duration
+
+	// Identity
+	From    *mail.Address
+	Aliases []*mail.Address
+	CopyTo  []string
+
+	// Outgoing
+	Outgoing        string
+	OutgoingCredCmd string
+}

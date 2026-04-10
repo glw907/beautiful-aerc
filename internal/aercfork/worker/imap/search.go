@@ -1,0 +1,52 @@
+// Forked from aerc (git.sr.ht/~rjarry/aerc) — MIT License
+package imap
+
+import (
+	"maps"
+	"strings"
+
+	"github.com/emersion/go-imap"
+
+	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/types"
+	"git.sr.ht/~rjarry/go-opt/v2"
+)
+
+func translateSearch(c *types.SearchCriteria) *imap.SearchCriteria {
+	criteria := imap.NewSearchCriteria()
+	if c == nil {
+		return criteria
+	}
+	criteria.WithFlags = translateFlags(c.WithFlags)
+	criteria.WithoutFlags = translateFlags(c.WithoutFlags)
+
+	if !c.StartDate.IsZero() {
+		criteria.SentSince = c.StartDate
+	}
+	if !c.EndDate.IsZero() {
+		criteria.SentBefore = c.EndDate
+	}
+	maps.Copy(criteria.Header, c.Headers)
+	for _, f := range c.From {
+		criteria.Header.Add("From", f)
+	}
+	for _, t := range c.To {
+		criteria.Header.Add("To", t)
+	}
+	for _, c := range c.Cc {
+		criteria.Header.Add("Cc", c)
+	}
+	terms := opt.LexArgs(strings.Join(c.Terms, " "))
+	if terms.Count() > 0 {
+		switch {
+		case c.SearchAll:
+			criteria.Text = terms.Args()
+		case c.SearchBody:
+			criteria.Body = terms.Args()
+		default:
+			for _, term := range terms.Args() {
+				criteria.Header.Add("Subject", term)
+			}
+		}
+	}
+	return criteria
+}

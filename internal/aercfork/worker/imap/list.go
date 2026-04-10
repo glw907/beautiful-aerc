@@ -1,0 +1,165 @@
+// Forked from aerc (git.sr.ht/~rjarry/aerc) — MIT License
+package imap
+
+import (
+	"strings"
+
+	"github.com/emersion/go-imap"
+
+	"github.com/glw907/beautiful-aerc/internal/aercfork/log"
+	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
+	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/types"
+)
+
+func (imapw *IMAPWorker) handleListDirectories(msg *types.ListDirectories) {
+	mailboxes := make(chan *imap.MailboxInfo)
+	imapw.worker.Tracef("Listing mailboxes")
+	done := make(chan any)
+
+	go func() {
+		defer log.PanicHandler()
+
+		labels := make([]string, 0)
+		provider := imapw.config.provider
+		useLabels := provider == GMail || provider == Proton
+
+		for mbox := range mailboxes {
+			if !canOpen(mbox) {
+				// no need to pass this to handlers if it can't be opened
+				continue
+			}
+			dir := &models.Directory{
+				Name: mbox.Name,
+			}
+			switch provider {
+			case GMail:
+				labels = append(labels, mbox.Name)
+			case Proton:
+				if strings.HasPrefix(mbox.Name, "Labels/") {
+					labels = append(labels, strings.TrimPrefix(mbox.Name, "Labels/"))
+				}
+			default:
+				// No label support
+			}
+			for _, attr := range mbox.Attributes {
+				attr = strings.TrimPrefix(attr, "\\")
+				attr = strings.ToLower(attr)
+				role, ok := models.Roles[attr]
+				if !ok {
+					continue
+				}
+				dir.Role = role
+			}
+			if mbox.Name == "INBOX" {
+				dir.Role = models.InboxRole
+			}
+			imapw.worker.PostMessage(&types.Directory{
+				Message: types.RespondTo(msg),
+				Dir:     dir,
+			}, nil)
+		}
+
+		if useLabels {
+			imapw.worker.Debugf("Available labels: %s", labels)
+			imapw.worker.PostMessage(&types.LabelList{Labels: labels}, nil)
+		}
+
+		done <- nil
+	}()
+
+	switch {
+	case imapw.liststatus:
+		items := []imap.StatusItem{
+			imap.StatusMessages,
+			imap.StatusRecent,
+			imap.StatusUnseen,
+		}
+		statuses, err := imapw.client.liststatus.ListStatus(
+			"",
+			"*",
+			items,
+			mailboxes,
+		)
+		if err != nil {
+			<-done
+			imapw.worker.PostMessage(&types.Error{
+				Message: types.RespondTo(msg),
+				Error:   err,
+			}, nil)
+			return
+
+		}
+		for _, status := range statuses {
+			imapw.worker.PostMessage(&types.DirectoryInfo{
+				Info: &models.DirectoryInfo{
+					Name:   status.Name,
+					Exists: int(status.Messages),
+					Recent: int(status.Recent),
+					Unseen: int(status.Unseen),
+				},
+			}, nil)
+		}
+	default:
+		err := imapw.client.List("", "*", mailboxes)
+		if err != nil {
+			<-done
+			imapw.worker.PostMessage(&types.Error{
+				Message: types.RespondTo(msg),
+				Error:   err,
+			}, nil)
+			return
+		}
+	}
+	<-done
+	imapw.worker.PostMessage(
+		&types.Done{Message: types.RespondTo(msg)}, nil)
+}
+
+const NonExistentAttr = "\\NonExistent"
+
+func canOpen(mbox *imap.MailboxInfo) bool {
+	for _, attr := range mbox.Attributes {
+		if attr == imap.NoSelectAttr ||
+			attr == NonExistentAttr {
+			return false
+		}
+	}
+	return true
+}
+
+func (imapw *IMAPWorker) handleSearchDirectory(msg *types.SearchDirectory) {
+	emitError := func(err error) {
+		imapw.worker.PostMessage(&types.Error{
+			Message: types.RespondTo(msg),
+			Error:   err,
+		}, nil)
+	}
+
+	imapw.worker.Tracef("Executing search")
+	criteria := translateSearch(msg.Criteria)
+
+	if msg.Context.Err() != nil {
+		imapw.worker.PostMessage(&types.Cancelled{
+			Message: types.RespondTo(msg),
+		}, nil)
+		return
+	}
+
+	uids, err := imapw.client.UidSearch(criteria)
+	if err != nil {
+		emitError(err)
+		return
+	}
+
+	if msg.Context.Err() != nil {
+		imapw.worker.PostMessage(&types.Cancelled{
+			Message: types.RespondTo(msg),
+		}, nil)
+		return
+	}
+
+	imapw.worker.PostMessage(&types.SearchResults{
+		Message: types.RespondTo(msg),
+		Uids:    models.Uint32ToUidList(uids),
+	}, nil)
+}

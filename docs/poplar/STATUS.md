@@ -1,12 +1,12 @@
 # Poplar Status
 
-**Current state:** Design complete. Ready to start Pass 1.
+**Current state:** Pass 1 complete. Ready to start Pass 2.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 | Scaffold + Fork | pending |
+| 1 | Scaffold + Fork | done |
 | 2 | Backend Adapter + Connect | pending |
 | 3 | Bubbletea Shell | pending |
 | 4 | Message List | pending |
@@ -21,13 +21,16 @@
 ## Plans
 
 - [Design spec](../superpowers/specs/2026-04-09-poplar-design.md)
+- [Pass 1 plan](../superpowers/plans/2026-04-09-poplar-pass1-scaffold.md)
 
 ## Continuing Development
 
 ### Next starter prompt
 
-> Start Pass 1: Scaffold the poplar binary and fork aerc's worker
-> code. See `docs/poplar/STATUS.md` for context and
+> Start Pass 2: Backend Adapter + Connect. Define the
+> `mail.Backend` interface in `internal/mail/`, write the JMAP
+> adapter wrapping the forked worker, parse account config, and
+> connect to Fastmail. See `docs/poplar/STATUS.md` for context and
 > `docs/superpowers/specs/2026-04-09-poplar-design.md` for the full
 > spec.
 
