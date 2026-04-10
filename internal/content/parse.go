@@ -1,8 +1,182 @@
 package content
 
 import (
+	"regexp"
 	"strings"
 )
+
+var (
+	reHeading     = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	reCodeFence   = regexp.MustCompile("^```(\\w*)$")
+	reRule        = regexp.MustCompile(`^(-{3,}|_{3,}|\*{3,})$`)
+	reUnordered   = regexp.MustCompile(`^[-*+]\s+(.+)$`)
+	reOrdered     = regexp.MustCompile(`^(\d+)\.\s+(.+)$`)
+	reQuotePrefix = regexp.MustCompile(`^(>+)\s?(.*)$`)
+	reAttribution = regexp.MustCompile(`(?i)^on\s.+wrote:\s*$`)
+	reSignature   = regexp.MustCompile(`^-- $`)
+)
+
+// ParseBlocks parses normalized markdown into email-aware block types.
+func ParseBlocks(markdown string) []Block {
+	return parseBlocksAtLevel(markdown, 1)
+}
+
+func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
+	lines := strings.Split(markdown, "\n")
+	var blocks []Block
+	i := 0
+
+	for i < len(lines) {
+		line := lines[i]
+
+		// Skip blank lines between blocks
+		if strings.TrimSpace(line) == "" {
+			i++
+			continue
+		}
+
+		// Signature: "-- " marker, everything after is signature
+		if reSignature.MatchString(line) {
+			var sigLines [][]Span
+			for i++; i < len(lines); i++ {
+				sigLines = append(sigLines, parseSpans(lines[i]))
+			}
+			if len(sigLines) > 0 {
+				blocks = append(blocks, Signature{Lines: sigLines})
+			}
+			break
+		}
+
+		// Code fence
+		if m := reCodeFence.FindStringSubmatch(line); m != nil {
+			lang := m[1]
+			var codeLines []string
+			i++
+			for i < len(lines) && !strings.HasPrefix(lines[i], "```") {
+				codeLines = append(codeLines, lines[i])
+				i++
+			}
+			if i < len(lines) {
+				i++ // skip closing fence
+			}
+			blocks = append(blocks, CodeBlock{
+				Text: strings.Join(codeLines, "\n"),
+				Lang: lang,
+			})
+			continue
+		}
+
+		// Heading
+		if m := reHeading.FindStringSubmatch(line); m != nil {
+			blocks = append(blocks, Heading{
+				Level: len(m[1]),
+				Spans: parseSpans(m[2]),
+			})
+			i++
+			continue
+		}
+
+		// Horizontal rule
+		if reRule.MatchString(strings.TrimSpace(line)) {
+			blocks = append(blocks, Rule{})
+			i++
+			continue
+		}
+
+		// Quote attribution (must check before blockquote)
+		if reAttribution.MatchString(strings.TrimSpace(line)) {
+			blocks = append(blocks, QuoteAttribution{Spans: parseSpans(strings.TrimSpace(line))})
+			i++
+			continue
+		}
+
+		// Blockquote
+		if reQuotePrefix.MatchString(line) {
+			var quoteLines []string
+			for i < len(lines) && reQuotePrefix.MatchString(lines[i]) {
+				quoteLines = append(quoteLines, lines[i])
+				i++
+			}
+			blocks = append(blocks, parseBlockquote(quoteLines, quoteLevel))
+			continue
+		}
+
+		// List items (unordered)
+		if m := reUnordered.FindStringSubmatch(line); m != nil {
+			blocks = append(blocks, ListItem{
+				Spans:   parseSpans(m[1]),
+				Ordered: false,
+			})
+			i++
+			continue
+		}
+
+		// List items (ordered)
+		if m := reOrdered.FindStringSubmatch(line); m != nil {
+			idx := 0
+			for _, c := range m[1] {
+				idx = idx*10 + int(c-'0')
+			}
+			blocks = append(blocks, ListItem{
+				Spans:   parseSpans(m[2]),
+				Ordered: true,
+				Index:   idx,
+			})
+			i++
+			continue
+		}
+
+		// Paragraph: collect consecutive non-blank, non-special lines
+		var paraLines []string
+		for i < len(lines) {
+			l := lines[i]
+			if strings.TrimSpace(l) == "" {
+				break
+			}
+			if reHeading.MatchString(l) || reCodeFence.MatchString(l) ||
+				reRule.MatchString(strings.TrimSpace(l)) || reQuotePrefix.MatchString(l) ||
+				reUnordered.MatchString(l) || reOrdered.MatchString(l) ||
+				reSignature.MatchString(l) {
+				break
+			}
+			paraLines = append(paraLines, l)
+			i++
+		}
+		if len(paraLines) > 0 {
+			blocks = append(blocks, Paragraph{
+				Spans: parseSpans(strings.Join(paraLines, " ")),
+			})
+		}
+	}
+
+	return blocks
+}
+
+// parseBlockquote parses collected quote-prefixed lines into a
+// Blockquote with recursive nesting.
+func parseBlockquote(lines []string, level int) Blockquote {
+	// Strip one level of "> " prefix
+	var stripped []string
+	for _, line := range lines {
+		m := reQuotePrefix.FindStringSubmatch(line)
+		if m != nil {
+			prefixLen := len(m[1])
+			if prefixLen > 1 {
+				stripped = append(stripped, strings.Repeat(">", prefixLen-1)+" "+m[2])
+			} else {
+				stripped = append(stripped, m[2])
+			}
+		} else {
+			stripped = append(stripped, line)
+		}
+	}
+
+	inner := strings.Join(stripped, "\n")
+	return Blockquote{
+		Blocks: parseBlocksAtLevel(inner, level+1),
+		Level:  level,
+	}
+}
 
 // parseSpans parses inline markdown formatting into a slice of Span values.
 // Handles: **bold**, *italic*, `code`, [text](url).
