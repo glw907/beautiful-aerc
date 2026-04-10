@@ -123,21 +123,21 @@ diff_add.fg={{.C "color_success"}}
 diff_del.fg={{.C "color_error"}}
 `
 
-// stylesetData wraps a Theme for template execution.
+// stylesetData wraps a CompiledTheme for template execution.
 type stylesetData struct {
 	Name  string
-	theme *Theme
+	theme *CompiledTheme
 }
 
 // C returns the hex color for a slot name. Used in the template as {{.C "name"}}.
 func (d stylesetData) C(name string) string {
-	return d.theme.Color(name)
+	return d.theme.PaletteHex(name)
 }
 
 var stylesetTmpl = template.Must(template.New("styleset").Parse(stylesetTemplate))
 
 // GenerateStyleset renders the styleset template with the theme's colors.
-func GenerateStyleset(t *Theme) (string, error) {
+func GenerateStyleset(t *CompiledTheme) (string, error) {
 	var buf strings.Builder
 	data := stylesetData{Name: t.Name, theme: t}
 	if err := stylesetTmpl.Execute(&buf, data); err != nil {
@@ -147,7 +147,7 @@ func GenerateStyleset(t *Theme) (string, error) {
 }
 
 // WriteStyleset generates and writes the styleset to a file.
-func WriteStyleset(t *Theme, path string) error {
+func WriteStyleset(t *CompiledTheme, path string) error {
 	content, err := GenerateStyleset(t)
 	if err != nil {
 		return err

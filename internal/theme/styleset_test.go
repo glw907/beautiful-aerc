@@ -8,18 +8,11 @@ import (
 )
 
 func TestGenerateStyleset(t *testing.T) {
-	path := writeTheme(t, validTheme)
-	th, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	output, err := GenerateStyleset(th)
+	output, err := GenerateStyleset(Nord)
 	if err != nil {
 		t.Fatalf("GenerateStyleset: %v", err)
 	}
 
-	// Verify key structural elements
 	checks := []struct {
 		name string
 		want string
@@ -48,15 +41,9 @@ func TestGenerateStyleset(t *testing.T) {
 }
 
 func TestGenerateStylesetWriteFile(t *testing.T) {
-	path := writeTheme(t, validTheme)
-	th, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
 	dir := t.TempDir()
-	outPath := filepath.Join(dir, "testtheme")
-	if err := WriteStyleset(th, outPath); err != nil {
+	outPath := filepath.Join(dir, "TestTheme")
+	if err := WriteStyleset(Nord, outPath); err != nil {
 		t.Fatalf("WriteStyleset: %v", err)
 	}
 
