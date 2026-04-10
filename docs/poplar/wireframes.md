@@ -727,3 +727,91 @@ Single-message delete skips this and uses the undo bar instead.
 - **Confirm delete (#6):** Status bar prompt. Count in
   `color_warning`. Only for 3+ messages. Single-message delete is
   instant with undo bar (#9). Pass 6.
+
+---
+
+## 10. Compose — External Editor (#3)
+
+Not a poplar screen. Bubbletea suspends via `tea.ExecProcess`,
+handing the terminal to the editor. Poplar disappears entirely
+and reappears when the editor exits.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Poplar running (bubbletea)                         │
+│  User presses c (compose) or r (reply)              │
+└──────────────────────┬──────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│  Poplar writes temp file:                           │
+│  - Headers (To, From, Subject)                      │
+│  - Quoted body (reply/forward)                      │
+│  - Signature (if configured)                        │
+│                                                     │
+│  tea.ExecProcess($EDITOR, tempfile)                 │
+│  Bubbletea suspends — terminal belongs to editor    │
+└──────────────────────┬──────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│  Editor running (full screen, e.g., nvim-mail)      │
+│  User composes message                              │
+│                                                     │
+│  :wq → exit code 0                                  │
+│  :cq → exit code 1                                  │
+└──────────────────────┬──────────────────────────────┘
+                       │
+                ┌──────┴──────┐
+                ▼             ▼
+          Exit code 0    Exit code ≠ 0
+          ┌──────────┐   ┌───────────┐
+          │ Compose  │   │ Toast:    │
+          │ review   │   │ "Compose  │
+          │ prompt   │   │  aborted" │
+          │ (§9 #4)  │   └───────────┘
+          └──────────┘
+```
+
+**Annotations:**
+
+- **`tea.ExecProcess`:** Bubbletea's mechanism for handing terminal
+  control to a child process. Event loop suspends, terminal restores,
+  resumes on child exit.
+- **Default editor:** `$EDITOR` (poplar default: `micro`). For this
+  user: `nvim-mail`.
+- **Temp file:** Created by poplar using `internal/compose/` for
+  header formatting and quoted text reflow.
+- **Exit code 0:** Triggers compose review prompt (§9, element #4).
+- **Exit code ≠ 0:** Compose aborted. Toast "Compose aborted" in
+  `fg_dim`. No review prompt.
+- **Pass 9 implementation.**
+
+---
+
+## Coverage
+
+All 20 UI elements from the interface inventory:
+
+| # | Element | Wireframe |
+|---|---------|-----------|
+| 1 | Folder + Message List | §1 Composite, §3 Sidebar, §4 Message List |
+| 2 | Message Viewer | §5 Viewer |
+| 3 | Compose (external) | §10 Compose |
+| 4 | Compose Review | §9 Overlays |
+| 5 | Folder Picker | §9 Overlays |
+| 6 | Confirm Delete | §9 Overlays |
+| 7 | Keybinding Help | §6 Help Popover |
+| 8 | Status Toast | §7 Transient UI |
+| 9 | Undo Bar | §7 Transient UI |
+| 10 | Error Banner | §7 Transient UI |
+| 11 | Loading Spinner | §7 Transient UI |
+| 12 | Connection Status | §7 Transient UI |
+| 13 | Empty Folder | §8 Screen States |
+| 14 | Threaded View | §8 Screen States |
+| 15 | Search Results | §8 Screen States |
+| 16 | Multi-Select | §8 Screen States |
+| 17 | Focused Panel | §8 Screen States |
+| 18 | Tab Bar | §1 Composite, §2 Tab Bar |
+| 19 | Command Footer | §1 Composite (all wireframes) |
+| 20 | Status Bar | §1 Composite (all wireframes) |
