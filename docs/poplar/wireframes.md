@@ -647,3 +647,83 @@ Sidebar focused:                    Message list focused:
   (sidebar) or `▐` (message list) on the selected row. Unfocused
   panel shows `bg_selection` background only, no border indicator.
   j/k only operates in the focused panel.
+
+---
+
+## 9. Overlays (#4, #5, #6)
+
+### Compose review (#4)
+
+Inline prompt in the status bar after the editor exits with code 0.
+Blocks all other input until answered.
+
+```
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Send message?  y:send  n:abort  e:edit  p:postpone                                                            │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+```
+
+### Folder picker (#5)
+
+Modal overlay for `:move` and `:copy`. Fuzzy-filtered folder list.
+
+#### Empty query (all folders shown)
+
+```
+                       ╭─ Move to folder ────────────────────────╮
+                       │                                          │
+                       │  >                                       │
+                       │                                          │
+                       │  ┃ 󰇰 Inbox                               │
+                       │    󰏫 Drafts                               │
+                       │    󰑚 Sent                                 │
+                       │    󰀼 Archive                              │
+                       │    󰍷 Spam                                 │
+                       │    󰩺 Trash                                │
+                       │    󰂚 Notifications                        │
+                       │    󰑴 Remind                               │
+                       │    󰡡 Lists/golang                         │
+                       │    󰡡 Lists/rust                           │
+                       │                                          │
+                       ╰──────────────────────────────────────────╯
+```
+
+#### Filtered results
+
+```
+                       ╭─ Move to folder ────────────────────────╮
+                       │                                          │
+                       │  > arch                                  │
+                       │                                          │
+                       │  ┃ 󰀼 Archive                             │
+                       │    󰡡 Lists/arch-linux                    │
+                       │                                          │
+                       ╰──────────────────────────────────────────╯
+```
+
+### Confirm delete (#6)
+
+Inline prompt in status bar for bulk delete (3+ messages).
+Single-message delete skips this and uses the undo bar instead.
+
+```
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Delete 5 messages?  y:confirm  n:cancel                                                                       │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+```
+
+**Annotations:**
+
+- **Compose review (#4):** Status bar prompt, not a modal. Keys in
+  `fg_bright` bold, hints in `fg_dim`. Blocks all input. Pass 9.
+- **Folder picker (#5):** Modal overlay, centered. Dimmed background.
+  `>` prefix on `bubbles/textinput` filter line. Results update
+  as you type (fuzzy match on folder name). `j/k` or arrows move
+  selection. `Enter` confirms, `Escape` cancels. Selected row has
+  `┃` left border + `bg_selection`. Rounded border in `bg_border`.
+  Title shows action ("Move to folder" / "Copy to folder") in
+  `accent_primary`. Picker shrinks to fit results (no fixed height).
+  Pass 7.
+- **Confirm delete (#6):** Status bar prompt. Count in
+  `color_warning`. Only for 3+ messages. Single-message delete is
+  instant with undo bar (#9). Pass 6.
