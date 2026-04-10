@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker"
@@ -19,7 +18,6 @@ type JMAPAdapter struct {
 	w       *types.Worker
 	updates chan Update
 	done    chan struct{}
-	mu      sync.Mutex
 }
 
 // NewJMAPAdapter creates a JMAP backend adapter for the given account.
