@@ -19,13 +19,11 @@ const (
 // sidebarWidth is the fixed width of the sidebar panel.
 const sidebarWidth = 30
 
-// AccountTab implements Tab for the main account view with sidebar and message list.
+// AccountTab is the main account view with sidebar and message list panels.
 type AccountTab struct {
 	styles  Styles
 	backend mail.Backend
 	focused Panel
-	folder  string
-	icon    string
 	width   int
 	height  int
 }
@@ -36,30 +34,14 @@ func NewAccountTab(styles Styles, backend mail.Backend) AccountTab {
 		styles:  styles,
 		backend: backend,
 		focused: SidebarPanel,
-		folder:  "Inbox",
-		icon:    "󰇰",
 	}
 }
-
-// Title returns the current folder name.
-func (m AccountTab) Title() string { return m.folder }
-
-// Icon returns the folder's Nerd Font icon.
-func (m AccountTab) Icon() string { return m.icon }
-
-// Closeable returns false — the account tab cannot be closed.
-func (m AccountTab) Closeable() bool { return false }
 
 // Init returns no initial command.
 func (m AccountTab) Init() tea.Cmd { return nil }
 
-// Update satisfies tea.Model. Delegates to updateTab for typed access.
-func (m AccountTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m.updateTab(msg)
-}
-
-// updateTab handles key events and window size changes, returning the typed model.
-func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
+// Update handles key events and window size changes.
+func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -150,6 +132,13 @@ func renderDivider(height int, s Styles) string {
 
 func minInt(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b

@@ -9,13 +9,10 @@ import (
 	"github.com/glw907/beautiful-aerc/internal/theme"
 )
 
-// tabBarHeight is the number of rows the tab bar occupies.
-const tabBarHeight = 3
-
 // App is the root bubbletea model for poplar.
+// TODO(Task 6): rewire to new chrome layout (TopLine, no tab bar).
 type App struct {
-	tabs      []Tab
-	activeTab int
+	acct      AccountTab
 	styles    Styles
 	statusBar StatusBar
 	footer    Footer
@@ -33,13 +30,12 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend) App {
 	folders, _ := backend.ListFolders()
 	if len(folders) > 0 {
 		inbox := folders[0]
-		sb.SetFolder(acct.Icon(), inbox.Name, inbox.Exists, inbox.Unseen)
+		sb.SetFolder("󰇰", inbox.Name, inbox.Exists, inbox.Unseen)
 	}
 	sb.SetConnected(true)
 
 	return App{
-		tabs:      []Tab{acct},
-		activeTab: 0,
+		acct:      acct,
 		styles:    styles,
 		statusBar: sb,
 		footer:    NewFooter(styles),
@@ -50,7 +46,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend) App {
 // Init returns no initial command.
 func (m App) Init() tea.Cmd { return nil }
 
-// Update handles global keys and delegates to the active tab.
+// Update handles global keys and delegates to the account tab.
 func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -58,10 +54,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		contentHeight := m.contentHeight()
-		tabMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: contentHeight}
-		updated, cmd := m.tabs[m.activeTab].Update(tabMsg)
-		m.tabs[m.activeTab] = updated.(Tab)
+		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
+		var cmd tea.Cmd
+		m.acct, cmd = m.acct.Update(contentMsg)
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
 
@@ -69,13 +64,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			idx := int(msg.Runes[0]-'0') - 1
-			if idx < len(m.tabs) {
-				m.activeTab = idx
-				m.updateFooterContext()
-			}
-			return m, nil
 		case "?":
 			// Stubbed for 2.5b-5 (help popover)
 			return m, nil
@@ -85,13 +73,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 	}
 
-	// Delegate to active tab
-	if len(m.tabs) > 0 {
-		updated, cmd := m.tabs[m.activeTab].Update(msg)
-		m.tabs[m.activeTab] = updated.(Tab)
-		cmds = append(cmds, cmd)
-		m.updateFooterContext()
-	}
+	// Delegate to account tab
+	var cmd tea.Cmd
+	m.acct, cmd = m.acct.Update(msg)
+	cmds = append(cmds, cmd)
+	m.updateFooterContext()
 
 	return m, tea.Batch(cmds...)
 }
@@ -102,15 +88,8 @@ func (m App) View() string {
 		return ""
 	}
 
-	tabs := make([]tabInfo, len(m.tabs))
-	for i, t := range m.tabs {
-		tabs[i] = tabInfo{title: t.Title(), icon: t.Icon()}
-	}
-
-	tabBar := renderTabBar(tabs, m.activeTab, m.width, sidebarWidth, m.styles)
-
 	// Add right border │ to each content line
-	rawContent := m.tabs[m.activeTab].View()
+	rawContent := m.acct.View()
 	rightBorder := m.styles.FrameBorder.Render("│")
 	contentLines := strings.Split(rawContent, "\n")
 	for i, line := range contentLines {
@@ -123,7 +102,6 @@ func (m App) View() string {
 	foot := m.footer.View(m.width)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		tabBar,
 		content,
 		status,
 		foot,
@@ -132,8 +110,8 @@ func (m App) View() string {
 
 // contentHeight returns the height available for the content area.
 func (m App) contentHeight() int {
-	// tab bar (3) + status bar (1) + footer (1)
-	chrome := tabBarHeight + 2
+	// status bar (1) + footer (1)
+	chrome := 2
 	h := m.height - chrome
 	if h < 1 {
 		return 1
@@ -141,13 +119,11 @@ func (m App) contentHeight() int {
 	return h
 }
 
-// updateFooterContext switches the footer KeyMap based on the active tab's focus.
+// updateFooterContext switches the footer KeyMap based on the active panel.
 func (m *App) updateFooterContext() {
-	if acct, ok := m.tabs[m.activeTab].(AccountTab); ok {
-		if acct.focused == SidebarPanel {
-			m.footer.SetContext(SidebarContext)
-		} else {
-			m.footer.SetContext(MsgListContext)
-		}
+	if m.acct.focused == SidebarPanel {
+		m.footer.SetContext(SidebarContext)
+	} else {
+		m.footer.SetContext(MsgListContext)
 	}
 }
