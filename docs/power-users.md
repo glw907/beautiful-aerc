@@ -10,7 +10,6 @@ For getting started, see the [README](../README.md). For the compose editor, see
 - [HTML filter pipeline](#html-filter-pipeline)
 - [Header filter](#header-filter)
 - [Plain text filter](#plain-text-filter)
-- [Footnote system](#footnote-system)
 - [Theme token resolution](#theme-token-resolution)
 - [Known edge cases](#known-edge-cases)
 - [Troubleshooting](#troubleshooting)
@@ -52,7 +51,7 @@ Before conversion, the binary strips known junk:
 
 ### 2. convertHTML
 
-The cleaned HTML is converted to markdown using the [`github.com/JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) library with three custom plugins:
+The cleaned HTML is converted to markdown using the [`github.com/JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) library with four plugins:
 
 - **commonmark plugin** — standard CommonMark markdown output
 - **table plugin** — data tables (those with `<th>` headers) become GFM pipe tables
@@ -83,11 +82,15 @@ Runs of three or more consecutive short plain-text blocks (under 25 characters e
 
 Detects Outlook-style flattened quoted replies: paragraphs containing an attribution line (`Person wrote:`) followed by inline `&gt;` markers where line breaks originally were. Reconstructs them as proper markdown blockquotes with `> ` prefixes.
 
-### 8. reflowMarkdown
+### 8. compactLineRuns
+
+Runs of three or more consecutive short single-line blocks (under 80 visible characters, not markdown block elements or sentence-ending lines) are joined with trailing spaces (`  \n`) into compact runs. This handles scattered short lines from flattened table cells that aren't short enough for `collapseShortBlocks` but are clearly not intended as separate paragraphs.
+
+### 9. reflowMarkdown
 
 Plain paragraphs and blockquotes are rewrapped to 78 columns using minimum-raggedness dynamic programming. Headings, tables, lists, and code fences are left untouched.
 
-### 9. Glamour rendering
+### 10. Glamour rendering
 
 The markdown is rendered to styled ANSI output by [Glamour](https://github.com/charmbracelet/glamour) using a style derived from the active TOML theme. Headings, bold, italic, links, and blockquotes are all styled via Glamour's style document, which is built from the theme's color slots at startup.
 
@@ -115,26 +118,6 @@ The `text/plain` filter checks the first 50 lines of the message body for HTML t
 This handles a common case where some mail clients send plain text MIME parts that contain full HTML markup.
 
 If no HTML is detected, the filter pipes the text through aerc's built-in `wrap | colorize` for standard plain text reflow and color rendering.
-
-## Footnote system
-
-Links are the trickiest part of rendering HTML email in a terminal. Inline URLs clutter the text and break the reading flow. The footnote system solves this by separating link text from URLs:
-
-**In the body:** Link text is colored and followed by a dimmed footnote marker (`[^1]`). Self-referencing links (where the text is the URL) render as plain colored URLs with no footnote.
-
-**At the bottom:** A dimmed separator line followed by numbered URL references. Each reference shows the full URL.
-
-**OSC 8 hyperlinks:** Long URLs are visually truncated with `...` to fit within `AERC_COLUMNS`. The full URL is embedded in an [OSC 8 hyperlink escape sequence](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) so supporting terminals (kitty, iTerm2, WezTerm, etc.) can make the truncated text clickable. The link picker also reads OSC 8 hrefs, so truncation never affects link opening.
-
-**Colors used:**
-
-| Element | Token |
-|---------|-------|
-| Link text in body | `link_text` |
-| Footnote markers `[^N]` | `msg_dim` |
-| Separator line | `msg_dim` |
-| Reference labels `[^N]:` | `msg_dim` |
-| Reference URLs | `link_url` |
 
 ## Theme token resolution
 

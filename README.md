@@ -5,9 +5,8 @@ A themeable, productive email environment for the [aerc](https://aerc-mail.org/)
 <!-- screenshot: Hero shot — full aerc window with the Nord theme
      size: 140x48 terminal (match kitty-mail.conf dimensions)
      show: Message list on left with Nerd Font icons and thread prefixes.
-           Rendered HTML email on right with colored headers, markdown
-           body with footnote links, and the URL reference section at
-           the bottom. Inbox folder, mix of read/unread messages.
+           Rendered HTML email on right with colored headers and styled
+           markdown body. Inbox folder, mix of read/unread messages.
      file: docs/images/hero.png
 -->
 
@@ -21,10 +20,10 @@ A themeable, productive email environment for the [aerc](https://aerc-mail.org/)
 - [Prerequisites](#prerequisites)
 - [Install](#install)
 - [How email renders](#how-email-renders)
-- [Footnote-style links](#footnote-style-links)
 - [Theme system](#theme-system)
 - [Composing email with nvim-mail](#composing-email-with-nvim-mail)
 - [Optional components](#optional-components)
+- [Roadmap](#roadmap)
 - [Further reading](#further-reading)
 
 > **Want to understand the internals?** See
@@ -60,22 +59,12 @@ beautiful-aerc bridges that gap. It gives you the same clean, structured email e
      show: The same HTML email (a newsletter or marketing email with
            links, headings, and lists) rendered by stock aerc on the
            left (w3m/lynx output) and beautiful-aerc on the right
-           (mailrender html output with colors and footnote links).
+           (mailrender html output with styled markdown).
            Pick something that shows the difference dramatically.
      file: docs/images/before-after.png
 -->
 
-- **Clean rendering of HTML emails** — even the messy ones. An 8-stage pipeline cleans up the worst HTML the internet can throw at it and produces readable, styled markdown.
-
-- **Numbered footnote-style links** that keep body text clean and readable. URLs are collected in a reference section at the bottom, not jammed inline.
-
-<!-- screenshot: Footnote links in action
-     size: 80x30 terminal
-     show: A rendered email with colored link text, dimmed [^N] markers
-           in the body, and the numbered URL reference section at the
-           bottom with the separator line.
-     file: docs/images/footnote-links.png
--->
+- **Clean rendering of HTML emails** — even the messy ones. A multi-stage pipeline cleans up the worst HTML the internet can throw at it and renders styled markdown via [Glamour](https://github.com/charmbracelet/glamour).
 
 - **A semantic theme system** with three built-in themes (Nord, Solarized Dark, Gruvbox Dark) that colors everything consistently — the UI, the message viewer, and the compose editor.
 
@@ -96,9 +85,9 @@ This pipeline was built by processing real personal email over many hours of ite
 
 Markdown is the core abstraction throughout beautiful-aerc, in both directions.
 
-**Reading email:** HTML messages are converted to clean markdown, then styled with ANSI colors for the terminal. Headings, bold text, lists, and links all render as you'd expect from a markdown document. Links become numbered footnotes so the body text stays readable.
+**Reading email:** HTML messages are converted to clean markdown, then rendered with styled ANSI output by [Glamour](https://github.com/charmbracelet/glamour). Headings, bold text, lists, blockquotes, and links all render as you'd expect from a markdown document.
 
-**Writing email:** You compose in markdown in the Neovim editor. When you send, aerc converts your markdown to HTML and sends both versions as a multipart message. Recipients with GUI clients see rich text; recipients with CLI clients see your clean plain text.
+**Writing email:** You compose in markdown in the Neovim editor. When you send, aerc converts your markdown to HTML via `mailrender to-html` and sends both versions as a multipart message. Recipients with GUI clients see rich text; recipients with CLI clients see your clean plain text.
 
 Why markdown? Because it's the natural language for terminal users. It's readable as-is — no markup noise cluttering your terminal. It gives you clean formatting options (headings, bold, lists, links) when composing. And it converts losslessly to HTML for recipients who expect rich email. Your reading and writing experiences use the same formatting language, which makes the whole system feel coherent.
 
@@ -114,7 +103,7 @@ beautiful-aerc replaces these defaults with purpose-built Go binaries. Why Go in
 
 **mailrender** — The filter pipeline, and the heart of the project. This is where the hard work happens.
 
-Email HTML is the messiest markup on the internet — every sender generates it differently, there are no real standards in practice, and the edge cases are endless. mailrender is an 8+ stage pipeline that tames all of this into clean, readable markdown. It has three subcommands: `headers` for header rendering, `html` for HTML-to-markdown conversion, and `plain` for plain text handling.
+Email HTML is the messiest markup on the internet — every sender generates it differently, there are no real standards in practice, and the edge cases are endless. mailrender is a multi-stage pipeline that tames all of this into clean, readable markdown rendered by Glamour. Its subcommands cover the full email lifecycle: `headers` for header rendering, `html` for HTML-to-markdown conversion, `plain` for plain text handling, `markdown` for extracting clean markdown from HTML (used in reply templates), `to-html` for converting composed markdown to HTML on send, `compose` for normalizing compose buffers, and `themes` for generating aerc stylesets.
 
 Here's a taste of what email actually looks like under the hood — and what mailrender handles so you don't have to:
 
@@ -184,7 +173,7 @@ The project also ships working configuration files and launcher scripts, install
 ## Prerequisites
 
 - [aerc](https://aerc-mail.org/) — the email client itself
-- [Go](https://go.dev/) 1.25+ — needed to build the binaries (not needed at runtime)
+- [Go](https://go.dev/) 1.26+ — needed to build the binaries (not needed at runtime)
 - [GNU Stow](https://www.gnu.org/software/stow/) — symlink manager for installing the config files
 
 Optional:
@@ -207,7 +196,7 @@ cd beautiful-aerc
 
 **2. Build and install the binaries**
 
-This builds all three Go binaries and installs them to `~/.local/bin/` (make sure that's on your `PATH`):
+This builds all four Go binaries and installs them to `~/.local/bin/` (make sure that's on your `PATH`):
 
 ```sh
 make build
@@ -268,27 +257,8 @@ text/plain = mailrender plain
 When you open an email, here's what happens:
 
 - **headers** — Receives the raw RFC 2822 headers. Reorders them (From, To, Cc, Date, Subject), colorizes field names, wraps long address lines to fit the terminal width, and prints a separator line below.
-- **html** — Receives the raw HTML body. Cleans up sender-specific junk, converts to markdown via a Go HTML-to-markdown library, cleans conversion artifacts, converts links to numbered footnotes, and renders styled output via Glamour with ANSI syntax highlighting for headings, bold, italic, and rules.
+- **html** — Receives the raw HTML body. Cleans up sender-specific junk, converts to markdown via the [html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown) Go library, normalizes whitespace and structure, reflows paragraphs to 78 columns, and renders styled output via [Glamour](https://github.com/charmbracelet/glamour) with theme-derived colors for headings, bold, italic, links, blockquotes, and rules.
 - **plain** — Receives the raw plain text body. Checks whether it's actually HTML in disguise (some clients send full HTML in a text/plain MIME part) and routes it through the HTML pipeline if so. Otherwise uses aerc's built-in `wrap | colorize`.
-
-## Footnote-style links
-
-Links in HTML emails render as footnote references. The body text stays clean and readable; URLs are collected in a numbered reference section at the bottom:
-
-```
-If you don't recognize this account, remove[^1] it.
-
-Check activity[^2]
-
-See https://myaccount.google.com/notifications
-----------------------------------------
-[^1]: https://accounts.google.com/AccountDisavow?adt=...
-[^2]: https://accounts.google.com/AccountChooser?Email=...
-```
-
-Link text is colored; footnote markers are dimmed. Self-referencing links (where the display text is the URL itself) render as plain URLs with no footnote — no point adding a reference that just repeats itself.
-
-Long URLs in the reference section are visually truncated to fit the terminal width, but the full URL is embedded in an [OSC 8 hyperlink](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) so terminals that support it (kitty, iTerm2, etc.) can still make the truncated text clickable. Ctrl+click opens any URL in the browser via kitty's `mouse_map`.
 
 ## Theme system
 
@@ -415,6 +385,14 @@ Keywords=mail;email;aerc;
 ```
 
 See `.config/kitty/kitty-mail.conf` for the full profile with annotated design choices. Adapt these ideas for your own terminal emulator.
+
+## Roadmap
+
+beautiful-aerc today is a filter pipeline and configuration package for the aerc email client. The long-term goal is **poplar** — a standalone bubbletea-based terminal email client that lives in this same repo.
+
+Poplar reuses the existing filter, theme, and compose infrastructure as library code and adds its own UI layer built on [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss). It targets Fastmail (JMAP) and Gmail (IMAP) with an opinionated, keyboard-driven interface.
+
+Development is iterative — poplar is being built in numbered passes, from scaffold to daily-driver. See [docs/poplar/STATUS.md](docs/poplar/STATUS.md) for current progress and [docs/poplar/architecture.md](docs/poplar/architecture.md) for design decisions.
 
 ## Further reading
 
