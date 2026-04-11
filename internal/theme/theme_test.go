@@ -23,33 +23,38 @@ func TestPaletteHex(t *testing.T) {
 }
 
 func TestThemeRegistryComplete(t *testing.T) {
-	expected := []string{
-		"catppuccin-latte", "catppuccin-mocha", "dracula",
-		"everforest-dark", "everforest-light", "gruvbox-dark",
-		"gruvbox-light", "kanagawa", "nord", "one-dark",
-		"rose-pine", "rose-pine-dawn", "solarized-dark",
-		"solarized-light", "tokyo-night",
-	}
-
 	if len(Themes) != 15 {
 		t.Fatalf("Themes map has %d entries, want 15", len(Themes))
 	}
 
-	for _, name := range expected {
-		if _, ok := Themes[name]; !ok {
-			t.Errorf("Themes map missing %q", name)
-		}
-	}
-
+	// ThemeNames derives from Themes map — verify consistency.
 	names := ThemeNames()
-	if len(names) != 15 {
-		t.Fatalf("ThemeNames() returned %d names, want 15", len(names))
+	if len(names) != len(Themes) {
+		t.Fatalf("ThemeNames() returned %d names, Themes has %d entries",
+			len(names), len(Themes))
+	}
+	for _, name := range names {
+		if _, ok := Themes[name]; !ok {
+			t.Errorf("ThemeNames() includes %q but Themes map does not", name)
+		}
 	}
 
 	// Verify alphabetical order.
 	for i := 1; i < len(names); i++ {
 		if names[i] < names[i-1] {
 			t.Errorf("ThemeNames() not sorted: %q before %q", names[i-1], names[i])
+		}
+	}
+
+	// Verify default theme exists.
+	if _, ok := Themes[DefaultThemeName]; !ok {
+		t.Errorf("default theme %q not in Themes map", DefaultThemeName)
+	}
+
+	// Verify all themes produce styled output.
+	for name, th := range Themes {
+		if th.Heading.Render("x") == "x" {
+			t.Errorf("theme %q Heading style is unstyled", name)
 		}
 	}
 

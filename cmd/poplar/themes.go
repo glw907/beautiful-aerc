@@ -13,7 +13,7 @@ func newThemesCmd() *cobra.Command {
 		Short: "List available color themes",
 		Run: func(cmd *cobra.Command, args []string) {
 			for _, name := range theme.ThemeNames() {
-				if name == "one-dark" {
+				if name == theme.DefaultThemeName {
 					fmt.Printf("* %s (default)\n", name)
 				} else {
 					fmt.Printf("  %s\n", name)

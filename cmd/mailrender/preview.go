@@ -35,7 +35,8 @@ func newPreviewCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&themeName, "theme", "nord", "theme name (nord, solarized-dark, gruvbox-dark)")
+	cmd.Flags().StringVar(&themeName, "theme", theme.DefaultThemeName,
+		"theme name ("+strings.Join(theme.ThemeNames(), ", ")+")")
 	cmd.Flags().IntVar(&width, "width", 78, "rendering width in columns")
 	return cmd
 }

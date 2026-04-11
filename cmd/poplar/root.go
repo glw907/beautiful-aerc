@@ -25,7 +25,7 @@ func newRootCmd() *cobra.Command {
 			return runRoot(f)
 		},
 	}
-	cmd.Flags().StringVarP(&f.theme, "theme", "t", "one-dark",
+	cmd.Flags().StringVarP(&f.theme, "theme", "t", theme.DefaultThemeName,
 		"color theme ("+strings.Join(theme.ThemeNames(), ", ")+")")
 	return cmd
 }

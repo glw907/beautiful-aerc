@@ -1,5 +1,10 @@
 package theme
 
+import "sort"
+
+// DefaultThemeName is the CLI name of the default theme.
+const DefaultThemeName = "one-dark"
+
 var oneDarkPalette = Palette{
 	BgBase:          "#282c34",
 	BgElevated:      "#31353f",
@@ -351,11 +356,10 @@ var Themes = map[string]*CompiledTheme{
 
 // ThemeNames returns the available theme names in alphabetical order.
 func ThemeNames() []string {
-	return []string{
-		"catppuccin-latte", "catppuccin-mocha", "dracula",
-		"everforest-dark", "everforest-light", "gruvbox-dark",
-		"gruvbox-light", "kanagawa", "nord", "one-dark",
-		"rose-pine", "rose-pine-dawn", "solarized-dark",
-		"solarized-light", "tokyo-night",
+	names := make([]string, 0, len(Themes))
+	for name := range Themes {
+		names = append(names, name)
 	}
+	sort.Strings(names)
+	return names
 }
