@@ -1,7 +1,7 @@
 # Poplar Compose System Design
 
 Spec for the poplar compose experience: inline editing in the right
-panel with sidebar and chrome visible, a built-in pico-level editor
+panel with sidebar and chrome visible, Catkin (the built-in editor)
 for v1, and neovim embedding via `--embed` RPC for v1.1.
 
 ## Motivation
@@ -18,7 +18,7 @@ client.
 
 | Editor | Version | How it works | Target user |
 |--------|---------|-------------|-------------|
-| Built-in (default) | v1 | Extended textarea with pico-level editing | Everyone |
+| Catkin (default) | v1 | Extended textarea with pico-level editing | Everyone |
 | Neovim | v1.1 | `nvim --embed` RPC grid renderer | Power users |
 
 Both editors render in the right panel's editor region. The compose
@@ -30,7 +30,7 @@ Config selects the editor:
 
 ```toml
 # ~/.config/poplar/config.toml
-editor = "builtin"  # default; "nvim" enables neovim embedding (v1.1)
+editor = "catkin"  # default; "nvim" enables neovim embedding (v1.1)
 ```
 
 ## Compose Panel Layout
@@ -111,15 +111,17 @@ type Editor interface {
 }
 ```
 
-Both the built-in editor and the future neovim editor satisfy this
+Both Catkin and the future neovim editor satisfy this
 interface. The compose panel calls only these methods — it never
 reaches into implementation details.
 
-## Built-in Editor (v1)
+## Catkin: The Built-in Editor (v1)
 
-Extended `bubbles/textarea` with pico-level editing and
-mail-specific features. The default compose experience that works
-out of the box with no configuration.
+Catkin is poplar's built-in compose editor — an extended
+`bubbles/textarea` with pico-level editing and mail-specific
+features. Named after the fuzzy flower clusters that poplar trees
+produce. The default compose experience that works out of the box
+with no configuration.
 
 ### Core Editing
 
@@ -415,7 +417,7 @@ features available.
 
 - Header region (bubbletea native, contact picker)
 - `Editor` interface (designed for future neovim implementation)
-- Built-in editor (extended textarea, all features listed above)
+- Catkin editor (extended textarea, all features listed above)
 - Compose lifecycle (prepare, edit, validate, send, abort, draft)
 - Send pipeline (block parser, goldmark HTML, format=flowed plain)
 - Inline reply support
@@ -429,6 +431,6 @@ features available.
 - poplar-embed nvim plugin
 - Config: `editor = "nvim"`
 
-The `Editor` interface is the seam. Pass 9 builds one
-implementation and the full compose infrastructure. The v1.1 pass
-adds a second implementation behind the same interface.
+The `Editor` interface is the seam. Pass 9 builds Catkin and the
+full compose infrastructure. The v1.1 pass adds the neovim
+implementation behind the same interface.
