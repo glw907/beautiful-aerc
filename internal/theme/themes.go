@@ -3,7 +3,7 @@ package theme
 var nordPalette = Palette{
 	BgBase:          "#2e3440",
 	BgElevated:      "#3b4252",
-	BgSelection:     "#394353",
+	BgSelection:     "#434c5e",
 	BgBorder:        "#49576b",
 	FgBase:          "#d8dee9",
 	FgBright:        "#e5e9f0",
@@ -22,7 +22,7 @@ var nordPalette = Palette{
 var solarizedDarkPalette = Palette{
 	BgBase:          "#002b36",
 	BgElevated:      "#073642",
-	BgSelection:     "#073642",
+	BgSelection:     "#134858",
 	BgBorder:        "#586e75",
 	FgBase:          "#839496",
 	FgBright:        "#93a1a1",
@@ -41,7 +41,7 @@ var solarizedDarkPalette = Palette{
 var gruvboxDarkPalette = Palette{
 	BgBase:          "#282828",
 	BgElevated:      "#3c3836",
-	BgSelection:     "#3c3836",
+	BgSelection:     "#504945",
 	BgBorder:        "#665c54",
 	FgBase:          "#ebdbb2",
 	FgBright:        "#fbf1c7",

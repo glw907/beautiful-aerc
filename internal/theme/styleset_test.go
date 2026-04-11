@@ -24,7 +24,7 @@ func TestGenerateStyleset(t *testing.T) {
 		{"success", "success.fg=#a3be8c"},
 		{"msglist unread", "msglist_unread.fg=#8fbcbb"},
 		{"tab selected", "tab.selected.bg=#88c0d0"},
-		{"selection", "*.selected.bg=#394353"},
+		{"selection", "*.selected.bg=#434c5e"},
 		{"quote 1", "quote_1.fg=#8fbcbb"},
 		{"diff add", "diff_add.fg=#a3be8c"},
 		{"diff del", "diff_del.fg=#bf616a"},
