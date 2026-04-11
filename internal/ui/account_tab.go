@@ -22,19 +22,23 @@ const sidebarWidth = 30
 
 // AccountTab is the main account view with sidebar and message list panels.
 type AccountTab struct {
-	styles  Styles
-	backend mail.Backend
-	focused Panel
-	width   int
-	height  int
+	styles      Styles
+	backend     mail.Backend
+	focused     Panel
+	selectedIdx int
+	folderCount int
+	width       int
+	height      int
 }
 
 // NewAccountTab creates an AccountTab using the given styles and backend.
 func NewAccountTab(styles Styles, backend mail.Backend) AccountTab {
+	folders, _ := backend.ListFolders()
 	return AccountTab{
-		styles:  styles,
-		backend: backend,
-		focused: SidebarPanel,
+		styles:      styles,
+		backend:     backend,
+		focused:     SidebarPanel,
+		folderCount: len(folders),
 	}
 }
 
@@ -48,11 +52,20 @@ func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case tea.KeyMsg:
-		if msg.Type == tea.KeyTab {
+		switch {
+		case msg.Type == tea.KeyTab:
 			if m.focused == SidebarPanel {
 				m.focused = MsgListPanel
 			} else {
 				m.focused = SidebarPanel
+			}
+		case m.focused == SidebarPanel && msg.String() == "j":
+			if m.selectedIdx < m.folderCount-1 {
+				m.selectedIdx++
+			}
+		case m.focused == SidebarPanel && msg.String() == "k":
+			if m.selectedIdx > 0 {
+				m.selectedIdx--
 			}
 		}
 	}
@@ -152,7 +165,7 @@ func (m AccountTab) View() string {
 // renderSidebar renders the account name, folder groups, and padding.
 func (m AccountTab) renderSidebar(width int) string {
 	// Account name line
-	acctLine := m.styles.Dim.Render(
+	acctLine := m.styles.SidebarAccount.Render(
 		lipgloss.NewStyle().Width(width).Render(" " + m.backend.AccountName()),
 	)
 
@@ -163,6 +176,7 @@ func (m AccountTab) renderSidebar(width int) string {
 	folders, _ := m.backend.ListFolders()
 	groups := groupFolders(folders)
 
+	folderIdx := 0
 	var folderLines []string
 	for gi, group := range groups {
 		if gi > 0 {
@@ -170,9 +184,8 @@ func (m AccountTab) renderSidebar(width int) string {
 		}
 		for _, f := range group {
 			icon := folderIcon(f)
-			// Icon is 2-cell wide in terminal. Format: " ┃ 󰇰  Name     count"
-			// or "   󰇰  Name     count" when not selected.
 			name := f.Name
+			selected := m.focused == SidebarPanel && folderIdx == m.selectedIdx
 
 			var countStr string
 			if f.Unseen > 0 {
@@ -181,8 +194,7 @@ func (m AccountTab) renderSidebar(width int) string {
 
 			// Build the line: " " + selection + icon + "  " + name + padding + count
 			var line string
-			if m.focused == SidebarPanel && f.Role == "inbox" {
-				// Selected indicator (hardcoded to Inbox for prototype)
+			if selected {
 				line = " ┃ " + icon + "  " + name
 			} else {
 				line = "   " + icon + "  " + name
@@ -194,7 +206,11 @@ func (m AccountTab) renderSidebar(width int) string {
 			line += strings.Repeat(" ", padNeeded) + countStr
 
 			rendered := lipgloss.NewStyle().Width(width).Render(line)
+			if selected {
+				rendered = m.styles.SidebarSelected.Width(width).Render(line)
+			}
 			folderLines = append(folderLines, rendered)
+			folderIdx++
 		}
 	}
 

@@ -33,6 +33,10 @@ type Styles struct {
 	// Selection (used by focus cycling)
 	Selection lipgloss.Style
 
+	// Sidebar
+	SidebarAccount  lipgloss.Style
+	SidebarSelected lipgloss.Style
+
 	// Placeholder text
 	Dim lipgloss.Style
 
@@ -80,6 +84,11 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgDim),
 
 		Selection: lipgloss.NewStyle().
+			Background(t.BgSelection),
+
+		SidebarAccount: lipgloss.NewStyle().
+			Foreground(t.AccentSecondary).Bold(true),
+		SidebarSelected: lipgloss.NewStyle().
 			Background(t.BgSelection),
 
 		Dim: lipgloss.NewStyle().
