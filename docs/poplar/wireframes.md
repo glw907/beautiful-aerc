@@ -11,67 +11,66 @@ See the UI design spec for the complete interface inventory:
 
 - Box-drawing characters for borders: `╭╮╰╯│─┃`
 - `┃` thick left bar for selected row indicator
-- Nerd Font glyphs rendered directly
+- Nerd Font glyphs rendered directly (2-cell wide in terminal)
 - Color annotations use theme slot names (`accent_primary`, `fg_dim`)
 - Default terminal: 120 columns x 40 rows
 - `←N→` for column widths
 - `[key]` for interactive elements
+- Tab bar uses bubbletea bubble style (not aerc `┬` separators)
 
 ---
 
 ## 1. Composite Layout
 
 Full application with all persistent chrome and both panels visible.
-This is the default view on launch — Inbox selected, message list
-focused.
+Shows the multi-tab state with a viewer tab open — this makes the
+tab bar visible as a distinct UI element. Inbox selected, message
+list focused.
 
 ```
-╭─ 󰇰 Inbox ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│←────────── 30 ──────────→│←───────────────────────────── remaining ──────────────────────────────────────────→│
-│                           │                                                                                   │
-│ ┃ 󰇰 Inbox              3 │  󰇮  Alice Johnson            Re: Project update for Q2 launch         10:32 AM   │
-│   󰏫 Drafts               │  󰇮  Bob Smith                 Weekly standup notes                      9:15 AM   │
-│   󰑚 Sent                 │  󰑚  Carol White               Re: Budget review                       Yesterday   │
-│   󰀼 Archive              │      Dave Chen                 Meeting minutes from Monday                Apr 07   │
-│                           │  󰈻  Eve Martinez              Quarterly report draft                     Apr 06   │
-│   󰍷 Spam             12  │      Frank Lee                 Re: Server migration plan                  Apr 05   │
-│   󰩺 Trash                │      ├─ Grace Kim              └─ Re: Server migration plan               Apr 05   │
-│                           │      │  └─ Frank Lee              Re: Server migration plan               Apr 05   │
-│   󰂚 Notifications        │      Hannah Park               New office supplies order                  Apr 04   │
-│   󰑴 Remind               │      Ivan Petrov                Conference travel request                 Apr 03   │
-│   󰡡 Lists/golang         │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-├───────────────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
-│ 󰇰 Inbox · 10 messages · 2 unread                                                                  ● connected│
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ d:del  a:archive  s:star  r:reply  R:all  f:fwd  c:compose  /:search  ?:help  ::cmd                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ╭───────────╮
+ │ 󰇰  Inbox  │  Re: Project update for Q2 launch
+─╯           ╰──────────────────────────────────────────────────────────────────────────────────────────────╮
+│←───────── 30 ─────────→│←──────────────────────────── remaining ──────────────────────────────────────→│
+│                         │                                                                               │
+│ ┃ 󰇰  Inbox           3 │  󰇮  Alice Johnson          Re: Project update for Q2 launch       10:32 AM   │
+│   󰏫  Drafts             │  󰇮  Bob Smith               Weekly standup notes                    9:15 AM   │
+│   󰑚  Sent               │  󰑚  Carol White             Re: Budget review                     Yesterday   │
+│   󰀼  Archive            │      Dave Chen               Meeting minutes from Monday              Apr 07   │
+│                         │  󰈻  Eve Martinez            Quarterly report draft                   Apr 06   │
+│   󰍷  Spam           12  │      Frank Lee               Re: Server migration plan                Apr 05   │
+│   󰩺  Trash              │      ├─ Grace Kim            └─ Re: Server migration plan             Apr 05   │
+│                         │      │  └─ Frank Lee            Re: Server migration plan              Apr 05   │
+│   󰂚  Notifications      │      Hannah Park             New office supplies order                Apr 04   │
+│   󰑴  Remind             │      Ivan Petrov             Conference travel request                Apr 03   │
+│   󰡡  Lists/golang       │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+├─────────────────────────┴───────────────────────────────────────────────────────────────────────────────┤
+│ 󰇰  Inbox · 10 messages · 2 unread                                                          ● connected │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ d:del  a:archive  s:star  r:reply  R:all  f:fwd  c:compose  /:search  ?:help  ::cmd                    │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 **Annotations:**
 
-- **Tab bar** (row 1): Active tab shows folder icon + name.
-  `accent_secondary` text on `bg_base`. Inactive tabs use `fg_dim`
-  on `bg_elevated`.
+- **Tab bar** (top 3 rows): Bubbletea-style tab bubbles — not
+  aerc's embedded-in-border `┬` style. Active tab is a rounded
+  bubble (`╭│╰╯`) in `accent_secondary` on `bg_base`. The active
+  tab's bottom edge opens into the content area (no border between
+  active tab and content). Inactive tabs are plain text in `fg_dim`
+  sitting on the connecting line. The connecting line merges into
+  the content frame's top-right corner (`╮`).
 - **Sidebar** (left, 30 cols): Three folder groups separated by
   blank lines. Selected row has `┃` thick left border in
   `accent_primary` + `bg_selection` full-width fill. Unread counts
@@ -92,41 +91,51 @@ focused.
 
 ## 2. Tab Bar (#18)
 
+Bubbletea-style tab bubbles. Active tab has rounded borders that
+open into the content area below. Inactive tabs are plain text on
+the connecting line.
+
 ### Single account tab (default on launch)
 
 ```
-╭─ 󰇰 Inbox ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ ╭───────────╮
+ │ 󰇰  Inbox  │
+─╯           ╰───────────────────────────────────────────────────────────────────────────────────────╮
 ```
 
 ### Multiple tabs (viewer open)
 
 ```
-╭─ 󰇰 Inbox ─┬─ Re: Project update for Q2 launch ─┬─────────────────────────────────────────────────────────────╮
+ ╭───────────╮
+ │ 󰇰  Inbox  │  Re: Project update for Q2 launch
+─╯           ╰──────────────────────────────────────────────────────────────────────────────────────╮
 ```
 
 ### Three tabs (two viewers open)
 
 ```
-╭─ 󰇰 Inbox ─┬─ Re: Project update ─┬─ Budget review ─┬──────────────────────────────────────────────────────────╮
+ ╭───────────╮
+ │ 󰇰  Inbox  │  Re: Project update  ·  Budget review
+─╯           ╰──────────────────────────────────────────────────────────────────────────────────────╮
 ```
 
 **Annotations:**
 
-- **Active tab:** `accent_secondary` text on `bg_base`. Bottom
-  border merges with content area (no visible line between tab
-  and content).
-- **Inactive tabs:** `fg_dim` text on `bg_elevated`. Visible
-  bottom border separating tab from content.
-- **Tab separator:** `┬` where tab borders meet the top edge.
-  `─` fills remaining space to the right edge.
-- **Account folder tabs:** Show folder icon + folder name.
-  Not closeable — always present. Title updates when folder
-  changes (e.g., switch from Inbox to Sent).
+- **Active tab:** Rounded bubble (`╭╮` top, `╯╰` bottom opening
+  into content). `accent_secondary` text on `bg_base`. Bottom edge
+  opens into content area — no visible line between active tab and
+  content.
+- **Inactive tabs:** Plain text in `fg_dim` on the connecting line.
+  No border — distinguished from active tab by color alone. `·` dot
+  separator between inactive tabs.
+- **Account folder tabs:** Show folder icon + folder name. Not
+  closeable — always present. Title updates when folder changes
+  (e.g., switch from Inbox to Sent).
 - **Viewer tabs:** Show message subject, truncated to fit.
   Closeable with `q`.
 - **Numeric switching:** `1-9` keys switch to tab by position.
-- **Overflow:** If tabs exceed terminal width, rightmost tabs
-  are truncated with `…`. Active tab is always fully visible.
+- **Overflow:** If tabs exceed terminal width, rightmost tabs are
+  truncated with `…`. Active tab is always fully visible.
 
 ---
 
@@ -135,49 +144,49 @@ focused.
 ### Focused, Inbox selected
 
 ```
- ┃ 󰇰 Inbox              3
-   󰏫 Drafts
-   󰑚 Sent
-   󰀼 Archive
+ ┃ 󰇰  Inbox             3
+   󰏫  Drafts
+   󰑚  Sent
+   󰀼  Archive
 
-   󰍷 Spam             12
-   󰩺 Trash
+   󰍷  Spam            12
+   󰩺  Trash
 
-   󰂚 Notifications
-   󰑴 Remind
-   󰡡 Lists/golang
-   󰡡 Lists/rust
+   󰂚  Notifications
+   󰑴  Remind
+   󰡡  Lists/golang
+   󰡡  Lists/rust
 ```
 
 ### Focused, selection in Disposal group
 
 ```
-   󰇰 Inbox              3
-   󰏫 Drafts
-   󰑚 Sent
-   󰀼 Archive
+   󰇰  Inbox             3
+   󰏫  Drafts
+   󰑚  Sent
+   󰀼  Archive
 
-   󰍷 Spam             12
- ┃ 󰩺 Trash
+   󰍷  Spam            12
+ ┃ 󰩺  Trash
 
-   󰂚 Notifications
-   󰑴 Remind
-   󰡡 Lists/golang
+   󰂚  Notifications
+   󰑴  Remind
+   󰡡  Lists/golang
 ```
 
 ### Unfocused (message list has focus)
 
 ```
-   󰇰 Inbox              3
-   󰏫 Drafts
-   󰑚 Sent
-   󰀼 Archive
+   󰇰  Inbox             3
+   󰏫  Drafts
+   󰑚  Sent
+   󰀼  Archive
 
-   󰍷 Spam             12
-   󰩺 Trash
+   󰍷  Spam            12
+   󰩺  Trash
 
-   󰂚 Notifications
-   󰑴 Remind
+   󰂚  Notifications
+   󰑴  Remind
 ```
 
 The selected folder (Inbox) still has `bg_selection` background
@@ -262,49 +271,52 @@ Full-width viewer in its own tab. No sidebar — the viewer uses
 the entire content area.
 
 ```
-╭─ 󰇰 Inbox ─┬─ Re: Project update for Q2 launch ─┬─────────────────────────────────────────────────────────────╮
-│                                                                                                               │
-│  From:     Alice Johnson <alice@example.com>                                                                  │
-│  To:       Geoff Wright <geoff@907.life>                                                                      │
-│  Date:     Thu, 10 Apr 2026 10:32:07 -0600                                                                    │
-│  Subject:  Re: Project update for Q2 launch                                                                   │
-│  ─────────────────────────────────────────────────────────────────────────────────────────────────────         │
-│                                                                                                               │
-│  Hey Geoff,                                                                                                   │
-│                                                                                                               │
-│  Just wanted to follow up on the Q2 launch timeline. I've attached the                                        │
-│  updated project plan with the revised milestones.                                                            │
-│                                                                                                               │
-│  ## Key changes                                                                                               │
-│                                                                                                               │
-│  - Beta release moved to April 15                                                                             │
-│  - QA window extended by one week                                                                             │
-│  - Launch date is now May 1                                                                                   │
-│                                                                                                               │
-│  Let me know if you have any concerns about the new timeline.                                                 │
-│                                                                                                               │
-│  > On Apr 9, 2026, Geoff Wright wrote:                                                                        │
-│  > Can you send me the updated project plan? I want to review the                                              │
-│  > milestones before our meeting on Friday.                                                                    │
-│                                                                                                               │
-│  Best,                                                                                                        │
-│  Alice                                                                                                        │
-│                                                                                                               │
-│                                                                                                               │
-│                                                                                                               │
-│                                                                                                               │
-│                                                                                                               │
-│                                                                                                               │
-│                                                                                                               │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Re: Project update for Q2 launch · 100%                                                            ● connected│
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ d:del  a:archive  s:star  r:reply  R:all  f:fwd  Tab:links  q:close                                          │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ╭───────────╮ ╭──────────────────────────────────────╮
+ │ 󰇰  Inbox  │ │ Re: Project update for Q2 launch     │
+─╯           ╰─╯                                      ╰────────────────────────────────────────────────────╮
+│                                                                                                          │
+│  From:     Alice Johnson <alice@example.com>                                                             │
+│  To:       Geoff Wright <geoff@907.life>                                                                 │
+│  Date:     Thu, 10 Apr 2026 10:32:07 -0600                                                               │
+│  Subject:  Re: Project update for Q2 launch                                                              │
+│  ──────────────────────────────────────────────────────────────────────────────────────────               │
+│                                                                                                          │
+│  Hey Geoff,                                                                                              │
+│                                                                                                          │
+│  Just wanted to follow up on the Q2 launch timeline. I've attached the                                   │
+│  updated project plan with the revised milestones.                                                       │
+│                                                                                                          │
+│  ## Key changes                                                                                          │
+│                                                                                                          │
+│  - Beta release moved to April 15                                                                        │
+│  - QA window extended by one week                                                                        │
+│  - Launch date is now May 1                                                                              │
+│                                                                                                          │
+│  Let me know if you have any concerns about the new timeline.                                            │
+│                                                                                                          │
+│  > On Apr 9, 2026, Geoff Wright wrote:                                                                   │
+│  > Can you send me the updated project plan? I want to review the                                        │
+│  > milestones before our meeting on Friday.                                                              │
+│                                                                                                          │
+│  Best,                                                                                                   │
+│  Alice                                                                                                   │
+│                                                                                                          │
+│                                                                                                          │
+│                                                                                                          │
+│                                                                                                          │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Re: Project update for Q2 launch · 100%                                                      ● connected │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ d:del  a:archive  s:star  r:reply  R:all  f:fwd  Tab:links  q:close                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 **Annotations:**
 
+- **Tab bar:** Bubbletea bubble style. Both tabs have rounded
+  bubbles here — the viewer tab is active (`accent_secondary`),
+  the account tab is inactive (`fg_dim`). Active tab's bottom
+  opens into the content area.
 - **Full width:** Viewer uses entire content area (no sidebar
   split). Opens in a new tab — the account folder tab remains
   available via `1` or tab switching.
@@ -427,9 +439,9 @@ Auto-dismissing feedback after an action. Replaces normal status
 bar content for 3 seconds.
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ ✓ Archived 1 message                                                                               ● connected│
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ✓ Archived 1 message                                                                       ● connected │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 Toast variants by action type:
@@ -448,15 +460,15 @@ Replaces status bar for reversible destructive actions. Action is
 deferred — not executed until the 5-second window expires.
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Deleted 1 message · press u to undo                                                                     [5s] │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Deleted 1 message · press u to undo                                                                [5s] │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Deleted 3 messages · press u to undo                                                                    [3s] │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Deleted 3 messages · press u to undo                                                               [3s] │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 ### Error banner (#10)
@@ -465,15 +477,15 @@ Persistent — does not auto-dismiss. Cleared by keypress or
 condition resolving (e.g., reconnection succeeds).
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ ✗ Connection lost — reconnecting…                                                                             │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ✗ Connection lost — reconnecting…                                                                       │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ ✗ Send failed: SMTP authentication error                                                                      │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ✗ Send failed: SMTP authentication error                                                                │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 ### Loading spinner (#11)
@@ -484,21 +496,21 @@ with braille dot pattern.
 #### Message list (fetching headers)
 
 ```
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                        ⣾ Loading messages…                                        │
-│                           │                                                                                   │
-│                           │                                                                                   │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                     ⣾ Loading messages…                                       │
+│                         │                                                                               │
+│                         │                                                                               │
 ```
 
 #### Viewer (fetching body)
 
 ```
-│                                                                                                               │
-│                                                                                                               │
-│                                    ⣾ Loading message…                                                         │
-│                                                                                                               │
-│                                                                                                               │
+│                                                                                                          │
+│                                                                                                          │
+│                                  ⣾ Loading message…                                                      │
+│                                                                                                          │
+│                                                                                                          │
 ```
 
 ### Connection status (#12)
@@ -506,9 +518,9 @@ with braille dot pattern.
 Persistent indicator at the right edge of the status bar.
 
 ```
-│ 󰇰 Inbox · 10 messages · 2 unread                                                                  ● connected│
-│ 󰇰 Inbox · 10 messages · 2 unread                                                             ◌ reconnecting… │
-│ 󰇰 Inbox · 10 messages · 2 unread                                                                  ○ offline  │
+│ 󰇰  Inbox · 10 messages · 2 unread                                                          ● connected │
+│ 󰇰  Inbox · 10 messages · 2 unread                                                     ◌ reconnecting…  │
+│ 󰇰  Inbox · 10 messages · 2 unread                                                          ○ offline   │
 ```
 
 **Annotations:**
@@ -536,17 +548,17 @@ Persistent indicator at the right edge of the status bar.
 Centered placeholder when a folder has no messages.
 
 ```
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                          No messages                                               │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
-│                           │                                                                                   │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                       No messages                                              │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
+│                         │                                                                               │
 ```
 
 ### Threaded view — expanded (#14)
@@ -583,9 +595,9 @@ Search query and result count shown in status bar. Message list
 filters to matching messages only.
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ 󰍉 search: "project update" · 3 results                                                            ● connected│
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 󰍉  search: "project update" · 3 results                                                   ● connected │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 `n/N` jump between results. `:clear` restores the full list.
@@ -606,11 +618,11 @@ Selected messages show a check icon in the flags column.
 Status bar and footer swap to bulk mode:
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ 3 selected                                                                                                    │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Space:toggle  d:del all  a:archive all  v:cancel  Esc:cancel                                                  │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 3 selected                                                                                              │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Space:toggle  d:del all  a:archive all  v:cancel  Esc:cancel                                            │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ### Focused panel cycling (#17)
@@ -658,9 +670,9 @@ Inline prompt in the status bar after the editor exits with code 0.
 Blocks all other input until answered.
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Send message?  y:send  n:abort  e:edit  p:postpone                                                            │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Send message?  y:send  n:abort  e:edit  p:postpone                                                      │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 ### Folder picker (#5)
@@ -674,16 +686,16 @@ Modal overlay for `:move` and `:copy`. Fuzzy-filtered folder list.
                        │                                          │
                        │  >                                       │
                        │                                          │
-                       │  ┃ 󰇰 Inbox                               │
-                       │    󰏫 Drafts                               │
-                       │    󰑚 Sent                                 │
-                       │    󰀼 Archive                              │
-                       │    󰍷 Spam                                 │
-                       │    󰩺 Trash                                │
-                       │    󰂚 Notifications                        │
-                       │    󰑴 Remind                               │
-                       │    󰡡 Lists/golang                         │
-                       │    󰡡 Lists/rust                           │
+                       │  ┃ 󰇰  Inbox                              │
+                       │    󰏫  Drafts                              │
+                       │    󰑚  Sent                                │
+                       │    󰀼  Archive                             │
+                       │    󰍷  Spam                                │
+                       │    󰩺  Trash                               │
+                       │    󰂚  Notifications                       │
+                       │    󰑴  Remind                              │
+                       │    󰡡  Lists/golang                        │
+                       │    󰡡  Lists/rust                          │
                        │                                          │
                        ╰──────────────────────────────────────────╯
 ```
@@ -695,8 +707,8 @@ Modal overlay for `:move` and `:copy`. Fuzzy-filtered folder list.
                        │                                          │
                        │  > arch                                  │
                        │                                          │
-                       │  ┃ 󰀼 Archive                             │
-                       │    󰡡 Lists/arch-linux                    │
+                       │  ┃ 󰀼  Archive                            │
+                       │    󰡡  Lists/arch-linux                   │
                        │                                          │
                        ╰──────────────────────────────────────────╯
 ```
@@ -707,9 +719,9 @@ Inline prompt in status bar for bulk delete (3+ messages).
 Single-message delete skips this and uses the undo bar instead.
 
 ```
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Delete 5 messages?  y:confirm  n:cancel                                                                       │
-├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Delete 5 messages?  y:confirm  n:cancel                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 ```
 
 **Annotations:**
