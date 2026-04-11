@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/glw907/beautiful-aerc/internal/content"
 	"github.com/glw907/beautiful-aerc/internal/filter"
@@ -40,12 +41,8 @@ func newPreviewCmd() *cobra.Command {
 }
 
 func resolveTheme(name string) *theme.CompiledTheme {
-	switch name {
-	case "solarized-dark":
-		return theme.SolarizedDark
-	case "gruvbox-dark":
-		return theme.GruvboxDark
-	default:
-		return theme.Nord
+	if t, ok := theme.Themes[strings.ToLower(name)]; ok {
+		return t
 	}
+	return theme.OneDark
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/glw907/beautiful-aerc/internal/theme"
 	"github.com/spf13/cobra"
@@ -22,7 +23,7 @@ func newThemesGenerateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "generate [theme-name]",
 		Short: "Generate aerc styleset from a compiled theme",
-		Long:  "Available themes: nord, solarized-dark, gruvbox-dark. Generates all if no name given.",
+		Long:  "Available themes: " + strings.Join(theme.ThemeNames(), ", ") + ". Generates all if no name given.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir, err := findConfigDir()
 			if err != nil {
@@ -33,22 +34,18 @@ func newThemesGenerateCmd() *cobra.Command {
 				return fmt.Errorf("create stylesets dir: %w", err)
 			}
 
-			themes := map[string]*theme.CompiledTheme{
-				"nord":           theme.Nord,
-				"solarized-dark": theme.SolarizedDark,
-				"gruvbox-dark":   theme.GruvboxDark,
-			}
-
 			if len(args) > 0 {
-				t, ok := themes[args[0]]
+				name := strings.ToLower(args[0])
+				t, ok := theme.Themes[name]
 				if !ok {
-					return fmt.Errorf("unknown theme %q (available: nord, solarized-dark, gruvbox-dark)", args[0])
+					return fmt.Errorf("unknown theme %q (available: %s)",
+						args[0], strings.Join(theme.ThemeNames(), ", "))
 				}
 				return generateOne(t, stylesetsDir)
 			}
 
-			for _, t := range []*theme.CompiledTheme{theme.Nord, theme.SolarizedDark, theme.GruvboxDark} {
-				if err := generateOne(t, stylesetsDir); err != nil {
+			for _, name := range theme.ThemeNames() {
+				if err := generateOne(theme.Themes[name], stylesetsDir); err != nil {
 					return err
 				}
 			}
