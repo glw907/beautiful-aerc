@@ -34,6 +34,10 @@ type Styles struct {
 
 	// Placeholder text
 	Dim lipgloss.Style
+
+	// Top line frame edge
+	TopLine   lipgloss.Style
+	ToastText lipgloss.Style
 }
 
 // NewStyles creates a Styles from a CompiledTheme.
@@ -74,5 +78,10 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 
 		Dim: lipgloss.NewStyle().
 			Foreground(t.FgDim),
+
+		TopLine: lipgloss.NewStyle().
+			Foreground(t.BgBorder),
+		ToastText: lipgloss.NewStyle().
+			Foreground(t.ColorSuccess),
 	}
 }
