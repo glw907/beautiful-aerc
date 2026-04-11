@@ -29,6 +29,21 @@ github.com/charmbracelet/bubbles
 
 `lipgloss` is already in `go.mod`.
 
+### Ecosystem evaluation
+
+The bubbletea community has no ready-made chrome shell components
+worth importing. `termkit/skeleton` provides multi-tab management
+but its model doesn't map to Poplar's opinionated design.
+`76creates/stickers` offers FlexBox layout but manual width
+arithmetic with `lipgloss.JoinVertical`/`JoinHorizontal` is
+simpler for our fixed layout. `rmhubbert/bubbletea-overlay` may
+be useful for the help popover (2.5b-5) — evaluate then.
+
+From official `bubbles`: use `help` (footer), `key` (bindings),
+`viewport` (viewer in 2.5b-4). Tab bar, status bar, and focus
+cycling are custom lipgloss — this is the idiomatic approach
+(Charm's own `soft-serve` does the same).
+
 ## Root Model (`internal/ui/app.go`)
 
 The root model owns:
@@ -134,10 +149,16 @@ tab 1's rendered width.
 - Inactive tab separator: `·` in `fg_dim`
 - Connecting line and frame corner: `bg_border`
 
+### Title truncation
+
+Each tab title is capped at 30 characters (truncated with `…`).
+This fits 3 tabs comfortably in 120 columns with bubble chrome.
+
 ### Overflow
 
-If tabs exceed terminal width, rightmost inactive tabs are
-truncated with `…`. Active tab is always fully visible.
+If even truncated tabs exceed terminal width, rightmost inactive
+tabs are dropped entirely and the last visible inactive tab shows
+`…`. Active tab is always fully visible.
 
 ## Status Bar
 
