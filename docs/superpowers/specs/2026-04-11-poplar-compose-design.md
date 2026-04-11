@@ -117,22 +117,45 @@ reaches into implementation details.
 
 ## Catkin: The Built-in Editor (v1)
 
-Catkin is poplar's built-in compose editor — an extended
-`bubbles/textarea` with pico-level editing and mail-specific
-features. Named after the fuzzy flower clusters that poplar trees
-produce. The default compose experience that works out of the box
-with no configuration.
+Catkin is poplar's built-in compose editor — a lightweight editor
+highly optimized for email, built as a premier bubbletea component.
+Named after the fuzzy flower clusters that poplar trees produce.
+Works out of the box with no configuration.
+
+### Design Philosophy
+
+Catkin is a reusable bubbletea component, not a poplar internal.
+It should be importable by any bubbletea application that needs a
+text editor — the email-specific features (reflow, quote handling,
+tidytext) are layered on top via poplar's compose panel, not
+baked into the core editor.
+
+**Package structure:**
+
+- `catkin/` — core editor component (standalone, no poplar
+  dependencies). Manages its own key sequences internally.
+- Poplar's compose panel wraps Catkin and adds email-specific
+  behavior (quote-aware reflow, tidytext, spellcheck, signature)
+
+Catkin is not modal, but its command vocabulary is vim-flavored.
+Users who know vim motions feel at home; users who don't can
+discover commands through the footer hints and `?` help. The goal
+is a non-modal editor where vim-literate users never reach for a
+manual.
 
 ### Core Editing
 
-- Insert, delete, backspace, word-delete
-- Word-level navigation (Ctrl+Left, Ctrl+Right)
-- Paragraph-level cut/paste (Ctrl+K / Ctrl+U) — a "paragraph" is
-  consecutive non-blank lines at the same quote depth
+- Insert, delete, backspace, word-delete (`dw`-style)
+- Word-level navigation (`w`/`b` or Ctrl+Left/Right)
+- Line start/end (`0`/`$` or Home/End)
+- Paragraph-level cut/paste (`dd`-paragraph / `p`) — a
+  "paragraph" is consecutive non-blank lines at the same quote
+  depth
 - Line-level cut (secondary binding)
 - Selection support for cut operations
-- Undo/redo
-- Search (Ctrl+W) with find-next
+- Undo/redo (`u` / Ctrl+R)
+- Search (`/`) with `n`/`N` for next/previous match
+- Jump to top/bottom (`gg`/`G`)
 
 ### Mail-Specific Features
 
