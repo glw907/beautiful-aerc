@@ -12,7 +12,7 @@ func TestRenderTabBar(t *testing.T) {
 
 	t.Run("single tab", func(t *testing.T) {
 		tabs := []tabInfo{{title: "Inbox", icon: "󰇰"}}
-		result := renderTabBar(tabs, 0, 80, styles)
+		result := renderTabBar(tabs, 0, 80, 30, styles)
 		lines := strings.Split(result, "\n")
 		if len(lines) != 3 {
 			t.Fatalf("expected 3 lines, got %d", len(lines))
@@ -20,11 +20,17 @@ func TestRenderTabBar(t *testing.T) {
 		if !strings.Contains(lines[0], "╭") {
 			t.Error("row 1 missing top-left corner")
 		}
+		if !strings.Contains(lines[0], "│") {
+			t.Error("row 1 missing right border")
+		}
 		if !strings.Contains(lines[1], "Inbox") {
 			t.Error("row 2 missing tab title")
 		}
 		if !strings.Contains(lines[2], "╯") {
-			t.Error("row 3 missing bottom-left corner")
+			t.Error("row 3 missing bottom corner")
+		}
+		if !strings.Contains(lines[2], "┬") {
+			t.Error("row 3 missing divider junction")
 		}
 	})
 
@@ -33,7 +39,7 @@ func TestRenderTabBar(t *testing.T) {
 			{title: "Inbox", icon: "󰇰"},
 			{title: "Re: Project update", icon: "󰇰"},
 		}
-		result := renderTabBar(tabs, 0, 80, styles)
+		result := renderTabBar(tabs, 0, 80, 30, styles)
 		if !strings.Contains(result, "Inbox") {
 			t.Error("missing active tab title")
 		}
@@ -47,7 +53,7 @@ func TestRenderTabBar(t *testing.T) {
 			{title: "Inbox", icon: "󰇰"},
 			{title: "Re: Project update", icon: "󰇰"},
 		}
-		result := renderTabBar(tabs, 1, 80, styles)
+		result := renderTabBar(tabs, 1, 80, 30, styles)
 		lines := strings.Split(result, "\n")
 		if !strings.Contains(lines[1], "Inbox") {
 			t.Error("row 2 missing inactive tab")
@@ -59,7 +65,7 @@ func TestRenderTabBar(t *testing.T) {
 			title: "This is a very long subject line that exceeds thirty characters",
 			icon:  "󰇰",
 		}}
-		result := renderTabBar(tabs, 0, 80, styles)
+		result := renderTabBar(tabs, 0, 80, 30, styles)
 		if !strings.Contains(result, "…") {
 			t.Error("long title not truncated with ellipsis")
 		}

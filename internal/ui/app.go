@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/beautiful-aerc/internal/mail"
@@ -57,7 +59,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		contentHeight := m.contentHeight()
-		tabMsg := tea.WindowSizeMsg{Width: m.width, Height: contentHeight}
+		tabMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: contentHeight}
 		updated, cmd := m.tabs[m.activeTab].Update(tabMsg)
 		m.tabs[m.activeTab] = updated.(Tab)
 		cmds = append(cmds, cmd)
@@ -105,8 +107,18 @@ func (m App) View() string {
 		tabs[i] = tabInfo{title: t.Title(), icon: t.Icon()}
 	}
 
-	tabBar := renderTabBar(tabs, m.activeTab, m.width, m.styles)
-	content := m.tabs[m.activeTab].View()
+	tabBar := renderTabBar(tabs, m.activeTab, m.width, sidebarWidth, m.styles)
+
+	// Add right border │ to each content line
+	rawContent := m.tabs[m.activeTab].View()
+	rightBorder := m.styles.FrameBorder.Render("│")
+	contentLines := strings.Split(rawContent, "\n")
+	for i, line := range contentLines {
+		pad := maxInt(0, m.width-1-lipgloss.Width(line))
+		contentLines[i] = line + strings.Repeat(" ", pad) + rightBorder
+	}
+	content := strings.Join(contentLines, "\n")
+
 	status := m.statusBar.View(m.width)
 	foot := m.footer.View(m.width)
 
