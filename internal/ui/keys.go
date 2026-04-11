@@ -45,6 +45,7 @@ func NewFolderJumpKeys() FolderJumpKeys {
 
 // MsgListKeys groups for the message list footer.
 type MsgListKeys struct {
+	nav    keyGroup
 	triage keyGroup
 	reply  keyGroup
 	app    keyGroup
@@ -53,6 +54,10 @@ type MsgListKeys struct {
 // NewMsgListKeys returns the default message list key bindings.
 func NewMsgListKeys() MsgListKeys {
 	return MsgListKeys{
+		nav: keyGroup{
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "messages")),
+			key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "folders")),
+		},
 		triage: keyGroup{
 			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "del")),
 			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive")),
@@ -74,11 +79,12 @@ func NewMsgListKeys() MsgListKeys {
 
 // Groups returns the keybinding groups for footer rendering.
 func (k MsgListKeys) Groups() []keyGroup {
-	return []keyGroup{k.triage, k.reply, k.app}
+	return []keyGroup{k.nav, k.triage, k.reply, k.app}
 }
 
 // SidebarKeys groups for the sidebar footer.
 type SidebarKeys struct {
+	nav    keyGroup
 	action keyGroup
 	folder keyGroup
 	app    keyGroup
@@ -88,6 +94,9 @@ type SidebarKeys struct {
 func NewSidebarKeys() SidebarKeys {
 	fj := NewFolderJumpKeys()
 	return SidebarKeys{
+		nav: keyGroup{
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "folders")),
+		},
 		action: keyGroup{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Enter", "open")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compose")),
@@ -102,7 +111,7 @@ func NewSidebarKeys() SidebarKeys {
 
 // Groups returns the keybinding groups for footer rendering.
 func (k SidebarKeys) Groups() []keyGroup {
-	return []keyGroup{k.action, k.folder, k.app}
+	return []keyGroup{k.nav, k.action, k.folder, k.app}
 }
 
 // ViewerKeys groups for the viewer footer.

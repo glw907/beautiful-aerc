@@ -169,8 +169,8 @@ func (m AccountTab) renderSidebar(width int) string {
 		lipgloss.NewStyle().Width(width).Render(" " + m.backend.AccountName()),
 	)
 
-	// Blank separator
-	blank := strings.Repeat(" ", width)
+	// Blank separator (with sidebar background)
+	blank := m.styles.SidebarBg.Width(width).Render("")
 
 	// Build folder lines
 	folders, _ := m.backend.ListFolders()
@@ -205,9 +205,11 @@ func (m AccountTab) renderSidebar(width int) string {
 			padNeeded := maxInt(0, width-lineWidth-countWidth-1)
 			line += strings.Repeat(" ", padNeeded) + countStr
 
-			rendered := lipgloss.NewStyle().Width(width).Render(line)
+			var rendered string
 			if selected {
 				rendered = m.styles.SidebarSelected.Width(width).Render(line)
+			} else {
+				rendered = m.styles.SidebarBg.Width(width).Render(line)
 			}
 			folderLines = append(folderLines, rendered)
 			folderIdx++
@@ -219,7 +221,7 @@ func (m AccountTab) renderSidebar(width int) string {
 	lines = append(lines, acctLine, blank)
 	lines = append(lines, folderLines...)
 
-	// Pad remaining height
+	// Pad remaining height with sidebar background
 	for len(lines) < m.height {
 		lines = append(lines, blank)
 	}

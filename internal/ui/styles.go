@@ -34,6 +34,7 @@ type Styles struct {
 	Selection lipgloss.Style
 
 	// Sidebar
+	SidebarBg       lipgloss.Style
 	SidebarAccount  lipgloss.Style
 	SidebarSelected lipgloss.Style
 
@@ -86,8 +87,11 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		Selection: lipgloss.NewStyle().
 			Background(t.BgSelection),
 
+		SidebarBg: lipgloss.NewStyle().
+			Background(t.BgElevated),
 		SidebarAccount: lipgloss.NewStyle().
-			Foreground(t.AccentSecondary).Bold(true),
+			Foreground(t.AccentSecondary).Bold(true).
+			Background(t.BgElevated),
 		SidebarSelected: lipgloss.NewStyle().
 			Background(t.BgSelection),
 
