@@ -234,11 +234,15 @@ both panels. Bubbletea sends `tea.WindowSizeMsg` on every resize.
 - Below the breakpoint, the sidebar panel is not rendered and
   the divider is removed. The right panel (message list or
   viewer) uses the full content width.
+- The top frame line shows `account · folder` on the left so
+  the user retains context when the sidebar is hidden:
+  `geoff@907.life · Inbox ──── ✓ 3 archived ─╮`
 - The sidebar can still be accessed via `Tab` focus cycling —
   when the sidebar gains focus below the breakpoint, it renders
   as a full-width panel replacing the message list/viewer.
 - Above the breakpoint, both panels are always visible. `Tab`
-  cycles focus between them.
+  cycles focus between them. The top line is a plain frame edge
+  (account and folder are in the sidebar).
 - The breakpoint is evaluated on every `tea.WindowSizeMsg`.
   Resizing the terminal live transitions smoothly.
 - The `┬` and `┴` junction characters on the top and bottom
@@ -332,7 +336,7 @@ or viewer).
 #### Responsive: Narrow Terminal (< 106 cols)
 
 ```
-──────────────────────────────────────────────────────────────────────────╮
+ geoff@907.life · Inbox ──────────────────────────────────────────────────╮
 │                                                                         │
 │ 󰇮  Alice Johnson          Re: Project update for Q2 launch   10:32 AM  │
 │ 󰇮  Bob Smith               Weekly standup notes                9:15 AM  │
