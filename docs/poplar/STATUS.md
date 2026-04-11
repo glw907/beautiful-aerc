@@ -26,9 +26,10 @@ single-key folder jumps defined. Ready for sidebar prototype (Pass 2.5b-2).
 | 6 | Triage actions | pending |
 | 7 | Command mode + search | pending |
 | 8 | Gmail IMAP | pending |
-| 9 | Compose + send | pending |
+| 9 | Compose + send (Catkin editor, inline compose) | pending |
 | 10 | Config | pending |
 | 11 | Polish for daily use | pending |
+| 1.1 | Neovim embedding (nvim --embed RPC) | pending |
 
 ## Plans
 
@@ -50,6 +51,7 @@ single-key folder jumps defined. Ready for sidebar prototype (Pass 2.5b-2).
 - [Keybinding map](../poplar/keybindings.md)
 - [Theme selection spec](../superpowers/specs/2026-04-11-poplar-themes-design.md)
 - [Theme selection plan](../superpowers/plans/2026-04-11-poplar-themes.md)
+- [Compose system spec](../superpowers/specs/2026-04-11-poplar-compose-design.md)
 
 ## Continuing Development
 
