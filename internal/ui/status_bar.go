@@ -38,24 +38,28 @@ func (sb *StatusBar) SetCounts(total, unread int) {
 	sb.unread = unread
 }
 
-// SetConnected sets the connection state to connected or offline.
-func (sb *StatusBar) SetConnected(connected bool) {
-	if connected {
-		sb.connState = Connected
-	} else {
-		sb.connState = Offline
-	}
-}
-
 // SetConnectionState sets the connection state directly.
 func (sb *StatusBar) SetConnectionState(state ConnectionState) {
 	sb.connState = state
 }
 
+// buildFill creates a horizontal line of width chars with ┴ at dividerCol.
+func buildFill(width, dividerCol int) string {
+	var buf strings.Builder
+	buf.Grow(width * 3) // UTF-8 box-drawing chars are 3 bytes
+	for i := 0; i < width; i++ {
+		if dividerCol > 0 && i == dividerCol {
+			buf.WriteRune('┴')
+		} else {
+			buf.WriteRune('─')
+		}
+	}
+	return buf.String()
+}
+
 // View renders the status bar at the given width. dividerCol is the
 // column position of the panel divider (0 to skip the junction).
 func (sb StatusBar) View(width, dividerCol int) string {
-	// Build the right portion: " 10 messages · 3 unread · ● connected ─╯"
 	counts := fmt.Sprintf("%d messages", sb.total)
 	if sb.unread > 0 {
 		counts += fmt.Sprintf(" · %d unread", sb.unread)
@@ -82,19 +86,8 @@ func (sb StatusBar) View(width, dividerCol int) string {
 	rightPlain := " " + counts + " · " + connIcon + " " + connText + " ─╯"
 	rightWidth := lipgloss.Width(rightPlain)
 
-	// Build left fill with ┴ at dividerCol.
-	fillWidth := maxInt(0, width-rightWidth)
-	var buf strings.Builder
-	for i := 0; i < fillWidth; i++ {
-		if dividerCol > 0 && i == dividerCol {
-			buf.WriteRune('┴')
-		} else {
-			buf.WriteRune('─')
-		}
-	}
-
-	// Render each segment with styles. The fill uses TopLine style (frame color).
-	fillPart := sb.styles.TopLine.Render(buf.String())
+	fillWidth := max(0, width-rightWidth)
+	fillPart := sb.styles.TopLine.Render(buildFill(fillWidth, dividerCol))
 	countsPart := sb.styles.StatusBar.Render(" " + counts + " · ")
 	connIconPart := connStyle.Render(connIcon)
 	connTextPart := sb.styles.StatusBar.Render(" " + connText + " ")
@@ -107,20 +100,8 @@ func (sb StatusBar) View(width, dividerCol int) string {
 	if actual < width {
 		result += strings.Repeat("─", width-actual)
 	} else if actual > width {
-		// Trim the fill to compensate.
-		trimmed := fillWidth - (actual - width)
-		if trimmed < 0 {
-			trimmed = 0
-		}
-		var buf2 strings.Builder
-		for i := 0; i < trimmed; i++ {
-			if dividerCol > 0 && i == dividerCol {
-				buf2.WriteRune('┴')
-			} else {
-				buf2.WriteRune('─')
-			}
-		}
-		fillPart = sb.styles.TopLine.Render(buf2.String())
+		trimmed := max(0, fillWidth-(actual-width))
+		fillPart = sb.styles.TopLine.Render(buildFill(trimmed, dividerCol))
 		result = fillPart + countsPart + connIconPart + connTextPart + endPart
 	}
 

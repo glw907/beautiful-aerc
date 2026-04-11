@@ -32,7 +32,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend) App {
 		inbox := folders[0]
 		sb.SetCounts(inbox.Exists, inbox.Unseen)
 	}
-	sb.SetConnected(true)
+	sb.SetConnectionState(Connected)
 
 	return App{
 		acct:      acct,
@@ -94,7 +94,7 @@ func (m App) View() string {
 	rightBorder := m.styles.FrameBorder.Render("│")
 	contentLines := strings.Split(rawContent, "\n")
 	for i, line := range contentLines {
-		pad := maxInt(0, m.width-1-lipgloss.Width(line))
+		pad := max(0, m.width-1-lipgloss.Width(line))
 		contentLines[i] = line + strings.Repeat(" ", pad) + rightBorder
 	}
 	content := strings.Join(contentLines, "\n")

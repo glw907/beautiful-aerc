@@ -25,8 +25,8 @@ type AccountTab struct {
 	styles      Styles
 	backend     mail.Backend
 	focused     Panel
+	folders     []mail.Folder
 	selectedIdx int
-	folderCount int
 	width       int
 	height      int
 }
@@ -35,10 +35,10 @@ type AccountTab struct {
 func NewAccountTab(styles Styles, backend mail.Backend) AccountTab {
 	folders, _ := backend.ListFolders()
 	return AccountTab{
-		styles:      styles,
-		backend:     backend,
-		focused:     SidebarPanel,
-		folderCount: len(folders),
+		styles:  styles,
+		backend: backend,
+		focused: SidebarPanel,
+		folders: folders,
 	}
 }
 
@@ -60,7 +60,7 @@ func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
 				m.focused = SidebarPanel
 			}
 		case m.focused == SidebarPanel && msg.String() == "j":
-			if m.selectedIdx < m.folderCount-1 {
+			if m.selectedIdx < len(m.folders)-1 {
 				m.selectedIdx++
 			}
 		case m.focused == SidebarPanel && msg.String() == "k":
@@ -152,7 +152,7 @@ func (m AccountTab) View() string {
 		return ""
 	}
 
-	sw := minInt(sidebarWidth, m.width/2)
+	sw := min(sidebarWidth, m.width/2)
 	mw := m.width - sw - 1 // -1 for divider
 
 	sidebar := m.renderSidebar(sw)
@@ -164,17 +164,11 @@ func (m AccountTab) View() string {
 
 // renderSidebar renders the account name, folder groups, and padding.
 func (m AccountTab) renderSidebar(width int) string {
-	// Account name line
-	acctLine := m.styles.SidebarAccount.Render(
-		lipgloss.NewStyle().Width(width).Render(" " + m.backend.AccountName()),
-	)
+	acctLine := m.styles.SidebarAccount.Width(width).Render(" " + m.backend.AccountName())
 
-	// Blank separator (with sidebar background)
 	blank := m.styles.SidebarBg.Width(width).Render("")
 
-	// Build folder lines
-	folders, _ := m.backend.ListFolders()
-	groups := groupFolders(folders)
+	groups := groupFolders(m.folders)
 
 	folderIdx := 0
 	var folderLines []string
@@ -192,7 +186,6 @@ func (m AccountTab) renderSidebar(width int) string {
 				countStr = fmt.Sprintf("%d", f.Unseen)
 			}
 
-			// Build the line: " " + selection + icon + "  " + name + padding + count
 			var line string
 			if selected {
 				line = " ┃ " + icon + "  " + name
@@ -201,8 +194,8 @@ func (m AccountTab) renderSidebar(width int) string {
 			}
 
 			lineWidth := lipgloss.Width(line)
-			countWidth := lipgloss.Width(countStr)
-			padNeeded := maxInt(0, width-lineWidth-countWidth-1)
+			countWidth := len(countStr)
+			padNeeded := max(0, width-lineWidth-countWidth-1)
 			line += strings.Repeat(" ", padNeeded) + countStr
 
 			var rendered string
@@ -216,12 +209,10 @@ func (m AccountTab) renderSidebar(width int) string {
 		}
 	}
 
-	// Assemble: acct name, blank, folders, then pad to full height
 	var lines []string
 	lines = append(lines, acctLine, blank)
 	lines = append(lines, folderLines...)
 
-	// Pad remaining height with sidebar background
 	for len(lines) < m.height {
 		lines = append(lines, blank)
 	}
@@ -231,19 +222,21 @@ func (m AccountTab) renderSidebar(width int) string {
 
 // renderPlaceholder renders a centered label in a panel of the given size.
 func renderPlaceholder(label string, width, height int, focused bool, s Styles) string {
-	topPad := maxInt(0, (height-1)/2)
-	botPad := maxInt(0, height-1-topPad)
-	leftPad := maxInt(0, (width-len(label))/2)
+	topPad := max(0, (height-1)/2)
+	botPad := max(0, height-1-topPad)
+	leftPad := max(0, (width-len(label))/2)
+
+	focusedPad := lipgloss.NewStyle().
+		Width(width).
+		Background(s.Selection.GetBackground())
+	unfocusedPad := strings.Repeat(" ", width)
 
 	var lines []string
 	for i := 0; i < topPad; i++ {
 		if focused {
-			lines = append(lines, lipgloss.NewStyle().
-				Width(width).
-				Background(s.Selection.GetBackground()).
-				Render(""))
+			lines = append(lines, focusedPad.Render(""))
 		} else {
-			lines = append(lines, strings.Repeat(" ", width))
+			lines = append(lines, unfocusedPad)
 		}
 	}
 
@@ -263,12 +256,9 @@ func renderPlaceholder(label string, width, height int, focused bool, s Styles) 
 
 	for i := 0; i < botPad; i++ {
 		if focused {
-			lines = append(lines, lipgloss.NewStyle().
-				Width(width).
-				Background(s.Selection.GetBackground()).
-				Render(""))
+			lines = append(lines, focusedPad.Render(""))
 		} else {
-			lines = append(lines, strings.Repeat(" ", width))
+			lines = append(lines, unfocusedPad)
 		}
 	}
 
@@ -283,18 +273,4 @@ func renderDivider(height int, s Styles) string {
 		lines[i] = div
 	}
 	return strings.Join(lines, "\n")
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
