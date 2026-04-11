@@ -67,11 +67,18 @@ func (m AccountTab) View() string {
 	sw := minInt(sidebarWidth, m.width/2)
 	mw := m.width - sw - 1 // -1 for divider
 
-	sidebarContent := renderPlaceholder("Sidebar", sw, m.height, m.focused == SidebarPanel, m.styles)
+	// Sidebar: account name + blank line + placeholder body
+	acctName := m.styles.Dim.Render(
+		lipgloss.NewStyle().Width(sw).Render(" " + m.backend.AccountName()),
+	)
+	blankLine := strings.Repeat(" ", sw)
+	sidebarBody := renderPlaceholder("Sidebar", sw, m.height-2, m.focused == SidebarPanel, m.styles)
+	sidebar := acctName + "\n" + blankLine + "\n" + sidebarBody
+
 	divider := renderDivider(m.height, m.styles)
 	msglistContent := renderPlaceholder("Message List", mw, m.height, m.focused == MsgListPanel, m.styles)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarContent, divider, msglistContent)
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, divider, msglistContent)
 }
 
 // renderPlaceholder renders a centered label in a panel of the given size.

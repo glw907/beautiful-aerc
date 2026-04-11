@@ -40,6 +40,15 @@ func TestAccountTab(t *testing.T) {
 		}
 	})
 
+	t.Run("view shows account name", func(t *testing.T) {
+		tab := NewAccountTab(styles, backend)
+		tab, _ = tab.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+		view := stripANSI(tab.View())
+		if !strings.Contains(view, "geoff@907.life") {
+			t.Error("sidebar should show account name")
+		}
+	})
+
 	t.Run("window size", func(t *testing.T) {
 		tab := NewAccountTab(styles, backend)
 		tab, _ = tab.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
