@@ -7,55 +7,122 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// StatusBar renders a one-row status line with folder info and connection state.
+// ConnectionState represents the mail connection status.
+type ConnectionState int
+
+const (
+	Connected    ConnectionState = iota
+	Offline
+	Reconnecting
+)
+
+// StatusBar renders the bottom frame edge with combined status indicator.
 type StatusBar struct {
 	styles    Styles
-	icon      string
-	folder    string
 	total     int
 	unread    int
-	connected bool
+	connState ConnectionState
 }
 
 // NewStatusBar creates a StatusBar with the given styles.
 func NewStatusBar(styles Styles) StatusBar {
 	return StatusBar{
 		styles:    styles,
-		connected: true,
+		connState: Connected,
 	}
 }
 
-// SetFolder updates the displayed folder information.
-func (sb *StatusBar) SetFolder(icon, name string, total, unread int) {
-	sb.icon = icon
-	sb.folder = name
+// SetCounts updates the message and unread counts.
+func (sb *StatusBar) SetCounts(total, unread int) {
 	sb.total = total
 	sb.unread = unread
 }
 
-// SetConnected updates the connection state.
+// SetConnected sets the connection state to connected or offline.
 func (sb *StatusBar) SetConnected(connected bool) {
-	sb.connected = connected
+	if connected {
+		sb.connState = Connected
+	} else {
+		sb.connState = Offline
+	}
 }
 
-// View renders the status bar at the given width.
-func (sb StatusBar) View(width int) string {
-	left := fmt.Sprintf(" %s  %s · %d messages", sb.icon, sb.folder, sb.total)
+// SetConnectionState sets the connection state directly.
+func (sb *StatusBar) SetConnectionState(state ConnectionState) {
+	sb.connState = state
+}
+
+// View renders the status bar at the given width. dividerCol is the
+// column position of the panel divider (0 to skip the junction).
+func (sb StatusBar) View(width, dividerCol int) string {
+	// Build the right portion: " 10 messages · 3 unread · ● connected ─╯"
+	counts := fmt.Sprintf("%d messages", sb.total)
 	if sb.unread > 0 {
-		left += fmt.Sprintf(" · %d unread", sb.unread)
+		counts += fmt.Sprintf(" · %d unread", sb.unread)
 	}
 
-	var right string
-	if sb.connected {
-		dot := sb.styles.StatusConnected.Render("●")
-		right = dot + " connected "
-	} else {
-		dot := sb.styles.StatusOffline.Render("●")
-		right = dot + " offline "
+	var connIcon, connText string
+	var connStyle lipgloss.Style
+	switch sb.connState {
+	case Connected:
+		connIcon = "●"
+		connText = "connected"
+		connStyle = sb.styles.StatusConnected
+	case Offline:
+		connIcon = "○"
+		connText = "offline"
+		connStyle = sb.styles.StatusOffline
+	case Reconnecting:
+		connIcon = "◐"
+		connText = "reconnecting"
+		connStyle = sb.styles.StatusReconnect
 	}
 
-	gap := maxInt(0, width-lipgloss.Width(left)-lipgloss.Width(right))
-	middle := strings.Repeat(" ", gap)
+	// Measure right portion width using plain text (no ANSI).
+	rightPlain := " " + counts + " · " + connIcon + " " + connText + " ─╯"
+	rightWidth := lipgloss.Width(rightPlain)
 
-	return sb.styles.StatusBar.Render(left + middle + right)
+	// Build left fill with ┴ at dividerCol.
+	fillWidth := maxInt(0, width-rightWidth)
+	var buf strings.Builder
+	for i := 0; i < fillWidth; i++ {
+		if dividerCol > 0 && i == dividerCol {
+			buf.WriteRune('┴')
+		} else {
+			buf.WriteRune('─')
+		}
+	}
+
+	// Render each segment with styles. The fill uses TopLine style (frame color).
+	fillPart := sb.styles.TopLine.Render(buf.String())
+	countsPart := sb.styles.StatusBar.Render(" " + counts + " · ")
+	connIconPart := connStyle.Render(connIcon)
+	connTextPart := sb.styles.StatusBar.Render(" " + connText + " ")
+	endPart := sb.styles.TopLine.Render("─╯")
+
+	result := fillPart + countsPart + connIconPart + connTextPart + endPart
+
+	// Clamp to exact width if lipgloss rounding causes drift.
+	actual := lipgloss.Width(result)
+	if actual < width {
+		result += strings.Repeat("─", width-actual)
+	} else if actual > width {
+		// Trim the fill to compensate.
+		trimmed := fillWidth - (actual - width)
+		if trimmed < 0 {
+			trimmed = 0
+		}
+		var buf2 strings.Builder
+		for i := 0; i < trimmed; i++ {
+			if dividerCol > 0 && i == dividerCol {
+				buf2.WriteRune('┴')
+			} else {
+				buf2.WriteRune('─')
+			}
+		}
+		fillPart = sb.styles.TopLine.Render(buf2.String())
+		result = fillPart + countsPart + connIconPart + connTextPart + endPart
+	}
+
+	return result
 }

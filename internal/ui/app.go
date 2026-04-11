@@ -30,7 +30,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend) App {
 	folders, _ := backend.ListFolders()
 	if len(folders) > 0 {
 		inbox := folders[0]
-		sb.SetFolder("󰇰", inbox.Name, inbox.Exists, inbox.Unseen)
+		sb.SetCounts(inbox.Exists, inbox.Unseen)
 	}
 	sb.SetConnected(true)
 
@@ -98,7 +98,7 @@ func (m App) View() string {
 	}
 	content := strings.Join(contentLines, "\n")
 
-	status := m.statusBar.View(m.width)
+	status := m.statusBar.View(m.width, sidebarWidth)
 	foot := m.footer.View(m.width)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
