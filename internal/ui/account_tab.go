@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,35 +21,53 @@ const sidebarWidth = 30
 
 // AccountTab is the main account view with sidebar and message list panels.
 type AccountTab struct {
-	styles      Styles
-	backend     mail.Backend
-	focused     Panel
-	folders     []mail.Folder
-	selectedIdx int
-	width       int
-	height      int
+	styles  Styles
+	backend mail.Backend
+	focused Panel
+	sidebar Sidebar
+	width   int
+	height  int
 }
 
 // NewAccountTab creates an AccountTab using the given styles and backend.
 func NewAccountTab(styles Styles, backend mail.Backend) AccountTab {
 	folders, _ := backend.ListFolders()
+	sb := NewSidebar(styles, folders, sidebarWidth, 1)
+
 	return AccountTab{
 		styles:  styles,
 		backend: backend,
 		focused: SidebarPanel,
-		folders: folders,
+		sidebar: sb,
 	}
 }
+
+// Title returns the current folder name.
+func (m AccountTab) Title() string { return m.sidebar.SelectedFolder() }
+
+// Icon returns the folder's Nerd Font icon.
+func (m AccountTab) Icon() string { return m.sidebar.SelectedIcon() }
+
+// Closeable returns false — the account tab cannot be closed.
+func (m AccountTab) Closeable() bool { return false }
 
 // Init returns no initial command.
 func (m AccountTab) Init() tea.Cmd { return nil }
 
-// Update handles key events and window size changes.
+// Update satisfies tea.Model. Delegates to updateTab for typed access.
 func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
+	return m.updateTab(msg)
+}
+
+// updateTab handles key events and window size changes, returning the typed model.
+func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		sw := min(sidebarWidth, m.width/2)
+		m.sidebar.SetSize(sw, m.height-2) // -2 for account name + blank line
+
 	case tea.KeyMsg:
 		switch {
 		case msg.Type == tea.KeyTab:
@@ -59,94 +76,31 @@ func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
 			} else {
 				m.focused = SidebarPanel
 			}
-		case m.focused == SidebarPanel && msg.String() == "j":
-			if m.selectedIdx < len(m.folders)-1 {
-				m.selectedIdx++
-			}
-		case m.focused == SidebarPanel && msg.String() == "k":
-			if m.selectedIdx > 0 {
-				m.selectedIdx--
+			m.sidebar.SetFocused(m.focused == SidebarPanel)
+
+		default:
+			if m.focused == SidebarPanel {
+				m.handleSidebarKey(msg)
 			}
 		}
 	}
 	return m, nil
 }
 
-// Folder icons indexed by role or name for sidebar display.
-var folderIcons = map[string]string{
-	"inbox":         "󰇰",
-	"drafts":        "󰏫",
-	"sent":          "󰑚",
-	"archive":       "󰀼",
-	"junk":          "󰍷",
-	"trash":         "󰩺",
-	"Notifications": "󰂚",
-	"Remind":        "󰑴",
+// handleSidebarKey routes key events to sidebar actions.
+// J/K (uppercase) navigate folders. j/k are reserved for messages.
+func (m *AccountTab) handleSidebarKey(msg tea.KeyMsg) {
+	switch msg.String() {
+	case "J", "down":
+		m.sidebar.MoveDown()
+	case "K", "up":
+		m.sidebar.MoveUp()
+	case "G":
+		m.sidebar.MoveToBottom()
+	}
 }
 
-const defaultFolderIcon = "󰡡"
-
-// folderIcon returns the icon for a folder by role, then name, then default.
-func folderIcon(f mail.Folder) string {
-	if f.Role != "" {
-		if icon, ok := folderIcons[f.Role]; ok {
-			return icon
-		}
-	}
-	if icon, ok := folderIcons[f.Name]; ok {
-		return icon
-	}
-	return defaultFolderIcon
-}
-
-// Folder groups: primary (inbox..archive), disposal (spam, trash),
-// custom (everything else). Groups are separated by blank lines.
-func groupFolders(folders []mail.Folder) [][]mail.Folder {
-	primary := []string{"inbox", "drafts", "sent", "archive"}
-	disposal := []string{"junk", "trash"}
-	isPrimary := func(f mail.Folder) bool {
-		for _, r := range primary {
-			if f.Role == r {
-				return true
-			}
-		}
-		return false
-	}
-	isDisposal := func(f mail.Folder) bool {
-		for _, r := range disposal {
-			if f.Role == r {
-				return true
-			}
-		}
-		return false
-	}
-
-	var p, d, c []mail.Folder
-	for _, f := range folders {
-		switch {
-		case isPrimary(f):
-			p = append(p, f)
-		case isDisposal(f):
-			d = append(d, f)
-		default:
-			c = append(c, f)
-		}
-	}
-
-	var groups [][]mail.Folder
-	if len(p) > 0 {
-		groups = append(groups, p)
-	}
-	if len(d) > 0 {
-		groups = append(groups, d)
-	}
-	if len(c) > 0 {
-		groups = append(groups, c)
-	}
-	return groups
-}
-
-// View renders the two-panel layout with sidebar folders and message list.
+// View renders the sidebar + divider + message list placeholder.
 func (m AccountTab) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
@@ -155,69 +109,32 @@ func (m AccountTab) View() string {
 	sw := min(sidebarWidth, m.width/2)
 	mw := m.width - sw - 1 // -1 for divider
 
-	sidebar := m.renderSidebar(sw)
+	// Account name line + blank line + folder rows = sidebar view
+	acctLine := m.styles.SidebarAccount.Width(sw).Render(" " + m.backend.AccountName())
+	blank := m.styles.SidebarBg.Width(sw).Render("")
+
+	// Sidebar content: account name + blank + folder list
+	sidebarFolders := m.sidebar.View()
+
+	var sidebarLines []string
+	sidebarLines = append(sidebarLines, acctLine, blank)
+	if sidebarFolders != "" {
+		sidebarLines = append(sidebarLines, strings.Split(sidebarFolders, "\n")...)
+	}
+
+	// Pad to height
+	for len(sidebarLines) < m.height {
+		sidebarLines = append(sidebarLines, strings.Repeat(" ", sw))
+	}
+	if len(sidebarLines) > m.height {
+		sidebarLines = sidebarLines[:m.height]
+	}
+
+	sidebarView := strings.Join(sidebarLines, "\n")
 	divider := renderDivider(m.height, m.styles)
-	msglistContent := renderPlaceholder("Message List", mw, m.height, m.focused == MsgListPanel, m.styles)
+	msglistView := renderPlaceholder("Message List", mw, m.height, m.focused == MsgListPanel, m.styles)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, divider, msglistContent)
-}
-
-// renderSidebar renders the account name, folder groups, and padding.
-func (m AccountTab) renderSidebar(width int) string {
-	acctLine := m.styles.SidebarAccount.Width(width).Render(" " + m.backend.AccountName())
-
-	blank := m.styles.SidebarBg.Width(width).Render("")
-
-	groups := groupFolders(m.folders)
-
-	folderIdx := 0
-	var folderLines []string
-	for gi, group := range groups {
-		if gi > 0 {
-			folderLines = append(folderLines, blank)
-		}
-		for _, f := range group {
-			icon := folderIcon(f)
-			name := f.Name
-			selected := m.focused == SidebarPanel && folderIdx == m.selectedIdx
-
-			var countStr string
-			if f.Unseen > 0 {
-				countStr = fmt.Sprintf("%d", f.Unseen)
-			}
-
-			var line string
-			if selected {
-				line = " ┃ " + icon + "  " + name
-			} else {
-				line = "   " + icon + "  " + name
-			}
-
-			lineWidth := lipgloss.Width(line)
-			countWidth := len(countStr)
-			padNeeded := max(0, width-lineWidth-countWidth-1)
-			line += strings.Repeat(" ", padNeeded) + countStr
-
-			var rendered string
-			if selected {
-				rendered = m.styles.SidebarSelected.Width(width).Render(line)
-			} else {
-				rendered = m.styles.SidebarBg.Width(width).Render(line)
-			}
-			folderLines = append(folderLines, rendered)
-			folderIdx++
-		}
-	}
-
-	var lines []string
-	lines = append(lines, acctLine, blank)
-	lines = append(lines, folderLines...)
-
-	for len(lines) < m.height {
-		lines = append(lines, blank)
-	}
-
-	return strings.Join(lines[:m.height], "\n")
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, divider, msglistView)
 }
 
 // renderPlaceholder renders a centered label in a panel of the given size.
@@ -226,40 +143,22 @@ func renderPlaceholder(label string, width, height int, focused bool, s Styles) 
 	botPad := max(0, height-1-topPad)
 	leftPad := max(0, (width-len(label))/2)
 
-	focusedPad := lipgloss.NewStyle().
-		Width(width).
-		Background(s.Selection.GetBackground())
-	unfocusedPad := strings.Repeat(" ", width)
-
-	var lines []string
-	for i := 0; i < topPad; i++ {
-		if focused {
-			lines = append(lines, focusedPad.Render(""))
-		} else {
-			lines = append(lines, unfocusedPad)
-		}
-	}
-
-	centeredLabel := strings.Repeat(" ", leftPad) + label
+	padStyle := lipgloss.NewStyle().Width(width)
+	labelStyle := lipgloss.NewStyle().Width(width).Foreground(s.Dim.GetForeground())
 	if focused {
-		lines = append(lines, lipgloss.NewStyle().
-			Width(width).
-			Foreground(s.Dim.GetForeground()).
-			Background(s.Selection.GetBackground()).
-			Render(centeredLabel))
-	} else {
-		lines = append(lines, lipgloss.NewStyle().
-			Width(width).
-			Foreground(s.Dim.GetForeground()).
-			Render(centeredLabel))
+		bg := s.Selection.GetBackground()
+		padStyle = padStyle.Background(bg)
+		labelStyle = labelStyle.Background(bg)
 	}
 
-	for i := 0; i < botPad; i++ {
-		if focused {
-			lines = append(lines, focusedPad.Render(""))
-		} else {
-			lines = append(lines, unfocusedPad)
-		}
+	blankLine := padStyle.Render("")
+	var lines []string
+	for range topPad {
+		lines = append(lines, blankLine)
+	}
+	lines = append(lines, labelStyle.Render(strings.Repeat(" ", leftPad)+label))
+	for range botPad {
+		lines = append(lines, blankLine)
 	}
 
 	return strings.Join(lines, "\n")

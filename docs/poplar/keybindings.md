@@ -9,14 +9,15 @@ Contexts: **G** = global (all views), **L** = message list,
 
 ## Navigation
 
-Movement keys work in the focused panel. In the message list they
-move the cursor. In the viewer they scroll. In the sidebar they
-move folder selection.
+`j/k` always means messages (message list cursor, viewer scroll).
+`J/K` always means folders (sidebar selection). This matches aerc.
 
 | Key | Action | Context |
 |-----|--------|---------|
-| `j` | Down / scroll down | G |
-| `k` | Up / scroll up | G |
+| `j` | Message down / scroll down | L, V |
+| `k` | Message up / scroll up | L, V |
+| `J` | Folder down | G |
+| `K` | Folder up | G |
 | `G` | Jump to bottom | G |
 | `C-d` | Half page down | G |
 | `C-u` | Half page up | G |

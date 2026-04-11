@@ -112,4 +112,45 @@ func TestApp(t *testing.T) {
 			t.Errorf("contentHeight = %d, want 21", app.contentHeight())
 		}
 	})
+
+	t.Run("sidebar renders in composite layout", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app, _ = app.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+		view := app.View()
+		plain := stripANSI(view)
+		lines := strings.Split(plain, "\n")
+
+		for _, name := range []string{"Inbox", "Drafts", "Sent", "Archive", "Spam", "Trash"} {
+			found := false
+			for _, line := range lines {
+				runes := []rune(line)
+				if len(runes) >= 30 {
+					sidebarPart := string(runes[:30])
+					if strings.Contains(sidebarPart, name) {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				t.Errorf("folder %q not found in sidebar region", name)
+			}
+		}
+	})
+
+	t.Run("status bar updates on sidebar navigation", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app, _ = app.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+		// Navigate to Spam (index 4: Inbox->Drafts->Sent->Archive->Spam)
+		// J (uppercase) navigates folders, like aerc
+		for range 4 {
+			app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		}
+		view := app.View()
+		plain := stripANSI(view)
+		// Spam has 12 unseen
+		if !strings.Contains(plain, "12 unread") {
+			t.Error("status bar should show 12 unread after navigating to Spam")
+		}
+	})
 }

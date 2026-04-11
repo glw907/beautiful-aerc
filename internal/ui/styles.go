@@ -34,9 +34,14 @@ type Styles struct {
 	Selection lipgloss.Style
 
 	// Sidebar
-	SidebarBg       lipgloss.Style
-	SidebarAccount  lipgloss.Style
-	SidebarSelected lipgloss.Style
+	SidebarBg           lipgloss.Style
+	SidebarAccount      lipgloss.Style
+	SidebarSelected     lipgloss.Style
+	SidebarFolder       lipgloss.Style
+	SidebarFolderUnread lipgloss.Style
+	SidebarIconUnread   lipgloss.Style
+	SidebarCount        lipgloss.Style
+	SidebarIndicator    lipgloss.Style
 
 	// Placeholder text
 	Dim lipgloss.Style
@@ -94,6 +99,16 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Background(t.BgElevated),
 		SidebarSelected: lipgloss.NewStyle().
 			Background(t.BgSelection),
+		SidebarFolder: lipgloss.NewStyle().
+			Foreground(t.FgBase),
+		SidebarFolderUnread: lipgloss.NewStyle().
+			Foreground(t.AccentTertiary),
+		SidebarIconUnread: lipgloss.NewStyle().
+			Foreground(t.AccentTertiary),
+		SidebarCount: lipgloss.NewStyle().
+			Foreground(t.AccentTertiary),
+		SidebarIndicator: lipgloss.NewStyle().
+			Foreground(t.AccentPrimary),
 
 		Dim: lipgloss.NewStyle().
 			Foreground(t.FgDim),

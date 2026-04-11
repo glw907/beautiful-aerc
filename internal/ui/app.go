@@ -123,11 +123,15 @@ func (m App) contentHeight() int {
 	return h
 }
 
-// updateFooterContext switches the footer KeyMap based on the active panel.
+// updateFooterContext switches the footer KeyMap based on the active panel
+// and syncs the status bar with the sidebar's selected folder.
 func (m *App) updateFooterContext() {
 	if m.acct.focused == SidebarPanel {
 		m.footer.SetContext(SidebarContext)
 	} else {
 		m.footer.SetContext(MsgListContext)
+	}
+	if f, ok := m.acct.sidebar.SelectedFolderInfo(); ok {
+		m.statusBar.SetCounts(f.Exists, f.Unseen)
 	}
 }

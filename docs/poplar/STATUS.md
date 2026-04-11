@@ -1,8 +1,10 @@
 # Poplar Status
 
-**Current state:** Chrome redesign complete. Tab bar dropped, three-sided
-frame added, account name in sidebar, grouped footer with `┊` separators,
-single-key folder jumps defined. Ready for sidebar prototype (Pass 2.5b-2).
+**Current state:** Sidebar prototype complete. Three folder groups with
+blank-line separators, `┃` focus indicator, unread count badges,
+j/k/G navigation, Tab focus cycling between sidebar and message list,
+status bar syncs with selected folder. Ready for message list prototype
+(Pass 2.5b-3).
 
 ## Passes
 
@@ -16,7 +18,7 @@ single-key folder jumps defined. Ready for sidebar prototype (Pass 2.5b-2).
 | 2.5b-1 | Prototype: chrome shell | done |
 | 2.5b-keys | Keybinding design: single-key scheme for all screens | done |
 | 2.5b-chrome | Chrome redesign: drop tabs, frame, status, footer | done |
-| 2.5b-2 | Prototype: sidebar | pending |
+| 2.5b-2 | Prototype: sidebar | done |
 | 2.5b-3 | Prototype: message list | pending |
 | 2.5b-4 | Prototype: message viewer | pending |
 | 2.5b-5 | Prototype: help popover | pending |
@@ -57,18 +59,18 @@ single-key folder jumps defined. Ready for sidebar prototype (Pass 2.5b-2).
 
 ### Next steps
 
-1. **Execute Pass 2.5b-2** — sidebar prototype
+1. **Execute Pass 2.5b-3** — message list prototype
 
 ### Next starter prompt
 
-> Start Pass 2.5b-2: sidebar prototype. Read the plan at
-> `docs/superpowers/plans/2026-04-10-poplar-sidebar.md`, the
-> wireframes at `docs/poplar/wireframes.md`, the architecture
-> doc at `docs/poplar/architecture.md`, and the keybinding map
-> at `docs/poplar/keybindings.md`. The chrome redesign dropped
-> the tab bar — sidebar is always visible, account name at top,
-> three-sided frame. Execute the plan using the keybinding scheme
-> already defined in `internal/ui/keys.go`.
+> Start Pass 2.5b-3: message list prototype. Read the wireframes
+> at `docs/poplar/wireframes.md` (section 3), the architecture doc
+> at `docs/poplar/architecture.md`, and the keybinding map at
+> `docs/poplar/keybindings.md`. The sidebar (Pass 2.5b-2) is
+> complete — folder list with groups, selection, unread badges,
+> j/k/G navigation, Tab focus cycling. Replace the "Message List"
+> placeholder in AccountTab's right panel with a real message list
+> component using mock data from `internal/mail/mock.go`.
 
 ### Pass-end checklist
 

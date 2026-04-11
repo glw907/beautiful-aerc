@@ -95,7 +95,7 @@ func NewSidebarKeys() SidebarKeys {
 	fj := NewFolderJumpKeys()
 	return SidebarKeys{
 		nav: keyGroup{
-			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "folders")),
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/J/k/K", "nav")),
 		},
 		action: keyGroup{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Enter", "open")),
@@ -105,6 +105,7 @@ func NewSidebarKeys() SidebarKeys {
 		app: keyGroup{
 			key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 			key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "cmd")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		},
 	}
 }

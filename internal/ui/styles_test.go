@@ -27,6 +27,11 @@ func TestNewStyles(t *testing.T) {
 		{"FooterKey", s.FooterKey},
 		{"FooterHint", s.FooterHint},
 		{"Selection", s.Selection},
+		{"SidebarFolder", s.SidebarFolder},
+		{"SidebarFolderUnread", s.SidebarFolderUnread},
+		{"SidebarIconUnread", s.SidebarIconUnread},
+		{"SidebarCount", s.SidebarCount},
+		{"SidebarIndicator", s.SidebarIndicator},
 		{"Dim", s.Dim},
 	}
 	for _, tt := range tests {
