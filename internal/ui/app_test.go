@@ -2,6 +2,7 @@ package ui
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,6 +59,57 @@ func TestApp(t *testing.T) {
 		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 		if app.acct.focused != MsgListPanel {
 			t.Errorf("after Tab, focused = %d, want MsgListPanel", app.acct.focused)
+		}
+	})
+
+	t.Run("view has top line with ╮", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app, _ = app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		view := app.View()
+		plain := stripANSI(view)
+		lines := strings.Split(plain, "\n")
+		if len(lines) < 1 {
+			t.Fatal("no lines rendered")
+		}
+		trimmed := strings.TrimRight(lines[0], " ")
+		if !strings.HasSuffix(trimmed, "╮") {
+			t.Errorf("first line should end with ╮: %q", trimmed)
+		}
+	})
+
+	t.Run("view has status bar with ╯", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app, _ = app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		view := app.View()
+		plain := stripANSI(view)
+		found := false
+		for _, line := range strings.Split(plain, "\n") {
+			if strings.HasSuffix(strings.TrimRight(line, " "), "╯") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("no line ends with ╯ (status bar missing)")
+		}
+	})
+
+	t.Run("no tab bar", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app, _ = app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		view := app.View()
+		plain := stripANSI(view)
+		if strings.Contains(plain, "╭") {
+			t.Error("should not contain ╭ (tab bar removed)")
+		}
+	})
+
+	t.Run("content height is height minus 3 chrome rows", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app.width = 80
+		app.height = 24
+		if app.contentHeight() != 21 {
+			t.Errorf("contentHeight = %d, want 21", app.contentHeight())
 		}
 	})
 }

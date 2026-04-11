@@ -10,10 +10,10 @@ import (
 )
 
 // App is the root bubbletea model for poplar.
-// TODO(Task 6): rewire to new chrome layout (TopLine, no tab bar).
 type App struct {
 	acct      AccountTab
 	styles    Styles
+	topLine   TopLine
 	statusBar StatusBar
 	footer    Footer
 	keys      GlobalKeys
@@ -37,6 +37,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend) App {
 	return App{
 		acct:      acct,
 		styles:    styles,
+		topLine:   NewTopLine(styles),
 		statusBar: sb,
 		footer:    NewFooter(styles),
 		keys:      NewGlobalKeys(),
@@ -98,10 +99,13 @@ func (m App) View() string {
 	}
 	content := strings.Join(contentLines, "\n")
 
+	dividerCol := sidebarWidth
+	topLine := m.topLine.View(m.width, dividerCol)
 	status := m.statusBar.View(m.width, sidebarWidth)
 	foot := m.footer.View(m.width)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
+		topLine,
 		content,
 		status,
 		foot,
@@ -110,8 +114,8 @@ func (m App) View() string {
 
 // contentHeight returns the height available for the content area.
 func (m App) contentHeight() int {
-	// status bar (1) + footer (1)
-	chrome := 2
+	// top line (1) + status bar (1) + footer (1)
+	chrome := 3
 	h := m.height - chrome
 	if h < 1 {
 		return 1
