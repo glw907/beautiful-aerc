@@ -63,11 +63,14 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgBright).
 			Background(t.BgBorder),
 		StatusConnected: lipgloss.NewStyle().
-			Foreground(t.ColorSuccess),
+			Foreground(t.ColorSuccess).
+			Background(t.BgBorder),
 		StatusReconnect: lipgloss.NewStyle().
-			Foreground(t.ColorWarning),
+			Foreground(t.ColorWarning).
+			Background(t.BgBorder),
 		StatusOffline: lipgloss.NewStyle().
-			Foreground(t.FgDim),
+			Foreground(t.FgDim).
+			Background(t.BgBorder),
 
 		FooterKey: lipgloss.NewStyle().
 			Foreground(t.FgBright).Bold(true),

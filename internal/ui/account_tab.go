@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,7 +59,81 @@ func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the two-panel placeholder layout.
+// Folder icons indexed by role or name for sidebar display.
+var folderIcons = map[string]string{
+	"inbox":         "󰇰",
+	"drafts":        "󰏫",
+	"sent":          "󰑚",
+	"archive":       "󰀼",
+	"junk":          "󰍷",
+	"trash":         "󰩺",
+	"Notifications": "󰂚",
+	"Remind":        "󰑴",
+}
+
+const defaultFolderIcon = "󰡡"
+
+// folderIcon returns the icon for a folder by role, then name, then default.
+func folderIcon(f mail.Folder) string {
+	if f.Role != "" {
+		if icon, ok := folderIcons[f.Role]; ok {
+			return icon
+		}
+	}
+	if icon, ok := folderIcons[f.Name]; ok {
+		return icon
+	}
+	return defaultFolderIcon
+}
+
+// Folder groups: primary (inbox..archive), disposal (spam, trash),
+// custom (everything else). Groups are separated by blank lines.
+func groupFolders(folders []mail.Folder) [][]mail.Folder {
+	primary := []string{"inbox", "drafts", "sent", "archive"}
+	disposal := []string{"junk", "trash"}
+	isPrimary := func(f mail.Folder) bool {
+		for _, r := range primary {
+			if f.Role == r {
+				return true
+			}
+		}
+		return false
+	}
+	isDisposal := func(f mail.Folder) bool {
+		for _, r := range disposal {
+			if f.Role == r {
+				return true
+			}
+		}
+		return false
+	}
+
+	var p, d, c []mail.Folder
+	for _, f := range folders {
+		switch {
+		case isPrimary(f):
+			p = append(p, f)
+		case isDisposal(f):
+			d = append(d, f)
+		default:
+			c = append(c, f)
+		}
+	}
+
+	var groups [][]mail.Folder
+	if len(p) > 0 {
+		groups = append(groups, p)
+	}
+	if len(d) > 0 {
+		groups = append(groups, d)
+	}
+	if len(c) > 0 {
+		groups = append(groups, c)
+	}
+	return groups
+}
+
+// View renders the two-panel layout with sidebar folders and message list.
 func (m AccountTab) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
@@ -67,18 +142,73 @@ func (m AccountTab) View() string {
 	sw := minInt(sidebarWidth, m.width/2)
 	mw := m.width - sw - 1 // -1 for divider
 
-	// Sidebar: account name + blank line + placeholder body
-	acctName := m.styles.Dim.Render(
-		lipgloss.NewStyle().Width(sw).Render(" " + m.backend.AccountName()),
-	)
-	blankLine := strings.Repeat(" ", sw)
-	sidebarBody := renderPlaceholder("Sidebar", sw, m.height-2, m.focused == SidebarPanel, m.styles)
-	sidebar := acctName + "\n" + blankLine + "\n" + sidebarBody
-
+	sidebar := m.renderSidebar(sw)
 	divider := renderDivider(m.height, m.styles)
 	msglistContent := renderPlaceholder("Message List", mw, m.height, m.focused == MsgListPanel, m.styles)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, divider, msglistContent)
+}
+
+// renderSidebar renders the account name, folder groups, and padding.
+func (m AccountTab) renderSidebar(width int) string {
+	// Account name line
+	acctLine := m.styles.Dim.Render(
+		lipgloss.NewStyle().Width(width).Render(" " + m.backend.AccountName()),
+	)
+
+	// Blank separator
+	blank := strings.Repeat(" ", width)
+
+	// Build folder lines
+	folders, _ := m.backend.ListFolders()
+	groups := groupFolders(folders)
+
+	var folderLines []string
+	for gi, group := range groups {
+		if gi > 0 {
+			folderLines = append(folderLines, blank)
+		}
+		for _, f := range group {
+			icon := folderIcon(f)
+			// Icon is 2-cell wide in terminal. Format: " ┃ 󰇰  Name     count"
+			// or "   󰇰  Name     count" when not selected.
+			name := f.Name
+
+			var countStr string
+			if f.Unseen > 0 {
+				countStr = fmt.Sprintf("%d", f.Unseen)
+			}
+
+			// Build the line: " " + selection + icon + "  " + name + padding + count
+			var line string
+			if m.focused == SidebarPanel && f.Role == "inbox" {
+				// Selected indicator (hardcoded to Inbox for prototype)
+				line = " ┃ " + icon + "  " + name
+			} else {
+				line = "   " + icon + "  " + name
+			}
+
+			lineWidth := lipgloss.Width(line)
+			countWidth := lipgloss.Width(countStr)
+			padNeeded := maxInt(0, width-lineWidth-countWidth-1)
+			line += strings.Repeat(" ", padNeeded) + countStr
+
+			rendered := lipgloss.NewStyle().Width(width).Render(line)
+			folderLines = append(folderLines, rendered)
+		}
+	}
+
+	// Assemble: acct name, blank, folders, then pad to full height
+	var lines []string
+	lines = append(lines, acctLine, blank)
+	lines = append(lines, folderLines...)
+
+	// Pad remaining height
+	for len(lines) < m.height {
+		lines = append(lines, blank)
+	}
+
+	return strings.Join(lines[:m.height], "\n")
 }
 
 // renderPlaceholder renders a centered label in a panel of the given size.

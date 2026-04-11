@@ -59,7 +59,7 @@ func (f Footer) View(width int) string {
 		var bindings []string
 		for _, b := range g {
 			k := f.styles.FooterKey.Render(b.Help().Key)
-			d := f.styles.FooterHint.Render(":" + b.Help().Desc)
+			d := f.styles.FooterHint.Render(" " + b.Help().Desc)
 			bindings = append(bindings, k+d)
 		}
 		parts = append(parts, strings.Join(bindings, "  "))

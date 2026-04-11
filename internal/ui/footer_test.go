@@ -23,11 +23,11 @@ func TestFooterView(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(MsgListContext)
 		result := stripANSI(f.View(120))
-		if !strings.Contains(result, "d:del") {
-			t.Error("missing d:del")
+		if !strings.Contains(result, "d del") {
+			t.Error("missing d del")
 		}
-		if !strings.Contains(result, "a:archive") {
-			t.Error("missing a:archive")
+		if !strings.Contains(result, "a archive") {
+			t.Error("missing a archive")
 		}
 	})
 
@@ -35,11 +35,11 @@ func TestFooterView(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(MsgListContext)
 		result := stripANSI(f.View(120))
-		if !strings.Contains(result, "r:reply") {
-			t.Error("missing r:reply")
+		if !strings.Contains(result, "r reply") {
+			t.Error("missing r reply")
 		}
-		if !strings.Contains(result, "c:compose") {
-			t.Error("missing c:compose")
+		if !strings.Contains(result, "c compose") {
+			t.Error("missing c compose")
 		}
 	})
 
@@ -47,11 +47,11 @@ func TestFooterView(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(SidebarContext)
 		result := stripANSI(f.View(120))
-		if !strings.Contains(result, "I:inbox") {
-			t.Error("missing I:inbox folder jump")
+		if !strings.Contains(result, "I inbox") {
+			t.Error("missing I inbox folder jump")
 		}
-		if !strings.Contains(result, "D:drafts") {
-			t.Error("missing D:drafts folder jump")
+		if !strings.Contains(result, "D drafts") {
+			t.Error("missing D drafts folder jump")
 		}
 	})
 
@@ -68,7 +68,7 @@ func TestFooterView(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(SidebarContext)
 		result := stripANSI(f.View(120))
-		if strings.Contains(result, "d:del") {
+		if strings.Contains(result, "d del") {
 			t.Error("sidebar should not show delete hint")
 		}
 	})
