@@ -42,20 +42,14 @@ elements complete. Ready for prototype implementation (Pass 2.5b).
 
 ### Next steps
 
-1. **User reviews wireframes** — review `docs/poplar/wireframes.md`
-   and approve or request changes
-2. **Write implementation plan for Pass 2.5b-1** (chrome shell)
-3. **Execute Pass 2.5b-1** — tab bar, status bar, command footer,
-   focus cycling, theme-to-lipgloss bridge
+1. **Execute Pass 2.5b-1** — implementation plan is ready
 
 ### Next starter prompt
 
-> Start Pass 2.5b-1: chrome shell prototype. Read the wireframes at
-> `docs/poplar/wireframes.md`, the UI design spec at
-> `docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`,
-> and the architecture doc at `docs/poplar/architecture.md`. Write a
-> plan first, then build the chrome shell: tab bar, status bar,
-> command footer, focus cycling, and theme-to-lipgloss bridge.
+> Execute Pass 2.5b-1: chrome shell prototype. The implementation
+> plan is at `docs/superpowers/plans/2026-04-10-poplar-chrome-shell.md`.
+> The design spec is at `docs/superpowers/specs/2026-04-10-poplar-chrome-shell-design.md`.
+> Use subagent-driven-development to execute the plan task by task.
 
 ### Pass-end checklist
 
