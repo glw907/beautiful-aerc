@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -8,6 +9,13 @@ import (
 	"github.com/glw907/beautiful-aerc/internal/mail"
 	"github.com/glw907/beautiful-aerc/internal/theme"
 )
+
+// stripANSI removes ANSI escape sequences to get plain text for positional checks.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
 
 func TestApp(t *testing.T) {
 	backend := mail.NewMockBackend()
@@ -78,6 +86,74 @@ func TestApp(t *testing.T) {
 		}
 		if !strings.Contains(view, "connected") {
 			t.Error("view missing connection indicator")
+		}
+	})
+
+	t.Run("vertical line connections", func(t *testing.T) {
+		app := NewApp(theme.Nord, backend)
+		app.width = 80
+		app.height = 20
+		// Propagate size so content renders
+		app, _ = app.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+
+		view := app.View()
+		plain := stripANSI(view)
+		lines := strings.Split(plain, "\n")
+
+		if len(lines) < 6 {
+			t.Fatalf("expected at least 6 lines, got %d:\n%s", len(lines), plain)
+		}
+
+		// Row 3 (index 2): must have ┬ for divider junction and ╮ for right frame corner
+		row3 := strings.TrimRight(lines[2], " ")
+		if !strings.Contains(row3, "┬") {
+			t.Errorf("row 3 missing ┬ divider junction:\n%s", row3)
+		}
+		row3Runes := []rune(row3)
+		lastRune := row3Runes[len(row3Runes)-1]
+		if lastRune != '╮' {
+			t.Errorf("row 3 last char = %c, want ╮:\n%s", lastRune, row3)
+		}
+
+		// Rows 1-2 should NOT have │ at the right edge (tab bubble floats free)
+		for i := 0; i < 2; i++ {
+			runes := []rune(lines[i])
+			if len(runes) > 0 {
+				last := runes[len(runes)-1]
+				if last == '│' {
+					t.Errorf("row %d has │ at right edge (should float free):\n%s", i+1, lines[i])
+				}
+			}
+		}
+
+		// Find the ┬ position on row 3 — this is where the panel divider is
+		dividerCol := -1
+		for i, r := range row3Runes {
+			if r == '┬' {
+				dividerCol = i
+				break
+			}
+		}
+		if dividerCol < 0 {
+			t.Fatal("could not find ┬ position on row 3")
+		}
+
+		// Content lines (row 4 onward, before status bar): must have │ at dividerCol
+		// and │ at the right edge (right border)
+		for i := 3; i < len(lines)-2; i++ { // skip status bar and footer
+			runes := []rune(lines[i])
+			if len(runes) == 0 {
+				continue
+			}
+			if dividerCol < len(runes) && runes[dividerCol] != '│' {
+				t.Errorf("line %d: char at divider col %d = %c, want │:\n%s",
+					i+1, dividerCol, runes[dividerCol], lines[i])
+			}
+			last := runes[len(runes)-1]
+			if last != '│' {
+				t.Errorf("line %d: last char = %c, want │ (right border):\n%s",
+					i+1, last, lines[i])
+			}
 		}
 	})
 }

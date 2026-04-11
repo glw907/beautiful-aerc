@@ -73,14 +73,13 @@ func renderTabBar(tabs []tabInfo, active, width, dividerCol int, s Styles) strin
 	inactiveText := s.TabInactiveText
 	connectLine := s.TabConnectLine
 
-	// Row 1: padding + ╭ + ─ fill + ╮ + padding to right border
+	// Row 1: padding + ╭ + ─ fill + ╮
 	row1Pad := strings.Repeat(" ", leftOffset)
 	row1Inner := strings.Repeat("─", activeInner)
 	row1 := row1Pad + border.Render("╭"+row1Inner+"╮")
-	row1 += strings.Repeat(" ", maxInt(0, width-1-lipgloss.Width(row1)))
-	row1 += connectLine.Render("│")
+	row1 += strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row1)))
 
-	// Row 2: inactive before + │ content │ + inactive after + right border
+	// Row 2: inactive before + │ content │ + inactive after
 	row2 := ""
 	for i, p := range beforeParts {
 		row2 += inactiveText.Render(p)
@@ -94,28 +93,28 @@ func renderTabBar(tabs []tabInfo, active, width, dividerCol int, s Styles) strin
 	if afterStr != "" {
 		row2 += inactiveText.Render(afterStr)
 	}
-	row2 += strings.Repeat(" ", maxInt(0, width-1-lipgloss.Width(row2)))
-	row2 += connectLine.Render("│")
+	row2 += strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row2)))
 
 	// Row 3: ─╯ + spaces + ╰ + ─ fill (with ┬ at dividerCol) + ╯
 	row3LeftLen := maxInt(1, leftOffset)
 	row3Left := connectLine.Render(strings.Repeat("─", row3LeftLen) + "╯")
 	row3Mid := strings.Repeat(" ", activeInner)
 
-	// Build right fill with ┬ junction at dividerCol
+	// Build right fill with ┬ junction at dividerCol, ╮ at right frame corner
 	row3RightStart := row3LeftLen + 1 + activeInner + 1 // after ╰
-	rightFill := maxInt(0, width-1-row3RightStart-1)     // -1 for ╰, -1 for ╯
+	rightFill := maxInt(0, width-row3RightStart-1)       // -1 for ╰
 	var fillBuf strings.Builder
 	fillBuf.WriteString("╰")
 	for i := 0; i < rightFill; i++ {
 		pos := row3RightStart + i
 		if dividerCol > 0 && pos == dividerCol {
 			fillBuf.WriteRune('┬')
+		} else if i == rightFill-1 {
+			fillBuf.WriteRune('╮')
 		} else {
 			fillBuf.WriteRune('─')
 		}
 	}
-	fillBuf.WriteString("╯")
 	row3Right := connectLine.Render(fillBuf.String())
 	row3 := row3Left + row3Mid + row3Right
 

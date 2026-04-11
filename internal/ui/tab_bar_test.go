@@ -20,8 +20,8 @@ func TestRenderTabBar(t *testing.T) {
 		if !strings.Contains(lines[0], "╭") {
 			t.Error("row 1 missing top-left corner")
 		}
-		if !strings.Contains(lines[0], "│") {
-			t.Error("row 1 missing right border")
+		if !strings.Contains(lines[2], "╮") {
+			t.Error("row 3 missing right frame corner")
 		}
 		if !strings.Contains(lines[1], "Inbox") {
 			t.Error("row 2 missing tab title")
