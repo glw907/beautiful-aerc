@@ -64,8 +64,6 @@ Returns no commands. Mock data, no I/O at startup.
    active tab
 2. Handle global keys:
    - `1-9` — switch tab by position
-   - `gt` — next tab (cycles, not shown in footer)
-   - `gT` — previous tab (cycles, not shown in footer)
    - `?` — toggle help popover (2.5b-5, stubbed as no-op)
    - `:` — command mode (2.5b-7, stubbed as no-op)
 3. Delegate remaining keys to `tabs[activeTab].Update(msg)`

@@ -1558,7 +1558,6 @@ type App struct {
 	statusBar StatusBar
 	footer    Footer
 	keys      GlobalKeys
-	pending   string // buffered key prefix for multi-key sequences (e.g., "g")
 	width     int
 	height    int
 }
@@ -1606,28 +1605,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
-		// Handle pending multi-key sequences (gt, gT)
-		if m.pending == "g" {
-			m.pending = ""
-			switch msg.String() {
-			case "t":
-				m.activeTab = (m.activeTab + 1) % len(m.tabs)
-				m.updateFooterContext()
-				return m, nil
-			case "T":
-				m.activeTab = (m.activeTab - 1 + len(m.tabs)) % len(m.tabs)
-				m.updateFooterContext()
-				return m, nil
-			}
-			// Not a recognized g-sequence, fall through
-		}
-
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "g":
-			m.pending = "g"
-			return m, nil
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 			idx := int(msg.Runes[0]-'0') - 1
 			if idx < len(m.tabs) {
