@@ -68,14 +68,18 @@ Moves the sidebar selection and switches the message list.
 | `n` | Next result | A |
 | `N` | Previous result | A |
 
-## Select
+## Select (deferred — Pass 6)
 
-Multi-select mode for bulk operations.
+Multi-select is not yet implemented. The bindings below are
+reserved in the design so later passes don't collide with them.
+`v` is the entry point; `Space` toggles selection on the current
+message once multi-select is active. Until Pass 6 lands, neither
+key does anything.
 
 | Key | Action | Context |
 |-----|--------|---------|
-| `v` | Enter/exit visual select | A |
-| `Space` | Toggle selection on current message | A |
+| `v` | Enter/exit visual select *(reserved, Pass 6)* | A |
+| `Space` | Toggle selection on current message *(reserved, Pass 6)* | A |
 
 ## Viewer
 
@@ -89,9 +93,12 @@ Multi-select mode for bulk operations.
 | Key | Action | Context |
 |-----|--------|---------|
 | `?` | Help popover | A, V |
-| `:` | Command mode | A, V |
 | `q` | Quit (from account view) | A |
 | `C-c` | Force quit | A, V |
+
+Poplar has no `:` command mode. Every action is a key or a
+modal picker launched by a key. See "No command mode" in the
+Design Decisions section below.
 
 ## Footer Display
 
@@ -107,8 +114,8 @@ has room for every account-view action, including hints for
 features that aren't yet wired up.
 
 ```
- j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select  ? help  : cmd  q quit
- ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── tools & app ──────────────────────────────────▸
+ j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select  ? help  q quit
+ ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── tools & app ──────────────────────────────▸
 ```
 
 **Compressed nav hints.** `j/k/J/K nav` covers both `j/k`
@@ -120,7 +127,9 @@ compressed form tells a vim-literate user everything they need.
 **Future hints shown.** `. read`, `v select`, and `n/N results`
 are in the footer even though the actions aren't implemented
 yet. This surfaces the full planned vocabulary so users discover
-features as they come online.
+features as they come online. The footer's goal is to show what
+it will look like when poplar is done — aspirational content is
+deliberate.
 
 `X` (Spam) and `T` (Trash) are still live keys but omitted from
 the footer — disposal folders are jumped to rarely enough that
@@ -131,8 +140,8 @@ the footer real estate is better spent elsewhere.
 Each hint has a `dropRank` (0-10). When the terminal is too
 narrow to fit every hint, the footer drops hints in descending
 rank order until the content fits. Rank 0 hints (`? help`,
-`: cmd`, `q quit`) are always kept as an escape hatch — even on
-a 40-column terminal you can reach help and quit.
+`q quit`) are always kept as an escape hatch — even on a
+40-column terminal you can reach help and quit.
 
 Drop tiers (highest rank → first to go):
 
@@ -146,7 +155,7 @@ Drop tiers (highest rank → first to go):
 | 3 | `f fwd`, `/ find` | Tertiary actions |
 | 2 | `r/R reply`, `c compose` | Primary compose actions |
 | 1 | `d del`, `a archive` | Primary triage |
-| 0 | `? help`, `: cmd`, `q quit` | Always kept |
+| 0 | `? help`, `q quit` | Always kept |
 
 Approximate breakpoints (account context):
 
@@ -164,8 +173,8 @@ separators or empty groups.
 ### Viewer footer
 
 ```
- d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ Tab links  q close  ? help  : cmd
- ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── viewer / app ───────────────▸
+ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ Tab links  q close  ? help
+ ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── viewer / app ─────────▸
 ```
 
 ### Group separator
@@ -194,3 +203,19 @@ list.
 **Group separation via `┊`.** Light quadruple dash vertical in
 `fg_dim`, padded with one space on each side. Subtle enough to
 recede behind the key hints, clear enough to read the groups.
+
+**No command mode.** Poplar does not have a `:` command line.
+Every action is bound to a key, or is invoked by a key that
+opens a modal picker (folder move/copy, search, etc.). The
+curated footer is the authoritative discoverability surface —
+a hidden command layer would double it. Pine doesn't have one
+either. See architecture.md "Drop `:` command mode" for the
+full rationale.
+
+**Non-modal for pane focus; visual-select is the only mode.**
+The account view is a single pane — `j/k` always navigates the
+message list, `J/K` always navigates folders, every other key
+is always live. The eventual multi-select feature (Pass 6) is
+the one narrow exception: `v` enters a vim-style visual mode
+where `Space` toggles row selection and `Esc` exits. That
+feature is deferred and currently unbound.

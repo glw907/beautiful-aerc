@@ -42,7 +42,7 @@ No tab bar — sidebar provides folder context. Inbox selected.
 │   󰡡  Lists/golang        │                                                                              │
 │                          │                                                                              │
  ──────────────────────────┴──────────────────────────────────────── 10 messages · 3 unread · ● connected ─╯
-  d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  c:compose  ┊  /:search  ?:help  ::cmd
+  d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  c:compose  ┊  /:search  ?:help  q:quit
 ```
 
 **Annotations:**
@@ -247,23 +247,22 @@ with dimmed content behind. Content changes per context.
                   │                                                         │
                   │  Navigate           Triage          Reply               │
                   │  j/k  up/down       d  delete       r  reply            │
-                  │  gg   top           D  delete…      R  all              │
-                  │  G    bottom        a  archive      f  forward          │
-                  │  C-d  half pg dn    A  archive…     c  compose          │
-                  │  C-u  half pg up    s  star                             │
-                  │  C-f  page dn       .  read/unrd                        │
+                  │  G    bottom        a  archive      R  all              │
+                  │  C-d  half pg dn    s  star         f  forward          │
+                  │  C-u  half pg up    .  read/unrd    c  compose          │
+                  │  C-f  page dn                                           │
                   │  C-b  page up                                           │
                   │                                                         │
                   │  Search             Select          Threads             │
-                  │  /    search        v  select       zo  unfold          │
-                  │  n    next          ␣  toggle       zc  fold            │
-                  │  N    prev                          za  toggle          │
+                  │  /    search        v  select       …  fold (TBD)      │
+                  │  n    next          ␣  toggle                           │
+                  │  N    prev                                              │
                   │                                                         │
                   │  Go To                                                  │
-                  │  gi  inbox    gd  drafts    gs  sent                    │
-                  │  ga  archive  gx  spam      gt  trash                   │
+                  │  I  inbox    D  drafts    S  sent                       │
+                  │  A  archive  X  spam      T  trash                      │
                   │                                                         │
-                  │  Enter  open        :  command       ?  close           │
+                  │  Enter  open        ?  close                            │
                   │                                                         │
                   ╰─────────────────────────────────────────────────────────╯
 ```
@@ -275,10 +274,9 @@ with dimmed content behind. Content changes per context.
                   │                                                         │
                   │  Navigate           Triage          Reply               │
                   │  j/k  scroll        d  delete       r  reply            │
-                  │  gg   top           a  archive      R  all              │
-                  │  G    bottom        s  star         f  forward          │
-                  │  C-d  half pg dn                    c  compose          │
-                  │  C-u  half pg up                                        │
+                  │  G    bottom        a  archive      R  all              │
+                  │  C-d  half pg dn    s  star         f  forward          │
+                  │  C-u  half pg up                    c  compose          │
                   │  C-f  page dn                                           │
                   │  C-b  page up                                           │
                   │                                                         │
@@ -287,17 +285,25 @@ with dimmed content behind. Content changes per context.
                   ╰─────────────────────────────────────────────────────────╯
 ```
 
-### Sidebar context
+### Sidebar context *(out of date — merged into account context)*
+
+Under the one-pane decision (architecture.md, Pass 2.5b-2
+refinement), there is no separate sidebar focus. Every key is
+always live: `j/k` navigates messages, `J/K` navigates folders.
+The help popover has only two contexts — account and viewer.
+This mockup is preserved as a reference until Pass 2.5b-5
+(help popover prototype) rebuilds the popover layout, at which
+point the sidebar section should be removed entirely.
 
 ```
                   ╭─ Sidebar ───────────────────────────────────────────────╮
                   │                                                         │
                   │  Navigate           Go To                               │
-                  │  j/k  up/down       gi  inbox      gd  drafts          │
-                  │  gg   top           gs  sent       ga  archive         │
-                  │  G    bottom        gx  spam       gt  trash           │
+                  │  J/K  up/down       I  inbox     D  drafts              │
+                  │  G    bottom        S  sent      A  archive             │
+                  │                     X  spam      T  trash               │
                   │                                                         │
-                  │  Enter  open        c  compose      ?  close           │
+                  │  Enter  open        c  compose      ?  close            │
                   │                                                         │
                   ╰─────────────────────────────────────────────────────────╯
 ```
@@ -461,7 +467,8 @@ prefixes.
 
 ### Threaded view — collapsed (#14)
 
-Thread folded with `zc`. Shows message count badge.
+Thread folded via the fold key (TBD — see Pass 2.5b-3.5
+brainstorm). Shows message count badge.
 
 ```
      Eve Martinez           [3] Re: Server migration plan                  Apr 05
@@ -485,7 +492,7 @@ filters to matching messages only.
  ──────────────────────────┴───────────────── 󰍉  search: "project update" · 3 results · ● connected ─╯
 ```
 
-`n/N` jump between results. `:clear` restores the full list.
+`n/N` jump between results. `Esc` restores the full list.
 
 ### Multi-select (#16)
 
@@ -511,12 +518,18 @@ Status bar and footer swap to bulk mode:
 
 - **Empty folder (#13):** "No messages" text in `fg_dim`. Centered
   horizontally and vertically in the message list panel.
-- **Thread collapse (#14):** `zo` unfold, `zc` fold, `za` toggle.
-  Collapsed thread shows `[N]` count in `fg_dim` before subject.
-  Thread root always visible. Count includes root.
+- **Thread collapse (#14):** Fold key TBD — the original
+  `zo`/`zc`/`za` proposal violates the no-multikey rule
+  (architecture.md). Candidates under discussion are `Tab`
+  and `Space`; final choice is pending the Pass 2.5b-3.5
+  brainstorm. Fold-all / unfold-all may ship in this pass or
+  be deferred. Collapsed thread shows `[N]` count in `fg_dim`
+  before subject. Thread root always visible. Count includes
+  root.
 - **Search (#15):** `󰍉` search icon in `color_info`. Query text
   in `fg_bright`. Result count in `fg_dim`. Status bar retains
-  connection indicator. `:clear` restores normal view.
+  connection indicator. Search is cleared with `Esc`
+  (`:` command mode was dropped — no `:clear` command).
 - **Multi-select (#16):** `󰄬` check icon in `color_success` on
   selected rows. Selected rows get `bg_selection` background.
   Status bar shows count. Footer swaps to bulk actions. `Esc`
@@ -536,7 +549,10 @@ Blocks all other input until answered.
 
 ### Folder picker (#5)
 
-Modal overlay for `:move` and `:copy`. Fuzzy-filtered folder list.
+Modal overlay for move/copy actions. Invoked by a key (key
+assignment TBD — originally documented as `:move`/`:copy`
+commands before `:` command mode was dropped). Fuzzy-filtered
+folder list.
 
 #### Empty query (all folders shown)
 

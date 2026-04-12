@@ -435,9 +435,9 @@ family. All themes are compiled Go values — no runtime config files.
 **Decision:** Footer hints carry per-hint `dropRank` (0–10).
 When the terminal is too narrow to fit the full hint list, the
 footer progressively drops the highest-rank hints until the
-content fits. Rank 0 hints (`? help`, `: cmd`, `q quit`) are
-pinned and never drop. Groups whose hints all drop also collapse
-their preceding `┊` separator.
+content fits. Rank 0 hints (`? help`, `q quit`) are pinned and
+never drop. Groups whose hints all drop also collapse their
+preceding `┊` separator.
 **Rationale:** A pure "hide whole groups" responsive scheme is
 too coarse — at borderline widths you'd lose `r/R reply` along
 with the rest of the compose group when only `f fwd` needed to
@@ -445,11 +445,14 @@ go. Per-hint ranks let the footer degrade by individual
 affordance: nav (vim convention) drops first, then niche modes
 (`v select`, `n/N results`), then secondary actions (`.`, `s`,
 `f`, `/`), keeping the primary email loop (`d`, `a`, `r/R`, `c`)
-plus the always-pinned `? help / : cmd / q quit` escape hatch
-even at 40 columns. Implemented in `internal/ui/footer.go` —
+plus the always-pinned `? help / q quit` escape hatch even at
+40 columns. Implemented in `internal/ui/footer.go` —
 `fitFooterHints` drops one hint at a time and re-measures until
 the rendered plain-text width fits.
-**Date:** 2026-04-11
+**Note:** Originally pinned `: cmd` alongside `? help` and
+`q quit` in rank 0. Command mode was dropped entirely on
+2026-04-12, so the rank-0 set shrank to two hints.
+**Date:** 2026-04-11 (updated 2026-04-12)
 
 ### Message list as child model with viewport offset
 **Decision:** Message list is a standalone `MessageList` struct in
@@ -524,3 +527,112 @@ general rule is now codified in the `bubbletea-design` skill's "Hue
 Budget" subsection so future TUI work picks it up automatically;
 the poplar-specific application lives in `docs/poplar/styling.md`.
 **Date:** 2026-04-11 (Pass 2.5b-3)
+
+### Threading default: on globally, per-folder override
+**Decision:** Threaded display is enabled by default for every
+folder. A per-folder `[ui.folders.<name>]` override flips an
+individual folder to flat. There is no per-account granularity —
+poplar is a single-account-at-a-time UI.
+**Rationale:** Matches the default state shown in
+`wireframes.md` §3, matches the expectation every user brings
+from Fastmail web, Apple Mail, and Gmail, and is simpler than
+aerc's opt-in model. "Better Pine" means Pine UX polish, not
+Pine defaults — pine's defaults lost the war against modern
+mail clients, and poplar shouldn't inherit them just for
+historical fidelity. The per-folder override is cheap and
+covers the "this folder reads better chronologically" case.
+**Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
+
+### Sidebar folder groups are load-bearing
+**Decision:** The Primary / Disposal / Custom three-group
+structure of the sidebar is permanent, not a default the user
+can flatten. Poplar always renders Primary first, then
+Disposal, then Custom, separated by blank lines. User config
+assigns an in-group rank to folders but cannot move a folder
+across groups. Canonical folders keep their canonical order
+unless explicitly reranked. Custom folders alphabetize by
+default; user can override with explicit ranks.
+**Rationale:** The grouping prevents accidental navigation
+into personal folders when scrolling past Trash, and the
+wireframe looks good because of it. Letting users flatten the
+groups would allow them to shoot off their own feet for no
+clear win. Keeping the groups rigid doesn't cost flexibility
+that actually matters — within-group ranking covers every
+real reorder use case (pin `Lists/golang` to the top of Custom,
+push `Notifications` down, etc.). The simpler invariant also
+makes the sidebar renderer easier to reason about.
+**Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
+
+### Nested folders render flat with one-space indent
+**Decision:** Folders whose names contain `/` (e.g.
+`Lists/golang`, `Projects/Acme`) get one extra leading space
+in the sidebar. No tree view, no expand/collapse. Adjacent
+siblings are still kept adjacent by the alphabetical sort
+within the Custom group — the indent is pure render polish on
+top of the flat data model.
+**Rationale:** The three-level-deep hierarchies typical of
+real Fastmail/Gmail accounts need *some* visual signal that
+`Lists/golang` and `Lists/rust` are siblings. A one-space
+indent is subtle enough to read as "these things are related"
+without implying an interactive tree. Tree view was explicitly
+rejected at Pass 2.5b-2 (aerc tried it, its `app/dirtree.go`
+sorts children alphabetically ignoring `folders-sort`, and
+the complexity-to-benefit ratio is bad). The indent costs
+nothing — one character per nested row, no data-model change,
+no new navigation rules.
+**Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
+
+### Drop `:` command mode
+**Decision:** Poplar does not have a `:` command line. Every
+action is bound to a key, or is invoked by a key that opens a
+modal picker (folder move/copy, search, etc.). Pass 7 in
+`STATUS.md` shrinks from "Command mode + search" to just
+"Search."
+**Rationale:** Every use case for `:` in the wireframes has a
+more direct path: folder jumps use single uppercase keys
+(`I`/`D`/`S`/`A`/`X`/`T`), move/copy open a folder picker
+modal via a key, `/` starts search, `Esc` clears it. A hidden
+command layer would double the discoverability surface — users
+would have to learn keys *and* command names with no clear
+rule for which is authoritative — and it contradicts the
+curated-footer philosophy. Pine doesn't have one. Removing it
+also frees a full column from the footer on narrow terminals.
+If a typed-input affordance turns out to be necessary later
+for some action that can't be a key or a modal, we can add it
+back — removing a key is cheap, and re-adding one is cheap too.
+**Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
+
+### Multi-select deferred to Pass 6; `v`/`Space` reserved
+**Decision:** The `v`-enters-visual-select multi-select design
+from `wireframes.md` §16 is deferred to Pass 6 (triage
+actions). `v` and `Space` stay in `keybindings.md` as reserved
+but marked deferred. Neither key does anything in v1 until
+Pass 6 lands.
+**Rationale:** Multi-select is a non-trivial feature
+(selection state, footer swap, bulk action application) that
+belongs with the triage pass where bulk delete/archive
+actually matters. Reserving the keys now prevents later passes
+from grabbing them for unrelated features. This is also the
+one narrow place where poplar accepts modality — `v` enters a
+mode where `Space` toggles row selection — and that acceptance
+is load-bearing for the keybinding design (e.g., `Space` is
+not free for thread-fold toggle, which forces the fold-key
+question onto other keys like `Tab`).
+**Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
+
+### First `[ui]` config section
+**Decision:** `~/.config/poplar/accounts.toml` gains a `[ui]`
+table with a global `threading` default and
+`[ui.folders.<name>]` subsections for per-folder overrides
+(threading, sort, rank, possibly hide). This is the first
+non-account config section in poplar and sets the pattern for
+future UI-tuning sections.
+**Rationale:** Folder display behavior is UI concern, not
+account concern, so it belongs outside the `[[account]]`
+block. Keying the per-folder overrides on the folder name
+(not a glob) keeps the initial implementation simple — globs
+can come later if there's demand. The exact field names and
+types are still subject to brainstorm refinement (see
+STATUS.md "Still open" list), but the location and shape of
+the section is fixed.
+**Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
