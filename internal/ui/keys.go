@@ -81,6 +81,7 @@ func NewAccountKeys() AccountKeys {
 			key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "select")),
 			key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 			key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "cmd")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		},
 	}
 }

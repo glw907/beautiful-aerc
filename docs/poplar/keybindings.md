@@ -107,8 +107,8 @@ has room for every account-view action, including hints for
 features that aren't yet wired up.
 
 ```
- j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select  ? help  : cmd
- ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── tools & app ──────────────────────────▸
+ j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select  ? help  : cmd  q quit
+ ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── tools & app ──────────────────────────────────▸
 ```
 
 **Compressed nav hints.** `j/k/J/K nav` covers both `j/k`
