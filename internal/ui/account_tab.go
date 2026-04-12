@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/beautiful-aerc/internal/config"
-	"github.com/glw907/beautiful-aerc/internal/mail"
+	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 // sidebarWidth is the fixed width of the sidebar panel.

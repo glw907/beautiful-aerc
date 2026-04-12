@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/glw907/beautiful-aerc/internal/config"
-	"github.com/glw907/beautiful-aerc/internal/mail"
-	"github.com/glw907/beautiful-aerc/internal/theme"
+	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/theme"
 )
 
 // newLoadedTab builds an AccountTab and runs the initial Cmd chain so

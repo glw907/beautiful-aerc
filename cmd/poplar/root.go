@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/glw907/beautiful-aerc/internal/config"
-	"github.com/glw907/beautiful-aerc/internal/mail"
-	"github.com/glw907/beautiful-aerc/internal/theme"
-	"github.com/glw907/beautiful-aerc/internal/ui"
+	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui"
 	"github.com/spf13/cobra"
 )
 

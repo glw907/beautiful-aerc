@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/glw907/beautiful-aerc/internal/mail"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 // RenderFolderSubsections renders `[ui.folders.<name>]` subsections

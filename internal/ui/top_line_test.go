@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/beautiful-aerc/internal/theme"
+	"github.com/glw907/poplar/internal/theme"
 )
 
 func TestTopLineView(t *testing.T) {

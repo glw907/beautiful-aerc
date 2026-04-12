@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/beautiful-aerc/internal/mail"
-	"github.com/glw907/beautiful-aerc/internal/theme"
+	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/theme"
 )
 
 func TestMessageList(t *testing.T) {

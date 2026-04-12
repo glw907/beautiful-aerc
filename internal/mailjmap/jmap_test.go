@@ -3,8 +3,8 @@ package mailjmap
 import (
 	"testing"
 
-	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
-	"github.com/glw907/beautiful-aerc/internal/mail"
+	"github.com/glw907/poplar/internal/mailworker/models"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 func TestTranslateFolder(t *testing.T) {

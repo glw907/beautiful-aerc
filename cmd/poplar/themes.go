@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/glw907/beautiful-aerc/internal/theme"
+	"github.com/glw907/poplar/internal/theme"
 	"github.com/spf13/cobra"
 )
 

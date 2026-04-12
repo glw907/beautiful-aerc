@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/glw907/beautiful-aerc/internal/theme"
+	"github.com/glw907/poplar/internal/theme"
 )
 
 const maxBodyWidth = 78

@@ -2,7 +2,7 @@ package ui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/glw907/beautiful-aerc/internal/mail"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 // foldersLoadedMsg carries the result of an initial ListFolders call.

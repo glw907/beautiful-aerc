@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/beautiful-aerc/internal/config"
-	"github.com/glw907/beautiful-aerc/internal/mail"
+	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 // folderEntry holds a classified folder plus its rendered metadata.

@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
-	"github.com/glw907/beautiful-aerc/internal/aercfork/worker"
-	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/types"
-	"github.com/glw907/beautiful-aerc/internal/config"
-	"github.com/glw907/beautiful-aerc/internal/mail"
+	"github.com/glw907/poplar/internal/mailworker/models"
+	"github.com/glw907/poplar/internal/mailworker/worker"
+	"github.com/glw907/poplar/internal/mailworker/worker/types"
+	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 // JMAPAdapter wraps the forked aerc JMAP worker behind the mail.Backend

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glw907/beautiful-aerc/internal/theme"
+	"github.com/glw907/poplar/internal/theme"
 )
 
 func TestFooterView(t *testing.T) {

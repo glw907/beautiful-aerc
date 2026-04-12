@@ -1,0 +1,257 @@
+// Forked from aerc (git.sr.ht/~rjarry/aerc) — MIT License
+package imap
+
+import (
+	"fmt"
+	"slices"
+
+	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/client"
+	"github.com/emersion/go-imap/utf7"
+
+	"github.com/glw907/poplar/internal/mailworker/log"
+	"github.com/glw907/poplar/internal/mailworker/models"
+	"github.com/glw907/poplar/internal/mailworker/worker/types"
+)
+
+// drainUpdates will drain the updates channel. For some operations, the imap
+// server will send unilateral messages. If they arrive while another operation
+// is in progress, the buffered updates channel can fill up and cause a freeze
+// of the entire backend. Avoid this by draining the updates channel and only
+// process the Message and Expunge updates.
+//
+// To stop the draining, close the returned struct.
+func (imapw *IMAPWorker) drainUpdates() *drainCloser {
+	done := make(chan struct{})
+	go func() {
+		defer log.PanicHandler()
+		for {
+			select {
+			case update := <-imapw.updates:
+				switch update.(type) {
+				case *client.MessageUpdate,
+					*client.ExpungeUpdate:
+					imapw.handleImapUpdate(update)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	return &drainCloser{done}
+}
+
+type drainCloser struct {
+	done chan struct{}
+}
+
+func (d *drainCloser) Close() error {
+	close(d.done)
+	return nil
+}
+
+func (imapw *IMAPWorker) handleDeleteMessages(msg *types.DeleteMessages) {
+	drain := imapw.drainUpdates()
+	defer drain.Close()
+
+	// Build provider-dependent EXPUNGE handler.
+	imapw.BuildExpungeHandler(models.UidToUint32List(msg.Uids), true)
+
+	item := imap.FormatFlagsOp(imap.AddFlags, true)
+	flags := []any{imap.DeletedFlag}
+	uids := toSeqSet(msg.Uids)
+	if err := imapw.client.UidStore(uids, item, flags, nil); err != nil {
+		imapw.worker.PostMessage(&types.Error{
+			Message: types.RespondTo(msg),
+			Error:   err,
+		}, nil)
+		return
+	}
+	if err := imapw.client.Expunge(nil); err != nil {
+		imapw.worker.PostMessage(&types.Error{
+			Message: types.RespondTo(msg),
+			Error:   err,
+		}, nil)
+	} else {
+		imapw.worker.PostMessage(&types.Done{Message: types.RespondTo(msg)}, nil)
+	}
+}
+
+func (imapw *IMAPWorker) handleAnsweredMessages(msg *types.AnsweredMessages) {
+	item := imap.FormatFlagsOp(imap.AddFlags, false)
+	flags := []any{imap.AnsweredFlag}
+	if !msg.Answered {
+		item = imap.FormatFlagsOp(imap.RemoveFlags, false)
+	}
+	imapw.handleStoreOps(msg, msg.Uids, item, flags,
+		func(_msg *imap.Message) error {
+			imapw.worker.PostMessage(&types.MessageInfo{
+				Message: types.RespondTo(msg),
+				Info: &models.MessageInfo{
+					Flags: translateImapFlags(_msg.Flags),
+					Uid:   models.Uint32ToUid(_msg.Uid),
+				},
+			}, nil)
+			return nil
+		})
+}
+
+func (imapw *IMAPWorker) handleFlagMessages(msg *types.FlagMessages) {
+	flags := []any{flagToImap[msg.Flags]}
+	item := imap.FormatFlagsOp(imap.AddFlags, false)
+	if !msg.Enable {
+		item = imap.FormatFlagsOp(imap.RemoveFlags, false)
+	}
+	imapw.handleStoreOps(msg, msg.Uids, item, flags,
+		func(_msg *imap.Message) error {
+			imapw.worker.PostMessage(&types.MessageInfo{
+				Message: types.RespondTo(msg),
+				Info: &models.MessageInfo{
+					Flags: translateImapFlags(_msg.Flags),
+					Uid:   models.Uint32ToUid(_msg.Uid),
+				},
+				ReplaceFlags: true,
+			}, nil)
+			return nil
+		})
+}
+
+func (imapw *IMAPWorker) handleModifyLabels(msg *types.ModifyLabels) {
+	if len(msg.Toggle) > 0 {
+		// To toggle, we need to query the current message, and it's
+		// not straightforward from here; cowardly bail out.
+		imapw.worker.PostMessage(&types.Error{
+			Message: types.RespondTo(msg),
+			Error:   fmt.Errorf("label toggling not supported"),
+		}, nil)
+		return
+	}
+	if imapw.config.provider == Proton {
+		// If any label removal is requested, make sure that we're on that
+		// label's virtual folder (otherwise the removal is silently a no-op)
+		for _, l := range msg.Remove {
+			if imapw.selected.Name != fmt.Sprintf("Labels/%s", l) {
+				imapw.worker.PostMessage(&types.Error{
+					Message: types.RespondTo(msg),
+					Error: fmt.Errorf("Proton labels can only " +
+						"be removed from their virtual folder"),
+				}, nil)
+				return
+			}
+		}
+	}
+	labelOps := map[imap.FlagsOp][]string{
+		imap.AddFlags:    msg.Add,
+		imap.RemoveFlags: msg.Remove,
+	}
+	for labelOp, labels := range labelOps {
+		if len(labels) == 0 {
+			continue
+		}
+		switch imapw.config.provider {
+		case GMail:
+			// Per GMail documentation, leverage the STORE command
+			// to update labels
+			// (https://developers.google.com/workspace/gmail/imap/imap-extensions)
+			var item imap.StoreItem
+			if labelOp == imap.AddFlags {
+				item = "+X-GM-LABELS"
+			} else {
+				item = "-X-GM-LABELS"
+			}
+			// Duplicate the label list to avoid funky things to
+			// happen, possibly linked to this (?)
+			// https://github.com/emersion/go-imap/blob/v1.2.1/client/cmd_selected.go#L195
+			labelsAny := []any{}
+			utf7Encoder := utf7.Encoding.NewEncoder()
+			for _, l := range labels {
+				utf7label, _ := utf7Encoder.String(l)
+				labelsAny = append(labelsAny, utf7label)
+			}
+			nop_cb := func(_ *imap.Message) error { return nil }
+			imapw.handleStoreOps(msg, msg.Uids, item, labelsAny, nop_cb)
+		case Proton:
+			// Per Proton documentation, adding/removing labels
+			// is obtained by moving messages to/from label virtual
+			// folders
+			// (https://proton.me/support/labels-in-bridge#how-to-apply-labels-in-bridge)
+			uids := toSeqSet(msg.Uids)
+			var impactedVFolders []string
+			for _, l := range labels {
+				var destination string
+				if labelOp == imap.AddFlags {
+					destination = fmt.Sprintf("Labels/%s", l)
+					impactedVFolders = append(impactedVFolders,
+						destination)
+				} else {
+					destination = "INBOX"
+				}
+				if err := imapw.client.UidMove(uids, destination); err != nil {
+					imapw.worker.PostMessage(&types.Error{
+						Message: types.RespondTo(msg),
+						Error:   err,
+					}, nil)
+				}
+			}
+			// Refresh the impacted virtual folders;
+			impactedVFolders = slices.Compact(impactedVFolders)
+			imapw.worker.PostAction(&types.CheckMail{
+				Directories: impactedVFolders,
+			}, nil)
+		default:
+			imapw.worker.PostMessage(&types.Error{
+				Message: types.RespondTo(msg),
+				Error:   fmt.Errorf("operation only supported for GMail and Proton"),
+			}, nil)
+			return
+		}
+	}
+}
+
+func (imapw *IMAPWorker) handleStoreOps(
+	msg types.WorkerMessage, uids []models.UID, item imap.StoreItem, flag any,
+	procFunc func(*imap.Message) error,
+) {
+	messages := make(chan *imap.Message)
+	done := make(chan error)
+
+	go func() {
+		defer log.PanicHandler()
+
+		var reterr error
+		for _msg := range messages {
+			err := procFunc(_msg)
+			if err != nil {
+				if reterr == nil {
+					reterr = err
+				}
+				// drain the channel upon error
+				for range messages {
+				}
+			}
+		}
+		done <- reterr
+	}()
+
+	emitErr := func(err error) {
+		imapw.worker.PostMessage(&types.Error{
+			Message: types.RespondTo(msg),
+			Error:   err,
+		}, nil)
+	}
+
+	set := toSeqSet(uids)
+	if err := imapw.client.UidStore(set, item, flag, messages); err != nil {
+		emitErr(err)
+		return
+	}
+	if err := <-done; err != nil {
+		emitErr(err)
+		return
+	}
+	imapw.worker.PostAction(&types.CheckMail{
+		Directories: []string{imapw.selected.Name},
+	}, nil)
+	imapw.worker.PostMessage(
+		&types.Done{Message: types.RespondTo(msg)}, nil)
+}
