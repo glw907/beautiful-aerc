@@ -1,26 +1,26 @@
 # Poplar Status
 
-**Current state:** Message list prototype complete. Hand-rolled
-`MessageList` component in `internal/ui/msglist.go` with column
-layout (cursor / flag / sender(22) / subject(fill) / date(12)), `▐`
-cursor on the selected row, viewport scrolling
-(`MoveDown`/`MoveUp`/`MoveToTop`/`MoveToBottom` plus `HalfPage` and
-`Page` Up/Down — all routed through a single `moveBy` helper).
-**Brightness, not hue:** read rows render in `FgDim`, unread in
-`FgBright` (sender bold), the flag glyph dims with the row, and
-`ColorWarning` is reserved for the single unread+flagged case. The
-cursor `▐` is the only other place hue is used. Glyphs `󰈻 󰑚 󰇮`
-carry the flag/answered/unread distinction; color carries the "demands
-attention" signal. Codified as a general TUI rule in the
-`bubbletea-design` skill ("Hue Budget") and as the poplar-specific map
-in `docs/poplar/styling.md`. Folder changes via J/K refresh the
-message list through `AccountTab.loadSelectedFolder` (mock-backed;
-Pass 3 wires real JMAP). Single-pane key dispatch: `j/k` move
-messages, `J/K/G` move folders, every key always live. Shared
-`applyBg` and `fillRowToWidth` helpers extracted from sidebar and
-msglist row renderers. Flag cell width pinned to **1 lipgloss cell**
-— visual width vs `lipgloss.Width()` mismatch is documented inline.
-Ready for message viewer prototype (Pass 2.5b-4).
+**Current state:** Pass 2.5b-3.5 complete. `internal/config/`
+package now holds both `AccountConfig` and the new `UIConfig` +
+`LoadUI` — `internal/poplar/` is gone. Folder classification lives
+in `internal/mail/classify.go` as a pure
+`Classify([]Folder) []ClassifiedFolder` with a role→alias→Custom
+priority ladder, verified against Gmail/Fastmail/Outlook/iCloud/
+Yahoo/Proton. The sidebar consumes `[]ClassifiedFolder` +
+`config.UIConfig` with rank, label, hide, and a one-space nested
+indent capped at depth 3; canonical display names normalize
+provider oddities like `[Gmail]/Sent Mail` → `Sent`. The JMAP
+adapter stub relocated to `internal/mailjmap/` to let
+`internal/config` import `internal/mail` for the classifier
+without a cycle. Backend I/O is now Cmd-based: `AccountTab.Init`
+returns `loadFoldersCmd`, J/K dispatches `loadFolderCmd`, and
+`AccountTab` emits `FolderChangedMsg` that `App` consumes to
+update the status bar without reaching through child state.
+New `poplar config init` subcommand discovers folders and merges
+commented `[ui.folders.<name>]` subsections into `accounts.toml`
+(dry-run by default, `--write` replaces atomically, idempotent).
+Dead `:` command-mode stub and its rank-0 footer hint are gone.
+Ready for Pass 2.5b-3.6 (threading + fold).
 
 ## Passes
 
@@ -36,7 +36,7 @@ Ready for message viewer prototype (Pass 2.5b-4).
 | 2.5b-chrome | Chrome redesign: drop tabs, frame, status, footer | done |
 | 2.5b-2 | Prototype: sidebar | done |
 | 2.5b-3 | Prototype: message list | done |
-| 2.5b-3.5 | Prototype: UI config + sidebar polish | pending |
+| 2.5b-3.5 | Prototype: UI config + sidebar polish | done |
 | 2.5b-3.6 | Prototype: threading + fold (index view completion) | pending |
 | 2.5b-3.7 | Prototype: sidebar filter UI (UX only, no backing logic) | pending |
 | 2.5b-4 | Prototype: message viewer | pending |
@@ -79,109 +79,11 @@ Ready for message viewer prototype (Pass 2.5b-4).
 
 ### Next steps
 
-1. **Execute Pass 2.5b-3.5** — UI config + sidebar polish + docs cleanup
-2. **Execute Pass 2.5b-3.6** — threading + fold (index view completion)
-3. **Execute Pass 2.5b-3.7** — sidebar filter UI prototype (UX only)
+1. **Execute Pass 2.5b-3.6** — threading + fold (index view completion)
+2. **Execute Pass 2.5b-3.7** — sidebar filter UI prototype (UX only)
+3. **Execute Pass 2.5b-4** — message viewer prototype
 
-### Next starter prompt
-
-> Start Pass 2.5b-3.5: UI config + sidebar polish + keybindings-doc
-> cleanup. This pass adds the first `[ui]` section to
-> `~/.config/poplar/accounts.toml`, uses it to auto-discover and
-> rank folders in the sidebar, renders nested folders with a
-> one-space indent, and finishes the keybindings-doc cleanup.
-> **Threading render, fold state, and the `Space`/`F`/`U` keys all
-> belong to the next pass (2.5b-3.6), not this one.** Schema
-> fields for threading are still parsed and stored in this pass —
-> they sit unused in `UIConfig` until 2.5b-3.6 wires the consumer.
->
-> **Open this session by brainstorming the open questions below.**
-> Read the wireframes at `docs/poplar/wireframes.md` (§2 sidebar
-> and §3 message list), the architecture doc at
-> `docs/poplar/architecture.md` (especially "Sidebar folder groups
-> are load-bearing", "Nested folders render flat with one-space
-> indent", "First `[ui]` config section", and the new "Pass
-> 2.5b-3.5 split" decision), the keybindings doc at
-> `docs/poplar/keybindings.md`, the styling reference at
-> `docs/poplar/styling.md`, and the existing sidebar code at
-> `internal/ui/sidebar.go`.
->
-> **Goal.** Three things land in this pass:
->
-> 1. **First `[ui]` section** in `~/.config/poplar/accounts.toml`,
->    parsed into a `UIConfig` struct, threaded through `App` →
->    `AccountTab` → children as read-only at construction. Global
->    defaults plus per-folder overrides
->    (`[ui.folders.<name>] rank = N, threading = false, sort = ...`).
->    Threading-related fields are parsed and stored this pass but
->    have no consumer until 2.5b-3.6.
-> 2. **Sidebar polish**: folder auto-discovery,
->    Primary/Disposal/Custom group classification, within-group
->    ranking by `rank` field, alphabetical fallback in the Custom
->    group, one-space indent for folders whose names contain `/`.
-> 3. **Keybindings doc cleanup**: drop remaining `:` references,
->    mark `v`/`Space` as reserved (deferred to Pass 6 / 2.5b-3.6),
->    mark `F`/`U` as reserved (deferred to 2.5b-3.6), resolve
->    remaining wireframe TBDs about fold keys by pointing at
->    2.5b-3.6, confirm the footer drop-rank table is still
->    accurate.
->
-> ---
->
-> **Settled (do not re-brainstorm):**
->
-> - Pass scope is split — threading render and fold state are
->   **not** in this pass. See architecture.md "Pass 2.5b-3.5
->   split".
-> - Sidebar groups are load-bearing (Primary / Disposal / Custom).
->   User config ranks *within* a group; folders cannot move across
->   groups.
-> - Canonical folders keep their canonical order unless explicitly
->   reranked; custom folders alphabetize by default.
-> - Nested folders get a one-space indent, no tree view.
-> - `[ui]` is the first non-account config section; the pattern it
->   establishes will be reused for future UI-tuning sections.
-> - `:` command mode is dropped entirely — every action is a key
->   or a modal picker.
->
-> ---
->
-> **Still open — brainstorm these first:**
->
-> - **Exact config field names, types, defaults.** Settle the
->   global fields (`threading`, maybe `folder-order`, maybe a hide
->   list), the per-folder fields (`rank`, `threading`, `sort`,
->   maybe `hide`), and their types (int rank vs float rank, string
->   sort vs enum).
-> - **Folder auto-discovery and classification rules.** How does
->   poplar decide which provider folder is "Inbox" — role attr,
->   canonical name match, alias list? How are `[Gmail]/Sent Mail`,
->   `Sent Items`, etc. mapped to canonical names? Is
->   classification done in `internal/mail/` or `internal/poplar/`?
->   Does the mock backend need to exercise the classifier?
-> - **Within-group rank semantics.** Positive int? Floats for
->   insertion? Ties broken alphabetically? Is negative rank valid
->   (pin-to-bottom)?
-> - **`[ui.folders.<name>]` key: canonical or provider name?**
->   Canonical is more portable across providers; provider is more
->   literal. Pick one and document.
-> - **Nested indent: one level or scales with depth?**
->   `Lists/golang` is one indent. Would `Projects/Acme/Planning`
->   be two indents, or still just one?
-> - **Hide folders via config?** Some users have provider-injected
->   folders they never want to see (e.g. `[Gmail]/All Mail`).
->   Include a hide mechanism now or defer?
-> - **Where does `UIConfig` live?** `internal/poplar/ui_config.go`
->   alongside `AccountConfig`, or a new `internal/config/` package?
-> - **Exact delta for keybindings-doc cleanup.** The doc is
->   mostly clean — confirm what still needs to change.
->
-> **Approach.** Brainstorm the open questions above, then write a
-> short plan doc at
-> `docs/superpowers/plans/2026-04-12-poplar-ui-config.md`, then
-> implement. Standard pass-end checklist applies.
-
-### Follow-up starter prompt (Pass 2.5b-3.6)
+### Next starter prompt (Pass 2.5b-3.6)
 
 > After Pass 2.5b-3.5 lands, resume with Pass 2.5b-3.6: threading
 > display + fold state + index-view completion. Read the
@@ -261,7 +163,7 @@ Ready for message viewer prototype (Pass 2.5b-4).
 > doc at `docs/superpowers/plans/2026-04-12-poplar-threading.md`,
 > then implement. Standard pass-end checklist applies.
 
-### Follow-up starter prompt (Pass 2.5b-3.7)
+### Follow-up starter prompt after (Pass 2.5b-3.7)
 
 > After Pass 2.5b-3.6 lands, resume with Pass 2.5b-3.7: sidebar
 > filter UI prototype. **This pass is UI/UX only — no backing

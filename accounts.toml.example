@@ -1,0 +1,38 @@
+# poplar account configuration
+# Copy to $XDG_CONFIG_HOME/poplar/accounts.toml (usually
+# ~/.config/poplar/accounts.toml) and edit to taste.
+
+[[account]]
+name = "Example"
+backend = "jmap"
+source = "jmap+oauthbearer://you@example.com@api.example.com/.well-known/jmap"
+credential-cmd = "fastmail-password"
+
+# UI preferences. The [ui] table is optional — omit it to take the
+# defaults. Run `poplar config init` after first launch to discover
+# your provider's folder names and generate [ui.folders.<name>]
+# subsections for your custom folders.
+[ui]
+threading = true
+
+[ui.folders.Inbox]
+# label = ""
+# rank = 0
+# threading = true
+# sort = "date-desc"
+# hide = false
+
+[ui.folders.Drafts]
+# rank = 0
+
+[ui.folders.Sent]
+# rank = 0
+
+[ui.folders.Archive]
+# rank = 0
+
+[ui.folders.Spam]
+# rank = 0
+
+[ui.folders.Trash]
+# rank = 0

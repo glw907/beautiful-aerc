@@ -106,7 +106,8 @@ a minimal `poplar.AccountConfig` (15 fields) in `internal/poplar/`.
 Headers, HeadersExclude, CheckMail, and identity fields. The rest
 (PGP, AuthRes, CheckMailCmd, etc.) is unused by IMAP/JMAP workers
 or handled differently by poplar. Smaller surface = easier to
-maintain and understand.
+maintain and understand. **Update 2026-04-12 (Pass 2.5b-3.5):**
+package moved to `internal/config/` alongside `UIConfig`.
 **Date:** 2026-04-09 (Pass 1)
 
 ### Split aerc lib/ into focused packages
@@ -147,6 +148,9 @@ separate from aerc's config.
 The TOML format matches the theme files for consistency. Credential
 resolution uses a `credential-cmd` field that executes a shell
 command and injects the output into the source URL's userinfo.
+**Update 2026-04-12 (Pass 2.5b-3.5):** file now also carries the
+`[ui]` table; parsing split between `ParseAccounts` and `LoadUI`
+in `internal/config/`.
 **Date:** 2026-04-09 (Pass 2)
 
 ### Inherited global WorkerMessages channel
@@ -726,3 +730,62 @@ a compelling runtime use case turns up during real daily use,
 adding a key later is cheap. Better Pine means fewer knobs,
 not more.
 **Date:** 2026-04-12 (Pass 2.5b-3.5 brainstorm)
+
+### UIConfig and AccountConfig unified in `internal/config/`
+**Decision:** The `internal/poplar/` package is deleted in Pass
+2.5b-3.5. `AccountConfig` moves to `internal/config/account.go`
+and a new `UIConfig` + `LoadUI` lives in `internal/config/ui.go`.
+Both types read from the same `accounts.toml` file via
+independent decodings (`BurntSushi/toml` silently drops unknown
+keys, so the two parsers don't collide). The JMAP adapter stub
+that used to live in `internal/mail/jmap.go` moves to a new
+`internal/mailjmap/` subpackage so `internal/mail` can stop
+importing `internal/config` — the writer in `internal/config`
+needs to import `internal/mail` for the classifier types, and
+a cycle would otherwise form.
+**Rationale:** `internal/poplar/` held exactly one type (and its
+loader) and was colliding with the `poplar` package-alias name
+inside the JMAP adapter. Consolidating both config concerns
+under `internal/config/` gives a single clear home for "things
+read from the user's config file" and removes the alias-shadow
+footgun. Follow-on config sections (keybindings, compose,
+themes) will live here too.
+**Date:** 2026-04-12 (Pass 2.5b-3.5)
+
+### Folder classifier in `internal/mail/classify.go`
+**Decision:** A pure `Classify(folders []Folder) []ClassifiedFolder`
+function in `internal/mail/` maps raw backend folders to canonical
+identity + group (Primary / Disposal / Custom). Priority is role
+attribute → alias table → Custom fallback. The alias table is
+verified against Gmail IMAP, Fastmail JMAP, Outlook/M365, iCloud,
+Yahoo/AOL, and Proton Mail Bridge.
+**Rationale:** Folder identity was previously scattered between
+`sidebar.go:classifyGroup` (role-only) and `sidebar.go:sidebarIcon`
+(role + name heuristic). Moving it to a pure function in the mail
+package makes it testable in isolation, shareable between the
+sidebar renderer and `poplar config init`, and backend-agnostic —
+IMAP workers with `\Special-Use` flags set `Folder.Role` the same
+way JMAP does. The alias table is the fallback for providers that
+don't send role metadata (or send it inconsistently).
+**Date:** 2026-04-12 (Pass 2.5b-3.5)
+
+### Tea.Cmd-based backend I/O before Pass 3
+**Decision:** `AccountTab.Init` returns a `loadFoldersCmd`. J/K
+navigation dispatches `loadFolderCmd(name)`. Results come back as
+`foldersLoadedMsg` and `folderLoadedMsg` handled in `Update`. The
+synchronous `ListFolders` call in `NewAccountTab` and the
+`loadSelectedFolder` helper in `handleKey` are both gone.
+`AccountTab` emits `FolderChangedMsg` when selection moves; `App`
+consumes it to update the status bar instead of reaching through
+`m.acct.sidebar.SelectedFolderInfo()`. The dead `case ":":` stub
+in `App.Update` is deleted, and the `: cmd` rank-0 footer hint
+is removed alongside it.
+**Rationale:** Pass 3 wires real JMAP/IMAP backends. Their
+`ListFolders` and `FetchHeaders` calls take 200–500ms. Running
+them in `Update` or constructors would freeze the UI on every
+keypress and on startup. Fixing the pattern now — while the mock
+backend is instant and the regression surface is small — is
+cheaper than landing JMAP latency on top of a blocking Update
+loop. This also matches the Elm architecture the `CLAUDE.md`
+elm-conventions file mandates.
+**Date:** 2026-04-12 (Pass 2.5b-3.5)

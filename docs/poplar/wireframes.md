@@ -254,9 +254,9 @@ with dimmed content behind. Content changes per context.
                   │  C-b  page up                                           │
                   │                                                         │
                   │  Search             Select          Threads             │
-                  │  /    search        v  select       …  fold (TBD)      │
-                  │  n    next          ␣  toggle                           │
-                  │  N    prev                                              │
+                  │  /    search        v  select       ␣  fold             │
+                  │  n    next          ␣  toggle       F  fold all         │
+                  │  N    prev                          U  unfold all       │
                   │                                                         │
                   │  Go To                                                  │
                   │  I  inbox    D  drafts    S  sent                       │
@@ -467,8 +467,8 @@ prefixes.
 
 ### Threaded view — collapsed (#14)
 
-Thread folded via the fold key (TBD — see Pass 2.5b-3.5
-brainstorm). Shows message count badge.
+Thread folded via `Space` (Pass 2.5b-3.6). Shows message count
+badge.
 
 ```
      Eve Martinez           [3] Re: Server migration plan                  Apr 05
@@ -518,14 +518,12 @@ Status bar and footer swap to bulk mode:
 
 - **Empty folder (#13):** "No messages" text in `fg_dim`. Centered
   horizontally and vertically in the message list panel.
-- **Thread collapse (#14):** Fold key TBD — the original
-  `zo`/`zc`/`za` proposal violates the no-multikey rule
-  (architecture.md). Candidates under discussion are `Tab`
-  and `Space`; final choice is pending the Pass 2.5b-3.5
-  brainstorm. Fold-all / unfold-all may ship in this pass or
-  be deferred. Collapsed thread shows `[N]` count in `fg_dim`
-  before subject. Thread root always visible. Count includes
-  root.
+- **Thread collapse (#14):** `Space` toggles the fold under the
+  cursor, `F` folds all, `U` unfolds all (Pass 2.5b-3.6). Space
+  is dual-purpose: inside visual-select mode (Pass 6) it
+  toggles row selection, outside visual mode it toggles fold.
+  Collapsed thread shows `[N]` count in `fg_dim` before subject.
+  Thread root always visible. Count includes root.
 - **Search (#15):** `󰍉` search icon in `color_info`. Query text
   in `fg_bright`. Result count in `fg_dim`. Status bar retains
   connection indicator. Search is cleared with `Esc`

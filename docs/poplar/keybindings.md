@@ -72,14 +72,32 @@ Moves the sidebar selection and switches the message list.
 
 Multi-select is not yet implemented. The bindings below are
 reserved in the design so later passes don't collide with them.
-`v` is the entry point; `Space` toggles selection on the current
-message once multi-select is active. Until Pass 6 lands, neither
-key does anything.
+`v` enters visual-select mode; inside that mode `Space` toggles
+selection on the current row. Outside visual mode, `Space` is
+the thread fold-toggle — see § Threads below. Both `v` and
+`Space` are unbound until Pass 6 / Pass 2.5b-3.6 respectively.
 
 | Key | Action | Context |
 |-----|--------|---------|
 | `v` | Enter/exit visual select *(reserved, Pass 6)* | A |
-| `Space` | Toggle selection on current message *(reserved, Pass 6)* | A |
+| `Space` | Toggle selection on current row *(inside visual mode, Pass 6)* | A |
+
+## Threads (reserved — Pass 2.5b-3.6)
+
+Threaded view and per-thread fold state ship in Pass 2.5b-3.6.
+The bindings below are reserved now so no other pass can grab
+them; they do nothing until that pass lands.
+
+| Key | Action | Context |
+|-----|--------|---------|
+| `Space` | Toggle fold on thread under cursor *(reserved, 2.5b-3.6)* | A |
+| `F` | Fold all threads *(reserved, 2.5b-3.6)* | A |
+| `U` | Unfold all threads *(reserved, 2.5b-3.6)* | A |
+
+`Space` is dual-purpose: inside visual-select mode (Pass 6) it
+toggles row selection, outside visual mode it toggles thread
+fold. See architecture.md "Thread fold key: Space, dual meaning
+in visual-select mode".
 
 ## Viewer
 

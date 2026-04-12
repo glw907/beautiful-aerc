@@ -152,3 +152,35 @@ params = {cache-state = "true"}
 		t.Errorf("from = %v, want test@fm.com", a.From)
 	}
 }
+
+func TestExampleConfigParses(t *testing.T) {
+	const example = `[[account]]
+name = "Example"
+backend = "jmap"
+source = "jmap+oauthbearer://you@example.com@api.example.com/.well-known/jmap"
+credential-cmd = "echo token"
+
+[ui]
+threading = true
+
+[ui.folders.Inbox]
+# rank = 0
+
+[ui.folders.Drafts]
+[ui.folders.Sent]
+[ui.folders.Archive]
+[ui.folders.Spam]
+[ui.folders.Trash]
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.toml")
+	if err := os.WriteFile(path, []byte(example), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseAccounts(path); err != nil {
+		t.Fatalf("ParseAccounts: %v", err)
+	}
+	if _, err := LoadUI(path); err != nil {
+		t.Fatalf("LoadUI: %v", err)
+	}
+}
