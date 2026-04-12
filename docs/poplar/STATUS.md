@@ -36,6 +36,7 @@ Ready for message viewer prototype (Pass 2.5b-4).
 | 2.5b-chrome | Chrome redesign: drop tabs, frame, status, footer | done |
 | 2.5b-2 | Prototype: sidebar | done |
 | 2.5b-3 | Prototype: message list | done |
+| 2.5b-3.5 | Prototype: threaded view + UI config | pending |
 | 2.5b-4 | Prototype: message viewer | pending |
 | 2.5b-5 | Prototype: help popover | pending |
 | 2.5b-6 | Prototype: status/toast system | pending |
@@ -76,30 +77,101 @@ Ready for message viewer prototype (Pass 2.5b-4).
 
 ### Next steps
 
-1. **Execute Pass 2.5b-4** — message viewer prototype
+1. **Execute Pass 2.5b-3.5** — threaded view + UI config
 
 ### Next starter prompt
 
-> Start Pass 2.5b-4: message viewer prototype. Read the wireframes
-> at `docs/poplar/wireframes.md` (section 4 — message viewer), the
-> architecture doc at `docs/poplar/architecture.md`, the keybinding
-> map at `docs/poplar/keybindings.md`, and the styling reference at
-> `docs/poplar/styling.md`. The message list (Pass 2.5b-3) is
-> complete — `j/k` navigation, viewport scrolling, flag icons,
-> read/unread styling, mock-backed via
-> `AccountTab.loadSelectedFolder`. Add a `MessageViewer` component
-> in `internal/ui/viewer.go` that opens over the right panel when
-> the user presses `Enter` on the selected message. Reuse the
-> existing `internal/content` package (`ParseHeaders`,
-> `ParseBlocks`, `RenderHeaders`, `RenderBody`) to render the
-> message body — that's already lipgloss-based. The sidebar stays
-> visible; only the right panel swaps from list → viewer. `q`
-> closes the viewer back to the list. Single-pane key dispatch:
-> while the viewer is open, `j/k` scrolls the viewer body, not
-> the list. Before adding any new styles, add them to `styling.md`
-> first so the semantic role is documented alongside the palette
-> assignment. Mock body content can come from extending
-> `internal/mail/mock.go` with a `FetchMessage` implementation.
+> Start Pass 2.5b-3.5: threaded message list view and the first
+> piece of UI config. **Open by brainstorming** — the design has
+> open questions (see below) and the user wants to settle them
+> before any code goes in. Read the wireframes at
+> `docs/poplar/wireframes.md` (section 3 — message list, plus
+> §7 screen state #14 "Threaded View"), the architecture doc at
+> `docs/poplar/architecture.md`, the keybinding map at
+> `docs/poplar/keybindings.md`, and the styling reference at
+> `docs/poplar/styling.md`. Aerc's per-folder
+> `[ui:folder=Inbox]` `threading-enabled = true` model is the
+> closest prior art and should be referenced explicitly during
+> brainstorming.
+>
+> **Goal.** Add threaded display to the message list (the
+> wireframe shows it as the default state) and the first
+> `[ui]` config section so users can pick threaded vs flat per
+> folder. The viewer pass (2.5b-4) is unblocked either way; this
+> sub-pass exists because the wireframe shows threading and
+> Pass 2.5b-3 shipped without it.
+>
+> **What needs to happen (subject to brainstorm refinement):**
+>
+> 1. **Data model** — extend `mail.MessageInfo` (or add a sibling
+>    type) with `ThreadID`, parent reference, and depth so the
+>    backend can express grouping. JMAP threads are native;
+>    IMAP needs RFC 5256 THREAD or in-memory grouping (deferred
+>    to Pass 8).
+> 2. **Mock backend** — add at least one threaded conversation
+>    to `internal/mail/mock.go` so the renderer can be exercised
+>    without a real backend. Use the wireframe's example
+>    (Frank Lee → Grace Kim → Frank Lee).
+> 3. **Render** — thread prefix glyphs in the subject column
+>    in `FgDim`: `├─` has-siblings, `└─` last-sibling, `│`
+>    stem. Document the new style slot(s) in
+>    `docs/poplar/styling.md` **before** writing renderer code
+>    (per the doc-first rule).
+> 4. **Fold state** — per-thread expanded/collapsed flags on
+>    `MessageList`. `j/k` skip hidden children. Cursor never
+>    lands on a collapsed child. Collapsed thread shows
+>    `[N]` count badge in `fg_dim` before the subject (per
+>    wireframes.md:515).
+> 5. **Keys** — single-keypress fold operations: `zo` unfold,
+>    `zc` fold, `za` toggle. **All three are two-keypress
+>    sequences** — re-read the no-multikey rule
+>    (`docs/poplar/architecture.md` "No multi-key sequences")
+>    and resolve the contradiction in brainstorming. Either
+>    pick single-keypress alternatives (`+`/`-`/`Space`?) or
+>    accept that vim's `z` prefix is the one place we allow a
+>    two-key chord. The wireframe assumes `z*` — the architecture
+>    doc forbids it. The user needs to break the tie.
+> 6. **UI config** — first `[ui]` section in
+>    `~/.config/poplar/accounts.toml`. Suggested shape:
+>    ```toml
+>    [ui]
+>    threading = true   # default for all folders
+>
+>    [ui.folders.Inbox]
+>    threading = false  # per-folder override
+>    ```
+>    Add a `UIConfig` struct in `internal/config/` with a
+>    `Threading bool` plus `FolderOverrides map[string]FolderUI`.
+>    Wire it through `App` → `AccountTab` → `MessageList` as a
+>    read-only field at construction. Document the schema in
+>    `docs/poplar/architecture.md` since this is the first UI
+>    config section and sets the pattern for future ones.
+> 7. **Runtime toggle (optional, decide in brainstorm)** —
+>    single-key (e.g. `T`) to flip the current folder between
+>    threaded and flat for the session. In-memory only; doesn't
+>    write back to disk. Useful for "show me this folder flat
+>    right now" without editing config.
+>
+> **Open questions to settle in brainstorming:**
+>
+> - **Default value** — threaded on or off? Aerc defaults on.
+>   Pine philosophy says on (modern expectation). Flat is
+>   simpler for chronological folders. The user wants to decide
+>   this explicitly.
+> - **Granularity** — global / per-account / per-folder? The
+>   recommendation above is per-folder with a global fallback,
+>   but confirm before coding.
+> - **Fold key conflict** — `zo`/`zc`/`za` vs the no-multikey
+>   rule. Pick a side.
+> - **Runtime toggle** — `T` keybinding yes/no? Is the toggle
+>   per-folder, per-session, or both?
+> - **Sort interaction** — threads sort by latest reply, children
+>   render chronologically inside the parent. Confirm.
+>
+> **Approach.** Brainstorm first (settle the open questions),
+> then write a short plan doc at
+> `docs/superpowers/plans/2026-04-12-poplar-threading.md`,
+> then implement. Standard pass-end checklist applies.
 
 ### Pass-end checklist
 
