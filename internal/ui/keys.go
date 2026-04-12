@@ -71,8 +71,7 @@ func NewAccountKeys() AccountKeys {
 			key.NewBinding(key.WithKeys("."), key.WithHelp(".", "read")),
 		},
 		reply: keyGroup{
-			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
-			key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "all")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r/R", "reply")),
 			key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fwd")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compose")),
 		},
@@ -112,8 +111,7 @@ func NewViewerKeys() ViewerKeys {
 			key.NewBinding(key.WithKeys("."), key.WithHelp(".", "read")),
 		},
 		reply: keyGroup{
-			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
-			key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "all")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r/R", "reply")),
 			key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fwd")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compose")),
 		},

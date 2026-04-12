@@ -107,8 +107,8 @@ has room for every account-view action, including hints for
 features that aren't yet wired up.
 
 ```
- j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r reply  R all  f fwd  c compose ┊ / find  n/N results  v select  ? help  : cmd
- ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ─────────────▸  ◂── tools & app ──────────────────────────▸
+ j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select  ? help  : cmd
+ ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── tools & app ──────────────────────────▸
 ```
 
 **Compressed nav hints.** `j/k/J/K nav` covers both `j/k`
@@ -129,8 +129,8 @@ the footer real estate is better spent elsewhere.
 ### Viewer footer
 
 ```
- d del  a archive  s star  . read ┊ r reply  R all  f fwd  c compose ┊ Tab links  q close  ? help  : cmd
- ◂── triage ─────────────────────▸  ◂── reply/compose ─────────────▸  ◂── viewer / app ───────────────▸
+ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ Tab links  q close  ? help  : cmd
+ ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── viewer / app ───────────────▸
 ```
 
 ### Group separator

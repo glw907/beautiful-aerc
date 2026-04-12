@@ -58,8 +58,8 @@ func TestFooterView(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(AccountContext)
 		result := stripANSI(f.View(160))
-		if !strings.Contains(result, "r reply") {
-			t.Error("missing r reply")
+		if !strings.Contains(result, "r/R reply") {
+			t.Error("missing r/R reply")
 		}
 		if !strings.Contains(result, "c compose") {
 			t.Error("missing c compose")
