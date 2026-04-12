@@ -38,6 +38,7 @@ Ready for message viewer prototype (Pass 2.5b-4).
 | 2.5b-3 | Prototype: message list | done |
 | 2.5b-3.5 | Prototype: UI config + sidebar polish | pending |
 | 2.5b-3.6 | Prototype: threading + fold (index view completion) | pending |
+| 2.5b-3.7 | Prototype: sidebar filter UI (UX only, no backing logic) | pending |
 | 2.5b-4 | Prototype: message viewer | pending |
 | 2.5b-5 | Prototype: help popover | pending |
 | 2.5b-6 | Prototype: status/toast system | pending |
@@ -80,6 +81,7 @@ Ready for message viewer prototype (Pass 2.5b-4).
 
 1. **Execute Pass 2.5b-3.5** — UI config + sidebar polish + docs cleanup
 2. **Execute Pass 2.5b-3.6** — threading + fold (index view completion)
+3. **Execute Pass 2.5b-3.7** — sidebar filter UI prototype (UX only)
 
 ### Next starter prompt
 
@@ -257,6 +259,79 @@ Ready for message viewer prototype (Pass 2.5b-4).
 >
 > **Approach.** Brainstorm the open questions, then write a plan
 > doc at `docs/superpowers/plans/2026-04-12-poplar-threading.md`,
+> then implement. Standard pass-end checklist applies.
+
+### Follow-up starter prompt (Pass 2.5b-3.7)
+
+> After Pass 2.5b-3.6 lands, resume with Pass 2.5b-3.7: sidebar
+> filter UI prototype. **This pass is UI/UX only — no backing
+> filter logic, no backend calls, no persistence beyond the
+> filter-string field on `Sidebar`.** The match set is hardcoded
+> or applied as a trivial substring match over the already-loaded
+> folder slice. The point of the pass is to prototype and validate
+> the *interaction* — entry key, inline input rendering, matched
+> vs. dimmed row treatment, empty state, clear/exit — on a
+> bounded surface before the real search work in Pass 2.5b-7 /
+> Pass 7. Read the wireframes at `docs/poplar/wireframes.md`
+> (§2 sidebar), the architecture doc at
+> `docs/poplar/architecture.md`, the keybindings doc at
+> `docs/poplar/keybindings.md`, the styling reference at
+> `docs/poplar/styling.md`, and the existing sidebar code at
+> `internal/ui/sidebar.go`.
+>
+> **Goal.** The sidebar gains a filter affordance. When active:
+>
+> 1. The sidebar panel shows an inline input row (probably near
+>    the top, under the account name) where the user types a
+>    filter string.
+> 2. Folder rows whose names match the filter are rendered
+>    normally; non-matching rows are either hidden or dimmed
+>    (brainstorm which).
+> 3. `Esc` clears the filter and exits the mode; `Enter`
+>    commits the selection (opens the folder).
+> 4. Group headers, indent, unread counts, and the `┃` selection
+>    indicator continue to render correctly under filter.
+>
+> Real filter functionality (beyond a trivial substring match)
+> is explicitly out of scope. Backend-backed filtering, fuzzy
+> ranking, and highlight-span rendering are all later work,
+> tracked separately. This pass proves the interaction.
+>
+> ---
+>
+> **Still open — brainstorm these:**
+>
+> - **Entry key.** `/` is earmarked for global search (footer
+>   shows `/ find`). Options: reuse `/` and disambiguate by
+>   context ("if sidebar has focus"), pick a different key
+>   (`f`? `Ctrl-f`?), or rethink the global-search key to free
+>   `/` for sidebar-local use. The one-pane, no-focus-cycling
+>   architecture makes "if sidebar has focus" tricky — there's
+>   no sidebar focus state to disambiguate against.
+> - **Modal or inline-always?** Is the filter a mode (enter,
+>   type, exit) or always visible at the top of the sidebar
+>   accepting keystrokes when non-empty? Mode is simpler and
+>   matches the no-clutter sidebar; always-visible is a lighter
+>   touch but adds a row to the sidebar chrome.
+> - **Non-match treatment.** Hide non-matching rows entirely
+>   (compact list), or keep them visible but dimmed (stable
+>   position, easier to re-find)?
+> - **Group-header behavior under filter.** If the Primary group
+>   has zero matches, does its blank-line separator collapse?
+>   Does the group disappear? Or stay with an empty slot?
+> - **Interaction with `J/K` and folder-jump keys.** Does `J/K`
+>   move through the filtered set or the full list? Do `I/D/S/A`
+>   still jump to canonical folders while the filter is active?
+> - **What does "matched" rendering look like?** Bold? Accent
+>   color? Character-level highlight spans? (Spans are the
+>   hardest and can defer.)
+> - **Scope test for 2.5b-7.** Is there a specific search-UX
+>   question the sidebar prototype is meant to answer that we
+>   should name now so the brainstorm stays targeted?
+>
+> **Approach.** Brainstorm the open questions, then write a short
+> plan doc at
+> `docs/superpowers/plans/2026-04-12-poplar-sidebar-filter-ui.md`,
 > then implement. Standard pass-end checklist applies.
 
 ### Pass-end checklist
