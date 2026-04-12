@@ -10,7 +10,7 @@ import (
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/handlers"
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/jmap/cache"
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/types"
-	"github.com/glw907/beautiful-aerc/internal/poplar"
+	appconfig "github.com/glw907/beautiful-aerc/internal/config"
 	"git.sr.ht/~rockorager/go-jmap"
 	"git.sr.ht/~rockorager/go-jmap/mail/identity"
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
@@ -27,7 +27,7 @@ var (
 
 type JMAPWorker struct {
 	config struct {
-		account    *poplar.AccountConfig
+		account    *appconfig.AccountConfig
 		endpoint   string
 		oauth      bool
 		user       *url.Userinfo

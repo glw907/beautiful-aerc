@@ -8,26 +8,26 @@ import (
 	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker"
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/types"
-	"github.com/glw907/beautiful-aerc/internal/poplar"
+	"github.com/glw907/beautiful-aerc/internal/config"
 )
 
 // JMAPAdapter wraps the forked aerc JMAP worker behind the Backend
 // interface, bridging async message-passing to synchronous calls.
 type JMAPAdapter struct {
-	config  *poplar.AccountConfig
+	acctCfg *config.AccountConfig
 	w       *types.Worker
 	updates chan Update
 	done    chan struct{}
 }
 
 // NewJMAPAdapter creates a JMAP backend adapter for the given account.
-func NewJMAPAdapter(config *poplar.AccountConfig) (*JMAPAdapter, error) {
-	w, err := worker.NewWorker(config.Source, config.Name)
+func NewJMAPAdapter(cfg *config.AccountConfig) (*JMAPAdapter, error) {
+	w, err := worker.NewWorker(cfg.Source, cfg.Name)
 	if err != nil {
 		return nil, fmt.Errorf("creating worker: %w", err)
 	}
 	return &JMAPAdapter{
-		config:  config,
+		acctCfg: cfg,
 		w:       w,
 		updates: make(chan Update, 50),
 		done:    make(chan struct{}),
@@ -39,7 +39,7 @@ func (a *JMAPAdapter) Connect(ctx context.Context) error {
 	go a.w.Backend.Run()
 	go a.pump()
 
-	if err := a.doAction(&types.Configure{Config: a.config}); err != nil {
+	if err := a.doAction(&types.Configure{Config: a.acctCfg}); err != nil {
 		close(a.done)
 		return fmt.Errorf("configuring worker: %w", err)
 	}

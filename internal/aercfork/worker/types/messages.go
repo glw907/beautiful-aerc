@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
-	"github.com/glw907/beautiful-aerc/internal/poplar"
+	"github.com/glw907/beautiful-aerc/internal/config"
 	"github.com/emersion/go-message/mail"
 )
 
@@ -79,7 +79,7 @@ type Unsupported struct {
 
 type Configure struct {
 	Message
-	Config *poplar.AccountConfig
+	Config *config.AccountConfig
 }
 
 type Connect struct {

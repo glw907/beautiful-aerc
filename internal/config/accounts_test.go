@@ -1,4 +1,4 @@
-package poplar
+package config
 
 import (
 	"os"

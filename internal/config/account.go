@@ -1,5 +1,5 @@
-// Package poplar provides poplar-specific types shared across the application.
-package poplar
+// Package config holds poplar's configuration types and loaders.
+package config
 
 import (
 	"time"
