@@ -1,16 +1,17 @@
-package mail
+package mailjmap
 
 import (
 	"testing"
 
 	"github.com/glw907/beautiful-aerc/internal/aercfork/models"
+	"github.com/glw907/beautiful-aerc/internal/mail"
 )
 
 func TestTranslateFolder(t *testing.T) {
 	tests := []struct {
 		name string
 		dir  *models.Directory
-		want Folder
+		want mail.Folder
 	}{
 		{
 			name: "inbox with unread",
@@ -20,7 +21,7 @@ func TestTranslateFolder(t *testing.T) {
 				Unseen: 5,
 				Role:   models.InboxRole,
 			},
-			want: Folder{
+			want: mail.Folder{
 				Name:   "Inbox",
 				Exists: 42,
 				Unseen: 5,
@@ -34,7 +35,7 @@ func TestTranslateFolder(t *testing.T) {
 				Exists: 100,
 				Unseen: 0,
 			},
-			want: Folder{
+			want: mail.Folder{
 				Name:   "Sent",
 				Exists: 100,
 				Unseen: 0,

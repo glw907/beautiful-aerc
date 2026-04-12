@@ -1,4 +1,7 @@
-package mail
+// Package mailjmap wraps the forked aerc JMAP worker behind the
+// mail.Backend interface. Lives in its own package so internal/mail
+// can avoid depending on internal/config (needed for AccountConfig).
+package mailjmap
 
 import (
 	"context"
@@ -9,14 +12,15 @@ import (
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker"
 	"github.com/glw907/beautiful-aerc/internal/aercfork/worker/types"
 	"github.com/glw907/beautiful-aerc/internal/config"
+	"github.com/glw907/beautiful-aerc/internal/mail"
 )
 
-// JMAPAdapter wraps the forked aerc JMAP worker behind the Backend
+// JMAPAdapter wraps the forked aerc JMAP worker behind the mail.Backend
 // interface, bridging async message-passing to synchronous calls.
 type JMAPAdapter struct {
 	acctCfg *config.AccountConfig
 	w       *types.Worker
-	updates chan Update
+	updates chan mail.Update
 	done    chan struct{}
 }
 
@@ -29,7 +33,7 @@ func NewJMAPAdapter(cfg *config.AccountConfig) (*JMAPAdapter, error) {
 	return &JMAPAdapter{
 		acctCfg: cfg,
 		w:       w,
-		updates: make(chan Update, 50),
+		updates: make(chan mail.Update, 50),
 		done:    make(chan struct{}),
 	}, nil
 }
@@ -57,9 +61,12 @@ func (a *JMAPAdapter) Disconnect() error {
 	return err
 }
 
+// AccountName returns the account display name.
+func (a *JMAPAdapter) AccountName() string { return a.acctCfg.Name }
+
 // ListFolders returns all mail folders from the server.
-func (a *JMAPAdapter) ListFolders() ([]Folder, error) {
-	var folders []Folder
+func (a *JMAPAdapter) ListFolders() ([]mail.Folder, error) {
+	var folders []mail.Folder
 	err := a.doCollect(&types.ListDirectories{}, func(msg types.WorkerMessage) {
 		if d, ok := msg.(*types.Directory); ok {
 			folders = append(folders, translateFolder(d.Dir))
@@ -77,47 +84,47 @@ func (a *JMAPAdapter) OpenFolder(name string) error {
 }
 
 // FetchHeaders retrieves header info for the given message UIDs.
-func (a *JMAPAdapter) FetchHeaders(uids []UID) ([]MessageInfo, error) {
+func (a *JMAPAdapter) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
 // FetchBody retrieves the full body of a single message.
-func (a *JMAPAdapter) FetchBody(uid UID) (io.Reader, error) {
+func (a *JMAPAdapter) FetchBody(uid mail.UID) (io.Reader, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
 // Search finds messages matching the given criteria.
-func (a *JMAPAdapter) Search(criteria SearchCriteria) ([]UID, error) {
+func (a *JMAPAdapter) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
 // Move moves messages to the destination folder.
-func (a *JMAPAdapter) Move(uids []UID, dest string) error {
+func (a *JMAPAdapter) Move(uids []mail.UID, dest string) error {
 	return fmt.Errorf("not implemented")
 }
 
 // Copy copies messages to the destination folder.
-func (a *JMAPAdapter) Copy(uids []UID, dest string) error {
+func (a *JMAPAdapter) Copy(uids []mail.UID, dest string) error {
 	return fmt.Errorf("not implemented")
 }
 
 // Delete moves messages to trash.
-func (a *JMAPAdapter) Delete(uids []UID) error {
+func (a *JMAPAdapter) Delete(uids []mail.UID) error {
 	return fmt.Errorf("not implemented")
 }
 
 // Flag sets or clears a flag on messages.
-func (a *JMAPAdapter) Flag(uids []UID, flag Flag, set bool) error {
+func (a *JMAPAdapter) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	return fmt.Errorf("not implemented")
 }
 
 // MarkRead marks messages as read.
-func (a *JMAPAdapter) MarkRead(uids []UID) error {
+func (a *JMAPAdapter) MarkRead(uids []mail.UID) error {
 	return fmt.Errorf("not implemented")
 }
 
 // MarkAnswered marks messages as answered.
-func (a *JMAPAdapter) MarkAnswered(uids []UID) error {
+func (a *JMAPAdapter) MarkAnswered(uids []mail.UID) error {
 	return fmt.Errorf("not implemented")
 }
 
@@ -127,7 +134,7 @@ func (a *JMAPAdapter) Send(from string, rcpts []string, body io.Reader) error {
 }
 
 // Updates returns a channel of asynchronous backend updates.
-func (a *JMAPAdapter) Updates() <-chan Update {
+func (a *JMAPAdapter) Updates() <-chan mail.Update {
 	return a.updates
 }
 
@@ -170,8 +177,8 @@ func (a *JMAPAdapter) doCollect(msg types.WorkerMessage, collect func(types.Work
 	return <-ch
 }
 
-func translateFolder(d *models.Directory) Folder {
-	return Folder{
+func translateFolder(d *models.Directory) mail.Folder {
+	return mail.Folder{
 		Name:   d.Name,
 		Exists: d.Exists,
 		Unseen: d.Unseen,
