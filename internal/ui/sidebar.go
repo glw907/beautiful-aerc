@@ -151,18 +151,10 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	isSelected := idx == s.selected
 	hasUnread := entry.folder.Unseen > 0
 
-	// Apply row background to a base style.
-	withBg := func(base lipgloss.Style) lipgloss.Style {
-		if bg, ok := bgStyle.GetBackground().(lipgloss.Color); ok {
-			return base.Background(bg)
-		}
-		return base
-	}
-
 	// Indicator: ┃ when selected, space otherwise
 	var indicator string
 	if isSelected {
-		indicator = withBg(s.styles.SidebarIndicator).Render("┃")
+		indicator = applyBg(s.styles.SidebarIndicator, bgStyle).Render("┃")
 	} else {
 		indicator = bgStyle.Render(" ")
 	}
@@ -171,13 +163,13 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	if hasUnread {
 		textStyle = s.styles.SidebarUnread
 	}
-	icon := withBg(textStyle).Render(entry.icon)
-	name := withBg(textStyle).Render(entry.folder.Name)
+	icon := applyBg(textStyle, bgStyle).Render(entry.icon)
+	name := applyBg(textStyle, bgStyle).Render(entry.folder.Name)
 
 	var countStr string
 	var countWidth int
 	if hasUnread {
-		countStr = withBg(textStyle).Render(fmt.Sprintf("%d", entry.folder.Unseen))
+		countStr = applyBg(textStyle, bgStyle).Render(fmt.Sprintf("%d", entry.folder.Unseen))
 		countWidth = lipgloss.Width(countStr)
 	}
 
@@ -193,13 +185,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 		countStr +
 		bgStyle.Render(strings.Repeat(" ", rightMargin))
 
-	// Ensure exact width
-	rowWidth := lipgloss.Width(row)
-	if rowWidth < s.width {
-		row += bgStyle.Render(strings.Repeat(" ", s.width-rowWidth))
-	}
-
-	return row
+	return fillRowToWidth(row, s.width, bgStyle)
 }
 
 // renderBlankLine renders an empty line at the sidebar width with the sidebar background.

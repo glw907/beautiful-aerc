@@ -17,6 +17,7 @@ type AccountTab struct {
 	styles  Styles
 	backend mail.Backend
 	sidebar Sidebar
+	msglist MessageList
 	width   int
 	height  int
 }
@@ -26,11 +27,37 @@ func NewAccountTab(styles Styles, backend mail.Backend) AccountTab {
 	folders, _ := backend.ListFolders()
 	sb := NewSidebar(styles, folders, sidebarWidth, 1)
 
-	return AccountTab{
+	tab := AccountTab{
 		styles:  styles,
 		backend: backend,
 		sidebar: sb,
+		msglist: NewMessageList(styles, nil, 1, 1),
 	}
+	tab.loadSelectedFolder()
+	return tab
+}
+
+// loadSelectedFolder fetches messages for the currently selected
+// sidebar folder and seeds the message list. Mock-backed for now;
+// Pass 3 will plumb this through real JMAP/IMAP fetches.
+func (m *AccountTab) loadSelectedFolder() {
+	name := m.sidebar.SelectedFolder()
+	if name == "" {
+		m.msglist.SetMessages(nil)
+		return
+	}
+	if err := m.backend.OpenFolder(name); err != nil {
+		// TODO(pass3): surface OpenFolder error via toast/status.
+		m.msglist.SetMessages(nil)
+		return
+	}
+	msgs, err := m.backend.FetchHeaders(nil)
+	if err != nil {
+		// TODO(pass3): surface FetchHeaders error via toast/status.
+		m.msglist.SetMessages(nil)
+		return
+	}
+	m.msglist.SetMessages(msgs)
 }
 
 // Title returns the current folder name.
@@ -58,6 +85,8 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.height = msg.Height
 		sw := min(sidebarWidth, m.width/2)
 		m.sidebar.SetSize(sw, m.height-2) // -2 for account name + blank line
+		mw := max(1, m.width-sw-1)        // -1 for divider
+		m.msglist.SetSize(mw, m.height)
 
 	case tea.KeyMsg:
 		m.handleKey(msg)
@@ -66,26 +95,42 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 }
 
 // handleKey dispatches navigation keys by identity. J/K/G move the
-// sidebar; j/k will move the message list cursor once it exists.
+// sidebar (and refresh the message list); j/k/Ctrl-d/Ctrl-u move the
+// message list cursor.
 func (m *AccountTab) handleKey(msg tea.KeyMsg) {
 	switch msg.String() {
-	case "J", "down":
+	case "J":
 		m.sidebar.MoveDown()
-	case "K", "up":
+		m.loadSelectedFolder()
+	case "K":
 		m.sidebar.MoveUp()
+		m.loadSelectedFolder()
 	case "G":
-		m.sidebar.MoveToBottom()
+		m.msglist.MoveToBottom()
+	case "g":
+		m.msglist.MoveToTop()
+	case "j", "down":
+		m.msglist.MoveDown()
+	case "k", "up":
+		m.msglist.MoveUp()
+	case "ctrl+d":
+		m.msglist.HalfPageDown()
+	case "ctrl+u":
+		m.msglist.HalfPageUp()
+	case "ctrl+f", "pgdown":
+		m.msglist.PageDown()
+	case "ctrl+b", "pgup":
+		m.msglist.PageUp()
 	}
 }
 
-// View renders the sidebar + divider + message list placeholder.
+// View renders the sidebar + divider + message list.
 func (m AccountTab) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
 	}
 
 	sw := min(sidebarWidth, m.width/2)
-	mw := m.width - sw - 1 // -1 for divider
 
 	acctLine := m.styles.SidebarAccount.Width(sw).Render(" " + m.backend.AccountName())
 	blank := m.styles.SidebarBg.Width(sw).Render("")
@@ -107,31 +152,9 @@ func (m AccountTab) View() string {
 
 	sidebarView := strings.Join(sidebarLines, "\n")
 	divider := renderDivider(m.height, m.styles)
-	msglistView := renderPlaceholder("Message List", mw, m.height, m.styles)
+	msglistView := m.msglist.View()
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, divider, msglistView)
-}
-
-// renderPlaceholder renders a centered label in a panel of the given size.
-func renderPlaceholder(label string, width, height int, s Styles) string {
-	topPad := max(0, (height-1)/2)
-	botPad := max(0, height-1-topPad)
-	leftPad := max(0, (width-len(label))/2)
-
-	padStyle := lipgloss.NewStyle().Width(width)
-	labelStyle := lipgloss.NewStyle().Width(width).Foreground(s.Dim.GetForeground())
-
-	blankLine := padStyle.Render("")
-	var lines []string
-	for range topPad {
-		lines = append(lines, blankLine)
-	}
-	lines = append(lines, labelStyle.Render(strings.Repeat(" ", leftPad)+label))
-	for range botPad {
-		lines = append(lines, blankLine)
-	}
-
-	return strings.Join(lines, "\n")
 }
 
 // renderDivider renders a vertical line of │ characters.

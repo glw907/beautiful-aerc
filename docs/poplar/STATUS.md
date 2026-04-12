@@ -1,19 +1,26 @@
 # Poplar Status
 
-**Current state:** Sidebar prototype complete. Three folder groups with
-blank-line separators, `┃` selection indicator (matches account accent),
-bold-white unread folders and counts, J/K/G navigation (aerc
-convention: J/K folders, j/k messages). One pane, no focus cycling
-(like pine) — every key is always live, no Tab switching. Status bar
-syncs with selected folder. Semantic style map codified in
-`docs/poplar/styling.md` — every `Styles` field has a documented role
-and palette slot. Footer is responsive: per-hint `dropRank` (0–10)
-drops nav first, then niche modes, then secondary actions, keeping
-the primary email loop (`d a r/R c`) plus the always-pinned
-`? : q` escape hatch even at 40 columns. Hint definitions, shared
-triage/reply groups, and group functions all live in `footer.go`;
-`keys.go` is dispatch-only. Ready for message list prototype
-(Pass 2.5b-3).
+**Current state:** Message list prototype complete. Hand-rolled
+`MessageList` component in `internal/ui/msglist.go` with column
+layout (cursor / flag / sender(22) / subject(fill) / date(12)), `▐`
+cursor on the selected row, viewport scrolling
+(`MoveDown`/`MoveUp`/`MoveToTop`/`MoveToBottom` plus `HalfPage` and
+`Page` Up/Down — all routed through a single `moveBy` helper).
+**Brightness, not hue:** read rows render in `FgDim`, unread in
+`FgBright` (sender bold), the flag glyph dims with the row, and
+`ColorWarning` is reserved for the single unread+flagged case. The
+cursor `▐` is the only other place hue is used. Glyphs `󰈻 󰑚 󰇮`
+carry the flag/answered/unread distinction; color carries the "demands
+attention" signal. Codified as a general TUI rule in the
+`bubbletea-design` skill ("Hue Budget") and as the poplar-specific map
+in `docs/poplar/styling.md`. Folder changes via J/K refresh the
+message list through `AccountTab.loadSelectedFolder` (mock-backed;
+Pass 3 wires real JMAP). Single-pane key dispatch: `j/k` move
+messages, `J/K/G` move folders, every key always live. Shared
+`applyBg` and `fillRowToWidth` helpers extracted from sidebar and
+msglist row renderers. Flag cell width pinned to **1 lipgloss cell**
+— visual width vs `lipgloss.Width()` mismatch is documented inline.
+Ready for message viewer prototype (Pass 2.5b-4).
 
 ## Passes
 
@@ -28,7 +35,7 @@ triage/reply groups, and group functions all live in `footer.go`;
 | 2.5b-keys | Keybinding design: single-key scheme for all screens | done |
 | 2.5b-chrome | Chrome redesign: drop tabs, frame, status, footer | done |
 | 2.5b-2 | Prototype: sidebar | done |
-| 2.5b-3 | Prototype: message list | pending |
+| 2.5b-3 | Prototype: message list | done |
 | 2.5b-4 | Prototype: message viewer | pending |
 | 2.5b-5 | Prototype: help popover | pending |
 | 2.5b-6 | Prototype: status/toast system | pending |
@@ -69,24 +76,30 @@ triage/reply groups, and group functions all live in `footer.go`;
 
 ### Next steps
 
-1. **Execute Pass 2.5b-3** — message list prototype
+1. **Execute Pass 2.5b-4** — message viewer prototype
 
 ### Next starter prompt
 
-> Start Pass 2.5b-3: message list prototype. Read the wireframes
-> at `docs/poplar/wireframes.md` (section 3), the architecture doc
-> at `docs/poplar/architecture.md`, the keybinding map at
-> `docs/poplar/keybindings.md`, and the styling reference at
-> `docs/poplar/styling.md`. The sidebar (Pass 2.5b-2) is
-> complete — folder list with groups, selection, unread badges,
-> J/K/G navigation. The account view is one pane (like pine):
-> no Tab focus cycling, every key always live. Replace the
-> "Message List" placeholder in AccountTab's right panel with a
-> real message list component using mock data from
-> `internal/mail/mock.go`. `j/k` navigates messages; `J/K/G`
-> already navigates folders via the sidebar. Before adding any
-> new styles, add them to `styling.md` first so the semantic role
-> is documented alongside the palette assignment.
+> Start Pass 2.5b-4: message viewer prototype. Read the wireframes
+> at `docs/poplar/wireframes.md` (section 4 — message viewer), the
+> architecture doc at `docs/poplar/architecture.md`, the keybinding
+> map at `docs/poplar/keybindings.md`, and the styling reference at
+> `docs/poplar/styling.md`. The message list (Pass 2.5b-3) is
+> complete — `j/k` navigation, viewport scrolling, flag icons,
+> read/unread styling, mock-backed via
+> `AccountTab.loadSelectedFolder`. Add a `MessageViewer` component
+> in `internal/ui/viewer.go` that opens over the right panel when
+> the user presses `Enter` on the selected message. Reuse the
+> existing `internal/content` package (`ParseHeaders`,
+> `ParseBlocks`, `RenderHeaders`, `RenderBody`) to render the
+> message body — that's already lipgloss-based. The sidebar stays
+> visible; only the right panel swaps from list → viewer. `q`
+> closes the viewer back to the list. Single-pane key dispatch:
+> while the viewer is open, `j/k` scrolls the viewer body, not
+> the list. Before adding any new styles, add them to `styling.md`
+> first so the semantic role is documented alongside the palette
+> assignment. Mock body content can come from extending
+> `internal/mail/mock.go` with a `FetchMessage` implementation.
 
 ### Pass-end checklist
 

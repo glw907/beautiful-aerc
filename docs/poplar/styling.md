@@ -85,6 +85,64 @@ which layers the background onto a base foreground style. This is the
 only way lipgloss lets us compose fg + bg without clobbering
 already-rendered ANSI.
 
+### Message list
+
+The message list is the primary content surface — its background is
+`BgBase`, the same as the rest of the right panel. Selected rows
+overlay `BgSelection`. **The list has two visual layers: brightness
+(read vs unread) and glyph (flag vs answered vs unread vs none).
+Color hue is used only for the cursor and for the single
+unread+flagged case** — every other distinction is carried by text
+brightness or by which glyph appears, not by hue. This keeps the row
+to at most two accent hues simultaneously and matches the
+"brightness, not hue" convention used by Apple Mail, Fastmail,
+Gmail, and Mutt.
+
+| Field | fg | bg | Role |
+|-------|----|----|------|
+| `MsgListBg` | — | `BgBase` | Base panel background (every row) |
+| `MsgListSelected` | — | `BgSelection` | Selected row background override |
+| `MsgListCursor` | `AccentPrimary` | inherit | `▐` left-edge cursor on selected row |
+| `MsgListUnreadSender` | `FgBright` bold | inherit | Sender column when message is unread |
+| `MsgListUnreadSubject` | `FgBright` | inherit | Subject column when message is unread |
+| `MsgListReadSender` | `FgDim` | inherit | Sender column when message has been read |
+| `MsgListReadSubject` | `FgDim` | inherit | Subject column when message has been read |
+| `MsgListDate` | `FgDim` | inherit | Date column (always de-emphasized) |
+| `MsgListIconUnread` | `FgBright` | inherit | Any glyph (`󰇮 󰑚`) on an unread row — matches the row's text brightness |
+| `MsgListIconRead` | `FgDim` | inherit | Any glyph (`󰑚 󰈻`) on a read row — inherits the row's dimness |
+| `MsgListFlagFlagged` | `ColorWarning` | inherit | `󰈻` flag icon **only when row is also unread** — the single permitted accent for the highest-priority row state |
+
+Background composition uses the shared `applyBg(base, bgStyle)`
+helper from `styles.go`: each text segment layers its base foreground
+style over the row background without clobbering already-rendered
+ANSI. The cursor `▐` is the only character that escalates to
+`AccentPrimary`; the rest of the selected row keeps its unread/read
+foreground colors so the visual rhythm of unread vs read survives
+selection.
+
+**Read state always wins over flag state for icon color.** A read
+flagged message gets the dim flag glyph (`󰈻` in `FgDim`), not the
+orange one. Once you've read it you've acknowledged the importance —
+the row dims completely. Only the *unread* flagged row gets the
+orange accent, so it pops as the single most attention-worthy item
+in the list. This follows Tufte's data-ink principle: spend hue on
+the row that demands action, withhold it everywhere else.
+
+**Date is always dim, even on unread rows.** The date is metadata,
+not content — escalating it would compete with the sender/subject for
+the eye's first stop. The wireframe shows this consistently across all
+states.
+
+**Why brightness and not hue for unread.** An earlier iteration used
+`AccentTertiary` (teal) for unread sender/subject and three different
+accent hues (teal/orange/purple) for the three flag types. Four
+competing hues per row on a muted Nord background fragments
+attention — no single element wins the eye, and "garish" is the
+right word for it. Brightness alone (`FgBright` vs `FgDim`) is enough
+signal for read state, and it leaves the hue budget free for the
+cursor and for flagged-unread, the two things that genuinely need to
+pop.
+
 ### Tab bar (unused in current chrome, reserved)
 
 | Field | fg | bg | Role |

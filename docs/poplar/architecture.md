@@ -450,3 +450,77 @@ even at 40 columns. Implemented in `internal/ui/footer.go` —
 `fitFooterHints` drops one hint at a time and re-measures until
 the rendered plain-text width fits.
 **Date:** 2026-04-11
+
+### Message list as child model with viewport offset
+**Decision:** Message list is a standalone `MessageList` struct in
+`internal/ui/msglist.go` with its own `View()`, cursor state
+(`selected`), viewport state (`offset`), and movement methods
+(`MoveDown`/`MoveUp`/`MoveToTop`/`MoveToBottom`/`HalfPageDown`/`HalfPageUp`/
+`PageDown`/`PageUp`). All movement routes through a single `moveBy(delta)`
+helper that clamps the cursor and re-clamps the viewport. `AccountTab`
+owns it as a child model alongside `Sidebar` and dispatches keys by
+identity (`j/k` to msglist, `J/K` to sidebar) — no focus switching.
+**Rationale:** Same Elm-architecture pattern as the sidebar (Pass
+2.5b-2). Hand-rolled (not `bubbles/list`) for the same reasons: full
+control over the `▐` cursor cell, selection background composition,
+and hand-tuned column layout. Viewport offset (`clampOffset`) is
+needed because the message list scrolls — the sidebar doesn't.
+Folder changes via J/K refresh the message list through
+`AccountTab.loadSelectedFolder` (mock-backed for the prototype, real
+JMAP/IMAP in Pass 3).
+**Date:** 2026-04-11 (Pass 2.5b-3)
+
+### Flag cell width measured by lipgloss, not visual cells
+**Decision:** The message list flag column is **1 lipgloss cell wide**,
+not 2. The wireframe shows Nerd Font glyphs (`󰇮 󰑚 󰈻`) as 2 visual
+cells, but `lipgloss.Width()` reports them as 1 cell. All column-width
+math (`mlFixedWidth`, padding) uses lipgloss cells; an empty flag
+slot is one space, not two.
+**Rationale:** Initial implementation assumed visual width and
+mismatched the math, producing right-edge misalignment between rows
+with icons and rows without. Lipgloss is the source of truth for
+character cell math because it's what computes every padding and
+join in the rendered output. Visual width is only relevant for
+human-eye verification of the live render. Documented inline in
+`mlFixedWidth` so future contributors don't repeat the mistake.
+**Date:** 2026-04-11 (Pass 2.5b-3)
+
+### Shared `applyBg` helper for row background composition
+**Decision:** The closure that layers a row's background color onto a
+foreground style — previously duplicated as `withBg` inside both
+`sidebar.go:renderRow` and `msglist.go:renderRow` — is now a single
+package-level helper `applyBg(base, bgStyle)` in `styles.go`. Both
+components call `applyBg(s.styles.X, bgStyle).Render(...)` instead of
+defining the closure inline.
+**Rationale:** The closure body was byte-for-byte identical in both
+files. Future row-rendering components (message viewer header,
+threaded reply panel) will need the same composition. A free function
+is shorter at the call site, eliminates the per-row closure
+allocation, and simplifies `renderFlagCell`'s signature (no need to
+thread the closure as a parameter).
+**Date:** 2026-04-11 (Pass 2.5b-3)
+
+### Message list color: brightness, not hue
+**Decision:** Read state in the message list is encoded by brightness
+(`FgBright` for unread, `FgDim` for read), not by hue. Glyphs carry
+the flag/answered/unread distinction. Color hue is reserved for the
+two states that genuinely demand attention: the cursor (`AccentPrimary`
+on `▐`) and the unread+flagged row (`ColorWarning` on the `󰈻`
+glyph). A read+flagged row dims the flag glyph along with the rest of
+the row — read state always wins over flag state for color. Replaced
+the per-flag-type hue scheme (`MsgListFlagUnread` teal +
+`MsgListFlagAnswered` purple + `MsgListFlagFlagged` orange) with two
+brightness-based icon styles (`MsgListIconUnread` /
+`MsgListIconRead`) plus the narrowed `MsgListFlagFlagged` for the
+single attention-worthy combination.
+**Rationale:** The earlier scheme used four hues per row (cursor blue
++ unread teal + answered purple + flagged orange) on a muted Nord
+background. No single element won the eye, and the row read as
+garish. This is Tufte's data-ink principle applied to color: spend
+hue on the data that demands attention, withhold it everywhere else.
+Apple Mail, Fastmail, Gmail, and Mutt all encode unread by brightness
+or weight, not hue — the convention exists because it works. The
+general rule is now codified in the `bubbletea-design` skill's "Hue
+Budget" subsection so future TUI work picks it up automatically;
+the poplar-specific application lives in `docs/poplar/styling.md`.
+**Date:** 2026-04-11 (Pass 2.5b-3)

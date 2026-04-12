@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/beautiful-aerc/internal/theme"
 )
@@ -43,12 +45,50 @@ type Styles struct {
 	SidebarUnread    lipgloss.Style
 	SidebarIndicator lipgloss.Style
 
+	// Message list. Rows use MsgListBg as their base; selected rows
+	// override with MsgListSelected (BgSelection). Read state is
+	// encoded by brightness (FgBright/FgDim), not hue. The cursor ▐
+	// and the unread+flagged row are the only places hue is used.
+	MsgListBg            lipgloss.Style
+	MsgListSelected      lipgloss.Style
+	MsgListCursor        lipgloss.Style
+	MsgListUnreadSender  lipgloss.Style
+	MsgListUnreadSubject lipgloss.Style
+	MsgListReadSender    lipgloss.Style
+	MsgListReadSubject   lipgloss.Style
+	MsgListDate          lipgloss.Style
+	MsgListIconUnread    lipgloss.Style
+	MsgListIconRead      lipgloss.Style
+	MsgListFlagFlagged   lipgloss.Style
+
 	// Placeholder text
 	Dim lipgloss.Style
 
 	// Top line frame edge
 	TopLine   lipgloss.Style
 	ToastText lipgloss.Style
+}
+
+// applyBg layers the background of bgStyle onto base. Used by row
+// renderers (sidebar, message list) to compose a foreground style
+// with the row's background color without clobbering already-rendered
+// ANSI segments.
+func applyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
+	if bg, ok := bgStyle.GetBackground().(lipgloss.Color); ok {
+		return base.Background(bg)
+	}
+	return base
+}
+
+// fillRowToWidth right-pads a fully-rendered row of ANSI segments to
+// exactly width display cells, using bgStyle for the trailing fill so
+// the row's background extends to the panel edge. Shared by sidebar
+// and message list row renderers.
+func fillRowToWidth(row string, width int, bgStyle lipgloss.Style) string {
+	if rw := lipgloss.Width(row); rw < width {
+		return row + bgStyle.Render(strings.Repeat(" ", width-rw))
+	}
+	return row
 }
 
 // NewStyles creates a Styles from a CompiledTheme.
@@ -105,6 +145,29 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgBright).Bold(true),
 		SidebarIndicator: lipgloss.NewStyle().
 			Foreground(t.AccentSecondary),
+
+		MsgListBg: lipgloss.NewStyle().
+			Background(t.BgBase),
+		MsgListSelected: lipgloss.NewStyle().
+			Background(t.BgSelection),
+		MsgListCursor: lipgloss.NewStyle().
+			Foreground(t.AccentPrimary),
+		MsgListUnreadSender: lipgloss.NewStyle().
+			Foreground(t.FgBright).Bold(true),
+		MsgListUnreadSubject: lipgloss.NewStyle().
+			Foreground(t.FgBright),
+		MsgListReadSender: lipgloss.NewStyle().
+			Foreground(t.FgDim),
+		MsgListReadSubject: lipgloss.NewStyle().
+			Foreground(t.FgDim),
+		MsgListDate: lipgloss.NewStyle().
+			Foreground(t.FgDim),
+		MsgListIconUnread: lipgloss.NewStyle().
+			Foreground(t.FgBright),
+		MsgListIconRead: lipgloss.NewStyle().
+			Foreground(t.FgDim),
+		MsgListFlagFlagged: lipgloss.NewStyle().
+			Foreground(t.ColorWarning),
 
 		Dim: lipgloss.NewStyle().
 			Foreground(t.FgDim),
