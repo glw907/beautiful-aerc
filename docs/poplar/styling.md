@@ -98,7 +98,7 @@ already-rendered ANSI.
 
 | Field | fg | bg | Role |
 |-------|----|----|------|
-| `Selection` | — | `BgSelection` | Generic focus highlight (message list, etc.) |
+| `Selection` | — | `BgSelection` | Generic selection highlight (message list, etc.) |
 | `Dim` | `FgDim` | — | Placeholder text ("Message List" etc.) |
 | `ToastText` | `ColorSuccess` | — | Toast notifications |
 

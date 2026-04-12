@@ -76,7 +76,7 @@ func TestSidebar(t *testing.T) {
 		}
 	})
 
-	t.Run("selected row has focus indicator", func(t *testing.T) {
+	t.Run("selected row has selection indicator", func(t *testing.T) {
 		sb := NewSidebar(styles, folders, 30, 20)
 		view := sb.View()
 		plain := stripANSI(view)

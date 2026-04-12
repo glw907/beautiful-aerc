@@ -102,12 +102,18 @@ to the current context. Bindings are grouped logically with
 ### Account footer
 
 The unified one-pane footer. `j/k` and `J/K` both live, triage
-and reply always available.
+and reply always available. Primary folder jumps (`I/D/S/A`) sit
+in the nav group so they read as navigation aids.
 
 ```
- j/k:messages  J/K:folders  ┊  d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  c:compose  ┊  /:search  ?:help  ::cmd
- ◂── navigation ──────────▸    ◂── triage ──────────────▸   ◂── reply/compose ──────────────▸   ◂── app ──────────▸
+ j/k:messages  J/K:folders  I:inbox  D:drafts  S:sent  A:archive  ┊  d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  c:compose  ┊  /:search  ?:help  ::cmd
+ ◂── navigation ─────────────────────────────────────────────────▸   ◂── triage ──────────────▸   ◂── reply/compose ──────────────▸   ◂── app ──────────▸
 ```
+
+`X` (Spam) and `T` (Trash) are still live keys but omitted from
+the footer — disposal folders are jumped to rarely enough that
+the footer real estate is better spent on hints for the primary
+group.
 
 ### Viewer footer
 

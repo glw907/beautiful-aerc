@@ -13,7 +13,7 @@ func TestFooterView(t *testing.T) {
 	t.Run("account context has group separator", func(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(AccountContext)
-		result := stripANSI(f.View(120))
+		result := stripANSI(f.View(160))
 		if !strings.Contains(result, "┊") {
 			t.Error("missing group separator ┊")
 		}
@@ -22,7 +22,7 @@ func TestFooterView(t *testing.T) {
 	t.Run("account context has nav group", func(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(AccountContext)
-		result := stripANSI(f.View(120))
+		result := stripANSI(f.View(160))
 		if !strings.Contains(result, "j/k messages") {
 			t.Error("missing j/k messages")
 		}
@@ -31,10 +31,21 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
+	t.Run("account context has folder jumps in nav group", func(t *testing.T) {
+		f := NewFooter(styles)
+		f.SetContext(AccountContext)
+		result := stripANSI(f.View(160))
+		for _, want := range []string{"I inbox", "D drafts", "S sent", "A archive"} {
+			if !strings.Contains(result, want) {
+				t.Errorf("missing folder jump hint %q", want)
+			}
+		}
+	})
+
 	t.Run("account context has triage group", func(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(AccountContext)
-		result := stripANSI(f.View(120))
+		result := stripANSI(f.View(160))
 		if !strings.Contains(result, "d del") {
 			t.Error("missing d del")
 		}
@@ -46,7 +57,7 @@ func TestFooterView(t *testing.T) {
 	t.Run("account context has reply group", func(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(AccountContext)
-		result := stripANSI(f.View(120))
+		result := stripANSI(f.View(160))
 		if !strings.Contains(result, "r reply") {
 			t.Error("missing r reply")
 		}
@@ -58,7 +69,7 @@ func TestFooterView(t *testing.T) {
 	t.Run("starts with 1-space padding", func(t *testing.T) {
 		f := NewFooter(styles)
 		f.SetContext(AccountContext)
-		result := stripANSI(f.View(120))
+		result := stripANSI(f.View(160))
 		if !strings.HasPrefix(result, " ") {
 			t.Error("footer should start with 1-space padding")
 		}

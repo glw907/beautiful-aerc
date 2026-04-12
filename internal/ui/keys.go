@@ -43,8 +43,8 @@ func NewFolderJumpKeys() FolderJumpKeys {
 	}
 }
 
-// AccountKeys groups for the unified one-pane account footer.
-// With no focus cycling, folder nav and message nav are both always live.
+// AccountKeys groups for the unified one-pane account footer:
+// folder nav, message nav, triage, reply, and app keys are all live.
 type AccountKeys struct {
 	nav    keyGroup
 	triage keyGroup
@@ -54,10 +54,15 @@ type AccountKeys struct {
 
 // NewAccountKeys returns the default account view key bindings.
 func NewAccountKeys() AccountKeys {
+	fj := NewFolderJumpKeys()
 	return AccountKeys{
 		nav: keyGroup{
 			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "messages")),
 			key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "folders")),
+			fj.Inbox,
+			fj.Drafts,
+			fj.Sent,
+			fj.Archive,
 		},
 		triage: keyGroup{
 			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "del")),

@@ -23,8 +23,7 @@ See the UI design spec for the complete interface inventory:
 ## 1. Composite Layout
 
 Full application with all persistent chrome and both panels visible.
-No tab bar — sidebar provides folder context. Inbox selected, message
-list focused.
+No tab bar — sidebar provides folder context. Inbox selected.
 
 ```
 ───────────────────────────┬──────────────────────────────────────────────────────────────────────────────╮
@@ -69,15 +68,17 @@ list focused.
   Closes frame with `╯`.
 - **Command footer**: Below the status bar frame edge. Key in
   `fg_bright` bold, `:` separator and hint text in `fg_dim`.
-  Groups separated by `┊` in `fg_dim`. Context = message list.
-- **Focus**: Message list focused (sidebar selection shown but
-  without the `┃` active border). `Tab` cycles focus between panels.
+  Groups separated by `┊` in `fg_dim`. Single account context —
+  j/k messages, J/K folders, triage and reply always live.
+- **One pane (like pine)**: No Tab focus cycling. The `┃` selection
+  indicator always renders on the selected folder. Every key is
+  dispatched by identity, not by "which panel is active".
 
 ---
 
 ## 2. Sidebar (#1 — left panel)
 
-### Focused, Inbox selected
+### Inbox selected
 
 ```
  ┃ 󰇰  Inbox             3
@@ -94,7 +95,7 @@ list focused.
    󰡡  Lists/rust
 ```
 
-### Focused, selection in Disposal group
+### Selection in Disposal group
 
 ```
    󰇰  Inbox             3
@@ -110,32 +111,13 @@ list focused.
    󰡡  Lists/golang
 ```
 
-### Unfocused (message list has focus)
-
-```
-   󰇰  Inbox             3
-   󰏫  Drafts
-   󰑚  Sent
-   󰀼  Archive
-
-   󰍷  Spam            12
-   󰩺  Trash
-
-   󰂚  Notifications
-   󰑴  Remind
-```
-
-The selected folder (Inbox) still has `bg_selection` background
-but no `┃` border — the border only appears in the focused state.
-
 **Annotations:**
 
 - **Width:** 30 columns fixed.
-- **Selected row (focused):** `┃` thick left border in
-  `accent_primary` + full-width `bg_selection` background.
-  Folder name in `fg_bright`.
-- **Selected row (unfocused):** `bg_selection` background only,
-  no `┃` border. Folder name in `fg_base`.
+- **Selected row:** `┃` thick left border in `accent_secondary`
+  + full-width `bg_selection` background. Folder name in
+  `fg_bright`. The `┃` is always shown — no focus state because
+  the screen is one pane (like pine).
 - **Unread counts:** Right-aligned in `accent_tertiary`. Only
   shown when > 0.
 - **Folder icons:** Nerd Font in `fg_base`. When folder has
@@ -143,9 +125,7 @@ but no `┃` border — the border only appears in the focused state.
 - **Group spacing:** One blank line between Primary, Disposal,
   and Custom groups. No group headers rendered.
 - **Scrolling:** If folders exceed panel height, viewport clips
-  with j/k scrolling. No scrollbar.
-- **Footer (when focused):**
-  `Enter:open  c:compose  ::cmd`
+  with J/K scrolling. No scrollbar.
 
 ---
 
@@ -235,9 +215,8 @@ returns to the message list — no tab switching needed.
 - **No tab bar:** Viewer opens in the right panel — no new tab
   created. Sidebar remains visible. `q` returns to message list.
   No `1-9` switching or tab lifecycle.
-- **Sidebar:** Still visible and showing current folder selection.
-  Folder icon on selected row shifts to `bg_selection` (unfocused
-  style — viewer has focus).
+- **Sidebar:** Still visible and showing current folder selection
+  with the usual `┃` + `bg_selection` row.
 - **Message body:** 72-char fixed width (same as mailrender render
   width). Content pipeline (`ParseBlocks` → `RenderBody`). Headings
   in `color_success` bold. Blockquotes in `accent_tertiary` (level
@@ -528,22 +507,6 @@ Status bar and footer swap to bulk mode:
   Space:toggle  d:del all  a:archive all  v:cancel  Esc:cancel
 ```
 
-### Focused panel cycling (#17)
-
-`Tab` toggles focus between sidebar and message list. The focused
-panel receives j/k navigation. Visual difference is the `┃`
-selection border.
-
-```
-Sidebar focused:                    Message list focused:
-┌──────────┬──────────────────┐     ┌──────────┬──────────────────┐
-│ ┃ Inbox  │  Alice Johnson   │     │   Inbox  │▐ Alice Johnson   │
-│   Sent   │  Bob Smith       │     │   Sent   │  Bob Smith       │
-│   Trash  │  Carol White     │     │   Trash  │  Carol White     │
-└──────────┴──────────────────┘     └──────────┴──────────────────┘
-  ↑ j/k navigate here                           ↑ j/k navigate here
-```
-
 **Annotations:**
 
 - **Empty folder (#13):** "No messages" text in `fg_dim`. Centered
@@ -558,11 +521,6 @@ Sidebar focused:                    Message list focused:
   selected rows. Selected rows get `bg_selection` background.
   Status bar shows count. Footer swaps to bulk actions. `Esc`
   or `v` exits multi-select mode, deselecting all.
-- **Focus cycling (#17):** `Tab` key. Focused panel shows `┃`
-  (sidebar) or `▐` (message list) on the selected row. Unfocused
-  panel shows `bg_selection` background only, no border indicator.
-  j/k only operates in the focused panel.
-
 ---
 
 ## 8. Overlays (#4, #5, #6)
@@ -722,6 +680,5 @@ All 19 UI elements from the interface inventory (Tab Bar removed):
 | 14 | Threaded View | §7 Screen States |
 | 15 | Search Results | §7 Screen States |
 | 16 | Multi-Select | §7 Screen States |
-| 17 | Focused Panel | §7 Screen States |
 | 19 | Command Footer | §1 Composite (all wireframes). Grouped by function with `┊` separators. |
 | 20 | Status Bar | §1 Composite (all wireframes). Bottom frame edge `──┴──╯`. |

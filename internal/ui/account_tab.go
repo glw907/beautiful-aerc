@@ -11,9 +11,8 @@ import (
 // sidebarWidth is the fixed width of the sidebar panel.
 const sidebarWidth = 30
 
-// AccountTab is the main account view. The screen is one pane from a
-// keyboard nav standpoint (like pine) — no focus cycling. Every key is
-// always live: J/K/G navigate folders, j/k navigate messages.
+// AccountTab is the main account view. One pane (like pine): every
+// key is always live. J/K/G navigate folders, j/k navigate messages.
 type AccountTab struct {
 	styles  Styles
 	backend mail.Backend
@@ -66,10 +65,8 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	return m, nil
 }
 
-// handleKey routes key events to sidebar or message list actions.
-// J/K/G navigate folders (sidebar). j/k will navigate messages once
-// the message list exists. No focus switching — keys are dispatched
-// by identity, not by "which panel is active".
+// handleKey dispatches navigation keys by identity. J/K/G move the
+// sidebar; j/k will move the message list cursor once it exists.
 func (m *AccountTab) handleKey(msg tea.KeyMsg) {
 	switch msg.String() {
 	case "J", "down":

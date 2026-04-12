@@ -174,7 +174,7 @@ demonstrates a compelling framework capability, lean toward the
 showcase — as long as it serves the UX.
 **Rationale:** Attract bubbletea contributors. Prove the framework
 scales to a real, complex application. Extractable patterns (theme
-bridge, tab manager, focus cycling, toast system) benefit the
+bridge, Catkin editor, inline compose, toast system) benefit the
 community.
 **Date:** 2026-04-10
 

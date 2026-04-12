@@ -30,7 +30,8 @@ type Styles struct {
 	FooterHint lipgloss.Style
 	FooterSep  lipgloss.Style
 
-	// Selection (used by focus cycling)
+	// Selection is a generic selected-row highlight (reserved for the
+	// message list and other scrolling panels).
 	Selection lipgloss.Style
 
 	// Sidebar. All sidebar rows use SidebarBg as their background.
