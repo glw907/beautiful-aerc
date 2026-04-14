@@ -215,15 +215,75 @@ func TestMessageList(t *testing.T) {
 
 func mockMessages() []mail.MessageInfo {
 	return []mail.MessageInfo{
-		{UID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "10:23 AM", Flags: 0},
-		{UID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "9:45 AM", Flags: 0},
-		{UID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "9:12 AM", Flags: 0},
-		{UID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "Yesterday", Flags: mail.FlagSeen},
-		{UID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "Yesterday", Flags: mail.FlagSeen | mail.FlagFlagged},
-		{UID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "Yesterday", Flags: mail.FlagSeen | mail.FlagAnswered},
-		{UID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "Apr 8", Flags: mail.FlagSeen},
-		{UID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "Apr 8", Flags: mail.FlagSeen},
-		{UID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "Apr 7", Flags: mail.FlagSeen},
-		{UID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "Apr 7", Flags: mail.FlagSeen | mail.FlagFlagged},
+		{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "10:23 AM", Flags: 0},
+		{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "9:45 AM", Flags: 0},
+		{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "9:12 AM", Flags: 0},
+		{UID: "4", ThreadID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "Yesterday", Flags: mail.FlagSeen},
+		{UID: "5", ThreadID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "Yesterday", Flags: mail.FlagSeen | mail.FlagFlagged},
+		{UID: "6", ThreadID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "Yesterday", Flags: mail.FlagSeen | mail.FlagAnswered},
+		{UID: "7", ThreadID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "Apr 8", Flags: mail.FlagSeen},
+		{UID: "8", ThreadID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "Apr 8", Flags: mail.FlagSeen},
+		{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "Apr 7", Flags: mail.FlagSeen},
+		{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "Apr 7", Flags: mail.FlagSeen | mail.FlagFlagged},
 	}
+}
+
+func TestMessageListThreading(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	t.Run("groups by ThreadID with explicit root", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "1", ThreadID: "1", From: "A", Date: "Apr 1", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "Apr 5", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "Apr 6", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if got, want := len(ml.rows), 3; got != want {
+			t.Fatalf("len(rows) = %d, want %d", got, want)
+		}
+		var rootUIDs []mail.UID
+		var childUIDs []mail.UID
+		for _, r := range ml.rows {
+			if r.isThreadRoot {
+				rootUIDs = append(rootUIDs, r.msg.UID)
+			} else {
+				childUIDs = append(childUIDs, r.msg.UID)
+			}
+		}
+		if len(rootUIDs) != 2 {
+			t.Errorf("rootUIDs = %v, want exactly 2", rootUIDs)
+		}
+		if len(childUIDs) != 1 || childUIDs[0] != "11" {
+			t.Errorf("childUIDs = %v, want [11]", childUIDs)
+		}
+		for _, r := range ml.rows {
+			if r.isThreadRoot && r.msg.UID == "10" && r.threadSize != 2 {
+				t.Errorf("T1 root threadSize = %d, want 2", r.threadSize)
+			}
+			if r.isThreadRoot && r.msg.UID == "1" && r.threadSize != 1 {
+				t.Errorf("standalone threadSize = %d, want 1", r.threadSize)
+			}
+		}
+	})
+
+	t.Run("synthetic root when no message has empty InReplyTo", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "999", From: "First", Date: "Apr 5", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "999", From: "Second", Date: "Apr 6", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if got, want := len(ml.rows), 2; got != want {
+			t.Fatalf("len(rows) = %d, want %d", got, want)
+		}
+		var rootUID mail.UID
+		for _, r := range ml.rows {
+			if r.isThreadRoot {
+				rootUID = r.msg.UID
+				break
+			}
+		}
+		if rootUID != "10" {
+			t.Errorf("synthetic root UID = %q, want 10", rootUID)
+		}
+	})
 }

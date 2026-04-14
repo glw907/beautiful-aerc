@@ -96,19 +96,94 @@ func (m *MessageList) SetMessages(msgs []mail.MessageInfo) {
 
 // rebuild runs the group → sort → flatten pipeline against m.source
 // and applies fold state, producing m.rows. Called from SetMessages
-// and from any fold-mutating method. Tasks 5-10 build out the full
-// pipeline; for now this is a trivial one-row-per-message pass.
+// and from any fold-mutating method.
+//
+// Pipeline (this task implements steps 1-2 only; later tasks add the
+// rest):
+//
+//  1. Bucket by ThreadID.
+//  2. Pick a root per bucket (empty InReplyTo, fallback earliest by date).
+//  3. Sort children chronologically ascending.            (Task 6)
+//  4. Compute thread latest-activity sort key.            (Task 7)
+//  5. Sort threads by latest-activity in m.sort direction. (Task 8)
+//  6. Walk threads, emit displayRows root-then-children,
+//     computing depth and box-drawing prefix.              (Task 9)
+//  7. Apply fold state.                                    (Task 10)
 func (m *MessageList) rebuild() {
+	buckets := bucketByThreadID(m.source)
 	rows := make([]displayRow, 0, len(m.source))
-	for _, msg := range m.source {
+	for _, bucket := range buckets {
+		rootIdx := pickRoot(bucket)
+		root := bucket[rootIdx]
 		rows = append(rows, displayRow{
-			msg:          msg,
+			msg:          root,
 			isThreadRoot: true,
-			threadSize:   1,
+			threadSize:   len(bucket),
 			depth:        0,
 		})
+		for i, msg := range bucket {
+			if i == rootIdx {
+				continue
+			}
+			rows = append(rows, displayRow{
+				msg:          msg,
+				isThreadRoot: false,
+				threadSize:   0,
+				depth:        1, // refined in Task 9
+			})
+		}
 	}
 	m.rows = rows
+}
+
+// bucketByThreadID groups messages by their ThreadID, preserving
+// input order within each bucket. Iterates the input twice (once to
+// collect ThreadIDs in encounter order, once to slot messages) so the
+// bucket order is deterministic — important for tests that compare
+// against a specific layout.
+func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
+	var order []mail.UID
+	seen := make(map[mail.UID]int)
+	for _, m := range msgs {
+		if _, ok := seen[m.ThreadID]; ok {
+			continue
+		}
+		seen[m.ThreadID] = len(order)
+		order = append(order, m.ThreadID)
+	}
+	buckets := make([][]mail.MessageInfo, len(order))
+	for _, m := range msgs {
+		idx := seen[m.ThreadID]
+		buckets[idx] = append(buckets[idx], m)
+	}
+	return buckets
+}
+
+// pickRoot returns the index within bucket of the message that should
+// be treated as the thread root. Preference: the message with empty
+// InReplyTo. Fallback: the earliest message by date string. The
+// fallback handles broken parent chains (message references a parent
+// that wasn't fetched) without crashing — the synthetic root and any
+// other top-level orphans become depth-1 children in the renderer.
+//
+// Date comparison uses lexicographic order on the wire-string format,
+// which is wrong in general — Pass 3 introduces real time.Time on
+// MessageInfo, at which point this becomes a proper time comparison.
+// Until then, mock data uses identical date strings so the fallback
+// is deterministic-by-input-order, which is fine for prototype.
+func pickRoot(bucket []mail.MessageInfo) int {
+	for i, m := range bucket {
+		if m.InReplyTo == "" {
+			return i
+		}
+	}
+	earliest := 0
+	for i, m := range bucket {
+		if m.Date < bucket[earliest].Date {
+			earliest = i
+		}
+	}
+	return earliest
 }
 
 // SetSize updates the panel dimensions.
