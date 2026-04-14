@@ -537,6 +537,66 @@ func TestMessageListThreading(t *testing.T) {
 	})
 }
 
+func TestMessageListWithMockBackend(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	b := mail.NewMockBackend()
+	msgs, err := b.FetchHeaders(nil)
+	if err != nil {
+		t.Fatalf("FetchHeaders: %v", err)
+	}
+
+	ml := NewMessageList(styles, msgs, 120, 30)
+
+	t.Run("14 source messages produce 14 displayRows expanded", func(t *testing.T) {
+		if got, want := len(ml.rows), 14; got != want {
+			t.Errorf("len(rows) = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("threaded conversation has correct prefix vocabulary", func(t *testing.T) {
+		var t1Prefixes []string
+		for _, r := range ml.rows {
+			if r.msg.ThreadID == "T1" {
+				t1Prefixes = append(t1Prefixes, r.prefix)
+			}
+		}
+		if len(t1Prefixes) != 4 {
+			t.Fatalf("T1 row count = %d, want 4", len(t1Prefixes))
+		}
+		// Frank Lee root, then Grace (├─), then Frank-deep (│  └─), then Henry (└─).
+		// Children sorted chronologically asc; the actual mock dates are all
+		// "Apr 5" so order falls back to insertion order via SliceStable.
+		want := []string{"", "├─ ", "│  └─ ", "└─ "}
+		for i, w := range want {
+			if t1Prefixes[i] != w {
+				t.Errorf("T1 prefix[%d] = %q, want %q", i, t1Prefixes[i], w)
+			}
+		}
+	})
+
+	t.Run("FoldAll collapses the threaded conversation", func(t *testing.T) {
+		ml := NewMessageList(styles, msgs, 120, 30)
+		ml.FoldAll()
+		visible := visibleRowCount(ml)
+		// 10 single-message threads (unaffected) + 1 visible folded root = 11.
+		if visible != 11 {
+			t.Errorf("visible after FoldAll = %d, want 11", visible)
+		}
+		var foundBadge bool
+		for _, r := range ml.rows {
+			if r.isThreadRoot && r.msg.ThreadID == "T1" {
+				if r.prefix != "[4] " {
+					t.Errorf("collapsed T1 root prefix = %q, want %q", r.prefix, "[4] ")
+				}
+				foundBadge = true
+			}
+		}
+		if !foundBadge {
+			t.Error("never found T1 thread root after FoldAll")
+		}
+	})
+}
+
 // visibleRowCount counts the displayRows that aren't hidden by fold
 // state. Used by tests to check fold behavior.
 func visibleRowCount(ml MessageList) int {
