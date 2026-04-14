@@ -83,6 +83,11 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, m.selectionChangedCmds()
 
 	case folderLoadedMsg:
+		order := SortDateDesc
+		if fc, ok := m.uiCfg.Folders[msg.name]; ok && fc.Sort == "date-asc" {
+			order = SortDateAsc
+		}
+		m.msglist.SetSort(order)
 		m.msglist.SetMessages(msg.msgs)
 		return m, nil
 
