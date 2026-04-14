@@ -82,22 +82,23 @@ the thread fold-toggle — see § Threads below. Both `v` and
 | `v` | Enter/exit visual select *(reserved, Pass 6)* | A |
 | `Space` | Toggle selection on current row *(inside visual mode, Pass 6)* | A |
 
-## Threads (reserved — Pass 2.5b-3.6)
-
-Threaded view and per-thread fold state ship in Pass 2.5b-3.6.
-The bindings below are reserved now so no other pass can grab
-them; they do nothing until that pass lands.
+## Threads
 
 | Key | Action | Context |
 |-----|--------|---------|
-| `Space` | Toggle fold on thread under cursor *(reserved, 2.5b-3.6)* | A |
-| `F` | Fold all threads *(reserved, 2.5b-3.6)* | A |
-| `U` | Unfold all threads *(reserved, 2.5b-3.6)* | A |
+| `Space` | Toggle fold on thread under cursor | A |
+| `F` | Fold all threads | A |
+| `U` | Unfold all threads | A |
 
 `Space` is dual-purpose: inside visual-select mode (Pass 6) it
 toggles row selection, outside visual mode it toggles thread
-fold. See architecture.md "Thread fold key: Space, dual meaning
-in visual-select mode".
+fold. See ADR 0052 "Thread fold key: Space, dual meaning in
+visual-select mode".
+
+Folding from a child row folds the row's thread root — `Space`
+always operates on the entire thread, never on individual replies.
+The cursor snaps to the root after folding so it doesn't land on
+a hidden row.
 
 ## Viewer
 
@@ -132,8 +133,7 @@ has room for every account-view action, including hints for
 features that aren't yet wired up.
 
 ```
- j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select  ? help  q quit
- ◂── navigation ─────────────▸  ◂── triage ─────────────────────▸  ◂── reply/compose ──────────▸  ◂── tools & app ──────────────────────────────▸
+ j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select ┊ ␣ fold  F fold all  U unfold all ┊ ? help  q quit
 ```
 
 **Compressed nav hints.** `j/k/J/K nav` covers both `j/k`
@@ -168,8 +168,8 @@ Drop tiers (highest rank → first to go):
 | 10–9 | `j/k/J/K nav`, `I/D/S/A folders` | Vim/arrow users don't need the hint |
 | 8 | `v select` | Niche mode, discoverable in `?` help |
 | 7 | `n/N results` | Only useful after `/`, infer from convention |
-| 5 | `. read` | Secondary triage |
-| 4 | `s star` | Secondary triage |
+| 5 | `. read`, `F fold all`, `U unfold all` | Secondary triage / bulk fold |
+| 4 | `s star`, `␣ fold` | Secondary triage / per-thread fold |
 | 3 | `f fwd`, `/ find` | Tertiary actions |
 | 2 | `r/R reply`, `c compose` | Primary compose actions |
 | 1 | `d del`, `a archive` | Primary triage |
