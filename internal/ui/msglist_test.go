@@ -456,6 +456,36 @@ func TestMessageListThreading(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("renders box-drawing prefix in subject column", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Root subject", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root subject", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root subject", From: "ReplyB", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 100, 20)
+		plain := stripANSI(ml.View())
+		if !strings.Contains(plain, "├─ Re: Root subject") {
+			t.Error("expected ├─ prefix on first reply")
+		}
+		if !strings.Contains(plain, "└─ Re: Root subject") {
+			t.Error("expected └─ prefix on last reply")
+		}
+	})
+
+	t.Run("renders [N] badge on collapsed thread root", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Root", From: "R", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root", From: "A", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root", From: "B", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 100, 20)
+		ml.ToggleFold()
+		plain := stripANSI(ml.View())
+		if !strings.Contains(plain, "[3] Root") {
+			t.Errorf("expected [3] Root in collapsed view, got: %q", plain)
+		}
+	})
 }
 
 // visibleRowCount counts the displayRows that aren't hidden by fold

@@ -554,9 +554,17 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	dateText := padLeft(truncateCells(msg.Date, mlDateWidth), mlDateWidth)
 	date := applyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
 
+	// Subject column: prefix (in MsgListThreadPrefix style) followed by
+	// the subject text (in the read/unread style), with the subject
+	// truncated to fit whatever space remains after the prefix.
 	subjectWidth := max(1, m.width-mlFixedWidth)
-	subjectText := padRight(truncateCells(msg.Subject, subjectWidth), subjectWidth)
-	subject := applyBg(subjectStyle, bgStyle).Render(subjectText)
+	prefixCells := runewidth.StringWidth(row.prefix)
+	subjectCells := max(0, subjectWidth-prefixCells)
+
+	prefixStyled := applyBg(m.styles.MsgListThreadPrefix, bgStyle).Render(row.prefix)
+	subjectText := padRight(truncateCells(msg.Subject, subjectCells), subjectCells)
+	subjectStyled := applyBg(subjectStyle, bgStyle).Render(subjectText)
+	subject := prefixStyled + subjectStyled
 
 	line := cursor +
 		flag +
