@@ -266,6 +266,24 @@ func TestMessageListThreading(t *testing.T) {
 		}
 	})
 
+	t.Run("children sort chronologically ascending within a thread", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "Apr 1", Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "Late", Date: "Apr 3", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Early", Date: "Apr 2", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if got, want := len(ml.rows), 3; got != want {
+			t.Fatalf("len(rows) = %d, want %d", got, want)
+		}
+		wantOrder := []mail.UID{"10", "11", "12"}
+		for i, want := range wantOrder {
+			if got := ml.rows[i].msg.UID; got != want {
+				t.Errorf("rows[%d].UID = %q, want %q", i, got, want)
+			}
+		}
+	})
+
 	t.Run("synthetic root when no message has empty InReplyTo", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
 			{UID: "10", ThreadID: "T1", InReplyTo: "999", From: "First", Date: "Apr 5", Flags: mail.FlagSeen},

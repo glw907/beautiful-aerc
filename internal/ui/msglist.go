@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -121,12 +122,19 @@ func (m *MessageList) rebuild() {
 			threadSize:   len(bucket),
 			depth:        0,
 		})
+		children := make([]mail.MessageInfo, 0, len(bucket)-1)
 		for i, msg := range bucket {
 			if i == rootIdx {
 				continue
 			}
+			children = append(children, msg)
+		}
+		sort.SliceStable(children, func(i, j int) bool {
+			return children[i].Date < children[j].Date
+		})
+		for _, child := range children {
 			rows = append(rows, displayRow{
-				msg:          msg,
+				msg:          child,
 				isThreadRoot: false,
 				threadSize:   0,
 				depth:        1, // refined in Task 9
