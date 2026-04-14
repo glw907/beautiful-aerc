@@ -60,6 +60,7 @@ type Styles struct {
 	MsgListIconUnread    lipgloss.Style
 	MsgListIconRead      lipgloss.Style
 	MsgListFlagFlagged   lipgloss.Style
+	MsgListThreadPrefix  lipgloss.Style
 
 	// Placeholder text
 	Dim lipgloss.Style
@@ -168,6 +169,8 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgDim),
 		MsgListFlagFlagged: lipgloss.NewStyle().
 			Foreground(t.ColorWarning),
+		MsgListThreadPrefix: lipgloss.NewStyle().
+			Foreground(t.FgDim),
 
 		Dim: lipgloss.NewStyle().
 			Foreground(t.FgDim),

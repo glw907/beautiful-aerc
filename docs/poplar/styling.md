@@ -111,6 +111,7 @@ Gmail, and Mutt.
 | `MsgListIconUnread` | `FgBright` | inherit | Any glyph (`󰇮 󰑚`) on an unread row — matches the row's text brightness |
 | `MsgListIconRead` | `FgDim` | inherit | Any glyph (`󰑚 󰈻`) on a read row — inherits the row's dimness |
 | `MsgListFlagFlagged` | `ColorWarning` | inherit | `󰈻` flag icon **only when row is also unread** — the single permitted accent for the highest-priority row state |
+| `MsgListThreadPrefix` | `FgDim` | inherit | Box-drawing thread prefix (`├─`, `└─`, `│`) and `[N]` collapsed-thread badge |
 
 Background composition uses the shared `applyBg(base, bgStyle)`
 helper from `styles.go`: each text segment layers its base foreground
