@@ -225,6 +225,52 @@ func TestAccountTab_folderLoadedSeedsMsglist(t *testing.T) {
 	}
 }
 
+func TestAccountTabFoldKeys(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+
+	if got, want := visibleRowCount(tab.msglist), 14; got != want {
+		t.Fatalf("initial visible rows = %d, want %d", got, want)
+	}
+
+	t.Run("F folds all threads", func(t *testing.T) {
+		tab2, _ := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+		if got := visibleRowCount(tab2.msglist); got != 11 {
+			t.Errorf("after F, visible = %d, want 11", got)
+		}
+	})
+
+	t.Run("U unfolds all threads after F", func(t *testing.T) {
+		tab2, _ := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+		tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
+		if got := visibleRowCount(tab2.msglist); got != 14 {
+			t.Errorf("after F then U, visible = %d, want 14", got)
+		}
+	})
+
+	t.Run("Space toggles fold under cursor", func(t *testing.T) {
+		// Use a fresh tab to avoid aliasing the folded map with the F subtest.
+		tabS := newLoadedTab(t, 120, 30)
+		var t1Idx int = -1
+		for i, r := range tabS.msglist.rows {
+			if r.isThreadRoot && r.msg.ThreadID == "T1" {
+				t1Idx = i
+				break
+			}
+		}
+		if t1Idx < 0 {
+			t.Fatal("T1 root not found in displayRows")
+		}
+		tab2 := tabS
+		for i := 0; i < t1Idx; i++ {
+			tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		}
+		tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeySpace})
+		if got := visibleRowCount(tab2.msglist); got != 11 {
+			t.Errorf("after Space on T1 root, visible = %d, want 11", got)
+		}
+	})
+}
+
 func TestAccountTab_JDispatchesFolderLoad(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 	_, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})

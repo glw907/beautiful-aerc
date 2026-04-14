@@ -128,6 +128,12 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		m.msglist.PageDown()
 	case "ctrl+b", "pgup":
 		m.msglist.PageUp()
+	case " ":
+		m.msglist.ToggleFold()
+	case "F":
+		m.msglist.FoldAll()
+	case "U":
+		m.msglist.UnfoldAll()
 	}
 	return m, nil
 }
