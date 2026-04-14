@@ -27,11 +27,43 @@ const (
 	mlIconFlagged  = "󰈻"
 )
 
+// SortOrder is the thread-level sort direction. Children inside a
+// thread always sort chronologically ascending; SortOrder controls
+// only the order of thread roots (and of unthreaded messages, which
+// are single-message threads).
+type SortOrder int
+
+const (
+	SortDateDesc SortOrder = iota // newest activity first (default)
+	SortDateAsc                   // oldest activity first
+)
+
+// displayRow is one rendered row in the message list. The slice of
+// these is computed from the source []MessageInfo by the build
+// pipeline (group, sort, flatten). Hidden rows still occupy indices
+// in the slice; the renderer skips them and j/k navigation walks
+// past them.
+type displayRow struct {
+	msg          mail.MessageInfo
+	prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
+	isThreadRoot bool
+	threadSize   int   // set on roots only; 1 for unthreaded
+	hidden       bool  // true when collapsed under a folded root
+	depth        uint8 // 0 = root; derived during prefix computation
+}
+
 // MessageList renders the message list panel: flags, sender, subject,
 // and date columns. Hand-rolled (not bubbles/list) to match the
 // sidebar pattern and allow the ▐ cursor + selection background.
+//
+// MessageList owns thread grouping, fold state, and sort direction.
+// The source slice is preserved alongside a derived []displayRow so
+// fold mutations re-flatten without a backend refetch.
 type MessageList struct {
-	msgs     []mail.MessageInfo
+	source   []mail.MessageInfo
+	rows     []displayRow
+	folded   map[mail.UID]bool
+	sort     SortOrder
 	selected int
 	offset   int
 	styles   Styles
@@ -41,19 +73,42 @@ type MessageList struct {
 
 // NewMessageList creates a MessageList with the given messages and size.
 func NewMessageList(styles Styles, msgs []mail.MessageInfo, width, height int) MessageList {
-	return MessageList{
-		msgs:   msgs,
+	m := MessageList{
 		styles: styles,
 		width:  width,
 		height: height,
+		folded: map[mail.UID]bool{},
+		sort:   SortDateDesc,
 	}
+	m.SetMessages(msgs)
+	return m
 }
 
-// SetMessages replaces the message slice and resets the cursor and viewport.
+// SetMessages replaces the source slice and rebuilds the displayRow
+// list. Resets fold state, cursor, and viewport.
 func (m *MessageList) SetMessages(msgs []mail.MessageInfo) {
-	m.msgs = msgs
+	m.source = msgs
+	m.folded = map[mail.UID]bool{}
 	m.selected = 0
 	m.offset = 0
+	m.rebuild()
+}
+
+// rebuild runs the group → sort → flatten pipeline against m.source
+// and applies fold state, producing m.rows. Called from SetMessages
+// and from any fold-mutating method. Tasks 5-10 build out the full
+// pipeline; for now this is a trivial one-row-per-message pass.
+func (m *MessageList) rebuild() {
+	rows := make([]displayRow, 0, len(m.source))
+	for _, msg := range m.source {
+		rows = append(rows, displayRow{
+			msg:          msg,
+			isThreadRoot: true,
+			threadSize:   1,
+			depth:        0,
+		})
+	}
+	m.rows = rows
 }
 
 // SetSize updates the panel dimensions.
@@ -69,22 +124,24 @@ func (m MessageList) Selected() int { return m.selected }
 // SelectedMessage returns the currently selected message. ok is false
 // if the list is empty.
 func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
-	if m.selected < 0 || m.selected >= len(m.msgs) {
+	if m.selected < 0 || m.selected >= len(m.rows) {
 		return mail.MessageInfo{}, false
 	}
-	return m.msgs[m.selected], true
+	return m.rows[m.selected].msg, true
 }
 
-// Count returns the number of messages in the list.
-func (m MessageList) Count() int { return len(m.msgs) }
+// Count returns the number of source messages in the list.
+func (m MessageList) Count() int { return len(m.source) }
 
-// moveBy shifts the cursor by delta rows, clamped to the message
-// range, and re-clamps the viewport offset to keep it visible.
+// moveBy shifts the cursor by delta rows, clamped to the displayRow
+// range, and re-clamps the viewport offset. Hidden-row skipping is
+// added in Task 12; for now this matches previous behavior because
+// the trivial pipeline produces no hidden rows.
 func (m *MessageList) moveBy(delta int) {
-	if len(m.msgs) == 0 {
+	if len(m.rows) == 0 {
 		return
 	}
-	m.selected = max(0, min(len(m.msgs)-1, m.selected+delta))
+	m.selected = max(0, min(len(m.rows)-1, m.selected+delta))
 	m.clampOffset()
 }
 
@@ -101,7 +158,7 @@ func (m *MessageList) MoveToTop() {
 }
 
 // MoveToBottom jumps the cursor to the last message.
-func (m *MessageList) MoveToBottom() { m.moveBy(len(m.msgs)) }
+func (m *MessageList) MoveToBottom() { m.moveBy(len(m.rows)) }
 
 // HalfPageDown moves the cursor down by half the visible height.
 func (m *MessageList) HalfPageDown() { m.moveBy(max(1, m.height/2)) }
@@ -138,7 +195,7 @@ func (m MessageList) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	if len(m.msgs) == 0 {
+	if len(m.rows) == 0 {
 		return m.renderEmpty()
 	}
 
@@ -146,8 +203,8 @@ func (m MessageList) View() string {
 	selectedBg := m.styles.MsgListSelected
 
 	end := m.offset + m.height
-	if end > len(m.msgs) {
-		end = len(m.msgs)
+	if end > len(m.rows) {
+		end = len(m.rows)
 	}
 
 	lines := make([]string, 0, m.height)
@@ -166,7 +223,8 @@ func (m MessageList) View() string {
 
 // renderRow renders one message row at the configured width.
 func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
-	msg := m.msgs[idx]
+	row := m.rows[idx]
+	msg := row.msg
 	isSelected := idx == m.selected
 	isUnread := msg.Flags&mail.FlagSeen == 0
 
@@ -198,7 +256,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	subjectText := padRight(truncateCells(msg.Subject, subjectWidth), subjectWidth)
 	subject := applyBg(subjectStyle, bgStyle).Render(subjectText)
 
-	row := cursor +
+	line := cursor +
 		flag +
 		bgStyle.Render(" ") +
 		sender +
@@ -208,7 +266,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 		date +
 		bgStyle.Render(" ")
 
-	return fillRowToWidth(row, m.width, bgStyle)
+	return fillRowToWidth(line, m.width, bgStyle)
 }
 
 // renderFlagCell renders the 1-cell flag column. Priority: flagged >
