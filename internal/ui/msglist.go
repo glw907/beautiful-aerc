@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -132,6 +133,7 @@ func (m *MessageList) rebuild() {
 	for _, w := range wrapped {
 		rows = appendThreadRows(rows, w.bucket)
 	}
+	applyFoldState(rows, m.folded)
 	m.rows = rows
 }
 
@@ -307,12 +309,106 @@ func buildPrefix(ancestorLastFlags []bool, isLast bool) string {
 	return b.String()
 }
 
+// applyFoldState mutates rows in place: for any folded thread root,
+// every subsequent row up to the next root is marked hidden, and the
+// root's prefix is replaced with "[N] " where N is threadSize.
+func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
+	for i := 0; i < len(rows); i++ {
+		if !rows[i].isThreadRoot {
+			continue
+		}
+		if !folded[rows[i].msg.UID] {
+			continue
+		}
+		rows[i].prefix = fmt.Sprintf("[%d] ", rows[i].threadSize)
+		for j := i + 1; j < len(rows); j++ {
+			if rows[j].isThreadRoot {
+				break
+			}
+			rows[j].hidden = true
+		}
+	}
+}
+
 // SetSort changes the thread-level sort direction and re-runs the
 // build pipeline. Children inside a thread always sort ascending
 // regardless of this setting.
 func (m *MessageList) SetSort(order SortOrder) {
 	m.sort = order
 	m.rebuild()
+}
+
+// ToggleFold flips the fold state of the thread the cursor is
+// currently inside. If the cursor is on a child row, the toggle still
+// operates on that child's thread root. After folding, the cursor
+// snaps to the root index so it doesn't land on a now-hidden row.
+func (m *MessageList) ToggleFold() {
+	if len(m.rows) == 0 {
+		return
+	}
+	rootIdx := m.threadRootIndex(m.selected)
+	if rootIdx < 0 {
+		return
+	}
+	rootUID := m.rows[rootIdx].msg.UID
+	m.folded[rootUID] = !m.folded[rootUID]
+	m.rebuild()
+	if m.selected >= len(m.rows) || m.rows[m.selected].hidden {
+		m.selected = m.indexOfUID(rootUID)
+	}
+	m.clampOffset()
+}
+
+// FoldAll collapses every thread root.
+func (m *MessageList) FoldAll() {
+	for _, r := range m.rows {
+		if r.isThreadRoot && r.threadSize > 1 {
+			m.folded[r.msg.UID] = true
+		}
+	}
+	m.rebuild()
+	if m.selected >= len(m.rows) || m.rows[m.selected].hidden {
+		for i := m.selected; i >= 0; i-- {
+			if !m.rows[i].hidden {
+				m.selected = i
+				break
+			}
+		}
+	}
+	m.clampOffset()
+}
+
+// UnfoldAll clears all fold state.
+func (m *MessageList) UnfoldAll() {
+	m.folded = map[mail.UID]bool{}
+	m.rebuild()
+	m.clampOffset()
+}
+
+// threadRootIndex returns the row index of the thread root that owns
+// the row at idx. Walks backwards from idx until it finds a row with
+// isThreadRoot == true. Returns -1 if no root is found above idx.
+func (m MessageList) threadRootIndex(idx int) int {
+	if idx < 0 || idx >= len(m.rows) {
+		return -1
+	}
+	for i := idx; i >= 0; i-- {
+		if m.rows[i].isThreadRoot {
+			return i
+		}
+	}
+	return -1
+}
+
+// indexOfUID returns the displayRow index of the message with the
+// given UID, or -1 if not found.
+func (m MessageList) indexOfUID(uid mail.UID) int {
+	for i, r := range m.rows {
+		if r.msg.UID == uid {
+			return i
+		}
+	}
+	return -1
 }
 
 // SetSize updates the panel dimensions.

@@ -349,6 +349,75 @@ func TestMessageListThreading(t *testing.T) {
 		}
 	})
 
+	t.Run("ToggleFold collapses thread under cursor", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if got, want := visibleRowCount(ml), 2; got != want {
+			t.Fatalf("initial visible rows = %d, want %d", got, want)
+		}
+		ml.ToggleFold()
+		if got, want := visibleRowCount(ml), 1; got != want {
+			t.Errorf("after fold visible rows = %d, want %d", got, want)
+		}
+		if got, want := ml.rows[0].prefix, "[2] "; got != want {
+			t.Errorf("collapsed root prefix = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("ToggleFold from child row folds the thread root", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		ml.MoveDown() // cursor on UID 11 (child)
+		ml.ToggleFold()
+		if got, want := visibleRowCount(ml), 1; got != want {
+			t.Errorf("after fold from child, visible rows = %d, want %d", got, want)
+		}
+		if got := ml.Selected(); got != 0 {
+			t.Errorf("cursor index after fold = %d, want 0", got)
+		}
+	})
+
+	t.Run("FoldAll and UnfoldAll", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "RootA", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "RootB", Date: "2026-04-06 10:00", Flags: mail.FlagSeen},
+			{UID: "21", ThreadID: "T2", InReplyTo: "20", From: "ReplyB", Date: "2026-04-06 11:00", Flags: mail.FlagSeen},
+			{UID: "30", ThreadID: "T3", InReplyTo: "", From: "Solo", Date: "2026-04-07 10:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if got, want := visibleRowCount(ml), 5; got != want {
+			t.Fatalf("initial visible = %d, want %d", got, want)
+		}
+		ml.FoldAll()
+		if got, want := visibleRowCount(ml), 3; got != want {
+			t.Errorf("after FoldAll visible = %d, want %d", got, want)
+		}
+		ml.UnfoldAll()
+		if got, want := visibleRowCount(ml), 5; got != want {
+			t.Errorf("after UnfoldAll visible = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("SetMessages resets fold state", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		ml.ToggleFold()
+		ml.SetMessages(msgs) // same data
+		if got, want := visibleRowCount(ml), 2; got != want {
+			t.Errorf("after SetMessages reload, visible = %d, want %d", got, want)
+		}
+	})
+
 	t.Run("box-drawing prefixes for branching thread", func(t *testing.T) {
 		// Tree shape:
 		//   Root (UID 10)
@@ -387,4 +456,16 @@ func TestMessageListThreading(t *testing.T) {
 			}
 		}
 	})
+}
+
+// visibleRowCount counts the displayRows that aren't hidden by fold
+// state. Used by tests to check fold behavior.
+func visibleRowCount(ml MessageList) int {
+	n := 0
+	for _, r := range ml.rows {
+		if !r.hidden {
+			n++
+		}
+	}
+	return n
 }
