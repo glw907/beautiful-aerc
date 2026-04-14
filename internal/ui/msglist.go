@@ -18,8 +18,8 @@ import (
 const (
 	mlSenderWidth = 22
 	mlDateWidth   = 14
-	// cursor + sp + flag + sp×2 + sender + sp×2 + subject-pad + sp×2 + date + sp
-	mlFixedWidth = 1 + 1 + 1 + 2 + mlSenderWidth + 2 + 2 + mlDateWidth + 1
+	// cursor + sp×2 + flag + sp×2 + sender + sp×2 + subject-pad + sp×2 + date + sp
+	mlFixedWidth = 1 + 2 + 1 + 2 + mlSenderWidth + 2 + 2 + mlDateWidth + 1
 )
 
 // Nerd Font glyphs used in the message list.
@@ -730,7 +730,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	subject := prefixStyled + subjectStyled
 
 	line := cursor +
-		bgStyle.Render(" ") +
+		bgStyle.Render("  ") +
 		flag +
 		bgStyle.Render("  ") +
 		sender +
