@@ -25,14 +25,6 @@
           },
           {
             "type": "command",
-            "command": ".claude/hooks/filter-live-verify.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/dotfiles-sync.sh"
-          },
-          {
-            "type": "command",
             "command": ".claude/hooks/elm-architecture-lint.sh"
           }
         ]
@@ -43,14 +35,6 @@
           {
             "type": "command",
             "command": ".claude/hooks/claude-md-size.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/filter-live-verify.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/dotfiles-sync.sh"
           },
           {
             "type": "command",
