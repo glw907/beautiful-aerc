@@ -194,6 +194,21 @@ func pickRoot(bucket []mail.MessageInfo) int {
 	return earliest
 }
 
+// latestActivity returns the maximum Date string across all messages
+// in a thread bucket. Used as the inter-thread sort key in step 5 of
+// the build pipeline. Empty bucket returns "" — caller should not
+// invoke on an empty bucket but the safe answer keeps the function
+// total.
+func latestActivity(bucket []mail.MessageInfo) string {
+	latest := ""
+	for _, m := range bucket {
+		if m.Date > latest {
+			latest = m.Date
+		}
+	}
+	return latest
+}
+
 // SetSize updates the panel dimensions.
 func (m *MessageList) SetSize(width, height int) {
 	m.width = width

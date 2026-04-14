@@ -284,6 +284,17 @@ func TestMessageListThreading(t *testing.T) {
 		}
 	})
 
+	t.Run("thread latest-activity computed correctly", func(t *testing.T) {
+		bucket := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", Date: "Apr 1"},
+			{UID: "11", ThreadID: "T1", Date: "Apr 5"},
+			{UID: "12", ThreadID: "T1", Date: "Apr 3"},
+		}
+		if got, want := latestActivity(bucket), "Apr 5"; got != want {
+			t.Errorf("latestActivity = %q, want %q", got, want)
+		}
+	})
+
 	t.Run("synthetic root when no message has empty InReplyTo", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
 			{UID: "10", ThreadID: "T1", InReplyTo: "999", From: "First", Date: "Apr 5", Flags: mail.FlagSeen},
