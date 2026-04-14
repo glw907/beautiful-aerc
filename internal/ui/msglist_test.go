@@ -348,4 +348,43 @@ func TestMessageListThreading(t *testing.T) {
 			t.Errorf("synthetic root UID = %q, want 10", rootUID)
 		}
 	})
+
+	t.Run("box-drawing prefixes for branching thread", func(t *testing.T) {
+		// Tree shape:
+		//   Root (UID 10)
+		//   ├─ Reply A (UID 11)
+		//   │  └─ Deep (UID 12)
+		//   └─ Reply B (UID 13)
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "11", From: "Deep", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+			{UID: "13", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", Date: "2026-04-05 13:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if got, want := len(ml.rows), 4; got != want {
+			t.Fatalf("len(rows) = %d, want %d", got, want)
+		}
+		want := []struct {
+			uid    mail.UID
+			prefix string
+			depth  uint8
+		}{
+			{"10", "", 0},
+			{"11", "├─ ", 1},
+			{"12", "│  └─ ", 2},
+			{"13", "└─ ", 1},
+		}
+		for i, w := range want {
+			if got := ml.rows[i].msg.UID; got != w.uid {
+				t.Errorf("rows[%d].UID = %q, want %q", i, got, w.uid)
+			}
+			if got := ml.rows[i].prefix; got != w.prefix {
+				t.Errorf("rows[%d].prefix = %q, want %q", i, got, w.prefix)
+			}
+			if got := ml.rows[i].depth; got != w.depth {
+				t.Errorf("rows[%d].depth = %d, want %d", i, got, w.depth)
+			}
+		}
+	})
 }

@@ -130,34 +130,7 @@ func (m *MessageList) rebuild() {
 
 	rows := make([]displayRow, 0, len(m.source))
 	for _, w := range wrapped {
-		bucket := w.bucket
-		rootIdx := pickRoot(bucket)
-		root := bucket[rootIdx]
-		rows = append(rows, displayRow{
-			msg:          root,
-			isThreadRoot: true,
-			threadSize:   len(bucket),
-			depth:        0,
-		})
-
-		children := make([]mail.MessageInfo, 0, len(bucket)-1)
-		for i, msg := range bucket {
-			if i == rootIdx {
-				continue
-			}
-			children = append(children, msg)
-		}
-		sort.SliceStable(children, func(i, j int) bool {
-			return children[i].Date < children[j].Date
-		})
-		for _, child := range children {
-			rows = append(rows, displayRow{
-				msg:          child,
-				isThreadRoot: false,
-				threadSize:   0,
-				depth:        1, // refined in Task 9
-			})
-		}
+		rows = appendThreadRows(rows, w.bucket)
 	}
 	m.rows = rows
 }
@@ -225,6 +198,113 @@ func latestActivity(bucket []mail.MessageInfo) string {
 		}
 	}
 	return latest
+}
+
+// threadNode is a transient tree node used during prefix computation.
+// The tree exists only for the duration of one appendThreadRows call;
+// after the walk produces displayRows it's discarded.
+type threadNode struct {
+	msg      mail.MessageInfo
+	children []*threadNode
+}
+
+// appendThreadRows builds a transient tree from one thread bucket,
+// then emits displayRows in depth-first root-then-children order with
+// the right prefix for each row's position. The tree never escapes
+// this function — it's a scratch structure for prefix computation.
+func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow {
+	rootIdx := pickRoot(bucket)
+	root := &threadNode{msg: bucket[rootIdx]}
+
+	// Index every message by UID so children can find their parent.
+	byUID := map[mail.UID]*threadNode{}
+	for i, msg := range bucket {
+		if i == rootIdx {
+			byUID[msg.UID] = root
+			continue
+		}
+		byUID[msg.UID] = &threadNode{msg: msg}
+	}
+
+	// Hook each non-root child to its parent. If the parent is missing
+	// (broken chain — InReplyTo references a UID outside the bucket),
+	// fall back to attaching it to the root as a top-level child.
+	for i, msg := range bucket {
+		if i == rootIdx {
+			continue
+		}
+		node := byUID[msg.UID]
+		parent, ok := byUID[msg.InReplyTo]
+		if !ok {
+			parent = root
+		}
+		parent.children = append(parent.children, node)
+	}
+
+	// Sort children chronologically ascending at every level.
+	var sortChildren func(n *threadNode)
+	sortChildren = func(n *threadNode) {
+		sort.SliceStable(n.children, func(i, j int) bool {
+			return n.children[i].msg.Date < n.children[j].msg.Date
+		})
+		for _, c := range n.children {
+			sortChildren(c)
+		}
+	}
+	sortChildren(root)
+
+	// Emit the root.
+	rows = append(rows, displayRow{
+		msg:          root.msg,
+		isThreadRoot: true,
+		threadSize:   len(bucket),
+		depth:        0,
+	})
+
+	// Walk children depth-first, building the prefix from the trail
+	// of "is-last-sibling" flags at each ancestor level.
+	var walk func(node *threadNode, ancestorLastFlags []bool)
+	walk = func(node *threadNode, ancestorLastFlags []bool) {
+		for i, child := range node.children {
+			isLast := i == len(node.children)-1
+			rows = append(rows, displayRow{
+				msg:          child.msg,
+				isThreadRoot: false,
+				threadSize:   0,
+				depth:        uint8(len(ancestorLastFlags) + 1),
+				prefix:       buildPrefix(ancestorLastFlags, isLast),
+			})
+			walk(child, append(ancestorLastFlags, isLast))
+		}
+	}
+	walk(root, nil)
+
+	return rows
+}
+
+// buildPrefix constructs the box-drawing prefix string for a row at
+// the given depth. ancestorLastFlags has one entry per ancestor level
+// above this row, indicating whether that ancestor was the last
+// sibling at its own level. isLast reports whether the current row is
+// the last sibling at its own level.
+//
+// For each ancestor: "   " if it was the last sibling, "│  " otherwise.
+// Then the current node's connector: "└─ " if last, "├─ " otherwise.
+func buildPrefix(ancestorLastFlags []bool, isLast bool) string {
+	var b strings.Builder
+	for _, last := range ancestorLastFlags {
+		if last {
+			b.WriteString("   ")
+		} else {
+			b.WriteString("│  ")
+		}
+	}
+	if isLast {
+		b.WriteString("└─ ")
+	} else {
+		b.WriteString("├─ ")
+	}
+	return b.String()
 }
 
 // SetSort changes the thread-level sort direction and re-runs the
