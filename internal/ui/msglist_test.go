@@ -486,6 +486,55 @@ func TestMessageListThreading(t *testing.T) {
 			t.Errorf("expected [3] Root in collapsed view, got: %q", plain)
 		}
 	})
+
+	t.Run("MoveDown skips hidden rows", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "1", ThreadID: "1", From: "Above", Subject: "above", Date: "2026-04-10", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "thread", Date: "2026-04-09", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "thread", Date: "2026-04-09 11:00", Flags: mail.FlagSeen},
+			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", Date: "2026-04-08", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		// Default sort puts these in date-desc order: Above, Root, Reply, Below.
+		ml.MoveDown() // cursor on Root (index 1)
+		ml.ToggleFold()
+		// Now visible rows: Above (0), Root (1, folded), Below (3 — index 2 hidden).
+		// MoveDown from Root should land on Below (index 3), skipping hidden index 2.
+		ml.MoveDown()
+		if got, want := ml.Selected(), 3; got != want {
+			t.Errorf("after MoveDown across hidden row, Selected() = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("MoveUp skips hidden rows", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "1", ThreadID: "1", From: "Above", Subject: "above", Date: "2026-04-10", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "thread", Date: "2026-04-09", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "thread", Date: "2026-04-09 11:00", Flags: mail.FlagSeen},
+			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", Date: "2026-04-08", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		ml.MoveDown() // cursor on Root
+		ml.ToggleFold()
+		ml.MoveDown() // → index 3 (Below)
+		ml.MoveUp()
+		if got, want := ml.Selected(), 1; got != want {
+			t.Errorf("after MoveUp across hidden row, Selected() = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("MoveToBottom lands on last visible row", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-09", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-09 11:00", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		ml.ToggleFold() // fold T1, child at index 1 hidden
+		ml.MoveToBottom()
+		if got, want := ml.Selected(), 0; got != want {
+			t.Errorf("MoveToBottom with only root visible: Selected() = %d, want %d", got, want)
+		}
+	})
 }
 
 // visibleRowCount counts the displayRows that aren't hidden by fold

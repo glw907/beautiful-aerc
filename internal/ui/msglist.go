@@ -435,32 +435,67 @@ func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
 // diverge once the build pipeline produces hidden rows.)
 func (m MessageList) Count() int { return len(m.source) }
 
-// moveBy shifts the cursor by delta rows, clamped to the displayRow
-// range, and re-clamps the viewport offset. Hidden-row skipping is
-// added in Task 12; for now this matches previous behavior because
-// the trivial pipeline produces no hidden rows.
+// moveBy shifts the cursor by delta visible rows, walking past any
+// hidden rows in the requested direction. Empty list is a no-op.
 func (m *MessageList) moveBy(delta int) {
 	if len(m.rows) == 0 {
 		return
 	}
-	m.selected = max(0, min(len(m.rows)-1, m.selected+delta))
+	if delta == 0 {
+		m.clampOffset()
+		return
+	}
+
+	step := 1
+	if delta < 0 {
+		step = -1
+		delta = -delta
+	}
+
+	idx := m.selected
+	for delta > 0 {
+		next := idx + step
+		for next >= 0 && next < len(m.rows) && m.rows[next].hidden {
+			next += step
+		}
+		if next < 0 || next >= len(m.rows) {
+			break
+		}
+		idx = next
+		delta--
+	}
+	m.selected = idx
 	m.clampOffset()
 }
 
-// MoveDown advances the cursor by one row.
+// MoveDown advances the cursor by one visible row.
 func (m *MessageList) MoveDown() { m.moveBy(1) }
 
-// MoveUp retreats the cursor by one row.
+// MoveUp retreats the cursor by one visible row.
 func (m *MessageList) MoveUp() { m.moveBy(-1) }
 
-// MoveToTop jumps the cursor to the first message.
+// MoveToTop jumps the cursor to the first visible row.
 func (m *MessageList) MoveToTop() {
-	m.selected = 0
-	m.offset = 0
+	for i := 0; i < len(m.rows); i++ {
+		if !m.rows[i].hidden {
+			m.selected = i
+			m.offset = 0
+			m.clampOffset()
+			return
+		}
+	}
 }
 
-// MoveToBottom jumps the cursor to the last message.
-func (m *MessageList) MoveToBottom() { m.moveBy(len(m.rows)) }
+// MoveToBottom jumps the cursor to the last visible row.
+func (m *MessageList) MoveToBottom() {
+	for i := len(m.rows) - 1; i >= 0; i-- {
+		if !m.rows[i].hidden {
+			m.selected = i
+			m.clampOffset()
+			return
+		}
+	}
+}
 
 // HalfPageDown moves the cursor down by half the visible height.
 func (m *MessageList) HalfPageDown() { m.moveBy(max(1, m.height/2)) }
@@ -504,18 +539,18 @@ func (m MessageList) View() string {
 	plainBg := m.styles.MsgListBg
 	selectedBg := m.styles.MsgListSelected
 
-	end := m.offset + m.height
-	if end > len(m.rows) {
-		end = len(m.rows)
-	}
-
 	lines := make([]string, 0, m.height)
-	for i := m.offset; i < end; i++ {
+	visible := 0
+	for i := m.offset; i < len(m.rows) && visible < m.height; i++ {
+		if m.rows[i].hidden {
+			continue
+		}
 		bg := plainBg
 		if i == m.selected {
 			bg = selectedBg
 		}
 		lines = append(lines, m.renderRow(i, bg))
+		visible++
 	}
 	for len(lines) < m.height {
 		lines = append(lines, m.renderBlankLine())
