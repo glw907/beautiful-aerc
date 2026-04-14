@@ -43,6 +43,14 @@ type Backend interface {
 }
 
 // MessageInfo holds message header information for list display.
+//
+// ThreadID groups messages that belong to the same conversation. A
+// non-threaded message is a thread of size 1 with ThreadID == UID and
+// InReplyTo == "". InReplyTo points at the parent message's UID and
+// is empty for thread roots. The UI layer derives depth and box-
+// drawing prefixes from the tree shape — depth is not carried on the
+// wire because doing so would duplicate information the prefix walk
+// already produces and risk drift if a backend miscounted.
 type MessageInfo struct {
 	UID     UID
 	Subject string
@@ -50,4 +58,7 @@ type MessageInfo struct {
 	Date    string
 	Flags   Flag
 	Size    uint32
+
+	ThreadID  UID
+	InReplyTo UID
 }
