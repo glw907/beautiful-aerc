@@ -168,11 +168,12 @@ func TestMessageList(t *testing.T) {
 		if len(lines) == 0 {
 			t.Fatal("empty view")
 		}
-		// Strip the trailing right margin space, then verify the date appears
-		// at the end of the row (not in the middle).
+		// The date column is 12 cells wide; "2026-04-12 10:23" (16 chars)
+		// truncates to "2026-04-12 …". Verify the date prefix appears at the
+		// tail of the row (right-aligned, not in the middle).
 		first := strings.TrimRight(lines[0], " ")
-		if !strings.HasSuffix(first, "10:23 AM") {
-			t.Errorf("expected first row to end with date, got tail: %q", first)
+		if !strings.HasSuffix(first, "…") || !strings.Contains(first, "2026-04-12") {
+			t.Errorf("expected first row to end with truncated date, got tail: %q", first)
 		}
 	})
 
@@ -215,16 +216,16 @@ func TestMessageList(t *testing.T) {
 
 func mockMessages() []mail.MessageInfo {
 	return []mail.MessageInfo{
-		{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "10:23 AM", Flags: 0},
-		{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "9:45 AM", Flags: 0},
-		{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "9:12 AM", Flags: 0},
-		{UID: "4", ThreadID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "Yesterday", Flags: mail.FlagSeen},
-		{UID: "5", ThreadID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "Yesterday", Flags: mail.FlagSeen | mail.FlagFlagged},
-		{UID: "6", ThreadID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "Yesterday", Flags: mail.FlagSeen | mail.FlagAnswered},
-		{UID: "7", ThreadID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "Apr 8", Flags: mail.FlagSeen},
-		{UID: "8", ThreadID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "Apr 8", Flags: mail.FlagSeen},
-		{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "Apr 7", Flags: mail.FlagSeen},
-		{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "Apr 7", Flags: mail.FlagSeen | mail.FlagFlagged},
+		{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "2026-04-12 10:23", Flags: 0},
+		{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "2026-04-12 09:45", Flags: 0},
+		{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "2026-04-12 09:12", Flags: 0},
+		{UID: "4", ThreadID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "2026-04-11", Flags: mail.FlagSeen},
+		{UID: "5", ThreadID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "2026-04-10", Flags: mail.FlagSeen | mail.FlagFlagged},
+		{UID: "6", ThreadID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "2026-04-09", Flags: mail.FlagSeen | mail.FlagAnswered},
+		{UID: "7", ThreadID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "2026-04-08", Flags: mail.FlagSeen},
+		{UID: "8", ThreadID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "2026-04-07", Flags: mail.FlagSeen},
+		{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "2026-04-06", Flags: mail.FlagSeen},
+		{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "2026-04-05", Flags: mail.FlagSeen | mail.FlagFlagged},
 	}
 }
 
@@ -292,6 +293,38 @@ func TestMessageListThreading(t *testing.T) {
 		}
 		if got, want := latestActivity(bucket), "Apr 5"; got != want {
 			t.Errorf("latestActivity = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("threads sorted by latest activity descending by default", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			// Older thread first in input.
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Old", Date: "Apr 1", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "OldReply", Date: "Apr 2", Flags: mail.FlagSeen},
+			// Newer thread second in input.
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "New", Date: "Apr 5", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		if ml.rows[0].msg.UID != "20" {
+			t.Errorf("first row UID = %q, want 20 (T2 root)", ml.rows[0].msg.UID)
+		}
+		if ml.rows[1].msg.UID != "10" {
+			t.Errorf("second row UID = %q, want 10 (T1 root)", ml.rows[1].msg.UID)
+		}
+		if ml.rows[2].msg.UID != "11" {
+			t.Errorf("third row UID = %q, want 11 (T1 child)", ml.rows[2].msg.UID)
+		}
+	})
+
+	t.Run("threads sorted ascending when SortDateAsc", func(t *testing.T) {
+		msgs := []mail.MessageInfo{
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "New", Date: "Apr 5", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Old", Date: "Apr 1", Flags: mail.FlagSeen},
+		}
+		ml := NewMessageList(styles, msgs, 90, 20)
+		ml.SetSort(SortDateAsc)
+		if ml.rows[0].msg.UID != "10" {
+			t.Errorf("first row UID = %q, want 10 (T1)", ml.rows[0].msg.UID)
 		}
 	})
 

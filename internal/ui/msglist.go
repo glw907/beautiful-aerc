@@ -112,8 +112,25 @@ func (m *MessageList) SetMessages(msgs []mail.MessageInfo) {
 //  7. Apply fold state.                                    (Task 10)
 func (m *MessageList) rebuild() {
 	buckets := bucketByThreadID(m.source)
+
+	type sortedBucket struct {
+		bucket []mail.MessageInfo
+		latest string
+	}
+	wrapped := make([]sortedBucket, len(buckets))
+	for i, b := range buckets {
+		wrapped[i] = sortedBucket{bucket: b, latest: latestActivity(b)}
+	}
+	sort.SliceStable(wrapped, func(i, j int) bool {
+		if m.sort == SortDateAsc {
+			return wrapped[i].latest < wrapped[j].latest
+		}
+		return wrapped[i].latest > wrapped[j].latest
+	})
+
 	rows := make([]displayRow, 0, len(m.source))
-	for _, bucket := range buckets {
+	for _, w := range wrapped {
+		bucket := w.bucket
 		rootIdx := pickRoot(bucket)
 		root := bucket[rootIdx]
 		rows = append(rows, displayRow{
@@ -122,6 +139,7 @@ func (m *MessageList) rebuild() {
 			threadSize:   len(bucket),
 			depth:        0,
 		})
+
 		children := make([]mail.MessageInfo, 0, len(bucket)-1)
 		for i, msg := range bucket {
 			if i == rootIdx {
@@ -207,6 +225,14 @@ func latestActivity(bucket []mail.MessageInfo) string {
 		}
 	}
 	return latest
+}
+
+// SetSort changes the thread-level sort direction and re-runs the
+// build pipeline. Children inside a thread always sort ascending
+// regardless of this setting.
+func (m *MessageList) SetSort(order SortOrder) {
+	m.sort = order
+	m.rebuild()
 }
 
 // SetSize updates the panel dimensions.
