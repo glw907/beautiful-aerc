@@ -77,3 +77,37 @@ func folderChangedCmd(f mail.Folder) tea.Cmd {
 		}
 	}
 }
+
+// SearchMode selects which fields the message filter matches against.
+type SearchMode int
+
+const (
+	// SearchModeName matches subject + sender. Default.
+	SearchModeName SearchMode = iota
+	// SearchModeAll matches subject + sender + date text.
+	SearchModeAll
+)
+
+// SearchState is the lifecycle state of the sidebar search UI.
+type SearchState int
+
+const (
+	// SearchIdle — no filter, shelf shows hint row.
+	SearchIdle SearchState = iota
+	// SearchTyping — prompt focused, printable runes append to query,
+	// filter updates live on each keystroke.
+	SearchTyping
+	// SearchActive — query is live but prompt is unfocused; normal
+	// account-view key routing resumes.
+	SearchActive
+)
+
+// SearchUpdatedMsg is emitted by SidebarSearch.Update on each
+// keystroke or mode change in Typing state, carrying the current
+// query and mode. AccountTab handles it by calling
+// MessageList.SetFilter and then pushing the thread count into
+// SidebarSearch.SetResultCount.
+type SearchUpdatedMsg struct {
+	Query string
+	Mode  SearchMode
+}
