@@ -67,3 +67,26 @@ single-binary `poplar` repo landed 2026-04-12 (ADR 0058).
 > **Approach.** Brainstorm the open questions, write a plan doc at
 > `docs/superpowers/plans/2026-04-12-poplar-threading.md`, then
 > implement. Pass-end ritual: invoke the `poplar-pass` skill.
+
+## Tooling queue (out-of-band)
+
+Cross-cutting subsystems built outside the pass sequence. These do
+not block any pass; build them when the queue position makes sense.
+
+- **Mailrender training capture system** — queued, not started.
+  - **Spec:** `docs/superpowers/specs/2026-04-12-mailrender-training-design.md`
+  - **Plan:** `docs/superpowers/plans/2026-04-13-mailrender-training.md`
+  - **Builds:** `internal/train/`, `internal/content/markdown.go`,
+    `cmd/poplar/train.go`, `.claude/skills/fix-corpus/` (directory
+    skill with normative reference), `docs/poplar/training.md`,
+    ADR 0059, plus updates to invariants/system-map/CLAUDE.md.
+  - **Logical slot:** between Pass 2.5b-3.7 (sidebar filter UI)
+    and Pass 2.5b-4 (message viewer). Building before the viewer
+    means the viewer's `b` key reuses `internal/train.Save` from
+    day one and the fix-corpus loop is already triaging the 45
+    pre-migrated audit-output captures by the time viewer
+    development starts surfacing new rendering bugs.
+  - **Dependencies:** `internal/filter`, `internal/content`,
+    `internal/mailworker/xdg` — all already shipped.
+  - **Build approach:** subagent-driven-development on the plan
+    above, ~26 tasks across 8 phases, fresh subagent per task.
