@@ -131,6 +131,8 @@ func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
 }
 
 // Count returns the number of source messages in the list.
+// (Use len(m.rows) when you need the displayRow count — the two
+// diverge once the build pipeline produces hidden rows.)
 func (m MessageList) Count() int { return len(m.source) }
 
 // moveBy shifts the cursor by delta rows, clamped to the displayRow
