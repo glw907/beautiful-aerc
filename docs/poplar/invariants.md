@@ -72,6 +72,16 @@ the ADR(s) that justify them.
   poplar dependencies); v1.1 adds neovim via `--embed` RPC.
   Compose renders inline in the right panel — sidebar and chrome
   stay visible. No `tea.ExecProcess` terminal takeover.
+- `mail.MessageInfo` carries `ThreadID` and `InReplyTo` on the
+  wire. Depth is not a wire field — the UI derives it during the
+  prefix walk. A non-threaded message is a thread of size 1 with
+  `ThreadID == UID` and `InReplyTo == ""`.
+- `MessageList` owns thread grouping and fold state. It holds
+  `source []MessageInfo` (the raw backend payload) alongside a
+  derived `rows []displayRow` rebuilt by a group→sort→flatten
+  pipeline. A transient `*threadNode` tree is built per bucket
+  inside `appendThreadRows` only to compute box-drawing prefixes,
+  then discarded — the renderer never sees the tree.
 
 ## UX
 
@@ -89,10 +99,23 @@ the ADR(s) that justify them.
   Trash. Shared with lowercase triage keys (`d` delete vs
   `D` drafts) without conflict.
 - Threaded display is default-on. Per-folder `[ui.folders.<name>]
-  threading = false` overrides to flat.
-- `Space` is the thread-fold toggle outside visual-select mode.
-  Inside visual-select mode (Pass 6) it toggles row selection.
-  `F` folds all threads in the current folder; `U` unfolds all.
+  threading = false` overrides to flat. No runtime toggle.
+- Threads sort by latest activity (max date across the thread)
+  in the folder's configured direction. Children inside a thread
+  always sort chronologically ascending regardless of folder
+  direction. Folder sort comes from `[ui.folders.<name>] sort`
+  (`date-desc` default, `date-asc` opt-in).
+- Thread root is the message with empty `InReplyTo`. Fallback
+  for broken chains: earliest by date in the bucket; remaining
+  orphans attach to the root as depth-1 children.
+- Fold state is per-session, reset on every `SetMessages`
+  (folder reload). Threads default expanded. The `[N] ` prefix
+  badge replaces the box-drawing prefix on a collapsed root.
+- `Space` toggles fold on the thread under the cursor (operates
+  on the thread root if the cursor is on a child; cursor snaps
+  to the nearest visible row after fold). Inside visual-select
+  mode (Pass 6) `Space` toggles row selection instead. `F` folds
+  every multi-message thread; `U` unfolds all.
 - Message list encodes read state by brightness (`FgBright` bold
   for unread, `FgDim` for read). Hue is reserved for the cursor
   (`AccentPrimary`) and for the unread+flagged case
@@ -143,7 +166,7 @@ invariant. ADR numbering is chronological.
 | Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054 |
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
 | Sidebar groups, nested indent, classification | 0018, 0019, 0034, 0049, 0050 |
-| Message list, threading, fold | 0041, 0045, 0047, 0048, 0055 |
+| Message list, threading, fold | 0041, 0045, 0047, 0048, 0055, 0059, 0060, 0061, 0062, 0063 |
 | Vim-first keybindings, no command mode, no multi-key | 0015, 0024, 0051 |
 | Compose, Catkin, editor interface | 0031, 0032, 0033 |
 | Per-screen prototype passes | 0022 |

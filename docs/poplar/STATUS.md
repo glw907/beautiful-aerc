@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 2.5b-3.6 (threading + fold). Pivot to the
-single-binary `poplar` repo landed 2026-04-12 (ADR 0058).
+**Current pass:** Pass 2.5b-3.7 (sidebar filter UI). Threading +
+fold landed 2026-04-13 across ADRs 0059–0063.
 
 ## Passes
 
@@ -18,7 +18,7 @@ single-binary `poplar` repo landed 2026-04-12 (ADR 0058).
 | 2.5b-2 | Prototype: sidebar | done |
 | 2.5b-3 | Prototype: message list | done |
 | 2.5b-3.5 | Prototype: UI config + sidebar polish | done |
-| 2.5b-3.6 | Prototype: threading + fold | pending |
+| 2.5b-3.6 | Prototype: threading + fold | done |
 | 2.5b-3.7 | Prototype: sidebar filter UI | pending |
 | 2.5b-train | Tooling: mailrender training capture system | pending |
 | 2.5b-4 | Prototype: message viewer | pending |
@@ -35,31 +35,24 @@ single-binary `poplar` repo landed 2026-04-12 (ADR 0058).
 | 11 | Polish for daily use | pending |
 | 1.1 | Neovim embedding (nvim --embed RPC) | pending |
 
-## Next starter prompt (Pass 2.5b-3.6)
+## Next starter prompt (Pass 2.5b-3.7)
 
-> **Goal.** Threaded display, per-thread fold state, bulk fold/unfold.
+> **Goal.** Sidebar filter UI — incremental filter over the
+> folder list for finding a folder by partial name. Single pane,
+> no popover takeover.
 >
-> **Approach.** Pure implementation pass — design is settled. Spec at
-> `docs/superpowers/specs/2026-04-13-poplar-threading-design.md`,
-> 18-task plan at
-> `docs/superpowers/plans/2026-04-12-poplar-threading.md`. Execute
-> via `superpowers:subagent-driven-development` (recommended) or
-> `superpowers:executing-plans`. Pass-end ritual: invoke
-> `poplar-pass`.
+> **Settled.** Group order fixed (ADR 0019); nested indent rule
+> unchanged (ADR 0034); single-key bindings only (ADR 0015).
 >
-> **Settled.** Inherited from ADRs 0045/0052/0053/0054 (threading
-> default-on, `Space`/`F`/`U` keys, no runtime toggle) plus the
-> 2026-04-13 brainstorm: latest-activity sort key, `MessageInfo`
-> gains `ThreadID`/`InReplyTo` only (no wire `Depth`), Camp 2 /
-> Thunderbird-style flat displayRow with transient tree, threads
-> default expanded, per-session fold state reset on reload, thread
-> root is the message with empty `InReplyTo` (earliest-by-date
-> fallback for broken chains), 4-message branching mock thread.
+> **Still open — brainstorm:** activation key (`/` taken by
+> message search); filter scope and match style; visual treatment
+> (replace, overlay, dim); cursor ownership; Esc semantics.
+>
+> **Approach.** Brainstorm, write spec + plan under
+> `docs/superpowers/{specs,plans}/`, implement via
+> `subagent-driven-development`. Pass-end via `poplar-pass`.
 
-## Pass 2.5b-train details
+## Queued: Pass 2.5b-train (mailrender training capture)
 
-Tooling pass — not a UX prototype. Slotted before 2.5b-4 because the
-viewer's `b` capture key reuses `internal/train.Save`. Spec:
-`docs/superpowers/specs/2026-04-12-mailrender-training-design.md`.
-Plan: `docs/superpowers/plans/2026-04-13-mailrender-training.md`
-(26 tasks, 8 phases, subagent-driven).
+Spec `docs/superpowers/specs/2026-04-12-mailrender-training-design.md`,
+plan `docs/superpowers/plans/2026-04-13-mailrender-training.md`.
