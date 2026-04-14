@@ -18,6 +18,10 @@ const sidebarWidth = 30
 // this number matching.
 const sidebarHeaderRows = 2
 
+// searchShelfRows is the height of the SidebarSearch shelf pinned
+// to the bottom of the sidebar column.
+const searchShelfRows = 3
+
 // AccountTab is the main account view. One pane (like pine): every
 // key is always live. J/K/G navigate folders, j/k navigate messages.
 type AccountTab struct {
@@ -27,23 +31,25 @@ type AccountTab struct {
 	// mutated and its results are never cached as owned state —
 	// they come back as Msg types through the normal Update flow.
 	// This is the elm-conventions Rule 5 exception.
-	backend mail.Backend
-	uiCfg   config.UIConfig
-	sidebar Sidebar
-	msglist MessageList
-	width   int
-	height  int
+	backend       mail.Backend
+	uiCfg         config.UIConfig
+	sidebar       Sidebar
+	sidebarSearch SidebarSearch
+	msglist       MessageList
+	width         int
+	height        int
 }
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
 func NewAccountTab(styles Styles, backend mail.Backend, uiCfg config.UIConfig) AccountTab {
 	return AccountTab{
-		styles:  styles,
-		backend: backend,
-		uiCfg:   uiCfg,
-		sidebar: NewSidebar(styles, nil, uiCfg, sidebarWidth, 1),
-		msglist: NewMessageList(styles, nil, 1, 1),
+		styles:        styles,
+		backend:       backend,
+		uiCfg:         uiCfg,
+		sidebar:       NewSidebar(styles, nil, uiCfg, sidebarWidth, 1),
+		sidebarSearch: NewSidebarSearch(styles, sidebarWidth),
+		msglist:       NewMessageList(styles, nil, 1, 1),
 	}
 }
 
@@ -73,7 +79,9 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		sw := min(sidebarWidth, m.width/2)
-		m.sidebar.SetSize(sw, m.height-sidebarHeaderRows)
+		folderHeight := max(1, m.height-sidebarHeaderRows-searchShelfRows)
+		m.sidebar.SetSize(sw, folderHeight)
+		m.sidebarSearch.SetSize(sw)
 		mw := max(1, m.width-sw-1) // -1 for divider
 		m.msglist.SetSize(mw, m.height)
 		return m, nil
@@ -95,6 +103,11 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		// TODO(pass-2.5b-6): surface via status/toast.
 		return m, nil
 
+	case SearchUpdatedMsg:
+		m.msglist.SetFilter(msg.Query, msg.Mode)
+		m.sidebarSearch.SetResultCount(m.msglist.FilterResultCount())
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -103,13 +116,45 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 // handleKey dispatches navigation keys by identity. J/K/G move the
 // sidebar (and dispatch a folder-load Cmd); j/k/Ctrl-d/Ctrl-u move the
-// message list cursor.
+// message list cursor. During an active search, printable keys flow
+// through the SidebarSearch instead of the account-view handlers.
 func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
+	// Route to SidebarSearch when we're in Typing state — it owns
+	// the input routing for this modal slice, except for Enter and
+	// Esc which transition state.
+	if m.sidebarSearch.State() == SearchTyping {
+		switch msg.Type {
+		case tea.KeyEnter:
+			m.sidebarSearch.Commit()
+			return m, nil
+		case tea.KeyEsc:
+			m.sidebarSearch.Clear()
+			m.msglist.ClearFilter()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.sidebarSearch, cmd = m.sidebarSearch.Update(msg)
+		return m, cmd
+	}
+
 	switch msg.String() {
+	case "/":
+		if m.sidebarSearch.State() == SearchIdle || m.sidebarSearch.State() == SearchActive {
+			m.sidebarSearch.Activate()
+			return m, nil
+		}
+	case "esc":
+		if m.sidebarSearch.State() == SearchActive {
+			m.sidebarSearch.Clear()
+			m.msglist.ClearFilter()
+			return m, nil
+		}
 	case "J":
+		m.clearSearchIfActive()
 		m.sidebar.MoveDown()
 		return m, m.selectionChangedCmds()
 	case "K":
+		m.clearSearchIfActive()
 		m.sidebar.MoveUp()
 		return m, m.selectionChangedCmds()
 	case "G":
@@ -129,13 +174,34 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	case "ctrl+b", "pgup":
 		m.msglist.PageUp()
 	case " ":
+		if m.sidebarSearch.State() == SearchActive {
+			return m, nil
+		}
 		m.msglist.ToggleFold()
 	case "F":
+		if m.sidebarSearch.State() == SearchActive {
+			return m, nil
+		}
 		m.msglist.FoldAll()
 	case "U":
+		if m.sidebarSearch.State() == SearchActive {
+			return m, nil
+		}
 		m.msglist.UnfoldAll()
 	}
 	return m, nil
+}
+
+// clearSearchIfActive clears the shelf and the filter if the shelf
+// is in any non-Idle state. Returns true if anything was cleared —
+// callers use this to decide whether to run follow-up logic.
+func (m *AccountTab) clearSearchIfActive() bool {
+	if m.sidebarSearch.State() == SearchIdle {
+		return false
+	}
+	m.sidebarSearch.Clear()
+	m.msglist.ClearFilter()
+	return true
 }
 
 // selectionChangedCmds returns the batch of Cmds that run every time
@@ -153,7 +219,9 @@ func (m AccountTab) selectionChangedCmds() tea.Cmd {
 	)
 }
 
-// View renders the sidebar + divider + message list.
+// View renders the sidebar + divider + message list. The sidebar
+// column is composed top-to-bottom as: account header (2 rows),
+// folder region (flex), search shelf (3 rows pinned to bottom).
 func (m AccountTab) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
@@ -165,15 +233,23 @@ func (m AccountTab) View() string {
 	blank := m.styles.SidebarBg.Width(sw).Render("")
 
 	sidebarFolders := m.sidebar.View()
+	shelfView := m.sidebarSearch.View()
 
 	var sidebarLines []string
 	sidebarLines = append(sidebarLines, acctLine, blank)
 	if sidebarFolders != "" {
 		sidebarLines = append(sidebarLines, strings.Split(sidebarFolders, "\n")...)
 	}
-	for len(sidebarLines) < m.height {
+	// Pad the folder region with blank rows so the shelf lands at
+	// the bottom of the column regardless of how many folders exist.
+	targetFolderEnd := m.height - searchShelfRows
+	for len(sidebarLines) < targetFolderEnd {
 		sidebarLines = append(sidebarLines, blank)
 	}
+	if len(sidebarLines) > targetFolderEnd {
+		sidebarLines = sidebarLines[:targetFolderEnd]
+	}
+	sidebarLines = append(sidebarLines, strings.Split(shelfView, "\n")...)
 	if len(sidebarLines) > m.height {
 		sidebarLines = sidebarLines[:m.height]
 	}

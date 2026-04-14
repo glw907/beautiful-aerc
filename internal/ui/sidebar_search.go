@@ -89,6 +89,10 @@ func (s *SidebarSearch) SetResultCount(n int) {
 // the possibly-mutated shelf plus a Cmd that emits a
 // SearchUpdatedMsg whenever the query or mode changed. Only
 // meaningful in SearchTyping state.
+//
+// The textinput's own returned Cmd (cursor blink ticker) is dropped
+// — the shelf doesn't need a blinking cursor and it makes tests
+// 500ms slower per keystroke when drained synchronously.
 func (s SidebarSearch) Update(msg tea.Msg) (SidebarSearch, tea.Cmd) {
 	if s.state != SearchTyping {
 		return s, nil
@@ -109,21 +113,16 @@ func (s SidebarSearch) Update(msg tea.Msg) (SidebarSearch, tea.Cmd) {
 	}
 
 	prev := s.input.Value()
-	var cmd tea.Cmd
-	s.input, cmd = s.input.Update(msg)
+	s.input, _ = s.input.Update(msg)
 	cur := s.input.Value()
 	if cur == prev {
-		return s, cmd
+		return s, nil
 	}
 	query := cur
 	mode := s.mode
-	emitCmd := func() tea.Msg {
+	return s, func() tea.Msg {
 		return SearchUpdatedMsg{Query: query, Mode: mode}
 	}
-	if cmd == nil {
-		return s, emitCmd
-	}
-	return s, tea.Batch(cmd, emitCmd)
 }
 
 // View renders the shelf's 3 rows: blank separator, prompt/hint,

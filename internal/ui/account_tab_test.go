@@ -288,3 +288,235 @@ func TestAccountTab_JDispatchesFolderLoad(t *testing.T) {
 		t.Fatalf("unexpected cmd result: %T", msg)
 	}
 }
+
+// drainSearch unwraps a Cmd from SidebarSearch.Update through any
+// tea.BatchMsg envelope and feeds the SearchUpdatedMsg back into the
+// tab so the filter takes effect. Use after typing a key during
+// search.
+func drainSearch(t *testing.T, tab *AccountTab, cmd tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		return
+	}
+	msg := cmd()
+	if upd, ok := msg.(SearchUpdatedMsg); ok {
+		newTab, _ := tab.updateTab(upd)
+		*tab = newTab
+		return
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, sub := range batch {
+			if sub == nil {
+				continue
+			}
+			inner := sub()
+			if upd, ok := inner.(SearchUpdatedMsg); ok {
+				newTab, _ := tab.updateTab(upd)
+				*tab = newTab
+			}
+		}
+	}
+}
+
+func TestAccountTabSearchShelf(t *testing.T) {
+	t.Run("view renders the search hint at the bottom of the sidebar", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		view := stripANSI(tab.View())
+		if !strings.Contains(view, "/ to search") {
+			t.Error("sidebar should show '/ to search' hint")
+		}
+	})
+
+	t.Run("search hint is in the last few rows of the sidebar column", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		lines := strings.Split(stripANSI(tab.View()), "\n")
+		hintRow := -1
+		for i, line := range lines {
+			if strings.Contains(line, "/ to search") {
+				hintRow = i
+				break
+			}
+		}
+		if hintRow < 0 {
+			t.Fatal("hint not found in view")
+		}
+		contentRows := len(lines)
+		if hintRow < contentRows-3 || hintRow >= contentRows {
+			t.Errorf("hint row %d not in bottom shelf (content rows: %d)", hintRow, contentRows)
+		}
+	})
+}
+
+func TestAccountTabSearchActivation(t *testing.T) {
+	t.Run("/ in Idle activates search", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		if tab.sidebarSearch.State() != SearchTyping {
+			t.Errorf("state after / = %v, want SearchTyping", tab.sidebarSearch.State())
+		}
+	})
+
+	t.Run("/ in Idle does not start filtering yet (empty query)", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		rowCountBefore := len(tab.msglist.rows)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		if got := len(tab.msglist.rows); got != rowCountBefore {
+			t.Errorf("row count after / = %d, want %d (no filter yet)", got, rowCountBefore)
+		}
+	})
+}
+
+func TestAccountTabSearchFilter(t *testing.T) {
+	t.Run("typing during search filters the message list", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		rowsBefore := len(tab.msglist.rows)
+
+		for _, r := range []rune{'a', 'l', 'i'} {
+			var cmd tea.Cmd
+			tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			drainSearch(t, &tab, cmd)
+		}
+
+		if got := len(tab.msglist.rows); got >= rowsBefore {
+			t.Errorf("row count after typing = %d, want < %d", got, rowsBefore)
+		}
+	})
+
+	t.Run("SearchUpdatedMsg directly sets the filter", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		rowsBefore := len(tab.msglist.rows)
+		tab, _ = tab.updateTab(SearchUpdatedMsg{Query: "alice", Mode: SearchModeName})
+		if got := len(tab.msglist.rows); got >= rowsBefore {
+			t.Errorf("row count after SearchUpdatedMsg = %d, want < %d", got, rowsBefore)
+		}
+	})
+
+	t.Run("SearchUpdatedMsg feeds the count back to SidebarSearch", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(SearchUpdatedMsg{Query: "alice", Mode: SearchModeName})
+		if tab.sidebarSearch.results != tab.msglist.FilterResultCount() {
+			t.Errorf("sidebarSearch.results = %d, want %d (mirrors FilterResultCount)",
+				tab.sidebarSearch.results, tab.msglist.FilterResultCount())
+		}
+	})
+}
+
+func TestAccountTabSearchCommitClear(t *testing.T) {
+	t.Run("Enter in Typing transitions shelf to Active", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		if tab.sidebarSearch.State() != SearchActive {
+			t.Errorf("state after Enter = %v, want SearchActive", tab.sidebarSearch.State())
+		}
+	})
+
+	t.Run("Enter keeps the filter live (query preserved)", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		filteredRows := len(tab.msglist.rows)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		if got := len(tab.msglist.rows); got != filteredRows {
+			t.Errorf("row count after Enter = %d, want %d (filter preserved)", got, filteredRows)
+		}
+	})
+
+	t.Run("Esc in Typing clears the filter and returns to Idle", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		rowsBefore := len(tab.msglist.rows)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEsc})
+		if tab.sidebarSearch.State() != SearchIdle {
+			t.Errorf("state after Esc = %v, want SearchIdle", tab.sidebarSearch.State())
+		}
+		if got := len(tab.msglist.rows); got != rowsBefore {
+			t.Errorf("row count after Esc = %d, want %d (full restore)", got, rowsBefore)
+		}
+	})
+
+	t.Run("Esc in Active clears the filter", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		rowsBefore := len(tab.msglist.rows)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEsc})
+		if tab.sidebarSearch.State() != SearchIdle {
+			t.Errorf("state after Esc in Active = %v, want SearchIdle", tab.sidebarSearch.State())
+		}
+		if got := len(tab.msglist.rows); got != rowsBefore {
+			t.Errorf("row count after Esc in Active = %d, want %d", got, rowsBefore)
+		}
+	})
+}
+
+func TestAccountTabSearchFolderJump(t *testing.T) {
+	t.Run("J during Active clears the search", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		if tab.sidebarSearch.State() != SearchActive {
+			t.Fatalf("setup: state = %v, want SearchActive", tab.sidebarSearch.State())
+		}
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		if tab.sidebarSearch.State() != SearchIdle {
+			t.Errorf("state after J = %v, want SearchIdle", tab.sidebarSearch.State())
+		}
+	})
+
+	t.Run("K during Active clears the search", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		if tab.sidebarSearch.State() != SearchIdle {
+			t.Errorf("state after K = %v, want SearchIdle", tab.sidebarSearch.State())
+		}
+	})
+}
+
+func TestAccountTabSearchFoldNoOp(t *testing.T) {
+	t.Run("Space during Active does not crash and does not exit search", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+		if tab.sidebarSearch.State() != SearchActive {
+			t.Errorf("state after Space = %v, want SearchActive", tab.sidebarSearch.State())
+		}
+	})
+
+	t.Run("F during Active does not crash", func(t *testing.T) {
+		tab := newLoadedTab(t, 80, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		var cmd tea.Cmd
+		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		drainSearch(t, &tab, cmd)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+		if tab.sidebarSearch.State() != SearchActive {
+			t.Errorf("state after F = %v, want SearchActive", tab.sidebarSearch.State())
+		}
+	})
+}

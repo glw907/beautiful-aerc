@@ -189,3 +189,28 @@ func TestApp(t *testing.T) {
 		}
 	})
 }
+
+func TestAppQuitStolenDuringSearch(t *testing.T) {
+	t.Run("q during Active clears search, does not quit", func(t *testing.T) {
+		app := newLoadedApp(t, 80, 30)
+
+		// Activate search and type a character, commit, then press q.
+		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		if cmd != nil {
+			drainApp(t, &app, cmd)
+		}
+		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		if app.acct.sidebarSearch.State() != SearchActive {
+			t.Fatalf("setup: state = %v, want SearchActive", app.acct.sidebarSearch.State())
+		}
+
+		_, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		if cmd != nil {
+			msg := cmd()
+			if _, isQuit := msg.(tea.QuitMsg); isQuit {
+				t.Error("q during Active returned tea.Quit; should have cleared search")
+			}
+		}
+	})
+}

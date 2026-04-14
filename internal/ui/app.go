@@ -63,7 +63,17 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q":
+			if m.acct.sidebarSearch.State() != SearchIdle {
+				// Steal q while search is active so it doesn't quit
+				// the app mid-search. Delegate to AccountTab which
+				// clears the filter.
+				var cmd tea.Cmd
+				m.acct, cmd = m.acct.Update(tea.KeyMsg{Type: tea.KeyEsc})
+				return m, cmd
+			}
+			return m, tea.Quit
+		case "ctrl+c":
 			return m, tea.Quit
 		case "?":
 			// Stubbed for 2.5b-5 (help popover)
