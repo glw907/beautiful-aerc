@@ -21,7 +21,7 @@ func NewMockBackend() *MockBackend {
 	return &MockBackend{
 		name: "geoff@907.life",
 		folders: []Folder{
-			{Name: "Inbox", Exists: 10, Unseen: 3, Role: "inbox"},
+			{Name: "Inbox", Exists: 14, Unseen: 4, Role: "inbox"},
 			{Name: "Drafts", Exists: 2, Unseen: 0, Role: "drafts"},
 			{Name: "Sent", Exists: 145, Unseen: 0, Role: "sent"},
 			{Name: "Archive", Exists: 1893, Unseen: 0, Role: "archive"},
@@ -33,16 +33,25 @@ func NewMockBackend() *MockBackend {
 			{Name: "Lists/rust", Exists: 89, Unseen: 0, Role: ""},
 		},
 		msgs: []MessageInfo{
-			{UID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "10:23 AM", Flags: 0},
-			{UID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "9:45 AM", Flags: 0},
-			{UID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "9:12 AM", Flags: 0},
-			{UID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "Yesterday", Flags: FlagSeen},
-			{UID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "Yesterday", Flags: FlagSeen | FlagFlagged},
-			{UID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "Yesterday", Flags: FlagSeen | FlagAnswered},
-			{UID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "Apr 8", Flags: FlagSeen},
-			{UID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "Apr 8", Flags: FlagSeen},
-			{UID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "Apr 7", Flags: FlagSeen},
-			{UID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "Apr 7", Flags: FlagSeen | FlagFlagged},
+			// Flat single-message threads: ThreadID == UID, no InReplyTo.
+			{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "10:23 AM", Flags: 0},
+			{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "9:45 AM", Flags: 0},
+			{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "9:12 AM", Flags: 0},
+			{UID: "4", ThreadID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "Yesterday", Flags: FlagSeen},
+			{UID: "5", ThreadID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "Yesterday", Flags: FlagSeen | FlagFlagged},
+			{UID: "6", ThreadID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "Yesterday", Flags: FlagSeen | FlagAnswered},
+			{UID: "7", ThreadID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "Apr 8", Flags: FlagSeen},
+			{UID: "8", ThreadID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "Apr 8", Flags: FlagSeen},
+			{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "Apr 7", Flags: FlagSeen},
+			{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "Apr 7", Flags: FlagSeen | FlagFlagged},
+
+			// Threaded conversation T1: branching shape (root + linear chain + sibling).
+			// Exercises the full ├─ │ └─ prefix vocabulary. First child unread so a
+			// folded thread can still carry "contains unread" status.
+			{UID: "20", ThreadID: "T1", InReplyTo: "", Subject: "Server migration plan", From: "Frank Lee", Date: "Apr 5", Flags: FlagSeen | FlagAnswered},
+			{UID: "21", ThreadID: "T1", InReplyTo: "20", Subject: "Re: Server migration plan", From: "Grace Kim", Date: "Apr 5", Flags: 0},
+			{UID: "22", ThreadID: "T1", InReplyTo: "21", Subject: "Re: Server migration plan", From: "Frank Lee", Date: "Apr 5", Flags: FlagSeen},
+			{UID: "23", ThreadID: "T1", InReplyTo: "20", Subject: "Re: Server migration plan", From: "Henry Park", Date: "Apr 5", Flags: FlagSeen},
 		},
 		updates: make(chan Update),
 	}

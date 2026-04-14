@@ -5,6 +5,85 @@ import (
 	"testing"
 )
 
+func TestMockBackendThreading(t *testing.T) {
+	b := NewMockBackend()
+	msgs, err := b.FetchHeaders(nil)
+	if err != nil {
+		t.Fatalf("FetchHeaders: %v", err)
+	}
+
+	t.Run("total message count", func(t *testing.T) {
+		if got, want := len(msgs), 14; got != want {
+			t.Errorf("len(msgs) = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("flat messages have ThreadID == UID and empty InReplyTo", func(t *testing.T) {
+		flatUIDs := map[UID]bool{
+			"1": true, "2": true, "3": true, "4": true, "5": true,
+			"6": true, "7": true, "8": true, "9": true, "10": true,
+		}
+		for _, m := range msgs {
+			if !flatUIDs[m.UID] {
+				continue
+			}
+			if m.ThreadID != m.UID {
+				t.Errorf("flat message %s: ThreadID = %q, want %q", m.UID, m.ThreadID, m.UID)
+			}
+			if m.InReplyTo != "" {
+				t.Errorf("flat message %s: InReplyTo = %q, want empty", m.UID, m.InReplyTo)
+			}
+		}
+	})
+
+	t.Run("threaded conversation has 4 messages with ThreadID T1", func(t *testing.T) {
+		threaded := map[UID]MessageInfo{}
+		for _, m := range msgs {
+			if m.ThreadID == "T1" {
+				threaded[m.UID] = m
+			}
+		}
+		if len(threaded) != 4 {
+			t.Fatalf("threaded conversation has %d messages, want 4", len(threaded))
+		}
+
+		root, ok := threaded["20"]
+		if !ok {
+			t.Fatal("missing root message UID 20")
+		}
+		if root.InReplyTo != "" {
+			t.Errorf("root InReplyTo = %q, want empty", root.InReplyTo)
+		}
+
+		grace, ok := threaded["21"]
+		if !ok {
+			t.Fatal("missing reply UID 21 (Grace Kim)")
+		}
+		if grace.InReplyTo != "20" {
+			t.Errorf("Grace InReplyTo = %q, want 20", grace.InReplyTo)
+		}
+		if grace.Flags&FlagSeen != 0 {
+			t.Error("Grace should be unread (FlagSeen not set)")
+		}
+
+		franky, ok := threaded["22"]
+		if !ok {
+			t.Fatal("missing reply UID 22 (Frank deep)")
+		}
+		if franky.InReplyTo != "21" {
+			t.Errorf("Frank-22 InReplyTo = %q, want 21", franky.InReplyTo)
+		}
+
+		henry, ok := threaded["23"]
+		if !ok {
+			t.Fatal("missing reply UID 23 (Henry)")
+		}
+		if henry.InReplyTo != "20" {
+			t.Errorf("Henry InReplyTo = %q, want 20", henry.InReplyTo)
+		}
+	})
+}
+
 func TestMockBackend(t *testing.T) {
 	b := NewMockBackend()
 
