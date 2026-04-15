@@ -16,6 +16,9 @@
 
 ## Medium
 
+- [ ] **#10** Evaluate migrating mail backend from aerc fork to emersion ecosystem `#improvement` `#poplar` *(2026-04-15)*
+  Emersion maintains a coherent Go mail/DAV library stack — `go-imap`, `go-smtp`, `go-message`, `go-webdav`, `go-vcard` — that would eliminate the aerc fork maintenance burden (`internal/mailworker/`, ADR 0058) and give us a library-based architecture instead of a fork of another TUI's internals. **Critical blocker to investigate first:** emersion has no JMAP client as far as I know, and the Go JMAP landscape is very thin. Options if confirmed: (1) drop JMAP, use IMAP for Fastmail — loses push, efficient delta sync, atomic ops; (2) hybrid with emersion IMAP + aerc JMAP fork — worst of both; (3) find or write a Go JMAP client — big v1-derailing project. First step when picked up: WebFetch pkg.go.dev for `jmap` and check what exists. Emerged during 2026-04-15 CardDAV brainstorm when evaluating `emersion/go-vcard` for the contacts parser. Reverses ADR 0058; worth its own focused brainstorm, not a casual refactor.
+
 - [ ] **#9** Viewer `n/N` walks filtered row set `#feature` `#poplar` *(2026-04-14)*
   While a search filter is committed and the viewer is open, `n/N` should advance to the next/previous message in the filtered row set and fetch its body into the current viewer. Deferred from Pass 2.5b-4 brainstorm (option c). Requires viewer↔msglist cursor coupling, body prefetch semantics, and filter-boundary behavior. **Bundle with Pass 3 (wire to live backend)** — prefetch semantics only become meaningful with real IMAP/JMAP latency.
 
