@@ -17,7 +17,7 @@ func newLoadedTab(t *testing.T, width, height int) AccountTab {
 	t.Helper()
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, backend, config.DefaultUIConfig())
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: width, Height: height})
 
 	// Resolve the Init Cmd to drive the tab into its post-load state.
@@ -184,7 +184,7 @@ func TestAccountTab(t *testing.T) {
 func TestAccountTabInit_ReturnsFoldersCmd(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, backend, config.DefaultUIConfig())
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
 	msg := runCmd(tab.Init())
 	if _, ok := msg.(foldersLoadedMsg); !ok {
 		t.Fatalf("expected foldersLoadedMsg from Init, got %T", msg)
@@ -194,7 +194,7 @@ func TestAccountTabInit_ReturnsFoldersCmd(t *testing.T) {
 func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, backend, config.DefaultUIConfig())
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
 	folders, _ := backend.ListFolders()
 	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
 	if len(tab.sidebar.entries) == 0 {
@@ -214,7 +214,7 @@ func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 func TestAccountTab_folderLoadedSeedsMsglist(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, backend, config.DefaultUIConfig())
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	msgs := []mail.MessageInfo{
 		{UID: "1", Subject: "hello", From: "a", Date: "now"},
@@ -519,4 +519,101 @@ func TestAccountTabSearchFoldNoOp(t *testing.T) {
 			t.Errorf("state after F = %v, want SearchActive", tab.sidebarSearch.State())
 		}
 	})
+}
+
+// Viewer integration: enter opens, search/folder-jumps inert while open.
+
+func TestAccountTab_EnterOpensViewer(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	if tab.viewer.IsOpen() {
+		t.Fatal("viewer should start closed")
+	}
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tab.viewer.IsOpen() {
+		t.Fatal("Enter must open the viewer")
+	}
+	if cmd == nil {
+		t.Fatal("Enter must produce a Cmd batch (load + opened + spinner)")
+	}
+}
+
+func TestAccountTab_EnterMarksRead(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	// First message in mock fixture (UID 1) is unread.
+	first, ok := tab.msglist.SelectedMessage()
+	if !ok {
+		t.Fatal("expected a selection")
+	}
+	if first.Flags&mail.FlagSeen != 0 {
+		t.Fatalf("test fixture broke: UID %s should be unread", first.UID)
+	}
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	after, _ := tab.msglist.SelectedMessage()
+	if after.Flags&mail.FlagSeen == 0 {
+		t.Errorf("Enter should optimistically mark seen on UID %s", after.UID)
+	}
+}
+
+func TestAccountTab_EnterEmptyFolderNoOp(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: nil})
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if tab.viewer.IsOpen() {
+		t.Error("Enter on empty folder must not open viewer")
+	}
+	if cmd != nil {
+		t.Errorf("Enter on empty folder must not emit a Cmd")
+	}
+}
+
+func TestAccountTab_SearchKeysInertWhileViewerOpen(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tab.viewer.IsOpen() {
+		t.Fatal("viewer should be open")
+	}
+	// `/` while viewer open should not activate the search shelf.
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if tab.sidebarSearch.State() != SearchIdle {
+		t.Errorf("/ while viewer open activated search; state = %v", tab.sidebarSearch.State())
+	}
+}
+
+func TestAccountTab_FolderJumpInertWhileViewerOpen(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	startFolder := tab.Title()
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
+	if tab.Title() != startFolder {
+		t.Errorf("J while viewer open changed folder to %q (was %q)", tab.Title(), startFolder)
+	}
+}
+
+func TestAccountTab_StaleBodyLoadedDropped(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	openUID := tab.viewer.CurrentUID()
+	// Deliver a body for a UID we never opened — must be ignored.
+	tab, _ = tab.updateTab(bodyLoadedMsg{uid: mail.UID("nonsense"), blocks: nil})
+	if tab.viewer.phase == viewerReady {
+		t.Errorf("viewer for UID %s readied on stale bodyLoaded", openUID)
+	}
+}
+
+func TestAccountTab_QClosesViewer(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tab.viewer.IsOpen() {
+		t.Fatal("viewer should be open")
+	}
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if tab.viewer.IsOpen() {
+		t.Error("q must close viewer")
+	}
+	if cmd == nil {
+		t.Error("close must emit ViewerClosedMsg cmd")
+	}
 }

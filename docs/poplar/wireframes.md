@@ -310,8 +310,8 @@ returns to the message list — no tab switching needed.
   `fg_base`, `<email>` in angle brackets in `fg_dim`. Separator
   `─` line in `fg_dim` below headers.
 - **Viewport:** `bubbles/viewport`. Scroll percentage in status
-  bar. `j/k` lines, `C-d/C-u` half page, `C-f/C-b` full page,
-  `G` bottom.
+  bar. `j/k` lines, `Space`/`b` page down/up, `g`/`G` top/bottom.
+  No `Ctrl+` bindings — modifier-free per the keybinding rules.
 - **Status bar:** Bottom frame edge. Scroll percentage + connection
   indicator. Closes frame with `╯`.
 - **Footer:** Viewer-specific bindings. `Tab:links` opens link
@@ -332,16 +332,14 @@ with dimmed content behind. Content changes per context.
                   │                                                         │
                   │  Navigate           Triage          Reply               │
                   │  j/k  up/down       d  delete       r  reply            │
-                  │  G    bottom        a  archive      R  all              │
-                  │  C-d  half pg dn    s  star         f  forward          │
-                  │  C-u  half pg up    .  read/unrd    c  compose          │
-                  │  C-f  page dn                                           │
-                  │  C-b  page up                                           │
+                  │  g/G  top/bottom    a  archive      R  all              │
+                  │                     s  star         f  forward          │
+                  │                     .  read/unrd    c  compose          │
                   │                                                         │
                   │  Search             Select          Threads             │
                   │  /    search        v  select       ␣  fold             │
                   │  n    next          ␣  toggle       F  fold all         │
-                  │  N    prev                          U  unfold all       │
+                  │  N    prev                                              │
                   │                                                         │
                   │  Go To                                                  │
                   │  I  inbox    D  drafts    S  sent                       │
@@ -358,12 +356,10 @@ with dimmed content behind. Content changes per context.
                   ╭─ Message Viewer ────────────────────────────────────────╮
                   │                                                         │
                   │  Navigate           Triage          Reply               │
-                  │  j/k  scroll        d  delete       r  reply            │
-                  │  G    bottom        a  archive      R  all              │
-                  │  C-d  half pg dn    s  star         f  forward          │
-                  │  C-u  half pg up                    c  compose          │
-                  │  C-f  page dn                                           │
-                  │  C-b  page up                                           │
+                  │  j/k    scroll      d  delete       r  reply            │
+                  │  g/G    top/bot     a  archive      R  all              │
+                  │  ␣/b    page d/u    s  star         f  forward          │
+                  │  1-9    open link                   c  compose          │
                   │                                                         │
                   │  Tab  link picker   q  close        ?  close            │
                   │                                                         │

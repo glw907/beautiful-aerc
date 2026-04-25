@@ -9,7 +9,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-const maxBodyWidth = 78
+const maxBodyWidth = 72
 
 // RenderBody renders blocks into a styled string using lipgloss.
 // Width is capped at maxBodyWidth for readability.
@@ -105,8 +105,17 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 		if b.Ordered {
 			prefix = string(rune('0'+b.Index%10)) + ". "
 		}
-		text = ansi.Wordwrap(prefix+text, width, "")
-		return t.Paragraph.Render(text)
+		indent := strings.Repeat(" ", len(prefix))
+		wrapped := ansi.Wordwrap(text, width-len(prefix), "")
+		lines := strings.Split(wrapped, "\n")
+		for i, line := range lines {
+			if i == 0 {
+				lines[i] = prefix + line
+			} else {
+				lines[i] = indent + line
+			}
+		}
+		return t.Paragraph.Render(strings.Join(lines, "\n"))
 
 	default:
 		return ""
@@ -193,17 +202,34 @@ func renderHeaderScalar(key, value string, t *theme.CompiledTheme) string {
 	return t.HeaderKey.Render(key+":") + " " + t.HeaderValue.Render(value)
 }
 
+// visibleAddrWidth returns the printed width of an Address as
+// rendered by renderHeaderAddresses. Used by the wrap accumulator to
+// decide where to break.
+func visibleAddrWidth(a Address) int {
+	switch {
+	case a.Name != "" && a.Email != "":
+		return len(a.Name) + len(a.Email) + 3 // " <" + ">"
+	case a.Name != "":
+		return len(a.Name)
+	default:
+		return len(a.Email)
+	}
+}
+
 func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int) []string {
 	keyStr := t.HeaderKey.Render(key + ":")
 	indent := strings.Repeat(" ", len(key)+2)
 
 	var formatted []string
 	for _, a := range addrs {
-		if a.Name != "" {
+		switch {
+		case a.Name != "" && a.Email != "":
 			formatted = append(formatted, fmt.Sprintf("%s %s",
 				t.HeaderValue.Render(a.Name),
 				t.HeaderDim.Render("<"+a.Email+">")))
-		} else {
+		case a.Name != "":
+			formatted = append(formatted, t.HeaderValue.Render(a.Name))
+		default:
 			formatted = append(formatted, t.HeaderValue.Render(a.Email))
 		}
 	}
@@ -213,10 +239,7 @@ func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, 
 	currentVisible := len(key) + 2
 
 	for i, addr := range formatted {
-		addrVisible := len(addrs[i].Name) + len(addrs[i].Email) + 3
-		if addrs[i].Name == "" {
-			addrVisible = len(addrs[i].Email)
-		}
+		addrVisible := visibleAddrWidth(addrs[i])
 
 		sep := ""
 		sepLen := 0

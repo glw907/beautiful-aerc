@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/theme"
 )
 
 // sidebarWidth is the fixed width of the sidebar panel.
@@ -36,13 +37,14 @@ type AccountTab struct {
 	sidebar       Sidebar
 	sidebarSearch SidebarSearch
 	msglist       MessageList
+	viewer        Viewer
 	width         int
 	height        int
 }
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
-func NewAccountTab(styles Styles, backend mail.Backend, uiCfg config.UIConfig) AccountTab {
+func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig) AccountTab {
 	return AccountTab{
 		styles:        styles,
 		backend:       backend,
@@ -50,6 +52,7 @@ func NewAccountTab(styles Styles, backend mail.Backend, uiCfg config.UIConfig) A
 		sidebar:       NewSidebar(styles, nil, uiCfg, sidebarWidth, 1),
 		sidebarSearch: NewSidebarSearch(styles, sidebarWidth),
 		msglist:       NewMessageList(styles, nil, 1, 1),
+		viewer:        NewViewer(styles, t, backend.AccountName()),
 	}
 }
 
@@ -84,6 +87,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.sidebarSearch.SetSize(sw)
 		mw := max(1, m.width-sw-1) // -1 for divider
 		m.msglist.SetSize(mw, m.height)
+		m.viewer = m.viewer.SetSize(mw, m.height)
 		return m, nil
 
 	case foldersLoadedMsg:
@@ -99,8 +103,14 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.msglist.SetMessages(msg.msgs)
 		return m, nil
 
+	case bodyLoadedMsg:
+		if m.viewer.CurrentUID() == msg.uid {
+			m.viewer = m.viewer.SetBody(msg.blocks)
+		}
+		return m, nil
+
 	case backendErrMsg:
-		// TODO(pass-2.5b-6): surface via status/toast.
+		// Surfacing waits on the toast/status overlay.
 		return m, nil
 
 	case SearchUpdatedMsg:
@@ -111,14 +121,28 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
+
+	// Forward any other Msg (spinner ticks, etc.) to the viewer when
+	// it's open so its embedded sub-models keep advancing.
+	if m.viewer.IsOpen() {
+		var cmd tea.Cmd
+		m.viewer, cmd = m.viewer.Update(msg)
+		return m, cmd
+	}
 	return m, nil
 }
 
-// handleKey dispatches navigation keys by identity. J/K/G move the
-// sidebar (and dispatch a folder-load Cmd); j/k/Ctrl-d/Ctrl-u move the
-// message list cursor. During an active search, printable keys flow
-// through the SidebarSearch instead of the account-view handlers.
+// handleKey dispatches navigation keys by identity. When the viewer
+// is open, every key routes there first. Otherwise: J/K/G move the
+// sidebar (and dispatch a folder-load Cmd); j/k move the message-list
+// cursor. During an active search, printable keys flow through
+// SidebarSearch instead of the account-view handlers.
 func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
+	if m.viewer.IsOpen() {
+		var cmd tea.Cmd
+		m.viewer, cmd = m.viewer.Update(msg)
+		return m, cmd
+	}
 	// Route to SidebarSearch when we're in Typing state — it owns
 	// the input routing for this modal slice, except for Enter and
 	// Esc which transition state.
@@ -149,6 +173,8 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 			m.msglist.ClearFilter()
 			return m, nil
 		}
+	case "enter":
+		return m.openSelectedMessage()
 	case "J":
 		m.clearSearchIfActive()
 		m.sidebar.MoveDown()
@@ -165,14 +191,6 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		m.msglist.MoveDown()
 	case "k", "up":
 		m.msglist.MoveUp()
-	case "ctrl+d":
-		m.msglist.HalfPageDown()
-	case "ctrl+u":
-		m.msglist.HalfPageUp()
-	case "ctrl+f", "pgdown":
-		m.msglist.PageDown()
-	case "ctrl+b", "pgup":
-		m.msglist.PageUp()
 	case " ":
 		if m.sidebarSearch.State() == SearchActive {
 			return m, nil
@@ -185,6 +203,27 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		m.msglist.ToggleFoldAll()
 	}
 	return m, nil
+}
+
+// openSelectedMessage opens the current msglist selection in the
+// viewer, fires the body-fetch Cmd, and (for unread messages) flips
+// the seen flag locally + fires a backend MarkRead.
+func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
+	msg, ok := m.msglist.SelectedMessage()
+	if !ok {
+		return m, nil
+	}
+	m.viewer = m.viewer.Open(msg)
+	cmds := []tea.Cmd{
+		loadBodyCmd(m.backend, msg.UID),
+		viewerOpenedCmd(),
+		m.viewer.SpinnerTick(),
+	}
+	if msg.Flags&mail.FlagSeen == 0 {
+		m.msglist.MarkSeen(msg.UID)
+		cmds = append(cmds, markReadCmd(m.backend, msg.UID))
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // clearSearchIfActive clears the shelf and the filter if the shelf
@@ -249,9 +288,12 @@ func (m AccountTab) View() string {
 
 	sidebarView := strings.Join(sidebarLines, "\n")
 	divider := renderDivider(m.height, m.styles)
-	msglistView := m.msglist.View()
+	right := m.msglist.View()
+	if m.viewer.IsOpen() {
+		right = m.viewer.View()
+	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, divider, msglistView)
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, divider, right)
 }
 
 // renderDivider renders a vertical line of │ characters.

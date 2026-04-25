@@ -12,14 +12,15 @@ import (
 
 // App is the root bubbletea model for poplar.
 type App struct {
-	acct      AccountTab
-	styles    Styles
-	topLine   TopLine
-	statusBar StatusBar
-	footer    Footer
-	keys      GlobalKeys
-	width     int
-	height    int
+	acct       AccountTab
+	styles     Styles
+	topLine    TopLine
+	statusBar  StatusBar
+	footer     Footer
+	keys       GlobalKeys
+	viewerOpen bool
+	width      int
+	height     int
 }
 
 // NewApp creates the root model with a single AccountTab. Folder loading
@@ -30,7 +31,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig)
 	sb = sb.SetConnectionState(Connected)
 
 	return App{
-		acct:      NewAccountTab(styles, backend, uiCfg),
+		acct:      NewAccountTab(styles, t, backend, uiCfg),
 		styles:    styles,
 		topLine:   NewTopLine(styles),
 		statusBar: sb,
@@ -61,9 +62,32 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.statusBar = m.statusBar.SetCounts(msg.Exists, msg.Unseen)
 		return m, nil
 
+	case ViewerOpenedMsg:
+		m.viewerOpen = true
+		m.footer = m.footer.SetContext(ViewerContext)
+		m.statusBar = m.statusBar.SetMode(StatusViewer).SetScrollPct(0)
+		return m, nil
+
+	case ViewerClosedMsg:
+		m.viewerOpen = false
+		m.footer = m.footer.SetContext(AccountContext)
+		m.statusBar = m.statusBar.SetMode(StatusAccount)
+		return m, nil
+
+	case ViewerScrollMsg:
+		m.statusBar = m.statusBar.SetScrollPct(msg.Pct)
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q":
+			if m.viewerOpen {
+				// Viewer-open: q closes the viewer, not the app.
+				// Delegate so AccountTab routes to viewer.handleKey.
+				var cmd tea.Cmd
+				m.acct, cmd = m.acct.Update(msg)
+				return m, cmd
+			}
 			if m.acct.sidebarSearch.State() != SearchIdle {
 				// Steal q while search is active so it doesn't quit
 				// the app mid-search. Delegate to AccountTab which

@@ -571,6 +571,23 @@ func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
 // Count returns the number of source messages in the list.
 func (m MessageList) Count() int { return len(m.source) }
 
+// MarkSeen flips FlagSeen on the local copy of the message with the
+// given UID. Used for optimistic display when the viewer opens an
+// unread message — the backend MarkRead Cmd runs in parallel.
+// Order and visibility don't change, so no rebuild is needed.
+func (m *MessageList) MarkSeen(uid mail.UID) {
+	for i := range m.source {
+		if m.source[i].UID == uid {
+			m.source[i].Flags |= mail.FlagSeen
+		}
+	}
+	for i := range m.rows {
+		if m.rows[i].msg.UID == uid {
+			m.rows[i].msg.Flags |= mail.FlagSeen
+		}
+	}
+}
+
 // moveBy shifts the cursor by delta visible rows, walking past any
 // hidden rows in the requested direction. Empty list is a no-op.
 func (m *MessageList) moveBy(delta int) {

@@ -89,3 +89,26 @@ func TestStatusBarView(t *testing.T) {
 		}
 	})
 }
+
+func TestStatusBarViewerMode(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetMode(StatusViewer).SetScrollPct(42).SetConnectionState(Connected)
+	result := stripANSI(sb.View(80, 30))
+	if !strings.Contains(result, "42%") {
+		t.Errorf("expected scroll pct in viewer mode: %q", result)
+	}
+	if strings.Contains(result, "messages") {
+		t.Error("viewer mode should not show message counts")
+	}
+}
+
+func TestStatusBarSetScrollPctClamps(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	cases := []struct{ in, want int }{{-5, 0}, {0, 0}, {50, 50}, {100, 100}, {150, 100}}
+	for _, c := range cases {
+		sb := NewStatusBar(styles).SetMode(StatusViewer).SetScrollPct(c.in)
+		if sb.scrollPct != c.want {
+			t.Errorf("SetScrollPct(%d) = %d, want %d", c.in, sb.scrollPct, c.want)
+		}
+	}
+}

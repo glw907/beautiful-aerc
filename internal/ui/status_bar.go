@@ -17,11 +17,23 @@ const (
 	Reconnecting
 )
 
+// StatusMode is the left-side content shown in the status bar.
+// Account mode shows message + unread counts; Viewer mode shows the
+// scroll percentage of the open message body.
+type StatusMode int
+
+const (
+	StatusAccount StatusMode = iota
+	StatusViewer
+)
+
 // StatusBar renders the bottom frame edge with combined status indicator.
 type StatusBar struct {
 	styles    Styles
 	total     int
 	unread    int
+	scrollPct int
+	mode      StatusMode
 	connState ConnectionState
 }
 
@@ -46,6 +58,25 @@ func (sb StatusBar) SetConnectionState(state ConnectionState) StatusBar {
 	return sb
 }
 
+// SetMode returns a copy of sb in the given display mode.
+func (sb StatusBar) SetMode(mode StatusMode) StatusBar {
+	sb.mode = mode
+	return sb
+}
+
+// SetScrollPct returns a copy of sb with the viewer scroll percentage
+// updated. Only meaningful when mode == StatusViewer.
+func (sb StatusBar) SetScrollPct(pct int) StatusBar {
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	sb.scrollPct = pct
+	return sb
+}
+
 // buildFill creates a horizontal line of width chars with ┴ at dividerCol.
 func buildFill(width, dividerCol int) string {
 	var buf strings.Builder
@@ -63,9 +94,15 @@ func buildFill(width, dividerCol int) string {
 // View renders the status bar at the given width. dividerCol is the
 // column position of the panel divider (0 to skip the junction).
 func (sb StatusBar) View(width, dividerCol int) string {
-	counts := fmt.Sprintf("%d messages", sb.total)
-	if sb.unread > 0 {
-		counts += fmt.Sprintf(" · %d unread", sb.unread)
+	var counts string
+	switch sb.mode {
+	case StatusViewer:
+		counts = fmt.Sprintf("%d%%", sb.scrollPct)
+	default:
+		counts = fmt.Sprintf("%d messages", sb.total)
+		if sb.unread > 0 {
+			counts += fmt.Sprintf(" · %d unread", sb.unread)
+		}
 	}
 
 	var connIcon, connText string

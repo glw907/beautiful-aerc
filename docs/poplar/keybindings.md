@@ -19,11 +19,10 @@ This matches aerc's convention.
 | `k` | Message up / scroll up | A, V |
 | `J` | Folder down | A |
 | `K` | Folder up | A |
-| `G` | Jump to bottom | A |
-| `C-d` | Half page down | A, V |
-| `C-u` | Half page up | A, V |
-| `C-f` | Full page down | A, V |
-| `C-b` | Full page up | A, V |
+| `g` | Jump to top | A, V |
+| `G` | Jump to bottom | A, V |
+| `Space` | Page down (in viewer) | V |
+| `b` | Page up (in viewer) | V |
 | `Enter` | Open message | A |
 
 ## Triage
@@ -106,8 +105,13 @@ a hidden row.
 
 | Key | Action | Context |
 |-----|--------|---------|
-| `Tab` | Link picker | V |
-| `q` | Close viewer, return to list | V |
+| `1`–`9` | Open the Nth harvested link via `xdg-open` | V |
+| `Tab` | Link picker *(reserved, Pass 2.5b-4b)* | V |
+| `q`, `Esc` | Close viewer, return to list | V |
+
+Opening a message marks it read optimistically: the seen flag flips
+locally before the backend `MarkRead` Cmd resolves, so returning to
+the list shows the dimmed (read) styling immediately.
 
 ## App
 
@@ -115,7 +119,7 @@ a hidden row.
 |-----|--------|---------|
 | `?` | Help popover | A, V |
 | `q` | Quit (from account view) | A |
-| `C-c` | Force quit | A, V |
+| `C-c` | Force quit (terminal-kill alias, never advertised) | A, V |
 
 Poplar has no `:` command mode. Every action is a key or a
 modal picker launched by a key. See "No command mode" in the

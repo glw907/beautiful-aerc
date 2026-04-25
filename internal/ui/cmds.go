@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"io"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -108,4 +111,74 @@ const (
 type SearchUpdatedMsg struct {
 	Query string
 	Mode  SearchMode
+}
+
+// bodyLoadedMsg carries the parsed-block representation of a fetched
+// message body. AccountTab compares uid against the viewer's current
+// UID and drops mismatches (user closed and reopened on a different
+// UID before the Cmd resolved).
+type bodyLoadedMsg struct {
+	uid    mail.UID
+	blocks []content.Block
+}
+
+// ViewerOpenedMsg signals chrome (footer, status bar) that the viewer
+// is now displayed. App switches the footer context and status mode.
+type ViewerOpenedMsg struct{}
+
+// ViewerClosedMsg is the inverse: the viewer just closed.
+type ViewerClosedMsg struct{}
+
+// ViewerScrollMsg carries the viewer's current scroll position as a
+// 0..100 percentage. App routes it to the status bar.
+type ViewerScrollMsg struct {
+	Pct int
+}
+
+// loadBodyCmd fetches a message body, parses it into blocks, and
+// delivers a bodyLoadedMsg. Errors fall through as backendErrMsg.
+func loadBodyCmd(b mail.Backend, uid mail.UID) tea.Cmd {
+	return func() tea.Msg {
+		r, err := b.FetchBody(uid)
+		if err != nil {
+			return backendErrMsg{err: err}
+		}
+		buf, err := io.ReadAll(r)
+		if err != nil {
+			return backendErrMsg{err: err}
+		}
+		return bodyLoadedMsg{uid: uid, blocks: content.ParseBlocks(string(buf))}
+	}
+}
+
+// markReadCmd flips the seen flag on the backend. Errors flow back
+// as backendErrMsg so the eventual toast surface can pick them up;
+// callers that don't yet have a toast surface drop the message in
+// their default handler.
+func markReadCmd(b mail.Backend, uid mail.UID) tea.Cmd {
+	return func() tea.Msg {
+		if err := b.MarkRead([]mail.UID{uid}); err != nil {
+			return backendErrMsg{err: err}
+		}
+		return nil
+	}
+}
+
+// launchURLCmd opens a URL via the openURL hook (xdg-open in
+// production, swappable in tests). xdg-open detaches and its exit
+// status is unreliable, so errors are intentionally discarded.
+func launchURLCmd(url string) tea.Cmd {
+	return func() tea.Msg {
+		_ = openURL(url)
+		return nil
+	}
+}
+
+// viewerOpenedCmd, viewerClosedCmd, viewerScrollCmd are zero-latency
+// emit Cmds. Using Cmds (not direct mutation) keeps the chrome
+// updates inside the bubbletea Update loop.
+func viewerOpenedCmd() tea.Cmd { return func() tea.Msg { return ViewerOpenedMsg{} } }
+func viewerClosedCmd() tea.Cmd { return func() tea.Msg { return ViewerClosedMsg{} } }
+func viewerScrollCmd(pct int) tea.Cmd {
+	return func() tea.Msg { return ViewerScrollMsg{Pct: pct} }
 }

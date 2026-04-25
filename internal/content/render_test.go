@@ -239,6 +239,108 @@ func TestRenderBodyImpliedQuoteWrapping(t *testing.T) {
 	}
 }
 
+func TestRenderBodyWidthCap(t *testing.T) {
+	// Caller passes a generous width; renderer caps at maxBodyWidth.
+	long := strings.Repeat("alpha bravo charlie ", 20)
+	blocks := []Block{Paragraph{Spans: []Span{Text{Content: long}}}}
+	result := RenderBody(blocks, theme.Nord, 200)
+	for _, line := range strings.Split(stripANSITest(result), "\n") {
+		if w := lipgloss.Width(line); w > maxBodyWidth {
+			t.Errorf("line exceeds cap: %q (w=%d, cap=%d)", line, w, maxBodyWidth)
+		}
+	}
+}
+
+func TestRenderBodyWrapStressParagraph(t *testing.T) {
+	// Paragraph mixing styled spans straddling the wrap column.
+	blocks := []Block{Paragraph{Spans: []Span{
+		Text{Content: "This is a "},
+		Bold{Content: "very important"},
+		Text{Content: " message about the "},
+		Italic{Content: "quarterly earnings"},
+		Text{Content: " review and the upcoming "},
+		Code{Content: "config.yaml"},
+		Text{Content: " deployment changes that need attention from everyone on the team before the deadline next week."},
+	}}}
+	result := RenderBody(blocks, theme.Nord, 100)
+	for _, line := range strings.Split(stripANSITest(result), "\n") {
+		if w := lipgloss.Width(line); w > maxBodyWidth {
+			t.Errorf("styled paragraph overflow: %q (w=%d)", line, w)
+		}
+	}
+}
+
+func TestRenderBodyLongURL(t *testing.T) {
+	// A URL longer than the cap with no internal hyphens must not be
+	// split mid-token. Hyphenated URLs may still break (ansi.Wordwrap
+	// treats hyphens as breakpoints) — that case is documented and
+	// not asserted here.
+	url := "https://news.example.com/items?category=engineering&id=" + strings.Repeat("0123456789", 6)
+	blocks := []Block{Paragraph{Spans: []Span{
+		Text{Content: "see "},
+		Link{Text: url, URL: url},
+	}}}
+	result := RenderBody(blocks, theme.Nord, maxBodyWidth)
+	visible := stripANSITest(result)
+	if !strings.Contains(visible, url) {
+		t.Errorf("URL split across lines: %q", visible)
+	}
+}
+
+func TestRenderBodyNestedQuoteWrap(t *testing.T) {
+	// Two-level quote with long inner content. Outer prefix "> " (2),
+	// inner prefix another "> " (2), so inner content wraps at 68.
+	long := strings.Repeat("alpha bravo charlie delta echo foxtrot ", 5)
+	blocks := []Block{Blockquote{Level: 1, Blocks: []Block{
+		Blockquote{Level: 2, Blocks: []Block{
+			Paragraph{Spans: []Span{Text{Content: long}}},
+		}},
+	}}}
+	result := RenderBody(blocks, theme.Nord, maxBodyWidth)
+	for _, line := range strings.Split(stripANSITest(result), "\n") {
+		if w := lipgloss.Width(line); w > maxBodyWidth {
+			t.Errorf("nested-quote overflow: %q (w=%d)", line, w)
+		}
+	}
+}
+
+func TestRenderBodyListHangingIndent(t *testing.T) {
+	long := strings.Repeat("alpha bravo charlie delta ", 6)
+	blocks := []Block{ListItem{Spans: []Span{Text{Content: long}}}}
+	result := RenderBody(blocks, theme.Nord, maxBodyWidth)
+	visible := stripANSITest(result)
+	lines := strings.Split(strings.TrimRight(visible, "\n"), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected wrap to multiple lines, got %d", len(lines))
+	}
+	if !strings.HasPrefix(lines[0], "- ") {
+		t.Errorf("first line missing list prefix: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "  ") || strings.HasPrefix(lines[1], "- ") {
+		t.Errorf("continuation line missing hanging indent: %q", lines[1])
+	}
+}
+
+func TestRenderBodyFootnoteEdge(t *testing.T) {
+	// Construct text where the link's last word would land near the cap.
+	// The nbsp glue should keep "word[^1]" on one line.
+	pad := strings.Repeat("a ", 25) // 50 chars of padding
+	blocks := []Block{Paragraph{Spans: []Span{
+		Text{Content: pad},
+		Link{Text: "documentation", URL: "https://example.com/x"},
+	}}}
+	out, _ := RenderBodyWithFootnotes(blocks, theme.Nord, maxBodyWidth)
+	visible := stripANSITest(out)
+	for _, line := range strings.Split(visible, "\n") {
+		if strings.Contains(line, "[^1]") && !strings.Contains(line, "[^1]: ") {
+			if !strings.Contains(line, "documentation"+nbsp+"[^1]") &&
+				!strings.Contains(line, "documentation [^1]") {
+				t.Errorf("footnote marker orphaned from last word: %q", line)
+			}
+		}
+	}
+}
+
 // stripANSITest removes ANSI escape sequences for visible length checks.
 func stripANSITest(s string) string {
 	var out strings.Builder

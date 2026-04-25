@@ -214,3 +214,42 @@ func TestAppQuitStolenDuringSearch(t *testing.T) {
 		}
 	})
 }
+
+func TestApp_ViewerOpenedSwitchesFooterContext(t *testing.T) {
+	app := newLoadedApp(t, 120, 30)
+	if app.footer.context != AccountContext {
+		t.Fatalf("initial footer context = %v, want AccountContext", app.footer.context)
+	}
+	app, _ = app.Update(ViewerOpenedMsg{})
+	if app.footer.context != ViewerContext {
+		t.Errorf("after ViewerOpenedMsg, footer context = %v, want ViewerContext", app.footer.context)
+	}
+	if app.statusBar.mode != StatusViewer {
+		t.Errorf("statusBar mode = %v, want StatusViewer", app.statusBar.mode)
+	}
+}
+
+func TestApp_ViewerClosedRestoresFooterContext(t *testing.T) {
+	app := newLoadedApp(t, 120, 30)
+	app, _ = app.Update(ViewerOpenedMsg{})
+	app, _ = app.Update(ViewerClosedMsg{})
+	if app.footer.context != AccountContext {
+		t.Errorf("footer context = %v, want AccountContext", app.footer.context)
+	}
+	if app.statusBar.mode != StatusAccount {
+		t.Errorf("statusBar mode = %v, want StatusAccount", app.statusBar.mode)
+	}
+}
+
+func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
+	app := newLoadedApp(t, 120, 30)
+	app, _ = app.Update(ViewerOpenedMsg{})
+	app, _ = app.Update(ViewerScrollMsg{Pct: 47})
+	if app.statusBar.scrollPct != 47 {
+		t.Errorf("statusBar scrollPct = %d, want 47", app.statusBar.scrollPct)
+	}
+	view := stripANSI(app.statusBar.View(120, 30))
+	if !strings.Contains(view, "47%") {
+		t.Errorf("status bar view missing 47%% in viewer mode: %q", view)
+	}
+}

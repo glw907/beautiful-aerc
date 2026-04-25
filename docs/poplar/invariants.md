@@ -99,6 +99,24 @@ the ADR(s) that justify them.
   pipeline. A transient `*threadNode` tree is built per bucket
   inside `appendThreadRows` only to compute box-drawing prefixes,
   then discarded — the renderer never sees the tree.
+- The `Viewer` is an `AccountTab` child that owns no backend
+  reference. Body fetch and mark-read Cmds are constructed at
+  `AccountTab` and a `bodyLoadedMsg` carries parsed blocks back.
+  `AccountTab` drops stale `bodyLoadedMsg` events by comparing
+  against `viewer.CurrentUID()`. Phases: closed → loading (spinner
+  placeholder) → ready (headers pinned + body in `bubbles/viewport`)
+  → closed. While the viewer is open, every key routes there
+  first; search keys and folder jumps are inert.
+- Mark-read on viewer open is optimistic: `MessageList.MarkSeen`
+  flips the local seen flag immediately and the backend `MarkRead`
+  Cmd runs in parallel. Errors drop silently until Pass 2.5b-6.
+- Body content rendering caps at `maxBodyWidth = 72` cells.
+  Headers wrap at the panel content width (uncapped). Outbound
+  links are harvested by `content.RenderBodyWithFootnotes` into
+  `[N]: <url>` rows below a horizontal rule; inline link text gets
+  ` [^N]` glued to its last word with U+00A0 so wrap can never
+  orphan the marker. Auto-linked bare URLs (`Text == URL`) render
+  inline in link style without a marker.
 
 ## UX
 
@@ -166,6 +184,17 @@ the ADR(s) that justify them.
   current folder only — folder jumps (`I/D/S/A/X/T`, `J/K`) clear
   the active search. Fold keys (`Space/F/U`) are no-ops while a
   filter is committed.
+- Modifier-free keybindings: user-facing actions never bind a
+  Ctrl/Alt/Meta chord. Viewer scroll uses `j/k/Space/b/g/G`.
+  `Ctrl-c` survives only as a terminal-kill alias on the Quit
+  binding; never advertised. `pgup/pgdown` are not bound.
+- `Enter` on the message list opens the selected message in the
+  viewer. Unread → marked seen optimistically. `q`/`Esc` closes
+  the viewer and the cursor stays on the same row.
+- Viewer link launch: `1`–`9` open the Nth harvested URL via
+  `xdg-open` (fire-and-forget; errors drop until Pass 2.5b-6).
+  `Tab` is reserved for the link picker (Pass 2.5b-4b) — a no-op
+  in Pass 2.5b-4.
 
 ## Build & verification
 
@@ -202,7 +231,8 @@ invariant. ADR numbering is chronological.
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
 | Sidebar groups, nested indent, classification | 0018, 0019, 0034, 0049, 0050 |
 | Message list, threading, fold | 0041, 0045, 0047, 0048, 0055, 0059, 0060, 0061, 0062, 0063 |
-| Vim-first keybindings, no command mode, no multi-key | 0015, 0024, 0051 |
+| Vim-first keybindings, no command mode, no multi-key, no modifiers | 0015, 0024, 0051, 0068 |
 | Compose, Catkin, editor interface | 0031, 0032, 0033 |
 | Per-screen prototype passes | 0022 |
 | Sidebar search shelf, filter-and-hide, thread-level | 0064 |
+| Viewer prototype, footnote harvesting, optimistic mark-read | 0065, 0066, 0067, 0069 |

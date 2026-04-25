@@ -1,6 +1,12 @@
 package content
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/theme"
+)
 
 func TestParseHeaders(t *testing.T) {
 	tests := []struct {
@@ -65,3 +71,38 @@ func TestParseHeaders(t *testing.T) {
 		})
 	}
 }
+
+// TestRenderHeadersAddressUnitAtomic locks the wrap rule: when a To/Cc
+// list cannot fit on one line, the break happens between addresses,
+// never inside a `Name <email>` unit. Regression target for the
+// viewer prototype, which renders headers at the panel content width.
+func TestRenderHeadersAddressUnitAtomic(t *testing.T) {
+	h := ParsedHeaders{
+		To: []Address{
+			{Name: "Alice Anderson", Email: "alice.anderson@longdomain.example.com"},
+			{Name: "Bob Bjornson", Email: "bob.bjornson@longdomain.example.com"},
+		},
+	}
+	out := RenderHeaders(h, theme.Nord, 60)
+	for _, line := range strings.Split(out, "\n") {
+		stripped := stripANSITest(line)
+		opens := strings.Count(stripped, "<")
+		closes := strings.Count(stripped, ">")
+		if opens != closes {
+			t.Errorf("address unit split across lines: %q (opens=%d, closes=%d)", stripped, opens, closes)
+		}
+		if w := lipgloss.Width(line); w > 60 && !strings.Contains(stripped, "<") {
+			// The wrap algorithm allows a single oversized address unit
+			// past the limit (better than splitting the unit) but should
+			// not exceed when an alternative break exists.
+			t.Errorf("line exceeds width 60 without containing an address unit: %q (w=%d)", stripped, w)
+		}
+	}
+	flat := stripANSITest(out)
+	for _, want := range []string{"alice.anderson@longdomain.example.com", "bob.bjornson@longdomain.example.com"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("missing address in output: %s", want)
+		}
+	}
+}
+
