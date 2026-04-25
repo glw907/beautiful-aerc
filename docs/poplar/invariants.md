@@ -36,10 +36,12 @@ the ADR(s) that justify them.
   state lives in tea.Model structs; mutations happen only in
   Update; I/O only in tea.Cmd; children signal parents via Msg
   types; shared state is hoisted to the root.
-- Root model owns `mail.Backend` and `theme.CompiledTheme`.
-  Children hold a reference to the backend only when they need it
-  to construct tea.Cmd closures; they never cache backend results
-  as owned state.
+- `App` constructs the model tree and threads `mail.Backend` and
+  `*theme.CompiledTheme` into the components that need them.
+  `AccountTab` holds the backend reference for building tea.Cmd
+  closures; `Viewer` holds the theme reference for rendering
+  markdown blocks. No component caches backend results as owned
+  state.
 - Account view is one pane. No focus cycling. `j/k` always
   navigates messages, `J/K` always navigates folders, every triage
   and reply key is always live.
@@ -49,9 +51,11 @@ the ADR(s) that justify them.
   independently.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
-  through the `Styles` struct populated from `theme.CompiledTheme`
-  — no direct `lipgloss.NewStyle()` calls, no hardcoded hex
-  values.
+  through the `Styles` struct populated from `theme.CompiledTheme`.
+  `lipgloss.NewStyle()` is permitted only in `internal/ui/styles.go`
+  (the `Styles` factory) and `internal/theme/palette.go` (the
+  `Palette → CompiledTheme` step). Hex literals appear only in
+  `internal/theme/themes.go` palette definitions.
 - The semantic map from palette slots to UI surfaces lives in
   `docs/poplar/styling.md`. Before changing a color, the doc is
   updated first.
@@ -67,11 +71,12 @@ the ADR(s) that justify them.
 - Nested folder names (containing `/`) render flat — no extra
   indent vs. top-level folders. The `/` in the display name is
   the only affordance. No tree, no expand/collapse.
-- Compose editor is pluggable behind an `Editor` interface. v1
-  ships Catkin (native bubbletea editor, `catkin/` package, no
-  poplar dependencies); v1.1 adds neovim via `--embed` RPC.
-  Compose renders inline in the right panel — sidebar and chrome
-  stay visible. No `tea.ExecProcess` terminal takeover.
+- Compose (planned, Pass 9): pluggable behind an `Editor`
+  interface. v1 will ship Catkin (native bubbletea editor,
+  `catkin/` package, no poplar dependencies); v1.1 will add
+  neovim via `--embed` RPC. Compose renders inline in the right
+  panel — sidebar and chrome stay visible. No `tea.ExecProcess`
+  terminal takeover.
 - `mail.MessageInfo` carries `ThreadID` and `InReplyTo` on the
   wire. Depth is not a wire field — the UI derives it during the
   prefix walk. A non-threaded message is a thread of size 1 with
@@ -130,7 +135,7 @@ the ADR(s) that justify them.
 - `q` exits the viewer when the viewer is open, quits poplar when
   on the account view. While the sidebar search shelf is non-idle,
   `q` is stolen and clears the search instead of quitting. `?`
-  opens the help popover.
+  opens the help popover (planned, Pass 2.5b-5).
 - Folder jumps use uppercase single keys:
   `I` Inbox, `D` Drafts, `S` Sent, `A` Archive, `X` Spam, `T`
   Trash. Shared with lowercase triage keys (`d` delete vs
@@ -156,11 +161,11 @@ the ADR(s) that justify them.
   any is currently unfolded, otherwise unfolds everything. Mixed
   state collapses on first press — reach fully-unfolded with a
   second press.
-- Message list encodes read state by brightness (`FgBright` bold
-  for unread, `FgDim` for read). Hue is reserved for the cursor
-  (`AccentPrimary`) and for the unread+flagged case
-  (`ColorWarning`). Read-flagged rows dim their flag glyph along
-  with the rest of the row.
+- Message list encodes read state by brightness — unread sender
+  is `FgBright` bold, unread subject is `FgBright`; read rows are
+  `FgDim`. Hue is reserved for the cursor (`AccentPrimary`) and
+  for the unread+flagged case (`ColorWarning`). Read-flagged rows
+  dim their flag glyph along with the rest of the row.
 - Command footer is the primary discoverability surface. Each hint
   carries a drop rank 0–10. When the terminal is too narrow, hints
   drop in descending rank order. Rank 0 (`? help`, `q quit`) never
