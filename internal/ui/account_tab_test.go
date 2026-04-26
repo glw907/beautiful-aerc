@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -23,8 +26,9 @@ func newLoadedTab(t *testing.T, width, height int) AccountTab {
 	// Resolve the Init Cmd to drive the tab into its post-load state.
 	msg := runCmd(tab.Init())
 	tab, cmd := tab.updateTab(msg)
-	// selectionChangedCmds emits folderChangedCmd + loadFolderCmd (batch).
-	// Drain the batch so the message list gets seeded.
+	// selectionChangedCmds emits folderChangedCmd + openFolderCmd (batch).
+	// Drain the full two-hop chain so the message list gets seeded:
+	// openFolderCmd → folderQueryDoneMsg → fetchHeadersCmd → headersAppliedMsg.
 	drain(t, &tab, cmd)
 	return tab
 }
@@ -37,12 +41,20 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 	return cmd()
 }
 
-// drain walks a tea.Cmd (including tea.BatchMsg fan-outs) and feeds
-// every resulting non-batch message back into the tab's updateTab.
-// Non-recursive: assumes at most one level of batching.
+// drain walks a tea.Cmd tree and feeds every resulting non-App message
+// back into the tab's updateTab. It handles tea.BatchMsg fan-outs and
+// follows the two-hop folder-load chain (openFolderCmd returns
+// folderQueryDoneMsg, which causes fetchHeadersCmd, which returns
+// headersAppliedMsg). The depth limit of 8 hops is generous; normal
+// load paths are at most 2 hops deep.
 func drain(t *testing.T, tab *AccountTab, cmd tea.Cmd) {
 	t.Helper()
-	if cmd == nil {
+	drainDepth(t, tab, cmd, 8)
+}
+
+func drainDepth(t *testing.T, tab *AccountTab, cmd tea.Cmd, depth int) {
+	t.Helper()
+	if cmd == nil || depth == 0 {
 		return
 	}
 	msg := cmd()
@@ -57,16 +69,18 @@ func drain(t *testing.T, tab *AccountTab, cmd tea.Cmd) {
 				// has nothing to do with it.
 				continue
 			}
-			newTab, _ := tab.updateTab(inner)
+			newTab, follow := tab.updateTab(inner)
 			*tab = newTab
+			drainDepth(t, tab, follow, depth-1)
 		}
 		return
 	}
 	if _, isApp := msg.(FolderChangedMsg); isApp {
 		return
 	}
-	newTab, _ := tab.updateTab(msg)
+	newTab, follow := tab.updateTab(msg)
 	*tab = newTab
+	drainDepth(t, tab, follow, depth-1)
 }
 
 func TestAccountTab(t *testing.T) {
@@ -205,13 +219,13 @@ func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 	}
 	msg := runCmd(cmd)
 	switch msg.(type) {
-	case folderLoadedMsg, tea.BatchMsg, FolderChangedMsg:
+	case folderQueryDoneMsg, headersAppliedMsg, tea.BatchMsg, FolderChangedMsg:
 	default:
-		t.Fatalf("expected folderLoadedMsg/BatchMsg/FolderChangedMsg, got %T", msg)
+		t.Fatalf("expected folderQueryDoneMsg/headersAppliedMsg/BatchMsg/FolderChangedMsg, got %T", msg)
 	}
 }
 
-func TestAccountTab_folderLoadedSeedsMsglist(t *testing.T) {
+func TestAccountTab_headersAppliedSeedsMsglist(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
 	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
@@ -219,7 +233,7 @@ func TestAccountTab_folderLoadedSeedsMsglist(t *testing.T) {
 	msgs := []mail.MessageInfo{
 		{UID: "1", Subject: "hello", From: "a", Date: "now"},
 	}
-	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: msgs})
+	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: msgs})
 	if tab.msglist.Count() != 1 {
 		t.Fatalf("expected msglist count 1, got %d", tab.msglist.Count())
 	}
@@ -244,7 +258,7 @@ func TestAccountTab_PerFolderThreadingOverride(t *testing.T) {
 		{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "a", Date: "Apr 5", Flags: mail.FlagSeen},
 		{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "re: a", Date: "Apr 6", Flags: mail.FlagSeen},
 	}
-	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: msgs})
+	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: msgs})
 
 	if got := visibleRowCount(tab.msglist); got != 2 {
 		t.Fatalf("flat display visible rows = %d, want 2 (no thread tree)", got)
@@ -310,7 +324,7 @@ func TestAccountTab_JDispatchesFolderLoad(t *testing.T) {
 	}
 	msg := runCmd(cmd)
 	switch m := msg.(type) {
-	case folderLoadedMsg, FolderChangedMsg:
+	case folderQueryDoneMsg, headersAppliedMsg, FolderChangedMsg:
 	case tea.BatchMsg:
 		if len(m) == 0 {
 			t.Fatal("empty batch")
@@ -590,7 +604,7 @@ func TestAccountTab_EnterEmptyFolderNoOp(t *testing.T) {
 	backend := mail.NewMockBackend()
 	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: nil})
+	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: nil})
 	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 	if tab.viewer.IsOpen() {
 		t.Error("Enter on empty folder must not open viewer")
@@ -709,5 +723,150 @@ func TestAccountTab_QClosesViewer(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("close must emit ViewerClosedMsg cmd")
+	}
+}
+
+// pagingFakeBackend is a test-only mail.Backend that serves a
+// configurable number of messages for pagination tests. Only the
+// methods exercised by the load flow are implemented.
+type pagingFakeBackend struct {
+	msgs []mail.MessageInfo
+}
+
+func newPagingFakeBackend(count int) *pagingFakeBackend {
+	msgs := make([]mail.MessageInfo, count)
+	for i := range msgs {
+		uid := mail.UID(fmt.Sprintf("%d", i+1))
+		msgs[i] = mail.MessageInfo{UID: uid, Subject: "msg", From: "a@b", ThreadID: uid}
+	}
+	return &pagingFakeBackend{msgs: msgs}
+}
+
+func (b *pagingFakeBackend) AccountName() string              { return "test" }
+func (b *pagingFakeBackend) Connect(_ context.Context) error  { return nil }
+func (b *pagingFakeBackend) Disconnect() error                { return nil }
+func (b *pagingFakeBackend) ListFolders() ([]mail.Folder, error) {
+	return []mail.Folder{{Name: "Inbox", Role: "inbox"}}, nil
+}
+func (b *pagingFakeBackend) OpenFolder(_ string) error { return nil }
+func (b *pagingFakeBackend) QueryFolder(_ string, offset, limit int) ([]mail.UID, int, error) {
+	total := len(b.msgs)
+	if offset >= total {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	uids := make([]mail.UID, end-offset)
+	for i, m := range b.msgs[offset:end] {
+		uids[i] = m.UID
+	}
+	return uids, total, nil
+}
+func (b *pagingFakeBackend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
+	set := make(map[mail.UID]mail.MessageInfo, len(b.msgs))
+	for _, m := range b.msgs {
+		set[m.UID] = m
+	}
+	result := make([]mail.MessageInfo, 0, len(uids))
+	for _, uid := range uids {
+		if m, ok := set[uid]; ok {
+			result = append(result, m)
+		}
+	}
+	return result, nil
+}
+func (b *pagingFakeBackend) FetchBody(_ mail.UID) (io.Reader, error)         { return nil, nil }
+func (b *pagingFakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
+func (b *pagingFakeBackend) Move(_ []mail.UID, _ string) error                { return nil }
+func (b *pagingFakeBackend) Copy(_ []mail.UID, _ string) error                { return nil }
+func (b *pagingFakeBackend) Delete(_ []mail.UID) error                        { return nil }
+func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error     { return nil }
+func (b *pagingFakeBackend) MarkRead(_ []mail.UID) error                      { return nil }
+func (b *pagingFakeBackend) MarkAnswered(_ []mail.UID) error                  { return nil }
+func (b *pagingFakeBackend) Send(_ string, _ []string, _ io.Reader) error     { return nil }
+func (b *pagingFakeBackend) Updates() <-chan mail.Update                       { return nil }
+
+func TestAccountTab_PaginationInitialLoad(t *testing.T) {
+	// 600 messages — first window fetches 500.
+	backend := newPagingFakeBackend(600)
+	styles := NewStyles(theme.Nord)
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	// Simulate: folders loaded → selectionChangedCmds → openFolderCmd chain.
+	folders, _ := backend.ListFolders()
+	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	drain(t, &tab, cmd)
+
+	page := tab.pageFor("Inbox")
+	if page.loaded != 500 {
+		t.Errorf("after initial load: page.loaded = %d, want 500", page.loaded)
+	}
+	if page.total != 600 {
+		t.Errorf("after initial load: page.total = %d, want 600", page.total)
+	}
+	if tab.msglist.Count() != 500 {
+		t.Errorf("msglist.Count() = %d, want 500", tab.msglist.Count())
+	}
+}
+
+func TestAccountTab_MaybeLoadMore_NearBottom(t *testing.T) {
+	// 600 messages; after initial load of 500, cursor near bottom should trigger load-more.
+	backend := newPagingFakeBackend(600)
+	styles := NewStyles(theme.Nord)
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	folders, _ := backend.ListFolders()
+	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	drain(t, &tab, cmd)
+
+	// Move cursor to bottom to trigger load-more.
+	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if cmd == nil {
+		t.Fatal("G near bottom with more pages available must emit a load-more Cmd")
+	}
+	page := tab.pageFor("Inbox")
+	if !page.loadMoreInFlight {
+		t.Error("loadMoreInFlight must be true after maybeLoadMore triggers")
+	}
+}
+
+func TestAccountTab_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
+	backend := newPagingFakeBackend(600)
+	styles := NewStyles(theme.Nord)
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	folders, _ := backend.ListFolders()
+	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	drain(t, &tab, cmd)
+
+	// Move to bottom — sets loadMoreInFlight.
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+
+	// A second navigation while in-flight must NOT re-dispatch.
+	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if cmd != nil {
+		t.Errorf("second near-bottom nav while in-flight must not emit a Cmd, got %T", cmd)
+	}
+}
+
+func TestAccountTab_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
+	// 14 messages (the mock count) — loaded == total from the start.
+	backend := mail.NewMockBackend()
+	styles := NewStyles(theme.Nord)
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	folders, _ := backend.ListFolders()
+	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	drain(t, &tab, cmd)
+
+	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if cmd != nil {
+		t.Errorf("at bottom with loaded == total, must not emit a Cmd; got %T", cmd)
 	}
 }

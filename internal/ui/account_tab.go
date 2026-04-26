@@ -23,6 +23,13 @@ const sidebarHeaderRows = 2
 // to the bottom of the sidebar column.
 const searchShelfRows = 3
 
+// folderPage tracks lazy-load state for one folder.
+type folderPage struct {
+	loaded           int
+	total            int
+	loadMoreInFlight bool
+}
+
 // AccountTab is the main account view. One pane (like pine): every
 // key is always live. J/K/G navigate folders, j/k navigate messages.
 type AccountTab struct {
@@ -38,6 +45,7 @@ type AccountTab struct {
 	sidebarSearch SidebarSearch
 	msglist       MessageList
 	viewer        Viewer
+	pages         map[string]*folderPage
 	width         int
 	height        int
 }
@@ -53,6 +61,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 		sidebarSearch: NewSidebarSearch(styles, sidebarWidth),
 		msglist:       NewMessageList(styles, nil, 1, 1),
 		viewer:        NewViewer(styles, t, backend.AccountName()),
+		pages:         make(map[string]*folderPage),
 	}
 }
 
@@ -94,7 +103,17 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.sidebar.SetFolders(mail.Classify(msg.folders), m.uiCfg)
 		return m, m.selectionChangedCmds()
 
-	case folderLoadedMsg:
+	case folderQueryDoneMsg:
+		page := m.pageFor(msg.name)
+		page.total = msg.total
+		if !msg.reset {
+			page.loadMoreInFlight = true
+		}
+		return m, fetchHeadersCmd(m.backend, msg.name, msg.uids, msg.reset)
+
+	case headersAppliedMsg:
+		page := m.pageFor(msg.name)
+		page.loaded = len(msg.msgs)
 		fc := m.uiCfg.Folders[m.sidebar.ConfigKey(msg.name)]
 		order := SortDateDesc
 		if fc.Sort == "date-asc" {
@@ -107,6 +126,13 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.msglist.SetSort(order)
 		m.msglist.SetThreaded(threaded)
 		m.msglist.SetMessages(msg.msgs)
+		return m, nil
+
+	case headersAppendedMsg:
+		page := m.pageFor(msg.name)
+		page.loaded += len(msg.msgs)
+		page.loadMoreInFlight = false
+		m.msglist.AppendMessages(msg.msgs)
 		return m, nil
 
 	case bodyLoadedMsg:
@@ -211,6 +237,9 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		}
 		m.msglist.ToggleFoldAll()
 	}
+	if cmd := m.maybeLoadMore(); cmd != nil {
+		return m, cmd
+	}
 	return m, nil
 }
 
@@ -280,8 +309,47 @@ func (m AccountTab) selectionChangedCmds() tea.Cmd {
 	}
 	return tea.Batch(
 		folderChangedCmd(folder),
-		loadFolderCmd(m.backend, folder.Name),
+		openFolderCmd(m.backend, folder.Name),
 	)
+}
+
+// currentFolderName returns the provider name of the currently-selected
+// sidebar folder, or "" when nothing is selected.
+func (m AccountTab) currentFolderName() string {
+	folder, ok := m.sidebar.SelectedFolderInfo()
+	if !ok {
+		return ""
+	}
+	return folder.Name
+}
+
+// pageFor returns (creating if absent) the folderPage for name.
+func (m *AccountTab) pageFor(name string) *folderPage {
+	if m.pages[name] == nil {
+		m.pages[name] = &folderPage{}
+	}
+	return m.pages[name]
+}
+
+// loadMoreTrigger is how many rows from the bottom trigger a load-more.
+const loadMoreTrigger = 20
+
+// maybeLoadMore issues a loadMoreCmd when the cursor is near the bottom
+// and more messages are available. Returns nil when no action is needed.
+func (m *AccountTab) maybeLoadMore() tea.Cmd {
+	name := m.currentFolderName()
+	if name == "" {
+		return nil
+	}
+	page := m.pageFor(name)
+	if page.loadMoreInFlight || page.loaded >= page.total {
+		return nil
+	}
+	if !m.msglist.IsNearBottom(loadMoreTrigger) {
+		return nil
+	}
+	page.loadMoreInFlight = true
+	return loadMoreCmd(m.backend, name, page.loaded)
 }
 
 // View renders the sidebar + divider + message list. The sidebar

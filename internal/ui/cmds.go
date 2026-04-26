@@ -13,9 +13,23 @@ type foldersLoadedMsg struct {
 	folders []mail.Folder
 }
 
-// folderLoadedMsg carries the result of opening a folder and fetching
-// its header list.
-type folderLoadedMsg struct {
+// folderQueryDoneMsg carries a Query result; AccountTab follows up
+// with fetchHeadersCmd to materialize the headers.
+type folderQueryDoneMsg struct {
+	name  string
+	uids  []mail.UID
+	total int
+	reset bool // true on initial load, false on append
+}
+
+// headersAppliedMsg is the terminal message of an initial folder load.
+type headersAppliedMsg struct {
+	name string
+	msgs []mail.MessageInfo
+}
+
+// headersAppendedMsg is the terminal message of a load-more.
+type headersAppendedMsg struct {
 	name string
 	msgs []mail.MessageInfo
 }
@@ -50,11 +64,13 @@ func loadFoldersCmd(b mail.Backend) tea.Cmd {
 	}
 }
 
-// loadFolderCmd returns a Cmd that opens a folder and fetches its
-// header list. The result is a folderLoadedMsg, or an ErrorMsg.
-// Returns nil when name is empty — bubbletea treats a nil Cmd as "no
-// work," so the Update loop skips an otherwise-wasted dispatch.
-func loadFolderCmd(b mail.Backend, name string) tea.Cmd {
+// initialWindow is the number of UIDs requested on a fresh folder open.
+const initialWindow = 500
+
+// openFolderCmd opens a folder and queries the first window of UIDs.
+// The result is a folderQueryDoneMsg{reset:true}, or an ErrorMsg.
+// Returns nil when name is empty.
+func openFolderCmd(b mail.Backend, name string) tea.Cmd {
 	if name == "" {
 		return nil
 	}
@@ -62,11 +78,39 @@ func loadFolderCmd(b mail.Backend, name string) tea.Cmd {
 		if err := b.OpenFolder(name); err != nil {
 			return ErrorMsg{Op: "open folder", Err: err}
 		}
-		msgs, err := b.FetchHeaders(nil)
+		uids, total, err := b.QueryFolder(name, 0, initialWindow)
+		if err != nil {
+			return ErrorMsg{Op: "query folder", Err: err}
+		}
+		return folderQueryDoneMsg{name: name, uids: uids, total: total, reset: true}
+	}
+}
+
+// loadMoreCmd queries the next window of UIDs starting at offset.
+// The result is a folderQueryDoneMsg{reset:false}, or an ErrorMsg.
+func loadMoreCmd(b mail.Backend, name string, offset int) tea.Cmd {
+	return func() tea.Msg {
+		uids, total, err := b.QueryFolder(name, offset, initialWindow)
+		if err != nil {
+			return ErrorMsg{Op: "load more", Err: err}
+		}
+		return folderQueryDoneMsg{name: name, uids: uids, total: total, reset: false}
+	}
+}
+
+// fetchHeadersCmd materializes a UID list into MessageInfo slices.
+// On success it returns headersAppliedMsg (reset=true) or
+// headersAppendedMsg (reset=false). Errors return ErrorMsg.
+func fetchHeadersCmd(b mail.Backend, name string, uids []mail.UID, reset bool) tea.Cmd {
+	return func() tea.Msg {
+		msgs, err := b.FetchHeaders(uids)
 		if err != nil {
 			return ErrorMsg{Op: "fetch headers", Err: err}
 		}
-		return folderLoadedMsg{name: name, msgs: msgs}
+		if reset {
+			return headersAppliedMsg{name: name, msgs: msgs}
+		}
+		return headersAppendedMsg{name: name, msgs: msgs}
 	}
 }
 
