@@ -13,6 +13,7 @@ import (
 // App is the root bubbletea model for poplar.
 type App struct {
 	acct       AccountTab
+	backend    mail.Backend
 	styles     Styles
 	topLine    TopLine
 	statusBar  StatusBar
@@ -31,10 +32,11 @@ type App struct {
 func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
-	sb = sb.SetConnectionState(Connected)
+	sb = sb.SetConnectionState(Offline)
 
 	return App{
 		acct:      NewAccountTab(styles, t, backend, uiCfg),
+		backend:   backend,
 		styles:    styles,
 		topLine:   NewTopLine(styles),
 		statusBar: sb,
@@ -43,9 +45,10 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig)
 	}
 }
 
-// Init delegates to the account tab so the initial folder fetch fires.
+// Init delegates to the account tab so the initial folder fetch fires,
+// and starts the backend update pump.
 func (m App) Init() tea.Cmd {
-	return m.acct.Init()
+	return tea.Batch(m.acct.Init(), pumpUpdatesCmd(m.backend))
 }
 
 // Update handles global keys and delegates everything else to the
@@ -98,6 +101,15 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		acct, fcmd := m.acct.Update(msg)
 		m.acct = acct
 		cmds = append(cmds, fcmd)
+		return m, tea.Batch(cmds...)
+
+	case backendUpdateMsg:
+		cmds := []tea.Cmd{pumpUpdatesCmd(m.backend)} // re-arm pump
+		if msg.update.Type == mail.UpdateConnState {
+			m.statusBar = m.statusBar.SetConnectionState(translateConnState(msg.update.ConnState))
+		}
+		// Other Update types (UpdateNewMail, UpdateFlagsChanged, etc.)
+		// delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
@@ -174,6 +186,18 @@ func (m App) View() string {
 	}
 	parts = append(parts, status, foot)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// translateConnState maps mail.ConnState to the UI ConnectionState type.
+func translateConnState(s mail.ConnState) ConnectionState {
+	switch s {
+	case mail.ConnConnected:
+		return Connected
+	case mail.ConnReconnecting:
+		return Reconnecting
+	default:
+		return Offline
+	}
 }
 
 // contentHeight returns the height available for the content area.

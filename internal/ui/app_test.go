@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/config"
@@ -30,20 +31,45 @@ func newLoadedApp(t *testing.T, width, height int) App {
 	return app
 }
 
+// cmdTimeout is the maximum time drainApp waits for a single Cmd to
+// return. Blocking Cmds (e.g. pumpUpdatesCmd waiting on a channel)
+// are skipped when the timeout expires.
+const cmdTimeout = 50 * time.Millisecond
+
+// execCmd runs cmd() in a goroutine and returns the result via a
+// channel. Callers apply cmdTimeout to skip indefinitely-blocking Cmds.
+func execCmd(cmd tea.Cmd) <-chan tea.Msg {
+	ch := make(chan tea.Msg, 1)
+	go func() { ch <- cmd() }()
+	return ch
+}
+
 // drainApp walks a Cmd (including one layer of batching) and feeds
 // every resulting non-batch message back into the app's Update.
+// Cmds that do not return within cmdTimeout are skipped — this handles
+// the pumpUpdatesCmd which blocks indefinitely on a channel.
 func drainApp(t *testing.T, app *App, cmd tea.Cmd) {
 	t.Helper()
 	if cmd == nil {
 		return
 	}
-	msg := cmd()
+	var msg tea.Msg
+	select {
+	case msg = <-execCmd(cmd):
+	case <-time.After(cmdTimeout):
+		return // blocking Cmd (e.g. pump) — skip it
+	}
 	if batch, ok := msg.(tea.BatchMsg); ok {
 		for _, sub := range batch {
 			if sub == nil {
 				continue
 			}
-			inner := sub()
+			var inner tea.Msg
+			select {
+			case inner = <-execCmd(sub):
+			case <-time.After(cmdTimeout):
+				continue // blocking sub-Cmd — skip it
+			}
 			newApp, next := app.Update(inner)
 			*app = newApp
 			if next != nil {
@@ -428,5 +454,78 @@ func TestApp_BannerShrinksContentByOneRow(t *testing.T) {
 
 	if with != without {
 		t.Errorf("total view height changed: without=%d, with=%d", without, with)
+	}
+}
+
+func TestApp_InitialConnStateIsOffline(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, backend, config.DefaultUIConfig())
+	if got := app.statusBar.ConnectionState(); got != Offline {
+		t.Errorf("initial connState = %v, want Offline", got)
+	}
+}
+
+func TestApp_BackendUpdateConnState(t *testing.T) {
+	cases := []struct {
+		name      string
+		connState mail.ConnState
+		want      ConnectionState
+	}{
+		{"connected", mail.ConnConnected, Connected},
+		{"reconnecting", mail.ConnReconnecting, Reconnecting},
+		{"offline", mail.ConnOffline, Offline},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := mail.NewMockBackend()
+			app := NewApp(theme.Nord, backend, config.DefaultUIConfig())
+			msg := backendUpdateMsg{update: mail.Update{
+				Type:      mail.UpdateConnState,
+				ConnState: tc.connState,
+			}}
+			app, _ = app.Update(msg)
+			if got := app.statusBar.ConnectionState(); got != tc.want {
+				t.Errorf("connState = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestApp_BackendUpdateClosedChannelGoesOffline(t *testing.T) {
+	// Simulate the closed-channel case: pumpUpdatesCmd delivers a
+	// backendUpdateMsg with ConnState=ConnOffline.
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, backend, config.DefaultUIConfig())
+	// Force to Connected first so we can confirm the transition.
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnConnected,
+	}})
+	if got := app.statusBar.ConnectionState(); got != Connected {
+		t.Fatalf("setup: connState = %v, want Connected", got)
+	}
+	// Now deliver the closed-channel sentinel.
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnOffline,
+	}})
+	if got := app.statusBar.ConnectionState(); got != Offline {
+		t.Errorf("after closed-channel sentinel: connState = %v, want Offline", got)
+	}
+}
+
+func TestApp_BackendUpdateReArmspump(t *testing.T) {
+	// Verify that handling a backendUpdateMsg returns a non-nil Cmd
+	// (the re-armed pump). We can't execute it without blocking, but
+	// we confirm the Cmd is present.
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, backend, config.DefaultUIConfig())
+	msg := backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnConnected,
+	}}
+	_, cmd := app.Update(msg)
+	if cmd == nil {
+		t.Error("backendUpdateMsg handler returned nil Cmd; pump would die")
 	}
 }

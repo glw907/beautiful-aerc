@@ -58,6 +58,9 @@ func (sb StatusBar) SetConnectionState(state ConnectionState) StatusBar {
 	return sb
 }
 
+// ConnectionState returns the current connection state. Used in tests.
+func (sb StatusBar) ConnectionState() ConnectionState { return sb.connState }
+
 // SetMode returns a copy of sb in the given display mode.
 func (sb StatusBar) SetMode(mode StatusMode) StatusBar {
 	sb.mode = mode

@@ -219,6 +219,23 @@ func launchURLCmd(url string) tea.Cmd {
 	}
 }
 
+// backendUpdateMsg wraps a single mail.Update in a tea.Msg.
+type backendUpdateMsg struct{ update mail.Update }
+
+// pumpUpdatesCmd waits for one mail.Update on the backend channel,
+// returns it as a backendUpdateMsg, then re-arms itself. App's
+// Update loop is responsible for re-dispatching this Cmd so the
+// pump stays alive.
+func pumpUpdatesCmd(b mail.Backend) tea.Cmd {
+	return func() tea.Msg {
+		u, ok := <-b.Updates()
+		if !ok {
+			return backendUpdateMsg{update: mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnOffline}}
+		}
+		return backendUpdateMsg{update: u}
+	}
+}
+
 // viewerOpenedCmd, viewerClosedCmd, viewerScrollCmd are zero-latency
 // emit Cmds. Using Cmds (not direct mutation) keeps the chrome
 // updates inside the bubbletea Update loop.
