@@ -2,12 +2,14 @@ package ui
 
 import (
 	"os/exec"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -194,19 +196,57 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 
 // View renders the viewer in its current phase. Returns "" when
 // closed so AccountTab.View can fall through to the message list.
+//
+// The output is hard-clipped to v.width so the viewer cannot lie to
+// its parent's JoinHorizontal — content longer than v.width (e.g. a
+// raw URL the body renderer's hardwrap missed) gets truncated rather
+// than overflowing into the sidebar column. This is the bubbles-
+// component idiom: each component owns its size contract.
 func (v Viewer) View() string {
 	if !v.open {
 		return ""
 	}
 	if v.phase == viewerLoading {
 		text := v.spinner.View() + " Loading message…"
-		return lipgloss.Place(
+		placed := lipgloss.Place(
 			v.width, v.height,
 			lipgloss.Center, lipgloss.Center,
 			v.styles.Dim.Render(text),
 		)
+		return clipPane(placed, v.width, v.height)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, v.headerStr, v.viewport.View())
+	out := lipgloss.JoinVertical(lipgloss.Left, v.headerStr, v.viewport.View())
+	return clipPane(out, v.width, v.height)
+}
+
+// clipPane enforces the size contract every bubbletea component
+// owes its parent: exactly height rows, each exactly width cells.
+// Lines longer than width are truncated (ANSI-aware via
+// ansi.Truncate); shorter lines are padded; the row count is
+// enforced both ways. This is what bubbles components do
+// internally when they call lipgloss.Place — the same idiom
+// applied here so the viewer can never lie to JoinHorizontal.
+func clipPane(s string, width, height int) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for i, line := range lines {
+		w := lipgloss.Width(line)
+		switch {
+		case w > width:
+			lines[i] = ansi.Truncate(line, width, "")
+		case w < width:
+			lines[i] = line + strings.Repeat(" ", width-w)
+		}
+	}
+	for len(lines) < height {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // layout renders headers + body and populates the viewport. Called
