@@ -88,16 +88,15 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// does not change height, so the resize is skipped.
 		hadErr := m.lastErr.Err != nil
 		m.lastErr = msg
-		hasErr := m.lastErr.Err != nil
 		cmds := make([]tea.Cmd, 0, 2)
-		if hadErr != hasErr && m.width > 0 && m.height > 0 {
+		if hadErr != (m.lastErr.Err != nil) && m.width > 0 && m.height > 0 {
 			contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
-			rcmd := tea.Cmd(nil)
-			m.acct, rcmd = m.acct.Update(contentMsg)
+			acct, rcmd := m.acct.Update(contentMsg)
+			m.acct = acct
 			cmds = append(cmds, rcmd)
 		}
-		fcmd := tea.Cmd(nil)
-		m.acct, fcmd = m.acct.Update(msg)
+		acct, fcmd := m.acct.Update(msg)
+		m.acct = acct
 		cmds = append(cmds, fcmd)
 		return m, tea.Batch(cmds...)
 
