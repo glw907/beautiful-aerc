@@ -31,6 +31,9 @@ func TestNewStyles(t *testing.T) {
 		{"SidebarUnread", s.SidebarUnread},
 		{"SidebarIndicator", s.SidebarIndicator},
 		{"Dim", s.Dim},
+		{"HelpTitle", s.HelpTitle},
+		{"HelpGroupHeader", s.HelpGroupHeader},
+		{"HelpKey", s.HelpKey},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

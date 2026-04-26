@@ -62,6 +62,11 @@ type Styles struct {
 	MsgListFlagFlagged   lipgloss.Style
 	MsgListThreadPrefix  lipgloss.Style
 
+	// Help popover (modal overlay, `?`)
+	HelpTitle       lipgloss.Style
+	HelpGroupHeader lipgloss.Style
+	HelpKey         lipgloss.Style
+
 	// Placeholder text
 	Dim lipgloss.Style
 
@@ -180,6 +185,13 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.ColorWarning),
 		MsgListThreadPrefix: lipgloss.NewStyle().
 			Foreground(t.FgDim),
+
+		HelpTitle: lipgloss.NewStyle().
+			Foreground(t.AccentPrimary).Bold(true),
+		HelpGroupHeader: lipgloss.NewStyle().
+			Foreground(t.FgBright).Bold(true),
+		HelpKey: lipgloss.NewStyle().
+			Foreground(t.FgBright).Bold(true),
 
 		Dim: lipgloss.NewStyle().
 			Foreground(t.FgDim),
