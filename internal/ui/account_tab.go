@@ -158,13 +158,14 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.loading {
+		if m.loading && msg.ID == m.spinner.ID() {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
-		// Drop ticks while not loading; the next openFolderCmd will re-Tick.
-		return m, nil
+		// Tick belongs to the viewer's spinner (or a stale tick from
+		// a prior generation). Fall through to the viewer-forward
+		// block; the viewer's spinner ID guard rejects stale ticks.
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
