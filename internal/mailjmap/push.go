@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"git.sr.ht/~rockorager/go-jmap"
@@ -64,9 +65,15 @@ func (b *Backend) runEventSource(ctx context.Context) error {
 	// Wire the context cancellation to closing the EventSource.
 	// The push package does not accept a context directly; we close
 	// the response body from a separate goroutine when ctx is done.
+	// Emit ConnConnected on the first received event — that's the
+	// earliest signal that the SSE socket is genuinely open.
+	var connectedOnce sync.Once
 	es := &push.EventSource{
 		Client: cli,
 		Handler: func(sc *jmap.StateChange) {
+			connectedOnce.Do(func() {
+				b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnConnected})
+			})
 			if sc == nil {
 				return
 			}
@@ -93,7 +100,6 @@ func (b *Backend) runEventSource(ctx context.Context) error {
 		}
 	}()
 
-	b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnConnected})
 	err := es.Listen()
 	close(done)
 
