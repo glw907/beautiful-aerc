@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/config"
@@ -114,14 +115,13 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.helpOpen {
-			switch msg.String() {
-			case "?", "esc":
+			if key.Matches(msg, m.keys.CloseHelp) {
 				m.helpOpen = false
 			}
 			return m, nil
 		}
-		switch msg.String() {
-		case "q":
+		switch {
+		case key.Matches(msg, m.keys.Quit):
 			if m.viewerOpen {
 				// Viewer-open: q closes the viewer, not the app.
 				// Delegate so AccountTab routes to viewer.handleKey.
@@ -138,9 +138,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				return m, cmd
 			}
 			return m, tea.Quit
-		case "ctrl+c":
+		case key.Matches(msg, m.keys.ForceQuit):
 			return m, tea.Quit
-		case "?":
+		case key.Matches(msg, m.keys.Help):
 			m.helpOpen = true
 			ctx := HelpAccount
 			if m.viewerOpen {
