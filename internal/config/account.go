@@ -26,6 +26,11 @@ type AccountConfig struct {
 	Aliases []*mail.Address
 	CopyTo  []string
 
+	// Credentials
+	// Password is the bearer token or password after env-var substitution.
+	// In accounts.toml use "$VAR_NAME" to pull from the environment.
+	Password string
+
 	// Outgoing
 	Outgoing        string
 	OutgoingCredCmd string

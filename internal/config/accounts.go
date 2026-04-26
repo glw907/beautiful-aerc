@@ -19,6 +19,7 @@ type accountEntry struct {
 	Name            string            `toml:"name"`
 	Backend         string            `toml:"backend"`
 	Source          string            `toml:"source"`
+	Password        string            `toml:"password"`
 	CredentialCmd   string            `toml:"credential-cmd"`
 	CopyTo          string            `toml:"copy-to"`
 	FoldersSort     []string          `toml:"folders-sort"`
@@ -83,10 +84,16 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
+	password, err := resolveEnv(e.Password)
+	if err != nil {
+		return nil, fmt.Errorf("account %q password: %w", e.Name, err)
+	}
+
 	acct := &AccountConfig{
 		Name:            e.Name,
 		Backend:         e.Backend,
 		Source:          source,
+		Password:        password,
 		Folders:         e.FoldersSort,
 		FoldersExclude:  e.FoldersExclude,
 		Params:          e.Params,
@@ -131,4 +138,40 @@ func injectCredential(source, credential string) (string, error) {
 	}
 	u.User = url.UserPassword(username, credential)
 	return u.String(), nil
+}
+
+// resolveEnv replaces a leading "$VAR" with os.Getenv("VAR"). The
+// only supported form is the bare $VAR token; anything else is
+// returned unchanged so passwords containing a literal "$" still
+// work. Empty env returns an error so the user gets a clear
+// failure on misconfiguration.
+func resolveEnv(s string) (string, error) {
+	if !strings.HasPrefix(s, "$") || len(s) < 2 {
+		return s, nil
+	}
+	name := s[1:]
+	if !isShellName(name) {
+		return s, nil
+	}
+	val := os.Getenv(name)
+	if val == "" {
+		return "", fmt.Errorf("env var %s is empty or unset", name)
+	}
+	return val, nil
+}
+
+// isShellName reports whether s is a valid shell variable name:
+// starts with a letter or underscore, followed by letters, digits,
+// or underscores only.
+func isShellName(s string) bool {
+	for i, r := range s {
+		if r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+			continue
+		}
+		if i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return s != ""
 }

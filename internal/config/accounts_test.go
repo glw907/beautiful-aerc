@@ -153,6 +153,116 @@ params = {cache-state = "true"}
 	}
 }
 
+func TestResolveEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		envKey  string
+		envVal  string
+		want    string
+		wantErr string
+	}{
+		{
+			name:  "literal password unchanged",
+			input: "s3cr3t",
+			want:  "s3cr3t",
+		},
+		{
+			name:   "dollar-var resolves when set",
+			input:  "$MY_TOKEN",
+			envKey: "MY_TOKEN",
+			envVal: "tok-abc123",
+			want:   "tok-abc123",
+		},
+		{
+			name:    "unset dollar-var errors",
+			input:   "$MISSING_VAR",
+			wantErr: "env var MISSING_VAR is empty or unset",
+		},
+		{
+			name:  "bare dollar unchanged",
+			input: "$",
+			want:  "$",
+		},
+		{
+			name:  "digit-leading name unchanged",
+			input: "$1abc",
+			want:  "$1abc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envKey != "" {
+				t.Setenv(tt.envKey, tt.envVal)
+			}
+			got, err := resolveEnv(tt.input)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("expected error %q, got %q", tt.wantErr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("resolveEnv(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseAccountsEnvPassword(t *testing.T) {
+	t.Setenv("TEST_PASS_TOKEN", "live-token-xyz")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.toml")
+	toml := `[[account]]
+name = "Fastmail"
+backend = "jmap"
+source = "jmap+oauthbearer://user@example.com@api.example.com/.well-known/jmap"
+password = "$TEST_PASS_TOKEN"
+`
+	if err := os.WriteFile(path, []byte(toml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := ParseAccounts(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(accounts) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accounts))
+	}
+	if accounts[0].Password != "live-token-xyz" {
+		t.Errorf("Password = %q, want %q", accounts[0].Password, "live-token-xyz")
+	}
+}
+
+func TestParseAccountsEnvPasswordUnset(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.toml")
+	toml := `[[account]]
+name = "Fastmail"
+backend = "jmap"
+source = "jmap+oauthbearer://user@example.com@api.example.com/.well-known/jmap"
+password = "$DEFINITELY_UNSET_VAR_XYZ"
+`
+	if err := os.WriteFile(path, []byte(toml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ParseAccounts(path)
+	if err == nil {
+		t.Fatal("expected error for unset env var, got nil")
+	}
+	if !strings.Contains(err.Error(), "DEFINITELY_UNSET_VAR_XYZ") {
+		t.Errorf("expected error to mention var name, got %q", err.Error())
+	}
+}
+
 func TestExampleConfigParses(t *testing.T) {
 	const example = `[[account]]
 name = "Example"
