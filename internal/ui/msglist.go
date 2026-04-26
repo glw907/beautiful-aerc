@@ -595,6 +595,50 @@ func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
 // Count returns the number of source messages in the list.
 func (m MessageList) Count() int { return len(m.source) }
 
+// cursorUID returns the UID under the cursor, or empty if no rows.
+// Used as an anchor across rebuild.
+func (m *MessageList) cursorUID() mail.UID {
+	if len(m.rows) == 0 || m.selected >= len(m.rows) {
+		return ""
+	}
+	return m.rows[m.selected].msg.UID
+}
+
+// snapToUID positions the cursor on the row whose UID matches uid.
+// Falls back to clamp at len(rows)-1 when not found.
+func (m *MessageList) snapToUID(uid mail.UID) {
+	if uid == "" || len(m.rows) == 0 {
+		m.selected = 0
+		return
+	}
+	for i, r := range m.rows {
+		if r.msg.UID == uid {
+			m.selected = i
+			return
+		}
+	}
+	m.selected = len(m.rows) - 1
+}
+
+// IsNearBottom reports whether the cursor is within k rows of the
+// last row. Used by AccountTab to trigger lazy-load before the user
+// runs out of messages.
+func (m *MessageList) IsNearBottom(k int) bool {
+	return len(m.rows) > 0 && m.selected >= len(m.rows)-k
+}
+
+// AppendMessages adds extra to the message list, re-runs the
+// group→sort→flatten pipeline, and restores the cursor by UID.
+// Used for lazy-loading the next window of a large folder. Safe
+// against duplicate UIDs (rebuild dedups).
+func (m *MessageList) AppendMessages(extra []mail.MessageInfo) {
+	uid := m.cursorUID()
+	m.source = append(m.source, extra...)
+	m.now = time.Now()
+	m.rebuild()
+	m.snapToUID(uid)
+}
+
 // MarkSeen flips FlagSeen on the local copy of the message with the
 // given UID. Used for optimistic display when the viewer opens an
 // unread message — the backend MarkRead Cmd runs in parallel.

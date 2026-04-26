@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -909,6 +910,96 @@ func TestMessageListFilterResultCount(t *testing.T) {
 		ml := NewMessageList(styles, msgs, 90, 20)
 		if got := ml.FilterResultCount(); got != 0 {
 			t.Errorf("FilterResultCount with no filter = %d, want 0", got)
+		}
+	})
+}
+
+func TestMessageList_AppendMessages_PreservesCursor(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	initial := []mail.MessageInfo{
+		{UID: "1", ThreadID: "1", Subject: "First", From: "Alice", Date: "Apr 10", Flags: mail.FlagSeen},
+		{UID: "2", ThreadID: "2", Subject: "Second", From: "Bob", Date: "Apr 09", Flags: mail.FlagSeen},
+		{UID: "3", ThreadID: "3", Subject: "Third", From: "Carol", Date: "Apr 08", Flags: mail.FlagSeen},
+		{UID: "4", ThreadID: "4", Subject: "Fourth", From: "Dave", Date: "Apr 07", Flags: mail.FlagSeen},
+		{UID: "5", ThreadID: "5", Subject: "Fifth", From: "Eve", Date: "Apr 06", Flags: mail.FlagSeen},
+	}
+	extra := []mail.MessageInfo{
+		{UID: "6", ThreadID: "6", Subject: "Sixth", From: "Frank", Date: "Apr 05", Flags: mail.FlagSeen},
+		{UID: "7", ThreadID: "7", Subject: "Seventh", From: "Grace", Date: "Apr 04", Flags: mail.FlagSeen},
+	}
+
+	ml := NewMessageList(styles, initial, 90, 20)
+	// Advance to the third visible row (index 2).
+	ml.MoveDown()
+	ml.MoveDown()
+	anchorUID := ml.rows[ml.selected].msg.UID
+
+	ml.AppendMessages(extra)
+
+	// Source count must grow.
+	if got, want := ml.Count(), len(initial)+len(extra); got != want {
+		t.Errorf("Count() = %d, want %d", got, want)
+	}
+
+	// Cursor must still point at the same UID.
+	if got := ml.rows[ml.selected].msg.UID; got != anchorUID {
+		t.Errorf("cursor UID after AppendMessages = %q, want %q", got, anchorUID)
+	}
+}
+
+func TestMessageList_IsNearBottom(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	make100 := func() []mail.MessageInfo {
+		msgs := make([]mail.MessageInfo, 100)
+		for i := range msgs {
+			msgs[i] = mail.MessageInfo{
+				UID:      mail.UID(fmt.Sprintf("%d", i+1)),
+				ThreadID: mail.UID(fmt.Sprintf("%d", i+1)),
+				Subject:  fmt.Sprintf("Message %d", i+1),
+				From:     "Sender",
+				Date:     fmt.Sprintf("2026-04-%02d", (i%28)+1),
+				Flags:    mail.FlagSeen,
+			}
+		}
+		return msgs
+	}
+
+	t.Run("cursor near bottom returns true", func(t *testing.T) {
+		ml := NewMessageList(styles, make100(), 90, 20)
+		ml.MoveToBottom() // selected = 99
+		if !ml.IsNearBottom(5) {
+			t.Error("IsNearBottom(5) = false, want true when cursor at last row")
+		}
+	})
+
+	t.Run("cursor within k of bottom returns true", func(t *testing.T) {
+		ml := NewMessageList(styles, make100(), 90, 20)
+		ml.MoveToBottom()
+		ml.MoveUp()
+		ml.MoveUp()
+		ml.MoveUp() // selected = 96, 4 from end
+		if !ml.IsNearBottom(5) {
+			t.Error("IsNearBottom(5) = false, want true when cursor is 4 from end")
+		}
+	})
+
+	t.Run("cursor far from bottom returns false", func(t *testing.T) {
+		ml := NewMessageList(styles, make100(), 90, 20)
+		// Move to row 50 (selected=50, 50 from end of 100).
+		for range 50 {
+			ml.MoveDown()
+		}
+		if ml.IsNearBottom(5) {
+			t.Error("IsNearBottom(5) = true, want false when cursor is row 50 of 100")
+		}
+	})
+
+	t.Run("empty list returns false", func(t *testing.T) {
+		ml := NewMessageList(styles, nil, 90, 20)
+		if ml.IsNearBottom(5) {
+			t.Error("IsNearBottom(5) = true, want false for empty list")
 		}
 	})
 }

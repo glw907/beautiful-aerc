@@ -17,7 +17,8 @@ fi
 warnings=""
 
 # Rule 1: No package-level mutable state (var with slice, map, or struct)
-if grep -nE '^\s*var\s+\w+\s+((\[\]|\*|map\[)|\w+\{)' "$file" | grep -vq '^\s*//'; then
+# Only flag top-level declarations — lines with no leading whitespace.
+if grep -nE '^var\s+\w+\s+((\[\]|\*|map\[)|\w+\{)' "$file" | grep -vq '^//'; then
     warnings+="  Rule 1 violation: Package-level mutable var — move to model struct\n"
 fi
 
@@ -45,6 +46,7 @@ if [[ -n "$warnings" ]]; then
     echo "ELM ARCHITECTURE: $(basename "$file") has violations:" >&2
     echo -e "$warnings" >&2
     echo "  Invoke the elm-conventions skill for correct patterns." >&2
+    exit 2
 fi
 
 exit 0
