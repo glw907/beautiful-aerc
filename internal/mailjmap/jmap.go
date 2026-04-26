@@ -104,10 +104,12 @@ const (
 // Connect satisfies mail.Backend. It authenticates against the JMAP
 // session endpoint, populates the folder map, and initialises the
 // body cache and updates channel.
+//
+// All network RPCs run without holding b.mu. The lock is acquired
+// once at the end to install the completed state and spawn the push
+// goroutine.
 func (b *Backend) Connect(_ context.Context) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
+	// --- Phase 1: authenticate (no lock) ---
 	cli := &jmap.Client{
 		SessionEndpoint: b.cfg.Source,
 	}
@@ -115,22 +117,29 @@ func (b *Backend) Connect(_ context.Context) error {
 	if err := cli.Authenticate(); err != nil {
 		return fmt.Errorf("connect: authenticate: %w", err)
 	}
-	b.client = cli
-	b.session = cli.Session
+	session := cli.Session
 
-	if err := b.refreshFoldersLocked(); err != nil {
+	// --- Phase 2: fetch folders (no lock) ---
+	folders, mailboxState, err := fetchFolders(cli, session)
+	if err != nil {
 		return fmt.Errorf("connect: list folders: %w", err)
 	}
 
+	// --- Phase 3: seed email state (no lock) ---
+	emailState, err := fetchEmailState(cli, session)
+	if err != nil {
+		return fmt.Errorf("connect: seed email state: %w", err)
+	}
+
+	// --- Phase 4: build local values (no lock) ---
 	cache, err := lru.New[string, []byte](bodyCacheSize)
 	if err != nil {
 		return fmt.Errorf("connect: init body cache: %w", err)
 	}
-	b.bodies = cache
-	b.updates = make(chan mail.Update, updatesBuffer)
+	updates := make(chan mail.Update, updatesBuffer)
 
-	accountID := b.session.PrimaryAccounts[jmapmail.URI]
-	b.downloadBlob = func(blobID string) ([]byte, error) {
+	accountID := session.PrimaryAccounts[jmapmail.URI]
+	dlBlob := func(blobID string) ([]byte, error) {
 		rc, err := cli.Download(accountID, jmap.ID(blobID))
 		if err != nil {
 			return nil, err
@@ -139,68 +148,75 @@ func (b *Backend) Connect(_ context.Context) error {
 		return io.ReadAll(rc)
 	}
 
+	// --- Phase 5: install state under lock, then spawn goroutine ---
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	b.mu.Lock()
+	b.client = cli
+	b.session = session
+	b.folders = folders
+	b.states["Mailbox"] = mailboxState
+	b.states["Email"] = emailState
+	b.bodies = cache
+	b.updates = updates
+	b.downloadBlob = dlBlob
 	b.pushClient = cli
 	b.runEventSourceFunc = b.runEventSource
-
-	// Seed Email state so the push loop can call Email/changes
-	// with a valid sinceState.
-	if err := b.seedEmailStateLocked(); err != nil {
-		return fmt.Errorf("connect: seed email state: %w", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
 	b.pushCancel = cancel
-	b.pushDone = make(chan struct{})
+	b.pushDone = done
+	b.mu.Unlock()
+
 	go b.pushLoop(ctx)
 
 	return nil
 }
 
-// seedEmailStateLocked issues Email/get with ids=[] to fetch the
-// current Email state string. Caller must hold b.mu.
-func (b *Backend) seedEmailStateLocked() error {
-	accountID := b.session.PrimaryAccounts[jmapmail.URI]
+// fetchEmailState issues Email/get with ids=[] to fetch the current
+// Email state string. It does not hold b.mu — callers supply the
+// client and session directly.
+func fetchEmailState(cli jmapClient, session *jmap.Session) (string, error) {
+	accountID := session.PrimaryAccounts[jmapmail.URI]
 	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
 	req.Invoke(&email.Get{
 		Account:    accountID,
 		IDs:        []jmap.ID{},
 		Properties: []string{"id"},
 	})
-	resp, err := b.client.Do(req)
+	resp, err := cli.Do(req)
 	if err != nil {
-		return fmt.Errorf("email/get: %w", err)
+		return "", fmt.Errorf("email/get: %w", err)
 	}
 	for _, inv := range resp.Responses {
 		gr, ok := inv.Args.(*email.GetResponse)
 		if !ok {
 			continue
 		}
-		b.states["Email"] = gr.State
-		return nil
+		return gr.State, nil
 	}
-	return fmt.Errorf("email/get: no response")
+	return "", fmt.Errorf("email/get: no response")
 }
 
-// refreshFoldersLocked issues Mailbox/get, populates b.folders keyed
-// by canonical poplar name, and captures the state string into
-// b.states["Mailbox"]. Caller must hold b.mu.
-func (b *Backend) refreshFoldersLocked() error {
-	accountID := b.session.PrimaryAccounts[jmapmail.URI]
+// fetchFolders issues Mailbox/get and returns a populated folder map,
+// the Mailbox state string, and any error. It does not hold b.mu —
+// callers supply the client and session directly.
+func fetchFolders(cli jmapClient, session *jmap.Session) (map[string]folderEntry, string, error) {
+	accountID := session.PrimaryAccounts[jmapmail.URI]
 
 	req := &jmap.Request{}
 	req.Invoke(&mailbox.Get{Account: accountID})
 
-	resp, err := b.client.Do(req)
+	resp, err := cli.Do(req)
 	if err != nil {
-		return fmt.Errorf("mailbox/get: %w", err)
+		return nil, "", fmt.Errorf("mailbox/get: %w", err)
 	}
 
+	folders := make(map[string]folderEntry)
 	for _, inv := range resp.Responses {
 		gr, ok := inv.Args.(*mailbox.GetResponse)
 		if !ok {
 			continue
 		}
-		b.states["Mailbox"] = gr.State
 
 		// Build raw mail.Folder slice to run through the classifier.
 		raw := make([]mail.Folder, 0, len(gr.List))
@@ -216,13 +232,26 @@ func (b *Backend) refreshFoldersLocked() error {
 		classified := mail.Classify(raw)
 		for i, cf := range classified {
 			key := cf.DisplayName
-			b.folders[key] = folderEntry{
+			folders[key] = folderEntry{
 				id:     string(gr.List[i].ID),
 				folder: cf.Folder,
 			}
 		}
-		break
+		return folders, gr.State, nil
 	}
+	return folders, "", nil
+}
+
+// refreshFoldersLocked issues Mailbox/get, populates b.folders keyed
+// by canonical poplar name, and captures the state string into
+// b.states["Mailbox"]. Caller must hold b.mu.
+func (b *Backend) refreshFoldersLocked() error {
+	folders, state, err := fetchFolders(b.client, b.session)
+	if err != nil {
+		return err
+	}
+	b.folders = folders
+	b.states["Mailbox"] = state
 	return nil
 }
 
