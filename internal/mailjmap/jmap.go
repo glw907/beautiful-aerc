@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"sync"
 
@@ -134,7 +133,7 @@ func (b *Backend) Connect(_ context.Context) error {
 			return nil, err
 		}
 		defer rc.Close()
-		return ioutil.ReadAll(rc)
+		return io.ReadAll(rc)
 	}
 
 	// Push loop wired in Task 13.
