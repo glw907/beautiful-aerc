@@ -9,6 +9,12 @@
 
 ## Someday
 
+- [ ] **#15** Help popover: responsive layout for narrow terminals `#improvement` `#poplar` *(2026-04-25)*
+  Popover has a fixed natural width derived from content (~62 cols account, ~58 viewer). On terminals narrower than the popover, `lipgloss.Place` clips gracefully but the layout breaks visually. A future polish pass could reflow into a single column or drop columns based on terminal width. Surfaced during Pass 2.5b-5; out of scope per ADR-0071.
+
+- [ ] **#14** Help popover: background dim for the underlying view `#improvement` `#poplar` *(2026-04-25)*
+  Wireframe (§5) called for dimmed content behind the popover. Skipped in Pass 2.5b-5 because lipgloss has no native opacity and ANSI-level color stripping of the underlying view is fragile (ADR-0071). Revisit if user testing flags the no-dim approach as confusing. Implementation paths: (1) hand-roll a "dim every fg color" transform on the rendered chrome+content before composing under the popover; (2) wait for an upstream lipgloss dim helper.
+
 - [ ] **#13** Drop dead `blockKind` / `spanKind` enums from `internal/content/` `#improvement` `#poplar` *(2026-04-25)*
   The `Block` and `Span` interfaces require unexported marker methods (`blockType() blockKind`, `spanType() spanKind`) returning private kind constants. The sealed-sum-type pattern. Consumers never inspect the kind values — discrimination always happens via Go type switches. The enum constants and the kind return values are compile-but-unused machinery (~30 LOC). Reduce the marker methods to no-args (`isBlock()`, `isSpan()`) and delete the kindParagraph...,kindText... constants. Audit-2 explicitly notes this is **not blocking** and should ride along with the next pass that touches `internal/content/` — no dedicated commit.
 

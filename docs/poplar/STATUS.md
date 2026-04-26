@@ -1,11 +1,13 @@
 # Poplar Status
 
-**Current pass:** Pass 2.5b-4.5 shipped 2026-04-25. Audit-1+2
-mechanical fixes landed: folder jumps wired, per-folder threading
-override consumed, offline color realigned to ADR-0028, filter
-package trimmed. No new ADRs — code realigned to existing
-invariants. Next is Pass 2.5b-5 (help popover) with a brainstorm
-gate on future-binding policy.
+**Current pass:** Pass 2.5b-5 shipped 2026-04-25. Help popover
+landed: `?` opens a centered, rounded-box modal over the account or
+viewer context with the full planned keybinding vocabulary; unwired
+rows render dim per the future-binding policy (option C1, ADR-0072);
+modal infrastructure (root-owned bool + sentinel struct + key
+stealing + view takeover) is the template for future modals
+(ADR-0071). Next is Pass 2.5b-6 (error banner + spinner
+consolidation).
 
 ## Passes
 
@@ -15,8 +17,8 @@ gate on future-binding policy.
 | 2.5b-1..3.6, 2.5b-7 | Chrome / sidebar / msglist / threading / search | done |
 | 2.5b-4 | Prototype: message viewer | done |
 | 2.5b-4.5 | Audit-1+2 mechanical fixes | done |
-| 2.5b-5 | Prototype: help popover (open: future-binding policy) | next |
-| 2.5b-6 | Prototype: error banner + spinner consolidation | pending |
+| 2.5b-5 | Prototype: help popover | done |
+| 2.5b-6 | Prototype: error banner + spinner consolidation | next |
 | 2.5b-train | Tooling: mailrender training capture | pending (after Pass 3) |
 | 2.9 | Research: emersion vs aerc fork (BACKLOG #10) | pending |
 | 3 | Wire prototype to live backend | pending |
@@ -26,32 +28,29 @@ gate on future-binding policy.
 | 10, 11 | Config, polish | pending |
 | 1.1 | Neovim --embed RPC | pending |
 
-## Next starter prompt (Pass 2.5b-5)
+## Next starter prompt (Pass 2.5b-6)
 
-> **Goal.** Ship the help popover — modal overlay over the account
-> view and the viewer, advertising the keybindings users need to
-> remember. Bound to `?`.
+> **Goal.** Capture backend errors currently dropped silently
+> (mark-read in Pass 2.5b-4, body fetch, `xdg-open` in Pass 2.5b-4)
+> into a coherent banner + standardize spinner placeholders. Lays
+> the ground for Pass 6 toast/undo bar and Pass 9 send-progress.
 >
-> **Scope.** Modal overlay infrastructure (the first modal in the
-> codebase); two context-specific binding layouts (account vs.
-> viewer); key routing so `?` opens it from both contexts and any
-> key dismisses it. Layout per `wireframes.md` §5.
+> **Scope.** Top-anchored error banner; reusable spinner surface;
+> route `ErrMsg`-style events from `mail.Backend` Cmds via App.
+> Out of scope: toast + undo bar (Pass 6).
 >
-> **Settled (do not re-brainstorm):** wireframe layout, column
-> groupings, modal behavior; `?` as the open key (`app.go` already
-> routes to a stub); the two-context split.
+> **Settled:** consolidation goal (Audit-3 plan-shape); banner is
+> chrome (not a modal — does not steal keys), distinct from the
+> Pass 2.5b-5 modal infrastructure (ADR-0071).
 >
-> **Still open — brainstorm these:**
-> - **Future-binding policy.** The wireframe lists keys that don't
->   exist yet (`c compose`, `r reply`, `f forward`, `d delete`, etc.).
->   Three choices, each with a real cost (Audit-3 plan-shape §"Pass
->   2.5b-5"): only-wired (sparse + churns every pass), all-eventual
->   (silent dead keys; toast feedback isn't until 2.5b-6), or
->   all-with-future-marker (discoverable but needs a styling call).
+> **Still open — brainstorm:** banner anchoring + dismissal
+> (top vs above footer, auto vs Esc); styling (`ColorError` fill vs
+> accent border, single vs wrapped); spinner reuse (shared model
+> vs shared styles); error-stream wiring (per-Cmd `ErrMsg` vs
+> dedicated channel).
 >
-> **Approach.** Brainstorm the future-binding policy
-> (`superpowers:brainstorming`), write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-help-popover.md`, then
+> **Approach.** Brainstorm, plan at
+> `docs/superpowers/plans/YYYY-MM-DD-error-banner-spinner.md`,
 > implement. Standard pass-end checklist applies.
 
 ## Audits

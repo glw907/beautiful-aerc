@@ -134,8 +134,27 @@ the ADR(s) that justify them.
   modal picker launched by a key.
 - `q` exits the viewer when the viewer is open, quits poplar when
   on the account view. While the sidebar search shelf is non-idle,
-  `q` is stolen and clears the search instead of quitting. `?`
-  opens the help popover (planned, Pass 2.5b-5).
+  `q` is stolen and clears the search instead of quitting. While
+  the help popover is open, `q` is swallowed (help is a view, not
+  a state to escape). `?` opens the help popover; `?` or `Esc`
+  closes it.
+- The help popover is the first modal overlay. `App` owns
+  `helpOpen bool` and `help HelpPopover`; `viewerOpen` selects the
+  context (`HelpAccount` vs `HelpViewer`) at open time. While
+  `helpOpen` is true, `App.Update` short-circuits all keys other
+  than `?`/`Esc` (no delegation to children) and `App.View` returns
+  `m.help.View(width, height)` directly — the underlying account
+  layout is skipped. `HelpPopover` is render-only (no `Init`/
+  `Update`); centering is `lipgloss.Place`. No background dim in
+  v1.
+- Help popover advertises the full planned keybinding vocabulary,
+  not just currently-wired keys. Each row in the static binding
+  tables (`accountGroups`, `viewerGroups`,
+  `accountBottomHints`, `viewerBottomHints`) carries a `wired bool`
+  flag. Wired rows: bright-bold key + dim description. Unwired
+  rows: entire row dim, no bold, no glyph. Group headings stay
+  bright regardless. The dim/bright contrast is the future-binding
+  signal; later passes flip the flag as bindings come online.
 - Folder jumps use uppercase single keys:
   `I` Inbox, `D` Drafts, `S` Sent, `A` Archive, `X` Spam, `T`
   Trash. Shared with lowercase triage keys (`d` delete vs
@@ -242,3 +261,4 @@ invariant. ADR numbering is chronological.
 | Per-screen prototype passes | 0022 (superseded by 0070), 0070 |
 | Sidebar search shelf, filter-and-hide, thread-level | 0064 |
 | Viewer prototype, footnote harvesting, optimistic mark-read | 0065, 0066, 0067, 0069 |
+| Help popover modal, future-binding policy | 0071, 0072 |
