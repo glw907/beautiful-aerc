@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,11 +34,11 @@ func newConfigInitCmd() *cobra.Command {
 func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
 	path := f.config
 	if path == "" {
-		configHome, err := os.UserConfigDir()
+		var err error
+		path, err = defaultConfigPath()
 		if err != nil {
-			return fmt.Errorf("user config dir: %w", err)
+			return err
 		}
-		path = filepath.Join(configHome, "poplar", "accounts.toml")
 	}
 
 	data, err := os.ReadFile(path)
@@ -81,16 +82,18 @@ func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
 	return writeAtomically(path, merged)
 }
 
-// openBackendForInit returns a connected backend for the given account.
-// Currently only the "mock" backend type is wired for init — real JMAP
-// wiring will follow when Pass 3 lands the adapter.
+// openBackendForInit returns a connected backend for the given account,
+// ready to call ListFolders. Delegates to openBackend for construction,
+// then calls Connect with a background context.
 func openBackendForInit(acct config.AccountConfig) (mail.Backend, error) {
-	switch acct.Backend {
-	case "mock":
-		return mail.NewMockBackend(), nil
-	default:
-		return nil, fmt.Errorf("backend %q not yet supported by config init (Pass 3)", acct.Backend)
+	b, err := openBackend(acct)
+	if err != nil {
+		return nil, err
 	}
+	if err := b.Connect(context.Background()); err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
+	return b, nil
 }
 
 // writeAtomically writes content to path via a temp file + rename.

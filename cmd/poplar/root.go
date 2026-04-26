@@ -1,12 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/config"
-	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui"
 	"github.com/spf13/cobra"
@@ -53,9 +53,33 @@ func runRoot(f rootFlags) error {
 			f.theme, strings.Join(theme.ThemeNames(), ", "))
 	}
 
-	backend := mail.NewMockBackend()
-	uiCfg := config.DefaultUIConfig()
-	// Pass 3 swaps this for config.LoadUI(configPath).
+	configPath, err := defaultConfigPath()
+	if err != nil {
+		return err
+	}
+	accts, err := config.ParseAccounts(configPath)
+	if err != nil {
+		return fmt.Errorf("load accounts: %w", err)
+	}
+	if len(accts) == 0 {
+		return fmt.Errorf("no accounts configured; see ~/.config/poplar/accounts.toml")
+	}
+	backend, err := openBackend(accts[0])
+	if err != nil {
+		return fmt.Errorf("open backend: %w", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := backend.Connect(ctx); err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer backend.Disconnect()
+
+	uiCfg, err := config.LoadUI(configPath)
+	if err != nil {
+		return fmt.Errorf("load UI config: %w", err)
+	}
+
 	app := ui.NewApp(t, backend, uiCfg)
 
 	p := tea.NewProgram(appModel{app: app}, tea.WithAltScreen())
