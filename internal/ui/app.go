@@ -19,6 +19,8 @@ type App struct {
 	footer     Footer
 	keys       GlobalKeys
 	viewerOpen bool
+	helpOpen   bool
+	help       HelpPopover
 	width      int
 	height     int
 }
@@ -79,6 +81,13 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.helpOpen {
+			switch msg.String() {
+			case "?", "esc":
+				m.helpOpen = false
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q":
 			if m.viewerOpen {
@@ -100,7 +109,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "?":
-			// Stubbed for 2.5b-5 (help popover)
+			m.helpOpen = true
+			ctx := HelpAccount
+			if m.viewerOpen {
+				ctx = HelpViewer
+			}
+			m.help = NewHelpPopover(m.styles, ctx)
 			return m, nil
 		}
 	}
@@ -115,6 +129,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 func (m App) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
+	}
+	if m.helpOpen {
+		return m.help.View(m.width, m.height)
 	}
 
 	rawContent := m.acct.View()

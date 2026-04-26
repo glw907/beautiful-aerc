@@ -253,3 +253,25 @@ func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 		t.Errorf("status bar view missing 47%% in viewer mode: %q", view)
 	}
 }
+
+func TestApp_HelpOpenAndCloseWithQuestionMark(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	if app.helpOpen {
+		t.Fatal("setup: helpOpen should be false initially")
+	}
+
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !app.helpOpen {
+		t.Fatal("after ?: helpOpen should be true")
+	}
+
+	view := stripANSI(app.View())
+	if !strings.Contains(view, "Message List") {
+		t.Errorf("popover view missing 'Message List' title:\n%s", view)
+	}
+
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if app.helpOpen {
+		t.Error("after second ?: helpOpen should be false")
+	}
+}
