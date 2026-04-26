@@ -27,8 +27,7 @@ func NewHelpPopover(styles Styles, context HelpContext) HelpPopover {
 }
 
 // bindingRow is a single key/description entry in the popover.
-// wired is false for keys whose action is not yet implemented;
-// such rows render dim per the future-binding policy.
+// Unwired rows render dim per the future-binding policy.
 type bindingRow struct {
 	key   string
 	desc  string
@@ -156,29 +155,19 @@ var viewerBottomHints = []bindingRow{
 // the popover sizes its box from content and lipgloss.Place
 // handles centering.
 func (h HelpPopover) View(width, height int) string {
-	var (
-		title         string
-		groups        []bindingGroup
-		bottomHints   []bindingRow
-		layoutBuilder func(styles Styles, groups []bindingGroup) string
-	)
-
+	var title, body string
+	var bottomHints []bindingRow
 	switch h.context {
 	case HelpViewer:
 		title = "Message Viewer"
-		groups = viewerGroups
+		body = renderViewerLayout(h.styles, viewerGroups)
 		bottomHints = viewerBottomHints
-		layoutBuilder = renderViewerLayout
 	default:
 		title = "Message List"
-		groups = accountGroups
+		body = renderAccountLayout(h.styles, accountGroups)
 		bottomHints = accountBottomHints
-		layoutBuilder = renderAccountLayout
 	}
-
-	body := layoutBuilder(h.styles, groups)
-	hintLine := renderHintLine(h.styles, bottomHints)
-	inner := body + "\n\n" + hintLine
+	inner := body + "\n\n" + renderHintLine(h.styles, bottomHints)
 
 	// Wrap inner in a rounded box, with top border drawn manually
 	// so the title can be embedded. Border(style, top, right, bottom, left).
@@ -258,21 +247,25 @@ func renderGroup(styles Styles, g bindingGroup) string {
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
-// renderRow builds "<key>  <desc>" with the wired-vs-unwired
-// styling. Wired: bright-bold key + dim desc. Unwired: entire
-// row dim (no bold).
+// renderRow builds "<key>  <desc>" for a single row, padding the key
+// column to a fixed width.
 func renderRow(styles Styles, r bindingRow) string {
-	const keyWidth = 5 // padded right-alignment column for keys
+	const keyWidth = 5
 	keyPadded := r.key
 	for lipgloss.Width(keyPadded) < keyWidth {
 		keyPadded += " "
 	}
-	if r.wired {
-		return styles.HelpKey.Render(keyPadded) + "  " +
-			styles.Dim.Render(r.desc)
+	return renderKeyDesc(styles, keyPadded, r.desc, r.wired)
+}
+
+// renderKeyDesc applies the wired-vs-unwired styling to a key+desc
+// pair. Wired: bright-bold key, dim desc. Unwired: entire pair dim
+// (no bold) — the contrast is the future-binding signal.
+func renderKeyDesc(styles Styles, key, desc string, wired bool) string {
+	if wired {
+		return styles.HelpKey.Render(key) + "  " + styles.Dim.Render(desc)
 	}
-	// Unwired: render key + desc together in Dim, no bold.
-	return styles.Dim.Render(keyPadded + "  " + r.desc)
+	return styles.Dim.Render(key + "  " + desc)
 }
 
 // renderGap returns the inter-column spacer used between groups
@@ -302,18 +295,10 @@ func renderGotoGrid(styles Styles, g bindingGroup) string {
 }
 
 // renderHintLine builds the bottom hint line: "Enter  open    ?  close".
-// Each hint uses the same wired-vs-unwired styling as a row.
 func renderHintLine(styles Styles, hints []bindingRow) string {
 	parts := make([]string, 0, len(hints))
 	for _, h := range hints {
-		var part string
-		if h.wired {
-			part = styles.HelpKey.Render(h.key) + "  " +
-				styles.Dim.Render(h.desc)
-		} else {
-			part = styles.Dim.Render(h.key + "  " + h.desc)
-		}
-		parts = append(parts, part)
+		parts = append(parts, renderKeyDesc(styles, h.key, h.desc, h.wired))
 	}
 	return strings.Join(parts, "    ")
 }
