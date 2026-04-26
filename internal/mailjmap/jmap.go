@@ -36,18 +36,20 @@ type jmapClient interface {
 type Backend struct {
 	cfg config.AccountConfig
 
-	mu      sync.Mutex
-	client  jmapClient
-	session *jmap.Session
-	current string
-	folders map[string]folderEntry
-	blobIDs map[mail.UID]string
-	states  map[string]string
+	mu             sync.Mutex
+	client         jmapClient
+	pushClient     *jmap.Client // real client for EventSource; nil in unit tests
+	session        *jmap.Session
+	current        string
+	folders        map[string]folderEntry
+	blobIDs        map[mail.UID]string
+	states         map[string]string
 
-	bodies      *lru.Cache[string, []byte]
-	bodyGroup   singleflight.Group
-	downloadBlob func(blobID string) ([]byte, error) // nil ⇒ set by Connect; tests swap it
-	updates     chan mail.Update
+	bodies             *lru.Cache[string, []byte]
+	bodyGroup          singleflight.Group
+	downloadBlob       func(blobID string) ([]byte, error) // nil ⇒ set by Connect; tests swap it
+	updates            chan mail.Update
+	runEventSourceFunc func(ctx context.Context) error // swappable for tests
 
 	pushCancel context.CancelFunc
 	pushDone   chan struct{}
@@ -80,6 +82,7 @@ func New(cfg config.AccountConfig) *Backend {
 func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
 	b := New(cfg)
 	b.client = c
+	b.runEventSourceFunc = b.runEventSource
 	cache, _ := lru.New[string, []byte](bodyCacheSize)
 	b.bodies = cache
 	b.updates = make(chan mail.Update, updatesBuffer)
@@ -136,9 +139,46 @@ func (b *Backend) Connect(_ context.Context) error {
 		return io.ReadAll(rc)
 	}
 
-	// Push loop wired in Task 13.
+	b.pushClient = cli
+	b.runEventSourceFunc = b.runEventSource
+
+	// Seed Email state so the push loop can call Email/changes
+	// with a valid sinceState.
+	if err := b.seedEmailStateLocked(); err != nil {
+		return fmt.Errorf("connect: seed email state: %w", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	b.pushCancel = cancel
+	b.pushDone = make(chan struct{})
+	go b.pushLoop(ctx)
 
 	return nil
+}
+
+// seedEmailStateLocked issues Email/get with ids=[] to fetch the
+// current Email state string. Caller must hold b.mu.
+func (b *Backend) seedEmailStateLocked() error {
+	accountID := b.session.PrimaryAccounts[jmapmail.URI]
+	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
+	req.Invoke(&email.Get{
+		Account:    accountID,
+		IDs:        []jmap.ID{},
+		Properties: []string{"id"},
+	})
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("email/get: %w", err)
+	}
+	for _, inv := range resp.Responses {
+		gr, ok := inv.Args.(*email.GetResponse)
+		if !ok {
+			continue
+		}
+		b.states["Email"] = gr.State
+		return nil
+	}
+	return fmt.Errorf("email/get: no response")
 }
 
 // refreshFoldersLocked issues Mailbox/get, populates b.folders keyed

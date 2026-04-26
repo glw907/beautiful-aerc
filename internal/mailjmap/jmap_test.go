@@ -1,6 +1,8 @@
 package mailjmap
 
 import (
+	"context"
+	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -10,6 +12,7 @@ import (
 	"git.sr.ht/~rockorager/go-jmap"
 	jmapmail "git.sr.ht/~rockorager/go-jmap/mail"
 	"git.sr.ht/~rockorager/go-jmap/mail/email"
+	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -529,5 +532,216 @@ func TestFetchBody_UnknownUID(t *testing.T) {
 	_, err := b.FetchBody("nonexistent")
 	if err == nil {
 		t.Fatal("expected error for unknown uid")
+	}
+}
+
+// --- Push loop and emit tests ---
+
+// TestHandleStateChange_Dedup verifies that calling handleStateChange
+// twice with the same state only triggers the dispatcher once.
+func TestHandleStateChange_Dedup(t *testing.T) {
+	var calls atomic.Int32
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			calls.Add(1)
+			return fakeResponse(&jmap.Invocation{
+				Name: "Email/changes",
+				Args: &email.ChangesResponse{
+					OldState: "s1",
+					NewState: "s2",
+				},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+	b.states["Email"] = "s1"
+
+	b.handleStateChange("Email", "s2") // dispatches
+	b.handleStateChange("Email", "s2") // same new state → dedup
+
+	if n := calls.Load(); n != 1 {
+		t.Errorf("dispatcher called %d times, want 1", n)
+	}
+}
+
+// TestHandleStateChange_StatePreservedOnError verifies that b.states
+// is not advanced when the dispatcher returns an error.
+func TestHandleStateChange_StatePreservedOnError(t *testing.T) {
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			return nil, errors.New("rpc error")
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+	b.states["Email"] = "s1"
+
+	b.handleStateChange("Email", "s2")
+
+	b.mu.Lock()
+	got := b.states["Email"]
+	b.mu.Unlock()
+	if got != "s1" {
+		t.Errorf("states[Email] = %q after error, want %q", got, "s1")
+	}
+}
+
+// TestEmit_BufferFullDrop verifies that emit does not block or panic
+// when the updates channel is full.
+func TestEmit_BufferFullDrop(t *testing.T) {
+	b := newTestBackend(&fakeClient{}, "acct-1", nil)
+	// Fill the channel to capacity.
+	for range updatesBuffer {
+		b.updates <- mail.Update{Type: mail.UpdateNewMail}
+	}
+	// This must not block.
+	done := make(chan struct{})
+	go func() {
+		b.emit(mail.Update{Type: mail.UpdateExpunge})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("emit blocked on full channel")
+	}
+}
+
+// TestPushLoop_ConnReconnecting verifies that pushLoop emits
+// ConnReconnecting when runEventSourceFunc returns an error.
+func TestPushLoop_ConnReconnecting(t *testing.T) {
+	b := newTestBackend(&fakeClient{}, "acct-1", nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	first := make(chan struct{}, 1)
+	b.runEventSourceFunc = func(ctx context.Context) error {
+		select {
+		case first <- struct{}{}:
+		default:
+		}
+		return errors.New("stream error")
+	}
+
+	b.pushDone = make(chan struct{})
+	go b.pushLoop(ctx)
+
+	// Wait for at least one iteration.
+	<-first
+	cancel()
+	<-b.pushDone
+
+	// Drain channel and look for ConnReconnecting.
+	close(b.updates)
+	var found bool
+	for u := range b.updates {
+		if u.Type == mail.UpdateConnState && u.ConnState == mail.ConnReconnecting {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected ConnReconnecting update, got none")
+	}
+}
+
+// TestPushLoop_ConnConnected verifies that a successful
+// runEventSourceFunc emits ConnConnected before blocking.
+func TestPushLoop_ConnConnected(t *testing.T) {
+	b := newTestBackend(&fakeClient{}, "acct-1", nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan struct{})
+	b.runEventSourceFunc = func(ctx context.Context) error {
+		b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnConnected})
+		close(ready)
+		<-ctx.Done()
+		return nil
+	}
+
+	b.pushDone = make(chan struct{})
+	go b.pushLoop(ctx)
+
+	<-ready
+	cancel()
+	<-b.pushDone
+
+	close(b.updates)
+	var found bool
+	for u := range b.updates {
+		if u.Type == mail.UpdateConnState && u.ConnState == mail.ConnConnected {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected ConnConnected update, got none")
+	}
+}
+
+// TestDispatchEmailChanges_EmitsCorrectUpdates verifies that
+// dispatchEmailChanges emits NewMail, FlagsChanged, and Expunge.
+func TestDispatchEmailChanges_EmitsCorrectUpdates(t *testing.T) {
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(&jmap.Invocation{
+				Name: "Email/changes",
+				Args: &email.ChangesResponse{
+					Created:   []jmap.ID{"e-new"},
+					Updated:   []jmap.ID{"e-upd"},
+					Destroyed: []jmap.ID{"e-del"},
+				},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+	b.states["Email"] = "s0"
+
+	if err := b.dispatchEmailChanges("s0"); err != nil {
+		t.Fatalf("dispatchEmailChanges: %v", err)
+	}
+
+	// Collect synchronously-emitted updates (Created/Destroyed); Updated
+	// also triggers an async refreshBlobIDs but we only check the channel.
+	close(b.updates)
+	typesSeen := map[mail.UpdateType]bool{}
+	for u := range b.updates {
+		typesSeen[u.Type] = true
+	}
+	for _, want := range []mail.UpdateType{mail.UpdateNewMail, mail.UpdateFlagsChanged, mail.UpdateExpunge} {
+		if !typesSeen[want] {
+			t.Errorf("missing update type %v", want)
+		}
+	}
+}
+
+// TestDispatchMailboxChanges_EmitsFolderInfo verifies that
+// dispatchMailboxChanges emits UpdateFolderInfo for each affected mailbox.
+func TestDispatchMailboxChanges_EmitsFolderInfo(t *testing.T) {
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(&jmap.Invocation{
+				Name: "Mailbox/changes",
+				Args: &mailbox.ChangesResponse{
+					Updated: []jmap.ID{"mb-1"},
+				},
+			}), nil
+		},
+	}
+	folders := map[string]folderEntry{
+		"Inbox": {id: "mb-1", folder: mail.Folder{Name: "Inbox"}},
+	}
+	b := newTestBackend(fake, "acct-1", folders)
+	b.states["Mailbox"] = "s0"
+
+	if err := b.dispatchMailboxChanges("s0"); err != nil {
+		t.Fatalf("dispatchMailboxChanges: %v", err)
+	}
+
+	close(b.updates)
+	var found bool
+	for u := range b.updates {
+		if u.Type == mail.UpdateFolderInfo && u.Folder == "Inbox" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected UpdateFolderInfo for Inbox, got none")
 	}
 }
