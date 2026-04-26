@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/glw907/poplar/internal/mailworker/xdg"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/spf13/cobra"
@@ -34,7 +33,11 @@ func newConfigInitCmd() *cobra.Command {
 func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
 	path := f.config
 	if path == "" {
-		path = xdg.ConfigPath("poplar", "accounts.toml")
+		configHome, err := os.UserConfigDir()
+		if err != nil {
+			return fmt.Errorf("user config dir: %w", err)
+		}
+		path = filepath.Join(configHome, "poplar", "accounts.toml")
 	}
 
 	data, err := os.ReadFile(path)
