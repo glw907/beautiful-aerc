@@ -871,6 +871,60 @@ func TestAccountTab_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
 	}
 }
 
+// TestAccountTab_LoadingSpinner verifies the folder-open loading state.
+func TestAccountTab_LoadingSpinner(t *testing.T) {
+	t.Run("loading is true after selectionChangedCmds, before headersApplied", func(t *testing.T) {
+		styles := NewStyles(theme.Nord)
+		backend := mail.NewMockBackend()
+		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+		folders, _ := backend.ListFolders()
+		// foldersLoadedMsg calls selectionChangedCmds which sets loading=true.
+		tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
+		if !tab.loading {
+			t.Error("loading should be true after foldersLoadedMsg triggers selectionChangedCmds")
+		}
+	})
+
+	t.Run("loading is false after headersAppliedMsg", func(t *testing.T) {
+		styles := NewStyles(theme.Nord)
+		backend := mail.NewMockBackend()
+		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+		folders, _ := backend.ListFolders()
+		tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
+		// Deliver headersAppliedMsg — loading clears.
+		tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: []mail.MessageInfo{
+			{UID: "1", Subject: "hello", From: "a", ThreadID: "1"},
+		}})
+		if tab.loading {
+			t.Error("loading should be false after headersAppliedMsg")
+		}
+	})
+
+	t.Run("view contains Loading placeholder while loading and msglist empty", func(t *testing.T) {
+		styles := NewStyles(theme.Nord)
+		backend := mail.NewMockBackend()
+		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig())
+		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+		folders, _ := backend.ListFolders()
+		// After foldersLoadedMsg, loading=true and msglist is still empty.
+		tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
+		view := stripANSI(tab.View())
+		if !strings.Contains(view, "Loading") {
+			t.Error("view should contain Loading placeholder while loading and msglist is empty")
+		}
+	})
+
+	t.Run("view does not contain Loading after headers arrive", func(t *testing.T) {
+		tab := newLoadedTab(t, 120, 30)
+		view := stripANSI(tab.View())
+		if strings.Contains(view, "Loading messages") {
+			t.Error("view should not contain Loading placeholder after headers have been applied")
+		}
+	})
+}
+
 func TestAccountTab_WindowCounter(t *testing.T) {
 	t.Run("returns empty when no page loaded", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)

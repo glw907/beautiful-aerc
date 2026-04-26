@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/config"
@@ -47,6 +48,8 @@ type AccountTab struct {
 	msglist       MessageList
 	viewer        Viewer
 	pages         map[string]*folderPage
+	loading       bool
+	spinner       spinner.Model
 	width         int
 	height        int
 }
@@ -63,6 +66,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 		msglist:       NewMessageList(styles, nil, 1, 1),
 		viewer:        NewViewer(styles, t, backend.AccountName()),
 		pages:         make(map[string]*folderPage),
+		spinner:       NewSpinner(t),
 	}
 }
 
@@ -113,6 +117,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, fetchHeadersCmd(m.backend, msg.name, msg.uids, msg.reset)
 
 	case headersAppliedMsg:
+		m.loading = false
 		page := m.pageFor(msg.name)
 		page.loaded = len(msg.msgs)
 		fc := m.uiCfg.Folders[m.sidebar.ConfigKey(msg.name)]
@@ -150,6 +155,15 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	case SearchUpdatedMsg:
 		m.msglist.SetFilter(msg.Query, msg.Mode)
 		m.sidebarSearch.SetResultCount(m.msglist.FilterResultCount())
+		return m, nil
+
+	case spinner.TickMsg:
+		if m.loading {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		// Drop ticks while not loading; the next openFolderCmd will re-Tick.
 		return m, nil
 
 	case tea.KeyMsg:
@@ -302,15 +316,17 @@ func (m *AccountTab) clearSearchIfActive() {
 // selectionChangedCmds returns the batch of Cmds that run every time
 // the selected folder changes: a FolderChangedMsg emission so App's
 // status bar updates, plus a load Cmd that will populate the message
-// list when it resolves.
-func (m AccountTab) selectionChangedCmds() tea.Cmd {
+// list when it resolves. Sets loading=true and starts the spinner tick.
+func (m *AccountTab) selectionChangedCmds() tea.Cmd {
 	folder, ok := m.sidebar.SelectedFolderInfo()
 	if !ok {
 		return nil
 	}
+	m.loading = true
 	return tea.Batch(
 		folderChangedCmd(folder),
 		openFolderCmd(m.backend, folder.Name),
+		m.spinner.Tick,
 	)
 }
 
@@ -406,9 +422,21 @@ func (m AccountTab) View() string {
 
 	sidebarView := strings.Join(sidebarLines, "\n")
 	divider := renderDivider(m.height, m.styles)
-	right := m.msglist.View()
-	if m.viewer.IsOpen() {
+
+	var right string
+	switch {
+	case m.viewer.IsOpen():
 		right = m.viewer.View()
+	case m.loading && m.msglist.Count() == 0:
+		text := m.spinner.View() + " Loading messages…"
+		mw := max(1, m.width-min(sidebarWidth, m.width/2)-1)
+		right = lipgloss.Place(
+			mw, m.height,
+			lipgloss.Center, lipgloss.Center,
+			m.styles.Dim.Render(text),
+		)
+	default:
+		right = m.msglist.View()
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, divider, right)
