@@ -275,3 +275,92 @@ func TestApp_HelpOpenAndCloseWithQuestionMark(t *testing.T) {
 		t.Error("after second ?: helpOpen should be false")
 	}
 }
+
+func TestApp_HelpDismissedByEsc(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !app.helpOpen {
+		t.Fatal("setup: ? did not open help")
+	}
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if app.helpOpen {
+		t.Error("Esc should close help")
+	}
+}
+
+func TestApp_HelpStealsKeys(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	startMsgSelected := app.acct.msglist.Selected()
+	startFolderSelected := app.acct.sidebar.Selected()
+
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !app.helpOpen {
+		t.Fatal("setup: ? did not open help")
+	}
+
+	// Send a battery of keys that would normally do something.
+	stealKeys := []rune{'j', 'J', 'd', 'r', '/'}
+	for _, k := range stealKeys {
+		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{k}})
+	}
+
+	if app.acct.msglist.Selected() != startMsgSelected {
+		t.Errorf("msglist selection moved while help open: %d → %d",
+			startMsgSelected, app.acct.msglist.Selected())
+	}
+	if app.acct.sidebar.Selected() != startFolderSelected {
+		t.Errorf("sidebar selection moved while help open: %d → %d",
+			startFolderSelected, app.acct.sidebar.Selected())
+	}
+	if app.acct.sidebarSearch.State() != SearchIdle {
+		t.Errorf("search state changed while help open: got %v",
+			app.acct.sidebarSearch.State())
+	}
+	if !app.helpOpen {
+		t.Error("help closed unexpectedly during key barrage")
+	}
+}
+
+func TestApp_HelpQuitSwallowed(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !app.helpOpen {
+		t.Fatal("setup: ? did not open help")
+	}
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd != nil {
+		msg := cmd()
+		if _, isQuit := msg.(tea.QuitMsg); isQuit {
+			t.Error("q during help returned tea.Quit; should be swallowed")
+		}
+	}
+	if !app.helpOpen {
+		t.Error("q during help closed the popover; should be swallowed")
+	}
+}
+
+func TestApp_HelpContextSwitchesWithViewer(t *testing.T) {
+	app := newLoadedApp(t, 120, 30)
+
+	// Open help in account context — title is "Message List".
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	view := stripANSI(app.View())
+	if !strings.Contains(view, "Message List") {
+		t.Errorf("account-context help should title 'Message List':\n%s", view)
+	}
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}) // close
+
+	// Open the viewer.
+	app, _ = app.Update(ViewerOpenedMsg{})
+	if !app.viewerOpen {
+		t.Fatal("setup: viewer did not open")
+	}
+
+	// Open help — now the title should be "Message Viewer".
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	view = stripANSI(app.View())
+	if !strings.Contains(view, "Message Viewer") {
+		t.Errorf("viewer-context help should title 'Message Viewer':\n%s", view)
+	}
+}
