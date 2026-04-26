@@ -80,6 +80,25 @@ func (m *MockBackend) ListFolders() ([]Folder, error) {
 // OpenFolder is a no-op for the mock backend.
 func (m *MockBackend) OpenFolder(_ string) error { return nil }
 
+// QueryFolder slices the hardcoded message list. The mock ignores
+// folder name (always returns the same set) and clamps offset/limit
+// to the available range.
+func (m *MockBackend) QueryFolder(_ string, offset, limit int) ([]UID, int, error) {
+	total := len(m.msgs)
+	if offset >= total {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	uids := make([]UID, 0, end-offset)
+	for _, msg := range m.msgs[offset:end] {
+		uids = append(uids, msg.UID)
+	}
+	return uids, total, nil
+}
+
 // FetchHeaders returns the hardcoded message list. The uids parameter is
 // ignored — the mock always returns all messages.
 func (m *MockBackend) FetchHeaders(_ []UID) ([]MessageInfo, error) {

@@ -83,6 +83,11 @@ func (a *JMAPAdapter) OpenFolder(name string) error {
 	return a.doAction(&types.OpenDirectory{Directory: name})
 }
 
+// QueryFolder is not yet implemented; will be replaced in Task 10.
+func (a *JMAPAdapter) QueryFolder(_ string, _, _ int) ([]mail.UID, int, error) {
+	return nil, 0, fmt.Errorf("not implemented")
+}
+
 // FetchHeaders retrieves header info for the given message UIDs.
 func (a *JMAPAdapter) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	return nil, fmt.Errorf("not implemented")

@@ -84,6 +84,35 @@ func TestMockBackendThreading(t *testing.T) {
 	})
 }
 
+func TestMockBackend_QueryFolder(t *testing.T) {
+	b := NewMockBackend()
+	total := len(b.msgs)
+	cases := []struct {
+		name          string
+		offset, limit int
+		wantLen       int
+	}{
+		{"first window", 0, 5, 5},
+		{"past end", total + 10, 5, 0},
+		{"clamps end", total - 2, 10, 2},
+		{"zero limit", 0, 0, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			uids, gotTotal, err := b.QueryFolder("Inbox", tc.offset, tc.limit)
+			if err != nil {
+				t.Fatalf("QueryFolder: %v", err)
+			}
+			if gotTotal != total {
+				t.Errorf("total = %d, want %d", gotTotal, total)
+			}
+			if len(uids) != tc.wantLen {
+				t.Errorf("len(uids) = %d, want %d", len(uids), tc.wantLen)
+			}
+		})
+	}
+}
+
 func TestMockBackend(t *testing.T) {
 	b := NewMockBackend()
 
