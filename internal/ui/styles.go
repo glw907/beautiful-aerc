@@ -4,6 +4,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -82,6 +83,10 @@ type Styles struct {
 	// Top line frame edge
 	TopLine   lipgloss.Style
 	ToastText lipgloss.Style
+
+	// ErrorBanner is the one-line surface above the status bar that
+	// renders the most recent ErrorMsg. Foreground only; no fill.
+	ErrorBanner lipgloss.Style
 }
 
 // applyBg layers the background of bgStyle onto base. Used by row
@@ -215,5 +220,18 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.BgBorder),
 		ToastText: lipgloss.NewStyle().
 			Foreground(t.ColorSuccess),
+
+		ErrorBanner: lipgloss.NewStyle().
+			Foreground(t.ColorError),
 	}
+}
+
+// NewSpinner returns a configured bubbles/spinner.Model with poplar's
+// shared style: Dot variant, FgDim foreground. Centralized so future
+// folder-load and send-progress placeholders inherit the same look.
+func NewSpinner(t *theme.CompiledTheme) spinner.Model {
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(t.FgDim)
+	return sp
 }

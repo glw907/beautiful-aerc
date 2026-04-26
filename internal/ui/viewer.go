@@ -52,14 +52,11 @@ type Viewer struct {
 // NewViewer constructs an empty (closed) viewer. accountName is used
 // to synthesize a To: header until Pass 3 wires real backend headers.
 func NewViewer(styles Styles, t *theme.CompiledTheme, accountName string) Viewer {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = styles.Dim
 	return Viewer{
 		styles:      styles,
 		theme:       t,
 		accountName: accountName,
-		spinner:     sp,
+		spinner:     NewSpinner(t),
 	}
 }
 
