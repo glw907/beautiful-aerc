@@ -1,6 +1,11 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/glw907/poplar/internal/theme"
+)
 
 func TestHelpPopover_AccountGroupsCoverage(t *testing.T) {
 	wantGroups := []string{
@@ -75,4 +80,49 @@ func findAccountRow(group, key string) (bindingRow, bool) {
 		}
 	}
 	return bindingRow{}, false
+}
+
+func TestHelpPopover_AccountViewContent(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	h := NewHelpPopover(styles, HelpAccount)
+
+	view := stripANSI(h.View(80, 24))
+
+	// Title in the top border.
+	if !strings.Contains(view, "Message List") {
+		t.Error("account popover: missing title 'Message List'")
+	}
+
+	// Every group heading appears.
+	for _, want := range []string{
+		"Navigate", "Triage", "Reply",
+		"Search", "Select", "Threads", "Go To",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("account popover: missing group heading %q", want)
+		}
+	}
+
+	// Spot-check binding rows from each group.
+	for _, want := range []string{
+		"j/k", "up/down",
+		"d", "delete",
+		"r", "reply",
+		"/", "search",
+		"v", "select",
+		"F", "fold all",
+		"I", "inbox", "T", "trash",
+		"Enter", "open", "?", "close",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("account popover: missing %q", want)
+		}
+	}
+
+	// Rounded border corners present.
+	for _, want := range []string{"╭", "╮", "╰", "╯"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("account popover: missing border char %q", want)
+		}
+	}
 }

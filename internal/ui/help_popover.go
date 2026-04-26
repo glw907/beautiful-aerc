@@ -1,5 +1,11 @@
 package ui
 
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
 // HelpContext selects which binding layout the popover renders.
 type HelpContext int
 
@@ -143,4 +149,171 @@ var viewerBottomHints = []bindingRow{
 	{"Tab", "link picker", false},
 	{"q", "close", true},
 	{"?", "close", true},
+}
+
+// View renders the popover centered on a width × height area.
+// The caller (App) is expected to pass its full screen dimensions;
+// the popover sizes its box from content and lipgloss.Place
+// handles centering.
+func (h HelpPopover) View(width, height int) string {
+	var (
+		title         string
+		groups        []bindingGroup
+		bottomHints   []bindingRow
+		layoutBuilder func(styles Styles, groups []bindingGroup) string
+	)
+
+	switch h.context {
+	case HelpViewer:
+		title = "Message Viewer"
+		groups = viewerGroups
+		bottomHints = viewerBottomHints
+		layoutBuilder = renderViewerLayout
+	default:
+		title = "Message List"
+		groups = accountGroups
+		bottomHints = accountBottomHints
+		layoutBuilder = renderAccountLayout
+	}
+
+	body := layoutBuilder(h.styles, groups)
+	hintLine := renderHintLine(h.styles, bottomHints)
+	inner := body + "\n\n" + hintLine
+
+	// Wrap inner in a rounded box, with top border drawn manually
+	// so the title can be embedded. Border(style, top, right, bottom, left).
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder(), false, true, true, true).
+		BorderForeground(h.styles.FrameBorder.GetForeground()).
+		Padding(1, 2).
+		Render(inner)
+
+	boxWidth := lipgloss.Width(box)
+	topEdge := h.renderTopEdge(title, boxWidth)
+	popover := topEdge + "\n" + box
+
+	return lipgloss.Place(
+		width, height,
+		lipgloss.Center, lipgloss.Center,
+		popover,
+	)
+}
+
+// renderTopEdge builds "╭─ <title> ───╮" at the box's natural width.
+func (h HelpPopover) renderTopEdge(title string, boxWidth int) string {
+	titleSeg := h.styles.HelpTitle.Render(title)
+	border := h.styles.FrameBorder
+	prefix := border.Render("╭─ ") + titleSeg + border.Render(" ")
+	visible := lipgloss.Width(prefix) + 1 // +1 for the closing ╮
+	pad := boxWidth - visible
+	if pad < 0 {
+		pad = 0
+	}
+	return prefix + border.Render(strings.Repeat("─", pad)+"╮")
+}
+
+// renderAccountLayout builds the four-section layout for the
+// account context: three rows (Nav/Triage/Reply, then
+// Search/Select/Threads, then Go To grid). Bottom hint line is
+// added by View.
+func renderAccountLayout(styles Styles, groups []bindingGroup) string {
+	row1 := lipgloss.JoinHorizontal(lipgloss.Top,
+		renderGroup(styles, groups[0]),
+		renderGap(),
+		renderGroup(styles, groups[1]),
+		renderGap(),
+		renderGroup(styles, groups[2]),
+	)
+	row2 := lipgloss.JoinHorizontal(lipgloss.Top,
+		renderGroup(styles, groups[3]),
+		renderGap(),
+		renderGroup(styles, groups[4]),
+		renderGap(),
+		renderGroup(styles, groups[5]),
+	)
+	gotoBlock := renderGotoGrid(styles, groups[6])
+	return lipgloss.JoinVertical(lipgloss.Left,
+		row1, "", row2, "", gotoBlock)
+}
+
+// renderViewerLayout builds the single-row layout for the viewer
+// context: Nav/Triage/Reply side-by-side.
+func renderViewerLayout(styles Styles, groups []bindingGroup) string {
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		renderGroup(styles, groups[0]),
+		renderGap(),
+		renderGroup(styles, groups[1]),
+		renderGap(),
+		renderGroup(styles, groups[2]),
+	)
+}
+
+// renderGroup builds a single labeled column: heading on top,
+// then key/desc rows.
+func renderGroup(styles Styles, g bindingGroup) string {
+	lines := []string{styles.HelpGroupHeader.Render(g.title)}
+	for _, r := range g.rows {
+		lines = append(lines, renderRow(styles, r))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+// renderRow builds "<key>  <desc>" with the wired-vs-unwired
+// styling. Wired: bright-bold key + dim desc. Unwired: entire
+// row dim (no bold).
+func renderRow(styles Styles, r bindingRow) string {
+	const keyWidth = 5 // padded right-alignment column for keys
+	keyPadded := r.key
+	for lipgloss.Width(keyPadded) < keyWidth {
+		keyPadded += " "
+	}
+	if r.wired {
+		return styles.HelpKey.Render(keyPadded) + "  " +
+			styles.Dim.Render(r.desc)
+	}
+	// Unwired: render key + desc together in Dim, no bold.
+	return styles.Dim.Render(keyPadded + "  " + r.desc)
+}
+
+// renderGap returns the inter-column spacer used between groups
+// on a layout row.
+func renderGap() string {
+	return "    "
+}
+
+// renderGotoGrid builds the Go To group as a 3×2 grid:
+// "I inbox    D drafts    S sent" / "A archive  X spam  T trash".
+// The group's heading is rendered above. Falls back to a flat
+// column if the row count drifts from 6 — defensive against
+// careless edits to the binding tables.
+func renderGotoGrid(styles Styles, g bindingGroup) string {
+	heading := styles.HelpGroupHeader.Render(g.title)
+	if len(g.rows) != 6 {
+		return renderGroup(styles, g)
+	}
+	gap := renderGap()
+	row1 := renderRow(styles, g.rows[0]) + gap +
+		renderRow(styles, g.rows[1]) + gap +
+		renderRow(styles, g.rows[2])
+	row2 := renderRow(styles, g.rows[3]) + gap +
+		renderRow(styles, g.rows[4]) + gap +
+		renderRow(styles, g.rows[5])
+	return lipgloss.JoinVertical(lipgloss.Left, heading, row1, row2)
+}
+
+// renderHintLine builds the bottom hint line: "Enter  open    ?  close".
+// Each hint uses the same wired-vs-unwired styling as a row.
+func renderHintLine(styles Styles, hints []bindingRow) string {
+	parts := make([]string, 0, len(hints))
+	for _, h := range hints {
+		var part string
+		if h.wired {
+			part = styles.HelpKey.Render(h.key) + "  " +
+				styles.Dim.Render(h.desc)
+		} else {
+			part = styles.Dim.Render(h.key + "  " + h.desc)
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "    ")
 }
