@@ -15,22 +15,28 @@ the ADR(s) that justify them.
 - Repository organization: `cmd/poplar/` holds CLI wiring only.
   `internal/ui/` holds the tea.Model tree. `internal/mail/` holds
   the `Backend` interface and the folder classifier.
-  `internal/mailworker/` holds forked aerc IMAP + JMAP worker code,
-  annotated with provenance comments. `internal/mailjmap/` holds
-  the async→sync adapter that bridges the worker to the Backend
-  interface. `internal/config/` holds `AccountConfig`, `UIConfig`,
-  and `LoadUI`. `internal/theme/` holds compiled lipgloss themes.
+  `internal/mailjmap/` implements `Backend` against
+  `git.sr.ht/~rockorager/go-jmap` (Fastmail). `internal/mailimap/`
+  implements `Backend` against `github.com/emersion/go-imap` v1
+  (Gmail). `internal/mailauth/` vendors small XOAUTH2 + TCP
+  keepalive snippets with provenance comments.
+  `internal/config/` holds `AccountConfig`, `UIConfig`, and
+  `LoadUI`. `internal/theme/` holds compiled lipgloss themes.
   `internal/filter/`, `internal/content/`, `internal/tidy/` are
   library packages awaiting their poplar consumers.
-- Workers are forked from aerc
-  (`git.sr.ht/~rjarry/aerc`) on 2026-04-09. The fork lives under
-  `internal/mailworker/`. Upstream fixes are cherry-picked, never
-  `go get -u`'d.
+- Mail backends call upstream libraries directly. No aerc fork.
+  The library family is emersion (`go-imap` v1, `go-message`,
+  `go-smtp`, `go-sasl`, `go-webdav`, `go-vcard`) plus
+  `rockorager/go-jmap`. Vendored snippets are limited to MIT-
+  licensed helpers that fill specific gaps (XOAUTH2 against
+  `go-sasl`, Gmail X-GM-EXT against `go-imap`); each carries a
+  top-of-file provenance comment. The Pass 1-2 aerc fork
+  (`internal/mailworker/`) is being removed in Pass 3.
 - Backends supported in v1: Fastmail JMAP and Gmail IMAP. No
   maildir, mbox, or notmuch.
-- The `mail.Backend` interface is synchronous blocking. The JMAP
-  adapter bridges the forked worker's async channels to blocking
-  calls via a pump goroutine.
+- The `mail.Backend` interface is synchronous blocking. Both
+  backend packages call their underlying libraries synchronously
+  — no pump goroutine, no async-to-sync bridge.
 - `internal/ui/` follows the Elm architecture — invoke the
   `elm-conventions` skill before touching any file there. All
   state lives in tea.Model structs; mutations happen only in
@@ -264,10 +270,11 @@ invariant. ADR numbering is chronological.
 
 | Invariant theme | ADRs |
 |---|---|
-| Monorepo, single binary, fork policy | 0001, 0002, 0058 |
+| Monorepo, single binary | 0001, 0058 |
+| Direct-on-libraries mail stack (no aerc fork) | 0002 (superseded by 0075), 0006 (superseded by 0075), 0008 (superseded by 0075), 0010 (superseded by 0075), 0012 (superseded by 0075), 0075 |
 | Lipgloss + compiled themes, styling discipline | 0004, 0043, 0046 |
-| JMAP + IMAP only, minimal account config | 0008, 0012, 0009 |
-| Mail backend adapter synchronous | 0011 |
+| JMAP + IMAP only, minimal account config | 0009, 0075 |
+| Mail backend interface synchronous | 0010 (superseded by 0075), 0075 |
 | Config layout, folder classifier, UI config | 0013, 0052, 0053 |
 | Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054 |
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |

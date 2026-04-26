@@ -1,6 +1,6 @@
 ---
 title: Split aerc lib/ into focused packages
-status: accepted
+status: superseded by 0075
 date: 2026-04-09  # Pass 1
 ---
 
@@ -19,4 +19,8 @@ packages: `auth/` (OAuth), `keepalive/` (TCP), `xdg/` (paths),
 
 ## Consequences
 
-No follow-on notes recorded.
+**Superseded 2026-04-25 by ADR-0075.** The split packages
+disappear with the fork in Pass 3. The two pieces poplar still
+needs (`auth/xoauth2.go`, `keepalive/`) move to
+`internal/mailauth/` as small vendored snippets with provenance
+comments preserved.

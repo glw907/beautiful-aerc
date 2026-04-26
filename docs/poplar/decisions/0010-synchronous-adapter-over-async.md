@@ -1,6 +1,6 @@
 ---
 title: Synchronous adapter over async
-status: accepted
+status: superseded by 0075
 date: 2026-04-09  # Pass 2
 ---
 
@@ -22,4 +22,8 @@ goroutine.
 
 ## Consequences
 
-No follow-on notes recorded.
+**Superseded 2026-04-25 by ADR-0075.** The synchronous shape of
+`mail.Backend` is preserved, but the pump-goroutine adapter
+disappears: with no aerc fork there is no async channel idiom to
+bridge. `internal/mailjmap/` and `internal/mailimap/` call their
+respective libraries synchronously from the start.

@@ -1,12 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 2.5b-6 shipped 2026-04-25. Error banner +
-spinner consolidation: `ErrorMsg{Op, Err}` is the canonical Cmd
-error type; `App` owns `lastErr` and renders a foreground-only row
-above the status bar (ADR-0073). Shared `NewSpinner(t)` centralizes
-the placeholder spinner (ADR-0074). Next is Pass 2.9 (emersion vs
-aerc fork research, BACKLOG #10) — must settle the library stack
-before Pass 3 wires anything live.
+**Current pass:** Pass 2.9 shipped 2026-04-25. Library-stack
+research settled BACKLOG #10: direct-on-libraries
+(`emersion/go-imap` v1 + `rockorager/go-jmap`); ADR-0075
+supersedes 0002/0006/0008/0010/0012. Pass 3 reshapes around it.
 
 ## Passes
 
@@ -19,39 +16,39 @@ before Pass 3 wires anything live.
 | 2.5b-5 | Prototype: help popover | done |
 | 2.5b-6 | Prototype: error banner + spinner consolidation | done |
 | 2.5b-train | Tooling: mailrender training capture | pending (after Pass 3) |
-| 2.9 | Research: emersion vs aerc fork (BACKLOG #10) | next |
-| 3 | Wire prototype to live backend | pending (gated on Pass 2.9) |
+| 2.9 | Research: emersion vs aerc fork (BACKLOG #10) | done |
+| 3 | JMAP direct-on-rockorager + delete fork + wire live | next |
 | 6 | Triage actions (bundles toast + undo bar) | pending |
-| 8 | Gmail IMAP | pending |
-| 9, 9.5 | Compose + send, tidytext in compose | pending |
+| 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
+| 9, 9.5 | Compose + send (emersion/go-smtp), tidytext in compose | pending |
 | 10, 11 | Config, polish | pending |
 | 1.1 | Neovim --embed RPC | pending |
 
-## Next starter prompt (Pass 2.9)
+## Next starter prompt (Pass 3)
 
-> **Goal.** Decide whether to keep the aerc IMAP+JMAP fork
-> (ADR-0058) or migrate to the emersion stack (`go-imap`, `go-smtp`,
-> `go-message`, `go-webdav`, `go-vcard`). Output: research doc +
-> ADR (potentially superseding 0058) so Pass 3 starts settled.
+> **Goal.** Rewrite `internal/mailjmap/` directly against
+> `rockorager/go-jmap` (synchronous), delete `internal/mailworker/`,
+> wire the prototype to live Fastmail. Per ADR-0075. Gmail IMAP
+> deferred to Pass 8.
 >
-> **Scope.** Research-only — no production code. Throwaway spike
-> under `experiments/` allowed if needed for evidence. Deliverables:
-> `docs/poplar/research/YYYY-MM-DD-mail-library-stack.md` (library
-> inventory, JMAP gap, fork-burden comparison, recommendation) +
-> ADR.
+> **Scope.** New sync `internal/mailjmap/` on `rockorager/go-jmap`.
+> Vendor fork's `auth/xoauth2.go` + `keepalive/` into
+> `internal/mailauth/` with provenance comments. Delete
+> `internal/mailworker/` entirely (including IMAP). Wire Fastmail
+> through `App`. Address BACKLOG #11 (MIME-aware `FetchBody`).
 >
-> **Settled:** v1 backends are Fastmail JMAP + Gmail IMAP
-> (ADR-0008/0012); Backend interface is synchronous (ADR-0011).
+> **Settled:** Library choice + sync shape (ADR-0075).
+> Classification stays in `internal/mail/`. Wire types stay
+> `mail.MessageInfo` / `mail.Folder` — aerc `models/` is dropped.
 >
-> **Still open — brainstorm:** Go JMAP landscape (BACKLOG #10:
-> emersion has no JMAP client — check pkg.go.dev/`jmap`); options
-> if thin — (a) drop JMAP, use IMAP for Fastmail (loses push,
-> delta sync, atomic ops); (b) hybrid emersion-IMAP + aerc-JMAP;
-> (c) find/write a Go JMAP client; aerc-fork maintenance burden
-> since 2026-04-09; SMTP/CardDAV future needs (Pass 9, post-1.0).
+> **Open — brainstorm:** push/EventSource shape on a sync
+> interface (event channel vs callback); blob/state cache for v1
+> (skip? in-memory?); connection state → `●/◐/○`; large-mailbox
+> Email/get pagination.
 >
-> **Approach.** Brainstorm, write the research doc, land the ADR
-> (supersede 0058 in place if migrating).
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-jmap-direct-backend.md`,
+> implement. Standard pass-end checklist applies.
 
 ## Audits
 
