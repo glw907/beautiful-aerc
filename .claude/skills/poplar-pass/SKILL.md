@@ -28,7 +28,16 @@ of a pass.
    (invoke `superpowers:brainstorming`) and write a plan doc at
    `docs/superpowers/plans/YYYY-MM-DD-<topic>.md` before touching
    code.
-4. Execute the plan.
+4. **If the pass touches `internal/ui/`** — read
+   `docs/poplar/bubbletea-conventions.md`. The plan doc must name
+   the bubbles/glamour analogue for each new component (viewport,
+   list, table, textinput, textarea, spinner) and call out any
+   deviation explicitly. "Custom because X" is fine; "we just
+   wrote a custom thing" is not. The size contract, wordwrap +
+   hardwrap discipline, and JoinHorizontal trust contract are
+   non-negotiable defaults — deviations from them appear in the
+   plan with rationale.
+5. Execute the plan.
 
 ## Ending a pass — the consolidation ritual
 
@@ -38,6 +47,47 @@ until every step has been run.
 ### 1. /simplify
 
 Run the `simplify` skill. Fix anything it flags before continuing.
+
+### 1b. Idiomatic-bubbletea check (only if `internal/ui/` changed)
+
+Open `docs/poplar/bubbletea-conventions.md` and run its **§10
+Review checklist** against the pass's UI diff. Each item is
+verifiable from the diff or from a tmux capture:
+
+- [ ] Every changed/new component's `View()` returns no lines
+      wider than its assigned width and no more rows than its
+      assigned height. **Verified with a live tmux capture at
+      120×40** (and at the minimum viable width if the pass
+      touches layout).
+- [ ] No state mutation in `View()` or in any `tea.Cmd` closure.
+- [ ] All blocking I/O lives inside `tea.Cmd`.
+- [ ] Width math uses `lipgloss.Width` / `ansi.StringWidth` /
+      `displayCells` for icon strings, never `len()`.
+- [ ] Renderers that take a `width` parameter honor it via
+      wordwrap + hardwrap (or equivalent) — wordwrap-only is
+      insufficient.
+- [ ] No defensive parent-side clipping — a `MaxWidth` on
+      `child.View()` output is a sign the child isn't honoring
+      its contract; fix the child instead.
+- [ ] Children signal parents via `tea.Msg` types, not callbacks
+      or parent pointers.
+- [ ] `WindowSizeMsg` is forwarded into children after the parent
+      stores dims and calls `SetSize`.
+- [ ] Keys declared as `key.Binding`; dispatched with
+      `key.Matches`. New keys included in the help vocabulary
+      per ADR-0072.
+- [ ] No deprecated API usage (`HighPerformanceRendering`,
+      `tea.Sequentially`, package-level `spinner.Tick`,
+      `*Model.NewModel`, `EnterAltScreen`/`EnableMouse*` in
+      `Init`).
+
+Any deviation introduced this pass must be named in the ADR
+written in step 2 with explicit rationale. "We deviated because X"
+is fine; silent deviation is not.
+
+If the pass produced a conventions audit (e.g. when a new component
+is introduced and wants validation), link it from the pass entry
+in STATUS.md so future passes can find it.
 
 ### 2. Write new ADRs for every design decision made this pass
 
@@ -77,9 +127,10 @@ binding facts. For each ADR written in step 2:
 - **Rewrite** an existing fact if the decision changed it.
 - **Remove** a fact if the decision made it obsolete.
 
-**Never append blindly.** The file is 150 lines max. If you add
-without removing, it grows unbounded. Consider which existing facts
-this pass made redundant or wrong.
+**Never append blindly.** The file is 300 lines max (enforced by
+`.claude/hooks/claude-md-size.sh`). If you add without removing, it
+grows unbounded. Consider which existing facts this pass made
+redundant or wrong.
 
 Update the decision index table at the bottom to include the new
 ADR numbers.
