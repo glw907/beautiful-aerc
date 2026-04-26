@@ -114,7 +114,24 @@ the ADR(s) that justify them.
   first; search keys and folder jumps are inert.
 - Mark-read on viewer open is optimistic: `MessageList.MarkSeen`
   flips the local seen flag immediately and the backend `MarkRead`
-  Cmd runs in parallel. Errors drop silently until Pass 2.5b-6.
+  Cmd runs in parallel. Failures surface via `ErrorMsg` into the
+  App-owned banner.
+- `ErrorMsg{Op string; Err error}` is the canonical Cmd error type.
+  Every poplar `tea.Cmd` that can fail returns `ErrorMsg` with a
+  short verb-phrase `Op` ("mark read", "fetch body", "open folder").
+  `App` owns `lastErr ErrorMsg`; `App.Update` intercepts every
+  `ErrorMsg` and stores it (last-write-wins). The banner is one
+  foreground-only row above the status bar (`⚠ <Op>: <Err>`),
+  truncated to width with `…`. When `lastErr.Err != nil` the account
+  region shrinks by one cell so total view height is unchanged. The
+  banner is chrome — it does not steal keys. Help short-circuits
+  `View`, so the banner is hidden along with everything else while a
+  modal is open. No dismiss key, no severity, no queue in v1.
+- The bubbles/spinner placeholder is constructed via the shared
+  `NewSpinner(t *theme.CompiledTheme)` helper in
+  `internal/ui/styles.go`: Dot variant, `FgDim` foreground. Every
+  placeholder spinner (viewer load now; folder load and send progress
+  later) goes through this constructor.
 - Body content rendering caps at `maxBodyWidth = 72` cells.
   Headers wrap at the panel content width (uncapped). Outbound
   links are harvested by `content.RenderBodyWithFootnotes` into
@@ -216,9 +233,9 @@ the ADR(s) that justify them.
   viewer. Unread → marked seen optimistically. `q`/`Esc` closes
   the viewer and the cursor stays on the same row.
 - Viewer link launch: `1`–`9` open the Nth harvested URL via
-  `xdg-open` (fire-and-forget; errors drop until Pass 2.5b-6).
-  `Tab` is reserved for the link picker (Pass 2.5b-4b) — a no-op
-  in Pass 2.5b-4.
+  `xdg-open` (fire-and-forget; `xdg-open` itself detaches and exit
+  status is unreliable). `Tab` is reserved for the link picker
+  (Pass 2.5b-4b) — a no-op in Pass 2.5b-4.
 
 ## Build & verification
 
@@ -262,3 +279,4 @@ invariant. ADR numbering is chronological.
 | Sidebar search shelf, filter-and-hide, thread-level | 0064 |
 | Viewer prototype, footnote harvesting, optimistic mark-read | 0065, 0066, 0067, 0069 |
 | Help popover modal, future-binding policy | 0071, 0072 |
+| Error banner, ErrorMsg, shared spinner | 0073, 0074 |
