@@ -26,6 +26,10 @@
           {
             "type": "command",
             "command": ".claude/hooks/elm-architecture-lint.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/bubbletea-conventions-lint.sh"
           }
         ]
       },
@@ -39,6 +43,10 @@
           {
             "type": "command",
             "command": ".claude/hooks/elm-architecture-lint.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/bubbletea-conventions-lint.sh"
           }
         ]
       }
