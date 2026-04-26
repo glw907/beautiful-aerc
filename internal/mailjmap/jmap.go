@@ -21,13 +21,19 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
+// jmapClient is the subset of *jmap.Client poplar uses. The real
+// *jmap.Client satisfies it; tests substitute a fake.
+type jmapClient interface {
+	Do(req *jmap.Request) (*jmap.Response, error)
+}
+
 // Backend is one JMAP account. Construct with New, drive lifecycle
 // with Connect/Disconnect.
 type Backend struct {
 	cfg config.AccountConfig
 
 	mu      sync.Mutex
-	client  *jmap.Client
+	client  jmapClient
 	session *jmap.Session
 	current string
 	folders map[string]folderEntry
@@ -56,6 +62,22 @@ func New(cfg config.AccountConfig) *Backend {
 		blobIDs: make(map[mail.UID]string),
 		states:  make(map[string]string),
 	}
+}
+
+// NewWithClient is for tests. It bypasses the network handshake and
+// installs a pre-built client that already satisfies the session
+// contract. The caller is responsible for populating b.session if any
+// method under test reads PrimaryAccounts — assign it directly:
+//
+//	b := NewWithClient(cfg, fake)
+//	b.session = &jmap.Session{...}
+func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
+	b := New(cfg)
+	b.client = c
+	cache, _ := lru.New[string, []byte](bodyCacheSize)
+	b.bodies = cache
+	b.updates = make(chan mail.Update, updatesBuffer)
+	return b
 }
 
 // AccountName satisfies mail.Backend.
