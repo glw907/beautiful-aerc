@@ -33,11 +33,25 @@ const (
 	UpdateFlagsChanged
 	UpdateExpunge
 	UpdateFolderInfo
+	UpdateConnState
 )
 
-// Update represents an asynchronous update from the backend.
+// ConnState classifies the backend's transport state. Carried on
+// Update.ConnState only when Type == UpdateConnState.
+type ConnState int
+
+const (
+	ConnOffline ConnState = iota
+	ConnReconnecting
+	ConnConnected
+)
+
+// Update represents an asynchronous update from the backend. The
+// ConnState field is populated only for UpdateConnState; for every
+// other Type it is the zero value (ConnOffline) and ignored.
 type Update struct {
-	Type   UpdateType
-	Folder string
-	UIDs   []UID
+	Type      UpdateType
+	Folder    string
+	UIDs      []UID
+	ConnState ConnState
 }
