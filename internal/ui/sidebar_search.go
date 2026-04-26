@@ -44,9 +44,17 @@ func (s SidebarSearch) State() SearchState { return s.state }
 func (s SidebarSearch) Query() string      { return s.input.Value() }
 func (s SidebarSearch) Mode() SearchMode   { return s.mode }
 
-// SetSize updates the shelf's width. Height is fixed at searchShelfRows.
+// SetSize updates the shelf's width. Height is fixed at
+// searchShelfRows. Also clamps the embedded textinput so its
+// View() never produces lines wider than the sidebar column.
 func (s *SidebarSearch) SetSize(width int) {
 	s.width = width
+	// Reserve cells for the leading "  " indent (2), the search
+	// icon (2), and the gap before the prompt (1) — see
+	// renderPromptRow. Floor at 1 so textinput never gets a
+	// negative width.
+	const promptOverhead = 5
+	s.input.Width = max(1, width-promptOverhead)
 }
 
 // Activate transitions Idle → Typing and focuses the text input.
