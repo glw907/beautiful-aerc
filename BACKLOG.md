@@ -4,10 +4,19 @@
 
 ## High
 
+- [ ] **#17** Migrate AccountTab + Viewer key dispatch to `key.Matches` `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
+  Pass 4 audit-A3 (remainder). The App.Update slice was migrated in Pass 4; the AccountTab and Viewer handlers still use `switch msg.String()` for ~30 dispatch sites. The conventions doc and ref-apps §3/§8 establish `key.Matches` as the production norm — string switches are invisible to `bubbles/help` integration, prevent `Enabled()`-gated bindings, and block any future rebinding feature. Suggested approach: introduce an `AccountKeys` struct in `keys.go` (parallel to `GlobalKeys`) and a `ViewerKeys` struct, wire them through the model constructors, replace each dispatch chain. Should land as a dedicated structural-cleanup pass; sized at ~3-4 commits when broken up by component. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A3.
+
 - [x] **#7** Lipgloss renderer: missing first-level blockquote wrapping `#rendering` `#mailrender` *(2026-04-10)*
   Fixed with two changes: (1) post-parse `wrapImpliedQuotes` wraps unquoted content after a `QuoteAttribution` in a `Blockquote{Level: 1}`, incrementing inner blockquote levels; (2) renderer prefix changed from `strings.Repeat("> ", b.Level)` to `"> "` so structural nesting handles depth without double-counting. Only triggers at top level to avoid compounding. Verified against Yahoo deeply-threaded HTML and plain text emails.
 
 ## Someday
+
+- [ ] **#19** Refactor `App.View` to trust `AccountTab.View` line widths `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
+  Pass 4 audit-A10. `App.View` currently iterates every line of `m.acct.View()` to measure and pad it before appending the right border — parent-side post-processing on child output. The conventions doc lists this as an anti-pattern (§8). Once #17 lands and AccountTab fully honors its width contract, App.View can append the border without per-line measurement. Land after #17. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A10.
+
+- [ ] **#18** Replace zero-latency intra-model `tea.Cmd` signals with direct delegation `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
+  Pass 4 audit-A9. `viewerOpenedCmd` / `viewerClosedCmd` / `viewerScrollCmd` / `folderChangedCmd` emit messages from AccountTab to App as zero-latency tea.Cmds. The bubbletea source explicitly flags this as an anti-pattern (`tea.go:62-64`): "there's almost never a reason to use a command to send a message to another part of your program. That can almost always be done in the update function." Refactor: App.Update inspects AccountTab state directly after delegation (e.g. expose `IsViewerOpen()` / `SelectedFolderInfo()` on AccountTab) and updates chrome fields without a Cmd round-trip. Removes one frame of lag from the footer/status bar. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A9.
 
 - [ ] **#15** Help popover: responsive layout for narrow terminals `#improvement` `#poplar` *(2026-04-25)*
   Popover has a fixed natural width derived from content (~62 cols account, ~58 viewer). On terminals narrower than the popover, `lipgloss.Place` clips gracefully but the layout breaks visually. A future polish pass could reflow into a single column or drop columns based on terminal width. Surfaced during Pass 2.5b-5; out of scope per ADR-0071.
@@ -24,6 +33,9 @@
   Email browsing within neovim (folder list, message list, viewer as buffers), telescope pickers, compose integration, poplar command passthrough. Requires IPC/RPC interface in poplar. Design when core client is stable.
 
 ## Medium
+
+- [x] **#16** ~~Sidebar rows mis-sized: Nerd Font SPUA-A icons render double-width but `lipgloss.Width` reports 1~~ `#bug` `#poplar` *(2026-04-26)*
+  Resolved 2026-04-26 by Pass 4 audit-A1. New `displayCells` helper in `internal/ui/iconwidth.go` corrects the SPUA-A undercount (+1 per U+F0000–U+FFFFD codepoint); `fillRowToWidth`, sidebar `leftWidth`, and the message-list flag column now use it. Flag column bumped from 1 to 2 cells with a matching no-flag pad. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A1.
 
 - [ ] **#12** Pass 9.5 prereq: collapse `internal/tidy/` to drop CLI machinery `#improvement` `#poplar` *(2026-04-25)*
   Audit-2 verdict on `internal/tidy/` was **collapse** — the core algorithm (`SplitQuoted`/`Reassemble`/`BuildPrompt`/`CallAPI`/`Tidy`) fits the Pass 9.5 compose consumer well, but the package carries CLI ergonomics from a previous standalone-binary lineage that won't fit poplar's unified config. When Pass 9.5 lands, delete `LoadConfig`, `ApplyRuleOverrides`, `ApplyStyleOverrides`, `ConfigString`, `ResolveAPIKey`, and their tests (~100–150 LOC across source + tests). Move any surviving validators next to the unified config decode site in `internal/config/`. Optionally unexport `CallAPI` and `BuildPrompt` if no test reaches them after the trim. Goal: tidy exposes only `Config`, `DefaultConfig()`, `Tidy()`, `Result`, and the status constants. **Don't pre-emptively collapse** — wait until Pass 9.5 surfaces concrete needs that may reshape the trim. Findings: `docs/poplar/audits/2026-04-25-library-packages-findings.md`.
