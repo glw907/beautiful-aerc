@@ -181,6 +181,19 @@ func (h HelpPopover) View(width, height int) string {
 	topEdge := h.renderTopEdge(title, boxWidth)
 	popover := topEdge + "\n" + box
 
+	// lipgloss.Place is a no-op when content is wider than the
+	// target, so without a guard the popover would overflow the
+	// terminal at narrow widths. Render a fallback notice instead.
+	if boxWidth > width || lipgloss.Height(popover) > height {
+		notice := h.styles.Dim.Render(
+			"Terminal too narrow for help popover")
+		return lipgloss.Place(
+			width, height,
+			lipgloss.Center, lipgloss.Center,
+			notice,
+		)
+	}
+
 	return lipgloss.Place(
 		width, height,
 		lipgloss.Center, lipgloss.Center,
