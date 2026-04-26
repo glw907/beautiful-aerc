@@ -144,6 +144,23 @@ signal for read state, and it leaves the hue budget free for the
 cursor and for flagged-unread, the two things that genuinely need to
 pop.
 
+### Help popover (modal overlay, `?`)
+
+| Field | fg | bg | Role |
+|-------|----|----|------|
+| `HelpTitle` | `AccentPrimary` (bold) | — | Popover title embedded in top border ("Message List" / "Message Viewer") |
+| `HelpGroupHeader` | `FgBright` (bold) | — | Group headings ("Navigate", "Triage", etc.) |
+| `HelpKey` | `FgBright` (bold) | — | Key column for *wired* rows |
+| `Dim` (reuse) | `FgDim` | — | Description column (all rows) and entire key+desc for *unwired* (future) rows |
+| `FrameBorder` (reuse) | `BgBorder` | — | Rounded box border |
+
+**Wired vs. unwired:** rows whose binding is not yet implemented
+render the entire row in `Dim` (no bold). Group headings stay
+`HelpGroupHeader` (bright) regardless. The contrast between the
+bright-bold key column on wired rows and the flat-dim key column
+on unwired rows is the only visual signal — no glyph, no legend.
+See ADR for help popover future-binding policy.
+
 ### Tab bar (unused in current chrome, reserved)
 
 | Field | fg | bg | Role |
