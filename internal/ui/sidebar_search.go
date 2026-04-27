@@ -196,7 +196,7 @@ func (s SidebarSearch) renderInfoRow() string {
 
 	var countText string
 	var countStyled string
-	if s.Query() != "" && s.results == 0 {
+	if s.results == 0 {
 		countText = "no results"
 		countStyled = applyBg(s.styles.SearchNoResults, s.styles.SidebarBg).Render(countText)
 	} else {
