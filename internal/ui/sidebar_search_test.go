@@ -102,9 +102,10 @@ func TestSidebarSearchActivate(t *testing.T) {
 		}
 	})
 
-	t.Run("typing state renders [name] mode badge", func(t *testing.T) {
+	t.Run("typing state with query renders [name] mode badge", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30)
 		s.Activate()
+		s.input.SetValue("x")
 		plain := stripANSI(s.View())
 		if !strings.Contains(plain, "[name]") {
 			t.Errorf("typing view missing [name] badge: %q", plain)
@@ -242,13 +243,52 @@ func TestSidebarSearchModeCycle(t *testing.T) {
 		}
 	})
 
-	t.Run("view shows [all] after Tab", func(t *testing.T) {
+	t.Run("view shows [all] after Tab with non-empty query", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30)
 		s.Activate()
+		s.input.SetValue("x")
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
 		plain := stripANSI(s.View())
 		if !strings.Contains(plain, "[all]") {
 			t.Errorf("view missing [all] badge after Tab: %q", plain)
+		}
+	})
+}
+
+func TestSidebarSearchEmptyQuerySuppressesCount(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	t.Run("info row has no count text when query is empty after Activate", func(t *testing.T) {
+		s := NewSidebarSearch(styles, 30)
+		s.Activate()
+		lines := strings.Split(stripANSI(s.View()), "\n")
+		if len(lines) != 3 {
+			t.Fatalf("view has %d rows, want 3", len(lines))
+		}
+		infoRow := lines[2]
+		if strings.Contains(infoRow, "results") || strings.Contains(infoRow, "result") {
+			t.Errorf("info row should have no count with empty query, got %q", infoRow)
+		}
+		for _, ch := range infoRow {
+			if ch >= '0' && ch <= '9' {
+				t.Errorf("info row should contain no digit with empty query, got %q", infoRow)
+				break
+			}
+		}
+	})
+
+	t.Run("count appears after typing one character", func(t *testing.T) {
+		s := NewSidebarSearch(styles, 30)
+		s.Activate()
+		s.SetResultCount(5)
+		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		lines := strings.Split(stripANSI(s.View()), "\n")
+		if len(lines) != 3 {
+			t.Fatalf("view has %d rows, want 3", len(lines))
+		}
+		infoRow := lines[2]
+		if !strings.Contains(infoRow, "results") {
+			t.Errorf("info row should show count after typing, got %q", infoRow)
 		}
 	})
 }

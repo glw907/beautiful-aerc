@@ -181,10 +181,11 @@ func (s SidebarSearch) renderPromptRow() string {
 }
 
 // renderInfoRow renders the mode badge and result count. Blank in
-// idle state; in typing/active renders "[name]" or "[all]" on the
-// left and the result count or "no results" on the right.
+// idle state or when the query is empty; in typing/active with a
+// non-empty query renders "[name]" or "[all]" on the left and the
+// result count or "no results" on the right.
 func (s SidebarSearch) renderInfoRow() string {
-	if s.state == SearchIdle {
+	if s.state == SearchIdle || s.Query() == "" {
 		return s.renderBlankRow()
 	}
 	modeLabel := "[name]"
