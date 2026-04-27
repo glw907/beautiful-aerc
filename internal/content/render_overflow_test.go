@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -31,7 +32,7 @@ func TestFootnoteURLNoOverflow(t *testing.T) {
 			if len(urls) != 1 {
 				t.Fatalf("expected 1 url, got %d", len(urls))
 			}
-			if !strings.Contains(out, "[^1]:") {
+			if !strings.Contains(ansi.Strip(out), "[^1]:") {
 				t.Errorf("footnote entry missing from output:\n%s", out)
 			}
 			widthCap := w
