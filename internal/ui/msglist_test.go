@@ -1062,3 +1062,56 @@ func TestMessageListPlaceholder(t *testing.T) {
 		}
 	})
 }
+
+func TestMessageList_ColumnGaps(t *testing.T) {
+	// Regression lock for F5: exactly 2 spaces between sender column and
+	// subject, and between subject and date. The layout for a read row
+	// with no flag:
+	//
+	//   cursor(1) + sp×2(2) + flag(2) + sp×2(2) + sender(22) + sp×2(2)
+	//   + subject(w-48) + sp×2(2) + date(14) + sp(1)
+	//
+	// Total fixed cells: 1+2+2+2+22+2+2+14+1 = 48.
+	//
+	// A read message with no flag glyph means the flag cell is two ASCII
+	// spaces. The cursor glyph ▐ is 1 display cell but 3 bytes, so we
+	// index by rune position (which equals display-cell position for the
+	// ASCII characters that fill the rest of this row).
+	styles := NewStyles(theme.Nord)
+	const w = 100
+
+	msg := mail.MessageInfo{
+		UID:      "1",
+		ThreadID: "1",
+		From:     "Alice Johnson",  // 13 chars; padded to 22
+		Subject:  "Hello world",   // short; padded to fill subject budget
+		Date:     "Mon 2026-04-27", // 14 chars; fits date column exactly
+		Flags:    mail.FlagSeen,   // read, no flag glyph
+	}
+	ml := NewMessageList(styles, []mail.MessageInfo{msg}, w, 3)
+	line := stripANSI(strings.Split(ml.View(), "\n")[0])
+	runes := []rune(line)
+
+	if got := displayCells(strings.Split(ml.View(), "\n")[0]); got != w {
+		t.Fatalf("row displayCells = %d, want %d: %q", got, w, line)
+	}
+
+	// Sender block ends at rune index 28 (0-indexed):
+	//   cursor(1) + sp×2(2) + flag(2) + sp×2(2) + sender(22) - 1 = 28
+	// The cursor ▐ is one display cell, so rune index == cell index here.
+	const senderEnd = 1 + 2 + mlFlagWidth + 2 + mlSenderWidth - 1
+	gap1 := string(runes[senderEnd+1 : senderEnd+3])
+	if gap1 != "  " {
+		t.Errorf("sender→subject gap = %q (rune pos %d-%d), want 2 spaces",
+			gap1, senderEnd+1, senderEnd+2)
+	}
+
+	// Date block: trailing sp(1) + date(14) cells from the right edge.
+	// Two-space gap is the 2 runes immediately before the date start.
+	const dateStart = w - 1 - mlDateWidth // = 100 - 1 - 14 = 85
+	gap2 := string(runes[dateStart-2 : dateStart])
+	if gap2 != "  " {
+		t.Errorf("subject→date gap = %q (rune pos %d-%d), want 2 spaces",
+			gap2, dateStart-2, dateStart-1)
+	}
+}
