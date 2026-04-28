@@ -3,8 +3,14 @@
 package ui
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -120,4 +126,161 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 		)
 	}
 	return p, nil
+}
+
+// linkPickerMaxWidth caps the picker's natural width.
+const linkPickerMaxWidth = 70
+
+// linkPickerInlineCap caps the inline URL display length per row,
+// independent of box width — keeps the visual tight even on very wide
+// terminals.
+const linkPickerInlineCap = 50
+
+// View renders the picker as a standalone string. App composes via
+// Box + Position + PlaceOverlay; this method is the fallback used by
+// tests and when the box doesn't fit.
+func (p LinkPicker) View() string {
+	if !p.open {
+		return ""
+	}
+	return p.Box(p.width, p.height)
+}
+
+// Box returns the rendered modal at the size derived from (w, h).
+func (p LinkPicker) Box(w, h int) string {
+	boxW := linkPickerMaxWidth
+	if w-4 < boxW {
+		boxW = w - 4
+	}
+	if boxW < 20 {
+		boxW = 20
+	}
+	contentW := boxW - 2 // left/right border
+	indexW := 2 + len(strconv.Itoa(len(p.links)))
+	urlW := contentW - indexW - 1 // 1 space between index and URL
+	if urlW > linkPickerInlineCap {
+		urlW = linkPickerInlineCap
+	}
+
+	visibleRows := len(p.links)
+	maxListRows := h - 7 // top + bottom border + rule + 2 preview + 1 title slack
+	if maxListRows < 1 {
+		maxListRows = 1
+	}
+	if visibleRows > maxListRows {
+		visibleRows = maxListRows
+	}
+
+	if p.cursor < p.offset {
+		p.offset = p.cursor
+	}
+	if p.cursor >= p.offset+visibleRows {
+		p.offset = p.cursor - visibleRows + 1
+	}
+
+	var b strings.Builder
+	title := " Links "
+	rest := boxW - 2 - len(title)
+	if rest < 0 {
+		rest = 0
+	}
+	b.WriteString("┌─" + title + strings.Repeat("─", rest) + "┐\n")
+
+	maxIndexDigits := len(strconv.Itoa(len(p.links)))
+	for i := 0; i < visibleRows; i++ {
+		row := p.offset + i
+		if row >= len(p.links) {
+			b.WriteString("│" + strings.Repeat(" ", contentW) + "│\n")
+			continue
+		}
+		b.WriteString("│")
+		b.WriteString(p.formatRow(row, maxIndexDigits, urlW, contentW))
+		b.WriteString("│\n")
+	}
+
+	b.WriteString("├" + strings.Repeat("─", contentW) + "┤\n")
+
+	previewLines := p.previewLines(contentW)
+	for i := 0; i < 2; i++ {
+		line := ""
+		if i < len(previewLines) {
+			line = previewLines[i]
+		}
+		lw := lipgloss.Width(line)
+		if lw < contentW {
+			line += strings.Repeat(" ", contentW-lw)
+		}
+		b.WriteString("│" + line + "│\n")
+	}
+
+	b.WriteString("└" + strings.Repeat("─", contentW) + "┘")
+
+	return b.String()
+}
+
+// formatRow renders one list row: leading-space-pad + [N] + space + URL.
+// Painted with cursor background when row == p.cursor.
+func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
+	idxStr := strconv.Itoa(row + 1)
+	pad := strings.Repeat(" ", maxIndexDigits-len(idxStr))
+	url := p.links[row]
+	if displayCells(url) > urlW {
+		url = displayTruncate(url, urlW)
+	}
+	body := fmt.Sprintf("%s[%d] %s", pad, row+1, url)
+	bw := lipgloss.Width(body)
+	if bw < contentW {
+		body += strings.Repeat(" ", contentW-bw)
+	}
+	if row == p.cursor {
+		return p.styles.MsgListCursor.Render(body)
+	}
+	return body
+}
+
+// previewLines returns up to 2 wrapped lines of the cursor row's full
+// URL. The 2nd line is truncated with "…" when the URL exceeds 2
+// rows worth of cells.
+func (p LinkPicker) previewLines(width int) []string {
+	if p.cursor < 0 || p.cursor >= len(p.links) {
+		return nil
+	}
+	full := p.links[p.cursor]
+	wrapped := strings.Split(linkPickerWrap(full, width), "\n")
+	if len(wrapped) <= 2 {
+		return wrapped
+	}
+	row2 := wrapped[1]
+	if displayCells(row2) >= width {
+		row2 = displayTruncate(row2, width-1) + "…"
+	} else {
+		row2 += "…"
+	}
+	return []string{wrapped[0], row2}
+}
+
+// linkPickerWrap is the picker-local wrap helper. URLs are unbreakable
+// tokens, so Wordwrap can't split them — Hardwrap forces the residue
+// to honor width. Mirrors content.wrap (no UI-package equivalent yet).
+func linkPickerWrap(s string, width int) string {
+	if width < 1 {
+		width = 1
+	}
+	return ansi.Hardwrap(ansi.Wordwrap(s, width, ""), width, false)
+}
+
+// Position returns the centered top-left for the rendered box at
+// (totalW, totalH). Used by App to feed PlaceOverlay.
+func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
+	bw := lipgloss.Width(box)
+	bh := lipgloss.Height(box)
+	x := (totalW - bw) / 2
+	y := (totalH - bh) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	return x, y
 }

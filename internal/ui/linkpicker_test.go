@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -154,4 +155,47 @@ func containsClosed(msgs []tea.Msg) bool {
 		}
 	}
 	return false
+}
+
+func TestLinkPickerRowFormatLeadingSpacePad(t *testing.T) {
+	links := make([]string, 12)
+	for i := range links {
+		links[i] = "https://a.com"
+	}
+	p := newTestLinkPicker(t)
+	p = p.SetSize(80, 24).Open(links)
+	out := p.View()
+	if !strings.Contains(out, " [1]") {
+		t.Fatalf("expected ' [1]' (leading-space pad) in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[12]") {
+		t.Fatalf("expected '[12]' in output, got:\n%s", out)
+	}
+}
+
+func TestLinkPickerRowFormatNoPad(t *testing.T) {
+	links := make([]string, 9)
+	for i := range links {
+		links[i] = "https://a.com"
+	}
+	p := newTestLinkPicker(t)
+	p = p.SetSize(80, 24).Open(links)
+	out := p.View()
+	if strings.Contains(out, " [1]") {
+		t.Fatalf("expected no leading-space pad in 9-link picker, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[1]") {
+		t.Fatalf("expected '[1]' in output, got:\n%s", out)
+	}
+}
+
+func TestLinkPickerPreviewShowsFullURL(t *testing.T) {
+	long := "https://example.com/some/very/long/path/that/wraps?query=value"
+	p := newTestLinkPicker(t)
+	p = p.SetSize(80, 24).Open([]string{"https://a.com", long})
+	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	out := p.View()
+	if !strings.Contains(out, "example.com/some/very/long") {
+		t.Fatalf("preview should expose full URL prefix, got:\n%s", out)
+	}
 }
