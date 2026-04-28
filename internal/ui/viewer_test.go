@@ -151,17 +151,40 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	}
 }
 
-func TestViewerTabIsNoop(t *testing.T) {
-	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
-	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
-		content.Link{Text: "click", URL: "https://example.com"},
-	}}})
-	v2, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if cmd != nil {
-		t.Error("Tab must be a no-op (Pass 2.5b-4b)")
+func TestViewerTabEmitsLinkPickerOpenWhenLinks(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24)
+	v = v.Open(mail.MessageInfo{UID: "uid-1"})
+	v = v.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{
+			content.Link{Text: "click", URL: "https://a.com"},
+		}},
+	})
+
+	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	got := collectMsgs(cmd)
+	var found bool
+	for _, m := range got {
+		if op, ok := m.(LinkPickerOpenMsg); ok && len(op.Links) == 1 && op.Links[0] == "https://a.com" {
+			found = true
+		}
 	}
-	if !v2.IsOpen() {
-		t.Error("Tab must not close the viewer")
+	if !found {
+		t.Fatalf("expected LinkPickerOpenMsg with [https://a.com], got %v", got)
+	}
+}
+
+func TestViewerTabNoLinksInert(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24)
+	v = v.Open(mail.MessageInfo{UID: "uid-1"})
+	v = v.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{content.Text{Content: "no links"}}},
+	})
+
+	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	if cmd != nil {
+		t.Fatalf("expected no Cmd when zero links, got %v", cmd)
 	}
 }
 

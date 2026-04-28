@@ -160,7 +160,10 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 		v = v.Close()
 		return v, viewerClosedCmd()
 	case "tab":
-		return v, nil
+		if len(v.links) == 0 {
+			return v, nil
+		}
+		return v, linkPickerOpenCmd(v.links)
 	}
 	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
 		idx := int(s[0] - '1')
