@@ -334,9 +334,8 @@ func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// openSelectedMessage opens the current msglist selection in the
-// viewer, fires the body-fetch Cmd, and (for unread messages) flips
-// the seen flag locally + fires a backend MarkRead.
+// openSelectedMessage delegates to openMessage with the current
+// msglist cursor. No-op when the folder is empty.
 func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 	msg, ok := m.msglist.SelectedMessage()
 	if !ok {

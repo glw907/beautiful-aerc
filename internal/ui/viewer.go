@@ -46,7 +46,7 @@ type Viewer struct {
 }
 
 // NewViewer constructs an empty (closed) viewer. accountName is used
-// to synthesize a To: header until Pass 3 wires real backend headers.
+// to synthesize a To: header for fixtures that lack one.
 func NewViewer(styles Styles, t *theme.CompiledTheme, accountName string) Viewer {
 	return Viewer{
 		styles:      styles,
@@ -165,12 +165,8 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 		}
 		return v, linkPickerOpenCmd(v.links)
 	}
-	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
-		idx := int(s[0] - '1')
-		if idx < len(v.links) {
-			return v, launchURLCmd(v.links[idx])
-		}
-		return v, nil
+	if idx, ok := parseLinkKey(s, len(v.links)); ok {
+		return v, launchURLCmd(v.links[idx])
 	}
 	if v.phase != viewerReady {
 		return v, nil

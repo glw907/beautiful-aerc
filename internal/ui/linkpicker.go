@@ -115,11 +115,7 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 	case key.Matches(keyMsg, p.keys.Close):
 		return p, func() tea.Msg { return LinkPickerClosedMsg{} }
 	}
-	if s := keyMsg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
-		idx := int(s[0] - '1')
-		if idx >= len(p.links) {
-			return p, nil
-		}
+	if idx, ok := parseLinkKey(keyMsg.String(), len(p.links)); ok {
 		return p, tea.Batch(
 			func() tea.Msg { return LaunchURLMsg{URL: p.links[idx]} },
 			func() tea.Msg { return LinkPickerClosedMsg{} },
@@ -156,7 +152,8 @@ func (p LinkPicker) Box(w, h int) string {
 		boxW = 20
 	}
 	contentW := boxW - 2 // left/right border
-	indexW := 2 + len(strconv.Itoa(len(p.links)))
+	maxIndexDigits := len(strconv.Itoa(len(p.links)))
+	indexW := 2 + maxIndexDigits
 	urlW := contentW - indexW - 1 // 1 space between index and URL
 	if urlW > linkPickerInlineCap {
 		urlW = linkPickerInlineCap
@@ -186,7 +183,6 @@ func (p LinkPicker) Box(w, h int) string {
 	}
 	b.WriteString("┌─" + title + strings.Repeat("─", rest) + "┐\n")
 
-	maxIndexDigits := len(strconv.Itoa(len(p.links)))
 	for i := 0; i < visibleRows; i++ {
 		row := p.offset + i
 		if row >= len(p.links) {
@@ -259,9 +255,10 @@ func (p LinkPicker) previewLines(width int) []string {
 	return []string{wrapped[0], row2}
 }
 
-// linkPickerWrap is the picker-local wrap helper. URLs are unbreakable
-// tokens, so Wordwrap can't split them — Hardwrap forces the residue
-// to honor width. Mirrors content.wrap (no UI-package equivalent yet).
+// linkPickerWrap honors width for the preview footer. URLs are
+// unbreakable tokens, so Wordwrap can't split them — Hardwrap forces
+// the residue to honor width. Mirrors content.wrap; cross-package
+// duplication is acceptable at two callers.
 func linkPickerWrap(s string, width int) string {
 	if width < 1 {
 		width = 1
@@ -272,10 +269,29 @@ func linkPickerWrap(s string, width int) string {
 // Position returns the centered top-left for the rendered box at
 // (totalW, totalH). Used by App to feed PlaceOverlay.
 func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
-	bw := lipgloss.Width(box)
-	bh := lipgloss.Height(box)
-	x := (totalW - bw) / 2
-	y := (totalH - bh) / 2
+	return centerOverlay(box, totalW, totalH)
+}
+
+// parseLinkKey decodes a 1-9 keypress into a link index. Returns
+// (idx, true) when the key is a digit in [1, count]; (0, false)
+// otherwise. Shared by the viewer's quick-launch and the link picker.
+func parseLinkKey(s string, count int) (int, bool) {
+	if len(s) != 1 || s[0] < '1' || s[0] > '9' {
+		return 0, false
+	}
+	idx := int(s[0] - '1')
+	if idx >= count {
+		return 0, false
+	}
+	return idx, true
+}
+
+// centerOverlay returns the top-left (x, y) cell coordinates that
+// center box on (totalW, totalH). Shared by the help popover and the
+// link picker; both compose via PlaceOverlay.
+func centerOverlay(box string, totalW, totalH int) (int, int) {
+	x := (totalW - lipgloss.Width(box)) / 2
+	y := (totalH - lipgloss.Height(box)) / 2
 	if x < 0 {
 		x = 0
 	}

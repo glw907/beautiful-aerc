@@ -193,17 +193,7 @@ func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
 // Position returns the top-left (x, y) cell coordinates at which the
 // popover box should be placed to appear centered on (width, height).
 func (h HelpPopover) Position(box string, width, height int) (x, y int) {
-	bw := lipgloss.Width(box)
-	bh := lipgloss.Height(box)
-	x = (width - bw) / 2
-	y = (height - bh) / 2
-	if x < 0 {
-		x = 0
-	}
-	if y < 0 {
-		y = 0
-	}
-	return x, y
+	return centerOverlay(box, width, height)
 }
 
 // View renders the popover centered on a width × height area.
