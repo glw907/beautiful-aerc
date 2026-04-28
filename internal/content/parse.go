@@ -21,10 +21,10 @@ var (
 // urlSchemes is the ordered list of bare-URL schemes that splitBareURLs recognizes.
 var urlSchemes = []string{"https://", "http://", "mailto:"}
 
-// trailingPunct is the set of characters trimmed from the right end of a
-// bare URL when they are almost certainly sentence punctuation. Conservative:
-// only characters that would never legitimately close a URL.
-const trailingPunct = `.,;:!?)>'"` + "`"
+// trailingPunct is the set of characters trimmed from the right end of a bare
+// URL: characters that close a sentence, bracket, or code-span context but
+// never a URL.
+const trailingPunct = `.,;:!?)]>'"` + "`"
 
 // splitBareURLs splits a plain-text string on bare URL occurrences,
 // returning a mix of Text and Link spans. Recognized schemes: https://,
@@ -73,8 +73,15 @@ func splitBareURLs(s string) []Span {
 
 		// Trim trailing sentence punctuation.
 		trimmed := strings.TrimRight(rawURL, trailingPunct)
-		if trimmed == "" {
-			// Entire token was punctuation; treat as text.
+		// Reject scheme-only tokens — they're censored placeholders, not launchable URLs.
+		schemeOnly := false
+		for _, scheme := range urlSchemes {
+			if trimmed == scheme {
+				schemeOnly = true
+				break
+			}
+		}
+		if trimmed == "" || schemeOnly {
 			out = append(out, Text{Content: rawURL})
 			continue
 		}

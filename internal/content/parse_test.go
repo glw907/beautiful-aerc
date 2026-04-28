@@ -436,6 +436,104 @@ func TestParseBlocksCRLFParagraph(t *testing.T) {
 	}
 }
 
+func TestParseSpansBareURLInsideBrackets(t *testing.T) {
+	got := parseSpans("see [https://example.com] for more")
+	// Expect: Text "see [" + Link{URL: "https://example.com"} + Text "] for more"
+	// The "[" before the URL is not a markdown link (no "]("), so it passes through
+	// as a Text span prefix. The "]" after the URL is trimmed as trailing punct.
+	var link Link
+	var foundLink bool
+	for _, s := range got {
+		if l, ok := s.(Link); ok {
+			if foundLink {
+				t.Fatal("more than one Link span found")
+			}
+			link = l
+			foundLink = true
+		}
+	}
+	if !foundLink {
+		t.Fatalf("no Link span found in %v", got)
+	}
+	if link.URL != "https://example.com" {
+		t.Errorf("URL = %q, want %q (trailing ] must be trimmed)", link.URL, "https://example.com")
+	}
+	// The "] for more" suffix must appear as a Text span after the link.
+	foundSuffix := false
+	for _, s := range got {
+		if t2, ok := s.(Text); ok && strings.Contains(t2.Content, "] for more") {
+			foundSuffix = true
+		}
+	}
+	if !foundSuffix {
+		t.Errorf("suffix '] for more' not found in spans: %v", got)
+	}
+}
+
+func TestParseSpansBareURLBacktickTrim(t *testing.T) {
+	input := "see `https://example.com` here"
+	got := parseSpans(input)
+	// The backtick before the URL triggers a `code` span parse — the URL lands
+	// inside a Code span, not a Link. Verify the URL is not mangled by checking
+	// the Code span content directly (the bare-URL path is not reached here).
+	// What we care about: no Link span whose URL has a trailing backtick.
+	for _, s := range got {
+		if l, ok := s.(Link); ok {
+			if strings.HasSuffix(l.URL, "`") {
+				t.Errorf("Link URL has trailing backtick: %q", l.URL)
+			}
+		}
+	}
+}
+
+func TestParseSpansBareSchemeOnlyRejected(t *testing.T) {
+	got := parseSpans("see https://... for details")
+	for _, s := range got {
+		if l, ok := s.(Link); ok {
+			t.Errorf("unexpected Link span for scheme-only token: %v", l)
+		}
+	}
+}
+
+func TestParseSpansBareURLAtStart(t *testing.T) {
+	got := parseSpans("https://example.com is the link")
+	if len(got) == 0 {
+		t.Fatal("expected spans, got none")
+	}
+	if _, ok := got[0].(Link); !ok {
+		t.Errorf("span[0] = %T, want Link", got[0])
+	}
+	// No leading empty Text span.
+	if t2, ok := got[0].(Text); ok && t2.Content == "" {
+		t.Errorf("leading empty Text span found")
+	}
+}
+
+func TestParseSpansBareURLOnlyToken(t *testing.T) {
+	got := parseSpans("https://example.com")
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 span, got %d: %v", len(got), got)
+	}
+	if _, ok := got[0].(Link); !ok {
+		t.Errorf("span[0] = %T, want Link", got[0])
+	}
+}
+
+func TestParseSpansBareURLAtEnd(t *testing.T) {
+	got := parseSpans("check https://example.com")
+	if len(got) == 0 {
+		t.Fatal("expected spans, got none")
+	}
+	last := got[len(got)-1]
+	if _, ok := last.(Link); !ok {
+		t.Errorf("last span = %T, want Link", last)
+	}
+	// No trailing empty Text span.
+	if t2, ok := last.(Text); ok && t2.Content == "" {
+		t.Errorf("trailing empty Text span found")
+	}
+}
+
 func TestParseBlocksCorpus(t *testing.T) {
 	fixtures, err := filepath.Glob("../../e2e/testdata/*.html")
 	if err != nil {
