@@ -4,6 +4,9 @@
 
 ## High
 
+- [ ] **#24** Attachments support (v1 blocker) `#feature` `#poplar` `#v1` *(2026-04-28)*
+  poplar v1 needs attachment support end-to-end. Scope spans: backend (JMAP attachment metadata + blob fetch via the existing Download path; equivalent IMAP path when that backend lands), UI (per-row attachment indicator, attachment list/preview in the viewer, save-to-disk action with a path picker or default Downloads dir), and compose (attach files when composing, with size limits and MIME detection). Likely needs one or more dedicated planning + implementation passes — break into smaller backlog items in a future planning pass before starting.
+
 - [ ] **#23** HTML→plain-text fuses words across element boundaries `#bug` `#poplar` *(2026-04-28)*
   Visible in the 1Password Safari update email ("Safari toSafari 18.6", "increasing the  minimum") and Dave Johnson reply ("to:Dave_99504@yahoo.comThanks,Dave Johnson"). The html→markdown converter drops inter-element whitespace when adjacent inline elements (`<br>`, `<a>`, `<span>`) abut without a separating text node — the joined text loses the implicit word boundary the rendered HTML had. Affects readability of any HTML email with non-trivial inline structure. Likely fix in `internal/filter/html.go`: insert a space at element boundaries before tag stripping, or post-process to re-introduce spaces around fused alphanumeric runs. Discovered during 2026-04-28 viewer bug-fix work.
 
