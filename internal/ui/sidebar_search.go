@@ -160,9 +160,10 @@ func (s SidebarSearch) renderBlankRow() string {
 //     because the input is Blurred.
 func (s SidebarSearch) renderPromptRow() string {
 	if s.state == SearchIdle {
-		icon := applyBg(s.styles.SearchIcon, s.styles.SidebarBg).Render(s.icons.Search)
+		// No icon in the idle state — in simple mode icons.Search == "/"
+		// which would produce "/ / to search" (duplicated slash).
 		hint := applyBg(s.styles.SearchHint, s.styles.SidebarBg).Render(" / to search")
-		content := s.styles.SidebarBg.Render("  ") + icon + hint
+		content := s.styles.SidebarBg.Render("  ") + hint
 		return fillRowToWidth(content, s.width, s.styles.SidebarBg)
 	}
 

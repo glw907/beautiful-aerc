@@ -264,6 +264,48 @@ func TestMessageList(t *testing.T) {
 	})
 }
 
+func TestRenderFlagCell(t *testing.T) {
+	// renderFlagCell must always return a string that is exactly
+	// mlFlagWidth display cells wide, regardless of icon mode.
+	styles := NewStyles(theme.Nord)
+
+	tests := []struct {
+		name      string
+		flags     mail.Flag
+		isUnread  bool
+		iconSet   IconSet
+		spuaWidth int
+	}{
+		// Fancy mode (spuaCellWidth=2): SPUA glyph counts as 2 cells already.
+		{"fancy flagged unread", mail.FlagFlagged, true, FancyIcons, 2},
+		{"fancy answered read", mail.FlagAnswered, false, FancyIcons, 2},
+		{"fancy unread", 0, true, FancyIcons, 2},
+		{"fancy none", mail.FlagSeen, false, FancyIcons, 2},
+		// Simple mode (spuaCellWidth=1): narrow glyph needs padding.
+		{"simple flagged unread", mail.FlagFlagged, true, SimpleIcons, 1},
+		{"simple answered read", mail.FlagAnswered, false, SimpleIcons, 1},
+		{"simple unread", 0, true, SimpleIcons, 1},
+		{"simple none", mail.FlagSeen, false, SimpleIcons, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetSPUACellWidth(tt.spuaWidth)
+			defer SetSPUACellWidth(2)
+
+			ml := NewMessageList(styles, nil, 90, 10, tt.iconSet)
+			msg := mail.MessageInfo{Flags: tt.flags}
+			bg := styles.MsgListBg
+			rendered := ml.renderFlagCell(msg, tt.isUnread, bg)
+			got := displayCells(rendered)
+			if got != mlFlagWidth {
+				t.Errorf("displayCells(renderFlagCell(%s)) = %d, want %d (rendered=%q)",
+					tt.name, got, mlFlagWidth, stripANSI(rendered))
+			}
+		})
+	}
+}
+
 func mockMessages() []mail.MessageInfo {
 	return []mail.MessageInfo{
 		{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "2026-04-12 10:23:47 UTC", Flags: 0},

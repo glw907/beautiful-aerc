@@ -872,11 +872,14 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	return fillRowToWidth(line, m.width, bgStyle)
 }
 
-// renderFlagCell renders the 1-cell flag column. Priority: flagged >
-// answered > unread > none. Read state wins over flag state for color
-// — only the unread+flagged case escalates to the warning accent. Read
-// rows always use the dim icon style so the glyph dims with the rest
-// of the row.
+// renderFlagCell renders the flag column. Priority: flagged > answered >
+// unread > none. Read state wins over flag state for color — only the
+// unread+flagged case escalates to the warning accent. Read rows always
+// use the dim icon style so the glyph dims with the rest of the row.
+//
+// The rendered output is always exactly mlFlagWidth display cells. In
+// simple-icon mode, narrow glyphs (1 cell) are padded with one trailing
+// space so flagged and unflagged rows keep the sender column aligned.
 func (m MessageList) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgloss.Style) string {
 	iconStyle := m.styles.MsgListIconRead
 	if isUnread {
@@ -896,7 +899,15 @@ func (m MessageList) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle
 	default:
 		return bgStyle.Render("  ")
 	}
-	return applyBg(iconStyle, bgStyle).Render(glyph)
+	rendered := applyBg(iconStyle, bgStyle).Render(glyph)
+	// Pad with background spaces until the cell is exactly mlFlagWidth display
+	// cells wide. In fancy mode the SPUA-A glyph already occupies 2 cells
+	// (spuaCellWidth == 2), so displayCells == mlFlagWidth and the loop is a
+	// no-op. In simple mode the narrow glyph is 1 cell, so one space is added.
+	for displayCells(rendered) < mlFlagWidth {
+		rendered += bgStyle.Render(" ")
+	}
+	return rendered
 }
 
 // renderBlankLine returns a blank line at panel width with the base

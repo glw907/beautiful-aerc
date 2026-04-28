@@ -306,8 +306,8 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 }
 
 // sidebarIconFrom returns the icon for a classified folder from the given
-// IconSet. Canonicals use their canonical icon; custom folders fall back
-// to the heuristic name matcher.
+// IconSet. Canonicals use their canonical icon; all other folders use
+// CustomFolder regardless of name.
 func sidebarIconFrom(icons IconSet, cf mail.ClassifiedFolder) string {
 	switch cf.Canonical {
 	case "Inbox":
@@ -323,13 +323,5 @@ func sidebarIconFrom(icons IconSet, cf mail.ClassifiedFolder) string {
 	case "Trash":
 		return icons.Trash
 	}
-	lower := strings.ToLower(cf.Folder.Name)
-	switch {
-	case strings.Contains(lower, "notification"):
-		return icons.Notification
-	case strings.Contains(lower, "remind"):
-		return icons.Reminder
-	default:
-		return icons.CustomFolder
-	}
+	return icons.CustomFolder
 }
