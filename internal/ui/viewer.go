@@ -203,6 +203,7 @@ func (v Viewer) View() string {
 	if !v.open {
 		return ""
 	}
+	bg := v.styles.ViewerBg
 	if v.phase == viewerLoading {
 		text := v.spinner.View() + " Loading message…"
 		placed := lipgloss.Place(
@@ -210,22 +211,22 @@ func (v Viewer) View() string {
 			lipgloss.Center, lipgloss.Center,
 			v.styles.Dim.Render(text),
 		)
-		return clipPane(placed, v.width, v.height)
+		return clipPaneBg(placed, v.width, v.height, bg)
 	}
-	headers := padLeftLines(v.headerStr, 1)
-	body := padLeftLines(v.viewport.View(), 1)
-	out := lipgloss.JoinVertical(lipgloss.Left, headers, body)
-	return clipPane(out, v.width, v.height)
+	headers := padLeftLinesBg(v.headerStr, 1, bg)
+	body := padLeftLinesBg(v.viewport.View(), 1, bg)
+	blank := bg.Render(strings.Repeat(" ", v.width))
+	out := lipgloss.JoinVertical(lipgloss.Left, blank, headers, body, blank)
+	return clipPaneBg(out, v.width, v.height, bg)
 }
 
-// clipPane enforces the size contract every bubbletea component
+// clipPaneBg enforces the size contract every bubbletea component
 // owes its parent: exactly height rows, each exactly width cells.
-// Lines longer than width are truncated (ANSI-aware via
-// displayTruncate); shorter lines are padded; the row count is
-// enforced both ways. This is what bubbles components do
-// internally when they call lipgloss.Place — the same idiom
-// applied here so the viewer can never lie to JoinHorizontal.
-func clipPane(s string, width, height int) string {
+// Each content line passes through bgFillLine so the background
+// persists across embedded ANSI resets, then fillRowToWidth handles
+// truncation/right-pad. Missing rows are filled with bg-styled
+// blank rows.
+func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	if width < 1 || height < 1 {
 		return ""
 	}
@@ -233,17 +234,13 @@ func clipPane(s string, width, height int) string {
 	if len(lines) > height {
 		lines = lines[:height]
 	}
+	bgPrefix := bgPrefixFromStyle(bg)
 	for i, line := range lines {
-		w := displayCells(line)
-		switch {
-		case w > width:
-			lines[i] = displayTruncate(line, width)
-		case w < width:
-			lines[i] = line + strings.Repeat(" ", width-w)
-		}
+		lines[i] = fillRowToWidth(bgFillLine(line, bgPrefix), width, bg)
 	}
+	blank := bg.Render(strings.Repeat(" ", width))
 	for len(lines) < height {
-		lines = append(lines, strings.Repeat(" ", width))
+		lines = append(lines, blank)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -252,9 +249,11 @@ func clipPane(s string, width, height int) string {
 // from SetBody and from SetSize when the viewer is already ready.
 // Headers stay pinned above the viewport; only the body scrolls.
 //
-// contentWidth is one cell narrower than v.width. padLeftLines adds
+// contentWidth is one cell narrower than v.width. padLeftLinesBg adds
 // the leading space back in View(), so the total per-line cell count
-// equals v.width after clipPane pads the remainder.
+// equals v.width after clipPaneBg pads the remainder. The body height
+// also reserves two rows for the top + bottom blank padding rows
+// View() emits around the content.
 func (v *Viewer) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
@@ -267,19 +266,20 @@ func (v *Viewer) layout() {
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	headerHeight := lipgloss.Height(v.headerStr)
-	bodyHeight := max(1, v.height-headerHeight)
+	bodyHeight := max(1, v.height-headerHeight-2)
 	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)
 	v.viewport = vp
 }
 
-// padLeftLines prepends n spaces to every newline-separated line in s.
-func padLeftLines(s string, n int) string {
+// padLeftLinesBg prepends n bg-styled spaces to every newline-separated
+// line in s.
+func padLeftLinesBg(s string, n int, bg lipgloss.Style) string {
 	if n <= 0 || s == "" {
 		return s
 	}
-	pad := strings.Repeat(" ", n)
+	pad := bg.Render(strings.Repeat(" ", n))
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
 		lines[i] = pad + l

@@ -152,6 +152,28 @@ signal for read state, and it leaves the hue budget free for the
 cursor and for flagged-unread, the two things that genuinely need to
 pop.
 
+### Message viewer
+
+The viewer shares `BgBase` with the message list — the right panel is
+a single surface, so the viewer fills its full pane (header rows,
+body rows, and the blank padding rows at the top and bottom) with
+`BgBase`. Header keys (From/To/Cc/Bcc/Date/Subject) are right-padded
+to a common 8-cell column so values align.
+
+| Field | fg | bg | Role |
+|-------|----|----|------|
+| `ViewerBg` | — | `BgBase` | Base pane background (all padding rows + leading column + right-edge fill) |
+| `HeaderKey` (theme) | `AccentPrimary` bold | — | `From:`/`To:`/`Cc:`/`Bcc:`/`Date:`/`Subject:` label |
+| `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value |
+| `HeaderDim` (theme) | `FgDim` | — | `<email>` brackets and the `─` separator under the headers |
+
+Background composition: `clipPaneBg` and `padLeftLinesBg` use
+bg-styled spaces so the right-edge fill, left column, and top/bottom
+blank padding rows all carry `BgBase`. Each rendered content line is
+then run through `bgFillLine` (in `styles.go`), which prepends the
+bg ANSI prefix and re-emits it after every embedded `\x1b[0m` reset
+so cells under styled content don't fall back to the terminal default.
+
 ### Help popover (modal overlay, `?`)
 
 | Field | fg | bg | Role |

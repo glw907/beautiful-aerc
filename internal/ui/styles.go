@@ -65,6 +65,12 @@ type Styles struct {
 	MsgListFlagFlagged   lipgloss.Style
 	MsgListThreadPrefix  lipgloss.Style
 
+	// Viewer. The viewer pane shares BgBase with the message list —
+	// the right panel is a single surface. ViewerBg is the bg-only
+	// style used for padding (top/bottom blank rows, leading column,
+	// right-edge fill in clipPane).
+	ViewerBg lipgloss.Style
+
 	// Help popover (modal overlay, `?`)
 	HelpTitle       lipgloss.Style
 	HelpGroupHeader lipgloss.Style
@@ -100,6 +106,37 @@ func applyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
 		return base.Background(bg)
 	}
 	return base
+}
+
+// bgFillLine wraps a single rendered line so that its background
+// color persists across embedded ANSI resets. Lipgloss's Style.Render
+// emits "\x1b[0m" at the end of every styled segment — that resets
+// background too, so any plain (non-ANSI) characters that follow show
+// the terminal default. We prepend bgPrefix once and re-emit it after
+// every embedded reset, ensuring bg is restored before the next
+// character. Empty prefix returns line unchanged. Caller is
+// responsible for computing bgPrefix once via bgPrefixFromStyle and
+// reusing it across the lines of a pane.
+func bgFillLine(line, bgPrefix string) string {
+	if bgPrefix == "" {
+		return line
+	}
+	return bgPrefix + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bgPrefix) + "\x1b[0m"
+}
+
+// bgPrefixFromStyle extracts the ANSI prefix lipgloss emits for a
+// background color. Returns "" if the style has no background or the
+// renderer emits no prefix.
+func bgPrefixFromStyle(st lipgloss.Style) string {
+	bg, ok := st.GetBackground().(lipgloss.Color)
+	if !ok {
+		return ""
+	}
+	rendered := lipgloss.NewStyle().Background(bg).Render("X")
+	if i := strings.Index(rendered, "X"); i > 0 {
+		return rendered[:i]
+	}
+	return ""
 }
 
 // fillRowToWidth fits a fully-rendered row of ANSI segments to
@@ -200,6 +237,9 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.ColorWarning),
 		MsgListThreadPrefix: lipgloss.NewStyle().
 			Foreground(t.FgDim),
+
+		ViewerBg: lipgloss.NewStyle().
+			Background(t.BgBase),
 
 		HelpTitle: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary).Bold(true),

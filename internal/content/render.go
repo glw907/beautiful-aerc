@@ -217,8 +217,23 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// headerKeyColWidth is the cell width of the key+colon column. The
+// longest key ("Subject:") is 8 cells; padding every key to this
+// width aligns header values into a single column.
+const headerKeyColWidth = 8
+
+// renderHeaderKey renders "Key:" right-padded to headerKeyColWidth.
+func renderHeaderKey(key string, t *theme.CompiledTheme) string {
+	label := key + ":"
+	pad := headerKeyColWidth - len(label)
+	if pad < 0 {
+		pad = 0
+	}
+	return t.HeaderKey.Render(label) + strings.Repeat(" ", pad)
+}
+
 func renderHeaderScalar(key, value string, t *theme.CompiledTheme) string {
-	return t.HeaderKey.Render(key+":") + " " + t.HeaderValue.Render(value)
+	return renderHeaderKey(key, t) + " " + t.HeaderValue.Render(value)
 }
 
 // visibleAddrWidth returns the printed width of an Address as
@@ -236,8 +251,8 @@ func visibleAddrWidth(a Address) int {
 }
 
 func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int) []string {
-	keyStr := t.HeaderKey.Render(key + ":")
-	indent := strings.Repeat(" ", len(key)+2)
+	keyStr := renderHeaderKey(key, t)
+	indent := strings.Repeat(" ", headerKeyColWidth+1)
 
 	var formatted []string
 	for _, a := range addrs {
@@ -255,7 +270,7 @@ func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, 
 
 	var lines []string
 	current := keyStr + " "
-	currentVisible := len(key) + 2
+	currentVisible := headerKeyColWidth + 1
 
 	for i, addr := range formatted {
 		addrVisible := visibleAddrWidth(addrs[i])
