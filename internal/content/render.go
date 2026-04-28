@@ -212,7 +212,7 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	}
 
 	sep := t.HeaderDim.Render(strings.Repeat("─", width))
-	lines = append(lines, sep)
+	lines = append(lines, "", sep)
 
 	return strings.Join(lines, "\n")
 }
