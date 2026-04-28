@@ -147,7 +147,7 @@ var viewerGroups = []bindingGroup{
 // viewerBottomHints is the trailing line in the viewer context:
 // "Tab link picker    q  close    ?  close".
 var viewerBottomHints = []bindingRow{
-	{"Tab", "link picker", false},
+	{"Tab", "link picker", true},
 	{"q", "close", true},
 	{"?", "close", true},
 }
