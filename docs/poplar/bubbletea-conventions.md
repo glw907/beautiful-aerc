@@ -345,9 +345,17 @@ contains the receipt.
 - **`len(s)` for layout math.** Counts bytes, not cells. Use
   `lipgloss.Width(s)`. (norms §5.)
 - **Rune-counting Nerd Font icons.** SPUA-A glyphs (U+F0000+)
-  often render double-width but `runewidth` reports 1. Maintain
-  an explicit display-cell table for the icon set in use. (BACKLOG
-  #16; the bug that motivated this audit.)
+  often render double-width but `runewidth` reports 1. Use
+  `displayCells(s, spuaCellWidth)` with the startup-resolved width;
+  maintain an explicit icon table in `internal/ui/icons.go`. (ADR-0084.)
+- **`lipgloss.JoinHorizontal`/`JoinVertical` on SPUA-A rows.**
+  These pad using `lipgloss.Width`, which undercounts fancy-mode
+  icons. Use row-by-row `strings.Join` with pre-padded children.
+  This restriction applies when `spuaCellWidth != 1` (i.e., fancy
+  mode on Mono Nerd Font terminals). In simple mode and on
+  narrow-Nerd-Font terminals the ban is technically inert, but the
+  existing manual row-by-row join code is kept under both regimes
+  — see ADR-0084.
 - **Mutating model state in `View()` or in a `tea.Cmd` closure.**
   Update is the only mutation point. (norms §1.)
 - **Children calling parent methods or holding callbacks.**

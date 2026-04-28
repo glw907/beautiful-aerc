@@ -22,16 +22,15 @@ the ADR(s) that justify them.
   keepalive snippets with provenance comments.
   `internal/config/` holds `AccountConfig`, `UIConfig`, and
   `LoadUI`. `internal/theme/` holds compiled lipgloss themes.
-  `internal/filter/`, `internal/content/`, `internal/tidy/` are
-  library packages awaiting their poplar consumers.
+  `internal/term/` handles terminal capability detection
+  (`HasNerdFont`, `MeasureSPUACells`). `internal/filter/`,
+  `internal/content/`, `internal/tidy/` await their consumers.
 - Mail backends call upstream libraries directly. No aerc fork.
   The library family is emersion (`go-imap` v1, `go-message`,
   `go-smtp`, `go-sasl`, `go-webdav`, `go-vcard`) plus
-  `rockorager/go-jmap`. Vendored snippets are limited to MIT-
-  licensed helpers that fill specific gaps (XOAUTH2 against
-  `go-sasl`, Gmail X-GM-EXT against `go-imap`); each carries a
-  top-of-file provenance comment. The Pass 1-2 aerc fork
-  (`internal/mailworker/`) is being removed in Pass 3.
+  `rockorager/go-jmap`. Vendored snippets are MIT-licensed helpers
+  (XOAUTH2 against `go-sasl`, Gmail X-GM-EXT against `go-imap`);
+  each carries a top-of-file provenance comment.
 - Backends supported in v1: Fastmail JMAP and Gmail IMAP. No
   maildir, mbox, or notmuch.
 - The `mail.Backend` interface is synchronous blocking. Both
@@ -43,26 +42,31 @@ the ADR(s) that justify them.
   Update; I/O only in tea.Cmd; children signal parents via Msg
   types; shared state is hoisted to the root.
 - Idiomatic bubbletea is the default. UI uses `bubbles` components
-  as primary analogues; deviations are ADR'd. `View()`
-  self-enforces size via `clipPane`; renderers honor `width` via
-  wordwrap + hardwrap; width math uses `displayCells` for any string
-  that may carry a Nerd Font icon and `lipgloss.Width` for icon-free
-  strings (never `len()`); truncation of icon-bearing strings goes
-  through `displayTruncate`, never bare `ansi.Truncate`;
-  `lipgloss.JoinHorizontal`/`JoinVertical` are forbidden for any
-  composition that may include a row carrying a SPUA-A glyph (they
-  pad with `lipgloss.Width`, undercounting); use direct row-by-row
-  `strings.Join` with pre-padded children. Keys declared as `key.Binding`,
-  dispatched via `key.Matches`; `WindowSizeMsg` handlers both
-  `SetSize` children and forward the msg. Full contract in
-  `docs/poplar/bubbletea-conventions.md`, grounded in
-  `docs/poplar/research/2026-04-26-{bubbletea-norms,reference-apps}.md`.
+  as primary analogues; deviations are ADR'd. `View()` self-enforces
+  size via `clipPane`; renderers honor `width` via wordwrap + hardwrap;
+  width math uses `displayCells(s, spuaCellWidth)` for icon-bearing
+  strings and `lipgloss.Width` for icon-free strings (never `len()`);
+  truncation of icon-bearing strings goes through `displayTruncate`.
+  `lipgloss.JoinHorizontal`/`JoinVertical` are forbidden when
+  `spuaCellWidth != 1`; use row-by-row `strings.Join` with pre-padded
+  children (kept under both modes — see ADR-0084). Keys declared as
+  `key.Binding`, dispatched via `key.Matches`; `WindowSizeMsg` handlers
+  both `SetSize` children and forward the msg. Full contract in
+  `docs/poplar/bubbletea-conventions.md`.
+- Icon mode is resolved once at startup. `cmd/poplar/root.go` calls
+  `term.HasNerdFont`, `term.MeasureSPUACells`, and `term.Resolve` to
+  produce `(IconMode, spuaCellWidth)`. `ui.SetSPUACellWidth` is called
+  before `tea.NewProgram`. The resolved `IconSet` is threaded into
+  `ui.NewApp`. No runtime mode toggling.
+- `internal/ui/icons.go` is the only place icon literals live.
+  `SimpleIcons` runes are East Asian Width Na/N (`lipgloss.Width == 1`).
+  `FancyIcons` runes are in `[U+F0000, U+FFFFD]`. Both class
+  invariants are unit-tested.
 - `App` constructs the model tree and threads `mail.Backend` and
   `*theme.CompiledTheme` into the components that need them.
-  `AccountTab` holds the backend reference for building tea.Cmd
-  closures; `Viewer` holds the theme reference for rendering
-  markdown blocks. No component caches backend results as owned
-  state.
+  `AccountTab` holds the backend reference for tea.Cmd closures;
+  `Viewer` holds the theme reference for markdown rendering.
+  No component caches backend results as owned state.
 - Account view is one pane. No focus cycling. `j/k` always
   navigates messages, `J/K` always navigates folders, every triage
   and reply key is always live.
@@ -72,14 +76,11 @@ the ADR(s) that justify them.
   independently.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
-  through the `Styles` struct populated from `theme.CompiledTheme`.
+  through the `Styles` struct from `theme.CompiledTheme`.
   `lipgloss.NewStyle()` is permitted only in `internal/ui/styles.go`
-  (the `Styles` factory) and `internal/theme/palette.go` (the
-  `Palette → CompiledTheme` step). Hex literals appear only in
-  `internal/theme/themes.go` palette definitions.
+  and `internal/theme/palette.go`. Hex literals only in `themes.go`.
 - The semantic map from palette slots to UI surfaces lives in
-  `docs/poplar/styling.md`. Before changing a color, the doc is
-  updated first.
+  `docs/poplar/styling.md`; update it before changing any color.
 - Folder classification is a pure function:
   `mail.Classify([]Folder) []ClassifiedFolder`. Priority:
   `Folder.Role` → alias table → `Custom`. Provider folder names
@@ -89,15 +90,12 @@ the ADR(s) that justify them.
   Disposal, Custom. Separated by blank lines. No group headers.
   Groups are permanent — user config only ranks folders within
   their group.
-- Nested folder names (containing `/`) render flat — no extra
-  indent vs. top-level folders. The `/` in the display name is
-  the only affordance. No tree, no expand/collapse.
-- Compose (planned, Pass 9): pluggable behind an `Editor`
-  interface. v1 will ship Catkin (native bubbletea editor,
-  `catkin/` package, no poplar dependencies); v1.1 will add
-  neovim via `--embed` RPC. Compose renders inline in the right
-  panel — sidebar and chrome stay visible. No `tea.ExecProcess`
-  terminal takeover.
+- Nested folder names (containing `/`) render flat. The `/` in the
+  display name is the only affordance. No tree, no expand/collapse.
+- Compose (planned): pluggable behind an `Editor` interface. v1
+  ships Catkin (native bubbletea editor); v1.1 adds neovim via
+  `--embed` RPC. Compose renders inline — sidebar and chrome stay
+  visible. No `tea.ExecProcess` terminal takeover.
 - `mail.MessageInfo` carries `ThreadID` and `InReplyTo` on the
   wire. Depth is not a wire field — the UI derives it during the
   prefix walk. A non-threaded message is a thread of size 1 with
@@ -297,4 +295,5 @@ invariant. ADR numbering is chronological.
 | Viewer prototype, footnote harvesting, optimistic mark-read | 0065, 0066, 0067, 0069 |
 | Help popover modal, future-binding policy, overlay+dim | 0071 (superseded by 0082), 0072, 0082 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
-| Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079, 0080, 0081, 0083 |
+| Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
+| Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
