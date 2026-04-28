@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package term provides terminal capability detection used at poplar
 // startup: Nerd Font installation discovery (HasNerdFont) and DSR/CPR
 // probe of an SPUA-A glyph's rendered cell width (MeasureSPUACells).

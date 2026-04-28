@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package mailjmap implements mail.Backend for JMAP servers
 // (Fastmail) by calling git.sr.ht/~rockorager/go-jmap directly.
 // All RPC methods are synchronous. A single goroutine owned by

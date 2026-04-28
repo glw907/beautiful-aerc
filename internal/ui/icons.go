@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package ui
 
 // IconSet is the per-mode iconography vocabulary for poplar's UI

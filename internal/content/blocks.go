@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package content
 
 // Block represents a semantic unit of email content.

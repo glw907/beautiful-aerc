@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package term
 
 // IconMode is the resolved iconography mode the UI should render.

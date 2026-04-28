@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package config holds poplar's configuration types and loaders.
 package config
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package mail defines poplar's mail backend interface and types.
 package mail
 

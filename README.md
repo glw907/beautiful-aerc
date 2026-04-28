@@ -1,5 +1,7 @@
 # beautiful-aerc
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A themeable, productive email environment for the [aerc](https://aerc-mail.org/) email client.
 
 <!-- screenshot: Hero shot — full aerc window with the Nord theme
@@ -393,6 +395,15 @@ beautiful-aerc today is a filter pipeline and configuration package for the aerc
 Poplar reuses the existing filter, theme, and compose infrastructure as library code and adds its own UI layer built on [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss). It targets Fastmail (JMAP) and Gmail (IMAP) with an opinionated, keyboard-driven interface.
 
 Development is iterative — poplar is being built in numbered passes, from scaffold to daily-driver. See [docs/poplar/STATUS.md](docs/poplar/STATUS.md) for current progress and [docs/poplar/architecture.md](docs/poplar/architecture.md) for design decisions.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Vendored snippets retain their original copyright notices in file
+headers; all are MIT-compatible. See `internal/mailauth/xoauth2.go`,
+`internal/mailauth/keepalive/`, and `internal/ui/overlay.go` for
+provenance details.
 
 ## Further reading
 

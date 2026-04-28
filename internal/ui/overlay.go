@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Vendored from github.com/yorukot/superfile (MIT) commit main/2025.
 // Source: src/pkg/string_function/overplace.go
 // Purpose: composite an overlay string at (x,y) atop a background string,
