@@ -818,7 +818,11 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	// to subject — making the assembled row wider than m.width.
 	// Subtract spuaCount(flag)*(spuaCellWidth-1) from the subject budget so
 	// that displayCells(assembled row) == m.width regardless of flag content.
-	subjectWidth := max(1, m.width-mlFixedWidth-spuaCount(flag)*(spuaCellWidth-1))
+	flagAdjust := 0
+	if spuaCellWidth > 1 {
+		flagAdjust = spuaCount(flag) * (spuaCellWidth - 1)
+	}
+	subjectWidth := max(1, m.width-mlFixedWidth-flagAdjust)
 	prefixCells := runewidth.StringWidth(row.prefix)
 	subjectCells := max(0, subjectWidth-prefixCells)
 

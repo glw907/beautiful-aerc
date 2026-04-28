@@ -31,7 +31,11 @@ func SetSPUACellWidth(w int) {
 // displayCells returns the actual terminal display width of s, given
 // the runtime-determined SPUA-A cell width.
 func displayCells(s string) int {
-	return lipgloss.Width(s) + (spuaCellWidth-1)*spuaCount(s)
+	w := lipgloss.Width(s)
+	if spuaCellWidth == 1 {
+		return w
+	}
+	return w + (spuaCellWidth-1)*spuaCount(s)
 }
 
 // spuaCount counts SPUA-A runes in s. Fast-paths plain ASCII via a
