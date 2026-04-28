@@ -216,7 +216,7 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		MsgListBg: lipgloss.NewStyle().
 			Background(t.BgBase),
 		MsgListSelected: lipgloss.NewStyle().
-			Background(t.BgSelection),
+			Background(t.BgSubtle),
 		MsgListCursor: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary),
 		MsgListUnreadSender: lipgloss.NewStyle().

@@ -456,12 +456,30 @@ func formatFromList(addrs []*jmapmail.Address) string {
 			continue
 		}
 		if a.Name != "" {
-			parts = append(parts, a.Name)
+			parts = append(parts, trimSurroundingQuotes(a.Name))
 		} else {
 			parts = append(parts, a.Email)
 		}
 	}
 	return strings.Join(parts, ", ")
+}
+
+// trimSurroundingQuotes strips a leading single-quote-wrapped phrase
+// from a display name. Some mailing-list software (Google Groups,
+// etc.) emits names like "'DAVE JOHNSON' via Members" — the literal
+// single quotes are data, not RFC 5322 syntax, but they offset
+// visual alignment. Names that don't start with a single quote (e.g.
+// "Joe O'Brien") are returned unchanged.
+func trimSurroundingQuotes(s string) string {
+	if !strings.HasPrefix(s, "'") {
+		return s
+	}
+	rest := s[1:]
+	closeIdx := strings.Index(rest, "'")
+	if closeIdx < 0 {
+		return s
+	}
+	return rest[:closeIdx] + rest[closeIdx+1:]
 }
 
 // translateKeywords maps JMAP keyword strings to mail.Flag bits.

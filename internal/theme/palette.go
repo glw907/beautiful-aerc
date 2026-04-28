@@ -9,6 +9,7 @@ type Palette struct {
 	BgBase      string
 	BgElevated  string
 	BgSelection string
+	BgSubtle    string
 	BgBorder    string
 
 	FgBase      string
@@ -33,7 +34,7 @@ type CompiledTheme struct {
 	Name string
 
 	// Palette colors as lipgloss values
-	BgBase, BgElevated, BgSelection, BgBorder         lipgloss.Color
+	BgBase, BgElevated, BgSelection, BgSubtle, BgBorder lipgloss.Color
 	FgBase, FgBright, FgBrightest, FgDim               lipgloss.Color
 	AccentPrimary, AccentSecondary, AccentTertiary      lipgloss.Color
 	ColorError, ColorWarning, ColorSuccess              lipgloss.Color
@@ -65,6 +66,7 @@ func NewCompiledTheme(name string, p Palette) *CompiledTheme {
 		BgBase:          lipgloss.Color(p.BgBase),
 		BgElevated:      lipgloss.Color(p.BgElevated),
 		BgSelection:     lipgloss.Color(p.BgSelection),
+		BgSubtle:        lipgloss.Color(p.BgSubtle),
 		BgBorder:        lipgloss.Color(p.BgBorder),
 		FgBase:          lipgloss.Color(p.FgBase),
 		FgBright:        lipgloss.Color(p.FgBright),
@@ -117,6 +119,8 @@ func (t *CompiledTheme) PaletteHex(name string) string {
 	switch name {
 	case "bg_base":
 		return string(t.BgBase)
+	case "bg_subtle":
+		return string(t.BgSubtle)
 	case "bg_elevated":
 		return string(t.BgElevated)
 	case "bg_selection":

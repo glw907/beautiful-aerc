@@ -19,7 +19,8 @@ accent, whatever hue that is.
 |------|---------|
 | `BgBase` | Primary background (main content area) |
 | `BgElevated` | Raised surface (sidebar, popups, completion) |
-| `BgSelection` | Selected row highlight |
+| `BgSelection` | Sidebar selected-row highlight (lifts above `BgElevated`) |
+| `BgSubtle` | Message-list selected-row highlight (recedes below `BgBase`); sized to match the magnitude of `\|BgSelection − BgElevated\|` so both selection treatments feel equally weighted |
 | `BgBorder` | Borders, status bar, inactive chrome |
 | `FgBase` | Primary text |
 | `FgBright` | Emphasized text (tab labels, unread) |
@@ -109,7 +110,7 @@ Gmail, and Mutt.
 | Field | fg | bg | Role |
 |-------|----|----|------|
 | `MsgListBg` | — | `BgBase` | Base panel background (every row) |
-| `MsgListSelected` | — | `BgSelection` | Selected row background override |
+| `MsgListSelected` | — | `BgSubtle` | Selected row background override (slightly darker than `BgBase`, mirroring the sidebar's `BgSelection` lift over `BgElevated` in magnitude) |
 | `MsgListCursor` | `AccentPrimary` | inherit | `▐` left-edge cursor on selected row |
 | `MsgListUnreadSender` | `FgBright` bold | inherit | Sender column when message is unread |
 | `MsgListUnreadSubject` | `FgBright` | inherit | Subject column when message is unread |
@@ -156,9 +157,10 @@ pop.
 
 The viewer shares `BgBase` with the message list — the right panel is
 a single surface, so the viewer fills its full pane (header rows,
-body rows, and the blank padding rows at the top and bottom) with
-`BgBase`. Header keys (From/To/Cc/Bcc/Date/Subject) are right-padded
-to a common 8-cell column so values align.
+body rows, and the blank padding rows at the top, between headers
+and body, and at the bottom) with `BgBase`. Header keys (From/To/Cc/
+Bcc/Date/Subject) are right-padded to a common 8-cell column so
+values align.
 
 | Field | fg | bg | Role |
 |-------|----|----|------|

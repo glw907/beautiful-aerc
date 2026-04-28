@@ -216,7 +216,7 @@ func (v Viewer) View() string {
 	headers := padLeftLinesBg(v.headerStr, 1, bg)
 	body := padLeftLinesBg(v.viewport.View(), 1, bg)
 	blank := bg.Render(strings.Repeat(" ", v.width))
-	out := lipgloss.JoinVertical(lipgloss.Left, blank, headers, body, blank)
+	out := lipgloss.JoinVertical(lipgloss.Left, blank, headers, blank, body, blank)
 	return clipPaneBg(out, v.width, v.height, bg)
 }
 
@@ -252,8 +252,8 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 // contentWidth is one cell narrower than v.width. padLeftLinesBg adds
 // the leading space back in View(), so the total per-line cell count
 // equals v.width after clipPaneBg pads the remainder. The body height
-// also reserves two rows for the top + bottom blank padding rows
-// View() emits around the content.
+// reserves three rows for the blank padding rows View() emits: one
+// above headers, one between headers and body, and one at the bottom.
 func (v *Viewer) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
@@ -266,7 +266,7 @@ func (v *Viewer) layout() {
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	headerHeight := lipgloss.Height(v.headerStr)
-	bodyHeight := max(1, v.height-headerHeight-2)
+	bodyHeight := max(1, v.height-headerHeight-3)
 	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)
