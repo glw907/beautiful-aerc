@@ -1135,3 +1135,36 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 			gap2, dateStart-2, dateStart-1)
 	}
 }
+
+func TestMessageListMoveCursor(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	msgs := []mail.MessageInfo{
+		{UID: "uid-1", ThreadID: "uid-1", From: "Alice", Subject: "First", Date: "2026-04-26", Flags: mail.FlagSeen},
+		{UID: "uid-2", ThreadID: "uid-2", From: "Bob", Subject: "Second", Date: "2026-04-25", Flags: mail.FlagSeen},
+		{UID: "uid-3", ThreadID: "uid-3", From: "Carol", Subject: "Third", Date: "2026-04-24", Flags: mail.FlagSeen},
+	}
+	m := NewMessageList(styles, msgs, 90, 20, FancyIcons)
+
+	uid, moved := m.MoveCursor(1)
+	if !moved {
+		t.Fatal("MoveCursor(+1) from row 0 should move")
+	}
+	wantUID := mail.UID("uid-2")
+	if uid != wantUID {
+		t.Fatalf("MoveCursor(+1) = %q, want %q", uid, wantUID)
+	}
+
+	_, moved = m.MoveCursor(1)
+	if !moved {
+		t.Fatal("MoveCursor(+1) from row 1 should move")
+	}
+	_, moved = m.MoveCursor(1)
+	if moved {
+		t.Fatal("MoveCursor(+1) from last row should be inert")
+	}
+
+	_, moved = m.MoveCursor(-1)
+	if !moved {
+		t.Fatal("MoveCursor(-1) from last row should move")
+	}
+}

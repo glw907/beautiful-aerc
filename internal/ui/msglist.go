@@ -695,6 +695,20 @@ func (m *MessageList) MoveDown() { m.moveBy(1) }
 // MoveUp retreats the cursor by one visible row.
 func (m *MessageList) MoveUp() { m.moveBy(-1) }
 
+// MoveCursor shifts the cursor by delta visible rows (negative for up,
+// positive for down) and returns the resulting UID and whether the
+// cursor actually moved. Boundaries are inert — at first/last visible
+// row, calling with the corresponding direction returns ("", false).
+// Hidden (folded) rows are skipped.
+func (m *MessageList) MoveCursor(delta int) (mail.UID, bool) {
+	before := m.selected
+	m.moveBy(delta)
+	if m.selected == before {
+		return "", false
+	}
+	return m.cursorUID(), true
+}
+
 // MoveToTop jumps the cursor to the first visible row.
 func (m *MessageList) MoveToTop() {
 	for i := 0; i < len(m.rows); i++ {
