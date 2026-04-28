@@ -5,6 +5,7 @@ package ui
 import (
 	"bytes"
 	"io"
+	"os/exec"
 	"strings"
 
 	gomail "github.com/emersion/go-message/mail"
@@ -328,4 +329,35 @@ func viewerOpenedCmd() tea.Cmd { return func() tea.Msg { return ViewerOpenedMsg{
 func viewerClosedCmd() tea.Cmd { return func() tea.Msg { return ViewerClosedMsg{} } }
 func viewerScrollCmd(pct int) tea.Cmd {
 	return func() tea.Msg { return ViewerScrollMsg{Pct: pct} }
+}
+
+// openURL is the URL launcher hook. Tests swap it to capture the URL
+// instead of executing xdg-open. Shared by viewer numeric quick-launch
+// and the link picker.
+var openURL = func(url string) error {
+	return exec.Command("xdg-open", url).Start()
+}
+
+// LinkPickerOpenMsg requests the link picker overlay open with the
+// given URL list. Emitted by Viewer when Tab is pressed and at least
+// one URL is harvested. Handled at the App level (App owns the picker
+// state, mirrors the help-popover pattern from ADR-0082).
+type LinkPickerOpenMsg struct {
+	Links []string
+}
+
+// LinkPickerClosedMsg signals the picker has closed (Esc, Tab, Enter,
+// or numeric launch). Handled at the App level to flip linkPicker.open.
+type LinkPickerClosedMsg struct{}
+
+// LaunchURLMsg requests App fire launchURLCmd for the given URL.
+// Emitted by the link picker on Enter or 1-9 in-range.
+type LaunchURLMsg struct {
+	URL string
+}
+
+// linkPickerOpenCmd wraps a LinkPickerOpenMsg in a tea.Cmd so callers
+// can return it from Update.
+func linkPickerOpenCmd(links []string) tea.Cmd {
+	return func() tea.Msg { return LinkPickerOpenMsg{Links: links} }
 }

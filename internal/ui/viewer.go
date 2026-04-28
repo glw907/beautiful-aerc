@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -25,12 +24,6 @@ const (
 	viewerLoading viewerPhase = iota
 	viewerReady
 )
-
-// openURL is the URL launcher hook. Tests swap it to capture the URL
-// instead of executing xdg-open.
-var openURL = func(url string) error {
-	return exec.Command("xdg-open", url).Start()
-}
 
 // Viewer renders a single message in the right panel. It owns no
 // backend reference — body fetch and mark-read Cmds are constructed
