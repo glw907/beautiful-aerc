@@ -30,8 +30,14 @@ func stripANSI(s string) string {
 // the folder list and first folder's messages are populated.
 func newLoadedApp(t *testing.T, width, height int) App {
 	t.Helper()
+	return newLoadedAppWithIcons(t, width, height, FancyIcons)
+}
+
+// newLoadedAppWithIcons is like newLoadedApp but accepts an explicit IconSet.
+func newLoadedAppWithIcons(t *testing.T, width, height int, icons IconSet) App {
+	t.Helper()
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), icons)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	drainApp(t, &app, app.Init())
 	return app
@@ -584,28 +590,42 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 	// glyphs (sidebar folder icons, message flag icons). App.View uses
 	// displayCells (not lipgloss.Width) so each row is padded correctly
 	// before the border is appended.
-	for _, w := range []int{80, 100, 120, 160} {
-		app := newLoadedApp(t, w, 30)
-		view := app.View()
-		lines := strings.Split(view, "\n")
-		// Skip empty lines and lines that are all-border (top/bottom chrome).
-		borderRune := '│'
-		for lineIdx, line := range lines {
-			if line == "" {
-				continue
+	//
+	// Parameterized across three icon/width modes to lock in the invariant
+	// that displayCells(row) == terminal width regardless of SetSPUACellWidth.
+	for _, mode := range []struct {
+		name    string
+		width   int
+		iconSet IconSet
+	}{
+		{"simple_w1", 1, SimpleIcons},
+		{"fancy_w1", 1, FancyIcons},
+		{"fancy_w2", 2, FancyIcons},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			SetSPUACellWidth(mode.width)
+			defer SetSPUACellWidth(2) // restore the package init() default
+
+			borderRune := '│'
+			for _, w := range []int{80, 100, 120, 160} {
+				app := newLoadedAppWithIcons(t, w, 30, mode.iconSet)
+				view := app.View()
+				lines := strings.Split(view, "\n")
+				for lineIdx, line := range lines {
+					if line == "" {
+						continue
+					}
+					plain := stripANSI(line)
+					if !strings.ContainsRune(plain, borderRune) {
+						continue
+					}
+					dw := displayCells(line)
+					if dw != w {
+						t.Errorf("mode=%s w=%d line %d: displayCells=%d, want %d: %q",
+							mode.name, w, lineIdx, dw, w, plain)
+					}
+				}
 			}
-			// Content rows end with │. Find the position of the last │.
-			// All content rows must have it at the same display column = w-1.
-			plain := stripANSI(line)
-			if !strings.ContainsRune(plain, borderRune) {
-				continue
-			}
-			// Measure display cells of the full line (including the border).
-			dw := displayCells(line)
-			if dw != w {
-				t.Errorf("w=%d line %d: displayCells=%d, want %d: %q",
-					w, lineIdx, dw, w, plain)
-			}
-		}
+		})
 	}
 }

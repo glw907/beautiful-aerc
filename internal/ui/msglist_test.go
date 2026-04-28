@@ -141,28 +141,46 @@ func TestMessageList(t *testing.T) {
 		// cells; displayCells is the authoritative counter. Both read and unread
 		// rows must reach exactly w display cells so the right border lands at
 		// a fixed column regardless of flag state.
-		for _, w := range []int{80, 100, 120, 160} {
-			readMsg := mail.MessageInfo{
-				UID: "r", ThreadID: "r", From: "Alice", Subject: "Hello",
-				Date: "Mon 2026-04-26", Flags: mail.FlagSeen,
-			}
-			unreadMsg := mail.MessageInfo{
-				UID: "u", ThreadID: "u", From: "Bob", Subject: "World",
-				Date: "Mon 2026-04-26", Flags: 0,
-			}
-			ml := NewMessageList(styles, []mail.MessageInfo{readMsg, unreadMsg}, w, 5, FancyIcons)
-			lines := strings.Split(ml.View(), "\n")
-			if len(lines) < 2 {
-				t.Fatalf("w=%d: expected at least 2 rows, got %d", w, len(lines))
-			}
-			readW := displayCells(lines[0])
-			unreadW := displayCells(lines[1])
-			if readW != w {
-				t.Errorf("w=%d: read row displayCells=%d, want %d", w, readW, w)
-			}
-			if unreadW != w {
-				t.Errorf("w=%d: unread row displayCells=%d, want %d", w, unreadW, w)
-			}
+		//
+		// Parameterized across three icon/width modes to lock in the invariant
+		// that displayCells(row) == terminal width regardless of SetSPUACellWidth.
+		for _, mode := range []struct {
+			name    string
+			width   int
+			iconSet IconSet
+		}{
+			{"simple_w1", 1, SimpleIcons},
+			{"fancy_w1", 1, FancyIcons},
+			{"fancy_w2", 2, FancyIcons},
+		} {
+			t.Run(mode.name, func(t *testing.T) {
+				SetSPUACellWidth(mode.width)
+				defer SetSPUACellWidth(2) // restore the package init() default
+
+				for _, w := range []int{80, 100, 120, 160} {
+					readMsg := mail.MessageInfo{
+						UID: "r", ThreadID: "r", From: "Alice", Subject: "Hello",
+						Date: "Mon 2026-04-26", Flags: mail.FlagSeen,
+					}
+					unreadMsg := mail.MessageInfo{
+						UID: "u", ThreadID: "u", From: "Bob", Subject: "World",
+						Date: "Mon 2026-04-26", Flags: 0,
+					}
+					ml := NewMessageList(styles, []mail.MessageInfo{readMsg, unreadMsg}, w, 5, mode.iconSet)
+					lines := strings.Split(ml.View(), "\n")
+					if len(lines) < 2 {
+						t.Fatalf("mode=%s w=%d: expected at least 2 rows, got %d", mode.name, w, len(lines))
+					}
+					readW := displayCells(lines[0])
+					unreadW := displayCells(lines[1])
+					if readW != w {
+						t.Errorf("mode=%s w=%d: read row displayCells=%d, want %d", mode.name, w, readW, w)
+					}
+					if unreadW != w {
+						t.Errorf("mode=%s w=%d: unread row displayCells=%d, want %d", mode.name, w, unreadW, w)
+					}
+				}
+			})
 		}
 	})
 
