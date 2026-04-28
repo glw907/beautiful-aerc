@@ -969,3 +969,88 @@ func TestAccountTab_WindowCounter(t *testing.T) {
 		}
 	})
 }
+
+// Viewer n/N navigation tests.
+
+func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	// Open viewer on initial selection (UID "1", row 0).
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tab.viewer.IsOpen() {
+		t.Fatal("viewer must be open after Enter")
+	}
+	startUID := tab.viewer.CurrentUID()
+	// Transition to ready by calling SetBody.
+	tab.viewer = tab.viewer.SetBody(nil)
+	if tab.viewer.Phase() != viewerReady {
+		t.Fatal("viewer must be ready after SetBody")
+	}
+	// Send n — must advance to row 1.
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	newUID := tab.viewer.CurrentUID()
+	if newUID == startUID {
+		t.Errorf("n did not advance viewer; UID still %q", startUID)
+	}
+	if cmd == nil {
+		t.Error("n must return a non-nil Cmd (fetch batch)")
+	}
+}
+
+func TestViewerNAtBoundaryInert(t *testing.T) {
+	// Use a minimal 3-message fixture so we can predict the boundary.
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	msgs := []mail.MessageInfo{
+		{UID: "A", ThreadID: "A", From: "alice", Subject: "first", Flags: mail.FlagSeen},
+		{UID: "B", ThreadID: "B", From: "bob", Subject: "second", Flags: mail.FlagSeen},
+		{UID: "C", ThreadID: "C", From: "carol", Subject: "third", Flags: mail.FlagSeen},
+	}
+	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: msgs})
+	if tab.msglist.Count() != 3 {
+		t.Fatalf("fixture setup: count = %d, want 3", tab.msglist.Count())
+	}
+
+	// Jump to last row before opening viewer.
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+
+	// Open viewer on last message.
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tab.viewer.IsOpen() {
+		t.Fatal("viewer must be open")
+	}
+	tab.viewer = tab.viewer.SetBody(nil)
+	lastUID := tab.viewer.CurrentUID()
+
+	// n at the last row should be inert.
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if tab.viewer.CurrentUID() != lastUID {
+		t.Errorf("n at boundary changed viewer UID from %q to %q", lastUID, tab.viewer.CurrentUID())
+	}
+	if cmd != nil {
+		t.Errorf("n at boundary must return nil Cmd, got %T", cmd)
+	}
+}
+
+func TestViewerNDuringLoadInert(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	// Open viewer — stays in loading phase (no SetBody call).
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tab.viewer.IsOpen() {
+		t.Fatal("viewer must be open")
+	}
+	if tab.viewer.Phase() == viewerReady {
+		t.Fatal("viewer must still be loading (no SetBody called)")
+	}
+	loadingUID := tab.viewer.CurrentUID()
+
+	// n while loading must be inert.
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if tab.viewer.CurrentUID() != loadingUID {
+		t.Errorf("n during load changed UID from %q to %q", loadingUID, tab.viewer.CurrentUID())
+	}
+	if cmd != nil {
+		t.Errorf("n during load must return nil Cmd, got %T", cmd)
+	}
+}

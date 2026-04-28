@@ -66,6 +66,10 @@ func NewViewer(styles Styles, t *theme.CompiledTheme, accountName string) Viewer
 // IsOpen reports whether the viewer is currently displayed.
 func (v Viewer) IsOpen() bool { return v.open }
 
+// Phase reports the viewer's current load phase. Used by AccountTab
+// to gate n/N during loading so a second fetch isn't queued.
+func (v Viewer) Phase() viewerPhase { return v.phase }
+
 // CurrentUID returns the UID of the message in the viewer, or empty
 // when closed. Used by AccountTab to drop stale bodyLoadedMsg events.
 func (v Viewer) CurrentUID() mail.UID {

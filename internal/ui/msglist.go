@@ -592,6 +592,17 @@ func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
 	return m.rows[m.selected].msg, true
 }
 
+// MessageByUID returns the message info for uid, or ok=false when not
+// found in the source set.
+func (m MessageList) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
+	for i := range m.source {
+		if m.source[i].UID == uid {
+			return m.source[i], true
+		}
+	}
+	return mail.MessageInfo{}, false
+}
+
 // Count returns the number of source messages in the list.
 func (m MessageList) Count() int { return len(m.source) }
 

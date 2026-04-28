@@ -203,6 +203,25 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 // SidebarSearch instead of the account-view handlers.
 func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	if m.viewer.IsOpen() {
+		s := msg.String()
+		if s == "n" || s == "N" {
+			if m.viewer.Phase() != viewerReady {
+				return m, nil
+			}
+			delta := 1
+			if s == "N" {
+				delta = -1
+			}
+			uid, moved := m.msglist.MoveCursor(delta)
+			if !moved {
+				return m, nil
+			}
+			info, ok := m.msglist.MessageByUID(uid)
+			if !ok {
+				return m, nil
+			}
+			return m.openMessage(info)
+		}
 		var cmd tea.Cmd
 		m.viewer, cmd = m.viewer.Update(msg)
 		return m, cmd
@@ -298,14 +317,10 @@ func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
 	return m, m.selectionChangedCmds()
 }
 
-// openSelectedMessage opens the current msglist selection in the
-// viewer, fires the body-fetch Cmd, and (for unread messages) flips
-// the seen flag locally + fires a backend MarkRead.
-func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
-	msg, ok := m.msglist.SelectedMessage()
-	if !ok {
-		return m, nil
-	}
+// openMessage opens msg in the viewer, fires the body-fetch Cmd, and
+// (for unread messages) flips the seen flag locally + fires a backend
+// MarkRead. Shared by Enter, n, and N.
+func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
 	m.viewer = m.viewer.Open(msg)
 	cmds := []tea.Cmd{
 		loadBodyCmd(m.backend, msg.UID),
@@ -317,6 +332,17 @@ func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 		cmds = append(cmds, markReadCmd(m.backend, msg.UID))
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// openSelectedMessage opens the current msglist selection in the
+// viewer, fires the body-fetch Cmd, and (for unread messages) flips
+// the seen flag locally + fires a backend MarkRead.
+func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
+	msg, ok := m.msglist.SelectedMessage()
+	if !ok {
+		return m, nil
+	}
+	return m.openMessage(msg)
 }
 
 // clearSearchIfActive clears the shelf and the filter if the shelf
