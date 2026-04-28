@@ -25,6 +25,9 @@ func detectHTML(text string) bool {
 // CleanPlain normalizes plain text email content to markdown.
 // Detects HTML-in-plain-text and routes through CleanHTML if found.
 func CleanPlain(text string) string {
+	// Strip carriage returns from CRLF line endings (RFC 2822 7bit/8bit bodies)
+	// before any other processing, including the HTML detection branch.
+	text = strings.ReplaceAll(text, "\r", "")
 	if detectHTML(text) {
 		return CleanHTML(text)
 	}

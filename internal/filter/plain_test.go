@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestCleanPlainStripsCarriageReturn(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"crlf line endings", "line1\r\nline2\r\n"},
+		{"standalone cr", "a\rb"},
+		{"mixed crlf and lf", "first\r\nsecond\nthird\r\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CleanPlain(tt.input)
+			if strings.Contains(got, "\r") {
+				t.Errorf("CleanPlain() result contains \\r: %q", got)
+			}
+		})
+	}
+}
+
 func TestDetectHTML(t *testing.T) {
 	tests := []struct {
 		name  string

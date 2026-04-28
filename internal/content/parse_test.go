@@ -5,6 +5,7 @@ package content
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -304,6 +305,134 @@ func TestWrapImpliedQuotesIncrementsLevels(t *testing.T) {
 	}
 	if innerBQ.Level != 2 {
 		t.Errorf("inner blockquote level: got %d, want 2 (incremented from 1)", innerBQ.Level)
+	}
+}
+
+func TestParseSpansBareHTTPSURL(t *testing.T) {
+	got := parseSpans("Visit https://example.com today")
+	want := []Span{
+		Text{Content: "Visit "},
+		Link{Text: "https://example.com", URL: "https://example.com"},
+		Text{Content: " today"},
+	}
+	spansEqual(t, got, want)
+}
+
+func TestParseSpansBareHTTPURL(t *testing.T) {
+	got := parseSpans("Visit http://example.com today")
+	want := []Span{
+		Text{Content: "Visit "},
+		Link{Text: "http://example.com", URL: "http://example.com"},
+		Text{Content: " today"},
+	}
+	spansEqual(t, got, want)
+}
+
+func TestParseSpansBareMailtoURL(t *testing.T) {
+	got := parseSpans("Email mailto:foo@example.com now")
+	want := []Span{
+		Text{Content: "Email "},
+		Link{Text: "mailto:foo@example.com", URL: "mailto:foo@example.com"},
+		Text{Content: " now"},
+	}
+	spansEqual(t, got, want)
+}
+
+func TestParseSpansBareURLAtEndWithPunctuation(t *testing.T) {
+	got := parseSpans("see https://example.com.")
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 spans, got %d: %v", len(got), got)
+	}
+	link, ok := got[0].(Link)
+	if !ok {
+		// Allow "see " prefix to be span[0]; link may be span[1].
+		if len(got) < 2 {
+			t.Fatalf("no Link span found: %v", got)
+		}
+		link, ok = got[1].(Link)
+		if !ok {
+			t.Fatalf("span[1] not a Link: %v", got[1])
+		}
+	}
+	if link.URL != "https://example.com" {
+		t.Errorf("URL = %q, want %q (trailing . must be trimmed)", link.URL, "https://example.com")
+	}
+}
+
+func TestParseSpansBareURLInsideParens(t *testing.T) {
+	got := parseSpans("(see https://example.com)")
+	var found bool
+	for _, s := range got {
+		if link, ok := s.(Link); ok {
+			found = true
+			if link.URL != "https://example.com" {
+				t.Errorf("URL = %q, want %q (trailing ) must be trimmed)", link.URL, "https://example.com")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no Link span found in %v", got)
+	}
+}
+
+func TestParseSpansMarkdownLinkUntouched(t *testing.T) {
+	got := parseSpans("[text](https://example.com)")
+	var links int
+	for _, s := range got {
+		if _, ok := s.(Link); ok {
+			links++
+		}
+	}
+	if links != 1 {
+		t.Errorf("expected exactly 1 Link span (no double-processing), got %d in %v", links, got)
+	}
+}
+
+func TestParseSpansMultipleBareURLs(t *testing.T) {
+	got := parseSpans("a https://one.com b https://two.com c")
+	var links []Link
+	for _, s := range got {
+		if l, ok := s.(Link); ok {
+			links = append(links, l)
+		}
+	}
+	if len(links) != 2 {
+		t.Fatalf("expected 2 Link spans, got %d in %v", len(links), got)
+	}
+	if links[0].URL != "https://one.com" {
+		t.Errorf("link[0].URL = %q, want https://one.com", links[0].URL)
+	}
+	if links[1].URL != "https://two.com" {
+		t.Errorf("link[1].URL = %q, want https://two.com", links[1].URL)
+	}
+}
+
+func TestParseSpansNoURL(t *testing.T) {
+	input := "plain text with no URLs here"
+	got := parseSpans(input)
+	want := []Span{Text{Content: input}}
+	spansEqual(t, got, want)
+}
+
+func TestParseBlocksCRLFParagraph(t *testing.T) {
+	// Paranoia/lock-in: even if CR slips past the filter layer, no \r should
+	// survive in rendered span text.
+	input := "Para line 1\r\nPara line 2\r\n"
+	blocks := ParseBlocks(input)
+	for _, b := range blocks {
+		p, ok := b.(Paragraph)
+		if !ok {
+			continue
+		}
+		for _, s := range p.Spans {
+			text, ok := s.(Text)
+			if !ok {
+				continue
+			}
+			if strings.Contains(text.Content, "\r") {
+				t.Errorf("span text contains \\r: %q", text.Content)
+			}
+		}
 	}
 }
 

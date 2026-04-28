@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestNormalizeWhitespaceStripsCarriageReturn(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"crlf line endings", "line1\r\nline2\r\n"},
+		{"standalone cr", "a\rb"},
+		{"mixed", "first\r\nsecond\nthird\r\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeWhitespace(tt.input)
+			if strings.Contains(got, "\r") {
+				t.Errorf("normalizeWhitespace() result contains \\r: %q", got)
+			}
+		})
+	}
+}
+
 func TestCleanHTML(t *testing.T) {
 	tests := []struct {
 		name string

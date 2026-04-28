@@ -92,8 +92,10 @@ func stripHiddenElements(body string) string {
 
 // normalizeWhitespace collapses non-breaking spaces, zero-width filler
 // characters (preheader padding), blank lines with only spaces, excessive
-// blank lines, and leading blank lines.
+// blank lines, and leading blank lines. Also strips carriage returns from
+// CRLF line endings that survive HTML-to-markdown conversion.
 func normalizeWhitespace(text string) string {
+	text = strings.ReplaceAll(text, "\r", "")
 	text = reNBSP.ReplaceAllString(text, " ")
 	text = reZeroWidth.ReplaceAllString(text, "")
 	text = reBlankSpaces.ReplaceAllString(text, "")

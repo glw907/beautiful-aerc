@@ -18,8 +18,81 @@ var (
 	reSignature   = regexp.MustCompile(`^-- $`)
 )
 
+// urlSchemes is the ordered list of bare-URL schemes that splitBareURLs recognizes.
+var urlSchemes = []string{"https://", "http://", "mailto:"}
+
+// trailingPunct is the set of characters trimmed from the right end of a
+// bare URL when they are almost certainly sentence punctuation. Conservative:
+// only characters that would never legitimately close a URL.
+const trailingPunct = `.,;:!?)>'"` + "`"
+
+// splitBareURLs splits a plain-text string on bare URL occurrences,
+// returning a mix of Text and Link spans. Recognized schemes: https://,
+// http://, mailto:. Trailing sentence punctuation is trimmed from each URL.
+// This function must only be called on raw Text content, never on content
+// already inside a Link/Bold/Italic/Code span.
+func splitBareURLs(s string) []Span {
+	if s == "" {
+		return nil
+	}
+
+	var out []Span
+	remaining := s
+
+	for len(remaining) > 0 {
+		// Find the earliest URL scheme.
+		earliest := -1
+		for _, scheme := range urlSchemes {
+			idx := strings.Index(remaining, scheme)
+			if idx >= 0 && (earliest < 0 || idx < earliest) {
+				earliest = idx
+			}
+		}
+		if earliest < 0 {
+			// No more URLs.
+			out = append(out, Text{Content: remaining})
+			break
+		}
+
+		// Emit text before the URL.
+		if earliest > 0 {
+			out = append(out, Text{Content: remaining[:earliest]})
+		}
+		remaining = remaining[earliest:]
+
+		// URL continues until whitespace or end of string.
+		end := strings.IndexAny(remaining, " \t\n\r")
+		var rawURL string
+		if end < 0 {
+			rawURL = remaining
+			remaining = ""
+		} else {
+			rawURL = remaining[:end]
+			remaining = remaining[end:]
+		}
+
+		// Trim trailing sentence punctuation.
+		trimmed := strings.TrimRight(rawURL, trailingPunct)
+		if trimmed == "" {
+			// Entire token was punctuation; treat as text.
+			out = append(out, Text{Content: rawURL})
+			continue
+		}
+		suffix := rawURL[len(trimmed):]
+		out = append(out, Link{Text: trimmed, URL: trimmed})
+		if suffix != "" {
+			remaining = suffix + remaining
+		}
+	}
+
+	return out
+}
+
 // ParseBlocks parses normalized markdown into email-aware block types.
+// Strips carriage returns as a defensive measure: the filter layer removes
+// them, but ParseBlocks may be called directly in tests or future paths.
 func ParseBlocks(markdown string) []Block {
+	markdown = strings.ReplaceAll(markdown, "\r", "")
 	blocks := parseBlocksAtLevel(markdown, 1)
 	return wrapImpliedQuotes(blocks)
 }
@@ -336,5 +409,34 @@ func parseSpans(input string) []Span {
 		}
 	}
 
-	return spans
+	// Post-process: expand Text spans that contain bare URLs into Link spans.
+	// Non-Text spans (Bold, Italic, Code, Link) pass through untouched.
+	// Short-circuit: if no Text span contains a URL scheme, return spans unchanged
+	// to avoid allocating a new slice on the hot path.
+	hasURL := false
+	for _, s := range spans {
+		if t, ok := s.(Text); ok {
+			for _, scheme := range urlSchemes {
+				if strings.Contains(t.Content, scheme) {
+					hasURL = true
+					break
+				}
+			}
+			if hasURL {
+				break
+			}
+		}
+	}
+	if !hasURL {
+		return spans
+	}
+	var expanded []Span
+	for _, s := range spans {
+		if t, ok := s.(Text); ok {
+			expanded = append(expanded, splitBareURLs(t.Content)...)
+		} else {
+			expanded = append(expanded, s)
+		}
+	}
+	return expanded
 }
