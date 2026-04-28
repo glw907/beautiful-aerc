@@ -4,6 +4,9 @@
 
 ## High
 
+- [ ] **#22** Auto-link bare URLs in parsed bodies `#bug` `#poplar` *(2026-04-28)*
+  `internal/content/parse.go` only emits `Link` spans for markdown `[text](url)`. Bare `https://...` in real bodies renders as plain `Text`, so neither the long-bare-URL footnote path (Pass 2.5b-4b Phase 1) nor the `Tab` link picker fires for messages that aren't markdown-formatted. Need an autolink pass over each text run that tokenizes bare http(s) URLs (and probably `mailto:` / bare email addresses) into `Link{Text: url, URL: url}` so the existing harvest path picks them up. Discovered during Pass 2.5b-4b live tmux verification — viewer body shows bare URLs untouched, `v.links` empty, Tab inert. Fix is parser-local; no harvest or UI changes needed.
+
 - [x] **#20** ~~SPUA-A cell-width policy: needs robust cross-terminal solution~~ `#bug` `#poplar` `#bubbletea-norms` *(2026-04-27)*
   Resolved 2026-04-27 by ADR-0084 / pass `2026-04-27-spua-cell-width-policy`. Three-mode iconography (`[ui] icons = "auto" | "simple" | "fancy"`, default auto) with sysfont-based Nerd Font detection and CPR cell-width probe. ADR-0079 superseded; ADR-0083 narrowed. New `poplar diagnose` subcommand records the empirical receipt; manual matrix in `docs/poplar/testing/icon-modes.md`.
 
