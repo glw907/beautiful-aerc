@@ -4,6 +4,9 @@
 
 ## High
 
+- [ ] **#23** HTML→plain-text fuses words across element boundaries `#bug` `#poplar` *(2026-04-28)*
+  Visible in the 1Password Safari update email ("Safari toSafari 18.6", "increasing the  minimum") and Dave Johnson reply ("to:Dave_99504@yahoo.comThanks,Dave Johnson"). The html→markdown converter drops inter-element whitespace when adjacent inline elements (`<br>`, `<a>`, `<span>`) abut without a separating text node — the joined text loses the implicit word boundary the rendered HTML had. Affects readability of any HTML email with non-trivial inline structure. Likely fix in `internal/filter/html.go`: insert a space at element boundaries before tag stripping, or post-process to re-introduce spaces around fused alphanumeric runs. Discovered during 2026-04-28 viewer bug-fix work.
+
 - [x] **#22** ~~Auto-link bare URLs in parsed bodies~~ `#bug` `#poplar` *(2026-04-28)* (closed 2026-04-28)
   `internal/content/parse.go` only emits `Link` spans for markdown `[text](url)`. Bare `https://...` in real bodies renders as plain `Text`, so neither the long-bare-URL footnote path (Pass 2.5b-4b Phase 1) nor the `Tab` link picker fires for messages that aren't markdown-formatted. Need an autolink pass over each text run that tokenizes bare http(s) URLs (and probably `mailto:` / bare email addresses) into `Link{Text: url, URL: url}` so the existing harvest path picks them up. Discovered during Pass 2.5b-4b live tmux verification — viewer body shows bare URLs untouched, `v.links` empty, Tab inert. Fix is parser-local; no harvest or UI changes needed.
   Resolved 2026-04-28: added `splitBareURLs` post-processor in `parseSpans` that splits bare https/http/mailto URLs out of Text runs into Link{Text==URL} spans. Harvest path picks them up unchanged; Tab picker now works on real plain-text emails.
