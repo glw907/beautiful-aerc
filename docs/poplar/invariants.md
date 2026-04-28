@@ -132,33 +132,30 @@ the ADR(s) that justify them.
   flips the local seen flag immediately and the backend `MarkRead`
   Cmd runs in parallel. Failures surface via `ErrorMsg` into the
   App-owned banner.
-- `ErrorMsg{Op string; Err error}` is the canonical Cmd error type.
-  Every poplar `tea.Cmd` that can fail returns `ErrorMsg` with a
-  short verb-phrase `Op` ("mark read", "fetch body", "open folder").
-  `App` owns `lastErr ErrorMsg`; `App.Update` stores it (last-write-
-  wins). Banner is one foreground-only row above the status bar
-  (`⚠ <Op>: <Err>`), truncated to width with `…`; account region
-  shrinks by one cell when shown so view height is unchanged. Banner
-  is chrome — no key steal, no dismiss, no severity, no queue. While
-  help is open, banner is part of the dimmed underlay.
+- `ErrorMsg{Op, Err}` is the canonical Cmd error type. Every fallible
+  `tea.Cmd` returns it with a short verb-phrase `Op` ("mark read",
+  "fetch body"). `App` owns `lastErr` (last-write-wins). Banner is
+  one foreground-only row above the status bar (`⚠ <Op>: <Err>`),
+  truncated with `…`; account region shrinks one cell when shown so
+  view height is unchanged. No key steal, dismiss, severity, queue.
+  Part of the dimmed underlay while overlays are open.
 - Spinner placeholders go through `NewSpinner(t)` in
   `internal/ui/styles.go`: Dot variant, `FgDim`. Used by viewer load;
   future folder load and send progress will share it.
-- Body content rendering caps at `maxBodyWidth = 72` cells.
-  Headers wrap at the panel content width (uncapped). Outbound
-  links are harvested by `content.RenderBodyWithFootnotes` into
-  `[N]: <url>` rows below a horizontal rule; inline link text gets
-  ` [^N]` glued to its last word with U+00A0 so wrap can never
-  orphan the marker. Auto-linked bare URLs (`Text == URL`) render
-  inline in link style without a marker.
+- Body content rendering caps at `maxBodyWidth = 72` cells; headers
+  wrap at the panel content width (uncapped). Outbound links are
+  harvested by `content.RenderBodyWithFootnotes` into `[N]: <url>`
+  rows below a horizontal rule; inline link text gets ` [^N]` glued
+  to its last word with U+00A0 so wrap can never orphan the marker.
+  Short bare URLs (`Text == URL`, ≤30 cells) render inline in link
+  style without a marker.
 
 ## UX
 
 - Poplar is opinionated and not configurable in v1. Users who want
   maximum configurability should use aerc or mutt.
-- Vim-first keybindings: single-key motions, visual mode for
-  multi-select. No multi-key sequences. Bubbletea sends one
-  tea.KeyMsg per keypress.
+- Vim-first keybindings: single-key motions, visual mode for multi-
+  select. No multi-key sequences (one tea.KeyMsg per keypress).
 - No `:` command mode. Every action is a single-key binding or a
   modal picker launched by a key.
 - `q` exits the viewer when the viewer is open, quits poplar when
@@ -167,25 +164,19 @@ the ADR(s) that justify them.
   the help popover is open, `q` is swallowed (help is a view, not
   a state to escape). `?` opens the help popover; `?` or `Esc`
   closes it.
-- The help popover is the first modal overlay. `App` owns
-  `helpOpen bool` and `help HelpPopover`; `viewerOpen` selects the
-  context (`HelpAccount` vs `HelpViewer`) at open time. While
-  `helpOpen` is true, `App.Update` short-circuits all keys other
-  than `?`/`Esc` (no delegation to children). `App.View` renders
-  the underlying frame, dims it via `DimANSI` (SGR-faint injector),
-  then composites the popover box atop with `PlaceOverlay`
-  (vendored from superfile, MIT). `HelpPopover` exposes
-  `Box(w,h)`/`Position(box,w,h)` for compositing; `View(w,h)` is the
-  standalone fallback used when the popover doesn't fit. No `Init`/
-  `Update`; centering is computed from `Position`.
+- App owns modal overlays via the same compose pattern: render
+  underlying frame, dim via `DimANSI`, composite via `PlaceOverlay`
+  (vendored from superfile, MIT) at the centered top-left from
+  `centerOverlay`. While an overlay is open, `App.Update` short-
+  circuits keys into it. Two overlays exist: help popover (`App`
+  owns `helpOpen bool` + `help HelpPopover`; `viewerOpen` selects
+  `HelpAccount` vs `HelpViewer` context) and link picker (`App`
+  owns `linkPicker LinkPicker`; viewer-context-only).
 - Help popover advertises the full planned keybinding vocabulary,
-  not just currently-wired keys. Each row in the static binding
-  tables (`accountGroups`, `viewerGroups`,
-  `accountBottomHints`, `viewerBottomHints`) carries a `wired bool`
-  flag. Wired rows: bright-bold key + dim description. Unwired
-  rows: entire row dim, no bold, no glyph. Group headings stay
-  bright regardless. The dim/bright contrast is the future-binding
-  signal; later passes flip the flag as bindings come online.
+  not just currently-wired keys. Each row in the binding tables
+  carries a `wired bool` flag. Wired rows: bright-bold key + dim
+  desc. Unwired rows: dim throughout. Group headings stay bright.
+  Later passes flip wired flags as bindings come online.
 - Folder jumps use uppercase single keys:
   `I` Inbox, `D` Drafts, `S` Sent, `A` Archive, `X` Spam, `T`
   Trash. Shared with lowercase triage keys (`d` delete vs
@@ -203,14 +194,10 @@ the ADR(s) that justify them.
 - Fold state is per-session, reset on every `SetMessages`
   (folder reload). Threads default expanded. The `[N] ` prefix
   badge replaces the box-drawing prefix on a collapsed root.
-- `Space` toggles fold on the thread under the cursor (operates
-  on the thread root if the cursor is on a child; cursor snaps
-  to the nearest visible row after fold). Inside visual-select
-  mode (Pass 6) `Space` toggles row selection instead. `F` is
-  the bulk counterpart: it folds every multi-message thread if
-  any is currently unfolded, otherwise unfolds everything. Mixed
-  state collapses on first press — reach fully-unfolded with a
-  second press.
+- `Space` toggles fold on the thread under the cursor (snaps to
+  nearest visible row after fold; in visual-select mode toggles
+  row selection instead). `F` is the bulk counterpart: folds every
+  multi-message thread if any is unfolded, else unfolds everything.
 - Message list encodes read state by brightness — unread sender
   is `FgBright` bold, unread subject is `FgBright`; read rows are
   `FgDim`. Hue is reserved for the cursor (`AccentPrimary`) and
@@ -233,23 +220,37 @@ the ADR(s) that justify them.
   saved fold state, which is preserved unmutated and restored on
   `Esc`. `Esc` clears the query and restores the pre-search cursor
   row.
-- Search modes cycle between `[name]` (subject + sender) and
-  `[all]` (subject + sender + date text) via `Tab` while the prompt
-  is focused. Case-insensitive substring match. Scope is the
-  current folder only — folder jumps (`I/D/S/A/X/T`, `J/K`) clear
-  the active search. Fold keys (`Space/F/U`) are no-ops while a
-  filter is committed.
+- Search modes cycle between `[name]` (subject + sender) and `[all]`
+  (subject + sender + date text) via `Tab` while focused. Case-
+  insensitive substring; current folder only — folder jumps clear
+  the search. Fold keys are no-ops while filter is committed.
 - Modifier-free keybindings: user-facing actions never bind a
   Ctrl/Alt/Meta chord. Viewer scroll uses `j/k/Space/b/g/G`.
   `Ctrl-c` survives only as a terminal-kill alias on the Quit
   binding; never advertised. `pgup/pgdown` are not bound.
 - `Enter` on the message list opens the selected message in the
   viewer. Unread → marked seen optimistically. `q`/`Esc` closes
-  the viewer and the cursor stays on the same row.
+  the viewer and the cursor stays on the same row. While the viewer
+  is ready, `n`/`N` advances/retreats to the next visible message
+  (skipping folded rows), reusing the same fetch + mark-read flow
+  as `Enter`. Boundaries are inert; `n`/`N` are inert during
+  `viewerLoading`.
 - Viewer link launch: `1`–`9` open the Nth harvested URL via
   `xdg-open` (fire-and-forget; `xdg-open` itself detaches and exit
-  status is unreliable). `Tab` is reserved for the link picker
-  (Pass 2.5b-4b) — a no-op in Pass 2.5b-4.
+  status is unreliable). `Tab` opens the `LinkPicker` modal overlay
+  when at least one URL is harvested (inert otherwise). The picker
+  is App-owned, viewer-context-only, mirrors the help-popover
+  overlay pattern (centerOverlay + DimANSI + PlaceOverlay): `j/k`
+  cursor, `Enter`/`1`-`9` launch + close, `Esc`/`Tab` close, `q`
+  swallowed. Index column is right-aligned with leading-space pad;
+  inline URL truncated to 50 cells; 2-row preview footer wraps the
+  full URL.
+- Bare URL footnoting: a `Link{Text: url, URL: url}` span whose
+  `lipgloss.Width(URL) > 30` cells is harvested into the footnote
+  list with a `trimURL(url) + nbsp + [^N]` inline form. Short bare
+  URLs pass through unchanged. `trimURL` strips the scheme, keeps
+  host (with port), and appends `/<first-segment>` when present;
+  appends `…` when anything was removed.
 
 ## Build & verification
 
@@ -292,8 +293,8 @@ invariant. ADR numbering is chronological.
 | Compose, Catkin, editor interface, library foundation | 0031, 0032, 0033, 0076 |
 | Per-screen prototype passes | 0022 (superseded by 0070), 0070 |
 | Sidebar search shelf, filter-and-hide, thread-level | 0064 |
-| Viewer prototype, footnote harvesting, optimistic mark-read | 0065, 0066, 0067, 0069 |
-| Help popover modal, future-binding policy, overlay+dim | 0071 (superseded by 0082), 0072, 0082 |
+| Viewer prototype, footnote harvesting, optimistic mark-read, n/N nav, long-bare-URL footnoting | 0065, 0066, 0067, 0069, 0085, 0086 |
+| Help popover modal, future-binding policy, overlay+dim, link picker | 0071 (superseded by 0082), 0072, 0082, 0087 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
 | Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |

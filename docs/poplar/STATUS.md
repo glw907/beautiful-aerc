@@ -1,11 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 2.5b-4b next — viewer completion (link picker
-`Tab`, filtered `n/N`, URL bug cleanup). Pass SPUA-policy done —
-three-mode iconography (auto/simple/fancy) with sysfont detection +
-CPR cell-width probe; ADR-0084 supersedes 0079, narrows 0083; new
-`poplar diagnose` subcommand; matrix doc + workstation captures
-under `docs/poplar/testing/`.
+**Current pass:** Pass 5 next — bubbletea conventions cleanup (#17
++ #18 + #19). Pass 2.5b-4b done — viewer completion: long-bare-URL
+footnoting, `n`/`N` nav, `Tab` link picker; ADR-0085/0086/0087;
+BACKLOG #22 logged for upstream parser autolink gap.
 
 ## Passes
 
@@ -22,8 +20,8 @@ under `docs/poplar/testing/`.
 | 4 | Bubbletea conventions audit + infrastructure | done — [audit](audits/2026-04-26-bubbletea-conventions.md) |
 | 4.1 | Render bugfix pass — 7 findings, absorbs #14 | done |
 | SPUA-policy | Three-mode iconography (auto/simple/fancy) + runtime probe | done — ADR-0084, [matrix](testing/icon-modes.md) |
-| 2.5b-4b | Viewer completion: link picker (`Tab`) + `n/N` filtered (#9) + URL bug cleanup | next |
-| 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | pending |
+| 2.5b-4b | Viewer completion: long-bare-URL footnoting + `n`/`N` nav + `Tab` link picker | done — ADR-0085/0086/0087 |
+| 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | next |
 | 6 | Triage actions (delete/archive/star/read; toast + undo bar) | pending |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
@@ -34,22 +32,26 @@ under `docs/poplar/testing/`.
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 | 1.1 | Neovim companion plugin (post-v1, #6) | post-v1 |
 
-## Next starter prompt (Pass 2.5b-4b)
+## Next starter prompt (Pass 5)
 
-> **Goal.** Complete the viewer: link picker on `Tab`, filtered
-> `n/N` (BACKLOG #9), URL-handling cleanup deferred from 4.1.
+> **Goal.** Pay down bubbletea conventions debt from the Pass 4
+> audit: migrate AccountTab + Viewer key dispatch to `key.Matches`
+> (#17), replace zero-latency intra-model `tea.Cmd` signals with
+> direct delegation (#18), and trust `AccountTab.View` line widths
+> in `App.View` (#19, depends on #17).
 >
-> **Scope.** `internal/ui/viewer.go`, `account_tab.go` for `n/N`,
-> `internal/content/{parse,render_footnote}.go` for URL bugs.
+> **Scope.** `internal/ui/{account_tab,viewer,app}.go` plus a new
+> `AccountKeys`/`ViewerKeys` struct in `keys.go` parallel to
+> `GlobalKeys`. No new components; structural cleanup only.
 >
-> **Settled:** ADR-0066/0067 footnote + launcher; ADR-0082 overlay
-> (link picker reuses `PlaceOverlay`+`DimANSI`).
+> **Settled:** Pass 4 audit findings A3/A9/A10; ADR-0080; conventions
+> doc §3/§8/§10. Splits into ~3-4 commits ordered #17 → #18 → #19.
 >
-> **Still open — brainstorm:** link picker layout (column/grid,
-> key affordances); `n/N` when no filter active; URL-bug triage.
+> **Still open — brainstorm:** binding struct slicing; App-side read
+> accessors on AccountTab.
 >
-> **Approach.** Brainstorm open questions, write plan at
-> `docs/superpowers/plans/YYYY-MM-DD-viewer-completion.md`, then
+> **Approach.** Brainstorm, plan at
+> `docs/superpowers/plans/YYYY-MM-DD-bubbletea-conventions-cleanup.md`,
 > implement. Standard pass-end checklist applies.
 
 ## Audits
