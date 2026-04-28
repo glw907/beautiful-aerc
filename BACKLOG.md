@@ -15,6 +15,9 @@
 
 ## Someday
 
+- [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)*
+  Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
+
 - [ ] **#19** Refactor `App.View` to trust `AccountTab.View` line widths `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
   Pass 4 audit-A10. `App.View` currently iterates every line of `m.acct.View()` to measure and pad it before appending the right border — parent-side post-processing on child output. The conventions doc lists this as an anti-pattern (§8). Once #17 lands and AccountTab fully honors its width contract, App.View can append the border without per-line measurement. Land after #17. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A10.
 
