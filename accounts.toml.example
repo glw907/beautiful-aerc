@@ -2,11 +2,18 @@
 # Copy to $XDG_CONFIG_HOME/poplar/accounts.toml (usually
 # ~/.config/poplar/accounts.toml) and edit to taste.
 
+# `name` is an internal handle for this account — used in logs and
+# error messages, never shown in the UI. The sidebar header shows the
+# account's email address (auto-discovered from the JMAP session, or
+# read from the `from` field for non-JMAP backends). To override the
+# sidebar header (e.g. show "Work" instead of an email), set `display`.
 [[account]]
 name = "Example"
+# display = "Work"
 backend = "jmap"
 source = "jmap+oauthbearer://you@example.com@api.example.com/.well-known/jmap"
 credential-cmd = "fastmail-password"
+# from = "You <you@example.com>"
 
 # UI preferences. The [ui] table is optional — omit it to take the
 # defaults. Run `poplar config init` after first launch to discover

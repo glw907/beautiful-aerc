@@ -14,6 +14,7 @@ import (
 // Used for prototype development, testing, and demos.
 type MockBackend struct {
 	name    string
+	email   string
 	folders []Folder
 	msgs    []MessageInfo
 	updates chan Update
@@ -30,7 +31,8 @@ func NewMockBackend() *MockBackend {
 		return time.Date(2026, month, day, hour, min, 0, 0, time.Local)
 	}
 	return &MockBackend{
-		name: "geoff@907.life",
+		name:  "geoff@907.life",
+		email: "geoff@907.life",
 		folders: []Folder{
 			{Name: "Inbox", Exists: 14, Unseen: 4, Role: "inbox"},
 			{Name: "Drafts", Exists: 2, Unseen: 0, Role: "drafts"},
@@ -70,7 +72,8 @@ func NewMockBackend() *MockBackend {
 	}
 }
 
-func (m *MockBackend) AccountName() string              { return m.name }
+func (m *MockBackend) AccountName() string             { return m.name }
+func (m *MockBackend) AccountEmail() string            { return m.email }
 func (m *MockBackend) Connect(_ context.Context) error { return nil }
 func (m *MockBackend) Disconnect() error               { return nil }
 

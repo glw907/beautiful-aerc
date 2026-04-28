@@ -38,14 +38,14 @@ type jmapClient interface {
 type Backend struct {
 	cfg config.AccountConfig
 
-	mu             sync.Mutex
-	client         jmapClient
-	pushClient     *jmap.Client // real client for EventSource; nil in unit tests
-	session        *jmap.Session
-	current        string
-	folders        map[string]folderEntry
-	blobIDs        map[mail.UID]string
-	states         map[string]string
+	mu         sync.Mutex
+	client     jmapClient
+	pushClient *jmap.Client // real client for EventSource; nil in unit tests
+	session    *jmap.Session
+	current    string
+	folders    map[string]folderEntry
+	blobIDs    map[mail.UID]string
+	states     map[string]string
 
 	bodies             *lru.Cache[string, []byte]
 	bodyGroup          singleflight.Group
@@ -91,8 +91,35 @@ func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
 	return b
 }
 
-// AccountName satisfies mail.Backend.
-func (b *Backend) AccountName() string { return b.cfg.Name }
+// AccountName satisfies mail.Backend. The cfg.Name fallback only
+// surfaces during the pre-Connect window, before the JMAP session
+// supplies the email per RFC 8620 §1.6.2.
+func (b *Backend) AccountName() string {
+	if b.cfg.Display != "" {
+		return b.cfg.Display
+	}
+	if email := b.AccountEmail(); email != "" {
+		return email
+	}
+	return b.cfg.Name
+}
+
+// AccountEmail satisfies mail.Backend.
+func (b *Backend) AccountEmail() string {
+	if b.cfg.From != nil && b.cfg.From.Address != "" {
+		return b.cfg.From.Address
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.session == nil {
+		return ""
+	}
+	accountID := b.session.PrimaryAccounts[jmapmail.URI]
+	if acct, ok := b.session.Accounts[accountID]; ok {
+		return acct.Name
+	}
+	return ""
+}
 
 // Updates satisfies mail.Backend. Returns a nil channel before
 // Connect succeeds.

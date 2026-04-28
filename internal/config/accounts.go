@@ -19,6 +19,7 @@ type configFile struct {
 
 type accountEntry struct {
 	Name            string            `toml:"name"`
+	Display         string            `toml:"display"`
 	Backend         string            `toml:"backend"`
 	Source          string            `toml:"source"`
 	Password        string            `toml:"password"`
@@ -93,6 +94,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 
 	acct := &AccountConfig{
 		Name:            e.Name,
+		Display:         e.Display,
 		Backend:         e.Backend,
 		Source:          source,
 		Password:        password,

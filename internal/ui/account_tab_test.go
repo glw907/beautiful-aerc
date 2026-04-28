@@ -744,9 +744,10 @@ func newPagingFakeBackend(count int) *pagingFakeBackend {
 	return &pagingFakeBackend{msgs: msgs}
 }
 
-func (b *pagingFakeBackend) AccountName() string              { return "test" }
-func (b *pagingFakeBackend) Connect(_ context.Context) error  { return nil }
-func (b *pagingFakeBackend) Disconnect() error                { return nil }
+func (b *pagingFakeBackend) AccountName() string             { return "test" }
+func (b *pagingFakeBackend) AccountEmail() string            { return "test@example.com" }
+func (b *pagingFakeBackend) Connect(_ context.Context) error { return nil }
+func (b *pagingFakeBackend) Disconnect() error               { return nil }
 func (b *pagingFakeBackend) ListFolders() ([]mail.Folder, error) {
 	return []mail.Folder{{Name: "Inbox", Role: "inbox"}}, nil
 }
@@ -779,7 +780,7 @@ func (b *pagingFakeBackend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, e
 	}
 	return result, nil
 }
-func (b *pagingFakeBackend) FetchBody(_ mail.UID) (io.Reader, error)         { return nil, nil }
+func (b *pagingFakeBackend) FetchBody(_ mail.UID) (io.Reader, error)          { return nil, nil }
 func (b *pagingFakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
 func (b *pagingFakeBackend) Move(_ []mail.UID, _ string) error                { return nil }
 func (b *pagingFakeBackend) Copy(_ []mail.UID, _ string) error                { return nil }
@@ -788,7 +789,7 @@ func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error     { 
 func (b *pagingFakeBackend) MarkRead(_ []mail.UID) error                      { return nil }
 func (b *pagingFakeBackend) MarkAnswered(_ []mail.UID) error                  { return nil }
 func (b *pagingFakeBackend) Send(_ string, _ []string, _ io.Reader) error     { return nil }
-func (b *pagingFakeBackend) Updates() <-chan mail.Update                       { return nil }
+func (b *pagingFakeBackend) Updates() <-chan mail.Update                      { return nil }
 
 func TestAccountTab_PaginationInitialLoad(t *testing.T) {
 	// 600 messages — first window fetches 500.

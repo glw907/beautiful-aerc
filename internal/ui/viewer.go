@@ -30,29 +30,29 @@ const (
 // at the AccountTab level. The viewer is pure state + render, with
 // scroll position tracked by an embedded bubbles/viewport.
 type Viewer struct {
-	open        bool
-	phase       viewerPhase
-	msg         mail.MessageInfo
-	accountName string
-	blocks      []content.Block
-	links       []string
-	headerStr   string
-	viewport    viewport.Model
-	spinner     spinner.Model
-	styles      Styles
-	theme       *theme.CompiledTheme
-	width       int
-	height      int
+	open         bool
+	phase        viewerPhase
+	msg          mail.MessageInfo
+	accountEmail string
+	blocks       []content.Block
+	links        []string
+	headerStr    string
+	viewport     viewport.Model
+	spinner      spinner.Model
+	styles       Styles
+	theme        *theme.CompiledTheme
+	width        int
+	height       int
 }
 
-// NewViewer constructs an empty (closed) viewer. accountName is used
-// to synthesize a To: header for fixtures that lack one.
-func NewViewer(styles Styles, t *theme.CompiledTheme, accountName string) Viewer {
+// NewViewer constructs an empty (closed) viewer. accountEmail
+// populates the To: header in the rendered message view.
+func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string) Viewer {
 	return Viewer{
-		styles:      styles,
-		theme:       t,
-		accountName: accountName,
-		spinner:     NewSpinner(t),
+		styles:       styles,
+		theme:        t,
+		accountEmail: accountEmail,
+		spinner:      NewSpinner(t),
 	}
 }
 
@@ -257,7 +257,7 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 func (v *Viewer) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
-		To:      []content.Address{{Email: v.accountName}},
+		To:      []content.Address{{Email: v.accountEmail}},
 		Date:    v.msg.Date,
 		Subject: v.msg.Subject,
 	}

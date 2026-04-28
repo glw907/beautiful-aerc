@@ -68,7 +68,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 		sidebar:       NewSidebar(styles, nil, uiCfg, sidebarWidth, 1, icons),
 		sidebarSearch: NewSidebarSearch(styles, sidebarWidth, icons),
 		msglist:       NewMessageList(styles, nil, 1, 1, icons),
-		viewer:        NewViewer(styles, t, backend.AccountName()),
+		viewer:        NewViewer(styles, t, backend.AccountEmail()),
 		pages:         make(map[string]*folderPage),
 		spinner:       NewSpinner(t),
 	}

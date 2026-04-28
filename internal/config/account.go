@@ -14,6 +14,7 @@ import (
 // that the forked workers actually use.
 type AccountConfig struct {
 	Name           string
+	Display        string
 	Backend        string
 	Source         string
 	Params         map[string]string

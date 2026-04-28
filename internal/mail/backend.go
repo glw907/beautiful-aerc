@@ -20,7 +20,11 @@ type SearchCriteria struct {
 // tea.Cmd model handles async naturally by running blocking calls
 // in commands that return messages on completion.
 type Backend interface {
+	// AccountName is the user-facing display label.
 	AccountName() string
+	// AccountEmail is the user's email address. Empty before Connect
+	// resolves it for backends that auto-discover (e.g. JMAP session).
+	AccountEmail() string
 
 	Connect(ctx context.Context) error
 	Disconnect() error
