@@ -18,6 +18,10 @@ type UIConfig struct {
 	// canonical folders (Inbox, Drafts, Sent, Archive, Spam, Trash) or
 	// literal provider name for custom folders.
 	Folders map[string]FolderConfig
+
+	// Icons is the iconography mode: "auto" (default), "simple", or
+	// "fancy". See ADR-0084.
+	Icons string
 }
 
 // FolderConfig holds per-folder overrides from [ui.folders.<name>]
@@ -52,6 +56,7 @@ func DefaultUIConfig() UIConfig {
 	return UIConfig{
 		Threading: true,
 		Folders:   map[string]FolderConfig{},
+		Icons:     "auto",
 	}
 }
 
@@ -60,6 +65,7 @@ func DefaultUIConfig() UIConfig {
 type rawUI struct {
 	Threading *bool                   `toml:"threading"`
 	Folders   map[string]rawFolderCfg `toml:"folders"`
+	Icons     string                  `toml:"icons"`
 }
 
 type rawFolderCfg struct {
@@ -91,6 +97,15 @@ func LoadUI(path string) (UIConfig, error) {
 	out := DefaultUIConfig()
 	if raw.UI.Threading != nil {
 		out.Threading = *raw.UI.Threading
+	}
+
+	if raw.UI.Icons != "" {
+		switch raw.UI.Icons {
+		case "auto", "simple", "fancy":
+			out.Icons = raw.UI.Icons
+		default:
+			return UIConfig{}, fmt.Errorf("ui.icons: invalid value %q (want \"auto\", \"simple\", or \"fancy\")", raw.UI.Icons)
+		}
 	}
 
 	for name, fc := range raw.UI.Folders {

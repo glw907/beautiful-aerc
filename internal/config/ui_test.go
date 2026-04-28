@@ -145,6 +145,45 @@ rank = -10
 	}
 }
 
+// writeTempUI writes toml content to a temp file and returns its path.
+func writeTempUI(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.toml")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestLoadUI_Icons(t *testing.T) {
+	tests := []struct {
+		name    string
+		toml    string
+		want    string
+		wantErr bool
+	}{
+		{"default when missing", `[ui]`, "auto", false},
+		{"explicit auto", "[ui]\n" + `icons = "auto"`, "auto", false},
+		{"simple", "[ui]\n" + `icons = "simple"`, "simple", false},
+		{"fancy", "[ui]\n" + `icons = "fancy"`, "fancy", false},
+		{"invalid", "[ui]\n" + `icons = "blah"`, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempUI(t, tt.toml)
+			cfg, err := LoadUI(path)
+			gotErr := err != nil
+			if gotErr != tt.wantErr {
+				t.Fatalf("LoadUI err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && cfg.Icons != tt.want {
+				t.Errorf("cfg.Icons = %q, want %q", cfg.Icons, tt.want)
+			}
+		})
+	}
+}
+
 func TestLoadUIMissingFile(t *testing.T) {
 	_, err := LoadUI("/nonexistent/accounts.toml")
 	if err == nil {
