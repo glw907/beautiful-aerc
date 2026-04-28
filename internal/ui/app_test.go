@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -629,5 +630,48 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAppLinkPickerRoundTrip(t *testing.T) {
+	captured := ""
+	prev := openURL
+	openURL = func(url string) error { captured = url; return nil }
+	defer func() { openURL = prev }()
+
+	app := newLoadedApp(t, 120, 30)
+
+	// Open viewer on a message with one link.
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drainApp(t, &app, cmd)
+	if !app.viewerOpen {
+		t.Fatal("expected viewer open after Enter")
+	}
+
+	// Inject a body with one harvested link directly into the viewer
+	// so the harvest path is exercised and v.links populates.
+	app.acct.viewer = app.acct.viewer.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{
+			content.Link{Text: "click", URL: "https://example.com"},
+		}},
+	})
+
+	// Tab → viewer emits LinkPickerOpenMsg → App opens picker.
+	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	drainApp(t, &app, cmd)
+	if !app.IsLinkPickerOpen() {
+		t.Fatal("expected picker open after Tab")
+	}
+
+	// Enter → picker emits LaunchURLMsg + LinkPickerClosedMsg → App
+	// fires launchURLCmd (which calls openURL hook) and closes picker.
+	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drainApp(t, &app, cmd)
+
+	if captured != "https://example.com" {
+		t.Fatalf("expected openURL called with https://example.com, got %q", captured)
+	}
+	if app.IsLinkPickerOpen() {
+		t.Fatal("expected picker closed after Enter launch")
 	}
 }

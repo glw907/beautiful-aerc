@@ -26,6 +26,7 @@ type App struct {
 	viewerOpen bool
 	helpOpen   bool
 	help       HelpPopover
+	linkPicker LinkPicker
 	lastErr    ErrorMsg
 	width      int
 	height     int
@@ -39,14 +40,15 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig,
 	sb = sb.SetConnectionState(Offline)
 
 	return App{
-		acct:      NewAccountTab(styles, t, backend, uiCfg, icons),
-		backend:   backend,
-		icons:     icons,
-		styles:    styles,
-		topLine:   NewTopLine(styles),
-		statusBar: sb,
-		footer:    NewFooter(styles),
-		keys:      NewGlobalKeys(),
+		acct:       NewAccountTab(styles, t, backend, uiCfg, icons),
+		backend:    backend,
+		icons:      icons,
+		styles:     styles,
+		topLine:    NewTopLine(styles),
+		statusBar:  sb,
+		footer:     NewFooter(styles),
+		keys:       NewGlobalKeys(),
+		linkPicker: NewLinkPicker(styles, t),
 	}
 }
 
@@ -64,6 +66,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.linkPicker = m.linkPicker.SetSize(m.width, m.height)
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(contentMsg)
@@ -84,6 +87,17 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.footer = m.footer.SetContext(AccountContext)
 		m.statusBar = m.statusBar.SetMode(StatusAccount)
 		return m, nil
+
+	case LinkPickerOpenMsg:
+		m.linkPicker = m.linkPicker.Open(msg.Links)
+		return m, nil
+
+	case LinkPickerClosedMsg:
+		m.linkPicker = m.linkPicker.Close()
+		return m, nil
+
+	case LaunchURLMsg:
+		return m, launchURLCmd(msg.URL)
 
 	case ViewerScrollMsg:
 		m.statusBar = m.statusBar.SetScrollPct(msg.Pct)
@@ -123,6 +137,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				m.helpOpen = false
 			}
 			return m, nil
+		}
+		if m.linkPicker.IsOpen() {
+			var cmd tea.Cmd
+			m.linkPicker, cmd = m.linkPicker.Update(msg)
+			return m, cmd
 		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
@@ -229,6 +248,13 @@ func (m App) View() string {
 		return PlaceOverlay(x, y, box, dimmed)
 	}
 
+	if m.linkPicker.IsOpen() {
+		box := m.linkPicker.Box(m.width, m.height)
+		x, y := m.linkPicker.Position(box, m.width, m.height)
+		dimmed := DimANSI(frame)
+		return PlaceOverlay(x, y, box, dimmed)
+	}
+
 	return frame
 }
 
@@ -243,6 +269,9 @@ func translateConnState(s mail.ConnState) ConnectionState {
 		return Offline
 	}
 }
+
+// IsLinkPickerOpen reports whether the link picker overlay is visible.
+func (m App) IsLinkPickerOpen() bool { return m.linkPicker.IsOpen() }
 
 // contentHeight returns the height available for the content area.
 // The error banner takes one extra chrome row when present.
