@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -121,16 +122,29 @@ func (w *footnoteWalker) block(b Block) Block {
 	}
 }
 
+// longBareURLThreshold is the display-cell width above which a bare URL
+// gets the long-URL footnote treatment instead of inline pass-through.
+const longBareURLThreshold = 30
+
 func (w *footnoteWalker) spans(in []Span) []Span {
 	if len(in) == 0 {
 		return in
 	}
 	out := make([]Span, len(in))
 	for i, s := range in {
-		if link, ok := s.(Link); ok && link.Text != link.URL && link.URL != "" {
+		link, ok := s.(Link)
+		if !ok || link.URL == "" {
+			out[i] = s
+			continue
+		}
+		switch {
+		case link.Text != link.URL:
 			n := w.markerFor(link.URL)
 			out[i] = Link{Text: link.Text + nbsp + fmt.Sprintf("[^%d]", n), URL: link.URL}
-		} else {
+		case lipgloss.Width(link.URL) > longBareURLThreshold:
+			n := w.markerFor(link.URL)
+			out[i] = Link{Text: trimURL(link.URL) + nbsp + fmt.Sprintf("[^%d]", n), URL: link.URL}
+		default:
 			out[i] = s
 		}
 	}

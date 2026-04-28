@@ -127,3 +127,47 @@ func TestFootnoteListAfterRule(t *testing.T) {
 		t.Errorf("list must follow rule; rule=%d list=%d", ruleIdx, listIdx)
 	}
 }
+
+func TestLongBareURLFootnoted(t *testing.T) {
+	url := "https://example.com/very/long/path/that/exceeds/thirty/cells?query=1"
+	blocks := []Block{Paragraph{Spans: []Span{Link{Text: url, URL: url}}}}
+	rewritten, urls := harvestFootnotes(blocks)
+	if len(urls) != 1 || urls[0] != url {
+		t.Fatalf("expected one harvested url=%q, got %v", url, urls)
+	}
+	p := rewritten[0].(Paragraph)
+	link := p.Spans[0].(Link)
+	want := "example.com/very…" + nbsp + "[^1]"
+	if link.Text != want {
+		t.Fatalf("link.Text = %q, want %q", link.Text, want)
+	}
+	if link.URL != url {
+		t.Fatalf("link.URL = %q, want %q", link.URL, url)
+	}
+}
+
+func TestShortBareURLPassThrough(t *testing.T) {
+	url := "https://example.com/foo"
+	blocks := []Block{Paragraph{Spans: []Span{Link{Text: url, URL: url}}}}
+	rewritten, urls := harvestFootnotes(blocks)
+	if len(urls) != 0 {
+		t.Fatalf("expected no harvested urls, got %v", urls)
+	}
+	p := rewritten[0].(Paragraph)
+	link := p.Spans[0].(Link)
+	if link.Text != url {
+		t.Fatalf("link.Text = %q, want unchanged %q", link.Text, url)
+	}
+}
+
+func TestLongBareURLDedupedWithTextLink(t *testing.T) {
+	url := "https://example.com/very/long/path/that/exceeds/thirty/cells?q=1"
+	blocks := []Block{
+		Paragraph{Spans: []Span{Link{Text: url, URL: url}}},
+		Paragraph{Spans: []Span{Link{Text: "click here", URL: url}}},
+	}
+	_, urls := harvestFootnotes(blocks)
+	if len(urls) != 1 {
+		t.Fatalf("expected one harvested url after dedupe, got %v", urls)
+	}
+}
