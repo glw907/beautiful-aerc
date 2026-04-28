@@ -53,10 +53,11 @@ func (s SidebarSearch) Mode() SearchMode   { return s.mode }
 // View() never produces lines wider than the sidebar column.
 func (s *SidebarSearch) SetSize(width int) {
 	s.width = width
-	// Reserve cells for the leading "  " indent (2), the search
-	// icon (2), and the gap before the prompt (1) — see
-	// renderPromptRow. Floor at 1 so textinput never gets a
-	// negative width.
+	// promptOverhead is sized for the widest rendered states
+	// (Typing/Active): leading "  " indent (2), search icon (2),
+	// gap before prompt (1) — see renderPromptRow. The idle state
+	// omits the icon so it has a couple cells of unused slack, which
+	// is harmless. Floor at 1 so textinput never gets a negative width.
 	const promptOverhead = 5
 	s.input.Width = max(1, width-promptOverhead)
 }

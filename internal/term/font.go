@@ -5,6 +5,7 @@ package term
 import (
 	"bytes"
 	"context"
+	"io"
 	"os/exec"
 	"strings"
 	"sync"
@@ -53,6 +54,7 @@ func fcListFamilies() ([]string, bool) {
 	cmd := exec.CommandContext(ctx, path, ":family")
 	var out bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = io.Discard
 	if err := cmd.Run(); err != nil {
 		return nil, false
 	}
