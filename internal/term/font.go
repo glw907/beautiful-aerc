@@ -51,7 +51,7 @@ func fcListFamilies() ([]string, bool) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, ":family")
+	cmd := exec.CommandContext(ctx, path, "-f", "%{family}\n")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard
@@ -61,14 +61,9 @@ func fcListFamilies() ([]string, bool) {
 	return parseFcList(out.String()), true
 }
 
-// parseFcList extracts font family names from fc-list stdout.
-// Each line is one or more comma-separated families optionally
-// followed by ":style=..." — for example:
-//
-//	JetBrainsMono Nerd Font,JetBrainsMono NF:style=Thin Italic
-//
-// The function splits on commas and colon, strips whitespace, and
-// returns the de-duplicated family names.
+// parseFcList extracts font family names from fc-list output formatted
+// with `-f "%{family}\n"`. Each line is a comma-separated family list.
+// Also tolerates the legacy default `path:family[,family]:style=…` shape.
 func parseFcList(output string) []string {
 	seen := make(map[string]bool)
 	var families []string
@@ -77,8 +72,10 @@ func parseFcList(output string) []string {
 		if line == "" {
 			continue
 		}
-		// Drop anything after the first colon (":style=...").
-		if idx := strings.Index(line, ":"); idx >= 0 {
+		if idx := strings.Index(line, ": "); idx >= 0 {
+			line = line[idx+2:]
+		}
+		if idx := strings.Index(line, ":style="); idx >= 0 {
 			line = line[:idx]
 		}
 		for _, part := range strings.Split(line, ",") {

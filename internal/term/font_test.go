@@ -48,6 +48,15 @@ func TestParseFcList(t *testing.T) {
 			input:  "\nHack NF:style=Regular\n\n",
 			wantIn: []string{"Hack NF"},
 		},
+		{
+			// Real-world output of `fc-list` without `-f` — leading
+			// path before the first ": ", then family list, then style.
+			// Locks in the parser's tolerance for the legacy shape.
+			name: "leading file path stripped",
+			input: "/home/u/.local/share/fonts/JetBrainsMonoNerdFont-Regular.ttf: " +
+				"JetBrainsMono Nerd Font,JetBrainsMono NF:style=Regular\n",
+			wantIn: []string{"JetBrainsMono Nerd Font", "JetBrainsMono NF"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
