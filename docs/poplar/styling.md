@@ -160,7 +160,7 @@ a single surface. The Subject sits at column 1 on the very first row
 of the pane (vertically aligned with the sidebar's account label).
 A blank row separates the Subject from the metadata block (From/To/
 Cc/Bcc/Date), which is indented two cells inward and rendered with
-lowercase labels in `FgDim` and no colons. Two blank rows follow the
+uppercase labels in `FgDim` and no colons. Two blank rows follow the
 metadata before the body content begins, and a final blank row closes
 the pane at the bottom. The header has no rule, no overline, and no
 background tint — indentation alone delineates the header region.
@@ -170,7 +170,7 @@ background tint — indentation alone delineates the header region.
 | `ViewerBg` | — | `BgBase` | Base pane background (all padding rows + leading column + right-edge fill) |
 | `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered as a standalone title at the top of the viewer pane (column 1, no leading blank) |
 | `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value in the metadata block |
-| `HeaderDim` (theme) | `FgDim` | — | Lowercase `from`/`to`/`cc`/`bcc`/`date` labels and `<email>` brackets in the metadata block |
+| `HeaderDim` (theme) | `FgDim` | — | Uppercase `FROM`/`TO`/`CC`/`BCC`/`DATE` labels and `<email>` brackets in the metadata block |
 
 Background composition: `clipPaneBg` and `padLeftLinesBg` use
 bg-styled spaces so the right-edge fill, left column, and the blank

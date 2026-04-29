@@ -232,11 +232,11 @@ const headerKeyColWidth = 8
 // at the pane's existing 1-cell padding.
 const metadataIndent = "  "
 
-// renderHeaderKey renders the lowercase, colon-less header label
+// renderHeaderKey renders the uppercase, colon-less header label
 // right-padded to headerKeyColWidth. The HeaderDim style (FgDim) is
 // applied so the label reads as a quiet margin annotation.
 func renderHeaderKey(key string, t *theme.CompiledTheme) string {
-	label := strings.ToLower(key)
+	label := strings.ToUpper(key)
 	pad := headerKeyColWidth - len(label)
 	if pad < 0 {
 		pad = 0

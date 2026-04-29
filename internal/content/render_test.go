@@ -103,7 +103,7 @@ func TestRenderHeaders(t *testing.T) {
 	}
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
-	if !strings.Contains(visible, "from ") {
+	if !strings.Contains(visible, "FROM ") {
 		t.Error("missing From header")
 	}
 	if !strings.Contains(visible, "Alice") {
@@ -127,9 +127,9 @@ func TestRenderHeadersOrder(t *testing.T) {
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
 	subjectIdx := strings.Index(visible, "TheSubjectTitle")
-	fromIdx := strings.Index(visible, "from ")
-	toIdx := strings.Index(visible, "to ")
-	dateIdx := strings.Index(visible, "date ")
+	fromIdx := strings.Index(visible, "FROM ")
+	toIdx := strings.Index(visible, "TO ")
+	dateIdx := strings.Index(visible, "DATE ")
 
 	if subjectIdx > fromIdx {
 		t.Error("Subject title should appear before From")
@@ -149,10 +149,10 @@ func TestRenderHeadersSkipsEmpty(t *testing.T) {
 	}
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
-	if strings.Contains(visible, "to ") {
+	if strings.Contains(visible, "TO ") {
 		t.Error("should not render empty To header")
 	}
-	if strings.Contains(visible, "cc ") {
+	if strings.Contains(visible, "CC ") {
 		t.Error("should not render empty Cc header")
 	}
 }
@@ -193,7 +193,7 @@ func TestRenderHeadersMetadataIndented(t *testing.T) {
 	}
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
-	for _, label := range []string{"from ", "to ", "date "} {
+	for _, label := range []string{"FROM ", "TO ", "DATE "} {
 		idx := strings.Index(visible, label)
 		if idx < 0 {
 			t.Fatalf("missing label %q in render", label)
