@@ -8,8 +8,15 @@ import (
 	"os/exec"
 	"strings"
 
-	gomail "github.com/emersion/go-message/mail"
+	// Register non-UTF8 charset decoders (iso-8859-1, windows-1252,
+	// etc.) into go-message's charset registry. Without this, MIME
+	// parts with charset="iso-8859-1" — common for plain-text bodies
+	// from Outlook/Exchange senders — fail to decode and the body is
+	// silently dropped.
+	_ "github.com/emersion/go-message/charset"
+
 	tea "github.com/charmbracelet/bubbletea"
+	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/filter"
 	"github.com/glw907/poplar/internal/mail"
