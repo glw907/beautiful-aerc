@@ -187,10 +187,26 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// RenderHeaders renders parsed headers into a styled string.
-// Headers use the full terminal width for address wrapping.
+// RenderHeaders renders parsed headers into a styled string. The
+// Subject is hoisted above the structured From/To/Cc/Bcc/Date block
+// as a title — accent overline matched to the rendered subject's
+// width, then the subject in FgBright bold, then a blank line, then
+// the labeled metadata, then a full-width FgDim rule.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	var lines []string
+
+	if h.Subject != "" {
+		subject := wrap(h.Subject, width)
+		overlineWidth := lipgloss.Width(subject)
+		if overlineWidth > width {
+			overlineWidth = width
+		}
+		lines = append(lines,
+			t.SubjectOverline.Render(strings.Repeat("─", overlineWidth)),
+			t.SubjectTitle.Render(subject),
+			"",
+		)
+	}
 
 	if len(h.From) > 0 {
 		lines = append(lines, renderHeaderAddresses("From", h.From, t, width)...)
@@ -206,9 +222,6 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	}
 	if h.Date != "" {
 		lines = append(lines, renderHeaderScalar("Date", h.Date, t))
-	}
-	if h.Subject != "" {
-		lines = append(lines, renderHeaderScalar("Subject", h.Subject, t))
 	}
 
 	sep := t.HeaderDim.Render(strings.Repeat("─", width))

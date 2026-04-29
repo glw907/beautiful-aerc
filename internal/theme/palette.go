@@ -41,9 +41,11 @@ type CompiledTheme struct {
 	ColorInfo, ColorSpecial                             lipgloss.Color
 
 	// Composed styles for content rendering
-	HeaderKey      lipgloss.Style
-	HeaderValue    lipgloss.Style
-	HeaderDim      lipgloss.Style
+	HeaderKey       lipgloss.Style
+	HeaderValue     lipgloss.Style
+	HeaderDim       lipgloss.Style
+	SubjectTitle    lipgloss.Style
+	SubjectOverline lipgloss.Style
 	Paragraph      lipgloss.Style
 	Heading        lipgloss.Style
 	Quote          lipgloss.Style
@@ -88,6 +90,10 @@ func NewCompiledTheme(name string, p Palette) *CompiledTheme {
 		Foreground(t.FgBase)
 	t.HeaderDim = lipgloss.NewStyle().
 		Foreground(t.FgDim)
+	t.SubjectTitle = lipgloss.NewStyle().
+		Foreground(t.FgBright).Bold(true)
+	t.SubjectOverline = lipgloss.NewStyle().
+		Foreground(t.AccentSecondary)
 	t.Paragraph = lipgloss.NewStyle().
 		Foreground(t.FgBase)
 	t.Heading = lipgloss.NewStyle().

@@ -165,9 +165,11 @@ values align.
 | Field | fg | bg | Role |
 |-------|----|----|------|
 | `ViewerBg` | — | `BgBase` | Base pane background (all padding rows + leading column + right-edge fill) |
-| `HeaderKey` (theme) | `AccentPrimary` bold | — | `From:`/`To:`/`Cc:`/`Bcc:`/`Date:`/`Subject:` label |
+| `SubjectOverline` (theme) | `AccentSecondary` | — | Short `─` accent above the Subject title, sized to the rendered subject's display width |
+| `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered as a standalone title above the structured header block |
+| `HeaderKey` (theme) | `AccentPrimary` bold | — | `From:`/`To:`/`Cc:`/`Bcc:`/`Date:` label |
 | `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value |
-| `HeaderDim` (theme) | `FgDim` | — | `<email>` brackets and the `─` separator under the headers |
+| `HeaderDim` (theme) | `FgDim` | — | `<email>` brackets and the full-width `─` separator under the headers |
 
 Background composition: `clipPaneBg` and `padLeftLinesBg` use
 bg-styled spaces so the right-edge fill, left column, and top/bottom

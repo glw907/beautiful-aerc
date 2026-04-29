@@ -109,8 +109,8 @@ func TestRenderHeaders(t *testing.T) {
 	if !strings.Contains(visible, "Alice") {
 		t.Error("missing From name")
 	}
-	if !strings.Contains(visible, "Subject:") {
-		t.Error("missing Subject header")
+	if !strings.Contains(visible, "Hello World") {
+		t.Error("missing Subject title text")
 	}
 	if !strings.Contains(visible, "Hello World") {
 		t.Error("missing Subject value")
@@ -122,23 +122,23 @@ func TestRenderHeadersOrder(t *testing.T) {
 		From:    []Address{{Name: "Alice", Email: "alice@example.com"}},
 		To:      []Address{{Name: "Bob", Email: "bob@example.com"}},
 		Date:    "Mon, 5 Jan 2026",
-		Subject: "Test",
+		Subject: "TheSubjectTitle",
 	}
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
+	subjectIdx := strings.Index(visible, "TheSubjectTitle")
 	fromIdx := strings.Index(visible, "From:")
 	toIdx := strings.Index(visible, "To:")
 	dateIdx := strings.Index(visible, "Date:")
-	subjectIdx := strings.Index(visible, "Subject:")
 
+	if subjectIdx > fromIdx {
+		t.Error("Subject title should appear before From")
+	}
 	if fromIdx > toIdx {
 		t.Error("From should appear before To")
 	}
 	if toIdx > dateIdx {
 		t.Error("To should appear before Date")
-	}
-	if dateIdx > subjectIdx {
-		t.Error("Date should appear before Subject")
 	}
 }
 

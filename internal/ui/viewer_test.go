@@ -47,8 +47,11 @@ func TestViewerBodyLoadedSetsReady(t *testing.T) {
 	if !strings.Contains(out, "Hello world") {
 		t.Errorf("ready view missing body: %q", out)
 	}
-	if !strings.Contains(out, "Subject:") {
-		t.Errorf("ready view missing headers: %q", out)
+	if !strings.Contains(out, "Hi") {
+		t.Errorf("ready view missing subject title: %q", out)
+	}
+	if !strings.Contains(out, "From:") {
+		t.Errorf("ready view missing From label: %q", out)
 	}
 }
 
