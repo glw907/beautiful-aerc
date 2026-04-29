@@ -223,19 +223,22 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// headerKeyColWidth is the cell width of the key+colon column. The
-// longest key ("Subject:") is 8 cells; padding every key to this
-// width aligns header values into a single column.
+// headerKeyColWidth is the cell width of the label column. The
+// longest visible label after the Subject hoist is "date" (4 cells);
+// the column stays at 8 cells for alignment headroom and to keep
+// values landing where the prior layout placed them.
 const headerKeyColWidth = 8
 
-// renderHeaderKey renders "Key:" right-padded to headerKeyColWidth.
+// renderHeaderKey renders the lowercase, colon-less header label
+// right-padded to headerKeyColWidth. The HeaderDim style (FgDim) is
+// applied so the label reads as a quiet margin annotation.
 func renderHeaderKey(key string, t *theme.CompiledTheme) string {
-	label := key + ":"
+	label := strings.ToLower(key)
 	pad := headerKeyColWidth - len(label)
 	if pad < 0 {
 		pad = 0
 	}
-	return t.HeaderKey.Render(label) + strings.Repeat(" ", pad)
+	return t.HeaderDim.Render(label) + strings.Repeat(" ", pad)
 }
 
 func renderHeaderScalar(key, value string, t *theme.CompiledTheme) string {

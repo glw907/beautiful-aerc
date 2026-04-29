@@ -103,7 +103,7 @@ func TestRenderHeaders(t *testing.T) {
 	}
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
-	if !strings.Contains(visible, "From:") {
+	if !strings.Contains(visible, "from ") {
 		t.Error("missing From header")
 	}
 	if !strings.Contains(visible, "Alice") {
@@ -127,9 +127,9 @@ func TestRenderHeadersOrder(t *testing.T) {
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
 	subjectIdx := strings.Index(visible, "TheSubjectTitle")
-	fromIdx := strings.Index(visible, "From:")
-	toIdx := strings.Index(visible, "To:")
-	dateIdx := strings.Index(visible, "Date:")
+	fromIdx := strings.Index(visible, "from ")
+	toIdx := strings.Index(visible, "to ")
+	dateIdx := strings.Index(visible, "date ")
 
 	if subjectIdx > fromIdx {
 		t.Error("Subject title should appear before From")
@@ -149,10 +149,10 @@ func TestRenderHeadersSkipsEmpty(t *testing.T) {
 	}
 	result := RenderHeaders(h, theme.Nord, 80)
 	visible := stripANSITest(result)
-	if strings.Contains(visible, "To:") {
+	if strings.Contains(visible, "to ") {
 		t.Error("should not render empty To header")
 	}
-	if strings.Contains(visible, "Cc:") {
+	if strings.Contains(visible, "cc ") {
 		t.Error("should not render empty Cc header")
 	}
 }
