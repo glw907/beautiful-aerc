@@ -16,3 +16,5 @@
 audit-output/
 corpus/
 .worktrees/
+
+.superpowers/
