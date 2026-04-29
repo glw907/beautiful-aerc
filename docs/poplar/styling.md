@@ -156,27 +156,28 @@ pop.
 ### Message viewer
 
 The viewer shares `BgBase` with the message list — the right panel is
-a single surface, so the viewer fills its full pane (header rows,
-body rows, and the blank padding rows at the top, between headers
-and body, and at the bottom) with `BgBase`. Header keys (From/To/Cc/
-Bcc/Date/Subject) are right-padded to a common 8-cell column so
-values align.
+a single surface. The Subject sits at column 1 on the very first row
+of the pane (vertically aligned with the sidebar's account label).
+A blank row separates the Subject from the metadata block (From/To/
+Cc/Bcc/Date), which is indented two cells inward and rendered with
+lowercase labels in `FgDim` and no colons. Two blank rows follow the
+metadata before the body content begins, and a final blank row closes
+the pane at the bottom. The header has no rule, no overline, and no
+background tint — indentation alone delineates the header region.
 
 | Field | fg | bg | Role |
 |-------|----|----|------|
 | `ViewerBg` | — | `BgBase` | Base pane background (all padding rows + leading column + right-edge fill) |
-| `SubjectOverline` (theme) | `AccentSecondary` | — | Short `─` accent above the Subject title, sized to the rendered subject's display width |
-| `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered as a standalone title above the structured header block |
-| `HeaderKey` (theme) | `AccentPrimary` bold | — | `From:`/`To:`/`Cc:`/`Bcc:`/`Date:` label |
-| `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value |
-| `HeaderDim` (theme) | `FgDim` | — | `<email>` brackets and the full-width `─` separator under the headers |
+| `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered as a standalone title at the top of the viewer pane (column 1, no leading blank) |
+| `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value in the metadata block |
+| `HeaderDim` (theme) | `FgDim` | — | Lowercase `from`/`to`/`cc`/`bcc`/`date` labels and `<email>` brackets in the metadata block |
 
 Background composition: `clipPaneBg` and `padLeftLinesBg` use
-bg-styled spaces so the right-edge fill, left column, and top/bottom
-blank padding rows all carry `BgBase`. Each rendered content line is
-then run through `bgFillLine` (in `styles.go`), which prepends the
-bg ANSI prefix and re-emits it after every embedded `\x1b[0m` reset
-so cells under styled content don't fall back to the terminal default.
+bg-styled spaces so the right-edge fill, left column, and the blank
+padding rows all carry `BgBase`. Each rendered content line is then
+run through `bgFillLine` (in `styles.go`), which prepends the bg ANSI
+prefix and re-emits it after every embedded `\x1b[0m` reset so cells
+under styled content don't fall back to the terminal default.
 
 ### Help popover (modal overlay, `?`)
 
