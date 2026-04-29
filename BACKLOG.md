@@ -4,6 +4,9 @@
 
 ## High
 
+- [ ] **#25** Some emails render with no body text `#bug` `#poplar` *(2026-04-29)*
+  Observed on a real email from Kris Willing ("I'm late on my annual campaign . . .") in the viewer: header block renders correctly (subject, From, To, Date) but the body area is empty. Headers + structure are all present, just no Block content reaches the viewport. Likely a parser path that returns zero blocks for some MIME shape (possibly multipart/alternative where text/plain is empty or the html→markdown filter produces nothing). Repro: open the message in the inbox after fetching headers; spinner finishes, header renders, body stays blank. Investigate `internal/content/parse.go` + `internal/filter/html.go` against the actual blob; consider adding a "no renderable content" placeholder so empty bodies are at least labeled.
+
 - [ ] **#24** Attachments support (v1 blocker) `#feature` `#poplar` `#v1` *(2026-04-28)*
   poplar v1 needs attachment support end-to-end. Scope spans: backend (JMAP attachment metadata + blob fetch via the existing Download path; equivalent IMAP path when that backend lands), UI (per-row attachment indicator, attachment list/preview in the viewer, save-to-disk action with a path picker or default Downloads dir), and compose (attach files when composing, with size limits and MIME detection). Likely needs one or more dedicated planning + implementation passes — break into smaller backlog items in a future planning pass before starting.
 
