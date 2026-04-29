@@ -229,6 +229,12 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 // values landing where the prior layout placed them.
 const headerKeyColWidth = 8
 
+// metadataIndent is the leading whitespace prefix on every metadata
+// row (From/To/Cc/Bcc/Date). The two-cell inset reads as a margin
+// annotation, distinct from the subject and body which sit flush
+// at the pane's existing 1-cell padding.
+const metadataIndent = "  "
+
 // renderHeaderKey renders the lowercase, colon-less header label
 // right-padded to headerKeyColWidth. The HeaderDim style (FgDim) is
 // applied so the label reads as a quiet margin annotation.
@@ -242,7 +248,7 @@ func renderHeaderKey(key string, t *theme.CompiledTheme) string {
 }
 
 func renderHeaderScalar(key, value string, t *theme.CompiledTheme) string {
-	return renderHeaderKey(key, t) + " " + t.HeaderValue.Render(value)
+	return metadataIndent + renderHeaderKey(key, t) + " " + t.HeaderValue.Render(value)
 }
 
 // visibleAddrWidth returns the printed width of an Address as
@@ -260,8 +266,8 @@ func visibleAddrWidth(a Address) int {
 }
 
 func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int) []string {
-	keyStr := renderHeaderKey(key, t)
-	indent := strings.Repeat(" ", headerKeyColWidth+1)
+	keyStr := metadataIndent + renderHeaderKey(key, t)
+	indent := metadataIndent + strings.Repeat(" ", headerKeyColWidth+1)
 
 	var formatted []string
 	for _, a := range addrs {
@@ -279,7 +285,7 @@ func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, 
 
 	var lines []string
 	current := keyStr + " "
-	currentVisible := headerKeyColWidth + 1
+	currentVisible := len(metadataIndent) + headerKeyColWidth + 1
 
 	for i, addr := range formatted {
 		addrVisible := visibleAddrWidth(addrs[i])

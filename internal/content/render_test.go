@@ -195,6 +195,33 @@ func TestRenderHeadersAddressWrap(t *testing.T) {
 	}
 }
 
+func TestRenderHeadersMetadataIndented(t *testing.T) {
+	h := ParsedHeaders{
+		From:    []Address{{Name: "Alice", Email: "alice@example.com"}},
+		To:      []Address{{Email: "bob@example.com"}},
+		Date:    "Mon, 5 Jan 2026",
+		Subject: "Hello",
+	}
+	result := RenderHeaders(h, theme.Nord, 80)
+	visible := stripANSITest(result)
+	for _, label := range []string{"from ", "to ", "date "} {
+		idx := strings.Index(visible, label)
+		if idx < 0 {
+			t.Fatalf("missing label %q in render", label)
+		}
+		// The label must be preceded by a newline (or start-of-string)
+		// followed by exactly the metadataIndent (2 spaces).
+		var prefixStart int
+		if nl := strings.LastIndex(visible[:idx], "\n"); nl >= 0 {
+			prefixStart = nl + 1
+		}
+		prefix := visible[prefixStart:idx]
+		if prefix != "  " {
+			t.Errorf("label %q prefix = %q, want two spaces", label, prefix)
+		}
+	}
+}
+
 func TestRenderBodyNestedBlockquotePrefix(t *testing.T) {
 	// Nested blockquote should render with correct prefix depth,
 	// not double-count from both Level field and structural nesting.
