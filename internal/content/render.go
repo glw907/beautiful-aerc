@@ -188,22 +188,15 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 }
 
 // RenderHeaders renders parsed headers into a styled string. The
-// Subject is hoisted above the structured From/To/Cc/Bcc/Date block
-// as a title — accent overline matched to the rendered subject's
-// width, then the subject in FgBright bold, then a blank line, then
-// the labeled metadata, then a full-width FgDim rule.
+// Subject is hoisted as a title (FgBright bold) above the structured
+// From/To/Cc/Bcc/Date block; a blank line separates the title from
+// the metadata, and a full-width FgDim rule closes the header.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	var lines []string
 
 	if h.Subject != "" {
-		subject := wrap(h.Subject, width)
-		overlineWidth := lipgloss.Width(subject)
-		if overlineWidth > width {
-			overlineWidth = width
-		}
 		lines = append(lines,
-			t.SubjectOverline.Render(strings.Repeat("─", overlineWidth)),
-			t.SubjectTitle.Render(subject),
+			t.SubjectTitle.Render(wrap(h.Subject, width)),
 			"",
 		)
 	}
