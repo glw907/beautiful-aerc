@@ -217,9 +217,6 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 		lines = append(lines, renderHeaderScalar("Date", h.Date, t))
 	}
 
-	sep := t.HeaderDim.Render(strings.Repeat("─", width))
-	lines = append(lines, "", sep)
-
 	return strings.Join(lines, "\n")
 }
 

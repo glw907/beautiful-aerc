@@ -157,17 +157,6 @@ func TestRenderHeadersSkipsEmpty(t *testing.T) {
 	}
 }
 
-func TestRenderHeadersSeparator(t *testing.T) {
-	h := ParsedHeaders{
-		From:    []Address{{Email: "alice@example.com"}},
-		Subject: "Test",
-	}
-	result := RenderHeaders(h, theme.Nord, 80)
-	if !strings.Contains(result, "─") {
-		t.Error("missing separator line")
-	}
-}
-
 func TestRenderHeadersAddressWrap(t *testing.T) {
 	var addrs []Address
 	for i := 0; i < 10; i++ {
