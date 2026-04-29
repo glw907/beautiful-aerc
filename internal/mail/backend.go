@@ -68,6 +68,12 @@ type MessageInfo struct {
 	UID     UID
 	Subject string
 	From    string
+	// To, Cc, Bcc are flat display strings ("Name1, Name2, ...") in
+	// the same shape as From. The viewer renders each as a single
+	// header row when non-empty.
+	To  string
+	Cc  string
+	Bcc string
 	// Date is the pre-rendered display string the UI shows verbatim.
 	// SentAt is the authoritative instant for sorting; workers fill
 	// both, and UI sort comparisons use SentAt (falling back to Date

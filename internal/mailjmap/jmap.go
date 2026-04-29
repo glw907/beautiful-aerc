@@ -398,7 +398,7 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 
 // headerProperties is the minimal Email/get property set for list display.
 var headerProperties = []string{
-	"id", "blobId", "subject", "from", "receivedAt",
+	"id", "blobId", "subject", "from", "to", "cc", "bcc", "receivedAt",
 	"keywords", "size", "inReplyTo", "threadId",
 }
 
@@ -459,6 +459,9 @@ func translateEmail(e *email.Email) mail.MessageInfo {
 		UID:       mail.UID(e.ID),
 		Subject:   e.Subject,
 		From:      formatFromList(e.From),
+		To:        formatFromList(e.To),
+		Cc:        formatFromList(e.CC),
+		Bcc:       formatFromList(e.BCC),
 		Flags:     translateKeywords(e.Keywords),
 		Size:      uint32(e.Size),
 		ThreadID:  mail.UID(e.ThreadID),

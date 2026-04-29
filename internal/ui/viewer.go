@@ -216,7 +216,7 @@ func (v Viewer) View() string {
 	headers := padLeftLinesBg(v.headerStr, 1, bg)
 	body := padLeftLinesBg(v.viewport.View(), 1, bg)
 	blank := bg.Render(strings.Repeat(" ", v.width))
-	out := lipgloss.JoinVertical(lipgloss.Left, blank, headers, blank, body, blank)
+	out := lipgloss.JoinVertical(lipgloss.Left, headers, blank, body, blank)
 	return clipPaneBg(out, v.width, v.height, bg)
 }
 
@@ -252,13 +252,15 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 // contentWidth is one cell narrower than v.width. padLeftLinesBg adds
 // the leading space back in View(), so the total per-line cell count
 // equals v.width after clipPaneBg pads the remainder. The body height
-// reserves three rows for the blank padding rows View() emits: one
-// above headers, one between headers and body, and one at the bottom.
+// reserves two rows for the blank padding rows View() emits: one
+// between headers and body, and one at the bottom.
 func (v *Viewer) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
-		To:      []content.Address{{Email: v.accountEmail}},
-		Date:    v.msg.Date,
+		To:      addressesFor(v.msg.To, v.accountEmail),
+		Cc:      namesAsAddresses(v.msg.Cc),
+		Bcc:     namesAsAddresses(v.msg.Bcc),
+		Date:    viewerDateString(v.msg),
 		Subject: v.msg.Subject,
 	}
 	contentWidth := max(1, v.width-1)
@@ -266,7 +268,7 @@ func (v *Viewer) layout() {
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	headerHeight := lipgloss.Height(v.headerStr)
-	bodyHeight := max(1, v.height-headerHeight-3)
+	bodyHeight := max(1, v.height-headerHeight-2)
 	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)
@@ -285,6 +287,51 @@ func padLeftLinesBg(s string, n int, bg lipgloss.Style) string {
 		lines[i] = pad + l
 	}
 	return strings.Join(lines, "\n")
+}
+
+// addressesFor returns the To: list to render in the viewer. Real
+// recipient strings from the wire take precedence; otherwise fall
+// back to the user's own address (so the To: row is never empty).
+func addressesFor(to, fallbackEmail string) []content.Address {
+	if to != "" {
+		return namesAsAddresses(to)
+	}
+	if fallbackEmail == "" {
+		return nil
+	}
+	return []content.Address{{Email: fallbackEmail}}
+}
+
+// namesAsAddresses splits a flat "Name1, Name2, ..." MessageInfo
+// string into Address values for the header renderer. The split is
+// intentionally naive (commas inside quoted phrases are uncommon in
+// already-formatted display strings); refine if it bites.
+func namesAsAddresses(s string) []content.Address {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ", ")
+	out := make([]content.Address, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, content.Address{Name: p})
+		}
+	}
+	return out
+}
+
+// viewerDateString returns the date string for the viewer's Date row.
+// Prefers msg.Date when populated, otherwise formats msg.SentAt as a
+// full unambiguous timestamp ("Mon, Jan 2 2006 3:04 PM"). Returns ""
+// when neither is set so the row is omitted.
+func viewerDateString(msg mail.MessageInfo) string {
+	if msg.Date != "" {
+		return msg.Date
+	}
+	if msg.SentAt.IsZero() {
+		return ""
+	}
+	return msg.SentAt.Format("Mon, Jan 2 2006 3:04 PM")
 }
 
 // viewerViewportKeymap configures the viewport with modifier-free
