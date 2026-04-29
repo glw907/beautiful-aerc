@@ -22,6 +22,19 @@ func TestTrimURL(t *testing.T) {
 		{"mailto", "mailto:foo@example.com", "foo@example.com"},
 		{"port preserved", "https://example.com:8080/foo/bar", "example.com:8080/foo…"},
 		{"empty", "", ""},
+		{
+			// Google/Facebook tracking URLs: one giant opaque path segment
+			// with no further separators. trimURL must cap the segment so
+			// the inline form stays short.
+			name: "single oversized opaque segment capped",
+			in:   "https://c.gle/ADMV5J_kXq_U31YeshvtCqkmvPXvdYEr43xYb5dWsh1LqnSuUcpOZjaxn7HL0ItZG",
+			want: "c.gle/ADMV5J_kXq_U31Ye…",
+		},
+		{
+			"oversized first segment with later path capped",
+			"https://example.com/AVeryLongOpaqueTokenSegment/next",
+			"example.com/AVeryLongOpaqueT…",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
