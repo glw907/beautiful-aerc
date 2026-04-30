@@ -66,8 +66,10 @@ type Styles struct {
 	MsgListThreadPrefix  lipgloss.Style
 
 	// Viewer surfaces. ViewerBg is BgBase (body region); ViewerHeader
-	// is the BgElevated panel above it, with a FgDim BorderBottom
-	// painted on BgElevated as the panel/body divider.
+	// is the BgSubtle panel above it (a slight elevation off the body,
+	// keeping the header in the message track rather than the sidebar's
+	// BgElevated chrome track). FgDim BorderBottom on BgBase marks the
+	// panel/body divider.
 	ViewerBg     lipgloss.Style
 	ViewerHeader lipgloss.Style
 
@@ -210,7 +212,7 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		ViewerBg: lipgloss.NewStyle().
 			Background(t.BgBase),
 		ViewerHeader: lipgloss.NewStyle().
-			Background(t.BgElevated).
+			Background(t.BgSubtle).
 			Padding(1, 0, 1, 1).
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderBottom(true).

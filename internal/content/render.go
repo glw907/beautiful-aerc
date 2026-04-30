@@ -190,10 +190,10 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 // RenderHeaders renders parsed headers into a styled string. The
 // Subject is hoisted as a title above the From/To/Cc/Bcc/Date block;
 // a blank line separates the title from the metadata. Header leaf
-// styles carry Background(BgElevated) (see palette.go); unstyled
+// styles carry Background(BgSubtle) (see palette.go); unstyled
 // padding/indent runs are wrapped through bg here to match.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
-	bg := lipgloss.NewStyle().Background(t.BgElevated)
+	bg := lipgloss.NewStyle().Background(t.BgSubtle)
 
 	var lines []string
 	if h.Subject != "" {

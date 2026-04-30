@@ -83,18 +83,20 @@ func NewCompiledTheme(name string, p Palette) *CompiledTheme {
 		ColorSpecial:    lipgloss.Color(p.ColorSpecial),
 	}
 
-	// Header-pane styles render on BgElevated; body-pane styles render
+	// Header-pane styles render on BgSubtle (a small elevation off
+	// BgBase, signaling the header belongs to the message context, not
+	// the sidebar's BgElevated chrome track); body-pane styles render
 	// on BgBase. Baking the pane bg into every leaf eliminates the
 	// terminal-default-bg gaps lipgloss leaves between pre-styled
 	// segments (issue #209).
 	t.HeaderKey = lipgloss.NewStyle().
-		Foreground(t.AccentPrimary).Bold(true).Background(t.BgElevated)
+		Foreground(t.AccentPrimary).Bold(true).Background(t.BgSubtle)
 	t.HeaderValue = lipgloss.NewStyle().
-		Foreground(t.FgBase).Background(t.BgElevated)
+		Foreground(t.FgBase).Background(t.BgSubtle)
 	t.HeaderDim = lipgloss.NewStyle().
-		Foreground(t.FgDim).Background(t.BgElevated)
+		Foreground(t.FgDim).Background(t.BgSubtle)
 	t.SubjectTitle = lipgloss.NewStyle().
-		Foreground(t.FgBright).Bold(true).Background(t.BgElevated)
+		Foreground(t.FgBright).Bold(true).Background(t.BgSubtle)
 	t.Paragraph = lipgloss.NewStyle().
 		Foreground(t.FgBase).Background(t.BgBase)
 	t.Heading = lipgloss.NewStyle().
