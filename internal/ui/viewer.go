@@ -37,6 +37,7 @@ type Viewer struct {
 	blocks       []content.Block
 	links        []string
 	headerStr    string
+	panel        string // headerStr rendered through ViewerHeader at v.width
 	viewport     viewport.Model
 	spinner      spinner.Model
 	styles       Styles
@@ -81,6 +82,7 @@ func (v Viewer) Open(msg mail.MessageInfo) Viewer {
 	v.blocks = nil
 	v.links = nil
 	v.headerStr = ""
+	v.panel = ""
 	return v
 }
 
@@ -224,9 +226,8 @@ func (v Viewer) View() string {
 	// (unstyled) spaces. We strip that pad before bg-padding ourselves —
 	// otherwise fillRowToWidth sees the line at width and skips, leaving
 	// the right side on terminal-default bg.
-	panel := v.styles.ViewerHeader.Width(v.width).Render(v.headerStr)
 	leftPad := bg.Render(" ")
-	bodyHeight := max(0, v.height-lipgloss.Height(panel))
+	bodyHeight := max(0, v.height-lipgloss.Height(v.panel))
 	bodyLines := strings.Split(v.viewport.View(), "\n")
 	if len(bodyLines) > bodyHeight {
 		bodyLines = bodyLines[:bodyHeight]
@@ -240,7 +241,7 @@ func (v Viewer) View() string {
 			bodyLines = append(bodyLines, blank)
 		}
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, panel, strings.Join(bodyLines, "\n"))
+	return lipgloss.JoinVertical(lipgloss.Left, v.panel, strings.Join(bodyLines, "\n"))
 }
 
 // clipPaneBg fits s to exactly width × height. Each content line is
@@ -283,12 +284,10 @@ func (v *Viewer) layout() {
 	}
 	contentWidth := max(1, v.width-1)
 	v.headerStr = content.RenderHeaders(hdrs, v.theme, contentWidth)
+	v.panel = v.styles.ViewerHeader.Width(v.width).Render(v.headerStr)
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
-	// +1 for BorderBottom row, +2 for the panel's vertical padding
-	// (one above the subject, one below the last metadata row).
-	panelHeight := lipgloss.Height(v.headerStr) + 3
-	bodyHeight := max(1, v.height-panelHeight)
+	bodyHeight := max(1, v.height-lipgloss.Height(v.panel))
 	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)

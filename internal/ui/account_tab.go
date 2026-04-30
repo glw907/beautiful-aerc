@@ -17,11 +17,10 @@ import (
 // sidebarWidth is the fixed width of the sidebar panel.
 const sidebarWidth = 30
 
-// sidebarHeaderRows is the account-name line plus the blank line
-// below it, reserved at the top of the sidebar before the folder
-// list. AccountTab.View and the sidebar's own sizing both depend on
-// this number matching.
-const sidebarHeaderRows = 2
+// sidebarHeaderRows is the blank/account/blank padding reserved at
+// the top of the sidebar before the folder list. AccountTab.View
+// and the sidebar's own sizing both depend on this number matching.
+const sidebarHeaderRows = 3
 
 // searchShelfRows is the height of the SidebarSearch shelf pinned
 // to the bottom of the sidebar column.
