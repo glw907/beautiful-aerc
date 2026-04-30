@@ -19,8 +19,8 @@ accent, whatever hue that is.
 |------|---------|
 | `BgBase` | Primary background (main content area) |
 | `BgElevated` | Raised surface (sidebar, popups, completion) |
-| `BgSelection` | Sidebar selected-row highlight (lifts above `BgElevated`) |
-| `BgSubtle` | Message-list selected-row highlight; matches the magnitude *and direction* of `BgSelection − BgElevated` (lighter than `BgBase` for dark themes, darker for light themes) so both selection treatments feel equally weighted |
+| `BgSelection` | Selected-row highlight on `BgElevated` (sidebar) and `BgBase` (message list) — both surfaces use it for consistency |
+| `BgSubtle` | Barely-elevated panel surface — viewer header sits on this, a small tonal step off `BgBase` to mark the header as a sub-region of the message context (not the sidebar's chrome track) |
 | `BgBorder` | Borders, status bar, inactive chrome |
 | `FgBase` | Primary text |
 | `FgBright` | Emphasized text (tab labels, unread) |
@@ -110,7 +110,7 @@ Gmail, and Mutt.
 | Field | fg | bg | Role |
 |-------|----|----|------|
 | `MsgListBg` | — | `BgBase` | Base panel background (every row) |
-| `MsgListSelected` | — | `BgSubtle` | Selected row background override (mirrors the sidebar's `BgSelection`-vs-`BgElevated` shift in both magnitude and direction) |
+| `MsgListSelected` | — | `BgSelection` | Selected row background override (matches the sidebar's selection treatment for consistency) |
 | `MsgListCursor` | `AccentPrimary` | inherit | `▐` left-edge cursor on selected row |
 | `MsgListUnreadSender` | `FgBright` bold | inherit | Sender column when message is unread |
 | `MsgListUnreadSubject` | `FgBright` | inherit | Subject column when message is unread |
@@ -175,7 +175,7 @@ from the body, and a final blank row on `BgBase` closes the pane.
 | Field | fg | bg | Role |
 |-------|----|----|------|
 | `ViewerBg` | — | `BgBase` | Body surface + leading 1-cell column + gutter and bottom blank rows |
-| `ViewerHeader` | — | `BgElevated` | Header panel surface — a `lipgloss.Style` with `PaddingLeft(1)`, a bottom border in `FgDim`, and `Width(v.width-2)` set per render |
+| `ViewerHeader` | — | `BgSubtle` | Header panel surface — barely-elevated off the body's `BgBase`, signaling the header belongs to the message context rather than the sidebar's chrome track. `lipgloss.Style` with `Padding(1, 0, 1, 1)`, a bottom border in `FgDim` on `BgBase`, and `Width(v.width)` set per render |
 | `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered on the first row of the panel |
 | `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value in the metadata block |
 | `HeaderDim` (theme) | `FgDim` | — | Uppercase `FROM`/`TO`/`CC`/`BCC`/`DATE` labels and `<email>` brackets in the metadata block; also the panel's bottom border |
