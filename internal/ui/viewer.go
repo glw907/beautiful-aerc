@@ -219,12 +219,23 @@ func (v Viewer) View() string {
 	// bgFillLine pass reapplies BgBase after each reset; because our
 	// re-injection comes after that, BgElevated wins (last SGR for a
 	// given attribute takes effect).
+	// Pre-inject BgElevated after every \x1b[0m reset inside the
+	// header content so unstyled spans (label/value padding, the
+	// metadata indent) carry the panel bg. clipPaneBg's later
+	// bgFillLine pass reapplies BgBase after each reset; because our
+	// re-injection comes after that, BgElevated wins (last SGR for a
+	// given attribute takes effect).
 	elevPrefix := bgPrefixFromStyle(lipgloss.NewStyle().Background(v.theme.BgElevated))
 	preserved := strings.ReplaceAll(v.headerStr, "\x1b[0m", "\x1b[0m"+elevPrefix)
 	panel := v.styles.ViewerHeader.Width(v.width).Render(preserved)
-	body := padLeftLinesBg(v.viewport.View(), 1, bg)
-	blank := bg.Render(strings.Repeat(" ", v.width))
-	out := lipgloss.JoinVertical(lipgloss.Left, panel, blank, body, blank)
+
+	// Leading column right of the sidebar/viewer divider is BgElevated
+	// in every row — body, gutter, and bottom blank — so the line
+	// against the divider reads as a single continuous edge.
+	edge := lipgloss.NewStyle().Background(v.theme.BgElevated)
+	body := padLeftLinesBg(v.viewport.View(), 1, edge)
+	gutter := edge.Render(" ") + bg.Render(strings.Repeat(" ", v.width-1))
+	out := lipgloss.JoinVertical(lipgloss.Left, panel, gutter, body, gutter)
 	return clipPaneBg(out, v.width, v.height, bg)
 }
 
