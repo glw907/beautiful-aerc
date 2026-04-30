@@ -211,7 +211,7 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Background(t.BgBase),
 		ViewerHeader: lipgloss.NewStyle().
 			Background(t.BgElevated).
-			PaddingLeft(1).
+			Padding(1, 0, 1, 1).
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderBottom(true).
 			BorderForeground(t.FgDim).

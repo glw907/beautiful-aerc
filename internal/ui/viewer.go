@@ -285,7 +285,9 @@ func (v *Viewer) layout() {
 	v.headerStr = content.RenderHeaders(hdrs, v.theme, contentWidth)
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
-	panelHeight := lipgloss.Height(v.headerStr) + 1
+	// +1 for BorderBottom row, +2 for the panel's vertical padding
+	// (one above the subject, one below the last metadata row).
+	panelHeight := lipgloss.Height(v.headerStr) + 3
 	bodyHeight := max(1, v.height-panelHeight)
 	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()

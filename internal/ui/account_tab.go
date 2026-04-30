@@ -443,7 +443,7 @@ func (m AccountTab) View() string {
 	shelfView := m.sidebarSearch.View()
 
 	var sidebarLines []string
-	sidebarLines = append(sidebarLines, acctLine, blank)
+	sidebarLines = append(sidebarLines, blank, acctLine, blank)
 	if sidebarFolders != "" {
 		sidebarLines = append(sidebarLines, strings.Split(sidebarFolders, "\n")...)
 	}
