@@ -189,21 +189,15 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 
 // RenderHeaders renders parsed headers into a styled string. The
 // Subject is hoisted as a title above the From/To/Cc/Bcc/Date block;
-// a blank line separates the title from the metadata.
-//
-// Every styled segment carries t.BgElevated so the panel surface has
-// no terminal-default-bg gaps between Render() calls. Without this,
-// lipgloss issue #209 leaks through: an outer Background wrapper
-// can't refill bg across a child component's embedded \x1b[0m.
+// a blank line separates the title from the metadata. Header leaf
+// styles carry Background(BgElevated) (see palette.go); unstyled
+// padding/indent runs are wrapped through bg here to match.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	bg := lipgloss.NewStyle().Background(t.BgElevated)
 
 	var lines []string
 	if h.Subject != "" {
-		lines = append(lines,
-			t.SubjectTitle.Background(t.BgElevated).Render(wrap(h.Subject, width)),
-			"",
-		)
+		lines = append(lines, t.SubjectTitle.Render(wrap(h.Subject, width)), "")
 	}
 	if len(h.From) > 0 {
 		lines = append(lines, renderHeaderAddresses("From", h.From, t, width, bg)...)
@@ -247,14 +241,14 @@ func renderHeaderKey(key string, t *theme.CompiledTheme, bg lipgloss.Style) stri
 	if pad < 0 {
 		pad = 0
 	}
-	return t.HeaderDim.Background(t.BgElevated).Render(label) + bg.Render(strings.Repeat(" ", pad))
+	return t.HeaderDim.Render(label) + bg.Render(strings.Repeat(" ", pad))
 }
 
 func renderHeaderScalar(key, value string, t *theme.CompiledTheme, bg lipgloss.Style) string {
 	return bg.Render(metadataIndent) +
 		renderHeaderKey(key, t, bg) +
 		bg.Render(" ") +
-		t.HeaderValue.Background(t.BgElevated).Render(value)
+		t.HeaderValue.Render(value)
 }
 
 // visibleAddrWidth returns the printed width of an Address as
@@ -272,9 +266,6 @@ func visibleAddrWidth(a Address) int {
 }
 
 func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int, bg lipgloss.Style) []string {
-	headerValue := t.HeaderValue.Background(t.BgElevated)
-	headerDim := t.HeaderDim.Background(t.BgElevated)
-
 	keyStr := bg.Render(metadataIndent) + renderHeaderKey(key, t, bg)
 	indent := bg.Render(metadataIndent + strings.Repeat(" ", headerKeyColWidth+1))
 
@@ -282,11 +273,11 @@ func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, 
 	for i, a := range addrs {
 		switch {
 		case a.Name != "" && a.Email != "":
-			formatted[i] = headerValue.Render(a.Name) + bg.Render(" ") + headerDim.Render("<"+a.Email+">")
+			formatted[i] = t.HeaderValue.Render(a.Name) + bg.Render(" ") + t.HeaderDim.Render("<"+a.Email+">")
 		case a.Name != "":
-			formatted[i] = headerValue.Render(a.Name)
+			formatted[i] = t.HeaderValue.Render(a.Name)
 		default:
-			formatted[i] = headerValue.Render(a.Email)
+			formatted[i] = t.HeaderValue.Render(a.Email)
 		}
 	}
 

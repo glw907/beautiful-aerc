@@ -43,15 +43,6 @@ type Viewer struct {
 	theme        *theme.CompiledTheme
 	width        int
 	height       int
-
-	// Surface chrome cached on SetSize. divider is the panel/body
-	// separator row; gutter is a body-bg row with the BgElevated
-	// leading edge. Both depend only on width + theme, so they're
-	// stable across redraws between SetSize calls. edge is the
-	// BgElevated bg-only style used to pad the body's leading column.
-	edge    lipgloss.Style
-	divider string
-	gutter  string
 }
 
 // NewViewer constructs an empty (closed) viewer. accountEmail
@@ -62,7 +53,6 @@ func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string) Viewe
 		theme:        t,
 		accountEmail: accountEmail,
 		spinner:      NewSpinner(t),
-		edge:         lipgloss.NewStyle().Background(t.BgElevated),
 	}
 }
 
@@ -117,8 +107,6 @@ func (v Viewer) SetBody(blocks []content.Block) Viewer {
 func (v Viewer) SetSize(width, height int) Viewer {
 	v.width = width
 	v.height = height
-	v.divider = v.edge.Render(" ") + v.styles.ViewerDivider.Render(strings.Repeat("─", max(0, width-1)))
-	v.gutter = v.edge.Render(" ") + v.styles.ViewerBg.Render(strings.Repeat(" ", max(0, width-1)))
 	if v.phase == viewerReady && v.open {
 		v.layout()
 	}
@@ -226,24 +214,39 @@ func (v Viewer) View() string {
 		return clipPaneBg(placed, v.width, v.height, bg)
 	}
 
+	// Two stacked rectangles: BgElevated panel (with FgDim BorderBottom
+	// drawn natively by lipgloss) above a BgBase body. clipPaneBg
+	// per-line pads the body to v.width with bg-styled spaces — using
+	// lipgloss's outer Width.Render directly leaves terminal-default
+	// gaps in the right pad whenever the inner content ends a line
+	// with `\x1b[0m` (lipgloss issue #209).
+	// viewport.View() right-pads each line to its width with plain
+	// (unstyled) spaces. We strip that pad before bg-padding ourselves —
+	// otherwise fillRowToWidth sees the line at width and skips, leaving
+	// the right side on terminal-default bg.
 	panel := v.styles.ViewerHeader.Width(v.width).Render(v.headerStr)
-	body := padLeftLinesBg(v.viewport.View(), 1, v.edge)
-	bodyArea := lipgloss.JoinVertical(lipgloss.Left, v.gutter, body, v.gutter)
-	bodyHeight := max(0, v.height-lipgloss.Height(panel)-1)
-	bodyClipped := clipPaneBg(bodyArea, v.width, bodyHeight, bg)
-
-	if bodyClipped == "" {
-		return panel + "\n" + v.divider
+	leftPad := bg.Render(" ")
+	bodyHeight := max(0, v.height-lipgloss.Height(panel))
+	bodyLines := strings.Split(v.viewport.View(), "\n")
+	if len(bodyLines) > bodyHeight {
+		bodyLines = bodyLines[:bodyHeight]
 	}
-	return panel + "\n" + v.divider + "\n" + bodyClipped
+	for i, l := range bodyLines {
+		bodyLines[i] = fillRowToWidth(leftPad+strings.TrimRight(l, " "), v.width, bg)
+	}
+	if len(bodyLines) < bodyHeight {
+		blank := bg.Render(strings.Repeat(" ", v.width))
+		for len(bodyLines) < bodyHeight {
+			bodyLines = append(bodyLines, blank)
+		}
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, panel, strings.Join(bodyLines, "\n"))
 }
 
-// clipPaneBg enforces the size contract every bubbletea component
-// owes its parent: exactly height rows, each exactly width cells.
-// Each content line passes through bgFillLine so the background
-// persists across embedded ANSI resets, then fillRowToWidth handles
-// truncation/right-pad. Missing rows are filled with bg-styled
-// blank rows.
+// clipPaneBg fits s to exactly width × height. Each content line is
+// padded to width with bgStyle; missing rows get a bg-styled blank.
+// Surface-baked leaves (theme styles carry their pane's bg) make the
+// per-line right-pad sufficient — no SGR rewriting needed.
 func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	if width < 1 || height < 1 {
 		return ""
@@ -252,9 +255,8 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	if len(lines) > height {
 		lines = lines[:height]
 	}
-	bgPrefix := bgPrefixFromStyle(bg)
 	for i, line := range lines {
-		lines[i] = fillRowToWidth(bgFillLine(line, bgPrefix), width, bg)
+		lines[i] = fillRowToWidth(line, width, bg)
 	}
 	blank := bg.Render(strings.Repeat(" ", width))
 	for len(lines) < height {
@@ -267,13 +269,9 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 // from SetBody and from SetSize when the viewer is already ready.
 // Headers stay pinned above the viewport; only the body scrolls.
 //
-// contentWidth is one cell narrower than v.width. The header panel
-// adds the 1-cell left pad back via PaddingLeft, and the body lines
-// get padLeftLinesBg in View(); both reach v.width after clipPaneBg
-// fills any short rows. The body height reserves the rendered panel
-// (subject + metadata + bottom border row) plus two blank rows: one
-// gutter between the panel and the body, and one at the bottom of
-// the pane.
+// contentWidth is v.width - 1 to account for the panel's PaddingLeft.
+// The body region fills the rest of v.height beneath the rendered
+// panel (which includes its bottom border row).
 func (v *Viewer) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
@@ -288,25 +286,11 @@ func (v *Viewer) layout() {
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	panelHeight := lipgloss.Height(v.headerStr) + 1
-	bodyHeight := max(1, v.height-panelHeight-2)
+	bodyHeight := max(1, v.height-panelHeight)
 	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)
 	v.viewport = vp
-}
-
-// padLeftLinesBg prepends n bg-styled spaces to every newline-separated
-// line in s.
-func padLeftLinesBg(s string, n int, bg lipgloss.Style) string {
-	if n <= 0 || s == "" {
-		return s
-	}
-	pad := bg.Render(strings.Repeat(" ", n))
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		lines[i] = pad + l
-	}
-	return strings.Join(lines, "\n")
 }
 
 // addressesFor returns the To: list to render in the viewer. Real

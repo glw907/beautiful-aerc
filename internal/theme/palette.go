@@ -83,36 +83,40 @@ func NewCompiledTheme(name string, p Palette) *CompiledTheme {
 		ColorSpecial:    lipgloss.Color(p.ColorSpecial),
 	}
 
+	// Header-pane styles render on BgElevated; body-pane styles render
+	// on BgBase. Baking the pane bg into every leaf eliminates the
+	// terminal-default-bg gaps lipgloss leaves between pre-styled
+	// segments (issue #209).
 	t.HeaderKey = lipgloss.NewStyle().
-		Foreground(t.AccentPrimary).Bold(true)
+		Foreground(t.AccentPrimary).Bold(true).Background(t.BgElevated)
 	t.HeaderValue = lipgloss.NewStyle().
-		Foreground(t.FgBase)
+		Foreground(t.FgBase).Background(t.BgElevated)
 	t.HeaderDim = lipgloss.NewStyle().
-		Foreground(t.FgDim)
+		Foreground(t.FgDim).Background(t.BgElevated)
 	t.SubjectTitle = lipgloss.NewStyle().
-		Foreground(t.FgBright).Bold(true)
+		Foreground(t.FgBright).Bold(true).Background(t.BgElevated)
 	t.Paragraph = lipgloss.NewStyle().
-		Foreground(t.FgBase)
+		Foreground(t.FgBase).Background(t.BgBase)
 	t.Heading = lipgloss.NewStyle().
-		Foreground(t.ColorSuccess).Bold(true)
+		Foreground(t.ColorSuccess).Bold(true).Background(t.BgBase)
 	t.Quote = lipgloss.NewStyle().
-		Foreground(t.AccentTertiary)
+		Foreground(t.AccentTertiary).Background(t.BgBase)
 	t.DeepQuote = lipgloss.NewStyle().
-		Foreground(t.FgDim)
+		Foreground(t.FgDim).Background(t.BgBase)
 	t.Attribution = lipgloss.NewStyle().
-		Foreground(t.FgDim).Italic(true)
+		Foreground(t.FgDim).Italic(true).Background(t.BgBase)
 	t.Signature = lipgloss.NewStyle().
-		Foreground(t.FgDim)
-	t.Bold = lipgloss.NewStyle().Bold(true)
-	t.Italic = lipgloss.NewStyle().Italic(true)
+		Foreground(t.FgDim).Background(t.BgBase)
+	t.Bold = lipgloss.NewStyle().Bold(true).Background(t.BgBase)
+	t.Italic = lipgloss.NewStyle().Italic(true).Background(t.BgBase)
 	t.Link = lipgloss.NewStyle().
-		Foreground(t.AccentPrimary).Underline(true)
+		Foreground(t.AccentPrimary).Underline(true).Background(t.BgBase)
 	t.CodeInline = lipgloss.NewStyle().
-		Foreground(t.FgBright)
+		Foreground(t.FgBright).Background(t.BgBase)
 	t.CodeBlock = lipgloss.NewStyle().
-		Foreground(t.FgBright)
+		Foreground(t.FgBright).Background(t.BgBase)
 	t.HorizontalRule = lipgloss.NewStyle().
-		Foreground(t.FgDim)
+		Foreground(t.FgDim).Background(t.BgBase)
 
 	return t
 }

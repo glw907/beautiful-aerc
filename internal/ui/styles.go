@@ -66,14 +66,10 @@ type Styles struct {
 	MsgListThreadPrefix  lipgloss.Style
 
 	// Viewer surfaces. ViewerBg is BgBase (body region); ViewerHeader
-	// is the BgElevated panel above it; ViewerDivider styles the `─`
-	// run separating them. The divider lives outside the panel rather
-	// than as a BorderBottom so the BgElevated leading-edge column
-	// can stay a uniform space — a lipgloss border would paint `─`
-	// over it.
-	ViewerBg      lipgloss.Style
-	ViewerHeader  lipgloss.Style
-	ViewerDivider lipgloss.Style
+	// is the BgElevated panel above it, with a FgDim BorderBottom
+	// painted on BgElevated as the panel/body divider.
+	ViewerBg     lipgloss.Style
+	ViewerHeader lipgloss.Style
 
 	// Help popover (modal overlay, `?`)
 	HelpTitle       lipgloss.Style
@@ -112,37 +108,6 @@ func applyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
 	return base
 }
 
-// bgFillLine wraps a single rendered line so that its background
-// color persists across embedded ANSI resets. Lipgloss's Style.Render
-// emits "\x1b[0m" at the end of every styled segment — that resets
-// background too, so any plain (non-ANSI) characters that follow show
-// the terminal default. We prepend bgPrefix once and re-emit it after
-// every embedded reset, ensuring bg is restored before the next
-// character. Empty prefix returns line unchanged. Caller is
-// responsible for computing bgPrefix once via bgPrefixFromStyle and
-// reusing it across the lines of a pane.
-func bgFillLine(line, bgPrefix string) string {
-	if bgPrefix == "" {
-		return line
-	}
-	return bgPrefix + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bgPrefix) + "\x1b[0m"
-}
-
-// bgPrefixFromStyle extracts the ANSI prefix lipgloss emits for a
-// background color. Returns "" if the style has no background or the
-// renderer emits no prefix.
-func bgPrefixFromStyle(st lipgloss.Style) string {
-	bg, ok := st.GetBackground().(lipgloss.Color)
-	if !ok {
-		return ""
-	}
-	rendered := lipgloss.NewStyle().Background(bg).Render("X")
-	if i := strings.Index(rendered, "X"); i > 0 {
-		return rendered[:i]
-	}
-	return ""
-}
-
 // fillRowToWidth fits a fully-rendered row of ANSI segments to
 // exactly width display cells. Short rows are right-padded with
 // bgStyle so the row's background extends to the panel edge; over-
@@ -176,9 +141,9 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.BgBorder),
 
 		FrameBorder: lipgloss.NewStyle().
-			Foreground(t.BgBorder),
+			Foreground(t.BgBorder).Background(t.BgBase),
 		PanelDivider: lipgloss.NewStyle().
-			Foreground(t.BgBorder),
+			Foreground(t.BgBorder).Background(t.BgBase),
 
 		StatusBar: lipgloss.NewStyle().
 			Foreground(t.FgBright).
@@ -246,10 +211,11 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Background(t.BgBase),
 		ViewerHeader: lipgloss.NewStyle().
 			Background(t.BgElevated).
-			PaddingLeft(1),
-		ViewerDivider: lipgloss.NewStyle().
-			Foreground(t.FgDim).
-			Background(t.BgElevated),
+			PaddingLeft(1).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderBottom(true).
+			BorderForeground(t.FgDim).
+			BorderBackground(t.BgElevated),
 
 		HelpTitle: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary).Bold(true),
@@ -277,7 +243,7 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgDim),
 
 		TopLine: lipgloss.NewStyle().
-			Foreground(t.BgBorder),
+			Foreground(t.BgBorder).Background(t.BgBase),
 		ToastText: lipgloss.NewStyle().
 			Foreground(t.ColorSuccess),
 
