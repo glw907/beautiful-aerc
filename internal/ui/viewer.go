@@ -43,6 +43,15 @@ type Viewer struct {
 	theme        *theme.CompiledTheme
 	width        int
 	height       int
+
+	// Surface chrome cached on SetSize. divider is the panel/body
+	// separator row; gutter is a body-bg row with the BgElevated
+	// leading edge. Both depend only on width + theme, so they're
+	// stable across redraws between SetSize calls. edge is the
+	// BgElevated bg-only style used to pad the body's leading column.
+	edge    lipgloss.Style
+	divider string
+	gutter  string
 }
 
 // NewViewer constructs an empty (closed) viewer. accountEmail
@@ -53,6 +62,7 @@ func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string) Viewe
 		theme:        t,
 		accountEmail: accountEmail,
 		spinner:      NewSpinner(t),
+		edge:         lipgloss.NewStyle().Background(t.BgElevated),
 	}
 }
 
@@ -107,6 +117,8 @@ func (v Viewer) SetBody(blocks []content.Block) Viewer {
 func (v Viewer) SetSize(width, height int) Viewer {
 	v.width = width
 	v.height = height
+	v.divider = v.edge.Render(" ") + v.styles.ViewerDivider.Render(strings.Repeat("─", max(0, width-1)))
+	v.gutter = v.edge.Render(" ") + v.styles.ViewerBg.Render(strings.Repeat(" ", max(0, width-1)))
 	if v.phase == viewerReady && v.open {
 		v.layout()
 	}
@@ -213,30 +225,17 @@ func (v Viewer) View() string {
 		)
 		return clipPaneBg(placed, v.width, v.height, bg)
 	}
-	// Pre-inject BgElevated after every \x1b[0m reset inside the
-	// header content so unstyled spans (label/value padding, the
-	// metadata indent) carry the panel bg. clipPaneBg's later
-	// bgFillLine pass reapplies BgBase after each reset; because our
-	// re-injection comes after that, BgElevated wins (last SGR for a
-	// given attribute takes effect).
-	// Pre-inject BgElevated after every \x1b[0m reset inside the
-	// header content so unstyled spans (label/value padding, the
-	// metadata indent) carry the panel bg. clipPaneBg's later
-	// bgFillLine pass reapplies BgBase after each reset; because our
-	// re-injection comes after that, BgElevated wins (last SGR for a
-	// given attribute takes effect).
-	elevPrefix := bgPrefixFromStyle(lipgloss.NewStyle().Background(v.theme.BgElevated))
-	preserved := strings.ReplaceAll(v.headerStr, "\x1b[0m", "\x1b[0m"+elevPrefix)
-	panel := v.styles.ViewerHeader.Width(v.width).Render(preserved)
 
-	// Leading column right of the sidebar/viewer divider is BgElevated
-	// in every row — body, gutter, and bottom blank — so the line
-	// against the divider reads as a single continuous edge.
-	edge := lipgloss.NewStyle().Background(v.theme.BgElevated)
-	body := padLeftLinesBg(v.viewport.View(), 1, edge)
-	gutter := edge.Render(" ") + bg.Render(strings.Repeat(" ", v.width-1))
-	out := lipgloss.JoinVertical(lipgloss.Left, panel, gutter, body, gutter)
-	return clipPaneBg(out, v.width, v.height, bg)
+	panel := v.styles.ViewerHeader.Width(v.width).Render(v.headerStr)
+	body := padLeftLinesBg(v.viewport.View(), 1, v.edge)
+	bodyArea := lipgloss.JoinVertical(lipgloss.Left, v.gutter, body, v.gutter)
+	bodyHeight := max(0, v.height-lipgloss.Height(panel)-1)
+	bodyClipped := clipPaneBg(bodyArea, v.width, bodyHeight, bg)
+
+	if bodyClipped == "" {
+		return panel + "\n" + v.divider
+	}
+	return panel + "\n" + v.divider + "\n" + bodyClipped
 }
 
 // clipPaneBg enforces the size contract every bubbletea component

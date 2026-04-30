@@ -3,7 +3,6 @@
 package content
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -189,35 +188,38 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 }
 
 // RenderHeaders renders parsed headers into a styled string. The
-// Subject is hoisted as a title (FgBright bold) above the structured
-// From/To/Cc/Bcc/Date block; a blank line separates the title from
-// the metadata, and a full-width FgDim rule closes the header.
+// Subject is hoisted as a title above the From/To/Cc/Bcc/Date block;
+// a blank line separates the title from the metadata.
+//
+// Every styled segment carries t.BgElevated so the panel surface has
+// no terminal-default-bg gaps between Render() calls. Without this,
+// lipgloss issue #209 leaks through: an outer Background wrapper
+// can't refill bg across a child component's embedded \x1b[0m.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
-	var lines []string
+	bg := lipgloss.NewStyle().Background(t.BgElevated)
 
+	var lines []string
 	if h.Subject != "" {
 		lines = append(lines,
-			t.SubjectTitle.Render(wrap(h.Subject, width)),
+			t.SubjectTitle.Background(t.BgElevated).Render(wrap(h.Subject, width)),
 			"",
 		)
 	}
-
 	if len(h.From) > 0 {
-		lines = append(lines, renderHeaderAddresses("From", h.From, t, width)...)
+		lines = append(lines, renderHeaderAddresses("From", h.From, t, width, bg)...)
 	}
 	if len(h.To) > 0 {
-		lines = append(lines, renderHeaderAddresses("To", h.To, t, width)...)
+		lines = append(lines, renderHeaderAddresses("To", h.To, t, width, bg)...)
 	}
 	if len(h.Cc) > 0 {
-		lines = append(lines, renderHeaderAddresses("Cc", h.Cc, t, width)...)
+		lines = append(lines, renderHeaderAddresses("Cc", h.Cc, t, width, bg)...)
 	}
 	if len(h.Bcc) > 0 {
-		lines = append(lines, renderHeaderAddresses("Bcc", h.Bcc, t, width)...)
+		lines = append(lines, renderHeaderAddresses("Bcc", h.Bcc, t, width, bg)...)
 	}
 	if h.Date != "" {
-		lines = append(lines, renderHeaderScalar("Date", h.Date, t))
+		lines = append(lines, renderHeaderScalar("Date", h.Date, t, bg))
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -233,20 +235,26 @@ const headerKeyColWidth = 8
 // at the pane's existing 1-cell padding.
 const metadataIndent = "  "
 
-// renderHeaderKey renders the uppercase, colon-less header label
-// right-padded to headerKeyColWidth. The HeaderDim style (FgDim) is
-// applied so the label reads as a quiet margin annotation.
-func renderHeaderKey(key string, t *theme.CompiledTheme) string {
+// metadataPrefixWidth is the display-cell width of the row prefix —
+// metadataIndent + headerKeyColWidth + the trailing space — used by
+// the wrap accumulator. Computed against raw strings so it stays
+// correct after surface-baking wraps the prefix in ANSI.
+const metadataPrefixWidth = len(metadataIndent) + headerKeyColWidth + 1
+
+func renderHeaderKey(key string, t *theme.CompiledTheme, bg lipgloss.Style) string {
 	label := strings.ToUpper(key)
 	pad := headerKeyColWidth - len(label)
 	if pad < 0 {
 		pad = 0
 	}
-	return t.HeaderDim.Render(label) + strings.Repeat(" ", pad)
+	return t.HeaderDim.Background(t.BgElevated).Render(label) + bg.Render(strings.Repeat(" ", pad))
 }
 
-func renderHeaderScalar(key, value string, t *theme.CompiledTheme) string {
-	return metadataIndent + renderHeaderKey(key, t) + " " + t.HeaderValue.Render(value)
+func renderHeaderScalar(key, value string, t *theme.CompiledTheme, bg lipgloss.Style) string {
+	return bg.Render(metadataIndent) +
+		renderHeaderKey(key, t, bg) +
+		bg.Render(" ") +
+		t.HeaderValue.Background(t.BgElevated).Render(value)
 }
 
 // visibleAddrWidth returns the printed width of an Address as
@@ -263,27 +271,28 @@ func visibleAddrWidth(a Address) int {
 	}
 }
 
-func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int) []string {
-	keyStr := metadataIndent + renderHeaderKey(key, t)
-	indent := metadataIndent + strings.Repeat(" ", headerKeyColWidth+1)
+func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, width int, bg lipgloss.Style) []string {
+	headerValue := t.HeaderValue.Background(t.BgElevated)
+	headerDim := t.HeaderDim.Background(t.BgElevated)
 
-	var formatted []string
-	for _, a := range addrs {
+	keyStr := bg.Render(metadataIndent) + renderHeaderKey(key, t, bg)
+	indent := bg.Render(metadataIndent + strings.Repeat(" ", headerKeyColWidth+1))
+
+	formatted := make([]string, len(addrs))
+	for i, a := range addrs {
 		switch {
 		case a.Name != "" && a.Email != "":
-			formatted = append(formatted, fmt.Sprintf("%s %s",
-				t.HeaderValue.Render(a.Name),
-				t.HeaderDim.Render("<"+a.Email+">")))
+			formatted[i] = headerValue.Render(a.Name) + bg.Render(" ") + headerDim.Render("<"+a.Email+">")
 		case a.Name != "":
-			formatted = append(formatted, t.HeaderValue.Render(a.Name))
+			formatted[i] = headerValue.Render(a.Name)
 		default:
-			formatted = append(formatted, t.HeaderValue.Render(a.Email))
+			formatted[i] = headerValue.Render(a.Email)
 		}
 	}
 
 	var lines []string
-	current := keyStr + " "
-	currentVisible := len(metadataIndent) + headerKeyColWidth + 1
+	current := keyStr + bg.Render(" ")
+	currentVisible := metadataPrefixWidth
 
 	for i, addr := range formatted {
 		addrVisible := visibleAddrWidth(addrs[i])
@@ -298,9 +307,9 @@ func renderHeaderAddresses(key string, addrs []Address, t *theme.CompiledTheme, 
 		if currentVisible+sepLen+addrVisible > width && i > 0 {
 			lines = append(lines, current)
 			current = indent + addr
-			currentVisible = len(indent) + addrVisible
+			currentVisible = metadataPrefixWidth + addrVisible
 		} else {
-			current += sep + addr
+			current += bg.Render(sep) + addr
 			currentVisible += sepLen + addrVisible
 		}
 	}

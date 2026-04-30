@@ -65,15 +65,15 @@ type Styles struct {
 	MsgListFlagFlagged   lipgloss.Style
 	MsgListThreadPrefix  lipgloss.Style
 
-	// Viewer. The viewer body (under the header panel) shares BgBase
-	// with the message list. ViewerBg is the bg-only style used for
-	// the body's leading column, right-edge fill, the gutter row
-	// between the header panel and the body, and the bottom-of-pane
-	// blank. ViewerHeader is the header panel style: BgElevated fill
-	// with a bottom border in FgDim, applied at v.width via
-	// .Width(v.width - 1).PaddingLeft(1) so total width = v.width.
-	ViewerBg     lipgloss.Style
-	ViewerHeader lipgloss.Style
+	// Viewer surfaces. ViewerBg is BgBase (body region); ViewerHeader
+	// is the BgElevated panel above it; ViewerDivider styles the `─`
+	// run separating them. The divider lives outside the panel rather
+	// than as a BorderBottom so the BgElevated leading-edge column
+	// can stay a uniform space — a lipgloss border would paint `─`
+	// over it.
+	ViewerBg      lipgloss.Style
+	ViewerHeader  lipgloss.Style
+	ViewerDivider lipgloss.Style
 
 	// Help popover (modal overlay, `?`)
 	HelpTitle       lipgloss.Style
@@ -246,11 +246,10 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Background(t.BgBase),
 		ViewerHeader: lipgloss.NewStyle().
 			Background(t.BgElevated).
-			PaddingLeft(1).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderBottom(true).
-			BorderForeground(t.FgDim).
-			BorderBackground(t.BgElevated),
+			PaddingLeft(1),
+		ViewerDivider: lipgloss.NewStyle().
+			Foreground(t.FgDim).
+			Background(t.BgElevated),
 
 		HelpTitle: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary).Bold(true),
