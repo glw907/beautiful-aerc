@@ -199,7 +199,11 @@ func TestViewerClosedViewIsEmpty(t *testing.T) {
 }
 
 // TestViewerLeftPaddingGeometry verifies that every rendered line in the
-// ready phase starts with a space and is exactly v.width display cells wide.
+// ready phase is exactly v.width display cells wide. Panel rows lead
+// with the panel's BgElevated PaddingLeft cell; the panel's bottom
+// border row leads with a '─' that spans the full panel width; body
+// rows lead with a BgBase gutter cell. Width is the contract — leading
+// character varies by row class.
 func TestViewerLeftPaddingGeometry(t *testing.T) {
 	const w, h = 80, 20
 	v := newTestViewer().SetSize(w, h).Open(mail.MessageInfo{
@@ -214,9 +218,6 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 	for i, line := range lines {
 		if line == "" {
 			continue
-		}
-		if !strings.HasPrefix(line, " ") {
-			t.Errorf("line %d does not start with a space: %q", i, line)
 		}
 		if got := displayCells(line); got != w {
 			t.Errorf("line %d width = %d, want %d: %q", i, got, w, line)

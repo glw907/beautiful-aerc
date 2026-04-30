@@ -221,8 +221,7 @@ func (v Viewer) View() string {
 	// given attribute takes effect).
 	elevPrefix := bgPrefixFromStyle(lipgloss.NewStyle().Background(v.theme.BgElevated))
 	preserved := strings.ReplaceAll(v.headerStr, "\x1b[0m", "\x1b[0m"+elevPrefix)
-	panel := v.styles.ViewerHeader.Width(v.width - 2).Render(preserved)
-	panel = padLeftLinesBg(panel, 1, bg)
+	panel := v.styles.ViewerHeader.Width(v.width).Render(preserved)
 	body := padLeftLinesBg(v.viewport.View(), 1, bg)
 	blank := bg.Render(strings.Repeat(" ", v.width))
 	out := lipgloss.JoinVertical(lipgloss.Left, panel, blank, body, blank)
@@ -274,14 +273,13 @@ func (v *Viewer) layout() {
 		Date:    viewerDateString(v.msg),
 		Subject: v.msg.Subject,
 	}
-	bodyWidth := max(1, v.width-1)
-	headerWidth := max(1, v.width-2)
-	v.headerStr = content.RenderHeaders(hdrs, v.theme, headerWidth)
-	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, bodyWidth)
+	contentWidth := max(1, v.width-1)
+	v.headerStr = content.RenderHeaders(hdrs, v.theme, contentWidth)
+	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	panelHeight := lipgloss.Height(v.headerStr) + 1
 	bodyHeight := max(1, v.height-panelHeight-2)
-	vp := viewport.New(bodyWidth, bodyHeight)
+	vp := viewport.New(contentWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)
 	v.viewport = vp
