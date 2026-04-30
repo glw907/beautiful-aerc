@@ -63,6 +63,7 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 	switch b := block.(type) {
 	case Paragraph:
 		text := renderSpans(b.Spans, t)
+		text = strings.TrimLeft(text, " \t")
 		text = wrap(text, width)
 		return t.Paragraph.Render(text)
 
