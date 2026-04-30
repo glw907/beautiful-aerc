@@ -155,29 +155,38 @@ pop.
 
 ### Message viewer
 
-The viewer shares `BgBase` with the message list — the right panel is
-a single surface. The Subject sits at column 1 on the very first row
-of the pane (vertically aligned with the sidebar's account label).
+The viewer is composed of two surfaces. The header is a panel on
+`BgElevated` running from row 1 down through its bottom border;
+the body sits below it on `BgBase`, sharing that surface with the
+message list. The 1-cell leading column of the pane stays `BgBase`
+in every row — the panel inhabits column 1 through column
+`v.width-1`, leaving the pane's leading gutter intact for vertical
+alignment with the sidebar.
+
+Inside the panel the Subject sits on the first row at column 2
+(after the BgBase gutter and the panel's 1-cell `PaddingLeft`).
 A blank row separates the Subject from the metadata block (From/To/
-Cc/Bcc/Date), which is indented two cells inward and rendered with
-uppercase labels in `FgDim` and no colons. Two blank rows follow the
-metadata before the body content begins, and a final blank row closes
-the pane at the bottom. The header has no rule, no overline, and no
-background tint — indentation alone delineates the header region.
+Cc/Bcc/Date), which is indented two cells further inward and
+rendered with uppercase labels in `FgDim` and no colons. The panel
+closes with a single-line bottom border (`─`) in `FgDim` on
+`BgElevated`. A blank gutter row on `BgBase` separates the panel
+from the body, and a final blank row on `BgBase` closes the pane.
 
 | Field | fg | bg | Role |
 |-------|----|----|------|
-| `ViewerBg` | — | `BgBase` | Base pane background (all padding rows + leading column + right-edge fill) |
-| `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered as a standalone title at the top of the viewer pane (column 1, no leading blank) |
+| `ViewerBg` | — | `BgBase` | Body surface + leading 1-cell column + gutter and bottom blank rows |
+| `ViewerHeader` | — | `BgElevated` | Header panel surface — a `lipgloss.Style` with `PaddingLeft(1)`, a bottom border in `FgDim`, and `Width(v.width-2)` set per render |
+| `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered on the first row of the panel |
 | `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value in the metadata block |
-| `HeaderDim` (theme) | `FgDim` | — | Uppercase `FROM`/`TO`/`CC`/`BCC`/`DATE` labels and `<email>` brackets in the metadata block |
+| `HeaderDim` (theme) | `FgDim` | — | Uppercase `FROM`/`TO`/`CC`/`BCC`/`DATE` labels and `<email>` brackets in the metadata block; also the panel's bottom border |
 
-Background composition: `clipPaneBg` and `padLeftLinesBg` use
-bg-styled spaces so the right-edge fill, left column, and the blank
-padding rows all carry `BgBase`. Each rendered content line is then
-run through `bgFillLine` (in `styles.go`), which prepends the bg ANSI
-prefix and re-emits it after every embedded `\x1b[0m` reset so cells
-under styled content don't fall back to the terminal default.
+Background composition: the header panel is rendered by lipgloss
+with `Width()` set, so each panel row arrives pre-filled to the
+panel width with `BgElevated` — no manual right-edge fill is needed
+inside the panel. `padLeftLinesBg` then prepends a `BgBase` cell at
+column 0. Body rows are still padded by `padLeftLinesBg` and fully
+re-filled by `clipPaneBg` (via `bgFillLine` + `fillRowToWidth`) so
+the body's `BgBase` extends to the pane edge across every line.
 
 ### Help popover (modal overlay, `?`)
 

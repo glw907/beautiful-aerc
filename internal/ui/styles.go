@@ -65,11 +65,15 @@ type Styles struct {
 	MsgListFlagFlagged   lipgloss.Style
 	MsgListThreadPrefix  lipgloss.Style
 
-	// Viewer. The viewer pane shares BgBase with the message list —
-	// the right panel is a single surface. ViewerBg is the bg-only
-	// style used for padding (top/bottom blank rows, leading column,
-	// right-edge fill in clipPane).
-	ViewerBg lipgloss.Style
+	// Viewer. The viewer body (under the header panel) shares BgBase
+	// with the message list. ViewerBg is the bg-only style used for
+	// the body's leading column, right-edge fill, the gutter row
+	// between the header panel and the body, and the bottom-of-pane
+	// blank. ViewerHeader is the header panel style: BgElevated fill
+	// with a bottom border in FgDim, applied at v.width via
+	// .Width(v.width - 1).PaddingLeft(1) so total width = v.width.
+	ViewerBg     lipgloss.Style
+	ViewerHeader lipgloss.Style
 
 	// Help popover (modal overlay, `?`)
 	HelpTitle       lipgloss.Style
@@ -240,6 +244,13 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 
 		ViewerBg: lipgloss.NewStyle().
 			Background(t.BgBase),
+		ViewerHeader: lipgloss.NewStyle().
+			Background(t.BgElevated).
+			PaddingLeft(1).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderBottom(true).
+			BorderForeground(t.FgDim).
+			BorderBackground(t.BgElevated),
 
 		HelpTitle: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary).Bold(true),

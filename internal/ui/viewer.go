@@ -213,10 +213,11 @@ func (v Viewer) View() string {
 		)
 		return clipPaneBg(placed, v.width, v.height, bg)
 	}
-	headers := padLeftLinesBg(v.headerStr, 1, bg)
+	panel := v.styles.ViewerHeader.Width(v.width - 2).Render(v.headerStr)
+	panel = padLeftLinesBg(panel, 1, bg)
 	body := padLeftLinesBg(v.viewport.View(), 1, bg)
 	blank := bg.Render(strings.Repeat(" ", v.width))
-	out := lipgloss.JoinVertical(lipgloss.Left, headers, blank, blank, body, blank)
+	out := lipgloss.JoinVertical(lipgloss.Left, panel, blank, body, blank)
 	return clipPaneBg(out, v.width, v.height, bg)
 }
 
@@ -249,12 +250,13 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 // from SetBody and from SetSize when the viewer is already ready.
 // Headers stay pinned above the viewport; only the body scrolls.
 //
-// contentWidth is one cell narrower than v.width. padLeftLinesBg adds
-// the leading space back in View(), so the total per-line cell count
-// equals v.width after clipPaneBg pads the remainder. The body height
-// reserves three rows for the blank padding rows View() emits: two
-// between headers and body (the trailing-of-header blank plus an
-// extra breathing-room blank), and one at the bottom of the pane.
+// contentWidth is one cell narrower than v.width. The header panel
+// adds the 1-cell left pad back via PaddingLeft, and the body lines
+// get padLeftLinesBg in View(); both reach v.width after clipPaneBg
+// fills any short rows. The body height reserves the rendered panel
+// (subject + metadata + bottom border row) plus two blank rows: one
+// gutter between the panel and the body, and one at the bottom of
+// the pane.
 func (v *Viewer) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
@@ -264,13 +266,14 @@ func (v *Viewer) layout() {
 		Date:    viewerDateString(v.msg),
 		Subject: v.msg.Subject,
 	}
-	contentWidth := max(1, v.width-1)
-	v.headerStr = content.RenderHeaders(hdrs, v.theme, contentWidth)
-	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
+	bodyWidth := max(1, v.width-1)
+	headerWidth := max(1, v.width-2)
+	v.headerStr = content.RenderHeaders(hdrs, v.theme, headerWidth)
+	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, bodyWidth)
 	v.links = urls
-	headerHeight := lipgloss.Height(v.headerStr)
-	bodyHeight := max(1, v.height-headerHeight-3)
-	vp := viewport.New(contentWidth, bodyHeight)
+	panelHeight := lipgloss.Height(v.headerStr) + 1
+	bodyHeight := max(1, v.height-panelHeight-2)
+	vp := viewport.New(bodyWidth, bodyHeight)
 	vp.KeyMap = viewerViewportKeymap()
 	vp.SetContent(body)
 	v.viewport = vp
