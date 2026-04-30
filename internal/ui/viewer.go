@@ -213,7 +213,15 @@ func (v Viewer) View() string {
 		)
 		return clipPaneBg(placed, v.width, v.height, bg)
 	}
-	panel := v.styles.ViewerHeader.Width(v.width - 2).Render(v.headerStr)
+	// Pre-inject BgElevated after every \x1b[0m reset inside the
+	// header content so unstyled spans (label/value padding, the
+	// metadata indent) carry the panel bg. clipPaneBg's later
+	// bgFillLine pass reapplies BgBase after each reset; because our
+	// re-injection comes after that, BgElevated wins (last SGR for a
+	// given attribute takes effect).
+	elevPrefix := bgPrefixFromStyle(lipgloss.NewStyle().Background(v.theme.BgElevated))
+	preserved := strings.ReplaceAll(v.headerStr, "\x1b[0m", "\x1b[0m"+elevPrefix)
+	panel := v.styles.ViewerHeader.Width(v.width - 2).Render(preserved)
 	panel = padLeftLinesBg(panel, 1, bg)
 	body := padLeftLinesBg(v.viewport.View(), 1, bg)
 	blank := bg.Render(strings.Repeat(" ", v.width))
