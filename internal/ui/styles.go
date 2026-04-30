@@ -215,7 +215,7 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderBottom(true).
 			BorderForeground(t.FgDim).
-			BorderBackground(t.BgElevated),
+			BorderBackground(t.BgBase),
 
 		HelpTitle: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary).Bold(true),
