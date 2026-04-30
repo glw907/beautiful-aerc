@@ -104,7 +104,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.sidebar.SetSize(sw, folderHeight)
 		m.sidebarSearch.SetSize(sw)
 		mw := max(1, m.width-sw-1) // -1 for divider
-		m.msglist.SetSize(mw, max(1, m.height-2))
+		m.msglist.SetSize(mw, m.height)
 		m.viewer = m.viewer.SetSize(mw, m.height)
 		// Forward WindowSizeMsg into children that own bubbles
 		// components so any internal reflow they need fires.
@@ -463,26 +463,19 @@ func (m AccountTab) View() string {
 
 	divLine := m.styles.PanelDivider.Render("│")
 
-	mw := max(1, m.width-min(sidebarWidth, m.width/2)-1)
 	var rightLines []string
 	switch {
 	case m.viewer.IsOpen():
 		rightLines = strings.Split(m.viewer.View(), "\n")
 	case m.loading && m.msglist.Count() == 0:
 		text := m.spinner.View() + " Loading messages…"
+		mw := max(1, m.width-min(sidebarWidth, m.width/2)-1)
 		rightLines = strings.Split(
 			lipgloss.Place(mw, m.height, lipgloss.Center, lipgloss.Center,
 				m.styles.Dim.Render(text)),
 			"\n")
 	default:
-		// Padding rows above the first message and below the last give
-		// the list breathing room from the chrome top and the status bar
-		// below — same treatment as the sidebar account header and the
-		// viewer panel.
-		blank := m.styles.MsgListBg.Width(mw).Render("")
-		rightLines = append(rightLines, blank)
-		rightLines = append(rightLines, strings.Split(m.msglist.View(), "\n")...)
-		rightLines = append(rightLines, blank)
+		rightLines = strings.Split(m.msglist.View(), "\n")
 	}
 
 	// Assemble columns row-by-row rather than via lipgloss.JoinHorizontal.
