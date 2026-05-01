@@ -1210,3 +1210,152 @@ func TestMessageListMoveCursor(t *testing.T) {
 		t.Fatal("MoveCursor(-1) from last row should move")
 	}
 }
+
+func TestMessageList_VisualModeAndTargets(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	// Thread fixture: root "10" + two children "11", "12" in thread T1.
+	// Plus a standalone "20" in T2.
+	threadMsgs := func() []mail.MessageInfo {
+		return []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Subject: "re: root", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", Subject: "re: root 2", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "Solo", Subject: "solo", Date: "2026-04-06 10:00", Flags: mail.FlagSeen},
+		}
+	}
+
+	t.Run("default: VisualMode false, Marked empty", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		if ml.VisualMode() {
+			t.Error("VisualMode() = true, want false by default")
+		}
+		if got := ml.Marked(); len(got) != 0 {
+			t.Errorf("Marked() = %v, want empty", got)
+		}
+	})
+
+	t.Run("EnterVisual sets VisualMode true, Marked still empty", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		ml.EnterVisual()
+		if !ml.VisualMode() {
+			t.Error("VisualMode() = false after EnterVisual, want true")
+		}
+		if got := ml.Marked(); len(got) != 0 {
+			t.Errorf("Marked() = %v after EnterVisual, want empty", got)
+		}
+	})
+
+	t.Run("ToggleMark adds uid to marked set", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		ml.EnterVisual()
+		ml.ToggleMark("10")
+		got := ml.Marked()
+		if len(got) != 1 || got[0] != "10" {
+			t.Errorf("Marked() = %v after ToggleMark(10), want [10]", got)
+		}
+	})
+
+	t.Run("ToggleMark twice removes uid", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		ml.EnterVisual()
+		ml.ToggleMark("10")
+		ml.ToggleMark("10")
+		if got := ml.Marked(); len(got) != 0 {
+			t.Errorf("Marked() = %v after double ToggleMark, want empty", got)
+		}
+	})
+
+	t.Run("ExitVisual clears marked and sets VisualMode false", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		ml.EnterVisual()
+		ml.ToggleMark("10")
+		ml.ToggleMark("20")
+		ml.ExitVisual()
+		if ml.VisualMode() {
+			t.Error("VisualMode() = true after ExitVisual, want false")
+		}
+		if got := ml.Marked(); len(got) != 0 {
+			t.Errorf("Marked() = %v after ExitVisual, want empty", got)
+		}
+	})
+
+	t.Run("ActionTargets with no marks returns cursor UID", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		// Default sort date-desc: T2 (solo, Apr 6) first, T1 (root, Apr 5) second.
+		// Cursor at row 0 = UID "20".
+		got := ml.ActionTargets()
+		if len(got) != 1 {
+			t.Fatalf("ActionTargets() len = %d, want 1", len(got))
+		}
+		if got[0] != "20" {
+			t.Errorf("ActionTargets()[0] = %q, want %q", got[0], "20")
+		}
+	})
+
+	t.Run("ActionTargets with two marks returns them in source order", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		ml.EnterVisual()
+		ml.ToggleMark("20")
+		ml.ToggleMark("10")
+		got := ml.ActionTargets()
+		// Source order: 10, 11, 12, 20 → marks {10, 20} → [10, 20]
+		if len(got) != 2 {
+			t.Fatalf("ActionTargets() len = %d, want 2", len(got))
+		}
+		if got[0] != "10" || got[1] != "20" {
+			t.Errorf("ActionTargets() = %v, want [10 20]", got)
+		}
+	})
+
+	t.Run("ActionTargets from folded thread root expands to root+children", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		// Date-desc: T2 solo first (row 0), T1 root at row 1.
+		// Move cursor to T1 root (row 1) then fold.
+		ml.MoveDown()
+		ml.ToggleFold()
+		// Cursor should be on the folded T1 root.
+		msg, ok := ml.SelectedMessage()
+		if !ok || msg.UID != "10" {
+			t.Fatalf("expected cursor on T1 root (10), got %q ok=%v", msg.UID, ok)
+		}
+		got := ml.ActionTargets()
+		// WYSIWYG: folded root → root + all children = [10, 11, 12]
+		if len(got) != 3 {
+			t.Fatalf("ActionTargets() from folded root len = %d, want 3 (root+2 children): %v", len(got), got)
+		}
+		if got[0] != "10" {
+			t.Errorf("ActionTargets()[0] = %q, want root 10", got[0])
+		}
+		// Children 11, 12 should both appear (order: source order)
+		found11, found12 := false, false
+		for _, u := range got[1:] {
+			if u == "11" {
+				found11 = true
+			}
+			if u == "12" {
+				found12 = true
+			}
+		}
+		if !found11 || !found12 {
+			t.Errorf("ActionTargets() = %v, expected both 11 and 12 in result", got)
+		}
+	})
+
+	t.Run("ActionTargets from non-folded thread root returns only root UID", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		// Move cursor to T1 root (row 1, unfolded).
+		ml.MoveDown()
+		msg, ok := ml.SelectedMessage()
+		if !ok || msg.UID != "10" {
+			t.Fatalf("expected cursor on T1 root (10), got %q ok=%v", msg.UID, ok)
+		}
+		got := ml.ActionTargets()
+		if len(got) != 1 {
+			t.Fatalf("ActionTargets() from unfolded root len = %d, want 1: %v", len(got), got)
+		}
+		if got[0] != "10" {
+			t.Errorf("ActionTargets()[0] = %q, want 10", got[0])
+		}
+	})
+}

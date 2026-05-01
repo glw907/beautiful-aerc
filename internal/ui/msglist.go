@@ -72,10 +72,10 @@ type displayRow struct {
 // The source slice is preserved alongside a derived []displayRow so
 // fold mutations re-flatten without a backend refetch.
 type MessageList struct {
-	source  []mail.MessageInfo
-	rows    []displayRow
-	folded  map[mail.UID]bool
-	sort    SortOrder
+	source   []mail.MessageInfo
+	rows     []displayRow
+	folded   map[mail.UID]bool
+	sort     SortOrder
 	threaded bool
 	selected int
 	offset   int
@@ -92,6 +92,9 @@ type MessageList struct {
 	preSearchCursor int
 	savedByFilter   bool
 	filterResults   int
+	// Visual-select mode state.
+	visualMode bool
+	marked     map[mail.UID]struct{}
 }
 
 // searchFilter holds the active filter's query and mode. The zero
@@ -109,6 +112,7 @@ func NewMessageList(styles Styles, msgs []mail.MessageInfo, width, height int, i
 		width:    width,
 		height:   height,
 		folded:   map[mail.UID]bool{},
+		marked:   map[mail.UID]struct{}{},
 		sort:     SortDateDesc,
 		threaded: true,
 		now:      time.Now(),
@@ -124,6 +128,8 @@ func NewMessageList(styles Styles, msgs []mail.MessageInfo, width, height int, i
 func (m *MessageList) SetMessages(msgs []mail.MessageInfo) {
 	m.source = msgs
 	m.folded = map[mail.UID]bool{}
+	m.marked = map[mail.UID]struct{}{}
+	m.visualMode = false
 	m.selected = 0
 	m.offset = 0
 	m.filter = searchFilter{}
@@ -940,6 +946,79 @@ func (m MessageList) renderEmpty() string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// VisualMode reports whether the list is in visual-select mode.
+func (m MessageList) VisualMode() bool { return m.visualMode }
+
+// EnterVisual enters visual-select mode. The marked set is unchanged.
+func (m *MessageList) EnterVisual() { m.visualMode = true }
+
+// ExitVisual leaves visual-select mode and clears the marked set.
+func (m *MessageList) ExitVisual() {
+	m.visualMode = false
+	m.marked = map[mail.UID]struct{}{}
+}
+
+// ToggleMark flips membership of uid in the marked set.
+func (m *MessageList) ToggleMark(uid mail.UID) {
+	if _, ok := m.marked[uid]; ok {
+		delete(m.marked, uid)
+		return
+	}
+	m.marked[uid] = struct{}{}
+}
+
+// Marked returns the marked UIDs in source order. Returns nil when none
+// are marked.
+func (m MessageList) Marked() []mail.UID {
+	if len(m.marked) == 0 {
+		return nil
+	}
+	out := make([]mail.UID, 0, len(m.marked))
+	for _, msg := range m.source {
+		if _, ok := m.marked[msg.UID]; ok {
+			out = append(out, msg.UID)
+		}
+	}
+	return out
+}
+
+// ActionTargets returns the UIDs a triage action should operate on.
+// If any UIDs are marked, those are returned in source order.
+// Otherwise the cursor UID is returned. For a folded thread root,
+// the cursor case expands to root + all child UIDs (WYSIWYG).
+func (m MessageList) ActionTargets() []mail.UID {
+	if len(m.marked) > 0 {
+		return m.Marked()
+	}
+	if m.selected < 0 || m.selected >= len(m.rows) {
+		return nil
+	}
+	row := m.rows[m.selected]
+	if row.isThreadRoot && row.threadSize > 1 && m.folded[row.msg.UID] {
+		return m.threadUIDs(row.msg.UID)
+	}
+	return []mail.UID{row.msg.UID}
+}
+
+// threadUIDs returns the root UID followed by all child UIDs in source
+// order. Children are identified by matching ThreadID.
+func (m MessageList) threadUIDs(root mail.UID) []mail.UID {
+	rootMsg, ok := m.MessageByUID(root)
+	if !ok {
+		return []mail.UID{root}
+	}
+	out := []mail.UID{root}
+	for _, msg := range m.source {
+		if msg.UID == root {
+			continue
+		}
+		if msg.ThreadID == rootMsg.ThreadID {
+			out = append(out, msg.UID)
+		}
+	}
+	return out
 }
 
 // truncateCells cuts s to fit width display cells, appending an
