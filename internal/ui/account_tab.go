@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -49,6 +50,7 @@ type AccountTab struct {
 	sidebarSearch SidebarSearch
 	msglist       MessageList
 	viewer        Viewer
+	keys          AccountKeys
 	pages         map[string]*folderPage
 	loading       bool
 	spinner       spinner.Model
@@ -68,6 +70,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 		sidebarSearch: NewSidebarSearch(styles, sidebarWidth, icons),
 		msglist:       NewMessageList(styles, nil, 1, 1, icons),
 		viewer:        NewViewer(styles, t, backend.AccountEmail()),
+		keys:          NewAccountKeys(),
 		pages:         make(map[string]*folderPage),
 		spinner:       NewSpinner(t),
 	}
@@ -202,14 +205,16 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 // SidebarSearch instead of the account-view handlers.
 func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	if m.viewer.IsOpen() {
-		s := msg.String()
-		if s == "n" || s == "N" {
+		delta := 0
+		switch {
+		case key.Matches(msg, m.keys.NextMessage):
+			delta = 1
+		case key.Matches(msg, m.keys.PrevMessage):
+			delta = -1
+		}
+		if delta != 0 {
 			if m.viewer.Phase() != viewerReady {
 				return m, nil
-			}
-			delta := 1
-			if s == "N" {
-				delta = -1
 			}
 			uid, moved := m.msglist.MoveCursor(delta)
 			if !moved {
@@ -243,44 +248,54 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		return m, cmd
 	}
 
-	switch msg.String() {
-	case "/":
+	switch {
+	case key.Matches(msg, m.keys.OpenSearch):
 		if m.sidebarSearch.State() == SearchIdle || m.sidebarSearch.State() == SearchActive {
 			m.sidebarSearch.Activate()
 			return m, nil
 		}
-	case "esc":
+	case key.Matches(msg, m.keys.ClearSearch):
 		if m.sidebarSearch.State() == SearchActive {
 			m.sidebarSearch.Clear()
 			m.msglist.ClearFilter()
 			return m, nil
 		}
-	case "enter":
+	case key.Matches(msg, m.keys.OpenMessage):
 		return m.openSelectedMessage()
-	case "J":
+	case key.Matches(msg, m.keys.SidebarDown):
 		m.clearSearchIfActive()
 		m.sidebar.MoveDown()
 		return m, m.selectionChangedCmds()
-	case "K":
+	case key.Matches(msg, m.keys.SidebarUp):
 		m.clearSearchIfActive()
 		m.sidebar.MoveUp()
 		return m, m.selectionChangedCmds()
-	case "I", "D", "S", "A", "X", "T":
-		return m.jumpToFolder(folderJumpTargets[msg.String()])
-	case "G":
+	case key.Matches(msg, m.keys.JumpInbox):
+		return m.jumpToFolder("Inbox")
+	case key.Matches(msg, m.keys.JumpDrafts):
+		return m.jumpToFolder("Drafts")
+	case key.Matches(msg, m.keys.JumpSent):
+		return m.jumpToFolder("Sent")
+	case key.Matches(msg, m.keys.JumpArchive):
+		return m.jumpToFolder("Archive")
+	case key.Matches(msg, m.keys.JumpSpam):
+		return m.jumpToFolder("Spam")
+	case key.Matches(msg, m.keys.JumpTrash):
+		return m.jumpToFolder("Trash")
+	case key.Matches(msg, m.keys.MsgListBottom):
 		m.msglist.MoveToBottom()
-	case "g":
+	case key.Matches(msg, m.keys.MsgListTop):
 		m.msglist.MoveToTop()
-	case "j", "down":
+	case key.Matches(msg, m.keys.MsgListDown):
 		m.msglist.MoveDown()
-	case "k", "up":
+	case key.Matches(msg, m.keys.MsgListUp):
 		m.msglist.MoveUp()
-	case " ":
+	case key.Matches(msg, m.keys.ToggleFold):
 		if m.sidebarSearch.State() == SearchActive {
 			return m, nil
 		}
 		m.msglist.ToggleFold()
-	case "F":
+	case key.Matches(msg, m.keys.ToggleFoldAll):
 		if m.sidebarSearch.State() == SearchActive {
 			return m, nil
 		}
@@ -290,17 +305,6 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
-}
-
-// folderJumpTargets maps the uppercase folder-jump key to its
-// canonical folder name.
-var folderJumpTargets = map[string]string{
-	"I": "Inbox",
-	"D": "Drafts",
-	"S": "Sent",
-	"A": "Archive",
-	"X": "Spam",
-	"T": "Trash",
 }
 
 // jumpToFolder moves the sidebar selection to the canonical folder

@@ -42,6 +42,7 @@ type Viewer struct {
 	spinner      spinner.Model
 	styles       Styles
 	theme        *theme.CompiledTheme
+	keys         ViewerKeys
 	width        int
 	height       int
 }
@@ -54,6 +55,7 @@ func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string) Viewe
 		theme:        t,
 		accountEmail: accountEmail,
 		spinner:      NewSpinner(t),
+		keys:         NewViewerKeys(),
 	}
 }
 
@@ -152,32 +154,36 @@ func (v Viewer) Update(msg tea.Msg) (Viewer, tea.Cmd) {
 }
 
 // handleKey runs the viewer's key dispatch. q/esc closes; 1-9 launch
-// links; tab is reserved for a link-picker overlay and is a no-op
-// here. All other keys forward to the viewport, which is configured
-// with a modifier-free keymap (j/k/space/b/g/G).
+// links; tab opens the link-picker overlay. All other keys forward to
+// the viewport, which is configured with a modifier-free keymap
+// (j/k/space/b/g/G).
 func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
-	s := msg.String()
-	switch s {
-	case "q", "esc":
+	switch {
+	case key.Matches(msg, v.keys.Close):
 		v = v.Close()
 		return v, viewerClosedCmd()
-	case "tab":
+	case key.Matches(msg, v.keys.OpenPicker):
 		if len(v.links) == 0 {
 			return v, nil
 		}
 		return v, linkPickerOpenCmd(v.links)
 	}
-	if idx, ok := parseLinkKey(s, len(v.links)); ok {
-		return v, launchURLCmd(v.links[idx])
+	for n := 1; n <= 9; n++ {
+		if key.Matches(msg, linkBindingByIndex(v.keys, n)) {
+			if n-1 < len(v.links) {
+				return v, launchURLCmd(v.links[n-1])
+			}
+			return v, nil
+		}
 	}
 	if v.phase != viewerReady {
 		return v, nil
 	}
 	prevPct := v.ScrollPct()
-	switch s {
-	case "g":
+	switch {
+	case key.Matches(msg, v.keys.BodyTop):
 		v.viewport.GotoTop()
-	case "G":
+	case key.Matches(msg, v.keys.BodyBottom):
 		v.viewport.GotoBottom()
 	default:
 		var c tea.Cmd

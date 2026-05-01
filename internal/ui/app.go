@@ -157,7 +157,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				// the app mid-search. Delegate to AccountTab which
 				// clears the filter.
 				var cmd tea.Cmd
-				m.acct, cmd = m.acct.Update(tea.KeyMsg{Type: tea.KeyEsc})
+				m.acct, cmd = m.acct.Update(tea.KeyMsg{Type: tea.KeyEsc, Runes: []rune{}})
 				return m, cmd
 			}
 			return m, tea.Quit

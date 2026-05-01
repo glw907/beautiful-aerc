@@ -198,6 +198,14 @@ func TestViewerClosedViewIsEmpty(t *testing.T) {
 	}
 }
 
+func TestViewerHandleKey_CloseViaQ_UsesKeyMatches(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", From: "Alice"})
+	v, _ = v.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if v.IsOpen() {
+		t.Fatal("viewer should close on q")
+	}
+}
+
 // TestViewerLeftPaddingGeometry verifies that every rendered line in the
 // ready phase is exactly v.width display cells wide. Panel rows lead
 // with the panel's BgElevated PaddingLeft cell; the panel's bottom
