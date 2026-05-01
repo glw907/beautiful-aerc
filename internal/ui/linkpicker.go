@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/glw907/poplar/internal/theme"
 )
 
 // LinkPicker is the modal overlay launched by Tab while the viewer is
@@ -26,7 +25,6 @@ type LinkPicker struct {
 	width  int
 	height int
 	styles Styles
-	theme  *theme.CompiledTheme
 	keys   linkPickerKeys
 }
 
@@ -38,10 +36,9 @@ type linkPickerKeys struct {
 }
 
 // NewLinkPicker returns a closed picker.
-func NewLinkPicker(styles Styles, t *theme.CompiledTheme) LinkPicker {
+func NewLinkPicker(styles Styles) LinkPicker {
 	return LinkPicker{
 		styles: styles,
-		theme:  t,
 		keys: linkPickerKeys{
 			Up:    key.NewBinding(key.WithKeys("k", "up")),
 			Down:  key.NewBinding(key.WithKeys("j", "down")),
