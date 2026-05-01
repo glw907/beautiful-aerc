@@ -61,6 +61,7 @@ var accountGroups = []bindingGroup{
 			{"s", "star", true},
 			{".", "read/unrd", true},
 			{"m", "move", true},
+			{"E", "empty", true},
 			{"u", "undo", true},
 		},
 	},
