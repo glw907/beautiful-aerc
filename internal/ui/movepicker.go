@@ -12,7 +12,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
-	"github.com/glw907/poplar/internal/theme"
 )
 
 // MovePicker is the modal overlay launched by `m` from the account view.
@@ -29,7 +28,6 @@ type MovePicker struct {
 	width   int
 	height  int
 	styles  Styles
-	theme   *theme.CompiledTheme
 	keys    movePickerKeys
 }
 
@@ -41,11 +39,9 @@ type movePickerKeys struct {
 	Backspace key.Binding
 }
 
-// NewMovePicker returns a closed picker ready to be opened.
-func NewMovePicker(styles Styles, t *theme.CompiledTheme) MovePicker {
+func NewMovePicker(styles Styles) MovePicker {
 	return MovePicker{
 		styles: styles,
-		theme:  t,
 		keys: movePickerKeys{
 			Up:        key.NewBinding(key.WithKeys("up")),
 			Down:      key.NewBinding(key.WithKeys("down")),
@@ -58,8 +54,8 @@ func NewMovePicker(styles Styles, t *theme.CompiledTheme) MovePicker {
 
 func (p MovePicker) IsOpen() bool { return p.open }
 
-// Open transitions the picker into view with a fresh snapshot.
-// The source folder is excluded; filter + cursor reset to zero.
+// Open snapshots the targets and folder list. Source folder is
+// excluded so the picker never offers a no-op move-to-self.
 func (p MovePicker) Open(uids []mail.UID, src string, folders []FolderEntry) MovePicker {
 	p.open = true
 	p.uids = uids
@@ -104,7 +100,6 @@ func (p *MovePicker) recompute() {
 	p.offset = 0
 }
 
-// Update handles key events while the picker is open.
 func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
 	if !p.open {
 		return p, nil
@@ -180,7 +175,6 @@ func (p MovePicker) View() string {
 	return p.Box(p.width, p.height)
 }
 
-// Box renders the picker modal at the size derived from (w, h).
 func (p MovePicker) Box(w, h int) string {
 	boxW := movePickerMaxWidth
 	if w-4 < boxW {
@@ -280,7 +274,6 @@ func padOrTruncate(s string, width int) string {
 	return truncateToWidth(s, width)
 }
 
-// Position returns the centered top-left for the rendered box at (totalW, totalH).
 func (p MovePicker) Position(box string, totalW, totalH int) (int, int) {
 	return centerOverlay(box, totalW, totalH)
 }

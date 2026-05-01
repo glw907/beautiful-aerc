@@ -122,12 +122,13 @@ the ADR(s) that justify them.
   flips the local seen flag immediately and the backend `MarkRead`
   Cmd runs in parallel. Failures surface via `ErrorMsg` into the
   App-owned banner.
-- Triage actions (delete/archive/star/read) are optimistic with a
-  shared undo bar. `MessageList.Apply{Delete,Insert,Flag,Seen}` flip
-  local state without firing Cmds; `AccountTab.dispatchTriage`
-  snapshots inverse data, applies the flip, exits visual mode, and
-  emits `triageStartedMsg` + the forward backend Cmd via the shared
-  `buildTriageCmd`. `App` owns `pendingAction` and schedules a
+- Triage actions (delete/archive/star/read/move) are optimistic with
+  a shared undo bar. `MessageList.Apply{Delete,Insert,Flag,Seen}` flip
+  local state without firing Cmds; `AccountTab.dispatchTriage` (and
+  `dispatchMoveFromPicker` for move) snapshots inverse data, applies
+  the flip, exits visual mode, emits `triageStartedMsg` + forward Cmd
+  via `buildTriageCmd` (or `buildTriageCmdWithDest` for move's dest).
+  `App` owns `pendingAction` and schedules a
   `tea.Tick` for `[ui] undo_seconds` (default 6, clamped [2,30]).
   `u` fires `onUndo` + the saved inverse Cmd. A folder change
   commits (no inverse). An `ErrorMsg` runs `onUndo` before setting
@@ -294,6 +295,6 @@ invariant. ADR numbering is chronological.
 | Viewer prototype, footnote harvesting, optimistic mark-read, n/N nav, long-bare-URL footnoting | 0065, 0066, 0067, 0069, 0085, 0086 |
 | Help popover modal, future-binding policy, overlay+dim, link picker | 0071 (superseded by 0082), 0072, 0082, 0087 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
-| Optimistic triage with toast/undo, ActionTargets, visual mode | 0089, 0090 |
+| Optimistic triage with toast/undo, ActionTargets, visual mode, move picker | 0089, 0090, 0091 |
 | Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |

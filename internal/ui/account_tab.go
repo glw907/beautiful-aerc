@@ -569,29 +569,18 @@ func (m *AccountTab) dispatchSeenToggle(op string, uids []mail.UID, seen bool) t
 	return buildTriageCmd(op, uids, onUndo, fwd, rev)
 }
 
-// dispatchMove emits OpenMovePickerMsg so App can open the picker.
-// Source folder is excluded from Folders so the picker never offers
-// a no-op move-to-self.
 func (m *AccountTab) dispatchMove() tea.Cmd {
 	uids := m.msglist.ActionTargets()
 	if len(uids) == 0 {
 		return nil
 	}
 	src := m.currentFolderName()
-	all := m.sidebar.OrderedFolders()
-	folders := make([]FolderEntry, 0, len(all))
-	for _, f := range all {
-		if f.Provider != src {
-			folders = append(folders, f)
-		}
-	}
+	folders := m.sidebar.OrderedFolders()
 	return func() tea.Msg {
 		return OpenMovePickerMsg{UIDs: uids, Src: src, Folders: folders}
 	}
 }
 
-// dispatchMoveFromPicker handles a confirmed move: optimistic delete +
-// triageStartedMsg with forward and inverse backend Cmds.
 func (m *AccountTab) dispatchMoveFromPicker(msg MovePickerPickedMsg) tea.Cmd {
 	uids := msg.UIDs
 	if len(uids) == 0 {
@@ -607,16 +596,10 @@ func (m *AccountTab) dispatchMoveFromPicker(msg MovePickerPickedMsg) tea.Cmd {
 	return buildTriageCmdWithDest("move", uids, msg.Dest, onUndo, fwd, rev)
 }
 
-// buildTriageCmd is a convenience wrapper around buildTriageCmdWithDest
-// for actions with no destination folder.
 func buildTriageCmd(op string, uids []mail.UID, onUndo func(), fwd, rev func() error) tea.Cmd {
 	return buildTriageCmdWithDest(op, uids, "", onUndo, fwd, rev)
 }
 
-// buildTriageCmdWithDest assembles the canonical triage Cmd: a tea.Batch
-// that emits triageStartedMsg (so App can set the toast) and a forward
-// Cmd that calls fwd and rolls errors into ErrorMsg. dest is threaded
-// into triageStartedMsg so the toast can display the target folder name.
 func buildTriageCmdWithDest(op string, uids []mail.UID, dest string, onUndo func(), fwd, rev func() error) tea.Cmd {
 	forward := func() tea.Msg {
 		if err := fwd(); err != nil {

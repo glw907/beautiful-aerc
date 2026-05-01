@@ -1,10 +1,10 @@
 # Poplar Status
 
-**Current pass:** Pass 6.5 next — move-to-folder picker (`m`).
-Pass 6 done — triage actions (delete/archive/star/read) with
-optimistic Apply* helpers, App-owned toast + undo (`u`), visual-
-mode multi-select (`v`+Space), WYSIWYG folded-thread expansion;
-ADR-0089/0090.
+**Current pass:** Pass 6.6 next — Trash retention + manual empty.
+Pass 6.5 done — move-to-folder picker (`m`): App-owned modal
+overlay, type-to-filter, ↑↓ nav, optimistic move via shared
+`buildTriageCmdWithDest`, "Moved N to <dest>" toast + undo;
+ADR-0091.
 
 ## Passes
 
@@ -24,8 +24,8 @@ ADR-0089/0090.
 | 2.5b-4b | Viewer completion: long-bare-URL footnoting + `n`/`N` nav + `Tab` link picker | done — ADR-0085/0086/0087 |
 | 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | done — ADR-0088 |
 | 6 | Triage actions (delete/archive/star/read; toast + undo bar) | done — ADR-0089/0090 |
-| 6.5 | Move-to-folder picker (`m` modal; toast + undo) | next |
-| 6.6 | Trash retention + manual empty (config knob, default 30d) | pending |
+| 6.5 | Move-to-folder picker (`m` modal; toast + undo) | done — ADR-0091 |
+| 6.6 | Trash retention + manual empty (config knob, default 30d) | next |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
 | 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
@@ -35,29 +35,24 @@ ADR-0089/0090.
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 | 1.1 | Neovim companion plugin (post-v1, #6) | post-v1 |
 
-## Next starter prompt (Pass 6.5)
+## Next starter prompt (Pass 6.6)
 
-> **Goal.** Move-to-folder picker. Press `m`, get a modal list of
-> folders, pick one, the message moves with the same toast + undo
-> bar shape as Pass 6 triage.
+> **Goal.** Trash retention + manual empty. Auto-purge from Trash
+> after configurable age (default 30d); add manual "empty trash."
 >
-> **Scope.** New `internal/ui/movepicker.go` (modal overlay,
-> mirror `LinkPicker`/`HelpPopover` shape: centerOverlay +
-> DimANSI + PlaceOverlay). Reuse Pass 6's `buildTriageCmd` for
-> the dispatch + inverse. Hook `m` in AccountKeys.
+> **Scope.** New `[ui] trash_retention_days` (default 30, clamp
+> [0, 365]; 0 disables). Backend hook to purge old Trash on folder
+> load. Confirmation-modal manual empty key on Trash view. Toast +
+> local-only undo (backend commit is irreversible).
 >
-> **Settled:** Optimistic mutation (ADR-0086, ADR-0089). Toast
-> precedence + commit-on-folder-change (ADR-0089). ActionTargets
-> mode-agnostic (ADR-0090). Overlay pattern (ADR-0082, ADR-0087).
+> **Settled:** Optimistic triage (ADR-0089/0090). Modal overlay
+> (ADR-0087/0091). `[ui]` config (ADR-0053).
 >
-> **Still open — brainstorm:** Folder list ordering (Recent? all
-> folders alphabetic? sidebar order?). Filter input or just
-> j/k+letter prefix? How to handle a folder name typed but not
-> matching anything (no-op vs ErrorMsg vs feedback)?
+> **Still open — brainstorm:** Auto-purge trigger (on-load vs
+> background sweep)? Confirmation copy + key? Apply to Spam too?
 >
 > **Approach.** Brainstorm, plan at
-> `docs/superpowers/plans/YYYY-MM-DD-move-picker.md`, implement.
-> Standard pass-end checklist applies.
+> `docs/superpowers/plans/YYYY-MM-DD-trash-retention.md`, implement.
 
 ## Audits
 

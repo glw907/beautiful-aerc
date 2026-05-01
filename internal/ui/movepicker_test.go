@@ -26,7 +26,7 @@ func sampleFolders() []FolderEntry {
 
 func newTestPicker() MovePicker {
 	t := theme.Themes[theme.DefaultThemeName]
-	return NewMovePicker(NewStyles(t), t)
+	return NewMovePicker(NewStyles(t))
 }
 
 func TestMovePicker_OpenSetsState(t *testing.T) {

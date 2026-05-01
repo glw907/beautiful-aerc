@@ -1531,11 +1531,6 @@ func TestAccountTab_MKeyEmitsOpenMovePickerMsg(t *testing.T) {
 	if len(open.Folders) == 0 {
 		t.Error("Folders empty")
 	}
-	for _, f := range open.Folders {
-		if f.Provider == open.Src {
-			t.Errorf("Folders contains source %q; should be excluded", open.Src)
-		}
-	}
 }
 
 func TestAccountTab_MKeyNoOpOnEmpty(t *testing.T) {

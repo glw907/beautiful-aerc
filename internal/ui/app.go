@@ -55,7 +55,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig,
 		footer:      NewFooter(styles),
 		keys:        NewGlobalKeys(),
 		linkPicker:  NewLinkPicker(styles, t),
-		movePicker:  NewMovePicker(styles, t),
+		movePicker:  NewMovePicker(styles),
 		undoSeconds: uiCfg.UndoSeconds,
 		now:         time.Now,
 	}
