@@ -14,6 +14,7 @@ sweep, manual empty (`E` + ConfirmModal); ADR-0092/0093/0094.
 | 6 / 6.5 | Triage + undo bar (ADR-0089/0090); move picker (ADR-0091) | done |
 | 6.6 | Trash retention + manual empty (Destroy primitive, sweep, ConfirmModal) | done — ADR-0092/0093/0094 |
 | 6.7 | Verify retention/empty in tmux + reference-app research on the pattern | next |
+| 6.8 | Docs refactor: split invariants, reconcile system-map, single-source keybindings, trim wireframes, CLAUDE.md audit (+ general tidy) | pending |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
 | 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
@@ -57,7 +58,3 @@ sweep, manual empty (`E` + ConfirmModal); ADR-0092/0093/0094.
 > ties the two halves together. Bugs fix in this pass; design
 > recommendations log as a follow-on pass — don't expand scope
 > here.
-
-## Audits
-
-- [bubbletea conventions](audits/2026-04-26-bubbletea-conventions.md) · [invariants](audits/2026-04-25-invariants-findings.md) · [library packages](audits/2026-04-25-library-packages-findings.md) · [plan shape](audits/2026-04-25-plan-shape-findings.md)
