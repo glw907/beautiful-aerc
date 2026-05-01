@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/poplar/internal/mail"
 )
 
 // pendingAction is the App-owned state for an in-flight optimistic
@@ -19,13 +18,12 @@ type pendingAction struct {
 	inverse  tea.Cmd   // the undo Cmd; nil for unrecoverable ops
 	deadline time.Time // monotonic moment at which the toast expires
 	onUndo   func()    // local roll-back; runs on `u` and on ErrorMsg
-	uids     []mail.UID
 }
 
-// IsZero reports whether p represents "no active toast".
-func (p pendingAction) IsZero() bool {
-	return p.op == "" && p.n == 0 && p.inverse == nil && p.deadline.IsZero()
-}
+// IsZero reports whether p represents "no active toast". Every active
+// pending action has op set (the verb is required for rendering), so a
+// single check suffices.
+func (p pendingAction) IsZero() bool { return p.op == "" }
 
 // renderToast produces the one-row toast string. Returns "" for the
 // zero pendingAction. Width-bounded; truncates with ellipsis.

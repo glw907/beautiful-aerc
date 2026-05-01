@@ -480,7 +480,7 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 
 	switch op {
 	case "delete":
-		return m.dispatchRemoval("delete", uids, srcFolder,
+		return m.dispatchRemoval("delete", uids,
 			func() error { return m.backend.Delete(uids) },
 			func() error { return m.backend.Move(uids, srcFolder) })
 
@@ -491,7 +491,7 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 				return ErrorMsg{Op: "archive", Err: errors.New("no Archive folder configured")}
 			}
 		}
-		return m.dispatchRemoval("archive", uids, srcFolder,
+		return m.dispatchRemoval("archive", uids,
 			func() error { return m.backend.Move(uids, archive) },
 			func() error { return m.backend.Move(uids, srcFolder) })
 
@@ -524,36 +524,15 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 
 // dispatchRemoval factors the optimistic-flip / inverse-snapshot /
 // triageStartedMsg emission shared by delete and archive. fwd performs
-// the backend mutation; rev is the inverse (Move back to srcFolder).
-func (m *AccountTab) dispatchRemoval(op string, uids []mail.UID, srcFolder string, fwd, rev func() error) tea.Cmd {
+// the backend mutation; rev moves the messages back to the source
+// folder for the inverse.
+func (m *AccountTab) dispatchRemoval(op string, uids []mail.UID, fwd, rev func() error) tea.Cmd {
 	snapshot, positions := m.msglist.SnapshotSource(uids)
 	m.msglist.ApplyDelete(uids)
 	m.msglist.ExitVisual()
 
-	list := &m.msglist
-	onUndo := func() { list.ApplyInsert(snapshot, positions) }
-	forward := func() tea.Msg {
-		if err := fwd(); err != nil {
-			return ErrorMsg{Op: op, Err: err}
-		}
-		return nil
-	}
-	inverse := func() tea.Msg {
-		if err := rev(); err != nil {
-			return ErrorMsg{Op: op + " undo", Err: err}
-		}
-		return nil
-	}
-	start := func() tea.Msg {
-		return triageStartedMsg{
-			op:      op,
-			n:       len(uids),
-			uids:    uids,
-			inverse: inverse,
-			onUndo:  onUndo,
-		}
-	}
-	return tea.Batch(start, forward)
+	onUndo := func() { m.msglist.ApplyInsert(snapshot, positions) }
+	return buildTriageCmd(op, uids, onUndo, fwd, rev)
 }
 
 // dispatchFlagToggle handles star/unstar: flips a flag in MessageList
@@ -562,24 +541,10 @@ func (m *AccountTab) dispatchFlagToggle(op string, uids []mail.UID, flag mail.Fl
 	m.msglist.ApplyFlag(uids, flag, set)
 	m.msglist.ExitVisual()
 
-	list := &m.msglist
-	onUndo := func() { list.ApplyFlag(uids, flag, !set) }
-	forward := func() tea.Msg {
-		if err := m.backend.Flag(uids, flag, set); err != nil {
-			return ErrorMsg{Op: op, Err: err}
-		}
-		return nil
-	}
-	inverse := func() tea.Msg {
-		if err := m.backend.Flag(uids, flag, !set); err != nil {
-			return ErrorMsg{Op: op + " undo", Err: err}
-		}
-		return nil
-	}
-	start := func() tea.Msg {
-		return triageStartedMsg{op: op, n: len(uids), uids: uids, inverse: inverse, onUndo: onUndo}
-	}
-	return tea.Batch(start, forward)
+	onUndo := func() { m.msglist.ApplyFlag(uids, flag, !set) }
+	fwd := func() error { return m.backend.Flag(uids, flag, set) }
+	rev := func() error { return m.backend.Flag(uids, flag, !set) }
+	return buildTriageCmd(op, uids, onUndo, fwd, rev)
 }
 
 // dispatchSeenToggle handles read/unread: flips FlagSeen and routes to
@@ -588,21 +553,32 @@ func (m *AccountTab) dispatchSeenToggle(op string, uids []mail.UID, seen bool) t
 	m.msglist.ApplySeen(uids, seen)
 	m.msglist.ExitVisual()
 
-	list := &m.msglist
 	fwdFn := m.backend.MarkRead
 	revFn := m.backend.MarkUnread
 	if !seen {
 		fwdFn, revFn = m.backend.MarkUnread, m.backend.MarkRead
 	}
-	onUndo := func() { list.ApplySeen(uids, !seen) }
+	onUndo := func() { m.msglist.ApplySeen(uids, !seen) }
+	fwd := func() error { return fwdFn(uids) }
+	rev := func() error { return revFn(uids) }
+	return buildTriageCmd(op, uids, onUndo, fwd, rev)
+}
+
+// buildTriageCmd assembles the canonical triage Cmd: a tea.Batch that
+// emits triageStartedMsg (so App can set the toast) and a forward Cmd
+// that calls fwd and rolls up errors into ErrorMsg. The returned
+// inverse Cmd, when fired by App on `u` or by ErrorMsg rollback, calls
+// rev and similarly rolls errors. onUndo runs locally to revert the
+// optimistic flip.
+func buildTriageCmd(op string, uids []mail.UID, onUndo func(), fwd, rev func() error) tea.Cmd {
 	forward := func() tea.Msg {
-		if err := fwdFn(uids); err != nil {
+		if err := fwd(); err != nil {
 			return ErrorMsg{Op: op, Err: err}
 		}
 		return nil
 	}
 	inverse := func() tea.Msg {
-		if err := revFn(uids); err != nil {
+		if err := rev(); err != nil {
 			return ErrorMsg{Op: op + " undo", Err: err}
 		}
 		return nil

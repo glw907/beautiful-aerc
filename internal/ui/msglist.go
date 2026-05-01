@@ -1005,16 +1005,19 @@ func (m MessageList) ActionTargets() []mail.UID {
 // threadUIDs returns the root UID followed by all child UIDs in source
 // order. Children are identified by matching ThreadID.
 func (m MessageList) threadUIDs(root mail.UID) []mail.UID {
-	rootMsg, ok := m.MessageByUID(root)
-	if !ok {
+	var threadID mail.UID
+	for _, msg := range m.source {
+		if msg.UID == root {
+			threadID = msg.ThreadID
+			break
+		}
+	}
+	if threadID == "" {
 		return []mail.UID{root}
 	}
 	out := []mail.UID{root}
 	for _, msg := range m.source {
-		if msg.UID == root {
-			continue
-		}
-		if msg.ThreadID == rootMsg.ThreadID {
+		if msg.UID != root && msg.ThreadID == threadID {
 			out = append(out, msg.UID)
 		}
 	}
@@ -1107,6 +1110,9 @@ func (m *MessageList) ApplyInsert(msgs []mail.MessageInfo, positions []int) {
 
 // ApplyFlag flips a flag on every msg in m.source whose UID is in uids.
 func (m *MessageList) ApplyFlag(uids []mail.UID, flag mail.Flag, set bool) {
+	if len(uids) == 0 {
+		return
+	}
 	in := uidSet(uids)
 	for i := range m.source {
 		if _, ok := in[m.source[i].UID]; !ok {

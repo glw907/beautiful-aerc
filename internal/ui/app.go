@@ -120,7 +120,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.toast = pendingAction{
 			op:       msg.op,
 			n:        msg.n,
-			uids:     msg.uids,
 			inverse:  msg.inverse,
 			onUndo:   msg.onUndo,
 			deadline: deadline,
