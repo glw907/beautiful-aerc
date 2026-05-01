@@ -123,6 +123,17 @@ func (s Sidebar) FolderNameByCanonical(target string) (string, bool) {
 	return "", false
 }
 
+// FolderByProviderName returns the mail.Folder whose backend name matches.
+// Returns (Folder{}, false) when no entry matches.
+func (s Sidebar) FolderByProviderName(name string) (mail.Folder, bool) {
+	for _, e := range s.entries {
+		if e.cf.Folder.Name == name {
+			return e.cf.Folder, true
+		}
+	}
+	return mail.Folder{}, false
+}
+
 func (s Sidebar) OrderedFolders() []FolderEntry {
 	out := make([]FolderEntry, 0, len(s.entries))
 	for _, e := range s.entries {

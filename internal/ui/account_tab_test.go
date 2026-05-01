@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/config"
@@ -1568,5 +1569,180 @@ func TestAccountTab_MovePickerPickedDispatchesMove(t *testing.T) {
 	}
 	if !sawStart {
 		t.Errorf("no triageStartedMsg in %v", msgs)
+	}
+}
+
+// jumpAndLoadFolder sends a single-rune jump key and drains the full
+// folder-load chain so the message list is populated. Returns the final tab.
+func jumpAndLoadFolder(t *testing.T, tab AccountTab, key string) AccountTab {
+	t.Helper()
+	tab2, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+	drain(t, &tab2, cmd)
+	return tab2
+}
+
+// TestAccountTab_RetentionSweep_FlagSetOnFirstTrashVisit verifies that
+// IsSwept("Trash") becomes true after the first visit to the Trash folder
+// when TrashRetentionDays > 0, and that revisiting does not re-sweep.
+func TestAccountTab_RetentionSweep_FlagSetOnFirstTrashVisit(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	cfg := config.DefaultUIConfig()
+	cfg.TrashRetentionDays = 30
+	tab := NewAccountTab(styles, theme.Nord, backend, cfg, FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	msg := runCmd(tab.Init())
+	tab, cmd := tab.updateTab(msg)
+	drain(t, &tab, cmd)
+
+	if tab.IsSwept("Trash") {
+		t.Fatal("IsSwept(Trash) should be false before visiting Trash")
+	}
+
+	// Jump to Trash and drain the full load chain.
+	tab = jumpAndLoadFolder(t, tab, "T")
+
+	if !tab.IsSwept("Trash") {
+		t.Error("IsSwept(Trash) should be true after first Trash visit with retention enabled")
+	}
+
+	// Record the Destroy call count after the first visit.
+	callsBefore := len(backend.DestroyCalls)
+
+	// Jump to Inbox and back to Trash — sweep must not re-fire.
+	tab = jumpAndLoadFolder(t, tab, "I")
+	tab = jumpAndLoadFolder(t, tab, "T")
+
+	if len(backend.DestroyCalls) != callsBefore {
+		t.Errorf("second Trash visit caused %d extra Destroy calls, want 0",
+			len(backend.DestroyCalls)-callsBefore)
+	}
+}
+
+// TestAccountTab_RetentionSweep_DisabledByDefault verifies that with the
+// default config (TrashRetentionDays == 0) visiting Trash does not set the
+// swept flag or fire any Destroy calls.
+func TestAccountTab_RetentionSweep_DisabledByDefault(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	// DefaultUIConfig has TrashRetentionDays == 0.
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	msg := runCmd(tab.Init())
+	tab, cmd := tab.updateTab(msg)
+	drain(t, &tab, cmd)
+
+	tab = jumpAndLoadFolder(t, tab, "T")
+
+	if tab.IsSwept("Trash") {
+		t.Error("IsSwept(Trash) should remain false when TrashRetentionDays == 0")
+	}
+	if len(backend.DestroyCalls) != 0 {
+		t.Errorf("expected 0 Destroy calls, got %d", len(backend.DestroyCalls))
+	}
+}
+
+// TestAccountTab_EmptyKey_OnlyActiveOnDisposalFolders verifies that pressing
+// E while Inbox is selected does not emit OpenConfirmEmptyMsg.
+func TestAccountTab_EmptyKey_OnlyActiveOnDisposalFolders(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	// Inbox is loaded by default.
+	if tab.Title() != "Inbox" {
+		t.Fatalf("expected Inbox after load, got %q", tab.Title())
+	}
+	_, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
+	if cmd == nil {
+		return // no Cmd at all — correct, Inbox is not a disposal folder
+	}
+	// If a Cmd was returned, make sure it's not OpenConfirmEmptyMsg.
+	resultMsg := cmd()
+	if _, ok := resultMsg.(OpenConfirmEmptyMsg); ok {
+		t.Error("E on Inbox must not emit OpenConfirmEmptyMsg")
+	}
+}
+
+// TestAccountTab_EmptyKey_OpensConfirmOnTrash verifies that pressing E while
+// Trash is selected emits OpenConfirmEmptyMsg with Folder == "Trash".
+func TestAccountTab_EmptyKey_OpensConfirmOnTrash(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab = jumpAndLoadFolder(t, tab, "T")
+
+	_, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
+	if cmd == nil {
+		t.Fatal("E on Trash returned nil Cmd, want OpenConfirmEmptyMsg")
+	}
+	resultMsg := cmd()
+	confirm, ok := resultMsg.(OpenConfirmEmptyMsg)
+	if !ok {
+		t.Fatalf("E on Trash returned %T, want OpenConfirmEmptyMsg", resultMsg)
+	}
+	if confirm.Folder != "Trash" {
+		t.Errorf("OpenConfirmEmptyMsg.Folder = %q, want %q", confirm.Folder, "Trash")
+	}
+	if confirm.Source != "Trash" {
+		t.Errorf("OpenConfirmEmptyMsg.Source = %q, want %q", confirm.Source, "Trash")
+	}
+}
+
+// TestAccountTab_SweepCompletedMsg_RemovesRows verifies that
+// sweepCompletedMsg with a non-empty uid list removes those rows from
+// the message list.
+func TestAccountTab_SweepCompletedMsg_RemovesRows(t *testing.T) {
+	// Deliver headersApplied with two messages, then sweep one.
+	expired := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	msgs := []mail.MessageInfo{
+		{UID: "old1", ThreadID: "old1", Subject: "Old", From: "X", SentAt: expired},
+		{UID: "new1", ThreadID: "new1", Subject: "New", From: "Y", SentAt: time.Now()},
+	}
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tab, _ = tab.updateTab(headersAppliedMsg{name: "Trash", msgs: msgs})
+
+	if tab.msglist.Count() != 2 {
+		t.Fatalf("expected 2 messages before sweep, got %d", tab.msglist.Count())
+	}
+
+	tab, _ = tab.updateTab(sweepCompletedMsg{folder: "Trash", uids: []mail.UID{"old1"}})
+	if tab.msglist.Count() != 1 {
+		t.Errorf("after sweepCompletedMsg, count = %d, want 1", tab.msglist.Count())
+	}
+}
+
+// TestAccountTab_EmptyFolderDoneMsg_ClearsRowsAndEmitsToast verifies that
+// emptyFolderDoneMsg removes all rows and emits a triageStartedMsg.
+func TestAccountTab_EmptyFolderDoneMsg_ClearsRowsAndEmitsToast(t *testing.T) {
+	msgs := []mail.MessageInfo{
+		{UID: "1", ThreadID: "1", Subject: "A", From: "X", SentAt: time.Now()},
+		{UID: "2", ThreadID: "2", Subject: "B", From: "Y", SentAt: time.Now()},
+	}
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tab, _ = tab.updateTab(headersAppliedMsg{name: "Trash", msgs: msgs})
+
+	if tab.msglist.Count() != 2 {
+		t.Fatalf("expected 2 messages before empty, got %d", tab.msglist.Count())
+	}
+
+	tab, cmd := tab.updateTab(emptyFolderDoneMsg{folder: "Trash", n: 2})
+	if tab.msglist.Count() != 0 {
+		t.Errorf("after emptyFolderDoneMsg, count = %d, want 0", tab.msglist.Count())
+	}
+	if cmd == nil {
+		t.Fatal("emptyFolderDoneMsg must return a Cmd (triageStartedMsg)")
+	}
+	resultMsg := cmd()
+	ts, ok := resultMsg.(triageStartedMsg)
+	if !ok {
+		t.Fatalf("emptyFolderDoneMsg Cmd returned %T, want triageStartedMsg", resultMsg)
+	}
+	if ts.op != "empty" {
+		t.Errorf("triageStartedMsg.op = %q, want %q", ts.op, "empty")
+	}
+	if ts.n != 2 {
+		t.Errorf("triageStartedMsg.n = %d, want 2", ts.n)
 	}
 }

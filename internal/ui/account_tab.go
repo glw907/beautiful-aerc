@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -53,6 +54,7 @@ type AccountTab struct {
 	viewer            Viewer
 	keys              AccountKeys
 	pages             map[string]*folderPage
+	swept             map[string]bool
 	loading           bool
 	spinner           spinner.Model
 	pendingLinkPicker []string
@@ -74,6 +76,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 		viewer:        NewViewer(styles, t, backend.AccountEmail()),
 		keys:          NewAccountKeys(),
 		pages:         make(map[string]*folderPage),
+		swept:         make(map[string]bool),
 		spinner:       NewSpinner(t),
 	}
 }
@@ -151,6 +154,9 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.msglist.SetSort(order)
 		m.msglist.SetThreaded(threaded)
 		m.msglist.SetMessages(msg.msgs)
+		if sweep := m.maybeRetentionSweep(msg.name, msg.msgs); sweep != nil {
+			return m, sweep
+		}
 		return m, nil
 
 	case headersAppendedMsg:
@@ -173,6 +179,33 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 	case MovePickerPickedMsg:
 		return m, m.dispatchMoveFromPicker(msg)
+
+	case sweepCompletedMsg:
+		if len(msg.uids) > 0 {
+			m.msglist.ApplyDelete(msg.uids)
+		}
+		return m, nil
+
+	case EmptyFolderConfirmedMsg:
+		return m, emptyFolderCmd(m.backend, msg.Folder, msg.Source)
+
+	case emptyFolderDoneMsg:
+		all := make([]mail.UID, 0, m.msglist.Count())
+		for _, item := range m.msglist.Source() {
+			all = append(all, item.UID)
+		}
+		if len(all) > 0 {
+			m.msglist.ApplyDelete(all)
+		}
+		n := msg.n
+		folder := msg.folder
+		return m, func() tea.Msg {
+			return triageStartedMsg{
+				op:   "empty",
+				n:    n,
+				dest: folder,
+			}
+		}
 
 	case SearchUpdatedMsg:
 		m.msglist.SetFilter(msg.Query, msg.Mode)
@@ -330,6 +363,8 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Move):
 		return m, m.dispatchMove()
+	case key.Matches(msg, m.keys.Empty):
+		return m, m.dispatchEmpty()
 	}
 	if cmd := m.maybeLoadMore(); cmd != nil {
 		return m, cmd
@@ -401,6 +436,83 @@ func (m *AccountTab) selectionChangedCmds() tea.Cmd {
 		openFolderCmd(m.backend, folder.Name),
 		m.spinner.Tick,
 	)
+}
+
+// IsSwept reports whether the retention sweep has already fired for
+// the named folder this session. Used by tests.
+func (m AccountTab) IsSwept(folder string) bool {
+	return m.swept[folder]
+}
+
+// maybeRetentionSweep checks whether folderName is a Disposal folder
+// with a positive retention threshold. If so, and if the sweep has not
+// run yet this session, it marks the folder swept, collects expired
+// UIDs, and returns a destroyCmd (which may be a no-op if no UIDs
+// qualify). Returns nil when retention is disabled or the sweep already ran.
+func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.MessageInfo) tea.Cmd {
+	folder, ok := m.sidebar.FolderByProviderName(folderName)
+	if !ok {
+		return nil
+	}
+	var days int
+	switch folder.Role {
+	case "trash":
+		days = m.uiCfg.TrashRetentionDays
+	case "junk", "spam":
+		days = m.uiCfg.SpamRetentionDays
+	default:
+		return nil
+	}
+	if days <= 0 {
+		return nil
+	}
+	if m.swept[folder.Name] {
+		return nil
+	}
+	m.swept[folder.Name] = true
+
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	var expired []mail.UID
+	for _, msg := range loaded {
+		if msg.SentAt.IsZero() {
+			continue
+		}
+		if msg.SentAt.Before(cutoff) {
+			expired = append(expired, msg.UID)
+		}
+	}
+	return destroyCmd(m.backend, folder.Name, expired)
+}
+
+// dispatchEmpty emits OpenConfirmEmptyMsg when the selected folder is
+// Trash or Spam. Returns nil for all other folders — inert by design.
+func (m *AccountTab) dispatchEmpty() tea.Cmd {
+	folder, ok := m.sidebar.SelectedFolderInfo()
+	if !ok {
+		return nil
+	}
+	var display string
+	switch folder.Role {
+	case "trash":
+		display = "Trash"
+	case "junk", "spam":
+		display = "Spam"
+	default:
+		return nil
+	}
+	page := m.pages[folder.Name]
+	total := 0
+	if page != nil {
+		total = page.total
+	}
+	src := folder.Name
+	return func() tea.Msg {
+		return OpenConfirmEmptyMsg{
+			Folder: display,
+			Total:  total,
+			Source: src,
+		}
+	}
 }
 
 // currentFolderName returns the provider name of the currently-selected

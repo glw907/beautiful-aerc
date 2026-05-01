@@ -612,6 +612,10 @@ func (m MessageList) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
 // Count returns the number of source messages in the list.
 func (m MessageList) Count() int { return len(m.source) }
 
+// Source returns the underlying source message slice. The returned slice
+// is a direct reference to internal state; callers must not modify it.
+func (m MessageList) Source() []mail.MessageInfo { return m.source }
+
 // cursorUID returns the UID under the cursor, or empty if no rows.
 // Used as an anchor across rebuild.
 func (m *MessageList) cursorUID() mail.UID {
