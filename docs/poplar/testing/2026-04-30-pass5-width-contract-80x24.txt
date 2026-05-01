@@ -1,0 +1,24 @@
+──────────────────────────────┬────────────────────────────────────────────────╮
+                              │▐  󰑚   Hannah Pratt            …         9:13 AM│
+ geoff@907.life               │   󰑚   Hannah Pratt            └─          4:00 │
+                              │       Frank Cahill            …         3:53 PM│
+┃ 󰇰  Inbox                 13 │   󰇮   membership via ASC Bo…  …         3:26 PM│
+  󰏫  Drafts                   │   󰇮   Auto-Receipt via ASC …  …         3:25 PM│
+  󰑚  Sent                     │       Kris Willing            …  Wed 2026-04-29│
+  󰀼  Archive                  │       Cathy Wright            ├─   Wed 2026-04-│
+                              │       Kris Willing            └─         11:09 │
+  󰍷  Spam                     │       Apple                   …        11:02 AM│
+  󰩺  Trash                 22 │       Classic Collision       …         9:03 AM│
+                              │       Caroline Potasz         …  Wed 2026-04-29│
+  󰡡  Buccaneer 18             │       US Sailing via ASC Bo…  …  Wed 2026-04-29│
+  󰡡  DMARC Reports            │       Classic Collision       …  Wed 2026-04-29│
+  󰡡  Finance Committee      4 │   󰑚   Hannah Wright           …  Mon 2026-04-27│
+  󰡡  Membership Committee     │       Hannah Wright           └─   Tue 2026-04-│
+  󰡡  Notifications         99 │       Amy Purevsuren          …  Tue 2026-04-28│
+  󰡡  Program Committee        │       Cathy Wright            …  Tue 2026-04-28│
+  󰡡  Remind                   │       noreply-spamdigest vi…  …  Tue 2026-04-28│
+                              │       Christopher             …  Mon 2026-04-27│
+   / to search                │       Sam Raife               …  Sat 2026-04-25│
+                              │       Apple                   …  Sat 2026-04-25│
+──────────────────────────────┴──────── 52 messages · 13 unread · ● connected ─╯
+ d del  a archive ┊  r/R reply  f fwd  c compose ┊  / find ┊  ? help  q quit

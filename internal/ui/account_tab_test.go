@@ -1072,3 +1072,53 @@ func TestViewerNDuringLoadInert(t *testing.T) {
 		t.Errorf("n during load must return nil Cmd, got %T", cmd)
 	}
 }
+
+// assertAllLinesWidth checks that every line in view is exactly w
+// display cells wide. t.Helper ensures failure sites point to the
+// caller, not this function.
+func assertAllLinesWidth(t *testing.T, view string, w int) {
+	t.Helper()
+	for i, line := range strings.Split(view, "\n") {
+		if got := displayCells(line); got != w {
+			t.Errorf("line %d: width %d, want %d (line=%q)", i, got, w, line)
+		}
+	}
+}
+
+// TestAccountTabView_HonorsAssignedWidth verifies that every line
+// produced by AccountTab.View is exactly the assigned width in display
+// cells across multiple states: normal (message list), loading, and
+// viewer-open. This is the width contract that lets App.renderFrame
+// append the right border without per-line measure-and-pad logic.
+func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
+	const w, h = 119, 40 // 119 = 120-wide terminal minus the 1-cell right border
+
+	t.Run("normal state", func(t *testing.T) {
+		m := newLoadedTab(t, w, h)
+		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		assertAllLinesWidth(t, m.View(), w)
+	})
+
+	t.Run("loading state", func(t *testing.T) {
+		styles := NewStyles(theme.Nord)
+		backend := mail.NewMockBackend()
+		m := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		// Trigger loading state by delivering foldersLoadedMsg without
+		// following up with headersApplied — msglist stays empty.
+		folders, _ := backend.ListFolders()
+		m, _ = m.Update(foldersLoadedMsg{folders: folders})
+		assertAllLinesWidth(t, m.View(), w)
+	})
+
+	t.Run("viewer loading state", func(t *testing.T) {
+		m := newLoadedTab(t, w, h)
+		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		// Open viewer — stays in loading phase (no SetBody call).
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		if !m.viewer.IsOpen() {
+			t.Fatal("viewer should be open")
+		}
+		assertAllLinesWidth(t, m.View(), w)
+	})
+}

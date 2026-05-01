@@ -194,19 +194,11 @@ func (m App) renderFrame() string {
 	rawContent := m.acct.View()
 	rightBorder := m.styles.FrameBorder.Render("│")
 	contentLines := strings.Split(rawContent, "\n")
-	for i, line := range contentLines {
-		// displayCells measures actual terminal width, counting Nerd Font
-		// SPUA-A glyphs at their true 2-cell render width. Clip or pad so
-		// every content row occupies exactly m.width-1 terminal cells before
-		// the right border is appended.
-		dw := displayCells(line)
-		contentWidth := m.width - 1
-		if dw > contentWidth {
-			line = displayTruncate(line, contentWidth)
-		} else if dw < contentWidth {
-			line = line + strings.Repeat(" ", contentWidth-dw)
-		}
-		contentLines[i] = line + rightBorder
+	// AccountTab.View honors its width contract: every line is exactly
+	// m.width-1 display cells. Append the right border directly without
+	// per-line measure-and-pad — see TestAccountTabView_HonorsAssignedWidth.
+	for i := range contentLines {
+		contentLines[i] = contentLines[i] + rightBorder
 	}
 	content := strings.Join(contentLines, "\n")
 
@@ -223,9 +215,9 @@ func (m App) renderFrame() string {
 	// Use strings.Join rather than lipgloss.JoinVertical. JoinVertical pads
 	// all rows to the widest row using lipgloss.Width, which undercounts
 	// SPUA-A Nerd Font glyphs by 1 cell each. Content rows already have the
-	// correct terminal width (ensured by displayCells above); JoinVertical
-	// would add spurious 1-cell padding to any row with SPUA-A content,
-	// causing those rows to land 1 cell outside the terminal width.
+	// correct terminal width (guaranteed by AccountTab's width contract);
+	// JoinVertical would add spurious 1-cell padding to any row with SPUA-A
+	// content, causing those rows to land 1 cell outside the terminal width.
 	return strings.Join(parts, "\n")
 }
 
