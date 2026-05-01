@@ -55,6 +55,7 @@ type AccountKeys struct {
 	Star          key.Binding
 	ReadToggle    key.Binding
 	EnterVisual   key.Binding
+	Move          key.Binding
 }
 
 // NewAccountKeys returns the default account-tab key bindings.
@@ -84,6 +85,7 @@ func NewAccountKeys() AccountKeys {
 		Star:          key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "star")),
 		ReadToggle:    key.NewBinding(key.WithKeys("."), key.WithHelp(".", "read")),
 		EnterVisual:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "select")),
+		Move:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
 	}
 }
 

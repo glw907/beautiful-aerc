@@ -1505,3 +1505,72 @@ func TestAccountTab_TriageOnFoldedThread(t *testing.T) {
 		t.Errorf("after onUndo count = %d, want %d", tab.msglist.Count(), startCount+4)
 	}
 }
+
+func TestAccountTab_MKeyEmitsOpenMovePickerMsg(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	_, cmd := tab.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd == nil {
+		t.Fatal("m returned nil cmd, want OpenMovePickerMsg")
+	}
+	msgs := drainBatch(cmd)
+	var open *OpenMovePickerMsg
+	for _, m := range msgs {
+		if v, ok := m.(OpenMovePickerMsg); ok {
+			open = &v
+		}
+	}
+	if open == nil {
+		t.Fatalf("did not see OpenMovePickerMsg in %v", msgs)
+	}
+	if len(open.UIDs) == 0 {
+		t.Error("UIDs empty")
+	}
+	if open.Src == "" {
+		t.Error("Src empty")
+	}
+	if len(open.Folders) == 0 {
+		t.Error("Folders empty")
+	}
+	for _, f := range open.Folders {
+		if f.Provider == open.Src {
+			t.Errorf("Folders contains source %q; should be excluded", open.Src)
+		}
+	}
+}
+
+func TestAccountTab_MKeyNoOpOnEmpty(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	_, cmd := tab.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd != nil {
+		t.Errorf("m on empty msglist returned cmd %v, want nil", cmd)
+	}
+}
+
+func TestAccountTab_MovePickerPickedDispatchesMove(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	uids := tab.msglist.ActionTargets()
+	src := tab.currentFolderName()
+
+	_, cmd := tab.Update(MovePickerPickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
+	if cmd == nil {
+		t.Fatal("MovePickerPickedMsg produced nil cmd")
+	}
+	msgs := drainBatch(cmd)
+	var sawStart bool
+	for _, m := range msgs {
+		if ts, ok := m.(triageStartedMsg); ok {
+			sawStart = true
+			if ts.op != "move" {
+				t.Errorf("triageStartedMsg.op = %q, want %q", ts.op, "move")
+			}
+			if ts.dest != "Archive" {
+				t.Errorf("triageStartedMsg.dest = %q, want %q", ts.dest, "Archive")
+			}
+		}
+	}
+	if !sawStart {
+		t.Errorf("no triageStartedMsg in %v", msgs)
+	}
+}
