@@ -84,3 +84,22 @@ func TestRenderToast_Truncation(t *testing.T) {
 		t.Errorf("expected ellipsis in %q", got)
 	}
 }
+
+func TestRenderToast_EmptyOpHasNoUndoHint(t *testing.T) {
+	th := theme.Themes[theme.DefaultThemeName]
+	styles := NewStyles(th)
+	p := pendingAction{op: "empty", n: 247, dest: "Trash"}
+	out := renderToast(p, 80, styles)
+	if out == "" {
+		t.Fatal("renderToast returned empty for empty op")
+	}
+	if strings.Contains(out, "[u undo]") {
+		t.Errorf("empty toast should not advertise undo; got %q", out)
+	}
+	if !strings.Contains(out, "Emptied Trash") {
+		t.Errorf("expected 'Emptied Trash' in toast; got %q", out)
+	}
+	if !strings.Contains(out, "247") {
+		t.Errorf("expected count in toast; got %q", out)
+	}
+}

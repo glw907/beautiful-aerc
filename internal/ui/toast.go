@@ -43,13 +43,24 @@ func renderToast(p pendingAction, width int, styles Styles) string {
 		}
 	case "move":
 		body = fmt.Sprintf("%s %d %s to %s", verb, p.n, pluralize("message", p.n), p.dest)
+	case "empty":
+		body = fmt.Sprintf("%s %s (%d)", verb, p.dest, p.n)
 	default:
 		body = fmt.Sprintf("%s %d %s", verb, p.n, pluralize("message", p.n))
 	}
 	hint := "[u undo]"
-	full := "✓ " + body + "   " + hint
+	if p.op == "empty" {
+		hint = ""
+	}
+	full := "✓ " + body
+	if hint != "" {
+		full = full + "   " + hint
+	}
 	if lipgloss.Width(full) <= width {
 		return styles.Toast.Render(full)
+	}
+	if hint == "" {
+		return styles.Toast.Render(truncateToWidth(full, width))
 	}
 	hintW := lipgloss.Width(hint)
 	bodyBudget := width - hintW - 4 // "✓ " + "   "
@@ -76,6 +87,8 @@ func toastVerb(op string) string {
 		return "Marked unread"
 	case "move":
 		return "Moved"
+	case "empty":
+		return "Emptied"
 	}
 	return op
 }
