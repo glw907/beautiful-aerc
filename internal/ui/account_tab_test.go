@@ -804,6 +804,7 @@ func (b *pagingFakeBackend) Copy(_ []mail.UID, _ string) error                { 
 func (b *pagingFakeBackend) Delete(_ []mail.UID) error                        { return nil }
 func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error     { return nil }
 func (b *pagingFakeBackend) MarkRead(_ []mail.UID) error                      { return nil }
+func (b *pagingFakeBackend) MarkUnread(_ []mail.UID) error                    { return nil }
 func (b *pagingFakeBackend) MarkAnswered(_ []mail.UID) error                  { return nil }
 func (b *pagingFakeBackend) Send(_ string, _ []string, _ io.Reader) error     { return nil }
 func (b *pagingFakeBackend) Updates() <-chan mail.Update                      { return nil }

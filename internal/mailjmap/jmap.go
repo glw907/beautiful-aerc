@@ -694,6 +694,11 @@ func (b *Backend) MarkRead(uids []mail.UID) error {
 	return b.setKeyword(uids, "$seen", true)
 }
 
+// MarkUnread satisfies mail.Backend.
+func (b *Backend) MarkUnread(uids []mail.UID) error {
+	return b.setKeyword(uids, "$seen", false)
+}
+
 // MarkAnswered satisfies mail.Backend.
 func (b *Backend) MarkAnswered(uids []mail.UID) error {
 	return b.setKeyword(uids, "$answered", true)

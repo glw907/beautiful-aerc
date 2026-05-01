@@ -817,6 +817,73 @@ func TestMarkRead_RequestShape(t *testing.T) {
 	}
 }
 
+func TestMarkUnread_EmptyUIDs(t *testing.T) {
+	fake := &fakeClient{}
+	b := newTestBackend(fake, "acct-1", nil)
+
+	if err := b.MarkUnread(nil); err != nil {
+		t.Errorf("MarkUnread(nil): %v", err)
+	}
+	if err := b.MarkUnread([]mail.UID{}); err != nil {
+		t.Errorf("MarkUnread([]): %v", err)
+	}
+	if len(fake.sent) != 0 {
+		t.Errorf("expected no RPC calls, got %d", len(fake.sent))
+	}
+}
+
+func TestMarkUnread_RequestShape(t *testing.T) {
+	var capturedReq *jmap.Request
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			capturedReq = req
+			return fakeResponse(&jmap.Invocation{
+				Name:   "Email/set",
+				CallID: "0",
+				Args:   &email.SetResponse{},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-42", nil)
+
+	uids := []mail.UID{"e-1", "e-2"}
+	if err := b.MarkUnread(uids); err != nil {
+		t.Fatalf("MarkUnread: %v", err)
+	}
+
+	if capturedReq == nil {
+		t.Fatal("no request sent")
+	}
+	if len(capturedReq.Calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(capturedReq.Calls))
+	}
+	s, ok := capturedReq.Calls[0].Args.(*email.Set)
+	if !ok {
+		t.Fatalf("args type = %T, want *email.Set", capturedReq.Calls[0].Args)
+	}
+	if s.Account != "acct-42" {
+		t.Errorf("account = %q, want %q", s.Account, "acct-42")
+	}
+	if len(s.Update) != 2 {
+		t.Fatalf("update len = %d, want 2", len(s.Update))
+	}
+	for _, uid := range uids {
+		patch, ok := s.Update[jmap.ID(uid)]
+		if !ok {
+			t.Errorf("missing uid %q in Update", uid)
+			continue
+		}
+		val, ok := patch["keywords/$seen"]
+		if !ok {
+			t.Errorf("uid %q: missing keywords/$seen", uid)
+			continue
+		}
+		if val != nil {
+			t.Errorf("uid %q: keywords/$seen = %v, want nil (unset)", uid, val)
+		}
+	}
+}
+
 func TestSetKeyword_NotUpdatedError(t *testing.T) {
 	fake := &fakeClient{
 		respond: func(_ *jmap.Request) (*jmap.Response, error) {

@@ -48,6 +48,7 @@ type Backend interface {
 	Delete(uids []UID) error
 	Flag(uids []UID, flag Flag, set bool) error
 	MarkRead(uids []UID) error
+	MarkUnread(uids []UID) error
 	MarkAnswered(uids []UID) error
 
 	Send(from string, rcpts []string, body io.Reader) error

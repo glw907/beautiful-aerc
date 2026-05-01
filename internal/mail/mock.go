@@ -229,6 +229,7 @@ func (m *MockBackend) Copy(_ []UID, _ string) error           { return nil }
 func (m *MockBackend) Delete(_ []UID) error                   { return nil }
 func (m *MockBackend) Flag(_ []UID, _ Flag, _ bool) error     { return nil }
 func (m *MockBackend) MarkRead(_ []UID) error                 { return nil }
+func (m *MockBackend) MarkUnread(_ []UID) error               { return nil }
 func (m *MockBackend) MarkAnswered(_ []UID) error             { return nil }
 
 func (m *MockBackend) Send(_ string, _ []string, _ io.Reader) error {
