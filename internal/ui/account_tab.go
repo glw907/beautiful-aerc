@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -443,6 +444,153 @@ func (m *AccountTab) LinkPickerRequest() ([]string, bool) {
 	links := m.pendingLinkPicker
 	m.pendingLinkPicker = nil
 	return links, true
+}
+
+// dispatchTriage performs an optimistic triage action: snapshots state
+// for the inverse, mutates MessageList locally, exits visual mode, and
+// returns a Cmd that emits triageStartedMsg + the forward backend Cmd.
+// The op selects the kind of action: "delete", "archive", "star",
+// "read".
+func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
+	uids := m.msglist.ActionTargets()
+	if len(uids) == 0 {
+		return nil
+	}
+	srcFolder := m.currentFolderName()
+
+	switch op {
+	case "delete":
+		return m.dispatchRemoval("delete", uids, srcFolder,
+			func() error { return m.backend.Delete(uids) },
+			func() error { return m.backend.Move(uids, srcFolder) })
+
+	case "archive":
+		archive, ok := m.sidebar.FolderNameByCanonical("Archive")
+		if !ok {
+			return func() tea.Msg {
+				return ErrorMsg{Op: "archive", Err: errors.New("no Archive folder configured")}
+			}
+		}
+		return m.dispatchRemoval("archive", uids, srcFolder,
+			func() error { return m.backend.Move(uids, archive) },
+			func() error { return m.backend.Move(uids, srcFolder) })
+
+	case "star":
+		cursor, ok := m.msglist.SelectedMessage()
+		if !ok {
+			return nil
+		}
+		set := cursor.Flags&mail.FlagFlagged == 0
+		opName := "star"
+		if !set {
+			opName = "unstar"
+		}
+		return m.dispatchFlagToggle(opName, uids, mail.FlagFlagged, set)
+
+	case "read":
+		cursor, ok := m.msglist.SelectedMessage()
+		if !ok {
+			return nil
+		}
+		set := cursor.Flags&mail.FlagSeen == 0
+		opName := "read"
+		if !set {
+			opName = "unread"
+		}
+		return m.dispatchSeenToggle(opName, uids, set)
+	}
+	return nil
+}
+
+// dispatchRemoval factors the optimistic-flip / inverse-snapshot /
+// triageStartedMsg emission shared by delete and archive. fwd performs
+// the backend mutation; rev is the inverse (Move back to srcFolder).
+func (m *AccountTab) dispatchRemoval(op string, uids []mail.UID, srcFolder string, fwd, rev func() error) tea.Cmd {
+	snapshot, positions := m.msglist.SnapshotSource(uids)
+	m.msglist.ApplyDelete(uids)
+	m.msglist.ExitVisual()
+
+	list := &m.msglist
+	onUndo := func() { list.ApplyInsert(snapshot, positions) }
+	forward := func() tea.Msg {
+		if err := fwd(); err != nil {
+			return ErrorMsg{Op: op, Err: err}
+		}
+		return nil
+	}
+	inverse := func() tea.Msg {
+		if err := rev(); err != nil {
+			return ErrorMsg{Op: op + " undo", Err: err}
+		}
+		return nil
+	}
+	start := func() tea.Msg {
+		return triageStartedMsg{
+			op:      op,
+			n:       len(uids),
+			uids:    uids,
+			inverse: inverse,
+			onUndo:  onUndo,
+		}
+	}
+	return tea.Batch(start, forward)
+}
+
+// dispatchFlagToggle handles star/unstar: flips a flag in MessageList
+// and on the backend, with an inverse that flips it back.
+func (m *AccountTab) dispatchFlagToggle(op string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
+	m.msglist.ApplyFlag(uids, flag, set)
+	m.msglist.ExitVisual()
+
+	list := &m.msglist
+	onUndo := func() { list.ApplyFlag(uids, flag, !set) }
+	forward := func() tea.Msg {
+		if err := m.backend.Flag(uids, flag, set); err != nil {
+			return ErrorMsg{Op: op, Err: err}
+		}
+		return nil
+	}
+	inverse := func() tea.Msg {
+		if err := m.backend.Flag(uids, flag, !set); err != nil {
+			return ErrorMsg{Op: op + " undo", Err: err}
+		}
+		return nil
+	}
+	start := func() tea.Msg {
+		return triageStartedMsg{op: op, n: len(uids), uids: uids, inverse: inverse, onUndo: onUndo}
+	}
+	return tea.Batch(start, forward)
+}
+
+// dispatchSeenToggle handles read/unread: flips FlagSeen and routes to
+// MarkRead/MarkUnread on the backend.
+func (m *AccountTab) dispatchSeenToggle(op string, uids []mail.UID, seen bool) tea.Cmd {
+	m.msglist.ApplySeen(uids, seen)
+	m.msglist.ExitVisual()
+
+	list := &m.msglist
+	fwdFn := m.backend.MarkRead
+	revFn := m.backend.MarkUnread
+	if !seen {
+		fwdFn, revFn = m.backend.MarkUnread, m.backend.MarkRead
+	}
+	onUndo := func() { list.ApplySeen(uids, !seen) }
+	forward := func() tea.Msg {
+		if err := fwdFn(uids); err != nil {
+			return ErrorMsg{Op: op, Err: err}
+		}
+		return nil
+	}
+	inverse := func() tea.Msg {
+		if err := revFn(uids); err != nil {
+			return ErrorMsg{Op: op + " undo", Err: err}
+		}
+		return nil
+	}
+	start := func() tea.Msg {
+		return triageStartedMsg{op: op, n: len(uids), uids: uids, inverse: inverse, onUndo: onUndo}
+	}
+	return tea.Batch(start, forward)
 }
 
 // pageFor returns (creating if absent) the folderPage for name.

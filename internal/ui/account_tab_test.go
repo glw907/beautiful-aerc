@@ -1123,3 +1123,133 @@ func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
 		assertAllLinesWidth(t, m.View(), w)
 	})
 }
+
+// newLoadedTabWithMock is like newLoadedTab but exposes the underlying
+// MockBackend for tests that need to assert against recorded calls.
+func newLoadedTabWithMock(t *testing.T, w, h int) (AccountTab, *mail.MockBackend) {
+	t.Helper()
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: w, Height: h})
+	msg := runCmd(tab.Init())
+	tab, cmd := tab.updateTab(msg)
+	drain(t, &tab, cmd)
+	return tab, backend
+}
+
+// runDispatchCmd executes the Cmd returned by dispatchTriage and walks
+// the resulting tea.BatchMsg, returning the captured triageStartedMsg.
+// Forward Cmds are executed in-order so backend calls record.
+func runDispatchCmd(t *testing.T, cmd tea.Cmd) (started triageStartedMsg, found bool) {
+	t.Helper()
+	if cmd == nil {
+		return triageStartedMsg{}, false
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected tea.BatchMsg from dispatchTriage, got %T", msg)
+	}
+	for _, sub := range batch {
+		if sub == nil {
+			continue
+		}
+		inner := sub()
+		if ts, ok := inner.(triageStartedMsg); ok {
+			started = ts
+			found = true
+		}
+	}
+	return started, found
+}
+
+func TestAccountTab_Triage_DeleteArchive(t *testing.T) {
+	t.Run("delete cursor row", func(t *testing.T) {
+		tab, mock := newLoadedTabWithMock(t, 120, 30)
+		first, ok := tab.msglist.SelectedMessage()
+		if !ok {
+			t.Fatal("no selection")
+		}
+		startCount := tab.msglist.Count()
+		cmd := tab.dispatchTriage("delete")
+		if cmd == nil {
+			t.Fatal("dispatchTriage(delete) returned nil")
+		}
+		// Optimistic flip: row already gone.
+		if tab.msglist.Count() != startCount-1 {
+			t.Errorf("row count = %d, want %d", tab.msglist.Count(), startCount-1)
+		}
+		started, found := runDispatchCmd(t, cmd)
+		if !found {
+			t.Fatal("triageStartedMsg not emitted")
+		}
+		if started.op != "delete" || started.n != 1 {
+			t.Errorf("started = %+v, want op=delete n=1", started)
+		}
+		if len(mock.DeleteCalls) != 1 {
+			t.Fatalf("DeleteCalls = %d, want 1", len(mock.DeleteCalls))
+		}
+		if mock.DeleteCalls[0][0] != first.UID {
+			t.Errorf("DeleteCalls[0][0] = %s, want %s", mock.DeleteCalls[0][0], first.UID)
+		}
+		// Inverse: calling it should Move back to the source folder.
+		_ = started.inverse()
+		if len(mock.MoveCalls) != 1 {
+			t.Errorf("MoveCalls after inverse = %d, want 1", len(mock.MoveCalls))
+		}
+		// Local rollback: onUndo restores the row.
+		started.onUndo()
+		if tab.msglist.Count() != startCount {
+			t.Errorf("after onUndo count = %d, want %d", tab.msglist.Count(), startCount)
+		}
+	})
+
+	t.Run("archive cursor row", func(t *testing.T) {
+		tab, mock := newLoadedTabWithMock(t, 120, 30)
+		first, ok := tab.msglist.SelectedMessage()
+		if !ok {
+			t.Fatal("no selection")
+		}
+		cmd := tab.dispatchTriage("archive")
+		if cmd == nil {
+			t.Fatal("dispatchTriage(archive) returned nil")
+		}
+		started, found := runDispatchCmd(t, cmd)
+		if !found {
+			t.Fatal("triageStartedMsg not emitted for archive")
+		}
+		if started.op != "archive" {
+			t.Errorf("op = %q, want archive", started.op)
+		}
+		if len(mock.MoveCalls) != 1 {
+			t.Fatalf("MoveCalls = %d, want 1", len(mock.MoveCalls))
+		}
+		if mock.MoveCalls[0].Dest != "Archive" {
+			t.Errorf("Move dest = %q, want Archive", mock.MoveCalls[0].Dest)
+		}
+		if mock.MoveCalls[0].UIDs[0] != first.UID {
+			t.Errorf("Move uid = %s, want %s", mock.MoveCalls[0].UIDs[0], first.UID)
+		}
+		_ = started.inverse()
+		// Inverse move records back to source folder ("Inbox").
+		if len(mock.MoveCalls) != 2 || mock.MoveCalls[1].Dest != "Inbox" {
+			t.Errorf("inverse Move = %+v, want dest=Inbox", mock.MoveCalls)
+		}
+	})
+
+	t.Run("visual mode auto-exits", func(t *testing.T) {
+		tab, _ := newLoadedTabWithMock(t, 120, 30)
+		tab.msglist.EnterVisual()
+		if !tab.msglist.VisualMode() {
+			t.Fatal("setup: visual mode should be on")
+		}
+		cmd := tab.dispatchTriage("delete")
+		if cmd == nil {
+			t.Fatal("dispatchTriage returned nil")
+		}
+		if tab.msglist.VisualMode() {
+			t.Error("visual mode should auto-exit after triage")
+		}
+	})
+}

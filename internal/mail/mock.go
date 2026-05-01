@@ -18,6 +18,27 @@ type MockBackend struct {
 	folders []Folder
 	msgs    []MessageInfo
 	updates chan Update
+
+	// Recorded calls — exposed for tests that assert dispatch shape.
+	// All slices append in chronological order.
+	DeleteCalls     [][]UID
+	MoveCalls       []MockMoveCall
+	FlagCalls       []MockFlagCall
+	MarkReadCalls   [][]UID
+	MarkUnreadCalls [][]UID
+}
+
+// MockMoveCall records a Move invocation.
+type MockMoveCall struct {
+	UIDs []UID
+	Dest string
+}
+
+// MockFlagCall records a Flag invocation.
+type MockFlagCall struct {
+	UIDs []UID
+	Flag Flag
+	Set  bool
 }
 
 // NewMockBackend creates a MockBackend with realistic sample data.
@@ -224,13 +245,35 @@ Reply directly to this email or visit the discussion at https://github.example.c
 }
 
 func (m *MockBackend) Search(_ SearchCriteria) ([]UID, error) { return nil, nil }
-func (m *MockBackend) Move(_ []UID, _ string) error           { return nil }
-func (m *MockBackend) Copy(_ []UID, _ string) error           { return nil }
-func (m *MockBackend) Delete(_ []UID) error                   { return nil }
-func (m *MockBackend) Flag(_ []UID, _ Flag, _ bool) error     { return nil }
-func (m *MockBackend) MarkRead(_ []UID) error                 { return nil }
-func (m *MockBackend) MarkUnread(_ []UID) error               { return nil }
-func (m *MockBackend) MarkAnswered(_ []UID) error             { return nil }
+
+func (m *MockBackend) Move(uids []UID, dest string) error {
+	m.MoveCalls = append(m.MoveCalls, MockMoveCall{UIDs: append([]UID(nil), uids...), Dest: dest})
+	return nil
+}
+
+func (m *MockBackend) Copy(_ []UID, _ string) error { return nil }
+
+func (m *MockBackend) Delete(uids []UID) error {
+	m.DeleteCalls = append(m.DeleteCalls, append([]UID(nil), uids...))
+	return nil
+}
+
+func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
+	m.FlagCalls = append(m.FlagCalls, MockFlagCall{UIDs: append([]UID(nil), uids...), Flag: flag, Set: set})
+	return nil
+}
+
+func (m *MockBackend) MarkRead(uids []UID) error {
+	m.MarkReadCalls = append(m.MarkReadCalls, append([]UID(nil), uids...))
+	return nil
+}
+
+func (m *MockBackend) MarkUnread(uids []UID) error {
+	m.MarkUnreadCalls = append(m.MarkUnreadCalls, append([]UID(nil), uids...))
+	return nil
+}
+
+func (m *MockBackend) MarkAnswered(_ []UID) error { return nil }
 
 func (m *MockBackend) Send(_ string, _ []string, _ io.Reader) error {
 	return nil

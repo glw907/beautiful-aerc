@@ -96,6 +96,19 @@ func (s Sidebar) ConfigKey(providerName string) string {
 	return ""
 }
 
+// FolderNameByCanonical returns the provider folder name (e.g.
+// "Archive", "[Gmail]/Trash") whose canonical name matches target.
+// Returns ("", false) when no folder matches — used by triage actions
+// to look up the Archive/Trash destinations.
+func (s Sidebar) FolderNameByCanonical(target string) (string, bool) {
+	for _, e := range s.entries {
+		if e.cf.Canonical == target {
+			return e.cf.Folder.Name, true
+		}
+	}
+	return "", false
+}
+
 // SelectByCanonical moves the selection to the folder whose
 // canonical name matches target (e.g. "Inbox", "Drafts"). Returns
 // true if a matching folder was found and selected. No-op when no
