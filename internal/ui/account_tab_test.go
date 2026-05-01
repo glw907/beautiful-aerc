@@ -1456,3 +1456,52 @@ func TestApp_UndoKey(t *testing.T) {
 		}
 	})
 }
+
+func TestAccountTab_TriageOnFoldedThread(t *testing.T) {
+	tab, mock := newLoadedTabWithMock(t, 120, 30)
+
+	// Find the row for thread root UID 20 (mock fixture's T1 thread).
+	rootUID := mail.UID("20")
+	for range tab.msglist.Count() {
+		cur, ok := tab.msglist.SelectedMessage()
+		if !ok {
+			t.Fatal("no selection")
+		}
+		if cur.UID == rootUID {
+			break
+		}
+		tab.msglist.MoveDown()
+	}
+	cur, _ := tab.msglist.SelectedMessage()
+	if cur.UID != rootUID {
+		t.Fatalf("could not navigate to thread root %s", rootUID)
+	}
+	// Fold the thread.
+	tab.msglist.ToggleFold()
+
+	// ActionTargets on the folded root should expand to all 4 thread UIDs.
+	targets := tab.msglist.ActionTargets()
+	if len(targets) != 4 {
+		t.Fatalf("ActionTargets on folded root returned %d UIDs, want 4 (T1 has root+3 children)", len(targets))
+	}
+
+	// Dispatch delete; the forward Cmd should call mock.Delete with all 4 UIDs.
+	cmd := tab.dispatchTriage("delete")
+	started, found := runDispatchCmd(t, cmd)
+	if !found {
+		t.Fatal("triageStartedMsg not emitted")
+	}
+	if started.n != 4 {
+		t.Errorf("triageStartedMsg.n = %d, want 4", started.n)
+	}
+	if len(mock.DeleteCalls) != 1 || len(mock.DeleteCalls[0]) != 4 {
+		t.Errorf("DeleteCalls = %+v, want one call with 4 UIDs", mock.DeleteCalls)
+	}
+
+	// onUndo restores all 4 messages.
+	startCount := tab.msglist.Count()
+	started.onUndo()
+	if tab.msglist.Count() != startCount+4 {
+		t.Errorf("after onUndo count = %d, want %d", tab.msglist.Count(), startCount+4)
+	}
+}
