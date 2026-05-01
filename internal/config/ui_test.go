@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,6 +210,63 @@ func TestLoadUI_UndoSeconds(t *testing.T) {
 				t.Errorf("UndoSeconds = %d, want %d", cfg.UndoSeconds, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoadUI_TrashRetentionDefaults(t *testing.T) {
+	path := writeTempUI(t, `[ui]
+threading = true
+`)
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("LoadUI: %v", err)
+	}
+	if cfg.TrashRetentionDays != 0 {
+		t.Errorf("TrashRetentionDays = %d, want 0", cfg.TrashRetentionDays)
+	}
+	if cfg.SpamRetentionDays != 0 {
+		t.Errorf("SpamRetentionDays = %d, want 0", cfg.SpamRetentionDays)
+	}
+}
+
+func TestLoadUI_TrashRetentionParsed(t *testing.T) {
+	path := writeTempUI(t, `[ui]
+trash_retention_days = 14
+spam_retention_days = 7
+`)
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("LoadUI: %v", err)
+	}
+	if cfg.TrashRetentionDays != 14 {
+		t.Errorf("TrashRetentionDays = %d, want 14", cfg.TrashRetentionDays)
+	}
+	if cfg.SpamRetentionDays != 7 {
+		t.Errorf("SpamRetentionDays = %d, want 7", cfg.SpamRetentionDays)
+	}
+}
+
+func TestLoadUI_TrashRetentionClamp(t *testing.T) {
+	cases := []struct {
+		in, want int
+	}{
+		{-5, 0},
+		{0, 0},
+		{30, 30},
+		{365, 365},
+		{1000, 365},
+	}
+	for _, tc := range cases {
+		path := writeTempUI(t, fmt.Sprintf(`[ui]
+trash_retention_days = %d
+`, tc.in))
+		cfg, err := LoadUI(path)
+		if err != nil {
+			t.Fatalf("LoadUI(%d): %v", tc.in, err)
+		}
+		if cfg.TrashRetentionDays != tc.want {
+			t.Errorf("TrashRetentionDays for %d = %d, want %d", tc.in, cfg.TrashRetentionDays, tc.want)
+		}
 	}
 }
 

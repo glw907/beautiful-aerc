@@ -27,6 +27,14 @@ type UIConfig struct {
 
 	// UndoSeconds is the toast/undo timer in seconds. Default 6, clamped to [2, 30] on parse.
 	UndoSeconds int
+
+	// TrashRetentionDays is the per-session sweep cutoff for Trash. 0 disables (default).
+	// Clamped to [0, 365] on parse.
+	TrashRetentionDays int
+
+	// SpamRetentionDays is the per-session sweep cutoff for Spam. 0 disables (default).
+	// Clamped to [0, 365] on parse.
+	SpamRetentionDays int
 }
 
 // FolderConfig holds per-folder overrides from [ui.folders.<name>]
@@ -71,8 +79,10 @@ func DefaultUIConfig() UIConfig {
 type rawUI struct {
 	Threading   *bool                   `toml:"threading"`
 	Folders     map[string]rawFolderCfg `toml:"folders"`
-	Icons       string                  `toml:"icons"`
-	UndoSeconds *int                    `toml:"undo_seconds"`
+	Icons              string                  `toml:"icons"`
+	UndoSeconds        *int                    `toml:"undo_seconds"`
+	TrashRetentionDays *int                    `toml:"trash_retention_days"`
+	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
 }
 
 type rawFolderCfg struct {
@@ -125,6 +135,13 @@ func LoadUI(path string) (UIConfig, error) {
 		out.UndoSeconds = v
 	}
 
+	if raw.UI.TrashRetentionDays != nil {
+		out.TrashRetentionDays = clampRetention(*raw.UI.TrashRetentionDays)
+	}
+	if raw.UI.SpamRetentionDays != nil {
+		out.SpamRetentionDays = clampRetention(*raw.UI.SpamRetentionDays)
+	}
+
 	for name, fc := range raw.UI.Folders {
 		converted, err := convertFolderCfg(name, fc)
 		if err != nil {
@@ -134,6 +151,16 @@ func LoadUI(path string) (UIConfig, error) {
 	}
 
 	return out, nil
+}
+
+func clampRetention(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > 365 {
+		return 365
+	}
+	return v
 }
 
 func convertFolderCfg(name string, raw rawFolderCfg) (FolderConfig, error) {
