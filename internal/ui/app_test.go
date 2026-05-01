@@ -657,6 +657,123 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 	}
 }
 
+func TestApp_ToastLifecycle(t *testing.T) {
+	frozen := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+
+	newApp := func() App {
+		backend := mail.NewMockBackend()
+		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app.now = func() time.Time { return frozen }
+		return app
+	}
+
+	t.Run("triageStartedMsg sets toast and returns Tick Cmd", func(t *testing.T) {
+		app := newApp()
+		var ranUndo bool
+		app, cmd := app.Update(triageStartedMsg{
+			op:      "delete",
+			n:       1,
+			uids:    []mail.UID{"1"},
+			inverse: func() tea.Msg { return nil },
+			onUndo:  func() { ranUndo = true },
+		})
+		if app.toast.IsZero() {
+			t.Fatal("toast should be set after triageStartedMsg")
+		}
+		if app.toast.op != "delete" || app.toast.n != 1 {
+			t.Errorf("toast = %+v, want op=delete n=1", app.toast)
+		}
+		want := frozen.Add(time.Duration(app.undoSeconds) * time.Second)
+		if !app.toast.deadline.Equal(want) {
+			t.Errorf("deadline = %v, want %v", app.toast.deadline, want)
+		}
+		if cmd == nil {
+			t.Error("expected Tick Cmd, got nil")
+		}
+		if ranUndo {
+			t.Error("onUndo should not run on triageStartedMsg")
+		}
+	})
+
+	t.Run("toastExpireMsg with matching deadline clears toast", func(t *testing.T) {
+		app := newApp()
+		app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+		dl := app.toast.deadline
+		app, _ = app.Update(toastExpireMsg{deadline: dl})
+		if !app.toast.IsZero() {
+			t.Error("toast should clear on matching expire")
+		}
+	})
+
+	t.Run("toastExpireMsg with stale deadline ignored", func(t *testing.T) {
+		app := newApp()
+		app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+		stale := frozen.Add(-time.Hour)
+		app, _ = app.Update(toastExpireMsg{deadline: stale})
+		if app.toast.IsZero() {
+			t.Error("toast should NOT clear on stale expire")
+		}
+	})
+
+	t.Run("undoRequestedMsg invokes onUndo, returns inverse, clears toast", func(t *testing.T) {
+		app := newApp()
+		var ranUndo, ranInverse bool
+		app, _ = app.Update(triageStartedMsg{
+			op:      "delete",
+			n:       1,
+			inverse: func() tea.Msg { ranInverse = true; return nil },
+			onUndo:  func() { ranUndo = true },
+		})
+		_, cmd := app.Update(undoRequestedMsg{})
+		if !ranUndo {
+			t.Error("onUndo did not run on undoRequestedMsg")
+		}
+		if cmd == nil {
+			t.Fatal("expected inverse Cmd from undoRequestedMsg, got nil")
+		}
+		_ = cmd()
+		if !ranInverse {
+			t.Error("inverse Cmd did not fire")
+		}
+	})
+
+	t.Run("undoRequestedMsg with no toast is no-op", func(t *testing.T) {
+		app := newApp()
+		_, cmd := app.Update(undoRequestedMsg{})
+		if cmd != nil {
+			t.Error("expected nil Cmd when no toast active")
+		}
+	})
+
+	t.Run("ErrorMsg with active toast rolls back and clears toast", func(t *testing.T) {
+		app := newApp()
+		var ranUndo bool
+		app, _ = app.Update(triageStartedMsg{
+			op:     "delete",
+			n:      1,
+			onUndo: func() { ranUndo = true },
+		})
+		app, _ = app.Update(ErrorMsg{Op: "delete", Err: errors.New("boom")})
+		if !ranUndo {
+			t.Error("onUndo should run on ErrorMsg while toast active")
+		}
+		if !app.toast.IsZero() {
+			t.Error("toast should clear on ErrorMsg")
+		}
+		if app.lastErr.Err == nil {
+			t.Error("lastErr should be set after ErrorMsg")
+		}
+	})
+
+	t.Run("ErrorMsg with no toast just sets lastErr", func(t *testing.T) {
+		app := newApp()
+		app, _ = app.Update(ErrorMsg{Op: "x", Err: errors.New("y")})
+		if app.lastErr.Err == nil {
+			t.Error("lastErr should be set")
+		}
+	})
+}
+
 func TestAppLinkPickerRoundTrip(t *testing.T) {
 	captured := ""
 	prev := openURL

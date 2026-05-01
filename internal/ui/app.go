@@ -4,6 +4,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,10 +27,14 @@ type App struct {
 	viewerOpen bool
 	helpOpen   bool
 	help       HelpPopover
-	linkPicker LinkPicker
-	lastErr    ErrorMsg
-	width      int
-	height     int
+	linkPicker  LinkPicker
+	lastErr     ErrorMsg
+	toast       pendingAction
+	undoSeconds int
+	// now returns the wall clock; test seam, defaults to time.Now.
+	now    func() time.Time
+	width  int
+	height int
 }
 
 // NewApp creates the root model with a single AccountTab. Folder loading
@@ -40,15 +45,17 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig,
 	sb = sb.SetConnectionState(Offline)
 
 	return App{
-		acct:       NewAccountTab(styles, t, backend, uiCfg, icons),
-		backend:    backend,
-		icons:      icons,
-		styles:     styles,
-		topLine:    NewTopLine(styles),
-		statusBar:  sb,
-		footer:     NewFooter(styles),
-		keys:       NewGlobalKeys(),
-		linkPicker: NewLinkPicker(styles, t),
+		acct:        NewAccountTab(styles, t, backend, uiCfg, icons),
+		backend:     backend,
+		icons:       icons,
+		styles:      styles,
+		topLine:     NewTopLine(styles),
+		statusBar:   sb,
+		footer:      NewFooter(styles),
+		keys:        NewGlobalKeys(),
+		linkPicker:  NewLinkPicker(styles, t),
+		undoSeconds: uiCfg.UndoSeconds,
+		now:         time.Now,
 	}
 }
 
@@ -107,11 +114,48 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case LaunchURLMsg:
 		return m, launchURLCmd(msg.URL)
 
+	case triageStartedMsg:
+		deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
+		m.toast = pendingAction{
+			op:       msg.op,
+			n:        msg.n,
+			uids:     msg.uids,
+			inverse:  msg.inverse,
+			onUndo:   msg.onUndo,
+			deadline: deadline,
+		}
+		return m, tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
+			return toastExpireMsg{deadline: deadline}
+		})
+
+	case toastExpireMsg:
+		if !m.toast.IsZero() && msg.deadline.Equal(m.toast.deadline) {
+			m.toast = pendingAction{}
+		}
+		return m, nil
+
+	case undoRequestedMsg:
+		if m.toast.IsZero() {
+			return m, nil
+		}
+		if m.toast.onUndo != nil {
+			m.toast.onUndo()
+		}
+		cmd := m.toast.inverse
+		m.toast = pendingAction{}
+		return m, cmd
+
 	case ErrorMsg:
 		// Banner state is App-owned. nil ↔ set transitions toggle the
 		// chrome row count, so resize the child when the banner appears
 		// or disappears. Last-write-wins between two non-nil errors
 		// does not change height, so the resize is skipped.
+		// An ErrorMsg also rolls back any in-flight toast: the local
+		// flip is reversed via onUndo and the toast clears.
+		if !m.toast.IsZero() && m.toast.onUndo != nil {
+			m.toast.onUndo()
+		}
+		m.toast = pendingAction{}
 		hadErr := m.lastErr.Err != nil
 		m.lastErr = msg
 		cmds := make([]tea.Cmd, 0, 2)
