@@ -682,12 +682,54 @@ func (b *Backend) Delete(uids []mail.UID) error {
 
 // Destroy permanently deletes uids via JMAP Email/set destroy, bypassing
 // Trash. Irreversible. Empty input is a no-op.
-// Full implementation is deferred to Task 3 (Pass 6.6).
 func (b *Backend) Destroy(uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
-	return fmt.Errorf("destroy: not yet implemented")
+	b.mu.Lock()
+	accountID := b.accountIDLocked()
+	b.mu.Unlock()
+
+	ids := make([]jmap.ID, 0, len(uids))
+	for _, u := range uids {
+		ids = append(ids, jmap.ID(u))
+	}
+	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
+	callID := req.Invoke(&email.Set{
+		Account: accountID,
+		Destroy: ids,
+	})
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("destroy: %w", err)
+	}
+	if err := checkEmailSetDestroyed(resp, callID); err != nil {
+		return fmt.Errorf("destroy: %w", err)
+	}
+	return nil
+}
+
+// checkEmailSetDestroyed finds the Email/setResponse matching callID and
+// returns an error if any IDs appear in NotDestroyed with a type other than
+// "notFound". notFound is treated as success (already gone; idempotent).
+func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
+	for _, inv := range resp.Responses {
+		if inv.CallID != callID {
+			continue
+		}
+		sr, ok := inv.Args.(*email.SetResponse)
+		if !ok {
+			continue
+		}
+		for id, se := range sr.NotDestroyed {
+			if se.Type == "notFound" {
+				continue
+			}
+			return fmt.Errorf("not destroyed %s: %s", id, se.Type)
+		}
+		return nil
+	}
+	return fmt.Errorf("no Email/set response")
 }
 
 // Flag satisfies mail.Backend. It sets or clears a JMAP keyword for each uid.

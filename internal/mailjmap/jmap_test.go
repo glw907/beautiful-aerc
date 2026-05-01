@@ -1220,3 +1220,107 @@ func TestSearch_ReturnsNilNil(t *testing.T) {
 		t.Errorf("Search: got %v, want nil", uids)
 	}
 }
+
+// --- Destroy ---
+
+func TestDestroy_EmptyUIDs(t *testing.T) {
+	fake := &fakeClient{}
+	b := newTestBackend(fake, "acct-1", nil)
+
+	if err := b.Destroy(nil); err != nil {
+		t.Errorf("Destroy(nil): %v", err)
+	}
+	if err := b.Destroy([]mail.UID{}); err != nil {
+		t.Errorf("Destroy([]): %v", err)
+	}
+	if len(fake.sent) != 0 {
+		t.Errorf("expected no RPC calls for empty input, got %d", len(fake.sent))
+	}
+}
+
+func TestDestroy_RequestShape(t *testing.T) {
+	var capturedReq *jmap.Request
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			capturedReq = req
+			return fakeResponse(&jmap.Invocation{
+				Name:   "Email/set",
+				CallID: "0",
+				Args:   &email.SetResponse{},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-42", nil)
+
+	uids := []mail.UID{"id-1", "id-2"}
+	if err := b.Destroy(uids); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if capturedReq == nil {
+		t.Fatal("no request sent")
+	}
+	if len(capturedReq.Calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(capturedReq.Calls))
+	}
+	s, ok := capturedReq.Calls[0].Args.(*email.Set)
+	if !ok {
+		t.Fatalf("args type = %T, want *email.Set", capturedReq.Calls[0].Args)
+	}
+	if s.Account != "acct-42" {
+		t.Errorf("account = %q, want %q", s.Account, "acct-42")
+	}
+	if len(s.Destroy) != 2 {
+		t.Fatalf("Destroy len = %d, want 2", len(s.Destroy))
+	}
+	wantIDs := map[jmap.ID]bool{"id-1": true, "id-2": true}
+	for _, id := range s.Destroy {
+		if !wantIDs[id] {
+			t.Errorf("unexpected ID in Destroy: %q", id)
+		}
+	}
+}
+
+func TestDestroy_NotDestroyedError(t *testing.T) {
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(&jmap.Invocation{
+				Name:   "Email/set",
+				CallID: "0",
+				Args: &email.SetResponse{
+					NotDestroyed: map[jmap.ID]*jmap.SetError{
+						"id-1": {Type: "serverFail"},
+					},
+				},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+
+	err := b.Destroy([]mail.UID{"id-1"})
+	if err == nil {
+		t.Fatal("expected error from NotDestroyed, got nil")
+	}
+}
+
+func TestDestroy_NotFoundIsSuccess(t *testing.T) {
+	// notFound in NotDestroyed is idempotent — message is already gone.
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(&jmap.Invocation{
+				Name:   "Email/set",
+				CallID: "0",
+				Args: &email.SetResponse{
+					NotDestroyed: map[jmap.ID]*jmap.SetError{
+						"id-gone": {Type: "notFound"},
+					},
+				},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+
+	if err := b.Destroy([]mail.UID{"id-gone"}); err != nil {
+		t.Errorf("Destroy with notFound: expected success, got %v", err)
+	}
+}
