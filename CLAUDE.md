@@ -25,6 +25,14 @@ writing code.
   update, plan archival, commit + push + install) and the starter-
   prompt format for the next pass.
 
+## Path-scoped rules
+
+`.claude/rules/ui-invariants.md` auto-loads when editing
+`internal/ui/`, planning a UI pass (plan or spec docs under
+`docs/superpowers/`), or reading `docs/poplar/wireframes.md` /
+`docs/poplar/keybindings.md`. It carries the component + UX
+binding facts that are not universal.
+
 ## On-demand reading
 
 - `docs/poplar/system-map.md` — package layout, data flow, hook and

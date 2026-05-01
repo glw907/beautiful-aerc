@@ -35,6 +35,9 @@ Act on the current message (or selection in multi-select mode).
 | `a` | Archive | A, V |
 | `s` | Star / unstar | A, V |
 | `.` | Toggle read / unread | A, V |
+| `m` | Move (opens move picker) | A |
+| `E` | Empty current Disposal folder (opens confirm) | A |
+| `u` | Undo last triage action (within undo window) | A, V |
 
 ## Reply & Compose
 
@@ -70,19 +73,18 @@ Moves the sidebar selection and switches the message list.
 | `Enter` | Commit query (Typing → Active) | A |
 | `Esc` | Clear query, restore pre-search cursor | A |
 
-## Select (deferred — Pass 6)
+## Select (visual mode)
 
-Multi-select is not yet implemented. The bindings below are
-reserved in the design so later passes don't collide with them.
 `v` enters visual-select mode; inside that mode `Space` toggles
-selection on the current row. Outside visual mode, `Space` is
-the thread fold-toggle — see § Threads below. Both `v` and
-`Space` are unbound until Pass 6 / Pass 2.5b-3.6 respectively.
+selection on the current row. Outside visual mode, `Space` is the
+thread fold-toggle — see § Threads below. Marks survive `ExitVisual`
+and are consumed by the next dispatch (visual mode auto-exits on
+dispatch).
 
 | Key | Action | Context |
 |-----|--------|---------|
-| `v` | Enter/exit visual select *(reserved, Pass 6)* | A |
-| `Space` | Toggle selection on current row *(inside visual mode, Pass 6)* | A |
+| `v` | Enter/exit visual select | A |
+| `Space` | Toggle selection on current row (inside visual mode) | A |
 
 ## Threads
 
@@ -106,8 +108,9 @@ a hidden row.
 | Key | Action | Context |
 |-----|--------|---------|
 | `1`–`9` | Open the Nth harvested link via `xdg-open` | V |
-| `Tab` | Link picker *(reserved, Pass 2.5b-4b)* | V |
+| `Tab` | Link picker (when ≥1 URL harvested; inert otherwise) | V |
 | `q`, `Esc` | Close viewer, return to list | V |
+| `n` / `N` | Next / previous visible message (skips folded rows) | V |
 
 Opening a message marks it read optimistically: the seen flag flips
 locally before the backend `MarkRead` Cmd resolves, so returning to

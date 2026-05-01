@@ -1,11 +1,9 @@
 # Poplar Text Wireframes
 
-Reference wireframes for every UI element in the poplar interface
-inventory. Each wireframe defines layout, proportions, and
-information density for the bubbletea prototype (Pass 2.5b).
-
-See the UI design spec for the complete interface inventory:
-`docs/superpowers/specs/2026-04-10-poplar-ui-wireframing-design.md`
+Reference wireframes for poplar's UI. One canonical wireframe per
+screen state. Layout, proportions, information density. Behavior
+lives in `.claude/rules/ui-invariants.md`; key tables in
+`docs/poplar/keybindings.md`. Cross-reference rather than duplicate.
 
 ## Conventions
 
@@ -13,17 +11,17 @@ See the UI design spec for the complete interface inventory:
 - `┃` thick left bar for selected row indicator
 - Nerd Font glyphs rendered directly (2-cell wide in terminal)
 - Color annotations use theme slot names (`accent_primary`, `fg_dim`)
-- Default terminal: 120 columns x 40 rows
+- Default terminal: 120 columns × 40 rows
 - `←N→` for column widths
-- `[key]` for interactive elements
-- Three-sided frame: top `──┬──╮`, right `│`, bottom `──┴──╯`. No left border.
+- Three-sided frame: top `──┬──╮`, right `│`, bottom `──┴──╯`. No
+  left border.
 
 ---
 
-## 1. Composite Layout
+## 1. Composite layout
 
-Full application with all persistent chrome and both panels visible.
-No tab bar — sidebar provides folder context. Inbox selected.
+Full application — sidebar + message list. No tab bar. Inbox
+selected.
 
 ```
 ───────────────────────────┬──────────────────────────────────────────────────────────────────────────────╮
@@ -45,46 +43,23 @@ No tab bar — sidebar provides folder context. Inbox selected.
   d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  c:compose  ┊  /:search  ?:help  q:quit
 ```
 
-**Annotations:**
-
-- **No tab bar**: Removed entirely. The sidebar (always visible)
-  shows folder context. Folder name and message counts are in the
-  status bar. No `1-9` switching or tab lifecycle.
-- **Three-sided frame**: Top edge `───┬───╮` (left of divider is
-  open, right closes with `╮`). Right border `│`. Bottom status
-  bar `──┴──╯`. No left border — left edge is open.
-- **Sidebar** (left, 30 cols): Account name (`geoff@907.life`) at
-  top in `fg_dim`. Three folder groups separated by blank lines.
-  Selected row has `┃` thick left border in `accent_primary` +
-  `bg_selection` full-width fill. Unread counts right-aligned in
-  `accent_tertiary`, shown only when > 0.
-- **Sidebar search shelf**: The bottom 3 rows of the sidebar
-  column are the persistent search shelf (see §2.1). When idle,
-  they show the hint `󰍉 / to search`; when active, they host the
-  query input and result count. The sidebar column composition
-  top-to-bottom is: account header (2 rows) + folder region
-  (flex, scrollable) + search shelf (3 rows, pinned).
-- **Message list** (right, remaining width): Columns — flags (2),
-  sender (22), subject (fill), date (12). Double-space separator.
-  Unread rows in `accent_tertiary` with bold sender. Read rows in
-  `fg_dim`. Thread prefixes use box-drawing `├─ └─ │`.
-- **Vertical divider**: `│` between panels in `bg_border`.
-- **Status bar**: Bottom frame edge. `fg_bright` on `bg_border`.
-  Message count, unread count, connection indicator right-aligned.
-  Closes frame with `╯`.
-- **Command footer**: Below the status bar frame edge. Key in
-  `fg_bright` bold, `:` separator and hint text in `fg_dim`.
-  Groups separated by `┊` in `fg_dim`. Single account context —
-  j/k messages, J/K folders, triage and reply always live.
-- **One pane (like pine)**: No Tab focus cycling. The `┃` selection
-  indicator always renders on the selected folder. Every key is
-  dispatched by identity, not by "which panel is active".
+- Sidebar: 30 cols. Account header, three folder groups separated
+  by blank lines, search shelf pinned to bottom (§2.1).
+- Message list: remaining width. Columns: flags (2), sender (22),
+  subject (fill), date (12). Double-space separator.
+- Three-sided frame (top `──┬──╮`, right `│`, bottom `──┴──╯`). No
+  left border.
+- Status bar: bottom frame edge. Message count, unread count,
+  connection indicator right-aligned.
+- Footer: below status bar. Hint groups separated by `┊`.
 
 ---
 
-## 2. Sidebar (#1 — left panel)
+## 2. Sidebar
 
-### Inbox selected
+Inbox selected. Disposal group (Spam, Trash) separated from Primary
+by a blank line; Custom group (Notifications, Remind, Lists/…)
+separated likewise.
 
 ```
  ┃ 󰇰  Inbox             3
@@ -101,122 +76,56 @@ No tab bar — sidebar provides folder context. Inbox selected.
    󰡡  Lists/rust
 ```
 
-### Selection in Disposal group
-
-```
-   󰇰  Inbox             3
-   󰏫  Drafts
-   󰑚  Sent
-   󰀼  Archive
-
-   󰍷  Spam            12
- ┃ 󰩺  Trash
-
-   󰂚  Notifications
-   󰑴  Remind
-   󰡡  Lists/golang
-```
-
-**Annotations:**
-
-- **Width:** 30 columns fixed.
-- **Selected row:** `┃` thick left border in `accent_secondary`
-  + full-width `bg_selection` background. Folder name in
-  `fg_bright`. The `┃` is always shown — no focus state because
-  the screen is one pane (like pine).
-- **Unread counts:** Right-aligned in `accent_tertiary`. Only
-  shown when > 0.
-- **Folder icons:** Nerd Font in `fg_base`. When folder has
-  unread messages, icon switches to `accent_tertiary`.
-- **Group spacing:** One blank line between Primary, Disposal,
-  and Custom groups. No group headers rendered.
-- **Scrolling:** If folders exceed panel height, viewport clips
-  with J/K scrolling. No scrollbar.
+- Width: 30 columns fixed.
+- Selected row: `┃` thick left border in `accent_secondary`,
+  full-width `bg_selection` background, name in `fg_bright`.
+- Unread counts: right-aligned in `accent_tertiary`, only when > 0.
+- Folder icons: `fg_base`; switch to `accent_tertiary` when the
+  folder has unread messages.
+- Nested folder names render flat — `/` in the display name is the
+  only affordance (no tree).
 
 ---
 
-## 2.1 Sidebar Search (Shelf)
+## 2.1 Sidebar search shelf
 
-The search shelf is a 3-row region pinned to the bottom of the
-sidebar column. It is always visible, and hosts the query input,
-match mode badge, and result count. See ADR 0064 for rationale.
+Three rows pinned to the bottom of the sidebar column. Row 1 is a
+blank separator; rows 2–3 host the prompt and mode/count.
 
-### Idle
+### Idle / typing / committed
 
 ```
-│   󰡡  Lists/golang        │
 │   󰡡  Lists/rust          │
-│                          │    <- unused space (folders don't fill)
 │                          │
-│                          │    <- shelf row 1 (blank separator)
-│  󰍉 / to search           │    <- shelf row 2 (hint)
-│                          │    <- shelf row 3 (reserved for mode/count)
+│                          │   ← shelf row 1 (separator)
+│  󰍉 / to search           │   ← idle hint
+│                          │   ← reserved for mode/count
 ```
 
-### Typing (/ pressed, "proj" typed)
-
 ```
-│                          │
-│                          │
-│                          │
-│  󰍉 /proj▏                │
+│  󰍉 /proj▏                │   ← typing
 │  [name]       3 results  │
 ```
 
-### Committed (Enter pressed)
-
 ```
-│                          │
-│                          │
-│                          │
-│  󰍉 /proj                 │
-│  [name]       3 results  │
-```
-
-### No results
-
-```
-│                          │
-│                          │
-│                          │
-│  󰍉 /asdf▏                │
+│  󰍉 /asdf▏                │   ← no results
 │  [name]      no results  │
 ```
 
-And the message list simultaneously shows a centered placeholder
-distinct from the empty-folder state:
+When the filter is committed and matches nothing, the message list
+shows a centered "No matches" placeholder distinct from the
+empty-folder state (§7).
 
-```
-│                         │                                                                               │
-│                         │                                                                               │
-│                         │                       No matches                                               │
-│                         │                                                                               │
-```
-
-**Annotations:**
-
-- **Activation.** `/` in Idle state. `/` in Active re-focuses the
-  prompt with the existing query preserved. `Tab` cycles the mode
-  badge between `[name]` and `[all]`. `Enter` commits (Typing →
-  Active). `Esc` clears (any state → Idle).
-- **Colors.** Icon `󰍉` in `fg_dim` (idle) or `accent_tertiary`
-  (typing). Query text in `fg_base` (typing) or `fg_bright`
-  (committed). Mode badge in `fg_dim`. Result count in
-  `accent_tertiary`. "no results" in `color_warning`.
-- **Layout.** 30-col sidebar. Prompt row has 25 cells for query
-  text (1 indent + 2-cell icon + 1 space + 1 "/" = 5 cells chrome).
-  Mode/count row right-aligns the count with a flex gap of at
-  least 1 cell between the mode badge and the count text.
-- **Pinned.** The 3-row shelf is always at the bottom of the
-  sidebar column. Folders flow from the top; any empty space sits
-  between folders and the shelf. The folder region's height is
-  `accountTabHeight − sidebarHeaderRows − searchShelfRows`.
+- Activation: `/` from idle, or re-focus from active (preserves
+  query). `Tab` cycles `[name]` ↔ `[all]`. `Enter` commits.
+  `Esc` clears.
+- Colors: icon `󰍉` in `fg_dim`/`accent_tertiary`, query in
+  `fg_base`/`fg_bright`, mode badge in `fg_dim`, result count in
+  `accent_tertiary`, "no results" in `color_warning`.
 
 ---
 
-## 3. Message List (#1 — right panel)
-
-### Default with cursor and threading
+## 3. Message list
 
 ```
  󰇮  Alice Johnson            Re: Project update for Q2 launch          10:32 AM
@@ -227,49 +136,31 @@ distinct from the empty-folder state:
      Frank Lee                 Re: Server migration plan                   Apr 05
      ├─ Grace Kim              └─ Re: Server migration plan                Apr 05
      │  └─ Frank Lee              Re: Server migration plan                Apr 05
-     Hannah Park               New office supplies order                   Apr 04
-     Ivan Petrov                Conference travel request                  Apr 03
 ```
-
-### Column layout
 
 ```
 ←2→  ←──────── 22 ────────→  ←──────── fill ─────────────────────→  ←── 12 ──→
  FL  SENDER                   SUBJECT                                 DATE
 ```
 
-No column header row is rendered in the actual UI — the header
-above is for wireframe reference only.
-
-**Annotations:**
-
-- **Cursor:** `▐` right-half block in `accent_primary` at left
-  edge of current row + full-width `bg_selection` background.
-- **Columns:** flags (2), sender (22), subject (fill), date (12).
-  Double-space column separator.
-- **Unread rows:** `󰇮` envelope icon in flags column. Sender in
-  `accent_tertiary` bold. Subject in `accent_tertiary`.
-- **Read rows:** No flag icon (blank). Sender and subject in
-  `fg_dim`.
-- **Replied:** `󰑚` reply icon in `color_special`.
-- **Flagged:** `󰈻` flag icon in `color_warning`.
-- **Thread prefixes:** Rendered in subject column. `├─`
-  has-siblings, `└─` last-sibling, `│` stem. Thread chars
-  in `fg_dim`.
-- **Date format:** Today = time (`10:32 AM`), this week =
-  `Yesterday`/day name, older = `Mon DD`, previous year =
-  `Mon DD, YYYY`. Right-aligned.
-- **Sender truncation:** Long names truncated with `…` at
-  column boundary.
-- **Sort:** Newest first by default. Inbox/Notifications
-  override to oldest first (chronological).
+- Cursor: `▐` right-half block in `accent_primary` at row left,
+  full-width `bg_selection` background.
+- Flags column: `󰇮` envelope = unread, `󰑚` reply icon
+  (`color_special`), `󰈻` flag (`color_warning`).
+- Read state by brightness: unread sender bold `fg_bright`, unread
+  subject `fg_bright`, read rows `fg_dim`. Hue is reserved for
+  cursor + unread+flagged.
+- Thread prefixes in subject column: `├─` has-siblings, `└─`
+  last-sibling, `│` stem, all in `fg_dim`.
+- Date format and sort behavior: see invariants (date column,
+  threads sort).
 
 ---
 
-## 4. Message Viewer (#2)
+## 4. Message viewer
 
-Viewer opens in the right panel with sidebar still visible. `q`
-returns to the message list — no tab switching needed.
+Viewer opens in the right panel; sidebar still visible. `q` returns
+to the message list — no tab switching.
 
 ```
 ───────────────────────────┬──────────────────────────────────────────────────────────────────────────────╮
@@ -295,45 +186,33 @@ returns to the message list — no tab switching needed.
   d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  ┊  Tab:links  q:close  ?:help
 ```
 
-**Annotations:**
-
-- **No tab bar:** Viewer opens in the right panel — no new tab
-  created. Sidebar remains visible. `q` returns to message list.
-  No `1-9` switching or tab lifecycle.
-- **Sidebar:** Still visible and showing current folder selection
-  with the usual `┃` + `bg_selection` row.
-- **Message body:** 72-char fixed width (same as mailrender render
-  width). Content pipeline (`ParseBlocks` → `RenderBody`). Headings
-  in `color_success` bold. Blockquotes in `accent_tertiary` (level
-  1) or `fg_dim` (level 2+). Links in `accent_primary` underline.
-- **Header block:** Keys in `accent_primary` bold, values in
-  `fg_base`, `<email>` in angle brackets in `fg_dim`. Separator
-  `─` line in `fg_dim` below headers.
-- **Viewport:** `bubbles/viewport`. Scroll percentage in status
-  bar. `j/k` lines, `Space`/`b` page down/up, `g`/`G` top/bottom.
-  No `Ctrl+` bindings — modifier-free per the keybinding rules.
-- **Status bar:** Bottom frame edge. Scroll percentage + connection
-  indicator. Closes frame with `╯`.
-- **Footer:** Viewer-specific bindings. `Tab:links` opens link
-  picker. `q:close` returns to message list. Groups separated by
-  `┊`.
+- Body: 72-cell cap. Headers wrap at panel width. Headings
+  `color_success` bold; blockquotes `accent_tertiary` (L1) /
+  `fg_dim` (L2+); links `accent_primary` underline.
+- Header keys `accent_primary` bold; values `fg_base`; angle-bracketed
+  email in `fg_dim`.
+- Viewport scroll: `j/k`, `Space`/`b`, `g`/`G`. Modifier-free.
+- Footnotes: outbound links rendered `[N]: <url>` below a rule;
+  inline link text gets ` [^N]` glued via U+00A0. See invariants
+  (Viewer) for the full rule.
 
 ---
 
-## 5. Keybinding Help Popover (#7)
+## 5. Help popover
 
-Modal overlay triggered by `?` in any context. Centered on screen
-with dimmed content behind. Content changes per context.
+Modal overlay, `?` opens it. Two contexts: account view and viewer.
+Help advertises the full planned vocabulary; unwired rows render
+dim throughout.
 
-### Message list context
+### Account view context
 
 ```
-                  ╭─ Message List ──────────────────────────────────────────╮
+                  ╭─ Account View ──────────────────────────────────────────╮
                   │                                                         │
                   │  Navigate           Triage          Reply               │
                   │  j/k  up/down       d  delete       r  reply            │
                   │  g/G  top/bottom    a  archive      R  all              │
-                  │                     s  star         f  forward          │
+                  │  J/K  folders       s  star         f  forward          │
                   │                     .  read/unrd    c  compose          │
                   │                                                         │
                   │  Search             Select          Threads             │
@@ -343,9 +222,9 @@ with dimmed content behind. Content changes per context.
                   │                                                         │
                   │  Go To                                                  │
                   │  I  inbox    D  drafts    S  sent                       │
-                  │  A  archive  X  spam      T  trash                      │
+                  │  A  archive  X  spam      T  trash    E  empty (T/X)    │
                   │                                                         │
-                  │  Enter  open        ?  close                            │
+                  │  Enter  open        ?/Esc  close     m  move            │
                   │                                                         │
                   ╰─────────────────────────────────────────────────────────╯
 ```
@@ -359,218 +238,95 @@ with dimmed content behind. Content changes per context.
                   │  j/k    scroll      d  delete       r  reply            │
                   │  g/G    top/bot     a  archive      R  all              │
                   │  ␣/b    page d/u    s  star         f  forward          │
-                  │  1-9    open link                   c  compose          │
+                  │  n/N    next/prev   .  read/unrd    c  compose          │
+                  │  1-9    open link                                       │
                   │                                                         │
-                  │  Tab  link picker   q  close        ?  close            │
-                  │                                                         │
-                  ╰─────────────────────────────────────────────────────────╯
-```
-
-### Sidebar context *(out of date — merged into account context)*
-
-Under the one-pane decision (architecture.md, Pass 2.5b-2
-refinement), there is no separate sidebar focus. Every key is
-always live: `j/k` navigates messages, `J/K` navigates folders.
-The help popover has only two contexts — account and viewer.
-This mockup is preserved as a reference until Pass 2.5b-5
-(help popover prototype) rebuilds the popover layout, at which
-point the sidebar section should be removed entirely.
-
-```
-                  ╭─ Sidebar ───────────────────────────────────────────────╮
-                  │                                                         │
-                  │  Navigate           Go To                               │
-                  │  J/K  up/down       I  inbox     D  drafts              │
-                  │  G    bottom        S  sent      A  archive             │
-                  │                     X  spam      T  trash               │
-                  │                                                         │
-                  │  Enter  open        c  compose      ?  close            │
+                  │  Tab  link picker   q  close        ?/Esc  close help   │
                   │                                                         │
                   ╰─────────────────────────────────────────────────────────╯
 ```
 
-**Annotations:**
-
-- **Modal overlay:** Centered horizontally and vertically. Content
-  behind is dimmed (lipgloss reduced-opacity background).
-- **Border:** Rounded corners in `bg_border`.
-- **Title:** Context name in `accent_primary` bold, embedded in
-  top border.
-- **Group headings:** `fg_bright` bold (Navigate, Triage, etc.).
-- **Key column:** `fg_bright` bold. Fixed width within each column.
-- **Description column:** `fg_dim`. Left-aligned within group.
-- **Layout:** Three groups per row where content fits. Groups
-  separated by whitespace, no divider lines.
-- **Close:** `?` or `Escape`. Both close the popover.
-- **Input routing:** All keypresses route to popover when open.
-  Only `?` and `Escape` are handled; everything else is ignored.
-- **Size constraint:** Must fit on screen without scrolling. If
-  too many bindings, prune — this constraint forces curation.
+- Modal: centered, content behind dimmed via `DimANSI`.
+- Title bar embeds the context name in `accent_primary` bold.
+- Group headings `fg_bright` bold. Wired keys `fg_bright` bold +
+  desc `fg_dim`. Unwired rows dim throughout.
+- Input routing: only `?` and `Esc` are handled while open; `q` is
+  swallowed (help is a view, not a state to escape).
 
 ---
 
-## 6. Transient UI (#8, #9, #10, #11, #12)
+## 6. Chrome row (toast / undo / error)
 
-All transient elements render in the status bar area (between
-content and command footer). Only one transient element at a time.
-Priority: error banner > undo bar > toast > normal status.
-
-### Status toast (#8)
-
-Auto-dismissing feedback after an action. Toast appears inline in the
-top frame line at the right side for 3 seconds.
+The chrome row above the status bar is shared. Priority: error
+banner > toast > collapsed. Triage uses an inline toast with an
+`[u undo]` hint; permanent-delete operations (empty) use the same
+toast row but suppress the hint (no inverse).
 
 ```
-───────────────────────────┬──────────────────────────────────────── ✓ 3 archived ─╮
+───┴───── ✓ Archived 3 messages         [u undo · 5s] ────╯    triage toast
+───┴───── ✓ Emptied Trash (5)                            ────╯    permanent toast (no undo hint)
+───┴───── ⚠ mark read: connection refused                ────╯    error banner
 ```
 
-Toast variants by action type:
+Toast variants by op:
 
 ```
 ✓ Archived 1 message                color_success
-✓ Message sent                      color_success
-✓ Draft saved                       color_success
+✓ Deleted 3 messages                color_success
+✓ Emptied Trash (5)                 color_success     (no undo hint)
 󰈻 Flagged                           color_warning
 󰇮 Marked unread                     accent_tertiary
 ```
 
-### Undo bar (#9)
-
-Replaces status bar content for reversible destructive actions. Action
-is deferred — not executed until the 5-second window expires.
-
-```
- ──────────────────────────┴────────────── Deleted 1 message · press u to undo · [5s] ─╯
-```
-
-```
- ──────────────────────────┴─────────────── Deleted 3 messages · press u to undo · [3s] ─╯
-```
-
-### Error banner (#10)
-
-Persistent — does not auto-dismiss. Cleared by keypress or
-condition resolving (e.g., reconnection succeeds).
-
-```
- ──────────────────────────┴──────────────────── ✗ Connection lost — reconnecting… ─╯
-```
-
-```
- ──────────────────────────┴─────────────────── ✗ Send failed: SMTP authentication error ─╯
-```
-
-### Loading spinner (#11)
-
-Centered in content area while fetching data. Uses `bubbles/spinner`
-with braille dot pattern.
-
-#### Message list (fetching headers)
-
-```
-│                         │                                                                               │
-│                         │                                                                               │
-│                         │                     ⣾ Loading messages…                                       │
-│                         │                                                                               │
-│                         │                                                                               │
-```
-
-#### Viewer (fetching body)
-
-```
-│                                                                                                          │
-│                                                                                                          │
-│                                  ⣾ Loading message…                                                      │
-│                                                                                                          │
-│                                                                                                          │
-```
-
-### Connection status (#12)
-
-Persistent indicator at the right edge of the status bar frame edge.
-Uses shape + color + text for colorblind accessibility.
-
-```
- ──────────────────────────┴──────────────────── 10 messages · 2 unread · ● connected ─╯
- ──────────────────────────┴──────────────── 10 messages · 2 unread · ◐ reconnecting… ─╯
- ──────────────────────────┴──────────────────── 10 messages · 2 unread · ○ offline   ─╯
-```
-
-**Annotations:**
-
-- **Toast (#8):** `tea.Tick` auto-dismiss after 3s. Icon + message
-  text. Color varies by action type (see variants above).
-- **Undo bar (#9):** `u` key undoes the action and shows a toast
-  confirming. Countdown `[5s]` right-aligned in `fg_dim`, counts
-  down each second. Text in `fg_base` on `bg_elevated`.
-- **Error banner (#10):** `color_error` text. `✗` prefix. Persists
-  until dismissed by any keypress or the underlying condition clears.
-- **Spinner (#11):** `bubbles/spinner` with braille dot style
-  (`⣾⣽⣻⢿⡿⣟⣯⣷`). Centered in content area. Spinner char + label
-  in `fg_dim`.
-- **Connection (#12):** Right-aligned in status bar frame edge. Always
-  visible. Triple redundancy (shape + color + text) for colorblind
-  accessibility. `●` filled = connected (`color_success`). `◐` half =
-  reconnecting (`color_warning`). `○` hollow = offline (`fg_dim`).
+- Toast: `tea.Tick` schedules undo expiry per `[ui] undo_seconds`
+  (default 6, clamp `[2, 30]`). Empty/destroy-style ops omit the
+  hint because the primitive is irreversible.
+- Error banner: `⚠` prefix, single foreground row, truncated with
+  `…`. Persists until overwritten or cleared. No dismiss key, no
+  severity tiers. See invariants (Triage, undo, error banner).
+- Loading spinner: `bubbles/spinner` braille (`⣾⣽⣻⢿⡿⣟⣯⣷`),
+  centered in content area in `fg_dim` ("Loading messages…",
+  "Loading message…", etc.).
+- Connection indicator (right edge of status bar): `●` connected
+  (`color_success`), `◐` reconnecting (`color_warning`), `○`
+  offline (`fg_dim`). Triple redundancy for colorblind.
 
 ---
 
-## 7. Screen States (#13, #14, #15, #16, #17)
+## 7. Screen states
 
-### Empty folder (#13)
-
-Centered placeholder when a folder has no messages.
+### Empty folder
 
 ```
-│                         │                                                                               │
-│                         │                                                                               │
-│                         │                                                                               │
 │                         │                                                                               │
 │                         │                                                                               │
 │                         │                       No messages                                              │
 │                         │                                                                               │
 │                         │                                                                               │
-│                         │                                                                               │
-│                         │                                                                               │
-│                         │                                                                               │
 ```
 
-### Threaded view — expanded (#14)
+"No messages" centered, `fg_dim`.
 
-Default state. All thread children visible with box-drawing
-prefixes.
+### Threading — expanded, collapsed, mid-thread fold
 
-```
-     Eve Martinez              Re: Server migration plan                   Apr 05
-     ├─ Grace Kim              └─ Re: Server migration plan                Apr 05
-     │  └─ Frank Lee              Re: Server migration plan                Apr 05
-```
-
-### Threaded view — collapsed (#14)
-
-Thread folded via `Space` (Pass 2.5b-3.6). Shows message count
-badge.
+Default expanded. `Space` toggles fold under cursor; collapsed root
+shows `[N]` count badge replacing the box-drawing prefix.
 
 ```
-     Eve Martinez           [3] Re: Server migration plan                  Apr 05
+     Eve Martinez              Re: Server migration plan                   Apr 05    expanded root
+     ├─ Grace Kim              └─ Re: Server migration plan                Apr 05    child
+     │  └─ Frank Lee              Re: Server migration plan                Apr 05    grandchild
+
+     Eve Martinez           [3] Re: Server migration plan                  Apr 05    fully collapsed
+
+     Eve Martinez              Re: Server migration plan                   Apr 05    partially —
+     ├─ Grace Kim           [2] └─ Re: Server migration plan               Apr 05    mid-thread fold
 ```
 
-### Threaded view — partially collapsed (#14)
+`F` is the bulk counterpart (folds all if any unfolded, else
+unfolds all). See invariants (Reading & navigation).
 
-A mid-thread node folded, root still expanded.
-
-```
-     Eve Martinez              Re: Server migration plan                   Apr 05
-     ├─ Grace Kim           [2] └─ Re: Server migration plan               Apr 05
-```
-
-### Search filter applied (#15)
-
-Search is hosted in the sidebar shelf (§2.1), not the status bar.
-When a filter is active, the message list displays only matching
-threads (root + all children when any message in the thread
-matches). The status bar retains its normal contents — message
-counts, connection status — and is not used as a search indicator.
+### Search filter applied
 
 ```
 │ geoff@907.life           │                                                                               │
@@ -581,30 +337,18 @@ counts, connection status — and is not used as a search indicator.
 │   󰀼  Archive             │                                                                               │
 │                          │                                                                               │
 │   󰍷  Spam           12   │                                                                               │
-│                          │                                                                               │
 │  󰍉 /proj                 │                                                                               │
 │  [name]       2 results  │                                                                               │
  ──────────────────────────┴──────────────────────────────── 10 messages · 3 unread · ● connected ─╯
 ```
 
-When no messages match, the list shows a centered placeholder
-distinct from the empty-folder state of #13:
+Filter-and-hide: non-matching threads disappear; matching threads
+render fully expanded. Status bar retains its normal contents (no
+search indicator there). `Esc` clears + restores cursor.
 
-```
-│                         │                                                                               │
-│                         │                                                                               │
-│                         │                       No matches                                               │
-│                         │                                                                               │
-```
+### Multi-select (visual mode)
 
-`n/N` walk the filtered row set (aliases for `j/k`). `Esc` clears
-the filter and restores the full list plus the pre-search cursor
-row.
-
-### Multi-select (#16)
-
-`v` enters visual select mode. `Space` toggles individual rows.
-Selected messages show a check icon in the flags column.
+`v` enters visual mode. `Space` toggles individual rows.
 
 ```
  󰇮   Alice Johnson            Re: Project update for Q2 launch         10:32 AM
@@ -614,73 +358,24 @@ Selected messages show a check icon in the flags column.
  󰈻  󰄬 Eve Martinez             Quarterly report draft                    Apr 06
 ```
 
-Status bar and footer swap to bulk mode:
-
 ```
- ──────────────────────────┴──────────────────────────────────────────────── 3 selected ─╯
+ ──────────────────────────┴──────────────────────────────────────────── 3 selected ─╯
   Space:toggle  d:del all  a:archive all  v:cancel  Esc:cancel
 ```
 
-**Annotations:**
+- Check icon `󰄬` in `color_success` in flags column on selected
+  rows. Selected rows get `bg_selection`.
+- `ActionTargets` returns marks in source order on dispatch;
+  visual mode auto-exits after dispatch.
 
-- **Empty folder (#13):** "No messages" text in `fg_dim`. Centered
-  horizontally and vertically in the message list panel.
-- **Thread collapse (#14):** `Space` toggles the fold under the
-  cursor, `F` folds all, `U` unfolds all (Pass 2.5b-3.6). Space
-  is dual-purpose: inside visual-select mode (Pass 6) it
-  toggles row selection, outside visual mode it toggles fold.
-  Collapsed thread shows `[N]` count in `fg_dim` before subject.
-  Thread root always visible. Count includes root.
-- **Search (#15):** `󰍉` search icon in `color_info`. Query text
-  in `fg_bright`. Result count in `fg_dim`. Status bar retains
-  connection indicator. Search is cleared with `Esc`
-  (`:` command mode was dropped — no `:clear` command).
-- **Multi-select (#16):** `󰄬` check icon in `color_success` on
-  selected rows. Selected rows get `bg_selection` background.
-  Status bar shows count. Footer swaps to bulk actions. `Esc`
-  or `v` exits multi-select mode, deselecting all.
 ---
 
-## 8. Overlays (#4, #5, #6)
+## 8. Overlays
 
-### Compose review (#4)
+### Move picker
 
-Inline prompt in the status bar after the editor exits with code 0.
-Blocks all other input until answered.
-
-```
- ──────────────────────────┴─────────────────── Send message?  y:send  n:abort  e:edit  p:postpone ─╯
-```
-
-### Folder picker (#5)
-
-Modal overlay for move/copy actions. Invoked by a key (key
-assignment TBD — originally documented as `:move`/`:copy`
-commands before `:` command mode was dropped). Fuzzy-filtered
-folder list.
-
-#### Empty query (all folders shown)
-
-```
-                       ╭─ Move to folder ────────────────────────╮
-                       │                                          │
-                       │  >                                       │
-                       │                                          │
-                       │  ┃ 󰇰  Inbox                              │
-                       │    󰏫  Drafts                              │
-                       │    󰑚  Sent                                │
-                       │    󰀼  Archive                             │
-                       │    󰍷  Spam                                │
-                       │    󰩺  Trash                               │
-                       │    󰂚  Notifications                       │
-                       │    󰑴  Remind                              │
-                       │    󰡡  Lists/golang                        │
-                       │    󰡡  Lists/rust                          │
-                       │                                          │
-                       ╰──────────────────────────────────────────╯
-```
-
-#### Filtered results
+Modal overlay invoked by `m` from the account view. Fuzzy filter
+on folder name. `Enter` confirms, `Esc` cancels.
 
 ```
                        ╭─ Move to folder ────────────────────────╮
@@ -693,113 +388,44 @@ folder list.
                        ╰──────────────────────────────────────────╯
 ```
 
-### Confirm delete (#6)
+- Centered, dimmed underlay. `>` prefix on `bubbles/textinput`.
+  Selected row: `┃` + `bg_selection`. Rounded border `bg_border`,
+  title `accent_primary`.
+- Picker height shrinks to fit results.
 
-Inline prompt in status bar for bulk delete (3+ messages).
-Single-message delete skips this and uses the undo bar instead.
+### Confirm modal
 
-```
- ──────────────────────────┴────────────────────────────── Delete 5 messages?  y:confirm  n:cancel ─╯
-```
-
-**Annotations:**
-
-- **Compose review (#4):** Status bar prompt, not a modal. Keys in
-  `fg_bright` bold, hints in `fg_dim`. Blocks all input. Pass 9.
-- **Folder picker (#5):** Modal overlay, centered. Dimmed background.
-  `>` prefix on `bubbles/textinput` filter line. Results update
-  as you type (fuzzy match on folder name). `j/k` or arrows move
-  selection. `Enter` confirms, `Escape` cancels. Selected row has
-  `┃` left border + `bg_selection`. Rounded border in `bg_border`.
-  Title shows action ("Move to folder" / "Copy to folder") in
-  `accent_primary`. Picker shrinks to fit results (no fixed height).
-  Pass 7.
-- **Confirm delete (#6):** Status bar prompt. Count in
-  `color_warning`. Only for 3+ messages. Single-message delete is
-  instant with undo bar (#9). Pass 6.
-
----
-
-## 9. Compose — External Editor (#3)
-
-Not a poplar screen. Bubbletea suspends via `tea.ExecProcess`,
-handing the terminal to the editor. Poplar disappears entirely
-and reappears when the editor exits.
+Generic destructive-action prompt (`ConfirmModal`). Currently used
+by manual empty (`E` on Disposal folders). Topmost overlay.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Poplar running (bubbletea)                         │
-│  User presses c (compose) or r (reply)              │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Poplar writes temp file:                           │
-│  - Headers (To, From, Subject)                      │
-│  - Quoted body (reply/forward)                      │
-│  - Signature (if configured)                        │
-│                                                     │
-│  tea.ExecProcess($EDITOR, tempfile)                 │
-│  Bubbletea suspends — terminal belongs to editor    │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Editor running (full screen, e.g., nvim-mail)      │
-│  User composes message                              │
-│                                                     │
-│  :wq → exit code 0                                  │
-│  :cq → exit code 1                                  │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                ┌──────┴──────┐
-                ▼             ▼
-          Exit code 0    Exit code ≠ 0
-          ┌──────────┐   ┌───────────┐
-          │ Compose  │   │ Toast:    │
-          │ review   │   │ "Compose  │
-          │ prompt   │   │  aborted" │
-          │ (§9 #4)  │   └───────────┘
-          └──────────┘
+                       ╭─ Empty Trash? ──────────────────────────╮
+                       │                                          │
+                       │  Permanently delete 12 messages.         │
+                       │  This cannot be undone.                  │
+                       │                                          │
+                       │  y  empty           n  cancel            │
+                       │                                          │
+                       ╰──────────────────────────────────────────╯
 ```
 
-**Annotations:**
+- `y` confirms → `EmptyFolderConfirmedMsg` → empty pipeline.
+  `n`/`Esc` dismisses. No undo hint on the resulting toast (the
+  primitive is irreversible).
 
-- **`tea.ExecProcess`:** Bubbletea's mechanism for handing terminal
-  control to a child process. Event loop suspends, terminal restores,
-  resumes on child exit.
-- **Default editor:** `$EDITOR` (poplar default: `micro`). For this
-  user: `nvim-mail`.
-- **Temp file:** Created by poplar using `internal/compose/` for
-  header formatting and quoted text reflow.
-- **Exit code 0:** Triggers compose review prompt (§9, element #4).
-- **Exit code ≠ 0:** Compose aborted. Toast "Compose aborted" in
-  `fg_dim`. No review prompt.
-- **Pass 9 implementation.**
+### Link picker
 
----
+Viewer-context-only. `Tab` opens it when ≥1 URL is harvested.
 
-## Coverage
+```
+                       ╭─ Links ─────────────────────────────────╮
+                       │                                          │
+                       │  ┃ 1  example.com/docs/foo                │
+                       │    2  github.com/glw907/poplar            │
+                       │    3  fastmail.com                        │
+                       │                                          │
+                       ╰──────────────────────────────────────────╯
+```
 
-All 19 UI elements from the interface inventory (Tab Bar removed):
-
-| # | Element | Wireframe |
-|---|---------|-----------|
-| 1 | Folder + Message List | §1 Composite, §2 Sidebar, §3 Message List |
-| 2 | Message Viewer | §4 Viewer |
-| 3 | Compose (external) | §9 Compose |
-| 4 | Compose Review | §8 Overlays |
-| 5 | Folder Picker | §8 Overlays |
-| 6 | Confirm Delete | §8 Overlays |
-| 7 | Keybinding Help | §5 Help Popover |
-| 8 | Status Toast | §6 Transient UI |
-| 9 | Undo Bar | §6 Transient UI |
-| 10 | Error Banner | §6 Transient UI |
-| 11 | Loading Spinner | §6 Transient UI |
-| 12 | Connection Status | §6 Transient UI |
-| 13 | Empty Folder | §7 Screen States |
-| 14 | Threaded View | §7 Screen States |
-| 15 | Search Results | §7 Screen States |
-| 16 | Multi-Select | §7 Screen States |
-| 19 | Command Footer | §1 Composite (all wireframes). Grouped by function with `┊` separators. |
-| 20 | Status Bar | §1 Composite (all wireframes). Bottom frame edge `──┴──╯`. |
+- `j/k` cursor, `Enter` / `1`–`9` launch + close, `Esc`/`Tab`
+  close, `q` swallowed.

@@ -1,10 +1,10 @@
 # Poplar Status
 
-**Current pass:** Pass 6.7 next — verify Pass 6.6 in tmux + research
-the retention/empty pattern against reference apps (mutt, aerc,
-himalaya, NeoMutt) to confirm the design before it ossifies.
-Pass 6.6 done — `mail.Backend.Destroy` primitive, opt-in retention
-sweep, manual empty (`E` + ConfirmModal); ADR-0092/0093/0094.
+**Current pass:** Pass 6.7 next — verify Pass 6.6 in tmux +
+research the retention/empty pattern against reference apps before
+the design ossifies. Pass 6.8 done — docs refactor (path-scoped
+UI rule, system-map reconcile, wireframes strong-trim,
+keybindings single-source); ADR-0095.
 
 ## Passes
 
@@ -13,8 +13,8 @@ sweep, manual empty (`E` + ConfirmModal); ADR-0092/0093/0094.
 | 1 – 5 (incl. SPUA-policy, 2.5b-4b) | Scaffold → backend → UI → bubbletea cleanup (see git log) | done |
 | 6 / 6.5 | Triage + undo bar (ADR-0089/0090); move picker (ADR-0091) | done |
 | 6.6 | Trash retention + manual empty (Destroy primitive, sweep, ConfirmModal) | done — ADR-0092/0093/0094 |
+| 6.8 | Docs refactor: path-scoped UI rule, system-map reconcile, wireframes strong-trim, keybindings single-source | done — ADR-0095 |
 | 6.7 | Verify retention/empty in tmux + reference-app research on the pattern | next |
-| 6.8 | Docs refactor: split invariants, reconcile system-map, single-source keybindings, trim wireframes, CLAUDE.md audit (+ general tidy) | pending |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
 | 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
