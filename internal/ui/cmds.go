@@ -354,3 +354,78 @@ type MovePickerPickedMsg struct {
 
 // MovePickerClosedMsg is emitted when the picker is dismissed without a pick.
 type MovePickerClosedMsg struct{}
+
+// OpenConfirmEmptyMsg asks App to open the empty-folder confirm modal.
+// Source is passed through so it can be handed to emptyFolderCmd later.
+type OpenConfirmEmptyMsg struct {
+	Folder string // display name shown in modal title and toast
+	Total  int    // message count shown in modal body
+	Source string // provider folder name passed to Destroy
+}
+
+// EmptyFolderConfirmedMsg signals the user pressed `y` in the confirm modal.
+type EmptyFolderConfirmedMsg struct {
+	Folder string
+	Source string
+}
+
+// ConfirmModalClosedMsg signals the modal was dismissed without confirmation.
+type ConfirmModalClosedMsg struct{}
+
+// emptyFolderCmd queries every UID in src then issues Destroy. Pages
+// through QueryFolder so very large folders don't truncate at initialWindow.
+func emptyFolderCmd(b mail.Backend, displayName, src string) tea.Cmd {
+	return func() tea.Msg {
+		op := "empty " + strings.ToLower(displayName)
+		if err := b.OpenFolder(src); err != nil {
+			return ErrorMsg{Op: op, Err: err}
+		}
+		var all []mail.UID
+		const page = 1000
+		for offset := 0; ; {
+			uids, total, err := b.QueryFolder(src, offset, page)
+			if err != nil {
+				return ErrorMsg{Op: op, Err: err}
+			}
+			all = append(all, uids...)
+			offset += len(uids)
+			if len(uids) == 0 || offset >= total {
+				break
+			}
+		}
+		if len(all) == 0 {
+			return emptyFolderDoneMsg{folder: displayName, n: 0}
+		}
+		if err := b.Destroy(all); err != nil {
+			return ErrorMsg{Op: op, Err: err}
+		}
+		return emptyFolderDoneMsg{folder: displayName, n: len(all)}
+	}
+}
+
+// emptyFolderDoneMsg reports a successful manual empty.
+type emptyFolderDoneMsg struct {
+	folder string
+	n      int
+}
+
+// destroyCmd permanently deletes uids from src. Used by the retention sweep.
+// Empty input skips the backend call and returns sweepCompletedMsg with nil uids.
+func destroyCmd(b mail.Backend, folder string, uids []mail.UID) tea.Cmd {
+	return func() tea.Msg {
+		if len(uids) == 0 {
+			return sweepCompletedMsg{folder: folder, uids: nil}
+		}
+		if err := b.Destroy(uids); err != nil {
+			return ErrorMsg{Op: "purge expired", Err: err}
+		}
+		return sweepCompletedMsg{folder: folder, uids: uids}
+	}
+}
+
+// sweepCompletedMsg reports the result of a retention sweep.
+// AccountTab applies ApplyDelete(uids) so destroyed rows leave the visible list.
+type sweepCompletedMsg struct {
+	folder string
+	uids   []mail.UID
+}
