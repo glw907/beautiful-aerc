@@ -30,21 +30,22 @@ const (
 // at the AccountTab level. The viewer is pure state + render, with
 // scroll position tracked by an embedded bubbles/viewport.
 type Viewer struct {
-	open         bool
-	phase        viewerPhase
-	msg          mail.MessageInfo
-	accountEmail string
-	blocks       []content.Block
-	links        []string
-	headerStr    string
-	panel        string // headerStr rendered through ViewerHeader at v.width
-	viewport     viewport.Model
-	spinner      spinner.Model
-	styles       Styles
-	theme        *theme.CompiledTheme
-	keys         ViewerKeys
-	width        int
-	height       int
+	open               bool
+	phase              viewerPhase
+	msg                mail.MessageInfo
+	accountEmail       string
+	blocks             []content.Block
+	links              []string
+	headerStr          string
+	panel              string // headerStr rendered through ViewerHeader at v.width
+	viewport           viewport.Model
+	spinner            spinner.Model
+	styles             Styles
+	theme              *theme.CompiledTheme
+	keys               ViewerKeys
+	pendingLinkPicker  []string
+	width              int
+	height             int
 }
 
 // NewViewer constructs an empty (closed) viewer. accountEmail
@@ -88,8 +89,8 @@ func (v Viewer) Open(msg mail.MessageInfo) Viewer {
 	return v
 }
 
-// Close transitions the viewer out of view. The caller emits a
-// ViewerClosedMsg so chrome (footer, status bar) can revert context.
+// Close transitions the viewer out of view. App reads viewer state
+// via AccountTab.ViewerOpen() after delegation and reverts chrome.
 func (v Viewer) Close() Viewer {
 	v.open = false
 	v.phase = viewerLoading
@@ -132,6 +133,20 @@ func (v Viewer) ScrollPct() int {
 	return int(v.viewport.ScrollPercent() * 100)
 }
 
+// LinkPickerRequest returns the harvested link list and true if the
+// last keypress requested the link picker. Reading clears the
+// request — callers receive (nil, false) on subsequent reads until
+// another Tab press fires. Pointer receiver because the accessor
+// mutates the one-shot pending field.
+func (v *Viewer) LinkPickerRequest() ([]string, bool) {
+	if v.pendingLinkPicker == nil {
+		return nil, false
+	}
+	links := v.pendingLinkPicker
+	v.pendingLinkPicker = nil
+	return links, true
+}
+
 // Update handles spinner ticks and key events while open. Returns the
 // updated viewer + any Cmds (link launch, viewer-closed signal,
 // scroll-position broadcast). Caller is responsible for batching.
@@ -154,19 +169,20 @@ func (v Viewer) Update(msg tea.Msg) (Viewer, tea.Cmd) {
 }
 
 // handleKey runs the viewer's key dispatch. q/esc closes; 1-9 launch
-// links; tab opens the link-picker overlay. All other keys forward to
-// the viewport, which is configured with a modifier-free keymap
-// (j/k/space/b/g/G).
+// links; tab sets pendingLinkPicker for AccountTab to read after
+// delegation. All other keys forward to the viewport, which is
+// configured with a modifier-free keymap (j/k/space/b/g/G).
 func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 	switch {
 	case key.Matches(msg, v.keys.Close):
 		v = v.Close()
-		return v, viewerClosedCmd()
+		return v, nil
 	case key.Matches(msg, v.keys.OpenPicker):
 		if len(v.links) == 0 {
 			return v, nil
 		}
-		return v, linkPickerOpenCmd(v.links)
+		v.pendingLinkPicker = v.links
+		return v, nil
 	}
 	for n := 1; n <= 9; n++ {
 		if key.Matches(msg, linkBindingByIndex(v.keys, n)) {
@@ -179,7 +195,6 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 	if v.phase != viewerReady {
 		return v, nil
 	}
-	prevPct := v.ScrollPct()
 	switch {
 	case key.Matches(msg, v.keys.BodyTop):
 		v.viewport.GotoTop()
@@ -188,13 +203,7 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 	default:
 		var c tea.Cmd
 		v.viewport, c = v.viewport.Update(msg)
-		if pct := v.ScrollPct(); pct != prevPct {
-			return v, tea.Batch(c, viewerScrollCmd(pct))
-		}
 		return v, c
-	}
-	if pct := v.ScrollPct(); pct != prevPct {
-		return v, viewerScrollCmd(pct)
 	}
 	return v, nil
 }

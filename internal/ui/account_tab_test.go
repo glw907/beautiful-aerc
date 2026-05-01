@@ -66,18 +66,10 @@ func drainDepth(t *testing.T, tab *AccountTab, cmd tea.Cmd, depth int) {
 				continue
 			}
 			inner := sub()
-			if _, isApp := inner.(FolderChangedMsg); isApp {
-				// FolderChangedMsg is an App-level message; the tab
-				// has nothing to do with it.
-				continue
-			}
 			newTab, follow := tab.updateTab(inner)
 			*tab = newTab
 			drainDepth(t, tab, follow, depth-1)
 		}
-		return
-	}
-	if _, isApp := msg.(FolderChangedMsg); isApp {
 		return
 	}
 	newTab, follow := tab.updateTab(msg)
@@ -221,9 +213,9 @@ func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 	}
 	msg := runCmd(cmd)
 	switch msg.(type) {
-	case folderQueryDoneMsg, headersAppliedMsg, tea.BatchMsg, FolderChangedMsg:
+	case folderQueryDoneMsg, headersAppliedMsg, tea.BatchMsg:
 	default:
-		t.Fatalf("expected folderQueryDoneMsg/headersAppliedMsg/BatchMsg/FolderChangedMsg, got %T", msg)
+		t.Fatalf("expected folderQueryDoneMsg/headersAppliedMsg/BatchMsg, got %T", msg)
 	}
 }
 
@@ -326,7 +318,7 @@ func TestAccountTab_JDispatchesFolderLoad(t *testing.T) {
 	}
 	msg := runCmd(cmd)
 	switch m := msg.(type) {
-	case folderQueryDoneMsg, headersAppliedMsg, FolderChangedMsg:
+	case folderQueryDoneMsg, headersAppliedMsg:
 	case tea.BatchMsg:
 		if len(m) == 0 {
 			t.Fatal("empty batch")
@@ -579,8 +571,12 @@ func TestAccountTab_EnterOpensViewer(t *testing.T) {
 	if !tab.viewer.IsOpen() {
 		t.Fatal("Enter must open the viewer")
 	}
+	// Viewer state is now readable via accessor.
+	if !tab.ViewerOpen() {
+		t.Fatal("ViewerOpen() must return true after Enter")
+	}
 	if cmd == nil {
-		t.Fatal("Enter must produce a Cmd batch (load + opened + spinner)")
+		t.Fatal("Enter must produce a Cmd batch (load + spinner)")
 	}
 }
 
@@ -719,12 +715,33 @@ func TestAccountTab_QClosesViewer(t *testing.T) {
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer should be open")
 	}
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if tab.viewer.IsOpen() {
 		t.Error("q must close viewer")
 	}
-	if cmd == nil {
-		t.Error("close must emit ViewerClosedMsg cmd")
+	// Viewer state is now exposed via accessor; no Cmd is emitted.
+	if tab.ViewerOpen() {
+		t.Error("ViewerOpen() must return false after q closes the viewer")
+	}
+}
+
+func TestAccountTabAccessors(t *testing.T) {
+	m := newLoadedTab(t, 120, 30)
+	// Initial state: viewer closed, search idle.
+	if m.ViewerOpen() {
+		t.Error("ViewerOpen should be false initially")
+	}
+	if m.SearchState() != SearchIdle {
+		t.Error("SearchState should be SearchIdle initially")
+	}
+	exists, unseen := m.SelectedFolderCounts()
+	_ = exists
+	_ = unseen // smoke test only — values depend on test backend
+	if pct := m.ViewerScrollPct(); pct != 0 {
+		t.Errorf("ViewerScrollPct should be 0 with viewer closed, got %v", pct)
+	}
+	if _, ok := (&m).LinkPickerRequest(); ok {
+		t.Error("LinkPickerRequest should be (nil, false) initially")
 	}
 }
 

@@ -44,18 +44,19 @@ type AccountTab struct {
 	// mutated and its results are never cached as owned state —
 	// they come back as Msg types through the normal Update flow.
 	// This is the elm-conventions Rule 5 exception.
-	backend       mail.Backend
-	uiCfg         config.UIConfig
-	sidebar       Sidebar
-	sidebarSearch SidebarSearch
-	msglist       MessageList
-	viewer        Viewer
-	keys          AccountKeys
-	pages         map[string]*folderPage
-	loading       bool
-	spinner       spinner.Model
-	width         int
-	height        int
+	backend           mail.Backend
+	uiCfg             config.UIConfig
+	sidebar           Sidebar
+	sidebarSearch     SidebarSearch
+	msglist           MessageList
+	viewer            Viewer
+	keys              AccountKeys
+	pages             map[string]*folderPage
+	loading           bool
+	spinner           spinner.Model
+	pendingLinkPicker []string
+	width             int
+	height            int
 }
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
@@ -228,6 +229,9 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.viewer, cmd = m.viewer.Update(msg)
+		if links, ok := (&m.viewer).LinkPickerRequest(); ok {
+			m.pendingLinkPicker = links
+		}
 		return m, cmd
 	}
 	// Route to SidebarSearch when we're in Typing state — it owns
@@ -310,8 +314,8 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 // jumpToFolder moves the sidebar selection to the canonical folder
 // with the given name. No-op (and no Cmd) when no folder matches —
 // e.g. an account that doesn't expose a Drafts folder. Behaves like
-// J/K otherwise: clears any active search, fires FolderChangedMsg +
-// loadFolderCmd via selectionChangedCmds.
+// J/K otherwise: clears any active search, fires the load Cmd via
+// selectionChangedCmds.
 func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
 	if !m.sidebar.SelectByCanonical(canonical) {
 		return m, nil
@@ -327,7 +331,6 @@ func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
 	m.viewer = m.viewer.Open(msg)
 	cmds := []tea.Cmd{
 		loadBodyCmd(m.backend, msg.UID),
-		viewerOpenedCmd(),
 		m.viewer.SpinnerTick(),
 	}
 	if msg.Flags&mail.FlagSeen == 0 {
@@ -358,9 +361,10 @@ func (m *AccountTab) clearSearchIfActive() {
 }
 
 // selectionChangedCmds returns the batch of Cmds that run every time
-// the selected folder changes: a FolderChangedMsg emission so App's
-// status bar updates, plus a load Cmd that will populate the message
-// list when it resolves. Sets loading=true and starts the spinner tick.
+// the selected folder changes: a load Cmd that will populate the
+// message list when it resolves. Sets loading=true and starts the
+// spinner tick. App reads folder counts via SelectedFolderCounts()
+// after delegation rather than via a FolderChangedMsg signal.
 func (m *AccountTab) selectionChangedCmds() tea.Cmd {
 	folder, ok := m.sidebar.SelectedFolderInfo()
 	if !ok {
@@ -368,7 +372,6 @@ func (m *AccountTab) selectionChangedCmds() tea.Cmd {
 	}
 	m.loading = true
 	return tea.Batch(
-		folderChangedCmd(folder),
 		openFolderCmd(m.backend, folder.Name),
 		m.spinner.Tick,
 	)
@@ -398,6 +401,48 @@ func (m AccountTab) WindowCounter() string {
 		return ""
 	}
 	return fmt.Sprintf("%d/%d", page.loaded, page.total)
+}
+
+// ViewerOpen reports whether the viewer is currently open.
+func (m AccountTab) ViewerOpen() bool { return m.viewer.IsOpen() }
+
+// SelectedFolderCounts returns the (exists, unseen) counts for the
+// selected folder, or (0, 0) if no folder is selected. Mirrors the
+// payload that FolderChangedMsg used to carry.
+func (m AccountTab) SelectedFolderCounts() (int, int) {
+	folder, ok := m.sidebar.SelectedFolderInfo()
+	if !ok {
+		return 0, 0
+	}
+	return folder.Exists, folder.Unseen
+}
+
+// ViewerScrollPct returns the viewer's scroll percentage, or 0 when
+// the viewer is closed.
+func (m AccountTab) ViewerScrollPct() int {
+	if !m.viewer.IsOpen() {
+		return 0
+	}
+	return m.viewer.ScrollPct()
+}
+
+// SearchState exposes the sidebar search state machine.
+func (m AccountTab) SearchState() SearchState {
+	return m.sidebarSearch.State()
+}
+
+// LinkPickerRequest returns a one-shot pending link-picker open
+// request. Mirrors Viewer.LinkPickerRequest; AccountTab forwards
+// the viewer's request through itself so App.Update can read it
+// without traversing into nested children. Pointer receiver because
+// reading clears the pending field.
+func (m *AccountTab) LinkPickerRequest() ([]string, bool) {
+	if m.pendingLinkPicker == nil {
+		return nil, false
+	}
+	links := m.pendingLinkPicker
+	m.pendingLinkPicker = nil
+	return links, true
 }
 
 // pageFor returns (creating if absent) the folderPage for name.

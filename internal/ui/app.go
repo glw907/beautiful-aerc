@@ -58,9 +58,34 @@ func (m App) Init() tea.Cmd {
 	return tea.Batch(m.acct.Init(), pumpUpdatesCmd(m.backend))
 }
 
+// deriveChromeFromAcct re-reads AccountTab state and propagates it
+// to App-owned chrome (footer, status bar, viewerOpen, linkPicker).
+// Called after every delegation that may have changed child state.
+func (m App) deriveChromeFromAcct() App {
+	prevViewer := m.viewerOpen
+	m.viewerOpen = m.acct.ViewerOpen()
+	exists, unseen := m.acct.SelectedFolderCounts()
+	m.statusBar = m.statusBar.SetCounts(exists, unseen)
+	if m.viewerOpen {
+		if !prevViewer {
+			m.footer = m.footer.SetContext(ViewerContext)
+			m.statusBar = m.statusBar.SetMode(StatusViewer).SetScrollPct(0)
+		} else {
+			m.statusBar = m.statusBar.SetScrollPct(m.acct.ViewerScrollPct())
+		}
+	} else if prevViewer {
+		m.footer = m.footer.SetContext(AccountContext)
+		m.statusBar = m.statusBar.SetMode(StatusAccount)
+	}
+	if links, ok := (&m.acct).LinkPickerRequest(); ok {
+		m.linkPicker = m.linkPicker.Open(links)
+	}
+	return m
+}
+
 // Update handles global keys and delegates everything else to the
-// account tab. FolderChangedMsg bubbles up from the child and updates
-// the status bar without reaching into child state.
+// account tab. Chrome (footer, status bar, link picker) is derived
+// by reading AccountTab accessors after each delegation.
 func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -70,27 +95,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(contentMsg)
+		// WindowSizeMsg only forwards sizing; chrome derivation is not
+		// needed (sizing alone does not change viewer open/close state
+		// or folder counts).
 		return m, cmd
-
-	case FolderChangedMsg:
-		m.statusBar = m.statusBar.SetCounts(msg.Exists, msg.Unseen)
-		return m, nil
-
-	case ViewerOpenedMsg:
-		m.viewerOpen = true
-		m.footer = m.footer.SetContext(ViewerContext)
-		m.statusBar = m.statusBar.SetMode(StatusViewer).SetScrollPct(0)
-		return m, nil
-
-	case ViewerClosedMsg:
-		m.viewerOpen = false
-		m.footer = m.footer.SetContext(AccountContext)
-		m.statusBar = m.statusBar.SetMode(StatusAccount)
-		return m, nil
-
-	case LinkPickerOpenMsg:
-		m.linkPicker = m.linkPicker.Open(msg.Links)
-		return m, nil
 
 	case LinkPickerClosedMsg:
 		m.linkPicker = m.linkPicker.Close()
@@ -98,10 +106,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case LaunchURLMsg:
 		return m, launchURLCmd(msg.URL)
-
-	case ViewerScrollMsg:
-		m.statusBar = m.statusBar.SetScrollPct(msg.Pct)
-		return m, nil
 
 	case ErrorMsg:
 		// Banner state is App-owned. nil ↔ set transitions toggle the
@@ -119,6 +123,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		acct, fcmd := m.acct.Update(msg)
 		m.acct = acct
+		m = m.deriveChromeFromAcct()
 		cmds = append(cmds, fcmd)
 		return m, tea.Batch(cmds...)
 
@@ -150,14 +155,16 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				// Delegate so AccountTab routes to viewer.handleKey.
 				var cmd tea.Cmd
 				m.acct, cmd = m.acct.Update(msg)
+				m = m.deriveChromeFromAcct()
 				return m, cmd
 			}
-			if m.acct.sidebarSearch.State() != SearchIdle {
+			if m.acct.SearchState() != SearchIdle {
 				// Steal q while search is active so it doesn't quit
 				// the app mid-search. Delegate to AccountTab which
 				// clears the filter.
 				var cmd tea.Cmd
 				m.acct, cmd = m.acct.Update(tea.KeyMsg{Type: tea.KeyEsc, Runes: []rune{}})
+				m = m.deriveChromeFromAcct()
 				return m, cmd
 			}
 			return m, tea.Quit
@@ -177,6 +184,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	// Delegate everything else to the account tab.
 	var cmd tea.Cmd
 	m.acct, cmd = m.acct.Update(msg)
+	m = m.deriveChromeFromAcct()
 	return m, cmd
 }
 

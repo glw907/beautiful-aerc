@@ -217,7 +217,7 @@ func TestApp(t *testing.T) {
 	t.Run("status bar updates on sidebar navigation", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 20)
 		// Navigate to Spam (index 4: Inbox->Drafts->Sent->Archive->Spam).
-		// Each J dispatches a FolderChangedMsg + load — drain the chain.
+		// Each J dispatches a load — drain the chain.
 		for range 4 {
 			var cmd tea.Cmd
 			app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
@@ -262,9 +262,15 @@ func TestApp_ViewerOpenedSwitchesFooterContext(t *testing.T) {
 	if app.footer.context != AccountContext {
 		t.Fatalf("initial footer context = %v, want AccountContext", app.footer.context)
 	}
-	app, _ = app.Update(ViewerOpenedMsg{})
+	// Open the viewer by pressing Enter — deriveChromeFromAcct reads the
+	// new viewer state after delegation and updates footer + statusBar.
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drainApp(t, &app, cmd)
+	if !app.viewerOpen {
+		t.Fatal("viewerOpen should be true after Enter")
+	}
 	if app.footer.context != ViewerContext {
-		t.Errorf("after ViewerOpenedMsg, footer context = %v, want ViewerContext", app.footer.context)
+		t.Errorf("after Enter, footer context = %v, want ViewerContext", app.footer.context)
 	}
 	if app.statusBar.mode != StatusViewer {
 		t.Errorf("statusBar mode = %v, want StatusViewer", app.statusBar.mode)
@@ -273,8 +279,13 @@ func TestApp_ViewerOpenedSwitchesFooterContext(t *testing.T) {
 
 func TestApp_ViewerClosedRestoresFooterContext(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
-	app, _ = app.Update(ViewerOpenedMsg{})
-	app, _ = app.Update(ViewerClosedMsg{})
+	// Open via Enter, then close via q.
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drainApp(t, &app, cmd)
+	if !app.viewerOpen {
+		t.Fatal("setup: viewerOpen should be true after Enter")
+	}
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if app.footer.context != AccountContext {
 		t.Errorf("footer context = %v, want AccountContext", app.footer.context)
 	}
@@ -285,14 +296,25 @@ func TestApp_ViewerClosedRestoresFooterContext(t *testing.T) {
 
 func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
-	app, _ = app.Update(ViewerOpenedMsg{})
-	app, _ = app.Update(ViewerScrollMsg{Pct: 47})
-	if app.statusBar.scrollPct != 47 {
-		t.Errorf("statusBar scrollPct = %d, want 47", app.statusBar.scrollPct)
+	// Open the viewer and give it a body long enough to scroll.
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drainApp(t, &app, cmd)
+	if !app.viewerOpen {
+		t.Fatal("viewerOpen should be true after Enter")
+	}
+	// Inject a long body so G (go-to-bottom) produces a non-zero scroll pct.
+	long := strings.Repeat("alpha bravo charlie delta epsilon ", 50)
+	app.acct.viewer = app.acct.viewer.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
+	})
+	// Press G — deriveChromeFromAcct reads ViewerScrollPct after delegation.
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	if app.statusBar.scrollPct != 100 {
+		t.Errorf("statusBar scrollPct = %d, want 100 after G", app.statusBar.scrollPct)
 	}
 	view := stripANSI(app.statusBar.View(120, 30))
-	if !strings.Contains(view, "47%") {
-		t.Errorf("status bar view missing 47%% in viewer mode: %q", view)
+	if !strings.Contains(view, "100%") {
+		t.Errorf("status bar view missing 100%% in viewer mode: %q", view)
 	}
 }
 
@@ -393,10 +415,12 @@ func TestApp_HelpContextSwitchesWithViewer(t *testing.T) {
 	}
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}) // close
 
-	// Open the viewer.
-	app, _ = app.Update(ViewerOpenedMsg{})
+	// Open the viewer via Enter — deriveChromeFromAcct sets viewerOpen.
+	var cmd tea.Cmd
+	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drainApp(t, &app, cmd)
 	if !app.viewerOpen {
-		t.Fatal("setup: viewer did not open")
+		t.Fatal("setup: viewer did not open after Enter")
 	}
 
 	// Open help — now the title should be "Message Viewer".
@@ -656,7 +680,7 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 		}},
 	})
 
-	// Tab → viewer emits LinkPickerOpenMsg → App opens picker.
+	// Tab → viewer sets pendingLinkPicker → AccountTab relays → App opens picker via deriveChromeFromAcct.
 	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	drainApp(t, &app, cmd)
 	if !app.IsLinkPickerOpen() {

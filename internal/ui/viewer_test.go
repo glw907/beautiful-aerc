@@ -68,31 +68,22 @@ func TestViewerStaleBodyLoadedIgnored(t *testing.T) {
 
 func TestViewerCloseFromLoading(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
-	v, cmd := v.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if v.IsOpen() {
 		t.Error("esc must close viewer")
-	}
-	if cmd == nil {
-		t.Error("close must emit ViewerClosedMsg cmd")
-	}
-	if _, ok := cmd().(ViewerClosedMsg); !ok {
-		t.Errorf("cmd should produce ViewerClosedMsg")
 	}
 }
 
 func TestViewerCloseFromReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}})
-	v, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if v.IsOpen() {
 		t.Error("q must close viewer from ready phase")
 	}
-	if cmd == nil {
-		t.Error("close must emit cmd")
-	}
 }
 
-func TestViewerScrollEmitsScrollMsg(t *testing.T) {
+func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 	v := newTestViewer().SetSize(80, 6).Open(mail.MessageInfo{UID: "1", Subject: "S"})
 	long := strings.Repeat("alpha bravo charlie ", 40)
 	v = v.SetBody([]content.Block{
@@ -154,7 +145,7 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	}
 }
 
-func TestViewerTabEmitsLinkPickerOpenWhenLinks(t *testing.T) {
+func TestViewerTabSetsPendingLinkPickerRequest(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24)
 	v = v.Open(mail.MessageInfo{UID: "uid-1"})
 	v = v.SetBody([]content.Block{
@@ -163,17 +154,18 @@ func TestViewerTabEmitsLinkPickerOpenWhenLinks(t *testing.T) {
 		}},
 	})
 
-	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
+	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyTab})
 
-	got := collectMsgs(cmd)
-	var found bool
-	for _, m := range got {
-		if op, ok := m.(LinkPickerOpenMsg); ok && len(op.Links) == 1 && op.Links[0] == "https://a.com" {
-			found = true
-		}
+	links, ok := (&v).LinkPickerRequest()
+	if !ok {
+		t.Fatal("expected pending link-picker request after Tab")
 	}
-	if !found {
-		t.Fatalf("expected LinkPickerOpenMsg with [https://a.com], got %v", got)
+	if len(links) != 1 || links[0] != "https://a.com" {
+		t.Fatalf("expected [https://a.com], got %v", links)
+	}
+	// Second read must return false (one-shot).
+	if _, ok := (&v).LinkPickerRequest(); ok {
+		t.Fatal("LinkPickerRequest must clear on read")
 	}
 }
 
@@ -195,6 +187,27 @@ func TestViewerClosedViewIsEmpty(t *testing.T) {
 	v := newTestViewer()
 	if v.View() != "" {
 		t.Errorf("closed View must be empty, got %q", v.View())
+	}
+}
+
+func TestViewerLinkPickerRequest_OneShotClearsOnRead(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24)
+	v = v.Open(mail.MessageInfo{UID: "uid-1"})
+	v = v.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{
+			content.Link{Text: "click", URL: "https://a.com"},
+		}},
+	})
+
+	v, _ = v.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+
+	links, ok := (&v).LinkPickerRequest()
+	if !ok || len(links) == 0 {
+		t.Fatal("expected pending link-picker request after Tab")
+	}
+	_, ok = (&v).LinkPickerRequest()
+	if ok {
+		t.Fatal("LinkPickerRequest must clear on read")
 	}
 }
 

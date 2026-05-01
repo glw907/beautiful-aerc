@@ -56,15 +56,6 @@ type ErrorMsg struct {
 	Err error
 }
 
-// FolderChangedMsg is emitted by AccountTab whenever the selected folder
-// changes. App consumes it to update the status bar without reaching
-// into child state.
-type FolderChangedMsg struct {
-	Name   string
-	Exists int
-	Unseen int
-}
-
 // loadFoldersCmd returns a Cmd that fetches the folder list from the
 // backend. The result is delivered as a foldersLoadedMsg, or an
 // ErrorMsg on failure.
@@ -128,19 +119,6 @@ func fetchHeadersCmd(b mail.Backend, name string, uids []mail.UID, reset bool) t
 	}
 }
 
-// folderChangedCmd returns a zero-latency Cmd that emits a
-// FolderChangedMsg. Using a Cmd (rather than a direct mutation) keeps
-// message flow inside bubbletea's Update loop.
-func folderChangedCmd(f mail.Folder) tea.Cmd {
-	return func() tea.Msg {
-		return FolderChangedMsg{
-			Name:   f.Name,
-			Exists: f.Exists,
-			Unseen: f.Unseen,
-		}
-	}
-}
-
 // SearchMode selects which fields the message filter matches against.
 type SearchMode int
 
@@ -180,19 +158,6 @@ type SearchUpdatedMsg struct {
 type bodyLoadedMsg struct {
 	uid    mail.UID
 	blocks []content.Block
-}
-
-// ViewerOpenedMsg signals chrome (footer, status bar) that the viewer
-// is now displayed. App switches the footer context and status mode.
-type ViewerOpenedMsg struct{}
-
-// ViewerClosedMsg is the inverse: the viewer just closed.
-type ViewerClosedMsg struct{}
-
-// ViewerScrollMsg carries the viewer's current scroll position as a
-// 0..100 percentage. App routes it to the status bar.
-type ViewerScrollMsg struct {
-	Pct int
 }
 
 // loadBodyCmd fetches a message body, parses it into blocks, and
@@ -329,28 +294,11 @@ func pumpUpdatesCmd(b mail.Backend) tea.Cmd {
 	}
 }
 
-// viewerOpenedCmd, viewerClosedCmd, viewerScrollCmd are zero-latency
-// emit Cmds. Using Cmds (not direct mutation) keeps the chrome
-// updates inside the bubbletea Update loop.
-func viewerOpenedCmd() tea.Cmd { return func() tea.Msg { return ViewerOpenedMsg{} } }
-func viewerClosedCmd() tea.Cmd { return func() tea.Msg { return ViewerClosedMsg{} } }
-func viewerScrollCmd(pct int) tea.Cmd {
-	return func() tea.Msg { return ViewerScrollMsg{Pct: pct} }
-}
-
 // openURL is the URL launcher hook. Tests swap it to capture the URL
 // instead of executing xdg-open. Shared by viewer numeric quick-launch
 // and the link picker.
 var openURL = func(url string) error {
 	return exec.Command("xdg-open", url).Start()
-}
-
-// LinkPickerOpenMsg requests the link picker overlay open with the
-// given URL list. Emitted by Viewer when Tab is pressed and at least
-// one URL is harvested. Handled at the App level (App owns the picker
-// state, mirrors the help-popover pattern from ADR-0082).
-type LinkPickerOpenMsg struct {
-	Links []string
 }
 
 // LinkPickerClosedMsg signals the picker has closed (Esc, Tab, Enter,
@@ -361,10 +309,4 @@ type LinkPickerClosedMsg struct{}
 // Emitted by the link picker on Enter or 1-9 in-range.
 type LaunchURLMsg struct {
 	URL string
-}
-
-// linkPickerOpenCmd wraps a LinkPickerOpenMsg in a tea.Cmd so callers
-// can return it from Update.
-func linkPickerOpenCmd(links []string) tea.Cmd {
-	return func() tea.Msg { return LinkPickerOpenMsg{Links: links} }
 }
