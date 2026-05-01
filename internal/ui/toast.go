@@ -13,8 +13,9 @@ import (
 // pendingAction is the App-owned state for an in-flight optimistic
 // triage action. The zero value means "no toast active".
 type pendingAction struct {
-	op       string    // "delete" | "archive" | "star" | "unstar" | "read" | "unread"
+	op       string    // "delete" | "archive" | "star" | "unstar" | "read" | "unread" | "move"
 	n        int       // affected message count
+	dest     string    // destination folder name; non-empty for "move"
 	inverse  tea.Cmd   // the undo Cmd; nil for unrecoverable ops
 	deadline time.Time // monotonic moment at which the toast expires
 	onUndo   func()    // local roll-back; runs on `u` and on ErrorMsg
@@ -40,6 +41,8 @@ func renderToast(p pendingAction, width int, styles Styles) string {
 		} else {
 			body = verb
 		}
+	case "move":
+		body = fmt.Sprintf("%s %d %s to %s", verb, p.n, pluralize("message", p.n), p.dest)
 	default:
 		body = fmt.Sprintf("%s %d %s", verb, p.n, pluralize("message", p.n))
 	}
@@ -71,6 +74,8 @@ func toastVerb(op string) string {
 		return "Marked read"
 	case "unread":
 		return "Marked unread"
+	case "move":
+		return "Moved"
 	}
 	return op
 }

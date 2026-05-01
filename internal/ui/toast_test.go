@@ -50,6 +50,29 @@ func TestRenderToast(t *testing.T) {
 	}
 }
 
+func TestRenderToast_Move(t *testing.T) {
+	th := theme.Themes[theme.DefaultThemeName]
+	styles := NewStyles(th)
+	p := pendingAction{op: "move", n: 3, dest: "Receipts/2026"}
+	got := renderToast(p, 80, styles)
+	if !strings.Contains(got, "Moved 3 messages to Receipts/2026") {
+		t.Errorf("render = %q, want it to contain %q", got, "Moved 3 messages to Receipts/2026")
+	}
+	if !strings.Contains(got, "[u undo]") {
+		t.Errorf("render = %q, want undo hint", got)
+	}
+}
+
+func TestRenderToast_MoveSingle(t *testing.T) {
+	th := theme.Themes[theme.DefaultThemeName]
+	styles := NewStyles(th)
+	p := pendingAction{op: "move", n: 1, dest: "Inbox"}
+	got := renderToast(p, 80, styles)
+	if !strings.Contains(got, "Moved 1 message to Inbox") {
+		t.Errorf("render = %q, want singular form", got)
+	}
+}
+
 func TestRenderToast_Truncation(t *testing.T) {
 	th := theme.Themes[theme.DefaultThemeName]
 	styles := NewStyles(th)

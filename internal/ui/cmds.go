@@ -320,6 +320,7 @@ type LaunchURLMsg struct {
 type triageStartedMsg struct {
 	op      string
 	n       int
+	dest    string
 	uids    []mail.UID
 	inverse tea.Cmd
 	onUndo  func()
