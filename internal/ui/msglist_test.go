@@ -1359,3 +1359,215 @@ func TestMessageList_VisualModeAndTargets(t *testing.T) {
 		}
 	})
 }
+
+func TestMessageList_ApplyMutations(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	// flatMsgs is a helper that returns 4 independent single-message
+	// threads in descending date order: "d" newest … "a" oldest.
+	flatMsgs := func() []mail.MessageInfo {
+		return []mail.MessageInfo{
+			{UID: "a", ThreadID: "a", From: "Alice", Subject: "oldest", Date: "2026-04-01", Flags: mail.FlagSeen},
+			{UID: "b", ThreadID: "b", From: "Bob", Subject: "second", Date: "2026-04-02", Flags: mail.FlagSeen},
+			{UID: "c", ThreadID: "c", From: "Carol", Subject: "third", Date: "2026-04-03", Flags: mail.FlagSeen},
+			{UID: "d", ThreadID: "d", From: "Dave", Subject: "newest", Date: "2026-04-04", Flags: mail.FlagSeen},
+		}
+	}
+
+	// threadMsgs returns a thread T1 (root "10", children "11","12") plus
+	// a standalone "20". Default sort (date-desc) puts "20" first, then the
+	// T1 thread (rows 1,2,3).
+	threadMsgs := func() []mail.MessageInfo {
+		return []mail.MessageInfo{
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Subject: "re: root", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", Subject: "re: root 2", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "Solo", Subject: "solo", Date: "2026-04-06 10:00", Flags: mail.FlagSeen},
+		}
+	}
+
+	t.Run("ApplyDelete removes one UID from source", func(t *testing.T) {
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		initialRows := len(ml.rows)
+		ml.ApplyDelete([]mail.UID{"b"})
+		if got := len(ml.source); got != 3 {
+			t.Errorf("source len = %d, want 3", got)
+		}
+		if got := len(ml.rows); got != initialRows-1 {
+			t.Errorf("rows len = %d, want %d", got, initialRows-1)
+		}
+		for _, msg := range ml.source {
+			if msg.UID == "b" {
+				t.Error("uid 'b' still present in source after ApplyDelete")
+			}
+		}
+	})
+
+	t.Run("ApplyDelete on thread root removes only root; children re-root", func(t *testing.T) {
+		ml := NewMessageList(styles, threadMsgs(), 90, 20, FancyIcons)
+		// Delete the T1 root; children "11" and "12" should survive via re-root.
+		ml.ApplyDelete([]mail.UID{"10"})
+		if got := len(ml.source); got != 3 {
+			t.Errorf("source len = %d, want 3 (root removed, children remain)", got)
+		}
+		foundRoot := false
+		for _, msg := range ml.source {
+			if msg.UID == "10" {
+				t.Error("uid '10' still present in source after ApplyDelete")
+			}
+			if msg.UID == "11" || msg.UID == "12" {
+				foundRoot = true
+			}
+		}
+		if !foundRoot {
+			t.Error("children '11'/'12' missing from source after root delete")
+		}
+	})
+
+	t.Run("ApplyDelete cursor row: cursor stays at same index clamped", func(t *testing.T) {
+		// flatMsgs date-desc: d(0), c(1), b(2), a(3). Cursor starts at 0 (d).
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		if got, want := ml.Selected(), 0; got != want {
+			t.Fatalf("pre-condition: Selected() = %d, want %d", got, want)
+		}
+		// Verify row 0 is "d" (date-desc sort).
+		if ml.rows[0].msg.UID != "d" {
+			t.Fatalf("pre-condition: rows[0].UID = %q, want 'd'", ml.rows[0].msg.UID)
+		}
+		ml.ApplyDelete([]mail.UID{"d"})
+		// After removing "d", rows are c(0), b(1), a(2). Cursor should clamp to 0.
+		if got, want := ml.Selected(), 0; got != want {
+			t.Errorf("Selected() = %d, want %d after deleting cursor row (first)", got, want)
+		}
+	})
+
+	t.Run("ApplyDelete last row: cursor clamps to len-1", func(t *testing.T) {
+		// flatMsgs date-desc: d(0), c(1), b(2), a(3).
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		ml.MoveToBottom() // cursor at 3 ("a")
+		if got := ml.rows[ml.Selected()].msg.UID; got != "a" {
+			t.Fatalf("pre-condition: bottom row UID = %q, want 'a'", got)
+		}
+		ml.ApplyDelete([]mail.UID{"a"})
+		// 3 rows remain (d,c,b). firstIdx was 3; clamp to len-1 = 2.
+		if got, want := ml.Selected(), 2; got != want {
+			t.Errorf("Selected() = %d, want %d after deleting last row", got, want)
+		}
+	})
+
+	t.Run("ApplyDelete bulk: cursor lands at first removed display-row index, clamped", func(t *testing.T) {
+		// flatMsgs date-desc: d(0), c(1), b(2), a(3). Delete b and c (rows 1 and 2).
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		ml.ApplyDelete([]mail.UID{"b", "c"})
+		// 2 rows remain: d(0), a(1). firstIdx was 1; rows are now len 2 → cursor 1.
+		if got := len(ml.source); got != 2 {
+			t.Errorf("source len = %d, want 2", got)
+		}
+		if got, want := ml.Selected(), 1; got != want {
+			t.Errorf("Selected() = %d, want %d after bulk delete of rows 1&2", got, want)
+		}
+	})
+
+	t.Run("ApplyInsert re-inserts messages at original positions", func(t *testing.T) {
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		origSource := make([]mail.MessageInfo, len(ml.source))
+		copy(origSource, ml.source)
+
+		// Snapshot and delete "a" (source index 0) and "c" (source index 2).
+		msgs, positions := ml.SnapshotSource([]mail.UID{"a", "c"})
+		ml.ApplyDelete([]mail.UID{"a", "c"})
+		if got := len(ml.source); got != 2 {
+			t.Fatalf("source after delete = %d, want 2", got)
+		}
+
+		// Re-insert via ApplyInsert.
+		ml.ApplyInsert(msgs, positions)
+		if got := len(ml.source); got != 4 {
+			t.Fatalf("source after insert = %d, want 4", got)
+		}
+		// Source order should be restored.
+		for i, want := range origSource {
+			if ml.source[i].UID != want.UID {
+				t.Errorf("source[%d].UID = %q, want %q", i, ml.source[i].UID, want.UID)
+			}
+		}
+	})
+
+	t.Run("ApplyFlag sets FlagFlagged", func(t *testing.T) {
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		ml.ApplyFlag([]mail.UID{"b"}, mail.FlagFlagged, true)
+		msg, ok := ml.MessageByUID("b")
+		if !ok {
+			t.Fatal("uid 'b' missing after ApplyFlag")
+		}
+		if msg.Flags&mail.FlagFlagged == 0 {
+			t.Errorf("FlagFlagged not set on 'b'; Flags = %d", msg.Flags)
+		}
+		// Row count and cursor unchanged.
+		if got := len(ml.rows); got != 4 {
+			t.Errorf("rows len = %d, want 4", got)
+		}
+		if got := ml.Selected(); got != 0 {
+			t.Errorf("Selected() = %d, want 0", got)
+		}
+	})
+
+	t.Run("ApplyFlag clears FlagFlagged", func(t *testing.T) {
+		msgs := flatMsgs()
+		msgs[1].Flags |= mail.FlagFlagged // pre-flag "b"
+		ml := NewMessageList(styles, msgs, 90, 20, FancyIcons)
+		ml.ApplyFlag([]mail.UID{"b"}, mail.FlagFlagged, false)
+		msg, ok := ml.MessageByUID("b")
+		if !ok {
+			t.Fatal("uid 'b' missing after ApplyFlag")
+		}
+		if msg.Flags&mail.FlagFlagged != 0 {
+			t.Errorf("FlagFlagged still set on 'b' after clear; Flags = %d", msg.Flags)
+		}
+	})
+
+	t.Run("ApplySeen clears FlagSeen", func(t *testing.T) {
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		// "a" is initially FlagSeen; clear it.
+		ml.ApplySeen([]mail.UID{"a"}, false)
+		msg, ok := ml.MessageByUID("a")
+		if !ok {
+			t.Fatal("uid 'a' missing after ApplySeen")
+		}
+		if msg.Flags&mail.FlagSeen != 0 {
+			t.Errorf("FlagSeen still set on 'a' after ApplySeen(false); Flags = %d", msg.Flags)
+		}
+	})
+
+	t.Run("ApplySeen sets FlagSeen", func(t *testing.T) {
+		msgs := flatMsgs()
+		msgs[0].Flags &^= mail.FlagSeen // ensure "a" is unread first
+		ml := NewMessageList(styles, msgs, 90, 20, FancyIcons)
+		ml.ApplySeen([]mail.UID{"a"}, true)
+		msg, ok := ml.MessageByUID("a")
+		if !ok {
+			t.Fatal("uid 'a' missing after ApplySeen")
+		}
+		if msg.Flags&mail.FlagSeen == 0 {
+			t.Errorf("FlagSeen not set on 'a' after ApplySeen(true); Flags = %d", msg.Flags)
+		}
+	})
+
+	t.Run("SnapshotSource returns matching msgs and positions", func(t *testing.T) {
+		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
+		// Source order: a(0), b(1), c(2), d(3).
+		msgs, positions := ml.SnapshotSource([]mail.UID{"a", "c"})
+		if len(msgs) != 2 {
+			t.Fatalf("SnapshotSource msgs len = %d, want 2", len(msgs))
+		}
+		if msgs[0].UID != "a" || msgs[1].UID != "c" {
+			t.Errorf("SnapshotSource msgs UIDs = [%s %s], want [a c]", msgs[0].UID, msgs[1].UID)
+		}
+		if len(positions) != 2 {
+			t.Fatalf("SnapshotSource positions len = %d, want 2", len(positions))
+		}
+		if positions[0] != 0 || positions[1] != 2 {
+			t.Errorf("SnapshotSource positions = %v, want [0 2]", positions)
+		}
+	})
+}

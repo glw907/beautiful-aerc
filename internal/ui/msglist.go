@@ -1021,6 +1021,125 @@ func (m MessageList) threadUIDs(root mail.UID) []mail.UID {
 	return out
 }
 
+// uidSet builds a membership set from a slice of UIDs for O(1) lookup.
+func uidSet(uids []mail.UID) map[mail.UID]struct{} {
+	s := make(map[mail.UID]struct{}, len(uids))
+	for _, u := range uids {
+		s[u] = struct{}{}
+	}
+	return s
+}
+
+// ApplyDelete removes uids from m.source and rebuilds rows. Cursor
+// holds at the index of the first display-row that was removed,
+// clamped to len(rows)-1; if the resulting list is empty, selected
+// becomes 0.
+func (m *MessageList) ApplyDelete(uids []mail.UID) {
+	if len(uids) == 0 {
+		return
+	}
+	rm := uidSet(uids)
+
+	firstIdx := -1
+	for i, r := range m.rows {
+		if _, ok := rm[r.msg.UID]; ok {
+			firstIdx = i
+			break
+		}
+	}
+
+	kept := m.source[:0:0]
+	for _, msg := range m.source {
+		if _, ok := rm[msg.UID]; !ok {
+			kept = append(kept, msg)
+		}
+	}
+	m.source = kept
+	m.rebuild()
+
+	switch {
+	case len(m.rows) == 0:
+		m.selected = 0
+	case firstIdx < 0:
+		if m.selected >= len(m.rows) {
+			m.selected = len(m.rows) - 1
+		}
+	default:
+		if firstIdx >= len(m.rows) {
+			firstIdx = len(m.rows) - 1
+		}
+		m.selected = firstIdx
+	}
+}
+
+// ApplyInsert re-inserts msgs into m.source preserving their original
+// positions. positions[i] is the source-index where msgs[i] originally
+// lived; positions must be sorted ascending. Used for inverse roll-back.
+//
+// The merge works in original-index space: the total original length is
+// len(m.source)+len(msgs). For each original index 0..total-1, either
+// the re-inserted item lives there (from positions) or the next surviving
+// source element does. This correctly handles any combination of deleted
+// and surviving items.
+func (m *MessageList) ApplyInsert(msgs []mail.MessageInfo, positions []int) {
+	if len(msgs) == 0 {
+		return
+	}
+	total := len(m.source) + len(msgs)
+	out := make([]mail.MessageInfo, 0, total)
+	// Build a set of re-insert positions for fast lookup.
+	posSet := make(map[int]int, len(positions)) // original-idx → msgs index
+	for i, p := range positions {
+		posSet[p] = i
+	}
+	si := 0 // index into current m.source (survivors)
+	for orig := 0; orig < total; orig++ {
+		if mi, ok := posSet[orig]; ok {
+			out = append(out, msgs[mi])
+		} else {
+			out = append(out, m.source[si])
+			si++
+		}
+	}
+	m.source = out
+	m.rebuild()
+}
+
+// ApplyFlag flips a flag on every msg in m.source whose UID is in uids.
+func (m *MessageList) ApplyFlag(uids []mail.UID, flag mail.Flag, set bool) {
+	in := uidSet(uids)
+	for i := range m.source {
+		if _, ok := in[m.source[i].UID]; !ok {
+			continue
+		}
+		if set {
+			m.source[i].Flags |= flag
+		} else {
+			m.source[i].Flags &^= flag
+		}
+	}
+	m.rebuild()
+}
+
+// ApplySeen marks read (set=true) or unread (set=false).
+func (m *MessageList) ApplySeen(uids []mail.UID, seen bool) {
+	m.ApplyFlag(uids, mail.FlagSeen, seen)
+}
+
+// SnapshotSource returns the messages whose UIDs are in uids, paired
+// with their source-indexes. positions is sorted ascending. Used to
+// build the inverse Cmd before an ApplyDelete.
+func (m MessageList) SnapshotSource(uids []mail.UID) (msgs []mail.MessageInfo, positions []int) {
+	in := uidSet(uids)
+	for i, msg := range m.source {
+		if _, ok := in[msg.UID]; ok {
+			msgs = append(msgs, msg)
+			positions = append(positions, i)
+		}
+	}
+	return msgs, positions
+}
+
 // truncateCells cuts s to fit width display cells, appending an
 // ellipsis when truncated. Inputs are plain mail header text (no ANSI
 // escapes), so runewidth handles cell measurement directly without
