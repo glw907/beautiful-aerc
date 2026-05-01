@@ -862,6 +862,66 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 	}
 }
 
+func TestApp_OpenMovePickerOpensOverlay(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	folders := []FolderEntry{
+		{Display: "Inbox", Provider: "INBOX", Group: GroupPrimary},
+		{Display: "Archive", Provider: "Archive", Group: GroupDisposal},
+	}
+	app, _ = app.Update(OpenMovePickerMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
+	if !app.movePicker.IsOpen() {
+		t.Error("movePicker should be open after OpenMovePickerMsg")
+	}
+}
+
+func TestApp_MovePickerClosedFlipsState(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	folders := []FolderEntry{{Display: "Archive", Provider: "Archive", Group: GroupDisposal}}
+	app, _ = app.Update(OpenMovePickerMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
+	app, _ = app.Update(MovePickerClosedMsg{})
+	if app.movePicker.IsOpen() {
+		t.Error("movePicker should be closed after MovePickerClosedMsg")
+	}
+}
+
+func TestApp_FolderJumpInertWhilePickerOpen(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	folders := []FolderEntry{{Display: "Archive", Provider: "Archive", Group: GroupDisposal}}
+	app, _ = app.Update(OpenMovePickerMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
+	beforeFolder := app.acct.currentFolderName()
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
+	if got := app.acct.currentFolderName(); got != beforeFolder {
+		t.Errorf("folder changed to %q while picker open; want %q (key should be swallowed)", got, beforeFolder)
+	}
+}
+
+func TestApp_MovePickerPickedRoutesToAccountTab(t *testing.T) {
+	app := newLoadedApp(t, 120, 30)
+	// Use action targets from the loaded message list so dispatchMoveFromPicker
+	// doesn't short-circuit on empty UIDs.
+	uids := app.acct.msglist.ActionTargets()
+	src := app.acct.currentFolderName()
+	folders := []FolderEntry{{Display: "Archive", Provider: "Archive", Group: GroupDisposal}}
+	app, _ = app.Update(OpenMovePickerMsg{UIDs: uids, Src: src, Folders: folders})
+	_, cmd := app.Update(MovePickerPickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
+	if cmd == nil {
+		t.Fatal("Picked produced nil cmd; expected triageStartedMsg + forward")
+	}
+	msgs := drainBatch(cmd)
+	var sawStart bool
+	for _, m := range msgs {
+		if ts, ok := m.(triageStartedMsg); ok {
+			sawStart = true
+			if ts.dest != "Archive" {
+				t.Errorf("triageStartedMsg.dest = %q, want %q", ts.dest, "Archive")
+			}
+		}
+	}
+	if !sawStart {
+		t.Errorf("no triageStartedMsg in %v", msgs)
+	}
+}
+
 func TestApp_FolderChangeCommitsToast(t *testing.T) {
 	app := newLoadedApp(t, 100, 30)
 	app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})

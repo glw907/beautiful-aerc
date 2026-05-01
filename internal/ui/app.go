@@ -26,8 +26,9 @@ type App struct {
 	keys       GlobalKeys
 	viewerOpen bool
 	helpOpen   bool
-	help       HelpPopover
+	help        HelpPopover
 	linkPicker  LinkPicker
+	movePicker  MovePicker
 	lastErr     ErrorMsg
 	toast       pendingAction
 	undoSeconds int
@@ -54,6 +55,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig,
 		footer:      NewFooter(styles),
 		keys:        NewGlobalKeys(),
 		linkPicker:  NewLinkPicker(styles, t),
+		movePicker:  NewMovePicker(styles, t),
 		undoSeconds: uiCfg.UndoSeconds,
 		now:         time.Now,
 	}
@@ -99,6 +101,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.linkPicker = m.linkPicker.SetSize(m.width, m.height)
+		m.movePicker = m.movePicker.SetSize(m.width, m.height)
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(contentMsg)
@@ -110,6 +113,20 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case LinkPickerClosedMsg:
 		m.linkPicker = m.linkPicker.Close()
 		return m, nil
+
+	case OpenMovePickerMsg:
+		m.movePicker = m.movePicker.Open(msg.UIDs, msg.Src, msg.Folders)
+		return m, nil
+
+	case MovePickerClosedMsg:
+		m.movePicker = m.movePicker.Close()
+		return m, nil
+
+	case MovePickerPickedMsg:
+		var cmd tea.Cmd
+		m.acct, cmd = m.acct.Update(msg)
+		m = m.deriveChromeFromAcct()
+		return m, cmd
 
 	case LaunchURLMsg:
 		return m, launchURLCmd(msg.URL)
@@ -230,6 +247,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.linkPicker, cmd = m.linkPicker.Update(msg)
 			return m, cmd
 		}
+		if m.movePicker.IsOpen() {
+			var cmd tea.Cmd
+			m.movePicker, cmd = m.movePicker.Update(msg)
+			return m, cmd
+		}
 		switch {
 		case key.Matches(msg, m.keys.Undo):
 			// Undo is only live while a toast is active; otherwise the
@@ -342,6 +364,13 @@ func (m App) View() string {
 	if m.linkPicker.IsOpen() {
 		box := m.linkPicker.Box(m.width, m.height)
 		x, y := m.linkPicker.Position(box, m.width, m.height)
+		dimmed := DimANSI(frame)
+		return PlaceOverlay(x, y, box, dimmed)
+	}
+
+	if m.movePicker.IsOpen() {
+		box := m.movePicker.Box(m.width, m.height)
+		x, y := m.movePicker.Position(box, m.width, m.height)
 		dimmed := DimANSI(frame)
 		return PlaceOverlay(x, y, box, dimmed)
 	}
