@@ -1704,7 +1704,7 @@ func TestAccountTab_SweepCompletedMsg_RemovesRows(t *testing.T) {
 		t.Fatalf("expected 2 messages before sweep, got %d", tab.msglist.Count())
 	}
 
-	tab, _ = tab.updateTab(sweepCompletedMsg{folder: "Trash", uids: []mail.UID{"old1"}})
+	tab, _ = tab.updateTab(sweepCompletedMsg{uids: []mail.UID{"old1"}})
 	if tab.msglist.Count() != 1 {
 		t.Errorf("after sweepCompletedMsg, count = %d, want 1", tab.msglist.Count())
 	}

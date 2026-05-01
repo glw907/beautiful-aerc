@@ -409,23 +409,21 @@ type emptyFolderDoneMsg struct {
 	n      int
 }
 
-// destroyCmd permanently deletes uids from src. Used by the retention sweep.
-// Empty input skips the backend call and returns sweepCompletedMsg with nil uids.
-func destroyCmd(b mail.Backend, folder string, uids []mail.UID) tea.Cmd {
+// destroyCmd permanently deletes uids. Used by the retention sweep.
+// Empty input skips the backend call.
+func destroyCmd(b mail.Backend, uids []mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		if len(uids) == 0 {
-			return sweepCompletedMsg{folder: folder, uids: nil}
+			return sweepCompletedMsg{}
 		}
 		if err := b.Destroy(uids); err != nil {
 			return ErrorMsg{Op: "purge expired", Err: err}
 		}
-		return sweepCompletedMsg{folder: folder, uids: uids}
+		return sweepCompletedMsg{uids: uids}
 	}
 }
 
-// sweepCompletedMsg reports the result of a retention sweep.
-// AccountTab applies ApplyDelete(uids) so destroyed rows leave the visible list.
+// sweepCompletedMsg reports a retention sweep's destroyed UIDs.
 type sweepCompletedMsg struct {
-	folder string
-	uids   []mail.UID
+	uids []mail.UID
 }

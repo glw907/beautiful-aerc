@@ -481,7 +481,7 @@ func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.Messag
 			expired = append(expired, msg.UID)
 		}
 	}
-	return destroyCmd(m.backend, folder.Name, expired)
+	return destroyCmd(m.backend, expired)
 }
 
 // dispatchEmpty emits OpenConfirmEmptyMsg when the selected folder is

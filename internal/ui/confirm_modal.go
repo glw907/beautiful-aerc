@@ -30,9 +30,8 @@ type ConfirmModal struct {
 }
 
 type confirmKeys struct {
-	Yes    key.Binding
-	No     key.Binding
-	Cancel key.Binding
+	Yes     key.Binding
+	Dismiss key.Binding
 }
 
 // NewConfirmModal returns a closed modal.
@@ -40,9 +39,8 @@ func NewConfirmModal(styles Styles) ConfirmModal {
 	return ConfirmModal{
 		styles: styles,
 		keys: confirmKeys{
-			Yes:    key.NewBinding(key.WithKeys("y")),
-			No:     key.NewBinding(key.WithKeys("n")),
-			Cancel: key.NewBinding(key.WithKeys("esc")),
+			Yes:     key.NewBinding(key.WithKeys("y")),
+			Dismiss: key.NewBinding(key.WithKeys("n", "esc")),
 		},
 	}
 }
@@ -86,9 +84,7 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 			func() tea.Msg { return onYes() },
 			func() tea.Msg { return ConfirmModalClosedMsg{} },
 		)
-	case key.Matches(keyMsg, m.keys.No):
-		return m, func() tea.Msg { return ConfirmModalClosedMsg{} }
-	case key.Matches(keyMsg, m.keys.Cancel):
+	case key.Matches(keyMsg, m.keys.Dismiss):
 		return m, func() tea.Msg { return ConfirmModalClosedMsg{} }
 	}
 	// q is swallowed — consistent with help/link/move picker overlays.
