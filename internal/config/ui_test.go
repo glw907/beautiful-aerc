@@ -186,6 +186,32 @@ func TestLoadUI_Icons(t *testing.T) {
 	}
 }
 
+func TestLoadUI_UndoSeconds(t *testing.T) {
+	tests := []struct {
+		name string
+		toml string
+		want int
+	}{
+		{"default when unset", "[ui]\nthreading = true\n", 6},
+		{"explicit value within range", "[ui]\nundo_seconds = 10\n", 10},
+		{"below floor clamps to 2", "[ui]\nundo_seconds = 0\n", 2},
+		{"above ceiling clamps to 30", "[ui]\nundo_seconds = 99\n", 30},
+		{"negative clamps to 2", "[ui]\nundo_seconds = -5\n", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempUI(t, tt.toml)
+			cfg, err := LoadUI(path)
+			if err != nil {
+				t.Fatalf("LoadUI err = %v", err)
+			}
+			if cfg.UndoSeconds != tt.want {
+				t.Errorf("UndoSeconds = %d, want %d", cfg.UndoSeconds, tt.want)
+			}
+		})
+	}
+}
+
 func TestLoadUIMissingFile(t *testing.T) {
 	_, err := LoadUI("/nonexistent/accounts.toml")
 	if err == nil {

@@ -24,6 +24,9 @@ type UIConfig struct {
 	// Icons is the iconography mode: "auto" (default), "simple", or
 	// "fancy". See ADR-0084.
 	Icons string
+
+	// UndoSeconds is the toast/undo timer in seconds. Default 6, clamped to [2, 30] on parse.
+	UndoSeconds int
 }
 
 // FolderConfig holds per-folder overrides from [ui.folders.<name>]
@@ -56,18 +59,20 @@ type FolderConfig struct {
 // Use as a fallback when accounts.toml has no [ui] section.
 func DefaultUIConfig() UIConfig {
 	return UIConfig{
-		Threading: true,
-		Folders:   map[string]FolderConfig{},
-		Icons:     "auto",
+		Threading:   true,
+		Folders:     map[string]FolderConfig{},
+		Icons:       "auto",
+		UndoSeconds: 6,
 	}
 }
 
 // rawUI is the on-disk shape of the [ui] table. It uses pointers for
 // optional bool fields so we can distinguish "unset" from "explicit false".
 type rawUI struct {
-	Threading *bool                   `toml:"threading"`
-	Folders   map[string]rawFolderCfg `toml:"folders"`
-	Icons     string                  `toml:"icons"`
+	Threading   *bool                   `toml:"threading"`
+	Folders     map[string]rawFolderCfg `toml:"folders"`
+	Icons       string                  `toml:"icons"`
+	UndoSeconds *int                    `toml:"undo_seconds"`
 }
 
 type rawFolderCfg struct {
@@ -108,6 +113,16 @@ func LoadUI(path string) (UIConfig, error) {
 		default:
 			return UIConfig{}, fmt.Errorf("ui.icons: invalid value %q (want \"auto\", \"simple\", or \"fancy\")", raw.UI.Icons)
 		}
+	}
+
+	if raw.UI.UndoSeconds != nil {
+		v := *raw.UI.UndoSeconds
+		if v < 2 {
+			v = 2
+		} else if v > 30 {
+			v = 30
+		}
+		out.UndoSeconds = v
 	}
 
 	for name, fc := range raw.UI.Folders {
