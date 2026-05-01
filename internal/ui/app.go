@@ -115,6 +115,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, launchURLCmd(msg.URL)
 
 	case triageStartedMsg:
+		hadBanner := m.hasBannerRow()
 		deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
 		m.toast = pendingAction{
 			op:       msg.op,
@@ -124,15 +125,24 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			onUndo:   msg.onUndo,
 			deadline: deadline,
 		}
-		return m, tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
+		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
 			return toastExpireMsg{deadline: deadline}
-		})
+		})}
+		var rcmd tea.Cmd
+		m, rcmd = m.maybeResizeChild(hadBanner)
+		if rcmd != nil {
+			cmds = append(cmds, rcmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case toastExpireMsg:
-		if !m.toast.IsZero() && msg.deadline.Equal(m.toast.deadline) {
-			m.toast = pendingAction{}
+		if m.toast.IsZero() || !msg.deadline.Equal(m.toast.deadline) {
+			return m, nil
 		}
-		return m, nil
+		hadBanner := m.hasBannerRow()
+		m.toast = pendingAction{}
+		m, rcmd := m.maybeResizeChild(hadBanner)
+		return m, rcmd
 
 	case undoRequestedMsg:
 		if m.toast.IsZero() {
@@ -142,27 +152,35 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.toast.onUndo()
 		}
 		cmd := m.toast.inverse
+		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
-		return m, cmd
+		cmds := []tea.Cmd{}
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		var rcmd tea.Cmd
+		m, rcmd = m.maybeResizeChild(hadBanner)
+		if rcmd != nil {
+			cmds = append(cmds, rcmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case ErrorMsg:
-		// Banner state is App-owned. nil ↔ set transitions toggle the
-		// chrome row count, so resize the child when the banner appears
-		// or disappears. Last-write-wins between two non-nil errors
-		// does not change height, so the resize is skipped.
-		// An ErrorMsg also rolls back any in-flight toast: the local
-		// flip is reversed via onUndo and the toast clears.
+		// Banner state is App-owned. The chrome banner row (error or
+		// toast) takes one row; transitions in or out of having a row
+		// resize the child. An ErrorMsg also rolls back any in-flight
+		// toast: the local flip is reversed via onUndo, the toast
+		// clears, and the error replaces it.
+		hadBanner := m.hasBannerRow()
 		if !m.toast.IsZero() && m.toast.onUndo != nil {
 			m.toast.onUndo()
 		}
 		m.toast = pendingAction{}
-		hadErr := m.lastErr.Err != nil
 		m.lastErr = msg
 		cmds := make([]tea.Cmd, 0, 2)
-		if hadErr != (m.lastErr.Err != nil) && m.width > 0 && m.height > 0 {
-			contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
-			acct, rcmd := m.acct.Update(contentMsg)
-			m.acct = acct
+		var rcmd tea.Cmd
+		m, rcmd = m.maybeResizeChild(hadBanner)
+		if rcmd != nil {
 			cmds = append(cmds, rcmd)
 		}
 		acct, fcmd := m.acct.Update(msg)
@@ -252,8 +270,10 @@ func (m App) renderFrame() string {
 	foot := m.footer.SetCounter(m.acct.WindowCounter()).View(m.width)
 
 	parts := []string{topLine, content}
-	if banner := renderErrorBanner(m.lastErr, m.width, m.styles); banner != "" {
-		parts = append(parts, banner)
+	// Precedence: error banner wins; otherwise toast; otherwise the
+	// chrome row collapses entirely.
+	if bannerRow := m.chromeBannerRow(m.width); bannerRow != "" {
+		parts = append(parts, bannerRow)
 	}
 	parts = append(parts, status, foot)
 	// Use strings.Join rather than lipgloss.JoinVertical. JoinVertical pads
@@ -318,10 +338,11 @@ func translateConnState(s mail.ConnState) ConnectionState {
 func (m App) IsLinkPickerOpen() bool { return m.linkPicker.IsOpen() }
 
 // contentHeight returns the height available for the content area.
-// The error banner takes one extra chrome row when present.
+// The chrome banner row (error banner or toast) takes one extra row
+// when either is present; the row collapses when both are absent.
 func (m App) contentHeight() int {
 	chrome := 3 // top line + status bar + footer
-	if m.lastErr.Err != nil {
+	if m.lastErr.Err != nil || !m.toast.IsZero() {
 		chrome++
 	}
 	h := m.height - chrome
@@ -329,4 +350,37 @@ func (m App) contentHeight() int {
 		return 1
 	}
 	return h
+}
+
+// hasBannerRow reports whether the chrome row above the status bar is
+// occupied (either by the error banner or by an active toast).
+func (m App) hasBannerRow() bool {
+	return m.lastErr.Err != nil || !m.toast.IsZero()
+}
+
+// maybeResizeChild re-forwards a WindowSizeMsg to the child when the
+// chrome banner row's occupancy has changed since hadBanner was
+// captured. Returns the (possibly-updated) App and the resize Cmd, or
+// the input App and nil when no resize is needed.
+func (m App) maybeResizeChild(hadBanner bool) (App, tea.Cmd) {
+	if hadBanner == m.hasBannerRow() || m.width <= 0 || m.height <= 0 {
+		return m, nil
+	}
+	contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
+	acct, cmd := m.acct.Update(contentMsg)
+	m.acct = acct
+	return m, cmd
+}
+
+// chromeBannerRow renders the single chrome row above the status bar.
+// Error banner wins precedence; otherwise the toast renders; otherwise
+// the empty string collapses the row.
+func (m App) chromeBannerRow(width int) string {
+	if banner := renderErrorBanner(m.lastErr, width, m.styles); banner != "" {
+		return banner
+	}
+	if !m.toast.IsZero() {
+		return renderToast(m.toast, width, m.styles)
+	}
+	return ""
 }

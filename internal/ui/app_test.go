@@ -774,6 +774,51 @@ func TestApp_ToastLifecycle(t *testing.T) {
 	})
 }
 
+func TestApp_BannerToastPrecedence(t *testing.T) {
+	cases := []struct {
+		name     string
+		setupErr bool
+		setTost  bool
+		wantSubs []string
+		bannedSubs []string
+		empty    bool
+	}{
+		{name: "neither", empty: true},
+		{name: "toast only", setTost: true, wantSubs: []string{"u undo"}, bannedSubs: []string{"⚠"}},
+		{name: "error only", setupErr: true, wantSubs: []string{"⚠"}, bannedSubs: []string{"u undo"}},
+		{name: "both → error wins", setupErr: true, setTost: true, wantSubs: []string{"⚠"}, bannedSubs: []string{"u undo"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newLoadedApp(t, 100, 30)
+			if tc.setTost {
+				app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+			}
+			if tc.setupErr {
+				app, _ = app.Update(ErrorMsg{Op: "x", Err: errors.New("y")})
+			}
+			row := app.chromeBannerRow(100)
+			if tc.empty {
+				if row != "" {
+					t.Errorf("want empty row, got %q", stripANSI(row))
+				}
+				return
+			}
+			plain := stripANSI(row)
+			for _, s := range tc.wantSubs {
+				if !strings.Contains(plain, s) {
+					t.Errorf("row %q missing %q", plain, s)
+				}
+			}
+			for _, s := range tc.bannedSubs {
+				if strings.Contains(plain, s) {
+					t.Errorf("row %q should NOT contain %q", plain, s)
+				}
+			}
+		})
+	}
+}
+
 func TestAppLinkPickerRoundTrip(t *testing.T) {
 	captured := ""
 	prev := openURL
