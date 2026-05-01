@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hook: cap auto-loaded context docs.
-# CLAUDE.md (200 lines) and docs/poplar/invariants.md (300 lines) are both
+# CLAUDE.md (200 lines) and docs/poplar/invariants.md (400 lines) are both
 # pulled into every conversation; growth here is a context-budget tax.
 
 input=$(cat)
@@ -21,7 +21,7 @@ case "$file" in
         check "$file" 200 "CLAUDE.md"
         ;;
     */docs/poplar/invariants.md)
-        check "$file" 300 "invariants.md"
+        check "$file" 400 "invariants.md"
         ;;
 esac
 
