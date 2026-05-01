@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -198,6 +199,69 @@ func TestMovePicker_QSwallowed(t *testing.T) {
 	}
 	if p2.filter != beforeFilter {
 		t.Errorf("q modified filter to %q, want unchanged %q", p2.filter, beforeFilter)
+	}
+}
+
+func TestMovePicker_BoxFitsWidth(t *testing.T) {
+	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
+	box := p.Box(80, 24)
+	for i, line := range strings.Split(box, "\n") {
+		if w := lipgloss.Width(line); w > 80 {
+			t.Errorf("line %d width = %d, want <= 80: %q", i, w, line)
+		}
+	}
+}
+
+func TestMovePicker_BoxHeightBounded(t *testing.T) {
+	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
+	box := p.Box(80, 24)
+	if h := strings.Count(box, "\n") + 1; h > 24 {
+		t.Errorf("box height = %d, want <= 24", h)
+	}
+}
+
+func TestMovePicker_RendersGroupSeparators(t *testing.T) {
+	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 30)
+	box := p.Box(80, 30)
+	for _, want := range []string{"Inbox", "Trash", "Receipts/2026"} {
+		if !strings.Contains(box, want) {
+			t.Errorf("box missing %q", want)
+		}
+	}
+}
+
+func TestMovePicker_FilterEmptyMatchHint(t *testing.T) {
+	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
+	for _, r := range "zzzzz" {
+		p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	box := p.Box(80, 24)
+	if !strings.Contains(box, "no folders match") {
+		t.Errorf("box missing empty-match hint, got:\n%s", box)
+	}
+}
+
+func TestMovePicker_FilterHintRowShown(t *testing.T) {
+	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
+	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	box := p.Box(80, 24)
+	if !strings.Contains(box, "filter: r") {
+		t.Errorf("box missing filter hint, got:\n%s", box)
+	}
+}
+
+func TestMovePicker_HelpRowAlwaysShown(t *testing.T) {
+	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
+	box := p.Box(80, 24)
+	if !strings.Contains(box, "select") || !strings.Contains(box, "pick") || !strings.Contains(box, "cancel") {
+		t.Errorf("box missing help row, got:\n%s", box)
+	}
+}
+
+func TestMovePicker_ViewClosedEmpty(t *testing.T) {
+	p := newTestPicker()
+	if p.View() != "" {
+		t.Errorf("closed picker View = %q, want empty", p.View())
 	}
 }
 
