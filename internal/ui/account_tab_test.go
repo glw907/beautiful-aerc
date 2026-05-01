@@ -802,6 +802,7 @@ func (b *pagingFakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { 
 func (b *pagingFakeBackend) Move(_ []mail.UID, _ string) error                { return nil }
 func (b *pagingFakeBackend) Copy(_ []mail.UID, _ string) error                { return nil }
 func (b *pagingFakeBackend) Delete(_ []mail.UID) error                        { return nil }
+func (b *pagingFakeBackend) Destroy(_ []mail.UID) error                       { return nil }
 func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error     { return nil }
 func (b *pagingFakeBackend) MarkRead(_ []mail.UID) error                      { return nil }
 func (b *pagingFakeBackend) MarkUnread(_ []mail.UID) error                    { return nil }

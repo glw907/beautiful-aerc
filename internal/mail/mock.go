@@ -22,6 +22,7 @@ type MockBackend struct {
 	// Recorded calls — exposed for tests that assert dispatch shape.
 	// All slices append in chronological order.
 	DeleteCalls     [][]UID
+	DestroyCalls    [][]UID
 	MoveCalls       []MockMoveCall
 	FlagCalls       []MockFlagCall
 	MarkReadCalls   [][]UID
@@ -255,6 +256,28 @@ func (m *MockBackend) Copy(_ []UID, _ string) error { return nil }
 
 func (m *MockBackend) Delete(uids []UID) error {
 	m.DeleteCalls = append(m.DeleteCalls, append([]UID(nil), uids...))
+	return nil
+}
+
+// Destroy permanently removes uids from the in-memory message list,
+// bypassing Trash. Empty input is a no-op.
+func (m *MockBackend) Destroy(uids []UID) error {
+	if len(uids) == 0 {
+		return nil
+	}
+	m.DestroyCalls = append(m.DestroyCalls, append([]UID(nil), uids...))
+	gone := make(map[UID]struct{}, len(uids))
+	for _, u := range uids {
+		gone[u] = struct{}{}
+	}
+	kept := m.msgs[:0]
+	for _, msg := range m.msgs {
+		if _, drop := gone[msg.UID]; drop {
+			continue
+		}
+		kept = append(kept, msg)
+	}
+	m.msgs = kept
 	return nil
 }
 

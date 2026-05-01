@@ -680,6 +680,16 @@ func (b *Backend) Delete(uids []mail.UID) error {
 	return nil
 }
 
+// Destroy permanently deletes uids via JMAP Email/set destroy, bypassing
+// Trash. Irreversible. Empty input is a no-op.
+// Full implementation is deferred to Task 3 (Pass 6.6).
+func (b *Backend) Destroy(uids []mail.UID) error {
+	if len(uids) == 0 {
+		return nil
+	}
+	return fmt.Errorf("destroy: not yet implemented")
+}
+
 // Flag satisfies mail.Backend. It sets or clears a JMAP keyword for each uid.
 func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	keyword, err := keywordForFlag(flag)

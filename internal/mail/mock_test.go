@@ -115,6 +115,65 @@ func TestMockBackend_QueryFolder(t *testing.T) {
 	}
 }
 
+func TestMockBackend_Destroy_RecordsAndRemoves(t *testing.T) {
+	m := NewMockBackend()
+	headers, err := m.FetchHeaders(nil)
+	if err != nil {
+		t.Fatalf("FetchHeaders: %v", err)
+	}
+	startCount := len(headers)
+	if startCount < 2 {
+		t.Fatalf("mock seed too small: %d", startCount)
+	}
+	target := []UID{headers[0].UID, headers[1].UID}
+
+	if err := m.Destroy(target); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if len(m.DestroyCalls) != 1 {
+		t.Fatalf("DestroyCalls len = %d, want 1", len(m.DestroyCalls))
+	}
+	if !equalUIDs(m.DestroyCalls[0], target) {
+		t.Errorf("DestroyCalls[0] = %v, want %v", m.DestroyCalls[0], target)
+	}
+
+	after, err := m.FetchHeaders(nil)
+	if err != nil {
+		t.Fatalf("FetchHeaders after: %v", err)
+	}
+	if len(after) != startCount-2 {
+		t.Errorf("after-Destroy count = %d, want %d", len(after), startCount-2)
+	}
+	for _, msg := range after {
+		if msg.UID == target[0] || msg.UID == target[1] {
+			t.Errorf("destroyed UID %q still present", msg.UID)
+		}
+	}
+}
+
+func TestMockBackend_Destroy_EmptyIsNoop(t *testing.T) {
+	m := NewMockBackend()
+	if err := m.Destroy(nil); err != nil {
+		t.Fatalf("Destroy(nil): %v", err)
+	}
+	if len(m.DestroyCalls) != 0 {
+		t.Errorf("DestroyCalls len = %d, want 0", len(m.DestroyCalls))
+	}
+}
+
+func equalUIDs(a, b []UID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestMockBackend(t *testing.T) {
 	b := NewMockBackend()
 

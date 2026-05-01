@@ -46,6 +46,9 @@ type Backend interface {
 	Move(uids []UID, dest string) error
 	Copy(uids []UID, dest string) error
 	Delete(uids []UID) error
+	// Destroy permanently deletes uids from the currently-selected
+	// folder, bypassing Trash. Irreversible. Empty input is a no-op.
+	Destroy(uids []UID) error
 	Flag(uids []UID, flag Flag, set bool) error
 	MarkRead(uids []UID) error
 	MarkUnread(uids []UID) error
