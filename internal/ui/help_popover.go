@@ -56,10 +56,11 @@ var accountGroups = []bindingGroup{
 	{
 		title: "Triage",
 		rows: []bindingRow{
-			{"d", "delete", false},
-			{"a", "archive", false},
-			{"s", "star", false},
-			{".", "read/unrd", false},
+			{"d", "delete", true},
+			{"a", "archive", true},
+			{"s", "star", true},
+			{".", "read/unrd", true},
+			{"u", "undo", true},
 		},
 	},
 	{
@@ -82,8 +83,8 @@ var accountGroups = []bindingGroup{
 	{
 		title: "Select",
 		rows: []bindingRow{
-			{"v", "select", false},
-			{"␣", "toggle", false},
+			{"v", "select", true},
+			{"␣", "toggle", true},
 		},
 	},
 	{
@@ -128,9 +129,10 @@ var viewerGroups = []bindingGroup{
 	{
 		title: "Triage",
 		rows: []bindingRow{
-			{"d", "delete", false},
-			{"a", "archive", false},
-			{"s", "star", false},
+			{"d", "delete", true},
+			{"a", "archive", true},
+			{"s", "star", true},
+			{"u", "undo", true},
 		},
 	},
 	{
