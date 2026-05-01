@@ -60,6 +60,7 @@ var accountGroups = []bindingGroup{
 			{"a", "archive", true},
 			{"s", "star", true},
 			{".", "read/unrd", true},
+			{"m", "move", true},
 			{"u", "undo", true},
 		},
 	},
