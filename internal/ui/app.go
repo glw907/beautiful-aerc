@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,10 +26,11 @@ type App struct {
 	footer     Footer
 	keys       GlobalKeys
 	viewerOpen bool
-	helpOpen   bool
+	helpOpen    bool
 	help        HelpPopover
 	linkPicker  LinkPicker
 	movePicker  MovePicker
+	confirm     ConfirmModal
 	lastErr     ErrorMsg
 	toast       pendingAction
 	undoSeconds int
@@ -56,6 +58,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig,
 		keys:        NewGlobalKeys(),
 		linkPicker:  NewLinkPicker(styles),
 		movePicker:  NewMovePicker(styles),
+		confirm:     NewConfirmModal(styles),
 		undoSeconds: uiCfg.UndoSeconds,
 		now:         time.Now,
 	}
@@ -102,6 +105,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.height = msg.Height
 		m.linkPicker = m.linkPicker.SetSize(m.width, m.height)
 		m.movePicker = m.movePicker.SetSize(m.width, m.height)
+		m.confirm = m.confirm.SetSize(m.width, m.height)
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(contentMsg)
@@ -123,6 +127,30 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case MovePickerPickedMsg:
+		var cmd tea.Cmd
+		m.acct, cmd = m.acct.Update(msg)
+		m = m.deriveChromeFromAcct()
+		return m, cmd
+
+	case OpenConfirmEmptyMsg:
+		body := strconv.Itoa(msg.Total) + " messages will be permanently deleted."
+		m.confirm = m.confirm.Open(ConfirmRequest{
+			Title: "Empty " + msg.Folder,
+			Body:  body,
+			OnYes: func() tea.Msg {
+				return EmptyFolderConfirmedMsg{
+					Folder: msg.Folder,
+					Source: msg.Source,
+				}
+			},
+		})
+		return m, nil
+
+	case ConfirmModalClosedMsg:
+		m.confirm = m.confirm.Close()
+		return m, nil
+
+	case EmptyFolderConfirmedMsg:
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(msg)
 		m = m.deriveChromeFromAcct()
@@ -241,6 +269,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				m.helpOpen = false
 			}
 			return m, nil
+		}
+		if m.confirm.IsOpen() {
+			var cmd tea.Cmd
+			m.confirm, cmd = m.confirm.Update(msg)
+			return m, cmd
 		}
 		if m.linkPicker.IsOpen() {
 			var cmd tea.Cmd
@@ -361,6 +394,13 @@ func (m App) View() string {
 		return PlaceOverlay(x, y, box, dimmed)
 	}
 
+	if m.confirm.IsOpen() {
+		box := m.confirm.Box(m.width, m.height)
+		x, y := m.confirm.Position(box, m.width, m.height)
+		dimmed := DimANSI(frame)
+		return PlaceOverlay(x, y, box, dimmed)
+	}
+
 	if m.linkPicker.IsOpen() {
 		box := m.linkPicker.Box(m.width, m.height)
 		x, y := m.linkPicker.Position(box, m.width, m.height)
@@ -392,6 +432,9 @@ func translateConnState(s mail.ConnState) ConnectionState {
 
 // IsLinkPickerOpen reports whether the link picker overlay is visible.
 func (m App) IsLinkPickerOpen() bool { return m.linkPicker.IsOpen() }
+
+// IsConfirmOpen reports whether the confirm modal overlay is visible.
+func (m App) IsConfirmOpen() bool { return m.confirm.IsOpen() }
 
 // contentHeight returns the height available for the content area.
 // The chrome banner row (error banner or toast) takes one extra row

@@ -936,3 +936,75 @@ func TestApp_FolderChangeCommitsToast(t *testing.T) {
 		t.Errorf("toast should clear on folder change, got %+v", app.toast)
 	}
 }
+
+func TestApp_OpensConfirmModalOnEmptyMsg(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	if app.IsConfirmOpen() {
+		t.Fatal("confirm should be closed at start")
+	}
+	app, _ = app.Update(OpenConfirmEmptyMsg{Folder: "Trash", Total: 247, Source: "Trash"})
+	if !app.IsConfirmOpen() {
+		t.Fatal("confirm should be open after OpenConfirmEmptyMsg")
+	}
+	plain := stripANSI(app.View())
+	if !strings.Contains(plain, "Empty Trash") {
+		t.Errorf("View should contain 'Empty Trash'; got %q", plain)
+	}
+	if !strings.Contains(plain, "247") {
+		t.Errorf("View should contain '247'; got %q", plain)
+	}
+}
+
+func TestApp_ConfirmYesEmitsConfirmedMsgAndCloses(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	app, _ = app.Update(OpenConfirmEmptyMsg{Folder: "Trash", Total: 5, Source: "Trash"})
+	if !app.IsConfirmOpen() {
+		t.Fatal("setup: confirm should be open")
+	}
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	msgs := drainBatch(cmd)
+	found := false
+	for _, m := range msgs {
+		if _, ok := m.(EmptyFolderConfirmedMsg); ok {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected EmptyFolderConfirmedMsg in cmd batch; got %v", msgs)
+	}
+}
+
+func TestApp_ConfirmEscClosesWithoutEmit(t *testing.T) {
+	app := newLoadedApp(t, 80, 24)
+	app, _ = app.Update(OpenConfirmEmptyMsg{Folder: "Trash", Total: 5, Source: "Trash"})
+	if !app.IsConfirmOpen() {
+		t.Fatal("setup: confirm should be open")
+	}
+
+	app2, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	msgs := drainBatch(cmd)
+
+	// Must emit ConfirmModalClosedMsg.
+	sawClosed := false
+	for _, m := range msgs {
+		if _, ok := m.(ConfirmModalClosedMsg); ok {
+			sawClosed = true
+		}
+		if _, ok := m.(EmptyFolderConfirmedMsg); ok {
+			t.Error("must NOT emit EmptyFolderConfirmedMsg on Esc")
+		}
+	}
+	if !sawClosed {
+		t.Errorf("expected ConfirmModalClosedMsg; got %v", msgs)
+	}
+
+	// Drain the ConfirmModalClosedMsg so the modal actually closes.
+	for _, m := range msgs {
+		app2, _ = app2.Update(m)
+	}
+	if app2.IsConfirmOpen() {
+		t.Error("confirm should be closed after draining ConfirmModalClosedMsg")
+	}
+}
