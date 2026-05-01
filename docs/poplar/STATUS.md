@@ -1,9 +1,10 @@
 # Poplar Status
 
-**Current pass:** Pass 6 next — triage actions (delete/archive/
-star/read; toast + undo bar). Pass 5 done — KeyMaps + key.Matches
-(#17), delegate-then-read (#18), View width contract (#19);
-ADR-0088.
+**Current pass:** Pass 6.5 next — move-to-folder picker (`m`).
+Pass 6 done — triage actions (delete/archive/star/read) with
+optimistic Apply* helpers, App-owned toast + undo (`u`), visual-
+mode multi-select (`v`+Space), WYSIWYG folded-thread expansion;
+ADR-0089/0090.
 
 ## Passes
 
@@ -22,8 +23,8 @@ ADR-0088.
 | SPUA-policy | Three-mode iconography (auto/simple/fancy) + runtime probe | done — ADR-0084, [matrix](testing/icon-modes.md) |
 | 2.5b-4b | Viewer completion: long-bare-URL footnoting + `n`/`N` nav + `Tab` link picker | done — ADR-0085/0086/0087 |
 | 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | done — ADR-0088 |
-| 6 | Triage actions (delete/archive/star/read; toast + undo bar) | next |
-| 6.5 | Move-to-folder picker (`m` modal; toast + undo) | pending |
+| 6 | Triage actions (delete/archive/star/read; toast + undo bar) | done — ADR-0089/0090 |
+| 6.5 | Move-to-folder picker (`m` modal; toast + undo) | next |
 | 6.6 | Trash retention + manual empty (config knob, default 30d) | pending |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
@@ -34,26 +35,28 @@ ADR-0088.
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 | 1.1 | Neovim companion plugin (post-v1, #6) | post-v1 |
 
-## Next starter prompt (Pass 6)
+## Next starter prompt (Pass 6.5)
 
-> **Goal.** Triage vocabulary on the message list: delete,
-> archive, star/unstar, mark read/unread. One toast + undo bar
-> for reversible ops.
+> **Goal.** Move-to-folder picker. Press `m`, get a modal list of
+> folders, pick one, the message moves with the same toast + undo
+> bar shape as Pass 6 triage.
 >
-> **Scope.** `internal/ui/msglist.go`, `account_tab.go`,
-> `internal/mail/` (audit existing methods, add missing). New
-> `internal/ui/toast.go` for the undo bar above the status row
-> (error-banner shape, not an overlay).
+> **Scope.** New `internal/ui/movepicker.go` (modal overlay,
+> mirror `LinkPicker`/`HelpPopover` shape: centerOverlay +
+> DimANSI + PlaceOverlay). Reuse Pass 6's `buildTriageCmd` for
+> the dispatch + inverse. Hook `m` in AccountKeys.
 >
-> **Settled:** Optimistic mutation (ADR-0086). Foreground-only
-> banner shape (ADR-0073). Accessor-after-delegation (ADR-0088).
+> **Settled:** Optimistic mutation (ADR-0086, ADR-0089). Toast
+> precedence + commit-on-folder-change (ADR-0089). ActionTargets
+> mode-agnostic (ADR-0090). Overlay pattern (ADR-0082, ADR-0087).
 >
-> **Still open — brainstorm:** undo-window timing + dismissal;
-> visual-mode multi-select × single-row actions; trash/archive
-> + folder cursor (jump or stay?).
+> **Still open — brainstorm:** Folder list ordering (Recent? all
+> folders alphabetic? sidebar order?). Filter input or just
+> j/k+letter prefix? How to handle a folder name typed but not
+> matching anything (no-op vs ErrorMsg vs feedback)?
 >
 > **Approach.** Brainstorm, plan at
-> `docs/superpowers/plans/YYYY-MM-DD-triage-actions.md`, implement.
+> `docs/superpowers/plans/YYYY-MM-DD-move-picker.md`, implement.
 > Standard pass-end checklist applies.
 
 ## Audits

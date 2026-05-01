@@ -12,30 +12,25 @@ the ADR(s) that justify them.
 
 - Poplar is a single-binary bubbletea terminal email client built
   from one Go module: `cmd/poplar`.
-- Repository organization: `cmd/poplar/` holds CLI wiring only.
-  `internal/ui/` holds the tea.Model tree. `internal/mail/` holds
-  the `Backend` interface and the folder classifier.
-  `internal/mailjmap/` implements `Backend` against
-  `git.sr.ht/~rockorager/go-jmap` (Fastmail). `internal/mailimap/`
-  implements `Backend` against `github.com/emersion/go-imap` v1
-  (Gmail). `internal/mailauth/` vendors small XOAUTH2 + TCP
-  keepalive snippets with provenance comments.
-  `internal/config/` holds `AccountConfig`, `UIConfig`, and
-  `LoadUI`. `internal/theme/` holds compiled lipgloss themes.
-  `internal/term/` handles terminal capability detection
-  (`HasNerdFont`, `MeasureSPUACells`). `internal/filter/`,
-  `internal/content/`, `internal/tidy/` await their consumers.
+- Repository organization: `cmd/poplar/` (CLI wiring only),
+  `internal/ui/` (tea.Model tree), `internal/mail/` (`Backend`
+  interface + classifier), `internal/mailjmap/` (Fastmail via
+  `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/` (Gmail via
+  `emersion/go-imap` v1), `internal/mailauth/` (vendored XOAUTH2 +
+  keepalive snippets), `internal/config/` (`AccountConfig`,
+  `UIConfig`, `LoadUI`), `internal/theme/` (compiled lipgloss
+  themes), `internal/term/` (capability detection: `HasNerdFont`,
+  `MeasureSPUACells`). `internal/filter/`, `internal/content/`,
+  `internal/tidy/` await their consumers.
 - Mail backends call upstream libraries directly. No aerc fork.
   The library family is emersion (`go-imap` v1, `go-message`,
   `go-smtp`, `go-sasl`, `go-webdav`, `go-vcard`) plus
   `rockorager/go-jmap`. Vendored snippets are MIT-licensed helpers
   (XOAUTH2 against `go-sasl`, Gmail X-GM-EXT against `go-imap`);
   each carries a top-of-file provenance comment.
-- Backends supported in v1: Fastmail JMAP and Gmail IMAP. No
-  maildir, mbox, or notmuch.
-- The `mail.Backend` interface is synchronous blocking. Both
-  backend packages call their underlying libraries synchronously
-  — no pump goroutine, no async-to-sync bridge.
+- Backends in v1: Fastmail JMAP + Gmail IMAP. No maildir/mbox/notmuch.
+- `mail.Backend` is synchronous blocking; both packages call their
+  libraries synchronously — no pump goroutine, no async bridge.
 - `internal/ui/` follows the Elm architecture — invoke the
   `elm-conventions` skill before touching any file there. State
   in tea.Model structs; mutations only in Update; I/O only in
@@ -101,38 +96,54 @@ the ADR(s) that justify them.
   wire. Depth is not a wire field — the UI derives it during the
   prefix walk. A non-threaded message is a thread of size 1 with
   `ThreadID == UID` and `InReplyTo == ""`.
-- `mail.MessageInfo` carries both `Date string` and
-  `SentAt time.Time`. `SentAt` is the authoritative instant — used
-  for every sort comparison and for rendering the date column.
-  `Date` is a legacy wire field kept only as a display fallback for
-  test fixtures that predate `SentAt`; real workers must populate
-  `SentAt`. The UI sort helper `lessMessage` falls back to `Date`
-  lex comparison only when `SentAt` is zero on both operands.
-- Message list date column formatting lives in
-  `internal/ui/date_format.go` as `formatRelativeDate(t, now)`.
-  Same calendar day as `now` → 12-hour time (e.g. `10:23 AM`); any
-  other day → `Mon 2006-01-02`; zero time → empty. All in `now`'s
-  location. `MessageList` snapshots `now` at construction and on
-  `SetMessages`; `rebuild` precomputes `displayRow.dateText` so the
-  render path does no I/O and no per-frame formatting.
-- `MessageList` owns thread grouping and fold state. It holds
-  `source []MessageInfo` (the raw backend payload) alongside a
-  derived `rows []displayRow` rebuilt by a group→sort→flatten
-  pipeline. A transient `*threadNode` tree is built per bucket
-  inside `appendThreadRows` only to compute box-drawing prefixes,
-  then discarded — the renderer never sees the tree.
-- The `Viewer` is an `AccountTab` child that owns no backend
-  reference. Body fetch and mark-read Cmds are constructed at
-  `AccountTab` and a `bodyLoadedMsg` carries parsed blocks back.
-  `AccountTab` drops stale `bodyLoadedMsg` events by comparing
-  against `viewer.CurrentUID()`. Phases: closed → loading (spinner
-  placeholder) → ready (headers pinned + body in `bubbles/viewport`)
-  → closed. While the viewer is open, every key routes there
-  first; search keys and folder jumps are inert.
+- `mail.MessageInfo` carries `Date string` + `SentAt time.Time`.
+  `SentAt` is authoritative for sorts + date-column rendering;
+  `Date` is a legacy display fallback for fixtures predating
+  `SentAt`. `lessMessage` falls back to `Date` lex only when
+  `SentAt` is zero on both operands.
+- Message list date column: `formatRelativeDate(t, now)` in
+  `internal/ui/date_format.go`. Same calendar day → 12-hour time
+  (`10:23 AM`); other day → `Mon 2006-01-02`; zero → empty. All in
+  `now`'s location. `MessageList` snapshots `now` at construction +
+  on `SetMessages`; `rebuild` precomputes `displayRow.dateText` so
+  the render path is I/O-free.
+- `MessageList` owns thread grouping + fold state. Holds `source
+  []MessageInfo` plus derived `rows []displayRow` rebuilt by a
+  group→sort→flatten pipeline. A transient `*threadNode` tree is
+  built per bucket in `appendThreadRows` to compute box-drawing
+  prefixes, then discarded — the renderer never sees the tree.
+- `Viewer` is an `AccountTab` child with no backend reference. Body
+  fetch + mark-read Cmds are built at `AccountTab`; `bodyLoadedMsg`
+  carries parsed blocks back. Stale events are dropped by comparing
+  `viewer.CurrentUID()`. Phases: closed → loading (spinner) → ready
+  (headers + body in `bubbles/viewport`) → closed. While open every
+  key routes there first; search keys + folder jumps are inert.
 - Mark-read on viewer open is optimistic: `MessageList.MarkSeen`
   flips the local seen flag immediately and the backend `MarkRead`
   Cmd runs in parallel. Failures surface via `ErrorMsg` into the
   App-owned banner.
+- Triage actions (delete/archive/star/read) are optimistic with a
+  shared undo bar. `MessageList.Apply{Delete,Insert,Flag,Seen}` flip
+  local state without firing Cmds; `AccountTab.dispatchTriage`
+  snapshots inverse data, applies the flip, exits visual mode, and
+  emits `triageStartedMsg` + the forward backend Cmd via the shared
+  `buildTriageCmd`. `App` owns `pendingAction` and schedules a
+  `tea.Tick` for `[ui] undo_seconds` (default 6, clamped [2,30]).
+  `u` fires `onUndo` + the saved inverse Cmd. A folder change
+  commits (no inverse). An `ErrorMsg` runs `onUndo` before setting
+  `lastErr` so a backend failure visibly reverts the flip. The
+  chrome row above the status bar is shared with the error banner;
+  error wins, then toast, else the row collapses
+  (`App.chromeBannerRow`). `pendingAction.IsZero()` checks
+  `op == ""`.
+- `MessageList.ActionTargets()` is the source of truth for triage
+  scope: if anything is marked, return marks in source order
+  (mode-agnostic); otherwise cursor row, with WYSIWYG expansion to
+  all thread UIDs on a folded thread root. `visualMode` controls
+  input routing only (`Space` marks iff on); marks survive
+  `ExitVisual` and are consumed by the next dispatch. Visual mode
+  auto-exits on dispatch. Bulk star/read direction follows the
+  cursor row.
 - `ErrorMsg{Op, Err}` is the canonical Cmd error type. Every fallible
   `tea.Cmd` returns it with a short verb-phrase `Op` ("mark read",
   "fetch body"). `App` owns `lastErr` (last-write-wins). Banner is
@@ -143,12 +154,11 @@ the ADR(s) that justify them.
 - Spinner placeholders go through `NewSpinner(t)` (Dot, `FgDim`)
   in `internal/ui/styles.go`; shared across viewer/folder/send.
 - Body content rendering caps at `maxBodyWidth = 72` cells; headers
-  wrap at the panel content width (uncapped). Outbound links are
-  harvested by `content.RenderBodyWithFootnotes` into `[N]: <url>`
-  rows below a horizontal rule; inline link text gets ` [^N]` glued
-  to its last word with U+00A0 so wrap can never orphan the marker.
-  Short bare URLs (`Text == URL`, ≤30 cells) render inline in link
-  style without a marker.
+  wrap at the panel width (uncapped). Outbound links are harvested
+  by `content.RenderBodyWithFootnotes` into `[N]: <url>` rows below
+  a rule; inline link text gets ` [^N]` glued to its last word with
+  U+00A0. Short bare URLs (`Text == URL`, ≤30 cells) render inline
+  without a marker.
 
 ## UX
 
@@ -213,17 +223,14 @@ the ADR(s) that justify them.
 - Connection state renders as shape + color + text for colorblind
   accessibility: `●` green connected, `◐` orange reconnecting,
   `○` red hollow offline.
-- Search is activated by `/` from the account view. The search
-  shelf is a 3-row region pinned to the bottom of the sidebar
-  column. Filter-and-hide: non-matching threads disappear; matching
-  threads render fully expanded (root + all children) regardless of
-  saved fold state, which is preserved unmutated and restored on
-  `Esc`. `Esc` clears the query and restores the pre-search cursor
-  row.
-- Search modes cycle between `[name]` (subject + sender) and `[all]`
-  (subject + sender + date text) via `Tab` while focused. Case-
-  insensitive substring; current folder only — folder jumps clear
-  the search. Fold keys are no-ops while filter is committed.
+- Search: `/` activates a 3-row shelf pinned to the bottom of the
+  sidebar. Filter-and-hide: non-matching threads disappear; matching
+  threads render fully expanded regardless of saved fold state
+  (preserved, restored on `Esc`). `Esc` clears query + restores
+  pre-search cursor. `Tab` cycles `[name]` (subject+sender) ↔ `[all]`
+  (+date text). Case-insensitive substring; current folder only —
+  folder jumps clear search. Fold keys inert while filter is
+  committed.
 - Modifier-free keybindings: user-facing actions never bind a
   Ctrl/Alt/Meta chord. Viewer scroll uses `j/k/Space/b/g/G`.
   `Ctrl-c` survives only as a terminal-kill alias on the Quit
@@ -235,42 +242,33 @@ the ADR(s) that justify them.
   (skipping folded rows), reusing the same fetch + mark-read flow
   as `Enter`. Boundaries are inert; `n`/`N` are inert during
   `viewerLoading`.
-- Viewer link launch: `1`–`9` open the Nth harvested URL via
-  `xdg-open` (fire-and-forget; `xdg-open` itself detaches and exit
-  status is unreliable). `Tab` opens the `LinkPicker` modal overlay
-  when at least one URL is harvested (inert otherwise). The picker
-  is App-owned, viewer-context-only, mirrors the help-popover
-  overlay pattern (centerOverlay + DimANSI + PlaceOverlay): `j/k`
-  cursor, `Enter`/`1`-`9` launch + close, `Esc`/`Tab` close, `q`
-  swallowed. Index column is right-aligned with leading-space pad;
-  inline URL truncated to 50 cells; 2-row preview footer wraps the
-  full URL.
-- Bare URL footnoting: a `Link{Text: url, URL: url}` span whose
-  `lipgloss.Width(URL) > 30` cells is harvested into the footnote
-  list with a `trimURL(url) + nbsp + [^N]` inline form. Short bare
-  URLs pass through unchanged. `trimURL` strips the scheme, keeps
-  host (with port), and appends `/<first-segment>` when present;
-  appends `…` when anything was removed.
+- Viewer link launch: `1`–`9` opens the Nth harvested URL via
+  `xdg-open` (fire-and-forget). `Tab` opens the `LinkPicker` modal
+  overlay when ≥1 URL is harvested (inert otherwise). Picker is
+  App-owned, viewer-context-only, mirrors the help-popover overlay
+  pattern: `j/k` cursor, `Enter`/`1`–`9` launch+close, `Esc`/`Tab`
+  close, `q` swallowed.
+- Bare URL footnoting: `Link{Text: url, URL: url}` with
+  `lipgloss.Width > 30` cells harvests into the footnote list with
+  `trimURL(url) + nbsp + [^N]` inline. Short bare URLs pass through.
+  `trimURL` strips scheme, keeps host (+port), appends
+  `/<first-segment>` when present, appends `…` when anything was
+  removed.
 
 ## Build & verification
 
-- Single Makefile target set: `build`, `test`, `vet`, `lint`,
-  `install`, `check`, `clean`.
-- `make check` (vet + test) is the gate before any commit.
-- `make install` places the `poplar` binary in `~/.local/bin/`.
-- Go module: `github.com/glw907/poplar`. Go version in `go.mod` is
-  the minimum supported floor (1.26.0); the workstation toolchain is
-  1.26.1.
-- Before writing any Go code, invoke the `go-conventions` skill.
-- Before touching `internal/ui/`, invoke the `elm-conventions`
-  skill.
-- Before changing any color or style, update
-  `docs/poplar/styling.md` first.
-- Pass-end ritual lives in the `poplar-pass` skill. Trigger
-  phrases: "continue development", "next pass", "finish pass",
-  "ship pass".
-- Live verification of UI renders uses the tmux testing workflow
-  in `.claude/docs/tmux-testing.md`.
+- Makefile targets: `build`, `test`, `vet`, `lint`, `install`,
+  `check`, `clean`. `make check` (vet+test) is the commit gate;
+  `make install` writes to `~/.local/bin/`.
+- Go module: `github.com/glw907/poplar`. `go.mod` floor is 1.26.0;
+  workstation toolchain is 1.26.1.
+- Skills: invoke `go-conventions` before any Go file,
+  `elm-conventions` before any `internal/ui/` file, update
+  `docs/poplar/styling.md` before any color/style change.
+- Pass-end ritual lives in the `poplar-pass` skill (trigger:
+  "continue development", "next pass", "finish pass", "ship pass").
+- Live UI verification uses the tmux workflow in
+  `.claude/docs/tmux-testing.md`.
 
 ## Decision index
 
@@ -296,5 +294,6 @@ invariant. ADR numbering is chronological.
 | Viewer prototype, footnote harvesting, optimistic mark-read, n/N nav, long-bare-URL footnoting | 0065, 0066, 0067, 0069, 0085, 0086 |
 | Help popover modal, future-binding policy, overlay+dim, link picker | 0071 (superseded by 0082), 0072, 0082, 0087 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
+| Optimistic triage with toast/undo, ActionTargets, visual mode | 0089, 0090 |
 | Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
