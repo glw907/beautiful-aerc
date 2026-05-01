@@ -296,6 +296,15 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	case key.Matches(msg, m.keys.MsgListUp):
 		m.msglist.MoveUp()
 	case key.Matches(msg, m.keys.ToggleFold):
+		// In visual-select mode, Space toggles the cursor row's mark
+		// instead of folding the thread. Outside visual mode, fold
+		// behavior is unchanged (and inert during an active search).
+		if m.msglist.VisualMode() {
+			if cur, ok := m.msglist.SelectedMessage(); ok {
+				m.msglist.ToggleMark(cur.UID)
+			}
+			return m, nil
+		}
 		if m.sidebarSearch.State() == SearchActive {
 			return m, nil
 		}
@@ -305,6 +314,17 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 			return m, nil
 		}
 		m.msglist.ToggleFoldAll()
+	case key.Matches(msg, m.keys.Delete):
+		return m, m.dispatchTriage("delete")
+	case key.Matches(msg, m.keys.Archive):
+		return m, m.dispatchTriage("archive")
+	case key.Matches(msg, m.keys.Star):
+		return m, m.dispatchTriage("star")
+	case key.Matches(msg, m.keys.ReadToggle):
+		return m, m.dispatchTriage("read")
+	case key.Matches(msg, m.keys.EnterVisual):
+		m.msglist.EnterVisual()
+		return m, nil
 	}
 	if cmd := m.maybeLoadMore(); cmd != nil {
 		return m, cmd

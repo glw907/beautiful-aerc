@@ -1355,3 +1355,104 @@ func TestAccountTab_Triage_StarReadToggle(t *testing.T) {
 		}
 	})
 }
+
+func TestAccountTab_TriageKeys(t *testing.T) {
+	keyDispatches := []struct {
+		key    rune
+		op     string
+		assert func(t *testing.T, mock *mail.MockBackend)
+	}{
+		{'d', "delete", func(t *testing.T, mock *mail.MockBackend) {
+			if len(mock.DeleteCalls) != 1 {
+				t.Errorf("expected DeleteCalls=1, got %d", len(mock.DeleteCalls))
+			}
+		}},
+		{'a', "archive", func(t *testing.T, mock *mail.MockBackend) {
+			if len(mock.MoveCalls) == 0 || mock.MoveCalls[0].Dest != "Archive" {
+				t.Errorf("expected Move to Archive, got %+v", mock.MoveCalls)
+			}
+		}},
+		{'s', "star", func(t *testing.T, mock *mail.MockBackend) {
+			if len(mock.FlagCalls) == 0 || mock.FlagCalls[0].Flag != mail.FlagFlagged {
+				t.Errorf("expected Flag(FlagFlagged), got %+v", mock.FlagCalls)
+			}
+		}},
+		{'.', "read", func(t *testing.T, mock *mail.MockBackend) {
+			if len(mock.MarkReadCalls) == 0 {
+				t.Error("expected MarkReadCalls >= 1")
+			}
+		}},
+	}
+	for _, td := range keyDispatches {
+		t.Run(string(td.key), func(t *testing.T) {
+			tab, mock := newLoadedTabWithMock(t, 120, 30)
+			startCount := tab.msglist.Count()
+			tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{td.key}})
+			if cmd == nil {
+				t.Fatalf("key %q: expected Cmd from dispatchTriage", td.key)
+			}
+			// Drain the dispatch batch so backend calls record.
+			drain(t, &tab, cmd)
+			td.assert(t, mock)
+			_ = startCount
+		})
+	}
+
+	t.Run("v enters visual mode", func(t *testing.T) {
+		tab, _ := newLoadedTabWithMock(t, 120, 30)
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+		if !tab.msglist.VisualMode() {
+			t.Error("v should enter visual mode")
+		}
+	})
+
+	t.Run("Space marks in visual mode", func(t *testing.T) {
+		tab, _ := newLoadedTabWithMock(t, 120, 30)
+		tab.msglist.EnterVisual()
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+		if len(tab.msglist.Marked()) != 1 {
+			t.Errorf("Space in visual mode should mark 1 row, got %d", len(tab.msglist.Marked()))
+		}
+	})
+
+	t.Run("Space folds outside visual mode", func(t *testing.T) {
+		tab, _ := newLoadedTabWithMock(t, 120, 30)
+		// Move cursor onto a thread root if any in fixture.
+		if tab.msglist.VisualMode() {
+			t.Fatal("setup: visual mode should be off")
+		}
+		// Just verify Space doesn't mark when visual mode is off.
+		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+		if len(tab.msglist.Marked()) != 0 {
+			t.Error("Space outside visual should not mark")
+		}
+	})
+}
+
+func TestApp_UndoKey(t *testing.T) {
+	t.Run("u with no toast is no-op", func(t *testing.T) {
+		app := newLoadedApp(t, 100, 30)
+		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+		if cmd != nil {
+			// Cmd may be nil-or-non-nil from delegation, but undoRequestedMsg
+			// must not be the message produced.
+			msg := cmd()
+			if _, ok := msg.(undoRequestedMsg); ok {
+				t.Error("u with no toast should not emit undoRequestedMsg")
+			}
+		}
+	})
+
+	t.Run("u with active toast emits undoRequestedMsg", func(t *testing.T) {
+		app := newLoadedApp(t, 100, 30)
+		app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+		if cmd == nil {
+			t.Fatal("expected Cmd from u while toast active")
+		}
+		msg := cmd()
+		if _, ok := msg.(undoRequestedMsg); !ok {
+			t.Errorf("expected undoRequestedMsg, got %T", msg)
+		}
+	})
+}

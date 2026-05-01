@@ -211,6 +211,13 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			return m, cmd
 		}
 		switch {
+		case key.Matches(msg, m.keys.Undo):
+			// Undo is only live while a toast is active; otherwise the
+			// 'u' key falls through to AccountTab so other meanings can
+			// take over later.
+			if !m.toast.IsZero() {
+				return m, func() tea.Msg { return undoRequestedMsg{} }
+			}
 		case key.Matches(msg, m.keys.Quit):
 			if m.viewerOpen {
 				// Viewer-open: q closes the viewer, not the app.

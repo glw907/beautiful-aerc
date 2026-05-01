@@ -12,6 +12,7 @@ type GlobalKeys struct {
 	Quit      key.Binding
 	ForceQuit key.Binding
 	CloseHelp key.Binding
+	Undo      key.Binding
 }
 
 // NewGlobalKeys returns the default global key bindings.
@@ -21,6 +22,7 @@ func NewGlobalKeys() GlobalKeys {
 		Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		ForceQuit: key.NewBinding(key.WithKeys("ctrl+c")),
 		CloseHelp: key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
+		Undo:      key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
 	}
 }
 
@@ -48,6 +50,11 @@ type AccountKeys struct {
 	ToggleFoldAll key.Binding
 	NextMessage   key.Binding
 	PrevMessage   key.Binding
+	Delete        key.Binding
+	Archive       key.Binding
+	Star          key.Binding
+	ReadToggle    key.Binding
+	EnterVisual   key.Binding
 }
 
 // NewAccountKeys returns the default account-tab key bindings.
@@ -72,6 +79,11 @@ func NewAccountKeys() AccountKeys {
 		ToggleFoldAll: key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "fold all")),
 		NextMessage:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next message")),
 		PrevMessage:   key.NewBinding(key.WithKeys("N"), key.WithHelp("N", "prev message")),
+		Delete:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+		Archive:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive")),
+		Star:          key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "star")),
+		ReadToggle:    key.NewBinding(key.WithKeys("."), key.WithHelp(".", "read")),
+		EnterVisual:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "select")),
 	}
 }
 
