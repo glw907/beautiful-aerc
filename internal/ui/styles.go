@@ -94,6 +94,10 @@ type Styles struct {
 	TopLine   lipgloss.Style
 	ToastText lipgloss.Style
 
+	// Toast is the one-row undo bar rendered above the status bar after
+	// a triage action. Foreground only; no fill.
+	Toast lipgloss.Style
+
 	// ErrorBanner is the one-line surface above the status bar that
 	// renders the most recent ErrorMsg. Foreground only; no fill.
 	ErrorBanner lipgloss.Style
@@ -248,6 +252,8 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.BgBorder).Background(t.BgBase),
 		ToastText: lipgloss.NewStyle().
 			Foreground(t.ColorSuccess),
+		Toast: lipgloss.NewStyle().
+			Foreground(t.FgDim),
 
 		ErrorBanner: lipgloss.NewStyle().
 			Foreground(t.ColorError),
