@@ -861,3 +861,18 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 		t.Fatal("expected picker closed after Enter launch")
 	}
 }
+
+func TestApp_FolderChangeCommitsToast(t *testing.T) {
+	app := newLoadedApp(t, 100, 30)
+	app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+	if app.toast.IsZero() {
+		t.Fatal("setup: triageStartedMsg should have set the toast")
+	}
+
+	// Simulate folder load completion — this is what selectionChangedCmds
+	// resolves to when J/K or a folder-jump key fires.
+	app, _ = app.Update(folderQueryDoneMsg{name: "Drafts", uids: nil, total: 0, reset: true})
+	if !app.toast.IsZero() {
+		t.Errorf("toast should clear on folder change, got %+v", app.toast)
+	}
+}

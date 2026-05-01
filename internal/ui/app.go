@@ -189,6 +189,26 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		cmds = append(cmds, fcmd)
 		return m, tea.Batch(cmds...)
 
+	case folderQueryDoneMsg:
+		// A folder change commits any in-flight toast: the optimistic
+		// flip stands, no inverse fires. The pending state simply
+		// clears so the chrome row collapses. The msg still flows
+		// through to AccountTab below for normal load handling.
+		if msg.reset && !m.toast.IsZero() {
+			hadBanner := m.hasBannerRow()
+			m.toast = pendingAction{}
+			var rcmd tea.Cmd
+			m, rcmd = m.maybeResizeChild(hadBanner)
+			acct, fcmd := m.acct.Update(msg)
+			m.acct = acct
+			m = m.deriveChromeFromAcct()
+			cmds := []tea.Cmd{fcmd}
+			if rcmd != nil {
+				cmds = append(cmds, rcmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 	case backendUpdateMsg:
 		cmds := []tea.Cmd{pumpUpdatesCmd(m.backend)} // re-arm pump
 		if msg.update.Type == mail.UpdateConnState {
