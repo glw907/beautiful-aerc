@@ -23,6 +23,8 @@ ADR-0088.
 | 2.5b-4b | Viewer completion: long-bare-URL footnoting + `n`/`N` nav + `Tab` link picker | done — ADR-0085/0086/0087 |
 | 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | done — ADR-0088 |
 | 6 | Triage actions (delete/archive/star/read; toast + undo bar) | next |
+| 6.5 | Move-to-folder picker (`m` modal; toast + undo) | pending |
+| 6.6 | Trash retention + manual empty (config knob, default 30d) | pending |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
 | 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
