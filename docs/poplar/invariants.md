@@ -37,10 +37,11 @@ the ADR(s) that justify them.
   backend packages call their underlying libraries synchronously
   — no pump goroutine, no async-to-sync bridge.
 - `internal/ui/` follows the Elm architecture — invoke the
-  `elm-conventions` skill before touching any file there. All
-  state lives in tea.Model structs; mutations happen only in
-  Update; I/O only in tea.Cmd; children signal parents via Msg
-  types; shared state is hoisted to the root.
+  `elm-conventions` skill before touching any file there. State
+  in tea.Model structs; mutations only in Update; I/O only in
+  tea.Cmd; children expose accessors, parents read after
+  delegation (`App.deriveChromeFromAcct`). `tea.Msg` is reserved
+  for cross-tree signals, never child→parent state mirrors.
 - Idiomatic bubbletea is the default. UI uses `bubbles` components
   as primary analogues; deviations are ADR'd. `View()` self-enforces
   size via `clipPane`; renderers honor `width` via wordwrap + hardwrap;
@@ -139,9 +140,8 @@ the ADR(s) that justify them.
   truncated with `…`; account region shrinks one cell when shown so
   view height is unchanged. No key steal, dismiss, severity, queue.
   Part of the dimmed underlay while overlays are open.
-- Spinner placeholders go through `NewSpinner(t)` in
-  `internal/ui/styles.go`: Dot variant, `FgDim`. Used by viewer load;
-  future folder load and send progress will share it.
+- Spinner placeholders go through `NewSpinner(t)` (Dot, `FgDim`)
+  in `internal/ui/styles.go`; shared across viewer/folder/send.
 - Body content rendering caps at `maxBodyWidth = 72` cells; headers
   wrap at the panel content width (uncapped). Outbound links are
   harvested by `content.RenderBodyWithFootnotes` into `[N]: <url>`
@@ -285,7 +285,7 @@ invariant. ADR numbering is chronological.
 | JMAP + IMAP only, minimal account config | 0009, 0075 |
 | Mail backend interface synchronous | 0010 (superseded by 0075), 0075 |
 | Config layout, folder classifier, UI config | 0013, 0052, 0053 |
-| Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054 |
+| Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054, 0088 |
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
 | Sidebar groups, nested indent, classification | 0018, 0019, 0034, 0049, 0050 |
 | Message list, threading, fold | 0041, 0045, 0047, 0048, 0055, 0059, 0060, 0061, 0062, 0063 |

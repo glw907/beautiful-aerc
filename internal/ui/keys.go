@@ -77,65 +77,28 @@ func NewAccountKeys() AccountKeys {
 
 // ViewerKeys are handled by Viewer.handleKey. Body scrolling
 // (j/k/space/b) is delegated to the embedded viewport's own KeyMap;
-// only the keys Viewer consumes directly appear here.
+// only the keys Viewer consumes directly appear here. Links is a
+// fixed-size array indexed by harvested-link position minus one
+// (Links[0] is "1", Links[8] is "9").
 type ViewerKeys struct {
 	Close      key.Binding
 	OpenPicker key.Binding
 	BodyTop    key.Binding
 	BodyBottom key.Binding
-	Link1      key.Binding
-	Link2      key.Binding
-	Link3      key.Binding
-	Link4      key.Binding
-	Link5      key.Binding
-	Link6      key.Binding
-	Link7      key.Binding
-	Link8      key.Binding
-	Link9      key.Binding
+	Links      [9]key.Binding
 }
 
 // NewViewerKeys returns the default viewer key bindings.
 func NewViewerKeys() ViewerKeys {
-	return ViewerKeys{
+	vk := ViewerKeys{
 		Close:      key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "close")),
 		OpenPicker: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "links")),
 		BodyTop:    key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top of body")),
 		BodyBottom: key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of body")),
-		Link1:      key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "link 1")),
-		Link2:      key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "link 2")),
-		Link3:      key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "link 3")),
-		Link4:      key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "link 4")),
-		Link5:      key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "link 5")),
-		Link6:      key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "link 6")),
-		Link7:      key.NewBinding(key.WithKeys("7"), key.WithHelp("7", "link 7")),
-		Link8:      key.NewBinding(key.WithKeys("8"), key.WithHelp("8", "link 8")),
-		Link9:      key.NewBinding(key.WithKeys("9"), key.WithHelp("9", "link 9")),
 	}
-}
-
-// linkBindingByIndex returns the 1-based link binding from vk, or
-// zero binding when out of range. Used by Viewer.handleKey to fold
-// the nine digit keys into a single dispatch path.
-func linkBindingByIndex(vk ViewerKeys, n int) key.Binding {
-	switch n {
-	case 1:
-		return vk.Link1
-	case 2:
-		return vk.Link2
-	case 3:
-		return vk.Link3
-	case 4:
-		return vk.Link4
-	case 5:
-		return vk.Link5
-	case 6:
-		return vk.Link6
-	case 7:
-		return vk.Link7
-	case 8:
-		return vk.Link8
-	case 9:
-		return vk.Link9
+	for i := range vk.Links {
+		d := string(rune('1' + i))
+		vk.Links[i] = key.NewBinding(key.WithKeys(d), key.WithHelp(d, "link "+d))
 	}
-	return key.Binding{}
+	return vk
 }

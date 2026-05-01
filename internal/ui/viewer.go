@@ -184,10 +184,10 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 		v.pendingLinkPicker = v.links
 		return v, nil
 	}
-	for n := 1; n <= 9; n++ {
-		if key.Matches(msg, linkBindingByIndex(v.keys, n)) {
-			if n-1 < len(v.links) {
-				return v, launchURLCmd(v.links[n-1])
+	for i, b := range v.keys.Links {
+		if key.Matches(msg, b) {
+			if i < len(v.links) {
+				return v, launchURLCmd(v.links[i])
 			}
 			return v, nil
 		}

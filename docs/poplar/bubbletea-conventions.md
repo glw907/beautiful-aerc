@@ -359,7 +359,12 @@ contains the receipt.
 - **Mutating model state in `View()` or in a `tea.Cmd` closure.**
   Update is the only mutation point. (norms §1.)
 - **Children calling parent methods or holding callbacks.**
-  Children signal up via `tea.Msg` types. (Elm architecture; ADR-0023.)
+  Children expose state via accessors; parents read after
+  delegation. `tea.Msg` is reserved for cross-tree signals (e.g.,
+  Cmds returning from external state). Zero-latency intra-model
+  Cmd round-trips (child→parent state mirrors via signal Msg
+  types) are an anti-pattern — they mask synchronous control flow
+  as async indirection. (Elm architecture; ADR-0023, ADR-0088.)
 - **`tea.ExecProcess` for in-app surfaces.** Compose, picker,
   inline editors render in-pane. ExecProcess is for genuine
   shell-out (e.g., embedded `nvim`). (ADR-0033.)
@@ -432,8 +437,11 @@ verifiable from the diff or from a tmux capture.
 - [ ] No defensive parent-side clipping — a `MaxWidth` on
       `child.View()` output is a sign the child isn't honoring
       its contract; fix the child instead.
-- [ ] Children signal parents via `tea.Msg` types, not callbacks
-      or parent pointers.
+- [ ] Children expose state via accessors; parents read after
+      delegation (`deriveChromeFromAcct` pattern). `tea.Msg`
+      types are reserved for cross-tree signals — not for
+      child→parent state mirrors. No callbacks, no parent
+      pointers. (ADR-0088.)
 - [ ] `WindowSizeMsg` is forwarded into children after the parent
       stores dims and calls `SetSize`.
 - [ ] Keys declared as `key.Binding`; dispatched with

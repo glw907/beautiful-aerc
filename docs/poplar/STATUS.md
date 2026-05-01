@@ -1,9 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 5 next — bubbletea conventions cleanup (#17
-+ #18 + #19). Pass 2.5b-4b done — viewer completion: long-bare-URL
-footnoting, `n`/`N` nav, `Tab` link picker; ADR-0085/0086/0087;
-BACKLOG #22 logged for upstream parser autolink gap.
+**Current pass:** Pass 6 next — triage actions (delete/archive/
+star/read; toast + undo bar). Pass 5 done — KeyMaps + key.Matches
+(#17), delegate-then-read (#18), View width contract (#19);
+ADR-0088.
 
 ## Passes
 
@@ -21,8 +21,8 @@ BACKLOG #22 logged for upstream parser autolink gap.
 | 4.1 | Render bugfix pass — 7 findings, absorbs #14 | done |
 | SPUA-policy | Three-mode iconography (auto/simple/fancy) + runtime probe | done — ADR-0084, [matrix](testing/icon-modes.md) |
 | 2.5b-4b | Viewer completion: long-bare-URL footnoting + `n`/`N` nav + `Tab` link picker | done — ADR-0085/0086/0087 |
-| 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | next |
-| 6 | Triage actions (delete/archive/star/read; toast + undo bar) | pending |
+| 5 | Bubbletea conventions cleanup: `key.Matches` (#17) + delegation (#18) + App.View trust (#19) | done — ADR-0088 |
+| 6 | Triage actions (delete/archive/star/read; toast + undo bar) | next |
 | 7 | Polish I — popover narrow-terminal (#15) + small render drift cleanup | pending |
 | 8 | Gmail IMAP (direct-on-emersion rewrite) | pending |
 | 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
@@ -32,27 +32,27 @@ BACKLOG #22 logged for upstream parser autolink gap.
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 | 1.1 | Neovim companion plugin (post-v1, #6) | post-v1 |
 
-## Next starter prompt (Pass 5)
+## Next starter prompt (Pass 6)
 
-> **Goal.** Pay down bubbletea conventions debt from the Pass 4
-> audit: migrate AccountTab + Viewer key dispatch to `key.Matches`
-> (#17), replace zero-latency intra-model `tea.Cmd` signals with
-> direct delegation (#18), and trust `AccountTab.View` line widths
-> in `App.View` (#19, depends on #17).
+> **Goal.** Triage vocabulary on the message list: delete,
+> archive, star/unstar, mark read/unread. One toast + undo bar
+> for reversible ops.
 >
-> **Scope.** `internal/ui/{account_tab,viewer,app}.go` plus a new
-> `AccountKeys`/`ViewerKeys` struct in `keys.go` parallel to
-> `GlobalKeys`. No new components; structural cleanup only.
+> **Scope.** `internal/ui/msglist.go`, `account_tab.go`,
+> `internal/mail/` (audit existing methods, add missing). New
+> `internal/ui/toast.go` for the undo bar above the status row
+> (error-banner shape, not an overlay).
 >
-> **Settled:** Pass 4 audit findings A3/A9/A10; ADR-0080; conventions
-> doc §3/§8/§10. Splits into ~3-4 commits ordered #17 → #18 → #19.
+> **Settled:** Optimistic mutation (ADR-0086). Foreground-only
+> banner shape (ADR-0073). Accessor-after-delegation (ADR-0088).
 >
-> **Still open — brainstorm:** binding struct slicing; App-side read
-> accessors on AccountTab.
+> **Still open — brainstorm:** undo-window timing + dismissal;
+> visual-mode multi-select × single-row actions; trash/archive
+> + folder cursor (jump or stay?).
 >
 > **Approach.** Brainstorm, plan at
-> `docs/superpowers/plans/YYYY-MM-DD-bubbletea-conventions-cleanup.md`,
-> implement. Standard pass-end checklist applies.
+> `docs/superpowers/plans/YYYY-MM-DD-triage-actions.md`, implement.
+> Standard pass-end checklist applies.
 
 ## Audits
 
