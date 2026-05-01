@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	// Register non-UTF8 charset decoders (iso-8859-1, windows-1252,
 	// etc.) into go-message's charset registry. Without this, MIME
@@ -310,3 +311,28 @@ type LinkPickerClosedMsg struct{}
 type LaunchURLMsg struct {
 	URL string
 }
+
+// triageStartedMsg is emitted by AccountTab after an optimistic triage
+// flip. App receives it, sets the toast, and schedules a tea.Tick for
+// the undo timer. inverse runs on `u` or on an ErrorMsg rollback;
+// onUndo applies the local MessageList rollback before the inverse
+// Cmd fires.
+type triageStartedMsg struct {
+	op      string
+	n       int
+	uids    []mail.UID
+	inverse tea.Cmd
+	onUndo  func()
+}
+
+// toastExpireMsg fires when the undo timer elapses. App ignores it if
+// deadline does not match the active toast (stale tick from a prior
+// generation).
+type toastExpireMsg struct {
+	deadline time.Time
+}
+
+// undoRequestedMsg is emitted when the user presses `u` while a toast
+// is active. App applies the local roll-back via onUndo and fires the
+// inverse Cmd.
+type undoRequestedMsg struct{}
