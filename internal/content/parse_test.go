@@ -138,6 +138,15 @@ func TestParseBlocks(t *testing.T) {
 			types: []blockKind{kindListItem, kindListItem},
 		},
 		{
+			// Gmail-style plain-text bullets: 3-space indent on the bullet,
+			// continuation wrap on the next line at the same indent. The
+			// continuation must merge into the item or all sibling bullets
+			// collapse into one paragraph.
+			name:  "indented bullets with continuation",
+			input: "   - first item\n   wraps onto next line\n   - second item",
+			types: []blockKind{kindListItem, kindListItem},
+		},
+		{
 			name:  "signature",
 			input: "Body text.\n\n-- \nGeoff Wright\ngeoff@907.life",
 			types: []blockKind{kindParagraph, kindSignature},

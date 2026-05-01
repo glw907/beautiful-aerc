@@ -11,8 +11,8 @@ var (
 	reHeading     = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
 	reCodeFence   = regexp.MustCompile("^```(\\w*)$")
 	reRule        = regexp.MustCompile(`^(-{3,}|_{3,}|\*{3,})$`)
-	reUnordered   = regexp.MustCompile(`^[-*+]\s+(.+)$`)
-	reOrdered     = regexp.MustCompile(`^(\d+)\.\s+(.+)$`)
+	reUnordered   = regexp.MustCompile(`^\s*[-*+]\s+(.+)$`)
+	reOrdered     = regexp.MustCompile(`^\s*(\d+)\.\s+(.+)$`)
 	reQuotePrefix = regexp.MustCompile(`^(>+)\s?(.*)$`)
 	reAttribution = regexp.MustCompile(`(?i)^on\s.+wrote:\s*$`)
 	reSignature   = regexp.MustCompile(`^-- $`)
@@ -236,10 +236,9 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 		// List items (unordered)
 		if m := reUnordered.FindStringSubmatch(line); m != nil {
 			blocks = append(blocks, ListItem{
-				Spans:   parseSpans(m[1]),
+				Spans:   parseSpans(collectListItem(m[1], lines, &i)),
 				Ordered: false,
 			})
-			i++
 			continue
 		}
 
@@ -250,11 +249,10 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 				idx = idx*10 + int(c-'0')
 			}
 			blocks = append(blocks, ListItem{
-				Spans:   parseSpans(m[2]),
+				Spans:   parseSpans(collectListItem(m[2], lines, &i)),
 				Ordered: true,
 				Index:   idx,
 			})
-			i++
 			continue
 		}
 
@@ -282,6 +280,35 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 	}
 
 	return blocks
+}
+
+// collectListItem advances past the marker line at *i and merges any
+// indented continuation lines into the item's text. Plain-text mail
+// clients (Gmail) wrap list-item bodies onto the next line with the
+// same indent as the bullet content; without this merge, the wrapped
+// lines fall into a sibling paragraph and the bullet structure
+// visibly collapses.
+func collectListItem(text string, lines []string, i *int) string {
+	*i++
+	var b strings.Builder
+	b.WriteString(text)
+	for *i < len(lines) {
+		l := lines[*i]
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			break
+		}
+		if l[0] != ' ' && l[0] != '\t' {
+			break
+		}
+		if reUnordered.MatchString(l) || reOrdered.MatchString(l) {
+			break
+		}
+		b.WriteByte(' ')
+		b.WriteString(trimmed)
+		*i++
+	}
+	return b.String()
 }
 
 // parseBlockquote parses collected quote-prefixed lines into a
