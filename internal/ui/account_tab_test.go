@@ -1253,3 +1253,105 @@ func TestAccountTab_Triage_DeleteArchive(t *testing.T) {
 		}
 	})
 }
+
+func TestAccountTab_Triage_StarReadToggle(t *testing.T) {
+	t.Run("star unstarred row", func(t *testing.T) {
+		tab, mock := newLoadedTabWithMock(t, 120, 30)
+		first, _ := tab.msglist.SelectedMessage()
+		if first.Flags&mail.FlagFlagged != 0 {
+			t.Skip("fixture: cursor row already starred")
+		}
+		cmd := tab.dispatchTriage("star")
+		started, found := runDispatchCmd(t, cmd)
+		if !found {
+			t.Fatal("triageStartedMsg not emitted")
+		}
+		if started.op != "star" {
+			t.Errorf("op = %q, want star", started.op)
+		}
+		after, _ := tab.msglist.MessageByUID(first.UID)
+		if after.Flags&mail.FlagFlagged == 0 {
+			t.Errorf("local flag not set on UID %s", first.UID)
+		}
+		if len(mock.FlagCalls) != 1 || !mock.FlagCalls[0].Set || mock.FlagCalls[0].Flag != mail.FlagFlagged {
+			t.Errorf("FlagCalls = %+v, want one Set=true FlagFlagged", mock.FlagCalls)
+		}
+		// Inverse: clears the flag.
+		_ = started.inverse()
+		if len(mock.FlagCalls) != 2 || mock.FlagCalls[1].Set {
+			t.Errorf("inverse FlagCalls = %+v, want second Set=false", mock.FlagCalls)
+		}
+	})
+
+	t.Run("unstar starred row", func(t *testing.T) {
+		tab, mock := newLoadedTabWithMock(t, 120, 30)
+		// Move cursor to a starred message (UID 5 in the mock fixture).
+		for range tab.msglist.Count() {
+			cur, _ := tab.msglist.SelectedMessage()
+			if cur.Flags&mail.FlagFlagged != 0 {
+				break
+			}
+			tab.msglist.MoveDown()
+		}
+		cur, _ := tab.msglist.SelectedMessage()
+		if cur.Flags&mail.FlagFlagged == 0 {
+			t.Skip("no starred message in fixture")
+		}
+		cmd := tab.dispatchTriage("star")
+		started, _ := runDispatchCmd(t, cmd)
+		if started.op != "unstar" {
+			t.Errorf("op = %q, want unstar", started.op)
+		}
+		if len(mock.FlagCalls) != 1 || mock.FlagCalls[0].Set {
+			t.Errorf("FlagCalls = %+v, want Set=false", mock.FlagCalls)
+		}
+	})
+
+	t.Run("read on unread row", func(t *testing.T) {
+		tab, mock := newLoadedTabWithMock(t, 120, 30)
+		first, _ := tab.msglist.SelectedMessage()
+		if first.Flags&mail.FlagSeen != 0 {
+			t.Skip("fixture: cursor row already read")
+		}
+		cmd := tab.dispatchTriage("read")
+		started, _ := runDispatchCmd(t, cmd)
+		if started.op != "read" {
+			t.Errorf("op = %q, want read", started.op)
+		}
+		after, _ := tab.msglist.MessageByUID(first.UID)
+		if after.Flags&mail.FlagSeen == 0 {
+			t.Error("FlagSeen not set locally")
+		}
+		if len(mock.MarkReadCalls) != 1 {
+			t.Errorf("MarkReadCalls = %d, want 1", len(mock.MarkReadCalls))
+		}
+		_ = started.inverse()
+		if len(mock.MarkUnreadCalls) != 1 {
+			t.Errorf("inverse MarkUnreadCalls = %d, want 1", len(mock.MarkUnreadCalls))
+		}
+	})
+
+	t.Run("read on already-read row toggles to unread", func(t *testing.T) {
+		tab, mock := newLoadedTabWithMock(t, 120, 30)
+		// Move cursor to a read message (UID 4 is FlagSeen).
+		for range tab.msglist.Count() {
+			cur, _ := tab.msglist.SelectedMessage()
+			if cur.Flags&mail.FlagSeen != 0 {
+				break
+			}
+			tab.msglist.MoveDown()
+		}
+		cur, _ := tab.msglist.SelectedMessage()
+		if cur.Flags&mail.FlagSeen == 0 {
+			t.Skip("no read message in fixture")
+		}
+		cmd := tab.dispatchTriage("read")
+		started, _ := runDispatchCmd(t, cmd)
+		if started.op != "unread" {
+			t.Errorf("op = %q, want unread", started.op)
+		}
+		if len(mock.MarkUnreadCalls) != 1 {
+			t.Errorf("MarkUnreadCalls = %d, want 1", len(mock.MarkUnreadCalls))
+		}
+	})
+}
