@@ -325,3 +325,28 @@ func findLineContaining(lines []string, substr string) string {
 	return ""
 }
 
+func TestSidebar_OrderedFolders(t *testing.T) {
+	classified := []mail.ClassifiedFolder{
+		{Folder: mail.Folder{Name: "INBOX"}, Canonical: "Inbox", Group: mail.GroupPrimary},
+		{Folder: mail.Folder{Name: "Drafts"}, Canonical: "Drafts", Group: mail.GroupPrimary},
+		{Folder: mail.Folder{Name: "Trash"}, Canonical: "Trash", Group: mail.GroupDisposal},
+		{Folder: mail.Folder{Name: "Receipts/2026"}, Canonical: "Receipts/2026", Group: mail.GroupCustom},
+	}
+	s := NewSidebar(NewStyles(theme.OneDark), classified, config.UIConfig{}, 30, 20, SimpleIcons)
+	got := s.OrderedFolders()
+	if len(got) != 4 {
+		t.Fatalf("len = %d, want 4", len(got))
+	}
+	want := []FolderEntry{
+		{Display: "Inbox", Provider: "INBOX", Group: GroupPrimary},
+		{Display: "Drafts", Provider: "Drafts", Group: GroupPrimary},
+		{Display: "Trash", Provider: "Trash", Group: GroupDisposal},
+		{Display: "Receipts/2026", Provider: "Receipts/2026", Group: GroupCustom},
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("entry %d = %+v, want %+v", i, got[i], w)
+		}
+	}
+}
+
