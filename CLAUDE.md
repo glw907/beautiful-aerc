@@ -6,30 +6,37 @@ not "better mutt."
 
 @docs/poplar/invariants.md
 
-## Pre-1.0 stance
+## Release stance
 
-Poplar is pre-1.0. Until 1.0 ships, **clean code and long-term
-maintainability outweigh stability and compat concerns**. That
-means:
+The project moves through three phases with different rules
+(ADR-0105). Check `STATUS.md` to see which phase is active.
 
-- Refactor and rename freely. Don't propose compat shims, don't
-  surface "churn cost" as a tradeoff, don't preserve dead fields
-  "in case Pass N needs them" — strip them; the next pass re-adds
-  with its consumer.
+**Pre-beta** (now → Pass 10): **clean code outweighs stability.**
+
+- Refactor and rename freely. No compat shims, no "churn cost"
+  framing, no dead fields preserved "in case Pass N needs them" —
+  strip them; the next pass re-adds with its consumer.
 - When you notice a small adjacent issue while finishing other
   work, **fix it inline** as part of the current pass. Don't end
-  with an offer to /schedule a follow-up agent for it. Reserve
-  /schedule for genuinely time-gated follow-ups (soak windows,
-  metric verification after a deploy, recurring sweeps).
-- Migrations and breaking changes are first-class — explain them
-  in the commit message and the relevant ADR; don't engineer
-  around them.
-- The only exception is data on disk that the user can't easily
-  regenerate (mail caches, OAuth refresh tokens). That's a real
-  cost; everything else (config keys, file locations, exported
-  Go API, error message wording) is fair game.
+  with an offer to /schedule a follow-up. Reserve /schedule for
+  genuinely time-gated follow-ups (soak windows, metric checks,
+  recurring sweeps).
+- Migrations and breaking changes are first-class — explain in
+  the commit message and ADR; don't engineer around them.
+- The only sacred thing is data on disk the user can't easily
+  regenerate (mail caches, OAuth refresh tokens).
 
-After 1.0 this stance flips — that pass will be ADR'd explicitly.
+**Beta soak** (Pass 11 ships `v0.9.0` → `v1.0.0`): **stability first.**
+
+- Master accepts bug fixes only. No new features on master.
+- On-disk data formats frozen. Schema versions + automatic
+  lossless migrations across beta releases.
+- Refactors that don't touch user-visible behavior are OK if
+  small, reviewable, and tested.
+- New features queue on the `1.1` branch.
+
+**Post-1.0** (`v1.0.0` ships): standard SemVer. `v1.x.y`
+backwards-compatible; breaking changes wait for `v2.0.0`.
 
 ## Conventions
 

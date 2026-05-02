@@ -207,3 +207,4 @@ invariant. ADR numbering is chronological.
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
 | Path-scoped UI rule (split from invariants) | 0095 |
 | Responsive sidebar; 80×24 polish bar | 0096, 0097 |
+| Release model — pre-beta / beta soak / post-1.0 | 0105 |
