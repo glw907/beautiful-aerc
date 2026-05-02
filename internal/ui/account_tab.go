@@ -17,8 +17,27 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// sidebarWidth is the fixed width of the sidebar panel.
-const sidebarWidth = 30
+// sidebarWidthFor returns the sidebar width in terminal cells given
+// the current terminal width. Linear from 24 cells at termWidth=80
+// up to 30 cells at termWidth>=86; clamped to [24, 30].
+//
+// 80x24 is the design polish bar (default launch size on every
+// VT100-lineage terminal). The 56-cell offset is the message-list
+// natural minimum: flag(2) + icon(4) + sender(20) + thread-prefix(4)
+// + subject(8) + gap(2) + date(14) + sep(1) + right-border(1).
+//
+// See ADR-0096 (responsive sidebar) and ADR-0097 (80x24 polish bar).
+func sidebarWidthFor(termWidth int) int {
+	const minWidth, maxWidth = 24, 30
+	w := termWidth - 56
+	if w < minWidth {
+		return minWidth
+	}
+	if w > maxWidth {
+		return maxWidth
+	}
+	return w
+}
 
 // sidebarHeaderRows is the blank/account/blank padding reserved at
 // the top of the sidebar before the folder list. AccountTab.View
@@ -65,13 +84,14 @@ type AccountTab struct {
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
 func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig, icons IconSet) AccountTab {
+	initialSidebar := sidebarWidthFor(96)
 	return AccountTab{
 		styles:        styles,
 		icons:         icons,
 		backend:       backend,
 		uiCfg:         uiCfg,
-		sidebar:       NewSidebar(styles, nil, uiCfg, sidebarWidth, 1, icons),
-		sidebarSearch: NewSidebarSearch(styles, sidebarWidth, icons),
+		sidebar:       NewSidebar(styles, nil, uiCfg, initialSidebar, 1, icons),
+		sidebarSearch: NewSidebarSearch(styles, initialSidebar, icons),
 		msglist:       NewMessageList(styles, nil, 1, 1, icons),
 		viewer:        NewViewer(styles, t, backend.AccountEmail()),
 		keys:          NewAccountKeys(),
@@ -106,7 +126,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		sw := min(sidebarWidth, m.width/2)
+		sw := min(sidebarWidthFor(m.width), m.width/2)
 		folderHeight := max(1, m.height-sidebarHeaderRows-searchShelfRows)
 		m.sidebar.SetSize(sw, folderHeight)
 		m.sidebarSearch.SetSize(sw)
@@ -768,7 +788,7 @@ func (m AccountTab) View() string {
 		return ""
 	}
 
-	sw := min(sidebarWidth, m.width/2)
+	sw := min(sidebarWidthFor(m.width), m.width/2)
 
 	acctLine := m.styles.SidebarAccount.Width(sw).Render(" " + m.backend.AccountName())
 	blank := m.styles.SidebarBg.Width(sw).Render("")
@@ -803,7 +823,7 @@ func (m AccountTab) View() string {
 		rightLines = strings.Split(m.viewer.View(), "\n")
 	case m.loading && m.msglist.Count() == 0:
 		text := m.spinner.View() + " Loading messages…"
-		mw := max(1, m.width-min(sidebarWidth, m.width/2)-1)
+		mw := max(1, m.width-min(sidebarWidthFor(m.width), m.width/2)-1)
 		rightLines = strings.Split(
 			lipgloss.Place(mw, m.height, lipgloss.Center, lipgloss.Center,
 				m.styles.Dim.Render(text)),
