@@ -126,10 +126,17 @@ func TestConfirmModal_ViewWidthContract(t *testing.T) {
 
 	box := m.Box(80, 24)
 	lines, _ := splitLines(box)
+	if len(lines) == 0 {
+		t.Fatal("box produced no lines")
+	}
+	want := lipgloss.Width(lines[0])
 	for i, line := range lines {
 		w := lipgloss.Width(line)
 		if w > 80 {
 			t.Errorf("line %d width = %d, want ≤80: %q", i, w, line)
+		}
+		if w != want {
+			t.Errorf("line %d width = %d, want %d (border alignment): %q", i, w, want, line)
 		}
 	}
 }

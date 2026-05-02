@@ -1,0 +1,40 @@
+──────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────╮
+                              │▐  󰇮   Alice Johnson           Re: Project update for Q2 launch          Mon 2026-04-13 │
+ geoff@907.life               │   󰇮   Bob Smith               Quick question about the API              Mon 2026-04-13 │
+                              │   󰇮   Carol White             Lunch tomorrow?                           Mon 2026-04-13 │
+  󰇰  Inbox                  4 │       David Chen              Meeting notes from yesterday              Sun 2026-04-12 │
+  󰏫  Drafts                   │   󰈻   Billing Dept            Invoice #2847 attached                    Sun 2026-04-12 │
+  󰑚  Sent                     │   󰑚   Emma Wilson             Re: Weekend hiking trip                   Sun 2026-04-12 │
+  󰀼  Archive                  │       Acme Cloud              Your subscription renewal                 Wed 2026-04-08 │
+                              │       GitHub                  Code review: auth refactor PR #42         Wed 2026-04-08 │
+  󰍷  Spam                  12 │       Dev Community           New comment on your post                  Tue 2026-04-07 │
+┃ 󰩺  Trash                    │   󰈻   Alaska Airlines         Flight confirmation: SFO → SEA            Tue 2026-04-07 │
+                              │   󰑚   Frank Lee               Server migration plan                     Sun 2026-04-05 │
+  󰡡  Lists/golang             │   󰇮   Grace Kim               ├─ Re: Server migration plan              Sun 2026-04-05 │
+  󰡡  Lists/rust               │       Frank Lee               │  └─ Re: Server migration plan           Sun 2026-04-05 │
+  󰡡  Notifications            │       Henry Park              └─ Re: Server migration plan              Sun 2026-04-05 │
+  󰡡  Remind                   │                                                                                        │
+                              │                                                                                        │
+                              │    ┌─ Empty Trash ──────────────────────────────────┐                                  │
+                              │    │14 messages will be permanently deleted.        │                                  │
+                              │    ├────────────────────────────────────────────────┤                                  │
+                              │    │[y] yes   [n] no   [esc] cancel                 │                                  │
+                              │    └────────────────────────────────────────────────┘                                  │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+   / to search                │                                                                                        │
+                              │                                                                                        │
+──────────────────────────────┴─────────────────────────────────────────────────────────────── 5 messages · ○ offline ─╯
+ d del  a archive  s star  . read ┊  r/R reply  f fwd  c compose ┊  / find ┊  ␣ fold  F fold all ┊  ? help  q quit

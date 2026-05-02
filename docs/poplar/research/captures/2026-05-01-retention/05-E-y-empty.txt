@@ -1,0 +1,40 @@
+──────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────╮
+                              │                                                                                        │
+ geoff@907.life               │                                                                                        │
+                              │                                                                                        │
+  󰇰  Inbox                  4 │                                                                                        │
+  󰏫  Drafts                   │                                                                                        │
+  󰑚  Sent                     │                                                                                        │
+  󰀼  Archive                  │                                                                                        │
+                              │                                                                                        │
+  󰍷  Spam                  12 │                                                                                        │
+┃ 󰩺  Trash                    │                                                                                        │
+                              │                                                                                        │
+  󰡡  Lists/golang             │                                                                                        │
+  󰡡  Lists/rust               │                                                                                        │
+  󰡡  Notifications            │                                                                                        │
+  󰡡  Remind                   │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                      No messages                                       │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+   / to search                │                                                                                        │
+                              │                                                                                        │
+✓ Emptied Trash (14)
+──────────────────────────────┴─────────────────────────────────────────────────────────────── 5 messages · ○ offline ─╯
+ d del  a archive  s star  . read ┊  r/R reply  f fwd  c compose ┊  / find ┊  ␣ fold  F fold all ┊  ? help  q quit

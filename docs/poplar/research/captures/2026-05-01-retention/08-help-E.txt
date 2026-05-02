@@ -1,0 +1,40 @@
+──────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────╮
+                              │                                                                                        │
+ geoff@907.life               │                                                                                        │
+                              │                                                                                        │
+  󰇰  Inbox                  4 │                                                                                        │
+  󰏫  Drafts                   │                                                                                        │
+  󰑚  Sent                     │                                                                                        │
+  󰀼  Archive                  │                                                                                        │
+                              │╭─ Message List ─────────────────────────────────────────╮                              │
+  󰍷  Spam                  12 ││                                                        │                              │
+┃ 󰩺  Trash                    ││  Navigate          Triage              Reply           │                              │
+                              ││  j/k    up/down    d      delete       r      reply    │                              │
+  󰡡  Lists/golang             ││  g/G    top/bot    a      archive      R      all      │                              │
+  󰡡  Lists/rust               ││                    s      star         f      forward  │                              │
+  󰡡  Notifications            ││                    .      read/unrd    c      compose  │                              │
+  󰡡  Remind                   ││                    m      move                         │                              │
+                              ││                    E      empty                        │                              │
+                              ││                    u      undo                         │                              │
+                              ││                                                        │                              │
+                              ││  Search           Select           Threads             │                              │
+                              ││  /      search    v      select    ␣      fold         │                              │
+                              ││  n      next      ␣      toggle    F      fold all     │                              │
+                              ││  N      prev                                           │                              │
+                              ││                                                        │                              │
+                              ││  Go To                                                 │                              │
+                              ││  I      inbox    D      drafts    S      sent          │                              │
+                              ││  A      archive    X      spam    T      trash         │                              │
+                              ││                                                        │                              │
+                              ││  Enter  open    ?  close                               │                              │
+                              ││                                                        │                              │
+                              │╰────────────────────────────────────────────────────────╯                              │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+                              │                                                                                        │
+   / to search                │                                                                                        │
+                              │                                                                                        │
+──────────────────────────────┴─────────────────────────────────────────────────────────────── 5 messages · ○ offline ─╯
+ d del  a archive  s star  . read ┊  r/R reply  f fwd  c compose ┊  / find ┊  ␣ fold  F fold all ┊  ? help  q quit

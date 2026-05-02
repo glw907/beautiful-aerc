@@ -122,7 +122,7 @@ func (m ConfirmModal) Box(w, h int) string {
 
 	// Top border with inset title.
 	title := " " + m.req.Title + " "
-	rest := boxW - 2 - lipgloss.Width(title)
+	rest := boxW - 3 - lipgloss.Width(title)
 	if rest < 0 {
 		rest = 0
 	}
