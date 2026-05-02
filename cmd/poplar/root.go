@@ -61,11 +61,7 @@ func runRoot(f rootFlags) error {
 			f.theme, strings.Join(theme.ThemeNames(), ", "))
 	}
 
-	configPath, _, err := config.Resolve(f.config)
-	if err != nil {
-		return err
-	}
-	accts, err := config.Load(f.config)
+	accts, configPath, err := config.Load(f.config)
 	if errors.Is(err, config.ErrFirstRun) {
 		fmt.Fprintln(os.Stderr, err.Error())
 		fmt.Fprintln(os.Stderr, "Edit the file and run poplar again.")

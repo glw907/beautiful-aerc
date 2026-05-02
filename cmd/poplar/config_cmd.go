@@ -69,7 +69,7 @@ func newConfigCheckCmd() *cobra.Command {
 		Short:        "Validate config and test each account's connection",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			accounts, err := config.Load("")
+			accounts, _, err := config.Load("")
 			if err != nil {
 				return err
 			}

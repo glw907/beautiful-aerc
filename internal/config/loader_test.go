@@ -82,7 +82,7 @@ func TestLoadFirstRunWritesTemplate(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("POPLAR_CONFIG", filepath.Join(dir, "config.toml"))
 
-	_, err := Load("")
+	_, _, err := Load("")
 	if !errors.Is(err, ErrFirstRun) {
 		t.Fatalf("err = %v, want ErrFirstRun", err)
 	}
@@ -98,7 +98,7 @@ func TestLoadFirstRunWritesTemplate(t *testing.T) {
 func TestLoadFlagPathMissingErrors(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "explicit.toml")
-	_, err := Load(missing)
+	_, _, err := Load(missing)
 	if err == nil {
 		t.Fatal("expected error for missing flag path")
 	}
@@ -117,7 +117,7 @@ func TestLoadDetectsLegacyAccountsToml(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "poplar", "accounts.toml"), []byte("[[account]]\nname=\"x\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load("")
+	_, _, err := Load("")
 	if !errors.Is(err, ErrOldAccountsToml) {
 		t.Errorf("err = %v, want ErrOldAccountsToml", err)
 	}
