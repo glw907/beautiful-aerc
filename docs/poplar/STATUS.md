@@ -1,33 +1,29 @@
 # Poplar Status
 
 **Current pass:** Pass 8.1 next — Gmail preset on top of the
-generic IMAP backend. Pass 8.5 done — config v1: rename to
-`config.toml`, `provider` key, first-run template + exit 78,
-password-cmd deferred resolution, friendly errors with did-you-mean,
-6 new provider presets (outlook, mailbox-org, posteo, runbox, gmx,
-protonmail), `poplar config init/check/path` subcommands
-(ADR-0102/0103/0104). Live verification ran end-to-end against
-the user's Fastmail account.
+generic IMAP backend. Pass 8.5 done — config v1 (ADR-0102/0103/0104)
+plus integrated v1 roadmap (every open backlog item now scheduled
+to a numbered pass; see table).
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 5 (incl. SPUA-policy, 2.5b-4b) | Scaffold → backend → UI → bubbletea cleanup (see git log) | done |
-| 6 / 6.5 | Triage + undo bar (ADR-0089/0090); move picker (ADR-0091) | done |
-| 6.6 | Trash retention + manual empty (Destroy primitive, sweep, ConfirmModal) | done — ADR-0092/0093/0094 |
-| 6.7 | Tmux verify retention/empty + reference-app research | done — ratifies 0092/0093/0094, ConfirmModal width-drift fix |
-| 6.8 | Docs refactor: path-scoped UI rule, system-map reconcile, wireframes strong-trim, keybindings single-source | done — ADR-0095 |
-| 7 | Polish I — responsive sidebar + 80×24 polish bar (#15 closed) | done — ADR-0096/0097 |
-| 8 | Generic IMAP backend (provider registry, two-connection, 9-min IDLE, Destroy) | done — ADR-0098/0099/0100/0101 |
-| 8.5 | Config v1 (config.toml rename, first-run, password-cmd, friendly errors, 6 new presets) | done — ADR-0102/0103/0104 |
-| 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, label-aware fallbacks | next |
-| 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
-| 9.5 | Compose enhancements: Catkin native editor, tidytext (#12), content cleanup (#13) | pending |
-| 10 | Config polish | pending |
-| 11 | Final polish + 1.0 prep | pending |
+| 1 – 8.5 | Scaffold → backends → UI → triage → config v1 (see git log; ADRs 0001–0104) | done |
+| 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, label-aware fallbacks, XOAUTH2 wiring; re-add `Provider.GmailQuirks` + `capSet.XGM` | next |
+| 8.2 | Bubbletea cleanup II — #17 `key.Matches` migration (AccountTab + Viewer); #18 intra-model `tea.Cmd` → direct delegation; #19 `App.View` width trust (after #17) | pending |
+| 8.3 | Polish I — #23 HTML→plain word-fusion fix; #26 narrow-terminal msglist polish (date column, sender/subject balance); #9 viewer `n/N` walks filtered set | pending |
+| 8.4 | JMAP perf — #4 blob preload (next 2-3 messages on viewer open / msglist scroll) | pending |
+| 8.6 | Attachments I — backend (#24): JMAP attachment metadata + blob fetch; IMAP equivalent | pending |
+| 8.7 | Attachments II — viewer (#24): per-row indicator, attachment list/preview, save-to-disk picker | pending |
+| 9 | Compose framing — `Editor` interface, neovim `--embed` adapter, send via `go-smtp` | pending |
+| 9.5 | Compose enhancements — #5 Catkin native bubbletea editor; #12 `internal/tidy/` collapse; #13 dead `blockKind`/`spanKind` enum cleanup; #24 attach files in compose (size/MIME) | pending |
+| 9.6 | First-run wizard — #27 in-TUI account setup (uses Pass 9 editor primitives + Pass 8.5 config infra) | pending |
+| 10 | Polish II — #14 help popover background dim (decide v1 vs defer); any items surfaced during Pass 9–9.6 | pending |
+| 11 | 1.0 prep — docs sweep, README, release notes, tag v1.0, ADR codifying post-1.0 stability stance | pending |
+| 1.1 | Neovim companion plugin (#6) | post-v1 |
+| 1.2 | View raw RFC822 (#21) | post-v1 |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
-| 1.1 | Neovim companion plugin (post-v1, #6) | post-v1 |
 
 ## Next starter prompt (Pass 8.1)
 
@@ -35,12 +31,14 @@ the user's Fastmail account.
 > backend to Gmail's quirks so Gmail accounts work in v1.
 >
 > **Scope.** New `gmail` entry in `config.Providers` with
-> `GmailQuirks: true`. Gate Gmail-specific behavior in
-> `internal/mailimap/` on the flag: assert `X-GM-EXT-1` at Connect;
-> Move-to-Trash must select a non-Trash folder before EXPUNGE so
-> Gmail actually deletes; X-GM-LABELS as classification fallback if
-> SPECIAL-USE is missing. Wire the `internal/mailauth/` XOAUTH2
-> refresh flow into `dialCommand`/`dialIdle`.
+> `GmailQuirks: true`. Re-add `Provider.GmailQuirks` and
+> `capSet.XGM` (dropped in Pass 8.5 cleanup as dead fields). Gate
+> Gmail-specific behavior in `internal/mailimap/` on the flag:
+> assert `X-GM-EXT-1` at Connect; Move-to-Trash must select a
+> non-Trash folder before EXPUNGE so Gmail actually deletes;
+> X-GM-LABELS as classification fallback if SPECIAL-USE is
+> missing. Wire the `internal/mailauth/` XOAUTH2 refresh flow
+> into `dialCommand`/`dialIdle`.
 >
 > **Settled:** Generic IMAP backend (ADR-0099/0100/0101). Provider
 > registry (ADR-0098). XOAUTH2 helpers in `internal/mailauth/`.

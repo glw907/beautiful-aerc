@@ -7,13 +7,13 @@
 - [x] **#25** ~~Some emails render with no body text~~ `#bug` `#poplar` *(2026-04-29)* (closed 2026-04-29)
   Resolved 2026-04-29: root cause was a missing `_ "github.com/emersion/go-message/charset"` blank import in `internal/ui/cmds.go`. go-message's charset registry only carries UTF-8 by default; MIME parts declaring `charset="iso-8859-1"` (Outlook/Exchange default) failed to decode and `mr.NextPart()` errored on the first part, exiting the extraction loop with both plain and html unset. The blank import registers all standard email charsets (iso-8859-1, windows-1252, koi8-r, gb2312, shift_jis, big5, ...) side-effectfully.
 
-- [ ] **#27** First-run setup wizard (v1) `#feature` `#poplar` `#config` `#v1` *(2026-05-02)*
-  Interactive in-TUI flow for new users to configure their first account. Builds on Pass 8.5's config infrastructure: pick provider from a list, prompt for email, prompt for password (or detect a secret manager and offer to use it), test the connection, write the [[account]] block into config.toml. Pass 8.5 ships the self-documenting TOML and template; the wizard is a follow-on pass that makes onboarding smooth without leaving the terminal. Targeted before 1.0 (own pass, likely after Pass 9 compose lands so the editor primitives can inform the wizard's input fields).
+- [ ] **#27** First-run setup wizard (v1) `#feature` `#poplar` `#config` `#v1` *(2026-05-02)* — **scheduled: Pass 9.6**
+  Interactive in-TUI flow for new users to configure their first account. Builds on Pass 8.5's config infrastructure: pick provider from a list, prompt for email, prompt for password (or detect a secret manager and offer to use it), test the connection, write the [[account]] block into config.toml. Pass 8.5 ships the self-documenting TOML and template; the wizard is a follow-on pass that makes onboarding smooth without leaving the terminal. Bundled into Pass 9.6 so it can reuse Pass 9's editor primitives for the input fields.
 
-- [ ] **#24** Attachments support (v1 blocker) `#feature` `#poplar` `#v1` *(2026-04-28)*
-  poplar v1 needs attachment support end-to-end. Scope spans: backend (JMAP attachment metadata + blob fetch via the existing Download path; equivalent IMAP path when that backend lands), UI (per-row attachment indicator, attachment list/preview in the viewer, save-to-disk action with a path picker or default Downloads dir), and compose (attach files when composing, with size limits and MIME detection). Likely needs one or more dedicated planning + implementation passes — break into smaller backlog items in a future planning pass before starting.
+- [ ] **#24** Attachments support (v1 blocker) `#feature` `#poplar` `#v1` *(2026-04-28)* — **scheduled: Pass 8.6 (backend) + 8.7 (viewer) + 9.5 (compose-side attach)**
+  poplar v1 needs attachment support end-to-end. Scope spans: backend (JMAP attachment metadata + blob fetch via the existing Download path; equivalent IMAP path when that backend lands), UI (per-row attachment indicator, attachment list/preview in the viewer, save-to-disk action with a path picker or default Downloads dir), and compose (attach files when composing, with size limits and MIME detection). Split across three passes: 8.6 backend (JMAP+IMAP fetch path), 8.7 viewer (indicator, list/preview, save-to-disk), 9.5 compose-side (attach files when sending). Each pass plans its own task breakdown.
 
-- [ ] **#23** HTML→plain-text fuses words across element boundaries `#bug` `#poplar` *(2026-04-28)*
+- [ ] **#23** HTML→plain-text fuses words across element boundaries `#bug` `#poplar` *(2026-04-28)* — **scheduled: Pass 8.3**
   Visible in the 1Password Safari update email ("Safari toSafari 18.6", "increasing the  minimum") and Dave Johnson reply ("to:Dave_99504@yahoo.comThanks,Dave Johnson"). The html→markdown converter drops inter-element whitespace when adjacent inline elements (`<br>`, `<a>`, `<span>`) abut without a separating text node — the joined text loses the implicit word boundary the rendered HTML had. Affects readability of any HTML email with non-trivial inline structure. Likely fix in `internal/filter/html.go`: insert a space at element boundaries before tag stripping, or post-process to re-introduce spaces around fused alphanumeric runs. Discovered during 2026-04-28 viewer bug-fix work.
 
 - [x] **#22** ~~Auto-link bare URLs in parsed bodies~~ `#bug` `#poplar` *(2026-04-28)* (closed 2026-04-28)
@@ -23,7 +23,7 @@
 - [x] **#20** ~~SPUA-A cell-width policy: needs robust cross-terminal solution~~ `#bug` `#poplar` `#bubbletea-norms` *(2026-04-27)*
   Resolved 2026-04-27 by ADR-0084 / pass `2026-04-27-spua-cell-width-policy`. Three-mode iconography (`[ui] icons = "auto" | "simple" | "fancy"`, default auto) with sysfont-based Nerd Font detection and CPR cell-width probe. ADR-0079 superseded; ADR-0083 narrowed. New `poplar diagnose` subcommand records the empirical receipt; manual matrix in `docs/poplar/testing/icon-modes.md`.
 
-- [ ] **#17** Migrate AccountTab + Viewer key dispatch to `key.Matches` `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
+- [ ] **#17** Migrate AccountTab + Viewer key dispatch to `key.Matches` `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)* — **scheduled: Pass 8.2**
   Pass 4 audit-A3 (remainder). The App.Update slice was migrated in Pass 4; the AccountTab and Viewer handlers still use `switch msg.String()` for ~30 dispatch sites. The conventions doc and ref-apps §3/§8 establish `key.Matches` as the production norm — string switches are invisible to `bubbles/help` integration, prevent `Enabled()`-gated bindings, and block any future rebinding feature. Suggested approach: introduce an `AccountKeys` struct in `keys.go` (parallel to `GlobalKeys`) and a `ViewerKeys` struct, wire them through the model constructors, replace each dispatch chain. Should land as a dedicated structural-cleanup pass; sized at ~3-4 commits when broken up by component. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A3.
 
 - [x] **#7** Lipgloss renderer: missing first-level blockquote wrapping `#rendering` `#mailrender` *(2026-04-10)*
@@ -31,39 +31,39 @@
 
 ## Someday
 
-- [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)*
+- [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)* — **scheduled: Pass 1.2 (post-v1)**
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
 
-- [ ] **#19** Refactor `App.View` to trust `AccountTab.View` line widths `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
+- [ ] **#19** Refactor `App.View` to trust `AccountTab.View` line widths `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)* — **scheduled: Pass 8.2 (after #17)**
   Pass 4 audit-A10. `App.View` currently iterates every line of `m.acct.View()` to measure and pad it before appending the right border — parent-side post-processing on child output. The conventions doc lists this as an anti-pattern (§8). Once #17 lands and AccountTab fully honors its width contract, App.View can append the border without per-line measurement. Land after #17. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A10.
 
-- [ ] **#18** Replace zero-latency intra-model `tea.Cmd` signals with direct delegation `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)*
+- [ ] **#18** Replace zero-latency intra-model `tea.Cmd` signals with direct delegation `#improvement` `#poplar` `#bubbletea-norms` *(2026-04-26)* — **scheduled: Pass 8.2**
   Pass 4 audit-A9. `viewerOpenedCmd` / `viewerClosedCmd` / `viewerScrollCmd` / `folderChangedCmd` emit messages from AccountTab to App as zero-latency tea.Cmds. The bubbletea source explicitly flags this as an anti-pattern (`tea.go:62-64`): "there's almost never a reason to use a command to send a message to another part of your program. That can almost always be done in the update function." Refactor: App.Update inspects AccountTab state directly after delegation (e.g. expose `IsViewerOpen()` / `SelectedFolderInfo()` on AccountTab) and updates chrome fields without a Cmd round-trip. Removes one frame of lag from the footer/status bar. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A9.
 
 - [x] **#15** ~~Help popover: responsive layout for narrow terminals~~ `#improvement` `#poplar` *(2026-04-25)* (closed 2026-05-01)
   Resolved 2026-05-01 by Pass 7 / ADR-0097. 80×24 is the design polish bar; sub-80 widths handled by `HelpPopover.Box`'s existing `tooNarrow` fallback. The popover's natural width (≤62 account, ≤58 viewer) fits within the message-list pane at 80 cols once the sidebar narrows (ADR-0096). Pass 7 also resolved the underlying drift (threaded-row date clipping at 80×24) by introducing the responsive sidebar.
 
-- [ ] **#14** Help popover: background dim for the underlying view `#improvement` `#poplar` *(2026-04-25)*
+- [ ] **#14** Help popover: background dim for the underlying view `#improvement` `#poplar` *(2026-04-25)* — **scheduled: Pass 10 (decide v1 vs defer)**
   Wireframe (§5) called for dimmed content behind the popover. Skipped in Pass 2.5b-5 because lipgloss has no native opacity and ANSI-level color stripping of the underlying view is fragile (ADR-0071). Revisit if user testing flags the no-dim approach as confusing. Implementation paths: (1) hand-roll a "dim every fg color" transform on the rendered chrome+content before composing under the popover; (2) wait for an upstream lipgloss dim helper.
 
-- [ ] **#13** Drop dead `blockKind` / `spanKind` enums from `internal/content/` `#improvement` `#poplar` *(2026-04-25)*
+- [ ] **#13** Drop dead `blockKind` / `spanKind` enums from `internal/content/` `#improvement` `#poplar` *(2026-04-25)* — **scheduled: Pass 9.5**
   The `Block` and `Span` interfaces require unexported marker methods (`blockType() blockKind`, `spanType() spanKind`) returning private kind constants. The sealed-sum-type pattern. Consumers never inspect the kind values — discrimination always happens via Go type switches. The enum constants and the kind return values are compile-but-unused machinery (~30 LOC). Reduce the marker methods to no-args (`isBlock()`, `isSpan()`) and delete the kindParagraph...,kindText... constants. Audit-2 explicitly notes this is **not blocking** and should ride along with the next pass that touches `internal/content/` — no dedicated commit.
 
-- [ ] **#5** Built-in bubbletea compose editor `#poplar` `#v2` *(2026-04-10)*
-  Pine-style built-in compose using `bubbles/textarea` for body + custom header fields. Alternative to `$EDITOR` for users who want a seamless, zero-dependency compose experience. Would be a bubbletea showcase piece. Design after external editor flow (Pass 9) is stable.
-- [ ] **#6** Neovim companion plugin for poplar `#poplar` `#v2` *(2026-04-10)*
+- [ ] **#5** Catkin: built-in bubbletea compose editor `#poplar` `#v1` *(2026-04-10)* — **scheduled: Pass 9.5**
+  Pine-style built-in compose using `bubbles/textarea` for body + custom header fields. Alternative to `$EDITOR` for users who want a seamless, zero-dependency compose experience. Would be a bubbletea showcase piece. Lands in Pass 9.5 after Pass 9's external `$EDITOR` flow is stable; this is the "Catkin" editor referenced in the pass roadmap.
+- [ ] **#6** Neovim companion plugin for poplar `#poplar` `#v2` *(2026-04-10)* — **scheduled: Pass 1.1 (post-v1)**
   Email browsing within neovim (folder list, message list, viewer as buffers), telescope pickers, compose integration, poplar command passthrough. Requires IPC/RPC interface in poplar. Design when core client is stable.
 
 ## Medium
 
-- [ ] **#26** Pass 7 follow-up: further responsive polish for message-list at narrow terminals `#improvement` `#poplar` *(2026-05-01)*
+- [ ] **#26** Pass 7 follow-up: further responsive polish for message-list at narrow terminals `#improvement` `#poplar` *(2026-05-01)* — **scheduled: Pass 8.3**
   Pass 7 met the 80×24 polish bar via the responsive sidebar (ADR-0096), but at 80 cols the message-list pane still truncates sender names and squeezes subjects. Three interacting budgets to revisit: (1) **date column adapts to width** — switch to a narrower format (e.g. `04-30` / `3:41p`) at intermediate widths, and consider dropping the date column entirely at 80 cols; (2) **subject vs sender column balance** — currently sender gets a fixed allocation, should rebalance so subject takes more cells when sender names are short or when subject is the higher-signal column; (3) **sidebar floor** — current floor is 24 cells, explore whether 22 or 20 is acceptable when paired with label truncation, freeing more cells for the message list. Goal: 80×24 looks great even with long sender names + threaded prefixes.
 
 - [x] **#16** ~~Sidebar rows mis-sized: Nerd Font SPUA-A icons render double-width but `lipgloss.Width` reports 1~~ `#bug` `#poplar` *(2026-04-26)*
   Resolved 2026-04-26 by Pass 4 audit-A1. New `displayCells` helper in `internal/ui/iconwidth.go` corrects the SPUA-A undercount (+1 per U+F0000–U+FFFFD codepoint); `fillRowToWidth`, sidebar `leftWidth`, and the message-list flag column now use it. Flag column bumped from 1 to 2 cells with a matching no-flag pad. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A1.
   Re-audit 2026-04-27: the original "1-cell undercount" framing was workstation-specific (kitty + JetBrainsMonoNL + symbol_map), not universal as ADR-0079 claimed. The `displayCells +1` fix landed here was an over-correction whose visible defect was masked until Pass 4.1 F2. ADR-0084 replaces the static rule with a runtime probe; see that ADR's "Context" section for the institutional record.
 
-- [ ] **#12** Pass 9.5 prereq: collapse `internal/tidy/` to drop CLI machinery `#improvement` `#poplar` *(2026-04-25)*
+- [ ] **#12** Pass 9.5 prereq: collapse `internal/tidy/` to drop CLI machinery `#improvement` `#poplar` *(2026-04-25)* — **scheduled: Pass 9.5**
   Audit-2 verdict on `internal/tidy/` was **collapse** — the core algorithm (`SplitQuoted`/`Reassemble`/`BuildPrompt`/`CallAPI`/`Tidy`) fits the Pass 9.5 compose consumer well, but the package carries CLI ergonomics from a previous standalone-binary lineage that won't fit poplar's unified config. When Pass 9.5 lands, delete `LoadConfig`, `ApplyRuleOverrides`, `ApplyStyleOverrides`, `ConfigString`, `ResolveAPIKey`, and their tests (~100–150 LOC across source + tests). Move any surviving validators next to the unified config decode site in `internal/config/`. Optionally unexport `CallAPI` and `BuildPrompt` if no test reaches them after the trim. Goal: tidy exposes only `Config`, `DefaultConfig()`, `Tidy()`, `Result`, and the status constants. **Don't pre-emptively collapse** — wait until Pass 9.5 surfaces concrete needs that may reshape the trim. Findings: `docs/poplar/audits/2026-04-25-library-packages-findings.md`.
 
 - [x] **#11** ~~Pass 3 prereq: MIME-aware body fetch for filter dispatch~~ `#improvement` `#poplar` *(2026-04-25)*
@@ -72,7 +72,7 @@
 - [x] **#10** ~~Evaluate migrating mail backend from aerc fork to emersion ecosystem~~ `#improvement` `#poplar` *(2026-04-15)*
   Resolved 2026-04-25 by Pass 2.9 research and ADR-0075. The "Go JMAP landscape too thin" premise was wrong — `rockorager/go-jmap` covers the full JMAP surface and is already a dep. Adopting direct-on-libraries: `emersion/go-imap` v1 + `rockorager/go-jmap`, with `emersion/go-smtp/webdav/vcard` queued for later passes. ADR-0075 supersedes 0002, 0006, 0008, 0010, 0012. Research: `docs/poplar/research/2026-04-25-mail-library-stack.md`.
 
-- [ ] **#9** Viewer `n/N` walks filtered row set `#feature` `#poplar` *(2026-04-14)*
+- [ ] **#9** Viewer `n/N` walks filtered row set `#feature` `#poplar` *(2026-04-14)* — **scheduled: Pass 8.3**
   While a search filter is committed and the viewer is open, `n/N` should advance to the next/previous message in the filtered row set and fetch its body into the current viewer. Deferred from Pass 2.5b-4 brainstorm (option c). Requires viewer↔msglist cursor coupling, body prefetch semantics, and filter-boundary behavior. **Bundle with Pass 3 (wire to live backend)** — prefetch semantics only become meaningful with real IMAP/JMAP latency.
 
 - [x] **#8** ~~Design folder jump keybindings without multi-key sequences~~ `#feature` `#poplar` *(2026-04-10)*
@@ -82,7 +82,7 @@
   Binary was archived but `~/.claude/docs/aerc-setup.md` and `CLAUDE.md` still reference it extensively.
 - [x] **#2** Clean up stale pandoc references from docs `#improvement` `#docs` *(2026-04-09)*
   pandoc is no longer part of the project but `~/.claude/docs/aerc-setup.md` still references it in the filter pipeline and compose settings.
-- [ ] **#4** Investigate JMAP blob preloading for faster message open `#improvement` `#upstream` *(2026-04-09)*
+- [ ] **#4** Investigate JMAP blob preloading for faster message open `#improvement` `#upstream` *(2026-04-09)* — **scheduled: Pass 8.4**
   New messages are slow to open (~6s) because aerc fetches body blobs lazily from Fastmail on first open. `cache-blobs=true` only helps on second open. Investigate whether aerc's JMAP backend supports blob prefetching (e.g., preload next 2-3 messages) or if this needs an upstream aerc patch.
 - [x] **#3** ~~Glamour: hanging indent for wrapped list items~~ `#upstream` `#rendering` *(2026-04-09)*
   Obsolete — glamour dependency removed in Pass 2.5-render (lipgloss migration). List items now rendered directly via lipgloss.
