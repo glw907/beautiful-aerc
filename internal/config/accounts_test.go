@@ -22,7 +22,6 @@ func TestParseAccounts(t *testing.T) {
 name = "Fastmail"
 provider = "jmap"
 source = "jmap+oauthbearer://geoff@907.life@api.fastmail.com/.well-known/jmap"
-credential-cmd = "echo test-token"
 copy-to = "Sent"
 folders-sort = ["Inbox", "Sent", "Archive"]
 params = {cache-state = "true", cache-blobs = "true"}
@@ -35,13 +34,11 @@ params = {cache-state = "true", cache-blobs = "true"}
 name = "Work"
 provider = "jmap"
 source = "jmap://user@work.com@jmap.work.com"
-credential-cmd = "echo work-pass"
 
 [[account]]
 name = "Personal"
 provider = "imap"
 source = "imaps://user@personal.com@imap.personal.com:993"
-credential-cmd = "echo personal-pass"
 `,
 			wantN: 2,
 		},
@@ -84,31 +81,6 @@ credential-cmd = "echo personal-pass"
 	}
 }
 
-func TestParseAccountsCredentialInjection(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	toml := `[[account]]
-name = "Test"
-provider = "jmap"
-source = "jmap+oauthbearer://user@example.com@api.example.com/.well-known/jmap"
-credential-cmd = "echo secret-token"
-`
-	if err := os.WriteFile(path, []byte(toml), 0644); err != nil {
-		t.Fatal(err)
-	}
-	accounts, err := ParseAccounts(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(accounts) != 1 {
-		t.Fatalf("expected 1 account, got %d", len(accounts))
-	}
-	// Source URL should now contain the credential
-	if !strings.Contains(accounts[0].Source, "secret-token") {
-		t.Errorf("expected source to contain credential, got %q", accounts[0].Source)
-	}
-}
-
 func TestParseAccountsFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -116,7 +88,6 @@ func TestParseAccountsFields(t *testing.T) {
 name = "Fastmail"
 provider = "jmap"
 source = "jmap://user@fm.com@api.fm.com"
-credential-cmd = "echo pass"
 copy-to = "Sent"
 folders-sort = ["Inbox", "Sent"]
 from = "Test User <test@fm.com>"
@@ -447,7 +418,6 @@ func TestExampleConfigParses(t *testing.T) {
 name = "Example"
 provider = "jmap"
 source = "jmap+oauthbearer://you@example.com@api.example.com/.well-known/jmap"
-credential-cmd = "echo token"
 
 [ui]
 threading = true

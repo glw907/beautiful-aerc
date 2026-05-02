@@ -65,7 +65,4 @@ type AccountConfig struct {
 	OAuthClientSecret string
 	OAuthRefreshToken string
 
-	// Outgoing
-	Outgoing        string
-	OutgoingCredCmd string
 }
