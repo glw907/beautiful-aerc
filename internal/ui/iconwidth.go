@@ -62,10 +62,10 @@ func spuaCountSlow(s string) int {
 	return n
 }
 
-// displayTruncateEllipsis truncates s to at most n terminal display
-// cells, appending '…' (1 cell) when truncation occurs. Returns ""
-// when n <= 0. Returns "…" when n == 1 and s is non-empty and longer
-// than 1 cell.
+// displayTruncateEllipsis truncates s to fit n cells, with '…' as
+// the final cell when truncation occurred. The n==1 branch returns
+// the bare '…' so callers always get a single-cell sentinel rather
+// than an empty string when budget is too tight for any payload.
 func displayTruncateEllipsis(s string, n int) string {
 	if n <= 0 {
 		return ""
