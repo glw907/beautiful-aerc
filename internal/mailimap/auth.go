@@ -177,7 +177,16 @@ func resolvePassword(cfg *config.AccountConfig) (string, error) {
 // resolvedPassword returns the cached password for b, resolving it on
 // the first call. The cached value is stored under b.mu so reconnects
 // within the session reuse the same credential without re-running the cmd.
+//
+// XOAUTH2 access tokens are short-lived (~1h on Gmail). For
+// cfg.Auth == "xoauth2", the cache is bypassed: every dial re-runs
+// password-cmd to fetch a current token. Internal refresh against
+// the provider's token endpoint will land with the first-run wizard
+// (Pass 9.6).
 func (b *Backend) resolvedPassword() (string, error) {
+	if b.cfg.Auth == "xoauth2" {
+		return resolvePassword(&b.cfg)
+	}
 	b.mu.Lock()
 	cached := b.password
 	b.mu.Unlock()

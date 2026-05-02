@@ -3,6 +3,9 @@
 package mailimap
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,5 +57,58 @@ func TestResolvePasswordEmpty(t *testing.T) {
 	_, err := resolvePassword(cfg)
 	if err == nil {
 		t.Fatal("expected error for empty config, got nil")
+	}
+}
+
+func TestResolvedPassword_XOAUTH2_BypassesCache(t *testing.T) {
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "n")
+	if err := os.WriteFile(counter, []byte("0"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Each invocation increments the counter file and prints the new value.
+	cmd := fmt.Sprintf(
+		`n=$(cat %q); n=$((n+1)); printf %%s "$n" > %q; printf %%s "$n"`,
+		counter, counter)
+
+	b := New(config.AccountConfig{
+		Name:        "g",
+		Auth:        "xoauth2",
+		PasswordCmd: cmd,
+	})
+
+	first, err := b.resolvedPassword()
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	second, err := b.resolvedPassword()
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if first == second {
+		t.Errorf("xoauth2 should not cache: first=%q second=%q (want different)", first, second)
+	}
+}
+
+func TestResolvedPassword_NonXOAUTH2_Caches(t *testing.T) {
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "n")
+	if err := os.WriteFile(counter, []byte("0"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := fmt.Sprintf(
+		`n=$(cat %q); n=$((n+1)); printf %%s "$n" > %q; printf %%s "$n"`,
+		counter, counter)
+
+	b := New(config.AccountConfig{
+		Name:        "f",
+		Auth:        "plain",
+		PasswordCmd: cmd,
+	})
+
+	first, _ := b.resolvedPassword()
+	second, _ := b.resolvedPassword()
+	if first != second {
+		t.Errorf("plain auth should cache: first=%q second=%q (want equal)", first, second)
 	}
 }
