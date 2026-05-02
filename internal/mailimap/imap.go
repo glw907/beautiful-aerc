@@ -24,13 +24,14 @@ import (
 type Backend struct {
 	cfg config.AccountConfig
 
-	mu      sync.Mutex
-	cmd     imapClient // command connection (nil before Connect)
-	idle    imapClient // idle connection
-	caps    capSet
-	current string // currently-selected folder on cmd
-	trash   string // resolved Trash folder name; empty until first Delete
-	updates chan mail.Update
+	mu       sync.Mutex
+	cmd      imapClient // command connection (nil before Connect)
+	idle     imapClient // idle connection
+	caps     capSet
+	current  string // currently-selected folder on cmd
+	trash    string // resolved Trash folder name; empty until first Delete
+	password string // cached result of resolvePassword; set on first Connect
+	updates  chan mail.Update
 
 	idleCancel context.CancelFunc
 	idleDone   chan struct{}
@@ -77,16 +78,21 @@ func (b *Backend) Updates() <-chan mail.Update { return b.updates }
 
 const updatesBuffer = 64
 
-// Connect satisfies mail.Backend. It dials both connections,
-// authenticates, negotiates capabilities, and starts the idle
-// goroutine. The dial happens in auth.go; tests bypass by setting
-// b.cmd / b.idle directly and calling finishConnect.
+// Connect satisfies mail.Backend. It resolves the password (running
+// PasswordCmd if needed, caching the result), dials both connections,
+// authenticates, negotiates capabilities, and starts the idle goroutine.
+// The dial happens in auth.go; tests bypass by setting b.cmd / b.idle
+// directly and calling finishConnect.
 func (b *Backend) Connect(ctx context.Context) error {
-	cmd, err := dialCommand(b.cfg)
+	pw, err := b.resolvedPassword()
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	cmd, err := dialCommand(b.cfg, pw)
 	if err != nil {
 		return fmt.Errorf("connect cmd: %w", err)
 	}
-	idle, err := dialIdle(b.cfg)
+	idle, err := dialIdle(b.cfg, pw)
 	if err != nil {
 		_ = cmd.Logout()
 		return fmt.Errorf("connect idle: %w", err)

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -43,6 +44,7 @@ type Backend struct {
 	pushClient *jmap.Client // real client for EventSource; nil in unit tests
 	session    *jmap.Session
 	current    string
+	password   string // cached result of resolvePassword; set on first Connect
 	folders    map[string]folderEntry
 	blobIDs    map[mail.UID]string
 	states     map[string]string
@@ -130,37 +132,90 @@ const (
 	updatesBuffer = 64
 )
 
-// Connect satisfies mail.Backend. It authenticates against the JMAP
-// session endpoint, populates the folder map, and initialises the
+// resolvePassword returns the cleartext password for cfg. Inline
+// Password wins; otherwise PasswordCmd is run via /bin/sh -c and
+// stdout (trimmed) is the password. Returns an error if neither
+// is set or the command fails.
+func resolvePassword(cfg *config.AccountConfig) (string, error) {
+	if cfg.Password != "" {
+		return cfg.Password, nil
+	}
+	if cfg.PasswordCmd == "" {
+		return "", errors.New("account has no password or password-cmd")
+	}
+	cmd := exec.Command("/bin/sh", "-c", cfg.PasswordCmd)
+	out, err := cmd.Output()
+	if err != nil {
+		stderr := ""
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(ee.Stderr))
+		}
+		if stderr != "" {
+			return "", fmt.Errorf("password-cmd failed: %s", stderr)
+		}
+		return "", fmt.Errorf("password-cmd failed: %w", err)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
+
+// resolvedPassword returns the cached password for b, resolving it on
+// the first call. The cached value is stored under b.mu so reconnects
+// within the session reuse the same credential without re-running the cmd.
+func (b *Backend) resolvedPassword() (string, error) {
+	b.mu.Lock()
+	cached := b.password
+	b.mu.Unlock()
+	if cached != "" {
+		return cached, nil
+	}
+	pw, err := resolvePassword(&b.cfg)
+	if err != nil {
+		return "", err
+	}
+	b.mu.Lock()
+	b.password = pw
+	b.mu.Unlock()
+	return pw, nil
+}
+
+// Connect satisfies mail.Backend. It resolves the password (running
+// PasswordCmd if needed, caching the result), authenticates against the
+// JMAP session endpoint, populates the folder map, and initialises the
 // body cache and updates channel.
 //
 // All network RPCs run without holding b.mu. The lock is acquired
 // once at the end to install the completed state and spawn the push
 // goroutine.
 func (b *Backend) Connect(_ context.Context) error {
-	// --- Phase 1: authenticate (no lock) ---
+	// --- Phase 1: resolve password (no lock) ---
+	pw, err := b.resolvedPassword()
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+
+	// --- Phase 2: authenticate (no lock) ---
 	cli := &jmap.Client{
 		SessionEndpoint: b.cfg.Source,
 	}
-	cli.WithAccessToken(b.cfg.Password)
+	cli.WithAccessToken(pw)
 	if err := cli.Authenticate(); err != nil {
 		return fmt.Errorf("connect: authenticate: %w", err)
 	}
 	session := cli.Session
 
-	// --- Phase 2: fetch folders (no lock) ---
+	// --- Phase 3: fetch folders (no lock) ---
 	folders, mailboxState, err := fetchFolders(cli, session)
 	if err != nil {
 		return fmt.Errorf("connect: list folders: %w", err)
 	}
 
-	// --- Phase 3: seed email state (no lock) ---
+	// --- Phase 4: seed email state (no lock) ---
 	emailState, err := fetchEmailState(cli, session)
 	if err != nil {
 		return fmt.Errorf("connect: seed email state: %w", err)
 	}
 
-	// --- Phase 4: build local values (no lock) ---
+	// --- Phase 5: build local values (no lock) ---
 	cache, err := lru.New[string, []byte](bodyCacheSize)
 	if err != nil {
 		return fmt.Errorf("connect: init body cache: %w", err)
@@ -177,7 +232,7 @@ func (b *Backend) Connect(_ context.Context) error {
 		return io.ReadAll(rc)
 	}
 
-	// --- Phase 5: install state under lock, then spawn goroutine ---
+	// --- Phase 6: install state under lock, then spawn goroutine ---
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 

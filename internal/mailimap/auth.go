@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-sasl"
@@ -25,19 +27,22 @@ const (
 	keepAliveProbes   = 3
 )
 
-// dialCommand opens the synchronous command connection for cfg.
-func dialCommand(cfg config.AccountConfig) (imapClient, error) {
-	return dial(cfg, "command")
+// dialCommand opens the synchronous command connection for cfg using pw
+// as the resolved password.
+func dialCommand(cfg config.AccountConfig, pw string) (imapClient, error) {
+	return dial(cfg, pw, "command")
 }
 
-// dialIdle opens the dedicated idle connection for cfg.
-func dialIdle(cfg config.AccountConfig) (imapClient, error) {
-	return dial(cfg, "idle")
+// dialIdle opens the dedicated idle connection for cfg using pw as the
+// resolved password.
+func dialIdle(cfg config.AccountConfig, pw string) (imapClient, error) {
+	return dial(cfg, pw, "idle")
 }
 
 // dial opens one IMAP connection for the given role ("command" or "idle").
 // It applies TCP keepalives, performs TLS or STARTTLS, then authenticates.
-func dial(cfg config.AccountConfig, role string) (imapClient, error) {
+// pw is the resolved cleartext password / bearer token.
+func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) {
 	if cfg.Host == "" {
 		return nil, errors.New("imap: host is required")
 	}
@@ -116,7 +121,7 @@ func dial(cfg config.AccountConfig, role string) (imapClient, error) {
 		cli = imapclient.New(tlsConn, opts)
 	}
 
-	if err := authenticate(cli, cfg); err != nil {
+	if err := authenticate(cli, cfg, pw); err != nil {
 		_ = cli.Logout().Wait()
 		return nil, fmt.Errorf("authenticate (%s): %w", role, err)
 	}
@@ -140,26 +145,73 @@ func applyKeepalive(c *net.TCPConn) {
 	_ = keepalive.SetTcpKeepaliveInterval(fd, keepAliveInterval)
 }
 
+// resolvePassword returns the cleartext password for cfg. Inline
+// Password wins; otherwise PasswordCmd is run via /bin/sh -c and
+// stdout (trimmed) is the password. Returns an error if neither
+// is set or the command fails.
+func resolvePassword(cfg *config.AccountConfig) (string, error) {
+	if cfg.Password != "" {
+		return cfg.Password, nil
+	}
+	if cfg.PasswordCmd == "" {
+		return "", errors.New("account has no password or password-cmd")
+	}
+	cmd := exec.Command("/bin/sh", "-c", cfg.PasswordCmd)
+	out, err := cmd.Output()
+	if err != nil {
+		stderr := ""
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(ee.Stderr))
+		}
+		if stderr != "" {
+			return "", fmt.Errorf("password-cmd failed: %s", stderr)
+		}
+		return "", fmt.Errorf("password-cmd failed: %w", err)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
+
+// resolvedPassword returns the cached password for b, resolving it on
+// the first call. The cached value is stored under b.mu so reconnects
+// within the session reuse the same credential without re-running the cmd.
+func (b *Backend) resolvedPassword() (string, error) {
+	b.mu.Lock()
+	cached := b.password
+	b.mu.Unlock()
+	if cached != "" {
+		return cached, nil
+	}
+	pw, err := resolvePassword(&b.cfg)
+	if err != nil {
+		return "", err
+	}
+	b.mu.Lock()
+	b.password = pw
+	b.mu.Unlock()
+	return pw, nil
+}
+
 // authenticate runs the SASL exchange specified by cfg.Auth.
+// pw is the resolved cleartext password / bearer token.
 // Supported mechanisms: plain (default), login, cram-md5, xoauth2.
-func authenticate(cli *imapclient.Client, cfg config.AccountConfig) error {
+func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) error {
 	mech := cfg.Auth
 	if mech == "" {
 		mech = "plain"
 	}
 	switch mech {
 	case "plain":
-		return cli.Authenticate(sasl.NewPlainClient("", cfg.Email, cfg.Password))
+		return cli.Authenticate(sasl.NewPlainClient("", cfg.Email, pw))
 	case "login":
-		return cli.Login(cfg.Email, cfg.Password).Wait()
+		return cli.Login(cfg.Email, pw).Wait()
 	case "cram-md5":
 		// go-sasl v0.0.0-20241020182733 does not ship CRAM-MD5; reject early.
 		return errors.New("cram-md5: not supported by the bundled go-sasl version")
 	case "xoauth2":
-		if cfg.Password == "" {
+		if pw == "" {
 			return errors.New("xoauth2: access token (password field) required")
 		}
-		return cli.Authenticate(mailauth.NewXoauth2Client(cfg.Email, cfg.Password))
+		return cli.Authenticate(mailauth.NewXoauth2Client(cfg.Email, pw))
 	default:
 		return fmt.Errorf("unsupported auth mechanism %q", mech)
 	}
