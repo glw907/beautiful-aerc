@@ -403,6 +403,45 @@ password = "pw"
 	}
 }
 
+func TestParseAccountsPasswordCmdField(t *testing.T) {
+	toml := `
+[[account]]
+name         = "p"
+provider     = "fastmail"
+email        = "u@fm.com"
+password-cmd = "echo secret"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got[0].PasswordCmd != "echo secret" {
+		t.Errorf("PasswordCmd = %q, want \"echo secret\"", got[0].PasswordCmd)
+	}
+	if got[0].Password != "" {
+		t.Errorf("Password should be empty (resolution deferred)")
+	}
+}
+
+func TestParseAccountsRejectsBothPasswordAndCmd(t *testing.T) {
+	t.Setenv("PW", "x")
+	toml := `
+[[account]]
+name         = "p"
+provider     = "fastmail"
+email        = "u@fm.com"
+password     = "$PW"
+password-cmd = "echo secret"
+`
+	_, err := ParseAccountsFromBytes([]byte(toml))
+	if err == nil {
+		t.Fatalf("expected error for both password and password-cmd set")
+	}
+	if !strings.Contains(err.Error(), "password and password-cmd") {
+		t.Errorf("error %q should mention both fields", err)
+	}
+}
+
 func TestExampleConfigParses(t *testing.T) {
 	const example = `[[account]]
 name = "Example"

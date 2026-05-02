@@ -29,6 +29,7 @@ type accountEntry struct {
 	InsecureTLS       bool              `toml:"insecure-tls"`
 	Auth              string            `toml:"auth"`
 	Password          string            `toml:"password"`
+	PasswordCmd       string            `toml:"password-cmd"`
 	OAuthClientID     string            `toml:"oauth-client-id"`
 	OAuthClientSecret string            `toml:"oauth-client-secret"`
 	OAuthRefreshToken string            `toml:"oauth-refresh-token"`
@@ -111,6 +112,9 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("account %q password: %w", e.Name, err)
 	}
+	if password != "" && e.PasswordCmd != "" {
+		return nil, fmt.Errorf("account %q: both password and password-cmd set; use one", e.Name)
+	}
 	clientID, err := resolveEnv(e.OAuthClientID)
 	if err != nil {
 		return nil, fmt.Errorf("account %q oauth-client-id: %w", e.Name, err)
@@ -147,6 +151,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		InsecureTLS:       insecureTLS,
 		Auth:              e.Auth,
 		Password:          password,
+		PasswordCmd:       e.PasswordCmd,
 		OAuthClientID:     clientID,
 		OAuthClientSecret: clientSecret,
 		OAuthRefreshToken: refresh,

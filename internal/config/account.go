@@ -34,6 +34,12 @@ type AccountConfig struct {
 	// In config.toml use "$VAR_NAME" to pull from the environment.
 	Password string
 
+	// PasswordCmd is a shell command whose stdout becomes the
+	// password. Resolved at first Connect (not at config-load time)
+	// so secret-manager prompts surface near the action that needs
+	// them. Mutually exclusive with Password.
+	PasswordCmd string
+
 	// Auth — recognized values: "plain", "login", "cram-md5",
 	// "xoauth2", "bearer". Empty string defers to backend default.
 	Auth string
