@@ -62,6 +62,23 @@ func spuaCountSlow(s string) int {
 	return n
 }
 
+// displayTruncateEllipsis truncates s to at most n terminal display
+// cells, appending '…' (1 cell) when truncation occurs. Returns ""
+// when n <= 0. Returns "…" when n == 1 and s is non-empty and longer
+// than 1 cell.
+func displayTruncateEllipsis(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if displayCells(s) <= n {
+		return s
+	}
+	if n == 1 {
+		return "…"
+	}
+	return displayTruncate(s, n-1) + "…"
+}
+
 // displayTruncate truncates the ANSI string s to at most n terminal
 // display cells. ansi.Truncate uses runewidth internally and undercounts
 // SPUA-A by (spuaCellWidth-1) per glyph; this wrapper decrements the

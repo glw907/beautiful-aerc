@@ -36,6 +36,36 @@ func TestDisplayCells(t *testing.T) {
 	}
 }
 
+func TestDisplayTruncateEllipsis(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		n    int
+		want string
+	}{
+		{"fits exactly", "hello", 5, "hello"},
+		{"fits with room", "hi", 10, "hi"},
+		{"truncates with ellipsis", "Membership Committee", 14, "Membership Co…"},
+		{"truncates short", "Buccaneer 18", 8, "Buccane…"},
+		{"empty input", "", 5, ""},
+		{"zero budget", "hello", 0, ""},
+		{"one-cell budget non-empty", "hello", 1, "…"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := displayTruncateEllipsis(tc.in, tc.n)
+			if got != tc.want {
+				t.Errorf("displayTruncateEllipsis(%q, %d) = %q, want %q",
+					tc.in, tc.n, got, tc.want)
+			}
+			if displayCells(got) > tc.n && tc.n > 0 {
+				t.Errorf("displayTruncateEllipsis(%q, %d): result %q has %d cells, exceeds budget %d",
+					tc.in, tc.n, got, displayCells(got), tc.n)
+			}
+		})
+	}
+}
+
 func TestSetSPUACellWidthRejectsBadValue(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
