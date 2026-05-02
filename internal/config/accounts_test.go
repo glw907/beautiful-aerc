@@ -20,7 +20,7 @@ func TestParseAccounts(t *testing.T) {
 			name: "single jmap account",
 			toml: `[[account]]
 name = "Fastmail"
-backend = "jmap"
+provider = "jmap"
 source = "jmap+oauthbearer://geoff@907.life@api.fastmail.com/.well-known/jmap"
 credential-cmd = "echo test-token"
 copy-to = "Sent"
@@ -33,13 +33,13 @@ params = {cache-state = "true", cache-blobs = "true"}
 			name: "multiple accounts",
 			toml: `[[account]]
 name = "Work"
-backend = "jmap"
+provider = "jmap"
 source = "jmap://user@work.com@jmap.work.com"
 credential-cmd = "echo work-pass"
 
 [[account]]
 name = "Personal"
-backend = "imap"
+provider = "imap"
 source = "imaps://user@personal.com@imap.personal.com:993"
 credential-cmd = "echo personal-pass"
 `,
@@ -47,7 +47,7 @@ credential-cmd = "echo personal-pass"
 		},
 		{
 			name:    "missing name",
-			toml:    "[[account]]\nbackend = \"jmap\"\nsource = \"jmap://x@y\"\n",
+			toml:    "[[account]]\nprovider = \"jmap\"\nsource = \"jmap://x@y\"\n",
 			wantErr: "account 0: name is required",
 		},
 		{
@@ -89,7 +89,7 @@ func TestParseAccountsCredentialInjection(t *testing.T) {
 	path := filepath.Join(dir, "accounts.toml")
 	toml := `[[account]]
 name = "Test"
-backend = "jmap"
+provider = "jmap"
 source = "jmap+oauthbearer://user@example.com@api.example.com/.well-known/jmap"
 credential-cmd = "echo secret-token"
 `
@@ -114,7 +114,7 @@ func TestParseAccountsFields(t *testing.T) {
 	path := filepath.Join(dir, "accounts.toml")
 	toml := `[[account]]
 name = "Fastmail"
-backend = "jmap"
+provider = "jmap"
 source = "jmap://user@fm.com@api.fm.com"
 credential-cmd = "echo pass"
 copy-to = "Sent"
@@ -220,7 +220,7 @@ func TestParseAccountsEnvPassword(t *testing.T) {
 	path := filepath.Join(dir, "accounts.toml")
 	toml := `[[account]]
 name = "Fastmail"
-backend = "jmap"
+provider = "jmap"
 source = "jmap+oauthbearer://user@example.com@api.example.com/.well-known/jmap"
 password = "$TEST_PASS_TOKEN"
 `
@@ -244,7 +244,7 @@ func TestParseAccountsEnvPasswordUnset(t *testing.T) {
 	path := filepath.Join(dir, "accounts.toml")
 	toml := `[[account]]
 name = "Fastmail"
-backend = "jmap"
+provider = "jmap"
 source = "jmap+oauthbearer://user@example.com@api.example.com/.well-known/jmap"
 password = "$DEFINITELY_UNSET_VAR_XYZ"
 `
@@ -265,7 +265,7 @@ func TestParseAccountsResolvesYahooPreset(t *testing.T) {
 	toml := `
 [[account]]
 name     = "personal"
-backend  = "yahoo"
+provider  = "yahoo"
 email    = "user@yahoo.com"
 auth     = "plain"
 password = "$YAHOO_APP_PASSWORD"
@@ -303,7 +303,7 @@ func TestParseAccountsExplicitImap(t *testing.T) {
 	toml := `
 [[account]]
 name     = "self"
-backend  = "imap"
+provider  = "imap"
 email    = "u@example.com"
 host     = "mail.example.com"
 port     = 143
@@ -326,7 +326,7 @@ func TestParseAccountsResolvesFastmailPreset(t *testing.T) {
 	toml := `
 [[account]]
 name     = "fm"
-backend  = "fastmail"
+provider  = "fastmail"
 email    = "u@fastmail.com"
 auth     = "bearer"
 password = "$FASTMAIL_TOKEN"
@@ -379,7 +379,7 @@ oauth-refresh-token = "$OA_RT"
 func TestExampleConfigParses(t *testing.T) {
 	const example = `[[account]]
 name = "Example"
-backend = "jmap"
+provider = "jmap"
 source = "jmap+oauthbearer://you@example.com@api.example.com/.well-known/jmap"
 credential-cmd = "echo token"
 

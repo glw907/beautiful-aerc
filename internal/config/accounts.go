@@ -20,7 +20,7 @@ type configFile struct {
 type accountEntry struct {
 	Name              string            `toml:"name"`
 	Display           string            `toml:"display"`
-	Backend           string            `toml:"backend"`
+	Provider          string            `toml:"provider"`
 	Source            string            `toml:"source"`
 	Email             string            `toml:"email"`
 	Host              string            `toml:"host"`
@@ -81,13 +81,13 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		return nil, fmt.Errorf("account %d: name is required", index)
 	}
 
-	backend := e.Backend
+	backend := e.Provider
 	host := e.Host
 	port := e.Port
 	startTLS := e.StartTLS
 	source := e.Source
 
-	if preset, ok := LookupProvider(e.Backend); ok {
+	if preset, ok := LookupProvider(e.Provider); ok {
 		backend = preset.Backend
 		if host == "" {
 			host = preset.Host
