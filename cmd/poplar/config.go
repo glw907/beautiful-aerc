@@ -14,5 +14,8 @@ func newConfigCmd() *cobra.Command {
 		SilenceUsage: true,
 	}
 	cmd.AddCommand(newConfigDiscoverFoldersCmd())
+	cmd.AddCommand(newConfigInitTemplateCmd())
+	cmd.AddCommand(newConfigPathCmd())
+	cmd.AddCommand(newConfigCheckCmd())
 	return cmd
 }
