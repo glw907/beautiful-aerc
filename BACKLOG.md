@@ -7,6 +7,9 @@
 - [x] **#25** ~~Some emails render with no body text~~ `#bug` `#poplar` *(2026-04-29)* (closed 2026-04-29)
   Resolved 2026-04-29: root cause was a missing `_ "github.com/emersion/go-message/charset"` blank import in `internal/ui/cmds.go`. go-message's charset registry only carries UTF-8 by default; MIME parts declaring `charset="iso-8859-1"` (Outlook/Exchange default) failed to decode and `mr.NextPart()` errored on the first part, exiting the extraction loop with both plain and html unset. The blank import registers all standard email charsets (iso-8859-1, windows-1252, koi8-r, gb2312, shift_jis, big5, ...) side-effectfully.
 
+- [ ] **#27** First-run setup wizard (v1) `#feature` `#poplar` `#config` `#v1` *(2026-05-02)*
+  Interactive in-TUI flow for new users to configure their first account. Builds on Pass 8.5's config infrastructure: pick provider from a list, prompt for email, prompt for password (or detect a secret manager and offer to use it), test the connection, write the [[account]] block into config.toml. Pass 8.5 ships the self-documenting TOML and template; the wizard is a follow-on pass that makes onboarding smooth without leaving the terminal. Targeted before 1.0 (own pass, likely after Pass 9 compose lands so the editor primitives can inform the wizard's input fields).
+
 - [ ] **#24** Attachments support (v1 blocker) `#feature` `#poplar` `#v1` *(2026-04-28)*
   poplar v1 needs attachment support end-to-end. Scope spans: backend (JMAP attachment metadata + blob fetch via the existing Download path; equivalent IMAP path when that backend lands), UI (per-row attachment indicator, attachment list/preview in the viewer, save-to-disk action with a path picker or default Downloads dir), and compose (attach files when composing, with size limits and MIME detection). Likely needs one or more dedicated planning + implementation passes — break into smaller backlog items in a future planning pass before starting.
 
@@ -27,9 +30,6 @@
   Fixed with two changes: (1) post-parse `wrapImpliedQuotes` wraps unquoted content after a `QuoteAttribution` in a `Blockquote{Level: 1}`, incrementing inner blockquote levels; (2) renderer prefix changed from `strings.Repeat("> ", b.Level)` to `"> "` so structural nesting handles depth without double-counting. Only triggers at top level to avoid compounding. Verified against Yahoo deeply-threaded HTML and plain text emails.
 
 ## Someday
-
-- [ ] **#27** First-run setup wizard `#feature` `#poplar` `#config` `#v2` *(2026-05-02)*
-  Interactive in-TUI flow for new users to configure their first account. Builds on Pass 8.5's config infrastructure: pick provider from a list, prompt for email, prompt for password (or detect a secret manager and offer to use it), test the connection, write the [[account]] block back into config.toml. Pass 8.5 deliberately ships only the self-documenting TOML and the auto-generated template — the wizard is the next step toward a smooth onboarding.
 
 - [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)*
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.

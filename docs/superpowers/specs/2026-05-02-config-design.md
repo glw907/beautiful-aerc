@@ -16,7 +16,7 @@ single self-documenting TOML file that ships with sensible defaults
 and exhaustive inline help — first-time users should never need to
 leave the file to configure poplar.
 
-A first-run setup wizard is **post-1.0** and explicitly out of scope.
+A first-run setup wizard is planned as a **separate v1 pass** (BACKLOG #27) and is explicitly out of scope here. This spec lands the file/TOML surface and the auto-generated self-documenting template; the wizard pass adds the in-TUI flow on top.
 
 ## Scope
 
@@ -37,7 +37,7 @@ In:
 
 Out:
 
-- Setup wizard (post-1.0)
+- Setup wizard (separate v1 pass — BACKLOG #27)
 - SMTP / outgoing-mail preset fields (Pass 9 lands compose; SMTP
   defaults will be added then)
 - Per-account UI overrides (existing global `[ui]` block stays)
