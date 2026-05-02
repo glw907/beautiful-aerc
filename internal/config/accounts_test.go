@@ -60,7 +60,7 @@ credential-cmd = "echo personal-pass"
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := filepath.Join(dir, "accounts.toml")
+			path := filepath.Join(dir, "config.toml")
 			if err := os.WriteFile(path, []byte(tt.toml), 0644); err != nil {
 				t.Fatal(err)
 			}
@@ -86,7 +86,7 @@ credential-cmd = "echo personal-pass"
 
 func TestParseAccountsCredentialInjection(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	toml := `[[account]]
 name = "Test"
 provider = "jmap"
@@ -111,7 +111,7 @@ credential-cmd = "echo secret-token"
 
 func TestParseAccountsFields(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	toml := `[[account]]
 name = "Fastmail"
 provider = "jmap"
@@ -217,7 +217,7 @@ func TestParseAccountsEnvPassword(t *testing.T) {
 	t.Setenv("TEST_PASS_TOKEN", "live-token-xyz")
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	toml := `[[account]]
 name = "Fastmail"
 provider = "jmap"
@@ -241,7 +241,7 @@ password = "$TEST_PASS_TOKEN"
 
 func TestParseAccountsEnvPasswordUnset(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	toml := `[[account]]
 name = "Fastmail"
 provider = "jmap"
@@ -396,7 +396,7 @@ threading = true
 [ui.folders.Trash]
 `
 	dir := t.TempDir()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(example), 0644); err != nil {
 		t.Fatal(err)
 	}

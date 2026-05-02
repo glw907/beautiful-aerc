@@ -31,7 +31,7 @@ type AccountConfig struct {
 
 	// Credentials
 	// Password is the bearer token or password after env-var substitution.
-	// In accounts.toml use "$VAR_NAME" to pull from the environment.
+	// In config.toml use "$VAR_NAME" to pull from the environment.
 	Password string
 
 	// Auth — recognized values: "plain", "login", "cram-md5",
@@ -42,7 +42,7 @@ type AccountConfig struct {
 	// auto-discover (JMAP session). Used as SASL username for IMAP.
 	Email string
 
-	// IMAP transport (set directly via accounts.toml or via a
+	// IMAP transport (set directly via config.toml or via a
 	// provider preset).
 	Host     string
 	Port     int

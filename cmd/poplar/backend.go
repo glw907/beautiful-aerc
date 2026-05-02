@@ -13,14 +13,14 @@ import (
 	"github.com/glw907/poplar/internal/mailjmap"
 )
 
-// defaultConfigPath returns the default path to accounts.toml using
+// defaultConfigPath returns the default path to config.toml using
 // the platform's user config directory.
 func defaultConfigPath() (string, error) {
 	configHome, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("user config dir: %w", err)
 	}
-	return filepath.Join(configHome, "poplar", "accounts.toml"), nil
+	return filepath.Join(configHome, "poplar", "config.toml"), nil
 }
 
 // openBackend constructs a mail.Backend for the given account based on

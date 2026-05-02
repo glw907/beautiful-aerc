@@ -42,7 +42,7 @@ type accountEntry struct {
 	Params            map[string]string `toml:"params"`
 }
 
-// ParseAccounts reads a poplar accounts.toml file and returns
+// ParseAccounts reads a poplar config.toml file and returns
 // configured accounts with credentials resolved.
 func ParseAccounts(path string) ([]AccountConfig, error) {
 	data, err := os.ReadFile(path)
@@ -52,7 +52,7 @@ func ParseAccounts(path string) ([]AccountConfig, error) {
 	return ParseAccountsFromBytes(data)
 }
 
-// ParseAccountsFromBytes parses accounts.toml contents. Callers that
+// ParseAccountsFromBytes parses config.toml contents. Callers that
 // have already read the file should pass its bytes here to avoid a
 // second read.
 func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {

@@ -4,7 +4,7 @@ package config
 
 // Provider is a built-in account preset that fills in protocol,
 // host/port (IMAP), or session URL (JMAP) so users don't have to
-// look those up. Auth is still supplied per-account in accounts.toml.
+// look those up. Auth is still supplied per-account in config.toml.
 type Provider struct {
 	Name        string
 	Backend     string // "imap" or "jmap"

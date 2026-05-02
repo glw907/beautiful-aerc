@@ -65,7 +65,7 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("load accounts: %w", err)
 	}
 	if len(accts) == 0 {
-		return fmt.Errorf("no accounts configured; see ~/.config/poplar/accounts.toml")
+		return fmt.Errorf("no accounts configured; see ~/.config/poplar/config.toml")
 	}
 	backend, err := openBackend(accts[0])
 	if err != nil {

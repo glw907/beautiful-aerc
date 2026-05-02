@@ -22,13 +22,13 @@ func newConfigInitCmd() *cobra.Command {
 	f := configInitFlags{}
 	cmd := &cobra.Command{
 		Use:          "init",
-		Short:        "Discover folders and merge [ui.folders] defaults into accounts.toml",
+		Short:        "Discover folders and merge [ui.folders] defaults into config.toml",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runConfigInit(cmd, f)
 		},
 	}
-	cmd.Flags().StringVar(&f.config, "config", "", "path to accounts.toml (default: $XDG_CONFIG_HOME/poplar/accounts.toml)")
+	cmd.Flags().StringVar(&f.config, "config", "", "path to config.toml (default: $XDG_CONFIG_HOME/poplar/config.toml)")
 	cmd.Flags().BoolVar(&f.write, "write", false, "write merged output to the config file (default: dry-run to stdout)")
 	return cmd
 }
@@ -101,7 +101,7 @@ func openBackendForInit(acct config.AccountConfig) (mail.Backend, error) {
 // writeAtomically writes content to path via a temp file + rename.
 func writeAtomically(path, content string) error {
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".accounts.toml.tmp-*")
+	tmp, err := os.CreateTemp(dir, ".config.toml.tmp-*")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}

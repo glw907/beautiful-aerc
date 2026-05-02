@@ -27,7 +27,7 @@ func execConfigInit(t *testing.T, args ...string) string {
 
 func writeStubConfig(t *testing.T, dir, contents string) string {
 	t.Helper()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
 		t.Fatal(err)
 	}

@@ -111,7 +111,7 @@ rank = -10
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := filepath.Join(dir, "accounts.toml")
+			path := filepath.Join(dir, "config.toml")
 			if err := os.WriteFile(path, []byte(tt.toml), 0644); err != nil {
 				t.Fatal(err)
 			}
@@ -152,7 +152,7 @@ rank = -10
 func writeTempUI(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ trash_retention_days = %d
 }
 
 func TestLoadUIMissingFile(t *testing.T) {
-	_, err := LoadUI("/nonexistent/accounts.toml")
+	_, err := LoadUI("/nonexistent/config.toml")
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}

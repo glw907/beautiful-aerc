@@ -10,7 +10,7 @@ import (
 )
 
 // UIConfig holds poplar's UI tuning. Currently scoped to folder/sidebar
-// behavior. Populated from the [ui] table in accounts.toml.
+// behavior. Populated from the [ui] table in config.toml.
 type UIConfig struct {
 	// Threading is the default threading state for folders that do not
 	// specify a per-folder override. Default true.
@@ -64,7 +64,7 @@ type FolderConfig struct {
 }
 
 // DefaultUIConfig returns an empty UIConfig with sensible defaults.
-// Use as a fallback when accounts.toml has no [ui] section.
+// Use as a fallback when config.toml has no [ui] section.
 func DefaultUIConfig() UIConfig {
 	return UIConfig{
 		Threading:   true,
@@ -97,7 +97,7 @@ type rawUIFile struct {
 	UI rawUI `toml:"ui"`
 }
 
-// LoadUI reads the [ui] table from an accounts.toml file and returns
+// LoadUI reads the [ui] table from an config.toml file and returns
 // a UIConfig. A missing file is an error; a missing [ui] section
 // returns DefaultUIConfig().
 func LoadUI(path string) (UIConfig, error) {
