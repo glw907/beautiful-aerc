@@ -66,8 +66,24 @@ In:
   Elm-architecture-correct path).
 - Sidebar folder-row rendering: when the available label cell
   budget is less than the natural label width, truncate with `…`.
-  The display cells helper already exists (`displayCells`,
-  `displayTruncate`); reuse those.
+  The label budget per row is:
+  ```
+  labelBudget = sidebarWidth
+              - leadCells       (indicator+sp+icon+sp×2 = 6 in cells)
+              - countWidth      (0 if no unread, else cells of count)
+              - countGap        (1 if count present, else 0)
+              - rightMargin     (1 — the one-space border)
+  ```
+  Truncation is computed in cells (via `displayCells`), and the
+  `…` glyph (1 cell wide) replaces the last cell when truncation
+  occurs. Reuse `displayTruncate` and pass `"…"` as the
+  `ansi.Truncate` tail argument — or add a thin wrapper
+  `displayTruncateEllipsis(s, n)`.
+- Right-margin invariant: every folder row reserves exactly 1
+  cell of trailing space before the chrome divider. Truncated
+  labels never run up against the divider. Verified by a unit
+  test on `Sidebar.renderRow` output (last cell of every row is
+  whitespace under the sidebar background style).
 - Status-bar width math (`app.go:349`) — `dividerCol` is currently
   `sidebarWidth` (the const). Switch to the computed value.
 - Verify the message-list date drift resolves at 80×24 after the
@@ -141,6 +157,9 @@ Captures saved alongside the pass commit for the ADR record.
 - Unit: `sidebarWidthFor` table-driven (60→24, 79→24, 80→24, 81→25,
   85→29, 86→30, 120→30, 200→30).
 - Unit: folder label truncation at sidebar=24 with long custom
-  folder names.
+  folder names — verify (1) ellipsis appears when truncation
+  occurs, (2) the trailing 1-cell right margin is always
+  preserved, (3) total row cell width equals `sidebarWidth`
+  exactly.
 - Live tmux: the verification matrix above. Saved capture diffs
   in the pass commit.
