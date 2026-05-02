@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,7 +65,17 @@ func runRoot(f rootFlags) error {
 	if err != nil {
 		return err
 	}
-	accts, err := config.ParseAccounts(configPath)
+	accts, err := config.Load(f.config)
+	if errors.Is(err, config.ErrFirstRun) {
+		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintln(os.Stderr, "Edit the file and run poplar again.")
+		os.Exit(78)
+	}
+	if errors.Is(err, config.ErrOldAccountsToml) {
+		fmt.Fprintln(os.Stderr, "poplar: "+err.Error())
+		fmt.Fprintln(os.Stderr, "  poplar 1.0 reads config.toml; rename your accounts.toml file.")
+		os.Exit(78)
+	}
 	if err != nil {
 		return fmt.Errorf("load accounts: %w", err)
 	}

@@ -3,6 +3,9 @@
 package config
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -72,5 +75,34 @@ func TestResolveDefaultLinux(t *testing.T) {
 	}
 	if src != SourceDefault {
 		t.Errorf("source = %v, want SourceDefault", src)
+	}
+}
+
+func TestLoadFirstRunWritesTemplate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("POPLAR_CONFIG", filepath.Join(dir, "config.toml"))
+
+	_, err := Load("")
+	if !errors.Is(err, ErrFirstRun) {
+		t.Fatalf("err = %v, want ErrFirstRun", err)
+	}
+	got, readErr := os.ReadFile(filepath.Join(dir, "config.toml"))
+	if readErr != nil {
+		t.Fatalf("template not written: %v", readErr)
+	}
+	if string(got) != Template() {
+		t.Errorf("on-disk content does not match Template()")
+	}
+}
+
+func TestLoadFlagPathMissingErrors(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "explicit.toml")
+	_, err := Load(missing)
+	if err == nil {
+		t.Fatal("expected error for missing flag path")
+	}
+	if errors.Is(err, ErrFirstRun) {
+		t.Errorf("first-run template-write should NOT trigger when path was explicit")
 	}
 }

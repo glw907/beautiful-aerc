@@ -3,6 +3,8 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -55,4 +57,48 @@ func defaultConfigDir() (string, error) {
 	default:
 		return os.UserConfigDir()
 	}
+}
+
+// ErrFirstRun is returned by Load when the default config path
+// did not exist and a fresh template was written. The caller
+// should print a "created <path> — edit and run again" message
+// and exit with status 78 (EX_CONFIG).
+var ErrFirstRun = errors.New("first-run: template written")
+
+// ErrOldAccountsToml is returned when the user has an old
+// accounts.toml file (pre-1.0 carryover) and no config.toml.
+var ErrOldAccountsToml = errors.New("old accounts.toml detected; rename to config.toml")
+
+// Load resolves the config path and returns the parsed accounts.
+// When src is SourceDefault or SourceEnv and no file exists, it
+// writes the template and returns ErrFirstRun. When src is
+// SourceFlag and the file is missing, it returns a plain error
+// (the user explicitly chose that path; no template is written).
+func Load(flagPath string) ([]AccountConfig, error) {
+	path, src, err := Resolve(flagPath)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err == nil {
+		return ParseAccountsFromBytes(data)
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if src == SourceFlag {
+		return nil, fmt.Errorf("config file %s not found", path)
+	}
+	dir := filepath.Dir(path)
+	legacy := filepath.Join(dir, "accounts.toml")
+	if _, statErr := os.Stat(legacy); statErr == nil {
+		return nil, fmt.Errorf("%w: found %s", ErrOldAccountsToml, legacy)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create config dir: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(Template()), 0o600); err != nil {
+		return nil, fmt.Errorf("write template: %w", err)
+	}
+	return nil, fmt.Errorf("%w: %s", ErrFirstRun, path)
 }
