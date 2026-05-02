@@ -280,3 +280,55 @@ func TestDeleteNoTrashFolderReturnsError(t *testing.T) {
 		t.Errorf("Delete with no Trash folder should return error")
 	}
 }
+
+func TestDestroy_GmailQuirks_SelectsTrashFirst(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = map[string]bool{"UIDPLUS": true, "X-GM-EXT-1": true, "SPECIAL-USE": true}
+	cmd.folders = []listEntry{
+		{Name: "INBOX"},
+		{Name: "[Gmail]/Trash", Attributes: []string{"\\Trash"}},
+	}
+	idle := newFakeClient()
+	idle.caps = cmd.caps
+
+	b := newWithFake(config.AccountConfig{Name: "g", GmailQuirks: true}, cmd, idle)
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+
+	if err := b.Destroy([]mail.UID{"10", "11"}); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if cmd.selected != "[Gmail]/Trash" {
+		t.Errorf("selected = %q, want %q", cmd.selected, "[Gmail]/Trash")
+	}
+	if len(cmd.storeCalls) != 1 {
+		t.Fatalf("storeCalls = %d, want 1", len(cmd.storeCalls))
+	}
+	if len(cmd.expungeCalls) != 1 {
+		t.Fatalf("expungeCalls = %d, want 1", len(cmd.expungeCalls))
+	}
+}
+
+func TestDestroy_NonQuirks_DoesNotSelect(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = map[string]bool{"UIDPLUS": true}
+	idle := newFakeClient()
+	idle.caps = cmd.caps
+
+	b := newWithFake(config.AccountConfig{Name: "f"}, cmd, idle)
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+
+	if err := b.Destroy([]mail.UID{"7"}); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if cmd.selected != "" {
+		t.Errorf("selected = %q, want empty (no Select expected)", cmd.selected)
+	}
+	if len(cmd.storeCalls) != 1 || len(cmd.expungeCalls) != 1 {
+		t.Errorf("expected 1 Store + 1 UIDExpunge, got store=%d expunge=%d",
+			len(cmd.storeCalls), len(cmd.expungeCalls))
+	}
+}

@@ -97,13 +97,31 @@ func (b *Backend) resolveTrashFolder() (string, error) {
 // then UID EXPUNGE. Per ADR-0092: empty input is a no-op, the
 // operation is irreversible, missing UIDs are treated as success
 // (the server silently ignores them).
+//
+// On Gmail (b.cfg.GmailQuirks), EXPUNGE outside [Gmail]/Trash only
+// removes labels — it does not delete. Destroy on a Gmail backend
+// therefore selects [Gmail]/Trash before STORE+EXPUNGE. The caller
+// must pass UIDs that already live in Trash; both real callers
+// (manual Empty Trash per ADR-0094, retention sweep per ADR-0093)
+// satisfy this because they only trigger inside Disposal folders.
 func (b *Backend) Destroy(uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
 	b.mu.Lock()
 	cmd := b.cmd
+	gmail := b.cfg.GmailQuirks
 	b.mu.Unlock()
+
+	if gmail {
+		trash, err := b.resolveTrashFolder()
+		if err != nil {
+			return fmt.Errorf("destroy: %w", err)
+		}
+		if _, err := cmd.Select(trash, false); err != nil {
+			return fmt.Errorf("select trash: %w", err)
+		}
+	}
 
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
 		return fmt.Errorf("store deleted: %w", err)

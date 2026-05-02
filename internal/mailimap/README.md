@@ -7,6 +7,25 @@ used opportunistically. Two physical connections per backend
 
 See `docs/superpowers/specs/2026-05-01-imap-backend-design.md`.
 
+## Gmail (`GmailQuirks = true`)
+
+The `gmail` provider preset sets `GmailQuirks` on the
+`AccountConfig`. The IMAP backend then:
+
+- Asserts `X-GM-EXT-1` at Connect; refuses to start without it.
+- Routes `Destroy(uids)` through `SELECT [Gmail]/Trash` before
+  `STORE \Deleted` + `UID EXPUNGE`. Gmail's IMAP server only
+  permanently deletes when the SELECTed mailbox is `[Gmail]/Trash`;
+  EXPUNGE elsewhere just removes the matching label. Callers must
+  pass UIDs that already live in Trash — both real callers
+  (manual Empty Trash, retention sweep) operate from inside
+  Disposal folders, so this is satisfied.
+
+XOAUTH2 access tokens are short-lived (~1h). Poplar does not
+refresh them internally yet; wire `password-cmd` to a refresher
+(`oauth2l`, `op`, etc.). Internal token-endpoint exchange lands
+with the first-run wizard.
+
 ## Tests
 
 Unit tests use a fake `imapClient` (see `fake_test.go`) and run
