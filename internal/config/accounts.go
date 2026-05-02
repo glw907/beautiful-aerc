@@ -18,19 +18,27 @@ type configFile struct {
 }
 
 type accountEntry struct {
-	Name            string            `toml:"name"`
-	Display         string            `toml:"display"`
-	Backend         string            `toml:"backend"`
-	Source          string            `toml:"source"`
-	Password        string            `toml:"password"`
-	CredentialCmd   string            `toml:"credential-cmd"`
-	CopyTo          string            `toml:"copy-to"`
-	FoldersSort     []string          `toml:"folders-sort"`
-	FoldersExclude  []string          `toml:"folders-exclude"`
-	From            string            `toml:"from"`
-	Outgoing        string            `toml:"outgoing"`
-	OutgoingCredCmd string            `toml:"outgoing-credential-cmd"`
-	Params          map[string]string `toml:"params"`
+	Name              string            `toml:"name"`
+	Display           string            `toml:"display"`
+	Backend           string            `toml:"backend"`
+	Source            string            `toml:"source"`
+	Email             string            `toml:"email"`
+	Host              string            `toml:"host"`
+	Port              int               `toml:"port"`
+	StartTLS          bool              `toml:"starttls"`
+	Auth              string            `toml:"auth"`
+	Password          string            `toml:"password"`
+	OAuthClientID     string            `toml:"oauth-client-id"`
+	OAuthClientSecret string            `toml:"oauth-client-secret"`
+	OAuthRefreshToken string            `toml:"oauth-refresh-token"`
+	CredentialCmd     string            `toml:"credential-cmd"`
+	CopyTo            string            `toml:"copy-to"`
+	FoldersSort       []string          `toml:"folders-sort"`
+	FoldersExclude    []string          `toml:"folders-exclude"`
+	From              string            `toml:"from"`
+	Outgoing          string            `toml:"outgoing"`
+	OutgoingCredCmd   string            `toml:"outgoing-credential-cmd"`
+	Params            map[string]string `toml:"params"`
 }
 
 // ParseAccounts reads a poplar accounts.toml file and returns
@@ -71,11 +79,46 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if e.Name == "" {
 		return nil, fmt.Errorf("account %d: name is required", index)
 	}
-	if e.Source == "" {
-		return nil, fmt.Errorf("account %q: source is required", e.Name)
+
+	backend := e.Backend
+	host := e.Host
+	port := e.Port
+	startTLS := e.StartTLS
+	source := e.Source
+
+	if preset, ok := LookupProvider(e.Backend); ok {
+		backend = preset.Backend
+		if host == "" {
+			host = preset.Host
+		}
+		if port == 0 {
+			port = preset.Port
+		}
+		if !startTLS {
+			startTLS = preset.StartTLS
+		}
+		if source == "" {
+			source = preset.URL
+		}
 	}
 
-	source := e.Source
+	password, err := resolveEnv(e.Password)
+	if err != nil {
+		return nil, fmt.Errorf("account %q password: %w", e.Name, err)
+	}
+	clientID, err := resolveEnv(e.OAuthClientID)
+	if err != nil {
+		return nil, fmt.Errorf("account %q oauth-client-id: %w", e.Name, err)
+	}
+	clientSecret, err := resolveEnv(e.OAuthClientSecret)
+	if err != nil {
+		return nil, fmt.Errorf("account %q oauth-client-secret: %w", e.Name, err)
+	}
+	refresh, err := resolveEnv(e.OAuthRefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("account %q oauth-refresh-token: %w", e.Name, err)
+	}
+
 	if e.CredentialCmd != "" {
 		cred, err := runCredentialCmd(e.CredentialCmd)
 		if err != nil {
@@ -87,22 +130,25 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
-	password, err := resolveEnv(e.Password)
-	if err != nil {
-		return nil, fmt.Errorf("account %q password: %w", e.Name, err)
-	}
-
 	acct := &AccountConfig{
-		Name:            e.Name,
-		Display:         e.Display,
-		Backend:         e.Backend,
-		Source:          source,
-		Password:        password,
-		Folders:         e.FoldersSort,
-		FoldersExclude:  e.FoldersExclude,
-		Params:          e.Params,
-		Outgoing:        e.Outgoing,
-		OutgoingCredCmd: e.OutgoingCredCmd,
+		Name:              e.Name,
+		Display:           e.Display,
+		Backend:           backend,
+		Source:            source,
+		Email:             e.Email,
+		Host:              host,
+		Port:              port,
+		StartTLS:          startTLS,
+		Auth:              e.Auth,
+		Password:          password,
+		OAuthClientID:     clientID,
+		OAuthClientSecret: clientSecret,
+		OAuthRefreshToken: refresh,
+		Folders:           e.FoldersSort,
+		FoldersExclude:    e.FoldersExclude,
+		Params:            e.Params,
+		Outgoing:          e.Outgoing,
+		OutgoingCredCmd:   e.OutgoingCredCmd,
 	}
 
 	if e.CopyTo != "" {

@@ -51,11 +51,6 @@ credential-cmd = "echo personal-pass"
 			wantErr: "account 0: name is required",
 		},
 		{
-			name:    "missing source",
-			toml:    "[[account]]\nname = \"Test\"\nbackend = \"jmap\"\n",
-			wantErr: "account \"Test\": source is required",
-		},
-		{
 			name:    "empty file",
 			toml:    "",
 			wantErr: "no accounts defined",
@@ -262,6 +257,122 @@ password = "$DEFINITELY_UNSET_VAR_XYZ"
 	}
 	if !strings.Contains(err.Error(), "DEFINITELY_UNSET_VAR_XYZ") {
 		t.Errorf("expected error to mention var name, got %q", err.Error())
+	}
+}
+
+func TestParseAccountsResolvesYahooPreset(t *testing.T) {
+	t.Setenv("YAHOO_APP_PASSWORD", "secret-app-pw")
+	toml := `
+[[account]]
+name     = "personal"
+backend  = "yahoo"
+email    = "user@yahoo.com"
+auth     = "plain"
+password = "$YAHOO_APP_PASSWORD"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	a := got[0]
+	if a.Backend != "imap" {
+		t.Errorf("Backend = %q, want imap (preset should resolve)", a.Backend)
+	}
+	if a.Host != "imap.mail.yahoo.com" {
+		t.Errorf("Host = %q, want imap.mail.yahoo.com", a.Host)
+	}
+	if a.Port != 993 {
+		t.Errorf("Port = %d, want 993", a.Port)
+	}
+	if a.Email != "user@yahoo.com" {
+		t.Errorf("Email = %q, want user@yahoo.com", a.Email)
+	}
+	if a.Auth != "plain" {
+		t.Errorf("Auth = %q, want plain", a.Auth)
+	}
+	if a.Password != "secret-app-pw" {
+		t.Errorf("Password = %q, want resolved env value", a.Password)
+	}
+}
+
+func TestParseAccountsExplicitImap(t *testing.T) {
+	t.Setenv("IMAP_PASS", "raw-pw")
+	toml := `
+[[account]]
+name     = "self"
+backend  = "imap"
+email    = "u@example.com"
+host     = "mail.example.com"
+port     = 143
+starttls = true
+auth     = "plain"
+password = "$IMAP_PASS"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	a := got[0]
+	if a.Host != "mail.example.com" || a.Port != 143 || !a.StartTLS {
+		t.Errorf("transport mis-set: %+v", a)
+	}
+}
+
+func TestParseAccountsResolvesFastmailPreset(t *testing.T) {
+	t.Setenv("FASTMAIL_TOKEN", "tok")
+	toml := `
+[[account]]
+name     = "fm"
+backend  = "fastmail"
+email    = "u@fastmail.com"
+auth     = "bearer"
+password = "$FASTMAIL_TOKEN"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	a := got[0]
+	if a.Backend != "jmap" {
+		t.Errorf("Backend = %q, want jmap", a.Backend)
+	}
+	if a.Source != "https://api.fastmail.com/jmap/session" {
+		t.Errorf("Source = %q, want preset URL", a.Source)
+	}
+}
+
+func TestParseAccountsOAuthFieldsResolved(t *testing.T) {
+	t.Setenv("OA_CID", "the-client-id")
+	t.Setenv("OA_CS", "the-client-secret")
+	t.Setenv("OA_RT", "the-refresh-token")
+	toml := `
+[[account]]
+name                = "wk"
+backend             = "imap"
+email               = "u@example.com"
+host                = "imap.example.com"
+port                = 993
+auth                = "xoauth2"
+oauth-client-id     = "$OA_CID"
+oauth-client-secret = "$OA_CS"
+oauth-refresh-token = "$OA_RT"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	a := got[0]
+	if a.OAuthClientID != "the-client-id" {
+		t.Errorf("OAuthClientID = %q", a.OAuthClientID)
+	}
+	if a.OAuthClientSecret != "the-client-secret" {
+		t.Errorf("OAuthClientSecret = %q", a.OAuthClientSecret)
+	}
+	if a.OAuthRefreshToken != "the-refresh-token" {
+		t.Errorf("OAuthRefreshToken = %q", a.OAuthRefreshToken)
 	}
 }
 
