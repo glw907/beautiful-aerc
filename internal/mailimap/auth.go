@@ -116,6 +116,9 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 		tlsConn := tls.Client(raw, tlsCfg)
 		if err := tlsConn.Handshake(); err != nil {
 			_ = raw.Close()
+			if looksSelfHosted(cfg.Host) {
+				return nil, fmt.Errorf("tls handshake %s (%s): %w (set insecure-tls = true if self-signed)", addr, role, err)
+			}
 			return nil, fmt.Errorf("tls handshake %s (%s): %w", addr, role, err)
 		}
 		cli = imapclient.New(tlsConn, opts)
