@@ -37,7 +37,7 @@ func writeStubConfig(t *testing.T, dir, contents string) string {
 
 const minimalMockConfig = `[[account]]
 name = "Mock"
-backend = "mock"
+provider = "mock"
 source = "mock://local"
 
 [ui]

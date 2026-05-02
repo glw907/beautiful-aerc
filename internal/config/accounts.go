@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -123,6 +124,28 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		return nil, fmt.Errorf("account %q oauth-refresh-token: %w", e.Name, err)
 	}
 
+	// Validate provider against the registry + fallbacks.
+	// "mock" is permitted for testing; it short-circuits to
+	// mail.NewMockBackend in cmd/poplar/backend.go.
+	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
+		if _, ok := LookupProvider(e.Provider); !ok {
+			return nil, fmt.Errorf("account %q: unknown provider %q (known: %s)",
+				e.Name, e.Provider, knownProvidersList())
+		}
+	}
+
+	// IMAP requires a host (after preset resolution).
+	if backend == "imap" && host == "" {
+		return nil, fmt.Errorf("account %q (provider = %q): host is required for imap accounts",
+			e.Name, e.Provider)
+	}
+
+	// JMAP requires a session URL (after preset resolution).
+	if backend == "jmap" && source == "" {
+		return nil, fmt.Errorf("account %q (provider = %q): source URL is required for jmap accounts",
+			e.Name, e.Provider)
+	}
+
 	acct := &AccountConfig{
 		Name:              e.Name,
 		Display:           e.Display,
@@ -180,6 +203,18 @@ func resolveEnv(s string) (string, error) {
 		return "", fmt.Errorf("env var %s is empty or unset", name)
 	}
 	return val, nil
+}
+
+// knownProvidersList returns a sorted, comma-separated list of all
+// recognized provider names (presets + bare "imap"/"jmap").
+func knownProvidersList() string {
+	names := make([]string, 0, len(Providers))
+	for k := range Providers {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	names = append(names, "imap", "jmap")
+	return strings.Join(names, ", ")
 }
 
 // isShellName reports whether s is a valid shell variable name:

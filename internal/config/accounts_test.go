@@ -38,7 +38,8 @@ source = "jmap://user@work.com@jmap.work.com"
 [[account]]
 name = "Personal"
 provider = "imap"
-source = "imaps://user@personal.com@imap.personal.com:993"
+host = "imap.personal.com"
+port = 993
 `,
 			wantN: 2,
 		},
@@ -410,6 +411,59 @@ password-cmd = "echo secret"
 	}
 	if !strings.Contains(err.Error(), "password and password-cmd") {
 		t.Errorf("error %q should mention both fields", err)
+	}
+}
+
+func TestParseAccountsErrorsAreFriendly(t *testing.T) {
+	cases := []struct {
+		name     string
+		toml     string
+		wantSubs []string
+	}{
+		{
+			"unknown provider",
+			`[[account]]
+name = "p"
+provider = "yahho"
+email = "u@y.com"
+password = "x"
+`,
+			[]string{`account "p"`, "unknown provider", `"yahho"`},
+		},
+		{
+			"both password fields",
+			`[[account]]
+name = "p"
+provider = "fastmail"
+email = "u@fm.com"
+password = "x"
+password-cmd = "echo y"
+`,
+			[]string{`account "p"`, "password", "password-cmd"},
+		},
+		{
+			"missing host for imap",
+			`[[account]]
+name = "p"
+provider = "imap"
+email = "u@x.com"
+password = "x"
+`,
+			[]string{`account "p"`, "host", "imap"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseAccountsFromBytes([]byte(tc.toml))
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			for _, sub := range tc.wantSubs {
+				if !strings.Contains(err.Error(), sub) {
+					t.Errorf("error %q missing substring %q", err.Error(), sub)
+				}
+			}
+		})
 	}
 }
 
