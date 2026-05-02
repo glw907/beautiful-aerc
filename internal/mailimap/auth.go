@@ -3,16 +3,128 @@
 package mailimap
 
 import (
+	"crypto/tls"
 	"errors"
+	"fmt"
+	"net"
+	"strconv"
+	"time"
+
+	"github.com/emersion/go-sasl"
+	imapclient "github.com/emersion/go-imap/v2/imapclient"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mailauth"
+	"github.com/glw907/poplar/internal/mailauth/keepalive"
 )
 
-// dialCommand and dialIdle are filled in by Task 8.
+const (
+	dialTimeout       = 30 * time.Second
+	keepAliveInterval = 30 // seconds, for both net.Dialer and syscall tuning
+	keepAliveProbes   = 3
+)
+
+// dialCommand opens the synchronous command connection for cfg.
 func dialCommand(cfg config.AccountConfig) (imapClient, error) {
-	return nil, errors.New("dialCommand: not implemented (Task 8)")
+	return dial(cfg, "command")
 }
 
+// dialIdle opens the dedicated idle connection for cfg.
 func dialIdle(cfg config.AccountConfig) (imapClient, error) {
-	return nil, errors.New("dialIdle: not implemented (Task 8)")
+	return dial(cfg, "idle")
+}
+
+// dial opens one IMAP connection for the given role ("command" or "idle").
+// It applies TCP keepalives, performs TLS or STARTTLS, then authenticates.
+func dial(cfg config.AccountConfig, role string) (imapClient, error) {
+	if cfg.Host == "" {
+		return nil, errors.New("imap: host is required")
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = 993
+	}
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(port))
+
+	d := &net.Dialer{
+		Timeout:   dialTimeout,
+		KeepAlive: time.Duration(keepAliveInterval) * time.Second,
+	}
+	tlsCfg := &tls.Config{ServerName: cfg.Host}
+
+	// Dial the raw TCP connection so we can apply kernel keepalive tuning
+	// before handing the conn to imapclient.
+	raw, err := d.Dial("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("dial %s (%s): %w", addr, role, err)
+	}
+	if tcp, ok := raw.(*net.TCPConn); ok {
+		applyKeepalive(tcp)
+	}
+
+	opts := &imapclient.Options{TLSConfig: tlsCfg}
+
+	var cli *imapclient.Client
+	if cfg.StartTLS {
+		// Plain TCP then STARTTLS upgrade via imapclient.NewStartTLS.
+		cli, err = imapclient.NewStartTLS(raw, opts)
+		if err != nil {
+			return nil, fmt.Errorf("starttls %s (%s): %w", addr, role, err)
+		}
+	} else {
+		// Implicit TLS: wrap raw connection with TLS before handing to imapclient.
+		tlsConn := tls.Client(raw, tlsCfg)
+		if err := tlsConn.Handshake(); err != nil {
+			_ = raw.Close()
+			return nil, fmt.Errorf("tls handshake %s (%s): %w", addr, role, err)
+		}
+		cli = imapclient.New(tlsConn, opts)
+	}
+
+	if err := authenticate(cli, cfg); err != nil {
+		_ = cli.Logout().Wait()
+		return nil, fmt.Errorf("authenticate (%s): %w", role, err)
+	}
+
+	return newRealClient(cli), nil
+}
+
+// applyKeepalive tunes kernel TCP keepalive probes and interval on c.
+// Failures are silently ignored — the OS-level KeepAlive on the Dialer
+// already provides basic keepalive; the syscall tuning is advisory.
+func applyKeepalive(c *net.TCPConn) {
+	_ = c.SetKeepAlive(true)
+	f, err := c.File()
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fd := int(f.Fd())
+	_ = keepalive.SetTcpKeepaliveProbes(fd, keepAliveProbes)
+	_ = keepalive.SetTcpKeepaliveInterval(fd, keepAliveInterval)
+}
+
+// authenticate runs the SASL exchange specified by cfg.Auth.
+// Supported mechanisms: plain (default), login, cram-md5, xoauth2.
+func authenticate(cli *imapclient.Client, cfg config.AccountConfig) error {
+	mech := cfg.Auth
+	if mech == "" {
+		mech = "plain"
+	}
+	switch mech {
+	case "plain":
+		return cli.Authenticate(sasl.NewPlainClient("", cfg.Email, cfg.Password))
+	case "login":
+		return cli.Login(cfg.Email, cfg.Password).Wait()
+	case "cram-md5":
+		// go-sasl v0.0.0-20241020182733 does not ship CRAM-MD5; reject early.
+		return errors.New("cram-md5: not supported by the bundled go-sasl version")
+	case "xoauth2":
+		if cfg.Password == "" {
+			return errors.New("xoauth2: access token (password field) required; refresh-flow lands in Pass 8.1")
+		}
+		return cli.Authenticate(mailauth.NewXoauth2Client(cfg.Email, cfg.Password))
+	default:
+		return fmt.Errorf("unsupported auth mechanism %q", mech)
+	}
 }
