@@ -72,11 +72,20 @@
 #
 # OAuth providers
 #
-#   gmail and outlook authenticate via OAuth, not a password.
-#   poplar runs the OAuth flow on first connect and caches the
-#   refresh token via your `password-cmd`. See:
+#   gmail and outlook authenticate with a short-lived access
+#   token (XOAUTH2), not a password. Until poplar's first-run
+#   wizard ships, set `password-cmd` to a command that prints a
+#   fresh access token to stdout. Examples:
 #
-#       https://github.com/glw907/poplar/blob/master/docs/oauth.md
+#       oauth2l fetch --type=oauth2 --output_format=bare \
+#           --credentials=$HOME/.config/poplar/gmail-client.json \
+#           https://mail.google.com/
+#
+#       op read op://Personal/Gmail-XOAUTH2/access-token
+#
+#   The token expires every hour; password-cmd is re-run on each
+#   reconnect, so wire it to a refresher that returns a current
+#   token (most CLIs above handle the refresh transparently).
 #
 # ProtonMail
 #
