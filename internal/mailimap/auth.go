@@ -51,7 +51,7 @@ func dial(cfg config.AccountConfig, role string) (imapClient, error) {
 		Timeout:   dialTimeout,
 		KeepAlive: time.Duration(keepAliveInterval) * time.Second,
 	}
-	tlsCfg := &tls.Config{ServerName: cfg.Host}
+	tlsCfg := &tls.Config{ServerName: cfg.Host, InsecureSkipVerify: cfg.InsecureTLS} //nolint:gosec // InsecureTLS is opt-in for self-hosted dev servers
 
 	// Dial the raw TCP connection so we can apply kernel keepalive tuning
 	// before handing the conn to imapclient.

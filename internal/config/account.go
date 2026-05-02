@@ -48,6 +48,12 @@ type AccountConfig struct {
 	Port     int
 	StartTLS bool
 
+	// InsecureTLS skips TLS certificate verification. Intended for
+	// self-hosted IMAP servers with self-signed certs and local
+	// development (e.g., Dovecot in Docker). Never set for hosted
+	// providers.
+	InsecureTLS bool
+
 	// XOAUTH2 inputs. All env-var-substituted via $VAR.
 	OAuthClientID     string
 	OAuthClientSecret string

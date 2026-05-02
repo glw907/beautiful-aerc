@@ -26,6 +26,7 @@ type accountEntry struct {
 	Host              string            `toml:"host"`
 	Port              int               `toml:"port"`
 	StartTLS          bool              `toml:"starttls"`
+	InsecureTLS       bool              `toml:"insecure-tls"`
 	Auth              string            `toml:"auth"`
 	Password          string            `toml:"password"`
 	OAuthClientID     string            `toml:"oauth-client-id"`
@@ -139,6 +140,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		Host:              host,
 		Port:              port,
 		StartTLS:          startTLS,
+		InsecureTLS:       e.InsecureTLS,
 		Auth:              e.Auth,
 		Password:          password,
 		OAuthClientID:     clientID,

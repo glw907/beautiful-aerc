@@ -27,13 +27,14 @@ func TestLiveIMAPLifecycle(t *testing.T) {
 	}
 
 	cfg := config.AccountConfig{
-		Name:     "test",
-		Email:    user,
-		Host:     host,
-		Port:     1143,
-		StartTLS: true,
-		Auth:     "plain",
-		Password: pass,
+		Name:        "test",
+		Email:       user,
+		Host:        host,
+		Port:        1143,
+		StartTLS:    true,
+		InsecureTLS: true,
+		Auth:        "plain",
+		Password:    pass,
 	}
 	b := New(cfg)
 	ctx, cancel := context.WithCancel(context.Background())
