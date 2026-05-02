@@ -60,21 +60,25 @@ func TestResolvePasswordEmpty(t *testing.T) {
 	}
 }
 
-func TestResolvedPassword_XOAUTH2_BypassesCache(t *testing.T) {
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "n")
+// counterCmd returns a shell command that increments a per-test counter
+// file and prints the new value, so two invocations yield distinct outputs
+// ("1" then "2"). Used to detect whether resolvedPassword re-runs the cmd.
+func counterCmd(t *testing.T) string {
+	t.Helper()
+	counter := filepath.Join(t.TempDir(), "n")
 	if err := os.WriteFile(counter, []byte("0"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Each invocation increments the counter file and prints the new value.
-	cmd := fmt.Sprintf(
+	return fmt.Sprintf(
 		`n=$(cat %q); n=$((n+1)); printf %%s "$n" > %q; printf %%s "$n"`,
 		counter, counter)
+}
 
+func TestResolvedPassword_XOAUTH2_BypassesCache(t *testing.T) {
 	b := New(config.AccountConfig{
 		Name:        "g",
 		Auth:        "xoauth2",
-		PasswordCmd: cmd,
+		PasswordCmd: counterCmd(t),
 	})
 
 	first, err := b.resolvedPassword()
@@ -91,19 +95,10 @@ func TestResolvedPassword_XOAUTH2_BypassesCache(t *testing.T) {
 }
 
 func TestResolvedPassword_NonXOAUTH2_Caches(t *testing.T) {
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "n")
-	if err := os.WriteFile(counter, []byte("0"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cmd := fmt.Sprintf(
-		`n=$(cat %q); n=$((n+1)); printf %%s "$n" > %q; printf %%s "$n"`,
-		counter, counter)
-
 	b := New(config.AccountConfig{
 		Name:        "f",
 		Auth:        "plain",
-		PasswordCmd: cmd,
+		PasswordCmd: counterCmd(t),
 	})
 
 	first, _ := b.resolvedPassword()
