@@ -14,6 +14,7 @@ import (
 	imapclient "github.com/emersion/go-imap/v2/imapclient"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/mailauth"
 	"github.com/glw907/poplar/internal/mailauth/keepalive"
 )
@@ -62,7 +63,41 @@ func dial(cfg config.AccountConfig, role string) (imapClient, error) {
 		applyKeepalive(tcp)
 	}
 
-	opts := &imapclient.Options{TLSConfig: tlsCfg}
+	// Pre-allocate the realClient so its dispatch method can be wired
+	// into the UnilateralDataHandler before the imapclient.Client is
+	// constructed. The c field is set once the client is ready.
+	rc := &realClient{}
+
+	opts := &imapclient.Options{
+		TLSConfig: tlsCfg,
+		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
+			// EXISTS increase: signal new mail arrived.
+			Mailbox: func(data *imapclient.UnilateralDataMailbox) {
+				if data.NumMessages != nil {
+					rc.dispatch(mail.Update{Type: mail.UpdateNewMail})
+				}
+			},
+			// EXPUNGE: a message was removed.
+			Expunge: func(_ uint32) {
+				rc.dispatch(mail.Update{Type: mail.UpdateExpunge})
+			},
+			// Unilateral FETCH FLAGS: flags changed on one message.
+			Fetch: func(msg *imapclient.FetchMessageData) {
+				buf, _ := msg.Collect()
+				if buf == nil {
+					return
+				}
+				uid := imapUID(buf.UID)
+				if uid == "0" {
+					return
+				}
+				rc.dispatch(mail.Update{
+					Type: mail.UpdateFlagsChanged,
+					UIDs: []mail.UID{uid},
+				})
+			},
+		},
+	}
 
 	var cli *imapclient.Client
 	if cfg.StartTLS {
@@ -86,7 +121,8 @@ func dial(cfg config.AccountConfig, role string) (imapClient, error) {
 		return nil, fmt.Errorf("authenticate (%s): %w", role, err)
 	}
 
-	return newRealClient(cli), nil
+	rc.c = cli
+	return rc, nil
 }
 
 // applyKeepalive tunes kernel TCP keepalive probes and interval on c.
