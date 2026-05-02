@@ -13,25 +13,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type configInitFlags struct {
+type configDiscoverFoldersFlags struct {
 	write bool
 }
 
-func newConfigInitCmd() *cobra.Command {
-	f := configInitFlags{}
+func newConfigDiscoverFoldersCmd() *cobra.Command {
+	f := configDiscoverFoldersFlags{}
 	cmd := &cobra.Command{
-		Use:          "init",
-		Short:        "Discover folders and merge [ui.folders] defaults into config.toml",
+		Use:          "discover-folders",
+		Short:        "Connect to each account, discover server folders, merge defaults into [ui.folders]",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConfigInit(cmd, f)
+			return runConfigDiscoverFolders(cmd, f)
 		},
 	}
 	cmd.Flags().BoolVar(&f.write, "write", false, "write merged output to the config file (default: dry-run to stdout)")
 	return cmd
 }
 
-func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
+func runConfigDiscoverFolders(cmd *cobra.Command, f configDiscoverFoldersFlags) error {
 	flagPath := cmd.Root().PersistentFlags().Lookup("config").Value.String()
 	path, _, err := config.Resolve(flagPath)
 	if err != nil {
@@ -52,7 +52,7 @@ func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
 	}
 
 	// v1 is single-account. Connect to the first account's backend.
-	backend, err := openBackendForInit(accounts[0])
+	backend, err := openBackendForDiscoverFolders(accounts[0])
 	if err != nil {
 		return fmt.Errorf("opening backend for account %q: %w", accounts[0].Name, err)
 	}
@@ -79,10 +79,10 @@ func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
 	return writeAtomically(path, merged)
 }
 
-// openBackendForInit returns a connected backend for the given account,
+// openBackendForDiscoverFolders returns a connected backend for the given account,
 // ready to call ListFolders. Delegates to openBackend for construction,
 // then calls Connect with a background context.
-func openBackendForInit(acct config.AccountConfig) (mail.Backend, error) {
+func openBackendForDiscoverFolders(acct config.AccountConfig) (mail.Backend, error) {
 	b, err := openBackend(acct)
 	if err != nil {
 		return nil, err

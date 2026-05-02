@@ -13,6 +13,6 @@ func newConfigCmd() *cobra.Command {
 		Short:        "Manage poplar configuration",
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(newConfigInitCmd())
+	cmd.AddCommand(newConfigDiscoverFoldersCmd())
 	return cmd
 }

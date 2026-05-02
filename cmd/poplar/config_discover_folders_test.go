@@ -10,18 +10,18 @@ import (
 	"testing"
 )
 
-// execConfigInit invokes "poplar config init [args...]" through the full
+// execConfigDiscoverFolders invokes "poplar config discover-folders [args...]" through the full
 // command tree so the persistent --config flag (defined on root) is visible.
-func execConfigInit(t *testing.T, args ...string) string {
+func execConfigDiscoverFolders(t *testing.T, args ...string) string {
 	t.Helper()
 	root := newRootCmd()
 	root.AddCommand(newConfigCmd())
 	var buf bytes.Buffer
 	root.SetOut(&buf)
 	root.SetErr(&buf)
-	root.SetArgs(append([]string{"config", "init"}, args...))
+	root.SetArgs(append([]string{"config", "discover-folders"}, args...))
 	if err := root.Execute(); err != nil {
-		t.Fatalf("config init failed: %v", err)
+		t.Fatalf("config discover-folders failed: %v", err)
 	}
 	return buf.String()
 }
@@ -44,10 +44,10 @@ source = "mock://local"
 threading = true
 `
 
-func TestConfigInit_DryRunShowsDiscoveredFolders(t *testing.T) {
+func TestConfigDiscoverFolders_DryRunShowsDiscoveredFolders(t *testing.T) {
 	dir := t.TempDir()
 	path := writeStubConfig(t, dir, minimalMockConfig)
-	out := execConfigInit(t, "--config", path)
+	out := execConfigDiscoverFolders(t, "--config", path)
 
 	wantKeys := []string{
 		"[ui.folders.Inbox]",
@@ -76,10 +76,10 @@ func TestConfigInit_DryRunShowsDiscoveredFolders(t *testing.T) {
 	}
 }
 
-func TestConfigInit_WriteAppends(t *testing.T) {
+func TestConfigDiscoverFolders_WriteAppends(t *testing.T) {
 	dir := t.TempDir()
 	path := writeStubConfig(t, dir, minimalMockConfig)
-	_ = execConfigInit(t, "--config", path, "--write")
+	_ = execConfigDiscoverFolders(t, "--config", path, "--write")
 
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -93,15 +93,15 @@ func TestConfigInit_WriteAppends(t *testing.T) {
 	}
 }
 
-func TestConfigInit_Idempotent(t *testing.T) {
+func TestConfigDiscoverFolders_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	path := writeStubConfig(t, dir, minimalMockConfig)
-	_ = execConfigInit(t, "--config", path, "--write")
+	_ = execConfigDiscoverFolders(t, "--config", path, "--write")
 	first, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = execConfigInit(t, "--config", path, "--write")
+	_ = execConfigDiscoverFolders(t, "--config", path, "--write")
 	second, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
