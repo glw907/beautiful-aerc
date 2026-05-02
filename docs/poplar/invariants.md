@@ -37,14 +37,19 @@ the ADR(s) that justify them.
   Vendored snippets are MIT-licensed helpers (XOAUTH2 against
   `go-sasl`, Gmail X-GM-EXT against `go-imap`); each carries a
   top-of-file provenance comment.
-- Backends in v1: JMAP (`backend = "jmap"` / `"fastmail"`) and
-  generic IMAP (`backend = "imap"` or one of the presets `yahoo`,
-  `icloud`, `zoho`; `gmail` lands with X-GM-EXT support). Provider
-  presets in `config.Providers` resolve at decode time to the
-  canonical `imap`/`jmap` backend with host/port/URL/auth-hint
-  filled in. Self-hosted IMAP uses explicit `host`/`port` plus
-  `insecure-tls = true` for self-signed certs. No
-  maildir/mbox/notmuch.
+- Backends in v1: JMAP (`provider = "jmap"` / `"fastmail"`) and
+  generic IMAP (`provider = "imap"` or one of the presets `yahoo`,
+  `icloud`, `zoho`, `outlook`, `mailbox-org`, `posteo`, `runbox`,
+  `gmx`, `protonmail`; `gmail` lands with X-GM-EXT support in
+  Pass 8.1). Provider presets in `config.Providers` resolve at
+  decode time to the canonical `imap`/`jmap` backend with
+  host/port/URL/auth-hint filled in (and `InsecureTLS = true` on
+  the `protonmail` preset for the local Bridge's self-signed
+  loopback cert). Self-hosted IMAP uses explicit `host`/`port`
+  plus `insecure-tls = true` for self-signed certs; the dial path
+  surfaces a "set insecure-tls = true if self-signed" hint when
+  TLS handshake fails on RFC 1918 / `.local` / `127.x` hosts and
+  `InsecureTLS` is not already on. No maildir/mbox/notmuch.
 - `mail.Backend` is synchronous blocking; both packages call their
   libraries synchronously — no pump goroutine, no async bridge.
 - IMAP backend invariants: UIDPLUS is required at Connect (asserted
@@ -87,10 +92,30 @@ the ADR(s) that justify them.
 
 ### Config & theming
 
-- Config lives in `~/.config/poplar/accounts.toml`. Both
+- Config lives in `~/.config/poplar/config.toml` (XDG on Linux and
+  macOS, deliberately overriding Apple's Application Support
+  default; `%APPDATA%\poplar\config.toml` on Windows). Both
   `[[account]]` blocks and the `[ui]` table live in the same file;
-  `config.ParseAccounts` and `config.LoadUI` decode them
-  independently.
+  `config.Load` (accounts) and `config.LoadUI` decode them
+  independently. Path precedence: `--config` flag, `$POPLAR_CONFIG`,
+  OS default, resolved by `config.Resolve`. The TOML key for the
+  preset selector is `provider`.
+- First-run flow: when the default-or-env path is missing,
+  `config.Load` writes the self-documenting `config.Template()`
+  to disk and returns `ErrFirstRun`; the root command prints a
+  hint and exits 78 (EX_CONFIG). A legacy `accounts.toml` at the
+  same dir returns `ErrOldAccountsToml` with a rename hint.
+  `password-cmd` resolution is deferred to first `Connect` and
+  cached on the Backend (mu-guarded `password` field) so secret-
+  manager prompts surface near the action that needs them.
+  Validation errors carry `account "<name>" (provider = "<p>"): ...`
+  context; unknown providers get a Levenshtein "did you mean"
+  suggestion within edit distance 2.
+- `poplar config` subcommands: `init` (write template; refuses to
+  overwrite without `--force`), `init --force`, `check` (validate
+  + connect-test each account, sequentially), `path` (print
+  resolved path), `discover-folders` (connect each account and
+  merge default folder ordering into `[ui.folders]`).
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
@@ -162,9 +187,9 @@ invariant. ADR numbering is chronological.
 | Monorepo, single binary | 0001, 0058 |
 | Direct-on-libraries mail stack (no aerc fork) | 0002 (superseded by 0075), 0006 (superseded by 0075), 0008 (superseded by 0075), 0010 (superseded by 0075), 0012 (superseded by 0075), 0075 |
 | Lipgloss + compiled themes, styling discipline | 0004, 0043, 0046 |
-| JMAP + IMAP only, minimal account config | 0009, 0075, 0098, 0101 |
+| JMAP + IMAP only, minimal account config | 0009, 0075, 0098, 0101, 0104 |
 | Mail backend interface synchronous | 0010 (superseded by 0075), 0075, 0099 |
-| Config layout, folder classifier, UI config | 0013, 0052, 0053 |
+| Config layout, folder classifier, UI config | 0013, 0052, 0053, 0102, 0103 |
 | Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054, 0088 |
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
 | Sidebar groups, nested indent, classification | 0018, 0019, 0034, 0049, 0050 |

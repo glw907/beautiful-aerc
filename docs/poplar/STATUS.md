@@ -1,11 +1,13 @@
 # Poplar Status
 
 **Current pass:** Pass 8.1 next — Gmail preset on top of the
-generic IMAP backend. Pass 8 done — generic IMAP via
-`emersion/go-imap` v2 with provider registry (yahoo/icloud/zoho),
-two-connection model, 9-min IDLE refresh, and `Destroy` mapping
-(ADR-0098/0099/0100/0101). Live verification ran end-to-end
-against local Dovecot.
+generic IMAP backend. Pass 8.5 done — config v1: rename to
+`config.toml`, `provider` key, first-run template + exit 78,
+password-cmd deferred resolution, friendly errors with did-you-mean,
+6 new provider presets (outlook, mailbox-org, posteo, runbox, gmx,
+protonmail), `poplar config init/check/path` subcommands
+(ADR-0102/0103/0104). Live verification ran end-to-end against
+the user's Fastmail account.
 
 ## Passes
 
@@ -18,6 +20,7 @@ against local Dovecot.
 | 6.8 | Docs refactor: path-scoped UI rule, system-map reconcile, wireframes strong-trim, keybindings single-source | done — ADR-0095 |
 | 7 | Polish I — responsive sidebar + 80×24 polish bar (#15 closed) | done — ADR-0096/0097 |
 | 8 | Generic IMAP backend (provider registry, two-connection, 9-min IDLE, Destroy) | done — ADR-0098/0099/0100/0101 |
+| 8.5 | Config v1 (config.toml rename, first-run, password-cmd, friendly errors, 6 new presets) | done — ADR-0102/0103/0104 |
 | 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, label-aware fallbacks | next |
 | 9 | Compose framing: `Editor` interface, neovim `--embed` adapter, send via go-smtp | pending |
 | 9.5 | Compose enhancements: Catkin native editor, tidytext (#12), content cleanup (#13) | pending |
@@ -41,6 +44,9 @@ against local Dovecot.
 >
 > **Settled:** Generic IMAP backend (ADR-0099/0100/0101). Provider
 > registry (ADR-0098). XOAUTH2 helpers in `internal/mailauth/`.
+> Config v1 (ADR-0102/0103/0104) — `provider = "gmail"` decodes
+> through the same path; `password-cmd` is the credential channel
+> for the OAuth refresh-token cache.
 >
 > **Still open — brainstorm these:**
 > - XOAUTH2 refresh ownership (cache + 401-watch vs pre-refresh).
