@@ -137,6 +137,32 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestClassifyKnownProviderFolders(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		// Yahoo
+		{"yahoo bulk", "Bulk Mail", "Spam"},
+		// iCloud
+		{"icloud sent", "Sent Messages", "Sent"},
+		{"icloud trash", "Deleted Messages", "Trash"},
+		// Zoho — uses standard names
+		{"zoho sent", "Sent", "Sent"},
+		// Gmail (covered fully in Pass 8.1; sample here)
+		{"gmail trash", "[Gmail]/Trash", "Trash"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := classifyOne(Folder{Name: tc.in})
+			if got.Canonical != tc.want {
+				t.Errorf("Canonical = %q, want %q", got.Canonical, tc.want)
+			}
+		})
+	}
+}
+
 func TestClassifyPreservesOrder(t *testing.T) {
 	in := []Folder{
 		{Name: "Lists/golang"},
