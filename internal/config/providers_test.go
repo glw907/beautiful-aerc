@@ -58,6 +58,28 @@ func TestOutlookPresetShape(t *testing.T) {
 	}
 }
 
+func TestLookupProvider_Gmail(t *testing.T) {
+	p, ok := LookupProvider("gmail")
+	if !ok {
+		t.Fatal("gmail preset missing")
+	}
+	if p.Backend != "imap" {
+		t.Errorf("Backend = %q, want %q", p.Backend, "imap")
+	}
+	if p.Host != "imap.gmail.com" {
+		t.Errorf("Host = %q, want %q", p.Host, "imap.gmail.com")
+	}
+	if p.Port != 993 {
+		t.Errorf("Port = %d, want 993", p.Port)
+	}
+	if p.AuthHint != "xoauth2" {
+		t.Errorf("AuthHint = %q, want %q", p.AuthHint, "xoauth2")
+	}
+	if !p.GmailQuirks {
+		t.Errorf("GmailQuirks = false, want true")
+	}
+}
+
 func TestProviderRegistryLookup(t *testing.T) {
 	tests := []struct {
 		name     string

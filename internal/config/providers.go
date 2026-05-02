@@ -12,6 +12,7 @@ type Provider struct {
 	Port        int
 	StartTLS    bool
 	InsecureTLS bool   // true only for self-signed-cert presets (self-hosted)
+	GmailQuirks bool   // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
 	URL         string // JMAP presets only
 	AuthHint    string // "app-password" | "bearer" | "xoauth2"
 	HelpURL     string
@@ -90,6 +91,15 @@ var Providers = map[string]Provider{
 		Port:     993,
 		AuthHint: "app-password",
 		HelpURL:  "https://www.gmx.com/mail/",
+	},
+	"gmail": {
+		Name:        "gmail",
+		Backend:     "imap",
+		Host:        "imap.gmail.com",
+		Port:        993,
+		AuthHint:    "xoauth2",
+		GmailQuirks: true,
+		HelpURL:     "https://support.google.com/mail/answer/7126229",
 	},
 	"protonmail": {
 		Name:        "protonmail",

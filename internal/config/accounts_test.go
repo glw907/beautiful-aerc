@@ -451,6 +451,33 @@ password = "x"
 	}
 }
 
+func TestParseAccounts_GmailPresetCopiesQuirks(t *testing.T) {
+	const cfg = `
+[[account]]
+name        = "g"
+provider    = "gmail"
+email       = "me@example.com"
+password    = "tok"
+`
+	accts, err := ParseAccountsFromBytes([]byte(cfg))
+	if err != nil {
+		t.Fatalf("ParseAccountsFromBytes: %v", err)
+	}
+	if len(accts) != 1 {
+		t.Fatalf("got %d accounts, want 1", len(accts))
+	}
+	a := accts[0]
+	if a.Backend != "imap" {
+		t.Errorf("Backend = %q, want imap", a.Backend)
+	}
+	if a.Host != "imap.gmail.com" {
+		t.Errorf("Host = %q, want imap.gmail.com", a.Host)
+	}
+	if !a.GmailQuirks {
+		t.Errorf("GmailQuirks = false, want true")
+	}
+}
+
 func TestExampleConfigParses(t *testing.T) {
 	const example = `[[account]]
 name = "Example"

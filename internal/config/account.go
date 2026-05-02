@@ -60,4 +60,9 @@ type AccountConfig struct {
 	// providers.
 	InsecureTLS bool
 
+	// GmailQuirks enables Gmail-specific IMAP behavior in mailimap:
+	// X-GM-EXT-1 assertion at Connect, and Destroy routed via
+	// SELECT [Gmail]/Trash before EXPUNGE so EXPUNGE truly deletes.
+	// Set automatically by the gmail preset; never set by hand.
+	GmailQuirks bool
 }

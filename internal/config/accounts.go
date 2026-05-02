@@ -80,6 +80,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	port := e.Port
 	startTLS := e.StartTLS
 	insecureTLS := e.InsecureTLS
+	gmailQuirks := false
 	source := e.Source
 
 	if preset, ok := LookupProvider(e.Provider); ok {
@@ -96,6 +97,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		if !insecureTLS {
 			insecureTLS = preset.InsecureTLS
 		}
+		gmailQuirks = preset.GmailQuirks
 		if source == "" {
 			source = preset.URL
 		}
@@ -144,6 +146,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		Port:              port,
 		StartTLS:          startTLS,
 		InsecureTLS:       insecureTLS,
+		GmailQuirks:       gmailQuirks,
 		Auth:              e.Auth,
 		Password:          password,
 		PasswordCmd:       e.PasswordCmd,
