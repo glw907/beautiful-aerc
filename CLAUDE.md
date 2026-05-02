@@ -6,6 +6,31 @@ not "better mutt."
 
 @docs/poplar/invariants.md
 
+## Pre-1.0 stance
+
+Poplar is pre-1.0. Until 1.0 ships, **clean code and long-term
+maintainability outweigh stability and compat concerns**. That
+means:
+
+- Refactor and rename freely. Don't propose compat shims, don't
+  surface "churn cost" as a tradeoff, don't preserve dead fields
+  "in case Pass N needs them" — strip them; the next pass re-adds
+  with its consumer.
+- When you notice a small adjacent issue while finishing other
+  work, **fix it inline** as part of the current pass. Don't end
+  with an offer to /schedule a follow-up agent for it. Reserve
+  /schedule for genuinely time-gated follow-ups (soak windows,
+  metric verification after a deploy, recurring sweeps).
+- Migrations and breaking changes are first-class — explain them
+  in the commit message and the relevant ADR; don't engineer
+  around them.
+- The only exception is data on disk that the user can't easily
+  regenerate (mail caches, OAuth refresh tokens). That's a real
+  cost; everything else (config keys, file locations, exported
+  Go API, error message wording) is fair game.
+
+After 1.0 this stance flips — that pass will be ADR'd explicitly.
+
 ## Conventions
 
 Three global skills hold the rules. Invoke the relevant one before
