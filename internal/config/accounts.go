@@ -106,22 +106,22 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 
 	password, err := resolveEnv(e.Password)
 	if err != nil {
-		return nil, fmt.Errorf("account %q password: %w", e.Name, err)
+		return nil, fmt.Errorf("account %q (provider = %q) password: %w", e.Name, e.Provider, err)
 	}
 	if password != "" && e.PasswordCmd != "" {
-		return nil, fmt.Errorf("account %q: both password and password-cmd set; use one", e.Name)
+		return nil, fmt.Errorf("account %q (provider = %q): both password and password-cmd set; use one", e.Name, e.Provider)
 	}
 	clientID, err := resolveEnv(e.OAuthClientID)
 	if err != nil {
-		return nil, fmt.Errorf("account %q oauth-client-id: %w", e.Name, err)
+		return nil, fmt.Errorf("account %q (provider = %q) oauth-client-id: %w", e.Name, e.Provider, err)
 	}
 	clientSecret, err := resolveEnv(e.OAuthClientSecret)
 	if err != nil {
-		return nil, fmt.Errorf("account %q oauth-client-secret: %w", e.Name, err)
+		return nil, fmt.Errorf("account %q (provider = %q) oauth-client-secret: %w", e.Name, e.Provider, err)
 	}
 	refresh, err := resolveEnv(e.OAuthRefreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("account %q oauth-refresh-token: %w", e.Name, err)
+		return nil, fmt.Errorf("account %q (provider = %q) oauth-refresh-token: %w", e.Name, e.Provider, err)
 	}
 
 	// Validate provider against the registry + fallbacks.

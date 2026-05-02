@@ -30,7 +30,7 @@ type Backend struct {
 	caps     capSet
 	current  string // currently-selected folder on cmd
 	trash    string // resolved Trash folder name; empty until first Delete
-	password string // cached result of resolvePassword; set on first Connect
+	password string // cached PasswordCmd result; empty when cfg.Password is inline
 	updates  chan mail.Update
 
 	idleCancel context.CancelFunc
@@ -45,7 +45,6 @@ type capSet struct {
 	MOVE       bool
 	IDLE       bool
 	SpecialUse bool
-	XGM        bool // X-GM-EXT-1, used when GmailQuirks is on
 }
 
 // New constructs an unconnected Backend for cfg.
@@ -118,7 +117,6 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 		MOVE:       caps["MOVE"],
 		IDLE:       caps["IDLE"],
 		SpecialUse: caps["SPECIAL-USE"],
-		XGM:        caps["X-GM-EXT-1"],
 	}
 	if !cs.UIDPLUS {
 		return errors.New("server does not advertise UIDPLUS — required for safe deletion")

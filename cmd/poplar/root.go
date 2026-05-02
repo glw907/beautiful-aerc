@@ -25,9 +25,10 @@ type rootFlags struct {
 func newRootCmd() *cobra.Command {
 	f := rootFlags{}
 	cmd := &cobra.Command{
-		Use:          "poplar",
-		Short:        "A bubbletea-based terminal email client",
-		SilenceUsage: true,
+		Use:           "poplar",
+		Short:         "A bubbletea-based terminal email client",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRoot(f)
 		},

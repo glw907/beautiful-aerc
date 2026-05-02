@@ -44,7 +44,7 @@ type Backend struct {
 	pushClient *jmap.Client // real client for EventSource; nil in unit tests
 	session    *jmap.Session
 	current    string
-	password   string // cached result of resolvePassword; set on first Connect
+	password   string // cached PasswordCmd result; empty when cfg.Password is inline
 	folders    map[string]folderEntry
 	blobIDs    map[mail.UID]string
 	states     map[string]string

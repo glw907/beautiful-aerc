@@ -4,13 +4,6 @@ package config
 
 import "testing"
 
-func TestProtonmailPresetSetsInsecureTLS(t *testing.T) {
-	p := Provider{Name: "test", InsecureTLS: true}
-	if !p.InsecureTLS {
-		t.Errorf("InsecureTLS field missing or unread")
-	}
-}
-
 func TestProvidersV1Roster(t *testing.T) {
 	expected := []string{
 		"fastmail", "icloud", "yahoo", "zoho",

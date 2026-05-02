@@ -15,7 +15,6 @@ type Provider struct {
 	URL         string // JMAP presets only
 	AuthHint    string // "app-password" | "bearer" | "xoauth2"
 	HelpURL     string
-	GmailQuirks bool // Pass 8.1 — assert-not-negotiate + Trash precondition
 }
 
 // Providers maps preset name → Provider. Adding a new well-known
