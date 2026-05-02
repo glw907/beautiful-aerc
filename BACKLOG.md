@@ -28,6 +28,9 @@
 
 ## Someday
 
+- [ ] **#27** First-run setup wizard `#feature` `#poplar` `#config` `#v2` *(2026-05-02)*
+  Interactive in-TUI flow for new users to configure their first account. Builds on Pass 8.5's config infrastructure: pick provider from a list, prompt for email, prompt for password (or detect a secret manager and offer to use it), test the connection, write the [[account]] block back into config.toml. Pass 8.5 deliberately ships only the self-documenting TOML and the auto-generated template — the wizard is the next step toward a smooth onboarding.
+
 - [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)*
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
 
