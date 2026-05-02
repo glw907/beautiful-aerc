@@ -60,9 +60,4 @@ type AccountConfig struct {
 	// providers.
 	InsecureTLS bool
 
-	// XOAUTH2 inputs. All env-var-substituted via $VAR.
-	OAuthClientID     string
-	OAuthClientSecret string
-	OAuthRefreshToken string
-
 }

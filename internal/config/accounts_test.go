@@ -316,38 +316,6 @@ password = "$FASTMAIL_TOKEN"
 	}
 }
 
-func TestParseAccountsOAuthFieldsResolved(t *testing.T) {
-	t.Setenv("OA_CID", "the-client-id")
-	t.Setenv("OA_CS", "the-client-secret")
-	t.Setenv("OA_RT", "the-refresh-token")
-	toml := `
-[[account]]
-name                = "wk"
-provider            = "imap"
-email               = "u@example.com"
-host                = "imap.example.com"
-port                = 993
-auth                = "xoauth2"
-oauth-client-id     = "$OA_CID"
-oauth-client-secret = "$OA_CS"
-oauth-refresh-token = "$OA_RT"
-`
-	got, err := ParseAccountsFromBytes([]byte(toml))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	a := got[0]
-	if a.OAuthClientID != "the-client-id" {
-		t.Errorf("OAuthClientID = %q", a.OAuthClientID)
-	}
-	if a.OAuthClientSecret != "the-client-secret" {
-		t.Errorf("OAuthClientSecret = %q", a.OAuthClientSecret)
-	}
-	if a.OAuthRefreshToken != "the-refresh-token" {
-		t.Errorf("OAuthRefreshToken = %q", a.OAuthRefreshToken)
-	}
-}
-
 func TestParseAccountsPresetSetsInsecureTLS(t *testing.T) {
 	Providers["test-insecure"] = Provider{
 		Name:        "test-insecure",

@@ -29,9 +29,6 @@ type accountEntry struct {
 	Auth              string            `toml:"auth"`
 	Password          string            `toml:"password"`
 	PasswordCmd       string            `toml:"password-cmd"`
-	OAuthClientID     string            `toml:"oauth-client-id"`
-	OAuthClientSecret string            `toml:"oauth-client-secret"`
-	OAuthRefreshToken string            `toml:"oauth-refresh-token"`
 	CopyTo            string            `toml:"copy-to"`
 	FoldersSort       []string          `toml:"folders-sort"`
 	FoldersExclude    []string          `toml:"folders-exclude"`
@@ -111,19 +108,6 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if password != "" && e.PasswordCmd != "" {
 		return nil, fmt.Errorf("account %q (provider = %q): both password and password-cmd set; use one", e.Name, e.Provider)
 	}
-	clientID, err := resolveEnv(e.OAuthClientID)
-	if err != nil {
-		return nil, fmt.Errorf("account %q (provider = %q) oauth-client-id: %w", e.Name, e.Provider, err)
-	}
-	clientSecret, err := resolveEnv(e.OAuthClientSecret)
-	if err != nil {
-		return nil, fmt.Errorf("account %q (provider = %q) oauth-client-secret: %w", e.Name, e.Provider, err)
-	}
-	refresh, err := resolveEnv(e.OAuthRefreshToken)
-	if err != nil {
-		return nil, fmt.Errorf("account %q (provider = %q) oauth-refresh-token: %w", e.Name, e.Provider, err)
-	}
-
 	// Validate provider against the registry + fallbacks.
 	// "mock" is permitted for testing; it short-circuits to
 	// mail.NewMockBackend in cmd/poplar/backend.go.
@@ -163,9 +147,6 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		Auth:              e.Auth,
 		Password:          password,
 		PasswordCmd:       e.PasswordCmd,
-		OAuthClientID:     clientID,
-		OAuthClientSecret: clientSecret,
-		OAuthRefreshToken: refresh,
 		Folders:           e.FoldersSort,
 		FoldersExclude:    e.FoldersExclude,
 		Params:            e.Params,
