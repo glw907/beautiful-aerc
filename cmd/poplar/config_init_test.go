@@ -10,16 +10,17 @@ import (
 	"testing"
 )
 
-// runConfigInit invokes the subcommand with the given flags and
-// returns its captured stdout.
+// execConfigInit invokes "poplar config init [args...]" through the full
+// command tree so the persistent --config flag (defined on root) is visible.
 func execConfigInit(t *testing.T, args ...string) string {
 	t.Helper()
-	cmd := newConfigInitCmd()
+	root := newRootCmd()
+	root.AddCommand(newConfigCmd())
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs(args)
-	if err := cmd.Execute(); err != nil {
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs(append([]string{"config", "init"}, args...))
+	if err := root.Execute(); err != nil {
 		t.Fatalf("config init failed: %v", err)
 	}
 	return buf.String()

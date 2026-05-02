@@ -14,8 +14,7 @@ import (
 )
 
 type configInitFlags struct {
-	config string
-	write  bool
+	write bool
 }
 
 func newConfigInitCmd() *cobra.Command {
@@ -28,19 +27,15 @@ func newConfigInitCmd() *cobra.Command {
 			return runConfigInit(cmd, f)
 		},
 	}
-	cmd.Flags().StringVar(&f.config, "config", "", "path to config.toml (default: $XDG_CONFIG_HOME/poplar/config.toml)")
 	cmd.Flags().BoolVar(&f.write, "write", false, "write merged output to the config file (default: dry-run to stdout)")
 	return cmd
 }
 
 func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
-	path := f.config
-	if path == "" {
-		var err error
-		path, err = defaultConfigPath()
-		if err != nil {
-			return err
-		}
+	flagPath := cmd.Root().PersistentFlags().Lookup("config").Value.String()
+	path, _, err := config.Resolve(flagPath)
+	if err != nil {
+		return err
 	}
 
 	data, err := os.ReadFile(path)
@@ -78,7 +73,7 @@ func runConfigInit(cmd *cobra.Command, f configInitFlags) error {
 	merged := config.MergeFolderSubsections(data, rendered)
 
 	if !f.write {
-		fmt.Fprint(cmd.OutOrStdout(), merged)
+		fmt.Fprint(cmd.Root().OutOrStdout(), merged)
 		return nil
 	}
 	return writeAtomically(path, merged)

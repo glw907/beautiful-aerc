@@ -16,7 +16,8 @@ import (
 )
 
 type rootFlags struct {
-	theme string
+	config string
+	theme  string
 }
 
 func newRootCmd() *cobra.Command {
@@ -29,6 +30,8 @@ func newRootCmd() *cobra.Command {
 			return runRoot(f)
 		},
 	}
+	cmd.PersistentFlags().StringVar(&f.config, "config", "",
+		"path to config file (default: $POPLAR_CONFIG or ~/.config/poplar/config.toml)")
 	cmd.Flags().StringVarP(&f.theme, "theme", "t", theme.DefaultThemeName,
 		"color theme ("+strings.Join(theme.ThemeNames(), ", ")+")")
 	return cmd
@@ -56,7 +59,7 @@ func runRoot(f rootFlags) error {
 			f.theme, strings.Join(theme.ThemeNames(), ", "))
 	}
 
-	configPath, err := defaultConfigPath()
+	configPath, _, err := config.Resolve(f.config)
 	if err != nil {
 		return err
 	}
