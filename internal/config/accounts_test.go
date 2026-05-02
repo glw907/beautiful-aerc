@@ -467,6 +467,22 @@ password = "x"
 	}
 }
 
+func TestUnknownProviderIncludesSuggestion(t *testing.T) {
+	toml := `[[account]]
+name = "p"
+provider = "yahho"
+email = "u@y.com"
+password = "x"
+`
+	_, err := ParseAccountsFromBytes([]byte(toml))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), `did you mean "yahoo"`) {
+		t.Errorf("error %q missing 'did you mean yahoo' suggestion", err)
+	}
+}
+
 func TestExampleConfigParses(t *testing.T) {
 	const example = `[[account]]
 name = "Example"

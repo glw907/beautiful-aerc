@@ -129,8 +129,12 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	// mail.NewMockBackend in cmd/poplar/backend.go.
 	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
 		if _, ok := LookupProvider(e.Provider); !ok {
-			return nil, fmt.Errorf("account %q: unknown provider %q (known: %s)",
-				e.Name, e.Provider, knownProvidersList())
+			hint := ""
+			if s := suggestProvider(e.Provider); s != "" {
+				hint = fmt.Sprintf("; did you mean %q?", s)
+			}
+			return nil, fmt.Errorf("account %q: unknown provider %q%s (known: %s)",
+				e.Name, e.Provider, hint, knownProvidersList())
 		}
 	}
 
