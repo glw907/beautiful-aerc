@@ -28,16 +28,22 @@ import (
 //
 // See ADR-0096 (responsive sidebar) and ADR-0097 (80x24 polish bar).
 func sidebarWidthFor(termWidth int) int {
-	const minWidth, maxWidth = 24, 30
 	w := termWidth - 56
-	if w < minWidth {
-		return minWidth
+	if w < sidebarWidthMin {
+		return sidebarWidthMin
 	}
-	if w > maxWidth {
-		return maxWidth
+	if w > sidebarWidthMax {
+		return sidebarWidthMax
 	}
 	return w
 }
+
+// sidebarWidthMin / sidebarWidthMax bound sidebarWidthFor's output.
+// sidebarWidthMax doubles as the pre-WindowSizeMsg initial width.
+const (
+	sidebarWidthMin = 24
+	sidebarWidthMax = 30
+)
 
 // sidebarHeaderRows is the blank/account/blank padding reserved at
 // the top of the sidebar before the folder list. AccountTab.View
@@ -84,14 +90,13 @@ type AccountTab struct {
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
 func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig, icons IconSet) AccountTab {
-	initialSidebar := sidebarWidthFor(96)
 	return AccountTab{
 		styles:        styles,
 		icons:         icons,
 		backend:       backend,
 		uiCfg:         uiCfg,
-		sidebar:       NewSidebar(styles, nil, uiCfg, initialSidebar, 1, icons),
-		sidebarSearch: NewSidebarSearch(styles, initialSidebar, icons),
+		sidebar:       NewSidebar(styles, nil, uiCfg, sidebarWidthMax, 1, icons),
+		sidebarSearch: NewSidebarSearch(styles, sidebarWidthMax, icons),
 		msglist:       NewMessageList(styles, nil, 1, 1, icons),
 		viewer:        NewViewer(styles, t, backend.AccountEmail()),
 		keys:          NewAccountKeys(),
