@@ -106,3 +106,19 @@ func TestLoadFlagPathMissingErrors(t *testing.T) {
 		t.Errorf("first-run template-write should NOT trigger when path was explicit")
 	}
 }
+
+func TestLoadDetectsLegacyAccountsToml(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("POPLAR_CONFIG", "")
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "poplar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "poplar", "accounts.toml"), []byte("[[account]]\nname=\"x\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load("")
+	if !errors.Is(err, ErrOldAccountsToml) {
+		t.Errorf("err = %v, want ErrOldAccountsToml", err)
+	}
+}
