@@ -53,6 +53,9 @@
 
 ## Medium
 
+- [ ] **#26** Pass 7 follow-up: further responsive polish for message-list at narrow terminals `#improvement` `#poplar` *(2026-05-01)*
+  Pass 7 met the 80×24 polish bar via the responsive sidebar (ADR-0096), but at 80 cols the message-list pane still truncates sender names and squeezes subjects. Three interacting budgets to revisit: (1) **date column adapts to width** — switch to a narrower format (e.g. `04-30` / `3:41p`) at intermediate widths, and consider dropping the date column entirely at 80 cols; (2) **subject vs sender column balance** — currently sender gets a fixed allocation, should rebalance so subject takes more cells when sender names are short or when subject is the higher-signal column; (3) **sidebar floor** — current floor is 24 cells, explore whether 22 or 20 is acceptable when paired with label truncation, freeing more cells for the message list. Goal: 80×24 looks great even with long sender names + threaded prefixes.
+
 - [x] **#16** ~~Sidebar rows mis-sized: Nerd Font SPUA-A icons render double-width but `lipgloss.Width` reports 1~~ `#bug` `#poplar` *(2026-04-26)*
   Resolved 2026-04-26 by Pass 4 audit-A1. New `displayCells` helper in `internal/ui/iconwidth.go` corrects the SPUA-A undercount (+1 per U+F0000–U+FFFFD codepoint); `fillRowToWidth`, sidebar `leftWidth`, and the message-list flag column now use it. Flag column bumped from 1 to 2 cells with a matching no-flag pad. See audit `docs/poplar/audits/2026-04-26-bubbletea-conventions.md` finding A1.
   Re-audit 2026-04-27: the original "1-cell undercount" framing was workstation-specific (kitty + JetBrainsMonoNL + symbol_map), not universal as ADR-0079 claimed. The `displayCells +1` fix landed here was an over-correction whose visible defect was masked until Pass 4.1 F2. ADR-0084 replaces the static rule with a runtime probe; see that ADR's "Context" section for the institutional record.
