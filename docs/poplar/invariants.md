@@ -23,23 +23,41 @@ the ADR(s) that justify them.
 - Repository organization: `cmd/poplar/` (CLI wiring only),
   `internal/ui/` (tea.Model tree), `internal/mail/` (`Backend`
   interface + classifier), `internal/mailjmap/` (Fastmail via
-  `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/` (Gmail via
-  `emersion/go-imap` v1; created in Pass 8), `internal/mailauth/`
-  (vendored XOAUTH2 + keepalive snippets), `internal/config/`
-  (`AccountConfig`, `UIConfig`, `LoadUI`), `internal/theme/`
+  `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/` (generic
+  IMAP via `emersion/go-imap` v2; two physical connections per
+  Backend — command + idle), `internal/mailauth/` (vendored XOAUTH2
+  + keepalive snippets), `internal/config/` (`AccountConfig`,
+  `UIConfig`, `LoadUI`, `Provider` registry), `internal/theme/`
   (compiled lipgloss themes), `internal/term/` (capability
   detection: `HasNerdFont`, `MeasureSPUACells`). `internal/filter/`,
   `internal/content/`, `internal/tidy/` await their consumers.
 - Mail backends call upstream libraries directly. No aerc fork. The
-  library family is emersion (`go-imap` v1, `go-message`, `go-smtp`,
+  library family is emersion (`go-imap` v2, `go-message`, `go-smtp`,
   `go-sasl`, `go-webdav`, `go-vcard`) plus `rockorager/go-jmap`.
   Vendored snippets are MIT-licensed helpers (XOAUTH2 against
   `go-sasl`, Gmail X-GM-EXT against `go-imap`); each carries a
   top-of-file provenance comment.
-- Backends in v1: Fastmail JMAP + Gmail IMAP. No
+- Backends in v1: JMAP (`backend = "jmap"` / `"fastmail"`) and
+  generic IMAP (`backend = "imap"` or one of the presets `yahoo`,
+  `icloud`, `zoho`; `gmail` lands with X-GM-EXT support). Provider
+  presets in `config.Providers` resolve at decode time to the
+  canonical `imap`/`jmap` backend with host/port/URL/auth-hint
+  filled in. Self-hosted IMAP uses explicit `host`/`port` plus
+  `insecure-tls = true` for self-signed certs. No
   maildir/mbox/notmuch.
 - `mail.Backend` is synchronous blocking; both packages call their
   libraries synchronously — no pump goroutine, no async bridge.
+- IMAP backend invariants: UIDPLUS is required at Connect (asserted
+  in `capSet`). MOVE / SPECIAL-USE / IDLE are negotiated; absence
+  triggers documented fallbacks (COPY+STORE+EXPUNGE for Move, name-
+  alias classification for SPECIAL-USE, 30s STATUS-poll for IDLE).
+  The idle goroutine refreshes IDLE every 9 minutes (well under the
+  RFC 2177 29-minute cap), reconnects with exponential backoff
+  mirroring `mailjmap.pushLoop`, and emits `mail.Update` values on
+  the shared updates channel. `Destroy` issues
+  `UID STORE +FLAGS.SILENT (\Deleted)` then `UID EXPUNGE <uids>`,
+  matching ADR-0092 semantics with no risk of expunging unrelated
+  pre-marked messages.
 
 ### Elm architecture & idiomatic bubbletea
 
@@ -112,7 +130,9 @@ the ADR(s) that justify them.
 - `mail.Backend.Destroy(uids)` is the irreversible permanent-delete
   primitive (no inverse). Empty input is a no-op. JMAP impl issues
   `Email/set { destroy }` and treats `notFound` as success
-  (idempotent). IMAP impl arrives in Pass 8.
+  (idempotent). IMAP impl issues `UID STORE +FLAGS.SILENT (\Deleted)`
+  then `UID EXPUNGE <uids>`, scoped by UIDPLUS so unrelated
+  pre-marked messages are unaffected.
 
 ## Build & verification
 
@@ -142,8 +162,8 @@ invariant. ADR numbering is chronological.
 | Monorepo, single binary | 0001, 0058 |
 | Direct-on-libraries mail stack (no aerc fork) | 0002 (superseded by 0075), 0006 (superseded by 0075), 0008 (superseded by 0075), 0010 (superseded by 0075), 0012 (superseded by 0075), 0075 |
 | Lipgloss + compiled themes, styling discipline | 0004, 0043, 0046 |
-| JMAP + IMAP only, minimal account config | 0009, 0075 |
-| Mail backend interface synchronous | 0010 (superseded by 0075), 0075 |
+| JMAP + IMAP only, minimal account config | 0009, 0075, 0098, 0101 |
+| Mail backend interface synchronous | 0010 (superseded by 0075), 0075, 0099 |
 | Config layout, folder classifier, UI config | 0013, 0052, 0053 |
 | Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054, 0088 |
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
@@ -157,7 +177,7 @@ invariant. ADR numbering is chronological.
 | Help popover modal, future-binding policy, overlay+dim, link picker | 0071 (superseded by 0082), 0072, 0082, 0087 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
 | Optimistic triage with toast/undo, ActionTargets, visual mode, move picker | 0089, 0090, 0091 |
-| Permanent-delete primitive, retention sweep, manual empty + ConfirmModal | 0092, 0093, 0094 |
+| Permanent-delete primitive, retention sweep, manual empty + ConfirmModal | 0092, 0093, 0094, 0100 |
 | Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
 | Path-scoped UI rule (split from invariants) | 0095 |
