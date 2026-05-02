@@ -127,7 +127,10 @@ the ADR(s) that justify them.
 - Pass-end ritual lives in the `poplar-pass` skill (trigger:
   "continue development", "next pass", "finish pass", "ship pass").
 - Live UI verification uses the tmux workflow in
-  `.claude/docs/tmux-testing.md`.
+  `.claude/docs/tmux-testing.md`. 80×24 is the design polish bar:
+  every UI surface must look intentional at the default-launch
+  terminal size on every VT100-lineage terminal. Below 80, rendering
+  is best-effort. UI passes capture both 80×24 and 120×40.
 
 ## Decision index
 
@@ -158,3 +161,4 @@ invariant. ADR numbering is chronological.
 | Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
 | Path-scoped UI rule (split from invariants) | 0095 |
+| Responsive sidebar; 80×24 polish bar | 0096, 0097 |

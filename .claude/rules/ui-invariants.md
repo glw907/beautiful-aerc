@@ -30,6 +30,13 @@ file describes behavior, not the key tables.
   their group.
 - Nested folder names (containing `/`) render flat. The `/` in the
   display name is the only affordance. No tree, no expand/collapse.
+- Sidebar width is responsive: `sidebarWidthFor(termWidth) =
+  clamp(termWidth - 56, 24, 30)`. Linear from 24 at termWidth=80 up
+  to 30 at termWidth≥86; clamped below 80. Folder labels truncate
+  with `…` (via `displayTruncateEllipsis`) when their natural width
+  exceeds the per-row label budget. Every rendered folder row
+  preserves a 1-cell right margin before the chrome divider at
+  every width in `[24, 30]`. ADR-0096.
 
 ### Message list
 
