@@ -6,6 +6,9 @@ build:
 test:
 	go test ./...
 
+test-imap:
+	go test -tags=integration ./internal/mailimap/...
+
 vet:
 	go vet ./...
 
@@ -20,4 +23,4 @@ check: vet test
 clean:
 	rm -f $(BINARY)
 
-.PHONY: build test vet lint install check clean
+.PHONY: build test test-imap vet lint install check clean
