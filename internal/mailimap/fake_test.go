@@ -29,6 +29,11 @@ type fakeClient struct {
 	idleStop func()
 
 	logoutErr error
+
+	// searchFn, when non-nil, overrides the default Search stub.
+	searchFn func(mail.SearchCriteria) ([]mail.UID, error)
+	// fetchFn, when non-nil, overrides the default Fetch stub.
+	fetchFn func(uids []mail.UID, items []string, resultFn func(mail.UID, map[string]any)) error
 }
 
 func newFakeClient() *fakeClient {
@@ -55,9 +60,17 @@ func (f *fakeClient) Select(folder string, readOnly bool) (mail.Folder, error) {
 	return mail.Folder{Name: folder}, nil
 }
 
-func (f *fakeClient) Search(c mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
+func (f *fakeClient) Search(c mail.SearchCriteria) ([]mail.UID, error) {
+	if f.searchFn != nil {
+		return f.searchFn(c)
+	}
+	return nil, nil
+}
 
 func (f *fakeClient) Fetch(uids []mail.UID, items []string, resultFn func(mail.UID, map[string]any)) error {
+	if f.fetchFn != nil {
+		return f.fetchFn(uids, items, resultFn)
+	}
 	return nil
 }
 
@@ -66,7 +79,7 @@ func (f *fakeClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 	if !ok {
 		return nil, errors.New("not found")
 	}
-	return io.NopCloser(stringReader(body)), nil
+	return io.NopCloser(newStringReader(body)), nil
 }
 
 func (f *fakeClient) Store(uids []mail.UID, item string, value any) error {
@@ -102,12 +115,20 @@ func (f *fakeClient) IdleStop() {
 	}
 }
 
-type stringReader string
+type stringReader struct {
+	data []byte
+	pos  int
+}
 
-func (s stringReader) Read(p []byte) (int, error) {
-	if len(s) == 0 {
+func newStringReader(s string) *stringReader {
+	return &stringReader{data: []byte(s)}
+}
+
+func (s *stringReader) Read(p []byte) (int, error) {
+	if s.pos >= len(s.data) {
 		return 0, io.EOF
 	}
-	n := copy(p, s)
+	n := copy(p, s.data[s.pos:])
+	s.pos += n
 	return n, nil
 }
