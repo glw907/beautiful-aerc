@@ -9,6 +9,7 @@ import (
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailimap"
 	"github.com/glw907/poplar/internal/mailjmap"
 )
 
@@ -24,7 +25,6 @@ func defaultConfigPath() (string, error) {
 
 // openBackend constructs a mail.Backend for the given account based on
 // its backend type. Mock is the default for unconfigured (or test) accounts.
-// IMAP support lands in Pass 8.
 func openBackend(acct config.AccountConfig) (mail.Backend, error) {
 	switch acct.Backend {
 	case "mock", "":
@@ -32,7 +32,7 @@ func openBackend(acct config.AccountConfig) (mail.Backend, error) {
 	case "jmap":
 		return mailjmap.New(acct), nil
 	case "imap":
-		return nil, fmt.Errorf("imap backend lands in pass 8")
+		return mailimap.New(acct), nil
 	default:
 		return nil, fmt.Errorf("unknown backend %q for account %q", acct.Backend, acct.Name)
 	}
