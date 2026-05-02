@@ -164,9 +164,5 @@ func (b *Backend) Disconnect() error {
 	return firstErr
 }
 
-// idleLoop is implemented in idle.go. Stub here so finishConnect
-// compiles before Task 13 lands.
-func (b *Backend) idleLoop(ctx context.Context) {
-	defer close(b.idleDone)
-	<-ctx.Done()
-}
+// idleLoop, runIdleSession, pollLoop, handleUnilateral, and emit
+// are implemented in idle.go.

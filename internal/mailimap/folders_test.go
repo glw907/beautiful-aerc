@@ -3,7 +3,6 @@
 package mailimap
 
 import (
-	"context"
 	"testing"
 
 	"github.com/glw907/poplar/internal/config"
@@ -28,10 +27,10 @@ func TestListFoldersWithSpecialUse(t *testing.T) {
 	idle := newFakeClient()
 	idle.caps = cmd.caps
 
+	// Set up state that ListFolders needs without starting the idle
+	// goroutine.
 	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
-	if err := b.finishConnect(context.Background()); err != nil {
-		t.Fatalf("connect: %v", err)
-	}
+	b.caps = capSet{UIDPLUS: true, SpecialUse: true}
 
 	got, err := b.ListFolders()
 	if err != nil {
@@ -51,17 +50,24 @@ func TestOpenFolderTracksCurrent(t *testing.T) {
 	idle := newFakeClient()
 	idle.caps = cmd.caps
 
+	// Set up state that OpenFolder needs without starting the idle
+	// goroutine — finishConnect would spawn it and create a race
+	// between the goroutine's b.current write and this test's read.
 	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
-	if err := b.finishConnect(context.Background()); err != nil {
-		t.Fatalf("connect: %v", err)
-	}
+	b.caps = capSet{UIDPLUS: true}
+	b.switchCh = make(chan string, 1)
+
 	if err := b.OpenFolder("INBOX"); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	if cmd.selected != "INBOX" {
 		t.Errorf("selected = %q, want INBOX", cmd.selected)
 	}
-	if b.current != "INBOX" {
-		t.Errorf("b.current = %q, want INBOX", b.current)
+
+	b.mu.Lock()
+	cur := b.current
+	b.mu.Unlock()
+	if cur != "INBOX" {
+		t.Errorf("b.current = %q, want INBOX", cur)
 	}
 }
