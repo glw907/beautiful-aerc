@@ -34,6 +34,25 @@ type AccountConfig struct {
 	// In accounts.toml use "$VAR_NAME" to pull from the environment.
 	Password string
 
+	// Auth (Pass 8). Recognized values: "plain", "login", "cram-md5",
+	// "xoauth2", "bearer". Empty string defers to backend default.
+	Auth string
+
+	// Email is the user's address. May be empty for backends that
+	// auto-discover (JMAP session). Used as SASL username for IMAP.
+	Email string
+
+	// IMAP transport (set directly via accounts.toml or via a
+	// provider preset).
+	Host     string
+	Port     int
+	StartTLS bool
+
+	// XOAUTH2 inputs. All env-var-substituted via $VAR.
+	OAuthClientID     string
+	OAuthClientSecret string
+	OAuthRefreshToken string
+
 	// Outgoing
 	Outgoing        string
 	OutgoingCredCmd string
