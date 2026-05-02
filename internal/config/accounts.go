@@ -85,6 +85,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	host := e.Host
 	port := e.Port
 	startTLS := e.StartTLS
+	insecureTLS := e.InsecureTLS
 	source := e.Source
 
 	if preset, ok := LookupProvider(e.Provider); ok {
@@ -97,6 +98,9 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 		if !startTLS {
 			startTLS = preset.StartTLS
+		}
+		if !insecureTLS {
+			insecureTLS = preset.InsecureTLS
 		}
 		if source == "" {
 			source = preset.URL
@@ -140,7 +144,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		Host:              host,
 		Port:              port,
 		StartTLS:          startTLS,
-		InsecureTLS:       e.InsecureTLS,
+		InsecureTLS:       insecureTLS,
 		Auth:              e.Auth,
 		Password:          password,
 		OAuthClientID:     clientID,

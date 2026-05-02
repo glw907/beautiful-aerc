@@ -11,6 +11,7 @@ type Provider struct {
 	Host        string // IMAP presets only
 	Port        int
 	StartTLS    bool
+	InsecureTLS bool   // true only for self-signed-cert presets (self-hosted)
 	URL         string // JMAP presets only
 	AuthHint    string // "app-password" | "bearer" | "xoauth2"
 	HelpURL     string

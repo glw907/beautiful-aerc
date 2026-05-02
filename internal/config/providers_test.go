@@ -4,6 +4,13 @@ package config
 
 import "testing"
 
+func TestProtonmailPresetSetsInsecureTLS(t *testing.T) {
+	p := Provider{Name: "test", InsecureTLS: true}
+	if !p.InsecureTLS {
+		t.Errorf("InsecureTLS field missing or unread")
+	}
+}
+
 func TestProviderRegistryLookup(t *testing.T) {
 	tests := []struct {
 		name     string

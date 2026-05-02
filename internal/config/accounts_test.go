@@ -376,6 +376,33 @@ oauth-refresh-token = "$OA_RT"
 	}
 }
 
+func TestParseAccountsPresetSetsInsecureTLS(t *testing.T) {
+	Providers["test-insecure"] = Provider{
+		Name:        "test-insecure",
+		Backend:     "imap",
+		Host:        "test.local",
+		Port:        993,
+		InsecureTLS: true,
+	}
+	t.Cleanup(func() { delete(Providers, "test-insecure") })
+
+	toml := `
+[[account]]
+name     = "t"
+provider = "test-insecure"
+email    = "u@test.local"
+auth     = "plain"
+password = "pw"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !got[0].InsecureTLS {
+		t.Errorf("InsecureTLS = false, want true (from preset)")
+	}
+}
+
 func TestExampleConfigParses(t *testing.T) {
 	const example = `[[account]]
 name = "Example"
