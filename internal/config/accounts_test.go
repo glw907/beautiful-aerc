@@ -351,7 +351,7 @@ func TestParseAccountsOAuthFieldsResolved(t *testing.T) {
 	toml := `
 [[account]]
 name                = "wk"
-backend             = "imap"
+provider            = "imap"
 email               = "u@example.com"
 host                = "imap.example.com"
 port                = 993
