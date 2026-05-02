@@ -1,17 +1,17 @@
 # Poplar Status
 
-**Current pass:** Pass 8.1 next — Gmail preset. Pass 8.5 done —
-config v1 (ADR-0102/0103/0104) plus integrated roadmap with
-release stages (v0.9.0 freeze → soak → v1.0.0; ADR-0105). Every
-open backlog item is scheduled to a numbered pass.
+**Current pass:** Pass 8.2 next — bubbletea cleanup II. Pass 8.1
+done — Gmail preset (ADR-0106/0107/0108): `gmail` provider,
+`X-GM-EXT-1` assertion, Destroy via SELECT [Gmail]/Trash, XOAUTH2
+access tokens via `password-cmd` (no internal refresh until 9.6).
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
 | 1 – 8.5 | Scaffold → backends → UI → triage → config v1 (see git log; ADRs 0001–0104) | done |
-| 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, label-aware fallbacks, XOAUTH2; re-add `Provider.GmailQuirks` + `capSet.XGM` | next |
-| 8.2 | Bubbletea cleanup II — #17 `key.Matches`; #18 intra-model `tea.Cmd` → direct delegation; #19 `App.View` width trust | pending |
+| 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, XOAUTH2 via `password-cmd` (ADR-0106/0107/0108) | done |
+| 8.2 | Bubbletea cleanup II — #17 `key.Matches`; #18 intra-model `tea.Cmd` → direct delegation; #19 `App.View` width trust | next |
 | 8.3 | Polish I — #23 HTML word-fusion; #26 narrow-terminal msglist; #9 viewer `n/N` filtered | pending |
 | 8.4 | Cache 0 — design + ADR + spec (storage, decorator vs. backend-aware, `ChangeTracker` interface, RFC 4549 + JMAP sync) | pending |
 | 8.4a | Cache I — envelope/header cache, multi-account namespacing, "stale/syncing" UI indicator (supersedes #4) | pending |
@@ -29,32 +29,30 @@ open backlog item is scheduled to a numbered pass.
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta features | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.1)
+## Next starter prompt (Pass 8.2)
 
-> **Goal.** Add a `gmail` provider preset adapting the generic IMAP
-> backend to Gmail's quirks so Gmail accounts work before beta.
+> **Goal.** Bubbletea cleanup II — finish the migration to idiomatic
+> bubbletea conventions across the model tree.
 >
-> **Scope.** New `gmail` entry in `config.Providers` with
-> `GmailQuirks: true`. Re-add `Provider.GmailQuirks` and
-> `capSet.XGM` (dropped in Pass 8.5 cleanup as dead fields). Gate
-> Gmail-specific behavior in `internal/mailimap/` on the flag:
-> assert `X-GM-EXT-1` at Connect; Move-to-Trash must select a
-> non-Trash folder before EXPUNGE so Gmail actually deletes;
-> X-GM-LABELS as classification fallback if SPECIAL-USE is
-> missing. Wire the `internal/mailauth/` XOAUTH2 refresh flow
-> into `dialCommand`/`dialIdle`.
+> **Scope.** BACKLOG items #17, #18, #19:
+> - #17: Convert remaining ad-hoc key comparisons to `key.Matches`
+>   against `key.Binding` values; ensure new keys are in the help
+>   vocabulary (ADR-0072).
+> - #18: Replace intra-model `tea.Cmd` round-trips (parent emits Msg
+>   to itself) with direct delegation where the call doesn't cross
+>   a tree boundary.
+> - #19: `App.View` width trust — remove any defensive parent-side
+>   `MaxWidth` clipping; children honor their `SetSize` contract.
 >
-> **Settled:** Generic IMAP backend (ADR-0099/0100/0101). Provider
-> registry (ADR-0098). XOAUTH2 helpers in `internal/mailauth/`.
-> Config v1 (ADR-0102/0103/0104). Release model (ADR-0105).
+> **Settled:** Bubbletea conventions (ADR-0077/0078/0079/0080/
+> 0081/0083/0084). The size contract, wordwrap+hardwrap discipline,
+> and JoinHorizontal trust contract from `bubbletea-conventions.md`.
 >
-> **Still open — brainstorm these:**
-> - XOAUTH2 refresh ownership (cache + 401-watch vs pre-refresh).
-> - X-GM-LABELS fallback necessity in 2026 Gmail (likely dead-code
->   defense — confirm).
-> - Trash-precondition: generic `mail.Backend` contract or Gmail
->   branch on `b.caps.GmailQuirks`?
+> **Still open — brainstorm these:** None expected; this is a pure
+> implementation pass. If a deviation surfaces, ADR it.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-gmail-preset.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Read `docs/poplar/bubbletea-conventions.md` and
+> `.claude/rules/ui-invariants.md`, walk the diff sites listed in
+> BACKLOG, write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-bubbletea-cleanup-ii.md`,
+> then implement. Standard pass-end checklist applies.

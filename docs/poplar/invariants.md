@@ -40,8 +40,7 @@ the ADR(s) that justify them.
 - Backends in v1: JMAP (`provider = "jmap"` / `"fastmail"`) and
   generic IMAP (`provider = "imap"` or one of the presets `yahoo`,
   `icloud`, `zoho`, `outlook`, `mailbox-org`, `posteo`, `runbox`,
-  `gmx`, `protonmail`; `gmail` lands with X-GM-EXT support in
-  Pass 8.1). Provider presets in `config.Providers` resolve at
+  `gmx`, `protonmail`, `gmail`). Provider presets in `config.Providers` resolve at
   decode time to the canonical `imap`/`jmap` backend with
   host/port/URL/auth-hint filled in (and `InsecureTLS = true` on
   the `protonmail` preset for the local Bridge's self-signed
@@ -62,7 +61,11 @@ the ADR(s) that justify them.
   the shared updates channel. `Destroy` issues
   `UID STORE +FLAGS.SILENT (\Deleted)` then `UID EXPUNGE <uids>`,
   matching ADR-0092 semantics with no risk of expunging unrelated
-  pre-marked messages.
+  pre-marked messages. Gmail accounts (`GmailQuirks = true`) assert
+  `X-GM-EXT-1` at Connect and route `Destroy` through `SELECT
+  [Gmail]/Trash` first so EXPUNGE truly deletes; XOAUTH2 access
+  tokens come from `password-cmd` with no internal refresh until
+  Pass 9.6.
 
 ### Elm architecture & idiomatic bubbletea
 
@@ -208,3 +211,4 @@ invariant. ADR numbering is chronological.
 | Path-scoped UI rule (split from invariants) | 0095 |
 | Responsive sidebar; 80×24 polish bar | 0096, 0097 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
+| Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
