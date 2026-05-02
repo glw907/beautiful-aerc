@@ -68,3 +68,35 @@ func TestDisconnectLogsOutBoth(t *testing.T) {
 		t.Errorf("expected error from cmd Logout, got nil")
 	}
 }
+
+func TestFinishConnect_GmailQuirks_RequiresXGM(t *testing.T) {
+	cfg := config.AccountConfig{Name: "g", Backend: "imap", GmailQuirks: true}
+	b := New(cfg)
+	fc := newFakeClient()
+	fc.caps = map[string]bool{"UIDPLUS": true} // X-GM-EXT-1 absent
+	b.cmd = fc
+	b.idle = newFakeClient()
+
+	err := b.finishConnect(context.Background())
+	if err == nil {
+		t.Fatal("finishConnect with GmailQuirks and no X-GM-EXT-1: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), "X-GM-EXT-1") {
+		t.Errorf("error %q does not mention X-GM-EXT-1", err)
+	}
+}
+
+func TestFinishConnect_GmailQuirks_AcceptsXGM(t *testing.T) {
+	cfg := config.AccountConfig{Name: "g", Backend: "imap", GmailQuirks: true}
+	b := New(cfg)
+	fc := newFakeClient()
+	fc.caps = map[string]bool{"UIDPLUS": true, "X-GM-EXT-1": true}
+	b.cmd = fc
+	b.idle = newFakeClient()
+
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("finishConnect: %v", err)
+	}
+	// Tear down the idle goroutine started by finishConnect.
+	_ = b.Disconnect()
+}

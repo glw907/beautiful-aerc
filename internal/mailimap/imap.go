@@ -45,6 +45,7 @@ type capSet struct {
 	MOVE       bool
 	IDLE       bool
 	SpecialUse bool
+	XGM        bool // X-GM-EXT-1 (Gmail extensions)
 }
 
 // New constructs an unconnected Backend for cfg.
@@ -117,9 +118,13 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 		MOVE:       caps["MOVE"],
 		IDLE:       caps["IDLE"],
 		SpecialUse: caps["SPECIAL-USE"],
+		XGM:        caps["X-GM-EXT-1"],
 	}
 	if !cs.UIDPLUS {
 		return errors.New("server does not advertise UIDPLUS — required for safe deletion")
+	}
+	if b.cfg.GmailQuirks && !cs.XGM {
+		return errors.New("gmail account but server does not advertise X-GM-EXT-1")
 	}
 
 	updates := make(chan mail.Update, updatesBuffer)
