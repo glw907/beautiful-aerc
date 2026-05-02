@@ -157,7 +157,7 @@ func authenticate(cli *imapclient.Client, cfg config.AccountConfig) error {
 		return errors.New("cram-md5: not supported by the bundled go-sasl version")
 	case "xoauth2":
 		if cfg.Password == "" {
-			return errors.New("xoauth2: access token (password field) required; refresh-flow lands in Pass 8.1")
+			return errors.New("xoauth2: access token (password field) required")
 		}
 		return cli.Authenticate(mailauth.NewXoauth2Client(cfg.Email, cfg.Password))
 	default:

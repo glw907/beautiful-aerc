@@ -27,10 +27,8 @@ func (b *Backend) ListFolders() ([]mail.Folder, error) {
 
 	out := make([]mail.Folder, 0, len(entries))
 	for _, e := range entries {
-		f := mail.Folder{Name: e.Name, Role: roleFromAttrs(e.Attributes)}
-		// Populate Exists/Unseen via STATUS if needed. For Pass 8
-		// initial drop, leave at zero; the UI re-fetches via Select.
-		out = append(out, f)
+		// Exists/Unseen left at zero; OpenFolder/Select returns fresh counts.
+		out = append(out, mail.Folder{Name: e.Name, Role: roleFromAttrs(e.Attributes)})
 	}
 	return out, nil
 }

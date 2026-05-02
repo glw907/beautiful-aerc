@@ -34,7 +34,7 @@ type AccountConfig struct {
 	// In accounts.toml use "$VAR_NAME" to pull from the environment.
 	Password string
 
-	// Auth (Pass 8). Recognized values: "plain", "login", "cram-md5",
+	// Auth — recognized values: "plain", "login", "cram-md5",
 	// "xoauth2", "bearer". Empty string defers to backend default.
 	Auth string
 

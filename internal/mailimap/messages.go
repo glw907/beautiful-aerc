@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,22 +56,12 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 	return all[offset:end], total, nil
 }
 
-// uidGreater reports whether a is lexicographically greater than b,
-// falling back to string comparison when lengths differ. IMAP UIDs are
-// unsigned 32-bit integers that increment monotonically, so numeric
-// order equals lexicographic order when zero-padded; in practice UIDs
-// are never zero-padded in the wild, but a numeric string compare
-// (longer string = larger integer when lengths match) is safe here.
-//
-// We sort by UID as a proxy for "newest-first" because IMAP UIDs are
-// assigned in delivery order within a mailbox. This is the same
-// heuristic used by most IMAP clients when SORT is not available.
+// uidGreater reports a > b as IMAP UIDs (unsigned 32-bit decimals).
+// Sort by UID as a proxy for newest-first when SORT is unavailable.
 func uidGreater(a, b mail.UID) bool {
-	sa, sb := string(a), string(b)
-	if len(sa) != len(sb) {
-		return len(sa) > len(sb)
-	}
-	return sa > sb
+	ai, _ := strconv.ParseUint(string(a), 10, 32)
+	bi, _ := strconv.ParseUint(string(b), 10, 32)
+	return ai > bi
 }
 
 // fetchItems is the set of FETCH data items requested by FetchHeaders.

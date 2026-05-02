@@ -29,6 +29,7 @@ type Backend struct {
 	idle    imapClient // idle connection
 	caps    capSet
 	current string // currently-selected folder on cmd
+	trash   string // resolved Trash folder name; empty until first Delete
 	updates chan mail.Update
 
 	idleCancel context.CancelFunc
@@ -43,7 +44,7 @@ type capSet struct {
 	MOVE       bool
 	IDLE       bool
 	SpecialUse bool
-	XGM        bool // X-GM-EXT-1, set by Pass 8.1 when GmailQuirks is on
+	XGM        bool // X-GM-EXT-1, used when GmailQuirks is on
 }
 
 // New constructs an unconnected Backend for cfg.

@@ -68,15 +68,25 @@ func (b *Backend) Delete(uids []mail.UID) error {
 	return b.Move(uids, trash)
 }
 
-// resolveTrashFolder returns the server-side name of the Trash folder.
+// resolveTrashFolder returns the server-side name of the Trash folder,
+// caching the result on the Backend so repeated Deletes don't re-LIST.
 // Returns an error if no folder with Canonical == "Trash" is found.
 func (b *Backend) resolveTrashFolder() (string, error) {
+	b.mu.Lock()
+	cached := b.trash
+	b.mu.Unlock()
+	if cached != "" {
+		return cached, nil
+	}
 	folders, err := b.ListFolders()
 	if err != nil {
 		return "", fmt.Errorf("list folders: %w", err)
 	}
 	for _, cf := range mail.Classify(folders) {
 		if cf.Canonical == "Trash" {
+			b.mu.Lock()
+			b.trash = cf.Folder.Name
+			b.mu.Unlock()
 			return cf.Folder.Name, nil
 		}
 	}
@@ -139,9 +149,9 @@ func (b *Backend) MarkAnswered(uids []mail.UID) error {
 	return b.Flag(uids, mail.FlagAnswered, true)
 }
 
-// Send satisfies mail.Backend. Not implemented until Pass 9.
+// Send satisfies mail.Backend. Compose/SMTP lands with the editor pass.
 func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
-	return errors.New("send: not implemented (lands in Pass 9)")
+	return errors.New("send: not implemented")
 }
 
 // imapFlagsFor maps mail.Flag bits to IMAP system flag strings.
