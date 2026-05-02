@@ -12,6 +12,8 @@ package mailimap
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/glw907/poplar/internal/config"
@@ -71,3 +73,100 @@ func (b *Backend) AccountEmail() string {
 // Updates satisfies mail.Backend. Returns a nil channel before
 // Connect succeeds.
 func (b *Backend) Updates() <-chan mail.Update { return b.updates }
+
+const updatesBuffer = 64
+
+// Connect satisfies mail.Backend. It dials both connections,
+// authenticates, negotiates capabilities, and starts the idle
+// goroutine. The dial happens in auth.go; tests bypass by setting
+// b.cmd / b.idle directly and calling finishConnect.
+func (b *Backend) Connect(ctx context.Context) error {
+	cmd, err := dialCommand(b.cfg)
+	if err != nil {
+		return fmt.Errorf("connect cmd: %w", err)
+	}
+	idle, err := dialIdle(b.cfg)
+	if err != nil {
+		_ = cmd.Logout()
+		return fmt.Errorf("connect idle: %w", err)
+	}
+	b.mu.Lock()
+	b.cmd = cmd
+	b.idle = idle
+	b.mu.Unlock()
+
+	return b.finishConnect(ctx)
+}
+
+// finishConnect runs the post-dial bringup: capability negotiation,
+// channel setup, idle-goroutine spawn. Split out so unit tests can
+// drive it with fakes.
+func (b *Backend) finishConnect(ctx context.Context) error {
+	caps, err := b.cmd.Capabilities()
+	if err != nil {
+		return fmt.Errorf("capabilities: %w", err)
+	}
+	cs := capSet{
+		UIDPLUS:    caps["UIDPLUS"],
+		MOVE:       caps["MOVE"],
+		IDLE:       caps["IDLE"],
+		SpecialUse: caps["SPECIAL-USE"],
+		XGM:        caps["X-GM-EXT-1"],
+	}
+	if !cs.UIDPLUS {
+		return errors.New("server does not advertise UIDPLUS — required for safe deletion")
+	}
+
+	updates := make(chan mail.Update, updatesBuffer)
+
+	b.mu.Lock()
+	b.caps = cs
+	b.updates = updates
+	b.switchCh = make(chan string, 1)
+	idleCtx, cancel := context.WithCancel(context.Background())
+	b.idleCancel = cancel
+	b.idleDone = make(chan struct{})
+	b.mu.Unlock()
+
+	go b.idleLoop(idleCtx)
+
+	return nil
+}
+
+// Disconnect satisfies mail.Backend. Tears down the idle goroutine
+// then logs out both connections. Returns the first non-nil error.
+func (b *Backend) Disconnect() error {
+	b.mu.Lock()
+	cancel := b.idleCancel
+	done := b.idleDone
+	cmd := b.cmd
+	idle := b.idle
+	b.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+
+	var firstErr error
+	if cmd != nil {
+		if err := cmd.Logout(); err != nil {
+			firstErr = err
+		}
+	}
+	if idle != nil {
+		if err := idle.Logout(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// idleLoop is implemented in idle.go. Stub here so finishConnect
+// compiles before Task 13 lands.
+func (b *Backend) idleLoop(ctx context.Context) {
+	defer close(b.idleDone)
+	<-ctx.Done()
+}
