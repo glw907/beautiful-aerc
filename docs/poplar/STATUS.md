@@ -1,9 +1,8 @@
 # Poplar Status
 
-**Current pass:** Pass 8.2 next — bubbletea cleanup II. Pass 8.1
-done — Gmail preset (ADR-0106/0107/0108): `gmail` provider,
-`X-GM-EXT-1` assertion, Destroy via SELECT [Gmail]/Trash, XOAUTH2
-access tokens via `password-cmd` (no internal refresh until 9.6).
+**Current pass:** Pass 8.3 next — narrow-terminal polish I.
+Pass 8.2 closed as no-op: #17/#18/#19 were already resolved in
+Pass 5 (commits ec0984a/1797927/2b520c9); backlog updated.
 
 ## Passes
 
@@ -11,8 +10,8 @@ access tokens via `password-cmd` (no internal refresh until 9.6).
 |------|------|--------|
 | 1 – 8.5 | Scaffold → backends → UI → triage → config v1 (see git log; ADRs 0001–0104) | done |
 | 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, XOAUTH2 via `password-cmd` (ADR-0106/0107/0108) | done |
-| 8.2 | Bubbletea cleanup II — #17 `key.Matches`; #18 intra-model `tea.Cmd` → direct delegation; #19 `App.View` width trust | next |
-| 8.3 | Polish I — #23 HTML word-fusion; #26 narrow-terminal msglist; #9 viewer `n/N` filtered | pending |
+| 8.2 | Bubbletea cleanup II — #17/#18/#19 (closed; already resolved in Pass 5) | done |
+| 8.3 | Polish I — #23 HTML word-fusion; #26 narrow-terminal msglist; #9 viewer `n/N` filtered | next |
 | 8.4 | Cache 0 — design + ADR + spec (storage, decorator vs. backend-aware, `ChangeTracker` interface, RFC 4549 + JMAP sync) | pending |
 | 8.4a | Cache I — envelope/header cache, multi-account namespacing, "stale/syncing" UI indicator (supersedes #4) | pending |
 | 8.4b | Cache II — body cache, invalidation on flag/delete/IDLE, eviction (LRU + size + age), `poplar cache size/clear/status` | pending |
@@ -29,30 +28,32 @@ access tokens via `password-cmd` (no internal refresh until 9.6).
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta features | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.2)
+## Next starter prompt (Pass 8.3)
 
-> **Goal.** Bubbletea cleanup II — finish the migration to idiomatic
-> bubbletea conventions across the model tree.
+> **Goal.** Polish I — three behaviour bugs that bite real users at
+> the 80×24 polish bar and on plain-text-formatted mail.
 >
-> **Scope.** BACKLOG items #17, #18, #19:
-> - #17: Convert remaining ad-hoc key comparisons to `key.Matches`
->   against `key.Binding` values; ensure new keys are in the help
->   vocabulary (ADR-0072).
-> - #18: Replace intra-model `tea.Cmd` round-trips (parent emits Msg
->   to itself) with direct delegation where the call doesn't cross
->   a tree boundary.
-> - #19: `App.View` width trust — remove any defensive parent-side
->   `MaxWidth` clipping; children honor their `SetSize` contract.
+> **Scope.** BACKLOG items #23, #26, #9:
+> - #23: HTML→plain-text fuses words across element boundaries.
+>   Fix in `internal/filter/html.go` — insert whitespace at inline
+>   element boundaries before tag stripping (or post-process to
+>   re-introduce spaces around fused alphanumeric runs).
+> - #26: Narrow-terminal msglist polish — date-column adapts to
+>   width (`04-30` / `3:41p` at intermediate widths, drop entirely
+>   at 80 cols), rebalance subject vs sender allocation, explore
+>   sidebar floor below 24 cells.
+> - #9: Viewer `n`/`N` walks the filtered row set — couples viewer
+>   navigation to msglist's filter state. Bundles with the live
+>   backend so prefetch semantics are testable under real latency.
 >
-> **Settled:** Bubbletea conventions (ADR-0077/0078/0079/0080/
-> 0081/0083/0084). The size contract, wordwrap+hardwrap discipline,
-> and JoinHorizontal trust contract from `bubbletea-conventions.md`.
+> **Settled:** Bubbletea conventions (0077–0084), responsive
+> sidebar (0096), 80×24 polish bar (0097).
 >
-> **Still open — brainstorm these:** None expected; this is a pure
-> implementation pass. If a deviation surfaces, ADR it.
+> **Still open — brainstorm these:**
+> - #26: which of date format / sender-subject ratio / sidebar
+>   floor earn their keep at 80 cols, at which width thresholds?
+> - #9: prefetch eagerly while viewer open, or lazily on n/N?
 >
-> **Approach.** Read `docs/poplar/bubbletea-conventions.md` and
-> `.claude/rules/ui-invariants.md`, walk the diff sites listed in
-> BACKLOG, write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-bubbletea-cleanup-ii.md`,
-> then implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-polish-i.md`, then implement.
+> Standard pass-end checklist applies.
