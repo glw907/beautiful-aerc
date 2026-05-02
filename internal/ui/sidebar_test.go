@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -346,6 +347,62 @@ func TestSidebar_OrderedFolders(t *testing.T) {
 	for i, w := range want {
 		if got[i] != w {
 			t.Errorf("entry %d = %+v, want %+v", i, got[i], w)
+		}
+	}
+}
+
+// newTestSidebarWithFolder builds a Sidebar with a single custom folder
+// at the given width, display name, and unseen count.
+func newTestSidebarWithFolder(t *testing.T, w int, label string, unread int) *Sidebar {
+	t.Helper()
+	folders := []mail.ClassifiedFolder{
+		{
+			Folder:      mail.Folder{Name: label, Unseen: unread},
+			Canonical:   "",
+			DisplayName: label,
+			Group:       mail.GroupCustom,
+		},
+	}
+	s := NewSidebar(NewStyles(theme.OneDark), folders, config.DefaultUIConfig(), w, 5, SimpleIcons)
+	return &s
+}
+
+func TestSidebarRenderRow_TruncatesLongLabel(t *testing.T) {
+	s := newTestSidebarWithFolder(t, 24, "Membership Committee", 0)
+	out := s.View()
+	if !strings.Contains(out, "Membership C") {
+		t.Errorf("output missing truncated label start: %q", out)
+	}
+	if !strings.Contains(out, "…") {
+		t.Errorf("output missing ellipsis glyph: %q", out)
+	}
+	if strings.Contains(out, "Membership Committee") {
+		t.Errorf("output contains untruncated label at width 24: %q", out)
+	}
+}
+
+func TestSidebarRenderRow_PreservesRightMargin(t *testing.T) {
+	for w := 24; w <= 30; w++ {
+		s := newTestSidebarWithFolder(t, w, "Membership Committee", 5)
+		out := s.View()
+		for i, line := range strings.Split(out, "\n") {
+			if line == "" {
+				continue
+			}
+			plain := ansi.Strip(line)
+			if displayCells(plain) != w {
+				t.Errorf("width=%d row %d: cells=%d, want %d (%q)",
+					w, i, displayCells(plain), w, plain)
+			}
+			runes := []rune(plain)
+			if len(runes) == 0 {
+				continue
+			}
+			last := runes[len(runes)-1]
+			if last != ' ' {
+				t.Errorf("width=%d row %d: last rune %q, want space",
+					w, i, last)
+			}
 		}
 	}
 }

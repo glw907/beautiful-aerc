@@ -266,7 +266,6 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	}
 
 	icon := applyBg(textStyle, bgStyle).Render(entry.icon)
-	name := applyBg(textStyle, bgStyle).Render(entry.cf.DisplayName)
 
 	var countStr string
 	var countWidth int
@@ -275,11 +274,25 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 		countWidth = lipgloss.Width(countStr)
 	}
 
-	// Layout: indicator(1) + sp(1) + icon(2) + sp×2 + name + gap + count + margin(1)
+	// Per-row layout (cells):
+	//   indicator(1) + sp(1) + icon(2 or 4) + sp×2
+	//   + name(labelBudget) + gap(>=1) + countStr + rightMargin(1)
+	const rightMargin = 1
+	leadCells := displayCells(indicator) + 1 + displayCells(icon) + 2
+	countGap := 0
+	if hasUnread {
+		countGap = 1
+	}
+	labelBudget := s.width - leadCells - countWidth - countGap - rightMargin
+	if labelBudget < 1 {
+		labelBudget = 1
+	}
+	displayName := displayTruncateEllipsis(entry.cf.DisplayName, labelBudget)
+	name := applyBg(textStyle, bgStyle).Render(displayName)
+
 	leftContent := indicator + bgStyle.Render(" ") + icon + bgStyle.Render("  ") + name
 	leftWidth := displayCells(leftContent)
 
-	rightMargin := 1
 	gap := max(1, s.width-leftWidth-countWidth-rightMargin)
 
 	row := leftContent +
