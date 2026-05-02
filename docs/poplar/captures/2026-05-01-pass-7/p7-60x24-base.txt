@@ -1,0 +1,24 @@
+────────────────────────┬──────────────────────────────────╮
+                        │▐  󰑚   Hannah Pratt            …  │
+ geoff@907.life         │       Hannah Pratt            ├─ │
+                        │       Hannah Pratt            └─ │
+┃ 󰇰  Inbox           15 │       Kathryn Duder           …  │
+  󰏫  Drafts             │   󰈻   US Sailing via ASC Bo…  …  │
+  󰑚  Sent               │   󰇮   US Sailing via ASC Bo…  …  │
+  󰀼  Archive            │       Frank Cahill            …  │
+                        │   󰇮   membership via ASC Bo…  …  │
+  󰍷  Spam               │   󰇮   Auto-Receipt via ASC …  …  │
+  󰩺  Trash           22 │       Kris Willing            …  │
+                        │       Cathy Wright            ├─ │
+  󰡡  Buccaneer 18       │       Kris Willing            └─ │
+  󰡡  DMARC Reports      │       Apple                   …  │
+  󰡡  Finance Committ… 4 │       Classic Collision       …  │
+  󰡡  Membership Commit… │       Caroline Potasz         …  │
+  󰡡  Notifications  102 │       US Sailing via ASC Bo…  …  │
+  󰡡  Program Committee  │       Classic Collision       …  │
+  󰡡  Remind             │   󰑚   Hannah Wright           …  │
+                        │       Hannah Wright           └─ │
+   / to search          │       Amy Purevsuren          …  │
+                        │       Cathy Wright            …  │
+─────────────────── 56 messages · 15 unread · ● connected ─╯
+ d del  a archive ┊  r/R reply  c compose ┊  ? help  q quit

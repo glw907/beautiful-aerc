@@ -1,0 +1,24 @@
+───────────╭─ Message List ─────────────────────────────────────────╮──────────╮
+           │                                                        │026-04-30 │
+ geoff@907.│  Navigate          Triage              Reply           │  3:41 PM │
+           │  j/k    up/down    d      delete       r      reply    │  3:47 PM │
+┃ 󰇰  Inbox │  g/G    top/bot    a      archive      R      all      │  8:07 AM │
+  󰏫  Drafts│                    s      star         f      forward  │  7:00 AM │
+  󰑚  Sent  │                    .      read/unrd    c      compose  │  6:50 AM │
+  󰀼  Archiv│                    m      move                         │026-04-30 │
+           │                    E      empty                        │026-04-30 │
+  󰍷  Spam  │                    u      undo                         │026-04-30 │
+  󰩺  Trash │                                                        │026-04-29 │
+           │  Search           Select           Threads             │026-04-29 │
+  󰡡  Buccan│  /      search    v      select    ␣      fold         │026-04-30 │
+  󰡡  DMARC │  n      next      ␣      toggle    F      fold all     │026-04-30 │
+  󰡡  Financ│  N      prev                                           │026-04-30 │
+  󰡡  Member│                                                        │026-04-29 │
+  󰡡  Notifi│  Go To                                                 │026-04-29 │
+  󰡡  Progra│  I      inbox    D      drafts    S      sent          │026-04-29 │
+  󰡡  Remind│  A      archive    X      spam    T      trash         │026-04-27 │
+           │                                                        │026-04-28 │
+   / to sea│  Enter  open    ?  close                               │026-04-28 │
+           │                                                        │026-04-28 │
+───────────╰────────────────────────────────────────────────────────╯onnected ─╯
+ d del  a archive ┊  r/R reply  f fwd  c compose ┊  / find ┊  ? help  q quit
