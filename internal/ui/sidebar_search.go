@@ -6,10 +6,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
 )
+
+// sidebarSearchCycleMode binds Tab to the mode toggle while the
+// shelf is in SearchTyping state.
+var sidebarSearchCycleMode = key.NewBinding(key.WithKeys("tab"))
 
 // SidebarSearch is the 3-row shelf pinned to the bottom of the
 // sidebar column. Owns the text input, mode toggle, and state
@@ -107,7 +112,7 @@ func (s SidebarSearch) Update(msg tea.Msg) (SidebarSearch, tea.Cmd) {
 	}
 
 	// Intercept Tab: cycle the mode without routing to textinput.
-	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyTab {
+	if k, ok := msg.(tea.KeyMsg); ok && key.Matches(k, sidebarSearchCycleMode) {
 		if s.mode == SearchModeName {
 			s.mode = SearchModeAll
 		} else {

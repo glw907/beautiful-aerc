@@ -33,6 +33,7 @@ func NewGlobalKeys() GlobalKeys {
 type AccountKeys struct {
 	OpenSearch    key.Binding
 	ClearSearch   key.Binding
+	SearchCommit  key.Binding
 	OpenMessage   key.Binding
 	SidebarDown   key.Binding
 	SidebarUp     key.Binding
@@ -64,6 +65,7 @@ func NewAccountKeys() AccountKeys {
 	return AccountKeys{
 		OpenSearch:    key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		ClearSearch:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear search")),
+		SearchCommit:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "commit search")),
 		OpenMessage:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
 		SidebarDown:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next folder")),
 		SidebarUp:     key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev folder")),
@@ -101,7 +103,9 @@ type ViewerKeys struct {
 	OpenPicker key.Binding
 	BodyTop    key.Binding
 	BodyBottom key.Binding
-	Links      [9]key.Binding
+	// Links[i] binds digit key string(rune('1'+i)) to opening the
+	// (i+1)th harvested URL.
+	Links [9]key.Binding
 }
 
 // NewViewerKeys returns the default viewer key bindings.

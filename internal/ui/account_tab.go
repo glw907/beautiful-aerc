@@ -294,11 +294,11 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	// the input routing for this modal slice, except for Enter and
 	// Esc which transition state.
 	if m.sidebarSearch.State() == SearchTyping {
-		switch msg.Type {
-		case tea.KeyEnter:
+		switch {
+		case key.Matches(msg, m.keys.SearchCommit):
 			m.sidebarSearch.Commit()
 			return m, nil
-		case tea.KeyEsc:
+		case key.Matches(msg, m.keys.ClearSearch):
 			m.sidebarSearch.Clear()
 			m.msglist.ClearFilter()
 			return m, nil

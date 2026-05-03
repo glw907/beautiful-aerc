@@ -33,18 +33,25 @@ type linkPickerKeys struct {
 	Down  key.Binding
 	Enter key.Binding
 	Close key.Binding
+	// Digits[i] binds the digit key for harvested-link slot i+1.
+	Digits [9]key.Binding
 }
 
 // NewLinkPicker returns a closed picker.
 func NewLinkPicker(styles Styles) LinkPicker {
+	keys := linkPickerKeys{
+		Up:    key.NewBinding(key.WithKeys("k", "up")),
+		Down:  key.NewBinding(key.WithKeys("j", "down")),
+		Enter: key.NewBinding(key.WithKeys("enter")),
+		Close: key.NewBinding(key.WithKeys("esc", "tab")),
+	}
+	for i := range keys.Digits {
+		d := string(rune('1' + i))
+		keys.Digits[i] = key.NewBinding(key.WithKeys(d))
+	}
 	return LinkPicker{
 		styles: styles,
-		keys: linkPickerKeys{
-			Up:    key.NewBinding(key.WithKeys("k", "up")),
-			Down:  key.NewBinding(key.WithKeys("j", "down")),
-			Enter: key.NewBinding(key.WithKeys("enter")),
-			Close: key.NewBinding(key.WithKeys("esc", "tab")),
-		},
+		keys:   keys,
 	}
 }
 
@@ -112,13 +119,15 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 	case key.Matches(keyMsg, p.keys.Close):
 		return p, func() tea.Msg { return LinkPickerClosedMsg{} }
 	}
-	if s := keyMsg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
-		idx := int(s[0] - '1')
-		if idx < len(p.links) {
-			return p, tea.Batch(
-				func() tea.Msg { return LaunchURLMsg{URL: p.links[idx]} },
-				func() tea.Msg { return LinkPickerClosedMsg{} },
-			)
+	for i, b := range p.keys.Digits {
+		if key.Matches(keyMsg, b) {
+			if i < len(p.links) {
+				return p, tea.Batch(
+					func() tea.Msg { return LaunchURLMsg{URL: p.links[i]} },
+					func() tea.Msg { return LinkPickerClosedMsg{} },
+				)
+			}
+			return p, nil
 		}
 	}
 	return p, nil

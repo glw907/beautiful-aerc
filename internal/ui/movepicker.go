@@ -37,6 +37,9 @@ type movePickerKeys struct {
 	Pick      key.Binding
 	Close     key.Binding
 	Backspace key.Binding
+	// Swallow consumes 'q' so the picker doesn't quit the app while
+	// open — consistent with the other overlay surfaces.
+	Swallow key.Binding
 }
 
 func NewMovePicker(styles Styles) MovePicker {
@@ -48,6 +51,7 @@ func NewMovePicker(styles Styles) MovePicker {
 			Pick:      key.NewBinding(key.WithKeys("enter")),
 			Close:     key.NewBinding(key.WithKeys("esc")),
 			Backspace: key.NewBinding(key.WithKeys("backspace")),
+			Swallow:   key.NewBinding(key.WithKeys("q")),
 		},
 	}
 }
@@ -140,8 +144,7 @@ func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
 		p.recompute()
 		return p, nil
 	}
-	// q is swallowed — consistent with help/link picker overlays.
-	if keyMsg.String() == "q" {
+	if key.Matches(keyMsg, p.keys.Swallow) {
 		return p, nil
 	}
 	if r, ok := singlePrintableRune(keyMsg); ok {
