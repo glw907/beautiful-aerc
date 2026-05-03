@@ -107,11 +107,16 @@ func runRoot(f rootFlags) error {
 	}
 	ui.SetSPUACellWidth(cellWidth)
 
+	cacheCfg, err := config.LoadCache(configPath)
+	if err != nil {
+		return fmt.Errorf("load cache config: %w", err)
+	}
+
 	ct, ok := backend.(mail.ChangeTracker)
 	if !ok {
 		return fmt.Errorf("backend does not implement mail.ChangeTracker")
 	}
-	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{})
+	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{MaxSize: cacheCfg.MaxSize})
 	if err != nil {
 		return fmt.Errorf("open cache: %w", err)
 	}
