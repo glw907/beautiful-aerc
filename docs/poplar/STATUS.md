@@ -11,12 +11,13 @@
 | 8.5 | Overengineering audit — ADR-0125/0126/0127; ~700 LOC net deletion | done |
 | 8.5b | Elm architecture conformance audit (`internal/ui/`) — ADR-0128 | done |
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
-| 8.5c | Modal shell extraction (deferred from 8.5b R-modalshell) | pending |
+| 8.5c | UI structural cleanup — modal shell + sidebar column + overlay render caching | pending |
+| 8.5d | Content/filter cleanup — HTML word fusing (#23) + dead enums (#13) | pending |
 | 8.6 | Attachments I — backend (#24) | pending |
 | 8.7 | Attachments II — viewer (#24) | pending |
 | 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
-| 9.5 | Compose enhancements — #5 #12 #13 #24 | pending |
-| 9.6 | First-run wizard (#27) | pending |
+| 9.5 | Compose enhancements — #5 #12 #24 | pending |
+| 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
 | 10 | Polish II — popover dim (#14); items surfaced during 9–9.6 | pending |
 | 11 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag `v0.9.0` | pending |
 | **Beta soak** | Bug-fix releases on master; data formats frozen; new features queue on `1.1` | pending |
@@ -48,9 +49,11 @@
 > `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`, then implement.
 > Standard pass-end checklist applies.
 
-## Queued after 8.4c (Pass 8.5c)
+## Queued
 
-> **Goal.** Extract a shared modal-shell helper for the four overlays
-> (LinkPicker, MovePicker, ConfirmModal, HelpPopover) per
-> ADR-0128 R-modalshell. Capture golden tests at 80×24 and 120×40
-> before refactoring; verify byte-for-byte equality after.
+- **Pass 8.5c** — UI structural cleanup (modal shell + sidebar
+  column + overlay render caching). Spec:
+  `docs/superpowers/specs/2026-05-03-ui-structural-cleanup.md`.
+- **Pass 8.5d** — content/filter cleanup (HTML word fusing #23 +
+  dead `blockKind`/`spanKind` enums #13). Spec:
+  `docs/superpowers/specs/2026-05-03-content-filter-cleanup.md`.
