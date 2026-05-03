@@ -34,7 +34,10 @@ func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncTok
 	if err := b.OpenFolder(folder); err != nil {
 		return mail.ChangeSet{}, since, fmt.Errorf("select %s: %w", folder, err)
 	}
-	all, err := b.cmdClient().Search(mail.SearchCriteria{})
+	b.mu.Lock()
+	cmd := b.cmd
+	b.mu.Unlock()
+	all, err := cmd.Search(mail.SearchCriteria{})
 	if err != nil {
 		return mail.ChangeSet{}, since, fmt.Errorf("uid search: %w", err)
 	}
@@ -51,13 +54,6 @@ func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncTok
 		}
 	}
 	return mail.ChangeSet{Added: added}, encodeIMAPToken(newMax), nil
-}
-
-// cmdClient returns the locked command-connection imapClient.
-func (b *Backend) cmdClient() imapClient {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.cmd
 }
 
 func uidNumeric(u mail.UID) uint64 {

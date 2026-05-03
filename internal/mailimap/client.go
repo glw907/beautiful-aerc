@@ -57,7 +57,6 @@ type imapClient interface {
 
 // listEntry is the result of a LIST command for one folder.
 type listEntry struct {
-	Name        string
-	Attributes  []string // includes \Drafts, \Sent, \Trash, etc. when SPECIAL-USE
-	HasChildren bool
+	Name       string
+	Attributes []string // includes \Drafts, \Sent, \Trash, etc. when SPECIAL-USE
 }

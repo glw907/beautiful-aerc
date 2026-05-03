@@ -95,9 +95,8 @@ func (r *realClient) List(_, pattern string, specialUse bool) ([]listEntry, erro
 	out := make([]listEntry, 0, len(mailboxes))
 	for _, m := range mailboxes {
 		out = append(out, listEntry{
-			Name:        m.Mailbox,
-			Attributes:  attrsToStrings(m.Attrs),
-			HasChildren: containsAttr(m.Attrs, imap.MailboxAttrHasChildren),
+			Name:       m.Mailbox,
+			Attributes: attrsToStrings(m.Attrs),
 		})
 	}
 	return out, nil
@@ -110,16 +109,6 @@ func attrsToStrings(attrs []imap.MailboxAttr) []string {
 		out[i] = string(a)
 	}
 	return out
-}
-
-// containsAttr reports whether attrs contains target.
-func containsAttr(attrs []imap.MailboxAttr, target imap.MailboxAttr) bool {
-	for _, a := range attrs {
-		if a == target {
-			return true
-		}
-	}
-	return false
 }
 
 // Select selects (or examines) a folder and returns a summary.

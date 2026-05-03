@@ -5,6 +5,7 @@ package mailimap
 import (
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/glw907/poplar/internal/mail"
 )
@@ -79,7 +80,7 @@ func (f *fakeClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 	if !ok {
 		return nil, errors.New("not found")
 	}
-	return io.NopCloser(newStringReader(body)), nil
+	return io.NopCloser(strings.NewReader(body)), nil
 }
 
 func (f *fakeClient) Store(uids []mail.UID, item string, value any) error {
@@ -115,20 +116,3 @@ func (f *fakeClient) IdleStop() {
 	}
 }
 
-type stringReader struct {
-	data []byte
-	pos  int
-}
-
-func newStringReader(s string) *stringReader {
-	return &stringReader{data: []byte(s)}
-}
-
-func (s *stringReader) Read(p []byte) (int, error) {
-	if s.pos >= len(s.data) {
-		return 0, io.EOF
-	}
-	n := copy(p, s.data[s.pos:])
-	s.pos += n
-	return n, nil
-}

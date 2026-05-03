@@ -45,7 +45,6 @@ type capSet struct {
 	MOVE       bool
 	IDLE       bool
 	SpecialUse bool
-	XGM        bool // X-GM-EXT-1 (Gmail extensions)
 }
 
 // New constructs an unconnected Backend for cfg.
@@ -88,11 +87,11 @@ func (b *Backend) Connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	cmd, err := dialCommand(b.cfg, pw)
+	cmd, err := dial(b.cfg, pw, "command")
 	if err != nil {
 		return fmt.Errorf("connect cmd: %w", err)
 	}
-	idle, err := dialIdle(b.cfg, pw)
+	idle, err := dial(b.cfg, pw, "idle")
 	if err != nil {
 		_ = cmd.Logout()
 		return fmt.Errorf("connect idle: %w", err)
@@ -118,12 +117,11 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 		MOVE:       caps["MOVE"],
 		IDLE:       caps["IDLE"],
 		SpecialUse: caps["SPECIAL-USE"],
-		XGM:        caps["X-GM-EXT-1"],
 	}
 	if !cs.UIDPLUS {
 		return errors.New("server does not advertise UIDPLUS — required for safe deletion")
 	}
-	if b.cfg.GmailQuirks && !cs.XGM {
+	if b.cfg.GmailQuirks && !caps["X-GM-EXT-1"] {
 		return errors.New("gmail account but server does not advertise X-GM-EXT-1")
 	}
 
@@ -133,7 +131,7 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 	b.caps = cs
 	b.updates = updates
 	b.switchCh = make(chan string, 1)
-	idleCtx, cancel := context.WithCancel(context.Background())
+	idleCtx, cancel := context.WithCancel(ctx)
 	b.idleCancel = cancel
 	b.idleDone = make(chan struct{})
 	b.mu.Unlock()
@@ -174,5 +172,5 @@ func (b *Backend) Disconnect() error {
 	return firstErr
 }
 
-// idleLoop, runIdleSession, pollLoop, handleUnilateral, and emit
-// are implemented in idle.go.
+// idleLoop, runIdleSession, pollLoop, and emit are implemented in
+// idle.go.

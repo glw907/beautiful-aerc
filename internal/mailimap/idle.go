@@ -87,7 +87,7 @@ func (b *Backend) runIdleSession(ctx context.Context) error {
 
 	idleErrCh := make(chan error, 1)
 	go func() {
-		idleErrCh <- idle.Idle(b.handleUnilateral)
+		idleErrCh <- idle.Idle(b.emit)
 	}()
 
 	for {
@@ -136,12 +136,6 @@ func (b *Backend) pollLoop(ctx context.Context, folder string, switchCh chan str
 			b.emit(mail.Update{Type: mail.UpdateFolderInfo, Folder: folder})
 		}
 	}
-}
-
-// handleUnilateral receives unilateral IDLE responses (translated by
-// the realClient adapter into mail.Update values) and forwards them.
-func (b *Backend) handleUnilateral(u mail.Update) {
-	b.emit(u)
 }
 
 // emit sends u to the updates channel, dropping if buffer is full.

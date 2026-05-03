@@ -27,18 +27,6 @@ const (
 	keepAliveProbes   = 3
 )
 
-// dialCommand opens the synchronous command connection for cfg using pw
-// as the resolved password.
-func dialCommand(cfg config.AccountConfig, pw string) (imapClient, error) {
-	return dial(cfg, pw, "command")
-}
-
-// dialIdle opens the dedicated idle connection for cfg using pw as the
-// resolved password.
-func dialIdle(cfg config.AccountConfig, pw string) (imapClient, error) {
-	return dial(cfg, pw, "idle")
-}
-
 // dial opens one IMAP connection for the given role ("command" or "idle").
 // It applies TCP keepalives, performs TLS or STARTTLS, then authenticates.
 // pw is the resolved cleartext password / bearer token.
