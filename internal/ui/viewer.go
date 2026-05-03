@@ -36,8 +36,7 @@ type Viewer struct {
 	accountEmail       string
 	blocks             []content.Block
 	links              []string
-	headerStr          string
-	panel              string // headerStr rendered through ViewerHeader at v.width
+	panel              string // headers rendered through ViewerHeader at v.width
 	viewport           viewport.Model
 	spinner            spinner.Model
 	styles             Styles
@@ -83,7 +82,6 @@ func (v Viewer) Open(msg mail.MessageInfo) Viewer {
 	v.msg = msg
 	v.blocks = nil
 	v.links = nil
-	v.headerStr = ""
 	v.panel = ""
 	return v
 }
@@ -284,8 +282,8 @@ func (v *Viewer) layout() {
 		Subject: v.msg.Subject,
 	}
 	contentWidth := max(1, v.width-1)
-	v.headerStr = content.RenderHeaders(hdrs, v.theme, contentWidth)
-	v.panel = v.styles.ViewerHeader.Width(v.width).Render(v.headerStr)
+	headerStr := content.RenderHeaders(hdrs, v.theme, contentWidth)
+	v.panel = v.styles.ViewerHeader.Width(v.width).Render(headerStr)
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel))
