@@ -135,9 +135,8 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://only.example"},
 	}}})
-	v, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
+	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
 	if cmd != nil {
-		// Even if a cmd comes back, it should not invoke the launcher.
 		cmd()
 	}
 	if got != "" {

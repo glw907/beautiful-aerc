@@ -25,15 +25,6 @@ func testReq() ConfirmRequest {
 	}
 }
 
-func containsMsg(msgs []tea.Msg, target tea.Msg) bool {
-	for _, m := range msgs {
-		if m == target {
-			return true
-		}
-	}
-	return false
-}
-
 func containsMsgType(msgs []tea.Msg, target interface{}) bool {
 	targetType := func() string {
 		switch target.(type) {
