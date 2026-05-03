@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,9 +19,6 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	_ "modernc.org/sqlite"
 )
-
-// Silence unused-import warning until T12/T13 add direct cache.Open calls.
-var _ = cache.NewCache
 
 // newCacheCmd assembles the `poplar cache` subcommand tree.
 func newCacheCmd() *cobra.Command {
@@ -235,9 +234,88 @@ func humanizeBytes(n int64) string {
 	return fmt.Sprintf("%.1f TB", v)
 }
 
-// stub commands — implemented in T12 and T13.
+// newCacheEvictCmd assembles the `poplar cache evict` subcommand.
 func newCacheEvictCmd() *cobra.Command {
-	return &cobra.Command{Use: "evict", Hidden: true, Short: "stub"}
+	var olderThan string
+	var account string
+	c := &cobra.Command{
+		Use:          "evict",
+		Short:        "Manually evict cached bodies older than a duration",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if olderThan == "" {
+				return fmt.Errorf("--older-than is required (e.g. 30d, 2w, 24h)")
+			}
+			dur, err := parseEvictDuration(olderThan)
+			if err != nil {
+				return err
+			}
+			cutoff := time.Now().Add(-dur)
+			return runEvict(cmd.Context(), cmd.OutOrStdout(), cutoff, account)
+		},
+	}
+	c.Flags().StringVar(&olderThan, "older-than", "", `Evict bodies fetched longer ago than this (e.g. "30d", "2w", "24h")`)
+	c.Flags().StringVar(&account, "account", "", "Limit to one account by name (default: all accounts)")
+	return c
+}
+
+// parseEvictDuration extends time.ParseDuration with day (d) and
+// week (w) suffixes since cache eviction operates at coarser
+// granularity than time.ParseDuration's hour ceiling.
+func parseEvictDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty duration")
+	}
+	if strings.HasPrefix(s, "-") {
+		return 0, fmt.Errorf("duration must be positive")
+	}
+	switch s[len(s)-1] {
+	case 'd':
+		days, err := strconv.ParseFloat(s[:len(s)-1], 64)
+		if err != nil {
+			return 0, fmt.Errorf("parse %q: %w", s, err)
+		}
+		return time.Duration(days * 24 * float64(time.Hour)), nil
+	case 'w':
+		weeks, err := strconv.ParseFloat(s[:len(s)-1], 64)
+		if err != nil {
+			return 0, fmt.Errorf("parse %q: %w", s, err)
+		}
+		return time.Duration(weeks * 7 * 24 * float64(time.Hour)), nil
+	}
+	return time.ParseDuration(s)
+}
+
+// runEvict opens each account (or one if scoped) and runs EvictByAge.
+// Passing nil backend/tracker is safe — Evict only touches the bodies
+// table and performs no backend I/O.
+func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) error {
+	accts, _, err := loadAccounts()
+	if err != nil {
+		return err
+	}
+	matched := false
+	for _, a := range accts {
+		if scope != "" && a.Name != scope {
+			continue
+		}
+		matched = true
+		acct, err := cache.Open(a.Name, nil, nil, "", cache.Config{})
+		if err != nil {
+			return fmt.Errorf("open %s: %w", a.Name, err)
+		}
+		rows, freed, evictErr := acct.EvictByAge(ctx, cutoff)
+		acct.Close()
+		if evictErr != nil {
+			return fmt.Errorf("evict %s: %w", a.Name, evictErr)
+		}
+		fmt.Fprintf(w, "evicted %d bodies (%s freed) from %s\n", rows, humanizeBytes(freed), a.Name)
+	}
+	if scope != "" && !matched {
+		return fmt.Errorf("account %q not found", scope)
+	}
+	return nil
 }
 
 func newCacheVacuumCmd() *cobra.Command {

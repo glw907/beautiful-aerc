@@ -4,8 +4,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCacheStats_OutputFormat(t *testing.T) {
@@ -58,5 +60,46 @@ func TestHumanizeBytes(t *testing.T) {
 		if got != c.want {
 			t.Errorf("humanizeBytes(%d) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestParseEvictDuration(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"24h", 24 * time.Hour, false},
+		{"7d", 7 * 24 * time.Hour, false},
+		{"2w", 14 * 24 * time.Hour, false},
+		{"30m", 30 * time.Minute, false},
+		{"1.5h", 90 * time.Minute, false},
+		{"-1d", 0, true},
+		{"abc", 0, true},
+		{"", 0, true},
+	}
+	for _, c := range cases {
+		got, err := parseEvictDuration(c.in)
+		if (err != nil) != c.wantErr {
+			t.Errorf("parseEvictDuration(%q) err=%v, wantErr=%v", c.in, err, c.wantErr)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("parseEvictDuration(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestRunEvict_NoMatchingAccount(t *testing.T) {
+	// This test depends on loadAccounts succeeding. The dev config has
+	// accounts with empty names which causes loadAccounts to error, so
+	// we skip rather than fail with the wrong error.
+	if _, _, err := loadAccounts(); err != nil {
+		t.Skipf("loadAccounts error (dev config): %v", err)
+	}
+	var buf bytes.Buffer
+	err := runEvict(context.Background(), &buf, time.Now(), "no-such-account")
+	if err == nil {
+		t.Errorf("expected error for unknown account scope")
 	}
 }
