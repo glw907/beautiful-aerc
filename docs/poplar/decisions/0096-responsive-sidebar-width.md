@@ -1,6 +1,6 @@
 ---
 title: Responsive sidebar width
-status: accepted
+status: superseded by 0109
 date: 2026-05-01
 ---
 
@@ -33,3 +33,5 @@ Commit…" at sidebar=24). Truncation is consistent within a session
 because terminal width does not change without a resize. The
 half-width fallback `min(sidebarWidthFor(width), width/2)` continues
 to handle pathologically narrow widths.
+
+**Superseded by [ADR-0109](0109-polish-i-msglist-layout.md).**

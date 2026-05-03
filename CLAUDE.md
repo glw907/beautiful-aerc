@@ -74,6 +74,10 @@ binding facts that are not universal.
 - `docs/poplar/bubbletea-conventions.md` — idiomatic bubbletea
   reference (size contract, wordwrap+hardwrap, planning + review
   checklists). **Load before any UI planning or review.**
+- `docs/poplar/responsive-design.md` — three-tier responsive
+  model + the data-driven-cliff methodology for adding
+  responsive behavior to new UI components. Load before
+  planning any new responsive surface.
 - `docs/poplar/research/2026-04-26-bubbletea-norms.md` and
   `docs/poplar/research/2026-04-26-reference-apps.md` — the
   authority-of-last-resort for bubbletea conventions. If the

@@ -30,13 +30,14 @@ file describes behavior, not the key tables.
   their group.
 - Nested folder names (containing `/`) render flat. The `/` in the
   display name is the only affordance. No tree, no expand/collapse.
-- Sidebar width is responsive: `sidebarWidthFor(termWidth) =
-  clamp(termWidth - 56, 24, 30)`. Linear from 24 at termWidth=80 up
-  to 30 at termWidth≥86; clamped below 80. Folder labels truncate
-  with `…` (via `displayTruncateEllipsis`) when their natural width
-  exceeds the per-row label budget. Every rendered folder row
-  preserves a 1-cell right margin before the chrome divider at
-  every width in `[24, 30]`. ADR-0096.
+- Sidebar width, sender column, date column, flag column, and
+  sidebar icons are all derived from `ComputeLayout(termWidth)`
+  in `internal/ui/layout.go`. Three tiers: Spartan (W=80–89,
+  sidebar=14, no flags, no date, no icons), Intermediate
+  (W=90–107, flags + 3- or 5-cell date, no icons), Full
+  (W=108+, all chrome on). Sidebar floor 14 fits "Archive";
+  ceiling 30. Sender slope 0.125 hits coverage cliffs at
+  22/28/32 cells. The 14-cell ISO date is removed. ADR-0109.
 
 ### Message list
 

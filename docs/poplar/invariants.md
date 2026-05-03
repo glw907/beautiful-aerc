@@ -209,6 +209,6 @@ invariant. ADR numbering is chronological.
 | Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
 | Path-scoped UI rule (split from invariants) | 0095 |
-| Responsive sidebar; 80×24 polish bar | 0096, 0097 |
+| Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
