@@ -8,7 +8,7 @@ package ui
 // refactor steps (ModalShell extraction, SidebarColumn extraction, render
 // caches) leave rendering unchanged.
 //
-// Surfaces × sizes (14 files total):
+// Surfaces × sizes (12 files total):
 //
 //   confirm_80x24.txt, confirm_120x40.txt
 //   linkpicker_80x24.txt, linkpicker_120x40.txt
