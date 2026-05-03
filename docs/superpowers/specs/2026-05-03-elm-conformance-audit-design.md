@@ -229,6 +229,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Trivial. Verified by `grep`: no production caller.
 - **Size:** ~20 LOC removed.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-triageop: Type-design — `triageOp` typed constants
 
@@ -237,6 +238,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Low. Mechanical rename + compiler-checked exhaustiveness on the resulting switches.
 - **Size:** ~50 LOC.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-foldergroup: Drop `ui.FolderGroup`, use `mail.Group` directly
 
@@ -245,6 +247,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Low. Pure rename + delete.
 - **Size:** ~30 LOC net deletion.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-modalshell: Extract a shared modal-shell helper
 
@@ -253,6 +256,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Medium — touches every overlay, easy to regress border math.
 - **Size:** ~150 LOC added, ~200 removed (net win).
 - **Recommendation:** **queue as own pass** (Pass 8.5c — "modal shell extraction"). Outside the audit-then-fix scope of 8.5b; benefits from focused attention with golden tests per overlay before/after.
+- **Disposition:** queued as Pass 8.5c — "modal shell extraction".
 
 #### R-cmds-msgmove: Move component-state types out of `cmds.go`
 
@@ -261,6 +265,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Trivial — pure move.
 - **Size:** ~60 LOC moved.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-help-sized: `HelpPopover` stores width/height like other overlays
 
@@ -269,11 +274,13 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Low.
 - **Size:** ~30 LOC.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-pickerstate: Hoist picker scroll state out of `Box`
 
 - **Motivation:** Subsumed by the R2 mechanical fixes on linkpicker/movepicker `Box`. Tracked here as a refactor only because the architectural fix doubles as a structural cleanup.
 - **Recommendation:** rolled into the M-N conformance commits, not a separate refactor.
+- **Disposition:** applied this pass (commit M-2).
 
 #### R-sidebarcol: Extract sidebar-column assembly
 
@@ -282,6 +289,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Medium — view assembly with subtle padding behavior; needs golden tests.
 - **Size:** ~80 LOC moved.
 - **Recommendation:** **decline** for 8.5b — the current assembly is correct and tested, and the refactor doesn't unlock anything Pass 8.5b's charter promises. Worth doing eventually but not driven by an audit finding. Re-evaluate if a future pass changes sidebar layout.
+- **Disposition:** declined: not unlocked by an audit finding; re-evaluate when sidebar layout next changes.
 
 #### R-msglist-update: Give `MessageList` a real `Update` method
 
@@ -290,6 +298,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** High — MessageList is the most-tested UI component; changing its shape ripples.
 - **Size:** ~150 LOC.
 - **Recommendation:** **decline.** Bubbles `list` is not the right analogue for the threading-aware msglist (which owns fold/group state); the current direct-method shape is honest about that. Keep AccountTab as the dispatch site.
+- **Disposition:** declined: bubbles list is not the right analogue for threading-aware msglist.
 
 #### R-viewer-receivers: Pick one receiver style for `Viewer`
 
@@ -298,11 +307,13 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Low once R2 architectural fix lands (which removes `LinkPickerRequest`).
 - **Size:** ~15 LOC.
 - **Recommendation:** rolled into the architectural Viewer fix; not a separate refactor.
+- **Disposition:** applied this pass (commit A-4 dropped LinkPickerRequest; the remaining mixed-receiver shape on Viewer.layout/SetBody/SetSize is unchanged but no longer paired with an out-of-Update mutator).
 
 #### R-search-msg: Convert sidebar-search to Msg-driven control flow
 
 - **Motivation:** `SidebarSearch.Activate`/`Commit`/`Clear` are direct method calls from `AccountTab.Update`, documented as intentional. Per R4, conformant pattern is child returning `SearchActivatedMsg` / `SearchCommittedMsg` / `SearchClearedMsg`.
 - **Recommendation:** **decline.** Existing pattern is documented and the search shelf tightly co-evolves with AccountTab; turning it Msg-driven would multiply state transitions without any reuse benefit (no other parent will host this child). Acknowledged deviation.
+- **Disposition:** declined: documented intentional deviation; no reuse benefit.
 
 #### R-canonicaldefaultrank: Convert `canonicalDefaultRank` map var to a switch
 
@@ -311,6 +322,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Trivial.
 - **Size:** ~15 LOC.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-now-seam: Use `App.now` seam in retention sweep
 
@@ -319,11 +331,13 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Low.
 - **Size:** ~10 LOC.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-icons-frozen: Document/freeze icon-table mutability
 
 - **Motivation:** `SimpleIcons` and `FancyIcons` are package-level `var IconSet` values. They are intended to be init-only but nothing in the type prevents mutation.
 - **Recommendation:** **decline.** ADR-0084 already names the icon-table contract; no caller mutates them, and freezing via accessor function adds boilerplate without enabling anything. Convention is sufficient.
+- **Disposition:** declined: convention sufficient; ADR-0084 covers contract.
 
 #### R-viewerheader-cache: Drop `Viewer.headerStr` or `Viewer.panel`
 
@@ -332,6 +346,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Low.
 - **Size:** ~10 LOC.
 - **Recommendation:** apply this pass.
+- **Disposition:** applied this pass.
 
 #### R-status-clamp: Eliminate status-bar clamp loop
 
@@ -340,6 +355,7 @@ real concern is bypassing the existing `App.now` seam.
 - **Risk:** Medium — rendering correctness needs golden tests.
 - **Size:** ~30 LOC.
 - **Recommendation:** **queue as own pass** if it survives `/simplify`; otherwise decline. Defer the call to disposition step.
+- **Disposition:** declined: the clamp loop is a one-shot defensive correction at render time and golden tests pass; eliminating it requires reworking the status-bar layout pipeline, which is out of scope for the audit. Re-evaluate if a future status-bar pass touches this code.
 
 ### Cross-cutting themes
 
