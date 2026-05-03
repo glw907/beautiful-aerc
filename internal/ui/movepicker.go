@@ -119,13 +119,7 @@ func movePickerVisibleRows(height int) int {
 // clampOffset adjusts p.offset so p.cursor lies within the visible
 // window. Called after every cursor move.
 func (p MovePicker) clampOffset() MovePicker {
-	visible := movePickerVisibleRows(p.height)
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+visible {
-		p.offset = p.cursor - visible + 1
-	}
+	p.offset = clampScrollOffset(p.cursor, movePickerVisibleRows(p.height), p.offset)
 	return p
 }
 

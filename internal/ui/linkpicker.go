@@ -150,16 +150,22 @@ func visibleLinkRows(total, height int) int {
 	return maxRows
 }
 
+// clampScrollOffset returns offset adjusted so cursor lies within
+// [offset, offset+visible). Shared by overlay scroll-window logic.
+func clampScrollOffset(cursor, visible, offset int) int {
+	if cursor < offset {
+		return cursor
+	}
+	if cursor >= offset+visible {
+		return cursor - visible + 1
+	}
+	return offset
+}
+
 // clampOffset returns p with p.offset adjusted so p.cursor is
 // within the visible window. Called after every cursor move.
 func (p LinkPicker) clampOffset() LinkPicker {
-	visible := visibleLinkRows(len(p.links), p.height)
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+visible {
-		p.offset = p.cursor - visible + 1
-	}
+	p.offset = clampScrollOffset(p.cursor, visibleLinkRows(len(p.links), p.height), p.offset)
 	return p
 }
 

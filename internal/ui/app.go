@@ -18,9 +18,9 @@ import (
 
 // pendingEmptyConfirm carries the parameters App needs to emit
 // EmptyFolderConfirmedMsg when the user accepts the active confirm
-// modal. Zero value means no empty-folder confirm is pending.
+// modal. Zero value (empty folder) means no empty-folder confirm is
+// pending.
 type pendingEmptyConfirm struct {
-	active bool
 	folder string
 	source string
 }
@@ -53,7 +53,6 @@ type App struct {
 }
 
 // WithOpener returns a copy of m with the URL opener replaced.
-// Test seam.
 func (m App) WithOpener(opener URLOpener) App {
 	m.opener = opener
 	return m
@@ -164,7 +163,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case OpenConfirmEmptyMsg:
 		body := strconv.Itoa(msg.Total) + " messages will be permanently deleted."
-		m.pendingEmpty = pendingEmptyConfirm{active: true, folder: msg.Folder, source: msg.Source}
+		m.pendingEmpty = pendingEmptyConfirm{folder: msg.Folder, source: msg.Source}
 		m.confirm = m.confirm.Open(ConfirmRequest{
 			Title: "Empty " + msg.Folder,
 			Body:  body,
@@ -172,7 +171,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalYesMsg:
-		if m.pendingEmpty.active {
+		if m.pendingEmpty.folder != "" {
 			folder, source := m.pendingEmpty.folder, m.pendingEmpty.source
 			m.pendingEmpty = pendingEmptyConfirm{}
 			return m, func() tea.Msg {

@@ -66,8 +66,7 @@ type AccountTab struct {
 	now func() time.Time
 }
 
-// WithNow returns a copy of m with the clock seam replaced. Test
-// seam mirroring App.now.
+// WithNow returns a copy of m with the clock seam replaced.
 func (m AccountTab) WithNow(now func() time.Time) AccountTab {
 	m.now = now
 	return m

@@ -305,8 +305,8 @@ func joinColumnsRow(gap string, cols ...string) string {
 			if r < len(lines) {
 				line = lines[r]
 			}
-			for lipgloss.Width(line) < widths[i] {
-				line += " "
+			if w := lipgloss.Width(line); w < widths[i] {
+				line += strings.Repeat(" ", widths[i]-w)
 			}
 			b.WriteString(line)
 			if i < len(splits)-1 {
