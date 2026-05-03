@@ -62,6 +62,15 @@ type AccountTab struct {
 	// Set on every openMessage call; cleared when the result arrives
 	// (matched UID) or when the viewer closes.
 	bodyFetchCancel context.CancelFunc
+	// now returns the wall clock; test seam, defaults to time.Now.
+	now func() time.Time
+}
+
+// WithNow returns a copy of m with the clock seam replaced. Test
+// seam mirroring App.now.
+func (m AccountTab) WithNow(now func() time.Time) AccountTab {
+	m.now = now
+	return m
 }
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
@@ -81,6 +90,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 		swept:         make(map[string]bool),
 		spinner:       NewSpinner(t),
 		layout:        ComputeLayout(80),
+		now:           time.Now,
 	}
 }
 
@@ -513,7 +523,7 @@ func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.Messag
 	}
 	m.swept[folder.Name] = true
 
-	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	cutoff := m.now().Add(-time.Duration(days) * 24 * time.Hour)
 	var expired []mail.UID
 	for _, msg := range loaded {
 		if msg.SentAt.IsZero() {
