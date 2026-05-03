@@ -13,17 +13,10 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// Column widths for the message list. Subject takes whatever remains
-// after the fixed columns. The flag cell is 2 cells wide: Nerd Font
-// SPUA-A glyphs render as 2 cells in real terminals, and the no-flag
-// case pads to match (see renderFlagCell).
-const (
-	mlSenderWidth = 22
-	mlDateWidth   = 14
-	mlFlagWidth   = 2
-	// cursor + sp×2 + flag(2) + sp×2 + sender + sp×2 + subject-pad + sp×2 + date + sp
-	mlFixedWidth = 1 + 2 + mlFlagWidth + 2 + mlSenderWidth + 2 + 2 + mlDateWidth + 1
-)
+// mlFlagWidth is the width of the flag/status icon cell in display cells.
+// Nerd Font SPUA-A glyphs render as 2 cells in real terminals, and the
+// no-flag case pads to match (see renderFlagCell).
+const mlFlagWidth = 2
 
 // mlCursorGlyph is the cursor indicator in column 0.
 const mlCursorGlyph = "▐"
@@ -81,6 +74,7 @@ type MessageList struct {
 	offset   int
 	styles   Styles
 	icons    IconSet
+	layout   LayoutMode
 	width    int
 	height   int
 	// now is the clock snapshot fed into displayDate during rebuild.
@@ -105,10 +99,14 @@ type searchFilter struct {
 }
 
 // NewMessageList creates a MessageList with the given messages and size.
+// layout defaults to a legacy-compatible value (Sender=22, Date=5,
+// FlagColumn=true) so callers that haven't yet called SetLayout (e.g.
+// tests that bypass WindowSizeMsg) get sensible output.
 func NewMessageList(styles Styles, msgs []mail.MessageInfo, width, height int, icons IconSet) MessageList {
 	m := MessageList{
 		styles:   styles,
 		icons:    icons,
+		layout:   LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
 		width:    width,
 		height:   height,
 		folded:   map[mail.UID]bool{},
@@ -196,7 +194,7 @@ func (m *MessageList) rebuild() {
 		applyFoldState(rows, m.folded)
 	}
 	for i := range rows {
-		rows[i].dateText = displayDate(rows[i].msg, m.now, 5)
+		rows[i].dateText = displayDate(rows[i].msg, m.now, m.layout.Date)
 	}
 	m.rows = rows
 }
@@ -586,6 +584,26 @@ func (m *MessageList) SetSize(width, height int) {
 	m.clampOffset()
 }
 
+// SetLayout updates the column widths and date/flag toggles.
+// Called by AccountTab once per WindowSizeMsg. Triggers a row
+// rebuild only when the date width changes, since that affects
+// the pre-rendered dateText in displayRow.
+func (m *MessageList) SetLayout(l LayoutMode) {
+	prevDate := m.layout.Date
+	m.layout = l
+	if prevDate != l.Date {
+		m.rebuild()
+	}
+}
+
+// SetNow overrides the cached clock snapshot used by displayDate
+// during rebuild. Tests use this to freeze time; production code
+// relies on the SetMessages-driven refresh.
+func (m *MessageList) SetNow(now time.Time) {
+	m.now = now
+	m.rebuild()
+}
+
 // Selected returns the index of the currently selected message.
 func (m MessageList) Selected() int { return m.selected }
 
@@ -820,7 +838,6 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	isSelected := idx == m.selected
 	isUnread := msg.Flags&mail.FlagSeen == 0
 
-	// Cursor cell (1 col): ▐ when selected, blank otherwise.
 	var cursor string
 	if isSelected {
 		cursor = applyBg(m.styles.MsgListCursor, bgStyle).Render(mlCursorGlyph)
@@ -828,9 +845,6 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 		cursor = bgStyle.Render(" ")
 	}
 
-	flag := m.renderFlagCell(msg, isUnread, bgStyle)
-
-	// Sender / subject foreground depends on read state.
 	senderStyle := m.styles.MsgListReadSender
 	subjectStyle := m.styles.MsgListReadSubject
 	if isUnread {
@@ -838,27 +852,38 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 		subjectStyle = m.styles.MsgListUnreadSubject
 	}
 
-	senderText := padRight(truncateCells(msg.From, mlSenderWidth), mlSenderWidth)
+	senderText := padRight(truncateCells(msg.From, m.layout.Sender), m.layout.Sender)
 	sender := applyBg(senderStyle, bgStyle).Render(senderText)
 
-	dateText := padLeft(truncateCells(row.dateText, mlDateWidth), mlDateWidth)
-	date := applyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
+	var date string
+	if m.layout.Date > 0 {
+		dateText := padLeft(truncateCells(row.dateText, m.layout.Date), m.layout.Date)
+		date = applyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
+	}
 
-	// Subject column: prefix (in MsgListThreadPrefix style) followed by
-	// the subject text (in the read/unread style), with the subject
-	// truncated to fit whatever space remains after the prefix.
-	//
-	// mlFixedWidth budgets mlFlagWidth (2) cells for the flag. When the
-	// flag cell holds a Nerd Font SPUA-A glyph, lipgloss.Width undercounts
-	// it by (spuaCellWidth-1), so the row builder would allocate extra cells
-	// to subject — making the assembled row wider than m.width.
-	// Subtract spuaCount(flag)*(spuaCellWidth-1) from the subject budget so
-	// that displayCells(assembled row) == m.width regardless of flag content.
+	// fixed is the total non-subject, non-sender, non-date cell budget:
+	//   without flag: cursor(1) + sp×2(2) + sp×2(sender→subject,2) + sp×2(subject→date,2) + sp(trail,1) = 8
+	//   with flag:    + flag(2) + sp×2(flag→sender,2) = 12
+	// When Date=0, the sp×2+date block is omitted from the assembled row
+	// but fixed still counts those 3 cells — fillRowToWidth absorbs the
+	// slack so the row still reaches m.width, with subject 3 cells
+	// narrower than the ideal.
+	var flag string
+	fixed := 8 // without flag column
+	if m.layout.FlagColumn {
+		flag = m.renderFlagCell(msg, isUnread, bgStyle)
+		fixed = 12 // adds flag(2) + sp×2(flag→sender gap)
+	}
+
+	// When a SPUA-A glyph is in the flag cell, lipgloss.Width undercounts
+	// it by (spuaCellWidth-1). Subtract the under-count from the subject
+	// budget so displayCells(assembled row) == m.width regardless of flag
+	// content.
 	flagAdjust := 0
-	if spuaCellWidth > 1 {
+	if spuaCellWidth > 1 && m.layout.FlagColumn {
 		flagAdjust = spuaCount(flag) * (spuaCellWidth - 1)
 	}
-	subjectWidth := max(1, m.width-mlFixedWidth-flagAdjust)
+	subjectWidth := max(1, m.width-fixed-m.layout.Sender-m.layout.Date-flagAdjust)
 	prefixCells := runewidth.StringWidth(row.prefix)
 	subjectCells := max(0, subjectWidth-prefixCells)
 
@@ -867,18 +892,21 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	subjectStyled := applyBg(subjectStyle, bgStyle).Render(subjectText)
 	subject := prefixStyled + subjectStyled
 
-	line := cursor +
-		bgStyle.Render("  ") +
-		flag +
-		bgStyle.Render("  ") +
-		sender +
-		bgStyle.Render("  ") +
-		subject +
-		bgStyle.Render("  ") +
-		date +
-		bgStyle.Render(" ")
+	sp2 := bgStyle.Render("  ")
+	sp1 := bgStyle.Render(" ")
 
-	return fillRowToWidth(line, m.width, bgStyle)
+	var rowStr string
+	if m.layout.FlagColumn {
+		rowStr = cursor + sp2 + flag + sp2 + sender + sp2 + subject
+	} else {
+		rowStr = cursor + sp2 + sender + sp2 + subject
+	}
+	if m.layout.Date > 0 {
+		rowStr += sp2 + date
+	}
+	rowStr += sp1
+
+	return fillRowToWidth(rowStr, m.width, bgStyle)
 }
 
 // renderFlagCell renders the flag column. Priority: flagged > answered >

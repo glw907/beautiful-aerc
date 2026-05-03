@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -218,11 +220,11 @@ func TestMessageList(t *testing.T) {
 		if len(lines) == 0 {
 			t.Fatal("empty view")
 		}
-		// The date column is 18 cells wide; the fixture's 23-char date
-		// "2026-04-12 10:23:47 UTC" truncates. Verify the date prefix appears
-		// at the tail of the row (right-aligned, not in the middle).
+		// Default layout: Date=5. The fixture's 23-char date
+		// "2026-04-12 10:23:47 UTC" is truncated to 5 cells ("2026…").
+		// Verify the date appears at the tail of the row (right-aligned).
 		first := strings.TrimRight(lines[0], " ")
-		if !strings.HasSuffix(first, "…") || !strings.Contains(first, "2026-04-12") {
+		if !strings.HasSuffix(first, "…") || !strings.Contains(first, "2026") {
 			t.Errorf("expected first row to end with truncated date, got tail: %q", first)
 		}
 	})
@@ -1126,14 +1128,16 @@ func TestMessageListPlaceholder(t *testing.T) {
 }
 
 func TestMessageList_ColumnGaps(t *testing.T) {
-	// Regression lock for F5: exactly 2 spaces between sender column and
-	// subject, and between subject and date. The layout for a read row
-	// with no flag:
+	// Regression lock: exactly 2 spaces between sender column and
+	// subject, and between subject and date. Default layout is
+	// Sender=22, Date=5, FlagColumn=true. For a read row with no flag
+	// glyph (flag cell is two ASCII spaces):
 	//
 	//   cursor(1) + sp×2(2) + flag(2) + sp×2(2) + sender(22) + sp×2(2)
-	//   + subject(w-48) + sp×2(2) + date(14) + sp(1)
+	//   + subject(w-fixed) + sp×2(2) + date(5) + sp(1)
 	//
-	// Total fixed cells: 1+2+2+2+22+2+2+14+1 = 48.
+	// fixed = 12 (FlagColumn=true) + Sender(22) + Date(5) = 39 non-subject cells.
+	// With w=100: subject = 100 - 12 - 22 - 5 = 61 cells.
 	//
 	// A read message with no flag glyph means the flag cell is two ASCII
 	// spaces. The cursor glyph ▐ is 1 display cell but 3 bytes, so we
@@ -1145,10 +1149,10 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 	msg := mail.MessageInfo{
 		UID:      "1",
 		ThreadID: "1",
-		From:     "Alice Johnson",  // 13 chars; padded to 22
-		Subject:  "Hello world",   // short; padded to fill subject budget
-		Date:     "Mon 2026-04-27", // 14 chars; fits date column exactly
-		Flags:    mail.FlagSeen,   // read, no flag glyph
+		From:     "Alice Johnson", // 13 chars; padded to 22
+		Subject:  "Hello world",  // short; padded to fill subject budget
+		Date:     "04-27",        // 5 chars; fits date column exactly
+		Flags:    mail.FlagSeen,  // read, no flag glyph
 	}
 	ml := NewMessageList(styles, []mail.MessageInfo{msg}, w, 3, FancyIcons)
 	line := stripANSI(strings.Split(ml.View(), "\n")[0])
@@ -1161,16 +1165,16 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 	// Sender block ends at rune index 28 (0-indexed):
 	//   cursor(1) + sp×2(2) + flag(2) + sp×2(2) + sender(22) - 1 = 28
 	// The cursor ▐ is one display cell, so rune index == cell index here.
-	const senderEnd = 1 + 2 + mlFlagWidth + 2 + mlSenderWidth - 1
+	const senderEnd = 1 + 2 + mlFlagWidth + 2 + 22 - 1 // = 28
 	gap1 := string(runes[senderEnd+1 : senderEnd+3])
 	if gap1 != "  " {
 		t.Errorf("sender→subject gap = %q (rune pos %d-%d), want 2 spaces",
 			gap1, senderEnd+1, senderEnd+2)
 	}
 
-	// Date block: trailing sp(1) + date(14) cells from the right edge.
+	// Date block: trailing sp(1) + date(5) cells from the right edge.
 	// Two-space gap is the 2 runes immediately before the date start.
-	const dateStart = w - 1 - mlDateWidth // = 100 - 1 - 14 = 85
+	const dateStart = w - 1 - 5 // = 100 - 1 - 5 = 94
 	gap2 := string(runes[dateStart-2 : dateStart])
 	if gap2 != "  " {
 		t.Errorf("subject→date gap = %q (rune pos %d-%d), want 2 spaces",
@@ -1570,4 +1574,62 @@ func TestMessageList_ApplyMutations(t *testing.T) {
 			t.Errorf("SnapshotSource positions = %v, want [0 2]", positions)
 		}
 	})
+}
+
+func TestMessageListView_SpartanTier(t *testing.T) {
+	// W=80: pane=64. layout: Sender=22, Date=0, FlagColumn=false.
+	msgs := []mail.MessageInfo{
+		{UID: "1", From: "Geoffrey Wright", Subject: "Test message", SentAt: time.Now()},
+	}
+	m := NewMessageList(NewStyles(theme.Nord), msgs, 64, 10, SimpleIcons)
+	m.SetLayout(LayoutMode{Sender: 22, Date: 0, FlagColumn: false})
+
+	out := m.View()
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if w := lipgloss.Width(line); w != 64 {
+			t.Errorf("row width = %d, want 64: %q", w, line)
+		}
+	}
+	if !strings.Contains(out, "Geoffrey Wright") {
+		t.Errorf("sender missing from output:\n%s", out)
+	}
+}
+
+func TestMessageListView_IntermediateTier(t *testing.T) {
+	msgs := []mail.MessageInfo{
+		{UID: "1", From: "Linear", Subject: "Re: Q3 plan", SentAt: time.Now().Add(-time.Hour), Flags: mail.FlagSeen},
+	}
+	m := NewMessageList(NewStyles(theme.Nord), msgs, 78, 10, SimpleIcons)
+	m.SetLayout(LayoutMode{Sender: 24, Date: 3, FlagColumn: true})
+
+	out := m.View()
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if w := lipgloss.Width(line); w != 78 {
+			t.Errorf("row width = %d, want 78: %q", w, line)
+		}
+	}
+	if !strings.Contains(out, "1h ") {
+		t.Errorf("compact date %q missing from output:\n%s", "1h ", out)
+	}
+}
+
+func TestMessageListView_FullTier(t *testing.T) {
+	msgs := []mail.MessageInfo{
+		{UID: "1", From: "Linear", Subject: "Re: Q3 plan",
+			SentAt: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+			Flags:  mail.FlagSeen},
+	}
+	m := NewMessageList(NewStyles(theme.Nord), msgs, 96, 10, SimpleIcons)
+	m.SetLayout(LayoutMode{Sender: 27, Date: 5, FlagColumn: true})
+	m.SetNow(time.Date(2026, 5, 2, 14, 30, 0, 0, time.UTC))
+
+	out := m.View()
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if w := lipgloss.Width(line); w != 96 {
+			t.Errorf("row width = %d, want 96: %q", w, line)
+		}
+	}
+	if !strings.Contains(out, "04-30") {
+		t.Errorf("short date %q missing from output:\n%s", "04-30", out)
+	}
 }
