@@ -21,11 +21,21 @@ const (
 type HelpPopover struct {
 	styles  Styles
 	context HelpContext
+	width   int
+	height  int
 }
 
 // NewHelpPopover constructs a popover for the given context.
 func NewHelpPopover(styles Styles, context HelpContext) HelpPopover {
 	return HelpPopover{styles: styles, context: context}
+}
+
+// SetSize updates the popover's box dimensions. App threads
+// WindowSizeMsg here, mirroring the other overlay surfaces.
+func (h HelpPopover) SetSize(width, height int) HelpPopover {
+	h.width = width
+	h.height = height
+	return h
 }
 
 // bindingRow is a single key/description entry in the popover.

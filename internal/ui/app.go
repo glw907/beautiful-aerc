@@ -131,6 +131,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.confirm = m.confirm.SetSize(m.width, m.height)
 		m.confirm, cmd = m.confirm.Update(msg)
 		cmds = append(cmds, cmd)
+		m.help = m.help.SetSize(m.width, m.height)
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		m.acct, cmd = m.acct.Update(contentMsg)
 		cmds = append(cmds, cmd)
@@ -359,7 +360,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			if m.viewerOpen {
 				ctx = HelpViewer
 			}
-			m.help = NewHelpPopover(m.styles, ctx)
+			m.help = NewHelpPopover(m.styles, ctx).SetSize(m.width, m.height)
 			return m, nil
 		}
 	}
