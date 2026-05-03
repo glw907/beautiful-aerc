@@ -31,31 +31,19 @@ func formatRelativeDateCompact(t, now time.Time) string {
 	case delta < 5*time.Minute && delta >= 0:
 		return "now"
 	case delta < time.Hour:
-		return padR3(fmt.Sprintf("%dm", int(delta.Minutes())))
+		return padRight(fmt.Sprintf("%dm", int(delta.Minutes())), 3)
 	case delta < 24*time.Hour:
-		return padR3(fmt.Sprintf("%dh", int(delta.Hours())))
+		return padRight(fmt.Sprintf("%dh", int(delta.Hours())), 3)
 	case delta < 7*24*time.Hour:
-		return padR3(fmt.Sprintf("%dd", int(delta.Hours()/24)))
+		return padRight(fmt.Sprintf("%dd", int(delta.Hours()/24)), 3)
 	case delta < 28*24*time.Hour:
-		return padR3(fmt.Sprintf("%dw", int(delta.Hours()/(24*7))))
+		return padRight(fmt.Sprintf("%dw", int(delta.Hours()/(24*7))), 3)
 	case t.Year() == now.Year():
 		return t.Format("Jan")
 	default:
 		yy := t.Year() % 100
 		return fmt.Sprintf("'%02d", yy)
 	}
-}
-
-// padR3 right-pads s to exactly 3 cells. Caller guarantees s has 1–3 ASCII
-// cells; this helper does not handle wide runes.
-func padR3(s string) string {
-	for len(s) < 3 {
-		s += " "
-	}
-	if len(s) > 3 {
-		return s[:3]
-	}
-	return s
 }
 
 // formatRelativeDateShort returns a 5-cell short date string. Same-day

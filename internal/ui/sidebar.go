@@ -190,13 +190,9 @@ func (s *Sidebar) SetSize(width, height int) {
 	s.height = height
 }
 
-// SetLayout updates the layout-driven widths and icon toggle. The
-// caller (AccountTab) calls this once per WindowSizeMsg, before
-// rendering. Sidebar's own width tracking remains via SetSize for
-// height; SetLayout supplies the width and icon toggle.
+// SetLayout updates the icon toggle. Width is owned by SetSize.
 func (s *Sidebar) SetLayout(l LayoutMode) {
 	s.layout = l
-	s.width = l.Sidebar
 }
 
 // MoveUp moves the selection up by one.

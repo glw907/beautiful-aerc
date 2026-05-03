@@ -163,17 +163,9 @@ type bodyLoadedMsg struct {
 }
 
 // loadBodyCmd fetches a message body, parses it into blocks, and
-// delivers a bodyLoadedMsg. Errors fall through as ErrorMsg.
-//
-// The ctx parameter enables cancel-prior semantics: if the caller
-// cancels ctx before the backend call returns, the cmd returns
-// nil (no message) and the eventual FetchBody result is dropped.
-// The backend round-trip itself still completes — true wire-level
-// cancellation is deferred to the body-cache pass (8.4b).
-//
-// Real backends return raw RFC822 bytes; the mock returns markdown
-// directly. extractDisplayText sniffs the format and walks MIME
-// when present, falling back to raw bytes otherwise.
+// delivers a bodyLoadedMsg. Errors fall through as ErrorMsg. If ctx
+// is cancelled before FetchBody returns, the cmd returns nil and the
+// result is dropped; the backend round-trip itself still completes.
 func loadBodyCmd(ctx context.Context, b mail.Backend, uid mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		resultCh := make(chan tea.Msg, 1)

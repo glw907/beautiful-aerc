@@ -125,11 +125,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		mw := max(1, m.width-sw-1) // -1 for divider
 		m.msglist.SetSize(mw, m.height)
 		m.viewer = m.viewer.SetSize(mw, m.height)
-		// Forward WindowSizeMsg into children that own bubbles
-		// components so any internal reflow they need fires.
-		// SetSize handles the explicit dimensions; the msg pass
-		// keeps the convention that bubbles components rely on
-		// receiving the msg to reset internal state.
+		// Forward the msg so embedded bubbles components reflow.
 		var cmds []tea.Cmd
 		var c tea.Cmd
 		m.sidebarSearch, c = m.sidebarSearch.Update(msg)

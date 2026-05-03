@@ -584,10 +584,9 @@ func (m *MessageList) SetSize(width, height int) {
 	m.clampOffset()
 }
 
-// SetLayout updates the column widths and date/flag toggles.
-// Called by AccountTab once per WindowSizeMsg. Triggers a row
-// rebuild only when the date width changes, since that affects
-// the pre-rendered dateText in displayRow.
+// SetLayout updates the column widths and date/flag toggles. Date
+// width changes trigger a rebuild because dateText is precomputed
+// per row; sender/flag widths take effect at next render.
 func (m *MessageList) SetLayout(l LayoutMode) {
 	prevDate := m.layout.Date
 	m.layout = l
@@ -861,18 +860,14 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 		date = applyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
 	}
 
-	// fixed is the total non-subject, non-sender, non-date cell budget:
-	//   without flag: cursor(1) + sp×2(2) + sp×2(sender→subject,2) + sp×2(subject→date,2) + sp(trail,1) = 8
-	//   with flag:    + flag(2) + sp×2(flag→sender,2) = 12
-	// When Date=0, the sp×2+date block is omitted from the assembled row
-	// but fixed still counts those 3 cells — fillRowToWidth absorbs the
-	// slack so the row still reaches m.width, with subject 3 cells
-	// narrower than the ideal.
+	// fixed: cursor(1) + sp2 + sp2(sender→subject) + sp2(subject→date) + sp(trail) = 8;
+	// +flag(2) + sp2(flag→sender) = 12 with flag column. When Date=0 the trailing
+	// sp2+date block is omitted; fillRowToWidth absorbs the 3-cell slack.
 	var flag string
-	fixed := 8 // without flag column
+	fixed := 8
 	if m.layout.FlagColumn {
 		flag = m.renderFlagCell(msg, isUnread, bgStyle)
-		fixed = 12 // adds flag(2) + sp×2(flag→sender gap)
+		fixed = 12
 	}
 
 	// When a SPUA-A glyph is in the flag cell, lipgloss.Width undercounts
