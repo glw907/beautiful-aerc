@@ -256,4 +256,20 @@ password-cmd = "op read op://Personal/Fastmail/credential"
 #
 # spam_retention_days = 0
 #     Same as above, for Spam.
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  CACHE
+# ──────────────────────────────────────────────────────────────────────
+#
+# poplar caches mail headers and bodies in a per-account SQLite
+# database under your OS cache directory. Headers are kept
+# indefinitely; bodies populate when you open a message.
+
+# [cache]
+# max-size = "2GB"
+#     Body-cache size cap. When a new body would push total over
+#     the cap, oldest-by-sent-date bodies are evicted to fit. Set
+#     to "0" to disable the cap. Suffixes: KB, MB, GB, TB
+#     (1024-based).
 `
