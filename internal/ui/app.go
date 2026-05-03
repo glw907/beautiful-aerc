@@ -108,6 +108,7 @@ func (m App) deriveChromeFromAcct() App {
 		m.footer = m.footer.SetContext(AccountContext)
 		m.statusBar = m.statusBar.SetMode(StatusAccount)
 	}
+	m.footer = m.footer.SetCounter(m.acct.WindowCounter())
 	return m
 }
 
@@ -342,10 +343,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			if m.acct.SearchState() != SearchIdle {
 				// Steal q while search is active so it doesn't quit
-				// the app mid-search. Delegate to AccountTab which
-				// clears the filter.
+				// the app mid-search. Send a typed clear msg to
+				// AccountTab.
 				var cmd tea.Cmd
-				m.acct, cmd = m.acct.Update(tea.KeyMsg{Type: tea.KeyEsc, Runes: []rune{}})
+				m.acct, cmd = m.acct.Update(ClearSidebarSearchMsg{})
 				m = m.deriveChromeFromAcct()
 				return m, cmd
 			}
@@ -387,7 +388,7 @@ func (m App) renderFrame() string {
 	dividerCol := ComputeLayout(m.width).Sidebar
 	topLine := m.topLine.View(m.width, dividerCol)
 	status := m.statusBar.View(m.width, dividerCol)
-	foot := m.footer.SetCounter(m.acct.WindowCounter()).View(m.width)
+	foot := m.footer.View(m.width)
 
 	parts := []string{topLine, content}
 	// Precedence: error banner wins; otherwise toast; otherwise the

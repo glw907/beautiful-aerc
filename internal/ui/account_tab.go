@@ -138,6 +138,10 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		cmds = append(cmds, c)
 		return m, tea.Batch(cmds...)
 
+	case ClearSidebarSearchMsg:
+		m = m.clearSearchIfActive()
+		return m, nil
+
 	case foldersLoadedMsg:
 		m.sidebar.SetFolders(msg.classified, m.uiCfg)
 		return m.selectionChangedCmds()

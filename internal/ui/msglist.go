@@ -234,7 +234,7 @@ func (m *MessageList) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.Messa
 	out := buckets[:0]
 	for _, bucket := range buckets {
 		for _, msg := range bucket {
-			if matchMessage(msg, q, m.filter.mode) {
+			if m.matchMessage(msg, q) {
 				out = append(out, bucket)
 				break
 			}
@@ -243,18 +243,23 @@ func (m *MessageList) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.Messa
 	return out
 }
 
-// matchMessage tests one message against a pre-lowercased query under
-// the given mode. [name] matches subject + sender; [all] additionally
-// matches the date text. Each field is lowercased once per call.
-func matchMessage(msg mail.MessageInfo, lowerQuery string, mode SearchMode) bool {
+// matchMessage tests one message against a pre-lowercased query
+// under the active filter mode. [name] matches subject + sender;
+// [all] additionally matches the rendered date text the user sees
+// in the date column (not the wire RFC2822 string). Each field is
+// lowercased once per call.
+func (m *MessageList) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
 	if strings.Contains(strings.ToLower(msg.Subject), lowerQuery) {
 		return true
 	}
 	if strings.Contains(strings.ToLower(msg.From), lowerQuery) {
 		return true
 	}
-	if mode == SearchModeAll && strings.Contains(strings.ToLower(msg.Date), lowerQuery) {
-		return true
+	if m.filter.mode == SearchModeAll {
+		dateText := displayDate(msg, m.now, m.layout.Date)
+		if strings.Contains(strings.ToLower(dateText), lowerQuery) {
+			return true
+		}
 	}
 	return false
 }

@@ -335,6 +335,12 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 	}
 }
 
+// ClearSidebarSearchMsg tells AccountTab to clear an active sidebar
+// search shelf (Active or Typing). Used by App when q is pressed
+// while search is non-idle so the keypress doesn't fall through to
+// quit and the search gets a deterministic clear path.
+type ClearSidebarSearchMsg struct{}
+
 // OpenLinkPickerMsg requests App open the link picker with the given
 // harvested URLs. Emitted by Viewer when the user presses Tab on a
 // message that has at least one harvested link.
