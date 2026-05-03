@@ -14,6 +14,23 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
+// OpenMovePickerMsg asks App to open the move-to-folder picker.
+type OpenMovePickerMsg struct {
+	UIDs    []mail.UID
+	Src     string
+	Folders []FolderEntry
+}
+
+// MovePickerPickedMsg is emitted when the user selects a destination folder.
+type MovePickerPickedMsg struct {
+	UIDs []mail.UID
+	Src  string
+	Dest string
+}
+
+// MovePickerClosedMsg is emitted when the picker is dismissed without a pick.
+type MovePickerClosedMsg struct{}
+
 // MovePicker is the modal overlay launched by `m` from the account view.
 // App owns open state and overlay composition (mirrors LinkPicker, ADR-0087).
 type MovePicker struct {

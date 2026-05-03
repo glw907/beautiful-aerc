@@ -16,6 +16,38 @@ import (
 // shelf is in SearchTyping state.
 var sidebarSearchCycleMode = key.NewBinding(key.WithKeys("tab"))
 
+// SearchMode selects which fields the message filter matches against.
+type SearchMode int
+
+const (
+	// SearchModeName matches subject + sender. Default.
+	SearchModeName SearchMode = iota
+	// SearchModeAll matches subject + sender + date text.
+	SearchModeAll
+)
+
+// SearchState is the lifecycle state of the sidebar search UI.
+type SearchState int
+
+const (
+	// SearchIdle — no filter, shelf shows hint row.
+	SearchIdle SearchState = iota
+	// SearchTyping — prompt focused, printable runes append to query,
+	// filter updates live on each keystroke.
+	SearchTyping
+	// SearchActive — query is live but prompt is unfocused; normal
+	// account-view key routing resumes.
+	SearchActive
+)
+
+// SearchUpdatedMsg carries the live search query and mode from
+// SidebarSearch up to AccountTab whenever either changes in Typing
+// state.
+type SearchUpdatedMsg struct {
+	Query string
+	Mode  SearchMode
+}
+
 // SidebarSearch is the 3-row shelf pinned to the bottom of the
 // sidebar column. Owns the text input, mode toggle, and state
 // machine for the search feature. Communicates with AccountTab via

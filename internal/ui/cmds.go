@@ -152,38 +152,6 @@ func enqueueDestroys(ctx context.Context, c *cache.Account, folder string, uids 
 	return nil
 }
 
-// SearchMode selects which fields the message filter matches against.
-type SearchMode int
-
-const (
-	// SearchModeName matches subject + sender. Default.
-	SearchModeName SearchMode = iota
-	// SearchModeAll matches subject + sender + date text.
-	SearchModeAll
-)
-
-// SearchState is the lifecycle state of the sidebar search UI.
-type SearchState int
-
-const (
-	// SearchIdle — no filter, shelf shows hint row.
-	SearchIdle SearchState = iota
-	// SearchTyping — prompt focused, printable runes append to query,
-	// filter updates live on each keystroke.
-	SearchTyping
-	// SearchActive — query is live but prompt is unfocused; normal
-	// account-view key routing resumes.
-	SearchActive
-)
-
-// SearchUpdatedMsg carries the live search query and mode from
-// SidebarSearch up to AccountTab whenever either changes in Typing
-// state.
-type SearchUpdatedMsg struct {
-	Query string
-	Mode  SearchMode
-}
-
 // bodyLoadedMsg carries the parsed-block representation of a fetched
 // message body. AccountTab compares uid against the viewer's current
 // UID and drops mismatches (user closed and reopened on a different
@@ -381,23 +349,6 @@ type toastExpireMsg struct {
 // undoRequestedMsg is emitted when the user presses `u` while a toast
 // is active. App fires the inverse Cmd.
 type undoRequestedMsg struct{}
-
-// OpenMovePickerMsg asks App to open the move-to-folder picker.
-type OpenMovePickerMsg struct {
-	UIDs    []mail.UID
-	Src     string
-	Folders []FolderEntry
-}
-
-// MovePickerPickedMsg is emitted when the user selects a destination folder.
-type MovePickerPickedMsg struct {
-	UIDs []mail.UID
-	Src  string
-	Dest string
-}
-
-// MovePickerClosedMsg is emitted when the picker is dismissed without a pick.
-type MovePickerClosedMsg struct{}
 
 // OpenConfirmEmptyMsg asks App to open the empty-folder confirm modal.
 // Source is passed through so it can be handed to emptyFolderCmd later.
