@@ -115,3 +115,74 @@ func TestStoreBody_UnknownUID(t *testing.T) {
 		t.Errorf("storeBody on unknown uid: nil error, want error")
 	}
 }
+
+func TestStoreBody_EvictsBySizeWhenOverCap(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	a.maxSize = 100 // tiny cap for the test
+
+	now := time.Now()
+	// Three messages with descending sent_at — older messages are
+	// "older sent" and should evict first.
+	old := mail.UID("old-msg") // sent 2 days ago
+	mid := mail.UID("mid-msg") // sent 1 day ago
+	new := mail.UID("new-msg") // sent now
+	seedMessage(t, a, old, now.Add(-48*time.Hour))
+	seedMessage(t, a, mid, now.Add(-24*time.Hour))
+	seedMessage(t, a, new, now)
+
+	// Each body is 50 bytes. Total cap is 100, so storing the third
+	// body should evict the oldest-sent body to fit.
+	body50 := make([]byte, 50)
+	if err := a.storeBody(context.Background(), old, body50); err != nil {
+		t.Fatalf("store old: %v", err)
+	}
+	if err := a.storeBody(context.Background(), mid, body50); err != nil {
+		t.Fatalf("store mid: %v", err)
+	}
+	if err := a.storeBody(context.Background(), new, body50); err != nil {
+		t.Fatalf("store new: %v", err)
+	}
+
+	// old should be gone; mid and new survive.
+	for _, c := range []struct {
+		uid  mail.UID
+		want bool
+	}{
+		{old, false},
+		{mid, true},
+		{new, true},
+	} {
+		_, ok, err := a.lookupBody(context.Background(), c.uid)
+		if err != nil {
+			t.Fatalf("lookup %s: %v", c.uid, err)
+		}
+		if ok != c.want {
+			t.Errorf("uid %s: hit=%v, want %v", c.uid, ok, c.want)
+		}
+	}
+}
+
+func TestStoreBody_MaxSizeZeroDisablesCap(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	a.maxSize = 0 // disabled
+
+	now := time.Now()
+	for i, uid := range []mail.UID{"a", "b", "c"} {
+		seedMessage(t, a, uid, now.Add(time.Duration(-i)*time.Hour))
+		if err := a.storeBody(context.Background(), uid, make([]byte, 1000)); err != nil {
+			t.Fatalf("store %s: %v", uid, err)
+		}
+	}
+
+	for _, uid := range []mail.UID{"a", "b", "c"} {
+		_, ok, err := a.lookupBody(context.Background(), uid)
+		if err != nil {
+			t.Fatalf("lookup %s: %v", uid, err)
+		}
+		if !ok {
+			t.Errorf("uid %s: evicted with maxSize=0", uid)
+		}
+	}
+}

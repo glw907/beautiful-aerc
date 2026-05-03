@@ -46,6 +46,12 @@ type Account struct {
 	dir  string
 	name string
 
+	// maxSize is the body-cache size cap in bytes. 0 disables the cap.
+	// Set via cache.Config at Open. Cache II policy: when an insert
+	// would push total over maxSize, evict by messages.sent_at ASC
+	// until under cap.
+	maxSize int64
+
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
 
