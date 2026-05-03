@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 )
 
 // ConnectionState represents the mail connection status.
@@ -127,28 +126,19 @@ func (sb StatusBar) View(width, dividerCol int) string {
 		connStyle = sb.styles.StatusReconnect
 	}
 
-	// Measure right portion width using plain text (no ANSI).
-	rightPlain := " " + counts + " · " + connIcon + " " + connText + " ─╯"
-	rightWidth := runewidth.StringWidth(rightPlain)
-
-	fillWidth := max(0, width-rightWidth)
-	fillPart := sb.styles.TopLine.Render(buildFill(fillWidth, dividerCol))
+	// Build the styled segments first, then measure them with the
+	// same primitive (lipgloss.Width) used everywhere else. Measuring
+	// the plain-text template with a different primitive caused
+	// rounding drift on the connection icons and forced a corrective
+	// re-render.
 	countsPart := sb.styles.StatusBar.Render(" " + counts + " · ")
 	connIconPart := connStyle.Render(connIcon)
 	connTextPart := sb.styles.StatusBar.Render(" " + connText + " ")
 	endPart := sb.styles.TopLine.Render("─╯")
+	rightWidth := lipgloss.Width(countsPart) + lipgloss.Width(connIconPart) +
+		lipgloss.Width(connTextPart) + lipgloss.Width(endPart)
 
-	result := fillPart + countsPart + connIconPart + connTextPart + endPart
-
-	// Clamp to exact width if lipgloss rounding causes drift.
-	actual := lipgloss.Width(result)
-	if actual < width {
-		result += strings.Repeat("─", width-actual)
-	} else if actual > width {
-		trimmed := max(0, fillWidth-(actual-width))
-		fillPart = sb.styles.TopLine.Render(buildFill(trimmed, dividerCol))
-		result = fillPart + countsPart + connIconPart + connTextPart + endPart
-	}
-
-	return result
+	fillWidth := max(0, width-rightWidth)
+	fillPart := sb.styles.TopLine.Render(buildFill(fillWidth, dividerCol))
+	return fillPart + countsPart + connIconPart + connTextPart + endPart
 }
