@@ -134,3 +134,32 @@ func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, target int64) (ro
 		freed += batchFreed
 	}
 }
+
+// EvictByAge deletes body rows whose fetched_at is older than cutoff.
+// Returns the number of rows removed and total bytes freed. Used by
+// the `poplar cache evict --older-than` CLI; not invoked automatically.
+func (a *Account) EvictByAge(ctx context.Context, cutoff time.Time) (rows int, freed int64, err error) {
+	err = a.tx(ctx, func(tx *sql.Tx) error {
+		// Compute freed up front, since we need length(bytes) before deletion.
+		var freedI int64
+		err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(SUM(length(bytes)), 0) FROM bodies WHERE fetched_at < ?`,
+			cutoff.UnixNano()).Scan(&freedI)
+		if err != nil {
+			return fmt.Errorf("evict by age: sum: %w", err)
+		}
+		res, err := tx.ExecContext(ctx,
+			`DELETE FROM bodies WHERE fetched_at < ?`, cutoff.UnixNano())
+		if err != nil {
+			return fmt.Errorf("evict by age: delete: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("evict by age: rows: %w", err)
+		}
+		rows = int(n)
+		freed = freedI
+		return nil
+	})
+	return rows, freed, err
+}

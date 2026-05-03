@@ -186,3 +186,49 @@ func TestStoreBody_MaxSizeZeroDisablesCap(t *testing.T) {
 		}
 	}
 }
+
+func TestEvictByAge(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	now := time.Now()
+	old := mail.UID("old")
+	new := mail.UID("new")
+	seedMessage(t, a, old, now.Add(-90*24*time.Hour))
+	seedMessage(t, a, new, now)
+
+	// Insert with explicit fetched_at so we can control the boundary.
+	insert := func(uid mail.UID, fetchedAt time.Time) {
+		t.Helper()
+		var id int64
+		if err := a.db.QueryRow(`SELECT id FROM messages WHERE protocol_id = ?`, string(uid)).Scan(&id); err != nil {
+			t.Fatalf("lookup msg: %v", err)
+		}
+		if _, err := a.db.Exec(`INSERT INTO bodies (message, bytes, fetched_at) VALUES (?, ?, ?)`,
+			id, []byte("body"), fetchedAt.UnixNano()); err != nil {
+			t.Fatalf("insert body: %v", err)
+		}
+	}
+	insert(old, now.Add(-30*24*time.Hour))
+	insert(new, now)
+
+	cutoff := now.Add(-7 * 24 * time.Hour)
+	evicted, freed, err := a.EvictByAge(context.Background(), cutoff)
+	if err != nil {
+		t.Fatalf("EvictByAge: %v", err)
+	}
+	if evicted != 1 {
+		t.Errorf("evicted=%d, want 1", evicted)
+	}
+	if freed != int64(len("body")) {
+		t.Errorf("freed=%d, want %d", freed, len("body"))
+	}
+
+	// old gone, new survives
+	if _, ok, _ := a.lookupBody(context.Background(), old); ok {
+		t.Errorf("old body should have been evicted")
+	}
+	if _, ok, _ := a.lookupBody(context.Background(), new); !ok {
+		t.Errorf("new body should still be cached")
+	}
+}
