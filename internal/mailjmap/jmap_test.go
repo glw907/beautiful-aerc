@@ -823,7 +823,8 @@ func TestFlag_UnsupportedFlag(t *testing.T) {
 	fake := &fakeClient{}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	err := b.Flag([]mail.UID{"e-1"}, mail.FlagRecent, true)
+	// Flag(0) is not in the supported keyword switch.
+	err := b.Flag([]mail.UID{"e-1"}, mail.Flag(0), true)
 	if err == nil {
 		t.Fatal("expected error for unsupported flag")
 	}
@@ -899,82 +900,6 @@ func TestMove_UnknownFolder(t *testing.T) {
 	}
 }
 
-// --- Delete ---
-
-// --- Copy ---
-
-func TestCopy_EmptyUIDs(t *testing.T) {
-	fake := &fakeClient{}
-	folders := map[string]folderEntry{
-		"Archive": {id: "mb-arch", folder: mail.Folder{Name: "Archive"}},
-	}
-	b := newTestBackend(fake, "acct-1", folders)
-	if err := b.Copy(nil, "Archive"); err != nil {
-		t.Errorf("Copy(nil): %v", err)
-	}
-	if len(fake.sent) != 0 {
-		t.Errorf("expected no RPC, got %d", len(fake.sent))
-	}
-}
-
-func TestCopy_RequestShape(t *testing.T) {
-	var capturedReq *jmap.Request
-	fake := &fakeClient{
-		respond: func(req *jmap.Request) (*jmap.Response, error) {
-			capturedReq = req
-			return fakeResponse(&jmap.Invocation{
-				Name:   "Email/set",
-				CallID: "0",
-				Args:   &email.SetResponse{},
-			}), nil
-		},
-	}
-	folders := map[string]folderEntry{
-		"Archive": {id: "mb-arch", folder: mail.Folder{Name: "Archive"}},
-	}
-	b := newTestBackend(fake, "acct-1", folders)
-	b.blobIDs["e-1"] = "blob-e1"
-
-	if err := b.Copy([]mail.UID{"e-1"}, "Archive"); err != nil {
-		t.Fatalf("Copy: %v", err)
-	}
-	if capturedReq == nil {
-		t.Fatal("no request sent")
-	}
-	s, ok := capturedReq.Calls[0].Args.(*email.Set)
-	if !ok {
-		t.Fatalf("args type = %T", capturedReq.Calls[0].Args)
-	}
-	if len(s.Create) != 1 {
-		t.Fatalf("create len = %d, want 1", len(s.Create))
-	}
-	for _, e := range s.Create {
-		if e.BlobID != "blob-e1" {
-			t.Errorf("BlobID = %q, want %q", e.BlobID, "blob-e1")
-		}
-		if !e.MailboxIDs["mb-arch"] {
-			t.Errorf("MailboxIDs[mb-arch] = false, want true")
-		}
-	}
-}
-
-func TestCopy_UnknownBlobID(t *testing.T) {
-	fake := &fakeClient{}
-	folders := map[string]folderEntry{
-		"Archive": {id: "mb-arch", folder: mail.Folder{Name: "Archive"}},
-	}
-	b := newTestBackend(fake, "acct-1", folders)
-	// blobIDs not populated
-
-	err := b.Copy([]mail.UID{"e-missing"}, "Archive")
-	if err == nil {
-		t.Fatal("expected error for missing blob")
-	}
-	if len(fake.sent) != 0 {
-		t.Errorf("expected no RPC for missing blob, got %d", len(fake.sent))
-	}
-}
-
 // --- Send ---
 
 func TestSend_ReturnsNotImplemented(t *testing.T) {
@@ -985,18 +910,6 @@ func TestSend_ReturnsNotImplemented(t *testing.T) {
 	}
 }
 
-// --- Search ---
-
-func TestSearch_ReturnsNilNil(t *testing.T) {
-	b := newTestBackend(&fakeClient{}, "acct-1", nil)
-	uids, err := b.Search(mail.SearchCriteria{})
-	if err != nil {
-		t.Errorf("Search: unexpected error: %v", err)
-	}
-	if uids != nil {
-		t.Errorf("Search: got %v, want nil", uids)
-	}
-}
 
 // --- Destroy ---
 

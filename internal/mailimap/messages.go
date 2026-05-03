@@ -172,18 +172,3 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	return buf, nil
 }
 
-// Search satisfies mail.Backend. It forwards the SearchCriteria to the
-// underlying client unchanged; translation from mail.SearchCriteria to
-// IMAP SEARCH terms is the responsibility of the realClient adapter
-// (realclient.go). The fake client accepts the struct directly.
-func (b *Backend) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
-
-	uids, err := cmd.Search(criteria)
-	if err != nil {
-		return nil, fmt.Errorf("search: %w", classifyErr(err))
-	}
-	return uids, nil
-}

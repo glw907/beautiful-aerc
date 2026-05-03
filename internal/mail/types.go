@@ -11,7 +11,7 @@ type Flag uint32
 
 const (
 	FlagSeen Flag = 1 << iota
-	FlagRecent
+	_              // RFC 3501 \Recent is server-set, never client-passed; bit retained for cache compatibility
 	FlagAnswered
 	FlagForwarded
 	FlagDeleted

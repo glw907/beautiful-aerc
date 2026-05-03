@@ -622,12 +622,6 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	return v.([]byte), nil
 }
 
-// Search satisfies mail.Backend. Sidebar search filters in-memory in
-// Pass 2.5b-7; backend Search is unused. Pass 6 may wire server-side search.
-func (b *Backend) Search(_ mail.SearchCriteria) ([]mail.UID, error) {
-	return nil, nil
-}
-
 // Move satisfies mail.Backend. It moves uids into destFolder by patching
 // mailboxIds to contain only the destination mailbox.
 func (b *Backend) Move(uids []mail.UID, destFolder string) error {
@@ -658,52 +652,6 @@ func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 	}
 	if err := checkEmailSetUpdated(resp, callID); err != nil {
 		return fmt.Errorf("move: %w", err)
-	}
-	return nil
-}
-
-// Copy satisfies mail.Backend. It copies uids into destFolder by creating
-// new messages with the same blob and the destination mailbox. This is a
-// same-account copy using Email/set Create.
-func (b *Backend) Copy(uids []mail.UID, destFolder string) error {
-	if len(uids) == 0 {
-		return nil
-	}
-	b.mu.Lock()
-	destEntry, ok := b.folders[destFolder]
-	accountID := b.accountIDLocked()
-	blobIDs := make(map[mail.UID]string, len(uids))
-	for _, u := range uids {
-		blobIDs[u] = b.blobIDs[u]
-	}
-	b.mu.Unlock()
-	if !ok {
-		return fmt.Errorf("copy: unknown folder %q", destFolder)
-	}
-
-	create := make(map[jmap.ID]*email.Email, len(uids))
-	for i, u := range uids {
-		blobID := blobIDs[u]
-		if blobID == "" {
-			return fmt.Errorf("copy: unknown blob for uid %q (call FetchHeaders first)", u)
-		}
-		key := jmap.ID(fmt.Sprintf("copy-%d", i))
-		create[key] = &email.Email{
-			BlobID:     jmap.ID(blobID),
-			MailboxIDs: map[jmap.ID]bool{jmap.ID(destEntry.id): true},
-		}
-	}
-	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
-	callID := req.Invoke(&email.Set{
-		Account: accountID,
-		Create:  create,
-	})
-	resp, err := b.do(req)
-	if err != nil {
-		return fmt.Errorf("copy: %w", err)
-	}
-	if err := checkEmailSetCreated(resp, callID); err != nil {
-		return fmt.Errorf("copy: %w", err)
 	}
 	return nil
 }
@@ -851,21 +799,3 @@ func checkEmailSetUpdated(resp *jmap.Response, callID string) error {
 	return fmt.Errorf("no Email/set response")
 }
 
-// checkEmailSetCreated finds the Email/setResponse matching callID and returns
-// an error if any ids appear in NotCreated.
-func checkEmailSetCreated(resp *jmap.Response, callID string) error {
-	for _, inv := range resp.Responses {
-		if inv.CallID != callID {
-			continue
-		}
-		sr, ok := inv.Args.(*email.SetResponse)
-		if !ok {
-			continue
-		}
-		for id, se := range sr.NotCreated {
-			return fmt.Errorf("not created %s: %s", id, se.Type)
-		}
-		return nil
-	}
-	return fmt.Errorf("no Email/set response")
-}

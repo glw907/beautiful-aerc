@@ -4,6 +4,7 @@ package mail
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -134,7 +135,7 @@ func TestMockBackend_Destroy_RecordsAndRemoves(t *testing.T) {
 	if len(m.DestroyCalls) != 1 {
 		t.Fatalf("DestroyCalls len = %d, want 1", len(m.DestroyCalls))
 	}
-	if !equalUIDs(m.DestroyCalls[0], target) {
+	if !reflect.DeepEqual(m.DestroyCalls[0], target) {
 		t.Errorf("DestroyCalls[0] = %v, want %v", m.DestroyCalls[0], target)
 	}
 
@@ -160,18 +161,6 @@ func TestMockBackend_Destroy_EmptyIsNoop(t *testing.T) {
 	if len(m.DestroyCalls) != 0 {
 		t.Errorf("DestroyCalls len = %d, want 0", len(m.DestroyCalls))
 	}
-}
-
-func equalUIDs(a, b []UID) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func TestMockBackend(t *testing.T) {

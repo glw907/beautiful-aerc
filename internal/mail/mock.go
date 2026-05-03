@@ -21,21 +21,15 @@ type MockBackend struct {
 	// Recorded calls — exposed for tests that assert dispatch shape.
 	// All slices append in chronological order.
 	DestroyCalls [][]UID
-	MoveCalls    []MockMoveCall
-	FlagCalls    []MockFlagCall
-}
-
-// MockMoveCall records a Move invocation.
-type MockMoveCall struct {
-	UIDs []UID
-	Dest string
-}
-
-// MockFlagCall records a Flag invocation.
-type MockFlagCall struct {
-	UIDs []UID
-	Flag Flag
-	Set  bool
+	MoveCalls    []struct {
+		UIDs []UID
+		Dest string
+	}
+	FlagCalls []struct {
+		UIDs []UID
+		Flag Flag
+		Set  bool
+	}
 }
 
 // NewMockBackend creates a MockBackend with realistic sample data.
@@ -241,14 +235,13 @@ Reply directly to this email or visit the discussion at https://github.example.c
 `,
 }
 
-func (m *MockBackend) Search(_ SearchCriteria) ([]UID, error) { return nil, nil }
-
 func (m *MockBackend) Move(uids []UID, dest string) error {
-	m.MoveCalls = append(m.MoveCalls, MockMoveCall{UIDs: append([]UID(nil), uids...), Dest: dest})
+	m.MoveCalls = append(m.MoveCalls, struct {
+		UIDs []UID
+		Dest string
+	}{UIDs: append([]UID(nil), uids...), Dest: dest})
 	return nil
 }
-
-func (m *MockBackend) Copy(_ []UID, _ string) error { return nil }
 
 // Destroy permanently removes uids from the in-memory message list,
 // bypassing Trash. Empty input is a no-op.
@@ -273,7 +266,11 @@ func (m *MockBackend) Destroy(uids []UID) error {
 }
 
 func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
-	m.FlagCalls = append(m.FlagCalls, MockFlagCall{UIDs: append([]UID(nil), uids...), Flag: flag, Set: set})
+	m.FlagCalls = append(m.FlagCalls, struct {
+		UIDs []UID
+		Flag Flag
+		Set  bool
+	}{UIDs: append([]UID(nil), uids...), Flag: flag, Set: set})
 	return nil
 }
 

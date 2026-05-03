@@ -41,10 +41,7 @@ type Backend interface {
 	FetchHeaders(uids []UID) ([]MessageInfo, error)
 	FetchBody(uid UID) ([]byte, error)
 
-	Search(criteria SearchCriteria) ([]UID, error)
-
 	Move(uids []UID, dest string) error
-	Copy(uids []UID, dest string) error
 	// Destroy permanently deletes uids from the currently-selected
 	// folder, bypassing Trash. Irreversible. Empty input is a no-op.
 	Destroy(uids []UID) error

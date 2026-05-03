@@ -42,21 +42,6 @@ func (b *Backend) Move(uids []mail.UID, dest string) error {
 	return nil
 }
 
-// Copy satisfies mail.Backend.
-func (b *Backend) Copy(uids []mail.UID, dest string) error {
-	if len(uids) == 0 {
-		return nil
-	}
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
-
-	if err := cmd.Copy(uids, dest); err != nil {
-		return fmt.Errorf("copy: %w", classifyErr(err))
-	}
-	return nil
-}
-
 // resolveTrashFolder returns the server-side name of the Trash folder,
 // caching the result on the Backend so repeated Deletes don't re-LIST.
 // Returns an error if no folder with Canonical == "Trash" is found.
