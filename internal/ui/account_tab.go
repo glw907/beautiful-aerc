@@ -140,7 +140,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 	case foldersLoadedMsg:
 		m.sidebar.SetFolders(msg.classified, m.uiCfg)
-		return m, m.selectionChangedCmds()
+		return m.selectionChangedCmds()
 
 	case folderLoadedMsg:
 		m.loading = false
@@ -286,7 +286,7 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		m.viewer, cmd = m.viewer.Update(msg)
 		if !m.viewer.IsOpen() {
 			// Viewer just closed; discard any in-flight body fetch.
-			m.cancelInflightBodyFetch()
+			m = m.cancelInflightBodyFetch()
 		}
 		return m, cmd
 	}
@@ -323,13 +323,13 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	case key.Matches(msg, m.keys.OpenMessage):
 		return m.openSelectedMessage()
 	case key.Matches(msg, m.keys.SidebarDown):
-		m.clearSearchIfActive()
+		m = m.clearSearchIfActive()
 		m.sidebar.MoveDown()
-		return m, m.selectionChangedCmds()
+		return m.selectionChangedCmds()
 	case key.Matches(msg, m.keys.SidebarUp):
-		m.clearSearchIfActive()
+		m = m.clearSearchIfActive()
 		m.sidebar.MoveUp()
-		return m, m.selectionChangedCmds()
+		return m.selectionChangedCmds()
 	case key.Matches(msg, m.keys.JumpInbox):
 		return m.jumpToFolder("Inbox")
 	case key.Matches(msg, m.keys.JumpDrafts):
@@ -400,17 +400,18 @@ func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
 	if !m.sidebar.SelectByCanonical(canonical) {
 		return m, nil
 	}
-	m.clearSearchIfActive()
-	return m, m.selectionChangedCmds()
+	m = m.clearSearchIfActive()
+	return m.selectionChangedCmds()
 }
 
-// cancelInflightBodyFetch cancels any in-flight loadBodyCmd and clears
-// the cancel func. No-op when no fetch is in flight.
-func (m *AccountTab) cancelInflightBodyFetch() {
+// cancelInflightBodyFetch cancels any in-flight loadBodyCmd and
+// clears the cancel func. No-op when no fetch is in flight.
+func (m AccountTab) cancelInflightBodyFetch() AccountTab {
 	if m.bodyFetchCancel != nil {
 		m.bodyFetchCancel()
 		m.bodyFetchCancel = nil
 	}
+	return m
 }
 
 // openMessage opens msg in the viewer, fires the body-fetch Cmd, and
@@ -418,7 +419,7 @@ func (m *AccountTab) cancelInflightBodyFetch() {
 // Shared by Enter, n, and N. Cancels any prior in-flight body fetch
 // before issuing the new one.
 func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
-	m.cancelInflightBodyFetch()
+	m = m.cancelInflightBodyFetch()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.bodyFetchCancel = cancel
 	m.viewer = m.viewer.Open(msg)
@@ -444,30 +445,32 @@ func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 
 // clearSearchIfActive clears the shelf and the filter if the shelf
 // is in any non-Idle state. No-op when already idle.
-func (m *AccountTab) clearSearchIfActive() {
+func (m AccountTab) clearSearchIfActive() AccountTab {
 	if m.sidebarSearch.State() == SearchIdle {
-		return
+		return m
 	}
 	m.sidebarSearch.Clear()
 	m.msglist.ClearFilter()
+	return m
 }
 
-// selectionChangedCmds returns the batch of Cmds that run every time
-// the selected folder changes: a load Cmd that will populate the
-// message list when it resolves. Sets loading=true and starts the
-// spinner tick. App reads folder counts via SelectedFolderCounts()
-// after delegation rather than via a FolderChangedMsg signal.
-func (m *AccountTab) selectionChangedCmds() tea.Cmd {
+// selectionChangedCmds runs every time the selected folder changes:
+// resets the destination page, clears the msglist, sets loading=true,
+// and returns the load Cmd batched with the spinner tick. Returns the
+// updated AccountTab and the Cmd so mutations are visible at the call
+// site. App reads folder counts via SelectedFolderCounts() after
+// delegation rather than via a FolderChangedMsg signal.
+func (m AccountTab) selectionChangedCmds() (AccountTab, tea.Cmd) {
 	folder, ok := m.sidebar.SelectedFolderInfo()
 	if !ok {
-		return nil
+		return m, nil
 	}
 	m.loading = true
 	// Reset the page so folderLoadedMsg uses SetMessages (cursor reset)
 	// rather than RefreshSource (cursor preserved).
 	m.pages[folder.Name] = &folderPage{}
 	m.msglist.SetMessages(nil)
-	return tea.Batch(
+	return m, tea.Batch(
 		openFolderCmd(m.acct, folder.Name),
 		m.spinner.Tick,
 	)
