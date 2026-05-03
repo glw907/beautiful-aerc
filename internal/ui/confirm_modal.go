@@ -100,6 +100,9 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 const (
 	confirmModalMaxWidth = 50
 	confirmModalMinWidth = 24
+	// confirmModalBorderOverhead is the cell-width cost of "┌─" + "┐"
+	// around the inset title row.
+	confirmModalBorderOverhead = 3
 )
 
 // View renders the modal or "" when closed.
@@ -132,7 +135,7 @@ func (m ConfirmModal) Box(w, h int) string {
 
 	// Top border with inset title.
 	title := " " + m.req.Title + " "
-	rest := boxW - 3 - lipgloss.Width(title)
+	rest := boxW - confirmModalBorderOverhead - lipgloss.Width(title)
 	if rest < 0 {
 		rest = 0
 	}

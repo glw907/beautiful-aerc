@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mattn/go-runewidth"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // sidebarSearchCycleMode binds Tab to the mode toggle while the
@@ -217,7 +217,7 @@ func (s SidebarSearch) renderInfoRow() string {
 
 	indent := s.styles.SidebarBg.Render("  ")
 	margin := s.styles.SidebarBg.Render(" ")
-	contentCells := 2 + runewidth.StringWidth(modeLabel) + runewidth.StringWidth(countText) + 1
+	contentCells := 2 + lipgloss.Width(modeLabel) + lipgloss.Width(countText) + 1
 	gap := max(1, s.width-contentCells)
 	content := indent + mode + s.styles.SidebarBg.Render(strings.Repeat(" ", gap)) + countStyled + margin
 	return fillRowToWidth(content, s.width, s.styles.SidebarBg)

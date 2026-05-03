@@ -879,7 +879,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 		flagAdjust = spuaCount(flag) * (spuaCellWidth - 1)
 	}
 	subjectWidth := max(1, m.width-fixed-m.layout.Sender-m.layout.Date-flagAdjust)
-	prefixCells := runewidth.StringWidth(row.prefix)
+	prefixCells := lipgloss.Width(row.prefix)
 	subjectCells := max(0, subjectWidth-prefixCells)
 
 	prefixStyled := applyBg(m.styles.MsgListThreadPrefix, bgStyle).Render(row.prefix)

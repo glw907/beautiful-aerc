@@ -199,7 +199,7 @@ func (p LinkPicker) Box(w, h int) string {
 
 	var b strings.Builder
 	title := " Links "
-	rest := boxW - 2 - len(title)
+	rest := boxW - 2 - lipgloss.Width(title)
 	if rest < 0 {
 		rest = 0
 	}
