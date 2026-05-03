@@ -119,16 +119,24 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.linkPicker = m.linkPicker.SetSize(m.width, m.height)
-		m.movePicker = m.movePicker.SetSize(m.width, m.height)
-		m.confirm = m.confirm.SetSize(m.width, m.height)
-		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
+		var cmds []tea.Cmd
 		var cmd tea.Cmd
+		m.linkPicker = m.linkPicker.SetSize(m.width, m.height)
+		m.linkPicker, cmd = m.linkPicker.Update(msg)
+		cmds = append(cmds, cmd)
+		m.movePicker = m.movePicker.SetSize(m.width, m.height)
+		m.movePicker, cmd = m.movePicker.Update(msg)
+		cmds = append(cmds, cmd)
+		m.confirm = m.confirm.SetSize(m.width, m.height)
+		m.confirm, cmd = m.confirm.Update(msg)
+		cmds = append(cmds, cmd)
+		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		m.acct, cmd = m.acct.Update(contentMsg)
+		cmds = append(cmds, cmd)
 		// WindowSizeMsg only forwards sizing; chrome derivation is not
 		// needed (sizing alone does not change viewer open/close state
 		// or folder counts).
-		return m, cmd
+		return m, tea.Batch(cmds...)
 
 	case OpenLinkPickerMsg:
 		m.linkPicker = m.linkPicker.Open(msg.Links)
