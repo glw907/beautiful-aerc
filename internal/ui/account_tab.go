@@ -55,6 +55,7 @@ type AccountTab struct {
 	loading           bool
 	spinner           spinner.Model
 	pendingLinkPicker []string
+	layout            LayoutMode
 	width             int
 	height            int
 }
@@ -75,6 +76,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 		pages:         make(map[string]*folderPage),
 		swept:         make(map[string]bool),
 		spinner:       NewSpinner(t),
+		layout:        ComputeLayout(80),
 	}
 }
 
@@ -103,7 +105,15 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		sw := min(ComputeLayout(m.width).Sidebar, m.width/2)
+		layout := ComputeLayout(m.width)
+		if layout.Sidebar > m.width/2 {
+			layout.Sidebar = m.width / 2
+		}
+		m.layout = layout
+		m.sidebar.SetLayout(layout)
+		m.msglist.SetLayout(layout)
+
+		sw := layout.Sidebar
 		folderHeight := max(1, m.height-sidebarHeaderRows-searchShelfRows)
 		m.sidebar.SetSize(sw, folderHeight)
 		m.sidebarSearch.SetSize(sw)
@@ -765,7 +775,7 @@ func (m AccountTab) View() string {
 		return ""
 	}
 
-	sw := min(ComputeLayout(m.width).Sidebar, m.width/2)
+	sw := m.layout.Sidebar
 
 	acctName := displayTruncateEllipsis(m.backend.AccountName(), sw-1)
 	acctLine := m.styles.SidebarAccount.Width(sw).Render(" " + acctName)
@@ -801,7 +811,7 @@ func (m AccountTab) View() string {
 		rightLines = strings.Split(m.viewer.View(), "\n")
 	case m.loading && m.msglist.Count() == 0:
 		text := m.spinner.View() + " Loading messages…"
-		mw := max(1, m.width-min(ComputeLayout(m.width).Sidebar, m.width/2)-1)
+		mw := max(1, m.width-m.layout.Sidebar-1)
 		rightLines = strings.Split(
 			lipgloss.Place(mw, m.height, lipgloss.Center, lipgloss.Center,
 				m.styles.Dim.Render(text)),

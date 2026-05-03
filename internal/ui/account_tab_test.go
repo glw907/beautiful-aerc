@@ -1749,3 +1749,19 @@ func TestAccountTab_EmptyFolderDoneMsg_ClearsRowsAndEmitsToast(t *testing.T) {
 		t.Errorf("triageStartedMsg.n = %d, want 2", ts.n)
 	}
 }
+
+func TestAccountTab_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
+	tab := newLoadedTab(t, 95, 30)
+
+	wantLayout := ComputeLayout(95)
+	// AccountTab clamps Sidebar against width/2 — replicate that here:
+	if wantLayout.Sidebar > 95/2 {
+		wantLayout.Sidebar = 95 / 2
+	}
+	if got := tab.sidebar.layout; got != wantLayout {
+		t.Errorf("sidebar.layout = %+v, want %+v", got, wantLayout)
+	}
+	if got := tab.msglist.layout; got != wantLayout {
+		t.Errorf("msglist.layout = %+v, want %+v", got, wantLayout)
+	}
+}
