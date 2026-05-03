@@ -17,10 +17,21 @@ The project moves through three phases with different rules
   framing, no dead fields preserved "in case Pass N needs them" —
   strip them; the next pass re-adds with its consumer.
 - When you notice a small adjacent issue while finishing other
-  work, **fix it inline** as part of the current pass. Don't end
-  with an offer to /schedule a follow-up. Reserve /schedule for
-  genuinely time-gated follow-ups (soak windows, metric checks,
-  recurring sweeps).
+  work — a bug, an awkward API, dead code, duplicated logic, a
+  named type that no longer fits — **fix it inline** as part of
+  the current pass. Do **not** offer to log it, do **not** offer
+  to /schedule it, do **not** ask permission, do **not** add it
+  to the backlog. The only valid reasons to defer are: (a) the
+  fix needs research that would derail the current pass, or
+  (b) the fix touches a file the current pass deliberately
+  shouldn't touch for review-scope reasons. "It's not in the
+  plan" is not a reason. "It's adjacent but unrelated" is not a
+  reason — adjacency is the whole point. (Distinction vs
+  `/simplify`: that reviews code *you just wrote*; this rule
+  covers pre-existing ugliness you ran into while passing
+  through. Both flow into the current pass.) Reserve /schedule
+  for genuinely time-gated follow-ups (soak windows, metric
+  checks, recurring sweeps).
 - Migrations and breaking changes are first-class — explain in
   the commit message and ADR; don't engineer around them.
 - The only sacred thing is data on disk the user can't easily
