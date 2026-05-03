@@ -46,10 +46,7 @@ func (s ModalShell) Height() int { return s.height }
 // title is plain text; Box truncates it if "─ title " + borders would
 // exceed contentW+2 (the full box width). The title border uses
 // lipgloss.Width (icon-free strings), consistent with the invariant.
-//
-// styles supplies Dim for the separator style; no lipgloss.NewStyle calls
-// are made inside Box.
-func (s ModalShell) Box(styles Styles, title string, bodyRows []string, footerRows []string, contentW int) string {
+func (s ModalShell) Box(title string, bodyRows []string, footerRows []string, contentW int) string {
 	boxW := contentW + 2
 
 	// Top border: ┌─ title ─┐
@@ -65,7 +62,13 @@ func (s ModalShell) Box(styles Styles, title string, bodyRows []string, footerRo
 		maxTitleW = 0
 	}
 	if lipgloss.Width(titleSeg) > maxTitleW {
-		titleSeg = " " + truncateToWidth(title, maxTitleW-2) + " "
+		tgtW := maxTitleW - 2
+		if tgtW < 1 {
+			// No room for even a single-character title; suppress entirely.
+			titleSeg = ""
+		} else {
+			titleSeg = " " + truncateToWidth(title, tgtW) + " "
+		}
 	}
 	rest := boxW - 3 - lipgloss.Width(titleSeg)
 	if rest < 0 {

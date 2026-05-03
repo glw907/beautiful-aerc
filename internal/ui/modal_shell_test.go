@@ -7,18 +7,13 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/poplar/internal/theme"
 )
-
-func newTestShellStyles() Styles {
-	return NewStyles(theme.Themes[theme.DefaultThemeName])
-}
 
 // buildShellBox is a helper that exercises ModalShell.Box with the given
 // parameters and returns the raw box string (no overlay compositing).
-func buildShellBox(styles Styles, title string, bodyRows, footerRows []string, contentW int) string {
+func buildShellBox(title string, bodyRows, footerRows []string, contentW int) string {
 	var s ModalShell
-	return s.Box(styles, title, bodyRows, footerRows, contentW)
+	return s.Box(title, bodyRows, footerRows, contentW)
 }
 
 // lineWidths returns the display-cell width of each line in s, measured
@@ -64,8 +59,6 @@ func TestModalShell_SetSize(t *testing.T) {
 // TestModalShell_BoxWidth verifies that every line of Box output has equal
 // width equal to contentW+2.
 func TestModalShell_BoxWidth(t *testing.T) {
-	styles := newTestShellStyles()
-
 	cases := []struct {
 		name       string
 		title      string
@@ -101,12 +94,21 @@ func TestModalShell_BoxWidth(t *testing.T) {
 			footerRows: []string{"hint row            "},
 			contentW:   20,
 		},
+		{
+			// contentW==2 exposes the off-by-one in title truncation:
+			// maxTitleW-2 == -1 without the clamp, producing a 5-cell top border.
+			name:       "minimum contentW",
+			title:      "X",
+			bodyRows:   []string{"  "},
+			footerRows: []string{"  "},
+			contentW:   2,
+		},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			box := buildShellBox(styles, tc.title, tc.bodyRows, tc.footerRows, tc.contentW)
+			box := buildShellBox(tc.title, tc.bodyRows, tc.footerRows, tc.contentW)
 			lines, widths := lineWidths(box)
 			if len(lines) == 0 {
 				t.Fatal("box produced no lines")
@@ -124,10 +126,9 @@ func TestModalShell_BoxWidth(t *testing.T) {
 // TestModalShell_TitleTruncation verifies that an overly-long title is
 // truncated so the top border stays at contentW+2 cells.
 func TestModalShell_TitleTruncation(t *testing.T) {
-	styles := newTestShellStyles()
 	longTitle := "This Is A Very Long Title That Exceeds The Available Space Completely"
 	contentW := 20
-	box := buildShellBox(styles, longTitle, []string{"body row            "}, []string{"foot row            "}, contentW)
+	box := buildShellBox(longTitle, []string{"body row            "}, []string{"foot row            "}, contentW)
 	lines, widths := lineWidths(box)
 	if len(lines) == 0 {
 		t.Fatal("box produced no lines")
@@ -149,8 +150,6 @@ func TestModalShell_TitleTruncation(t *testing.T) {
 // sizes used in the overlay golden tests. Each golden records the raw box
 // string (before overlay compositing) so the test is self-contained.
 func TestModalShell_BoxGolden(t *testing.T) {
-	styles := newTestShellStyles()
-
 	cases := []struct {
 		name       string
 		title      string
@@ -187,7 +186,7 @@ func TestModalShell_BoxGolden(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildShellBox(styles, tc.title, tc.bodyRows, tc.footerRows, tc.contentW)
+			got := buildShellBox(tc.title, tc.bodyRows, tc.footerRows, tc.contentW)
 			checkGolden(t, tc.name, got)
 		})
 	}

@@ -134,7 +134,7 @@ func (m ConfirmModal) Box(w, h int) string {
 	help := "[y] yes   [n] no   [esc] cancel"
 	footerRows := []string{m.styles.Dim.Render(padOrTruncate(help, contentW))}
 
-	return m.shell.Box(m.styles, m.req.Title, bodyRows, footerRows, contentW)
+	return m.shell.Box(m.req.Title, bodyRows, footerRows, contentW)
 }
 
 // Position returns the centered top-left for PlaceOverlay.
