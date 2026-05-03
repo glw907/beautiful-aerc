@@ -94,10 +94,13 @@ the ADR(s) that justify them.
   `cache.Account.QueueOp`. `MessageList` is presentation-only —
   `RefreshSource` re-reads cache state after every write,
   preserving cursor on UID. `Viewer` holds the theme reference for
-  markdown rendering. `mail.Backend` was shrunk in cutover:
-  `MarkRead`/`MarkUnread`/`MarkAnswered`/`Delete` are gone;
-  `Flag(uids, flag, set)` is canonical and "delete" is a
-  `MoveArgs{Dest: trash}` queued op.
+  markdown rendering. `mail.Backend` was shrunk in cutover and
+  trimmed further in Pass 8.5:
+  `MarkRead`/`MarkUnread`/`MarkAnswered`/`Delete`/`Search`/`Copy`
+  are all gone. `Flag(uids, flag, set)` is canonical and "delete"
+  is a `MoveArgs{Dest: trash}` queued op. IMAP `Move` still uses
+  the lower-level `cmd.Copy` as its no-`MOVE` fallback (internal
+  helper, not on the interface).
 
 ### Config & theming
 
@@ -298,3 +301,4 @@ invariant. ADR numbering is chronological.
 | Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |
 | Cache cutover — UI reads/writes via cache.Account; mail.Backend shrunk (Mark*/Delete dropped); MessageList Apply* removed; folders.exists_total/unseen_total seed sidebar | 0121 |
 | Cache II policy — lazy body population, single max-size backstop, no LRU; FetchBody returns []byte; poplar cache CLI | 0122, 0123, 0124 |
+| Pass 8.5 overengineering audit — mail.Backend trim (Search/Copy removed), config.Source enum dropped, Provider doc fields removed, AccountConfig dead-field cleanup, cache.Cache aggregator removed, theme palette deletions, helper inlines, --config flag threading | 0125, 0126, 0127 |
