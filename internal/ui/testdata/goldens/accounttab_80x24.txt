@@ -1,0 +1,24 @@
+              │▐  Alice Johnson           Re: Project update for Q2 launch      
+ geoff@907.li…│   Bob Smith               Quick question about the API          
+              │   Carol White             Lunch tomorrow?                       
+┃ Inbox     4 │   David Chen              Meeting notes from yesterday          
+  Drafts      │   Billing Dept            Invoice #2847 attached                
+  Sent        │   Emma Wilson             Re: Weekend hiking trip               
+  Archive     │   Acme Cloud              Your subscription renewal             
+              │   GitHub                  Code review: auth refactor PR #42     
+  Spam     12 │   Dev Community           New comment on your post              
+  Trash       │   Alaska Airlines         Flight confirmation: SFO → SEA        
+              │   Frank Lee               Server migration plan                 
+  Lists/gola… │   Grace Kim               ├─ Re: Server migration plan          
+  Lists/rust  │   Frank Lee               │  └─ Re: Server migration plan       
+  Notificati… │   Henry Park              └─ Re: Server migration plan          
+  Remind      │                                                                 
+              │                                                                 
+              │                                                                 
+              │                                                                 
+              │                                                                 
+              │                                                                 
+              │                                                                 
+              │                                                                 
+   / to search│                                                                 
+              │                                                                 
