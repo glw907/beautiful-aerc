@@ -335,6 +335,13 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 	}
 }
 
+// OpenLinkPickerMsg requests App open the link picker with the given
+// harvested URLs. Emitted by Viewer when the user presses Tab on a
+// message that has at least one harvested link.
+type OpenLinkPickerMsg struct {
+	Links []string
+}
+
 // LinkPickerClosedMsg signals the picker has closed (Esc, Tab, Enter,
 // or numeric launch). Handled at the App level to flip linkPicker.open.
 type LinkPickerClosedMsg struct{}

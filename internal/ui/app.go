@@ -108,9 +108,6 @@ func (m App) deriveChromeFromAcct() App {
 		m.footer = m.footer.SetContext(AccountContext)
 		m.statusBar = m.statusBar.SetMode(StatusAccount)
 	}
-	if links, ok := (&m.acct).LinkPickerRequest(); ok {
-		m.linkPicker = m.linkPicker.Open(links)
-	}
 	return m
 }
 
@@ -132,6 +129,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// needed (sizing alone does not change viewer open/close state
 		// or folder counts).
 		return m, cmd
+
+	case OpenLinkPickerMsg:
+		m.linkPicker = m.linkPicker.Open(msg.Links)
+		return m, nil
 
 	case LinkPickerClosedMsg:
 		m.linkPicker = m.linkPicker.Close()

@@ -42,10 +42,9 @@ type Viewer struct {
 	spinner            spinner.Model
 	styles             Styles
 	theme              *theme.CompiledTheme
-	keys               ViewerKeys
-	pendingLinkPicker  []string
-	width              int
-	height             int
+	keys     ViewerKeys
+	width    int
+	height   int
 }
 
 // NewViewer constructs an empty (closed) viewer. accountEmail
@@ -133,20 +132,6 @@ func (v Viewer) ScrollPct() int {
 	return int(v.viewport.ScrollPercent() * 100)
 }
 
-// LinkPickerRequest returns the harvested link list and true if the
-// last keypress requested the link picker. Reading clears the
-// request — callers receive (nil, false) on subsequent reads until
-// another Tab press fires. Pointer receiver because the accessor
-// mutates the one-shot pending field.
-func (v *Viewer) LinkPickerRequest() ([]string, bool) {
-	if v.pendingLinkPicker == nil {
-		return nil, false
-	}
-	links := v.pendingLinkPicker
-	v.pendingLinkPicker = nil
-	return links, true
-}
-
 // Update handles spinner ticks and key events while open. Returns the
 // updated viewer + any Cmds (link launch, viewer-closed signal,
 // scroll-position broadcast). Caller is responsible for batching.
@@ -169,9 +154,9 @@ func (v Viewer) Update(msg tea.Msg) (Viewer, tea.Cmd) {
 }
 
 // handleKey runs the viewer's key dispatch. q/esc closes; 1-9 launch
-// links; tab sets pendingLinkPicker for AccountTab to read after
-// delegation. All other keys forward to the viewport, which is
-// configured with a modifier-free keymap (j/k/space/b/g/G).
+// links; tab emits OpenLinkPickerMsg for App. All other keys forward
+// to the viewport, which is configured with a modifier-free keymap
+// (j/k/space/b/g/G).
 func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 	switch {
 	case key.Matches(msg, v.keys.Close):
@@ -181,8 +166,8 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 		if len(v.links) == 0 {
 			return v, nil
 		}
-		v.pendingLinkPicker = v.links
-		return v, nil
+		links := append([]string(nil), v.links...)
+		return v, func() tea.Msg { return OpenLinkPickerMsg{Links: links} }
 	}
 	for i, b := range v.keys.Links {
 		if key.Matches(msg, b) {

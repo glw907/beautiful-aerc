@@ -55,7 +55,6 @@ type AccountTab struct {
 	swept             map[string]bool
 	loading           bool
 	spinner           spinner.Model
-	pendingLinkPicker []string
 	layout            LayoutMode
 	width             int
 	height            int
@@ -288,9 +287,6 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		if !m.viewer.IsOpen() {
 			// Viewer just closed; discard any in-flight body fetch.
 			m.cancelInflightBodyFetch()
-		}
-		if links, ok := (&m.viewer).LinkPickerRequest(); ok {
-			m.pendingLinkPicker = links
 		}
 		return m, cmd
 	}
@@ -606,20 +602,6 @@ func (m AccountTab) ViewerScrollPct() int {
 // SearchState exposes the sidebar search state machine.
 func (m AccountTab) SearchState() SearchState {
 	return m.sidebarSearch.State()
-}
-
-// LinkPickerRequest returns a one-shot pending link-picker open
-// request. Mirrors Viewer.LinkPickerRequest; AccountTab forwards
-// the viewer's request through itself so App.Update can read it
-// without traversing into nested children. Pointer receiver because
-// reading clears the pending field.
-func (m *AccountTab) LinkPickerRequest() ([]string, bool) {
-	if m.pendingLinkPicker == nil {
-		return nil, false
-	}
-	links := m.pendingLinkPicker
-	m.pendingLinkPicker = nil
-	return links, true
 }
 
 // dispatchTriage performs an optimistic triage action through the

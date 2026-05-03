@@ -140,7 +140,7 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	}
 }
 
-func TestViewerTabSetsPendingLinkPickerRequest(t *testing.T) {
+func TestViewerTabEmitsOpenLinkPickerMsg(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24)
 	v = v.Open(mail.MessageInfo{UID: "uid-1"})
 	v = v.SetBody([]content.Block{
@@ -149,18 +149,16 @@ func TestViewerTabSetsPendingLinkPickerRequest(t *testing.T) {
 		}},
 	})
 
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyTab})
-
-	links, ok := (&v).LinkPickerRequest()
+	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if cmd == nil {
+		t.Fatal("expected Cmd from Tab when links are harvested")
+	}
+	msg, ok := cmd().(OpenLinkPickerMsg)
 	if !ok {
-		t.Fatal("expected pending link-picker request after Tab")
+		t.Fatalf("expected OpenLinkPickerMsg, got %T", cmd())
 	}
-	if len(links) != 1 || links[0] != "https://a.com" {
-		t.Fatalf("expected [https://a.com], got %v", links)
-	}
-	// Second read must return false (one-shot).
-	if _, ok := (&v).LinkPickerRequest(); ok {
-		t.Fatal("LinkPickerRequest must clear on read")
+	if len(msg.Links) != 1 || msg.Links[0] != "https://a.com" {
+		t.Fatalf("expected [https://a.com], got %v", msg.Links)
 	}
 }
 
@@ -182,27 +180,6 @@ func TestViewerClosedViewIsEmpty(t *testing.T) {
 	v := newTestViewer()
 	if v.View() != "" {
 		t.Errorf("closed View must be empty, got %q", v.View())
-	}
-}
-
-func TestViewerLinkPickerRequest_OneShotClearsOnRead(t *testing.T) {
-	v := newTestViewer().SetSize(80, 24)
-	v = v.Open(mail.MessageInfo{UID: "uid-1"})
-	v = v.SetBody([]content.Block{
-		content.Paragraph{Spans: []content.Span{
-			content.Link{Text: "click", URL: "https://a.com"},
-		}},
-	})
-
-	v, _ = v.handleKey(tea.KeyMsg{Type: tea.KeyTab})
-
-	links, ok := (&v).LinkPickerRequest()
-	if !ok || len(links) == 0 {
-		t.Fatal("expected pending link-picker request after Tab")
-	}
-	_, ok = (&v).LinkPickerRequest()
-	if ok {
-		t.Fatal("LinkPickerRequest must clear on read")
 	}
 }
 

@@ -780,9 +780,6 @@ func TestAccountTabAccessors(t *testing.T) {
 	if pct := m.ViewerScrollPct(); pct != 0 {
 		t.Errorf("ViewerScrollPct should be 0 with viewer closed, got %v", pct)
 	}
-	if _, ok := (&m).LinkPickerRequest(); ok {
-		t.Error("LinkPickerRequest should be (nil, false) initially")
-	}
 }
 
 // pagingFakeBackend is a test-only mail.Backend that serves a
