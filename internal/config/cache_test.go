@@ -69,7 +69,7 @@ func TestLoadCache(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
-			if err := writeFile(path, c.toml); err != nil {
+			if err := os.WriteFile(path, []byte(c.toml), 0o644); err != nil {
 				t.Fatalf("write: %v", err)
 			}
 			got, err := LoadCache(path)
@@ -86,7 +86,3 @@ func TestLoadCache(t *testing.T) {
 	}
 }
 
-// writeFile is a tiny test helper.
-func writeFile(path, content string) error {
-	return os.WriteFile(path, []byte(content), 0o644)
-}

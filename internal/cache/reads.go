@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -193,11 +192,9 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 
 // FetchBody returns the body bytes for uid. Cache miss → backend
 // fetch → store → return; cache hit → return stored bytes without a
-// backend round-trip. Store failure is logged but does not propagate;
-// the returned bytes are still valid for the caller.
-//
-// Cache II policy: lazy population, no automatic eviction. The size
-// backstop in storeBody handles cap pressure inline.
+// backend round-trip. Store failure is non-fatal; the returned bytes
+// are still valid for the caller. Lazy population, no automatic
+// eviction. The size backstop in storeBody handles cap pressure inline.
 func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 	ctx := context.Background()
 	if buf, ok, err := a.lookupBody(ctx, uid); err != nil {
@@ -213,10 +210,8 @@ func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 		return nil, err
 	}
 	if storeErr := a.storeBody(ctx, uid, body); storeErr != nil {
-		// Best-effort: log and return body. The header row may be
-		// absent (storeBody requires it) for paths that haven't run
-		// SyncFolder yet — that's acceptable; next view re-fetches.
-		log.Printf("cache: store body %s: %v", uid, storeErr)
+		// store failure is non-fatal: body is still valid for the caller; next view will re-fetch.
+		_ = storeErr
 	}
 	return body, nil
 }
@@ -301,6 +296,14 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 	})
 }
 
+// sqlPlaceholders returns "?,?,...,?" with n question marks comma-separated.
+func sqlPlaceholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.Repeat("?,", n-1) + "?"
+}
+
 // uidsPlaceholders returns "?,?,?" and the matching args slice for
 // UIDs in IN clauses.
 func uidsPlaceholders(uids []mail.UID) (string, []any) {
@@ -308,10 +311,8 @@ func uidsPlaceholders(uids []mail.UID) (string, []any) {
 		return "", nil
 	}
 	args := make([]any, len(uids))
-	parts := make([]string, len(uids))
 	for i, u := range uids {
-		parts[i] = "?"
 		args[i] = string(u)
 	}
-	return strings.Join(parts, ","), args
+	return sqlPlaceholders(len(uids)), args
 }

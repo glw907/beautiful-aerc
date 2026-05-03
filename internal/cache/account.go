@@ -46,10 +46,8 @@ type Account struct {
 	dir  string
 	name string
 
-	// maxSize is the body-cache size cap in bytes. 0 disables the cap.
-	// Set via cache.Config at Open. Cache II policy: when an insert
-	// would push total over maxSize, evict by messages.sent_at ASC
-	// until under cap.
+	// maxSize is the body-cache size cap in bytes. 0 disables. When an insert
+	// would push total over maxSize, evict by messages.sent_at ASC until under cap.
 	maxSize int64
 
 	events        chan CacheEvent
@@ -107,6 +105,28 @@ type Config struct {
 	MaxSize int64
 }
 
+// DBPath returns the on-disk SQLite path for accountName under dir.
+// Empty dir defaults to $XDG_CACHE_HOME/poplar (or platform equivalent).
+// A leading ~ in dir is expanded to the user's home directory.
+func DBPath(accountName, dir string) (string, error) {
+	expanded, err := expandHome(dir)
+	if err != nil {
+		return "", fmt.Errorf("expand cache dir: %w", err)
+	}
+	slug := Slugify(accountName)
+	if slug == "" {
+		return "", fmt.Errorf("account %q produces empty cache slug", accountName)
+	}
+	return filepath.Join(expanded, slug, "mail.db"), nil
+}
+
+// OpenDB opens a SQLite database at path with the standard poplar pragmas.
+// Callers are responsible for setting pool sizes and running migrations.
+func OpenDB(path string) (*sql.DB, error) {
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)", path)
+	return sql.Open("sqlite", dsn)
+}
+
 // Open returns an Account ready for reads and writes. It opens (or
 // creates) the per-account SQLite database under dir, applies
 // pragmas, and runs schema migrations to the current version.
@@ -114,21 +134,15 @@ type Config struct {
 // dir is the cache base directory; the per-account subdirectory is
 // created if absent. A leading ~ is expanded to the user's home.
 func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string, cfg Config) (*Account, error) {
-	expanded, err := expandHome(dir)
+	dbPath, err := DBPath(accountName, dir)
 	if err != nil {
-		return nil, fmt.Errorf("expand cache dir: %w", err)
+		return nil, err
 	}
-	slug := slugify(accountName)
-	if slug == "" {
-		return nil, fmt.Errorf("account %q produces empty cache slug", accountName)
-	}
-	acctDir := filepath.Join(expanded, slug)
+	acctDir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(acctDir, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir cache: %w", err)
 	}
-	dbPath := filepath.Join(acctDir, "mail.db")
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)", dbPath)
-	db, err := sql.Open("sqlite", dsn)
+	db, err := OpenDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -240,9 +254,9 @@ func expandHome(p string) (string, error) {
 	return config.ExpandHome(p)
 }
 
-// slugify lowercases name and reduces non-[a-z0-9-] runs to a
+// Slugify lowercases name and reduces non-[a-z0-9-] runs to a
 // single dash. Leading/trailing dashes are stripped.
-func slugify(name string) string {
+func Slugify(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))
 	dash := false

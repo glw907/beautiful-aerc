@@ -14,7 +14,7 @@ import (
 
 // lookupBody reads a cached body for uid. Returns (bytes, true, nil)
 // on hit, (nil, false, nil) on miss, (nil, false, err) on db error.
-// No last_accessed update — Cache II is lazy-population only.
+// No last_accessed update — lazy-population only.
 func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, error) {
 	const q = `
         SELECT b.bytes
@@ -41,55 +41,54 @@ func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, e
 // so total bytes remain at or below maxSize.
 func (a *Account) storeBody(ctx context.Context, uid mail.UID, body []byte) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
-		var msgID int64
-		if err := tx.QueryRowContext(ctx, `SELECT id FROM messages WHERE protocol_id = ?`, string(uid)).Scan(&msgID); err != nil {
-			return fmt.Errorf("store body %s: lookup message: %w", uid, err)
-		}
-		// Size backstop: if maxSize > 0 and the new body would push
-		// total over cap, evict by sent_at ASC until total + new fits.
+		newSize := int64(len(body))
+		// Size backstop: compute total once; short-circuit if no eviction needed.
 		if a.maxSize > 0 {
-			newSize := int64(len(body))
-			target := a.maxSize - newSize
-			if target < 0 {
-				target = 0
+			var total int64
+			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(length(bytes)), 0) FROM bodies`).Scan(&total); err != nil {
+				return fmt.Errorf("store body %s: sum bytes: %w", uid, err)
 			}
-			if _, _, err := a.evictBySize(ctx, tx, target); err != nil {
-				return err
+			if total+newSize > a.maxSize {
+				target := a.maxSize - newSize
+				if target < 0 {
+					target = 0
+				}
+				if _, _, err := a.evictBySize(ctx, tx, total, target); err != nil {
+					return err
+				}
 			}
 		}
-		_, err := tx.ExecContext(ctx, `
-            INSERT INTO bodies (message, bytes, fetched_at) VALUES (?, ?, ?)
+		// Single INSERT...SELECT: resolves message FK and upserts in one statement.
+		res, err := tx.ExecContext(ctx, `
+            INSERT INTO bodies (message, bytes, fetched_at)
+            SELECT id, ?, ? FROM messages WHERE protocol_id = ?
             ON CONFLICT(message) DO UPDATE SET
               bytes      = excluded.bytes,
               fetched_at = excluded.fetched_at`,
-			msgID, body, time.Now().UnixNano())
+			body, time.Now().UnixNano(), string(uid))
 		if err != nil {
 			return fmt.Errorf("store body %s: insert: %w", uid, err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("store body %s: unknown message uid", uid)
 		}
 		return nil
 	})
 }
 
-// evictBySize removes oldest-by-sent-date bodies until the total
-// body bytes are at or below target. Returns the number of rows
-// removed and total bytes freed. The caller holds an open tx.
-func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, target int64) (rows int, freed int64, err error) {
+// evictBySize removes oldest-by-sent-date bodies until the total body bytes
+// are at or below target. total is the current SUM(length(bytes)) passed in
+// by the caller (computed before the new insert). Returns the number of rows
+// removed and bytes freed. The caller holds an open tx.
+func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, total, target int64) (rows int, freed int64, err error) {
 	const batchSize = 32
-	for {
-		var total int64
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(length(bytes)), 0) FROM bodies`).Scan(&total); err != nil {
-			return rows, freed, fmt.Errorf("evict: sum bytes: %w", err)
-		}
-		if total <= target {
-			return rows, freed, nil
-		}
-		// Pick the next batch of oldest-sent body rows to drop.
-		const pickQ = `
-            SELECT b.message, length(b.bytes)
-            FROM bodies b
-            JOIN messages m ON m.id = b.message
-            ORDER BY COALESCE(m.sent_at, 0) ASC
-            LIMIT ?`
+	const pickQ = `
+        SELECT b.message, length(b.bytes)
+        FROM bodies b
+        JOIN messages m ON m.id = b.message
+        ORDER BY m.sent_at ASC NULLS LAST
+        LIMIT ?`
+	for total > target {
 		rs, err := tx.QueryContext(ctx, pickQ, batchSize)
 		if err != nil {
 			return rows, freed, fmt.Errorf("evict: pick batch: %w", err)
@@ -117,22 +116,18 @@ func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, target int64) (ro
 			// store will still proceed.
 			return rows, freed, nil
 		}
-		// Build IN-clause placeholders.
 		args := make([]any, len(ids))
-		ph := make([]byte, 0, len(ids)*2-1)
 		for i, id := range ids {
-			if i > 0 {
-				ph = append(ph, ',')
-			}
-			ph = append(ph, '?')
 			args[i] = id
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM bodies WHERE message IN (`+string(ph)+`)`, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM bodies WHERE message IN (`+sqlPlaceholders(len(ids))+`)`, args...); err != nil {
 			return rows, freed, fmt.Errorf("evict: delete: %w", err)
 		}
 		rows += len(ids)
 		freed += batchFreed
+		total -= batchFreed
 	}
+	return rows, freed, nil
 }
 
 // EvictByAge deletes body rows whose fetched_at is older than cutoff.
@@ -140,26 +135,22 @@ func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, target int64) (ro
 // the `poplar cache evict --older-than` CLI; not invoked automatically.
 func (a *Account) EvictByAge(ctx context.Context, cutoff time.Time) (rows int, freed int64, err error) {
 	err = a.tx(ctx, func(tx *sql.Tx) error {
-		// Compute freed up front, since we need length(bytes) before deletion.
-		var freedI int64
-		err := tx.QueryRowContext(ctx,
-			`SELECT COALESCE(SUM(length(bytes)), 0) FROM bodies WHERE fetched_at < ?`,
-			cutoff.UnixNano()).Scan(&freedI)
+		rs, err := tx.QueryContext(ctx,
+			`DELETE FROM bodies WHERE fetched_at < ? RETURNING length(bytes)`,
+			cutoff.UnixNano())
 		if err != nil {
-			return fmt.Errorf("evict by age: sum: %w", err)
+			return fmt.Errorf("evict by age: %w", err)
 		}
-		res, err := tx.ExecContext(ctx,
-			`DELETE FROM bodies WHERE fetched_at < ?`, cutoff.UnixNano())
-		if err != nil {
-			return fmt.Errorf("evict by age: delete: %w", err)
+		defer rs.Close()
+		for rs.Next() {
+			var sz int64
+			if err := rs.Scan(&sz); err != nil {
+				return fmt.Errorf("evict by age: scan: %w", err)
+			}
+			freed += sz
+			rows++
 		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("evict by age: rows: %w", err)
-		}
-		rows = int(n)
-		freed = freedI
-		return nil
+		return rs.Err()
 	})
 	return rows, freed, err
 }

@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +18,13 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	_ "modernc.org/sqlite"
 )
+
+// outboxStatsQ counts pending vs other (executing+failed+conflict) outbox rows.
+var outboxStatsQ = fmt.Sprintf(`SELECT
+    COALESCE(SUM(CASE WHEN status = '%s' THEN 1 ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN status IN ('%s','%s','%s') THEN 1 ELSE 0 END), 0)
+FROM outbox`,
+	cache.OpPending, cache.OpExecuting, cache.OpFailed, cache.OpConflict)
 
 // newCacheCmd assembles the `poplar cache` subcommand tree.
 func newCacheCmd() *cobra.Command {
@@ -82,13 +88,17 @@ func gatherStats(ctx context.Context) ([]statsRow, error) {
 // statsForAccount opens the per-account SQLite directly (no Backend
 // or ChangeTracker — stats works offline).
 func statsForAccount(ctx context.Context, name string) (statsRow, error) {
-	dbPath, err := cacheDBPath(name)
+	dbPath, err := cache.DBPath(name, "")
 	if err != nil {
 		return statsRow{}, err
 	}
-	db, err := openCacheDB(dbPath)
+	db, err := cache.OpenDB(dbPath)
 	if err != nil {
-		return statsRow{}, err
+		return statsRow{}, fmt.Errorf("open cache db: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return statsRow{}, fmt.Errorf("ping cache db: %w", err)
 	}
 	defer db.Close()
 	row := statsRow{Account: name}
@@ -99,69 +109,13 @@ func statsForAccount(ctx context.Context, name string) (statsRow, error) {
 		`SELECT COUNT(*), COALESCE(SUM(length(bytes)), 0) FROM bodies`).Scan(&row.BodiesCount, &row.BodiesBytes); err != nil {
 		return row, fmt.Errorf("count bodies: %w", err)
 	}
-	if err := db.QueryRowContext(ctx,
-		`SELECT
-            COALESCE(SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN status IN ('executing','failed','conflict') THEN 1 ELSE 0 END), 0)
-         FROM outbox`).Scan(&row.OutboxPending, &row.OutboxOther); err != nil {
-		// outbox may not exist yet in an empty/new cache; treat as zero
-		row.OutboxPending = 0
-		row.OutboxOther = 0
+	if err := db.QueryRowContext(ctx, outboxStatsQ).Scan(&row.OutboxPending, &row.OutboxOther); err != nil {
+		return row, fmt.Errorf("count outbox: %w", err)
 	}
 	if fi, err := os.Stat(dbPath); err == nil {
 		row.DBBytes = fi.Size()
 	}
 	return row, nil
-}
-
-// cacheDBPath resolves the on-disk SQLite path for an account.
-// Mirrors the construction in cache.Open.
-func cacheDBPath(accountName string) (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	slug := slugifyName(accountName)
-	if slug == "" {
-		return "", fmt.Errorf("account %q has empty slug", accountName)
-	}
-	return fmt.Sprintf("%s/poplar/%s/mail.db", base, slug), nil
-}
-
-// slugifyName mirrors cache.slugify: lowercase, [a-z0-9-] only,
-// non-matching runs collapse to a single dash, leading/trailing
-// dashes stripped.
-func slugifyName(name string) string {
-	var b strings.Builder
-	b.Grow(len(name))
-	dash := false
-	for _, r := range strings.ToLower(name) {
-		switch {
-		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-':
-			if dash && b.Len() > 0 {
-				b.WriteByte('-')
-			}
-			dash = false
-			b.WriteRune(r)
-		default:
-			dash = true
-		}
-	}
-	return strings.Trim(b.String(), "-")
-}
-
-// openCacheDB opens an existing per-account database.
-func openCacheDB(path string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)", path)
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open cache db: %w", err)
-	}
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("ping cache db: %w", err)
-	}
-	return db, nil
 }
 
 // loadAccounts reads account config via the existing config loader.
@@ -346,7 +300,7 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 			continue
 		}
 		matched = true
-		dbPath, err := cacheDBPath(a.Name)
+		dbPath, err := cache.DBPath(a.Name, "")
 		if err != nil {
 			return err
 		}
@@ -354,9 +308,13 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		// VACUUM cannot run inside a transaction or with concurrent
 		// writers. Use a short-lived dedicated connection with no
 		// pool — single-connection bypass.
-		db, err := openCacheDB(dbPath)
+		db, err := cache.OpenDB(dbPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("open cache db: %w", err)
+		}
+		if err := db.Ping(); err != nil {
+			db.Close()
+			return fmt.Errorf("ping cache db: %w", err)
 		}
 		db.SetMaxOpenConns(1)
 		if _, err := db.ExecContext(ctx, `VACUUM`); err != nil {
