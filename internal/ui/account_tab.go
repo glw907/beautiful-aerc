@@ -225,7 +225,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		folder := msg.folder
 		src := msg.source
 		toast := func() tea.Msg {
-			return triageStartedMsg{op: "empty", n: n, dest: folder}
+			return triageStartedMsg{op: opEmpty, n: n, dest: folder}
 		}
 		return m, tea.Batch(toast, refreshFolderCmd(m.acct, src))
 
@@ -374,13 +374,13 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		}
 		m.msglist.ToggleFoldAll()
 	case key.Matches(msg, m.keys.Delete):
-		return m, m.dispatchTriage("delete")
+		return m, m.dispatchTriage(opDelete)
 	case key.Matches(msg, m.keys.Archive):
-		return m, m.dispatchTriage("archive")
+		return m, m.dispatchTriage(opArchive)
 	case key.Matches(msg, m.keys.Star):
-		return m, m.dispatchTriage("star")
+		return m, m.dispatchTriage(opStar)
 	case key.Matches(msg, m.keys.ReadToggle):
-		return m, m.dispatchTriage("read")
+		return m, m.dispatchTriage(opRead)
 	case key.Matches(msg, m.keys.EnterVisual):
 		m.msglist.EnterVisual()
 		return m, nil
@@ -615,7 +615,7 @@ func (m AccountTab) SearchState() SearchState {
 // cache. The cache QueueOp transactionally writes the optimistic flip
 // and the outbox row; the immediate folder refresh re-reads the new
 // state. Toast carries the inverse Cmd (a compensating QueueOp).
-func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
+func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 	uids := m.msglist.ActionTargets()
 	if len(uids) == 0 {
 		return nil
@@ -624,47 +624,47 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 	m.msglist.ExitVisual()
 
 	switch op {
-	case "delete":
+	case opDelete:
 		trash, ok := m.sidebar.FolderNameByCanonical("Trash")
 		if !ok {
 			return func() tea.Msg {
-				return ErrorMsg{Op: "delete", Err: errors.New("no Trash folder configured")}
+				return ErrorMsg{Op: string(op), Err: errors.New("no Trash folder configured")}
 			}
 		}
 		return m.queueMove(op, src, trash, uids)
 
-	case "archive":
+	case opArchive:
 		archive, ok := m.sidebar.FolderNameByCanonical("Archive")
 		if !ok {
 			return func() tea.Msg {
-				return ErrorMsg{Op: "archive", Err: errors.New("no Archive folder configured")}
+				return ErrorMsg{Op: string(op), Err: errors.New("no Archive folder configured")}
 			}
 		}
 		return m.queueMove(op, src, archive, uids)
 
-	case "star":
+	case opStar:
 		cursor, ok := m.msglist.SelectedMessage()
 		if !ok {
 			return nil
 		}
 		set := cursor.Flags&mail.FlagFlagged == 0
-		opName := "star"
+		toastOp := opStar
 		if !set {
-			opName = "unstar"
+			toastOp = opUnstar
 		}
-		return m.queueFlag(opName, src, uids, mail.FlagFlagged, set)
+		return m.queueFlag(toastOp, src, uids, mail.FlagFlagged, set)
 
-	case "read":
+	case opRead:
 		cursor, ok := m.msglist.SelectedMessage()
 		if !ok {
 			return nil
 		}
 		set := cursor.Flags&mail.FlagSeen == 0
-		opName := "read"
+		toastOp := opRead
 		if !set {
-			opName = "unread"
+			toastOp = opUnread
 		}
-		return m.queueFlag(opName, src, uids, mail.FlagSeen, set)
+		return m.queueFlag(toastOp, src, uids, mail.FlagSeen, set)
 	}
 	return nil
 }
@@ -672,11 +672,12 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 // queueMove queues a move op for each uid from src to dest, then
 // emits triageStartedMsg whose inverse undoes the move (queues
 // a move from dest back to src for each uid).
-func (m *AccountTab) queueMove(op, src, dest string, uids []mail.UID) tea.Cmd {
-	fwd := queueOpsCmd(m.acct, op, src, uids, func(_ mail.UID) cache.OpArgs {
+func (m *AccountTab) queueMove(op triageOp, src, dest string, uids []mail.UID) tea.Cmd {
+	label := string(op)
+	fwd := queueOpsCmd(m.acct, label, src, uids, func(_ mail.UID) cache.OpArgs {
 		return cache.MoveArgs{Dest: dest}
 	})
-	rev := queueOpsCmd(m.acct, op+" undo", dest, uids, func(_ mail.UID) cache.OpArgs {
+	rev := queueOpsCmd(m.acct, label+" undo", dest, uids, func(_ mail.UID) cache.OpArgs {
 		return cache.MoveArgs{Dest: src}
 	})
 	return startTriageCmd(op, dest, uids, fwd, rev)
@@ -684,11 +685,12 @@ func (m *AccountTab) queueMove(op, src, dest string, uids []mail.UID) tea.Cmd {
 
 // queueFlag queues a flag set/unset op for each uid, then emits the
 // triage toast whose inverse flips the flag back.
-func (m *AccountTab) queueFlag(op, src string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
-	fwd := queueOpsCmd(m.acct, op, src, uids, func(_ mail.UID) cache.OpArgs {
+func (m *AccountTab) queueFlag(op triageOp, src string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
+	label := string(op)
+	fwd := queueOpsCmd(m.acct, label, src, uids, func(_ mail.UID) cache.OpArgs {
 		return cache.FlagArgs{Flag: flag, Set: set}
 	})
-	rev := queueOpsCmd(m.acct, op+" undo", src, uids, func(_ mail.UID) cache.OpArgs {
+	rev := queueOpsCmd(m.acct, label+" undo", src, uids, func(_ mail.UID) cache.OpArgs {
 		return cache.FlagArgs{Flag: flag, Set: !set}
 	})
 	return startTriageCmd(op, "", uids, fwd, rev)
@@ -711,13 +713,13 @@ func (m *AccountTab) dispatchMoveFromPicker(msg MovePickerPickedMsg) tea.Cmd {
 		return nil
 	}
 	m.msglist.ExitVisual()
-	return m.queueMove("move", msg.Src, msg.Dest, msg.UIDs)
+	return m.queueMove(opMove, msg.Src, msg.Dest, msg.UIDs)
 }
 
 // startTriageCmd batches the forward queueOpsCmd with a triage-toast
 // emitter so the chrome row appears in the same Update tick the cache
 // flip lands.
-func startTriageCmd(op, dest string, uids []mail.UID, fwd, rev tea.Cmd) tea.Cmd {
+func startTriageCmd(op triageOp, dest string, uids []mail.UID, fwd, rev tea.Cmd) tea.Cmd {
 	start := func() tea.Msg {
 		return triageStartedMsg{op: op, n: len(uids), uids: uids, dest: dest, inverse: rev}
 	}

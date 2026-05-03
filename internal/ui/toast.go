@@ -10,15 +10,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// triageOp identifies which triage action a toast or pendingAction
+// represents. The empty value (opNone) means "no toast active".
+type triageOp string
+
+const (
+	opNone    triageOp = ""
+	opDelete  triageOp = "delete"
+	opArchive triageOp = "archive"
+	opStar    triageOp = "star"
+	opUnstar  triageOp = "unstar"
+	opRead    triageOp = "read"
+	opUnread  triageOp = "unread"
+	opMove    triageOp = "move"
+	opEmpty   triageOp = "empty"
+)
+
 // pendingAction is the App-owned state for an in-flight optimistic
 // triage action. The zero value means "no toast active". Local
 // roll-back lives entirely in the cache layer (the inverse Cmd queues
 // a compensating QueueOp); App holds only what the toast needs to
 // render plus the undo Cmd to fire on `u`.
 type pendingAction struct {
-	op       string    // "delete" | "archive" | "star" | "unstar" | "read" | "unread" | "move"
+	op       triageOp
 	n        int       // affected message count
-	dest     string    // destination folder name; non-empty for "move"
+	dest     string    // destination folder name; non-empty for opMove
 	inverse  tea.Cmd   // the undo Cmd; nil for unrecoverable ops
 	deadline time.Time // monotonic moment at which the toast expires
 }
@@ -26,7 +42,7 @@ type pendingAction struct {
 // IsZero reports whether p represents "no active toast". Every active
 // pending action has op set (the verb is required for rendering), so a
 // single check suffices.
-func (p pendingAction) IsZero() bool { return p.op == "" }
+func (p pendingAction) IsZero() bool { return p.op == opNone }
 
 // renderToast produces the one-row toast string. Returns "" for the
 // zero pendingAction. Width-bounded; truncates with ellipsis.
@@ -37,21 +53,21 @@ func renderToast(p pendingAction, width int, styles Styles) string {
 	verb := toastVerb(p.op)
 	var body string
 	switch p.op {
-	case "star", "unstar", "read", "unread":
+	case opStar, opUnstar, opRead, opUnread:
 		if p.n > 1 {
 			body = fmt.Sprintf("%s %d", verb, p.n)
 		} else {
 			body = verb
 		}
-	case "move":
+	case opMove:
 		body = fmt.Sprintf("%s %d %s to %s", verb, p.n, pluralize("message", p.n), p.dest)
-	case "empty":
+	case opEmpty:
 		body = fmt.Sprintf("%s %s (%d)", verb, p.dest, p.n)
 	default:
 		body = fmt.Sprintf("%s %d %s", verb, p.n, pluralize("message", p.n))
 	}
 	hint := "[u undo]"
-	if p.op == "empty" {
+	if p.op == opEmpty {
 		hint = ""
 	}
 	full := "✓ " + body
@@ -73,26 +89,26 @@ func renderToast(p pendingAction, width int, styles Styles) string {
 	return styles.Toast.Render(bodyTrunc + "   " + hint)
 }
 
-func toastVerb(op string) string {
+func toastVerb(op triageOp) string {
 	switch op {
-	case "delete":
+	case opDelete:
 		return "Deleted"
-	case "archive":
+	case opArchive:
 		return "Archived"
-	case "star":
+	case opStar:
 		return "Starred"
-	case "unstar":
+	case opUnstar:
 		return "Unstarred"
-	case "read":
+	case opRead:
 		return "Marked read"
-	case "unread":
+	case opUnread:
 		return "Marked unread"
-	case "move":
+	case opMove:
 		return "Moved"
-	case "empty":
+	case opEmpty:
 		return "Emptied"
 	}
-	return op
+	return string(op)
 }
 
 func pluralize(word string, n int) string {

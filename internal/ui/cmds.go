@@ -364,7 +364,7 @@ type LaunchURLMsg struct {
 // queueOpsCmd. The cache owns the optimistic state, so there is no
 // onUndo callback — undo is the inverse Cmd alone.
 type triageStartedMsg struct {
-	op      string
+	op      triageOp
 	n       int
 	dest    string
 	uids    []mail.UID
