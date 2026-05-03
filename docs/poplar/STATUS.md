@@ -1,8 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.3 next — narrow-terminal polish I.
-Pass 8.2 closed as no-op: #17/#18/#19 were already resolved in
-Pass 5 (commits ec0984a/1797927/2b520c9); backlog updated.
+**Current pass:** Pass 8.4 next — Cache 0 design.
 
 ## Passes
 
@@ -11,8 +9,8 @@ Pass 5 (commits ec0984a/1797927/2b520c9); backlog updated.
 | 1 – 8.5 | Scaffold → backends → UI → triage → config v1 (see git log; ADRs 0001–0104) | done |
 | 8.1 | Gmail preset: X-GM-EXT-1, Trash precondition, XOAUTH2 via `password-cmd` (ADR-0106/0107/0108) | done |
 | 8.2 | Bubbletea cleanup II — #17/#18/#19 (closed; already resolved in Pass 5) | done |
-| 8.3 | Polish I — #23 HTML word-fusion; #26 narrow-terminal msglist; #9 viewer `n/N` filtered | next |
-| 8.4 | Cache 0 — design + ADR + spec (storage, decorator vs. backend-aware, `ChangeTracker` interface, RFC 4549 + JMAP sync) | pending |
+| 8.3 | Polish I — #23 HTML word-fusion; #26 narrow-terminal msglist; #9 viewer `n/N` filtered (ADR-0109) | done |
+| 8.4 | Cache 0 — design + ADR + spec (storage, decorator vs. backend-aware, `ChangeTracker` interface, RFC 4549 + JMAP sync) | next |
 | 8.4a | Cache I — envelope/header cache, multi-account namespacing, "stale/syncing" UI indicator (supersedes #4) | pending |
 | 8.4b | Cache II — body cache, invalidation on flag/delete/IDLE, eviction (LRU + size + age), `poplar cache size/clear/status` | pending |
 | 8.4c | Cache III — offline mode: read-only when offline, queued triage actions, reconciliation, offline chrome indicator (decide beta vs post-1.0) | pending |
@@ -28,32 +26,35 @@ Pass 5 (commits ec0984a/1797927/2b520c9); backlog updated.
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta features | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.3)
+## Next starter prompt (Pass 8.4)
 
-> **Goal.** Polish I — three behaviour bugs that bite real users at
-> the 80×24 polish bar and on plain-text-formatted mail.
+> **Goal.** Design pass — establish the architecture, ADR, and spec
+> for the local mail cache. No implementation; the next two passes
+> (8.4a envelope/header cache, 8.4b body cache) execute against
+> what this pass settles.
 >
-> **Scope.** BACKLOG items #23, #26, #9:
-> - #23: HTML→plain-text fuses words across element boundaries.
->   Fix in `internal/filter/html.go` — insert whitespace at inline
->   element boundaries before tag stripping (or post-process to
->   re-introduce spaces around fused alphanumeric runs).
-> - #26: Narrow-terminal msglist polish — date-column adapts to
->   width (`04-30` / `3:41p` at intermediate widths, drop entirely
->   at 80 cols), rebalance subject vs sender allocation, explore
->   sidebar floor below 24 cells.
-> - #9: Viewer `n`/`N` walks the filtered row set — couples viewer
->   navigation to msglist's filter state. Bundles with the live
->   backend so prefetch semantics are testable under real latency.
+> **Scope.** Resolve open design questions and produce:
+> - A new ADR documenting cache shape and invariants.
+> - A spec doc at `docs/superpowers/specs/YYYY-MM-DD-cache-0-design.md`.
+> - A plan doc at `docs/superpowers/plans/YYYY-MM-DD-cache-0-design.md`
+>   for the design pass itself (since this pass produces docs).
 >
-> **Settled:** Bubbletea conventions (0077–0084), responsive
-> sidebar (0096), 80×24 polish bar (0097).
+> **Settled:** Sync backend interface (ADR-0099); JMAP + IMAP only
+> (ADR-0075); pre-beta schema freedom (ADR-0105).
 >
 > **Still open — brainstorm these:**
-> - #26: which of date format / sender-subject ratio / sidebar
->   floor earn their keep at 80 cols, at which width thresholds?
-> - #9: prefetch eagerly while viewer open, or lazily on n/N?
+> - Storage: SQLite (modernc.org/sqlite cgo-free), BoltDB, or
+>   filesystem-of-files? Trade-offs on query, eviction, concurrent
+>   IDLE updates, multi-account namespacing.
+> - Cache shape: decorator wrapping `mail.Backend`, or
+>   backend-aware (each backend reports change tokens)? RFC 4549
+>   QRESYNC for IMAP, `Email/changes` for JMAP.
+> - `ChangeTracker` interface: shared abstraction for both
+>   backends, or per-backend type with a thin adapter?
+> - Eviction policy primitives (LRU + size + age) and CLI surface
+>   (`poplar cache size/clear/status`).
+> - Offline-mode boundary: read-only on master + queued triage,
+>   or defer to post-1.0?
 >
-> **Approach.** Brainstorm the open questions, write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-polish-i.md`, then implement.
-> Standard pass-end checklist applies.
+> **Approach.** Brainstorm, write spec + plan + ADR, archive at
+> pass-end. No code in this pass.
