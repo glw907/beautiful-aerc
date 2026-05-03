@@ -340,10 +340,10 @@ func TestSidebar_OrderedFolders(t *testing.T) {
 		t.Fatalf("len = %d, want 4", len(got))
 	}
 	want := []FolderEntry{
-		{Display: "Inbox", Provider: "INBOX", Group: GroupPrimary},
-		{Display: "Drafts", Provider: "Drafts", Group: GroupPrimary},
-		{Display: "Trash", Provider: "Trash", Group: GroupDisposal},
-		{Display: "Receipts/2026", Provider: "Receipts/2026", Group: GroupCustom},
+		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
+		{Display: "Drafts", Provider: "Drafts", Group: mail.GroupPrimary},
+		{Display: "Trash", Provider: "Trash", Group: mail.GroupDisposal},
+		{Display: "Receipts/2026", Provider: "Receipts/2026", Group: mail.GroupCustom},
 	}
 	for i, w := range want {
 		if got[i] != w {

@@ -258,7 +258,7 @@ func (p MovePicker) buildListRows(contentW int) []string {
 		return []string{"  no folders match \"" + truncateToWidth(p.filter, contentW-22) + "\""}
 	}
 	rows := make([]string, 0, len(p.matches)+2)
-	prevGroup := FolderGroup(-1)
+	prevGroup := mail.Group(-1)
 	for i, idx := range p.matches {
 		entry := p.all[idx]
 		if p.filter == "" && i > 0 && entry.Group != prevGroup {

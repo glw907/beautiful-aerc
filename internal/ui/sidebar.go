@@ -12,18 +12,10 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-type FolderGroup int
-
-const (
-	GroupPrimary FolderGroup = iota
-	GroupDisposal
-	GroupCustom
-)
-
 type FolderEntry struct {
 	Display  string
 	Provider string
-	Group    FolderGroup
+	Group    mail.Group
 }
 
 // folderEntry holds a classified folder plus its rendered metadata.
@@ -145,21 +137,10 @@ func (s Sidebar) OrderedFolders() []FolderEntry {
 		out = append(out, FolderEntry{
 			Display:  display,
 			Provider: e.cf.Folder.Name,
-			Group:    translateGroup(e.cf.Group),
+			Group:    e.cf.Group,
 		})
 	}
 	return out
-}
-
-func translateGroup(g mail.Group) FolderGroup {
-	switch g {
-	case mail.GroupPrimary:
-		return GroupPrimary
-	case mail.GroupDisposal:
-		return GroupDisposal
-	default:
-		return GroupCustom
-	}
 }
 
 // SelectByCanonical moves the selection to the folder whose

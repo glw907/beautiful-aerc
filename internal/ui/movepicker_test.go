@@ -14,13 +14,13 @@ import (
 
 func sampleFolders() []FolderEntry {
 	return []FolderEntry{
-		{Display: "Inbox", Provider: "INBOX", Group: GroupPrimary},
-		{Display: "Drafts", Provider: "Drafts", Group: GroupPrimary},
-		{Display: "Sent", Provider: "Sent", Group: GroupPrimary},
-		{Display: "Archive", Provider: "Archive", Group: GroupDisposal},
-		{Display: "Trash", Provider: "Trash", Group: GroupDisposal},
-		{Display: "Receipts/2026", Provider: "Receipts/2026", Group: GroupCustom},
-		{Display: "Receipts/2025", Provider: "Receipts/2025", Group: GroupCustom},
+		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
+		{Display: "Drafts", Provider: "Drafts", Group: mail.GroupPrimary},
+		{Display: "Sent", Provider: "Sent", Group: mail.GroupPrimary},
+		{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal},
+		{Display: "Trash", Provider: "Trash", Group: mail.GroupDisposal},
+		{Display: "Receipts/2026", Provider: "Receipts/2026", Group: mail.GroupCustom},
+		{Display: "Receipts/2025", Provider: "Receipts/2025", Group: mail.GroupCustom},
 	}
 }
 
