@@ -206,7 +206,67 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 				resultCh <- ErrorMsg{Op: "fetch body", Err: err}
 				return
 			}
-			text := extractDisplayText(buf)
+			// Sniff the buffer for an RFC 822 header line ("Field-Name: value"
+			// before the first newline). Non-RFC822 input (e.g. mock backend's
+			// pre-cleaned markdown) is forwarded unchanged.
+			isRFC822 := func(b []byte) bool {
+				s := string(b)
+				if i := strings.IndexByte(s, '\n'); i > 0 {
+					s = s[:i]
+				}
+				colon := strings.IndexByte(s, ':')
+				if colon <= 0 || colon > 78 {
+					return false
+				}
+				for _, r := range s[:colon] {
+					if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') ||
+						(r >= '0' && r <= '9') || r == '-' || r == '_') {
+						return false
+					}
+				}
+				return true
+			}
+			text := string(buf)
+			if isRFC822(buf) {
+				if mr, mrErr := gomail.CreateReader(bytes.NewReader(buf)); mrErr == nil {
+					var plain, html string
+					for {
+						p, err := mr.NextPart()
+						if err != nil {
+							break
+						}
+						ih, ok := p.Header.(*gomail.InlineHeader)
+						if !ok {
+							io.Copy(io.Discard, p.Body)
+							continue
+						}
+						ct, _, _ := ih.ContentType()
+						body, rerr := io.ReadAll(p.Body)
+						if rerr != nil {
+							continue
+						}
+						switch ct {
+						case "text/plain":
+							if plain == "" {
+								plain = string(body)
+							}
+						case "text/html":
+							if html == "" {
+								html = string(body)
+							}
+						}
+					}
+					mr.Close()
+					switch {
+					case plain != "":
+						text = filter.CleanPlain(plain)
+					case html != "":
+						text = filter.CleanHTML(html)
+					default:
+						text = ""
+					}
+				}
+			}
 			resultCh <- bodyLoadedMsg{uid: uid, blocks: content.ParseBlocks(text)}
 		}()
 		select {
@@ -218,79 +278,6 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 	}
 }
 
-// extractDisplayText converts a fetched body buffer into markdown ready
-// for content.ParseBlocks. RFC822 input is walked via emersion/go-mail
-// to extract the preferred inline text part (text/plain over text/html);
-// non-RFC822 input (e.g. the mock backend's pre-cleaned markdown) is
-// returned unchanged. The extracted text runs through filter.CleanPlain
-// (which auto-routes to CleanHTML when the part is HTML) so the output
-// is always normalized markdown.
-func extractDisplayText(buf []byte) string {
-	if !looksLikeRFC822(buf) {
-		return string(buf)
-	}
-	mr, err := gomail.CreateReader(bytes.NewReader(buf))
-	if err != nil {
-		return string(buf)
-	}
-	defer mr.Close()
-
-	var plain, html string
-	for {
-		p, err := mr.NextPart()
-		if err != nil {
-			break
-		}
-		ih, ok := p.Header.(*gomail.InlineHeader)
-		if !ok {
-			io.Copy(io.Discard, p.Body)
-			continue
-		}
-		ct, _, _ := ih.ContentType()
-		body, rerr := io.ReadAll(p.Body)
-		if rerr != nil {
-			continue
-		}
-		switch ct {
-		case "text/plain":
-			if plain == "" {
-				plain = string(body)
-			}
-		case "text/html":
-			if html == "" {
-				html = string(body)
-			}
-		}
-	}
-	switch {
-	case plain != "":
-		return filter.CleanPlain(plain)
-	case html != "":
-		return filter.CleanHTML(html)
-	default:
-		return ""
-	}
-}
-
-// looksLikeRFC822 sniffs whether buf opens with a plausible mail header.
-// Header lines have the shape `Field-Name: value`; a blank line ends the
-// header block. The check looks at the first non-empty line only.
-func looksLikeRFC822(buf []byte) bool {
-	s := string(buf)
-	if i := strings.IndexByte(s, '\n'); i > 0 {
-		s = s[:i]
-	}
-	colon := strings.IndexByte(s, ':')
-	if colon <= 0 || colon > 78 {
-		return false
-	}
-	for _, r := range s[:colon] {
-		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
-			return false
-		}
-	}
-	return true
-}
 
 // markReadCmd queues an optimistic FlagSeen=true op for uid against
 // folder, then re-reads the folder so the read-state flip surfaces.

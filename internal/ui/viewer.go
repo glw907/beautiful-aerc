@@ -304,7 +304,14 @@ func (v *Viewer) layout() {
 	v.links = urls
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel))
 	vp := viewport.New(contentWidth, bodyHeight)
-	vp.KeyMap = viewerViewportKeymap()
+	// Modifier-free viewport bindings: j/k for line nav, space/b for
+	// page nav. g/G are handled by the viewer wrapper itself.
+	vp.KeyMap = viewport.KeyMap{
+		Up:       key.NewBinding(key.WithKeys("k", "up")),
+		Down:     key.NewBinding(key.WithKeys("j", "down")),
+		PageDown: key.NewBinding(key.WithKeys(" ")),
+		PageUp:   key.NewBinding(key.WithKeys("b")),
+	}
 	vp.SetContent(body)
 	v.viewport = vp
 }
@@ -354,14 +361,3 @@ func viewerDateString(msg mail.MessageInfo) string {
 	return msg.SentAt.Format("Mon, Jan 2 2006 3:04 PM")
 }
 
-// viewerViewportKeymap configures the viewport with modifier-free
-// bindings: j/k for line nav, space/b for page nav. g/G are handled
-// by the viewer wrapper itself (not the viewport).
-func viewerViewportKeymap() viewport.KeyMap {
-	return viewport.KeyMap{
-		Up:       key.NewBinding(key.WithKeys("k", "up")),
-		Down:     key.NewBinding(key.WithKeys("j", "down")),
-		PageDown: key.NewBinding(key.WithKeys(" ")),
-		PageUp:   key.NewBinding(key.WithKeys("b")),
-	}
-}

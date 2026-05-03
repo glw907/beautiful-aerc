@@ -115,7 +115,11 @@ func (m ConfirmModal) Box(w, h int) string {
 	}
 	contentW := boxW - 2
 
-	body := confirmWrap(m.req.Body, contentW)
+	wrapW := contentW
+	if wrapW < 1 {
+		wrapW = 1
+	}
+	body := ansi.Hardwrap(ansi.Wordwrap(m.req.Body, wrapW, ""), wrapW, false)
 	bodyLines := strings.Split(body, "\n")
 
 	var b strings.Builder
@@ -149,10 +153,3 @@ func (m ConfirmModal) Position(box string, totalW, totalH int) (int, int) {
 	return centerOverlay(box, totalW, totalH)
 }
 
-// confirmWrap wordwraps body text to width, hardwrapping long tokens.
-func confirmWrap(s string, width int) string {
-	if width < 1 {
-		width = 1
-	}
-	return ansi.Hardwrap(ansi.Wordwrap(s, width, ""), width, false)
-}

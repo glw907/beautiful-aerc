@@ -251,7 +251,16 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case backendUpdateMsg:
 		cmds := []tea.Cmd{pumpUpdatesCmd(m.acct.Backend())} // re-arm pump
 		if msg.update.Type == mail.UpdateConnState {
-			m.statusBar = m.statusBar.SetConnectionState(translateConnState(msg.update.ConnState))
+			var cs ConnectionState
+			switch msg.update.ConnState {
+			case mail.ConnConnected:
+				cs = Connected
+			case mail.ConnReconnecting:
+				cs = Reconnecting
+			default:
+				cs = Offline
+			}
+			m.statusBar = m.statusBar.SetConnectionState(cs)
 		}
 		// Other Update types (UpdateNewMail, UpdateFlagsChanged, etc.)
 		// delegate to AccountTab in a later pass.
@@ -410,18 +419,6 @@ func (m App) View() string {
 	}
 
 	return frame
-}
-
-// translateConnState maps mail.ConnState to the UI ConnectionState type.
-func translateConnState(s mail.ConnState) ConnectionState {
-	switch s {
-	case mail.ConnConnected:
-		return Connected
-	case mail.ConnReconnecting:
-		return Reconnecting
-	default:
-		return Offline
-	}
 }
 
 // IsLinkPickerOpen reports whether the link picker overlay is visible.

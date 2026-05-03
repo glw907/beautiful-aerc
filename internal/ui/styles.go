@@ -77,6 +77,7 @@ type Styles struct {
 	HelpTitle       lipgloss.Style
 	HelpGroupHeader lipgloss.Style
 	HelpKey         lipgloss.Style
+	HelpBoxBorder   lipgloss.Style
 
 	// Placeholder text
 	Dim lipgloss.Style
@@ -229,6 +230,10 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgBright).Bold(true),
 		HelpKey: lipgloss.NewStyle().
 			Foreground(t.FgBright).Bold(true),
+		HelpBoxBorder: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder(), false, true, true, true).
+			BorderForeground(t.BgBorder).
+			Padding(1, 2),
 
 		Dim: lipgloss.NewStyle().
 			Foreground(t.FgDim),

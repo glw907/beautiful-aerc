@@ -112,11 +112,14 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 	case key.Matches(keyMsg, p.keys.Close):
 		return p, func() tea.Msg { return LinkPickerClosedMsg{} }
 	}
-	if idx, ok := parseLinkKey(keyMsg.String(), len(p.links)); ok {
-		return p, tea.Batch(
-			func() tea.Msg { return LaunchURLMsg{URL: p.links[idx]} },
-			func() tea.Msg { return LinkPickerClosedMsg{} },
-		)
+	if s := keyMsg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+		idx := int(s[0] - '1')
+		if idx < len(p.links) {
+			return p, tea.Batch(
+				func() tea.Msg { return LaunchURLMsg{URL: p.links[idx]} },
+				func() tea.Msg { return LinkPickerClosedMsg{} },
+			)
+		}
 	}
 	return p, nil
 }
@@ -269,19 +272,6 @@ func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
 	return centerOverlay(box, totalW, totalH)
 }
 
-// parseLinkKey decodes a 1-9 keypress into a link index. Returns
-// (idx, true) when the key is a digit in [1, count]; (0, false)
-// otherwise. Shared by the viewer's quick-launch and the link picker.
-func parseLinkKey(s string, count int) (int, bool) {
-	if len(s) != 1 || s[0] < '1' || s[0] > '9' {
-		return 0, false
-	}
-	idx := int(s[0] - '1')
-	if idx >= count {
-		return 0, false
-	}
-	return idx, true
-}
 
 // centerOverlay returns the top-left (x, y) cell coordinates that
 // center box on (totalW, totalH). Shared by the help popover and the

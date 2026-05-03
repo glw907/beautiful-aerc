@@ -177,15 +177,18 @@ func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
 	inner := body + "\n\n" + renderHintLine(h.styles, bottomHints)
 
 	// Wrap inner in a rounded box, with top border drawn manually
-	// so the title can be embedded. Border(style, top, right, bottom, left).
-	b := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder(), false, true, true, true).
-		BorderForeground(h.styles.FrameBorder.GetForeground()).
-		Padding(1, 2).
-		Render(inner)
+	// so the title can be embedded. Style is defined in styles.go.
+	b := h.styles.HelpBoxBorder.Render(inner)
 
 	boxWidth := lipgloss.Width(b)
-	topEdge := h.renderTopEdge(title, boxWidth)
+	titleSeg := h.styles.HelpTitle.Render(title)
+	border := h.styles.FrameBorder
+	prefix := border.Render("╭─ ") + titleSeg + border.Render(" ")
+	pad := boxWidth - lipgloss.Width(prefix) - 1 // -1 for the closing ╮
+	if pad < 0 {
+		pad = 0
+	}
+	topEdge := prefix + border.Render(strings.Repeat("─", pad)+"╮")
 	popover := topEdge + "\n" + b
 
 	if boxWidth > width || lipgloss.Height(popover) > height {
@@ -220,18 +223,6 @@ func (h HelpPopover) View(width, height int) string {
 	)
 }
 
-// renderTopEdge builds "╭─ <title> ───╮" at the box's natural width.
-func (h HelpPopover) renderTopEdge(title string, boxWidth int) string {
-	titleSeg := h.styles.HelpTitle.Render(title)
-	border := h.styles.FrameBorder
-	prefix := border.Render("╭─ ") + titleSeg + border.Render(" ")
-	visible := lipgloss.Width(prefix) + 1 // +1 for the closing ╮
-	pad := boxWidth - visible
-	if pad < 0 {
-		pad = 0
-	}
-	return prefix + border.Render(strings.Repeat("─", pad)+"╮")
-}
 
 // renderAccountLayout builds the four-section layout for the
 // account context: three rows (Nav/Triage/Reply, then
