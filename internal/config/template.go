@@ -43,7 +43,7 @@ const templateBody = `# poplar — terminal email client
 #
 # A "preset" is a built-in shortcut that fills in the right
 # server name, port, and auth method for a known mail host. Set
-` + "`provider`" + ` to a preset name and poplar handles the rest — you
+# ` + "`provider`" + ` to a preset name and poplar handles the rest — you
 # only supply your email and password.
 #
 # If your provider isn't listed (or you run your own server),
