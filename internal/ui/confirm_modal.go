@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -28,10 +27,8 @@ type ConfirmModalYesMsg struct{}
 // ConfirmModal is a yes/no confirmation overlay. App owns it and composes it
 // via Box + Position + PlaceOverlay, mirroring MovePicker and LinkPicker.
 type ConfirmModal struct {
-	open   bool
+	shell  ModalShell
 	req    ConfirmRequest
-	width  int
-	height int
 	styles Styles
 	keys   confirmKeys
 }
@@ -53,31 +50,30 @@ func NewConfirmModal(styles Styles) ConfirmModal {
 }
 
 // IsOpen reports whether the modal is visible.
-func (m ConfirmModal) IsOpen() bool { return m.open }
+func (m ConfirmModal) IsOpen() bool { return m.shell.IsOpen() }
 
 // Open transitions the modal into the open state with req.
 func (m ConfirmModal) Open(req ConfirmRequest) ConfirmModal {
-	m.open = true
+	m.shell = m.shell.WithOpen(true)
 	m.req = req
 	return m
 }
 
 // Close transitions the modal out of view.
 func (m ConfirmModal) Close() ConfirmModal {
-	m.open = false
+	m.shell = m.shell.WithOpen(false)
 	return m
 }
 
 // SetSize updates dimensions. App threads WindowSizeMsg here.
 func (m ConfirmModal) SetSize(width, height int) ConfirmModal {
-	m.width = width
-	m.height = height
+	m.shell = m.shell.SetSize(width, height)
 	return m
 }
 
 // Update dispatches a key while the modal is open.
 func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
-	if !m.open {
+	if !m.shell.IsOpen() {
 		return m, nil
 	}
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -100,17 +96,14 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 const (
 	confirmModalMaxWidth = 50
 	confirmModalMinWidth = 24
-	// confirmModalBorderOverhead is the cell-width cost of "┌─" + "┐"
-	// around the inset title row.
-	confirmModalBorderOverhead = 3
 )
 
 // View renders the modal or "" when closed.
 func (m ConfirmModal) View() string {
-	if !m.open {
+	if !m.shell.IsOpen() {
 		return ""
 	}
-	return m.Box(m.width, m.height)
+	return m.Box(m.shell.Width(), m.shell.Height())
 }
 
 // Box returns the rendered modal at the size derived from (w, h).
@@ -131,34 +124,20 @@ func (m ConfirmModal) Box(w, h int) string {
 	body := ansi.Hardwrap(ansi.Wordwrap(m.req.Body, wrapW, ""), wrapW, false)
 	bodyLines := strings.Split(body, "\n")
 
-	var b strings.Builder
-
-	// Top border with inset title.
-	title := " " + m.req.Title + " "
-	rest := boxW - confirmModalBorderOverhead - lipgloss.Width(title)
-	if rest < 0 {
-		rest = 0
-	}
-	b.WriteString("┌─" + title + strings.Repeat("─", rest) + "┐\n")
-
-	// Body rows.
-	for _, line := range bodyLines {
-		b.WriteString("│" + padOrTruncate(line, contentW) + "│\n")
+	// Pad body lines to exactly contentW cells.
+	bodyRows := make([]string, len(bodyLines))
+	for i, line := range bodyLines {
+		bodyRows[i] = padOrTruncate(line, contentW)
 	}
 
-	// Separator + help row.
-	b.WriteString("├" + strings.Repeat("─", contentW) + "┤\n")
-
+	// Footer row: help text.
 	help := "[y] yes   [n] no   [esc] cancel"
-	b.WriteString("│" + m.styles.Dim.Render(padOrTruncate(help, contentW)) + "│\n")
+	footerRows := []string{m.styles.Dim.Render(padOrTruncate(help, contentW))}
 
-	b.WriteString("└" + strings.Repeat("─", contentW) + "┘")
-
-	return b.String()
+	return m.shell.Box(m.styles, m.req.Title, bodyRows, footerRows, contentW)
 }
 
 // Position returns the centered top-left for PlaceOverlay.
 func (m ConfirmModal) Position(box string, totalW, totalH int) (int, int) {
 	return centerOverlay(box, totalW, totalH)
 }
-
