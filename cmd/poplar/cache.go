@@ -318,6 +318,66 @@ func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) 
 	return nil
 }
 
+// newCacheVacuumCmd assembles the `poplar cache vacuum` subcommand.
 func newCacheVacuumCmd() *cobra.Command {
-	return &cobra.Command{Use: "vacuum", Hidden: true, Short: "stub"}
+	var account string
+	c := &cobra.Command{
+		Use:          "vacuum",
+		Short:        "VACUUM the per-account SQLite cache (reclaim free pages after eviction)",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVacuum(cmd.Context(), cmd.OutOrStdout(), account)
+		},
+	}
+	c.Flags().StringVar(&account, "account", "", "Limit to one account by name (default: all accounts)")
+	return c
+}
+
+// runVacuum opens each account's database and runs VACUUM, reporting
+// before/after file sizes.
+func runVacuum(ctx context.Context, w io.Writer, scope string) error {
+	accts, _, err := loadAccounts()
+	if err != nil {
+		return err
+	}
+	matched := false
+	for _, a := range accts {
+		if scope != "" && a.Name != scope {
+			continue
+		}
+		matched = true
+		dbPath, err := cacheDBPath(a.Name)
+		if err != nil {
+			return err
+		}
+		before, _ := fileSize(dbPath)
+		// VACUUM cannot run inside a transaction or with concurrent
+		// writers. Use a short-lived dedicated connection with no
+		// pool — single-connection bypass.
+		db, err := openCacheDB(dbPath)
+		if err != nil {
+			return err
+		}
+		db.SetMaxOpenConns(1)
+		if _, err := db.ExecContext(ctx, `VACUUM`); err != nil {
+			db.Close()
+			return fmt.Errorf("vacuum %s: %w", a.Name, err)
+		}
+		db.Close()
+		after, _ := fileSize(dbPath)
+		fmt.Fprintf(w, "vacuumed %s: %s → %s\n", a.Name, humanizeBytes(before), humanizeBytes(after))
+	}
+	if scope != "" && !matched {
+		return fmt.Errorf("account %q not found", scope)
+	}
+	return nil
+}
+
+// fileSize returns the size of the file at path in bytes.
+func fileSize(path string) (int64, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), nil
 }
