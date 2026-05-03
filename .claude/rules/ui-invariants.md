@@ -117,10 +117,12 @@ file describes behavior, not the key tables.
   is set on first attempt regardless of outcome — failures land in
   the error banner; no retry-loop. **Manual empty:** `E` on
   Disposal folders → `OpenConfirmEmptyMsg` → App opens
-  `ConfirmModal` → `EmptyFolderConfirmedMsg` → `emptyFolderCmd`
-  pages `cache.QueryFolder` in 1000-unit batches → `enqueueDestroys`
+  `ConfirmModal` and stores `pendingEmptyConfirm{folder, source}`
+  → user accepts → `ConfirmModalYesMsg` → App emits
+  `EmptyFolderConfirmedMsg` → `emptyFolderCmd` pages
+  `cache.QueryFolder` in 1000-unit batches → `enqueueDestroys`
   fan-out. Toast renders `Emptied <Folder> (<N>)` and suppresses
-  `[u undo]` (toast keys off `op == "empty"`).
+  `[u undo]` (toast keys off `op == opEmpty`).
 - `ErrorMsg{Op, Err}` is the canonical Cmd error type. Every
   fallible `tea.Cmd` returns it with a short verb-phrase `Op`
   ("mark read", "fetch body", "purge expired"). `App` owns
