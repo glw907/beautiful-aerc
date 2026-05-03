@@ -160,6 +160,10 @@ func (a *Account) AccountEmail() string {
 	return a.Backend.AccountEmail()
 }
 
+// DB exposes the underlying *sql.DB for tests and CLI introspection.
+// Production callers should go through the Account's typed methods.
+func (a *Account) DB() *sql.DB { return a.db }
+
 // Dir is the per-account cache directory on disk.
 func (a *Account) Dir() string { return a.dir }
 

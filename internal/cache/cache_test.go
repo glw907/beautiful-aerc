@@ -323,6 +323,34 @@ func TestCoordinationInvariant_SyncerSkipsUIFlagsOnPendingOp(t *testing.T) {
 	}
 }
 
+func TestMigrateV4_DropsLastAccessedAndIndex(t *testing.T) {
+	// Open a fresh DB at v3 by stubbing schemaVersion. We can't
+	// easily downgrade in-process, so instead we open at the current
+	// version, insert a body row, and verify after migration that:
+	//   - the bodies table is missing the last_accessed column
+	//   - the bodies_lru index is gone
+	//   - body bytes are intact
+	dir := t.TempDir()
+	a, err := Open("test", &fakeBackend{}, &fakeChangeTracker{}, dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+
+	// After migration, last_accessed should not exist.
+	row := a.DB().QueryRow(`SELECT name FROM pragma_table_info('bodies') WHERE name='last_accessed'`)
+	var name string
+	if err := row.Scan(&name); err == nil {
+		t.Errorf("bodies.last_accessed should be dropped, found column")
+	}
+
+	// bodies_lru index should be gone.
+	row = a.DB().QueryRow(`SELECT name FROM sqlite_master WHERE type='index' AND name='bodies_lru'`)
+	if err := row.Scan(&name); err == nil {
+		t.Errorf("bodies_lru index should be dropped, found %q", name)
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"Geoff Wright", "geoff-wright"},

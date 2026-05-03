@@ -9,7 +9,7 @@ import (
 
 // schemaVersion is the current schema version. Migrations from any
 // older version up to this one run in order at Open.
-const schemaVersion = 3
+const schemaVersion = 4
 
 // migration applies one schema version step inside a single
 // transaction. Index 0 holds the v0→v1 step.
@@ -21,6 +21,7 @@ var migrations = []migration{
 	migrateV1, // v0 → v1: full Cache I schema (spec §A.3)
 	migrateV2, // v1 → v2: next_eligible_at on outbox
 	migrateV3, // v2 → v3: backend-reported exists/unseen on folders
+	migrateV4, // v3 → v4: drop last_accessed + bodies_lru (Cache II policy)
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -121,6 +122,23 @@ func migrateV3(tx *sql.Tx) error {
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
 			return fmt.Errorf("migrate v3: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV4 narrows the bodies table to (message, bytes, fetched_at).
+// Cache II adopts a lazy-population, no-LRU policy (ADR-0122 forthcoming);
+// last_accessed and its index are obsolete. SQLite has supported
+// DROP COLUMN since 3.35 (March 2021); modernc.org/sqlite is past that.
+func migrateV4(tx *sql.Tx) error {
+	stmts := []string{
+		`DROP INDEX IF EXISTS bodies_lru`,
+		`ALTER TABLE bodies DROP COLUMN last_accessed`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("migrate v4: %w", err)
 		}
 	}
 	return nil
