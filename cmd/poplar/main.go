@@ -12,6 +12,7 @@ func main() {
 	cmd.AddCommand(newThemesCmd())
 	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newDiagnoseCmd())
+	cmd.AddCommand(newCacheCmd())
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
