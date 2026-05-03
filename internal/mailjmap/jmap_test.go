@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -452,23 +451,21 @@ func TestFetchBody_CacheMissAndHit(t *testing.T) {
 	b := newBodyTestBackend(uid, blobID, dl)
 
 	// First call: cache miss → download.
-	r1, err := b.FetchBody(uid)
+	buf1, err := b.FetchBody(uid)
 	if err != nil {
 		t.Fatalf("FetchBody first call: %v", err)
 	}
-	got1, _ := io.ReadAll(r1)
-	if string(got1) != string(body) {
-		t.Errorf("first read = %q, want %q", got1, body)
+	if string(buf1) != string(body) {
+		t.Errorf("first read = %q, want %q", buf1, body)
 	}
 
 	// Second call: cache hit → no download.
-	r2, err := b.FetchBody(uid)
+	buf2, err := b.FetchBody(uid)
 	if err != nil {
 		t.Fatalf("FetchBody second call: %v", err)
 	}
-	got2, _ := io.ReadAll(r2)
-	if string(got2) != string(body) {
-		t.Errorf("second read = %q, want %q", got2, body)
+	if string(buf2) != string(body) {
+		t.Errorf("second read = %q, want %q", buf2, body)
 	}
 
 	if n := calls.Load(); n != 1 {
@@ -494,12 +491,12 @@ func TestFetchBody_SingleflightCollapse(t *testing.T) {
 	const n = 10
 	var wg sync.WaitGroup
 	errs := make([]error, n)
-	readers := make([]io.Reader, n)
+	bufs := make([][]byte, n)
 	wg.Add(n)
 	for i := range n {
 		go func(i int) {
 			defer wg.Done()
-			readers[i], errs[i] = b.FetchBody(uid)
+			bufs[i], errs[i] = b.FetchBody(uid)
 		}(i)
 	}
 
@@ -513,10 +510,9 @@ func TestFetchBody_SingleflightCollapse(t *testing.T) {
 			t.Errorf("goroutine %d: %v", i, err)
 		}
 	}
-	for i, r := range readers {
-		got, _ := io.ReadAll(r)
-		if string(got) != string(body) {
-			t.Errorf("goroutine %d: read = %q, want %q", i, got, body)
+	for i, buf := range bufs {
+		if string(buf) != string(body) {
+			t.Errorf("goroutine %d: read = %q, want %q", i, buf, body)
 		}
 	}
 

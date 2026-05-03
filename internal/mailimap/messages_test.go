@@ -4,7 +4,6 @@ package mailimap
 
 import (
 	"context"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -265,7 +264,7 @@ func TestFetchHeadersThreadingFields(t *testing.T) {
 
 // --- FetchBody ---
 
-func TestFetchBodyReturnsReader(t *testing.T) {
+func TestFetchBodyReturnsBytes(t *testing.T) {
 	cmd := newFakeClient()
 	cmd.caps = baseCaps()
 	cmd.bodies[mail.UID("7")] = "Hello, world!"
@@ -277,16 +276,12 @@ func TestFetchBodyReturnsReader(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	r, err := b.FetchBody("7")
+	buf, err := b.FetchBody("7")
 	if err != nil {
 		t.Fatalf("FetchBody: %v", err)
 	}
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if string(data) != "Hello, world!" {
-		t.Errorf("body = %q, want 'Hello, world!'", string(data))
+	if got := string(buf); got != "Hello, world!" {
+		t.Errorf("body = %q, want 'Hello, world!'", got)
 	}
 }
 

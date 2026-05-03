@@ -201,14 +201,9 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		resultCh := make(chan tea.Msg, 1)
 		go func() {
-			r, err := c.FetchBody(uid)
+			buf, err := c.FetchBody(uid)
 			if err != nil {
 				resultCh <- ErrorMsg{Op: "fetch body", Err: err}
-				return
-			}
-			buf, err := io.ReadAll(r)
-			if err != nil {
-				resultCh <- ErrorMsg{Op: "read body", Err: err}
 				return
 			}
 			text := extractDisplayText(buf)

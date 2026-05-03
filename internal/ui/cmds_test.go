@@ -5,7 +5,6 @@ package ui
 import (
 	"context"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,9 +32,9 @@ func (b *blockingBackend) QueryFolder(_ string, _, _ int) ([]mail.UID, int, erro
 }
 func (b *blockingBackend) FetchHeaders(_ []mail.UID) ([]mail.MessageInfo, error) { return nil, nil }
 
-func (b *blockingBackend) FetchBody(_ mail.UID) (io.Reader, error) {
+func (b *blockingBackend) FetchBody(_ mail.UID) ([]byte, error) {
 	<-b.release
-	return strings.NewReader("body"), nil
+	return []byte("body"), nil
 }
 
 func (b *blockingBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }

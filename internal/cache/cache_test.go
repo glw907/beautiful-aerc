@@ -36,7 +36,7 @@ func (f *fakeBackend) QueryFolder(_ string, _, _ int) ([]mail.UID, int, error) {
 func (f *fakeBackend) FetchHeaders(_ []mail.UID) ([]mail.MessageInfo, error) {
 	return f.headers, nil
 }
-func (f *fakeBackend) FetchBody(_ mail.UID) (io.Reader, error) { return strings.NewReader(""), nil }
+func (f *fakeBackend) FetchBody(_ mail.UID) ([]byte, error) { return []byte{}, nil }
 func (f *fakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) {
 	return nil, nil
 }

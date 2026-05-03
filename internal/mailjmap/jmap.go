@@ -8,7 +8,6 @@
 package mailjmap
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -597,11 +596,12 @@ func firstInReplyTo(ids []string) string {
 	return ids[0]
 }
 
-// FetchBody satisfies mail.Backend. It returns the raw message blob for
-// uid, using an LRU cache to avoid redundant downloads. Concurrent callers
-// for the same blobID are collapsed via singleflight so only one download
-// runs. FetchHeaders must be called first to populate the blobID map.
-func (b *Backend) FetchBody(uid mail.UID) (io.Reader, error) {
+// FetchBody satisfies mail.Backend. Returns the raw RFC 822 body for
+// uid, using an LRU cache to avoid redundant downloads. Concurrent
+// callers for the same blobID are collapsed via singleflight so only
+// one download runs. FetchHeaders must be called first to populate
+// the blobID map.
+func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	b.mu.Lock()
 	blobID, ok := b.blobIDs[uid]
 	cache := b.bodies
@@ -612,7 +612,7 @@ func (b *Backend) FetchBody(uid mail.UID) (io.Reader, error) {
 	}
 
 	if buf, hit := cache.Get(blobID); hit {
-		return bytes.NewReader(buf), nil
+		return buf, nil
 	}
 
 	v, err, _ := b.bodyGroup.Do(blobID, func() (any, error) {
@@ -629,7 +629,7 @@ func (b *Backend) FetchBody(uid mail.UID) (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch body: %w", err)
 	}
-	return bytes.NewReader(v.([]byte)), nil
+	return v.([]byte), nil
 }
 
 // Search satisfies mail.Backend. Sidebar search filters in-memory in

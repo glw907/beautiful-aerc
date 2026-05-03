@@ -39,7 +39,7 @@ type Backend interface {
 	QueryFolder(name string, offset, limit int) (uids []UID, total int, err error)
 
 	FetchHeaders(uids []UID) ([]MessageInfo, error)
-	FetchBody(uid UID) (io.Reader, error)
+	FetchBody(uid UID) ([]byte, error)
 
 	Search(criteria SearchCriteria) ([]UID, error)
 

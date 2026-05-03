@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -193,7 +192,7 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 
 // FetchBody is a Cache II concern; for Cache I it falls straight
 // through to the backend. The bodies table is unused this pass.
-func (a *Account) FetchBody(uid mail.UID) (io.Reader, error) {
+func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 	if a.Backend == nil {
 		return nil, errors.New("cache: no backend")
 	}

@@ -154,9 +154,8 @@ func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 }
 
 // FetchBody satisfies mail.Backend. Returns the raw RFC 822 body for
-// the given UID as an io.Reader. The caller is responsible for closing
-// the reader if it implements io.Closer.
-func (b *Backend) FetchBody(uid mail.UID) (io.Reader, error) {
+// the given UID, drained from the IMAP client's underlying reader.
+func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	b.mu.Lock()
 	cmd := b.cmd
 	b.mu.Unlock()
@@ -165,7 +164,12 @@ func (b *Backend) FetchBody(uid mail.UID) (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch body %s: %w", uid, err)
 	}
-	return rc, nil
+	defer rc.Close()
+	buf, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, fmt.Errorf("fetch body %s: read: %w", uid, err)
+	}
+	return buf, nil
 }
 
 // Search satisfies mail.Backend. It forwards the SearchCriteria to the

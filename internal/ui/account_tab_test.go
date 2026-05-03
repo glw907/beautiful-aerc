@@ -837,7 +837,7 @@ func (b *pagingFakeBackend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, e
 	}
 	return result, nil
 }
-func (b *pagingFakeBackend) FetchBody(_ mail.UID) (io.Reader, error)          { return nil, nil }
+func (b *pagingFakeBackend) FetchBody(_ mail.UID) ([]byte, error)             { return nil, nil }
 func (b *pagingFakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
 func (b *pagingFakeBackend) Move(_ []mail.UID, _ string) error                { return nil }
 func (b *pagingFakeBackend) Copy(_ []mail.UID, _ string) error                { return nil }

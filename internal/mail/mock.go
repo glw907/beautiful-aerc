@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 )
 
@@ -134,11 +133,11 @@ func (m *MockBackend) FetchHeaders(_ []UID) ([]MessageInfo, error) {
 // path (styled spans straddling the 72-col cap, nested quotes, long
 // URLs, code blocks, list hanging indent, footnote markers at the
 // column boundary). Unmapped UIDs fall back to a short default.
-func (m *MockBackend) FetchBody(uid UID) (io.Reader, error) {
+func (m *MockBackend) FetchBody(uid UID) ([]byte, error) {
 	if body, ok := mockBodies[uid]; ok {
-		return strings.NewReader(body), nil
+		return []byte(body), nil
 	}
-	return strings.NewReader(fmt.Sprintf("Mock body for message %s\n\nNo extended content available for this UID.", uid)), nil
+	return []byte(fmt.Sprintf("Mock body for message %s\n\nNo extended content available for this UID.", uid)), nil
 }
 
 // mockBodies holds realistic markdown bodies keyed by UID, chosen to
