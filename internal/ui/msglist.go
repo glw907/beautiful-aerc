@@ -196,7 +196,7 @@ func (m *MessageList) rebuild() {
 		applyFoldState(rows, m.folded)
 	}
 	for i := range rows {
-		rows[i].dateText = displayDate(rows[i].msg, m.now)
+		rows[i].dateText = displayDate(rows[i].msg, m.now, 5)
 	}
 	m.rows = rows
 }
