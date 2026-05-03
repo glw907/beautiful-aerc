@@ -341,18 +341,8 @@ func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, ico
 	return out
 }
 
-// canonicalDefaultRank is the implicit in-group sort key for each
-// canonical folder. Custom folders (Canonical == "") fall through to
-// the non-canonical default and are ordered alphabetically.
-var canonicalDefaultRank = map[string]int{
-	"Inbox":   100,
-	"Drafts":  200,
-	"Sent":    300,
-	"Archive": 400,
-	"Spam":    100,
-	"Trash":   200,
-}
-
+// nonCanonicalDefaultRank is the rank assigned to custom folders
+// (Canonical == ""). It sorts after every canonical default.
 const nonCanonicalDefaultRank = 1000
 
 // sortEntries orders a group by (rank, display name). Rank comes
@@ -373,8 +363,18 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 	if fc := uiCfg.Folders[cf.ConfigKey()]; fc.RankSet {
 		return fc.Rank
 	}
-	if r, ok := canonicalDefaultRank[cf.Canonical]; ok {
-		return r
+	// In-group default ranks for canonicals. Primary group:
+	// Inbox/Drafts/Sent/Archive at 100/200/300/400. Disposal group:
+	// Spam/Trash at 100/200.
+	switch cf.Canonical {
+	case "Inbox", "Spam":
+		return 100
+	case "Drafts", "Trash":
+		return 200
+	case "Sent":
+		return 300
+	case "Archive":
+		return 400
 	}
 	return nonCanonicalDefaultRank
 }
