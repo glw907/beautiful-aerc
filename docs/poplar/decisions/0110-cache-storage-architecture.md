@@ -1,6 +1,6 @@
 ---
 title: Cache 0 — local mail cache storage architecture
-status: accepted
+status: accepted (narrowed by 0114, 0115)
 date: 2026-05-02
 ---
 
@@ -66,3 +66,11 @@ account and uses `ChangeTracker.Changes(ctx, folder, since)
   ChangeTracker), 8.4b (bodies + eviction + CLI), 8.4c (outbox +
   offline + overlays). Each pass has its own plan; review pass
   (8.4-review) gates implementation.
+- **Narrowed by ADR-0115** — `messages` schema uses a junction
+  table `message_mailboxes` rather than a `folder` column +
+  `UNIQUE (folder, protocol_id)`, to fit JMAP's
+  one-Email-N-mailboxes shape.
+- **Narrowed by ADR-0114** — UIDVALIDITY re-key contract is
+  spelled out (atomic transaction, connection fence, explicit
+  promotion of orphaned outbox rows to `conflict`); the bare
+  "FK CASCADE handles it" framing in this ADR is insufficient.

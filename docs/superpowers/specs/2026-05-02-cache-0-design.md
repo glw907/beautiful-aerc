@@ -1,8 +1,31 @@
 # Cache 0 — Local Mail Cache Design
 
-**Spec date:** 2026-05-02
+**Spec date:** 2026-05-02 (revised 2026-05-02)
 **Pass:** 8.4 (design) → 8.4-review → 8.4-revise → 8.4a/b/c (implementation)
-**Status:** unreviewed — see `docs/superpowers/reviews/` after Pass 8.4-review for findings
+**Status:** reviewed (2026-05-02) — implementation-ready. See revision history below.
+
+## Review notes
+
+Pass 8.4-review (`docs/superpowers/reviews/2026-05-02-cache-0-review.md`)
+flagged 12 must-fix and 10 should-fix findings. Pass 8.4-revise applied
+all must-fixes and most should-fixes inline. Decisions that reversed
+or substantively narrowed ADRs 0110 / 0111 / 0112 produced new ADRs:
+
+- **ADR-0113** — drain-first sync ordering (RFC 4549 §6); syncer/
+  drainer coordination invariant. Supersedes ADR-0112 sync-first.
+- **ADR-0114** — UIDVALIDITY re-key contract; `anchor-lost` and
+  `rekey-orphaned` outbox promotion paths. Narrows ADR-0110/0112.
+- **ADR-0115** — JMAP one-row-per-Email-per-account model; junction
+  table `message_mailboxes`. Narrows ADR-0110.
+- **ADR-0116** — outbox terminal classification: `max-attempts = 10`
+  default, auth-failure → conflict, crashed-mid-execute send →
+  conflict. Supersedes ADR-0112 failure handling.
+- **ADR-0117** — typed `Op` sum, name-based folder ops, drainer→UI
+  `Events()` channel, undo via compensating `tea.Cmd` only.
+  Supersedes parts of ADR-0111.
+
+Should-fix findings deferred to backlog (none — all applied or
+covered by the new ADRs).
 
 ## Purpose
 
@@ -56,7 +79,8 @@ $XDG_CACHE_HOME/poplar/<account-slug>/mail.db
 Linux/macOS use `$XDG_CACHE_HOME` (or `~/.cache`); Windows uses
 `%LOCALAPPDATA%\poplar`. macOS deliberately overrides the Application
 Support default, consistent with the config-file precedent
-(ADR-0102).
+(ADR-0102). The default is resolved via `os.UserCacheDir()`; the
+`[cache] dir` config value is tilde-expanded before use.
 
 `<account-slug>` is the account name from `config.toml` lower-cased,
 with non-`[a-z0-9-]` characters replaced by `-`. Slug collisions
@@ -110,8 +134,7 @@ CREATE TABLE folders (
 
 CREATE TABLE messages (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  folder       INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
-  protocol_id  TEXT    NOT NULL,                -- IMAP: UID stringified; JMAP: Email id
+  protocol_id  TEXT    NOT NULL UNIQUE,         -- IMAP: UID stringified; JMAP: Email id
   thread_id    TEXT,
   in_reply_to  TEXT,
   subject      TEXT,
@@ -124,11 +147,21 @@ CREATE TABLE messages (
   flags        INTEGER NOT NULL DEFAULT 0,      -- server-confirmed flags (mail.Flag bits)
   size         INTEGER,
   ui_flags     INTEGER NOT NULL DEFAULT 0,      -- optimistic UI-side flags
-  ui_hide      INTEGER NOT NULL DEFAULT 0,      -- 0/1; mid-move source hides from list
-  UNIQUE (folder, protocol_id)
+  ui_hide      INTEGER NOT NULL DEFAULT 0       -- 0/1; mid-move source hides from list
 );
-CREATE INDEX messages_folder_sent ON messages(folder, sent_at DESC);
-CREATE INDEX messages_thread      ON messages(folder, thread_id);
+
+-- Folder membership. IMAP: one row per message (lives in exactly one
+-- folder). JMAP: N rows per Email (mailboxIds is a set). Move = swap
+-- the row(s); copy (IMAP) = additional row.
+CREATE TABLE message_mailboxes (
+  message INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  folder  INTEGER NOT NULL REFERENCES folders(id)  ON DELETE CASCADE,
+  PRIMARY KEY (message, folder)
+);
+CREATE INDEX message_mailboxes_folder ON message_mailboxes(folder);
+
+CREATE INDEX messages_sent   ON messages(sent_at DESC);
+CREATE INDEX messages_thread ON messages(thread_id);
 
 CREATE TABLE bodies (
   message       INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
@@ -143,7 +176,7 @@ CREATE TABLE outbox (
   folder       INTEGER NOT NULL REFERENCES folders(id)  ON DELETE CASCADE,
   message      INTEGER          REFERENCES messages(id) ON DELETE CASCADE,
   kind         TEXT    NOT NULL,                -- 'move' | 'flag' | 'destroy' | 'send' | 'append' | ...
-  args         TEXT    NOT NULL,                -- JSON; type-specific
+  args         TEXT    NOT NULL,                -- JSON; type-specific (encoded from typed Op sum, see C.2)
   enqueued_at  INTEGER NOT NULL,
   status       TEXT    NOT NULL DEFAULT 'pending',
   attempts     INTEGER NOT NULL DEFAULT 0,
@@ -151,9 +184,10 @@ CREATE TABLE outbox (
   error        TEXT                             -- JSON: {kind, message, detail}
 );
 CREATE INDEX outbox_pending ON outbox(id) WHERE status IN ('pending', 'failed');
+CREATE INDEX outbox_message ON outbox(message) WHERE status IN ('pending', 'executing');
 ```
 
-Two non-obvious schema choices:
+Three non-obvious schema choices:
 
 - **`messages` carries `ui_flags` and `ui_hide` separately from
   `flags`.** `flags` reflects what the server has confirmed;
@@ -162,9 +196,28 @@ Two non-obvious schema choices:
   converge them. `ui_hide` lets a mid-move source message hide from
   the source folder before the server has confirmed the move. (Source:
   FairEmail's `EntityMessage` model.)
-- **`messages.protocol_id` is `TEXT`, not `INTEGER`.** JMAP `Email`
-  ids are strings; IMAP UIDs are stringified. The cache layer is
-  protocol-agnostic.
+- **`messages.protocol_id` is `TEXT`, not `INTEGER`, and is unique
+  per account (the DB is per-account, so this is account-scoped).**
+  JMAP `Email` ids are strings; IMAP UIDs are stringified. The cache
+  layer is protocol-agnostic.
+- **Folder membership lives in `message_mailboxes`, not on
+  `messages`.** This accommodates JMAP semantics natively (one
+  `Email` may live in N mailboxes; `Email/set update mailboxIds` is
+  a set operation, not a row move). For IMAP a message lives in
+  exactly one folder, so the junction holds a single row per
+  message; an IMAP `MOVE` rewrites the junction row in the same
+  transaction as the protocol_id update. Replaces the rejected
+  `messages.folder` + `UNIQUE (folder, protocol_id)` shape from the
+  pre-revise spec, which couldn't represent JMAP cleanly (see
+  ADR-0115).
+
+**CONDSTORE assertion (IMAP).** The IMAP backend asserts CONDSTORE
+support at `Connect` (alongside the existing UIDPLUS assertion). On
+NOMODSEQ servers, `Connect` fails with a clear error directing the
+user to a different account configuration. Same shape as UIDPLUS;
+keeps `ChangeTracker` semantics uniform across servers and avoids a
+NOMODSEQ-only fallback path that would be exercised rarely and
+silently rot.
 
 ### A.4 Schema versioning and migrations
 
@@ -224,12 +277,35 @@ not Cache 0.)
 
 ```go
 type ChangeTracker interface {
-    // Changes returns the set of message ids that were added,
-    // modified, or removed in folder since the given token.
+    // Changes returns the complete set of message ids that were
+    // added, modified, or removed in folder since the given token.
+    //
+    // Implementations MUST loop internally until the backend reports
+    // no more pages (JMAP: hasMoreChanges = false; IMAP: VANISHED
+    // and FETCH responses fully drained). Callers receive a
+    // single complete delta or an error; partial deltas are an
+    // implementation bug.
+    //
+    // Errors:
+    //   - ErrCannotCalculateChanges (sentinel) — backend reports
+    //     the cached SyncToken is too stale to compute a delta
+    //     (JMAP cannotCalculateChanges, IMAP UIDVALIDITY change).
+    //     The cache responds with the forced-refetch path defined
+    //     in §D.4 (pre-wipe remap by protocol_id; unremapped
+    //     pending outbox rows promoted to conflict with
+    //     error.kind = 'anchor-lost').
+    //   - context errors — propagated.
+    //   - other errors — transient; the syncer applies backoff.
+    //
     // SyncToken is opaque []byte; backends encode/decode their own
     // representation (JMAP: state string; IMAP: (uidvalidity, modseq, maxuid)).
     Changes(ctx context.Context, folder string, since SyncToken) (ChangeSet, SyncToken, error)
 }
+
+// ErrCannotCalculateChanges is returned by Changes when the backend
+// cannot compute a delta from the supplied token. The cache responds
+// by re-anchoring the folder (see §D.4).
+var ErrCannotCalculateChanges = errors.New("mail: cannot calculate changes")
 
 type SyncToken []byte
 
@@ -278,14 +354,22 @@ func (a *Account) QueryFolder(name string, offset, limit int) ([]MessageInfo, in
 func (a *Account) FetchHeaders(uids []UID) ([]MessageInfo, error)
 func (a *Account) FetchBody(uid UID) (io.Reader, error)
 
-// UI-facing writes (all enqueue into outbox):
-func (a *Account) QueueOp(ctx context.Context, op Op) error
+// UI-facing writes (all enqueue into outbox).
+// Folder is the canonical folder name (Inbox, Sent, …); the cache
+// resolves to the row id internally inside the same transaction.
+func (a *Account) QueueOp(ctx context.Context, folder string, msgID int64, args OpArgs) error
 
 // Status + control:
 func (a *Account) IsOnline() bool
 func (a *Account) Outbox() ([]OutboxRow, error)
 func (a *Account) Conflicts() ([]OutboxRow, error)
 func (a *Account) ResolveConflict(opID int64, action ResolveAction) error
+
+// Drainer→UI signal channel. App's pumpCacheCmd ranges this and
+// re-emits CacheEvent values as tea.Msg into the program loop. The
+// cache package never holds *tea.Program (preserves the layer
+// boundary in §B.1).
+func (a *Account) Events() <-chan CacheEvent
 ```
 
 `App` constructs `*cache.Cache` and threads `*cache.Account` into
@@ -324,30 +408,42 @@ offline, the row sits until reconnect. Same code, both paths.
 
 ### C.2 Op kinds
 
+`OpArgs` is a sealed sum at the Go layer; the on-disk `args TEXT`
+column carries its JSON encoding. The kind string in the `kind`
+column is derived from the concrete `OpArgs` type at insert time.
+
 ```go
-type Op struct {
-    Kind   string                 // 'move' | 'flag' | 'destroy' | 'send' | 'append'
-    Folder int64                  // source folder row id
-    Msg    sql.NullInt64          // message row id (NULL for folder-level ops)
-    Args   map[string]interface{} // type-specific; serialized as JSON
-}
+type OpArgs interface{ opArgs() }
+
+type MoveArgs    struct { Dest string }            // dest folder name
+type FlagArgs    struct { Flag mail.Flag; Set bool }
+type DestroyArgs struct{}
+type SendArgs    struct { /* Pass 9 */ }
+type AppendArgs  struct { /* Pass 9 */ }
+
+func (MoveArgs)    opArgs() {}
+func (FlagArgs)    opArgs() {}
+func (DestroyArgs) opArgs() {}
+func (SendArgs)    opArgs() {}
+func (AppendArgs)  opArgs() {}
 ```
 
 Kind catalog (Cache 0 scope marked **bold**):
 
-- **`move`** — `args = {dest: <folder-name>}`. Optimistic: set
-  `ui_hide = 1` on source row.
-- **`flag`** — `args = {flag: <name>, set: <bool>}`. Optimistic:
-  update `ui_flags`.
-- **`destroy`** — `args = {}`. Optimistic: `ui_hide = 1`; row deleted
-  on success.
+- **`move`** — `MoveArgs{Dest}`. Optimistic: set `ui_hide = 1` on
+  source row.
+- **`flag`** — `FlagArgs{Flag, Set}`. Optimistic: update `ui_flags`.
+- **`destroy`** — `DestroyArgs{}`. Optimistic: `ui_hide = 1`; row
+  deleted on success.
 - `send` — Pass 9 (Compose). Schema accommodates; not implemented in
   Cache 0–III.
 - `append` — Pass 9. APPEND a local message to a server folder
   (used by Send to copy outgoing into Sent).
 
-Adding a kind is `INSERT INTO outbox` with a new `kind` string +
-recognizing it in the drainer's dispatcher. No schema migration.
+Adding a kind is a new `OpArgs` impl + drainer dispatcher case + a
+new kind string. No schema migration. The on-disk `args` JSON
+schema is part of the v1.0-frozen format; new fields on existing
+kinds must be additive (and unknown fields tolerated on read).
 
 ### C.3 Optimistic UI semantics
 
@@ -363,6 +459,17 @@ recognizing it in the drainer's dispatcher. No schema migration.
 - The UI never observes intermediate state. Reads always go through
   `cache.Account` methods; those methods return only rows where
   `ui_hide = 0`.
+
+**Syncer/drainer coordination invariant.** The syncer (`Changes()`
+poll loop, also fed by JMAP push and IMAP IDLE) MUST NOT update
+`ui_flags` for any message whose `messages.id` appears in an outbox
+row with status `pending` or `executing`. The syncer updates only
+`flags`. The drainer is solely responsible for converging
+`ui_flags → flags` after backend confirmation. Without this
+invariant, a server-side change pushed during an in-flight queued
+flag op would revert the optimistic display before the drainer
+runs. (The `outbox_message` partial index supports the EXISTS
+check.)
 
 ## D. Outbox state machine and replay
 
@@ -412,10 +519,13 @@ On startup, ops in `executing` state are reclassified:
 - **Idempotent kinds (`move`, `flag`, `destroy`)** — reset to
   `pending`. Safe to replay; the conflict matrix handles "already
   applied" as success.
-- **Non-idempotent kinds (`send`)** — reset to `failed` with
-  `error.kind = 'crashed-mid-execute'`. User must resolve via
-  Conflicts overlay. (This matters for Pass 9; mentioned here so
-  Cache 0's schema accommodates it.)
+- **Non-idempotent kinds (`send`)** — reset to `conflict` with
+  `error.kind = 'crashed-mid-execute'`. User must resolve via the
+  `!` Conflicts overlay. Resetting to `failed` would cycle
+  `executing → failed → pending → executing → …` forever on a
+  reproducible crash; promotion to `conflict` requires explicit user
+  acknowledgement. (This matters for Pass 9; mentioned here so
+  Cache 0's schema and the conflict-overlay UX accommodate it.)
 
 ### D.3 Replay strategy
 
@@ -423,28 +533,71 @@ On startup, ops in `executing` state are reclassified:
 (`ORDER BY id`). One op at a time. No drain-time coalescing. Across
 accounts: parallel.
 
+**Drainer query.** The drainer's pickup query is:
+
+```sql
+SELECT * FROM outbox
+WHERE status IN ('pending', 'failed')
+  AND (last_attempt IS NULL OR last_attempt < :now - backoff(attempts))
+ORDER BY id
+LIMIT 1
+```
+
+A `failed` op whose backoff window has not elapsed is **skipped**;
+later `pending` ops on the same account proceed. This non-blocking
+behavior is an explicit invariant — the drainer never head-of-line
+blocks the whole queue on a single failed op (K-9's MessagingController
+takes the opposite stance, which we deliberately reject; rationale in
+review B3).
+
 **Per-op execution.**
 
 1. Mark `status = 'executing'`, `last_attempt = now`, `attempts++`.
 2. Read joined `messages.protocol_id` for the op's `message` row
    (gets the current UID/JMAP id, which may differ from when
    enqueued).
-3. Dispatch on `kind`; call the appropriate `Backend` method.
+3. Dispatch on the typed `OpArgs`; call the appropriate `Backend`
+   method.
 4. On success → `status = 'done'`, optionally apply confirmation
-   side-effects (e.g., move op → delete source `messages` row).
+   side-effects (e.g., move op → update `message_mailboxes`).
 5. On `notFound` from backend (message destroyed remotely) →
    `status = 'done'` (idempotent success).
 6. On other backend conflict (folder gone, etc.) → `status =
    'conflict'`, populate `error`.
-7. On network error → `status = 'failed'`, populate `error`. Backoff
+7. On 4xx authentication error → `status = 'conflict'`,
+   `error.kind = 'auth-failure'`. Does not enter the backoff loop.
+   User resolves by re-authenticating (Pass 9.6 token refresh; until
+   then, restarting `password-cmd` and re-launching). This prevents
+   the OAuth-token-expires-mid-drain infinite-retry trap (review D3).
+8. On network error → `status = 'failed'`, populate `error`. Backoff
    timer governs retry.
+9. When `attempts >= max-attempts > 0`, transition `failed →
+   conflict` with `error.kind = 'max-attempts-exceeded'`. Default
+   `max-attempts = 10`. Setting `max-attempts = 0` (unlimited)
+   remains opt-in for users who want indefinite retry on intermittent
+   networks (review B6 / D3).
 
-**Sync-first ordering.** Before draining the queue on reconnect, the
-sync goroutine runs `ChangeTracker.Changes()` first. This applies
-remote deltas (including remote-removes that CASCADE-delete queue
-rows referencing them) before we attempt to replay against
-potentially-stale state. Source: Thunderbird's wiki recommendation;
-also intuitive — fetch first, then act.
+**Drain-first ordering.** On reconnect, the per-account scheduler
+drains the outbox **before** running `ChangeTracker.Changes()`. RFC
+4549 §6 ("Processing Offline Queues") explicitly mandates queued
+client actions before pulling server-side changes; the spec follows
+the RFC. The FK CASCADE protection still works under drain-first
+because `notFound` from the backend is already a `done` outcome in
+the conflict matrix — a remote-removed message produces idempotent
+success during drain, then the subsequent `Changes()` cycle reaps
+the cache row.
+
+(IMAP UIDVALIDITY signals received during drain fence both
+connections until re-key completes; see §D.4. Replaces the
+sync-first ordering rejected in ADR-0113.)
+
+**Drainer→UI signals.** The drainer publishes `CacheEvent` values on
+`(*Account).Events()` after each terminal transition (`done`,
+`conflict`). `App` runs a `pumpCacheCmd` (mirroring `pumpUpdatesCmd`
+for `mail.Update`) that ranges this channel and re-emits the values
+as `tea.Msg` into the program loop. The cache package never holds a
+`*tea.Program` reference. UI redraws on `CacheEvent` reception
+(message list refresh, conflict-count badge, status bar).
 
 **Why no coalescing.** I considered batching same-kind/same-args ops
 into single backend calls (Thunderbird's strategy). Dropping it for
@@ -474,22 +627,79 @@ Cache 0 because:
 | `flag(msg, F, set)`   | Backend `notFound`                                                                                         | Idempotent success.                                                                                       |
 | `destroy(msg)`        | Backend already destroyed (or `notFound`)                                                                  | Idempotent success. (JMAP spec: `notFound` in `Email/set destroy` is success. IMAP UID EXPUNGE: no-op.)   |
 | `send(msg)`           | Pass 9.                                                                                                     | Pass 9.                                                                                                    |
+| Any                   | Backend returns 4xx authentication error                                                                   | `status = 'conflict'`, `error.kind = 'auth-failure'`. Bypasses backoff loop.                              |
+| Any                   | `attempts >= max-attempts > 0`                                                                              | `failed → conflict`, `error.kind = 'max-attempts-exceeded'`.                                              |
+| Any                   | `messages` row deleted during UIDVALIDITY re-key                                                           | `pending`/`executing` → `conflict`, `error.kind = 'rekey-orphaned'` (before CASCADE).                     |
+| Any                   | `messages` row deleted during forced full-refetch (`cannotCalculateChanges` / re-key fallback)             | `pending`/`executing` → `conflict`, `error.kind = 'anchor-lost'` (before CASCADE).                        |
+| `send(msg)`           | Crashed mid-execute on restart                                                                             | `executing → conflict`, `error.kind = 'crashed-mid-execute'` (Pass 9).                                    |
 
-**UIDVALIDITY change handling.** The IMAP folder sync code (Cache I)
-detects UIDVALIDITY change on `OpenFolder` and re-keys (or wipes and
-re-fetches) the folder's `messages` rows. Because outbox rows
-reference `messages.id` (not UIDs), they continue to work — at
-replay, the queue reads `messages.protocol_id` fresh and gets the
-new UID. If a message row is deleted because the protocol couldn't
-remap it, CASCADE removes the outbox row too. **No
-UIDVALIDITY-specific code in the queue.**
+**UIDVALIDITY re-key contract (IMAP).** The pre-revise spec
+delegated re-key behavior to "the IMAP folder sync code"; the
+review (D-pattern-1) flagged that this is load-bearing and
+under-specified. The Cache I implementation MUST honor this
+contract:
+
+1. **Connection fence.** A UIDVALIDITY change observed on either
+   the command connection (after a `SELECT` reply) or the IDLE
+   connection (mid-IDLE, on reconnect) fences both connections:
+   the drainer is paused for the affected folder, in-flight ops
+   are aborted (transitions back from `executing` to `pending`),
+   IDLE is dropped, and re-key runs against a freshly-opened
+   command connection.
+2. **Atomic re-key.** Re-key runs in a single SQLite transaction.
+   The implementation does `UID SEARCH ALL` (optionally narrowed
+   by `Date.Sent`) plus `UID FETCH (UID FLAGS RFC822.HEADER)` to
+   build an old→new `protocol_id` mapping (matched by Message-ID
+   and date when possible). Inside the transaction:
+   - Update `messages.protocol_id` for matched rows.
+   - Delete `messages` rows that didn't match.
+   - Promote any pending/executing outbox row whose `messages` row
+     was deleted to `conflict` with
+     `error.kind = 'rekey-orphaned'` *before* the implicit CASCADE
+     would silently destroy it. (CASCADE still runs for any
+     leftover, but the explicit promotion fires first and writes
+     the user-visible conflict row.)
+   - Update `folders.uidvalidity` and reset `folders.sync_token`.
+3. **Resume.** On commit, the drainer is unpaused; the syncer's
+   next tick fetches the new `Changes()` baseline.
+
+If the implementation cannot do an authoritative remap (e.g.,
+`UID SEARCH` itself fails), the fallback is the forced-refetch path
+described next — it shares an implementation path.
+
+**`cannotCalculateChanges` / forced full-refetch (JMAP & IMAP).**
+JMAP servers return `cannotCalculateChanges` when the cached
+`SyncToken` is too stale; the IMAP path falls back here when re-key
+matching fails. Both must avoid silent data loss for pending outbox
+rows:
+
+1. Fetch the full current folder listing into a staging set.
+2. For each existing `messages` row in the folder, attempt to remap
+   by `protocol_id` against the staging set. Matched rows survive
+   with their existing `messages.id`. Unmatched rows are queued for
+   delete.
+3. Before deleting, promote any pending/executing outbox row whose
+   `messages` row would be deleted to `conflict` with
+   `error.kind = 'anchor-lost'`.
+4. Commit deletes + insert new staging rows in one transaction.
+
+This shares an implementation path with the UIDVALIDITY re-key
+above; both are special cases of "wipe-and-re-anchor with pending-
+op promotion."
+
+**Outbox-row references stay at `messages.id`.** Because outbox
+rows reference `messages.id` (not UIDs/JMAP ids), they continue to
+work across re-keys — at replay, the queue reads
+`messages.protocol_id` fresh and gets the current id. The promotion
+paths above are for the cases where the message row itself cannot
+survive the re-anchor.
 
 This is the load-bearing reason Cache 0 uses local-row references in
 the queue, not UIDs. Thunderbird's offline-IMAP queue wipes on
-UIDVALIDITY change (`DeleteAllOfflineOpsForCurrentDB()`); offlineimap
-and mbsync hard-stop the folder. FairEmail's design dissolves the
-problem by not putting UIDs in the queue. Adopting FairEmail's
-approach.
+UIDVALIDITY change (`DeleteAllOfflineOpsForCurrentDB()`) — silent
+data loss; the cited K-9 path has the same shape. FairEmail's design
+dissolves the problem by not putting UIDs in the queue. Adopting
+FairEmail's approach plus the explicit promotion paths above.
 
 ## E. Eviction (body cache)
 
@@ -516,7 +726,18 @@ All configured under `[cache]`:
 
 - At startup (after migration, before serving UI).
 - On a hourly timer while running.
-- After any body fetch that pushes total over `max-size`.
+- **Before** any body insert that would push total over `max-size`,
+  not after — `SQLITE_FULL` fires before a post-insert eviction
+  could free space (review D6). The drainer pre-checks
+  `(total + new_body_size) > max_size` and runs eviction inline if
+  so.
+- When free disk space on the cache filesystem drops below a low
+  watermark (`free_disk < 256MB` or `free_disk < 5% of partition`,
+  whichever is larger). Eviction may exceed the `max-size`
+  reduction target to restore the watermark.
+- On `EROFS` / `ENOSPC` (see §I) the cache pauses body inserts and
+  surfaces a banner; header inserts and outbox writes continue
+  best-effort against WAL until that too fills.
 
 ### E.4 Pinned bodies
 
@@ -549,7 +770,8 @@ New top-level `[cache]` block in `config.toml`:
 ```toml
 [cache]
 # Storage
-dir              = "~/.cache/poplar"  # base; per-account subdir auto-created
+dir              = "~/.cache/poplar"  # base; per-account subdir auto-created.
+                                      # Tilde-expanded; default os.UserCacheDir().
 max-size         = "2GB"
 max-age          = "90d"
 max-per-folder   = 0                  # 0 = no cap
@@ -562,7 +784,9 @@ offline-grace    = "30s"              # consecutive failures before flipping to 
 outbox-retention = "7d"               # how long 'done' ops persist for audit
 backoff-min      = "1s"
 backoff-max      = "60s"
-max-attempts     = 0                  # 0 = retry network failures forever
+max-attempts     = 10                 # cap; 0 = retry network failures forever (opt-in).
+                                      # On exceed, failed → conflict with
+                                      # error.kind = 'max-attempts-exceeded'.
 ```
 
 `config.LoadCache()` mirrors `config.LoadUI()` (ADR-0102). Defaults
@@ -656,34 +880,66 @@ called out so the review pass can verify the design holds.
    independent.
 10. **SQLite WAL grows unbounded.** Periodic `wal_checkpoint(TRUNCATE)`
     on the drain goroutine's idle ticks.
+11. **OAuth token expires mid-drain (review D3).** Auth errors map
+    to `conflict` with `error.kind = 'auth-failure'`, not the
+    backoff loop. User re-authenticates.
+12. **Forced full-refetch destroys pending intent (review D4 /
+    D-pattern-2).** `cannotCalculateChanges` and IMAP re-key
+    fallback both run the pre-wipe remap path in §D.4. Unremapped
+    pending rows → `conflict` with `error.kind = 'anchor-lost'`.
+13. **UIDVALIDITY change mid-drain (review D9 / D-pattern-1).**
+    Either-connection observation fences both connections;
+    in-flight ops abort; re-key runs atomically. See §D.4.
+14. **`ResolveConflict` races the drainer (review D5).**
+    `ResolveConflict` issues `UPDATE ... WHERE id = ? AND status =
+    'conflict'` and checks `RowsAffected`; `0` returns a
+    user-visible "already changed" error that triggers an overlay
+    refresh. SQLite WAL serializes the write; the drainer never
+    promotes a `conflict` row, so the only race is user-vs-user
+    via the same overlay (a `discard` on a row another action just
+    `retry`'d) — handled by the same `RowsAffected` check.
+15. **Account removed from config while DB has pending ops (review
+    D10).** Startup scans `$XDG_CACHE_HOME/poplar/*/mail.db`. Any
+    DB whose slug doesn't resolve to a configured account and has
+    non-`done` outbox rows surfaces a startup warning naming the
+    account and the pending count. The DB is not auto-deleted;
+    user runs `poplar cache clear --account <slug> --confirm`.
+16. **Disk full / read-only filesystem (review C7 / D6).** `EROFS`
+    and `ENOSPC` from SQLite writes flip the cache to a
+    degraded mode: body inserts paused, header inserts and outbox
+    writes attempted best-effort, error banner shows "cache disk
+    unavailable." UI reads continue from existing rows.
 
-## J. Open questions deferred to review
+## J. Open questions — review outcomes
 
-These are choices I'm least confident in and want explicit review
-attention on:
+The pre-revise spec listed five open questions. Pass 8.4-review +
+8.4-revise resolved each:
 
-1. **Unified write path migration cost.** Current poplar (Pass 8.3)
-   has triage methods that call the backend directly with App-layer
-   optimistic UI. Cache 0 routes them through the cache. Pass 8.4a's
-   plan must spell out the migration path for `AccountTab` and the
-   triage Cmd functions.
-2. **`ui_flags` + `ui_hide` split.** This duplicates state on the
-   message row. Source-vetted (FairEmail), but adds complexity. Is
-   the alternative (single-state with sync converging it) actually
-   broken, or just less explicit?
-3. **No drain-time coalescing.** Reversed my earlier position; want
-   review to confirm dropping it doesn't paint the JMAP backend into
-   a corner.
-4. **`max-attempts = 0` (retry network failures forever).**
-   Alternative: cap and convert to `conflict`. Argument for forever:
-   a laptop offline for a month should resume cleanly. Argument
-   against: a permanent server-side issue (deleted folder, revoked
-   credential) would loop forever without this surfacing as a
-   conflict.
-5. **`!` and `Q` overlay keys.** No surveyed client ships these UIs;
-   we're inventing. Are these the right keybindings (`!` for
-   conflicts, `Q` for outbox)? Are they discoverable enough for
-   power users without colliding with vim conventions?
+1. **Unified write path migration cost** — resolved. Pass 8.4a's
+   plan (`docs/superpowers/plans/2026-05-02-cache-i-implementation.md`)
+   prescribes a strangler-fig order: cache writes first (with
+   `MessageList.Apply*` and old backend Cmds still alive), then
+   cache-backed reads, then deletion of the legacy paths. The
+   intermediate window is safe because the cache becomes the single
+   source of truth at step 2 (review C1).
+2. **`ui_flags` + `ui_hide` split** — confirmed. The split is
+   load-bearing once the syncer/drainer coordination invariant
+   (§C.3) is in place. A single-state design would force the syncer
+   to either suppress server updates for in-flight ops (same
+   complexity in a different place) or stomp the optimistic state
+   (review B4).
+3. **No drain-time coalescing** — confirmed. JMAP backend is free
+   to coalesce at the `Email/set` boundary; IMAP per-op latency
+   is acceptable on a long-lived connection. Revisit if profiling
+   later shows otherwise.
+4. **`max-attempts` default** — changed from `0` (forever) to `10`
+   (cap). Permanent failures (auth, deleted folder, server quota)
+   no longer loop silently. Users on intermittent links can still
+   set `max-attempts = 0` (review B6 / D3, ADR-0116).
+5. **`!` and `Q` overlay keys** — kept as-is (TUI-native invention,
+   no conflict with vim conventions on the account view). Revisit
+   if user feedback during pre-beta shows discovery friction;
+   helped by help-popover entries (ADR-0072).
 
 ## Sources read for this design
 
@@ -703,3 +959,17 @@ attention on:
 - himalaya — confirmed: stateless CLI, no offline.
 - offlineimap / mbsync — UIDVALIDITY hard-stop pattern (rejected).
 - Outlook (CEM) — silent-Conflicts-folder pattern (rejected).
+- K-9 Mail `MessagingControllerCommands.java`,
+  `MessagingController.java`, `OutboxStateRepository.kt` — explicit
+  `RETRIES_EXCEEDED` terminal state (adopted as
+  `max-attempts-exceeded`); UID-in-blob queue (rejected, same
+  failure mode as Thunderbird desktop); head-of-line-blocking
+  drainer (rejected).
+- Camel (Evolution) `camel-imapx-folder.c`,
+  `camel-imapx-message-info.c` — server-flags-only model; surfaces
+  the syncer-vs-drainer ordering risk that the §C.3 coordination
+  invariant addresses.
+- RFC 4549 §6 — drain-first ordering for offline queues
+  (ADR-0113).
+- RFC 7162 — CONDSTORE/QRESYNC; CONDSTORE asserted at IMAP
+  Connect.

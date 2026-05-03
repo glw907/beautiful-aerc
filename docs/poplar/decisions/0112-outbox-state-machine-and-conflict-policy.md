@@ -1,6 +1,6 @@
 ---
 title: Cache 0 — outbox queue, replay state machine, and conflict policy
-status: accepted
+status: accepted (sync ordering superseded by 0113; failure handling superseded by 0116; UIDVALIDITY contract narrowed by 0114)
 date: 2026-05-02
 ---
 
@@ -124,3 +124,19 @@ the outbox row.
   (FairEmail, K-9, Thunderbird, Mailspring); only Outlook is
   server-wins. We follow the OSS majority; documented for future
   review if user complaints emerge.
+- **Superseded by ADR-0113** — sync ordering is drain-first, not
+  sync-first (RFC 4549 §6). Plus a syncer/drainer coordination
+  invariant: the syncer MUST NOT update `ui_flags` for messages
+  with a `pending`/`executing` outbox row.
+- **Superseded by ADR-0116** — failure classification:
+  `max-attempts = 10` default with `failed → conflict
+  (max-attempts-exceeded)` on cap; auth errors → `conflict
+  (auth-failure)`, bypassing backoff; crashed-mid-execute send →
+  `conflict`, not `failed`.
+- **Narrowed by ADR-0114** — the bare "no UIDVALIDITY-specific
+  code in the queue" framing is insufficient; the IMAP folder
+  sync code now has a binding contract (atomic re-key, connection
+  fence, explicit promotion of orphaned rows to `conflict`). The
+  queue still references `messages.id` and remains
+  UIDVALIDITY-agnostic; the contract just defines what happens to
+  rows whose `messages` row can't survive re-anchor.

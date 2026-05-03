@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.4-revise next — apply Cache 0 review findings.
+**Current pass:** Pass 8.4a next — Cache I implementation.
 
 ## Passes
 
@@ -12,8 +12,8 @@
 | 8.3 | Polish I — msglist, viewer (ADR-0109) | done |
 | 8.4 | Cache 0 — design + spec + ADR-0110/0111/0112 | done |
 | 8.4-review | Independent multi-angle review of Cache 0 spec → findings doc | done |
-| 8.4-revise | Apply review findings; produce revised spec + Pass 8.4a brief | next |
-| 8.4a | Cache I — schema + headers + `mail.ChangeTracker` impls; unified write path migration | pending |
+| 8.4-revise | Apply review findings; revised spec + ADR-0113/0114/0115/0116/0117; Pass 8.4a brief | done |
+| 8.4a | Cache I — schema + headers + `mail.ChangeTracker` impls; unified write path migration | next |
 | 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | pending |
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
 | 8.6 | Attachments I — backend (#24) | pending |
@@ -28,20 +28,26 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.4-revise)
+## Next starter prompt (Pass 8.4a)
 
-> **Goal.** Apply Pass 8.4-review findings to the Cache 0 spec
-> and ADRs 0110/0111/0112; write the Pass 8.4a implementation brief.
+> **Goal.** Implement Cache I — per-account SQLite (schema v1),
+> `mail.ChangeTracker` interface and JMAP/IMAP impls, unified
+> write path through `cache.QueueOp`, strangler-fig migration from
+> direct-`mail.Backend` triage Cmds to cache-backed reads. Online
+> behavior only; outbox table is written to but offline-detection,
+> `Q`/`!` overlays, and status badge land in Cache III (8.4c).
 >
 > **Approach.** Fresh session. Read
-> `docs/superpowers/plans/2026-05-02-cache-0-revise.md` end-to-end —
-> it has the full step-by-step. Work from the spec, the review at
-> `docs/superpowers/reviews/2026-05-02-cache-0-review.md`, and the
-> ADRs only. Do NOT load history from Pass 8.4 or 8.4-review.
+> `docs/superpowers/plans/2026-05-02-cache-i-implementation.md`
+> end-to-end — it has the full ordered task list. Source of truth
+> for design is `docs/superpowers/specs/2026-05-02-cache-0-design.md`
+> (status: reviewed) plus ADR-0110/0111/0112/0113/0114/0115/0116/0117.
+> The strangler-fig order (cache writes → cache-backed reads →
+> delete legacy paths) is mandatory.
 >
-> **Outputs.** Revised spec; new ADRs where decisions reverse; Pass
-> 8.4a brief at
-> `docs/superpowers/plans/<TODAY>-cache-i-implementation.md`. No
-> code. Standard pass-end ritual (skip /simplify and `make install`).
-> Recommend `/ultrareview` on the resulting branch in the commit
-> message — Cache 0 is the v1.0-frozen on-disk contract.
+> **Outputs.** New `internal/cache/` package, `mail.ChangeTracker`
+> interface + two backend impls, `mail.Backend` shrunk to `Flag`,
+> UI rewired through `*cache.Account`, App-layer optimistic-state
+> plumbing deleted, comprehensive tests. Standard pass-end ritual
+> (with `/simplify`, idiomatic-bubbletea check, tmux verification
+> at 80×24 and 120×40, and `make install`).

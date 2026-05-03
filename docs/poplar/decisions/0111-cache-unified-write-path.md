@@ -1,6 +1,6 @@
 ---
 title: Cache 0 — unified write path through cache.QueueOp
-status: accepted
+status: accepted (parts superseded by 0117)
 date: 2026-05-02
 ---
 
@@ -78,3 +78,10 @@ implemented in Cache 0–III.
   abstraction (`mail.Backend`) becomes invisible to the UI.
 - Pre-beta (ADR-0105): refactor freedom permits the API rename.
   Beta-soak does not.
+- **Superseded in part by ADR-0117** — `QueueOp` takes a folder
+  *name* (not a row id), an `OpArgs` sealed sum (not
+  `map[string]interface{}`), and the cache exposes
+  `Events() <-chan CacheEvent` for drainer→UI signaling. Undo's
+  synchronous-mutation half is dropped; undo fires only the
+  compensating `tea.Cmd`. The unified-write-path principle and the
+  `ui_flags` / `ui_hide` columns stand.
