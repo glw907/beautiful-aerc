@@ -97,7 +97,10 @@ func TestAccountTab(t *testing.T) {
 	t.Run("view shows account name", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 20)
 		view := stripANSI(tab.View())
-		if !strings.Contains(view, "geoff@907.life") {
+		// Account name may be truncated with … when the sidebar is narrow
+		// (e.g. sw=14 at terminal width=80). Check for the first 10 chars
+		// which are stable across all plausible sidebar widths.
+		if !strings.Contains(view, "geoff@907.") {
 			t.Error("sidebar should show account name")
 		}
 	})

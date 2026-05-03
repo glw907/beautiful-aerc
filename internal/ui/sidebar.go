@@ -38,6 +38,7 @@ type Sidebar struct {
 	selected int
 	styles   Styles
 	icons    IconSet
+	layout   LayoutMode
 	width    int
 	height   int
 }
@@ -189,6 +190,15 @@ func (s *Sidebar) SetSize(width, height int) {
 	s.height = height
 }
 
+// SetLayout updates the layout-driven widths and icon toggle. The
+// caller (AccountTab) calls this once per WindowSizeMsg, before
+// rendering. Sidebar's own width tracking remains via SetSize for
+// height; SetLayout supplies the width and icon toggle.
+func (s *Sidebar) SetLayout(l LayoutMode) {
+	s.layout = l
+	s.width = l.Sidebar
+}
+
 // MoveUp moves the selection up by one.
 func (s *Sidebar) MoveUp() {
 	if s.selected > 0 {
@@ -248,7 +258,8 @@ func (s Sidebar) View() string {
 
 // renderRow renders a single folder row with proper background layering.
 // The selection indicator ┃ always sits in column 0. All folders render
-// at the same indent regardless of nesting.
+// at the same indent regardless of nesting. The icon block is included
+// only when s.layout.Icons is true.
 func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) string {
 	isSelected := idx == s.selected
 	hasUnread := entry.cf.Folder.Unseen > 0
@@ -265,7 +276,14 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 		textStyle = s.styles.SidebarUnread
 	}
 
-	icon := applyBg(textStyle, bgStyle).Render(entry.icon)
+	var icon string
+	var leadCells int
+	if s.layout.Icons {
+		icon = applyBg(textStyle, bgStyle).Render(entry.icon)
+		leadCells = displayCells(indicator) + 1 + displayCells(icon) + 2
+	} else {
+		leadCells = displayCells(indicator) + 1
+	}
 
 	var countStr string
 	var countWidth int
@@ -274,11 +292,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 		countWidth = lipgloss.Width(countStr)
 	}
 
-	// Per-row layout (cells):
-	//   indicator(1) + sp(1) + icon(2 or 4) + sp×2
-	//   + name(labelBudget) + gap(>=1) + countStr + rightMargin(1)
 	const rightMargin = 1
-	leadCells := displayCells(indicator) + 1 + displayCells(icon) + 2
 	countGap := 0
 	if hasUnread {
 		countGap = 1
@@ -290,7 +304,12 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	displayName := displayTruncateEllipsis(entry.cf.DisplayName, labelBudget)
 	name := applyBg(textStyle, bgStyle).Render(displayName)
 
-	leftContent := indicator + bgStyle.Render(" ") + icon + bgStyle.Render("  ") + name
+	var leftContent string
+	if s.layout.Icons {
+		leftContent = indicator + bgStyle.Render(" ") + icon + bgStyle.Render("  ") + name
+	} else {
+		leftContent = indicator + bgStyle.Render(" ") + name
+	}
 	leftWidth := displayCells(leftContent)
 
 	gap := max(1, s.width-leftWidth-countWidth-rightMargin)

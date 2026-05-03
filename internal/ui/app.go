@@ -346,7 +346,7 @@ func (m App) renderFrame() string {
 	}
 	content := strings.Join(contentLines, "\n")
 
-	dividerCol := sidebarWidthFor(m.width)
+	dividerCol := ComputeLayout(m.width).Sidebar
 	topLine := m.topLine.View(m.width, dividerCol)
 	status := m.statusBar.View(m.width, dividerCol)
 	foot := m.footer.SetCounter(m.acct.WindowCounter()).View(m.width)

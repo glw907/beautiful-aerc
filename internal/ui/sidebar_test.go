@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -352,7 +353,8 @@ func TestSidebar_OrderedFolders(t *testing.T) {
 }
 
 // newTestSidebarWithFolder builds a Sidebar with a single custom folder
-// at the given width, display name, and unseen count.
+// at the given width, display name, and unseen count. Icons are enabled
+// (SimpleIcons) to match the pre-LayoutMode behavior of these tests.
 func newTestSidebarWithFolder(t *testing.T, w int, label string, unread int) *Sidebar {
 	t.Helper()
 	folders := []mail.ClassifiedFolder{
@@ -364,6 +366,7 @@ func newTestSidebarWithFolder(t *testing.T, w int, label string, unread int) *Si
 		},
 	}
 	s := NewSidebar(NewStyles(theme.OneDark), folders, config.DefaultUIConfig(), w, 5, SimpleIcons)
+	s.SetLayout(LayoutMode{Sidebar: w, Icons: true})
 	return &s
 }
 
@@ -403,6 +406,45 @@ func TestSidebarRenderRow_PreservesRightMargin(t *testing.T) {
 				t.Errorf("width=%d row %d: last rune %q, want space",
 					w, i, last)
 			}
+		}
+	}
+}
+
+func TestSidebarRenderRow_NoIcons(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	folders := []mail.ClassifiedFolder{
+		{DisplayName: "Inbox", Folder: mail.Folder{Name: "Inbox", Unseen: 3}, Group: mail.GroupPrimary},
+	}
+	s := NewSidebar(styles, folders, config.DefaultUIConfig(), 14, 10, IconSet{})
+	s.SetLayout(LayoutMode{Sidebar: 14, Icons: false})
+
+	got := s.View()
+	if !strings.Contains(got, "Inbox") {
+		t.Errorf("Inbox label missing from output:\n%s", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w != 14 {
+			t.Errorf("row width = %d, want 14: %q", w, line)
+		}
+	}
+}
+
+func TestSidebarRenderRow_WithIcons(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	folders := []mail.ClassifiedFolder{
+		{DisplayName: "Inbox", Folder: mail.Folder{Name: "Inbox", Unseen: 3}, Group: mail.GroupPrimary},
+	}
+	icons := SimpleIcons
+	s := NewSidebar(styles, folders, config.DefaultUIConfig(), 24, 10, icons)
+	s.SetLayout(LayoutMode{Sidebar: 24, Icons: true})
+
+	got := s.View()
+	if !strings.Contains(got, "Inbox") {
+		t.Errorf("Inbox label missing from output:\n%s", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w != 24 {
+			t.Errorf("row width = %d, want 24: %q", w, line)
 		}
 	}
 }
