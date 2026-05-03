@@ -61,3 +61,57 @@ func TestLookupBody_Hit(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestStoreBody_Insert(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	uid := mail.UID("store-me")
+	seedMessage(t, a, uid, time.Now())
+
+	body := []byte("RFC822 body bytes")
+	if err := a.storeBody(context.Background(), uid, body); err != nil {
+		t.Fatalf("storeBody: %v", err)
+	}
+
+	got, ok, err := a.lookupBody(context.Background(), uid)
+	if err != nil || !ok {
+		t.Fatalf("lookup after store: ok=%v err=%v", ok, err)
+	}
+	if string(got) != string(body) {
+		t.Errorf("got %q, want %q", got, body)
+	}
+}
+
+func TestStoreBody_Replace(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	uid := mail.UID("replace-me")
+	seedMessage(t, a, uid, time.Now())
+
+	if err := a.storeBody(context.Background(), uid, []byte("first")); err != nil {
+		t.Fatalf("first store: %v", err)
+	}
+	if err := a.storeBody(context.Background(), uid, []byte("second")); err != nil {
+		t.Fatalf("second store: %v", err)
+	}
+
+	got, _, err := a.lookupBody(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if string(got) != "second" {
+		t.Errorf("got %q, want %q", got, "second")
+	}
+}
+
+func TestStoreBody_UnknownUID(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	err := a.storeBody(context.Background(), mail.UID("never-seeded"), []byte("body"))
+	if err == nil {
+		t.Errorf("storeBody on unknown uid: nil error, want error")
+	}
+}

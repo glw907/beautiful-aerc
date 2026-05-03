@@ -32,5 +32,29 @@ func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, e
 	return buf, true, nil
 }
 
-// unused vars suppressed during phase 3a; remove when storeBody arrives.
-var _ = time.Time{}
+// storeBody writes body bytes into the bodies table for uid. The
+// caller has already cache-missed; this is the population path.
+// Returns an error if uid has no row in messages (caller bug — the
+// header row is established by SyncFolder/upsertMessages first).
+//
+// Cache II policy: no automatic eviction here. Phase 4 wires the
+// max-size backstop into this same path.
+func (a *Account) storeBody(ctx context.Context, uid mail.UID, body []byte) error {
+	return a.tx(ctx, func(tx *sql.Tx) error {
+		var msgID int64
+		err := tx.QueryRowContext(ctx, `SELECT id FROM messages WHERE protocol_id = ?`, string(uid)).Scan(&msgID)
+		if err != nil {
+			return fmt.Errorf("store body %s: lookup message: %w", uid, err)
+		}
+		_, err = tx.ExecContext(ctx, `
+            INSERT INTO bodies (message, bytes, fetched_at) VALUES (?, ?, ?)
+            ON CONFLICT(message) DO UPDATE SET
+              bytes      = excluded.bytes,
+              fetched_at = excluded.fetched_at`,
+			msgID, body, time.Now().UnixNano())
+		if err != nil {
+			return fmt.Errorf("store body %s: insert: %w", uid, err)
+		}
+		return nil
+	})
+}
