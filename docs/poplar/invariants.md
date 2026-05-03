@@ -212,3 +212,4 @@ invariant. ADR numbering is chronological.
 | Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
+| Local cache architecture (design accepted Pass 8.4; implementation 8.4a–c) — per-account SQLite, unified write path, outbox + state machine; spec at `docs/superpowers/specs/2026-05-02-cache-0-design.md` | 0110, 0111, 0112 |
