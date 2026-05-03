@@ -152,7 +152,7 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 			a.publish(row, OpConflict, dispatchErr)
 			return
 		}
-		nextAt := time.Now().Add(backoffFor(cfg)(row.Attempts + 1)).UnixNano()
+		nextAt := time.Now().Add(backoff.Exponential(row.Attempts+1, cfg.BackoffMin, cfg.BackoffMax)).UnixNano()
 		_ = a.finishOp(row.ID, OpFailed, encodeErr("transient", dispatchErr), nextAt)
 	}
 }
@@ -163,7 +163,8 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpArgs) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		if !row.MessageID.Valid {
-			return mark(tx, row, OpDone)
+			_, err := tx.Exec(`UPDATE outbox SET status = ?, error = '' WHERE id = ?`, OpDone, row.ID)
+		return err
 		}
 		switch v := args.(type) {
 		case MoveArgs:
@@ -190,13 +191,9 @@ func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpAr
 				return err
 			}
 		}
-		return mark(tx, row, OpDone)
+		_, err := tx.Exec(`UPDATE outbox SET status = ?, error = '' WHERE id = ?`, OpDone, row.ID)
+		return err
 	})
-}
-
-func mark(tx *sql.Tx, row *outboxRow, status OpStatus) error {
-	_, err := tx.Exec(`UPDATE outbox SET status = ?, error = '' WHERE id = ?`, status, row.ID)
-	return err
 }
 
 // dispatch routes one decoded op to the backend.
@@ -253,14 +250,6 @@ func encodeErr(kind string, err error) string {
 	}
 	b, _ := json.Marshal(payload{Kind: kind, Message: err.Error()})
 	return string(b)
-}
-
-// backoffFor returns a function that maps attempt count → wait
-// duration via the shared internal/backoff helper.
-func backoffFor(cfg drainerConfig) func(int) time.Duration {
-	return func(attempts int) time.Duration {
-		return backoff.Exponential(attempts, cfg.BackoffMin, cfg.BackoffMax)
-	}
 }
 
 // stderrLog returns the writer for diagnostic logs. Tests reassign

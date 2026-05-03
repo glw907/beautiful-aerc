@@ -9,7 +9,6 @@ package cache
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,18 +21,6 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 )
-
-// Cache holds the per-account handles. Accounts are added with
-// Open and removed with Close. Construction is the App's job.
-type Cache struct {
-	mu       sync.RWMutex
-	accounts map[string]*Account
-}
-
-// NewCache returns an empty cache.
-func NewCache() *Cache {
-	return &Cache{accounts: make(map[string]*Account)}
-}
 
 // Account exposes a single account's handle. The UI reads/writes
 // through this type; the backend pointer is held so the syncer
@@ -109,9 +96,19 @@ type Config struct {
 // Empty dir defaults to $XDG_CACHE_HOME/poplar (or platform equivalent).
 // A leading ~ in dir is expanded to the user's home directory.
 func DBPath(accountName, dir string) (string, error) {
-	expanded, err := expandHome(dir)
-	if err != nil {
-		return "", fmt.Errorf("expand cache dir: %w", err)
+	var expanded string
+	if dir == "" {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("expand cache dir: %w", err)
+		}
+		expanded = filepath.Join(base, "poplar")
+	} else {
+		exp, err := config.ExpandHome(dir)
+		if err != nil {
+			return "", fmt.Errorf("expand cache dir: %w", err)
+		}
+		expanded = exp
 	}
 	slug := Slugify(accountName)
 	if slug == "" {
@@ -240,20 +237,6 @@ func (a *Account) signalDrainer() {
 	}
 }
 
-// expandHome resolves dir to an absolute on-disk cache root.
-// Empty input → $XDG_CACHE_HOME/poplar (or platform-equivalent).
-// Otherwise the path is tilde-expanded via config.ExpandHome.
-func expandHome(p string) (string, error) {
-	if p == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(base, "poplar"), nil
-	}
-	return config.ExpandHome(p)
-}
-
 // Slugify lowercases name and reduces non-[a-z0-9-] runs to a
 // single dash. Leading/trailing dashes are stripped.
 func Slugify(name string) string {
@@ -275,5 +258,3 @@ func Slugify(name string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// errClosed indicates the account was closed mid-operation.
-var errClosed = errors.New("cache: account closed")
