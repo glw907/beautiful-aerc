@@ -100,11 +100,6 @@ func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 }
 
 func TestViewerNumericLaunchesURL(t *testing.T) {
-	got := ""
-	prev := openURL
-	openURL = func(u string) error { got = u; return nil }
-	defer func() { openURL = prev }()
-
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://example.com/one"},
@@ -116,9 +111,12 @@ func TestViewerNumericLaunchesURL(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("numeric key must produce a launch cmd")
 	}
-	cmd() // execute the cmd to invoke openURL hook
-	if got != "https://example.com/one" {
-		t.Errorf("launched URL = %q, want https://example.com/one", got)
+	msg, ok := cmd().(LaunchURLMsg)
+	if !ok {
+		t.Fatalf("expected LaunchURLMsg, got %T", cmd())
+	}
+	if msg.URL != "https://example.com/one" {
+		t.Errorf("LaunchURLMsg.URL = %q, want https://example.com/one", msg.URL)
 	}
 	if !v.IsOpen() {
 		t.Error("link launch must not close viewer")
@@ -127,17 +125,15 @@ func TestViewerNumericLaunchesURL(t *testing.T) {
 
 func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	got := ""
-	prev := openURL
-	openURL = func(u string) error { got = u; return nil }
-	defer func() { openURL = prev }()
-
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://only.example"},
 	}}})
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
 	if cmd != nil {
-		cmd()
+		if msg, ok := cmd().(LaunchURLMsg); ok {
+			got = msg.URL
+		}
 	}
 	if got != "" {
 		t.Errorf("out-of-range numeric key launched a URL: %q", got)

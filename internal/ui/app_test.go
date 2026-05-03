@@ -814,11 +814,10 @@ func TestApp_BannerToastPrecedence(t *testing.T) {
 
 func TestAppLinkPickerRoundTrip(t *testing.T) {
 	captured := ""
-	prev := openURL
-	openURL = func(url string) error { captured = url; return nil }
-	defer func() { openURL = prev }()
-
-	app := newLoadedApp(t, 120, 30)
+	app := newLoadedApp(t, 120, 30).WithOpener(func(url string) error {
+		captured = url
+		return nil
+	})
 
 	// Open viewer on a message with one link.
 	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})

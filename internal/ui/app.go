@@ -35,9 +35,18 @@ type App struct {
 	toast       pendingAction
 	undoSeconds int
 	// now returns the wall clock; test seam, defaults to time.Now.
-	now    func() time.Time
+	now func() time.Time
+	// opener launches URLs; test seam, defaults to xdgOpenURL.
+	opener URLOpener
 	width  int
 	height int
+}
+
+// WithOpener returns a copy of m with the URL opener replaced.
+// Test seam.
+func (m App) WithOpener(opener URLOpener) App {
+	m.opener = opener
+	return m
 }
 
 // NewApp creates the root model with a single AccountTab. Folder loading
@@ -60,6 +69,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		confirm:     NewConfirmModal(styles),
 		undoSeconds: uiCfg.UndoSeconds,
 		now:         time.Now,
+		opener:      xdgOpenURL,
 	}
 }
 
@@ -156,7 +166,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, cmd
 
 	case LaunchURLMsg:
-		return m, launchURLCmd(msg.URL)
+		return m, launchURLCmd(m.opener, msg.URL)
 
 	case triageStartedMsg:
 		hadBanner := m.hasBannerRow()

@@ -287,14 +287,22 @@ func markReadCmd(c *cache.Account, folder string, uid mail.UID) tea.Cmd {
 	})
 }
 
-// launchURLCmd opens a URL via the openURL hook (xdg-open in
-// production, swappable in tests). xdg-open detaches and its exit
+// URLOpener launches a URL in the user's browser. App holds one;
+// tests inject a stub via App.WithOpener.
+type URLOpener func(string) error
+
+// launchURLCmd opens url via opener. xdg-open detaches and its exit
 // status is unreliable, so errors are intentionally discarded.
-func launchURLCmd(url string) tea.Cmd {
+func launchURLCmd(opener URLOpener, url string) tea.Cmd {
 	return func() tea.Msg {
-		_ = openURL(url)
+		_ = opener(url)
 		return nil
 	}
+}
+
+// xdgOpenURL is the default URLOpener: shells out to xdg-open.
+func xdgOpenURL(url string) error {
+	return exec.Command("xdg-open", url).Start()
 }
 
 // backendUpdateMsg wraps a single mail.Update in a tea.Msg.
@@ -325,13 +333,6 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 		}
 		return cacheEventMsg{event: ev}
 	}
-}
-
-// openURL is the URL launcher hook. Tests swap it to capture the URL
-// instead of executing xdg-open. Shared by viewer numeric quick-launch
-// and the link picker.
-var openURL = func(url string) error {
-	return exec.Command("xdg-open", url).Start()
 }
 
 // LinkPickerClosedMsg signals the picker has closed (Esc, Tab, Enter,

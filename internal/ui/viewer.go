@@ -187,7 +187,8 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 	for i, b := range v.keys.Links {
 		if key.Matches(msg, b) {
 			if i < len(v.links) {
-				return v, launchURLCmd(v.links[i])
+				url := v.links[i]
+				return v, func() tea.Msg { return LaunchURLMsg{URL: url} }
 			}
 			return v, nil
 		}
