@@ -318,7 +318,6 @@ password = "$FASTMAIL_TOKEN"
 
 func TestParseAccountsPresetSetsInsecureTLS(t *testing.T) {
 	Providers["test-insecure"] = Provider{
-		Name:        "test-insecure",
 		Backend:     "imap",
 		Host:        "test.local",
 		Port:        993,

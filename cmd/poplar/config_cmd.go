@@ -20,7 +20,7 @@ func newConfigInitTemplateCmd() *cobra.Command {
 		Short:        "Write a fresh self-documenting config template",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, _, err := config.Resolve("")
+			path, err := config.Resolve("")
 			if err != nil {
 				return err
 			}
@@ -51,7 +51,7 @@ func newConfigPathCmd() *cobra.Command {
 		Short:        "Print the resolved config-file path",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, _, err := config.Resolve("")
+			path, err := config.Resolve("")
 			if err != nil {
 				return err
 			}

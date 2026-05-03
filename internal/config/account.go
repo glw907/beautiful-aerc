@@ -4,8 +4,6 @@
 package config
 
 import (
-	"time"
-
 	"github.com/emersion/go-message/mail"
 )
 
@@ -20,14 +18,10 @@ type AccountConfig struct {
 	Params         map[string]string
 	Folders        []string
 	FoldersExclude []string
-	Headers        []string
-	HeadersExclude []string
-	CheckMail      time.Duration
 
 	// Identity
-	From    *mail.Address
-	Aliases []*mail.Address
-	CopyTo  []string
+	From   *mail.Address
+	CopyTo []string
 
 	// Credentials
 	// Password is the bearer token or password after env-var substitution.

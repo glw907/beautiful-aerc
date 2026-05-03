@@ -10,18 +10,8 @@ import (
 	"runtime"
 )
 
-// Source records where the config path came from.
-type Source int
-
-const (
-	SourceFlag    Source = iota
-	SourceEnv
-	SourceDefault
-)
-
-// Resolve returns the config-file path to use, plus how it was
-// chosen. Precedence: --config flag, then $POPLAR_CONFIG, then the
-// OS default.
+// Resolve returns the config-file path to use. Precedence:
+// --config flag, then $POPLAR_CONFIG, then the OS default.
 //
 // Linux/macOS default: ~/.config/poplar/config.toml.
 // Windows default:     %APPDATA%\poplar\config.toml.
@@ -29,18 +19,18 @@ const (
 // macOS deliberately uses ~/.config/ rather than the OS-default
 // ~/Library/Application Support/, matching the convention used by
 // pass, nvim, tmux, and git.
-func Resolve(flagPath string) (string, Source, error) {
+func Resolve(flagPath string) (string, error) {
 	if flagPath != "" {
-		return flagPath, SourceFlag, nil
+		return flagPath, nil
 	}
 	if env := os.Getenv("POPLAR_CONFIG"); env != "" {
-		return env, SourceEnv, nil
+		return env, nil
 	}
 	dir, err := defaultConfigDir()
 	if err != nil {
-		return "", SourceDefault, err
+		return "", err
 	}
-	return filepath.Join(dir, "poplar", "config.toml"), SourceDefault, nil
+	return filepath.Join(dir, "poplar", "config.toml"), nil
 }
 
 func defaultConfigDir() (string, error) {
@@ -71,13 +61,13 @@ var ErrOldAccountsToml = errors.New("old accounts.toml detected; rename to confi
 
 // Load resolves the config path and returns the parsed accounts
 // alongside the resolved path (so callers can reuse it for sibling
-// loads such as LoadUI without re-resolving). When src is
-// SourceDefault or SourceEnv and no file exists, it writes the
-// template and returns ErrFirstRun. When src is SourceFlag and the
-// file is missing, it returns a plain error (the user explicitly
-// chose that path; no template is written).
+// loads such as LoadUI without re-resolving). When the path comes
+// from $POPLAR_CONFIG or the OS default and no file exists, it
+// writes the template and returns ErrFirstRun. When the path was
+// supplied via flagPath and the file is missing, it returns a plain
+// error (the user explicitly chose that path; no template is written).
 func Load(flagPath string) ([]AccountConfig, string, error) {
-	path, src, err := Resolve(flagPath)
+	path, err := Resolve(flagPath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -89,7 +79,7 @@ func Load(flagPath string) ([]AccountConfig, string, error) {
 	if !os.IsNotExist(err) {
 		return nil, path, err
 	}
-	if src == SourceFlag {
+	if flagPath != "" {
 		return nil, path, fmt.Errorf("config file %s not found", path)
 	}
 	dir := filepath.Dir(path)

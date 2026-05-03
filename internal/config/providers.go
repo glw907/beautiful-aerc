@@ -6,110 +6,74 @@ package config
 // host/port (IMAP), or session URL (JMAP) so users don't have to
 // look those up. Auth is still supplied per-account in config.toml.
 type Provider struct {
-	Name        string
 	Backend     string // "imap" or "jmap"
 	Host        string // IMAP presets only
 	Port        int
 	StartTLS    bool
-	InsecureTLS bool   // true only for self-signed-cert presets (self-hosted)
-	GmailQuirks bool   // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
+	InsecureTLS bool // true only for self-signed-cert presets (self-hosted)
+	GmailQuirks bool // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
 	URL         string // JMAP presets only
-	AuthHint    string // "app-password" | "bearer" | "xoauth2"
-	HelpURL     string
 }
 
 // Providers maps preset name → Provider. Adding a new well-known
 // service is one struct literal.
 var Providers = map[string]Provider{
 	"fastmail": {
-		Name:     "fastmail",
-		Backend:  "jmap",
-		URL:      "https://api.fastmail.com/jmap/session",
-		AuthHint: "bearer",
-		HelpURL:  "https://app.fastmail.com/settings/security/tokens",
+		Backend: "jmap",
+		URL:     "https://api.fastmail.com/jmap/session",
 	},
 	"yahoo": {
-		Name:     "yahoo",
-		Backend:  "imap",
-		Host:     "imap.mail.yahoo.com",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://login.yahoo.com/account/security",
+		Backend: "imap",
+		Host:    "imap.mail.yahoo.com",
+		Port:    993,
 	},
 	"icloud": {
-		Name:     "icloud",
-		Backend:  "imap",
-		Host:     "imap.mail.me.com",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://appleid.apple.com",
+		Backend: "imap",
+		Host:    "imap.mail.me.com",
+		Port:    993,
 	},
 	"zoho": {
-		Name:     "zoho",
-		Backend:  "imap",
-		Host:     "imap.zoho.com",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://accounts.zoho.com/home#security/app_password",
+		Backend: "imap",
+		Host:    "imap.zoho.com",
+		Port:    993,
 	},
 	"outlook": {
-		Name:     "outlook",
-		Backend:  "imap",
-		Host:     "outlook.office365.com",
-		Port:     993,
-		AuthHint: "xoauth2",
-		HelpURL:  "https://account.live.com/proofs/AppPassword",
+		Backend: "imap",
+		Host:    "outlook.office365.com",
+		Port:    993,
 	},
 	"mailbox-org": {
-		Name:     "mailbox-org",
-		Backend:  "imap",
-		Host:     "imap.mailbox.org",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://account.mailbox.org/",
+		Backend: "imap",
+		Host:    "imap.mailbox.org",
+		Port:    993,
 	},
 	"posteo": {
-		Name:     "posteo",
-		Backend:  "imap",
-		Host:     "posteo.de",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://posteo.de/en/help/",
+		Backend: "imap",
+		Host:    "posteo.de",
+		Port:    993,
 	},
 	"runbox": {
-		Name:     "runbox",
-		Backend:  "imap",
-		Host:     "mail.runbox.com",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://help.runbox.com/",
+		Backend: "imap",
+		Host:    "mail.runbox.com",
+		Port:    993,
 	},
 	"gmx": {
-		Name:     "gmx",
-		Backend:  "imap",
-		Host:     "imap.gmx.com",
-		Port:     993,
-		AuthHint: "app-password",
-		HelpURL:  "https://www.gmx.com/mail/",
+		Backend: "imap",
+		Host:    "imap.gmx.com",
+		Port:    993,
 	},
 	"gmail": {
-		Name:        "gmail",
 		Backend:     "imap",
 		Host:        "imap.gmail.com",
 		Port:        993,
-		AuthHint:    "xoauth2",
 		GmailQuirks: true,
-		HelpURL:     "https://support.google.com/mail/answer/7126229",
 	},
 	"protonmail": {
-		Name:        "protonmail",
 		Backend:     "imap",
 		Host:        "127.0.0.1",
 		Port:        1143,
 		StartTLS:    true,
 		InsecureTLS: true,
-		AuthHint:    "bridge-password",
-		HelpURL:     "https://proton.me/mail/bridge",
 	},
 }
 

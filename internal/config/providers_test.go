@@ -53,9 +53,6 @@ func TestOutlookPresetShape(t *testing.T) {
 	if p.Port != 993 {
 		t.Errorf("Port = %d, want 993", p.Port)
 	}
-	if p.AuthHint != "xoauth2" {
-		t.Errorf("AuthHint = %q, want xoauth2", p.AuthHint)
-	}
 }
 
 func TestLookupProvider_Gmail(t *testing.T) {
@@ -71,9 +68,6 @@ func TestLookupProvider_Gmail(t *testing.T) {
 	}
 	if p.Port != 993 {
 		t.Errorf("Port = %d, want 993", p.Port)
-	}
-	if p.AuthHint != "xoauth2" {
-		t.Errorf("AuthHint = %q, want %q", p.AuthHint, "xoauth2")
 	}
 	if !p.GmailQuirks {
 		t.Errorf("GmailQuirks = false, want true")

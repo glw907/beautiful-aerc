@@ -46,7 +46,7 @@ func runDiagnose() error {
 	fmt.Printf("  duration       = %s\n", dur.Round(100*time.Microsecond))
 	fmt.Println()
 
-	configPath, _, _ := config.Resolve("")
+	configPath, _ := config.Resolve("")
 	cfgIcons := "auto"
 	if configPath != "" {
 		if uiCfg, err := config.LoadUI(configPath); err == nil {

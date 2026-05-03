@@ -33,7 +33,7 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 
 func runConfigDiscoverFolders(cmd *cobra.Command, f configDiscoverFoldersFlags) error {
 	flagPath := cmd.Root().PersistentFlags().Lookup("config").Value.String()
-	path, _, err := config.Resolve(flagPath)
+	path, err := config.Resolve(flagPath)
 	if err != nil {
 		return err
 	}
