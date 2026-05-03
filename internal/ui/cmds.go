@@ -4,6 +4,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os/exec"
 	"strings"
@@ -164,21 +165,38 @@ type bodyLoadedMsg struct {
 // loadBodyCmd fetches a message body, parses it into blocks, and
 // delivers a bodyLoadedMsg. Errors fall through as ErrorMsg.
 //
+// The ctx parameter enables cancel-prior semantics: if the caller
+// cancels ctx before the backend call returns, the cmd returns
+// nil (no message) and the eventual FetchBody result is dropped.
+// The backend round-trip itself still completes — true wire-level
+// cancellation is deferred to the body-cache pass (8.4b).
+//
 // Real backends return raw RFC822 bytes; the mock returns markdown
 // directly. extractDisplayText sniffs the format and walks MIME
 // when present, falling back to raw bytes otherwise.
-func loadBodyCmd(b mail.Backend, uid mail.UID) tea.Cmd {
+func loadBodyCmd(ctx context.Context, b mail.Backend, uid mail.UID) tea.Cmd {
 	return func() tea.Msg {
-		r, err := b.FetchBody(uid)
-		if err != nil {
-			return ErrorMsg{Op: "fetch body", Err: err}
+		resultCh := make(chan tea.Msg, 1)
+		go func() {
+			r, err := b.FetchBody(uid)
+			if err != nil {
+				resultCh <- ErrorMsg{Op: "fetch body", Err: err}
+				return
+			}
+			buf, err := io.ReadAll(r)
+			if err != nil {
+				resultCh <- ErrorMsg{Op: "read body", Err: err}
+				return
+			}
+			text := extractDisplayText(buf)
+			resultCh <- bodyLoadedMsg{uid: uid, blocks: content.ParseBlocks(text)}
+		}()
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg := <-resultCh:
+			return msg
 		}
-		buf, err := io.ReadAll(r)
-		if err != nil {
-			return ErrorMsg{Op: "read body", Err: err}
-		}
-		text := extractDisplayText(buf)
-		return bodyLoadedMsg{uid: uid, blocks: content.ParseBlocks(text)}
 	}
 }
 

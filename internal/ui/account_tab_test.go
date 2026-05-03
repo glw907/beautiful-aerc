@@ -1797,3 +1797,95 @@ func TestAccountTab_NextMessage_WalksFilteredRows(t *testing.T) {
 		t.Errorf("after n with filter: cursor on UID %q, want %q", got.UID, "3")
 	}
 }
+
+// TestAccountTab_OpenMessage_CancelsPriorFetch verifies that calling
+// openMessage twice replaces the body-fetch cancel func, meaning the
+// prior in-flight fetch has been cancelled before the new one starts.
+func TestAccountTab_OpenMessage_CancelsPriorFetch(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	backend := mail.NewMockBackend()
+	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tab.msglist.SetMessages([]mail.MessageInfo{
+		{UID: "1", From: "a@example.com", Subject: "first"},
+		{UID: "2", From: "b@example.com", Subject: "second"},
+	})
+
+	// First openMessage — cancel func should be populated.
+	tab, _ = tab.openMessage(mail.MessageInfo{UID: "1"})
+	if tab.bodyFetchCancel == nil {
+		t.Fatal("after first openMessage: bodyFetchCancel is nil")
+	}
+
+	// Capture the context from the first fetch by wrapping it before
+	// we call openMessage again. We verify the first context is
+	// cancelled by checking ctx.Done is closed after the second call.
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	// Replace with our tracked cancel to test cancellation.
+	tab.bodyFetchCancel = firstCancel
+
+	// Second openMessage — should cancel the first and set a new func.
+	tab, _ = tab.openMessage(mail.MessageInfo{UID: "2"})
+	if tab.bodyFetchCancel == nil {
+		t.Fatal("after second openMessage: bodyFetchCancel is nil")
+	}
+
+	// The first context must have been cancelled.
+	select {
+	case <-firstCtx.Done():
+		// good — first fetch was cancelled
+	default:
+		t.Error("first bodyFetchCancel was not called by the second openMessage")
+	}
+
+	// The new cancel func is set; calling it should not panic.
+	tab.bodyFetchCancel()
+}
+
+// TestAccountTab_ViewerClose_CancelsInflightFetch verifies that closing
+// the viewer (q key) cancels any in-flight body fetch.
+func TestAccountTab_ViewerClose_CancelsInflightFetch(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab, _ = tab.openMessage(mail.MessageInfo{UID: "1"})
+	if tab.bodyFetchCancel == nil {
+		t.Fatal("after openMessage: bodyFetchCancel is nil")
+	}
+
+	// Replace cancel with a tracked one.
+	ctx, cancel := context.WithCancel(context.Background())
+	tab.bodyFetchCancel = cancel
+
+	// Press q — closes the viewer.
+	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	if tab.viewer.IsOpen() {
+		t.Fatal("q should have closed the viewer")
+	}
+
+	select {
+	case <-ctx.Done():
+		// good — cancel was called on close
+	default:
+		t.Error("viewer close did not cancel the in-flight body fetch")
+	}
+
+	if tab.bodyFetchCancel != nil {
+		t.Error("bodyFetchCancel should be nil after viewer close")
+	}
+}
+
+// TestAccountTab_BodyLoaded_ClearsCancelFunc verifies that when
+// bodyLoadedMsg arrives with the matching UID, the cancel func is cleared.
+func TestAccountTab_BodyLoaded_ClearsCancelFunc(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab, _ = tab.openMessage(mail.MessageInfo{UID: "1"})
+
+	_, cancel := context.WithCancel(context.Background())
+	tab.bodyFetchCancel = cancel
+
+	tab, _ = tab.updateTab(bodyLoadedMsg{uid: "1", blocks: nil})
+
+	if tab.bodyFetchCancel != nil {
+		t.Error("bodyFetchCancel should be nil after bodyLoadedMsg for the current UID")
+	}
+}

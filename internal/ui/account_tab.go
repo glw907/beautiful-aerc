@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -58,6 +59,10 @@ type AccountTab struct {
 	layout            LayoutMode
 	width             int
 	height            int
+	// bodyFetchCancel cancels the in-flight loadBodyCmd goroutine.
+	// Set on every openMessage call; cleared when the result arrives
+	// (matched UID) or when the viewer closes.
+	bodyFetchCancel context.CancelFunc
 }
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
@@ -175,6 +180,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 	case bodyLoadedMsg:
 		if m.viewer.CurrentUID() == msg.uid {
+			m.bodyFetchCancel = nil
 			m.viewer = m.viewer.SetBody(msg.blocks)
 		}
 		return m, nil
@@ -273,6 +279,10 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.viewer, cmd = m.viewer.Update(msg)
+		if !m.viewer.IsOpen() {
+			// Viewer just closed; discard any in-flight body fetch.
+			m.cancelInflightBodyFetch()
+		}
 		if links, ok := (&m.viewer).LinkPickerRequest(); ok {
 			m.pendingLinkPicker = links
 		}
@@ -392,13 +402,26 @@ func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
 	return m, m.selectionChangedCmds()
 }
 
+// cancelInflightBodyFetch cancels any in-flight loadBodyCmd and clears
+// the cancel func. No-op when no fetch is in flight.
+func (m *AccountTab) cancelInflightBodyFetch() {
+	if m.bodyFetchCancel != nil {
+		m.bodyFetchCancel()
+		m.bodyFetchCancel = nil
+	}
+}
+
 // openMessage opens msg in the viewer, fires the body-fetch Cmd, and
 // (for unread messages) flips the seen flag locally + fires a backend
-// MarkRead. Shared by Enter, n, and N.
+// MarkRead. Shared by Enter, n, and N. Cancels any prior in-flight
+// body fetch before issuing the new one.
 func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
+	m.cancelInflightBodyFetch()
+	ctx, cancel := context.WithCancel(context.Background())
+	m.bodyFetchCancel = cancel
 	m.viewer = m.viewer.Open(msg)
 	cmds := []tea.Cmd{
-		loadBodyCmd(m.backend, msg.UID),
+		loadBodyCmd(ctx, m.backend, msg.UID),
 		m.viewer.SpinnerTick(),
 	}
 	if msg.Flags&mail.FlagSeen == 0 {
