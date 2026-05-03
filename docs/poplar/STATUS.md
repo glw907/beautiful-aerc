@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.4b next — Cache II (body cache + eviction + `poplar cache` CLI).
+**Current pass:** Pass 8.4c next — Cache III (outbox + offline + Q/! overlays + status badge).
 
 ## Passes
 
@@ -15,7 +15,7 @@
 | 8.4-revise | Apply review findings; revised spec + ADR-0113/0114/0115/0116/0117 | done |
 | 8.4a | Cache I foundation — schema, ChangeTracker, syncer, drainer, tests; ADR-0118/0119/0120 | done |
 | 8.4a-cutover | UI cutover — `*cache.Account` reads + writes, Backend collapse to `Flag`, App-layer optimistic-state delete; ADR-0121 | done |
-| 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | next |
+| 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | done |
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
 | 8.6 | Attachments I — backend (#24) | pending |
 | 8.7 | Attachments II — viewer (#24) | pending |
@@ -29,24 +29,26 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.4b)
+## Next starter prompt (Pass 8.4c)
 
-> **Goal.** Land the body cache: `bodies` table use, LRU eviction
-> (size + age + per-folder caps), and a `poplar cache` CLI for
-> inspection and manual eviction.
+> **Goal.** Land Cache III: visible outbox, offline mode, Q/! per-row
+> state overlays, and a connection-state badge in the status bar.
 >
-> **Scope.** `(*cache.Account).FetchBody` writes/reads the bodies
-> table instead of falling straight through to the backend; an
-> eviction goroutine prunes by LRU using the `bodies_lru` index;
-> `cmd/poplar/cache.go` adds `poplar cache stats`, `poplar cache
-> evict --older-than`, `poplar cache vacuum`. Body fetches are
-> still synchronous — async prefetch is a Pass 8.4c+ concern.
+> **Scope.** Surface the cache outbox in the UI (queued/executing/failed
+> badges per message), implement true offline mode (drainer pauses, reads
+> still served from cache), and a status-bar connection indicator.
+> Reference: invariants.md "Cache" section, ADR-0117 (typed op events),
+> wireframes for status bar.
 >
-> **Settled (do not re-brainstorm):** ADR-0110/0111/0112/0113/
-> 0114/0115/0116/0117/0118/0119/0120/0121.
+> **Settled (do not re-brainstorm):** ADR-0110–0124 (Cache 0/I/II +
+> cutover + policy + CLI). Outbox state machine (ADR-0112/0116). Typed
+> op events (ADR-0117).
 >
-> **Approach.** Brainstorm eviction policy parameters (LRU
-> threshold defaults, per-folder cap, opt-out flag for archival
-> folders), write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-cache-ii.md`, then implement.
+> **Still open — brainstorm these:** Q/! glyph placement vs flag column,
+> offline-mode entry/exit triggers (manual toggle vs auto on transient
+> backend failures), connection-state cycling vs latching, undo behavior
+> while offline.
+>
+> **Approach.** Brainstorm the open questions, write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-cache-iii.md`, then implement.
 > Standard pass-end checklist applies.
