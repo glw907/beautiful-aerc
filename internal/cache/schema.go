@@ -9,7 +9,7 @@ import (
 
 // schemaVersion is the current schema version. Migrations from any
 // older version up to this one run in order at Open.
-const schemaVersion = 2
+const schemaVersion = 3
 
 // migration applies one schema version step inside a single
 // transaction. Index 0 holds the v0→v1 step.
@@ -20,6 +20,7 @@ type migration func(*sql.Tx) error
 var migrations = []migration{
 	migrateV1, // v0 → v1: full Cache I schema (spec §A.3)
 	migrateV2, // v1 → v2: next_eligible_at on outbox
+	migrateV3, // v2 → v3: backend-reported exists/unseen on folders
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -102,6 +103,24 @@ func migrateV2(tx *sql.Tx) error {
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
 			return fmt.Errorf("migrate v2: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV3 adds backend-reported exists/unseen counts on the
+// folders table. The cache's local count from message_mailboxes is a
+// lower bound (only synced folders have rows); the backend-reported
+// value covers folders the user hasn't opened yet so the sidebar can
+// surface unread badges immediately.
+func migrateV3(tx *sql.Tx) error {
+	stmts := []string{
+		`ALTER TABLE folders ADD COLUMN exists_total INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE folders ADD COLUMN unseen_total INTEGER NOT NULL DEFAULT 0`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("migrate v3: %w", err)
 		}
 	}
 	return nil

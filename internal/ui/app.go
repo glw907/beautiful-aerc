@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -17,9 +18,8 @@ import (
 
 // App is the root bubbletea model for poplar.
 type App struct {
-	acct       AccountTab
-	backend    mail.Backend
-	icons      IconSet
+	acct        AccountTab
+	icons       IconSet
 	styles     Styles
 	topLine    TopLine
 	statusBar  StatusBar
@@ -42,14 +42,13 @@ type App struct {
 
 // NewApp creates the root model with a single AccountTab. Folder loading
 // happens in Init's Cmd chain, not in the constructor.
-func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig, icons IconSet) App {
+func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons IconSet) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
 
 	return App{
-		acct:        NewAccountTab(styles, t, backend, uiCfg, icons),
-		backend:     backend,
+		acct:        NewAccountTab(styles, t, acct, uiCfg, icons),
 		icons:       icons,
 		styles:      styles,
 		topLine:     NewTopLine(styles),
@@ -67,7 +66,7 @@ func NewApp(t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig,
 // Init delegates to the account tab so the initial folder fetch fires,
 // and starts the backend update pump.
 func (m App) Init() tea.Cmd {
-	return tea.Batch(m.acct.Init(), pumpUpdatesCmd(m.backend))
+	return tea.Batch(m.acct.Init(), pumpUpdatesCmd(m.acct.Backend()))
 }
 
 // deriveChromeFromAcct re-reads AccountTab state and propagates it
@@ -167,7 +166,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			n:        msg.n,
 			dest:     msg.dest,
 			inverse:  msg.inverse,
-			onUndo:   msg.onUndo,
 			deadline: deadline,
 		}
 		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
@@ -193,9 +191,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if m.toast.IsZero() {
 			return m, nil
 		}
-		if m.toast.onUndo != nil {
-			m.toast.onUndo()
-		}
 		cmd := m.toast.inverse
 		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
@@ -213,13 +208,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case ErrorMsg:
 		// Banner state is App-owned. The chrome banner row (error or
 		// toast) takes one row; transitions in or out of having a row
-		// resize the child. An ErrorMsg also rolls back any in-flight
-		// toast: the local flip is reversed via onUndo, the toast
-		// clears, and the error replaces it.
+		// resize the child. An ErrorMsg also clears any in-flight
+		// toast — cache state owns the optimistic flip, so a manual
+		// inverse fire is the user's responsibility.
 		hadBanner := m.hasBannerRow()
-		if !m.toast.IsZero() && m.toast.onUndo != nil {
-			m.toast.onUndo()
-		}
 		m.toast = pendingAction{}
 		m.lastErr = msg
 		cmds := make([]tea.Cmd, 0, 2)
@@ -234,12 +226,14 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		cmds = append(cmds, fcmd)
 		return m, tea.Batch(cmds...)
 
-	case folderQueryDoneMsg:
+	case folderLoadedMsg:
 		// A folder change commits any in-flight toast: the optimistic
 		// flip stands, no inverse fires. The pending state simply
-		// clears so the chrome row collapses. The msg still flows
-		// through to AccountTab below for normal load handling.
-		if msg.reset && !m.toast.IsZero() {
+		// clears so the chrome row collapses. Detect "folder change"
+		// by comparing the loaded folder against the message-list's
+		// current contents — only fresh loads (where the page was
+		// reset by selectionChangedCmds) carry a toast-clearing hint.
+		if !m.toast.IsZero() && m.acct.msglist.Count() == 0 {
 			hadBanner := m.hasBannerRow()
 			m.toast = pendingAction{}
 			var rcmd tea.Cmd
@@ -255,7 +249,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 
 	case backendUpdateMsg:
-		cmds := []tea.Cmd{pumpUpdatesCmd(m.backend)} // re-arm pump
+		cmds := []tea.Cmd{pumpUpdatesCmd(m.acct.Backend())} // re-arm pump
 		if msg.update.Type == mail.UpdateConnState {
 			m.statusBar = m.statusBar.SetConnectionState(translateConnState(msg.update.ConnState))
 		}

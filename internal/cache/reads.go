@@ -16,10 +16,20 @@ import (
 
 // ListFolders returns the cache's folder rows joined with the
 // canonical classification (mail.Classify wraps the same alias
-// table the UI sidebar uses). The cache is the source of truth;
-// the syncer keeps it converged with the backend.
+// table the UI sidebar uses) and per-folder Exists/Unseen counts
+// computed from message_mailboxes ⨝ messages. The cache is the
+// source of truth; the syncer keeps it converged with the backend.
 func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
-	rows, err := a.db.Query(`SELECT name, role FROM folders ORDER BY name`)
+	const q = `
+        SELECT f.name, f.role, f.exists_total, f.unseen_total,
+               COUNT(mm.message) AS local_exists,
+               SUM(CASE WHEN (m.flags & ?) = 0 THEN 1 ELSE 0 END) AS local_unseen
+        FROM folders f
+        LEFT JOIN message_mailboxes mm ON mm.folder = f.id
+        LEFT JOIN messages m ON m.id = mm.message AND m.ui_hide = 0
+        GROUP BY f.id, f.name, f.role, f.exists_total, f.unseen_total
+        ORDER BY f.name`
+	rows, err := a.db.Query(q, uint32(mail.FlagSeen))
 	if err != nil {
 		return nil, fmt.Errorf("list folders: %w", err)
 	}
@@ -28,12 +38,27 @@ func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
 	for rows.Next() {
 		var name string
 		var role sql.NullString
-		if err := rows.Scan(&name, &role); err != nil {
+		var existsTotal, localExists int
+		var unseenTotal int
+		var localUnseen sql.NullInt64
+		if err := rows.Scan(&name, &role, &existsTotal, &unseenTotal, &localExists, &localUnseen); err != nil {
 			return nil, fmt.Errorf("scan folder: %w", err)
 		}
 		f := mail.Folder{Name: name}
 		if role.Valid {
 			f.Role = role.String
+		}
+		// Prefer local counts once any messages are synced; otherwise
+		// fall back to backend-reported totals stored at SyncFolders
+		// time so unopened folders still show their unread badges.
+		if localExists > 0 {
+			f.Exists = localExists
+			if localUnseen.Valid {
+				f.Unseen = int(localUnseen.Int64)
+			}
+		} else {
+			f.Exists = existsTotal
+			f.Unseen = unseenTotal
 		}
 		raw = append(raw, f)
 	}

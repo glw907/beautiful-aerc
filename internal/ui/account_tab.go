@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -39,12 +40,11 @@ type folderPage struct {
 type AccountTab struct {
 	styles Styles
 	icons  IconSet
-	// backend is held as a read-only reference so Update can build
-	// tea.Cmd closures that call backend methods. It is never
-	// mutated and its results are never cached as owned state —
-	// they come back as Msg types through the normal Update flow.
-	// This is the elm-conventions Rule 5 exception.
-	backend           mail.Backend
+	// acct is the per-account cache handle. UI reads come from
+	// acct.QueryFolder; UI writes funnel through acct.QueueOp. The
+	// underlying mail.Backend reference lives behind acct.Backend
+	// (used for AccountName/AccountEmail accessors and body fetch).
+	acct              *cache.Account
 	uiCfg             config.UIConfig
 	sidebar           Sidebar
 	sidebarSearch     SidebarSearch
@@ -67,16 +67,16 @@ type AccountTab struct {
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
-func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, uiCfg config.UIConfig, icons IconSet) AccountTab {
+func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons IconSet) AccountTab {
 	return AccountTab{
 		styles:        styles,
 		icons:         icons,
-		backend:       backend,
+		acct:          acct,
 		uiCfg:         uiCfg,
 		sidebar:       NewSidebar(styles, nil, uiCfg, 30, 1, icons),
 		sidebarSearch: NewSidebarSearch(styles, 30, icons),
 		msglist:       NewMessageList(styles, nil, 1, 1, icons),
-		viewer:        NewViewer(styles, t, backend.AccountEmail()),
+		viewer:        NewViewer(styles, t, acct.AccountEmail()),
 		keys:          NewAccountKeys(),
 		pages:         make(map[string]*folderPage),
 		swept:         make(map[string]bool),
@@ -88,15 +88,20 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, backend mail.Backend, 
 // Title returns the current folder name.
 func (m AccountTab) Title() string { return m.sidebar.SelectedFolder() }
 
+// Backend returns the underlying mail.Backend so the App can drive
+// the connection-state pump without duplicating the cache reference.
+func (m AccountTab) Backend() mail.Backend { return m.acct.Backend }
+
 // Icon returns the folder's Nerd Font icon.
 func (m AccountTab) Icon() string { return m.sidebar.SelectedIcon() }
 
 // Closeable returns false — the account tab cannot be closed.
 func (m AccountTab) Closeable() bool { return false }
 
-// Init fires the initial folder-list fetch.
+// Init fires the initial folder-list fetch and starts the cache event
+// pump.
 func (m AccountTab) Init() tea.Cmd {
-	return loadFoldersCmd(m.backend)
+	return tea.Batch(loadFoldersCmd(m.acct), pumpCacheCmd(m.acct))
 }
 
 // Update satisfies tea.Model. Delegates to updateTab for typed access.
@@ -135,21 +140,19 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case foldersLoadedMsg:
-		m.sidebar.SetFolders(mail.Classify(msg.folders), m.uiCfg)
+		m.sidebar.SetFolders(msg.classified, m.uiCfg)
 		return m, m.selectionChangedCmds()
 
-	case folderQueryDoneMsg:
-		page := m.pageFor(msg.name)
-		page.total = msg.total
-		if !msg.reset {
-			page.loadMoreInFlight = true
-		}
-		return m, fetchHeadersCmd(m.backend, msg.name, msg.uids, msg.reset)
-
-	case headersAppliedMsg:
+	case folderLoadedMsg:
 		m.loading = false
 		page := m.pageFor(msg.name)
+		// selectionChangedCmds zeroes the page before firing
+		// openFolderCmd, so loaded == 0 reliably means "fresh open"
+		// (cursor reset); any other value means "post-write refresh"
+		// (cursor preserved). Snapshot before mutating page.loaded.
+		isInitial := page.loaded == 0
 		page.loaded = len(msg.msgs)
+		page.total = msg.total
 		fc := m.uiCfg.Folders[m.sidebar.ConfigKey(msg.name)]
 		order := SortDateDesc
 		if fc.Sort == "date-asc" {
@@ -161,18 +164,32 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		}
 		m.msglist.SetSort(order)
 		m.msglist.SetThreaded(threaded)
-		m.msglist.SetMessages(msg.msgs)
+		if isInitial {
+			m.msglist.SetMessages(msg.msgs)
+		} else {
+			m.msglist.RefreshSource(msg.msgs)
+		}
 		if sweep := m.maybeRetentionSweep(msg.name, msg.msgs); sweep != nil {
 			return m, sweep
 		}
 		return m, nil
 
-	case headersAppendedMsg:
+	case folderAppendedMsg:
 		page := m.pageFor(msg.name)
 		page.loaded += len(msg.msgs)
+		page.total = msg.total
 		page.loadMoreInFlight = false
 		m.msglist.AppendMessages(msg.msgs)
 		return m, nil
+
+	case cacheEventMsg:
+		// Drainer transition: re-read current folder so any backing
+		// state change is reflected. Re-arm the pump.
+		cmds := []tea.Cmd{pumpCacheCmd(m.acct)}
+		if name := m.currentFolderName(); name != "" {
+			cmds = append(cmds, refreshFolderCmd(m.acct, name))
+		}
+		return m, tea.Batch(cmds...)
 
 	case bodyLoadedMsg:
 		if m.viewer.CurrentUID() == msg.uid {
@@ -190,31 +207,24 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, m.dispatchMoveFromPicker(msg)
 
 	case sweepCompletedMsg:
-		if len(msg.uids) > 0 {
-			m.msglist.ApplyDelete(msg.uids)
+		// Sweep fired; cache now has ui_hide=1 on each affected row.
+		// Refresh to reflect.
+		if name := m.currentFolderName(); name != "" {
+			return m, refreshFolderCmd(m.acct, name)
 		}
 		return m, nil
 
 	case EmptyFolderConfirmedMsg:
-		return m, emptyFolderCmd(m.backend, msg.Folder, msg.Source)
+		return m, emptyFolderCmd(m.acct, msg.Folder, msg.Source)
 
 	case emptyFolderDoneMsg:
-		all := make([]mail.UID, 0, m.msglist.Count())
-		for _, item := range m.msglist.Source() {
-			all = append(all, item.UID)
-		}
-		if len(all) > 0 {
-			m.msglist.ApplyDelete(all)
-		}
 		n := msg.n
 		folder := msg.folder
-		return m, func() tea.Msg {
-			return triageStartedMsg{
-				op:   "empty",
-				n:    n,
-				dest: folder,
-			}
+		src := msg.source
+		toast := func() tea.Msg {
+			return triageStartedMsg{op: "empty", n: n, dest: folder}
 		}
+		return m, tea.Batch(toast, refreshFolderCmd(m.acct, src))
 
 	case SearchUpdatedMsg:
 		m.msglist.SetFilter(msg.Query, msg.Mode)
@@ -408,21 +418,20 @@ func (m *AccountTab) cancelInflightBodyFetch() {
 }
 
 // openMessage opens msg in the viewer, fires the body-fetch Cmd, and
-// (for unread messages) flips the seen flag locally + fires a backend
-// MarkRead. Shared by Enter, n, and N. Cancels any prior in-flight
-// body fetch before issuing the new one.
+// (for unread messages) queues a FlagSeen=true op via the cache.
+// Shared by Enter, n, and N. Cancels any prior in-flight body fetch
+// before issuing the new one.
 func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
 	m.cancelInflightBodyFetch()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.bodyFetchCancel = cancel
 	m.viewer = m.viewer.Open(msg)
 	cmds := []tea.Cmd{
-		loadBodyCmd(ctx, m.backend, msg.UID),
+		loadBodyCmd(ctx, m.acct, msg.UID),
 		m.viewer.SpinnerTick(),
 	}
 	if msg.Flags&mail.FlagSeen == 0 {
-		m.msglist.MarkSeen(msg.UID)
-		cmds = append(cmds, markReadCmd(m.backend, msg.UID))
+		cmds = append(cmds, markReadCmd(m.acct, m.currentFolderName(), msg.UID))
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -458,8 +467,12 @@ func (m *AccountTab) selectionChangedCmds() tea.Cmd {
 		return nil
 	}
 	m.loading = true
+	// Reset the page so folderLoadedMsg uses SetMessages (cursor reset)
+	// rather than RefreshSource (cursor preserved).
+	m.pages[folder.Name] = &folderPage{}
+	m.msglist.SetMessages(nil)
 	return tea.Batch(
-		openFolderCmd(m.backend, folder.Name),
+		openFolderCmd(m.acct, folder.Name),
 		m.spinner.Tick,
 	)
 }
@@ -507,7 +520,7 @@ func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.Messag
 			expired = append(expired, msg.UID)
 		}
 	}
-	return destroyCmd(m.backend, expired)
+	return destroyCmd(m.acct, folder.Name, expired)
 }
 
 // dispatchEmpty emits OpenConfirmEmptyMsg when the selected folder is
@@ -541,7 +554,7 @@ func (m *AccountTab) dispatchEmpty() tea.Cmd {
 	}
 }
 
-// currentFolderName returns the provider name of the currently-selected
+// currentFolderName returns the canonical name of the currently-selected
 // sidebar folder, or "" when nothing is selected.
 func (m AccountTab) currentFolderName() string {
 	folder, ok := m.sidebar.SelectedFolderInfo()
@@ -609,23 +622,27 @@ func (m *AccountTab) LinkPickerRequest() ([]string, bool) {
 	return links, true
 }
 
-// dispatchTriage performs an optimistic triage action: snapshots state
-// for the inverse, mutates MessageList locally, exits visual mode, and
-// returns a Cmd that emits triageStartedMsg + the forward backend Cmd.
-// The op selects the kind of action: "delete", "archive", "star",
-// "read".
+// dispatchTriage performs an optimistic triage action through the
+// cache. The cache QueueOp transactionally writes the optimistic flip
+// and the outbox row; the immediate folder refresh re-reads the new
+// state. Toast carries the inverse Cmd (a compensating QueueOp).
 func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 	uids := m.msglist.ActionTargets()
 	if len(uids) == 0 {
 		return nil
 	}
-	srcFolder := m.currentFolderName()
+	src := m.currentFolderName()
+	m.msglist.ExitVisual()
 
 	switch op {
 	case "delete":
-		return m.dispatchRemoval("delete", uids,
-			func() error { return m.backend.Delete(uids) },
-			func() error { return m.backend.Move(uids, srcFolder) })
+		trash, ok := m.sidebar.FolderNameByCanonical("Trash")
+		if !ok {
+			return func() tea.Msg {
+				return ErrorMsg{Op: "delete", Err: errors.New("no Trash folder configured")}
+			}
+		}
+		return m.queueMove(op, src, trash, uids)
 
 	case "archive":
 		archive, ok := m.sidebar.FolderNameByCanonical("Archive")
@@ -634,9 +651,7 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 				return ErrorMsg{Op: "archive", Err: errors.New("no Archive folder configured")}
 			}
 		}
-		return m.dispatchRemoval("archive", uids,
-			func() error { return m.backend.Move(uids, archive) },
-			func() error { return m.backend.Move(uids, srcFolder) })
+		return m.queueMove(op, src, archive, uids)
 
 	case "star":
 		cursor, ok := m.msglist.SelectedMessage()
@@ -648,7 +663,7 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 		if !set {
 			opName = "unstar"
 		}
-		return m.dispatchFlagToggle(opName, uids, mail.FlagFlagged, set)
+		return m.queueFlag(opName, src, uids, mail.FlagFlagged, set)
 
 	case "read":
 		cursor, ok := m.msglist.SelectedMessage()
@@ -660,51 +675,34 @@ func (m *AccountTab) dispatchTriage(op string) tea.Cmd {
 		if !set {
 			opName = "unread"
 		}
-		return m.dispatchSeenToggle(opName, uids, set)
+		return m.queueFlag(opName, src, uids, mail.FlagSeen, set)
 	}
 	return nil
 }
 
-// dispatchRemoval factors the optimistic-flip / inverse-snapshot /
-// triageStartedMsg emission shared by delete and archive. fwd performs
-// the backend mutation; rev moves the messages back to the source
-// folder for the inverse.
-func (m *AccountTab) dispatchRemoval(op string, uids []mail.UID, fwd, rev func() error) tea.Cmd {
-	snapshot, positions := m.msglist.SnapshotSource(uids)
-	m.msglist.ApplyDelete(uids)
-	m.msglist.ExitVisual()
-
-	onUndo := func() { m.msglist.ApplyInsert(snapshot, positions) }
-	return buildTriageCmd(op, uids, onUndo, fwd, rev)
+// queueMove queues a move op for each uid from src to dest, then
+// emits triageStartedMsg whose inverse undoes the move (queues
+// a move from dest back to src for each uid).
+func (m *AccountTab) queueMove(op, src, dest string, uids []mail.UID) tea.Cmd {
+	fwd := queueOpsCmd(m.acct, op, src, uids, func(_ mail.UID) cache.OpArgs {
+		return cache.MoveArgs{Dest: dest}
+	})
+	rev := queueOpsCmd(m.acct, op+" undo", dest, uids, func(_ mail.UID) cache.OpArgs {
+		return cache.MoveArgs{Dest: src}
+	})
+	return startTriageCmd(op, dest, uids, fwd, rev)
 }
 
-// dispatchFlagToggle handles star/unstar: flips a flag in MessageList
-// and on the backend, with an inverse that flips it back.
-func (m *AccountTab) dispatchFlagToggle(op string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
-	m.msglist.ApplyFlag(uids, flag, set)
-	m.msglist.ExitVisual()
-
-	onUndo := func() { m.msglist.ApplyFlag(uids, flag, !set) }
-	fwd := func() error { return m.backend.Flag(uids, flag, set) }
-	rev := func() error { return m.backend.Flag(uids, flag, !set) }
-	return buildTriageCmd(op, uids, onUndo, fwd, rev)
-}
-
-// dispatchSeenToggle handles read/unread: flips FlagSeen and routes to
-// MarkRead/MarkUnread on the backend.
-func (m *AccountTab) dispatchSeenToggle(op string, uids []mail.UID, seen bool) tea.Cmd {
-	m.msglist.ApplySeen(uids, seen)
-	m.msglist.ExitVisual()
-
-	fwdFn := m.backend.MarkRead
-	revFn := m.backend.MarkUnread
-	if !seen {
-		fwdFn, revFn = m.backend.MarkUnread, m.backend.MarkRead
-	}
-	onUndo := func() { m.msglist.ApplySeen(uids, !seen) }
-	fwd := func() error { return fwdFn(uids) }
-	rev := func() error { return revFn(uids) }
-	return buildTriageCmd(op, uids, onUndo, fwd, rev)
+// queueFlag queues a flag set/unset op for each uid, then emits the
+// triage toast whose inverse flips the flag back.
+func (m *AccountTab) queueFlag(op, src string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
+	fwd := queueOpsCmd(m.acct, op, src, uids, func(_ mail.UID) cache.OpArgs {
+		return cache.FlagArgs{Flag: flag, Set: set}
+	})
+	rev := queueOpsCmd(m.acct, op+" undo", src, uids, func(_ mail.UID) cache.OpArgs {
+		return cache.FlagArgs{Flag: flag, Set: !set}
+	})
+	return startTriageCmd(op, "", uids, fwd, rev)
 }
 
 func (m *AccountTab) dispatchMove() tea.Cmd {
@@ -720,41 +718,21 @@ func (m *AccountTab) dispatchMove() tea.Cmd {
 }
 
 func (m *AccountTab) dispatchMoveFromPicker(msg MovePickerPickedMsg) tea.Cmd {
-	uids := msg.UIDs
-	if len(uids) == 0 {
+	if len(msg.UIDs) == 0 {
 		return nil
 	}
-	snapshot, positions := m.msglist.SnapshotSource(uids)
-	m.msglist.ApplyDelete(uids)
 	m.msglist.ExitVisual()
-
-	onUndo := func() { m.msglist.ApplyInsert(snapshot, positions) }
-	fwd := func() error { return m.backend.Move(uids, msg.Dest) }
-	rev := func() error { return m.backend.Move(uids, msg.Src) }
-	return buildTriageCmdWithDest("move", uids, msg.Dest, onUndo, fwd, rev)
+	return m.queueMove("move", msg.Src, msg.Dest, msg.UIDs)
 }
 
-func buildTriageCmd(op string, uids []mail.UID, onUndo func(), fwd, rev func() error) tea.Cmd {
-	return buildTriageCmdWithDest(op, uids, "", onUndo, fwd, rev)
-}
-
-func buildTriageCmdWithDest(op string, uids []mail.UID, dest string, onUndo func(), fwd, rev func() error) tea.Cmd {
-	forward := func() tea.Msg {
-		if err := fwd(); err != nil {
-			return ErrorMsg{Op: op, Err: err}
-		}
-		return nil
-	}
-	inverse := func() tea.Msg {
-		if err := rev(); err != nil {
-			return ErrorMsg{Op: op + " undo", Err: err}
-		}
-		return nil
-	}
+// startTriageCmd batches the forward queueOpsCmd with a triage-toast
+// emitter so the chrome row appears in the same Update tick the cache
+// flip lands.
+func startTriageCmd(op, dest string, uids []mail.UID, fwd, rev tea.Cmd) tea.Cmd {
 	start := func() tea.Msg {
-		return triageStartedMsg{op: op, n: len(uids), uids: uids, dest: dest, inverse: inverse, onUndo: onUndo}
+		return triageStartedMsg{op: op, n: len(uids), uids: uids, dest: dest, inverse: rev}
 	}
-	return tea.Batch(start, forward)
+	return tea.Batch(start, fwd)
 }
 
 // pageFor returns (creating if absent) the folderPage for name.
@@ -783,7 +761,7 @@ func (m *AccountTab) maybeLoadMore() tea.Cmd {
 		return nil
 	}
 	page.loadMoreInFlight = true
-	return loadMoreCmd(m.backend, name, page.loaded)
+	return loadMoreCmd(m.acct, name, page.loaded)
 }
 
 // View renders the sidebar + divider + message list. The sidebar
@@ -796,7 +774,7 @@ func (m AccountTab) View() string {
 
 	sw := m.layout.Sidebar
 
-	acctName := displayTruncateEllipsis(m.backend.AccountName(), sw-1)
+	acctName := displayTruncateEllipsis(m.acct.AccountName(), sw-1)
 	acctLine := m.styles.SidebarAccount.Width(sw).Render(" " + acctName)
 	blank := m.styles.SidebarBg.Width(sw).Render("")
 
@@ -853,4 +831,3 @@ func (m AccountTab) View() string {
 	}
 	return strings.Join(assembled, "\n")
 }
-

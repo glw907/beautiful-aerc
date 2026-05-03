@@ -19,36 +19,35 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	gomail "github.com/emersion/go-message/mail"
+	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/filter"
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// foldersLoadedMsg carries the result of an initial ListFolders call.
+// foldersLoadedMsg carries the result of an initial sync + ListFolders
+// call. The cache emits canonical display names already classified.
 type foldersLoadedMsg struct {
-	folders []mail.Folder
+	classified []mail.ClassifiedFolder
 }
 
-// folderQueryDoneMsg carries a Query result; AccountTab follows up
-// with fetchHeadersCmd to materialize the headers.
-type folderQueryDoneMsg struct {
+// folderLoadedMsg replaces the previous open→query→fetch chain. The
+// cache returns headers in one call.
+type folderLoadedMsg struct {
 	name  string
-	uids  []mail.UID
+	msgs  []mail.MessageInfo
 	total int
-	reset bool // true on initial load, false on append
 }
 
-// headersAppliedMsg is the terminal message of an initial folder load.
-type headersAppliedMsg struct {
-	name string
-	msgs []mail.MessageInfo
+// folderAppendedMsg is the load-more counterpart of folderLoadedMsg.
+type folderAppendedMsg struct {
+	name  string
+	msgs  []mail.MessageInfo
+	total int
 }
 
-// headersAppendedMsg is the terminal message of a load-more.
-type headersAppendedMsg struct {
-	name string
-	msgs []mail.MessageInfo
-}
+// cacheEventMsg wraps one CacheEvent for the UI loop.
+type cacheEventMsg struct{ event cache.CacheEvent }
 
 // ErrorMsg carries a failure from any tea.Cmd. App captures the most
 // recent ErrorMsg into lastErr; the banner renders "⚠ <Op>: <Err>".
@@ -58,67 +57,99 @@ type ErrorMsg struct {
 	Err error
 }
 
-// loadFoldersCmd returns a Cmd that fetches the folder list from the
-// backend. The result is delivered as a foldersLoadedMsg, or an
-// ErrorMsg on failure.
-func loadFoldersCmd(b mail.Backend) tea.Cmd {
-	return func() tea.Msg {
-		folders, err := b.ListFolders()
-		if err != nil {
-			return ErrorMsg{Op: "list folders", Err: err}
-		}
-		return foldersLoadedMsg{folders: folders}
-	}
-}
-
 // initialWindow is the number of UIDs requested on a fresh folder open.
 const initialWindow = 500
 
-// openFolderCmd opens a folder and queries the first window of UIDs.
-// The result is a folderQueryDoneMsg{reset:true}, or an ErrorMsg.
-// Returns nil when name is empty.
-func openFolderCmd(b mail.Backend, name string) tea.Cmd {
+// loadFoldersCmd syncs folder metadata from the backend then reads the
+// classified list out of the cache.
+func loadFoldersCmd(c *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		if err := c.SyncFolders(context.Background()); err != nil {
+			return ErrorMsg{Op: "list folders", Err: err}
+		}
+		cls, err := c.ListFolders()
+		if err != nil {
+			return ErrorMsg{Op: "list folders", Err: err}
+		}
+		return foldersLoadedMsg{classified: cls}
+	}
+}
+
+// queryFolderCmd reads the first window of cached headers and emits
+// a folderLoadedMsg. When sync is true (folder open), the backend is
+// nudged to converge first; sync errors don't fail the load. An empty
+// name returns nil so callers can chain without nil-checks.
+func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	if name == "" {
 		return nil
 	}
+	op := "refresh"
+	if sync {
+		op = "query folder"
+	}
 	return func() tea.Msg {
-		if err := b.OpenFolder(name); err != nil {
-			return ErrorMsg{Op: "open folder", Err: err}
+		if sync {
+			_ = c.SyncFolder(context.Background(), name)
 		}
-		uids, total, err := b.QueryFolder(name, 0, initialWindow)
+		msgs, total, err := c.QueryFolder(name, 0, initialWindow)
 		if err != nil {
-			return ErrorMsg{Op: "query folder", Err: err}
+			return ErrorMsg{Op: op, Err: err}
 		}
-		return folderQueryDoneMsg{name: name, uids: uids, total: total, reset: true}
+		return folderLoadedMsg{name: name, msgs: msgs, total: total}
 	}
 }
 
-// loadMoreCmd queries the next window of UIDs starting at offset.
-// The result is a folderQueryDoneMsg{reset:false}, or an ErrorMsg.
-func loadMoreCmd(b mail.Backend, name string, offset int) tea.Cmd {
+// openFolderCmd is queryFolderCmd with sync — used by sidebar
+// navigation to converge with the backend before reading.
+func openFolderCmd(c *cache.Account, name string) tea.Cmd {
+	return queryFolderCmd(c, name, true)
+}
+
+// refreshFolderCmd is queryFolderCmd without sync — used after a
+// write op to pick up the optimistic flip the cache already applied.
+func refreshFolderCmd(c *cache.Account, name string) tea.Cmd {
+	return queryFolderCmd(c, name, false)
+}
+
+// loadMoreCmd returns the next window of cached headers.
+func loadMoreCmd(c *cache.Account, name string, offset int) tea.Cmd {
 	return func() tea.Msg {
-		uids, total, err := b.QueryFolder(name, offset, initialWindow)
+		msgs, total, err := c.QueryFolder(name, offset, initialWindow)
 		if err != nil {
 			return ErrorMsg{Op: "load more", Err: err}
 		}
-		return folderQueryDoneMsg{name: name, uids: uids, total: total, reset: false}
+		return folderAppendedMsg{name: name, msgs: msgs, total: total}
 	}
 }
 
-// fetchHeadersCmd materializes a UID list into MessageInfo slices.
-// On success it returns headersAppliedMsg (reset=true) or
-// headersAppendedMsg (reset=false). Errors return ErrorMsg.
-func fetchHeadersCmd(b mail.Backend, name string, uids []mail.UID, reset bool) tea.Cmd {
+// queueOpsCmd enqueues one op per uid in folder, then refreshes.
+// makeArgs lets each uid carry its own args (e.g. flag toggles whose
+// value is uid-independent return the same args every time).
+func queueOpsCmd(c *cache.Account, op, folder string, uids []mail.UID, makeArgs func(mail.UID) cache.OpArgs) tea.Cmd {
 	return func() tea.Msg {
-		msgs, err := b.FetchHeaders(uids)
+		ctx := context.Background()
+		for _, u := range uids {
+			if _, err := c.QueueOp(ctx, folder, u, makeArgs(u)); err != nil {
+				return ErrorMsg{Op: op, Err: err}
+			}
+		}
+		msgs, total, err := c.QueryFolder(folder, 0, initialWindow)
 		if err != nil {
-			return ErrorMsg{Op: "fetch headers", Err: err}
+			return ErrorMsg{Op: op + " refresh", Err: err}
 		}
-		if reset {
-			return headersAppliedMsg{name: name, msgs: msgs}
-		}
-		return headersAppendedMsg{name: name, msgs: msgs}
+		return folderLoadedMsg{name: folder, msgs: msgs, total: total}
 	}
+}
+
+// enqueueDestroys queues a destroy op per uid against folder. Shared
+// by emptyFolderCmd and destroyCmd. Returns the first error.
+func enqueueDestroys(ctx context.Context, c *cache.Account, folder string, uids []mail.UID) error {
+	for _, u := range uids {
+		if _, err := c.QueueOp(ctx, folder, u, cache.DestroyArgs{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SearchMode selects which fields the message filter matches against.
@@ -162,15 +193,15 @@ type bodyLoadedMsg struct {
 	blocks []content.Block
 }
 
-// loadBodyCmd fetches a message body, parses it into blocks, and
-// delivers a bodyLoadedMsg. Errors fall through as ErrorMsg. If ctx
-// is cancelled before FetchBody returns, the cmd returns nil and the
-// result is dropped; the backend round-trip itself still completes.
-func loadBodyCmd(ctx context.Context, b mail.Backend, uid mail.UID) tea.Cmd {
+// loadBodyCmd fetches a message body via the cache (Cache I delegates
+// straight to the backend) and parses it into blocks. If ctx is
+// cancelled before FetchBody returns the cmd returns nil and the
+// result is dropped; the backend round-trip still completes.
+func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		resultCh := make(chan tea.Msg, 1)
 		go func() {
-			r, err := b.FetchBody(uid)
+			r, err := c.FetchBody(uid)
 			if err != nil {
 				resultCh <- ErrorMsg{Op: "fetch body", Err: err}
 				return
@@ -266,16 +297,12 @@ func looksLikeRFC822(buf []byte) bool {
 	return true
 }
 
-// markReadCmd flips the seen flag on the backend. Errors flow back
-// as ErrorMsg; App captures the most recent into lastErr and renders
-// it in the banner above the status bar.
-func markReadCmd(b mail.Backend, uid mail.UID) tea.Cmd {
-	return func() tea.Msg {
-		if err := b.MarkRead([]mail.UID{uid}); err != nil {
-			return ErrorMsg{Op: "mark read", Err: err}
-		}
-		return nil
-	}
+// markReadCmd queues an optimistic FlagSeen=true op for uid against
+// folder, then re-reads the folder so the read-state flip surfaces.
+func markReadCmd(c *cache.Account, folder string, uid mail.UID) tea.Cmd {
+	return queueOpsCmd(c, "mark read", folder, []mail.UID{uid}, func(_ mail.UID) cache.OpArgs {
+		return cache.FlagArgs{Flag: mail.FlagSeen, Set: true}
+	})
 }
 
 // launchURLCmd opens a URL via the openURL hook (xdg-open in
@@ -305,6 +332,19 @@ func pumpUpdatesCmd(b mail.Backend) tea.Cmd {
 	}
 }
 
+// pumpCacheCmd waits for one CacheEvent and re-arms itself. App's
+// Update loop re-dispatches this Cmd after each event so the pump
+// stays alive across the program lifetime.
+func pumpCacheCmd(c *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-c.Events()
+		if !ok {
+			return nil
+		}
+		return cacheEventMsg{event: ev}
+	}
+}
+
 // openURL is the URL launcher hook. Tests swap it to capture the URL
 // instead of executing xdg-open. Shared by viewer numeric quick-launch
 // and the link picker.
@@ -324,16 +364,15 @@ type LaunchURLMsg struct {
 
 // triageStartedMsg is emitted by AccountTab after an optimistic triage
 // flip. App receives it, sets the toast, and schedules a tea.Tick for
-// the undo timer. inverse runs on `u` or on an ErrorMsg rollback;
-// onUndo applies the local MessageList rollback before the inverse
-// Cmd fires.
+// the undo timer. inverse runs on `u`: a compensating QueueOp via
+// queueOpsCmd. The cache owns the optimistic state, so there is no
+// onUndo callback — undo is the inverse Cmd alone.
 type triageStartedMsg struct {
 	op      string
 	n       int
 	dest    string
 	uids    []mail.UID
 	inverse tea.Cmd
-	onUndo  func()
 }
 
 // toastExpireMsg fires when the undo timer elapses. App ignores it if
@@ -344,8 +383,7 @@ type toastExpireMsg struct {
 }
 
 // undoRequestedMsg is emitted when the user presses `u` while a toast
-// is active. App applies the local roll-back via onUndo and fires the
-// inverse Cmd.
+// is active. App fires the inverse Cmd.
 type undoRequestedMsg struct{}
 
 // OpenMovePickerMsg asks App to open the move-to-folder picker.
@@ -370,7 +408,7 @@ type MovePickerClosedMsg struct{}
 type OpenConfirmEmptyMsg struct {
 	Folder string // display name shown in modal title and toast
 	Total  int    // message count shown in modal body
-	Source string // provider folder name passed to Destroy
+	Source string // canonical folder name passed to QueueOp
 }
 
 // EmptyFolderConfirmedMsg signals the user pressed `y` in the confirm modal.
@@ -382,58 +420,59 @@ type EmptyFolderConfirmedMsg struct {
 // ConfirmModalClosedMsg signals the modal was dismissed without confirmation.
 type ConfirmModalClosedMsg struct{}
 
-// emptyFolderCmd queries every UID in src then issues Destroy. Pages
-// through QueryFolder so very large folders don't truncate at initialWindow.
-func emptyFolderCmd(b mail.Backend, displayName, src string) tea.Cmd {
+// emptyFolderCmd pages the cache for every UID in src, queues a
+// destroy op per UID, then re-reads. Bypasses the undo bar (emitting
+// triageStartedMsg with op = "empty" so the toast suppresses the [u]
+// hint per ADR-0094).
+func emptyFolderCmd(c *cache.Account, displayName, src string) tea.Cmd {
 	return func() tea.Msg {
 		op := "empty " + strings.ToLower(displayName)
-		if err := b.OpenFolder(src); err != nil {
-			return ErrorMsg{Op: op, Err: err}
-		}
+		ctx := context.Background()
 		var all []mail.UID
 		const page = 1000
 		for offset := 0; ; {
-			uids, total, err := b.QueryFolder(src, offset, page)
+			msgs, total, err := c.QueryFolder(src, offset, page)
 			if err != nil {
 				return ErrorMsg{Op: op, Err: err}
 			}
-			all = append(all, uids...)
-			offset += len(uids)
-			if len(uids) == 0 || offset >= total {
+			for _, m := range msgs {
+				all = append(all, m.UID)
+			}
+			offset += len(msgs)
+			if len(msgs) == 0 || offset >= total {
 				break
 			}
 		}
-		if len(all) == 0 {
-			return emptyFolderDoneMsg{folder: displayName, n: 0}
-		}
-		if err := b.Destroy(all); err != nil {
+		if err := enqueueDestroys(ctx, c, src, all); err != nil {
 			return ErrorMsg{Op: op, Err: err}
 		}
-		return emptyFolderDoneMsg{folder: displayName, n: len(all)}
+		return emptyFolderDoneMsg{folder: displayName, source: src, n: len(all)}
 	}
 }
 
 // emptyFolderDoneMsg reports a successful manual empty.
 type emptyFolderDoneMsg struct {
 	folder string
+	source string
 	n      int
 }
 
-// destroyCmd permanently deletes uids. Used by the retention sweep.
-// Empty input skips the backend call.
-func destroyCmd(b mail.Backend, uids []mail.UID) tea.Cmd {
+// destroyCmd queues per-UID destroy ops for the retention sweep.
+// Empty input skips the queue.
+func destroyCmd(c *cache.Account, folder string, uids []mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		if len(uids) == 0 {
-			return sweepCompletedMsg{}
+			return sweepCompletedMsg{folder: folder}
 		}
-		if err := b.Destroy(uids); err != nil {
+		if err := enqueueDestroys(context.Background(), c, folder, uids); err != nil {
 			return ErrorMsg{Op: "purge expired", Err: err}
 		}
-		return sweepCompletedMsg{uids: uids}
+		return sweepCompletedMsg{folder: folder, uids: uids}
 	}
 }
 
 // sweepCompletedMsg reports a retention sweep's destroyed UIDs.
 type sweepCompletedMsg struct {
-	uids []mail.UID
+	folder string
+	uids   []mail.UID
 }

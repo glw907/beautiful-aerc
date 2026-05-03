@@ -69,10 +69,13 @@ file describes behavior, not the key tables.
   `viewer.CurrentUID()`. Phases: closed → loading (spinner) → ready
   (headers + body in `bubbles/viewport`) → closed. While open every
   key routes there first; search keys + folder jumps are inert.
-- Mark-read on viewer open is optimistic: `MessageList.MarkSeen`
-  flips the local seen flag immediately and the backend `MarkRead`
-  Cmd runs in parallel. Failures surface via `ErrorMsg` into the
-  App-owned banner.
+- Mark-read on viewer open is optimistic via the cache:
+  `markReadCmd` queues `FlagArgs{FlagSeen, true}` through
+  `cache.Account.QueueOp`, which transactionally flips `ui_flags`
+  and inserts the outbox row. The follow-up `folderLoadedMsg`
+  refresh re-reads the now-flipped state into `MessageList` via
+  `RefreshSource` (cursor preserved). Failures surface via
+  `ErrorMsg` into the App-owned banner.
 - Body content rendering caps at `maxBodyWidth = 72` cells; headers
   wrap at the panel width (uncapped). Outbound links are harvested
   by `content.RenderBodyWithFootnotes` into `[N]: <url>` rows below
@@ -82,35 +85,42 @@ file describes behavior, not the key tables.
 
 ### Triage, undo, error banner
 
-- Triage actions (delete/archive/star/read/move) are optimistic with
-  a shared undo bar. `MessageList.Apply{Delete,Insert,Flag,Seen}`
-  flip local state without firing Cmds; `AccountTab.dispatchTriage`
-  (or `dispatchMoveFromPicker` for move) snapshots inverse data,
-  applies the flip, exits visual mode, and emits `triageStartedMsg`
-  + the forward Cmd via `buildTriageCmd` (or
-  `buildTriageCmdWithDest` for move's dest). `App` owns
-  `pendingAction` and schedules a `tea.Tick` for `[ui] undo_seconds`
-  (default 6, clamped `[2, 30]`). `u` fires `onUndo` + the saved
-  inverse Cmd. A folder change commits (no inverse). An `ErrorMsg`
-  runs `onUndo` before setting `lastErr` so a backend failure
-  visibly reverts the flip. The chrome row above the status bar is
-  shared with the error banner; error wins, then toast, else the
-  row collapses (`App.chromeBannerRow`). `pendingAction.IsZero()`
-  checks `op == ""`.
+- Triage actions (delete/archive/star/read/move) are optimistic
+  through the cache. `AccountTab.dispatchTriage` (or
+  `dispatchMoveFromPicker`) calls `queueOpsCmd` which queues the
+  op via `cache.QueueOp` (transactional optimistic flip on
+  `ui_flags` / `ui_hide`) and immediately re-reads the folder via
+  `cache.QueryFolder`. The result `folderLoadedMsg` updates the
+  msglist via `RefreshSource` (cursor preserved). `triageStartedMsg`
+  carries the inverse Cmd — a compensating `cache.QueueOp` that
+  reverses the action. `App` owns `pendingAction` and schedules a
+  `tea.Tick` for `[ui] undo_seconds` (default 6, clamped `[2, 30]`).
+  `u` fires the saved inverse Cmd; there is no separate local
+  roll-back since cache state is the only state. A folder change
+  commits the toast (cache state stands). An `ErrorMsg` clears the
+  toast — the user's responsibility to fire the inverse manually if
+  a forward op already flipped state. The chrome row above the
+  status bar is shared with the error banner; error wins, then
+  toast, else the row collapses (`App.chromeBannerRow`).
+  `pendingAction.IsZero()` checks `op == ""`. "Delete" is a Move
+  to the canonical Trash folder (no `mail.Backend.Delete` exists);
+  the inverse moves it back to the source folder.
 - Permanent-delete consumers — both bypass the undo bar (the
   primitive is irreversible). **Retention sweep:** opt-in via `[ui]
   trash_retention_days` / `spam_retention_days` (default 0, clamp
   `[0, 365]`). Fires once per session per Disposal folder, on first
-  `headersAppliedMsg` for that folder. Iterates loaded messages,
+  `folderLoadedMsg` for that folder. Iterates loaded messages,
   collects UIDs whose `SentAt` is before
   `now - retention_days * 24h` (zero `SentAt` skipped — partial
-  sweep by design), dispatches `destroyCmd`. `swept[name]` flag is
-  set on first attempt regardless of outcome — failures land in the
-  error banner; no retry-loop. **Manual empty:** `E` on Disposal
-  folders → `OpenConfirmEmptyMsg` → App opens `ConfirmModal` →
-  `EmptyFolderConfirmedMsg` → `emptyFolderCmd` pages `QueryFolder`
-  in 1000-unit batches → `Destroy`. Toast renders `Emptied <Folder>
-  (<N>)` and suppresses `[u undo]` (toast keys off `op == "empty"`).
+  sweep by design), dispatches `destroyCmd` which queues
+  `DestroyArgs{}` per UID via `cache.QueueOp`. `swept[name]` flag
+  is set on first attempt regardless of outcome — failures land in
+  the error banner; no retry-loop. **Manual empty:** `E` on
+  Disposal folders → `OpenConfirmEmptyMsg` → App opens
+  `ConfirmModal` → `EmptyFolderConfirmedMsg` → `emptyFolderCmd`
+  pages `cache.QueryFolder` in 1000-unit batches → `enqueueDestroys`
+  fan-out. Toast renders `Emptied <Folder> (<N>)` and suppresses
+  `[u undo]` (toast keys off `op == "empty"`).
 - `ErrorMsg{Op, Err}` is the canonical Cmd error type. Every
   fallible `tea.Cmd` returns it with a short verb-phrase `Op`
   ("mark read", "fetch body", "purge expired"). `App` owns

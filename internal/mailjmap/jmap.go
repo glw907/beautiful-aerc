@@ -718,23 +718,6 @@ func (b *Backend) Copy(uids []mail.UID, destFolder string) error {
 	return nil
 }
 
-// Delete satisfies mail.Backend. It soft-deletes by moving uids to Trash.
-func (b *Backend) Delete(uids []mail.UID) error {
-	if len(uids) == 0 {
-		return nil
-	}
-	b.mu.Lock()
-	_, ok := b.folders["Trash"]
-	b.mu.Unlock()
-	if !ok {
-		return fmt.Errorf("delete: Trash folder not found")
-	}
-	if err := b.Move(uids, "Trash"); err != nil {
-		return fmt.Errorf("delete: %w", err)
-	}
-	return nil
-}
-
 // Destroy permanently deletes uids via JMAP Email/set destroy, bypassing
 // Trash. Irreversible. Empty input is a no-op.
 func (b *Backend) Destroy(uids []mail.UID) error {
@@ -794,21 +777,6 @@ func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 		return err
 	}
 	return b.setKeyword(uids, keyword, set)
-}
-
-// MarkRead satisfies mail.Backend.
-func (b *Backend) MarkRead(uids []mail.UID) error {
-	return b.setKeyword(uids, "$seen", true)
-}
-
-// MarkUnread satisfies mail.Backend.
-func (b *Backend) MarkUnread(uids []mail.UID) error {
-	return b.setKeyword(uids, "$seen", false)
-}
-
-// MarkAnswered satisfies mail.Backend.
-func (b *Backend) MarkAnswered(uids []mail.UID) error {
-	return b.setKeyword(uids, "$answered", true)
 }
 
 // Send satisfies mail.Backend. Compose is planned for Pass 9.

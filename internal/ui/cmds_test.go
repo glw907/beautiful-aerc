@@ -42,13 +42,9 @@ func (b *blockingBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { re
 
 func (b *blockingBackend) Move(_ []mail.UID, _ string) error { return nil }
 func (b *blockingBackend) Copy(_ []mail.UID, _ string) error { return nil }
-func (b *blockingBackend) Delete(_ []mail.UID) error         { return nil }
 func (b *blockingBackend) Destroy(_ []mail.UID) error        { return nil }
 
 func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
-func (b *blockingBackend) MarkRead(_ []mail.UID) error                  { return nil }
-func (b *blockingBackend) MarkUnread(_ []mail.UID) error                { return nil }
-func (b *blockingBackend) MarkAnswered(_ []mail.UID) error              { return nil }
 
 func (b *blockingBackend) Send(_ string, _ []string, _ io.Reader) error { return nil }
 
@@ -61,8 +57,9 @@ func TestLoadBodyCmd_CancelDiscardsResult(t *testing.T) {
 	release := make(chan struct{})
 	mock := &blockingBackend{release: release}
 
+	acct := newTestCache(t, mock)
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := loadBodyCmd(ctx, mock, "uid-1")
+	cmd := loadBodyCmd(ctx, acct, "uid-1")
 
 	resultCh := make(chan tea.Msg, 1)
 	go func() {

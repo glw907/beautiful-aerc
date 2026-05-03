@@ -142,6 +142,24 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 // Name is the user-facing account label.
 func (a *Account) Name() string { return a.name }
 
+// AccountName proxies to the backend's display label. Sidebar header
+// reads this; routes through the cache so the UI doesn't pierce
+// straight to the backend pointer.
+func (a *Account) AccountName() string {
+	if a.Backend == nil {
+		return a.name
+	}
+	return a.Backend.AccountName()
+}
+
+// AccountEmail proxies to the backend's resolved email address.
+func (a *Account) AccountEmail() string {
+	if a.Backend == nil {
+		return ""
+	}
+	return a.Backend.AccountEmail()
+}
+
 // Dir is the per-account cache directory on disk.
 func (a *Account) Dir() string { return a.dir }
 

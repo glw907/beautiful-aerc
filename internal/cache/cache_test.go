@@ -45,7 +45,6 @@ func (f *fakeBackend) Move(uids []mail.UID, _ string) error {
 	return f.err
 }
 func (f *fakeBackend) Copy(_ []mail.UID, _ string) error { return nil }
-func (f *fakeBackend) Delete(_ []mail.UID) error         { return nil }
 func (f *fakeBackend) Destroy(uids []mail.UID) error {
 	f.destroys = append(f.destroys, uids...)
 	return f.err
@@ -54,9 +53,6 @@ func (f *fakeBackend) Flag(uids []mail.UID, _ mail.Flag, _ bool) error {
 	f.flags = append(f.flags, uids...)
 	return f.err
 }
-func (f *fakeBackend) MarkRead(_ []mail.UID) error     { return nil }
-func (f *fakeBackend) MarkUnread(_ []mail.UID) error   { return nil }
-func (f *fakeBackend) MarkAnswered(_ []mail.UID) error { return nil }
 func (f *fakeBackend) Send(_ string, _ []string, _ io.Reader) error {
 	return nil
 }

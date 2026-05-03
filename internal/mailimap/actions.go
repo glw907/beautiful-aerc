@@ -57,17 +57,6 @@ func (b *Backend) Copy(uids []mail.UID, dest string) error {
 	return nil
 }
 
-// Delete satisfies mail.Backend. Soft-deletes to Trash. Resolves the
-// Trash folder name via ListFolders + Classify; returns an error
-// rather than expunging in place when no Trash folder is found.
-func (b *Backend) Delete(uids []mail.UID) error {
-	trash, err := b.resolveTrashFolder()
-	if err != nil {
-		return err
-	}
-	return b.Move(uids, trash)
-}
-
 // resolveTrashFolder returns the server-side name of the Trash folder,
 // caching the result on the Backend so repeated Deletes don't re-LIST.
 // Returns an error if no folder with Canonical == "Trash" is found.
@@ -154,17 +143,6 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 		return fmt.Errorf("store flags: %w", classifyErr(err))
 	}
 	return nil
-}
-
-// MarkRead satisfies mail.Backend.
-func (b *Backend) MarkRead(uids []mail.UID) error { return b.Flag(uids, mail.FlagSeen, true) }
-
-// MarkUnread satisfies mail.Backend.
-func (b *Backend) MarkUnread(uids []mail.UID) error { return b.Flag(uids, mail.FlagSeen, false) }
-
-// MarkAnswered satisfies mail.Backend.
-func (b *Backend) MarkAnswered(uids []mail.UID) error {
-	return b.Flag(uids, mail.FlagAnswered, true)
 }
 
 // Send satisfies mail.Backend. Compose/SMTP lands with the editor pass.

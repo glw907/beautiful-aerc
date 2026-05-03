@@ -29,12 +29,14 @@ func (a *Account) SyncFolders(ctx context.Context) error {
 			canonical := cf.DisplayName
 			live[canonical] = struct{}{}
 			if _, err := tx.Exec(`
-                INSERT INTO folders (name, protocol_name, role)
-                VALUES (?, ?, ?)
+                INSERT INTO folders (name, protocol_name, role, exists_total, unseen_total)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                   protocol_name = excluded.protocol_name,
-                  role          = excluded.role`,
-				canonical, cf.Folder.Name, cf.Folder.Role); err != nil {
+                  role          = excluded.role,
+                  exists_total  = excluded.exists_total,
+                  unseen_total  = excluded.unseen_total`,
+				canonical, cf.Folder.Name, cf.Folder.Role, cf.Folder.Exists, cf.Folder.Unseen); err != nil {
 				return fmt.Errorf("upsert folder %q: %w", canonical, err)
 			}
 		}

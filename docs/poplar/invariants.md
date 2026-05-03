@@ -87,11 +87,17 @@ the ADR(s) that justify them.
   Keys declared as `key.Binding`, dispatched via `key.Matches`;
   `WindowSizeMsg` handlers both `SetSize` children and forward the
   msg. Full contract in `docs/poplar/bubbletea-conventions.md`.
-- `App` constructs the model tree and threads `mail.Backend` and
-  `*theme.CompiledTheme` into the components that need them.
-  `AccountTab` holds the backend reference for tea.Cmd closures;
-  `Viewer` holds the theme reference for markdown rendering. No
-  component caches backend results as owned state.
+- `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
+  tree. `AccountTab` holds the cache handle (backend reachable via
+  `AccountTab.Backend()` for `pumpUpdatesCmd`); reads come from
+  `cache.Account.QueryFolder`/`ListFolders`, writes from
+  `cache.Account.QueueOp`. `MessageList` is presentation-only —
+  `RefreshSource` re-reads cache state after every write,
+  preserving cursor on UID. `Viewer` holds the theme reference for
+  markdown rendering. `mail.Backend` was shrunk in cutover:
+  `MarkRead`/`MarkUnread`/`MarkAnswered`/`Delete` are gone;
+  `Flag(uids, flag, set)` is canonical and "delete" is a
+  `MoveArgs{Dest: trash}` queued op.
 
 ### Config & theming
 
@@ -184,9 +190,12 @@ the ADR(s) that justify them.
   transactionally on `Open`. v1 installs the full Cache I shape
   (folders / messages / message_mailboxes / bodies / outbox per
   spec §A.3). v2 adds `outbox.next_eligible_at` so the drainer's
-  pickup query filters the failed-row backoff window in SQL via
-  the `outbox_pickup` partial index instead of scanning every
-  failed row in Go.
+  pickup query filters the failed-row backoff window in SQL. v3
+  adds `folders.exists_total`/`unseen_total` carrying backend-
+  reported counts so unopened folders show unread badges
+  immediately; `ListFolders` prefers local cache counts (from
+  `message_mailboxes`) once any messages are synced for that
+  folder.
 - `mail.ChangeTracker` is the protocol-level change-detection
   sibling of `mail.Backend`. Both v1 backends implement it.
   JMAP impl ignores the folder argument (Email/changes is
@@ -285,5 +294,6 @@ invariant. ADR numbering is chronological.
 | Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
-| Local cache architecture (design accepted Pass 8.4; revised Pass 8.4-revise; foundation Pass 8.4a; cutover Pass 8.4a-cutover; bodies + CLI Pass 8.4b; offline + Q/! overlays Pass 8.4c) — per-account SQLite + junction-table message shape, unified write path with typed Op sum + drainer Events, drain-first sync ordering, outbox + state machine + terminal classification, UIDVALIDITY re-key contract, IMAP scan-and-diff ChangeTracker (CONDSTORE deferred); spec at `docs/superpowers/specs/2026-05-02-cache-0-design.md` | 0110 (narrowed by 0114, 0115), 0111 (parts superseded by 0117), 0112 (superseded in part by 0113, 0116; narrowed by 0114), 0113, 0114, 0115, 0116, 0117, 0118, 0120 |
+| Local cache architecture (design accepted Pass 8.4; revised Pass 8.4-revise; foundation Pass 8.4a; cutover Pass 8.4a-cutover; bodies + CLI Pass 8.4b; offline + Q/! overlays Pass 8.4c) — per-account SQLite + junction-table message shape, unified write path with typed Op sum + drainer Events, drain-first sync ordering, outbox + state machine + terminal classification, UIDVALIDITY re-key contract, IMAP scan-and-diff ChangeTracker (CONDSTORE deferred); spec at `docs/superpowers/specs/2026-05-02-cache-0-design.md` | 0110 (narrowed by 0114, 0115), 0111 (parts superseded by 0117), 0112 (superseded in part by 0113, 0116; narrowed by 0114), 0113, 0114, 0115, 0116, 0117, 0118, 0120, 0121 |
 | Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |
+| Cache cutover — UI reads/writes via cache.Account; mail.Backend shrunk (Mark*/Delete dropped); MessageList Apply* removed; folders.exists_total/unseen_total seed sidebar | 0121 |

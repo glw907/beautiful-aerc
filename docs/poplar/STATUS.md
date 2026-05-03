@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.4a-cutover next — UI through cache + Backend collapse.
+**Current pass:** Pass 8.4b next — Cache II (body cache + eviction + `poplar cache` CLI).
 
 ## Passes
 
@@ -14,8 +14,8 @@
 | 8.4-review | Independent multi-angle review of Cache 0 spec → findings doc | done |
 | 8.4-revise | Apply review findings; revised spec + ADR-0113/0114/0115/0116/0117 | done |
 | 8.4a | Cache I foundation — schema, ChangeTracker, syncer, drainer, tests; ADR-0118/0119/0120 | done |
-| 8.4a-cutover | UI cutover — `*cache.Account` reads + writes, Backend collapse to `Flag`, App-layer optimistic-state delete | next |
-| 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | pending |
+| 8.4a-cutover | UI cutover — `*cache.Account` reads + writes, Backend collapse to `Flag`, App-layer optimistic-state delete; ADR-0121 | done |
+| 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | next |
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
 | 8.6 | Attachments I — backend (#24) | pending |
 | 8.7 | Attachments II — viewer (#24) | pending |
@@ -29,27 +29,24 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.4a-cutover)
+## Next starter prompt (Pass 8.4b)
 
-> **Goal.** Wire the UI through `cache.Account` and delete the
-> legacy direct-Backend code paths. Cache foundation is shipped
-> (Pass 8.4a, ADR-0118).
+> **Goal.** Land the body cache: `bodies` table use, LRU eviction
+> (size + age + per-folder caps), and a `poplar cache` CLI for
+> inspection and manual eviction.
 >
-> **Scope.** Phases 3 + 6 of
-> `docs/superpowers/plans/2026-05-02-cache-i-implementation.md`:
-> shrink `mail.Backend` (drop MarkRead/MarkUnread/MarkAnswered/
-> Delete — Flag is canonical); thread `*cache.Account` into
-> `App.NewApp` + `AccountTab`; switch reads through
-> `cache.Account.QueryFolder`, writes through `cache.QueueOp`;
-> replace `triageStartedMsg.onUndo` with a compensating-`QueueOp`
-> inverse; delete `MessageList.Apply*` and the App-layer
-> optimistic-state plumbing (ADR-0089); add `pumpCacheCmd` for
-> `(*Account).Events()`. Strangler-fig order (write switch →
-> read switch → legacy delete) is mandatory.
+> **Scope.** `(*cache.Account).FetchBody` writes/reads the bodies
+> table instead of falling straight through to the backend; an
+> eviction goroutine prunes by LRU using the `bodies_lru` index;
+> `cmd/poplar/cache.go` adds `poplar cache stats`, `poplar cache
+> evict --older-than`, `poplar cache vacuum`. Body fetches are
+> still synchronous — async prefetch is a Pass 8.4c+ concern.
 >
 > **Settled (do not re-brainstorm):** ADR-0110/0111/0112/0113/
-> 0114/0115/0116/0117/0118/0119/0120.
+> 0114/0115/0116/0117/0118/0119/0120/0121.
 >
-> **Approach.** Pre-beta refactor freedom — migrate UI tests
-> to the new shape rather than carrying shims. Standard pass-end
-> ritual; archive the cache-i plan when this pass closes.
+> **Approach.** Brainstorm eviction policy parameters (LRU
+> threshold defaults, per-folder cap, opt-out flag for archival
+> folders), write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-cache-ii.md`, then implement.
+> Standard pass-end checklist applies.

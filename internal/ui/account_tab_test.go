@@ -23,16 +23,11 @@ func newLoadedTab(t *testing.T, width, height int) AccountTab {
 	t.Helper()
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: width, Height: height})
-
-	// Resolve the Init Cmd to drive the tab into its post-load state.
-	msg := runCmd(tab.Init())
-	tab, cmd := tab.updateTab(msg)
-	// selectionChangedCmds emits folderChangedCmd + openFolderCmd (batch).
-	// Drain the full two-hop chain so the message list gets seeded:
-	// openFolderCmd → folderQueryDoneMsg → fetchHeadersCmd → headersAppliedMsg.
-	drain(t, &tab, cmd)
+	// Init returns a Batch (loadFoldersCmd + pumpCacheCmd). Drain it so
+	// foldersLoadedMsg → folderLoadedMsg both flow into the tab.
+	drain(t, &tab, tab.Init())
 	return tab
 }
 
@@ -55,21 +50,43 @@ func drain(t *testing.T, tab *AccountTab, cmd tea.Cmd) {
 	drainDepth(t, tab, cmd, 8)
 }
 
+// runCmdWithTimeout invokes cmd with a short timeout. The cache event
+// pump and other long-poll Cmds block until something happens; drains
+// in tests should skip them rather than hang. Returns nil on timeout.
+func runCmdWithTimeout(cmd tea.Cmd) tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	ch := make(chan tea.Msg, 1)
+	go func() { ch <- cmd() }()
+	select {
+	case msg := <-ch:
+		return msg
+	case <-time.After(50 * time.Millisecond):
+		return nil
+	}
+}
+
 func drainDepth(t *testing.T, tab *AccountTab, cmd tea.Cmd, depth int) {
 	t.Helper()
 	if cmd == nil || depth == 0 {
 		return
 	}
-	msg := cmd()
+	msg := runCmdWithTimeout(cmd)
+	feedTab(t, tab, msg, depth)
+}
+
+// feedTab routes one message into updateTab, recursing into BatchMsg
+// children so nested batches expand fully.
+func feedTab(t *testing.T, tab *AccountTab, msg tea.Msg, depth int) {
+	t.Helper()
+	if msg == nil || depth == 0 {
+		return
+	}
 	if batch, ok := msg.(tea.BatchMsg); ok {
 		for _, sub := range batch {
-			if sub == nil {
-				continue
-			}
-			inner := sub()
-			newTab, follow := tab.updateTab(inner)
-			*tab = newTab
-			drainDepth(t, tab, follow, depth-1)
+			inner := runCmdWithTimeout(sub)
+			feedTab(t, tab, inner, depth-1)
 		}
 		return
 	}
@@ -196,19 +213,35 @@ func TestAccountTab(t *testing.T) {
 func TestAccountTabInit_ReturnsFoldersCmd(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+	// Init returns a Batch (loadFoldersCmd + pumpCacheCmd). Look for
+	// foldersLoadedMsg among the batched results.
 	msg := runCmd(tab.Init())
-	if _, ok := msg.(foldersLoadedMsg); !ok {
-		t.Fatalf("expected foldersLoadedMsg from Init, got %T", msg)
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected BatchMsg from Init, got %T", msg)
+	}
+	var found bool
+	for _, sub := range batch {
+		if sub == nil {
+			continue
+		}
+		if _, ok := runCmdWithTimeout(sub).(foldersLoadedMsg); ok {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("foldersLoadedMsg not present in Init batch")
 	}
 }
 
 func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	folders, _ := backend.ListFolders()
-	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	if len(tab.sidebar.entries) == 0 {
 		t.Fatal("expected sidebar to be seeded")
 	}
@@ -217,21 +250,21 @@ func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 	}
 	msg := runCmd(cmd)
 	switch msg.(type) {
-	case folderQueryDoneMsg, headersAppliedMsg, tea.BatchMsg:
+	case folderLoadedMsg, folderAppendedMsg, tea.BatchMsg:
 	default:
-		t.Fatalf("expected folderQueryDoneMsg/headersAppliedMsg/BatchMsg, got %T", msg)
+		t.Fatalf("expected folderLoadedMsg/folderAppendedMsg/BatchMsg, got %T", msg)
 	}
 }
 
 func TestAccountTab_headersAppliedSeedsMsglist(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	msgs := []mail.MessageInfo{
 		{UID: "1", Subject: "hello", From: "a", Date: "now"},
 	}
-	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: msgs})
+	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: msgs, total: len(msgs)})
 	if tab.msglist.Count() != 1 {
 		t.Fatalf("expected msglist count 1, got %d", tab.msglist.Count())
 	}
@@ -247,16 +280,16 @@ func TestAccountTab_PerFolderThreadingOverride(t *testing.T) {
 		ThreadingSet: true,
 	}
 
-	tab := NewAccountTab(styles, theme.Nord, backend, uiCfg, FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), uiCfg, FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	folders, _ := backend.ListFolders()
-	tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
+	tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 
 	msgs := []mail.MessageInfo{
 		{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "a", Date: "Apr 5", Flags: mail.FlagSeen},
 		{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "re: a", Date: "Apr 6", Flags: mail.FlagSeen},
 	}
-	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: msgs})
+	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: msgs, total: len(msgs)})
 
 	if got := visibleRowCount(tab.msglist); got != 2 {
 		t.Fatalf("flat display visible rows = %d, want 2 (no thread tree)", got)
@@ -322,7 +355,7 @@ func TestAccountTab_JDispatchesFolderLoad(t *testing.T) {
 	}
 	msg := runCmd(cmd)
 	switch m := msg.(type) {
-	case folderQueryDoneMsg, headersAppliedMsg:
+	case folderLoadedMsg, folderAppendedMsg:
 	case tea.BatchMsg:
 		if len(m) == 0 {
 			t.Fatal("empty batch")
@@ -594,19 +627,22 @@ func TestAccountTab_EnterMarksRead(t *testing.T) {
 	if first.Flags&mail.FlagSeen != 0 {
 		t.Fatalf("test fixture broke: UID %s should be unread", first.UID)
 	}
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-	after, _ := tab.msglist.SelectedMessage()
+	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	// Drain the mark-read Cmd (queueOpsCmd refresh) so the cache flip
+	// surfaces in msglist.source.
+	drain(t, &tab, cmd)
+	after, _ := tab.msglist.MessageByUID(first.UID)
 	if after.Flags&mail.FlagSeen == 0 {
-		t.Errorf("Enter should optimistically mark seen on UID %s", after.UID)
+		t.Errorf("Enter should optimistically mark seen on UID %s", first.UID)
 	}
 }
 
 func TestAccountTab_EnterEmptyFolderNoOp(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: nil})
+	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: nil, total: 0})
 	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 	if tab.viewer.IsOpen() {
 		t.Error("Enter on empty folder must not open viewer")
@@ -670,11 +706,11 @@ func TestAccountTab_FolderJumpKeys(t *testing.T) {
 func TestAccountTab_FolderJumpUnknownFolderNoOp(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tab, _ = tab.updateTab(foldersLoadedMsg{folders: []mail.Folder{
+	tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify([]mail.Folder{
 		{Name: "Inbox", Role: "inbox"},
-	}})
+	})})
 	startFolder := tab.Title()
 	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
 	if tab.Title() != startFolder {
@@ -805,25 +841,26 @@ func (b *pagingFakeBackend) FetchBody(_ mail.UID) (io.Reader, error)          { 
 func (b *pagingFakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
 func (b *pagingFakeBackend) Move(_ []mail.UID, _ string) error                { return nil }
 func (b *pagingFakeBackend) Copy(_ []mail.UID, _ string) error                { return nil }
-func (b *pagingFakeBackend) Delete(_ []mail.UID) error                        { return nil }
 func (b *pagingFakeBackend) Destroy(_ []mail.UID) error                       { return nil }
 func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error     { return nil }
-func (b *pagingFakeBackend) MarkRead(_ []mail.UID) error                      { return nil }
-func (b *pagingFakeBackend) MarkUnread(_ []mail.UID) error                    { return nil }
-func (b *pagingFakeBackend) MarkAnswered(_ []mail.UID) error                  { return nil }
 func (b *pagingFakeBackend) Send(_ string, _ []string, _ io.Reader) error     { return nil }
 func (b *pagingFakeBackend) Updates() <-chan mail.Update                      { return nil }
 
 func TestAccountTab_PaginationInitialLoad(t *testing.T) {
 	// 600 messages — first window fetches 500.
 	backend := newPagingFakeBackend(600)
+	acct := newTestCache(t, backend)
+	// Pre-sync messages so openFolderCmd's QueryFolder finds them
+	// without racing the drain timeout.
+	if err := acct.SyncFolder(context.Background(), "Inbox"); err != nil {
+		t.Fatalf("SyncFolder: %v", err)
+	}
 	styles := NewStyles(theme.Nord)
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, acct, config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
-	// Simulate: folders loaded → selectionChangedCmds → openFolderCmd chain.
 	folders, _ := backend.ListFolders()
-	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	drain(t, &tab, cmd)
 
 	page := tab.pageFor("Inbox")
@@ -841,12 +878,16 @@ func TestAccountTab_PaginationInitialLoad(t *testing.T) {
 func TestAccountTab_MaybeLoadMore_NearBottom(t *testing.T) {
 	// 600 messages; after initial load of 500, cursor near bottom should trigger load-more.
 	backend := newPagingFakeBackend(600)
+	acct := newTestCache(t, backend)
+	if err := acct.SyncFolder(context.Background(), "Inbox"); err != nil {
+		t.Fatalf("SyncFolder: %v", err)
+	}
 	styles := NewStyles(theme.Nord)
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, acct, config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
-	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	drain(t, &tab, cmd)
 
 	// Move cursor to bottom to trigger load-more.
@@ -863,11 +904,11 @@ func TestAccountTab_MaybeLoadMore_NearBottom(t *testing.T) {
 func TestAccountTab_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
 	backend := newPagingFakeBackend(600)
 	styles := NewStyles(theme.Nord)
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
-	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	drain(t, &tab, cmd)
 
 	// Move to bottom — sets loadMoreInFlight.
@@ -884,11 +925,11 @@ func TestAccountTab_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
 	// 14 messages (the mock count) — loaded == total from the start.
 	backend := mail.NewMockBackend()
 	styles := NewStyles(theme.Nord)
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
-	tab, cmd := tab.updateTab(foldersLoadedMsg{folders: folders})
+	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	drain(t, &tab, cmd)
 
 	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
@@ -902,11 +943,11 @@ func TestAccountTab_LoadingSpinner(t *testing.T) {
 	t.Run("loading is true after selectionChangedCmds, before headersApplied", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
-		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
 		// foldersLoadedMsg calls selectionChangedCmds which sets loading=true.
-		tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
+		tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 		if !tab.loading {
 			t.Error("loading should be true after foldersLoadedMsg triggers selectionChangedCmds")
 		}
@@ -915,27 +956,27 @@ func TestAccountTab_LoadingSpinner(t *testing.T) {
 	t.Run("loading is false after headersAppliedMsg", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
-		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
-		tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
-		// Deliver headersAppliedMsg — loading clears.
-		tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: []mail.MessageInfo{
+		tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
+		// Deliver folderLoadedMsg — loading clears.
+		tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", total: 1, msgs: []mail.MessageInfo{
 			{UID: "1", Subject: "hello", From: "a", ThreadID: "1"},
 		}})
 		if tab.loading {
-			t.Error("loading should be false after headersAppliedMsg")
+			t.Error("loading should be false after folderLoadedMsg")
 		}
 	})
 
 	t.Run("view contains Loading placeholder while loading and msglist empty", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
-		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
 		// After foldersLoadedMsg, loading=true and msglist is still empty.
-		tab, _ = tab.updateTab(foldersLoadedMsg{folders: folders})
+		tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 		view := stripANSI(tab.View())
 		if !strings.Contains(view, "Loading") {
 			t.Error("view should contain Loading placeholder while loading and msglist is empty")
@@ -955,7 +996,7 @@ func TestAccountTab_WindowCounter(t *testing.T) {
 	t.Run("returns empty when no page loaded", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
-		tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		got := tab.WindowCounter()
 		if got != "" {
 			t.Errorf("WindowCounter() = %q, want empty", got)
@@ -1024,14 +1065,14 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 	// Use a minimal 3-message fixture so we can predict the boundary.
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	msgs := []mail.MessageInfo{
 		{UID: "A", ThreadID: "A", From: "alice", Subject: "first", Flags: mail.FlagSeen},
 		{UID: "B", ThreadID: "B", From: "bob", Subject: "second", Flags: mail.FlagSeen},
 		{UID: "C", ThreadID: "C", From: "carol", Subject: "third", Flags: mail.FlagSeen},
 	}
-	tab, _ = tab.updateTab(headersAppliedMsg{name: "Inbox", msgs: msgs})
+	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: msgs, total: len(msgs)})
 	if tab.msglist.Count() != 3 {
 		t.Fatalf("fixture setup: count = %d, want 3", tab.msglist.Count())
 	}
@@ -1108,12 +1149,12 @@ func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
 	t.Run("loading state", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
-		m := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		m := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 		// Trigger loading state by delivering foldersLoadedMsg without
 		// following up with headersApplied — msglist stays empty.
 		folders, _ := backend.ListFolders()
-		m, _ = m.Update(foldersLoadedMsg{folders: folders})
+		m, _ = m.Update(foldersLoadedMsg{classified: mail.Classify(folders)})
 		assertAllLinesWidth(t, m.View(), w)
 	})
 
@@ -1129,626 +1170,6 @@ func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
 	})
 }
 
-// newLoadedTabWithMock is like newLoadedTab but exposes the underlying
-// MockBackend for tests that need to assert against recorded calls.
-func newLoadedTabWithMock(t *testing.T, w, h int) (AccountTab, *mail.MockBackend) {
-	t.Helper()
-	styles := NewStyles(theme.Nord)
-	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
-	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: w, Height: h})
-	msg := runCmd(tab.Init())
-	tab, cmd := tab.updateTab(msg)
-	drain(t, &tab, cmd)
-	return tab, backend
-}
-
-// runDispatchCmd executes the Cmd returned by dispatchTriage and walks
-// the resulting tea.BatchMsg, returning the captured triageStartedMsg.
-// Forward Cmds are executed in-order so backend calls record.
-func runDispatchCmd(t *testing.T, cmd tea.Cmd) (started triageStartedMsg, found bool) {
-	t.Helper()
-	if cmd == nil {
-		return triageStartedMsg{}, false
-	}
-	msg := cmd()
-	batch, ok := msg.(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("expected tea.BatchMsg from dispatchTriage, got %T", msg)
-	}
-	for _, sub := range batch {
-		if sub == nil {
-			continue
-		}
-		inner := sub()
-		if ts, ok := inner.(triageStartedMsg); ok {
-			started = ts
-			found = true
-		}
-	}
-	return started, found
-}
-
-func TestAccountTab_Triage_DeleteArchive(t *testing.T) {
-	t.Run("delete cursor row", func(t *testing.T) {
-		tab, mock := newLoadedTabWithMock(t, 120, 30)
-		first, ok := tab.msglist.SelectedMessage()
-		if !ok {
-			t.Fatal("no selection")
-		}
-		startCount := tab.msglist.Count()
-		cmd := tab.dispatchTriage("delete")
-		if cmd == nil {
-			t.Fatal("dispatchTriage(delete) returned nil")
-		}
-		// Optimistic flip: row already gone.
-		if tab.msglist.Count() != startCount-1 {
-			t.Errorf("row count = %d, want %d", tab.msglist.Count(), startCount-1)
-		}
-		started, found := runDispatchCmd(t, cmd)
-		if !found {
-			t.Fatal("triageStartedMsg not emitted")
-		}
-		if started.op != "delete" || started.n != 1 {
-			t.Errorf("started = %+v, want op=delete n=1", started)
-		}
-		if len(mock.DeleteCalls) != 1 {
-			t.Fatalf("DeleteCalls = %d, want 1", len(mock.DeleteCalls))
-		}
-		if mock.DeleteCalls[0][0] != first.UID {
-			t.Errorf("DeleteCalls[0][0] = %s, want %s", mock.DeleteCalls[0][0], first.UID)
-		}
-		// Inverse: calling it should Move back to the source folder.
-		_ = started.inverse()
-		if len(mock.MoveCalls) != 1 {
-			t.Errorf("MoveCalls after inverse = %d, want 1", len(mock.MoveCalls))
-		}
-		// Local rollback: onUndo restores the row.
-		started.onUndo()
-		if tab.msglist.Count() != startCount {
-			t.Errorf("after onUndo count = %d, want %d", tab.msglist.Count(), startCount)
-		}
-	})
-
-	t.Run("archive cursor row", func(t *testing.T) {
-		tab, mock := newLoadedTabWithMock(t, 120, 30)
-		first, ok := tab.msglist.SelectedMessage()
-		if !ok {
-			t.Fatal("no selection")
-		}
-		cmd := tab.dispatchTriage("archive")
-		if cmd == nil {
-			t.Fatal("dispatchTriage(archive) returned nil")
-		}
-		started, found := runDispatchCmd(t, cmd)
-		if !found {
-			t.Fatal("triageStartedMsg not emitted for archive")
-		}
-		if started.op != "archive" {
-			t.Errorf("op = %q, want archive", started.op)
-		}
-		if len(mock.MoveCalls) != 1 {
-			t.Fatalf("MoveCalls = %d, want 1", len(mock.MoveCalls))
-		}
-		if mock.MoveCalls[0].Dest != "Archive" {
-			t.Errorf("Move dest = %q, want Archive", mock.MoveCalls[0].Dest)
-		}
-		if mock.MoveCalls[0].UIDs[0] != first.UID {
-			t.Errorf("Move uid = %s, want %s", mock.MoveCalls[0].UIDs[0], first.UID)
-		}
-		_ = started.inverse()
-		// Inverse move records back to source folder ("Inbox").
-		if len(mock.MoveCalls) != 2 || mock.MoveCalls[1].Dest != "Inbox" {
-			t.Errorf("inverse Move = %+v, want dest=Inbox", mock.MoveCalls)
-		}
-	})
-
-	t.Run("visual mode auto-exits", func(t *testing.T) {
-		tab, _ := newLoadedTabWithMock(t, 120, 30)
-		tab.msglist.EnterVisual()
-		if !tab.msglist.VisualMode() {
-			t.Fatal("setup: visual mode should be on")
-		}
-		cmd := tab.dispatchTriage("delete")
-		if cmd == nil {
-			t.Fatal("dispatchTriage returned nil")
-		}
-		if tab.msglist.VisualMode() {
-			t.Error("visual mode should auto-exit after triage")
-		}
-	})
-}
-
-func TestAccountTab_Triage_StarReadToggle(t *testing.T) {
-	t.Run("star unstarred row", func(t *testing.T) {
-		tab, mock := newLoadedTabWithMock(t, 120, 30)
-		first, _ := tab.msglist.SelectedMessage()
-		if first.Flags&mail.FlagFlagged != 0 {
-			t.Skip("fixture: cursor row already starred")
-		}
-		cmd := tab.dispatchTriage("star")
-		started, found := runDispatchCmd(t, cmd)
-		if !found {
-			t.Fatal("triageStartedMsg not emitted")
-		}
-		if started.op != "star" {
-			t.Errorf("op = %q, want star", started.op)
-		}
-		after, _ := tab.msglist.MessageByUID(first.UID)
-		if after.Flags&mail.FlagFlagged == 0 {
-			t.Errorf("local flag not set on UID %s", first.UID)
-		}
-		if len(mock.FlagCalls) != 1 || !mock.FlagCalls[0].Set || mock.FlagCalls[0].Flag != mail.FlagFlagged {
-			t.Errorf("FlagCalls = %+v, want one Set=true FlagFlagged", mock.FlagCalls)
-		}
-		// Inverse: clears the flag.
-		_ = started.inverse()
-		if len(mock.FlagCalls) != 2 || mock.FlagCalls[1].Set {
-			t.Errorf("inverse FlagCalls = %+v, want second Set=false", mock.FlagCalls)
-		}
-	})
-
-	t.Run("unstar starred row", func(t *testing.T) {
-		tab, mock := newLoadedTabWithMock(t, 120, 30)
-		// Move cursor to a starred message (UID 5 in the mock fixture).
-		for range tab.msglist.Count() {
-			cur, _ := tab.msglist.SelectedMessage()
-			if cur.Flags&mail.FlagFlagged != 0 {
-				break
-			}
-			tab.msglist.MoveDown()
-		}
-		cur, _ := tab.msglist.SelectedMessage()
-		if cur.Flags&mail.FlagFlagged == 0 {
-			t.Skip("no starred message in fixture")
-		}
-		cmd := tab.dispatchTriage("star")
-		started, _ := runDispatchCmd(t, cmd)
-		if started.op != "unstar" {
-			t.Errorf("op = %q, want unstar", started.op)
-		}
-		if len(mock.FlagCalls) != 1 || mock.FlagCalls[0].Set {
-			t.Errorf("FlagCalls = %+v, want Set=false", mock.FlagCalls)
-		}
-	})
-
-	t.Run("read on unread row", func(t *testing.T) {
-		tab, mock := newLoadedTabWithMock(t, 120, 30)
-		first, _ := tab.msglist.SelectedMessage()
-		if first.Flags&mail.FlagSeen != 0 {
-			t.Skip("fixture: cursor row already read")
-		}
-		cmd := tab.dispatchTriage("read")
-		started, _ := runDispatchCmd(t, cmd)
-		if started.op != "read" {
-			t.Errorf("op = %q, want read", started.op)
-		}
-		after, _ := tab.msglist.MessageByUID(first.UID)
-		if after.Flags&mail.FlagSeen == 0 {
-			t.Error("FlagSeen not set locally")
-		}
-		if len(mock.MarkReadCalls) != 1 {
-			t.Errorf("MarkReadCalls = %d, want 1", len(mock.MarkReadCalls))
-		}
-		_ = started.inverse()
-		if len(mock.MarkUnreadCalls) != 1 {
-			t.Errorf("inverse MarkUnreadCalls = %d, want 1", len(mock.MarkUnreadCalls))
-		}
-	})
-
-	t.Run("read on already-read row toggles to unread", func(t *testing.T) {
-		tab, mock := newLoadedTabWithMock(t, 120, 30)
-		// Move cursor to a read message (UID 4 is FlagSeen).
-		for range tab.msglist.Count() {
-			cur, _ := tab.msglist.SelectedMessage()
-			if cur.Flags&mail.FlagSeen != 0 {
-				break
-			}
-			tab.msglist.MoveDown()
-		}
-		cur, _ := tab.msglist.SelectedMessage()
-		if cur.Flags&mail.FlagSeen == 0 {
-			t.Skip("no read message in fixture")
-		}
-		cmd := tab.dispatchTriage("read")
-		started, _ := runDispatchCmd(t, cmd)
-		if started.op != "unread" {
-			t.Errorf("op = %q, want unread", started.op)
-		}
-		if len(mock.MarkUnreadCalls) != 1 {
-			t.Errorf("MarkUnreadCalls = %d, want 1", len(mock.MarkUnreadCalls))
-		}
-	})
-}
-
-func TestAccountTab_TriageKeys(t *testing.T) {
-	keyDispatches := []struct {
-		key    rune
-		op     string
-		assert func(t *testing.T, mock *mail.MockBackend)
-	}{
-		{'d', "delete", func(t *testing.T, mock *mail.MockBackend) {
-			if len(mock.DeleteCalls) != 1 {
-				t.Errorf("expected DeleteCalls=1, got %d", len(mock.DeleteCalls))
-			}
-		}},
-		{'a', "archive", func(t *testing.T, mock *mail.MockBackend) {
-			if len(mock.MoveCalls) == 0 || mock.MoveCalls[0].Dest != "Archive" {
-				t.Errorf("expected Move to Archive, got %+v", mock.MoveCalls)
-			}
-		}},
-		{'s', "star", func(t *testing.T, mock *mail.MockBackend) {
-			if len(mock.FlagCalls) == 0 || mock.FlagCalls[0].Flag != mail.FlagFlagged {
-				t.Errorf("expected Flag(FlagFlagged), got %+v", mock.FlagCalls)
-			}
-		}},
-		{'.', "read", func(t *testing.T, mock *mail.MockBackend) {
-			if len(mock.MarkReadCalls) == 0 {
-				t.Error("expected MarkReadCalls >= 1")
-			}
-		}},
-	}
-	for _, td := range keyDispatches {
-		t.Run(string(td.key), func(t *testing.T) {
-			tab, mock := newLoadedTabWithMock(t, 120, 30)
-			startCount := tab.msglist.Count()
-			tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{td.key}})
-			if cmd == nil {
-				t.Fatalf("key %q: expected Cmd from dispatchTriage", td.key)
-			}
-			// Drain the dispatch batch so backend calls record.
-			drain(t, &tab, cmd)
-			td.assert(t, mock)
-			_ = startCount
-		})
-	}
-
-	t.Run("v enters visual mode", func(t *testing.T) {
-		tab, _ := newLoadedTabWithMock(t, 120, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-		if !tab.msglist.VisualMode() {
-			t.Error("v should enter visual mode")
-		}
-	})
-
-	t.Run("Space marks in visual mode", func(t *testing.T) {
-		tab, _ := newLoadedTabWithMock(t, 120, 30)
-		tab.msglist.EnterVisual()
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-		if len(tab.msglist.Marked()) != 1 {
-			t.Errorf("Space in visual mode should mark 1 row, got %d", len(tab.msglist.Marked()))
-		}
-	})
-
-	t.Run("Space folds outside visual mode", func(t *testing.T) {
-		tab, _ := newLoadedTabWithMock(t, 120, 30)
-		// Move cursor onto a thread root if any in fixture.
-		if tab.msglist.VisualMode() {
-			t.Fatal("setup: visual mode should be off")
-		}
-		// Just verify Space doesn't mark when visual mode is off.
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-		if len(tab.msglist.Marked()) != 0 {
-			t.Error("Space outside visual should not mark")
-		}
-	})
-}
-
-func TestApp_UndoKey(t *testing.T) {
-	t.Run("u with no toast is no-op", func(t *testing.T) {
-		app := newLoadedApp(t, 100, 30)
-		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
-		if cmd != nil {
-			// Cmd may be nil-or-non-nil from delegation, but undoRequestedMsg
-			// must not be the message produced.
-			msg := cmd()
-			if _, ok := msg.(undoRequestedMsg); ok {
-				t.Error("u with no toast should not emit undoRequestedMsg")
-			}
-		}
-	})
-
-	t.Run("u with active toast emits undoRequestedMsg", func(t *testing.T) {
-		app := newLoadedApp(t, 100, 30)
-		app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
-		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
-		if cmd == nil {
-			t.Fatal("expected Cmd from u while toast active")
-		}
-		msg := cmd()
-		if _, ok := msg.(undoRequestedMsg); !ok {
-			t.Errorf("expected undoRequestedMsg, got %T", msg)
-		}
-	})
-}
-
-func TestAccountTab_TriageOnFoldedThread(t *testing.T) {
-	tab, mock := newLoadedTabWithMock(t, 120, 30)
-
-	// Find the row for thread root UID 20 (mock fixture's T1 thread).
-	rootUID := mail.UID("20")
-	for range tab.msglist.Count() {
-		cur, ok := tab.msglist.SelectedMessage()
-		if !ok {
-			t.Fatal("no selection")
-		}
-		if cur.UID == rootUID {
-			break
-		}
-		tab.msglist.MoveDown()
-	}
-	cur, _ := tab.msglist.SelectedMessage()
-	if cur.UID != rootUID {
-		t.Fatalf("could not navigate to thread root %s", rootUID)
-	}
-	// Fold the thread.
-	tab.msglist.ToggleFold()
-
-	// ActionTargets on the folded root should expand to all 4 thread UIDs.
-	targets := tab.msglist.ActionTargets()
-	if len(targets) != 4 {
-		t.Fatalf("ActionTargets on folded root returned %d UIDs, want 4 (T1 has root+3 children)", len(targets))
-	}
-
-	// Dispatch delete; the forward Cmd should call mock.Delete with all 4 UIDs.
-	cmd := tab.dispatchTriage("delete")
-	started, found := runDispatchCmd(t, cmd)
-	if !found {
-		t.Fatal("triageStartedMsg not emitted")
-	}
-	if started.n != 4 {
-		t.Errorf("triageStartedMsg.n = %d, want 4", started.n)
-	}
-	if len(mock.DeleteCalls) != 1 || len(mock.DeleteCalls[0]) != 4 {
-		t.Errorf("DeleteCalls = %+v, want one call with 4 UIDs", mock.DeleteCalls)
-	}
-
-	// onUndo restores all 4 messages.
-	startCount := tab.msglist.Count()
-	started.onUndo()
-	if tab.msglist.Count() != startCount+4 {
-		t.Errorf("after onUndo count = %d, want %d", tab.msglist.Count(), startCount+4)
-	}
-}
-
-func TestAccountTab_MKeyEmitsOpenMovePickerMsg(t *testing.T) {
-	tab := newLoadedTab(t, 120, 30)
-	_, cmd := tab.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
-	if cmd == nil {
-		t.Fatal("m returned nil cmd, want OpenMovePickerMsg")
-	}
-	msgs := drainBatch(cmd)
-	var open *OpenMovePickerMsg
-	for _, m := range msgs {
-		if v, ok := m.(OpenMovePickerMsg); ok {
-			open = &v
-		}
-	}
-	if open == nil {
-		t.Fatalf("did not see OpenMovePickerMsg in %v", msgs)
-	}
-	if len(open.UIDs) == 0 {
-		t.Error("UIDs empty")
-	}
-	if open.Src == "" {
-		t.Error("Src empty")
-	}
-	if len(open.Folders) == 0 {
-		t.Error("Folders empty")
-	}
-}
-
-func TestAccountTab_MKeyNoOpOnEmpty(t *testing.T) {
-	styles := NewStyles(theme.Nord)
-	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
-	_, cmd := tab.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
-	if cmd != nil {
-		t.Errorf("m on empty msglist returned cmd %v, want nil", cmd)
-	}
-}
-
-func TestAccountTab_MovePickerPickedDispatchesMove(t *testing.T) {
-	tab := newLoadedTab(t, 120, 30)
-	uids := tab.msglist.ActionTargets()
-	src := tab.currentFolderName()
-
-	_, cmd := tab.Update(MovePickerPickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
-	if cmd == nil {
-		t.Fatal("MovePickerPickedMsg produced nil cmd")
-	}
-	msgs := drainBatch(cmd)
-	var sawStart bool
-	for _, m := range msgs {
-		if ts, ok := m.(triageStartedMsg); ok {
-			sawStart = true
-			if ts.op != "move" {
-				t.Errorf("triageStartedMsg.op = %q, want %q", ts.op, "move")
-			}
-			if ts.dest != "Archive" {
-				t.Errorf("triageStartedMsg.dest = %q, want %q", ts.dest, "Archive")
-			}
-		}
-	}
-	if !sawStart {
-		t.Errorf("no triageStartedMsg in %v", msgs)
-	}
-}
-
-// jumpAndLoadFolder sends a single-rune jump key and drains the full
-// folder-load chain so the message list is populated. Returns the final tab.
-func jumpAndLoadFolder(t *testing.T, tab AccountTab, key string) AccountTab {
-	t.Helper()
-	tab2, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-	drain(t, &tab2, cmd)
-	return tab2
-}
-
-// TestAccountTab_RetentionSweep_FlagSetOnFirstTrashVisit verifies that
-// IsSwept("Trash") becomes true after the first visit to the Trash folder
-// when TrashRetentionDays > 0, and that revisiting does not re-sweep.
-func TestAccountTab_RetentionSweep_FlagSetOnFirstTrashVisit(t *testing.T) {
-	styles := NewStyles(theme.Nord)
-	backend := mail.NewMockBackend()
-	cfg := config.DefaultUIConfig()
-	cfg.TrashRetentionDays = 30
-	tab := NewAccountTab(styles, theme.Nord, backend, cfg, FancyIcons)
-	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	msg := runCmd(tab.Init())
-	tab, cmd := tab.updateTab(msg)
-	drain(t, &tab, cmd)
-
-	if tab.IsSwept("Trash") {
-		t.Fatal("IsSwept(Trash) should be false before visiting Trash")
-	}
-
-	// Jump to Trash and drain the full load chain.
-	tab = jumpAndLoadFolder(t, tab, "T")
-
-	if !tab.IsSwept("Trash") {
-		t.Error("IsSwept(Trash) should be true after first Trash visit with retention enabled")
-	}
-
-	// Record the Destroy call count after the first visit.
-	callsBefore := len(backend.DestroyCalls)
-
-	// Jump to Inbox and back to Trash — sweep must not re-fire.
-	tab = jumpAndLoadFolder(t, tab, "I")
-	tab = jumpAndLoadFolder(t, tab, "T")
-
-	if len(backend.DestroyCalls) != callsBefore {
-		t.Errorf("second Trash visit caused %d extra Destroy calls, want 0",
-			len(backend.DestroyCalls)-callsBefore)
-	}
-}
-
-// TestAccountTab_RetentionSweep_DisabledByDefault verifies that with the
-// default config (TrashRetentionDays == 0) visiting Trash does not set the
-// swept flag or fire any Destroy calls.
-func TestAccountTab_RetentionSweep_DisabledByDefault(t *testing.T) {
-	styles := NewStyles(theme.Nord)
-	backend := mail.NewMockBackend()
-	// DefaultUIConfig has TrashRetentionDays == 0.
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
-	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	msg := runCmd(tab.Init())
-	tab, cmd := tab.updateTab(msg)
-	drain(t, &tab, cmd)
-
-	tab = jumpAndLoadFolder(t, tab, "T")
-
-	if tab.IsSwept("Trash") {
-		t.Error("IsSwept(Trash) should remain false when TrashRetentionDays == 0")
-	}
-	if len(backend.DestroyCalls) != 0 {
-		t.Errorf("expected 0 Destroy calls, got %d", len(backend.DestroyCalls))
-	}
-}
-
-// TestAccountTab_EmptyKey_OnlyActiveOnDisposalFolders verifies that pressing
-// E while Inbox is selected does not emit OpenConfirmEmptyMsg.
-func TestAccountTab_EmptyKey_OnlyActiveOnDisposalFolders(t *testing.T) {
-	tab := newLoadedTab(t, 120, 30)
-	// Inbox is loaded by default.
-	if tab.Title() != "Inbox" {
-		t.Fatalf("expected Inbox after load, got %q", tab.Title())
-	}
-	_, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
-	if cmd == nil {
-		return // no Cmd at all — correct, Inbox is not a disposal folder
-	}
-	// If a Cmd was returned, make sure it's not OpenConfirmEmptyMsg.
-	resultMsg := cmd()
-	if _, ok := resultMsg.(OpenConfirmEmptyMsg); ok {
-		t.Error("E on Inbox must not emit OpenConfirmEmptyMsg")
-	}
-}
-
-// TestAccountTab_EmptyKey_OpensConfirmOnTrash verifies that pressing E while
-// Trash is selected emits OpenConfirmEmptyMsg with Folder == "Trash".
-func TestAccountTab_EmptyKey_OpensConfirmOnTrash(t *testing.T) {
-	tab := newLoadedTab(t, 120, 30)
-	tab = jumpAndLoadFolder(t, tab, "T")
-
-	_, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
-	if cmd == nil {
-		t.Fatal("E on Trash returned nil Cmd, want OpenConfirmEmptyMsg")
-	}
-	resultMsg := cmd()
-	confirm, ok := resultMsg.(OpenConfirmEmptyMsg)
-	if !ok {
-		t.Fatalf("E on Trash returned %T, want OpenConfirmEmptyMsg", resultMsg)
-	}
-	if confirm.Folder != "Trash" {
-		t.Errorf("OpenConfirmEmptyMsg.Folder = %q, want %q", confirm.Folder, "Trash")
-	}
-	if confirm.Source != "Trash" {
-		t.Errorf("OpenConfirmEmptyMsg.Source = %q, want %q", confirm.Source, "Trash")
-	}
-}
-
-// TestAccountTab_SweepCompletedMsg_RemovesRows verifies that
-// sweepCompletedMsg with a non-empty uid list removes those rows from
-// the message list.
-func TestAccountTab_SweepCompletedMsg_RemovesRows(t *testing.T) {
-	// Deliver headersApplied with two messages, then sweep one.
-	expired := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
-	msgs := []mail.MessageInfo{
-		{UID: "old1", ThreadID: "old1", Subject: "Old", From: "X", SentAt: expired},
-		{UID: "new1", ThreadID: "new1", Subject: "New", From: "Y", SentAt: time.Now()},
-	}
-	styles := NewStyles(theme.Nord)
-	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
-	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tab, _ = tab.updateTab(headersAppliedMsg{name: "Trash", msgs: msgs})
-
-	if tab.msglist.Count() != 2 {
-		t.Fatalf("expected 2 messages before sweep, got %d", tab.msglist.Count())
-	}
-
-	tab, _ = tab.updateTab(sweepCompletedMsg{uids: []mail.UID{"old1"}})
-	if tab.msglist.Count() != 1 {
-		t.Errorf("after sweepCompletedMsg, count = %d, want 1", tab.msglist.Count())
-	}
-}
-
-// TestAccountTab_EmptyFolderDoneMsg_ClearsRowsAndEmitsToast verifies that
-// emptyFolderDoneMsg removes all rows and emits a triageStartedMsg.
-func TestAccountTab_EmptyFolderDoneMsg_ClearsRowsAndEmitsToast(t *testing.T) {
-	msgs := []mail.MessageInfo{
-		{UID: "1", ThreadID: "1", Subject: "A", From: "X", SentAt: time.Now()},
-		{UID: "2", ThreadID: "2", Subject: "B", From: "Y", SentAt: time.Now()},
-	}
-	styles := NewStyles(theme.Nord)
-	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
-	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tab, _ = tab.updateTab(headersAppliedMsg{name: "Trash", msgs: msgs})
-
-	if tab.msglist.Count() != 2 {
-		t.Fatalf("expected 2 messages before empty, got %d", tab.msglist.Count())
-	}
-
-	tab, cmd := tab.updateTab(emptyFolderDoneMsg{folder: "Trash", n: 2})
-	if tab.msglist.Count() != 0 {
-		t.Errorf("after emptyFolderDoneMsg, count = %d, want 0", tab.msglist.Count())
-	}
-	if cmd == nil {
-		t.Fatal("emptyFolderDoneMsg must return a Cmd (triageStartedMsg)")
-	}
-	resultMsg := cmd()
-	ts, ok := resultMsg.(triageStartedMsg)
-	if !ok {
-		t.Fatalf("emptyFolderDoneMsg Cmd returned %T, want triageStartedMsg", resultMsg)
-	}
-	if ts.op != "empty" {
-		t.Errorf("triageStartedMsg.op = %q, want %q", ts.op, "empty")
-	}
-	if ts.n != 2 {
-		t.Errorf("triageStartedMsg.n = %d, want 2", ts.n)
-	}
-}
 
 func TestAccountTab_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
 	tab := newLoadedTab(t, 95, 30)
@@ -1804,7 +1225,7 @@ func TestAccountTab_NextMessage_WalksFilteredRows(t *testing.T) {
 func TestAccountTab_OpenMessage_CancelsPriorFetch(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	backend := mail.NewMockBackend()
-	tab := NewAccountTab(styles, theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tab.msglist.SetMessages([]mail.MessageInfo{
 		{UID: "1", From: "a@example.com", Subject: "first"},

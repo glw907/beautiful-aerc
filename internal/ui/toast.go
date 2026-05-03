@@ -11,14 +11,16 @@ import (
 )
 
 // pendingAction is the App-owned state for an in-flight optimistic
-// triage action. The zero value means "no toast active".
+// triage action. The zero value means "no toast active". Local
+// roll-back lives entirely in the cache layer (the inverse Cmd queues
+// a compensating QueueOp); App holds only what the toast needs to
+// render plus the undo Cmd to fire on `u`.
 type pendingAction struct {
 	op       string    // "delete" | "archive" | "star" | "unstar" | "read" | "unread" | "move"
 	n        int       // affected message count
 	dest     string    // destination folder name; non-empty for "move"
 	inverse  tea.Cmd   // the undo Cmd; nil for unrecoverable ops
 	deadline time.Time // monotonic moment at which the toast expires
-	onUndo   func()    // local roll-back; runs on `u` and on ErrorMsg
 }
 
 // IsZero reports whether p represents "no active toast". Every active

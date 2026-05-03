@@ -21,12 +21,9 @@ type MockBackend struct {
 
 	// Recorded calls — exposed for tests that assert dispatch shape.
 	// All slices append in chronological order.
-	DeleteCalls     [][]UID
-	DestroyCalls    [][]UID
-	MoveCalls       []MockMoveCall
-	FlagCalls       []MockFlagCall
-	MarkReadCalls   [][]UID
-	MarkUnreadCalls [][]UID
+	DestroyCalls [][]UID
+	MoveCalls    []MockMoveCall
+	FlagCalls    []MockFlagCall
 }
 
 // MockMoveCall records a Move invocation.
@@ -254,11 +251,6 @@ func (m *MockBackend) Move(uids []UID, dest string) error {
 
 func (m *MockBackend) Copy(_ []UID, _ string) error { return nil }
 
-func (m *MockBackend) Delete(uids []UID) error {
-	m.DeleteCalls = append(m.DeleteCalls, append([]UID(nil), uids...))
-	return nil
-}
-
 // Destroy permanently removes uids from the in-memory message list,
 // bypassing Trash. Empty input is a no-op.
 func (m *MockBackend) Destroy(uids []UID) error {
@@ -285,18 +277,6 @@ func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
 	m.FlagCalls = append(m.FlagCalls, MockFlagCall{UIDs: append([]UID(nil), uids...), Flag: flag, Set: set})
 	return nil
 }
-
-func (m *MockBackend) MarkRead(uids []UID) error {
-	m.MarkReadCalls = append(m.MarkReadCalls, append([]UID(nil), uids...))
-	return nil
-}
-
-func (m *MockBackend) MarkUnread(uids []UID) error {
-	m.MarkUnreadCalls = append(m.MarkUnreadCalls, append([]UID(nil), uids...))
-	return nil
-}
-
-func (m *MockBackend) MarkAnswered(_ []UID) error { return nil }
 
 func (m *MockBackend) Send(_ string, _ []string, _ io.Reader) error {
 	return nil

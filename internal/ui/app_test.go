@@ -40,7 +40,7 @@ func newLoadedApp(t *testing.T, width, height int) App {
 func newLoadedAppWithIcons(t *testing.T, width, height int, icons IconSet) App {
 	t.Helper()
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), icons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), icons)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	drainApp(t, &app, app.Init())
 	return app
@@ -74,6 +74,17 @@ func drainApp(t *testing.T, app *App, cmd tea.Cmd) {
 	case <-time.After(cmdTimeout):
 		return // blocking Cmd (e.g. pump) — skip it
 	}
+	feed(t, app, msg)
+}
+
+// feed routes one message into App.Update, recursing into BatchMsg
+// children so nested batches (e.g. App.Init wrapping AccountTab.Init)
+// expand fully.
+func feed(t *testing.T, app *App, msg tea.Msg) {
+	t.Helper()
+	if msg == nil {
+		return
+	}
 	if batch, ok := msg.(tea.BatchMsg); ok {
 		for _, sub := range batch {
 			if sub == nil {
@@ -83,13 +94,9 @@ func drainApp(t *testing.T, app *App, cmd tea.Cmd) {
 			select {
 			case inner = <-execCmd(sub):
 			case <-time.After(cmdTimeout):
-				continue // blocking sub-Cmd — skip it
+				continue
 			}
-			newApp, next := app.Update(inner)
-			*app = newApp
-			if next != nil {
-				drainApp(t, app, next)
-			}
+			feed(t, app, inner)
 		}
 		return
 	}
@@ -104,7 +111,7 @@ func TestApp(t *testing.T) {
 	backend := mail.NewMockBackend()
 
 	t.Run("quit on q", func(t *testing.T) {
-		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		app.width = 80
 		app.height = 24
 		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -118,7 +125,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("quit on ctrl+c", func(t *testing.T) {
-		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		app.width = 80
 		app.height = 24
 		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -128,7 +135,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("window size stored", func(t *testing.T) {
-		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		if app.width != 120 || app.height != 40 {
 			t.Errorf("size = %dx%d, want 120x40", app.width, app.height)
@@ -175,7 +182,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("content height is height minus 3 chrome rows", func(t *testing.T) {
-		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		app.width = 80
 		app.height = 24
 		if app.contentHeight() != 21 {
@@ -208,7 +215,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("footer starts in account context", func(t *testing.T) {
-		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		if app.footer.context != AccountContext {
 			t.Errorf("footer context = %d, want AccountContext", app.footer.context)
 		}
@@ -540,7 +547,7 @@ func TestApp_BannerShrinksContentByOneRow(t *testing.T) {
 
 func TestApp_InitialConnStateIsOffline(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	if got := app.statusBar.ConnectionState(); got != Offline {
 		t.Errorf("initial connState = %v, want Offline", got)
 	}
@@ -559,7 +566,7 @@ func TestApp_BackendUpdateConnState(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			backend := mail.NewMockBackend()
-			app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+			app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 			msg := backendUpdateMsg{update: mail.Update{
 				Type:      mail.UpdateConnState,
 				ConnState: tc.connState,
@@ -576,7 +583,7 @@ func TestApp_BackendUpdateClosedChannelGoesOffline(t *testing.T) {
 	// Simulate the closed-channel case: pumpUpdatesCmd delivers a
 	// backendUpdateMsg with ConnState=ConnOffline.
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	// Force to Connected first so we can confirm the transition.
 	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
 		Type:      mail.UpdateConnState,
@@ -600,7 +607,7 @@ func TestApp_BackendUpdateReArmspump(t *testing.T) {
 	// (the re-armed pump). We can't execute it without blocking, but
 	// we confirm the Cmd is present.
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	msg := backendUpdateMsg{update: mail.Update{
 		Type:      mail.UpdateConnState,
 		ConnState: mail.ConnConnected,
@@ -662,20 +669,18 @@ func TestApp_ToastLifecycle(t *testing.T) {
 
 	newApp := func() App {
 		backend := mail.NewMockBackend()
-		app := NewApp(theme.Nord, backend, config.DefaultUIConfig(), FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		app.now = func() time.Time { return frozen }
 		return app
 	}
 
 	t.Run("triageStartedMsg sets toast and returns Tick Cmd", func(t *testing.T) {
 		app := newApp()
-		var ranUndo bool
 		app, cmd := app.Update(triageStartedMsg{
 			op:      "delete",
 			n:       1,
 			uids:    []mail.UID{"1"},
 			inverse: func() tea.Msg { return nil },
-			onUndo:  func() { ranUndo = true },
 		})
 		if app.toast.IsZero() {
 			t.Fatal("toast should be set after triageStartedMsg")
@@ -689,9 +694,6 @@ func TestApp_ToastLifecycle(t *testing.T) {
 		}
 		if cmd == nil {
 			t.Error("expected Tick Cmd, got nil")
-		}
-		if ranUndo {
-			t.Error("onUndo should not run on triageStartedMsg")
 		}
 	})
 
@@ -715,19 +717,15 @@ func TestApp_ToastLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("undoRequestedMsg invokes onUndo, returns inverse, clears toast", func(t *testing.T) {
+	t.Run("undoRequestedMsg returns inverse, clears toast", func(t *testing.T) {
 		app := newApp()
-		var ranUndo, ranInverse bool
+		var ranInverse bool
 		app, _ = app.Update(triageStartedMsg{
 			op:      "delete",
 			n:       1,
 			inverse: func() tea.Msg { ranInverse = true; return nil },
-			onUndo:  func() { ranUndo = true },
 		})
 		_, cmd := app.Update(undoRequestedMsg{})
-		if !ranUndo {
-			t.Error("onUndo did not run on undoRequestedMsg")
-		}
 		if cmd == nil {
 			t.Fatal("expected inverse Cmd from undoRequestedMsg, got nil")
 		}
@@ -745,18 +743,13 @@ func TestApp_ToastLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrorMsg with active toast rolls back and clears toast", func(t *testing.T) {
+	t.Run("ErrorMsg with active toast clears toast", func(t *testing.T) {
 		app := newApp()
-		var ranUndo bool
 		app, _ = app.Update(triageStartedMsg{
-			op:     "delete",
-			n:      1,
-			onUndo: func() { ranUndo = true },
+			op: "delete",
+			n:  1,
 		})
 		app, _ = app.Update(ErrorMsg{Op: "delete", Err: errors.New("boom")})
-		if !ranUndo {
-			t.Error("onUndo should run on ErrorMsg while toast active")
-		}
 		if !app.toast.IsZero() {
 			t.Error("toast should clear on ErrorMsg")
 		}
@@ -931,7 +924,11 @@ func TestApp_FolderChangeCommitsToast(t *testing.T) {
 
 	// Simulate folder load completion — this is what selectionChangedCmds
 	// resolves to when J/K or a folder-jump key fires.
-	app, _ = app.Update(folderQueryDoneMsg{name: "Drafts", uids: nil, total: 0, reset: true})
+	// Simulate a folder change: the msglist is empty (selectionChangedCmds
+	// just reset it) and a folderLoadedMsg arrives — that combination is
+	// the App's signal to clear the toast.
+	app.acct.msglist.SetMessages(nil)
+	app, _ = app.Update(folderLoadedMsg{name: "Drafts", msgs: nil, total: 0})
 	if !app.toast.IsZero() {
 		t.Errorf("toast should clear on folder change, got %+v", app.toast)
 	}

@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/term"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui"
@@ -105,7 +107,20 @@ func runRoot(f rootFlags) error {
 	}
 	ui.SetSPUACellWidth(cellWidth)
 
-	app := ui.NewApp(t, backend, uiCfg, iconSet)
+	ct, ok := backend.(mail.ChangeTracker)
+	if !ok {
+		return fmt.Errorf("backend does not implement mail.ChangeTracker")
+	}
+	acct, err := cache.Open(accts[0].Name, backend, ct, "")
+	if err != nil {
+		return fmt.Errorf("open cache: %w", err)
+	}
+	defer acct.Close()
+	if err := acct.StartDrainer(ctx); err != nil {
+		return fmt.Errorf("start drainer: %w", err)
+	}
+
+	app := ui.NewApp(t, acct, uiCfg, iconSet)
 
 	p := tea.NewProgram(appModel{app: app}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
