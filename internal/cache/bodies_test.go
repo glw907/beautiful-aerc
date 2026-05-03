@@ -203,7 +203,7 @@ func (f *fakeBackendWithBody) FetchBody(_ mail.UID) ([]byte, error) {
 
 func TestFetchBody_PopulatesCacheOnMiss(t *testing.T) {
 	be := &fakeBackendWithBody{body: []byte("from-backend")}
-	a, err := Open("test", be, &fakeChangeTracker{}, t.TempDir())
+	a, err := Open("test", be, &fakeChangeTracker{}, t.TempDir(), Config{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

@@ -97,13 +97,23 @@ type CacheEvent struct {
 	Err     string // populated for conflict/failed
 }
 
+// Config tunes per-account cache behavior. Currently the only knob
+// is the body-cache size backstop; future fields cover sync-on-open,
+// drainer behavior, etc. The zero Config (MaxSize=0) disables the
+// size backstop — useful for tests and for users who want no cap.
+type Config struct {
+	// MaxSize is the body-cache size cap in bytes. 0 disables.
+	// Default 2GB when populated from [cache] in config.toml.
+	MaxSize int64
+}
+
 // Open returns an Account ready for reads and writes. It opens (or
 // creates) the per-account SQLite database under dir, applies
 // pragmas, and runs schema migrations to the current version.
 //
 // dir is the cache base directory; the per-account subdirectory is
 // created if absent. A leading ~ is expanded to the user's home.
-func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string) (*Account, error) {
+func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string, cfg Config) (*Account, error) {
 	expanded, err := expandHome(dir)
 	if err != nil {
 		return nil, fmt.Errorf("expand cache dir: %w", err)
@@ -138,6 +148,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		db:            db,
 		dir:           acctDir,
 		name:          accountName,
+		maxSize:       cfg.MaxSize,
 		events:        make(chan CacheEvent, 32),
 		drainSignal:   make(chan struct{}, 1),
 		stop:          make(chan struct{}),

@@ -111,7 +111,7 @@ func runRoot(f rootFlags) error {
 	if !ok {
 		return fmt.Errorf("backend does not implement mail.ChangeTracker")
 	}
-	acct, err := cache.Open(accts[0].Name, backend, ct, "")
+	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{})
 	if err != nil {
 		return fmt.Errorf("open cache: %w", err)
 	}

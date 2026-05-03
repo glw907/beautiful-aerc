@@ -49,7 +49,7 @@ func (f *fullSyncChangeTracker) Changes(_ context.Context, folder string, _ mail
 // construction.
 func newTestCache(t *testing.T, backend mail.Backend) *cache.Account {
 	t.Helper()
-	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir())
+	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir(), cache.Config{})
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
