@@ -19,17 +19,14 @@ func testReq() ConfirmRequest {
 	return ConfirmRequest{
 		Title: "Empty Trash",
 		Body:  "Permanently delete all 42 messages in Trash?",
-		OnYes: func() tea.Msg {
-			return EmptyFolderConfirmedMsg{Folder: "Trash", Source: "Trash"}
-		},
 	}
 }
 
 func containsMsgType(msgs []tea.Msg, target interface{}) bool {
 	targetType := func() string {
 		switch target.(type) {
-		case EmptyFolderConfirmedMsg:
-			return "EmptyFolderConfirmedMsg"
+		case ConfirmModalYesMsg:
+			return "ConfirmModalYesMsg"
 		case ConfirmModalClosedMsg:
 			return "ConfirmModalClosedMsg"
 		default:
@@ -39,8 +36,8 @@ func containsMsgType(msgs []tea.Msg, target interface{}) bool {
 	for _, m := range msgs {
 		var got string
 		switch m.(type) {
-		case EmptyFolderConfirmedMsg:
-			got = "EmptyFolderConfirmedMsg"
+		case ConfirmModalYesMsg:
+			got = "ConfirmModalYesMsg"
 		case ConfirmModalClosedMsg:
 			got = "ConfirmModalClosedMsg"
 		}
@@ -66,7 +63,7 @@ func TestConfirmModal_OpenClose(t *testing.T) {
 	}
 }
 
-func TestConfirmModal_YesEmitsOnYesAndCloses(t *testing.T) {
+func TestConfirmModal_YesEmitsYesAndCloses(t *testing.T) {
 	m := newTestConfirmModal()
 	m = m.Open(testReq())
 	m = m.SetSize(80, 24)
@@ -74,8 +71,8 @@ func TestConfirmModal_YesEmitsOnYesAndCloses(t *testing.T) {
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	msgs := drainBatch(cmd)
 
-	if !containsMsgType(msgs, EmptyFolderConfirmedMsg{}) {
-		t.Error("expected EmptyFolderConfirmedMsg in batch")
+	if !containsMsgType(msgs, ConfirmModalYesMsg{}) {
+		t.Error("expected ConfirmModalYesMsg in batch")
 	}
 	if !containsMsgType(msgs, ConfirmModalClosedMsg{}) {
 		t.Error("expected ConfirmModalClosedMsg in batch")
@@ -95,8 +92,8 @@ func TestConfirmModal_NoAndEscClose(t *testing.T) {
 		if !containsMsgType(msgs, ConfirmModalClosedMsg{}) {
 			t.Errorf("key %q: expected ConfirmModalClosedMsg", key)
 		}
-		if containsMsgType(msgs, EmptyFolderConfirmedMsg{}) {
-			t.Errorf("key %q: must NOT emit EmptyFolderConfirmedMsg", key)
+		if containsMsgType(msgs, ConfirmModalYesMsg{}) {
+			t.Errorf("key %q: must NOT emit ConfirmModalYesMsg", key)
 		}
 	}
 }

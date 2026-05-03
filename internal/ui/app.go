@@ -16,6 +16,15 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
+// pendingEmptyConfirm carries the parameters App needs to emit
+// EmptyFolderConfirmedMsg when the user accepts the active confirm
+// modal. Zero value means no empty-folder confirm is pending.
+type pendingEmptyConfirm struct {
+	active bool
+	folder string
+	source string
+}
+
 // App is the root bubbletea model for poplar.
 type App struct {
 	acct        AccountTab
@@ -30,8 +39,9 @@ type App struct {
 	help        HelpPopover
 	linkPicker  LinkPicker
 	movePicker  MovePicker
-	confirm     ConfirmModal
-	lastErr     ErrorMsg
+	confirm       ConfirmModal
+	pendingEmpty  pendingEmptyConfirm
+	lastErr       ErrorMsg
 	toast       pendingAction
 	undoSeconds int
 	// now returns the wall clock; test seam, defaults to time.Now.
@@ -143,19 +153,25 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case OpenConfirmEmptyMsg:
 		body := strconv.Itoa(msg.Total) + " messages will be permanently deleted."
+		m.pendingEmpty = pendingEmptyConfirm{active: true, folder: msg.Folder, source: msg.Source}
 		m.confirm = m.confirm.Open(ConfirmRequest{
 			Title: "Empty " + msg.Folder,
 			Body:  body,
-			OnYes: func() tea.Msg {
-				return EmptyFolderConfirmedMsg{
-					Folder: msg.Folder,
-					Source: msg.Source,
-				}
-			},
 		})
 		return m, nil
 
+	case ConfirmModalYesMsg:
+		if m.pendingEmpty.active {
+			folder, source := m.pendingEmpty.folder, m.pendingEmpty.source
+			m.pendingEmpty = pendingEmptyConfirm{}
+			return m, func() tea.Msg {
+				return EmptyFolderConfirmedMsg{Folder: folder, Source: source}
+			}
+		}
+		return m, nil
+
 	case ConfirmModalClosedMsg:
+		m.pendingEmpty = pendingEmptyConfirm{}
 		m.confirm = m.confirm.Close()
 		return m, nil
 

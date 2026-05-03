@@ -958,17 +958,24 @@ func TestApp_ConfirmYesEmitsConfirmedMsgAndCloses(t *testing.T) {
 		t.Fatal("setup: confirm should be open")
 	}
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	msgs := drainBatch(cmd)
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	yesMsgs := drainBatch(cmd)
+
+	// Confirm.Update emits ConfirmModalYesMsg + ConfirmModalClosedMsg.
+	// Feed both back through App.Update; the Yes handler then emits
+	// EmptyFolderConfirmedMsg.
 	found := false
-	for _, m := range msgs {
-		if _, ok := m.(EmptyFolderConfirmedMsg); ok {
-			found = true
-			break
+	for _, m := range yesMsgs {
+		var c tea.Cmd
+		app, c = app.Update(m)
+		for _, follow := range drainBatch(c) {
+			if _, ok := follow.(EmptyFolderConfirmedMsg); ok {
+				found = true
+			}
 		}
 	}
 	if !found {
-		t.Errorf("expected EmptyFolderConfirmedMsg in cmd batch; got %v", msgs)
+		t.Errorf("expected EmptyFolderConfirmedMsg after draining Yes batch; got %v", yesMsgs)
 	}
 }
 

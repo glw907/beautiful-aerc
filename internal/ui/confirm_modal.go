@@ -11,12 +11,19 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// ConfirmRequest holds the content and callback for one modal invocation.
+// ConfirmRequest holds the content for one modal invocation. The
+// followup action on confirmation is dispatched by App based on
+// state it sets when opening the modal — ConfirmModal itself only
+// emits ConfirmModalYesMsg / ConfirmModalClosedMsg.
 type ConfirmRequest struct {
 	Title string
 	Body  string
-	OnYes func() tea.Msg
 }
+
+// ConfirmModalYesMsg fires when the user presses 'y' on an open
+// ConfirmModal. App dispatches the appropriate followup based on
+// its own pending-confirm state.
+type ConfirmModalYesMsg struct{}
 
 // ConfirmModal is a yes/no confirmation overlay. App owns it and composes it
 // via Box + Position + PlaceOverlay, mirroring MovePicker and LinkPicker.
@@ -79,9 +86,8 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 	}
 	switch {
 	case key.Matches(keyMsg, m.keys.Yes):
-		onYes := m.req.OnYes
 		return m, tea.Batch(
-			func() tea.Msg { return onYes() },
+			func() tea.Msg { return ConfirmModalYesMsg{} },
 			func() tea.Msg { return ConfirmModalClosedMsg{} },
 		)
 	case key.Matches(keyMsg, m.keys.Dismiss):
