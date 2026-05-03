@@ -13,84 +13,65 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type configDiscoverFoldersFlags struct {
-	write bool
-}
-
 func newConfigDiscoverFoldersCmd() *cobra.Command {
-	f := configDiscoverFoldersFlags{}
+	var write bool
 	cmd := &cobra.Command{
 		Use:          "discover-folders",
 		Short:        "Connect to each account, discover server folders, merge defaults into [ui.folders]",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConfigDiscoverFolders(cmd, f)
+			flagPath := configFlagPath(cmd)
+			path, err := config.Resolve(flagPath)
+			if err != nil {
+				return err
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("reading config: %w", err)
+			}
+
+			accounts, err := config.ParseAccountsFromBytes(data)
+			if err != nil {
+				return fmt.Errorf("loading accounts: %w", err)
+			}
+			if len(accounts) == 0 {
+				return fmt.Errorf("no accounts in %s", path)
+			}
+
+			// v1 is single-account. Connect to the first account's backend.
+			backend, err := openBackend(accounts[0])
+			if err != nil {
+				return fmt.Errorf("opening backend for account %q: %w", accounts[0].Name, err)
+			}
+			if err := backend.Connect(context.Background()); err != nil {
+				return fmt.Errorf("connecting backend for account %q: %w", accounts[0].Name, err)
+			}
+			defer backend.Disconnect()
+
+			folders, err := backend.ListFolders()
+			if err != nil {
+				return fmt.Errorf("listing folders: %w", err)
+			}
+			classified := mail.Classify(folders)
+
+			existing, err := config.ExistingFolderKeys(data)
+			if err != nil {
+				return fmt.Errorf("reading existing folder keys: %w", err)
+			}
+
+			rendered := config.RenderFolderSubsections(classified, existing)
+			merged := config.MergeFolderSubsections(data, rendered)
+
+			if !write {
+				fmt.Fprint(cmd.Root().OutOrStdout(), merged)
+				return nil
+			}
+			return writeAtomically(path, merged)
 		},
 	}
-	cmd.Flags().BoolVar(&f.write, "write", false, "write merged output to the config file (default: dry-run to stdout)")
+	cmd.Flags().BoolVar(&write, "write", false, "write merged output to the config file (default: dry-run to stdout)")
 	return cmd
-}
-
-func runConfigDiscoverFolders(cmd *cobra.Command, f configDiscoverFoldersFlags) error {
-	flagPath := cmd.Root().PersistentFlags().Lookup("config").Value.String()
-	path, err := config.Resolve(flagPath)
-	if err != nil {
-		return err
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("reading config: %w", err)
-	}
-
-	accounts, err := config.ParseAccountsFromBytes(data)
-	if err != nil {
-		return fmt.Errorf("loading accounts: %w", err)
-	}
-	if len(accounts) == 0 {
-		return fmt.Errorf("no accounts in %s", path)
-	}
-
-	// v1 is single-account. Connect to the first account's backend.
-	backend, err := openBackendForDiscoverFolders(accounts[0])
-	if err != nil {
-		return fmt.Errorf("opening backend for account %q: %w", accounts[0].Name, err)
-	}
-	defer backend.Disconnect()
-
-	folders, err := backend.ListFolders()
-	if err != nil {
-		return fmt.Errorf("listing folders: %w", err)
-	}
-	classified := mail.Classify(folders)
-
-	existing, err := config.ExistingFolderKeys(data)
-	if err != nil {
-		return fmt.Errorf("reading existing folder keys: %w", err)
-	}
-
-	rendered := config.RenderFolderSubsections(classified, existing)
-	merged := config.MergeFolderSubsections(data, rendered)
-
-	if !f.write {
-		fmt.Fprint(cmd.Root().OutOrStdout(), merged)
-		return nil
-	}
-	return writeAtomically(path, merged)
-}
-
-// openBackendForDiscoverFolders returns a connected backend for the given account,
-// ready to call ListFolders. Delegates to openBackend for construction,
-// then calls Connect with a background context.
-func openBackendForDiscoverFolders(acct config.AccountConfig) (mail.Backend, error) {
-	b, err := openBackend(acct)
-	if err != nil {
-		return nil, err
-	}
-	if err := b.Connect(context.Background()); err != nil {
-		return nil, fmt.Errorf("connect: %w", err)
-	}
-	return b, nil
 }
 
 // writeAtomically writes content to path via a temp file + rename.

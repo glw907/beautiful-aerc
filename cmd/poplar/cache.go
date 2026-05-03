@@ -54,35 +54,21 @@ func newCacheStatsCmd() *cobra.Command {
 		Use:   "stats",
 		Short: "Print per-account cache statistics",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rows, err := gatherStats(cmd.Context())
+			accts, _, err := loadAccounts()
 			if err != nil {
 				return err
 			}
 			writeStatsHeader(cmd.OutOrStdout())
-			for _, r := range rows {
-				fmt.Fprintln(cmd.OutOrStdout(), formatStatsLine(r))
+			for _, a := range accts {
+				row, err := statsForAccount(cmd.Context(), a.Name)
+				if err != nil {
+					return fmt.Errorf("stats for %s: %w", a.Name, err)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), formatStatsLine(row))
 			}
 			return nil
 		},
 	}
-}
-
-// gatherStats opens each account's database read-only and returns
-// stats rows. It does NOT instantiate backends — stats is offline-safe.
-func gatherStats(ctx context.Context) ([]statsRow, error) {
-	accts, _, err := loadAccounts()
-	if err != nil {
-		return nil, err
-	}
-	var rows []statsRow
-	for _, a := range accts {
-		row, err := statsForAccount(ctx, a.Name)
-		if err != nil {
-			return nil, fmt.Errorf("stats for %s: %w", a.Name, err)
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
 }
 
 // statsForAccount opens the per-account SQLite directly (no Backend
@@ -304,7 +290,10 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		if err != nil {
 			return err
 		}
-		before, _ := fileSize(dbPath)
+		var before int64
+		if fi, statErr := os.Stat(dbPath); statErr == nil {
+			before = fi.Size()
+		}
 		// VACUUM cannot run inside a transaction or with concurrent
 		// writers. Use a short-lived dedicated connection with no
 		// pool — single-connection bypass.
@@ -322,7 +311,10 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 			return fmt.Errorf("vacuum %s: %w", a.Name, err)
 		}
 		db.Close()
-		after, _ := fileSize(dbPath)
+		var after int64
+		if fi, statErr := os.Stat(dbPath); statErr == nil {
+			after = fi.Size()
+		}
 		fmt.Fprintf(w, "vacuumed %s: %s → %s\n", a.Name, humanizeBytes(before), humanizeBytes(after))
 	}
 	if scope != "" && !matched {
@@ -331,11 +323,3 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 	return nil
 }
 
-// fileSize returns the size of the file at path in bytes.
-func fileSize(path string) (int64, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-	return fi.Size(), nil
-}

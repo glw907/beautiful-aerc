@@ -11,6 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// configFlagPath returns the value of the root command's --config
+// persistent flag, or "" when the flag is not registered (e.g. tests
+// that exercise a subcommand in isolation).
+func configFlagPath(cmd *cobra.Command) string {
+	root := cmd.Root()
+	if root == nil {
+		return ""
+	}
+	f := root.PersistentFlags().Lookup("config")
+	if f == nil {
+		return ""
+	}
+	return f.Value.String()
+}
+
 // newConfigInitTemplateCmd creates the `poplar config init` subcommand,
 // which writes a fresh self-documenting config template to disk.
 func newConfigInitTemplateCmd() *cobra.Command {
@@ -20,7 +35,8 @@ func newConfigInitTemplateCmd() *cobra.Command {
 		Short:        "Write a fresh self-documenting config template",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := config.Resolve("")
+			flagPath := configFlagPath(cmd)
+			path, err := config.Resolve(flagPath)
 			if err != nil {
 				return err
 			}
@@ -51,7 +67,8 @@ func newConfigPathCmd() *cobra.Command {
 		Short:        "Print the resolved config-file path",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := config.Resolve("")
+			flagPath := configFlagPath(cmd)
+			path, err := config.Resolve(flagPath)
 			if err != nil {
 				return err
 			}
@@ -69,7 +86,8 @@ func newConfigCheckCmd() *cobra.Command {
 		Short:        "Validate config and test each account's connection",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			accounts, _, err := config.Load("")
+			flagPath := configFlagPath(cmd)
+			accounts, _, err := config.Load(flagPath)
 			if err != nil {
 				return err
 			}
