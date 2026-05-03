@@ -187,6 +187,54 @@ func TestStoreBody_MaxSizeZeroDisablesCap(t *testing.T) {
 	}
 }
 
+// fakeBackendWithBody is a minimal mail.Backend that returns a fixed
+// body and counts FetchBody calls. Used to verify the write-through
+// path doesn't re-call the backend on cache hit.
+type fakeBackendWithBody struct {
+	fakeBackend
+	calls int
+	body  []byte
+}
+
+func (f *fakeBackendWithBody) FetchBody(_ mail.UID) ([]byte, error) {
+	f.calls++
+	return f.body, nil
+}
+
+func TestFetchBody_PopulatesCacheOnMiss(t *testing.T) {
+	be := &fakeBackendWithBody{body: []byte("from-backend")}
+	a, err := Open("test", be, &fakeChangeTracker{}, t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+
+	uid := mail.UID("write-through")
+	seedMessage(t, a, uid, time.Now())
+
+	body1, err := a.FetchBody(uid)
+	if err != nil {
+		t.Fatalf("FetchBody first: %v", err)
+	}
+	if string(body1) != "from-backend" {
+		t.Errorf("first body=%q, want %q", body1, "from-backend")
+	}
+	if be.calls != 1 {
+		t.Errorf("backend calls=%d after miss, want 1", be.calls)
+	}
+
+	body2, err := a.FetchBody(uid)
+	if err != nil {
+		t.Fatalf("FetchBody second: %v", err)
+	}
+	if string(body2) != "from-backend" {
+		t.Errorf("second body=%q, want %q", body2, "from-backend")
+	}
+	if be.calls != 1 {
+		t.Errorf("backend calls=%d after hit, want 1 (no re-fetch)", be.calls)
+	}
+}
+
 func TestEvictByAge(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
