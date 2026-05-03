@@ -22,7 +22,7 @@ func (b *Backend) ListFolders() ([]mail.Folder, error) {
 
 	entries, err := cmd.List("", "*", useSpecial)
 	if err != nil {
-		return nil, fmt.Errorf("list: %w", err)
+		return nil, fmt.Errorf("list: %w", classifyErr(err))
 	}
 
 	out := make([]mail.Folder, 0, len(entries))

@@ -161,6 +161,79 @@ the ADR(s) that justify them.
   (idempotent). IMAP impl issues `UID STORE +FLAGS.SILENT (\Deleted)`
   then `UID EXPUNGE <uids>`, scoped by UIDPLUS so unrelated
   pre-marked messages are unaffected.
+- `mail.ErrAuth` and `mail.ErrNotFound` are typed sentinels each
+  backend wraps onto its native error shape via package-local
+  `classifyErr`. JMAP uses `errors.As(*jmap.RequestError)` and
+  routes 401/403 → `ErrAuth`, 404 → `ErrNotFound`. IMAP uses
+  `errors.As(*imap.Error)` and routes
+  `AUTHENTICATIONFAILED`/`AUTHORIZATIONFAILED`/`PRIVACYREQUIRED` →
+  `ErrAuth`, `NONEXISTENT` → `ErrNotFound`. The cache drainer's
+  conflict matrix routes via `errors.Is` against these sentinels
+  (no substring matching).
+
+## Cache
+
+- `internal/cache` is the on-disk store. One `*cache.Account` per
+  email account; one SQLite database per account at
+  `$XDG_CACHE_HOME/poplar/<slug>/mail.db` (slug = lowercased
+  account name with non-`[a-z0-9-]` runs replaced by `-`).
+  `modernc.org/sqlite` driver, WAL mode, foreign_keys ON,
+  synchronous=NORMAL, busy_timeout=5000. Pool capped to
+  4 open / 2 idle.
+- Schema is versioned in `schema_version`; migrations run
+  transactionally on `Open`. v1 installs the full Cache I shape
+  (folders / messages / message_mailboxes / bodies / outbox per
+  spec §A.3). v2 adds `outbox.next_eligible_at` so the drainer's
+  pickup query filters the failed-row backoff window in SQL via
+  the `outbox_pickup` partial index instead of scanning every
+  failed row in Go.
+- `mail.ChangeTracker` is the protocol-level change-detection
+  sibling of `mail.Backend`. Both v1 backends implement it.
+  JMAP impl ignores the folder argument (Email/changes is
+  account-scoped per RFC 8621 §4.3) and returns the global
+  delta; the cache routes per-folder membership via
+  message_mailboxes. IMAP impl is scan-and-diff: select folder,
+  `UID SEARCH ALL`, diff against the prior maxuid encoded in
+  the SyncToken; `Modified` always nil; CONDSTORE-aware
+  incremental impl deferred (see `BACKLOG.md`). UIDVALIDITY
+  change → `mail.ErrCannotCalculateChanges` → cache re-anchor
+  per spec §D.4.
+- `(*Account).QueueOp(ctx, folder, msgUID, args)` is the single
+  write entry point. `OpArgs` is a sealed sum (`MoveArgs`,
+  `FlagArgs`, `DestroyArgs`; reserved `SendArgs`, `AppendArgs`).
+  Inside one transaction: resolve folder → row id, insert
+  outbox row with `status='pending'` and `next_eligible_at=NULL`,
+  apply optimistic `ui_flags`/`ui_hide` to the message row,
+  commit, signal drainer.
+- Outbox status is the typed `cache.OpStatus` enum
+  (`OpPending`/`OpExecuting`/`OpDone`/`OpFailed`/`OpConflict`)
+  stored as the underlying string. Op kind is `cache.OpKind`
+  (`KindMove`/`KindFlag`/`KindDestroy`/`KindSend`/`KindAppend`).
+  `CacheEvent` carries both as typed values.
+- Drainer is per-account, single goroutine. Pickup query is one
+  SQL statement using the `outbox_pickup` partial index. Wakes
+  on `drainSignal` (every QueueOp) or a 5-second idle ticker.
+  Conflict matrix per spec §D.4: success → `OpDone`,
+  `errors.Is(err, mail.ErrAuth)` → `OpConflict` with
+  `auth-failure` kind (no backoff), `errors.Is(err, mail.ErrNotFound)`
+  → idempotent `OpDone`, transient → `OpFailed` with
+  exponential `next_eligible_at`, `attempts >= max-attempts`
+  → `OpConflict` with `max-attempts-exceeded`. Crash recovery
+  resets `OpExecuting` rows: idempotent kinds → `OpPending`,
+  `send`/`append` → `OpConflict` with `crashed-mid-execute`.
+- Syncer/drainer coordination invariant (ADR-0113): the syncer's
+  upsert path uses an `EXISTS (… outbox_message …)` guard so an
+  in-flight pending/executing op's `ui_flags` is never reverted
+  by a concurrent server-side change.
+- `(*Account).Events()` is the drainer→UI signal channel
+  (buffered 32). Drops on backpressure are counted in
+  `(*Account).DroppedEvents()` so the UI can detect staleness
+  and reconcile via a full cache re-read.
+- `internal/backoff.Exponential(attempts, initial, max)` is the
+  shared exponential-backoff helper used by the cache drainer,
+  the JMAP push loop, and the IMAP idle reconnect loop. Returns
+  `initial` on attempt ≤ 1; doubles each subsequent attempt;
+  caps at `max`.
 
 ## Build & verification
 
@@ -212,4 +285,5 @@ invariant. ADR numbering is chronological.
 | Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
-| Local cache architecture (design accepted Pass 8.4; revised Pass 8.4-revise; implementation 8.4a–c) — per-account SQLite + junction-table message shape, unified write path with typed Op sum + drainer Events, drain-first sync ordering, outbox + state machine + terminal classification, UIDVALIDITY re-key contract; spec at `docs/superpowers/specs/2026-05-02-cache-0-design.md` | 0110 (narrowed by 0114, 0115), 0111 (parts superseded by 0117), 0112 (superseded in part by 0113, 0116; narrowed by 0114), 0113, 0114, 0115, 0116, 0117 |
+| Local cache architecture (design accepted Pass 8.4; revised Pass 8.4-revise; foundation Pass 8.4a; cutover Pass 8.4a-cutover; bodies + CLI Pass 8.4b; offline + Q/! overlays Pass 8.4c) — per-account SQLite + junction-table message shape, unified write path with typed Op sum + drainer Events, drain-first sync ordering, outbox + state machine + terminal classification, UIDVALIDITY re-key contract, IMAP scan-and-diff ChangeTracker (CONDSTORE deferred); spec at `docs/superpowers/specs/2026-05-02-cache-0-design.md` | 0110 (narrowed by 0114, 0115), 0111 (parts superseded by 0117), 0112 (superseded in part by 0113, 0116; narrowed by 0114), 0113, 0114, 0115, 0116, 0117, 0118, 0120 |
+| Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |

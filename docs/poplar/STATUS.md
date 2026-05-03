@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.4a next — Cache I implementation.
+**Current pass:** Pass 8.4a-cutover next — UI through cache + Backend collapse.
 
 ## Passes
 
@@ -12,8 +12,9 @@
 | 8.3 | Polish I — msglist, viewer (ADR-0109) | done |
 | 8.4 | Cache 0 — design + spec + ADR-0110/0111/0112 | done |
 | 8.4-review | Independent multi-angle review of Cache 0 spec → findings doc | done |
-| 8.4-revise | Apply review findings; revised spec + ADR-0113/0114/0115/0116/0117; Pass 8.4a brief | done |
-| 8.4a | Cache I — schema + headers + `mail.ChangeTracker` impls; unified write path migration | next |
+| 8.4-revise | Apply review findings; revised spec + ADR-0113/0114/0115/0116/0117 | done |
+| 8.4a | Cache I foundation — schema, ChangeTracker, syncer, drainer, tests; ADR-0118/0119/0120 | done |
+| 8.4a-cutover | UI cutover — `*cache.Account` reads + writes, Backend collapse to `Flag`, App-layer optimistic-state delete | next |
 | 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | pending |
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
 | 8.6 | Attachments I — backend (#24) | pending |
@@ -28,26 +29,27 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.4a)
+## Next starter prompt (Pass 8.4a-cutover)
 
-> **Goal.** Implement Cache I — per-account SQLite (schema v1),
-> `mail.ChangeTracker` interface and JMAP/IMAP impls, unified
-> write path through `cache.QueueOp`, strangler-fig migration from
-> direct-`mail.Backend` triage Cmds to cache-backed reads. Online
-> behavior only; outbox table is written to but offline-detection,
-> `Q`/`!` overlays, and status badge land in Cache III (8.4c).
+> **Goal.** Wire the UI through `cache.Account` and delete the
+> legacy direct-Backend code paths. Cache foundation is shipped
+> (Pass 8.4a, ADR-0118).
 >
-> **Approach.** Fresh session. Read
-> `docs/superpowers/plans/2026-05-02-cache-i-implementation.md`
-> end-to-end — it has the full ordered task list. Source of truth
-> for design is `docs/superpowers/specs/2026-05-02-cache-0-design.md`
-> (status: reviewed) plus ADR-0110/0111/0112/0113/0114/0115/0116/0117.
-> The strangler-fig order (cache writes → cache-backed reads →
-> delete legacy paths) is mandatory.
+> **Scope.** Phases 3 + 6 of
+> `docs/superpowers/plans/2026-05-02-cache-i-implementation.md`:
+> shrink `mail.Backend` (drop MarkRead/MarkUnread/MarkAnswered/
+> Delete — Flag is canonical); thread `*cache.Account` into
+> `App.NewApp` + `AccountTab`; switch reads through
+> `cache.Account.QueryFolder`, writes through `cache.QueueOp`;
+> replace `triageStartedMsg.onUndo` with a compensating-`QueueOp`
+> inverse; delete `MessageList.Apply*` and the App-layer
+> optimistic-state plumbing (ADR-0089); add `pumpCacheCmd` for
+> `(*Account).Events()`. Strangler-fig order (write switch →
+> read switch → legacy delete) is mandatory.
 >
-> **Outputs.** New `internal/cache/` package, `mail.ChangeTracker`
-> interface + two backend impls, `mail.Backend` shrunk to `Flag`,
-> UI rewired through `*cache.Account`, App-layer optimistic-state
-> plumbing deleted, comprehensive tests. Standard pass-end ritual
-> (with `/simplify`, idiomatic-bubbletea check, tmux verification
-> at 80×24 and 120×40, and `make install`).
+> **Settled (do not re-brainstorm):** ADR-0110/0111/0112/0113/
+> 0114/0115/0116/0117/0118/0119/0120.
+>
+> **Approach.** Pre-beta refactor freedom — migrate UI tests
+> to the new shape rather than carrying shims. Standard pass-end
+> ritual; archive the cache-i plan when this pass closes.

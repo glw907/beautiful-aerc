@@ -56,6 +56,9 @@
 
 ## Medium
 
+- [ ] **#28** CONDSTORE-aware IMAP ChangeTracker `#improvement` `#poplar` *(2026-05-02)* — **scheduled: post-8.4c, after profiling**
+  Current `internal/mailimap/changes.go` is scan-and-diff (`UID SEARCH ALL`, diff against prior maxuid encoded in the SyncToken). Modified UIDs are always nil, so flag-only changes round-trip through `Backend.FetchHeaders` for the affected set. Replace with `UID FETCH 1:* CHANGEDSINCE <modseq>` per RFC 7162, plus the CONDSTORE assertion at `finishConnect` (NOMODSEQ → fail Connect with a clear error). SyncToken is forward-compatible: bytes 0-3 reserved for uidvalidity, bytes 4-11 hold maxuid; add a third field (modseq) by re-laying the 12-byte token. Wire VANISHED detection so Removed UIDs aren't best-effort. ADR-0120.
+
 - [ ] **#26** Pass 7 follow-up: further responsive polish for message-list at narrow terminals `#improvement` `#poplar` *(2026-05-01)* — **scheduled: Pass 8.3**
   Pass 7 met the 80×24 polish bar via the responsive sidebar (ADR-0096), but at 80 cols the message-list pane still truncates sender names and squeezes subjects. Three interacting budgets to revisit: (1) **date column adapts to width** — switch to a narrower format (e.g. `04-30` / `3:41p`) at intermediate widths, and consider dropping the date column entirely at 80 cols; (2) **subject vs sender column balance** — currently sender gets a fixed allocation, should rebalance so subject takes more cells when sender names are short or when subject is the higher-signal column; (3) **sidebar floor** — current floor is 24 cells, explore whether 22 or 20 is acceptable when paired with label truncation, freeing more cells for the message list. Goal: 80×24 looks great even with long sender names + threaded prefixes.
 

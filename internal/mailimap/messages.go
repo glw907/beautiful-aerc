@@ -92,7 +92,7 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 		results = append(results, infoFromFetch(uid, items))
 	})
 	if err != nil {
-		return nil, fmt.Errorf("fetch headers: %w", err)
+		return nil, fmt.Errorf("fetch headers: %w", classifyErr(err))
 	}
 	return results, nil
 }
@@ -179,7 +179,7 @@ func (b *Backend) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
 
 	uids, err := cmd.Search(criteria)
 	if err != nil {
-		return nil, fmt.Errorf("search: %w", err)
+		return nil, fmt.Errorf("search: %w", classifyErr(err))
 	}
 	return uids, nil
 }

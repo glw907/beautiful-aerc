@@ -26,18 +26,18 @@ func (b *Backend) Move(uids []mail.UID, dest string) error {
 
 	if hasMove {
 		if err := cmd.Move(uids, dest); err != nil {
-			return fmt.Errorf("uid move: %w", err)
+			return fmt.Errorf("uid move: %w", classifyErr(err))
 		}
 		return nil
 	}
 	if err := cmd.Copy(uids, dest); err != nil {
-		return fmt.Errorf("copy: %w", err)
+		return fmt.Errorf("copy: %w", classifyErr(err))
 	}
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
-		return fmt.Errorf("store deleted: %w", err)
+		return fmt.Errorf("store deleted: %w", classifyErr(err))
 	}
 	if err := cmd.UIDExpunge(uids); err != nil {
-		return fmt.Errorf("uid expunge: %w", err)
+		return fmt.Errorf("uid expunge: %w", classifyErr(err))
 	}
 	return nil
 }
@@ -52,7 +52,7 @@ func (b *Backend) Copy(uids []mail.UID, dest string) error {
 	b.mu.Unlock()
 
 	if err := cmd.Copy(uids, dest); err != nil {
-		return fmt.Errorf("copy: %w", err)
+		return fmt.Errorf("copy: %w", classifyErr(err))
 	}
 	return nil
 }
@@ -80,7 +80,7 @@ func (b *Backend) resolveTrashFolder() (string, error) {
 	}
 	folders, err := b.ListFolders()
 	if err != nil {
-		return "", fmt.Errorf("list folders: %w", err)
+		return "", fmt.Errorf("list folders: %w", classifyErr(err))
 	}
 	for _, cf := range mail.Classify(folders) {
 		if cf.Canonical == "Trash" {
@@ -116,18 +116,18 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	if gmail {
 		trash, err := b.resolveTrashFolder()
 		if err != nil {
-			return fmt.Errorf("destroy: %w", err)
+			return fmt.Errorf("destroy: %w", classifyErr(err))
 		}
 		if _, err := cmd.Select(trash, false); err != nil {
-			return fmt.Errorf("select trash: %w", err)
+			return fmt.Errorf("select trash: %w", classifyErr(err))
 		}
 	}
 
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
-		return fmt.Errorf("store deleted: %w", err)
+		return fmt.Errorf("store deleted: %w", classifyErr(err))
 	}
 	if err := cmd.UIDExpunge(uids); err != nil {
-		return fmt.Errorf("uid expunge: %w", err)
+		return fmt.Errorf("uid expunge: %w", classifyErr(err))
 	}
 	return nil
 }
@@ -151,7 +151,7 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 		item = "-FLAGS.SILENT"
 	}
 	if err := cmd.Store(uids, item, flags); err != nil {
-		return fmt.Errorf("store flags: %w", err)
+		return fmt.Errorf("store flags: %w", classifyErr(err))
 	}
 	return nil
 }

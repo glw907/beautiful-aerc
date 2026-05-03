@@ -15,6 +15,7 @@ import (
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
 	"git.sr.ht/~rockorager/go-jmap/core/push"
 
+	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -27,7 +28,7 @@ const (
 // return it backs off exponentially and emits ConnReconnecting.
 func (b *Backend) pushLoop(ctx context.Context) {
 	defer close(b.pushDone)
-	backoff := pushBackoffInitial
+	attempts := 0
 	for {
 		if ctx.Err() != nil {
 			return
@@ -38,18 +39,15 @@ func (b *Backend) pushLoop(ctx context.Context) {
 		}
 		if err != nil {
 			b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
+			attempts++
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(backoff):
-			}
-			backoff *= 2
-			if backoff > pushBackoffMax {
-				backoff = pushBackoffMax
+			case <-time.After(backoff.Exponential(attempts, pushBackoffInitial, pushBackoffMax)):
 			}
 			continue
 		}
-		backoff = pushBackoffInitial
+		attempts = 0
 	}
 }
 
@@ -153,7 +151,7 @@ func (b *Backend) dispatchEmailChanges(prevState string) error {
 		Account:    accountID,
 		SinceState: prevState,
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return fmt.Errorf("email/changes: %w", err)
 	}
@@ -194,7 +192,7 @@ func (b *Backend) refreshBlobIDs(accountID jmap.ID, ids []jmap.ID) {
 		IDs:        ids,
 		Properties: []string{"id", "blobId"},
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mailjmap: refreshBlobIDs: %v\n", err)
 		return
@@ -225,7 +223,7 @@ func (b *Backend) dispatchMailboxChanges(prevState string) error {
 		Account:    accountID,
 		SinceState: prevState,
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return fmt.Errorf("mailbox/changes: %w", err)
 	}

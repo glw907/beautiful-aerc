@@ -36,6 +36,20 @@ The project moves through three phases with different rules
   the commit message and ADR; don't engineer around them.
 - The only sacred thing is data on disk the user can't easily
   regenerate (mail caches, OAuth refresh tokens).
+- **Anti-pattern when triaging review findings:** never skip with
+  framings like "cross-package," "schema change," "non-trivial
+  refactor," "would require interface change," "churn cost,"
+  "out of scope." Every one of those describes work this pre-beta
+  posture explicitly endorses, so they cannot be used as defer
+  rationales. Schema work in particular is *welcomed* now (v1.0
+  freeze is the trigger to land schema improvements, not the
+  reason to defer them). The only valid skip rationales are:
+  (a) **speculative future consumer** — the finding adds a
+  field/type/hook with no current call site and no immediate
+  need; (b) **upstream-blocked** — requires a third-party change
+  the project doesn't control or vendor; (c) **premature
+  optimization without measurement** (efficiency findings only,
+  bounded current shape). Anything else: apply it.
 
 **Beta soak** (Pass 11 ships `v0.9.0` → `v1.0.0`): **stability first.**
 

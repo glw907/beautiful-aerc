@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -23,7 +24,7 @@ const (
 func (b *Backend) idleLoop(ctx context.Context) {
 	defer close(b.idleDone)
 
-	backoff := reconnectInitial
+	attempts := 0
 	for {
 		if ctx.Err() != nil {
 			return
@@ -34,18 +35,15 @@ func (b *Backend) idleLoop(ctx context.Context) {
 		}
 		if err != nil {
 			b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
+			attempts++
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(backoff):
-			}
-			backoff *= 2
-			if backoff > reconnectMax {
-				backoff = reconnectMax
+			case <-time.After(backoff.Exponential(attempts, reconnectInitial, reconnectMax)):
 			}
 			continue
 		}
-		backoff = reconnectInitial
+		attempts = 0
 	}
 }
 

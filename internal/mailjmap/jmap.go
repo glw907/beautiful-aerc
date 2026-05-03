@@ -432,7 +432,7 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 		CalculateTotal: true,
 	})
 
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query folder: %w", err)
 	}
@@ -481,7 +481,7 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 		Properties: headerProperties,
 	})
 
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch headers: %w", err)
 	}
@@ -662,7 +662,7 @@ func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 		Account: accountID,
 		Update:  update,
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return fmt.Errorf("move: %w", err)
 	}
@@ -708,7 +708,7 @@ func (b *Backend) Copy(uids []mail.UID, destFolder string) error {
 		Account: accountID,
 		Create:  create,
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
@@ -754,7 +754,7 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 		Account: accountID,
 		Destroy: ids,
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return fmt.Errorf("destroy: %w", err)
 	}
@@ -864,7 +864,7 @@ func (b *Backend) setKeyword(uids []mail.UID, keyword string, set bool) error {
 		Account: accountID,
 		Update:  update,
 	})
-	resp, err := b.client.Do(req)
+	resp, err := b.do(req)
 	if err != nil {
 		return fmt.Errorf("set keyword %s: %w", keyword, err)
 	}
