@@ -74,8 +74,7 @@ func (p MovePicker) Open(uids []mail.UID, src string, folders []FolderEntry) Mov
 	p.filter = ""
 	p.cursor = 0
 	p.offset = 0
-	p.recompute()
-	return p
+	return p.recompute()
 }
 
 func (p MovePicker) Close() MovePicker {
@@ -113,7 +112,7 @@ func (p MovePicker) clampOffset() MovePicker {
 	return p
 }
 
-func (p *MovePicker) recompute() {
+func (p MovePicker) recompute() MovePicker {
 	p.matches = p.matches[:0]
 	if cap(p.matches) < len(p.all) {
 		p.matches = make([]int, 0, len(p.all))
@@ -126,6 +125,7 @@ func (p *MovePicker) recompute() {
 	}
 	p.cursor = 0
 	p.offset = 0
+	return p
 }
 
 func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
@@ -165,16 +165,14 @@ func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
 		}
 		_, size := utf8.DecodeLastRuneInString(p.filter)
 		p.filter = p.filter[:len(p.filter)-size]
-		p.recompute()
-		return p, nil
+		return p.recompute(), nil
 	}
 	if key.Matches(keyMsg, p.keys.Swallow) {
 		return p, nil
 	}
 	if r, ok := singlePrintableRune(keyMsg); ok {
 		p.filter += string(r)
-		p.recompute()
-		return p, nil
+		return p.recompute(), nil
 	}
 	return p, nil
 }
