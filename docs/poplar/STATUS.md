@@ -1,24 +1,17 @@
 # Poplar Status
 
-**Current pass:** Pass 8.5b next — Elm architecture conformance audit of `internal/ui/`.
+**Current pass:** Pass 8.4c next — Cache III (visible outbox + offline + Q/! overlays + connection badge).
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 8 | Scaffold → backends → UI → triage → config v1 (see git log; ADRs 0001–0104) | done |
-| 8.1 | Gmail preset (ADR-0106/0107/0108) | done |
-| 8.2 | Bubbletea cleanup II | done |
-| 8.3 | Polish I — msglist, viewer (ADR-0109) | done |
-| 8.4 | Cache 0 — design + spec + ADR-0110/0111/0112 | done |
-| 8.4-review | Independent multi-angle review of Cache 0 spec → findings doc | done |
-| 8.4-revise | Apply review findings; revised spec + ADR-0113/0114/0115/0116/0117 | done |
-| 8.4a | Cache I foundation — schema, ChangeTracker, syncer, drainer, tests; ADR-0118/0119/0120 | done |
-| 8.4a-cutover | UI cutover — `*cache.Account` reads + writes, Backend collapse to `Flag`, App-layer optimistic-state delete; ADR-0121 | done |
-| 8.4b | Cache II — body cache + eviction + `poplar cache` CLI | done |
+| 1 – 8.3 | Scaffold → backends → UI → triage → config v1 → Gmail preset → polish I (see git log; ADRs 0001–0109) | done |
+| 8.4 – 8.4b | Cache 0–II — design, foundation, UI cutover, body cache + CLI (ADR-0110–0124) | done |
 | 8.5 | Overengineering audit — ADR-0125/0126/0127; ~700 LOC net deletion | done |
-| 8.5b | Elm architecture conformance audit (`internal/ui/`) | pending |
+| 8.5b | Elm architecture conformance audit (`internal/ui/`) — ADR-0128 | done |
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
+| 8.5c | Modal shell extraction (deferred from 8.5b R-modalshell) | pending |
 | 8.6 | Attachments I — backend (#24) | pending |
 | 8.7 | Attachments II — viewer (#24) | pending |
 | 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
@@ -31,27 +24,7 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.5b)
-
-> **Goal.** Pass 8.5b — Elm architecture conformance audit of
-> `internal/ui/`. Verify state-in-models, mutations-only-in-Update,
-> I/O-only-in-Cmd, child→parent communication via Msg only, shared
-> state hoisted to root.
->
-> **Scope.** `internal/ui/` only. Sibling to Pass 8.5 (overengineering
-> audit, just shipped); operates on the slimmer UI surface 8.5
-> produced.
->
-> **Settled (do not re-brainstorm):** elm-conventions skill rules.
-> ADR-0023, 0035-0037, 0042, 0044, 0054, 0088 (Elm-architecture ADRs).
->
-> **Approach.** Brainstorm → spec at
-> `docs/superpowers/specs/2026-05-03-elm-conformance-audit-design.md`
-> → plan at
-> `docs/superpowers/plans/2026-05-03-elm-conformance-audit.md` →
-> execute. Standard pass-end checklist applies.
-
-## Queued after 8.5b (Pass 8.4c)
+## Next starter prompt (Pass 8.4c)
 
 > **Goal.** Land Cache III: visible outbox, offline mode, Q/! per-row
 > state overlays, and a connection-state badge in the status bar.
@@ -70,3 +43,14 @@
 > offline-mode entry/exit triggers (manual toggle vs auto on transient
 > backend failures), connection-state cycling vs latching, undo behavior
 > while offline.
+>
+> **Approach.** Brainstorm the open questions, write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`, then implement.
+> Standard pass-end checklist applies.
+
+## Queued after 8.4c (Pass 8.5c)
+
+> **Goal.** Extract a shared modal-shell helper for the four overlays
+> (LinkPicker, MovePicker, ConfirmModal, HelpPopover) per
+> ADR-0128 R-modalshell. Capture golden tests at 80×24 and 120×40
+> before refactoring; verify byte-for-byte equality after.
