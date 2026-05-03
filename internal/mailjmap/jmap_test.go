@@ -76,22 +76,12 @@ func TestListFolders_ReturnsCachedFolders(t *testing.T) {
 
 func TestOpenFolder(t *testing.T) {
 	tests := []struct {
-		name      string
-		openName  string
-		wantErr   bool
-		wantCurr  string
+		name     string
+		openName string
+		wantErr  bool
 	}{
-		{
-			name:     "known folder sets current",
-			openName: "Inbox",
-			wantErr:  false,
-			wantCurr: "Inbox",
-		},
-		{
-			name:     "unknown folder returns error",
-			openName: "Nonexistent",
-			wantErr:  true,
-		},
+		{name: "known folder", openName: "Inbox", wantErr: false},
+		{name: "unknown folder returns error", openName: "Nonexistent", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -105,9 +95,6 @@ func TestOpenFolder(t *testing.T) {
 			err := b.OpenFolder(tt.openName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("OpenFolder(%q) error = %v, wantErr %v", tt.openName, err, tt.wantErr)
-			}
-			if !tt.wantErr && b.current != tt.wantCurr {
-				t.Errorf("current = %q, want %q", b.current, tt.wantCurr)
 			}
 		})
 	}

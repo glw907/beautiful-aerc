@@ -29,16 +29,13 @@ func classifyErr(err error) error {
 	if errors.As(err, &re) {
 		switch re.Status {
 		case 401, 403:
-			return wrapAuth(err)
+			return errJoin(err, mail.ErrAuth)
 		case 404:
-			return wrapNotFound(err)
+			return errJoin(err, mail.ErrNotFound)
 		}
 	}
 	return err
 }
-
-func wrapAuth(err error) error     { return errJoin(err, mail.ErrAuth) }
-func wrapNotFound(err error) error { return errJoin(err, mail.ErrNotFound) }
 
 // errJoin wraps two errors so errors.Is matches the sentinel and
 // the original message stays in Error().

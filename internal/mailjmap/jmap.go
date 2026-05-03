@@ -42,7 +42,6 @@ type Backend struct {
 	client     jmapClient
 	pushClient *jmap.Client // real client for EventSource; nil in unit tests
 	session    *jmap.Session
-	current    string
 	password   string // cached PasswordCmd result; empty when cfg.Password is inline
 	folders    map[string]folderEntry
 	blobIDs    map[mail.UID]string
@@ -367,7 +366,6 @@ func (b *Backend) Disconnect() error {
 	}
 	b.client = nil
 	b.session = nil
-	b.current = ""
 	b.folders = make(map[string]folderEntry)
 	b.blobIDs = make(map[mail.UID]string)
 	b.states = make(map[string]string)
@@ -400,7 +398,6 @@ func (b *Backend) OpenFolder(name string) error {
 	if _, ok := b.folders[name]; !ok {
 		return fmt.Errorf("open folder: unknown folder %q", name)
 	}
-	b.current = name
 	return nil
 }
 
@@ -519,7 +516,9 @@ func translateEmail(e *email.Email) mail.MessageInfo {
 		Flags:     translateKeywords(e.Keywords),
 		Size:      uint32(e.Size),
 		ThreadID:  mail.UID(e.ThreadID),
-		InReplyTo: mail.UID(firstInReplyTo(e.InReplyTo)),
+	}
+	if len(e.InReplyTo) > 0 {
+		info.InReplyTo = mail.UID(e.InReplyTo[0])
 	}
 	if e.ReceivedAt != nil {
 		info.SentAt = *e.ReceivedAt
@@ -585,15 +584,6 @@ func translateKeywords(kw map[string]bool) mail.Flag {
 		f |= mail.FlagForwarded
 	}
 	return f
-}
-
-// firstInReplyTo returns the first value from the InReplyTo header list,
-// or empty string if there are none.
-func firstInReplyTo(ids []string) string {
-	if len(ids) == 0 {
-		return ""
-	}
-	return ids[0]
 }
 
 // FetchBody satisfies mail.Backend. Returns the raw RFC 822 body for
