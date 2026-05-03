@@ -3,6 +3,8 @@
 package filter
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -251,6 +253,63 @@ func TestCompactLineRuns(t *testing.T) {
 			got := compactLineRuns(tt.input)
 			if got != tt.want {
 				t.Errorf("got:\n%s\nwant:\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanHTML_InlineBoundaryFusion(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+		want string
+	}{
+		{name: "br between words", html: "Safari to<br>Safari 18.6", want: "Safari to Safari 18.6"},
+		// Anchors are preserved as markdown links; the important invariant
+		// is that a space separates the link from adjacent text, preventing
+		// fusion like "[link](url)text".
+		{name: "anchor abuts trailing text", html: `<a href="https://example.com">link</a>text`, want: "[link](https://example.com) text"},
+		{name: "anchor abuts leading text", html: `text<a href="https://example.com">link</a>`, want: "text [link](https://example.com)"},
+		{name: "consecutive inline tags collapse to single space", html: `<a>one</a><a>two</a>`, want: "[one]() [two]()"},
+		{name: "colon abuts anchor email", html: `to:<a href="mailto:Dave_99504@yahoo.com">Dave_99504@yahoo.com</a><br>Thanks,<br>Dave Johnson`, want: `to: [Dave\_99504@yahoo.com](mailto:Dave_99504@yahoo.com) Thanks, Dave Johnson`},
+		{name: "span inside paragraph keeps internal spacing", html: `<p>the <span>minimum</span> required</p>`, want: "the minimum required"},
+		{name: "block paragraphs preserved", html: `<p>para one</p><p>para two</p>`, want: "para one\n\npara two"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := strings.TrimSpace(CleanHTML(tt.html))
+			if got != tt.want {
+				t.Errorf("CleanHTML() mismatch\n  got:  %q\n  want: %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanHTML_FusionFixtures(t *testing.T) {
+	cases := []struct {
+		fixture        string
+		mustContain    []string
+		mustNotContain []string
+	}{
+		{fixture: "safari-update-fragment.html", mustContain: []string{"Safari to Safari", "increasing the minimum"}, mustNotContain: []string{"toSafari", "the  minimum"}},
+		{fixture: "dave-johnson-fragment.html", mustContain: []string{"Dave_99504@yahoo.com) Thanks", "Dave Johnson"}, mustNotContain: []string{"Dave_99504@yahoo.comThanks"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("testdata", tc.fixture))
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			out := CleanHTML(string(raw))
+			for _, s := range tc.mustContain {
+				if !strings.Contains(out, s) {
+					t.Errorf("output missing %q\n--- output ---\n%s", s, out)
+				}
+			}
+			for _, s := range tc.mustNotContain {
+				if strings.Contains(out, s) {
+					t.Errorf("output should not contain %q\n--- output ---\n%s", s, out)
+				}
 			}
 		})
 	}

@@ -8,6 +8,33 @@ import (
 	"strings"
 )
 
+// inlineBoundaryTags is the closed set of inline HTML elements whose
+// boundaries must carry an explicit space when they abut text. Tag
+// names are matched case-insensitively. Block-level tags (p, div,
+// h1-h6, li, etc.) are deliberately excluded — the html→markdown
+// converter handles their separation via blank lines.
+var inlineBoundaryTags = []string{
+	"a", "b", "code", "em", "i", "span", "strong", "u",
+}
+
+var reInlineBoundary = regexp.MustCompile(
+	`(?i)<(?:/)?(?:` + strings.Join(inlineBoundaryTags, "|") + `)(?:\s[^>]*)?\s*/?>`,
+)
+
+// reBR matches both <br> and <br/> forms.
+var reBR = regexp.MustCompile(`(?i)<br\s*/?>`)
+
+// inlineBoundaryPad surrounds each inline-element boundary tag with
+// a space so adjacent text runs are separated before tag stripping.
+// <br> is replaced with a plain space directly — it marks a soft line
+// break in prose and should not become a hard markdown line break.
+func inlineBoundaryPad(body string) string {
+	body = reBR.ReplaceAllString(body, " ")
+	return reInlineBoundary.ReplaceAllStringFunc(body, func(m string) string {
+		return " " + m + " "
+	})
+}
+
 // Package-level compiled regexes.
 var (
 	reMozClass      = regexp.MustCompile(` class="moz-[^"]*"`)
@@ -37,13 +64,15 @@ var (
 )
 
 // prepareHTML cleans the raw HTML before conversion: strips Mozilla-specific
-// attributes, hidden elements (display:none divs), and zero-size tracking images.
+// attributes, hidden elements (display:none divs), zero-size tracking images,
+// and pads inline element boundaries to prevent word fusion after tag stripping.
 func prepareHTML(body string) string {
 	body = reMozClass.ReplaceAllString(body, "")
 	body = reMozDataAttr.ReplaceAllString(body, "")
 	body = reMozAttr.ReplaceAllString(body, "")
 	body = stripHiddenElements(body)
 	body = reZeroImg.ReplaceAllString(body, "")
+	body = inlineBoundaryPad(body)
 	return body
 }
 
