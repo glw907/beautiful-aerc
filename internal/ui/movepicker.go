@@ -89,6 +89,30 @@ func (p MovePicker) SetSize(width, height int) MovePicker {
 	return p
 }
 
+// movePickerVisibleRows is the list-row capacity at the given total
+// box height. Reserves rows for top + bottom border + filter line +
+// preview lines + slack.
+func movePickerVisibleRows(height int) int {
+	rows := height - 7
+	if rows < 1 {
+		rows = 1
+	}
+	return rows
+}
+
+// clampOffset adjusts p.offset so p.cursor lies within the visible
+// window. Called after every cursor move.
+func (p MovePicker) clampOffset() MovePicker {
+	visible := movePickerVisibleRows(p.height)
+	if p.cursor < p.offset {
+		p.offset = p.cursor
+	}
+	if p.cursor >= p.offset+visible {
+		p.offset = p.cursor - visible + 1
+	}
+	return p
+}
+
 func (p *MovePicker) recompute() {
 	p.matches = p.matches[:0]
 	if cap(p.matches) < len(p.all) {
@@ -117,12 +141,12 @@ func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
 		if p.cursor < len(p.matches)-1 {
 			p.cursor++
 		}
-		return p, nil
+		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Up):
 		if p.cursor > 0 {
 			p.cursor--
 		}
-		return p, nil
+		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Pick):
 		if p.cursor < 0 || p.cursor >= len(p.matches) {
 			return p, nil
@@ -188,19 +212,10 @@ func (p MovePicker) Box(w, h int) string {
 	}
 	contentW := boxW - 2
 
-	maxListRows := h - 7
-	if maxListRows < 1 {
-		maxListRows = 1
-	}
+	maxListRows := movePickerVisibleRows(h)
 
 	rows := p.buildListRows(contentW)
 	if len(rows) > maxListRows {
-		if p.cursor < p.offset {
-			p.offset = p.cursor
-		}
-		if p.cursor >= p.offset+maxListRows {
-			p.offset = p.cursor - maxListRows + 1
-		}
 		end := p.offset + maxListRows
 		if end > len(rows) {
 			end = len(rows)

@@ -102,12 +102,12 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 		if p.cursor < len(p.links)-1 {
 			p.cursor++
 		}
-		return p, nil
+		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Up):
 		if p.cursor > 0 {
 			p.cursor--
 		}
-		return p, nil
+		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Enter):
 		if p.cursor < 0 || p.cursor >= len(p.links) {
 			return p, nil
@@ -135,6 +135,33 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 
 // linkPickerMaxWidth caps the picker's natural width.
 const linkPickerMaxWidth = 70
+
+// visibleLinkRows is the number of list rows the picker shows at
+// the given total box height. The 7-row reservation is for top +
+// bottom border + rule + 2 preview lines + 1 title slack.
+func visibleLinkRows(total, height int) int {
+	maxRows := height - 7
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	if total < maxRows {
+		return total
+	}
+	return maxRows
+}
+
+// clampOffset returns p with p.offset adjusted so p.cursor is
+// within the visible window. Called after every cursor move.
+func (p LinkPicker) clampOffset() LinkPicker {
+	visible := visibleLinkRows(len(p.links), p.height)
+	if p.cursor < p.offset {
+		p.offset = p.cursor
+	}
+	if p.cursor >= p.offset+visible {
+		p.offset = p.cursor - visible + 1
+	}
+	return p
+}
 
 // linkPickerInlineCap caps the inline URL display length per row,
 // independent of box width — keeps the visual tight even on very wide
@@ -168,21 +195,7 @@ func (p LinkPicker) Box(w, h int) string {
 		urlW = linkPickerInlineCap
 	}
 
-	visibleRows := len(p.links)
-	maxListRows := h - 7 // top + bottom border + rule + 2 preview + 1 title slack
-	if maxListRows < 1 {
-		maxListRows = 1
-	}
-	if visibleRows > maxListRows {
-		visibleRows = maxListRows
-	}
-
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+visibleRows {
-		p.offset = p.cursor - visibleRows + 1
-	}
+	visibleRows := visibleLinkRows(len(p.links), h)
 
 	var b strings.Builder
 	title := " Links "
