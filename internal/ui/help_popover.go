@@ -229,33 +229,26 @@ func (h HelpPopover) View(width, height int) string {
 // Search/Select/Threads, then Go To grid). Bottom hint line is
 // added by View.
 func renderAccountLayout(styles Styles, groups []bindingGroup) string {
-	row1 := lipgloss.JoinHorizontal(lipgloss.Top,
+	row1 := joinColumnsRow(renderGap(),
 		renderGroup(styles, groups[0]),
-		renderGap(),
 		renderGroup(styles, groups[1]),
-		renderGap(),
 		renderGroup(styles, groups[2]),
 	)
-	row2 := lipgloss.JoinHorizontal(lipgloss.Top,
+	row2 := joinColumnsRow(renderGap(),
 		renderGroup(styles, groups[3]),
-		renderGap(),
 		renderGroup(styles, groups[4]),
-		renderGap(),
 		renderGroup(styles, groups[5]),
 	)
 	gotoBlock := renderGotoGrid(styles, groups[6])
-	return lipgloss.JoinVertical(lipgloss.Left,
-		row1, "", row2, "", gotoBlock)
+	return strings.Join([]string{row1, "", row2, "", gotoBlock}, "\n")
 }
 
 // renderViewerLayout builds the single-row layout for the viewer
 // context: Nav/Triage/Reply side-by-side.
 func renderViewerLayout(styles Styles, groups []bindingGroup) string {
-	return lipgloss.JoinHorizontal(lipgloss.Top,
+	return joinColumnsRow(renderGap(),
 		renderGroup(styles, groups[0]),
-		renderGap(),
 		renderGroup(styles, groups[1]),
-		renderGap(),
 		renderGroup(styles, groups[2]),
 	)
 }
@@ -267,7 +260,52 @@ func renderGroup(styles Styles, g bindingGroup) string {
 	for _, r := range g.rows {
 		lines = append(lines, renderRow(styles, r))
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return strings.Join(lines, "\n")
+}
+
+// joinColumnsRow concatenates pre-rendered multi-line columns
+// side-by-side, padding each column to its widest line and the
+// row to the tallest column. Gap is inserted between columns. Use
+// instead of lipgloss.JoinHorizontal so the result is correct
+// under both icon-mode cell widths (per ADR-0084).
+func joinColumnsRow(gap string, cols ...string) string {
+	if len(cols) == 0 {
+		return ""
+	}
+	splits := make([][]string, len(cols))
+	widths := make([]int, len(cols))
+	height := 0
+	for i, col := range cols {
+		lines := strings.Split(col, "\n")
+		splits[i] = lines
+		if len(lines) > height {
+			height = len(lines)
+		}
+		for _, line := range lines {
+			if w := lipgloss.Width(line); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	rows := make([]string, height)
+	for r := 0; r < height; r++ {
+		var b strings.Builder
+		for i, lines := range splits {
+			var line string
+			if r < len(lines) {
+				line = lines[r]
+			}
+			for lipgloss.Width(line) < widths[i] {
+				line += " "
+			}
+			b.WriteString(line)
+			if i < len(splits)-1 {
+				b.WriteString(gap)
+			}
+		}
+		rows[r] = b.String()
+	}
+	return strings.Join(rows, "\n")
 }
 
 // renderRow builds "<key>  <desc>" for a single row, padding the key
@@ -314,7 +352,7 @@ func renderGotoGrid(styles Styles, g bindingGroup) string {
 	row2 := renderRow(styles, g.rows[3]) + gap +
 		renderRow(styles, g.rows[4]) + gap +
 		renderRow(styles, g.rows[5])
-	return lipgloss.JoinVertical(lipgloss.Left, heading, row1, row2)
+	return strings.Join([]string{heading, row1, row2}, "\n")
 }
 
 // renderHintLine builds the bottom hint line: "Enter  open    ?  close".
