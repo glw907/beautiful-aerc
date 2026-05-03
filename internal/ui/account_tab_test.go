@@ -1765,3 +1765,35 @@ func TestAccountTab_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
 		t.Errorf("msglist.layout = %+v, want %+v", got, wantLayout)
 	}
 }
+
+func TestAccountTab_NextMessage_WalksFilteredRows(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	// Each message is its own thread (ThreadID == UID, no InReplyTo) so
+	// filterBuckets operates at the message level and UID 2 is excluded.
+	msgs := []mail.MessageInfo{
+		{UID: "1", ThreadID: "1", From: "alice@example.com", Subject: "alpha report"},
+		{UID: "2", ThreadID: "2", From: "bob@example.com", Subject: "beta update"},
+		{UID: "3", ThreadID: "3", From: "alice@example.com", Subject: "alpha summary"},
+	}
+	tab.msglist.SetMessages(msgs)
+
+	// Commit a filter that hides UID 2.
+	tab.msglist.SetFilter("alpha", SearchModeName)
+
+	// Open UID 1 in the viewer.
+	tab, _ = tab.openMessage(msgs[0])
+
+	// Drive the viewer into Ready by delivering bodyLoadedMsg.
+	tab, _ = tab.updateTab(bodyLoadedMsg{uid: "1", blocks: nil})
+
+	// Press n — cursor should advance to UID 3, skipping the hidden UID 2.
+	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	got, ok := tab.msglist.SelectedMessage()
+	if !ok {
+		t.Fatal("after n: SelectedMessage not ok")
+	}
+	if got.UID != "3" {
+		t.Errorf("after n with filter: cursor on UID %q, want %q", got.UID, "3")
+	}
+}
