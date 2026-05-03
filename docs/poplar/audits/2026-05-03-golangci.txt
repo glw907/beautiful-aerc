@@ -1,0 +1,168 @@
+internal/term/probe.go:40:17: Error return value of `tty.Close` is not checked (errcheck)
+	defer tty.Close()
+	               ^
+internal/term/probe.go:60:20: Error return value of `term.Restore` is not checked (errcheck)
+	defer term.Restore(fd, oldState)
+	                  ^
+internal/term/probe_test.go:108:22: Error return value of `master.Close` is not checked (errcheck)
+			defer master.Close()
+			                  ^
+internal/term/probe_test.go:109:21: Error return value of `slave.Close` is not checked (errcheck)
+			defer slave.Close()
+			                 ^
+internal/term/probe_test.go:138:20: Error return value of `master.Close` is not checked (errcheck)
+	defer master.Close()
+	                  ^
+internal/term/probe_test.go:139:19: Error return value of `slave.Close` is not checked (errcheck)
+	defer slave.Close()
+	                 ^
+internal/term/probe_test.go:156:20: Error return value of `master.Close` is not checked (errcheck)
+	defer master.Close()
+	                  ^
+internal/term/probe_test.go:157:19: Error return value of `slave.Close` is not checked (errcheck)
+	defer slave.Close()
+	                 ^
+internal/filter/convert.go:40:17: Error return value of `w.WriteString` is not checked (errcheck)
+			w.WriteString(strings.TrimSpace(attr.Val))
+			             ^
+internal/filter/convert.go:105:16: Error return value of `w.WriteString` is not checked (errcheck)
+		w.WriteString("\n\n")
+		             ^
+internal/content/render_footnote_test.go:148:7: Error return value is not checked (errcheck)
+	p := rewritten[0].(Paragraph)
+	     ^
+internal/content/render_footnote_test.go:149:10: Error return value is not checked (errcheck)
+	link := p.Spans[0].(Link)
+	        ^
+internal/content/render_footnote_test.go:171:7: Error return value is not checked (errcheck)
+	p := rewritten[0].(Paragraph)
+	     ^
+internal/mailimap/auth.go:145:15: Error return value of `f.Close` is not checked (errcheck)
+	defer f.Close()
+	             ^
+internal/mailimap/messages.go:167:16: Error return value of `rc.Close` is not checked (errcheck)
+	defer rc.Close()
+	              ^
+internal/tidy/api.go:73:23: Error return value of `resp.Body.Close` is not checked (errcheck)
+	defer resp.Body.Close()
+	                     ^
+internal/tidy/tidy_test.go:19:28: Error return value of `(*encoding/json.Encoder).Encode` is not checked (errcheck)
+		json.NewEncoder(w).Encode(resp)
+		                         ^
+internal/tidy/tidy_test.go:151:10: Error return value of `w.Write` is not checked (errcheck)
+		w.Write([]byte(`{"error":{"message":"internal server error"}}`))
+		       ^
+internal/mailjmap/jmap.go:230:17: Error return value of `rc.Close` is not checked (errcheck)
+		defer rc.Close()
+		              ^
+internal/cache/account.go:156:11: Error return value of `db.Close` is not checked (errcheck)
+		db.Close()
+		        ^
+internal/cache/account.go:228:14: Error return value of `tx.Rollback` is not checked (errcheck)
+		tx.Rollback()
+		           ^
+internal/cache/bodies.go:102:13: Error return value of `rs.Close` is not checked (errcheck)
+				rs.Close()
+				        ^
+internal/cache/bodies.go:112:11: Error return value of `rs.Close` is not checked (errcheck)
+		rs.Close()
+		        ^
+internal/cache/bodies.go:144:17: Error return value of `rs.Close` is not checked (errcheck)
+		defer rs.Close()
+		              ^
+internal/cache/bodies_test.go:30:15: Error return value of `a.Close` is not checked (errcheck)
+	defer a.Close()
+	             ^
+internal/cache/bodies_test.go:43:15: Error return value of `a.Close` is not checked (errcheck)
+	defer a.Close()
+	             ^
+internal/cache/bodies_test.go:67:15: Error return value of `a.Close` is not checked (errcheck)
+	defer a.Close()
+	             ^
+internal/cache/cache_test.go:142:18: Error return value of `a.upsertMessages` is not checked (errcheck)
+	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{{UID: "5", Subject: "x"}})
+	                ^
+internal/cache/cache_test.go:175:18: Error return value of `a.upsertMessages` is not checked (errcheck)
+	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "9", Subject: "x"}})
+	                ^
+internal/cache/cache_test.go:194:62: Error return value of `(*database/sql.Row).Scan` is not checked (errcheck)
+	a.db.QueryRow(`SELECT status FROM outbox WHERE id = 1`).Scan(&status)
+	                                                            ^
+internal/cache/cache_test.go:207:15: Error return value of `a.SyncFolders` is not checked (errcheck)
+	a.SyncFolders(context.Background())
+	             ^
+internal/cache/cache_test.go:208:18: Error return value of `a.upsertMessages` is not checked (errcheck)
+	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1"}})
+	                ^
+internal/cache/cache_test.go:209:11: Error return value of `a.QueueOp` is not checked (errcheck)
+	a.QueueOp(context.Background(), "Inbox", "1", FlagArgs{Flag: mail.FlagSeen, Set: true})
+	         ^
+internal/cache/cache_test.go:210:16: Error return value of `a.StartDrainer` is not checked (errcheck)
+	a.StartDrainer(context.Background())
+	              ^
+internal/cache/cache_test.go:223:61: Error return value of `(*database/sql.Row).Scan` is not checked (errcheck)
+	a.db.QueryRow(`SELECT error FROM outbox WHERE id = 1`).Scan(&errPayload)
+	                                                           ^
+internal/cache/cache_test.go:233:15: Error return value of `a.SyncFolders` is not checked (errcheck)
+	a.SyncFolders(context.Background())
+	             ^
+internal/cache/cache_test.go:237:11: Error return value of `a.db.Exec` is not checked (errcheck)
+	a.db.Exec(`UPDATE outbox SET status = 'executing' WHERE id = ?`, opID)
+	         ^
+internal/cache/cache_test.go:242:68: Error return value of `(*database/sql.Row).Scan` is not checked (errcheck)
+	a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status)
+	                                                                  ^
+internal/cache/cache_test.go:252:15: Error return value of `a.SyncFolders` is not checked (errcheck)
+	a.SyncFolders(context.Background())
+	             ^
+internal/cache/cache_test.go:256:11: Error return value of `a.db.Exec` is not checked (errcheck)
+	a.db.Exec(`INSERT INTO outbox (folder, kind, args, enqueued_at, status) VALUES (?, 'send', '{}', ?, 'executing')`,
+	         ^
+internal/cache/cache_test.go:311:11: Error return value of `a.QueueOp` is not checked (errcheck)
+	a.QueueOp(context.Background(), "Inbox", "1", FlagArgs{Flag: mail.FlagFlagged, Set: true})
+	         ^
+internal/cache/drainer.go:106:16: Error return value of `fmt.Fprintln` is not checked (errcheck)
+			fmt.Fprintln(stderrLog(), "cache: drainer pickup error:", err)
+			            ^
+internal/cache/drainer.go:118:15: Error return value of `fmt.Fprintln` is not checked (errcheck)
+		fmt.Fprintln(stderrLog(), "cache: mark executing:", err)
+		            ^
+internal/cache/folders.go:51:15: Error return value of `rows.Close` is not checked (errcheck)
+				rows.Close()
+				          ^
+internal/cache/folders.go:58:13: Error return value of `rows.Close` is not checked (errcheck)
+		rows.Close()
+		          ^
+internal/cache/integration_test.go:133:16: Error return value of `a2.Close` is not checked (errcheck)
+	defer a2.Close()
+	              ^
+internal/cache/reads.go:35:18: Error return value of `rows.Close` is not checked (errcheck)
+	defer rows.Close()
+	                ^
+internal/cache/schema.go:178:15: Error return value of `tx.Rollback` is not checked (errcheck)
+			tx.Rollback()
+			           ^
+internal/cache/schema.go:182:15: Error return value of `tx.Rollback` is not checked (errcheck)
+			tx.Rollback()
+			           ^
+internal/ui/cache_helpers_test.go:56:31: Error return value of `acct.Close` is not checked (errcheck)
+	t.Cleanup(func() { acct.Close() })
+	                             ^
+internal/cache/account.go:29:2: field `mu` is unused (unused)
+	mu       sync.RWMutex
+	^
+internal/cache/account.go:279:5: var `errClosed` is unused (unused)
+var errClosed = errors.New("cache: account closed")
+    ^
+internal/ui/confirm_modal_test.go:28:6: func `containsMsg` is unused (unused)
+func containsMsg(msgs []tea.Msg, target tea.Msg) bool {
+     ^
+internal/ui/viewer_test.go:138:2: SA4006: this value of `v` is never used (staticcheck)
+	v, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
+	^
+internal/mailimap/imap.go:111:33: `(*Backend).finishConnect` - `ctx` is unused (unparam)
+func (b *Backend) finishConnect(ctx context.Context) error {
+                                ^
+internal/term/probe_test.go:34:28: `(*fakeTerminal).run` - `t` is unused (unparam)
+func (f *fakeTerminal) run(t *testing.T) {
+                           ^
