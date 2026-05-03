@@ -6,10 +6,13 @@ linters:
     - staticcheck
     - unused
     - gosimple
+    - unparam
 
 linters-settings:
   errcheck:
     check-type-assertions: true
+  unused:
+    exported-fields-are-used: false
 
 issues:
   exclude-use-default: false
