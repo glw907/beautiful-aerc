@@ -4,23 +4,12 @@ package theme
 
 import "testing"
 
-func TestPaletteHex(t *testing.T) {
-	tests := []struct {
-		name string
-		slot string
-		want string
-	}{
-		{"bg_base", "bg_base", "#2e3440"},
-		{"accent_primary", "accent_primary", "#81a1c1"},
-		{"unknown", "nonexistent", ""},
+func TestNordPaletteValues(t *testing.T) {
+	if got := string(Nord.BgBase); got != "#2e3440" {
+		t.Errorf("Nord.BgBase = %q, want %q", got, "#2e3440")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := Nord.PaletteHex(tt.slot)
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-		})
+	if got := string(Nord.AccentPrimary); got != "#81a1c1" {
+		t.Errorf("Nord.AccentPrimary = %q, want %q", got, "#81a1c1")
 	}
 }
 
@@ -63,7 +52,7 @@ func TestThemeRegistryComplete(t *testing.T) {
 	// Verify all themes have distinct bg_base (no copy-paste errors).
 	seen := map[string]string{}
 	for name, th := range Themes {
-		bg := th.PaletteHex("bg_base")
+		bg := string(th.BgBase)
 		if bg == "" {
 			t.Errorf("theme %q has empty bg_base", name)
 		}

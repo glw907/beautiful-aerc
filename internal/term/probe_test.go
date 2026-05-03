@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -31,7 +32,7 @@ type fakeTerminal struct {
 //  3. Write ESC[6n  (post-glyph request)
 //
 // We respond to each ESC[6n with a CPR using the scripted columns.
-func (f *fakeTerminal) run(t *testing.T) {
+func (f *fakeTerminal) run() {
 	buf := make([]byte, 64)
 	cpr := 0
 	for {
@@ -59,7 +60,7 @@ func (f *fakeTerminal) run(t *testing.T) {
 					if cpr == 1 {
 						col = f.after
 					}
-					_, _ = f.slave.Write([]byte("\x1b[1;" + intToStr(col) + "R"))
+					_, _ = f.slave.Write([]byte("\x1b[1;" + strconv.Itoa(col) + "R"))
 					cpr++
 					i = j + 1
 					continue
@@ -68,25 +69,6 @@ func (f *fakeTerminal) run(t *testing.T) {
 			i++
 		}
 	}
-}
-
-func intToStr(i int) string {
-	// avoid strconv import for build-tag isolation
-	if i == 0 {
-		return "0"
-	}
-	var b [8]byte
-	n := 0
-	for i > 0 {
-		b[n] = byte('0' + i%10)
-		i /= 10
-		n++
-	}
-	out := make([]byte, n)
-	for k := 0; k < n; k++ {
-		out[k] = b[n-1-k]
-	}
-	return string(out)
 }
 
 func TestMeasureSPUACellsViaPTY(t *testing.T) {
@@ -110,7 +92,7 @@ func TestMeasureSPUACellsViaPTY(t *testing.T) {
 
 			ft := &fakeTerminal{slave: slave, colBefore: tt.colBefore, after: tt.colAfter}
 			done := make(chan struct{})
-			go func() { ft.run(t); close(done) }()
+			go func() { ft.run(); close(done) }()
 
 			got, err := measureSPUACellsOn(master, 200*time.Millisecond)
 			if err != nil {

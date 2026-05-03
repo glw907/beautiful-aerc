@@ -25,20 +25,16 @@ import (
 // retained per the prior-art-with-license discipline. The
 // AmbiguousWidth pattern (probe-glyph-probe) is the same shape.
 func MeasureSPUACells() int {
-	w, err := measureSPUACells(200 * time.Millisecond)
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return 0
+	}
+	defer tty.Close()
+	w, err := measureSPUACellsOn(tty, 200*time.Millisecond)
 	if err != nil {
 		return 0
 	}
 	return w
-}
-
-func measureSPUACells(timeout time.Duration) (int, error) {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return 0, err
-	}
-	defer tty.Close()
-	return measureSPUACellsOn(tty, timeout)
 }
 
 // testGlyph is a Nerd Font SPUA-A icon (nf-md-mailbox U+F01EE — chosen

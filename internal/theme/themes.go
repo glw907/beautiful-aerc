@@ -15,7 +15,6 @@ var oneDarkPalette = Palette{
 	BgBorder:        "#5c6370",
 	FgBase:          "#abb2bf",
 	FgBright:        "#ced4de",
-	FgBrightest:     "#e6e8ee",
 	FgDim:           "#5c6370",
 	AccentPrimary:   "#61afef",
 	AccentSecondary: "#56b6c2",
@@ -23,8 +22,6 @@ var oneDarkPalette = Palette{
 	ColorError:      "#e86671",
 	ColorWarning:    "#d19a66",
 	ColorSuccess:    "#98c379",
-	ColorInfo:       "#e5c07b",
-	ColorSpecial:    "#c678dd",
 }
 
 var nordPalette = Palette{
@@ -35,7 +32,6 @@ var nordPalette = Palette{
 	BgBorder:        "#49576b",
 	FgBase:          "#d8dee9",
 	FgBright:        "#e5e9f0",
-	FgBrightest:     "#eceff4",
 	FgDim:           "#616e88",
 	AccentPrimary:   "#81a1c1",
 	AccentSecondary: "#88c0d0",
@@ -43,8 +39,6 @@ var nordPalette = Palette{
 	ColorError:      "#bf616a",
 	ColorWarning:    "#d08770",
 	ColorSuccess:    "#a3be8c",
-	ColorInfo:       "#ebcb8b",
-	ColorSpecial:    "#b48ead",
 }
 
 var solarizedDarkPalette = Palette{
@@ -55,7 +49,6 @@ var solarizedDarkPalette = Palette{
 	BgBorder:        "#586e75",
 	FgBase:          "#839496",
 	FgBright:        "#93a1a1",
-	FgBrightest:     "#eee8d5",
 	FgDim:           "#657b83",
 	AccentPrimary:   "#268bd2",
 	AccentSecondary: "#2aa198",
@@ -63,8 +56,6 @@ var solarizedDarkPalette = Palette{
 	ColorError:      "#dc322f",
 	ColorWarning:    "#cb4b16",
 	ColorSuccess:    "#859900",
-	ColorInfo:       "#b58900",
-	ColorSpecial:    "#6c71c4",
 }
 
 var gruvboxDarkPalette = Palette{
@@ -75,7 +66,6 @@ var gruvboxDarkPalette = Palette{
 	BgBorder:        "#665c54",
 	FgBase:          "#ebdbb2",
 	FgBright:        "#fbf1c7",
-	FgBrightest:     "#fbf1c7",
 	FgDim:           "#928374",
 	AccentPrimary:   "#83a598",
 	AccentSecondary: "#8ec07c",
@@ -83,8 +73,6 @@ var gruvboxDarkPalette = Palette{
 	ColorError:      "#fb4934",
 	ColorWarning:    "#fe8019",
 	ColorSuccess:    "#b8bb26",
-	ColorInfo:       "#fabd2f",
-	ColorSpecial:    "#d3869b",
 }
 
 var catppuccinMochaPalette = Palette{
@@ -95,7 +83,6 @@ var catppuccinMochaPalette = Palette{
 	BgBorder:        "#585b70",
 	FgBase:          "#cdd6f4",
 	FgBright:        "#bac2de",
-	FgBrightest:     "#f5e0dc",
 	FgDim:           "#6c7086",
 	AccentPrimary:   "#89b4fa",
 	AccentSecondary: "#94e2d5",
@@ -103,8 +90,6 @@ var catppuccinMochaPalette = Palette{
 	ColorError:      "#f38ba8",
 	ColorWarning:    "#fab387",
 	ColorSuccess:    "#a6e3a1",
-	ColorInfo:       "#f9e2af",
-	ColorSpecial:    "#cba6f7",
 }
 
 var catppuccinLattePalette = Palette{
@@ -115,7 +100,6 @@ var catppuccinLattePalette = Palette{
 	BgBorder:        "#acb0be",
 	FgBase:          "#4c4f69",
 	FgBright:        "#5c5f77",
-	FgBrightest:     "#11111b",
 	FgDim:           "#9ca0b0",
 	AccentPrimary:   "#1e66f5",
 	AccentSecondary: "#179299",
@@ -123,8 +107,6 @@ var catppuccinLattePalette = Palette{
 	ColorError:      "#d20f39",
 	ColorWarning:    "#fe640b",
 	ColorSuccess:    "#40a02b",
-	ColorInfo:       "#df8e1d",
-	ColorSpecial:    "#8839ef",
 }
 
 var draculaPalette = Palette{
@@ -135,7 +117,6 @@ var draculaPalette = Palette{
 	BgBorder:        "#6272a4",
 	FgBase:          "#f8f8f2",
 	FgBright:        "#f8f8f2",
-	FgBrightest:     "#ffffff",
 	FgDim:           "#6272a4",
 	AccentPrimary:   "#bd93f9",
 	AccentSecondary: "#8be9fd",
@@ -143,8 +124,6 @@ var draculaPalette = Palette{
 	ColorError:      "#ff5555",
 	ColorWarning:    "#ffb86c",
 	ColorSuccess:    "#50fa7b",
-	ColorInfo:       "#f1fa8c",
-	ColorSpecial:    "#ff79c6",
 }
 
 var tokyoNightPalette = Palette{
@@ -155,7 +134,6 @@ var tokyoNightPalette = Palette{
 	BgBorder:        "#3b4261",
 	FgBase:          "#c0caf5",
 	FgBright:        "#a9b1d6",
-	FgBrightest:     "#c0caf5",
 	FgDim:           "#565f89",
 	AccentPrimary:   "#7aa2f7",
 	AccentSecondary: "#7dcfff",
@@ -163,8 +141,6 @@ var tokyoNightPalette = Palette{
 	ColorError:      "#f7768e",
 	ColorWarning:    "#ff9e64",
 	ColorSuccess:    "#9ece6a",
-	ColorInfo:       "#e0af68",
-	ColorSpecial:    "#bb9af7",
 }
 
 var rosePinePalette = Palette{
@@ -175,7 +151,6 @@ var rosePinePalette = Palette{
 	BgBorder:        "#524f67",
 	FgBase:          "#e0def4",
 	FgBright:        "#e0def4",
-	FgBrightest:     "#e0def4",
 	FgDim:           "#6e6a86",
 	AccentPrimary:   "#c4a7e7",
 	AccentSecondary: "#9ccfd8",
@@ -183,8 +158,6 @@ var rosePinePalette = Palette{
 	ColorError:      "#eb6f92",
 	ColorWarning:    "#f6c177",
 	ColorSuccess:    "#9ccfd8",
-	ColorInfo:       "#f6c177",
-	ColorSpecial:    "#c4a7e7",
 }
 
 var rosePineDawnPalette = Palette{
@@ -195,7 +168,6 @@ var rosePineDawnPalette = Palette{
 	BgBorder:        "#cecacd",
 	FgBase:          "#575279",
 	FgBright:        "#464261",
-	FgBrightest:     "#26233a",
 	FgDim:           "#9893a5",
 	AccentPrimary:   "#907aa9",
 	AccentSecondary: "#56949f",
@@ -203,8 +175,6 @@ var rosePineDawnPalette = Palette{
 	ColorError:      "#b4637a",
 	ColorWarning:    "#ea9d34",
 	ColorSuccess:    "#56949f",
-	ColorInfo:       "#ea9d34",
-	ColorSpecial:    "#907aa9",
 }
 
 var kanagawaPalette = Palette{
@@ -215,7 +185,6 @@ var kanagawaPalette = Palette{
 	BgBorder:        "#54546D",
 	FgBase:          "#DCD7BA",
 	FgBright:        "#C8C093",
-	FgBrightest:     "#DCD7BA",
 	FgDim:           "#727169",
 	AccentPrimary:   "#7E9CD8",
 	AccentSecondary: "#7FB4CA",
@@ -223,8 +192,6 @@ var kanagawaPalette = Palette{
 	ColorError:      "#E82424",
 	ColorWarning:    "#FF9E3B",
 	ColorSuccess:    "#98BB6C",
-	ColorInfo:       "#E6C384",
-	ColorSpecial:    "#957FB8",
 }
 
 var everforestDarkPalette = Palette{
@@ -235,7 +202,6 @@ var everforestDarkPalette = Palette{
 	BgBorder:        "#7a8478",
 	FgBase:          "#d3c6aa",
 	FgBright:        "#d3c6aa",
-	FgBrightest:     "#e6ddc4",
 	FgDim:           "#859289",
 	AccentPrimary:   "#7fbbb3",
 	AccentSecondary: "#83c092",
@@ -243,8 +209,6 @@ var everforestDarkPalette = Palette{
 	ColorError:      "#e67e80",
 	ColorWarning:    "#e69875",
 	ColorSuccess:    "#a7c080",
-	ColorInfo:       "#dbbc7f",
-	ColorSpecial:    "#d699b6",
 }
 
 var everforestLightPalette = Palette{
@@ -255,7 +219,6 @@ var everforestLightPalette = Palette{
 	BgBorder:        "#a6b0a0",
 	FgBase:          "#5c6a72",
 	FgBright:        "#5c6a72",
-	FgBrightest:     "#3c474d",
 	FgDim:           "#939f91",
 	AccentPrimary:   "#3a94c5",
 	AccentSecondary: "#35a77c",
@@ -263,8 +226,6 @@ var everforestLightPalette = Palette{
 	ColorError:      "#f85552",
 	ColorWarning:    "#f57d26",
 	ColorSuccess:    "#8da101",
-	ColorInfo:       "#dfa000",
-	ColorSpecial:    "#df69ba",
 }
 
 var solarizedLightPalette = Palette{
@@ -275,7 +236,6 @@ var solarizedLightPalette = Palette{
 	BgBorder:        "#93a1a1",
 	FgBase:          "#657b83",
 	FgBright:        "#586e75",
-	FgBrightest:     "#073642",
 	FgDim:           "#93a1a1",
 	AccentPrimary:   "#268bd2",
 	AccentSecondary: "#2aa198",
@@ -283,8 +243,6 @@ var solarizedLightPalette = Palette{
 	ColorError:      "#dc322f",
 	ColorWarning:    "#cb4b16",
 	ColorSuccess:    "#859900",
-	ColorInfo:       "#b58900",
-	ColorSpecial:    "#6c71c4",
 }
 
 var gruvboxLightPalette = Palette{
@@ -295,7 +253,6 @@ var gruvboxLightPalette = Palette{
 	BgBorder:        "#a89984",
 	FgBase:          "#3c3836",
 	FgBright:        "#504945",
-	FgBrightest:     "#1d2021",
 	FgDim:           "#928374",
 	AccentPrimary:   "#076678",
 	AccentSecondary: "#427b58",
@@ -303,8 +260,6 @@ var gruvboxLightPalette = Palette{
 	ColorError:      "#9d0006",
 	ColorWarning:    "#af3a03",
 	ColorSuccess:    "#79740e",
-	ColorInfo:       "#b57614",
-	ColorSpecial:    "#8f3f71",
 }
 
 // OneDark is the compiled One Dark theme (default).
