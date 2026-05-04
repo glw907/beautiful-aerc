@@ -155,9 +155,9 @@ func resolvePassword(cfg *config.AccountConfig) (string, error) {
 			stderr = strings.TrimSpace(string(ee.Stderr))
 		}
 		if stderr != "" {
-			return "", fmt.Errorf("password-cmd failed: %s", stderr)
+			return "", fmt.Errorf("password-cmd: %s", stderr)
 		}
-		return "", fmt.Errorf("password-cmd failed: %w", err)
+		return "", fmt.Errorf("password-cmd: %v", err)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
 }

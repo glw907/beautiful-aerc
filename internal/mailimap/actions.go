@@ -31,13 +31,13 @@ func (b *Backend) Move(uids []mail.UID, dest string) error {
 		return nil
 	}
 	if err := cmd.Copy(uids, dest); err != nil {
-		return fmt.Errorf("copy: %w", classifyErr(err))
+		return fmt.Errorf("move %s: copy: %w", dest, classifyErr(err))
 	}
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
-		return fmt.Errorf("store deleted: %w", classifyErr(err))
+		return fmt.Errorf("move %s: mark source deleted: %w", dest, classifyErr(err))
 	}
 	if err := cmd.UIDExpunge(uids); err != nil {
-		return fmt.Errorf("uid expunge: %w", classifyErr(err))
+		return fmt.Errorf("move %s: expunge source: %w", dest, classifyErr(err))
 	}
 	return nil
 }
@@ -98,10 +98,10 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	}
 
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
-		return fmt.Errorf("store deleted: %w", classifyErr(err))
+		return fmt.Errorf("destroy: mark deleted: %w", classifyErr(err))
 	}
 	if err := cmd.UIDExpunge(uids); err != nil {
-		return fmt.Errorf("uid expunge: %w", classifyErr(err))
+		return fmt.Errorf("destroy: expunge: %w", classifyErr(err))
 	}
 	return nil
 }

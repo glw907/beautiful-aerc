@@ -367,15 +367,15 @@ func (r *realClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 
 	msgs, err := r.c.Fetch(mailUIDsToSet([]mail.UID{uid}), opts).Collect()
 	if err != nil {
-		return nil, fmt.Errorf("uid fetch body: %w", err)
+		return nil, fmt.Errorf("fetch body uid %s: %v", uid, err)
 	}
 	if len(msgs) == 0 {
-		return nil, fmt.Errorf("uid fetch body: no message for uid %s", uid)
+		return nil, fmt.Errorf("uid %s not on server", uid)
 	}
 
 	raw := msgs[0].FindBodySection(&imap.FetchItemBodySection{})
 	if raw == nil {
-		return nil, fmt.Errorf("uid fetch body: no BODY[] section for uid %s", uid)
+		return nil, fmt.Errorf("uid %s: no body returned", uid)
 	}
 	return io.NopCloser(bytes.NewReader(raw)), nil
 }
@@ -514,14 +514,14 @@ func (r *realClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
 
 	msgs, err := r.c.Fetch(mailUIDsToSet([]mail.UID{uid}), opts).Collect()
 	if err != nil {
-		return BodyStructure{}, fmt.Errorf("uid fetch bodystructure: %w", err)
+		return BodyStructure{}, fmt.Errorf("BODYSTRUCTURE uid %s: %v", uid, err)
 	}
 	if len(msgs) == 0 {
-		return BodyStructure{}, fmt.Errorf("uid fetch bodystructure: no message for uid %s", uid)
+		return BodyStructure{}, fmt.Errorf("uid %s not on server", uid)
 	}
 
 	if msgs[0].BodyStructure == nil {
-		return BodyStructure{}, fmt.Errorf("uid fetch bodystructure: no BODYSTRUCTURE for uid %s", uid)
+		return BodyStructure{}, fmt.Errorf("uid %s: server omitted BODYSTRUCTURE", uid)
 	}
 
 	return convertBodyStructure(msgs[0].BodyStructure, nil), nil
@@ -576,7 +576,7 @@ func convertBodyStructure(bs imap.BodyStructure, path []int) BodyStructure {
 func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error) {
 	parts, err := parseSectionPath(section)
 	if err != nil {
-		return nil, fmt.Errorf("fetch body part: %w", err)
+		return nil, fmt.Errorf("parse section %q: %v", section, err)
 	}
 
 	fetchSec := &imap.FetchItemBodySection{
@@ -591,15 +591,15 @@ func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error)
 
 	msgs, err := r.c.Fetch(mailUIDsToSet([]mail.UID{uid}), opts).Collect()
 	if err != nil {
-		return nil, fmt.Errorf("fetch body part %q: %w", section, err)
+		return nil, fmt.Errorf("fetch part %s of uid %s: %v", section, uid, err)
 	}
 	if len(msgs) == 0 {
-		return nil, fmt.Errorf("fetch body part %q: no message for uid %s", section, uid)
+		return nil, fmt.Errorf("uid %s not on server", uid)
 	}
 
 	raw := msgs[0].FindBodySection(fetchSec)
 	if raw == nil {
-		return nil, fmt.Errorf("fetch body part %q: section not found for uid %s", section, uid)
+		return nil, fmt.Errorf("uid %s part %s: server omitted bytes", uid, section)
 	}
 	return raw, nil
 }

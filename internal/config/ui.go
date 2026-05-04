@@ -111,12 +111,12 @@ type rawUIFile struct {
 func LoadUI(path string) (UIConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return UIConfig{}, fmt.Errorf("reading ui config: %w", err)
+		return UIConfig{}, fmt.Errorf("read %s: %v", path, err)
 	}
 
 	var raw rawUIFile
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return UIConfig{}, fmt.Errorf("parsing ui config: %w", err)
+		return UIConfig{}, fmt.Errorf("decode [ui]: %v", err)
 	}
 
 	out := DefaultUIConfig()

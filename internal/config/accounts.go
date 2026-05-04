@@ -41,18 +41,17 @@ type accountEntry struct {
 func ParseAccounts(path string) ([]AccountConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading accounts config: %w", err)
+		return nil, fmt.Errorf("read %s: %v", path, err)
 	}
 	return ParseAccountsFromBytes(data)
 }
 
-// ParseAccountsFromBytes parses config.toml contents. Callers that
-// have already read the file should pass its bytes here to avoid a
-// second read.
+// ParseAccountsFromBytes is the byte-slice form of ParseAccounts; use
+// it when the file has already been read.
 func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {
 	var cf configFile
 	if err := toml.Unmarshal(data, &cf); err != nil {
-		return nil, fmt.Errorf("parsing accounts config: %w", err)
+		return nil, fmt.Errorf("decode accounts: %v", err)
 	}
 
 	if len(cf.Account) == 0 {

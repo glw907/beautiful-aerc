@@ -153,7 +153,7 @@ func (b *Backend) dispatchEmailChanges(prevState string) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("email/changes: %w", err)
+		return fmt.Errorf("push: email changes: %v", err)
 	}
 
 	var cr *email.ChangesResponse
@@ -164,7 +164,7 @@ func (b *Backend) dispatchEmailChanges(prevState string) error {
 		}
 	}
 	if cr == nil {
-		return fmt.Errorf("email/changes: no response")
+		return fmt.Errorf("push: email changes returned no response")
 	}
 
 	if len(cr.Created) > 0 {

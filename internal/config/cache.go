@@ -50,11 +50,11 @@ func LoadCache(path string) (CacheConfig, error) {
 		if os.IsNotExist(err) {
 			return DefaultCacheConfig(), nil
 		}
-		return CacheConfig{}, fmt.Errorf("reading cache config: %w", err)
+		return CacheConfig{}, fmt.Errorf("read %s: %v", path, err)
 	}
 	var raw rawCacheFile
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return CacheConfig{}, fmt.Errorf("parsing cache config: %w", err)
+		return CacheConfig{}, fmt.Errorf("decode [cache]: %v", err)
 	}
 	if raw.Cache == nil {
 		return DefaultCacheConfig(), nil

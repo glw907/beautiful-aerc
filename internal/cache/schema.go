@@ -84,7 +84,7 @@ func migrateV1(tx *sql.Tx) error {
 	}
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
-			return fmt.Errorf("migrate v1: %w", err)
+			return fmt.Errorf("install cache schema: %v", err)
 		}
 	}
 	return nil
@@ -102,7 +102,7 @@ func migrateV2(tx *sql.Tx) error {
 	}
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
-			return fmt.Errorf("migrate v2: %w", err)
+			return fmt.Errorf("add outbox.next_eligible_at: %v", err)
 		}
 	}
 	return nil
@@ -120,7 +120,7 @@ func migrateV3(tx *sql.Tx) error {
 	}
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
-			return fmt.Errorf("migrate v3: %w", err)
+			return fmt.Errorf("add folders exists/unseen counts: %v", err)
 		}
 	}
 	return nil
@@ -137,7 +137,7 @@ func migrateV4(tx *sql.Tx) error {
 	}
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
-			return fmt.Errorf("migrate v4: %w", err)
+			return fmt.Errorf("narrow bodies table: %v", err)
 		}
 	}
 	return nil
@@ -165,7 +165,7 @@ func migrateV5(tx *sql.Tx) error {
 	}
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
-			return fmt.Errorf("migrate v5: %w", err)
+			return fmt.Errorf("add attachments table: %v", err)
 		}
 	}
 	return nil

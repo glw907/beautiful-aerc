@@ -146,7 +146,7 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
           FROM messages WHERE protocol_id IN (` + placeholders + `) AND ui_hide = 0`
 	rows, err := a.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("fetch headers: %w", err)
+		return nil, fmt.Errorf("query messages: %v", err)
 	}
 	for rows.Next() {
 		mi, err := scanMessageInfo(rows)

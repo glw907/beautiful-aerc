@@ -50,7 +50,7 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 	err := a.tx(ctx, func(tx *sql.Tx) error {
 		var status string
 		if err := tx.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
-			return fmt.Errorf("retry: read status: %w", err)
+			return fmt.Errorf("retry: lookup op %d: %v", opID, err)
 		}
 		if OpStatus(status) != OpConflict {
 			return ErrNotConflict
@@ -61,7 +61,7 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
             WHERE id = ?`,
 			OpPending, opID)
 		if err != nil {
-			return fmt.Errorf("retry: update: %w", err)
+			return fmt.Errorf("retry: requeue op %d: %v", opID, err)
 		}
 		signal = true
 		return nil

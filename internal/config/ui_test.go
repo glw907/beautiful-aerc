@@ -275,8 +275,8 @@ func TestLoadUIMissingFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
-	if !strings.Contains(err.Error(), "reading ui config") {
-		t.Errorf("expected 'reading ui config' in error, got %q", err.Error())
+	if !strings.Contains(err.Error(), "read ") {
+		t.Errorf("expected 'read ' in error, got %q", err.Error())
 	}
 }
 

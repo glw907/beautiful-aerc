@@ -76,25 +76,25 @@ func runRoot(f rootFlags) error {
 		os.Exit(78)
 	}
 	if err != nil {
-		return fmt.Errorf("load accounts: %w", err)
+		return fmt.Errorf("load accounts: %v", err)
 	}
 	if len(accts) == 0 {
 		return fmt.Errorf("no accounts configured; see ~/.config/poplar/config.toml")
 	}
 	backend, err := openBackend(accts[0])
 	if err != nil {
-		return fmt.Errorf("open backend: %w", err)
+		return fmt.Errorf("open backend %q: %v", accts[0].Name, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := backend.Connect(ctx); err != nil {
-		return fmt.Errorf("connect: %w", err)
+		return fmt.Errorf("connect %s: %v", accts[0].Name, err)
 	}
 	defer backend.Disconnect()
 
 	uiCfg, err := config.LoadUI(configPath)
 	if err != nil {
-		return fmt.Errorf("load UI config: %w", err)
+		return fmt.Errorf("ui config: %v", err)
 	}
 
 	hasNF := term.HasNerdFont()
@@ -109,7 +109,7 @@ func runRoot(f rootFlags) error {
 
 	cacheCfg, err := config.LoadCache(configPath)
 	if err != nil {
-		return fmt.Errorf("load cache config: %w", err)
+		return fmt.Errorf("cache config: %v", err)
 	}
 
 	ct, ok := backend.(mail.ChangeTracker)
@@ -118,18 +118,18 @@ func runRoot(f rootFlags) error {
 	}
 	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{MaxSize: cacheCfg.MaxSize})
 	if err != nil {
-		return fmt.Errorf("open cache: %w", err)
+		return fmt.Errorf("open cache for %s: %v", accts[0].Name, err)
 	}
 	defer acct.Close()
 	if err := acct.StartDrainer(ctx); err != nil {
-		return fmt.Errorf("start drainer: %w", err)
+		return fmt.Errorf("start drainer: %v", err)
 	}
 
 	app := ui.NewApp(t, acct, uiCfg, iconSet)
 
 	p := tea.NewProgram(appModel{app: app}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("running poplar: %w", err)
+		return err
 	}
 	return nil
 }

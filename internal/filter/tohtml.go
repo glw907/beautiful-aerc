@@ -16,7 +16,7 @@ import (
 func ToHTML(r io.Reader, w io.Writer) error {
 	src, err := io.ReadAll(r)
 	if err != nil {
-		return fmt.Errorf("reading input: %w", err)
+		return fmt.Errorf("read stdin: %v", err)
 	}
 
 	md := goldmark.New(
@@ -25,7 +25,7 @@ func ToHTML(r io.Reader, w io.Writer) error {
 
 	var body bytes.Buffer
 	if err := md.Convert(src, &body); err != nil {
-		return fmt.Errorf("converting markdown: %w", err)
+		return fmt.Errorf("markdown → html: %v", err)
 	}
 
 	const head = `<!DOCTYPE html>
@@ -37,7 +37,7 @@ func ToHTML(r io.Reader, w io.Writer) error {
 </html>
 `
 	if _, err := fmt.Fprint(w, head+body.String()+tail); err != nil {
-		return fmt.Errorf("writing output: %w", err)
+		return fmt.Errorf("write stdout: %v", err)
 	}
 	return nil
 }

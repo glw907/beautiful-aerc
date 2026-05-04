@@ -55,12 +55,12 @@ func CallAPI(url, apiKey, model, systemPrompt, text string) (string, error) {
 
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return "", fmt.Errorf("marshal request: %v", err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
+		return "", fmt.Errorf("new request: %v", err)
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("x-api-key", apiKey)
@@ -68,13 +68,13 @@ func CallAPI(url, apiKey, model, systemPrompt, text string) (string, error) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("call API: %w", err)
+		return "", fmt.Errorf("post %s: %v", url, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
+		return "", fmt.Errorf("drain response body: %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -87,7 +87,7 @@ func CallAPI(url, apiKey, model, systemPrompt, text string) (string, error) {
 
 	var apiResp apiResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", fmt.Errorf("unmarshal response: %v", err)
 	}
 
 	if len(apiResp.Content) == 0 {

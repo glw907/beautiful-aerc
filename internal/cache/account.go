@@ -106,13 +106,13 @@ func DBPath(accountName, dir string) (string, error) {
 	if dir == "" {
 		base, err := os.UserCacheDir()
 		if err != nil {
-			return "", fmt.Errorf("expand cache dir: %w", err)
+			return "", fmt.Errorf("user cache dir: %v", err)
 		}
 		expanded = filepath.Join(base, "poplar")
 	} else {
 		exp, err := config.ExpandHome(dir)
 		if err != nil {
-			return "", fmt.Errorf("expand cache dir: %w", err)
+			return "", fmt.Errorf("expand %q: %v", dir, err)
 		}
 		expanded = exp
 	}

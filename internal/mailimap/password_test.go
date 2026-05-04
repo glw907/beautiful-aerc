@@ -47,8 +47,8 @@ func TestResolvePasswordCmdFailureSurfaces(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from failing command, got nil")
 	}
-	if !strings.Contains(err.Error(), "password-cmd failed") {
-		t.Errorf("error %q does not contain %q", err.Error(), "password-cmd failed")
+	if !strings.Contains(err.Error(), "password-cmd") {
+		t.Errorf("error %q does not mention password-cmd", err.Error())
 	}
 }
 

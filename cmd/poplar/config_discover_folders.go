@@ -28,12 +28,12 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 
 			data, err := os.ReadFile(path)
 			if err != nil {
-				return fmt.Errorf("reading config: %w", err)
+				return fmt.Errorf("read %s: %v", path, err)
 			}
 
 			accounts, err := config.ParseAccountsFromBytes(data)
 			if err != nil {
-				return fmt.Errorf("loading accounts: %w", err)
+				return err
 			}
 			if len(accounts) == 0 {
 				return fmt.Errorf("no accounts in %s", path)
@@ -42,22 +42,22 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 			// v1 is single-account. Connect to the first account's backend.
 			backend, err := openBackend(accounts[0])
 			if err != nil {
-				return fmt.Errorf("opening backend for account %q: %w", accounts[0].Name, err)
+				return fmt.Errorf("backend for %q: %v", accounts[0].Name, err)
 			}
 			if err := backend.Connect(context.Background()); err != nil {
-				return fmt.Errorf("connecting backend for account %q: %w", accounts[0].Name, err)
+				return fmt.Errorf("connect %q: %v", accounts[0].Name, err)
 			}
 			defer backend.Disconnect()
 
 			folders, err := backend.ListFolders()
 			if err != nil {
-				return fmt.Errorf("listing folders: %w", err)
+				return fmt.Errorf("list server folders: %v", err)
 			}
 			classified := mail.Classify(folders)
 
 			existing, err := config.ExistingFolderKeys(data)
 			if err != nil {
-				return fmt.Errorf("reading existing folder keys: %w", err)
+				return fmt.Errorf("scan existing [ui.folders.*] keys: %v", err)
 			}
 
 			rendered := config.RenderFolderSubsections(classified, existing)
@@ -79,24 +79,24 @@ func writeAtomically(path, content string) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".config.toml.tmp-*")
 	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
+		return fmt.Errorf("temp file in %s: %v", dir, err)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath) // no-op on success after Rename
 
 	if _, err := tmp.WriteString(content); err != nil {
 		tmp.Close()
-		return fmt.Errorf("writing temp file: %w", err)
+		return fmt.Errorf("write %s: %v", tmpPath, err)
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return fmt.Errorf("syncing temp file: %w", err)
+		return fmt.Errorf("fsync %s: %v", tmpPath, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing temp file: %w", err)
+		return fmt.Errorf("close %s: %v", tmpPath, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("renaming temp file: %w", err)
+		return fmt.Errorf("rename %s → %s: %v", tmpPath, path, err)
 	}
 	return nil
 }

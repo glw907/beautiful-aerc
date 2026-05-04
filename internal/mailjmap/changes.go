@@ -44,7 +44,7 @@ func (b *Backend) Changes(ctx context.Context, _ string, since mail.SyncToken) (
 			if isCannotCalculateChanges(err) {
 				return mail.ChangeSet{}, since, mail.ErrCannotCalculateChanges
 			}
-			return mail.ChangeSet{}, since, fmt.Errorf("email/changes: %w", err)
+			return mail.ChangeSet{}, since, fmt.Errorf("changes since %q: %v", state, err)
 		}
 		var cr *email.ChangesResponse
 		for _, inv := range resp.Responses {
@@ -54,7 +54,7 @@ func (b *Backend) Changes(ctx context.Context, _ string, since mail.SyncToken) (
 			}
 		}
 		if cr == nil {
-			return mail.ChangeSet{}, since, errors.New("email/changes: no response")
+			return mail.ChangeSet{}, since, errors.New("changes: empty response")
 		}
 		out.Added = append(out.Added, idsToUIDs(cr.Created)...)
 		out.Modified = append(out.Modified, idsToUIDs(cr.Updated)...)

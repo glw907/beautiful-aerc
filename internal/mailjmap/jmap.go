@@ -154,9 +154,9 @@ func resolvePassword(cfg *config.AccountConfig) (string, error) {
 			stderr = strings.TrimSpace(string(ee.Stderr))
 		}
 		if stderr != "" {
-			return "", fmt.Errorf("password-cmd failed: %s", stderr)
+			return "", fmt.Errorf("password-cmd: %s", stderr)
 		}
-		return "", fmt.Errorf("password-cmd failed: %w", err)
+		return "", fmt.Errorf("password-cmd: %v", err)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
 }
@@ -195,7 +195,7 @@ func (b *Backend) Connect(_ context.Context) error {
 	// just to install the result.
 	pw, err := b.resolvedPassword()
 	if err != nil {
-		return fmt.Errorf("connect: %w", err)
+		return fmt.Errorf("password: %v", err)
 	}
 
 	cli := &jmap.Client{
@@ -203,23 +203,23 @@ func (b *Backend) Connect(_ context.Context) error {
 	}
 	cli.WithAccessToken(pw)
 	if err := cli.Authenticate(); err != nil {
-		return fmt.Errorf("connect: authenticate: %w", err)
+		return fmt.Errorf("authenticate: %v", err)
 	}
 	session := cli.Session
 
 	folders, mailboxState, err := fetchFolders(cli, session)
 	if err != nil {
-		return fmt.Errorf("connect: list folders: %w", err)
+		return fmt.Errorf("list folders: %v", err)
 	}
 
 	emailState, err := fetchEmailState(cli, session)
 	if err != nil {
-		return fmt.Errorf("connect: seed email state: %w", err)
+		return fmt.Errorf("seed email state: %v", err)
 	}
 
 	cache, err := lru.New[string, []byte](bodyCacheSize)
 	if err != nil {
-		return fmt.Errorf("connect: init body cache: %w", err)
+		return fmt.Errorf("body cache: %v", err)
 	}
 	updates := make(chan mail.Update, updatesBuffer)
 
@@ -648,10 +648,10 @@ func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("move: %w", err)
+		return fmt.Errorf("move: %v", err)
 	}
 	if err := checkEmailSetUpdated(resp, callID); err != nil {
-		return fmt.Errorf("move: %w", err)
+		return fmt.Errorf("move rejected by server: %v", err)
 	}
 	return nil
 }
@@ -677,10 +677,10 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("destroy: %w", err)
+		return fmt.Errorf("destroy: %v", err)
 	}
 	if err := checkEmailSetDestroyed(resp, callID); err != nil {
-		return fmt.Errorf("destroy: %w", err)
+		return fmt.Errorf("destroy rejected by server: %v", err)
 	}
 	return nil
 }
@@ -705,7 +705,7 @@ func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("no Email/set response")
+	return fmt.Errorf("Email/set: no response for destroy")
 }
 
 // Flag satisfies mail.Backend. It sets or clears a JMAP keyword for each uid.
@@ -771,10 +771,10 @@ func (b *Backend) setKeyword(uids []mail.UID, keyword string, set bool) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("set keyword %s: %w", keyword, err)
+		return fmt.Errorf("set keyword %s: %v", keyword, err)
 	}
 	if err := checkEmailSetUpdated(resp, callID); err != nil {
-		return fmt.Errorf("set keyword %s: %w", keyword, err)
+		return fmt.Errorf("keyword %s rejected: %v", keyword, err)
 	}
 	return nil
 }
@@ -795,7 +795,7 @@ func checkEmailSetUpdated(resp *jmap.Response, callID string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("no Email/set response")
+	return fmt.Errorf("Email/set: no response for update")
 }
 
 
