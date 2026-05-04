@@ -38,6 +38,18 @@ file describes behavior, not the key tables.
   (W=108+, all chrome on). Sidebar floor 14 fits "Archive";
   ceiling 30. Sender slope 0.125 hits coverage cliffs at
   22/28/32 cells. The 14-cell ISO date is removed. ADR-0109.
+- The left-hand column composite (account header rows / `Sidebar` /
+  spacer padding / `SidebarSearch` shelf) lives in
+  `SidebarColumn` (`internal/ui/sidebar_column.go`). `AccountTab`
+  holds one `SidebarColumn` field; reads go through
+  `Sidebar()` / `SidebarSearch()` accessors and writes through
+  `WithSidebar` / `WithSidebarSearch`. `SidebarColumn.View()`
+  emits the column content *without* the right-edge `│` divider
+  — `AccountTab` still owns the row-by-row join with the right
+  pane to preserve the SPUA-A-safe assembly invariant
+  (ADR-0084). `SidebarColumn` does not propagate `SetSize` to
+  its children; `AccountTab.WindowSizeMsg` calls
+  `SetLayout`/`SetSize` on the children directly. ADR-0129.
 
 ### Message list
 
@@ -179,6 +191,17 @@ file describes behavior, not the key tables.
   confirm modal (`ConfirmModal` — generic destructive-action
   prompt, used by manual empty). Confirm is topmost — its
   key-route and overlay-render branches run before the others.
+  The three Box-rendering overlays (`ConfirmModal`, `LinkPicker`,
+  `MovePicker`) share frame chrome via a named-field embedded
+  `shell ModalShell` (`internal/ui/modal_shell.go`); per-overlay
+  `View()` builds `bodyRows` + `footerRows` pre-padded to
+  `contentW` cells and calls `m.shell.Box(title, bodyRows,
+  footerRows, contentW)`. `HelpPopover` uses `lipgloss.Style`
+  with a rounded border and is *not* a ModalShell consumer.
+  `MovePicker` and `HelpPopover` cache their per-frame render via
+  a heap-allocated `*<T>Cache` pointer + dirty flag (the only
+  Elm-immutable-model escape hatch in the tree, scoped to
+  view-stable overlays — see ADR-0130).
 - Help popover advertises the full planned keybinding vocabulary,
   not just currently-wired keys. Each row in the binding tables
   carries a `wired bool` flag. Wired rows: bright-bold key + dim
