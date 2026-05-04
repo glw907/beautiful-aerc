@@ -172,9 +172,6 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	return buf, nil
 }
 
-// Attachments is not yet implemented; returns nil until Pass 8.6 Task 11.
-func (b *Backend) Attachments(_ mail.UID) ([]mail.Attachment, error) { return nil, nil }
-
 // FetchAttachment is not yet implemented; returns nil until Pass 8.6 Task 12.
 func (b *Backend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) { return nil, nil }
 
