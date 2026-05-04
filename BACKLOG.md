@@ -60,6 +60,9 @@
 
 ## Medium
 
+- [ ] **#31** `has_attachments` hint on messages — gate `loadAttachmentsCmd` `#improvement` `#poplar` *(2026-05-04)*
+  Pass 8.7 batches `loadAttachmentsCmd` on every viewer open. `cache.Account.Attachments` does not cache zero-length results, so attachment-free messages incur a backend round-trip per open. Plan: schema v6 adds `messages.has_attachments INTEGER NULL`. JMAP path is cheap — `Email/get` already returns `hasAttachment` per RFC 8621, syncer just adds one property. IMAP path needs a decision: (a) leave NULL on IMAP and keep unconditional fetch there, or (b) populate lazily on first `Attachments()` call. UI gates `loadAttachmentsCmd` when the column is `0`. Touches `internal/cache/schema.go`, `internal/mailjmap/sync.go`, `internal/cache/syncer.go`, `internal/mail/types.go` (MessageInfo wire field), `internal/ui/account_tab.go`. ADR-0138 noted the deferral.
+
 - [ ] **#30** Render cache for `Sidebar.View()` `#improvement` `#poplar` *(2026-05-03)*
   `Sidebar.View()` rebuilds the full folder list on every `tea.Msg` (60–80 lipgloss renders per frame at typical folder counts). `AccountTab.View()` runs on every Msg, so during spinner-active periods the rebuild fires continuously. Apply the same `*cache` pointer + dirty flag pattern as `movePickerCache` and `helpPopoverCache` (Pass 8.5c). Cache key: dirty flag set by `SetFolders` / `SetSize` / `SetLayout` / `MoveUp` / `MoveDown` / `MoveToTop` / `MoveToBottom` / `SelectByCanonical`. Out of scope for Pass 8.5c (limited to MovePicker + HelpPopover); flagged by `/simplify` efficiency reviewer.
 
