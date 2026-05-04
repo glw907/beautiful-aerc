@@ -39,7 +39,9 @@ type App struct {
 	helpOpen    bool
 	help        HelpPopover
 	linkPicker  LinkPicker
+	attachPicker AttachPicker
 	movePicker  MovePicker
+	downloadDir string
 	confirm          ConfirmModal
 	pendingEmpty     pendingEmptyConfirm
 	outbox           OutboxOverlay
@@ -80,8 +82,10 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		statusBar:   sb,
 		footer:      NewFooter(styles),
 		keys:        NewGlobalKeys(),
-		linkPicker:  NewLinkPicker(styles),
-		movePicker:  NewMovePicker(styles),
+		linkPicker:   NewLinkPicker(styles),
+		attachPicker: NewAttachPicker(styles, icons),
+		movePicker:   NewMovePicker(styles),
+		downloadDir:  uiCfg.DownloadDir,
 		confirm:     NewConfirmModal(styles),
 		outbox:      NewOutboxOverlay(styles),
 		conflict:    NewConflictOverlay(styles),
@@ -133,6 +137,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.linkPicker = m.linkPicker.SetSize(m.width, m.height)
 		m.linkPicker, cmd = m.linkPicker.Update(msg)
 		cmds = append(cmds, cmd)
+		m.attachPicker = m.attachPicker.SetSize(m.width, m.height)
+		m.attachPicker, cmd = m.attachPicker.Update(msg)
+		cmds = append(cmds, cmd)
 		m.movePicker = m.movePicker.SetSize(m.width, m.height)
 		m.movePicker, cmd = m.movePicker.Update(msg)
 		cmds = append(cmds, cmd)
@@ -171,6 +178,38 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.acct, cmd = m.acct.Update(msg)
 		m = m.deriveChromeFromAcct()
 		return m, cmd
+
+	case OpenAttachPickerMsg:
+		m.attachPicker = m.attachPicker.Open(msg.UID, msg.Items)
+		return m, nil
+
+	case AttachPickerClosedMsg:
+		m.attachPicker = m.attachPicker.Close()
+		return m, nil
+
+	case OpenAttachmentMsg:
+		return m, openAttachmentCmd(m.acct.Cache(), m.opener, msg.UID, msg.Att)
+
+	case SaveAttachmentMsg:
+		return m, saveAttachmentCmd(m.acct.Cache(), m.downloadDir, msg.UID, msg.Att)
+
+	case attachmentSavedMsg:
+		hadBanner := m.hasBannerRow()
+		deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
+		m.toast = pendingAction{
+			op:       opSavedAttachment,
+			dest:     msg.path,
+			deadline: deadline,
+		}
+		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
+			return toastExpireMsg{deadline: deadline}
+		})}
+		var rcmd tea.Cmd
+		m, rcmd = m.maybeResizeChild(hadBanner)
+		if rcmd != nil {
+			cmds = append(cmds, rcmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case OpenConfirmEmptyMsg:
 		body := strconv.Itoa(msg.Total) + " messages will be permanently deleted."
@@ -418,6 +457,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.linkPicker, cmd = m.linkPicker.Update(msg)
 			return m, cmd
 		}
+		if m.attachPicker.IsOpen() {
+			var cmd tea.Cmd
+			m.attachPicker, cmd = m.attachPicker.Update(msg)
+			return m, cmd
+		}
 		if m.movePicker.IsOpen() {
 			var cmd tea.Cmd
 			m.movePicker, cmd = m.movePicker.Update(msg)
@@ -564,6 +608,13 @@ func (m App) View() string {
 	if m.linkPicker.IsOpen() {
 		box := m.linkPicker.Box(m.width, m.height)
 		x, y := m.linkPicker.Position(box, m.width, m.height)
+		dimmed := DimANSI(frame)
+		return PlaceOverlay(x, y, box, dimmed)
+	}
+
+	if m.attachPicker.IsOpen() {
+		box := m.attachPicker.Box(m.width, m.height)
+		x, y := m.attachPicker.Position(box, m.width, m.height)
 		dimmed := DimANSI(frame)
 		return PlaceOverlay(x, y, box, dimmed)
 	}

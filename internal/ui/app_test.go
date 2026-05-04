@@ -1146,3 +1146,27 @@ func TestApp_OfflineBannerLatchedOncePerOfflineEpisode(t *testing.T) {
 		t.Errorf("offline banner re-emitted without intervening Connected")
 	}
 }
+
+func TestApp_OpenAttachPickerMsg_OpensOverlay(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+	app2, _ := app.Update(OpenAttachPickerMsg{
+		UID:   "u1",
+		Items: []mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}},
+	})
+	if !app2.attachPicker.IsOpen() {
+		t.Error("OpenAttachPickerMsg did not open the picker")
+	}
+}
+
+func TestApp_SaveAttachmentMsg_DispatchesCmd(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+	_, cmd := app.Update(SaveAttachmentMsg{
+		UID: "u1",
+		Att: mail.Attachment{PartID: "2", Filename: "x.pdf", Size: 1},
+	})
+	if cmd == nil {
+		t.Error("SaveAttachmentMsg should dispatch a Cmd")
+	}
+}
