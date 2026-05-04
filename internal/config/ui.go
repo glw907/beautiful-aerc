@@ -5,7 +5,7 @@ package config
 import (
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 )
@@ -151,7 +151,11 @@ func LoadUI(path string) (UIConfig, error) {
 	}
 
 	if raw.UI.DownloadDir != "" {
-		out.DownloadDir = expandHome(raw.UI.DownloadDir)
+		expanded, err := ExpandHome(raw.UI.DownloadDir)
+		if err != nil {
+			return UIConfig{}, fmt.Errorf("ui.download_dir: %w", err)
+		}
+		out.DownloadDir = expanded
 	}
 
 	for name, fc := range raw.UI.Folders {
@@ -179,19 +183,11 @@ func defaultDownloadDir() string {
 	if v := os.Getenv("XDG_DOWNLOAD_DIR"); v != "" {
 		return v
 	}
-	if home := os.Getenv("HOME"); home != "" {
-		return home + "/Downloads"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
 	}
-	return ""
-}
-
-func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		if home := os.Getenv("HOME"); home != "" {
-			return home + p[1:]
-		}
-	}
-	return p
+	return filepath.Join(home, "Downloads")
 }
 
 func convertFolderCfg(name string, raw rawFolderCfg) (FolderConfig, error) {

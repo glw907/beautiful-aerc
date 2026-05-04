@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -96,4 +98,18 @@ func displayTruncate(s string, n int) string {
 			return ""
 		}
 	}
+}
+
+// displayPadOrTruncate pads or truncates s to exactly n display cells.
+// Use for icon-bearing strings; padOrTruncate's lipgloss.Width call
+// undercounts SPUA-A glyphs.
+func displayPadOrTruncate(s string, n int) string {
+	w := displayCells(s)
+	if w == n {
+		return s
+	}
+	if w < n {
+		return s + strings.Repeat(" ", n-w)
+	}
+	return displayTruncate(s, n)
 }

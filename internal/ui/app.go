@@ -197,7 +197,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		hadBanner := m.hasBannerRow()
 		deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
 		m.toast = pendingAction{
-			op:       opSavedAttachment,
+			op:       opSaveAttachment,
 			dest:     msg.path,
 			deadline: deadline,
 		}

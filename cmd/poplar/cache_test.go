@@ -42,27 +42,6 @@ func TestCacheStats_Header(t *testing.T) {
 	}
 }
 
-func TestHumanizeBytes(t *testing.T) {
-	cases := []struct {
-		in   int64
-		want string
-	}{
-		{0, "0 B"},
-		{500, "500 B"},
-		{1024, "1.0 KB"},
-		{1500, "1.5 KB"},
-		{1024 * 1024, "1.0 MB"},
-		{int64(1.5 * 1024 * 1024), "1.5 MB"},
-		{1024 * 1024 * 1024, "1.0 GB"},
-	}
-	for _, c := range cases {
-		got := humanizeBytes(c.in)
-		if got != c.want {
-			t.Errorf("humanizeBytes(%d) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
 func TestParseEvictDuration(t *testing.T) {
 	cases := []struct {
 		in      string

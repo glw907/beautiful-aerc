@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/content"
+	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -38,7 +39,6 @@ type Viewer struct {
 	blocks       []content.Block
 	links        []string
 	attachments  []mail.Attachment
-	attachReady  bool
 	chipRow      string
 	chipHeight   int
 	icons        IconSet
@@ -90,7 +90,6 @@ func (v Viewer) Open(msg mail.MessageInfo) Viewer {
 	v.blocks = nil
 	v.links = nil
 	v.attachments = nil
-	v.attachReady = false
 	v.chipRow = ""
 	v.chipHeight = 0
 	v.panel = ""
@@ -137,7 +136,6 @@ func (v Viewer) Links() []string { return v.links }
 // for stale UIDs — caller drops stale messages before invoking.
 func (v Viewer) SetAttachments(items []mail.Attachment) Viewer {
 	v.attachments = items
-	v.attachReady = true
 	if v.phase == viewerReady && v.open {
 		v.layout()
 	}
@@ -316,7 +314,7 @@ func (v Viewer) renderChipRow(width int) (string, int) {
 		if name == "" {
 			name = "attachment"
 		}
-		chips[i] = fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanizeBytes(int64(a.Size)))
+		chips[i] = fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanize.Bytes(int64(a.Size)))
 	}
 	var lines []string
 	var cur string
@@ -363,14 +361,7 @@ func (v *Viewer) layout() {
 	contentWidth := max(1, v.width-1)
 	headerStr := content.RenderHeaders(hdrs, v.theme, contentWidth)
 	v.panel = v.styles.ViewerHeader.Width(v.width).Render(headerStr)
-	if v.attachReady {
-		row, h := v.renderChipRow(v.width)
-		v.chipRow = row
-		v.chipHeight = h
-	} else {
-		v.chipRow = ""
-		v.chipHeight = 0
-	}
+	v.chipRow, v.chipHeight = v.renderChipRow(v.width)
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.chipHeight)

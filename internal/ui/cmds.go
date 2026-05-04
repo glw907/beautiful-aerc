@@ -499,39 +499,30 @@ func discardConflictCmd(c *cache.Account, opID int64) tea.Cmd {
 	}
 }
 
-// attachmentsLoadedMsg carries metadata fetched via cache for the
-// viewer's current UID. Stale UIDs are dropped at the AccountTab
-// boundary like bodyLoadedMsg.
+// attachmentsLoadedMsg carries metadata for the viewer's current UID.
+// Stale UIDs are dropped at the AccountTab boundary like bodyLoadedMsg.
 type attachmentsLoadedMsg struct {
 	uid   mail.UID
 	items []mail.Attachment
 }
 
-// OpenAttachPickerMsg requests App open the attachment picker.
-// Emitted by Viewer when the user presses @ on a message that has
-// at least one attachment.
 type OpenAttachPickerMsg struct {
 	UID   mail.UID
 	Items []mail.Attachment
 }
 
-// AttachPickerClosedMsg signals the picker has closed.
 type AttachPickerClosedMsg struct{}
 
-// OpenAttachmentMsg requests App fire openAttachmentCmd for att on uid.
 type OpenAttachmentMsg struct {
 	UID mail.UID
 	Att mail.Attachment
 }
 
-// SaveAttachmentMsg requests App fire saveAttachmentCmd for att on uid.
 type SaveAttachmentMsg struct {
 	UID mail.UID
 	Att mail.Attachment
 }
 
-// attachmentSavedMsg reports a successful save. Carries the resolved
-// path so App can populate the toast.
 type attachmentSavedMsg struct {
 	path string
 }

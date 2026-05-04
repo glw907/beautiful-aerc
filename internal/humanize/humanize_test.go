@@ -1,8 +1,10 @@
-package ui
+// SPDX-License-Identifier: MIT
+
+package humanize
 
 import "testing"
 
-func TestHumanizeBytes(t *testing.T) {
+func TestBytes(t *testing.T) {
 	cases := []struct {
 		n    int64
 		want string
@@ -15,10 +17,11 @@ func TestHumanizeBytes(t *testing.T) {
 		{1024 * 1024, "1.0 MB"},
 		{2516582, "2.4 MB"},
 		{1024 * 1024 * 1024, "1.0 GB"},
+		{1024 * 1024 * 1024 * 1024, "1.0 TB"},
 	}
 	for _, c := range cases {
-		if got := humanizeBytes(c.n); got != c.want {
-			t.Errorf("humanizeBytes(%d) = %q, want %q", c.n, got, c.want)
+		if got := Bytes(c.n); got != c.want {
+			t.Errorf("Bytes(%d) = %q, want %q", c.n, got, c.want)
 		}
 	}
 }

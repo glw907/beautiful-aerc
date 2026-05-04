@@ -16,6 +16,7 @@ import (
 
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/humanize"
 	_ "modernc.org/sqlite"
 )
 
@@ -127,9 +128,9 @@ func formatStatsLine(r statsRow) string {
 		r.Account,
 		formatThousands(r.HeadersCount),
 		formatThousands(r.BodiesCount),
-		humanizeBytes(r.BodiesBytes),
+		humanize.Bytes(r.BodiesBytes),
 		outbox,
-		humanizeBytes(r.DBBytes),
+		humanize.Bytes(r.DBBytes),
 	)
 	tw.Flush()
 	return strings.TrimRight(sb.String(), "\n")
@@ -149,29 +150,6 @@ func formatThousands(n int64) string {
 		b.WriteRune(r)
 	}
 	return b.String()
-}
-
-// humanizeBytes returns a 1-decimal human-readable string in 1024-based
-// units. 0 → "0 B", 1024 → "1.0 KB", etc.
-func humanizeBytes(n int64) string {
-	if n < 1024 {
-		return fmt.Sprintf("%d B", n)
-	}
-	const k = 1024.0
-	v := float64(n) / k
-	if v < 1024 {
-		return fmt.Sprintf("%.1f KB", v)
-	}
-	v /= k
-	if v < 1024 {
-		return fmt.Sprintf("%.1f MB", v)
-	}
-	v /= k
-	if v < 1024 {
-		return fmt.Sprintf("%.1f GB", v)
-	}
-	v /= k
-	return fmt.Sprintf("%.1f TB", v)
 }
 
 // newCacheEvictCmd assembles the `poplar cache evict` subcommand.
@@ -250,7 +228,7 @@ func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) 
 		if evictErr != nil {
 			return fmt.Errorf("evict %s: %w", a.Name, evictErr)
 		}
-		fmt.Fprintf(w, "evicted %d bodies (%s freed) from %s\n", rows, humanizeBytes(freed), a.Name)
+		fmt.Fprintf(w, "evicted %d bodies (%s freed) from %s\n", rows, humanize.Bytes(freed), a.Name)
 	}
 	if scope != "" && !matched {
 		return fmt.Errorf("account %q not found", scope)
@@ -315,7 +293,7 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		if fi, statErr := os.Stat(dbPath); statErr == nil {
 			after = fi.Size()
 		}
-		fmt.Fprintf(w, "vacuumed %s: %s → %s\n", a.Name, humanizeBytes(before), humanizeBytes(after))
+		fmt.Fprintf(w, "vacuumed %s: %s → %s\n", a.Name, humanize.Bytes(before), humanize.Bytes(after))
 	}
 	if scope != "" && !matched {
 		return fmt.Errorf("account %q not found", scope)

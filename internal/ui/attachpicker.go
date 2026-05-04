@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -112,7 +113,7 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 }
 
 func (p AttachPicker) openCursor() tea.Cmd {
-	if p.cursor < 0 || p.cursor >= len(p.items) {
+	if p.cursor >= len(p.items) {
 		return nil
 	}
 	return p.openIndex(p.cursor)
@@ -127,7 +128,7 @@ func (p AttachPicker) openIndex(i int) tea.Cmd {
 }
 
 func (p AttachPicker) saveCursor() tea.Cmd {
-	if p.cursor < 0 || p.cursor >= len(p.items) {
+	if p.cursor >= len(p.items) {
 		return nil
 	}
 	uid, att := p.uid, p.items[p.cursor]
@@ -187,8 +188,8 @@ func (p AttachPicker) formatRow(row, maxIndexDigits, contentW int) string {
 	if name == "" {
 		name = "attachment"
 	}
-	size := humanizeBytes(int64(att.Size))
-	body := padOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
+	size := humanize.Bytes(int64(att.Size))
+	body := displayPadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
 		idxPad, p.icons.Attachment, row+1, name, size), contentW)
 	if row == p.cursor {
 		return p.styles.MsgListCursor.Render(body)
