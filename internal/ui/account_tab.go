@@ -102,6 +102,9 @@ func (m AccountTab) Title() string { return m.sidebarColumn.Sidebar().SelectedFo
 // the connection-state pump without duplicating the cache reference.
 func (m AccountTab) Backend() mail.Backend { return m.acct.Backend }
 
+// Cache returns the *cache.Account so App can pass it to outbox/conflict cmds.
+func (m AccountTab) Cache() *cache.Account { return m.acct }
+
 // Icon returns the folder's Nerd Font icon.
 func (m AccountTab) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
 

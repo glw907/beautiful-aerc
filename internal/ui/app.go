@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -39,9 +40,15 @@ type App struct {
 	help        HelpPopover
 	linkPicker  LinkPicker
 	movePicker  MovePicker
-	confirm       ConfirmModal
-	pendingEmpty  pendingEmptyConfirm
-	lastErr       ErrorMsg
+	confirm          ConfirmModal
+	pendingEmpty     pendingEmptyConfirm
+	outbox           OutboxOverlay
+	outboxOpen       bool
+	conflict         ConflictOverlay
+	conflictOpen     bool
+	lastOutboxDepth  cache.OutboxDepth
+	offlineHinted    bool
+	lastErr          ErrorMsg
 	toast       pendingAction
 	undoSeconds int
 	// now returns the wall clock; test seam, defaults to time.Now.
@@ -76,6 +83,8 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		linkPicker:  NewLinkPicker(styles),
 		movePicker:  NewMovePicker(styles),
 		confirm:     NewConfirmModal(styles),
+		outbox:      NewOutboxOverlay(styles),
+		conflict:    NewConflictOverlay(styles),
 		undoSeconds: uiCfg.UndoSeconds,
 		now:         time.Now,
 		opener:      xdgOpenURL,
@@ -130,6 +139,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.confirm = m.confirm.SetSize(m.width, m.height)
 		m.confirm, cmd = m.confirm.Update(msg)
 		cmds = append(cmds, cmd)
+		m.outbox = m.outbox.SetSize(m.width, m.height)
+		m.conflict = m.conflict.SetSize(m.width, m.height)
 		m.help = m.help.SetSize(m.width, m.height)
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		m.acct, cmd = m.acct.Update(contentMsg)
@@ -302,6 +313,67 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
 
+	case cacheEventMsg:
+		cmds := []tea.Cmd{refreshOutboxDepthCmd(m.acct.Cache())}
+		if m.outboxOpen {
+			cmds = append(cmds, loadOutboxSummaryCmd(m.acct.Cache()))
+		}
+		if m.conflictOpen {
+			cmds = append(cmds, loadOutboxConflictsCmd(m.acct.Cache()))
+		}
+		acct, fcmd := m.acct.Update(msg)
+		m.acct = acct
+		cmds = append(cmds, fcmd)
+		return m, tea.Batch(cmds...)
+
+	case OpenConflictsFromOutboxMsg:
+		m.outboxOpen = false
+		m.conflictOpen = true
+		m.conflict = m.conflict.Open(nil)
+		return m, loadOutboxConflictsCmd(m.acct.Cache())
+
+	case outboxDepthMsg:
+		m.lastOutboxDepth = msg.depth
+		inflight := msg.depth.Pending + msg.depth.Executing + msg.depth.Failed
+		m.statusBar = m.statusBar.SetOutboxDepth(inflight, msg.depth.Conflict)
+		return m, nil
+
+	case outboxSummaryMsg:
+		if msg.err != nil {
+			m.lastErr = ErrorMsg{Op: "outbox summary", Err: msg.err}
+			return m, nil
+		}
+		if m.outboxOpen {
+			m.outbox = m.outbox.SetGroups(msg.groups)
+		}
+		return m, nil
+
+	case outboxConflictsMsg:
+		if msg.err != nil {
+			m.lastErr = ErrorMsg{Op: "outbox conflicts", Err: msg.err}
+			return m, nil
+		}
+		if m.conflictOpen {
+			m.conflict = m.conflict.SetRows(msg.rows)
+			if len(msg.rows) == 0 {
+				m.conflict = m.conflict.Close()
+				m.conflictOpen = false
+			}
+		}
+		return m, nil
+
+	case RetryConflictMsg:
+		return m, retryConflictCmd(m.acct.Cache(), msg.OpID)
+
+	case DiscardConflictMsg:
+		return m, discardConflictCmd(m.acct.Cache(), msg.OpID)
+
+	case conflictResolvedMsg:
+		if msg.err != nil && !errors.Is(msg.err, cache.ErrNotConflict) {
+			m.lastErr = ErrorMsg{Op: "resolve conflict", Err: msg.err}
+		}
+		return m, tea.Batch(loadOutboxConflictsCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache()))
+
 	case tea.KeyMsg:
 		if m.helpOpen {
 			if key.Matches(msg, m.keys.CloseHelp) {
@@ -312,6 +384,22 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if m.confirm.IsOpen() {
 			var cmd tea.Cmd
 			m.confirm, cmd = m.confirm.Update(msg)
+			return m, cmd
+		}
+		if m.conflictOpen {
+			var cmd tea.Cmd
+			m.conflict, cmd = m.conflict.Update(msg)
+			if !m.conflict.IsOpen() {
+				m.conflictOpen = false
+			}
+			return m, cmd
+		}
+		if m.outboxOpen {
+			var cmd tea.Cmd
+			m.outbox, cmd = m.outbox.Update(msg)
+			if !m.outbox.IsOpen() {
+				m.outboxOpen = false
+			}
 			return m, cmd
 		}
 		if m.linkPicker.IsOpen() {
@@ -353,6 +441,14 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.ForceQuit):
 			return m, tea.Quit
+		case key.Matches(msg, m.keys.OutboxOverlay):
+			m.outboxOpen = true
+			m.outbox = m.outbox.Open(nil)
+			return m, loadOutboxSummaryCmd(m.acct.Cache())
+		case key.Matches(msg, m.keys.ConflictOverlay):
+			m.conflictOpen = true
+			m.conflict = m.conflict.Open(nil)
+			return m, loadOutboxConflictsCmd(m.acct.Cache())
 		case key.Matches(msg, m.keys.Help):
 			m.helpOpen = true
 			ctx := HelpAccount
@@ -438,6 +534,20 @@ func (m App) View() string {
 		x, y := m.confirm.Position(box, m.width, m.height)
 		dimmed := DimANSI(frame)
 		return PlaceOverlay(x, y, box, dimmed)
+	}
+
+	if m.conflictOpen {
+		body := m.conflict.View()
+		x, y := centerOverlay(body, m.width, m.height)
+		dimmed := DimANSI(frame)
+		return PlaceOverlay(x, y, body, dimmed)
+	}
+
+	if m.outboxOpen {
+		body := m.outbox.View()
+		x, y := centerOverlay(body, m.width, m.height)
+		dimmed := DimANSI(frame)
+		return PlaceOverlay(x, y, body, dimmed)
 	}
 
 	if m.linkPicker.IsOpen() {
