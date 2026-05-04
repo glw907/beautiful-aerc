@@ -16,6 +16,25 @@ const (
 	HelpViewer
 )
 
+// helpPopoverCache holds the memoised Box output and the inputs that
+// determine when it must be rebuilt.
+//
+// Pre-beta escape hatch: HelpPopover is an immutable value type, so a
+// cache that lives in the value would be lost on every SetSize/return.
+// Rather than switching to pointer receivers (which would break the Elm
+// immutable-model contract), we heap-allocate one small cache struct at
+// construction time and access it through a pointer. The pointer itself
+// is copied with the value, so every generation of the popover shares
+// the same cache — a deliberate choice: they all render the same logical
+// state, and the dirty flag ensures stale renders are never served.
+type helpPopoverCache struct {
+	dirty     bool
+	context   HelpContext
+	w, h      int
+	box       string
+	tooNarrow string
+}
+
 // HelpPopover is the modal help overlay. App owns key routing;
 // this model only renders.
 type HelpPopover struct {
@@ -23,11 +42,16 @@ type HelpPopover struct {
 	context HelpContext
 	width   int
 	height  int
+	cache   *helpPopoverCache // heap-allocated; shared across value copies
 }
 
 // NewHelpPopover constructs a popover for the given context.
 func NewHelpPopover(styles Styles, context HelpContext) HelpPopover {
-	return HelpPopover{styles: styles, context: context}
+	return HelpPopover{
+		styles:  styles,
+		context: context,
+		cache:   &helpPopoverCache{dirty: true},
+	}
 }
 
 // SetSize updates the popover's box dimensions. App threads
@@ -171,7 +195,16 @@ var viewerBottomHints = []bindingRow{
 // for overlay compositing. The second return value is a "too narrow"
 // fallback string; it is non-empty when the box does not fit within
 // (width, height) and the caller should display it instead.
+//
+// The result is cached keyed on (context, width, height); a context or
+// dimension change counts as dirty even when the flag is clear —
+// NewHelpPopover sets dirty=true, so the first call always rebuilds.
 func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
+	c := h.cache
+	if !c.dirty && c.context == h.context && c.w == width && c.h == height {
+		return c.box, c.tooNarrow
+	}
+
 	var title, body string
 	var bottomHints []bindingRow
 	switch h.context {
@@ -202,9 +235,17 @@ func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
 	popover := topEdge + "\n" + b
 
 	if boxWidth > width || lipgloss.Height(popover) > height {
-		return "", h.styles.Dim.Render("Terminal too narrow for help popover")
+		c.box = ""
+		c.tooNarrow = h.styles.Dim.Render("Terminal too narrow for help popover")
+	} else {
+		c.box = popover
+		c.tooNarrow = ""
 	}
-	return popover, ""
+	c.context = h.context
+	c.w = width
+	c.h = height
+	c.dirty = false
+	return c.box, c.tooNarrow
 }
 
 // Position returns the top-left (x, y) cell coordinates at which the

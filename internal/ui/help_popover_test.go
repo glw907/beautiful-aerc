@@ -227,6 +227,45 @@ func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
 	}
 }
 
+// BenchmarkHelpPopoverBox_Cold measures the full Box rebuild cost (dirty
+// cache) — one new HelpPopover per iteration.
+func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
+	styles := NewStyles(theme.Nord)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h := NewHelpPopover(styles, HelpAccount)
+		_, _ = h.Box(120, 40)
+	}
+}
+
+// BenchmarkHelpPopoverBox_Warm measures the cache-hit path for Box.
+// After the first call the cache is clean; subsequent calls return the
+// stored strings without rebuilding the lipgloss layout.
+func BenchmarkHelpPopoverBox_Warm(b *testing.B) {
+	styles := NewStyles(theme.Nord)
+	h := NewHelpPopover(styles, HelpAccount)
+	_, _ = h.Box(120, 40) // warm the cache
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = h.Box(120, 40)
+	}
+}
+
+// BenchmarkHelpPopoverView measures the cost of repeated View calls.
+// View still calls lipgloss.Place on each call; the cache saves the
+// expensive Box rebuild (lipgloss layout + string assembly).
+func BenchmarkHelpPopoverView(b *testing.B) {
+	styles := NewStyles(theme.Nord)
+	h := NewHelpPopover(styles, HelpAccount).SetSize(120, 40)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = h.View(120, 40)
+	}
+}
+
 // TestHelpPopover_VerticallyCentered locks in the F3 acceptance: the
 // popover's blank-row margins above and below the box are equal (±1).
 // Prior regression rendered the box pinned ~1 row from the top.
