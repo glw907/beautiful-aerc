@@ -83,8 +83,6 @@ func TestAttachments(t *testing.T) {
 	}
 }
 
-// TestAttachmentsSkipsBodyOnly confirms that when the top-level is a
-// standalone text/plain (no multipart wrapper), it is also skipped.
 func TestAttachmentsTopLevelPlain(t *testing.T) {
 	cmd := newFakeClient()
 	cmd.caps = baseCaps()
@@ -145,7 +143,6 @@ func TestAttachmentsNestedPlainKept(t *testing.T) {
 	}
 }
 
-// TestAttachmentsMissingUID confirms an error is returned for an unknown UID.
 func TestAttachmentsMissingUID(t *testing.T) {
 	cmd := newFakeClient()
 	cmd.caps = baseCaps()

@@ -81,7 +81,7 @@ func TestOpenFolder(t *testing.T) {
 		wantErr  bool
 	}{
 		{name: "known folder", openName: "Inbox", wantErr: false},
-		{name: "unknown folder returns error", openName: "Nonexistent", wantErr: true},
+		{name: "unknown folder", openName: "Nonexistent", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -523,8 +523,6 @@ func TestFetchBody_UnknownUID(t *testing.T) {
 
 // --- Push loop and emit tests ---
 
-// TestHandleStateChange_Dedup verifies that calling handleStateChange
-// twice with the same state only triggers the dispatcher once.
 func TestHandleStateChange_Dedup(t *testing.T) {
 	var calls atomic.Int32
 	fake := &fakeClient{
@@ -550,8 +548,6 @@ func TestHandleStateChange_Dedup(t *testing.T) {
 	}
 }
 
-// TestHandleStateChange_StatePreservedOnError verifies that b.states
-// is not advanced when the dispatcher returns an error.
 func TestHandleStateChange_StatePreservedOnError(t *testing.T) {
 	fake := &fakeClient{
 		respond: func(_ *jmap.Request) (*jmap.Response, error) {
@@ -571,8 +567,6 @@ func TestHandleStateChange_StatePreservedOnError(t *testing.T) {
 	}
 }
 
-// TestEmit_BufferFullDrop verifies that emit does not block or panic
-// when the updates channel is full.
 func TestEmit_BufferFullDrop(t *testing.T) {
 	b := newTestBackend(&fakeClient{}, "acct-1", nil)
 	// Fill the channel to capacity.
@@ -592,8 +586,6 @@ func TestEmit_BufferFullDrop(t *testing.T) {
 	}
 }
 
-// TestPushLoop_ConnReconnecting verifies that pushLoop emits
-// ConnReconnecting when runEventSourceFunc returns an error.
 func TestPushLoop_ConnReconnecting(t *testing.T) {
 	b := newTestBackend(&fakeClient{}, "acct-1", nil)
 
@@ -628,8 +620,6 @@ func TestPushLoop_ConnReconnecting(t *testing.T) {
 	}
 }
 
-// TestPushLoop_ConnConnected verifies that a successful
-// runEventSourceFunc emits ConnConnected before blocking.
 func TestPushLoop_ConnConnected(t *testing.T) {
 	b := newTestBackend(&fakeClient{}, "acct-1", nil)
 
@@ -661,8 +651,6 @@ func TestPushLoop_ConnConnected(t *testing.T) {
 	}
 }
 
-// TestDispatchEmailChanges_EmitsCorrectUpdates verifies that
-// dispatchEmailChanges emits NewMail, FlagsChanged, and Expunge.
 func TestDispatchEmailChanges_EmitsCorrectUpdates(t *testing.T) {
 	fake := &fakeClient{
 		respond: func(_ *jmap.Request) (*jmap.Response, error) {
@@ -697,8 +685,6 @@ func TestDispatchEmailChanges_EmitsCorrectUpdates(t *testing.T) {
 	}
 }
 
-// TestDispatchMailboxChanges_EmitsFolderInfo verifies that
-// dispatchMailboxChanges emits UpdateFolderInfo for each affected mailbox.
 func TestDispatchMailboxChanges_EmitsFolderInfo(t *testing.T) {
 	fake := &fakeClient{
 		respond: func(_ *jmap.Request) (*jmap.Response, error) {

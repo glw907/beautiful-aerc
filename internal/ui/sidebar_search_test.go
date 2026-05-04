@@ -13,7 +13,7 @@ import (
 func TestSidebarSearchIdle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	t.Run("idle state shows hint row", func(t *testing.T) {
+	t.Run("idle: hint row", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		plain := stripANSI(s.View())
 		if !strings.Contains(plain, "/ to search") {
@@ -21,7 +21,7 @@ func TestSidebarSearchIdle(t *testing.T) {
 		}
 	})
 
-	t.Run("idle state reports SearchIdle", func(t *testing.T) {
+	t.Run("idle: state", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		if s.State() != SearchIdle {
 			t.Errorf("State() = %v, want SearchIdle", s.State())
@@ -54,7 +54,7 @@ func TestSidebarSearchIdle(t *testing.T) {
 func TestSidebarSearchActivate(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	t.Run("Activate transitions Idle → Typing and focuses input", func(t *testing.T) {
+	t.Run("Activate: Idle → Typing", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		s.Activate()
 		if s.State() != SearchTyping {
@@ -81,7 +81,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 		}
 	})
 
-	t.Run("Clear also resets mode to SearchModeName", func(t *testing.T) {
+	t.Run("Clear: mode reset", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		s.Activate()
 		s.mode = SearchModeAll
@@ -166,7 +166,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("Update emits SearchUpdatedMsg on keystroke", func(t *testing.T) {
+	t.Run("Update: SearchUpdatedMsg", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		s.Activate()
 		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
@@ -208,7 +208,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 func TestSidebarSearchModeCycle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	t.Run("Tab cycles mode [name] → [all] → [name]", func(t *testing.T) {
+	t.Run("Tab: cycle [name] → [all]", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		s.Activate()
 
@@ -309,7 +309,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 		}
 	})
 
-	t.Run("zero results with non-empty query shows 'no results'", func(t *testing.T) {
+	t.Run("zero results, non-empty query", func(t *testing.T) {
 		s := NewSidebarSearch(styles, 30, FancyIcons)
 		s.Activate()
 		s.input.SetValue("asdf")

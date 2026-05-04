@@ -182,7 +182,7 @@ func TestApp(t *testing.T) {
 		}
 	})
 
-	t.Run("content height is height minus 3 chrome rows", func(t *testing.T) {
+	t.Run("content height (chrome subtracted)", func(t *testing.T) {
 		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		app.width = 80
 		app.height = 24
@@ -191,7 +191,7 @@ func TestApp(t *testing.T) {
 		}
 	})
 
-	t.Run("sidebar renders in composite layout", func(t *testing.T) {
+	t.Run("sidebar composite", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 20)
 		view := app.View()
 		plain := stripANSI(view)
@@ -222,7 +222,7 @@ func TestApp(t *testing.T) {
 		}
 	})
 
-	t.Run("status bar updates on sidebar navigation", func(t *testing.T) {
+	t.Run("status bar tracks nav", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 20)
 		// Navigate to Spam (index 4: Inbox->Drafts->Sent->Archive->Spam).
 		// Each J dispatches a load — drain the chain.

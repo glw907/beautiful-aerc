@@ -44,7 +44,7 @@ source = "mock://local"
 threading = true
 `
 
-func TestConfigDiscoverFolders_DryRunShowsDiscoveredFolders(t *testing.T) {
+func TestConfigDiscoverFolders_DryRun(t *testing.T) {
 	dir := t.TempDir()
 	path := writeStubConfig(t, dir, minimalMockConfig)
 	out := execConfigDiscoverFolders(t, "--config", path)
@@ -76,7 +76,7 @@ func TestConfigDiscoverFolders_DryRunShowsDiscoveredFolders(t *testing.T) {
 	}
 }
 
-func TestConfigDiscoverFolders_WriteAppends(t *testing.T) {
+func TestConfigDiscoverFolders_Write(t *testing.T) {
 	dir := t.TempDir()
 	path := writeStubConfig(t, dir, minimalMockConfig)
 	_ = execConfigDiscoverFolders(t, "--config", path, "--write")

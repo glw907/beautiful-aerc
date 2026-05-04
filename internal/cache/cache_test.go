@@ -120,7 +120,7 @@ func TestSchemaMigration(t *testing.T) {
 	}
 }
 
-func TestQueueOp_Atomicity_FlagAppliesOptimistic(t *testing.T) {
+func TestQueueOp_OptimisticFlag(t *testing.T) {
 	a := openTestAccount(t)
 	ctx := context.Background()
 
@@ -231,7 +231,7 @@ func TestDrainer_ConflictOnAuthError(t *testing.T) {
 	}
 }
 
-func TestRecoverExecuting_IdempotentResetsToPending(t *testing.T) {
+func TestRecoverExecuting_Idempotent(t *testing.T) {
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
 	a, _ := Open("rec", be, &fakeChangeTracker{}, t.TempDir(), Config{})
 	defer a.Close()
@@ -250,7 +250,7 @@ func TestRecoverExecuting_IdempotentResetsToPending(t *testing.T) {
 	}
 }
 
-func TestRecoverExecuting_SendBecomesConflict(t *testing.T) {
+func TestRecoverExecuting_Send(t *testing.T) {
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
 	a, _ := Open("rec-send", be, &fakeChangeTracker{}, t.TempDir(), Config{})
 	defer a.Close()
@@ -273,7 +273,7 @@ func TestRecoverExecuting_SendBecomesConflict(t *testing.T) {
 	}
 }
 
-func TestSyncFolder_ReAnchorPromotesOutboxToConflict(t *testing.T) {
+func TestSyncFolder_ReAnchor(t *testing.T) {
 	ct := &fakeChangeTracker{err: mail.ErrCannotCalculateChanges}
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
 	a, _ := Open("reanchor", be, ct, t.TempDir(), Config{})
@@ -301,7 +301,7 @@ func TestSyncFolder_ReAnchorPromotesOutboxToConflict(t *testing.T) {
 	}
 }
 
-func TestCoordinationInvariant_SyncerSkipsUIFlagsOnPendingOp(t *testing.T) {
+func TestCoordinationInvariant_PendingOp(t *testing.T) {
 	be := &fakeBackend{
 		folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}},
 		// Server reports message as unflagged.

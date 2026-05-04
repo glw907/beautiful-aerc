@@ -18,7 +18,7 @@ func TestLoadUI(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "missing [ui] section uses defaults",
+			name: "no [ui] section",
 			toml: `[[account]]
 name = "X"
 source = "jmap://x@y"
@@ -29,7 +29,7 @@ source = "jmap://x@y"
 			},
 		},
 		{
-			name: "empty [ui] section uses defaults",
+			name: "empty [ui] section",
 			toml: `[ui]
 `,
 			want: UIConfig{
@@ -88,14 +88,14 @@ rank = 5
 			},
 		},
 		{
-			name: "invalid sort value rejected",
+			name: "invalid sort",
 			toml: `[ui.folders.Inbox]
 sort = "alphabetical"
 `,
 			wantErr: `invalid sort "alphabetical"`,
 		},
 		{
-			name: "negative rank is valid",
+			name: "negative rank",
 			toml: `[ui.folders.Pinned]
 rank = -10
 `,
@@ -195,9 +195,9 @@ func TestLoadUI_UndoSeconds(t *testing.T) {
 	}{
 		{"default when unset", "[ui]\nthreading = true\n", 6},
 		{"explicit value within range", "[ui]\nundo_seconds = 10\n", 10},
-		{"below floor clamps to 2", "[ui]\nundo_seconds = 0\n", 2},
-		{"above ceiling clamps to 30", "[ui]\nundo_seconds = 99\n", 30},
-		{"negative clamps to 2", "[ui]\nundo_seconds = -5\n", 2},
+		{"below floor", "[ui]\nundo_seconds = 0\n", 2},
+		{"above ceiling", "[ui]\nundo_seconds = 99\n", 30},
+		{"negative", "[ui]\nundo_seconds = -5\n", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

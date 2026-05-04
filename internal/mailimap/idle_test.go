@@ -46,8 +46,6 @@ func drainUpdates(b *Backend, n int, timeout time.Duration) []mail.Update {
 	return out
 }
 
-// TestIdleEmitsConnectedOnStart verifies that idleLoop emits
-// ConnConnected after it selects the folder and enters IDLE.
 func TestIdleEmitsConnectedOnStart(t *testing.T) {
 	cmd := newFakeClient()
 	idleClient := newFakeClient()
@@ -83,8 +81,6 @@ func TestIdleEmitsConnectedOnStart(t *testing.T) {
 	}
 }
 
-// TestIdleFolderSwitch verifies that a folder-switch signal causes
-// the idle goroutine to stop the current IDLE and re-IDLE on the new folder.
 func TestIdleFolderSwitch(t *testing.T) {
 	cmd := newFakeClient()
 	idleClient := newFakeClient()
@@ -161,9 +157,6 @@ func TestIdleFolderSwitch(t *testing.T) {
 	}
 }
 
-// TestIdleReconnectsOnError verifies that an IDLE connection failure
-// emits ConnReconnecting and the goroutine retries, eventually
-// emitting ConnConnected on the second attempt.
 func TestIdleReconnectsOnError(t *testing.T) {
 	cmd := newFakeClient()
 	idleClient := newFakeClient()
@@ -226,8 +219,6 @@ func TestIdleReconnectsOnError(t *testing.T) {
 	}
 }
 
-// TestIdlePollFallback verifies that when IDLE capability is absent
-// the goroutine falls back to polling and emits UpdateFolderInfo.
 func TestIdlePollFallback(t *testing.T) {
 	cmd := newFakeClient()
 	idleClient := newFakeClient()
@@ -252,8 +243,6 @@ func TestIdlePollFallback(t *testing.T) {
 	// here — that's expected and acceptable.
 }
 
-// TestIdleExitOnContextCancel verifies that cancelling ctx causes
-// idleLoop to return promptly and close idleDone.
 func TestIdleExitOnContextCancel(t *testing.T) {
 	cmd := newFakeClient()
 	idleClient := newFakeClient()
@@ -288,8 +277,6 @@ func TestIdleExitOnContextCancel(t *testing.T) {
 	}
 }
 
-// TestIdleWaitsForFirstFolder verifies that when current == "" the
-// goroutine blocks until a folder is sent on switchCh.
 func TestIdleWaitsForFirstFolder(t *testing.T) {
 	cmd := newFakeClient()
 	idleClient := newFakeClient()

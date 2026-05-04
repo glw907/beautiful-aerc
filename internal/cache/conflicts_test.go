@@ -136,7 +136,7 @@ func TestRevertOptimistic_SendUnsupported(t *testing.T) {
 	}
 }
 
-func TestRetryOp_ResetsAttemptsAndStatus(t *testing.T) {
+func TestRetryOp_Reset(t *testing.T) {
 	a := openTestAccount(t)
 	opID, _ := seedConflictRow(t, a, "r1", FlagArgs{Flag: mail.FlagSeen, Set: true})
 	a.db.Exec(`UPDATE outbox SET attempts = 7, next_eligible_at = ?, error = 'x' WHERE id = ?`,
@@ -168,7 +168,7 @@ func TestRetryOp_ResetsAttemptsAndStatus(t *testing.T) {
 	}
 }
 
-func TestRetryOp_RejectsNonConflict(t *testing.T) {
+func TestRetryOp_NonConflict(t *testing.T) {
 	a := openTestAccount(t)
 	ctx := context.Background()
 	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{{UID: "n1", Subject: "x"}})
@@ -181,7 +181,7 @@ func TestRetryOp_RejectsNonConflict(t *testing.T) {
 	}
 }
 
-func TestRetryOp_SignalsDrainer(t *testing.T) {
+func TestRetryOp_Signal(t *testing.T) {
 	a := openTestAccount(t)
 	opID, _ := seedConflictRow(t, a, "s1", FlagArgs{Flag: mail.FlagSeen, Set: true})
 
@@ -202,7 +202,7 @@ func TestRetryOp_SignalsDrainer(t *testing.T) {
 	}
 }
 
-func TestDiscardOp_RevertsAndDeletes(t *testing.T) {
+func TestDiscardOp_Revert(t *testing.T) {
 	a := openTestAccount(t)
 	opID, msgID := seedConflictRow(t, a, "x1", FlagArgs{Flag: mail.FlagFlagged, Set: true})
 
@@ -224,7 +224,7 @@ func TestDiscardOp_RevertsAndDeletes(t *testing.T) {
 	}
 }
 
-func TestDiscardOp_Move_Unhides(t *testing.T) {
+func TestDiscardOp_Move(t *testing.T) {
 	a := openTestAccount(t)
 	opID, msgID := seedConflictRow(t, a, "x2", MoveArgs{Dest: "Archive"})
 
@@ -238,7 +238,7 @@ func TestDiscardOp_Move_Unhides(t *testing.T) {
 	}
 }
 
-func TestDiscardOp_RejectsNonConflict(t *testing.T) {
+func TestDiscardOp_NonConflict(t *testing.T) {
 	a := openTestAccount(t)
 	ctx := context.Background()
 	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{{UID: "x3", Subject: "x"}})

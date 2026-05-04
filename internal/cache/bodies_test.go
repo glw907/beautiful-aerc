@@ -116,7 +116,7 @@ func TestStoreBody_UnknownUID(t *testing.T) {
 	}
 }
 
-func TestStoreBody_EvictsBySizeWhenOverCap(t *testing.T) {
+func TestStoreBody_EvictOverCap(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
 	a.maxSize = 100 // tiny cap for the test
@@ -163,7 +163,7 @@ func TestStoreBody_EvictsBySizeWhenOverCap(t *testing.T) {
 	}
 }
 
-func TestStoreBody_MaxSizeZeroDisablesCap(t *testing.T) {
+func TestStoreBody_MaxSizeZero(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
 	a.maxSize = 0 // disabled
@@ -201,7 +201,7 @@ func (f *fakeBackendWithBody) FetchBody(_ mail.UID) ([]byte, error) {
 	return f.body, nil
 }
 
-func TestFetchBody_PopulatesCacheOnMiss(t *testing.T) {
+func TestFetchBody_Miss(t *testing.T) {
 	be := &fakeBackendWithBody{body: []byte("from-backend")}
 	a, err := Open("test", be, &fakeChangeTracker{}, t.TempDir(), Config{})
 	if err != nil {

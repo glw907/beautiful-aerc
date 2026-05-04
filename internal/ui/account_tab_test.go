@@ -96,7 +96,7 @@ func feedTab(t *testing.T, tab *AccountTab, msg tea.Msg, depth int) {
 }
 
 func TestAccountTab(t *testing.T) {
-	t.Run("title returns folder name after load", func(t *testing.T) {
+	t.Run("title after load", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 20)
 		if tab.Title() != "Inbox" {
 			t.Errorf("Title() = %q, want Inbox", tab.Title())
@@ -944,7 +944,7 @@ func TestAccountTab_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
 
 // TestAccountTab_LoadingSpinner verifies the folder-open loading state.
 func TestAccountTab_LoadingSpinner(t *testing.T) {
-	t.Run("loading is true after selectionChangedCmds, before headersApplied", func(t *testing.T) {
+	t.Run("loading: pre-headers", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
 		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
@@ -957,7 +957,7 @@ func TestAccountTab_LoadingSpinner(t *testing.T) {
 		}
 	})
 
-	t.Run("loading is false after headersAppliedMsg", func(t *testing.T) {
+	t.Run("loading: post-headers", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
 		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
@@ -973,7 +973,7 @@ func TestAccountTab_LoadingSpinner(t *testing.T) {
 		}
 	})
 
-	t.Run("view contains Loading placeholder while loading and msglist empty", func(t *testing.T) {
+	t.Run("loading placeholder", func(t *testing.T) {
 		styles := NewStyles(theme.Nord)
 		backend := mail.NewMockBackend()
 		tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
@@ -987,7 +987,7 @@ func TestAccountTab_LoadingSpinner(t *testing.T) {
 		}
 	})
 
-	t.Run("view does not contain Loading after headers arrive", func(t *testing.T) {
+	t.Run("placeholder gone after headers", func(t *testing.T) {
 		tab := newLoadedTab(t, 120, 30)
 		view := stripANSI(tab.View())
 		if strings.Contains(view, "Loading messages") {

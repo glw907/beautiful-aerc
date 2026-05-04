@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestConfigInitWritesTemplate(t *testing.T) {
+func TestConfigInit_Template(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("POPLAR_CONFIG", filepath.Join(dir, "config.toml"))
 
@@ -29,7 +29,7 @@ func TestConfigInitWritesTemplate(t *testing.T) {
 	}
 }
 
-func TestConfigInitRefusesExisting(t *testing.T) {
+func TestConfigInit_RefuseExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	t.Setenv("POPLAR_CONFIG", path)
@@ -48,7 +48,7 @@ func TestConfigInitRefusesExisting(t *testing.T) {
 	}
 }
 
-func TestConfigInitForceOverwrites(t *testing.T) {
+func TestConfigInit_Force(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	t.Setenv("POPLAR_CONFIG", path)
@@ -72,7 +72,7 @@ func TestConfigInitForceOverwrites(t *testing.T) {
 	}
 }
 
-func TestConfigPathPrintsResolved(t *testing.T) {
+func TestConfigPath_Resolved(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("POPLAR_CONFIG", filepath.Join(dir, "config.toml"))
 

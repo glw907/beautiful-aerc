@@ -12,7 +12,7 @@ import (
 func TestFooterView(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	t.Run("account context has group separator", func(t *testing.T) {
+	t.Run("account: group separator", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(160))
@@ -21,7 +21,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("account context has compressed nav group", func(t *testing.T) {
+	t.Run("account: compressed nav", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		// Full account footer is ~183 chars wide; use 190 to ensure nav survives.
@@ -34,7 +34,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("account context has planned future hints", func(t *testing.T) {
+	t.Run("account: future hints", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(200))
@@ -45,7 +45,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("account context has triage group", func(t *testing.T) {
+	t.Run("account: triage group", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(160))
@@ -57,7 +57,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("account context has reply group", func(t *testing.T) {
+	t.Run("account: reply group", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(160))
@@ -78,7 +78,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("responsive: nav drops first when space is tight", func(t *testing.T) {
+	t.Run("responsive: nav drops first", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(130))
@@ -96,7 +96,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("responsive: tools drop before triage and reply", func(t *testing.T) {
+	t.Run("responsive: tools before triage/reply", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(90))
@@ -114,7 +114,7 @@ func TestFooterView(t *testing.T) {
 		}
 	})
 
-	t.Run("responsive: app group never drops", func(t *testing.T) {
+	t.Run("responsive: app sticks", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
 		result := stripANSI(f.View(40))
@@ -180,7 +180,7 @@ func TestFooterWindowCounter(t *testing.T) {
 		}
 	})
 
-	t.Run("counter does not appear in viewer context", func(t *testing.T) {
+	t.Run("viewer: no counter", func(t *testing.T) {
 		f := NewFooter(styles).SetContext(ViewerContext).SetCounter("500/2347")
 		result := stripANSI(f.View(200))
 		if strings.Contains(result, "500/2347") {

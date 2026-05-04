@@ -25,7 +25,7 @@ func TestMockBackendThreading(t *testing.T) {
 		}
 	})
 
-	t.Run("flat messages have ThreadID == UID and empty InReplyTo", func(t *testing.T) {
+	t.Run("flat: ThreadID == UID, empty InReplyTo", func(t *testing.T) {
 		flatUIDs := map[UID]bool{
 			"1": true, "2": true, "3": true, "4": true, "5": true,
 			"6": true, "7": true, "8": true, "9": true, "10": true,
@@ -43,7 +43,7 @@ func TestMockBackendThreading(t *testing.T) {
 		}
 	})
 
-	t.Run("threaded conversation has 4 messages with ThreadID T1", func(t *testing.T) {
+	t.Run("threaded: shared ThreadID", func(t *testing.T) {
 		threaded := map[UID]MessageInfo{}
 		for _, m := range msgs {
 			if m.ThreadID == "T1" {
@@ -170,13 +170,13 @@ func TestMockBackend_Destroy_EmptyIsNoop(t *testing.T) {
 func TestMockBackend(t *testing.T) {
 	b := NewMockBackend()
 
-	t.Run("connect succeeds", func(t *testing.T) {
+	t.Run("connect", func(t *testing.T) {
 		if err := b.Connect(context.Background()); err != nil {
 			t.Fatalf("Connect: %v", err)
 		}
 	})
 
-	t.Run("list folders returns expected data", func(t *testing.T) {
+	t.Run("folder list", func(t *testing.T) {
 		folders, err := b.ListFolders()
 		if err != nil {
 			t.Fatalf("ListFolders: %v", err)
@@ -192,7 +192,7 @@ func TestMockBackend(t *testing.T) {
 		}
 	})
 
-	t.Run("inbox has unread messages", func(t *testing.T) {
+	t.Run("inbox unread", func(t *testing.T) {
 		folders, _ := b.ListFolders()
 		inbox := folders[0]
 		if inbox.Unseen == 0 {
@@ -203,7 +203,7 @@ func TestMockBackend(t *testing.T) {
 		}
 	})
 
-	t.Run("fetch headers returns messages", func(t *testing.T) {
+	t.Run("header fetch", func(t *testing.T) {
 		msgs, err := b.FetchHeaders(nil)
 		if err != nil {
 			t.Fatalf("FetchHeaders: %v", err)
@@ -221,14 +221,14 @@ func TestMockBackend(t *testing.T) {
 		}
 	})
 
-	t.Run("updates channel is non-nil", func(t *testing.T) {
+	t.Run("updates channel", func(t *testing.T) {
 		ch := b.Updates()
 		if ch == nil {
 			t.Fatal("Updates() returned nil channel")
 		}
 	})
 
-	t.Run("disconnect succeeds", func(t *testing.T) {
+	t.Run("disconnect", func(t *testing.T) {
 		if err := b.Disconnect(); err != nil {
 			t.Fatalf("Disconnect: %v", err)
 		}
