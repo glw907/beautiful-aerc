@@ -9,7 +9,7 @@ import (
 
 // schemaVersion is the current schema version. Migrations from any
 // older version up to this one run in order at Open.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // migration applies one schema version step inside a single
 // transaction. Index 0 holds the v0→v1 step.
@@ -22,6 +22,7 @@ var migrations = []migration{
 	migrateV2, // v1 → v2: next_eligible_at on outbox
 	migrateV3, // v2 → v3: backend-reported exists/unseen on folders
 	migrateV4, // v3 → v4: drop last_accessed + bodies_lru
+	migrateV5, // v4 → v5: attachments table (metadata + lazy bytes)
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -139,6 +140,34 @@ func migrateV4(tx *sql.Tx) error {
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
 			return fmt.Errorf("migrate v4: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV5 adds the attachments table. Metadata populates lazily on
+// first Attachments(uid) call; bytes populate lazily on first
+// FetchAttachment(uid, partID), gated by a separate size backstop.
+func migrateV5(tx *sql.Tx) error {
+	stmts := []string{
+		`CREATE TABLE attachments (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            message      INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            part_id      TEXT    NOT NULL,
+            filename     TEXT    NOT NULL DEFAULT '',
+            mime_type    TEXT    NOT NULL,
+            size         INTEGER NOT NULL,
+            content_id   TEXT    NOT NULL DEFAULT '',
+            disposition  TEXT    NOT NULL,
+            bytes        BLOB,
+            fetched_at   INTEGER,
+            UNIQUE (message, part_id)
+        )`,
+		`CREATE INDEX attachments_message ON attachments(message)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("migrate v5: %w", err)
 		}
 	}
 	return nil

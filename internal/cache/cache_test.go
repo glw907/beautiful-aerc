@@ -4,6 +4,7 @@ package cache
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"strings"
@@ -352,6 +353,36 @@ func TestMigrateV4_DropsLastAccessedAndIndex(t *testing.T) {
 	row = a.DB().QueryRow(`SELECT name FROM sqlite_master WHERE type='index' AND name='bodies_lru'`)
 	if err := row.Scan(&name); err == nil {
 		t.Errorf("bodies_lru index should be dropped, found %q", name)
+	}
+}
+
+func TestAttachmentsTableShape(t *testing.T) {
+	a := openTestAccount(t)
+	rows, err := a.db.Query(`PRAGMA table_info(attachments)`)
+	if err != nil {
+		t.Fatalf("table_info: %v", err)
+	}
+	defer rows.Close()
+	cols := map[string]string{}
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		cols[name] = ctype
+	}
+	want := []string{"id", "message", "part_id", "filename", "mime_type", "size", "content_id", "disposition", "bytes", "fetched_at"}
+	for _, n := range want {
+		if _, ok := cols[n]; !ok {
+			t.Errorf("attachments missing column %q", n)
+		}
 	}
 }
 
