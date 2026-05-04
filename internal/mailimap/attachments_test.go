@@ -157,3 +157,22 @@ func TestAttachmentsMissingUID(t *testing.T) {
 		t.Fatal("expected error for missing UID, got nil")
 	}
 }
+
+// TestFetchAttachment confirms FetchAttachment returns bytes stored under
+// the "<uid>::<section>" key in the fake client.
+func TestFetchAttachment(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = baseCaps()
+	cmd.bodyParts["7::2"] = []byte("PDF bytes")
+
+	b := connectFake(t, cmd)
+
+	got, err := b.FetchAttachment("7", "2")
+	if err != nil {
+		t.Fatalf("FetchAttachment: %v", err)
+	}
+	want := []byte("PDF bytes")
+	if string(got) != string(want) {
+		t.Errorf("FetchAttachment = %q, want %q", got, want)
+	}
+}

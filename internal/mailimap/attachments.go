@@ -76,3 +76,19 @@ func classifyDisposition(bs BodyStructure) mail.Disposition {
 	}
 	return mail.DispAttachment
 }
+
+// FetchAttachment satisfies mail.Backend. Issues UID FETCH BODY[<part>]
+// and returns the decoded bytes. The transfer encoding (base64,
+// quoted-printable) is decoded by the go-imap client adapter; this
+// returns raw decoded bytes ready to write to disk.
+func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
+	b.mu.Lock()
+	cmd := b.cmd
+	b.mu.Unlock()
+
+	body, err := cmd.FetchBodyPart(uid, partID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch attachment %s/%s: %w", uid, partID, err)
+	}
+	return body, nil
+}
