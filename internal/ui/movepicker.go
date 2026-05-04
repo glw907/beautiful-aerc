@@ -229,36 +229,26 @@ func (p MovePicker) Box(w, h int) string {
 		rows = rows[p.offset:end]
 	}
 
-	var b strings.Builder
-	title := " Move to (" + strconv.Itoa(len(p.matches)) + ") "
-	rest := boxW - 2 - lipgloss.Width(title)
-	if rest < 0 {
-		rest = 0
+	bodyRows := make([]string, maxListRows)
+	for i := 0; i < maxListRows; i++ {
+		if i < len(rows) {
+			bodyRows[i] = padOrTruncate(rows[i], contentW)
+		} else {
+			bodyRows[i] = strings.Repeat(" ", contentW)
+		}
 	}
-	b.WriteString("┌─" + title + strings.Repeat("─", rest) + "┐\n")
-
-	for _, row := range rows {
-		padded := padOrTruncate(row, contentW)
-		b.WriteString("│" + padded + "│\n")
-	}
-	for i := len(rows); i < maxListRows; i++ {
-		b.WriteString("│" + strings.Repeat(" ", contentW) + "│\n")
-	}
-
-	b.WriteString("├" + strings.Repeat("─", contentW) + "┤\n")
 
 	hint := ""
 	if p.filter != "" {
 		hint = "filter: " + p.filter
 	}
-	b.WriteString("│" + p.styles.Dim.Render(padOrTruncate(hint, contentW)) + "│\n")
+	footerRows := []string{
+		p.styles.Dim.Render(padOrTruncate(hint, contentW)),
+		p.styles.Dim.Render(padOrTruncate("↑↓ select · enter pick · esc cancel", contentW)),
+	}
 
-	help := "↑↓ select · enter pick · esc cancel"
-	b.WriteString("│" + p.styles.Dim.Render(padOrTruncate(help, contentW)) + "│\n")
-
-	b.WriteString("└" + strings.Repeat("─", contentW) + "┘")
-
-	return b.String()
+	title := "Move to (" + strconv.Itoa(len(p.matches)) + ")"
+	return p.shell.Box(title, bodyRows, footerRows, contentW)
 }
 
 func (p MovePicker) buildListRows(contentW int) []string {

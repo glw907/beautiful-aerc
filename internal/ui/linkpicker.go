@@ -200,28 +200,18 @@ func (p LinkPicker) Box(w, h int) string {
 
 	visibleRows := visibleLinkRows(len(p.links), h)
 
-	var b strings.Builder
-	title := " Links "
-	rest := boxW - 2 - lipgloss.Width(title)
-	if rest < 0 {
-		rest = 0
-	}
-	b.WriteString("┌─" + title + strings.Repeat("─", rest) + "┐\n")
-
+	bodyRows := make([]string, visibleRows)
 	for i := 0; i < visibleRows; i++ {
 		row := p.offset + i
 		if row >= len(p.links) {
-			b.WriteString("│" + strings.Repeat(" ", contentW) + "│\n")
+			bodyRows[i] = strings.Repeat(" ", contentW)
 			continue
 		}
-		b.WriteString("│")
-		b.WriteString(p.formatRow(row, maxIndexDigits, urlW, contentW))
-		b.WriteString("│\n")
+		bodyRows[i] = p.formatRow(row, maxIndexDigits, urlW, contentW)
 	}
 
-	b.WriteString("├" + strings.Repeat("─", contentW) + "┤\n")
-
 	previewLines := p.previewLines(contentW)
+	footerRows := make([]string, 2)
 	for i := 0; i < 2; i++ {
 		line := ""
 		if i < len(previewLines) {
@@ -231,12 +221,10 @@ func (p LinkPicker) Box(w, h int) string {
 		if lw < contentW {
 			line += strings.Repeat(" ", contentW-lw)
 		}
-		b.WriteString("│" + line + "│\n")
+		footerRows[i] = line
 	}
 
-	b.WriteString("└" + strings.Repeat("─", contentW) + "┘")
-
-	return b.String()
+	return p.shell.Box("Links", bodyRows, footerRows, contentW)
 }
 
 // formatRow renders one list row: leading-space-pad + [N] + space + URL.
