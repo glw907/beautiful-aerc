@@ -17,12 +17,20 @@ import (
 type CacheConfig struct {
 	// MaxSize is the body-cache size cap in bytes. 0 disables.
 	MaxSize int64
+	// MaxAttachmentSize is the attachment-bytes-cache size cap in
+	// bytes. 0 disables. Tracked separately from MaxSize so a flood
+	// of attachments cannot push out cached bodies and vice-versa.
+	MaxAttachmentSize int64
 }
 
 // DefaultCacheConfig returns the defaults applied when [cache] is
-// missing from config.toml. Currently 2GB body-cache cap.
+// missing from config.toml. Currently 2GB body-cache cap and 2GB
+// attachment-cache cap.
 func DefaultCacheConfig() CacheConfig {
-	return CacheConfig{MaxSize: 2 * 1024 * 1024 * 1024}
+	return CacheConfig{
+		MaxSize:           2 * 1024 * 1024 * 1024,
+		MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
+	}
 }
 
 type rawCacheFile struct {
@@ -30,7 +38,8 @@ type rawCacheFile struct {
 }
 
 type rawCache struct {
-	MaxSize string `toml:"max-size"`
+	MaxSize           string `toml:"max-size"`
+	MaxAttachmentSize string `toml:"max-attachment-size"`
 }
 
 // LoadCache reads the [cache] table from a config.toml file. A
@@ -57,6 +66,13 @@ func LoadCache(path string) (CacheConfig, error) {
 			return CacheConfig{}, fmt.Errorf("cache.max-size: %w", err)
 		}
 		out.MaxSize = n
+	}
+	if raw.Cache.MaxAttachmentSize != "" {
+		n, err := parseSize(raw.Cache.MaxAttachmentSize)
+		if err != nil {
+			return CacheConfig{}, fmt.Errorf("cache.max-attachment-size: %w", err)
+		}
+		out.MaxAttachmentSize = n
 	}
 	return out, nil
 }

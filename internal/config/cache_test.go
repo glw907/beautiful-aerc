@@ -48,22 +48,49 @@ func TestLoadCache(t *testing.T) {
 		{
 			name: "default when missing",
 			toml: ``,
-			want: CacheConfig{MaxSize: 2 * 1024 * 1024 * 1024},
+			want: CacheConfig{
+				MaxSize:           2 * 1024 * 1024 * 1024,
+				MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
+			},
 		},
 		{
 			name: "explicit 1GB",
 			toml: `[cache]` + "\n" + `max-size = "1GB"`,
-			want: CacheConfig{MaxSize: 1024 * 1024 * 1024},
+			want: CacheConfig{
+				MaxSize:           1024 * 1024 * 1024,
+				MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
+			},
 		},
 		{
 			name: "zero disables",
 			toml: `[cache]` + "\n" + `max-size = "0"`,
-			want: CacheConfig{MaxSize: 0},
+			want: CacheConfig{
+				MaxSize:           0,
+				MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
+			},
 		},
 		{
 			name:    "garbage rejected",
 			toml:    `[cache]` + "\n" + `max-size = "five gigs"`,
 			wantErr: true,
+		},
+		{
+			name: "explicit max-attachment-size",
+			toml: `[cache]` + "\n" +
+				`max-size = "1GB"` + "\n" +
+				`max-attachment-size = "500MB"`,
+			want: CacheConfig{
+				MaxSize:           1024 * 1024 * 1024,
+				MaxAttachmentSize: 500 * 1024 * 1024,
+			},
+		},
+		{
+			name: "default attachment cap when section absent",
+			toml: ``,
+			want: CacheConfig{
+				MaxSize:           2 * 1024 * 1024 * 1024,
+				MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
+			},
 		},
 	}
 	for _, c := range cases {
