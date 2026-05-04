@@ -216,3 +216,17 @@ func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) e
 		return fmt.Errorf("unsupported auth mechanism %q", mech)
 	}
 }
+
+// looksSelfHosted reports whether host is RFC 1918, IPv6 ULA,
+// .local, or 127.x — gates the "set insecure-tls = true" hint on
+// TLS errors.
+func looksSelfHosted(host string) bool {
+	if strings.HasSuffix(host, ".local") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate()
+}

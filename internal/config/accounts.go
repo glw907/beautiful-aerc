@@ -1,16 +1,135 @@
 // SPDX-License-Identifier: MIT
 
+// Package config holds poplar's configuration types and loaders.
 package config
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-message/mail"
 )
+
+// AccountConfig holds the configuration for a single email account.
+type AccountConfig struct {
+	Name           string
+	Display        string
+	Backend        string
+	Source         string
+	Params         map[string]string
+	Folders        []string
+	FoldersExclude []string
+
+	// Identity
+	From   *mail.Address
+	CopyTo []string
+
+	// Password is the bearer token or password after env-var substitution.
+	// In config.toml use "$VAR_NAME" to pull from the environment.
+	Password string
+
+	// PasswordCmd is a shell command whose stdout becomes the
+	// password. Deferred to first Connect so secret-manager prompts
+	// fire near the action. Mutually exclusive with Password.
+	PasswordCmd string
+
+	// Auth — recognized values: "plain", "login", "cram-md5",
+	// "xoauth2", "bearer". Empty string defers to backend default.
+	Auth string
+
+	// Email is the user's address. May be empty when the backend
+	// auto-discovers (e.g. JMAP session).
+	Email string
+
+	// IMAP transport (set directly or via a provider preset).
+	Host     string
+	Port     int
+	StartTLS bool
+
+	// InsecureTLS skips TLS verification — for self-hosted servers
+	// with self-signed certs. Never set for hosted providers.
+	InsecureTLS bool
+
+	// GmailQuirks enables Gmail-specific IMAP behavior in mailimap:
+	// X-GM-EXT-1 assertion at Connect, and Destroy routed via
+	// SELECT [Gmail]/Trash before EXPUNGE. Set by the gmail preset.
+	GmailQuirks bool
+}
+
+// ExpandHome turns a leading "~" into the user's home directory.
+// "~" → $HOME; "~/x" → $HOME/x; other paths and empty pass through.
+func ExpandHome(p string) (string, error) {
+	if !strings.HasPrefix(p, "~") {
+		return p, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if p == "~" {
+		return home, nil
+	}
+	return filepath.Join(home, strings.TrimPrefix(p, "~/")), nil
+}
+
+// suggestProvider returns the closest known-provider name to s, or ""
+// when nothing's within edit distance 2.
+func suggestProvider(s string) string {
+	if s == "" {
+		return ""
+	}
+	candidates := []string{"imap", "jmap"}
+	for k := range Providers {
+		candidates = append(candidates, k)
+	}
+	bestName := ""
+	bestDist := 3
+	for _, c := range candidates {
+		d := levenshtein(s, c)
+		if d < bestDist {
+			bestDist = d
+			bestName = c
+		}
+	}
+	if bestDist > 2 {
+		return ""
+	}
+	return bestName
+}
+
+func levenshtein(a, b string) int {
+	if a == b {
+		return 0
+	}
+	la, lb := len(a), len(b)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min(curr[j-1]+1, prev[j]+1, prev[j-1]+cost)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
 
 type configFile struct {
 	Account []accountEntry `toml:"account"`

@@ -4,9 +4,21 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
+
+// ErrAuth is the sentinel for backend authentication failure (4xx
+// from JMAP/HTTP, BAD/NO with auth context from IMAP, or expired
+// OAuth token). The cache drainer matches via errors.Is and promotes
+// the outbox row to conflict with kind "auth-failure". Backends MUST
+// wrap auth failures with %w so the chain unwraps to ErrAuth.
+var ErrAuth = errors.New("mail: authentication failed")
+
+// ErrNotFound signals the message no longer exists on the server.
+// The cache drainer treats it as idempotent success per spec §D.4.
+var ErrNotFound = errors.New("mail: not found")
 
 // SearchCriteria defines message search parameters.
 type SearchCriteria struct {

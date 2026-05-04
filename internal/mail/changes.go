@@ -28,18 +28,6 @@ type ChangeSet struct {
 // folder per spec §D.4.
 var ErrCannotCalculateChanges = errors.New("mail: cannot calculate changes")
 
-// ErrAuth is the sentinel for backend authentication failure (4xx
-// from JMAP/HTTP, BAD/NO with auth context from IMAP, or expired
-// OAuth token). The cache drainer matches this with errors.Is and
-// promotes the outbox row to conflict with kind "auth-failure"
-// instead of cycling through the backoff loop. Backends MUST wrap
-// auth failures with %w so the chain unwraps to ErrAuth.
-var ErrAuth = errors.New("mail: authentication failed")
-
-// ErrNotFound signals the message no longer exists on the server.
-// The cache drainer treats it as idempotent success per spec §D.4.
-var ErrNotFound = errors.New("mail: not found")
-
 // ChangeTracker is the protocol-level change-detection sibling of
 // Backend. Both v1 backends (mailjmap, mailimap) implement both
 // interfaces.
