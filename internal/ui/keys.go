@@ -12,7 +12,9 @@ type GlobalKeys struct {
 	Quit      key.Binding
 	ForceQuit key.Binding
 	CloseHelp key.Binding
-	Undo      key.Binding
+	Undo            key.Binding
+	OutboxOverlay   key.Binding
+	ConflictOverlay key.Binding
 }
 
 // NewGlobalKeys returns the default global key bindings.
@@ -22,7 +24,9 @@ func NewGlobalKeys() GlobalKeys {
 		Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		ForceQuit: key.NewBinding(key.WithKeys("ctrl+c")),
 		CloseHelp: key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
-		Undo:      key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
+		Undo:            key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
+		OutboxOverlay:   key.NewBinding(key.WithKeys("Q"), key.WithHelp("Q", "outbox")),
+		ConflictOverlay: key.NewBinding(key.WithKeys("!"), key.WithHelp("!", "conflicts")),
 	}
 }
 

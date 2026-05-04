@@ -423,3 +423,73 @@ type sweepCompletedMsg struct {
 	folder string
 	uids   []mail.UID
 }
+
+// outboxDepthMsg carries the latest cache.OutboxDepth into the App
+// for status-bar refresh.
+type outboxDepthMsg struct{ depth cache.OutboxDepth }
+
+// outboxSummaryMsg refreshes the open Q overlay.
+type outboxSummaryMsg struct {
+	groups []cache.OutboxGroup
+	err    error
+}
+
+// outboxConflictsMsg refreshes the open ! overlay.
+type outboxConflictsMsg struct {
+	rows []cache.ConflictRow
+	err  error
+}
+
+// conflictResolvedMsg carries the result of a Retry / Discard call.
+type conflictResolvedMsg struct {
+	opID int64
+	err  error
+}
+
+func refreshOutboxDepthCmd(c *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		d, err := c.OutboxDepth(ctx)
+		if err != nil {
+			return ErrorMsg{Op: "outbox depth", Err: err}
+		}
+		return outboxDepthMsg{depth: d}
+	}
+}
+
+func loadOutboxSummaryCmd(c *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		gs, err := c.OutboxSummary(ctx)
+		return outboxSummaryMsg{groups: gs, err: err}
+	}
+}
+
+func loadOutboxConflictsCmd(c *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		rs, err := c.OutboxConflicts(ctx)
+		return outboxConflictsMsg{rows: rs, err: err}
+	}
+}
+
+func retryConflictCmd(c *cache.Account, opID int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := c.RetryOp(ctx, opID)
+		return conflictResolvedMsg{opID: opID, err: err}
+	}
+}
+
+func discardConflictCmd(c *cache.Account, opID int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := c.DiscardOp(ctx, opID)
+		return conflictResolvedMsg{opID: opID, err: err}
+	}
+}
