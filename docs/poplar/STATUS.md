@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.8 active — Human-voice audit I.
+**Current pass:** Pass 8.9 active — Human-voice audit II (structural).
 
 ## Passes
 
@@ -15,8 +15,8 @@
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge (ADR-0132, 0133, 0134) | done |
 | 8.6 | Attachments I — backend (#24) (ADR-0135, 0136, 0137) | done |
 | 8.7 | Attachments II — viewer (#24) (ADR-0138, 0139, 0140) | done |
-| 8.8 | Human-voice audit I — research-grounded style guide, persona, ADR-0141, skill + `/simplify` updates; string-only fixes (C1 comments, C7 errors, C4 prose verbosity) | active |
-| 8.9 | Human-voice audit II — structural fixes (C2 defensive cruft, C3 inlines, C5 renames, C6 test boilerplate, C8 structural symmetry) against 8.8's frozen triage | pending |
+| 8.8 | Human-voice audit I — research-grounded style guide, persona, ADR-0141, skill + `/simplify` updates; string-only fixes (C1 comments, C7 errors, C4 prose verbosity) | done |
+| 8.9 | Human-voice audit II — structural fixes (C2 defensive cruft, C5 renames, C6 test boilerplate, C8 structural symmetry, C4-structural) against 8.8's frozen triage | active |
 | 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
 | 9.5 | Compose enhancements — #5 #12 #24 | pending |
 | 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
@@ -31,7 +31,8 @@
 
 > **Goal.** Apply the structural human-voice findings against
 > 8.8's frozen triage list — C2 defensive cruft, C6 test
-> boilerplate, C5 renames, C3 inlines, C8 structural symmetry.
+> boilerplate, C5 renames, C8 structural symmetry, C4-structural
+> chorus elimination. (C3 came up empty; no inlines.)
 >
 > **Scope.** Phase 3b of the plan at
 > `docs/superpowers/plans/2026-05-04-human-voice-audit.md`.
