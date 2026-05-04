@@ -5,8 +5,13 @@ package ui
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -541,5 +546,80 @@ func loadAttachmentsCmd(c *cache.Account, uid mail.UID) tea.Cmd {
 			return ErrorMsg{Op: "fetch attachments", Err: err}
 		}
 		return attachmentsLoadedMsg{uid: uid, items: items}
+	}
+}
+
+// sanitizeAttachFilename strips path separators and falls back to a
+// stable name keyed on partID when the attachment has no filename.
+func sanitizeAttachFilename(name, partID string) string {
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "attachment-" + partID
+	}
+	return name
+}
+
+// resolveSaveTarget returns the first non-existing path in dir
+// derived from base, suffixing -1, -2, ... before the extension.
+// Caps at 999 to avoid pathological loops.
+func resolveSaveTarget(dir, base string) (string, error) {
+	candidate := filepath.Join(dir, base)
+	if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
+		return candidate, nil
+	}
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	for i := 1; i <= 999; i++ {
+		candidate = filepath.Join(dir, fmt.Sprintf("%s-%d%s", stem, i, ext))
+		if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("collision suffix exhausted for %q", base)
+}
+
+// openAttachmentCmd writes att's bytes to a tempfile and shells out
+// to the URLOpener (xdg-open). Fire-and-forget; errors surface via ErrorMsg.
+func openAttachmentCmd(c *cache.Account, opener URLOpener, uid mail.UID, att mail.Attachment) tea.Cmd {
+	return func() tea.Msg {
+		body, err := c.FetchAttachment(context.Background(), uid, att.PartID)
+		if err != nil {
+			return ErrorMsg{Op: "open attachment", Err: err}
+		}
+		name := sanitizeAttachFilename(att.Filename, att.PartID)
+		path := filepath.Join(os.TempDir(), fmt.Sprintf("poplar-%s-%s", uid, name))
+		if err := os.WriteFile(path, body, 0o600); err != nil {
+			return ErrorMsg{Op: "open attachment", Err: err}
+		}
+		_ = opener(path)
+		return nil
+	}
+}
+
+// saveAttachmentCmd writes att's bytes to dir with collision-suffix
+// resolution and emits attachmentSavedMsg with the final path.
+func saveAttachmentCmd(c *cache.Account, dir string, uid mail.UID, att mail.Attachment) tea.Cmd {
+	return func() tea.Msg {
+		if dir == "" {
+			return ErrorMsg{Op: "save attachment", Err: fmt.Errorf("no download dir configured")}
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return ErrorMsg{Op: "save attachment", Err: err}
+		}
+		body, err := c.FetchAttachment(context.Background(), uid, att.PartID)
+		if err != nil {
+			return ErrorMsg{Op: "save attachment", Err: err}
+		}
+		name := sanitizeAttachFilename(att.Filename, att.PartID)
+		target, err := resolveSaveTarget(dir, name)
+		if err != nil {
+			return ErrorMsg{Op: "save attachment", Err: err}
+		}
+		if err := os.WriteFile(target, body, 0o600); err != nil {
+			return ErrorMsg{Op: "save attachment", Err: err}
+		}
+		return attachmentSavedMsg{path: target}
 	}
 }
