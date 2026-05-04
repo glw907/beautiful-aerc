@@ -43,9 +43,13 @@ type Backend struct {
 	pushClient *jmap.Client // real client for EventSource; nil in unit tests
 	session    *jmap.Session
 	password   string // cached PasswordCmd result; empty when cfg.Password is inline
-	folders    map[string]folderEntry
-	blobIDs    map[mail.UID]string
-	states     map[string]string
+	folders     map[string]folderEntry
+	blobIDs     map[mail.UID]string
+	// partBlobIDs caches per-uid (partID → blobID) maps so
+	// FetchAttachment doesn't require an extra Email/get when the
+	// caller has already invoked Attachments.
+	partBlobIDs map[mail.UID]map[string]string
+	states      map[string]string
 
 	bodies             *lru.Cache[string, []byte]
 	bodyGroup          singleflight.Group
@@ -67,10 +71,11 @@ type folderEntry struct {
 // cfg.Password (post env-var substitution) supplies the bearer token.
 func New(cfg config.AccountConfig) *Backend {
 	return &Backend{
-		cfg:     cfg,
-		folders: make(map[string]folderEntry),
-		blobIDs: make(map[mail.UID]string),
-		states:  make(map[string]string),
+		cfg:         cfg,
+		folders:     make(map[string]folderEntry),
+		blobIDs:     make(map[mail.UID]string),
+		partBlobIDs: make(map[mail.UID]map[string]string),
+		states:      make(map[string]string),
 	}
 }
 
@@ -368,6 +373,7 @@ func (b *Backend) Disconnect() error {
 	b.session = nil
 	b.folders = make(map[string]folderEntry)
 	b.blobIDs = make(map[mail.UID]string)
+	b.partBlobIDs = make(map[mail.UID]map[string]string)
 	b.states = make(map[string]string)
 	b.bodies = nil
 	return nil
@@ -798,9 +804,6 @@ func checkEmailSetUpdated(resp *jmap.Response, callID string) error {
 	}
 	return fmt.Errorf("no Email/set response")
 }
-
-// Attachments is not yet implemented; returns nil until Pass 8.6 Task 8.
-func (b *Backend) Attachments(_ mail.UID) ([]mail.Attachment, error) { return nil, nil }
 
 // FetchAttachment is not yet implemented; returns nil until Pass 8.6 Task 9.
 func (b *Backend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) { return nil, nil }
