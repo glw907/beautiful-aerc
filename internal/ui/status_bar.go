@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -36,6 +37,10 @@ type StatusBar struct {
 	scrollPct int
 	mode      StatusMode
 	connState ConnectionState
+	// Outbox segment: rendered between counts and the connection
+	// indicator. Hidden when both counts are zero.
+	outboxInflight int // pending + executing + failed
+	outboxConflict int // conflict only
 }
 
 // NewStatusBar creates a StatusBar with the given styles.
@@ -61,6 +66,21 @@ func (sb StatusBar) SetConnectionState(state ConnectionState) StatusBar {
 
 // ConnectionState returns the current connection state. Used in tests.
 func (sb StatusBar) ConnectionState() ConnectionState { return sb.connState }
+
+// SetOutboxDepth returns a copy of sb with the outbox segment counts
+// updated. inflight = pending + executing + failed; conflict is rendered
+// separately so the warning glyph dominates.
+func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
+	if inflight < 0 {
+		inflight = 0
+	}
+	if conflict < 0 {
+		conflict = 0
+	}
+	sb.outboxInflight = inflight
+	sb.outboxConflict = conflict
+	return sb
+}
 
 // SetMode returns a copy of sb in the given display mode.
 func (sb StatusBar) SetMode(mode StatusMode) StatusBar {
@@ -132,13 +152,32 @@ func (sb StatusBar) View(width, dividerCol int) string {
 	// rounding drift on the connection icons and forced a corrective
 	// re-render.
 	countsPart := sb.styles.StatusBar.Render(" " + counts + " · ")
+	outboxPart := sb.renderOutboxSegment()
 	connIconPart := connStyle.Render(connIcon)
 	connTextPart := sb.styles.StatusBar.Render(" " + connText + " ")
 	endPart := sb.styles.TopLine.Render("─╯")
-	rightWidth := lipgloss.Width(countsPart) + lipgloss.Width(connIconPart) +
-		lipgloss.Width(connTextPart) + lipgloss.Width(endPart)
+	rightWidth := lipgloss.Width(countsPart) + lipgloss.Width(outboxPart) +
+		lipgloss.Width(connIconPart) + lipgloss.Width(connTextPart) +
+		lipgloss.Width(endPart)
 
 	fillWidth := max(0, width-rightWidth)
 	fillPart := sb.styles.TopLine.Render(buildFill(fillWidth, dividerCol))
-	return fillPart + countsPart + connIconPart + connTextPart + endPart
+	return fillPart + countsPart + outboxPart + connIconPart + connTextPart + endPart
+}
+
+// renderOutboxSegment formats the outbox depth indicator. Returns the
+// empty string when both counts are zero (segment omitted).
+func (sb StatusBar) renderOutboxSegment() string {
+	if sb.outboxInflight == 0 && sb.outboxConflict == 0 {
+		return ""
+	}
+	if sb.outboxConflict > 0 {
+		total := sb.outboxInflight + sb.outboxConflict
+		glyph := sb.styles.StatusOffline.Render("⚠")
+		body := sb.styles.StatusBar.Render(strconv.Itoa(total) + " · ")
+		return glyph + body
+	}
+	glyph := sb.styles.StatusBar.Render("⇅")
+	body := sb.styles.StatusBar.Render(strconv.Itoa(sb.outboxInflight) + " · ")
+	return glyph + body
 }

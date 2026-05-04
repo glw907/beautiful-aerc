@@ -114,3 +114,39 @@ func TestStatusBarSetScrollPctClamps(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusBar_OutboxSegmentHiddenWhenZero(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles)
+	sb = sb.SetCounts(10, 2).SetOutboxDepth(0, 0)
+	out := sb.View(80, 30)
+	if strings.Contains(out, "⇅") || strings.Contains(out, "⚠") {
+		t.Errorf("unexpected outbox glyph in %q", out)
+	}
+}
+
+func TestStatusBar_OutboxPendingRendersArrows(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles)
+	sb = sb.SetCounts(10, 2).SetOutboxDepth(3, 0)
+	out := sb.View(80, 30)
+	if !strings.Contains(out, "⇅3") {
+		t.Errorf("missing ⇅3 in %q", out)
+	}
+	if strings.Contains(out, "⚠") {
+		t.Errorf("unexpected ⚠ in %q", out)
+	}
+}
+
+func TestStatusBar_OutboxConflictWinsOverPending(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles)
+	sb = sb.SetCounts(10, 2).SetOutboxDepth(3, 1)
+	out := sb.View(80, 30)
+	if !strings.Contains(out, "⚠4") {
+		t.Errorf("missing ⚠4 in %q", out)
+	}
+	if strings.Contains(out, "⇅") {
+		t.Errorf("⇅ still present alongside ⚠ in %q", out)
+	}
+}
