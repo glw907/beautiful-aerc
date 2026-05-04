@@ -265,6 +265,19 @@ func TestMovePicker_ViewClosedEmpty(t *testing.T) {
 	}
 }
 
+// BenchmarkMovePickerView measures the cost of Box() — the full list-row
+// build path — on a realistic 7-folder list at 80×24. Run before and
+// after the render cache to confirm allocations dropped.
+func BenchmarkMovePickerView(b *testing.B) {
+	p := newTestPicker()
+	p = p.Open(nil, "", sampleFolders())
+	p = p.SetSize(80, 24)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = p.Box(80, 24)
+	}
+}
+
 func drainBatch(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil

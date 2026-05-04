@@ -31,6 +31,24 @@ type MovePickerPickedMsg struct {
 // MovePickerClosedMsg is emitted when the picker is dismissed without a pick.
 type MovePickerClosedMsg struct{}
 
+// movePickerCache holds the memoised list-row slice and the inputs that
+// determine when it must be rebuilt.
+//
+// Pre-beta escape hatch: MovePicker is an immutable value type, so a cache
+// that lives in the value would be lost on every With*/Open/Update return.
+// Rather than switching to pointer receivers (which would break the Elm
+// immutable-model contract), we heap-allocate one small cache struct at
+// construction time and access it through a pointer. The pointer itself is
+// copied with the value, so every generation of the picker shares the same
+// cache — a deliberate choice: they all render the same logical state, and
+// the dirty flag ensures stale renders are never served.
+type movePickerCache struct {
+	dirty       bool   // true means rows must be rebuilt
+	rows        []string
+	contentW    int // last width the rows were built for
+	visibleRows int // last height-derived row count
+}
+
 // MovePicker is the modal overlay launched by `m` from the account view.
 // App owns open state and overlay composition (mirrors LinkPicker, ADR-0087).
 type MovePicker struct {
@@ -44,6 +62,7 @@ type MovePicker struct {
 	offset  int
 	styles  Styles
 	keys    movePickerKeys
+	cache   *movePickerCache // heap-allocated; shared across value copies
 }
 
 type movePickerKeys struct {
@@ -60,6 +79,7 @@ type movePickerKeys struct {
 func NewMovePicker(styles Styles) MovePicker {
 	return MovePicker{
 		styles: styles,
+		cache:  &movePickerCache{dirty: true},
 		keys: movePickerKeys{
 			Up:        key.NewBinding(key.WithKeys("up")),
 			Down:      key.NewBinding(key.WithKeys("down")),
@@ -89,7 +109,9 @@ func (p MovePicker) Open(uids []mail.UID, src string, folders []FolderEntry) Mov
 	p.filter = ""
 	p.cursor = 0
 	p.offset = 0
-	return p.recompute()
+	p = p.recompute()
+	p.cache.dirty = true
+	return p
 }
 
 func (p MovePicker) Close() MovePicker {
@@ -133,6 +155,7 @@ func (p MovePicker) recompute() MovePicker {
 	}
 	p.cursor = 0
 	p.offset = 0
+	p.cache.dirty = true
 	return p
 }
 
@@ -148,11 +171,13 @@ func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
 	case key.Matches(keyMsg, p.keys.Down):
 		if p.cursor < len(p.matches)-1 {
 			p.cursor++
+			p.cache.dirty = true
 		}
 		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Up):
 		if p.cursor > 0 {
 			p.cursor--
+			p.cache.dirty = true
 		}
 		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Pick):
@@ -220,23 +245,35 @@ func (p MovePicker) Box(w, h int) string {
 
 	maxListRows := movePickerVisibleRows(h)
 
-	rows := p.buildListRows(contentW)
-	if len(rows) > maxListRows {
-		end := p.offset + maxListRows
-		if end > len(rows) {
-			end = len(rows)
+	// Serve from cache when the rendered inputs are unchanged.
+	// Dimension change (contentW, maxListRows) counts as dirty even if the
+	// flag is clear — SetSize doesn't need to touch the flag.
+	c := p.cache
+	if c.dirty || c.contentW != contentW || c.visibleRows != maxListRows {
+		allRows := p.buildListRows(contentW)
+		start, end := p.offset, p.offset+maxListRows
+		if end > len(allRows) {
+			end = len(allRows)
 		}
-		rows = rows[p.offset:end]
-	}
+		if start > end {
+			start = end
+		}
+		visible := allRows[start:end]
 
-	bodyRows := make([]string, maxListRows)
-	for i := 0; i < maxListRows; i++ {
-		if i < len(rows) {
-			bodyRows[i] = padOrTruncate(rows[i], contentW)
-		} else {
-			bodyRows[i] = strings.Repeat(" ", contentW)
+		built := make([]string, maxListRows)
+		for i := 0; i < maxListRows; i++ {
+			if i < len(visible) {
+				built[i] = padOrTruncate(visible[i], contentW)
+			} else {
+				built[i] = strings.Repeat(" ", contentW)
+			}
 		}
+		c.rows = built
+		c.contentW = contentW
+		c.visibleRows = maxListRows
+		c.dirty = false
 	}
+	bodyRows := c.rows
 
 	hint := ""
 	if p.filter != "" {
