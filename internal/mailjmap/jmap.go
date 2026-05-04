@@ -805,6 +805,4 @@ func checkEmailSetUpdated(resp *jmap.Response, callID string) error {
 	return fmt.Errorf("no Email/set response")
 }
 
-// FetchAttachment is not yet implemented; returns nil until Pass 8.6 Task 9.
-func (b *Backend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) { return nil, nil }
 

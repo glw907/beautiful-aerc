@@ -99,6 +99,40 @@ func walkBodyStructure(bp *email.BodyPart) ([]mail.Attachment, map[string]string
 	return atts, parts
 }
 
+// FetchAttachment satisfies mail.Backend. Resolves (uid, partID) to
+// a blobID via the cached partBlobIDs map (issuing one Email/get
+// when the cache is cold), then downloads via downloadBlob.
+func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
+	b.mu.Lock()
+	parts := b.partBlobIDs[uid]
+	dl := b.downloadBlob
+	b.mu.Unlock()
+
+	if parts == nil {
+		// Cold map: populate via Attachments. Discard the metadata
+		// — the caller already has it, and the side-effect of
+		// populating partBlobIDs is what we need.
+		if _, err := b.Attachments(uid); err != nil {
+			return nil, fmt.Errorf("fetch attachment %s/%s: prime: %w", uid, partID, err)
+		}
+		b.mu.Lock()
+		parts = b.partBlobIDs[uid]
+		b.mu.Unlock()
+	}
+	blobID, ok := parts[partID]
+	if !ok {
+		return nil, fmt.Errorf("fetch attachment %s/%s: unknown partID", uid, partID)
+	}
+	if dl == nil {
+		return nil, fmt.Errorf("fetch attachment %s/%s: not connected", uid, partID)
+	}
+	body, err := dl(blobID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch attachment %s/%s: download: %w", uid, partID, err)
+	}
+	return body, nil
+}
+
 // classifyDisposition implements Q1: trust Content-Disposition; when
 // missing, ContentID != "" → inline, else attachment.
 func classifyDisposition(p *email.BodyPart) mail.Disposition {

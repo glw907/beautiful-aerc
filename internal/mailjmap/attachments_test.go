@@ -213,3 +213,92 @@ func TestAttachments_RequestShape(t *testing.T) {
 		}
 	}
 }
+
+// --- FetchAttachment ---
+
+func TestFetchAttachment(t *testing.T) {
+	blobBytes := []byte("fake-pdf-content")
+
+	bodyStructure := &email.BodyPart{
+		PartID:  "",
+		Type:    "multipart/mixed",
+		SubParts: []*email.BodyPart{
+			{
+				PartID:      "1",
+				BlobID:      jmap.ID("blob-pdf"),
+				Type:        "application/pdf",
+				Size:        uint64(len(blobBytes)),
+				Disposition: "attachment",
+				Name:        "report.pdf",
+			},
+		},
+	}
+
+	t.Run("warm_cache", func(t *testing.T) {
+		// Attachments populates partBlobIDs; FetchAttachment should
+		// not issue a second Email/get.
+		fake := &fakeClient{
+			respond: func(_ *jmap.Request) (*jmap.Response, error) {
+				return fakeResponse(&jmap.Invocation{
+					Name: "Email/get",
+					Args: &email.GetResponse{
+						List: []*email.Email{
+							{ID: "uid-1", BodyStructure: bodyStructure},
+						},
+					},
+				}), nil
+			},
+		}
+		b := newTestBackend(fake, "acct-1", nil)
+		b.downloadBlob = func(_ string) ([]byte, error) { return blobBytes, nil }
+
+		// Warm the cache.
+		if _, err := b.Attachments("uid-1"); err != nil {
+			t.Fatalf("Attachments: %v", err)
+		}
+		requestsBefore := len(fake.sent)
+
+		got, err := b.FetchAttachment("uid-1", "1")
+		if err != nil {
+			t.Fatalf("FetchAttachment: %v", err)
+		}
+		if string(got) != string(blobBytes) {
+			t.Errorf("got %q, want %q", got, blobBytes)
+		}
+		// No extra Email/get should have been issued.
+		if len(fake.sent) != requestsBefore {
+			t.Errorf("extra requests after warm FetchAttachment: got %d total, want %d", len(fake.sent), requestsBefore)
+		}
+	})
+
+	t.Run("cold_cache", func(t *testing.T) {
+		// No prior Attachments call: FetchAttachment must issue an
+		// Email/get to prime partBlobIDs before downloading.
+		fake := &fakeClient{
+			respond: func(_ *jmap.Request) (*jmap.Response, error) {
+				return fakeResponse(&jmap.Invocation{
+					Name: "Email/get",
+					Args: &email.GetResponse{
+						List: []*email.Email{
+							{ID: "uid-1", BodyStructure: bodyStructure},
+						},
+					},
+				}), nil
+			},
+		}
+		b := newTestBackend(fake, "acct-1", nil)
+		b.downloadBlob = func(_ string) ([]byte, error) { return blobBytes, nil }
+
+		got, err := b.FetchAttachment("uid-1", "1")
+		if err != nil {
+			t.Fatalf("FetchAttachment cold: %v", err)
+		}
+		if string(got) != string(blobBytes) {
+			t.Errorf("got %q, want %q", got, blobBytes)
+		}
+		// One Email/get must have been issued by the cold-miss path.
+		if len(fake.sent) < 1 {
+			t.Error("expected at least one Email/get request for cold FetchAttachment")
+		}
+	})
+}
