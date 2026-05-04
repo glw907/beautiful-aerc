@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"sync"
 
@@ -43,8 +42,8 @@ type Backend struct {
 	pushClient *jmap.Client // real client for EventSource; nil in unit tests
 	session    *jmap.Session
 	password   string // cached PasswordCmd result; empty when cfg.Password is inline
-	folders     map[string]folderEntry
-	blobIDs     map[mail.UID]string
+	folders    map[string]folderEntry
+	blobIDs    map[mail.UID]string
 	// partBlobIDs caches per-uid (partID → blobID) maps so
 	// FetchAttachment doesn't require an extra Email/get when the
 	// caller has already invoked Attachments.
@@ -134,32 +133,6 @@ const (
 	updatesBuffer = 64
 )
 
-// resolvePassword returns the cleartext password for cfg. Inline
-// Password wins; otherwise PasswordCmd is run via /bin/sh -c and
-// stdout (trimmed) is the password. Returns an error if neither
-// is set or the command fails.
-func resolvePassword(cfg *config.AccountConfig) (string, error) {
-	if cfg.Password != "" {
-		return cfg.Password, nil
-	}
-	if cfg.PasswordCmd == "" {
-		return "", errors.New("account has no password or password-cmd")
-	}
-	cmd := exec.Command("/bin/sh", "-c", cfg.PasswordCmd)
-	out, err := cmd.Output()
-	if err != nil {
-		stderr := ""
-		if ee, ok := err.(*exec.ExitError); ok {
-			stderr = strings.TrimSpace(string(ee.Stderr))
-		}
-		if stderr != "" {
-			return "", fmt.Errorf("password-cmd: %s", stderr)
-		}
-		return "", fmt.Errorf("password-cmd: %v", err)
-	}
-	return strings.TrimRight(string(out), "\n"), nil
-}
-
 // resolvedPassword returns the cached password for b, resolving it on
 // the first call. The cached value is stored under b.mu so reconnects
 // within the session reuse the same credential without re-running the cmd.
@@ -170,7 +143,7 @@ func (b *Backend) resolvedPassword() (string, error) {
 	if cached != "" {
 		return cached, nil
 	}
-	pw, err := resolvePassword(&b.cfg)
+	pw, err := b.cfg.ResolvePassword()
 	if err != nil {
 		return "", err
 	}
@@ -508,15 +481,15 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 
 func translateEmail(e *email.Email) mail.MessageInfo {
 	info := mail.MessageInfo{
-		UID:       mail.UID(e.ID),
-		Subject:   e.Subject,
-		From:      formatFromList(e.From),
-		To:        formatFromList(e.To),
-		Cc:        formatFromList(e.CC),
-		Bcc:       formatFromList(e.BCC),
-		Flags:     translateKeywords(e.Keywords),
-		Size:      uint32(e.Size),
-		ThreadID:  mail.UID(e.ThreadID),
+		UID:      mail.UID(e.ID),
+		Subject:  e.Subject,
+		From:     formatFromList(e.From),
+		To:       formatFromList(e.To),
+		Cc:       formatFromList(e.CC),
+		Bcc:      formatFromList(e.BCC),
+		Flags:    translateKeywords(e.Keywords),
+		Size:     uint32(e.Size),
+		ThreadID: mail.UID(e.ThreadID),
 	}
 	if len(e.InReplyTo) > 0 {
 		info.InReplyTo = mail.UID(e.InReplyTo[0])
@@ -796,5 +769,3 @@ func checkEmailSetUpdated(resp *jmap.Response, callID string) error {
 	}
 	return fmt.Errorf("Email/set: no response for update")
 }
-
-

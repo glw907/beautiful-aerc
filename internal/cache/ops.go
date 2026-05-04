@@ -92,7 +92,6 @@ func (a *Account) QueueOp(ctx context.Context, folder string, msgUID mail.UID, a
 func applyOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 	switch v := args.(type) {
 	case MoveArgs, DestroyArgs:
-		_ = v
 		_, err := tx.Exec(`UPDATE messages SET ui_hide = 1 WHERE id = ?`, msgID)
 		return err
 	case FlagArgs:
@@ -204,7 +203,6 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 // Returns ErrNotConflict if the row is not currently in the conflict
 // state (treat as benign: someone resolved it via another path).
 func (a *Account) RetryOp(ctx context.Context, opID int64) error {
-	var signal bool
 	err := a.tx(ctx, func(tx *sql.Tx) error {
 		var status string
 		if err := tx.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
@@ -221,15 +219,12 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 		if err != nil {
 			return fmt.Errorf("retry: requeue op %d: %v", opID, err)
 		}
-		signal = true
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	if signal {
-		a.signalDrainer()
-	}
+	a.signalDrainer()
 	return nil
 }
 

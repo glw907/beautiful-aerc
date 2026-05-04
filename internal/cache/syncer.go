@@ -121,9 +121,8 @@ func (a *Account) reAnchor(ctx context.Context, folder string) error {
 	})
 }
 
-// ListFolders. Existing rows are updated; new rows are inserted;
-// rows that no longer appear in the backend are removed (CASCADE
-// reaps their messages and outbox entries).
+// Rows that no longer appear in the backend are removed; CASCADE
+// reaps their messages and outbox entries.
 func (a *Account) SyncFolders(ctx context.Context) error {
 	if a.Backend == nil {
 		return fmt.Errorf("cache: no backend")

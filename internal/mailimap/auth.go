@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/emersion/go-sasl"
 	imapclient "github.com/emersion/go-imap/v2/imapclient"
+	"github.com/emersion/go-sasl"
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -136,32 +135,6 @@ func applyKeepalive(c *net.TCPConn) {
 	_ = keepalive.SetTcpKeepaliveInterval(fd, keepAliveInterval)
 }
 
-// resolvePassword returns the cleartext password for cfg. Inline
-// Password wins; otherwise PasswordCmd is run via /bin/sh -c and
-// stdout (trimmed) is the password. Returns an error if neither
-// is set or the command fails.
-func resolvePassword(cfg *config.AccountConfig) (string, error) {
-	if cfg.Password != "" {
-		return cfg.Password, nil
-	}
-	if cfg.PasswordCmd == "" {
-		return "", errors.New("account has no password or password-cmd")
-	}
-	cmd := exec.Command("/bin/sh", "-c", cfg.PasswordCmd)
-	out, err := cmd.Output()
-	if err != nil {
-		stderr := ""
-		if ee, ok := err.(*exec.ExitError); ok {
-			stderr = strings.TrimSpace(string(ee.Stderr))
-		}
-		if stderr != "" {
-			return "", fmt.Errorf("password-cmd: %s", stderr)
-		}
-		return "", fmt.Errorf("password-cmd: %v", err)
-	}
-	return strings.TrimRight(string(out), "\n"), nil
-}
-
 // resolvedPassword returns the cached password for b, resolving it on
 // the first call. The cached value is stored under b.mu so reconnects
 // within the session reuse the same credential without re-running the cmd.
@@ -173,7 +146,7 @@ func resolvePassword(cfg *config.AccountConfig) (string, error) {
 // (Pass 9.6).
 func (b *Backend) resolvedPassword() (string, error) {
 	if b.cfg.Auth == "xoauth2" {
-		return resolvePassword(&b.cfg)
+		return b.cfg.ResolvePassword()
 	}
 	b.mu.Lock()
 	cached := b.password
@@ -181,7 +154,7 @@ func (b *Backend) resolvedPassword() (string, error) {
 	if cached != "" {
 		return cached, nil
 	}
-	pw, err := resolvePassword(&b.cfg)
+	pw, err := b.cfg.ResolvePassword()
 	if err != nil {
 		return "", err
 	}

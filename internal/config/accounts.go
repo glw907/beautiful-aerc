@@ -4,8 +4,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,6 +15,29 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-message/mail"
 )
+
+// ResolvePassword returns the cleartext password for c. Inline
+// Password wins; otherwise PasswordCmd is run via /bin/sh -c and
+// stdout (trimmed of trailing newlines) is the password.
+func (c *AccountConfig) ResolvePassword() (string, error) {
+	if c.Password != "" {
+		return c.Password, nil
+	}
+	if c.PasswordCmd == "" {
+		return "", errors.New("account has no password or password-cmd")
+	}
+	out, err := exec.Command("/bin/sh", "-c", c.PasswordCmd).Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			if stderr := strings.TrimSpace(string(ee.Stderr)); stderr != "" {
+				return "", fmt.Errorf("password-cmd: %s", stderr)
+			}
+		}
+		return "", fmt.Errorf("password-cmd: %v", err)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
 
 // AccountConfig holds the configuration for a single email account.
 type AccountConfig struct {
