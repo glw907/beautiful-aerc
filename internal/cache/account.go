@@ -36,6 +36,8 @@ type Account struct {
 	// maxSize is the body-cache size cap in bytes. 0 disables. When an insert
 	// would push total over maxSize, evict by messages.sent_at ASC until under cap.
 	maxSize int64
+	// maxAttachmentSize is the attachment-bytes-cache size cap. 0 disables.
+	maxAttachmentSize int64
 
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
@@ -82,14 +84,18 @@ type CacheEvent struct {
 	Err     string // populated for conflict/failed
 }
 
-// Config tunes per-account cache behavior. Currently the only knob
-// is the body-cache size backstop; future fields cover sync-on-open,
-// drainer behavior, etc. The zero Config (MaxSize=0) disables the
-// size backstop — useful for tests and for users who want no cap.
+// Config tunes per-account cache behavior. Currently the only knobs
+// are the body-cache and attachment-cache size backstops; future
+// fields cover sync-on-open, drainer behavior, etc. The zero Config
+// (all zeroes) disables the size backstops — useful for tests and
+// for users who want no cap.
 type Config struct {
 	// MaxSize is the body-cache size cap in bytes. 0 disables.
 	// Default 2GB when populated from [cache] in config.toml.
 	MaxSize int64
+	// MaxAttachmentSize is the attachment-bytes-cache size cap in
+	// bytes. 0 disables. Tracked separately from MaxSize.
+	MaxAttachmentSize int64
 }
 
 // DBPath returns the on-disk SQLite path for accountName under dir.
@@ -159,7 +165,8 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		db:            db,
 		dir:           acctDir,
 		name:          accountName,
-		maxSize:       cfg.MaxSize,
+		maxSize:           cfg.MaxSize,
+		maxAttachmentSize: cfg.MaxAttachmentSize,
 		events:        make(chan CacheEvent, 32),
 		drainSignal:   make(chan struct{}, 1),
 		stop:          make(chan struct{}),

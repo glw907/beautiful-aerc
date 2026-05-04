@@ -399,3 +399,19 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenThreadsAttachmentMax(t *testing.T) {
+	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
+	ct := &fakeChangeTracker{}
+	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxSize: 100, MaxAttachmentSize: 200})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	if a.maxSize != 100 {
+		t.Errorf("maxSize = %d, want 100", a.maxSize)
+	}
+	if a.maxAttachmentSize != 200 {
+		t.Errorf("maxAttachmentSize = %d, want 200", a.maxAttachmentSize)
+	}
+}
