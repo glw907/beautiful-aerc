@@ -61,20 +61,8 @@ func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 		MIMEType:    mt,
 		Size:        bs.SizeBytes,
 		ContentID:   strings.Trim(bs.ContentID, "<>"),
-		Disposition: classifyDisposition(bs),
+		Disposition: mail.ClassifyDisposition(bs.Disposition, bs.ContentID),
 	}}
-}
-
-// classifyDisposition implements Q1: trust Content-Disposition;
-// when missing, ContentID != "" → inline, else attachment.
-func classifyDisposition(bs BodyStructure) mail.Disposition {
-	if d, err := mail.ParseDisposition(bs.Disposition); err == nil {
-		return d
-	}
-	if strings.TrimSpace(bs.ContentID) != "" {
-		return mail.DispInline
-	}
-	return mail.DispAttachment
 }
 
 // FetchAttachment satisfies mail.Backend. Issues UID FETCH BODY[<part>]

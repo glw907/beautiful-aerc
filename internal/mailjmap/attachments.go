@@ -14,14 +14,14 @@ import (
 )
 
 // attachmentProperties is the Email/get property set for attachment
-// metadata. bodyStructure carries every part with disposition + cid;
-// attachments is the server-precomputed non-body subset, useful as a
-// hint but not authoritative for inline-vs-attachment classification.
-var attachmentProperties = []string{"id", "bodyStructure", "attachments"}
+// metadata. bodyStructure carries every part with disposition + cid,
+// which is enough to classify inline-vs-attachment ourselves without
+// the server's precomputed `attachments` subset.
+var attachmentProperties = []string{"id", "bodyStructure"}
 
-// Attachments satisfies mail.Backend. Issues one Email/get with
-// bodyStructure + attachments, walks the part tree, and returns the
-// non-body parts. Side effect: populates b.partBlobIDs[uid].
+// Attachments satisfies mail.Backend. Issues one Email/get for
+// bodyStructure, walks the part tree, and returns the non-body
+// parts. Side effect: populates b.partBlobIDs[uid].
 func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
 	b.mu.Lock()
 	accountID := b.session.PrimaryAccounts[jmapmail.URI]
@@ -86,7 +86,7 @@ func walkBodyStructure(bp *email.BodyPart) ([]mail.Attachment, map[string]string
 			MIMEType:    mt,
 			Size:        uint32(p.Size),
 			ContentID:   strings.Trim(p.CID, "<>"),
-			Disposition: classifyDisposition(p),
+			Disposition: mail.ClassifyDisposition(p.Disposition, p.CID),
 		})
 	}
 	if len(bp.SubParts) > 0 {
@@ -133,14 +133,3 @@ func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	return body, nil
 }
 
-// classifyDisposition implements Q1: trust Content-Disposition; when
-// missing, ContentID != "" → inline, else attachment.
-func classifyDisposition(p *email.BodyPart) mail.Disposition {
-	if d, err := mail.ParseDisposition(p.Disposition); err == nil {
-		return d
-	}
-	if strings.TrimSpace(p.CID) != "" {
-		return mail.DispInline
-	}
-	return mail.DispAttachment
-}

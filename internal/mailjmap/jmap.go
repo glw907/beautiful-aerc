@@ -461,7 +461,8 @@ var headerProperties = []string{
 
 // FetchHeaders satisfies mail.Backend. It issues a single Email/get
 // request for the supplied UIDs and translates each response email
-// into mail.MessageInfo. BlobIDs are cached in b.blobIDs for Task 12.
+// into mail.MessageInfo. BlobIDs are cached in b.blobIDs so FetchBody
+// can download without a second Email/get.
 func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil

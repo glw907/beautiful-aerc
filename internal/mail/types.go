@@ -99,6 +99,20 @@ func ParseDisposition(s string) (Disposition, error) {
 	}
 }
 
+// ClassifyDisposition resolves a MIME part's disposition from the
+// Content-Disposition header value when present, falling back to
+// ContentID-presence as inline, then to attachment as the default.
+// Both backends call this at the protocol→mail boundary.
+func ClassifyDisposition(rawDisposition, contentID string) Disposition {
+	if d, err := ParseDisposition(rawDisposition); err == nil {
+		return d
+	}
+	if strings.TrimSpace(contentID) != "" {
+		return DispInline
+	}
+	return DispAttachment
+}
+
 // Attachment carries metadata for a non-body MIME part. PartID is
 // protocol-native (JMAP partId, IMAP section "2", "2.1") and is
 // opaque to consumers — pass it back to FetchAttachment unchanged.
