@@ -26,7 +26,7 @@
                                │  I      inbox    D      drafts    S      sent          │                               
                                │  A      archive    X      spam    T      trash         │                               
                                │                                                        │                               
-                               │  Enter  open    ?  close                               │                               
+                               │  Enter  open    Q  outbox    !  conflicts    ?  close  │                               
                                │                                                        │                               
                                ╰────────────────────────────────────────────────────────╯                               
                                                                                                                         

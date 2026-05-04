@@ -144,9 +144,11 @@ var accountGroups = []bindingGroup{
 }
 
 // accountBottomHints is the trailing line under the groups in the
-// account context: "Enter open    ?  close".
+// account context: "Enter open    Q outbox    ! conflicts    ? close".
 var accountBottomHints = []bindingRow{
 	{"Enter", "open", true},
+	{"Q", "outbox", true},
+	{"!", "conflicts", true},
 	{"?", "close", true},
 }
 
@@ -186,6 +188,8 @@ var viewerGroups = []bindingGroup{
 // "Tab link picker    q  close    ?  close".
 var viewerBottomHints = []bindingRow{
 	{"Tab", "link picker", true},
+	{"Q", "outbox", true},
+	{"!", "conflicts", true},
 	{"q", "close", true},
 	{"?", "close", true},
 }

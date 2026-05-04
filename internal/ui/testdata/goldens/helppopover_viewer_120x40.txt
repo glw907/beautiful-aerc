@@ -12,17 +12,17 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                               ╭─ Message Viewer ───────────────────────────────────────╮                               
-                               │                                                        │                               
-                               │  Navigate            Triage            Reply           │                               
-                               │  j/k    scroll       d      delete     r      reply    │                               
-                               │  g/G    top/bot      a      archive    R      all      │                               
-                               │  ␣/b    page d/u     s      star       f      forward  │                               
-                               │  1-9    open link    u      undo       c      compose  │                               
-                               │                                                        │                               
-                               │  Tab  link picker    q  close    ?  close              │                               
-                               │                                                        │                               
-                               ╰────────────────────────────────────────────────────────╯                               
+                      ╭─ Message Viewer ────────────────────────────────────────────────────────╮                       
+                      │                                                                         │                       
+                      │  Navigate            Triage            Reply                            │                       
+                      │  j/k    scroll       d      delete     r      reply                     │                       
+                      │  g/G    top/bot      a      archive    R      all                       │                       
+                      │  ␣/b    page d/u     s      star       f      forward                   │                       
+                      │  1-9    open link    u      undo       c      compose                   │                       
+                      │                                                                         │                       
+                      │  Tab  link picker    Q  outbox    !  conflicts    q  close    ?  close  │                       
+                      │                                                                         │                       
+                      ╰─────────────────────────────────────────────────────────────────────────╯                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
