@@ -4,6 +4,8 @@ package cache
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -131,5 +133,119 @@ func TestRevertOptimistic_SendUnsupported(t *testing.T) {
 	defer tx.Rollback()
 	if err := revertOptimisticTx(tx, 1, SendArgs{}); err == nil {
 		t.Errorf("expected error for SendArgs revert")
+	}
+}
+
+func TestRetryOp_ResetsAttemptsAndStatus(t *testing.T) {
+	a := openTestAccount(t)
+	opID, _ := seedConflictRow(t, a, "r1", FlagArgs{Flag: mail.FlagSeen, Set: true})
+	a.db.Exec(`UPDATE outbox SET attempts = 7, next_eligible_at = ?, error = 'x' WHERE id = ?`,
+		time.Now().Add(time.Hour).UnixNano(), opID)
+
+	if err := a.RetryOp(context.Background(), opID); err != nil {
+		t.Fatalf("RetryOp: %v", err)
+	}
+
+	var status string
+	var attempts int
+	var nextAt sql.NullInt64
+	var errStr string
+	if err := a.db.QueryRow(`SELECT status, attempts, next_eligible_at, error FROM outbox WHERE id = ?`,
+		opID).Scan(&status, &attempts, &nextAt, &errStr); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if OpStatus(status) != OpPending {
+		t.Errorf("status = %q, want pending", status)
+	}
+	if attempts != 0 {
+		t.Errorf("attempts = %d, want 0", attempts)
+	}
+	if nextAt.Valid {
+		t.Errorf("next_eligible_at not cleared: %v", nextAt)
+	}
+	if errStr != "" {
+		t.Errorf("error not cleared: %q", errStr)
+	}
+}
+
+func TestRetryOp_RejectsNonConflict(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{{UID: "n1", Subject: "x"}})
+	opID, _ := a.QueueOp(ctx, "Inbox", "n1", FlagArgs{Flag: mail.FlagSeen, Set: true})
+	// op is in OpPending, not OpConflict.
+
+	err := a.RetryOp(ctx, opID)
+	if !errors.Is(err, ErrNotConflict) {
+		t.Errorf("RetryOp on pending row: err = %v, want ErrNotConflict", err)
+	}
+}
+
+func TestRetryOp_SignalsDrainer(t *testing.T) {
+	a := openTestAccount(t)
+	opID, _ := seedConflictRow(t, a, "s1", FlagArgs{Flag: mail.FlagSeen, Set: true})
+
+	// Drain the signal channel first so we know any signal we observe came from RetryOp.
+	select {
+	case <-a.drainSignal:
+	default:
+	}
+
+	if err := a.RetryOp(context.Background(), opID); err != nil {
+		t.Fatalf("RetryOp: %v", err)
+	}
+	select {
+	case <-a.drainSignal:
+		// good
+	case <-time.After(100 * time.Millisecond):
+		t.Errorf("RetryOp did not signal drainer")
+	}
+}
+
+func TestDiscardOp_RevertsAndDeletes(t *testing.T) {
+	a := openTestAccount(t)
+	opID, msgID := seedConflictRow(t, a, "x1", FlagArgs{Flag: mail.FlagFlagged, Set: true})
+
+	if err := a.DiscardOp(context.Background(), opID); err != nil {
+		t.Fatalf("DiscardOp: %v", err)
+	}
+
+	// Outbox row gone.
+	var n int
+	a.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE id = ?`, opID).Scan(&n)
+	if n != 0 {
+		t.Errorf("outbox row not deleted")
+	}
+	// Optimistic flip reverted.
+	var ui uint32
+	a.db.QueryRow(`SELECT ui_flags FROM messages WHERE id = ?`, msgID).Scan(&ui)
+	if mail.Flag(ui)&mail.FlagFlagged != 0 {
+		t.Errorf("ui_flags still flagged after discard")
+	}
+}
+
+func TestDiscardOp_Move_Unhides(t *testing.T) {
+	a := openTestAccount(t)
+	opID, msgID := seedConflictRow(t, a, "x2", MoveArgs{Dest: "Archive"})
+
+	if err := a.DiscardOp(context.Background(), opID); err != nil {
+		t.Fatalf("DiscardOp: %v", err)
+	}
+	var hide int
+	a.db.QueryRow(`SELECT ui_hide FROM messages WHERE id = ?`, msgID).Scan(&hide)
+	if hide != 0 {
+		t.Errorf("ui_hide = %d after discard, want 0", hide)
+	}
+}
+
+func TestDiscardOp_RejectsNonConflict(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{{UID: "x3", Subject: "x"}})
+	opID, _ := a.QueueOp(ctx, "Inbox", "x3", FlagArgs{Flag: mail.FlagSeen, Set: true})
+
+	err := a.DiscardOp(ctx, opID)
+	if !errors.Is(err, ErrNotConflict) {
+		t.Errorf("DiscardOp on pending row: err = %v, want ErrNotConflict", err)
 	}
 }

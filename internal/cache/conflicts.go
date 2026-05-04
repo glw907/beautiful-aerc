@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -37,4 +38,77 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 		return fmt.Errorf("revertOptimisticTx: %T not supported", args)
 	}
 	return fmt.Errorf("revertOptimisticTx: unknown args %T", args)
+}
+
+// RetryOp transitions a conflicted op back to pending and signals
+// the drainer. attempts is reset to 0 — user-initiated retry grants
+// a fresh budget so an auth-failure with attempts >= max doesn't
+// re-enter conflict on the very next failure.
+//
+// Returns ErrNotConflict if the row is not currently in the conflict
+// state (treat as benign: someone resolved it via another path).
+func (a *Account) RetryOp(ctx context.Context, opID int64) error {
+	var signal bool
+	err := a.tx(ctx, func(tx *sql.Tx) error {
+		var status string
+		if err := tx.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
+			return fmt.Errorf("retry: read status: %w", err)
+		}
+		if OpStatus(status) != OpConflict {
+			return ErrNotConflict
+		}
+		_, err := tx.Exec(`
+            UPDATE outbox
+            SET status = ?, attempts = 0, next_eligible_at = NULL, error = ''
+            WHERE id = ?`,
+			OpPending, opID)
+		if err != nil {
+			return fmt.Errorf("retry: update: %w", err)
+		}
+		signal = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if signal {
+		a.signalDrainer()
+	}
+	return nil
+}
+
+// DiscardOp reverts the optimistic UI flip and deletes the outbox
+// row, all in one transaction. The conflicted op never reached the
+// server, so no remote reversal is needed — only local cleanup.
+//
+// Returns ErrNotConflict if the row is not currently in conflict.
+// Send/Append op kinds (Pass 9) cannot be discarded via this path
+// because revertOptimisticTx has no semantics for them.
+func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
+	return a.tx(ctx, func(tx *sql.Tx) error {
+		var status, kind, argsJSON string
+		var msgID sql.NullInt64
+		err := tx.QueryRow(
+			`SELECT status, kind, args, message FROM outbox WHERE id = ?`, opID).
+			Scan(&status, &kind, &argsJSON, &msgID)
+		if err != nil {
+			return fmt.Errorf("discard: read row: %w", err)
+		}
+		if OpStatus(status) != OpConflict {
+			return ErrNotConflict
+		}
+		args, err := decodeArgs(kind, argsJSON)
+		if err != nil {
+			return fmt.Errorf("discard: decode args: %w", err)
+		}
+		if msgID.Valid {
+			if err := revertOptimisticTx(tx, msgID.Int64, args); err != nil {
+				return fmt.Errorf("discard: revert: %w", err)
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM outbox WHERE id = ?`, opID); err != nil {
+			return fmt.Errorf("discard: delete: %w", err)
+		}
+		return nil
+	})
 }
