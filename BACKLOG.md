@@ -60,6 +60,9 @@
 
 ## Medium
 
+- [ ] **#30** Render cache for `Sidebar.View()` `#improvement` `#poplar` *(2026-05-03)*
+  `Sidebar.View()` rebuilds the full folder list on every `tea.Msg` (60–80 lipgloss renders per frame at typical folder counts). `AccountTab.View()` runs on every Msg, so during spinner-active periods the rebuild fires continuously. Apply the same `*cache` pointer + dirty flag pattern as `movePickerCache` and `helpPopoverCache` (Pass 8.5c). Cache key: dirty flag set by `SetFolders` / `SetSize` / `SetLayout` / `MoveUp` / `MoveDown` / `MoveToTop` / `MoveToBottom` / `SelectByCanonical`. Out of scope for Pass 8.5c (limited to MovePicker + HelpPopover); flagged by `/simplify` efficiency reviewer.
+
 - [ ] **#28** CONDSTORE-aware IMAP ChangeTracker `#improvement` `#poplar` *(2026-05-02)* — **scheduled: post-8.4c, after profiling**
   Current `internal/mailimap/changes.go` is scan-and-diff (`UID SEARCH ALL`, diff against prior maxuid encoded in the SyncToken). Modified UIDs are always nil, so flag-only changes round-trip through `Backend.FetchHeaders` for the affected set. Replace with `UID FETCH 1:* CHANGEDSINCE <modseq>` per RFC 7162, plus the CONDSTORE assertion at `finishConnect` (NOMODSEQ → fail Connect with a clear error). SyncToken is forward-compatible: bytes 0-3 reserved for uidvalidity, bytes 4-11 hold maxuid; add a third field (modseq) by re-laying the 12-byte token. Wire VANISHED detection so Removed UIDs aren't best-effort. ADR-0120.
 
