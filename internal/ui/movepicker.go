@@ -43,10 +43,10 @@ type MovePickerClosedMsg struct{}
 // cache — a deliberate choice: they all render the same logical state, and
 // the dirty flag ensures stale renders are never served.
 type movePickerCache struct {
-	dirty       bool   // true means rows must be rebuilt
+	dirty       bool
 	rows        []string
-	contentW    int // last width the rows were built for
-	visibleRows int // last height-derived row count
+	contentW    int
+	visibleRows int
 }
 
 // MovePicker is the modal overlay launched by `m` from the account view.
@@ -261,11 +261,11 @@ func (p MovePicker) Box(w, h int) string {
 
 		built := make([]string, maxListRows)
 		for i := 0; i < maxListRows; i++ {
+			line := ""
 			if i < len(visible) {
-				built[i] = padOrTruncate(visible[i], contentW)
-			} else {
-				built[i] = strings.Repeat(" ", contentW)
+				line = visible[i]
 			}
+			built[i] = padOrTruncate(line, contentW)
 		}
 		c.rows = built
 		c.contentW = contentW

@@ -134,10 +134,6 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 		sw := layout.Sidebar
 		folderHeight := max(1, m.height-sidebarHeaderRows-searchShelfRows)
-		// Re-build the SidebarColumn children with their new sizes, then
-		// record the column dims. The verbose-explicit path: each child is
-		// updated via its pointer-receiver method on a local copy, then
-		// re-wrapped through With*, and SetSize records the column dims.
 		sb := m.sidebarColumn.Sidebar()
 		sb.SetLayout(layout)
 		sb.SetSize(sw, folderHeight)
@@ -324,8 +320,7 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	// Route to SidebarSearch when we're in Typing state — it owns
 	// the input routing for this modal slice, except for Enter and
 	// Esc which transition state.
-	if m.sidebarColumn.SidebarSearch().State() == SearchTyping {
-		ss := m.sidebarColumn.SidebarSearch()
+	if ss := m.sidebarColumn.SidebarSearch(); ss.State() == SearchTyping {
 		switch {
 		case key.Matches(msg, m.keys.SearchCommit):
 			ss.Commit()
@@ -345,16 +340,15 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.OpenSearch):
-		st := m.sidebarColumn.SidebarSearch().State()
-		if st == SearchIdle || st == SearchActive {
-			ss := m.sidebarColumn.SidebarSearch()
+		ss := m.sidebarColumn.SidebarSearch()
+		if st := ss.State(); st == SearchIdle || st == SearchActive {
 			ss.Activate()
 			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			return m, nil
 		}
 	case key.Matches(msg, m.keys.ClearSearch):
-		if m.sidebarColumn.SidebarSearch().State() == SearchActive {
-			ss := m.sidebarColumn.SidebarSearch()
+		ss := m.sidebarColumn.SidebarSearch()
+		if ss.State() == SearchActive {
 			ss.Clear()
 			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			m.msglist.ClearFilter()
@@ -492,10 +486,10 @@ func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 // clearSearchIfActive clears the shelf and the filter if the shelf
 // is in any non-Idle state. No-op when already idle.
 func (m AccountTab) clearSearchIfActive() AccountTab {
-	if m.sidebarColumn.SidebarSearch().State() == SearchIdle {
+	ss := m.sidebarColumn.SidebarSearch()
+	if ss.State() == SearchIdle {
 		return m
 	}
-	ss := m.sidebarColumn.SidebarSearch()
 	ss.Clear()
 	m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 	m.msglist.ClearFilter()

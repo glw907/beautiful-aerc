@@ -49,14 +49,9 @@ func (s ModalShell) Height() int { return s.height }
 func (s ModalShell) Box(title string, bodyRows []string, footerRows []string, contentW int) string {
 	boxW := contentW + 2
 
-	// Top border: ┌─ title ─┐
-	// Overhead: "┌─" (2) + " " (before title, already in caller's title) +
-	// "─┐" (2) = 4. Title is wrapped in spaces by convention: " Title ".
-	// We compute remaining dashes after "┌─" + title + "┐".
+	// Top border = "┌─" + " title " + dashes + "┐". Fixed overhead is 3
+	// cells ("┌─" + "┐"); remaining dashes fill to boxW.
 	titleSeg := " " + title + " "
-	// Overhead for the top border line: "┌─" (2 cells) + "┐" (1 cell) = 3.
-	// Remaining dashes = boxW - 3 - lipgloss.Width(titleSeg).
-	// Truncate title when it would leave no room for dashes.
 	maxTitleW := boxW - 3
 	if maxTitleW < 0 {
 		maxTitleW = 0

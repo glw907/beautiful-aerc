@@ -204,7 +204,7 @@ func (p LinkPicker) Box(w, h int) string {
 	for i := 0; i < visibleRows; i++ {
 		row := p.offset + i
 		if row >= len(p.links) {
-			bodyRows[i] = strings.Repeat(" ", contentW)
+			bodyRows[i] = padOrTruncate("", contentW)
 			continue
 		}
 		bodyRows[i] = p.formatRow(row, maxIndexDigits, urlW, contentW)
@@ -232,11 +232,7 @@ func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 	if displayCells(url) > urlW {
 		url = displayTruncate(url, urlW)
 	}
-	body := fmt.Sprintf("%s[%d] %s", pad, row+1, url)
-	bw := lipgloss.Width(body)
-	if bw < contentW {
-		body += strings.Repeat(" ", contentW-bw)
-	}
+	body := padOrTruncate(fmt.Sprintf("%s[%d] %s", pad, row+1, url), contentW)
 	if row == p.cursor {
 		return p.styles.MsgListCursor.Render(body)
 	}
@@ -264,10 +260,8 @@ func (p LinkPicker) previewLines(width int) []string {
 	return []string{wrapped[0], row2}
 }
 
-// linkPickerWrap honors width for the preview footer. URLs are
-// unbreakable tokens, so Wordwrap can't split them — Hardwrap forces
-// the residue to honor width. Mirrors content.wrap; cross-package
-// duplication is acceptable at two callers.
+// linkPickerWrap wraps s to width. URLs are unbreakable tokens, so
+// Wordwrap alone can't split them — Hardwrap forces the residue.
 func linkPickerWrap(s string, width int) string {
 	if width < 1 {
 		width = 1
