@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
@@ -1009,5 +1010,73 @@ func TestApp_ConfirmEscClosesWithoutEmit(t *testing.T) {
 	}
 	if app2.IsConfirmOpen() {
 		t.Error("confirm should be closed after draining ConfirmModalClosedMsg")
+	}
+}
+
+func TestApp_OfflineBannerWithQueuedOps(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+	app.lastOutboxDepth = cache.OutboxDepth{Pending: 2}
+
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnOffline,
+	}})
+	if app.lastErr.Op != "connection" {
+		t.Errorf("expected offline banner, got Op=%q", app.lastErr.Op)
+	}
+	if !app.offlineHinted {
+		t.Errorf("offlineHinted not set")
+	}
+}
+
+func TestApp_OfflineNoBannerWhenOutboxEmpty(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnOffline,
+	}})
+	if app.lastErr.Op == "connection" {
+		t.Errorf("offline banner emitted on empty outbox")
+	}
+	if app.offlineHinted {
+		t.Errorf("offlineHinted set on empty outbox")
+	}
+}
+
+func TestApp_ConnectedClearsOfflineHinted(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+	app.offlineHinted = true
+
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnConnected,
+	}})
+	if app.offlineHinted {
+		t.Errorf("offlineHinted not cleared on Connected")
+	}
+}
+
+func TestApp_OfflineBannerLatchedOncePerOfflineEpisode(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+	app.lastOutboxDepth = cache.OutboxDepth{Pending: 1}
+
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnOffline,
+	}})
+	// User dismisses by writing a different lastErr.
+	app.lastErr = ErrorMsg{}
+	// Second offline transition without a Connected in between: should not re-emit.
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:      mail.UpdateConnState,
+		ConnState: mail.ConnOffline,
+	}})
+	if app.lastErr.Op == "connection" {
+		t.Errorf("offline banner re-emitted without intervening Connected")
 	}
 }

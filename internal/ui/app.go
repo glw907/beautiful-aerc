@@ -302,10 +302,21 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			switch msg.update.ConnState {
 			case mail.ConnConnected:
 				cs = Connected
+				m.offlineHinted = false
 			case mail.ConnReconnecting:
 				cs = Reconnecting
 			default:
 				cs = Offline
+				if !m.offlineHinted {
+					d := m.lastOutboxDepth
+					if d.Pending+d.Executing+d.Failed+d.Conflict > 0 {
+						m.lastErr = ErrorMsg{
+							Op:  "connection",
+							Err: errors.New("offline — queued ops will sync on reconnect"),
+						}
+						m.offlineHinted = true
+					}
+				}
 			}
 			m.statusBar = m.statusBar.SetConnectionState(cs)
 		}
