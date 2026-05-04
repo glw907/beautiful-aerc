@@ -11,9 +11,6 @@ import (
 	"github.com/glw907/poplar/internal/cache"
 )
 
-// OpenConflictOverlayMsg asks App to open the conflict overlay.
-type OpenConflictOverlayMsg struct{}
-
 // RetryConflictMsg / DiscardConflictMsg are emitted by the overlay
 // in response to r / d. App handles them by issuing the cache cmd.
 type RetryConflictMsg struct{ OpID int64 }
@@ -90,10 +87,7 @@ func (c ConflictOverlay) Close() ConflictOverlay {
 func (c ConflictOverlay) SetRows(rows []cache.ConflictRow) ConflictOverlay {
 	c.rows = rows
 	if c.cursor >= len(rows) {
-		c.cursor = 0
-		if len(rows) > 0 {
-			c.cursor = len(rows) - 1
-		}
+		c.cursor = max(0, len(rows)-1)
 	}
 	c.cache.dirty = true
 	return c

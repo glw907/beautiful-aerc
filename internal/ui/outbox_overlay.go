@@ -11,10 +11,6 @@ import (
 	"github.com/glw907/poplar/internal/cache"
 )
 
-// OpenOutboxMsg asks App to open the outbox overlay. Emitted by the
-// global key handler; the App routes the matching cache reload.
-type OpenOutboxMsg struct{}
-
 // OpenConflictsFromOutboxMsg is emitted by the outbox overlay when
 // the user presses ! to transition to the conflict overlay.
 type OpenConflictsFromOutboxMsg struct{}

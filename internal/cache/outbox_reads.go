@@ -75,15 +75,20 @@ func (a *Account) OutboxDepth(ctx context.Context) (OutboxDepth, error) {
 
 // OutboxSummary returns one OutboxGroup per (kind, folder, status)
 // combination. Result order: status (executing → pending → failed →
-// conflict), then kind ASC, then folder ASC. Folder is the canonical
-// folder name from the folders table.
+// conflict), then kind ASC, then folder ASC. For move ops Folder is
+// the destination (extracted from args.Dest); for other op kinds the
+// folder column is empty since the UI does not surface a per-row
+// source folder for them.
 func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {
 	const q = `
-        SELECT o.kind, COALESCE(f.name, ''), o.status, COUNT(*),
+        SELECT o.kind,
+               CASE WHEN o.kind = 'move'
+                    THEN COALESCE(json_extract(o.args, '$.Dest'), '')
+                    ELSE '' END AS folder,
+               o.status, COUNT(*),
                MIN(o.next_eligible_at)
         FROM outbox o
-        LEFT JOIN folders f ON f.id = o.folder
-        GROUP BY o.kind, o.folder, o.status
+        GROUP BY o.kind, folder, o.status
         ORDER BY
           CASE o.status
             WHEN 'executing' THEN 0
@@ -93,7 +98,7 @@ func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {
             ELSE 4
           END,
           o.kind,
-          COALESCE(f.name, '')`
+          folder`
 	rows, err := a.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("outbox summary: %w", err)

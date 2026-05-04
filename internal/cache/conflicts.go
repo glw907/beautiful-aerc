@@ -22,7 +22,6 @@ var ErrNotConflict = errors.New("cache: op is not in conflict state")
 func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 	switch v := args.(type) {
 	case MoveArgs, DestroyArgs:
-		_ = v
 		_, err := tx.Exec(`UPDATE messages SET ui_hide = 0 WHERE id = ?`, msgID)
 		return err
 	case FlagArgs:
