@@ -26,6 +26,7 @@ func surfaceFields(s IconSet) map[string]string {
 		"FlagFlagged":  s.FlagFlagged,
 		"FlagAnswered": s.FlagAnswered,
 		"FlagUnread":   s.FlagUnread,
+		"Attachment":   s.Attachment,
 	}
 }
 

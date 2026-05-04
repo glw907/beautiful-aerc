@@ -25,6 +25,7 @@ type IconSet struct {
 	FlagFlagged  string
 	FlagAnswered string
 	FlagUnread   string
+	Attachment   string
 }
 
 // SimpleIcons is the Unicode-Narrow iconography used when no Nerd Font
@@ -44,6 +45,7 @@ var SimpleIcons = IconSet{
 	FlagFlagged:  "⚑", // U+2691
 	FlagAnswered: "↩", // U+21A9
 	FlagUnread:   "●", // U+25CF
+	Attachment:   "§", // U+00A7
 }
 
 // FancyIcons is the Nerd Font SPUA-A iconography used when a Nerd Font
@@ -62,4 +64,5 @@ var FancyIcons = IconSet{
 	FlagFlagged:  "\U000F023B", // nf-md-flag
 	FlagAnswered: "\U000F045A", // nf-md-send (placeholder for answered; matches legacy mlIconAnswered)
 	FlagUnread:   "\U000F01EE", // nf-md-mailbox (matches legacy mlIconUnread)
+	Attachment:   "\U000F0184", // nf-md-paperclip
 }
