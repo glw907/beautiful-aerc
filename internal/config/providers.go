@@ -76,9 +76,3 @@ var Providers = map[string]Provider{
 		InsecureTLS: true,
 	},
 }
-
-// LookupProvider returns the Provider for key and true if known.
-func LookupProvider(key string) (Provider, bool) {
-	p, ok := Providers[key]
-	return p, ok
-}

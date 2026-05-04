@@ -54,13 +54,13 @@ func TestParseEvictDuration(t *testing.T) {
 		{"", 0, true},
 	}
 	for _, c := range cases {
-		got, err := parseEvictDuration(c.in)
+		got, err := parseDuration(c.in)
 		if (err != nil) != c.wantErr {
-			t.Errorf("parseEvictDuration(%q) err=%v, wantErr=%v", c.in, err, c.wantErr)
+			t.Errorf("parseDuration(%q) err=%v, wantErr=%v", c.in, err, c.wantErr)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("parseEvictDuration(%q) = %v, want %v", c.in, got, c.want)
+			t.Errorf("parseDuration(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }

@@ -155,7 +155,7 @@ func newCacheEvictCmd() *cobra.Command {
 			if olderThan == "" {
 				return fmt.Errorf("--older-than is required (e.g. 30d, 2w, 24h)")
 			}
-			dur, err := parseEvictDuration(olderThan)
+			dur, err := parseDuration(olderThan)
 			if err != nil {
 				return err
 			}
@@ -168,10 +168,10 @@ func newCacheEvictCmd() *cobra.Command {
 	return c
 }
 
-// parseEvictDuration extends time.ParseDuration with day (d) and
+// parseDuration extends time.ParseDuration with day (d) and
 // week (w) suffixes since cache eviction operates at coarser
 // granularity than time.ParseDuration's hour ceiling.
-func parseEvictDuration(s string) (time.Duration, error) {
+func parseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("empty duration")

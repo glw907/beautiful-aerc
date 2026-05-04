@@ -55,8 +55,8 @@ func TestOutlookPresetShape(t *testing.T) {
 	}
 }
 
-func TestLookupProvider_Gmail(t *testing.T) {
-	p, ok := LookupProvider("gmail")
+func TestProviders_Gmail(t *testing.T) {
+	p, ok := Providers["gmail"]
 	if !ok {
 		t.Fatal("gmail preset missing")
 	}
@@ -90,7 +90,7 @@ func TestProviderRegistryLookup(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p, ok := LookupProvider(tc.key)
+			p, ok := Providers[tc.key]
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}

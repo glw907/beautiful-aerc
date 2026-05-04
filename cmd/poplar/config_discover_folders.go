@@ -55,7 +55,7 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 			}
 			classified := mail.Classify(folders)
 
-			existing, err := config.ExistingFolderKeys(data)
+			existing, err := config.FolderKeys(data)
 			if err != nil {
 				return fmt.Errorf("scan existing [ui.folders.*] keys: %v", err)
 			}

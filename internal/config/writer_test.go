@@ -103,7 +103,7 @@ func TestMergeFolderSubsections_Appends(t *testing.T) {
 	}
 }
 
-func TestExistingFolderKeys(t *testing.T) {
+func TestFolderKeys(t *testing.T) {
 	contents := `[ui]
 threading = true
 
@@ -113,7 +113,7 @@ rank = 1
 [ui.folders."Lists/golang"]
 rank = 5
 `
-	keys, err := ExistingFolderKeys([]byte(contents))
+	keys, err := FolderKeys([]byte(contents))
 	if err != nil {
 		t.Fatal(err)
 	}

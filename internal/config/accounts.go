@@ -82,7 +82,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	gmailQuirks := false
 	source := e.Source
 
-	if preset, ok := LookupProvider(e.Provider); ok {
+	if preset, ok := Providers[e.Provider]; ok {
 		backend = preset.Backend
 		if host == "" {
 			host = preset.Host
@@ -113,7 +113,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	// "mock" is permitted for testing; it short-circuits to
 	// mail.NewMockBackend in cmd/poplar/backend.go.
 	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
-		if _, ok := LookupProvider(e.Provider); !ok {
+		if _, ok := Providers[e.Provider]; !ok {
 			hint := ""
 			if s := suggestProvider(e.Provider); s != "" {
 				hint = fmt.Sprintf("; did you mean %q?", s)

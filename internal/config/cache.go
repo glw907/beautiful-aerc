@@ -23,10 +23,7 @@ type CacheConfig struct {
 	MaxAttachmentSize int64
 }
 
-// DefaultCacheConfig returns the defaults applied when [cache] is
-// missing from config.toml. Currently 2GB body-cache cap and 2GB
-// attachment-cache cap.
-func DefaultCacheConfig() CacheConfig {
+func defaultCache() CacheConfig {
 	return CacheConfig{
 		MaxSize:           2 * 1024 * 1024 * 1024,
 		MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
@@ -43,12 +40,12 @@ type rawCache struct {
 }
 
 // LoadCache reads the [cache] table from a config.toml file. A
-// missing file or missing [cache] section returns DefaultCacheConfig.
+// missing file or missing [cache] section returns defaultCache.
 func LoadCache(path string) (CacheConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return DefaultCacheConfig(), nil
+			return defaultCache(), nil
 		}
 		return CacheConfig{}, fmt.Errorf("read %s: %v", path, err)
 	}
@@ -57,9 +54,9 @@ func LoadCache(path string) (CacheConfig, error) {
 		return CacheConfig{}, fmt.Errorf("decode [cache]: %v", err)
 	}
 	if raw.Cache == nil {
-		return DefaultCacheConfig(), nil
+		return defaultCache(), nil
 	}
-	out := DefaultCacheConfig()
+	out := defaultCache()
 	if raw.Cache.MaxSize != "" {
 		n, err := parseSize(raw.Cache.MaxSize)
 		if err != nil {

@@ -107,9 +107,9 @@ func isBareKey(s string) bool {
 	return true
 }
 
-// ExistingFolderKeys parses config.toml bytes and returns the set
+// FolderKeys parses config.toml bytes and returns the set
 // of subsection keys already present under [ui.folders.<name>].
-func ExistingFolderKeys(data []byte) (map[string]bool, error) {
+func FolderKeys(data []byte) (map[string]bool, error) {
 	var raw rawUIFile
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
