@@ -94,6 +94,13 @@ file describes behavior, not the key tables.
   a rule; inline link text gets ` [^N]` glued to its last word with
   U+00A0. Short bare URLs (`Text == URL`, ≤30 cells) render inline
   without a marker.
+- Chip row sits between header panel and body. Hidden when
+  `len(attachments) == 0`. Layout owned by `Viewer.layout`; body
+  height = `v.height - panel - chipHeight`. Chip row populates from
+  `attachmentsLoadedMsg` batched in the same Cmd as `bodyLoadedMsg`
+  on viewer open. `@` opens the App-owned `AttachPicker` overlay
+  (`o`/Enter/digit open via `xdg-open` on a tempfile; `s` saves to
+  `[ui] download_dir`; `Esc`/`q`/`@` close).
 
 ### Triage, undo, error banner
 
@@ -184,18 +191,20 @@ file describes behavior, not the key tables.
   underlying frame, dim via `DimANSI`, composite via `PlaceOverlay`
   (vendored from superfile, MIT) at the centered top-left from
   `centerOverlay`. While an overlay is open, `App.Update`
-  short-circuits keys into it. Six overlays exist: help popover
+  short-circuits keys into it. Seven overlays exist: help popover
   (`App` owns `helpOpen` + `help HelpPopover`; `viewerOpen` selects
   `HelpAccount` vs `HelpViewer` context), link picker
-  (viewer-context-only), move picker (`m` from account view),
-  confirm modal (`ConfirmModal` — generic destructive-action
+  (viewer-context-only), attachment picker (`@` from viewer;
+  `o`/`s`/`Enter`/digit/`Esc`), move picker (`m` from account
+  view), confirm modal (`ConfirmModal` — generic destructive-action
   prompt, used by manual empty), outbox overlay (`Q` — read-only
   grouped summary), and conflict overlay (`!` — per-row retry /
   discard via `cache.RetryOp` / `DiscardOp`). Confirm is topmost —
   its key-route and overlay-render branches run before the others.
   Cascade order: confirm > conflict > outbox > help > link picker
-  > move picker. The Box-rendering overlays (`ConfirmModal`,
-  `LinkPicker`, `MovePicker`, `OutboxOverlay`, `ConflictOverlay`)
+  > attach picker > move picker. The Box-rendering overlays
+  (`ConfirmModal`, `LinkPicker`, `AttachPicker`, `MovePicker`,
+  `OutboxOverlay`, `ConflictOverlay`)
   share frame chrome via a named-field embedded `shell ModalShell`
   (`internal/ui/modal_shell.go`); per-overlay `View()` builds
   `bodyRows` + `footerRows` pre-padded to `contentW` cells and

@@ -434,6 +434,40 @@ Viewer-context-only. `Tab` opens it when ≥1 URL is harvested.
 - `j/k` cursor, `Enter` / `1`–`9` launch + close, `Esc`/`Tab`
   close, `q` swallowed.
 
+### Attachment picker
+
+Viewer-context-only. `@` opens it when the message has ≥1
+attachment. The chip row in the viewer body sits between the
+header panel and the body; it lists `§ N. filename (size)` chips
+greedy-wrapped to width.
+
+```
+┌─ from / to / date / subject panel ───────────────────────┐
+│ … header lines …                                          │
+└──────────────────────────────────────────────────────────┘
+ § 1. report.pdf (2.3 KB)  § 2. agenda.txt (412 B)
+ § 3. photo.jpg (118 KB)
+─ body ────────────────────────────────────────────────────
+```
+
+```
+                       ╭─ Attachments ───────────────────────────╮
+                       │                                         │
+                       │  ┃§[1] report.pdf (2.3 KB)               │
+                       │   §[2] agenda.txt (412 B)                │
+                       │   §[3] photo.jpg (118 KB)                │
+                       │                                         │
+                       │ Enter/o open  s save  Esc close          │
+                       ╰─────────────────────────────────────────╯
+```
+
+- `j/k` cursor, `Enter` / `o` / digit open via `xdg-open` on a
+  tempfile, `s` saves to `[ui] download_dir` (default
+  `$XDG_DOWNLOAD_DIR` or `~/Downloads`); `Esc` / `q` / `@` close.
+- A successful save surfaces `Saved to <path>` in the toast row;
+  the row collapses on the undo timer (no undo affordance — the
+  file is on disk).
+
 ---
 
 ## 10. Outbox overlay (Q)

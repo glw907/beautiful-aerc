@@ -125,12 +125,23 @@ a hidden row.
 |-----|--------|---------|
 | `1`–`9` | Open the Nth harvested link via `xdg-open` | V |
 | `Tab` | Link picker (when ≥1 URL harvested; inert otherwise) | V |
+| `@` | Attachment picker (when ≥1 attachment; inert otherwise) | V |
 | `q`, `Esc` | Close viewer, return to list | V |
 | `n` / `N` | Next / previous visible message (skips folded rows) | V |
 
 Opening a message marks it read optimistically: the seen flag flips
 locally before the backend `MarkRead` Cmd resolves, so returning to
 the list shows the dimmed (read) styling immediately.
+
+### Attachment picker
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Cursor down / up |
+| `Enter`, `o` | Open via `xdg-open` (temp file) |
+| `s` | Save to `[ui] download_dir` |
+| `1`–`9` | Open Nth attachment |
+| `Esc`, `q`, `@` | Close picker |
 
 ## App
 
