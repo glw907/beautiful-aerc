@@ -19,7 +19,9 @@ type fakeClient struct {
 	folderSummary map[string]mail.Folder
 	selected      string
 
-	bodies map[mail.UID]string
+	bodies        map[mail.UID]string
+	bodyStructure map[mail.UID]BodyStructure
+	bodyParts     map[string][]byte // key "<uid>::<section>"
 
 	storeCalls   [][3]any // {uids, item, value}
 	moveCalls    [][2]any // {uids, dest}
@@ -42,6 +44,8 @@ func newFakeClient() *fakeClient {
 		caps:          map[string]bool{},
 		folderSummary: map[string]mail.Folder{},
 		bodies:        map[mail.UID]string{},
+		bodyStructure: map[mail.UID]BodyStructure{},
+		bodyParts:     map[string][]byte{},
 	}
 }
 
@@ -81,6 +85,23 @@ func (f *fakeClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 		return nil, errors.New("not found")
 	}
 	return io.NopCloser(strings.NewReader(body)), nil
+}
+
+func (f *fakeClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
+	bs, ok := f.bodyStructure[uid]
+	if !ok {
+		return BodyStructure{}, errors.New("not found")
+	}
+	return bs, nil
+}
+
+func (f *fakeClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error) {
+	key := string(uid) + "::" + section
+	data, ok := f.bodyParts[key]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return data, nil
 }
 
 func (f *fakeClient) Store(uids []mail.UID, item string, value any) error {

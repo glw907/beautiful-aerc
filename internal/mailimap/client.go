@@ -4,6 +4,8 @@ package mailimap
 
 import (
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/glw907/poplar/internal/mail"
 )
@@ -53,10 +55,45 @@ type imapClient interface {
 	// onUpdate is called per unilateral response.
 	Idle(onUpdate func(mail.Update)) error
 	IdleStop() // sends DONE
+
+	// FetchBodyStructure issues UID FETCH (BODYSTRUCTURE) for one UID
+	// and returns the parsed structure. Caller walks the tree.
+	FetchBodyStructure(uid mail.UID) (BodyStructure, error)
+
+	// FetchBodyPart returns the decoded bytes of one MIME part.
+	// section is an IMAP section identifier ("2", "2.1", etc.).
+	FetchBodyPart(uid mail.UID, section string) ([]byte, error)
 }
 
 // listEntry is the result of a LIST command for one folder.
 type listEntry struct {
 	Name       string
 	Attributes []string // includes \Drafts, \Sent, \Trash, etc. when SPECIAL-USE
+}
+
+// BodyStructure is the protocol-agnostic shape of a parsed IMAP
+// BODYSTRUCTURE response. Only the fields mailimap needs are
+// retained; the underlying go-imap type carries more.
+type BodyStructure struct {
+	Section     string          // "" for root, "1", "2", "2.1" for parts
+	MIMEType    string          // "text/plain" lowercased
+	Filename    string
+	SizeBytes   uint32
+	ContentID   string
+	Disposition string          // "attachment" | "inline" | "" if unset
+	Children    []BodyStructure
+}
+
+// sectionString converts a []int path (as produced by go-imap Walk) to
+// the dot-joined section string used in BodyStructure.Section.
+// An empty path (multipart root) produces "".
+func sectionString(path []int) string {
+	if len(path) == 0 {
+		return ""
+	}
+	parts := make([]string, len(path))
+	for i, n := range path {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ".")
 }

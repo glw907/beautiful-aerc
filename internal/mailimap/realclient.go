@@ -504,3 +504,123 @@ func (r *realClient) IdleStop() {
 		_ = cmd.Close()
 	}
 }
+
+// FetchBodyStructure issues UID FETCH BODYSTRUCTURE for one UID and
+// returns a protocol-agnostic BodyStructure tree. Extended body
+// structure is requested so Disposition and filename params are
+// populated.
+func (r *realClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
+	opts := &imap.FetchOptions{
+		UID:           true,
+		BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
+	}
+
+	msgs, err := r.c.Fetch(mailUIDsToSet([]mail.UID{uid}), opts).Collect()
+	if err != nil {
+		return BodyStructure{}, fmt.Errorf("uid fetch bodystructure: %w", err)
+	}
+	if len(msgs) == 0 {
+		return BodyStructure{}, fmt.Errorf("uid fetch bodystructure: no message for uid %s", uid)
+	}
+
+	if msgs[0].BodyStructure == nil {
+		return BodyStructure{}, fmt.Errorf("uid fetch bodystructure: no BODYSTRUCTURE for uid %s", uid)
+	}
+
+	return convertBodyStructure(msgs[0].BodyStructure, nil), nil
+}
+
+// convertBodyStructure recursively converts an imap.BodyStructure (go-imap
+// v2 type) to the protocol-agnostic BodyStructure. path is the integer
+// path from the Walk tree; nil means multipart root.
+func convertBodyStructure(bs imap.BodyStructure, path []int) BodyStructure {
+	sec := sectionString(path)
+	disp := ""
+	if d := bs.Disposition(); d != nil {
+		disp = strings.ToLower(d.Value)
+	}
+
+	switch v := bs.(type) {
+	case *imap.BodyStructureSinglePart:
+		return BodyStructure{
+			Section:     sec,
+			MIMEType:    v.MediaType(),
+			Filename:    v.Filename(),
+			SizeBytes:   v.Size,
+			ContentID:   v.ID,
+			Disposition: disp,
+		}
+
+	case *imap.BodyStructureMultiPart:
+		children := make([]BodyStructure, len(v.Children))
+		pathBuf := make([]int, len(path)+1)
+		copy(pathBuf, path)
+		for i, child := range v.Children {
+			pathBuf[len(path)] = i + 1
+			childPath := make([]int, len(pathBuf))
+			copy(childPath, pathBuf)
+			children[i] = convertBodyStructure(child, childPath)
+		}
+		return BodyStructure{
+			Section:     sec,
+			MIMEType:    v.MediaType(),
+			Disposition: disp,
+			Children:    children,
+		}
+	}
+
+	// Unreachable: go-imap only produces SinglePart and MultiPart.
+	return BodyStructure{Section: sec}
+}
+
+// FetchBodyPart fetches the raw bytes of a single MIME part identified
+// by its dot-joined section path (e.g. "2", "2.1"). The section is
+// fetched as BODY.PEEK[<section>] (no specifier — full part content).
+func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error) {
+	parts, err := parseSectionPath(section)
+	if err != nil {
+		return nil, fmt.Errorf("fetch body part: %w", err)
+	}
+
+	fetchSec := &imap.FetchItemBodySection{
+		Part:    parts,
+		Specifier: imap.PartSpecifierNone,
+		Peek:    true,
+	}
+	opts := &imap.FetchOptions{
+		UID:         true,
+		BodySection: []*imap.FetchItemBodySection{fetchSec},
+	}
+
+	msgs, err := r.c.Fetch(mailUIDsToSet([]mail.UID{uid}), opts).Collect()
+	if err != nil {
+		return nil, fmt.Errorf("fetch body part %q: %w", section, err)
+	}
+	if len(msgs) == 0 {
+		return nil, fmt.Errorf("fetch body part %q: no message for uid %s", section, uid)
+	}
+
+	raw := msgs[0].FindBodySection(fetchSec)
+	if raw == nil {
+		return nil, fmt.Errorf("fetch body part %q: section not found for uid %s", section, uid)
+	}
+	return raw, nil
+}
+
+// parseSectionPath converts a dot-joined section string ("2.1") to the
+// []int slice expected by imap.FetchItemBodySection.Part.
+func parseSectionPath(section string) ([]int, error) {
+	if section == "" {
+		return nil, nil
+	}
+	parts := strings.Split(section, ".")
+	nums := make([]int, len(parts))
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("invalid section path component %q in %q", p, section)
+		}
+		nums[i] = n
+	}
+	return nums, nil
+}
