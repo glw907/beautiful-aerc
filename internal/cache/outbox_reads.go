@@ -73,6 +73,46 @@ func (a *Account) OutboxDepth(ctx context.Context) (OutboxDepth, error) {
 	return d, rows.Err()
 }
 
+// OutboxSummary returns one OutboxGroup per (kind, folder, status)
+// combination. Result order: status (executing → pending → failed →
+// conflict), then kind ASC, then folder ASC. Folder is the canonical
+// folder name from the folders table.
+func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {
+	const q = `
+        SELECT o.kind, COALESCE(f.name, ''), o.status, COUNT(*),
+               MIN(o.next_eligible_at)
+        FROM outbox o
+        LEFT JOIN folders f ON f.id = o.folder
+        GROUP BY o.kind, o.folder, o.status
+        ORDER BY
+          CASE o.status
+            WHEN 'executing' THEN 0
+            WHEN 'pending'   THEN 1
+            WHEN 'failed'    THEN 2
+            WHEN 'conflict'  THEN 3
+            ELSE 4
+          END,
+          o.kind,
+          COALESCE(f.name, '')`
+	rows, err := a.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("outbox summary: %w", err)
+	}
+	defer rows.Close()
+	var out []OutboxGroup
+	for rows.Next() {
+		var g OutboxGroup
+		var kind, status string
+		if err := rows.Scan(&kind, &g.Folder, &status, &g.Count, &g.NextAt); err != nil {
+			return nil, err
+		}
+		g.Kind = OpKind(kind)
+		g.Status = OpStatus(status)
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 // errorPayload is the JSON shape written by encodeErr in drainer.go.
 type errorPayload struct {
 	Kind    string `json:"kind"`
