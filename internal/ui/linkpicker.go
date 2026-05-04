@@ -18,12 +18,10 @@ import (
 // Enter, 1-9 quick launch, Esc/Tab close. App owns the open state and
 // the overlay composition (mirrors help popover, ADR-0082).
 type LinkPicker struct {
-	open   bool
+	shell  ModalShell
 	links  []string
 	cursor int
 	offset int
-	width  int
-	height int
 	styles Styles
 	keys   linkPickerKeys
 }
@@ -56,7 +54,7 @@ func NewLinkPicker(styles Styles) LinkPicker {
 }
 
 // IsOpen reports whether the picker is visible.
-func (p LinkPicker) IsOpen() bool { return p.open }
+func (p LinkPicker) IsOpen() bool { return p.shell.IsOpen() }
 
 // Cursor returns the highlighted row index. Exposed for tests.
 func (p LinkPicker) Cursor() int { return p.cursor }
@@ -64,7 +62,7 @@ func (p LinkPicker) Cursor() int { return p.cursor }
 // Open transitions the picker into the open state with the given URL
 // list. Cursor and offset reset to 0.
 func (p LinkPicker) Open(links []string) LinkPicker {
-	p.open = true
+	p.shell = p.shell.WithOpen(true)
 	p.links = links
 	p.cursor = 0
 	p.offset = 0
@@ -74,15 +72,14 @@ func (p LinkPicker) Open(links []string) LinkPicker {
 // Close transitions the picker out of view. Caller is responsible for
 // any chrome-revert side effects (App handles this via Msg flow).
 func (p LinkPicker) Close() LinkPicker {
-	p.open = false
+	p.shell = p.shell.WithOpen(false)
 	return p
 }
 
 // SetSize updates the picker's box dimensions. App threads
 // WindowSizeMsg here.
 func (p LinkPicker) SetSize(width, height int) LinkPicker {
-	p.width = width
-	p.height = height
+	p.shell = p.shell.SetSize(width, height)
 	return p
 }
 
@@ -90,7 +87,7 @@ func (p LinkPicker) SetSize(width, height int) LinkPicker {
 // updated picker and any Cmds (launch + close on Enter / numeric;
 // close on Esc/Tab; nil otherwise).
 func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
-	if !p.open {
+	if !p.shell.IsOpen() {
 		return p, nil
 	}
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -165,7 +162,7 @@ func clampScrollOffset(cursor, visible, offset int) int {
 // clampOffset returns p with p.offset adjusted so p.cursor is
 // within the visible window. Called after every cursor move.
 func (p LinkPicker) clampOffset() LinkPicker {
-	p.offset = clampScrollOffset(p.cursor, visibleLinkRows(len(p.links), p.height), p.offset)
+	p.offset = clampScrollOffset(p.cursor, visibleLinkRows(len(p.links), p.shell.Height()), p.offset)
 	return p
 }
 
@@ -178,10 +175,10 @@ const linkPickerInlineCap = 50
 // Box + Position + PlaceOverlay; this method is the fallback used by
 // tests and when the box doesn't fit.
 func (p LinkPicker) View() string {
-	if !p.open {
+	if !p.shell.IsOpen() {
 		return ""
 	}
-	return p.Box(p.width, p.height)
+	return p.Box(p.shell.Width(), p.shell.Height())
 }
 
 // Box returns the rendered modal at the size derived from (w, h).

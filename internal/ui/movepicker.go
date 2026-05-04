@@ -34,7 +34,7 @@ type MovePickerClosedMsg struct{}
 // MovePicker is the modal overlay launched by `m` from the account view.
 // App owns open state and overlay composition (mirrors LinkPicker, ADR-0087).
 type MovePicker struct {
-	open    bool
+	shell   ModalShell
 	uids    []mail.UID
 	src     string
 	all     []FolderEntry
@@ -42,8 +42,6 @@ type MovePicker struct {
 	matches []int
 	cursor  int
 	offset  int
-	width   int
-	height  int
 	styles  Styles
 	keys    movePickerKeys
 }
@@ -73,12 +71,12 @@ func NewMovePicker(styles Styles) MovePicker {
 	}
 }
 
-func (p MovePicker) IsOpen() bool { return p.open }
+func (p MovePicker) IsOpen() bool { return p.shell.IsOpen() }
 
 // Open snapshots the targets and folder list. Source folder is
 // excluded so the picker never offers a no-op move-to-self.
 func (p MovePicker) Open(uids []mail.UID, src string, folders []FolderEntry) MovePicker {
-	p.open = true
+	p.shell = p.shell.WithOpen(true)
 	p.uids = uids
 	p.src = src
 	p.all = make([]FolderEntry, 0, len(folders))
@@ -95,13 +93,12 @@ func (p MovePicker) Open(uids []mail.UID, src string, folders []FolderEntry) Mov
 }
 
 func (p MovePicker) Close() MovePicker {
-	p.open = false
+	p.shell = p.shell.WithOpen(false)
 	return p
 }
 
 func (p MovePicker) SetSize(width, height int) MovePicker {
-	p.width = width
-	p.height = height
+	p.shell = p.shell.SetSize(width, height)
 	return p
 }
 
@@ -119,7 +116,7 @@ func movePickerVisibleRows(height int) int {
 // clampOffset adjusts p.offset so p.cursor lies within the visible
 // window. Called after every cursor move.
 func (p MovePicker) clampOffset() MovePicker {
-	p.offset = clampScrollOffset(p.cursor, movePickerVisibleRows(p.height), p.offset)
+	p.offset = clampScrollOffset(p.cursor, movePickerVisibleRows(p.shell.Height()), p.offset)
 	return p
 }
 
@@ -140,7 +137,7 @@ func (p MovePicker) recompute() MovePicker {
 }
 
 func (p MovePicker) Update(msg tea.Msg) (MovePicker, tea.Cmd) {
-	if !p.open {
+	if !p.shell.IsOpen() {
 		return p, nil
 	}
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -205,10 +202,10 @@ const (
 )
 
 func (p MovePicker) View() string {
-	if !p.open {
+	if !p.shell.IsOpen() {
 		return ""
 	}
-	return p.Box(p.width, p.height)
+	return p.Box(p.shell.Width(), p.shell.Height())
 }
 
 func (p MovePicker) Box(w, h int) string {
