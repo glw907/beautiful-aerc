@@ -37,6 +37,13 @@ func (b *blockingBackend) FetchBody(_ mail.UID) ([]byte, error) {
 	return []byte("body"), nil
 }
 
+func (b *blockingBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) {
+	return nil, nil
+}
+func (b *blockingBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) {
+	return nil, nil
+}
+
 func (b *blockingBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
 
 func (b *blockingBackend) Move(_ []mail.UID, _ string) error { return nil }

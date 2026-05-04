@@ -843,6 +843,12 @@ func (b *pagingFakeBackend) Destroy(_ []mail.UID) error                       { 
 func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error     { return nil }
 func (b *pagingFakeBackend) Send(_ string, _ []string, _ io.Reader) error     { return nil }
 func (b *pagingFakeBackend) Updates() <-chan mail.Update                      { return nil }
+func (b *pagingFakeBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) {
+	return nil, nil
+}
+func (b *pagingFakeBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) {
+	return nil, nil
+}
 
 func TestAccountTab_PaginationInitialLoad(t *testing.T) {
 	// 600 messages — first window fetches 500.
