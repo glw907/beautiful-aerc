@@ -179,6 +179,20 @@ the ADR(s) that justify them.
   `ErrAuth`, `NONEXISTENT` → `ErrNotFound`. The cache drainer's
   conflict matrix routes via `errors.Is` against these sentinels
   (no substring matching).
+- `mail.Attachment` carries `PartID`, `Filename`, `MIMEType` (lowercased
+  `type/subtype`, params dropped), `Size`, `ContentID` (unwrapped from
+  `<>`), and `Disposition`. PartID is protocol-native (JMAP `partId`,
+  IMAP section `"2"` / `"2.1"`) and opaque to consumers.
+  `mail.Backend.Attachments(uid)` returns metadata for non-body parts;
+  `FetchAttachment(uid, partID)` returns decoded bytes. JMAP impl
+  issues `Email/get` for `bodyStructure`, walks the part tree, and
+  caches partID→blobID per Backend instance for follow-up downloads
+  via `cli.Download`. IMAP impl issues `UID FETCH BODYSTRUCTURE` then
+  `UID FETCH BODY[<part>]`. Top-level `text/plain` and `text/html`
+  parts are dropped (displayable body, not attachments); the
+  classification rule lives in `mail.ClassifyDisposition` and trusts
+  `Content-Disposition` first, falls back to `ContentID != ""` →
+  inline, defaults to attachment.
 
 ## Cache
 
@@ -196,7 +210,11 @@ the ADR(s) that justify them.
   pickup query filters the failed-row backoff window in SQL. v3
   adds `folders.exists_total`/`unseen_total` for unread badges on
   unopened folders. v4 drops `bodies.last_accessed` and the
-  `bodies_lru` index (LRU eviction replaced by size backstop).
+  `bodies_lru` index (LRU eviction replaced by size backstop). v5
+  adds the `attachments` table (metadata + lazy bytes; columns
+  `id`, `message`, `part_id`, `filename`, `mime_type`, `size`,
+  `content_id`, `disposition`, `bytes`, `fetched_at`; UNIQUE
+  `(message, part_id)`; index on `message`).
 - `mail.ChangeTracker` is the protocol-level change-detection
   sibling of `mail.Backend`; both v1 backends implement it.
   JMAP impl is account-scoped (Email/changes per RFC 8621 §4.3);
@@ -210,6 +228,15 @@ the ADR(s) that justify them.
   (default 2 GB from `[cache] max-size` in `config.toml`), it
   evicts the oldest messages by `messages.sent_at` inline.
   `Backend.FetchBody` returns `([]byte, error)` — no `io.Reader`.
+- `(*Account).Attachments(ctx, uid)` and `FetchAttachment(ctx, uid,
+  partID)` mirror the body pattern. Metadata populates lazily on
+  first `Attachments` call (zero-length results are not cached);
+  bytes populate lazily on first `FetchAttachment`. Bytes eviction
+  runs a separate size backstop against
+  `cache.Config.MaxAttachmentSize` (default 2 GB from `[cache]
+  max-attachment-size` in `config.toml`), oldest by
+  `messages.sent_at`, clearing `bytes`/`fetched_at` while keeping
+  the metadata row. Bodies and attachments evict independently.
 - `cache.Slugify`, `cache.DBPath`, `cache.OpenDB` are exported
   helpers used by `cmd/poplar/cache.go`; all path/DSN logic is
   canonical here.
@@ -318,3 +345,4 @@ invariant. ADR numbering is chronological.
 | Pass 8.5c UI structural cleanup — `ModalShell` (named-field embed) for Box-rendering overlays; `SidebarColumn` composite hoists account-line + folders + spacer + shelf; `*<T>Cache` pointer + dirty flag escape hatch for view-stable overlays (MovePicker, HelpPopover) | 0129, 0130 |
 | Pass 8.5d content/filter cleanup — `Block`/`Span` sealed-sum markers reduced to `isBlock()`/`isSpan()`; dead `blockKind`/`spanKind` enums deleted | 0131 |
 | Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |
+| Attachments I (Pass 8.6) — backend support: `mail.Attachment` + `Attachments`/`FetchAttachment` on Backend; cache schema v5 `attachments` table with lazy metadata + lazy bytes under separate `MaxAttachmentSize` backstop; JMAP via Email/get bodyStructure + cli.Download; IMAP via UID FETCH BODYSTRUCTURE + BODY[<part>]; canonical `mail.ClassifyDisposition` (Disposition-first, ContentID fallback); MIME normalization at the protocol→mail boundary | 0135, 0136, 0137 |
