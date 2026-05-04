@@ -217,11 +217,7 @@ func (p LinkPicker) Box(w, h int) string {
 		if i < len(previewLines) {
 			line = previewLines[i]
 		}
-		lw := lipgloss.Width(line)
-		if lw < contentW {
-			line += strings.Repeat(" ", contentW-lw)
-		}
-		footerRows[i] = line
+		footerRows[i] = padOrTruncate(line, contentW)
 	}
 
 	return p.shell.Box("Links", bodyRows, footerRows, contentW)
@@ -284,7 +280,6 @@ func linkPickerWrap(s string, width int) string {
 func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
 	return centerOverlay(box, totalW, totalH)
 }
-
 
 // centerOverlay returns the top-left (x, y) cell coordinates that
 // center box on (totalW, totalH). Shared by the help popover and the
