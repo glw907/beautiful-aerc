@@ -39,6 +39,22 @@ Act on the current message (or selection in multi-select mode).
 | `E` | Empty current Disposal folder (opens confirm) | A |
 | `u` | Undo last triage action (within undo window) | A, V |
 
+## Cache & Outbox
+
+Visibility into the local cache's outbox queue and the conflict
+list when an op needs user intervention.
+
+| Key | Action | Context |
+|-----|--------|---------|
+| `Q` | Open outbox status overlay | A, V |
+| `!` | Open conflict overlay (or transition from `Q`) | A, V |
+| `r` | Retry highlighted conflict | (in `!` overlay) |
+| `d` | Discard highlighted conflict | (in `!` overlay) |
+
+`d` shadows the account-context Delete binding while the `!`
+overlay is open. The modal cascade short-circuits keys before
+delegating to AccountTab, so no conflict.
+
 ## Reply & Compose
 
 | Key | Action | Context |

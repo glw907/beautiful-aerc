@@ -184,24 +184,29 @@ file describes behavior, not the key tables.
   underlying frame, dim via `DimANSI`, composite via `PlaceOverlay`
   (vendored from superfile, MIT) at the centered top-left from
   `centerOverlay`. While an overlay is open, `App.Update`
-  short-circuits keys into it. Four overlays exist: help popover
+  short-circuits keys into it. Six overlays exist: help popover
   (`App` owns `helpOpen` + `help HelpPopover`; `viewerOpen` selects
   `HelpAccount` vs `HelpViewer` context), link picker
-  (viewer-context-only), move picker (`m` from account view), and
+  (viewer-context-only), move picker (`m` from account view),
   confirm modal (`ConfirmModal` — generic destructive-action
-  prompt, used by manual empty). Confirm is topmost — its
-  key-route and overlay-render branches run before the others.
-  The three Box-rendering overlays (`ConfirmModal`, `LinkPicker`,
-  `MovePicker`) share frame chrome via a named-field embedded
-  `shell ModalShell` (`internal/ui/modal_shell.go`); per-overlay
-  `View()` builds `bodyRows` + `footerRows` pre-padded to
-  `contentW` cells and calls `m.shell.Box(title, bodyRows,
-  footerRows, contentW)`. `HelpPopover` uses `lipgloss.Style`
-  with a rounded border and is *not* a ModalShell consumer.
-  `MovePicker` and `HelpPopover` cache their per-frame render via
-  a heap-allocated `*<T>Cache` pointer + dirty flag (the only
-  Elm-immutable-model escape hatch in the tree, scoped to
-  view-stable overlays — see ADR-0130).
+  prompt, used by manual empty), outbox overlay (`Q` — read-only
+  grouped summary), and conflict overlay (`!` — per-row retry /
+  discard via `cache.RetryOp` / `DiscardOp`). Confirm is topmost —
+  its key-route and overlay-render branches run before the others.
+  Cascade order: confirm > conflict > outbox > help > link picker
+  > move picker. The Box-rendering overlays (`ConfirmModal`,
+  `LinkPicker`, `MovePicker`, `OutboxOverlay`, `ConflictOverlay`)
+  share frame chrome via a named-field embedded `shell ModalShell`
+  (`internal/ui/modal_shell.go`); per-overlay `View()` builds
+  `bodyRows` + `footerRows` pre-padded to `contentW` cells and
+  calls `m.shell.Box(title, bodyRows, footerRows, contentW)`.
+  `HelpPopover` uses `lipgloss.Style` with a rounded border and is
+  *not* a ModalShell consumer. `MovePicker`, `HelpPopover`, and
+  `ConflictOverlay` cache their per-frame render via a heap-
+  allocated `*<T>Cache` pointer + dirty flag (the only Elm-
+  immutable-model escape hatch in the tree, scoped to view-stable
+  overlays — see ADR-0130). `OutboxOverlay` does not — its content
+  churns every cache event while the queue drains.
 - Help popover advertises the full planned keybinding vocabulary,
   not just currently-wired keys. Each row in the binding tables
   carries a `wired bool` flag. Wired rows: bright-bold key + dim
@@ -270,3 +275,19 @@ file describes behavior, not the key tables.
   drop in descending rank order. Rank 0 (`? help`, `q quit`) never
   drops. Groups with no remaining hints collapse their preceding
   `┊` separator.
+
+### Cache & Outbox
+
+- `Q` opens the outbox overlay (read-only grouped summary).
+- `!` opens the conflict overlay; the user resolves rows with
+  `r` (retry — `cache.RetryOp` resets attempts and signals the
+  drainer) or `d` (discard — `cache.DiscardOp` reverts the
+  optimistic flip and deletes the outbox row).
+- Status bar carries an outbox depth segment: `⇅N` (FgDim) when
+  only in-flight ops; `⚠N` (ColorWarning, N = inflight + conflict)
+  when any conflict; segment hidden when outbox is empty.
+- Connection state Offline + non-empty outbox emits a one-shot
+  ErrorMsg banner ("offline — queued ops will sync on
+  reconnect"). Empty outbox stays silent. The drainer's behavior
+  is unchanged by ConnState — it keeps trying with exponential
+  backoff (cap 60s).

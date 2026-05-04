@@ -39,7 +39,7 @@ selected.
 │   󰑴  Remind              │      Ivan Petrov             Conference travel request                Apr 03  │
 │   󰡡  Lists/golang        │                                                                              │
 │                          │                                                                              │
- ──────────────────────────┴──────────────────────────────────────── 10 messages · 3 unread · ● connected ─╯
+ ──────────────────────────┴────────────────────────────── 10 messages · 3 unread · ⇅3 · ● connected ─╯
   d:del  a:archive  s:star  ┊  r:reply  R:all  f:fwd  c:compose  ┊  /:search  ?:help  q:quit
 ```
 
@@ -50,7 +50,11 @@ selected.
 - Three-sided frame (top `──┬──╮`, right `│`, bottom `──┴──╯`). No
   left border.
 - Status bar: bottom frame edge. Message count, unread count,
-  connection indicator right-aligned.
+  outbox depth, connection indicator right-aligned.
+- Status bar segments (right-to-left): connection indicator,
+  outbox depth (`⇅N` in flight, `⚠N` when any conflict), unread
+  count, message count. The outbox segment is hidden when the
+  queue is empty.
 - Footer: below status bar. Hint groups separated by `┊`.
 
 ---
@@ -429,3 +433,53 @@ Viewer-context-only. `Tab` opens it when ≥1 URL is harvested.
 
 - `j/k` cursor, `Enter` / `1`–`9` launch + close, `Esc`/`Tab`
   close, `q` swallowed.
+
+---
+
+## 10. Outbox overlay (Q)
+
+Modal opened by `Q`. Read-only summary of pending / executing /
+failed / conflicted ops, grouped by `(kind, folder, status)`. No
+cursor — telemetry surface, not interactive.
+
+```
+┌─ Outbox ──────────────────────────────────────────────┐
+│ Move → Archive · 23 pending                           │
+│ Flag · 2 executing                                    │
+│ Delete · 1 failed, retrying in 12s                    │
+│ Move → Inbox · 1 conflict                             │
+├───────────────────────────────────────────────────────┤
+│ ! conflicts  ·  q close                               │
+└───────────────────────────────────────────────────────┘
+```
+
+Empty outbox renders a single body row "Outbox is empty." Conflict
+rows here are summary-only; the per-row detail and resolution UI
+lives in §11.
+
+---
+
+## 11. Conflict overlay (!)
+
+Modal opened by `!`. Per-row retry / discard for ops the drainer
+gave up on (auth-failure, max-attempts-exceeded, args-decode,
+crashed-mid-execute).
+
+```
+┌─ Conflicts ─────────────────────────────────────────────────────────────────┐
+│ ┃ Flag abc12345 in Inbox                                                    │
+│ │   auth-failure: invalid credentials  (3 attempts, 12m ago)                │
+│ │ Move xyz98765 in Inbox                                                    │
+│ │   max-attempts-exceeded: timeout reading from server  (10 attempts, 2m ago)│
+├─────────────────────────────────────────────────────────────────────────────┤
+│ r retry  ·  d discard  ·  q close                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+- `┃` thick bar marks the cursor row's header. `│` thin bar on
+  detail and on non-cursor rows.
+- `r` retries (resets attempts, signals drainer); `d` discards
+  (reverts the optimistic flip and deletes the outbox row).
+- Empty state: "No conflicts." Footer hides retry/discard hints.
+- Overflow: when `2 * len(rows) > available body rows`, the list
+  hard-caps and the last row reads `+N more (resolve to see)`.
