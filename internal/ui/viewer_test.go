@@ -13,7 +13,7 @@ import (
 )
 
 func newTestViewer() Viewer {
-	return NewViewer(NewStyles(theme.Nord), theme.Nord, "geoff@907.life")
+	return NewViewer(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", SimpleIcons)
 }
 
 func TestViewerOpenTransitionsToLoading(t *testing.T) {
@@ -215,5 +215,66 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 		if got := displayCells(line); got != w {
 			t.Errorf("line %d width = %d, want %d: %q", i, got, w, line)
 		}
+	}
+}
+
+func TestViewer_ChipRow_Hidden_WhenEmpty(t *testing.T) {
+	v := newTestViewer()
+	v = v.SetSize(80, 24)
+	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
+	v = v.SetBody(nil)
+	v = v.SetAttachments(nil)
+	out := v.View()
+	if strings.Contains(out, "§") || strings.Contains(out, "\U000F0184") {
+		t.Errorf("chip glyph present despite no attachments")
+	}
+}
+
+func TestViewer_ChipRow_Visible(t *testing.T) {
+	v := newTestViewer()
+	v = v.SetSize(120, 40)
+	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
+	v = v.SetBody(nil)
+	v = v.SetAttachments([]mail.Attachment{
+		{PartID: "2", Filename: "report.pdf", Size: 2400},
+	})
+	out := v.View()
+	if !strings.Contains(out, "report.pdf") {
+		t.Errorf("chip row missing filename: %s", out)
+	}
+	if !strings.Contains(out, "2.3 KB") {
+		t.Errorf("chip row missing size: %s", out)
+	}
+}
+
+func TestViewer_AtKey_Inert_WhenEmpty(t *testing.T) {
+	v := newTestViewer()
+	v = v.SetSize(120, 40)
+	v = v.Open(mail.MessageInfo{UID: "u1"})
+	v = v.SetBody(nil)
+	v = v.SetAttachments(nil)
+	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	if cmd != nil {
+		t.Errorf("expected no Cmd when no attachments; got one")
+	}
+}
+
+func TestViewer_AtKey_OpensPicker(t *testing.T) {
+	v := newTestViewer()
+	v = v.SetSize(120, 40)
+	v = v.Open(mail.MessageInfo{UID: "u1"})
+	v = v.SetBody(nil)
+	v = v.SetAttachments([]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}})
+	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	if cmd == nil {
+		t.Fatal("expected OpenAttachPickerMsg Cmd")
+	}
+	msg := cmd()
+	open, ok := msg.(OpenAttachPickerMsg)
+	if !ok {
+		t.Fatalf("got %T, want OpenAttachPickerMsg", msg)
+	}
+	if len(open.Items) != 1 || open.UID != "u1" {
+		t.Errorf("unexpected payload: %+v", open)
 	}
 }

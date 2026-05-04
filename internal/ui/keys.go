@@ -103,10 +103,11 @@ func NewAccountKeys() AccountKeys {
 // fixed-size array indexed by harvested-link position minus one
 // (Links[0] is "1", Links[8] is "9").
 type ViewerKeys struct {
-	Close      key.Binding
-	OpenPicker key.Binding
-	BodyTop    key.Binding
-	BodyBottom key.Binding
+	Close            key.Binding
+	OpenPicker       key.Binding
+	OpenAttachPicker key.Binding
+	BodyTop          key.Binding
+	BodyBottom       key.Binding
 	// Links[i] binds digit key string(rune('1'+i)) to opening the
 	// (i+1)th harvested URL.
 	Links [9]key.Binding
@@ -115,10 +116,11 @@ type ViewerKeys struct {
 // NewViewerKeys returns the default viewer key bindings.
 func NewViewerKeys() ViewerKeys {
 	vk := ViewerKeys{
-		Close:      key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "close")),
-		OpenPicker: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "links")),
-		BodyTop:    key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top of body")),
-		BodyBottom: key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of body")),
+		Close:            key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "close")),
+		OpenPicker:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "links")),
+		OpenAttachPicker: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "attachments")),
+		BodyTop:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top of body")),
+		BodyBottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of body")),
 	}
 	for i := range vk.Links {
 		d := string(rune('1' + i))

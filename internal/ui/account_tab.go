@@ -85,7 +85,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 			acct.AccountEmail(),
 		),
 		msglist: NewMessageList(styles, nil, 1, 1, icons),
-		viewer:  NewViewer(styles, t, acct.AccountEmail()),
+		viewer:  NewViewer(styles, t, acct.AccountEmail(), icons),
 		keys:    NewAccountKeys(),
 		pages:   make(map[string]*folderPage),
 		swept:   make(map[string]bool),

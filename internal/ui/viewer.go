@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -30,29 +31,35 @@ const (
 // at the AccountTab level. The viewer is pure state + render, with
 // scroll position tracked by an embedded bubbles/viewport.
 type Viewer struct {
-	open               bool
-	phase              viewerPhase
-	msg                mail.MessageInfo
-	accountEmail       string
-	blocks             []content.Block
-	links              []string
-	panel              string // headers rendered through ViewerHeader at v.width
-	viewport           viewport.Model
-	spinner            spinner.Model
-	styles             Styles
-	theme              *theme.CompiledTheme
-	keys     ViewerKeys
-	width    int
-	height   int
+	open         bool
+	phase        viewerPhase
+	msg          mail.MessageInfo
+	accountEmail string
+	blocks       []content.Block
+	links        []string
+	attachments  []mail.Attachment
+	attachReady  bool
+	chipRow      string
+	chipHeight   int
+	icons        IconSet
+	panel        string // headers rendered through ViewerHeader at v.width
+	viewport     viewport.Model
+	spinner      spinner.Model
+	styles       Styles
+	theme        *theme.CompiledTheme
+	keys         ViewerKeys
+	width        int
+	height       int
 }
 
 // NewViewer constructs an empty (closed) viewer. accountEmail
 // populates the To: header in the rendered message view.
-func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string) Viewer {
+func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string, icons IconSet) Viewer {
 	return Viewer{
 		styles:       styles,
 		theme:        t,
 		accountEmail: accountEmail,
+		icons:        icons,
 		spinner:      NewSpinner(t),
 		keys:         NewViewerKeys(),
 	}
@@ -82,6 +89,10 @@ func (v Viewer) Open(msg mail.MessageInfo) Viewer {
 	v.msg = msg
 	v.blocks = nil
 	v.links = nil
+	v.attachments = nil
+	v.attachReady = false
+	v.chipRow = ""
+	v.chipHeight = 0
 	v.panel = ""
 	return v
 }
@@ -122,6 +133,20 @@ func (v Viewer) SpinnerTick() tea.Cmd { return v.spinner.Tick }
 // Links returns the harvested URL list. Exposed for tests.
 func (v Viewer) Links() []string { return v.links }
 
+// SetAttachments installs the attachment metadata list. Idempotent
+// for stale UIDs — caller drops stale messages before invoking.
+func (v Viewer) SetAttachments(items []mail.Attachment) Viewer {
+	v.attachments = items
+	v.attachReady = true
+	if v.phase == viewerReady && v.open {
+		v.layout()
+	}
+	return v
+}
+
+// Attachments returns the harvested attachment metadata.
+func (v Viewer) Attachments() []mail.Attachment { return v.attachments }
+
 // ScrollPct returns the current scroll position as 0..100 percent.
 func (v Viewer) ScrollPct() int {
 	if v.phase != viewerReady {
@@ -160,6 +185,13 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 	case key.Matches(msg, v.keys.Close):
 		v = v.Close()
 		return v, nil
+	case key.Matches(msg, v.keys.OpenAttachPicker):
+		if len(v.attachments) == 0 {
+			return v, nil
+		}
+		uid := v.msg.UID
+		items := append([]mail.Attachment(nil), v.attachments...)
+		return v, func() tea.Msg { return OpenAttachPickerMsg{UID: uid, Items: items} }
 	case key.Matches(msg, v.keys.OpenPicker):
 		if len(v.links) == 0 {
 			return v, nil
@@ -226,7 +258,7 @@ func (v Viewer) View() string {
 	// otherwise fillRowToWidth sees the line at width and skips, leaving
 	// the right side on terminal-default bg.
 	leftPad := bg.Render(" ")
-	bodyHeight := max(0, v.height-lipgloss.Height(v.panel))
+	bodyHeight := max(0, v.height-lipgloss.Height(v.panel)-v.chipHeight)
 	bodyLines := strings.Split(v.viewport.View(), "\n")
 	if len(bodyLines) > bodyHeight {
 		bodyLines = bodyLines[:bodyHeight]
@@ -240,7 +272,12 @@ func (v Viewer) View() string {
 			bodyLines = append(bodyLines, blank)
 		}
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, v.panel, strings.Join(bodyLines, "\n"))
+	parts := []string{v.panel}
+	if v.chipRow != "" {
+		parts = append(parts, v.chipRow)
+	}
+	parts = append(parts, strings.Join(bodyLines, "\n"))
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // clipPaneBg fits s to exactly width × height. Each content line is
@@ -265,6 +302,48 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	return strings.Join(lines, "\n")
 }
 
+// renderChipRow returns the wrapped chip block plus its row count,
+// rendered at width. Returns ("", 0) when there are no attachments.
+func (v Viewer) renderChipRow(width int) (string, int) {
+	if len(v.attachments) == 0 || width < 1 {
+		return "", 0
+	}
+	icon := v.icons.Attachment
+	bg := v.styles.ViewerBg
+	chips := make([]string, len(v.attachments))
+	for i, a := range v.attachments {
+		name := a.Filename
+		if name == "" {
+			name = "attachment"
+		}
+		chips[i] = fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanizeBytes(int64(a.Size)))
+	}
+	var lines []string
+	var cur string
+	for _, c := range chips {
+		if displayCells(c) > width {
+			c = displayTruncate(c, width)
+		}
+		if cur == "" {
+			cur = c
+			continue
+		}
+		if displayCells(cur)+2+displayCells(c) > width {
+			lines = append(lines, cur)
+			cur = c
+			continue
+		}
+		cur = cur + "  " + c
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	for i, l := range lines {
+		lines[i] = fillRowToWidth(l, width, bg)
+	}
+	return strings.Join(lines, "\n"), len(lines)
+}
+
 // layout renders headers + body and populates the viewport. Called
 // from SetBody and from SetSize when the viewer is already ready.
 // Headers stay pinned above the viewport; only the body scrolls.
@@ -284,9 +363,17 @@ func (v *Viewer) layout() {
 	contentWidth := max(1, v.width-1)
 	headerStr := content.RenderHeaders(hdrs, v.theme, contentWidth)
 	v.panel = v.styles.ViewerHeader.Width(v.width).Render(headerStr)
+	if v.attachReady {
+		row, h := v.renderChipRow(v.width)
+		v.chipRow = row
+		v.chipHeight = h
+	} else {
+		v.chipRow = ""
+		v.chipHeight = 0
+	}
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
-	bodyHeight := max(1, v.height-lipgloss.Height(v.panel))
+	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.chipHeight)
 	vp := viewport.New(contentWidth, bodyHeight)
 	// Modifier-free viewport bindings: j/k for line nav, space/b for
 	// page nav. g/G are handled by the viewer wrapper itself.
