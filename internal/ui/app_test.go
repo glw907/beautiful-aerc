@@ -1060,6 +1060,72 @@ func TestApp_ConnectedClearsOfflineHinted(t *testing.T) {
 	}
 }
 
+func TestApp_QOpensOutboxOverlay(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	if !app.outboxOpen {
+		t.Errorf("Q did not set outboxOpen")
+	}
+	if cmd == nil {
+		t.Errorf("Q did not issue a load Cmd")
+	}
+}
+
+func TestApp_BangOpensConflictOverlay(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	if !app.conflictOpen {
+		t.Errorf("! did not set conflictOpen")
+	}
+	if cmd == nil {
+		t.Errorf("! did not issue a load Cmd")
+	}
+}
+
+func TestApp_QToBangTransition(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	if !app.outboxOpen {
+		t.Fatalf("setup: Q did not open outbox")
+	}
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	if app.outboxOpen {
+		t.Errorf("outbox stayed open after !")
+	}
+	if cmd == nil {
+		t.Fatal("! produced no Cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(OpenConflictsFromOutboxMsg); !ok {
+		t.Fatalf("expected OpenConflictsFromOutboxMsg, got %T", msg)
+	}
+	app, _ = app.Update(msg)
+	if !app.conflictOpen {
+		t.Errorf("OpenConflictsFromOutboxMsg did not open conflict overlay")
+	}
+}
+
+func TestApp_OutboxDepthMsgUpdatesStatusBar(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app, _ = app.Update(outboxDepthMsg{depth: cache.OutboxDepth{Pending: 3, Conflict: 1}})
+	if app.lastOutboxDepth.Pending != 3 || app.lastOutboxDepth.Conflict != 1 {
+		t.Errorf("lastOutboxDepth not stored: %+v", app.lastOutboxDepth)
+	}
+	out := stripANSI(app.statusBar.View(120, 30))
+	if !strings.Contains(out, "⚠4") {
+		t.Errorf("status bar missing ⚠4: %q", out)
+	}
+}
+
+func TestApp_ConflictResolvedRefreshes(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app.conflictOpen = true
+	_, cmd := app.Update(conflictResolvedMsg{opID: 42})
+	if cmd == nil {
+		t.Fatal("conflictResolvedMsg produced no Cmd")
+	}
+}
+
 func TestApp_OfflineBannerLatchedOncePerOfflineEpisode(t *testing.T) {
 	backend := mail.NewMockBackend()
 	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
