@@ -128,6 +128,13 @@ the ADR(s) that justify them.
   + connect-test each account, sequentially), `path` (print
   resolved path), `discover-folders` (connect each account and
   merge default folder ordering into `[ui.folders]`).
+- `[ui] download_dir` is the attachment-save target. Resolved at
+  `LoadUI` time: explicit value (tilde-expanded via
+  `config.ExpandHome`) wins, else `$XDG_DOWNLOAD_DIR`, else
+  `<UserHomeDir>/Downloads`. Empty resolution surfaces as an
+  `ErrorMsg` on save (no silent fallback to `/tmp` or cwd).
+  `saveAttachmentCmd` `MkdirAll(0o700)` and resolves collisions via
+  `-N` suffix before the extension, capped at 999.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
@@ -346,3 +353,4 @@ invariant. ADR numbering is chronological.
 | Pass 8.5d content/filter cleanup — `Block`/`Span` sealed-sum markers reduced to `isBlock()`/`isSpan()`; dead `blockKind`/`spanKind` enums deleted | 0131 |
 | Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |
 | Attachments I (Pass 8.6) — backend support: `mail.Attachment` + `Attachments`/`FetchAttachment` on Backend; cache schema v5 `attachments` table with lazy metadata + lazy bytes under separate `MaxAttachmentSize` backstop; JMAP via Email/get bodyStructure + cli.Download; IMAP via UID FETCH BODYSTRUCTURE + BODY[<part>]; canonical `mail.ClassifyDisposition` (Disposition-first, ContentID fallback); MIME normalization at the protocol→mail boundary | 0135, 0136, 0137 |
+| Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
