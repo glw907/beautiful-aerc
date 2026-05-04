@@ -46,8 +46,7 @@ type AccountTab struct {
 	// (used for AccountName/AccountEmail accessors and body fetch).
 	acct              *cache.Account
 	uiCfg             config.UIConfig
-	sidebar           Sidebar
-	sidebarSearch     SidebarSearch
+	sidebarColumn     SidebarColumn
 	msglist           MessageList
 	viewer            Viewer
 	keys              AccountKeys
@@ -80,28 +79,31 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 		icons:         icons,
 		acct:          acct,
 		uiCfg:         uiCfg,
-		sidebar:       NewSidebar(styles, nil, uiCfg, 30, 1, icons),
-		sidebarSearch: NewSidebarSearch(styles, 30, icons),
-		msglist:       NewMessageList(styles, nil, 1, 1, icons),
-		viewer:        NewViewer(styles, t, acct.AccountEmail()),
-		keys:          NewAccountKeys(),
-		pages:         make(map[string]*folderPage),
-		swept:         make(map[string]bool),
-		spinner:       NewSpinner(t),
-		layout:        ComputeLayout(80),
-		now:           time.Now,
+		sidebarColumn: NewSidebarColumn(styles, icons,
+			NewSidebar(styles, nil, uiCfg, 30, 1, icons),
+			NewSidebarSearch(styles, 30, icons),
+			acct.AccountEmail(),
+		),
+		msglist: NewMessageList(styles, nil, 1, 1, icons),
+		viewer:  NewViewer(styles, t, acct.AccountEmail()),
+		keys:    NewAccountKeys(),
+		pages:   make(map[string]*folderPage),
+		swept:   make(map[string]bool),
+		spinner: NewSpinner(t),
+		layout:  ComputeLayout(80),
+		now:     time.Now,
 	}
 }
 
 // Title returns the current folder name.
-func (m AccountTab) Title() string { return m.sidebar.SelectedFolder() }
+func (m AccountTab) Title() string { return m.sidebarColumn.Sidebar().SelectedFolder() }
 
 // Backend returns the underlying mail.Backend so the App can drive
 // the connection-state pump without duplicating the cache reference.
 func (m AccountTab) Backend() mail.Backend { return m.acct.Backend }
 
 // Icon returns the folder's Nerd Font icon.
-func (m AccountTab) Icon() string { return m.sidebar.SelectedIcon() }
+func (m AccountTab) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
 
 // Closeable returns false — the account tab cannot be closed.
 func (m AccountTab) Closeable() bool { return false }
@@ -128,21 +130,33 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 			layout.Sidebar = m.width / 2
 		}
 		m.layout = layout
-		m.sidebar.SetLayout(layout)
 		m.msglist.SetLayout(layout)
 
 		sw := layout.Sidebar
 		folderHeight := max(1, m.height-sidebarHeaderRows-searchShelfRows)
-		m.sidebar.SetSize(sw, folderHeight)
-		m.sidebarSearch.SetSize(sw)
+		// Re-build the SidebarColumn children with their new sizes, then
+		// record the column dims. The verbose-explicit path: each child is
+		// updated via its pointer-receiver method on a local copy, then
+		// re-wrapped through With*, and SetSize records the column dims.
+		sb := m.sidebarColumn.Sidebar()
+		sb.SetLayout(layout)
+		sb.SetSize(sw, folderHeight)
+		ss := m.sidebarColumn.SidebarSearch()
+		ss.SetSize(sw)
+		// Forward WindowSizeMsg to SidebarSearch so embedded bubbles
+		// components (textinput) can reflow.
+		var cmds []tea.Cmd
+		var c tea.Cmd
+		ss, c = ss.Update(msg)
+		cmds = append(cmds, c)
+		m.sidebarColumn = m.sidebarColumn.
+			WithSidebar(sb).
+			WithSidebarSearch(ss).
+			SetSize(sw, m.height)
 		mw := max(1, m.width-sw-1) // -1 for divider
 		m.msglist.SetSize(mw, m.height)
 		m.viewer = m.viewer.SetSize(mw, m.height)
-		// Forward the msg so embedded bubbles components reflow.
-		var cmds []tea.Cmd
-		var c tea.Cmd
-		m.sidebarSearch, c = m.sidebarSearch.Update(msg)
-		cmds = append(cmds, c)
+		// Forward the msg so embedded bubbles components in viewer reflow.
 		m.viewer, c = m.viewer.Update(msg)
 		cmds = append(cmds, c)
 		return m, tea.Batch(cmds...)
@@ -152,7 +166,9 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, nil
 
 	case foldersLoadedMsg:
-		m.sidebar.SetFolders(msg.classified, m.uiCfg)
+		sb := m.sidebarColumn.Sidebar()
+		sb.SetFolders(msg.classified, m.uiCfg)
+		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 		return m.selectionChangedCmds()
 
 	case folderLoadedMsg:
@@ -165,7 +181,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		isInitial := page.loaded == 0
 		page.loaded = len(msg.msgs)
 		page.total = msg.total
-		fc := m.uiCfg.Folders[m.sidebar.ConfigKey(msg.name)]
+		fc := m.uiCfg.Folders[m.sidebarColumn.Sidebar().ConfigKey(msg.name)]
 		order := SortDateDesc
 		if fc.Sort == "date-asc" {
 			order = SortDateAsc
@@ -240,7 +256,9 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 	case SearchUpdatedMsg:
 		m.msglist.SetFilter(msg.Query, msg.Mode)
-		m.sidebarSearch.SetResultCount(m.msglist.FilterResultCount())
+		ss := m.sidebarColumn.SidebarSearch()
+		ss.SetResultCount(m.msglist.FilterResultCount())
+		m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -306,30 +324,39 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	// Route to SidebarSearch when we're in Typing state — it owns
 	// the input routing for this modal slice, except for Enter and
 	// Esc which transition state.
-	if m.sidebarSearch.State() == SearchTyping {
+	if m.sidebarColumn.SidebarSearch().State() == SearchTyping {
+		ss := m.sidebarColumn.SidebarSearch()
 		switch {
 		case key.Matches(msg, m.keys.SearchCommit):
-			m.sidebarSearch.Commit()
+			ss.Commit()
+			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			return m, nil
 		case key.Matches(msg, m.keys.ClearSearch):
-			m.sidebarSearch.Clear()
+			ss.Clear()
+			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			m.msglist.ClearFilter()
 			return m, nil
 		}
 		var cmd tea.Cmd
-		m.sidebarSearch, cmd = m.sidebarSearch.Update(msg)
+		ss, cmd = ss.Update(msg)
+		m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 		return m, cmd
 	}
 
 	switch {
 	case key.Matches(msg, m.keys.OpenSearch):
-		if m.sidebarSearch.State() == SearchIdle || m.sidebarSearch.State() == SearchActive {
-			m.sidebarSearch.Activate()
+		st := m.sidebarColumn.SidebarSearch().State()
+		if st == SearchIdle || st == SearchActive {
+			ss := m.sidebarColumn.SidebarSearch()
+			ss.Activate()
+			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			return m, nil
 		}
 	case key.Matches(msg, m.keys.ClearSearch):
-		if m.sidebarSearch.State() == SearchActive {
-			m.sidebarSearch.Clear()
+		if m.sidebarColumn.SidebarSearch().State() == SearchActive {
+			ss := m.sidebarColumn.SidebarSearch()
+			ss.Clear()
+			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			m.msglist.ClearFilter()
 			return m, nil
 		}
@@ -337,11 +364,15 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		return m.openSelectedMessage()
 	case key.Matches(msg, m.keys.SidebarDown):
 		m = m.clearSearchIfActive()
-		m.sidebar.MoveDown()
+		sb := m.sidebarColumn.Sidebar()
+		sb.MoveDown()
+		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 		return m.selectionChangedCmds()
 	case key.Matches(msg, m.keys.SidebarUp):
 		m = m.clearSearchIfActive()
-		m.sidebar.MoveUp()
+		sb := m.sidebarColumn.Sidebar()
+		sb.MoveUp()
+		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 		return m.selectionChangedCmds()
 	case key.Matches(msg, m.keys.JumpInbox):
 		return m.jumpToFolder("Inbox")
@@ -373,12 +404,12 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.sidebarSearch.State() == SearchActive {
+		if m.sidebarColumn.SidebarSearch().State() == SearchActive {
 			return m, nil
 		}
 		m.msglist.ToggleFold()
 	case key.Matches(msg, m.keys.ToggleFoldAll):
-		if m.sidebarSearch.State() == SearchActive {
+		if m.sidebarColumn.SidebarSearch().State() == SearchActive {
 			return m, nil
 		}
 		m.msglist.ToggleFoldAll()
@@ -410,9 +441,11 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 // J/K otherwise: clears any active search, fires the load Cmd via
 // selectionChangedCmds.
 func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
-	if !m.sidebar.SelectByCanonical(canonical) {
+	sb := m.sidebarColumn.Sidebar()
+	if !sb.SelectByCanonical(canonical) {
 		return m, nil
 	}
+	m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 	m = m.clearSearchIfActive()
 	return m.selectionChangedCmds()
 }
@@ -459,10 +492,12 @@ func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 // clearSearchIfActive clears the shelf and the filter if the shelf
 // is in any non-Idle state. No-op when already idle.
 func (m AccountTab) clearSearchIfActive() AccountTab {
-	if m.sidebarSearch.State() == SearchIdle {
+	if m.sidebarColumn.SidebarSearch().State() == SearchIdle {
 		return m
 	}
-	m.sidebarSearch.Clear()
+	ss := m.sidebarColumn.SidebarSearch()
+	ss.Clear()
+	m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 	m.msglist.ClearFilter()
 	return m
 }
@@ -474,7 +509,7 @@ func (m AccountTab) clearSearchIfActive() AccountTab {
 // site. App reads folder counts via SelectedFolderCounts() after
 // delegation rather than via a FolderChangedMsg signal.
 func (m AccountTab) selectionChangedCmds() (AccountTab, tea.Cmd) {
-	folder, ok := m.sidebar.SelectedFolderInfo()
+	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return m, nil
 	}
@@ -501,7 +536,7 @@ func (m AccountTab) IsSwept(folder string) bool {
 // UIDs, and returns a destroyCmd (which may be a no-op if no UIDs
 // qualify). Returns nil when retention is disabled or the sweep already ran.
 func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.MessageInfo) tea.Cmd {
-	folder, ok := m.sidebar.FolderByProviderName(folderName)
+	folder, ok := m.sidebarColumn.Sidebar().FolderByProviderName(folderName)
 	if !ok {
 		return nil
 	}
@@ -538,7 +573,7 @@ func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.Messag
 // dispatchEmpty emits OpenConfirmEmptyMsg when the selected folder is
 // Trash or Spam. Returns nil for all other folders — inert by design.
 func (m *AccountTab) dispatchEmpty() tea.Cmd {
-	folder, ok := m.sidebar.SelectedFolderInfo()
+	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return nil
 	}
@@ -569,7 +604,7 @@ func (m *AccountTab) dispatchEmpty() tea.Cmd {
 // currentFolderName returns the canonical name of the currently-selected
 // sidebar folder, or "" when nothing is selected.
 func (m AccountTab) currentFolderName() string {
-	folder, ok := m.sidebar.SelectedFolderInfo()
+	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return ""
 	}
@@ -599,7 +634,7 @@ func (m AccountTab) ViewerOpen() bool { return m.viewer.IsOpen() }
 // selected folder, or (0, 0) if no folder is selected. Mirrors the
 // payload that FolderChangedMsg used to carry.
 func (m AccountTab) SelectedFolderCounts() (int, int) {
-	folder, ok := m.sidebar.SelectedFolderInfo()
+	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return 0, 0
 	}
@@ -617,7 +652,7 @@ func (m AccountTab) ViewerScrollPct() int {
 
 // SearchState exposes the sidebar search state machine.
 func (m AccountTab) SearchState() SearchState {
-	return m.sidebarSearch.State()
+	return m.sidebarColumn.SidebarSearch().State()
 }
 
 // dispatchTriage performs an optimistic triage action through the
@@ -634,7 +669,7 @@ func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 
 	switch op {
 	case opDelete:
-		trash, ok := m.sidebar.FolderNameByCanonical("Trash")
+		trash, ok := m.sidebarColumn.Sidebar().FolderNameByCanonical("Trash")
 		if !ok {
 			return func() tea.Msg {
 				return ErrorMsg{Op: string(op), Err: errors.New("no Trash folder configured")}
@@ -643,7 +678,7 @@ func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 		return m.queueMove(op, src, trash, uids)
 
 	case opArchive:
-		archive, ok := m.sidebar.FolderNameByCanonical("Archive")
+		archive, ok := m.sidebarColumn.Sidebar().FolderNameByCanonical("Archive")
 		if !ok {
 			return func() tea.Msg {
 				return ErrorMsg{Op: string(op), Err: errors.New("no Archive folder configured")}
@@ -711,7 +746,7 @@ func (m *AccountTab) dispatchMove() tea.Cmd {
 		return nil
 	}
 	src := m.currentFolderName()
-	folders := m.sidebar.OrderedFolders()
+	folders := m.sidebarColumn.Sidebar().OrderedFolders()
 	return func() tea.Msg {
 		return OpenMovePickerMsg{UIDs: uids, Src: src, Folders: folders}
 	}
@@ -764,41 +799,15 @@ func (m *AccountTab) maybeLoadMore() tea.Cmd {
 	return loadMoreCmd(m.acct, name, page.loaded)
 }
 
-// View renders the sidebar + divider + message list. The sidebar
-// column is composed top-to-bottom as: account header (2 rows),
-// folder region (flex), search shelf (3 rows pinned to bottom).
+// View renders the sidebar column + divider + right pane. SidebarColumn
+// produces the left column content; AccountTab owns the row-by-row join
+// with the divider and right pane.
 func (m AccountTab) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
 	}
 
-	sw := m.layout.Sidebar
-
-	acctName := displayTruncateEllipsis(m.acct.AccountName(), sw-1)
-	acctLine := m.styles.SidebarAccount.Width(sw).Render(" " + acctName)
-	blank := m.styles.SidebarBg.Width(sw).Render("")
-
-	sidebarFolders := m.sidebar.View()
-	shelfView := m.sidebarSearch.View()
-
-	var sidebarLines []string
-	sidebarLines = append(sidebarLines, blank, acctLine, blank)
-	if sidebarFolders != "" {
-		sidebarLines = append(sidebarLines, strings.Split(sidebarFolders, "\n")...)
-	}
-	// Pad the folder region with blank rows so the shelf lands at
-	// the bottom of the column regardless of how many folders exist.
-	targetFolderEnd := m.height - searchShelfRows
-	for len(sidebarLines) < targetFolderEnd {
-		sidebarLines = append(sidebarLines, blank)
-	}
-	if len(sidebarLines) > targetFolderEnd {
-		sidebarLines = sidebarLines[:targetFolderEnd]
-	}
-	sidebarLines = append(sidebarLines, strings.Split(shelfView, "\n")...)
-	if len(sidebarLines) > m.height {
-		sidebarLines = sidebarLines[:m.height]
-	}
+	sidebarLines := strings.Split(m.sidebarColumn.View(), "\n")
 
 	divLine := m.styles.PanelDivider.Render("│")
 

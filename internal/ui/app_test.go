@@ -250,8 +250,8 @@ func TestAppQuitStolenDuringSearch(t *testing.T) {
 			drainApp(t, &app, cmd)
 		}
 		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if app.acct.sidebarSearch.State() != SearchActive {
-			t.Fatalf("setup: state = %v, want SearchActive", app.acct.sidebarSearch.State())
+		if app.acct.sidebarColumn.SidebarSearch().State() != SearchActive {
+			t.Fatalf("setup: state = %v, want SearchActive", app.acct.sidebarColumn.SidebarSearch().State())
 		}
 
 		_, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -362,7 +362,7 @@ func TestApp_HelpDismissedByEsc(t *testing.T) {
 func TestApp_HelpStealsKeys(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
 	startMsgSelected := app.acct.msglist.Selected()
-	startFolderSelected := app.acct.sidebar.Selected()
+	startFolderSelected := app.acct.sidebarColumn.Sidebar().Selected()
 
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	if !app.helpOpen {
@@ -379,13 +379,13 @@ func TestApp_HelpStealsKeys(t *testing.T) {
 		t.Errorf("msglist selection moved while help open: %d → %d",
 			startMsgSelected, app.acct.msglist.Selected())
 	}
-	if app.acct.sidebar.Selected() != startFolderSelected {
+	if app.acct.sidebarColumn.Sidebar().Selected() != startFolderSelected {
 		t.Errorf("sidebar selection moved while help open: %d → %d",
-			startFolderSelected, app.acct.sidebar.Selected())
+			startFolderSelected, app.acct.sidebarColumn.Sidebar().Selected())
 	}
-	if app.acct.sidebarSearch.State() != SearchIdle {
+	if app.acct.sidebarColumn.SidebarSearch().State() != SearchIdle {
 		t.Errorf("search state changed while help open: got %v",
-			app.acct.sidebarSearch.State())
+			app.acct.sidebarColumn.SidebarSearch().State())
 	}
 	if !app.helpOpen {
 		t.Error("help closed unexpectedly during key barrage")

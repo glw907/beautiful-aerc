@@ -136,12 +136,12 @@ func TestAccountTab(t *testing.T) {
 	t.Run("J/K navigates sidebar", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 20)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
-		if tab.sidebar.SelectedFolder() != "Drafts" {
-			t.Errorf("after J, selected = %q, want Drafts", tab.sidebar.SelectedFolder())
+		if tab.sidebarColumn.Sidebar().SelectedFolder() != "Drafts" {
+			t.Errorf("after J, selected = %q, want Drafts", tab.sidebarColumn.Sidebar().SelectedFolder())
 		}
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
-		if tab.sidebar.SelectedFolder() != "Inbox" {
-			t.Errorf("after K, selected = %q, want Inbox", tab.sidebar.SelectedFolder())
+		if tab.sidebarColumn.Sidebar().SelectedFolder() != "Inbox" {
+			t.Errorf("after K, selected = %q, want Inbox", tab.sidebarColumn.Sidebar().SelectedFolder())
 		}
 	})
 
@@ -242,7 +242,7 @@ func TestAccountTab_foldersLoadedSeedsSidebar(t *testing.T) {
 	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 	folders, _ := backend.ListFolders()
 	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
-	if len(tab.sidebar.entries) == 0 {
+	if len(tab.sidebarColumn.Sidebar().entries) == 0 {
 		t.Fatal("expected sidebar to be seeded")
 	}
 	if cmd == nil {
@@ -427,8 +427,8 @@ func TestAccountTabSearchActivation(t *testing.T) {
 	t.Run("/ in Idle activates search", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-		if tab.sidebarSearch.State() != SearchTyping {
-			t.Errorf("state after / = %v, want SearchTyping", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchTyping {
+			t.Errorf("state after / = %v, want SearchTyping", tab.sidebarColumn.SidebarSearch().State())
 		}
 	})
 
@@ -471,9 +471,9 @@ func TestAccountTabSearchFilter(t *testing.T) {
 	t.Run("SearchUpdatedMsg feeds the count back to SidebarSearch", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		tab, _ = tab.updateTab(SearchUpdatedMsg{Query: "alice", Mode: SearchModeName})
-		if tab.sidebarSearch.results != tab.msglist.FilterResultCount() {
+		if tab.sidebarColumn.SidebarSearch().results != tab.msglist.FilterResultCount() {
 			t.Errorf("sidebarSearch.results = %d, want %d (mirrors FilterResultCount)",
-				tab.sidebarSearch.results, tab.msglist.FilterResultCount())
+				tab.sidebarColumn.SidebarSearch().results, tab.msglist.FilterResultCount())
 		}
 	})
 }
@@ -486,8 +486,8 @@ func TestAccountTabSearchCommitClear(t *testing.T) {
 		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		if tab.sidebarSearch.State() != SearchActive {
-			t.Errorf("state after Enter = %v, want SearchActive", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchActive {
+			t.Errorf("state after Enter = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
 	})
 
@@ -512,8 +512,8 @@ func TestAccountTabSearchCommitClear(t *testing.T) {
 		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEsc})
-		if tab.sidebarSearch.State() != SearchIdle {
-			t.Errorf("state after Esc = %v, want SearchIdle", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
+			t.Errorf("state after Esc = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
 		if got := len(tab.msglist.rows); got != rowsBefore {
 			t.Errorf("row count after Esc = %d, want %d (full restore)", got, rowsBefore)
@@ -529,8 +529,8 @@ func TestAccountTabSearchCommitClear(t *testing.T) {
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEsc})
-		if tab.sidebarSearch.State() != SearchIdle {
-			t.Errorf("state after Esc in Active = %v, want SearchIdle", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
+			t.Errorf("state after Esc in Active = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
 		if got := len(tab.msglist.rows); got != rowsBefore {
 			t.Errorf("row count after Esc in Active = %d, want %d", got, rowsBefore)
@@ -546,12 +546,12 @@ func TestAccountTabSearchFolderJump(t *testing.T) {
 		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		if tab.sidebarSearch.State() != SearchActive {
-			t.Fatalf("setup: state = %v, want SearchActive", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchActive {
+			t.Fatalf("setup: state = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
-		if tab.sidebarSearch.State() != SearchIdle {
-			t.Errorf("state after J = %v, want SearchIdle", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
+			t.Errorf("state after J = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
 	})
 
@@ -563,8 +563,8 @@ func TestAccountTabSearchFolderJump(t *testing.T) {
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
-		if tab.sidebarSearch.State() != SearchIdle {
-			t.Errorf("state after K = %v, want SearchIdle", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
+			t.Errorf("state after K = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
 	})
 }
@@ -578,8 +578,8 @@ func TestAccountTabSearchFoldNoOp(t *testing.T) {
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-		if tab.sidebarSearch.State() != SearchActive {
-			t.Errorf("state after Space = %v, want SearchActive", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchActive {
+			t.Errorf("state after Space = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
 	})
 
@@ -591,8 +591,8 @@ func TestAccountTabSearchFoldNoOp(t *testing.T) {
 		drainSearch(t, &tab, cmd)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
-		if tab.sidebarSearch.State() != SearchActive {
-			t.Errorf("state after F = %v, want SearchActive", tab.sidebarSearch.State())
+		if tab.sidebarColumn.SidebarSearch().State() != SearchActive {
+			t.Errorf("state after F = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
 	})
 }
@@ -660,8 +660,8 @@ func TestAccountTab_SearchKeysInertWhileViewerOpen(t *testing.T) {
 	}
 	// `/` while viewer open should not activate the search shelf.
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if tab.sidebarSearch.State() != SearchIdle {
-		t.Errorf("/ while viewer open activated search; state = %v", tab.sidebarSearch.State())
+	if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
+		t.Errorf("/ while viewer open activated search; state = %v", tab.sidebarColumn.SidebarSearch().State())
 	}
 }
 
@@ -691,7 +691,8 @@ func TestAccountTab_FolderJumpKeys(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.key+" jumps to "+tc.canonical, func(t *testing.T) {
 			tab2, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.key)})
-			got := tab2.sidebar.entries[tab2.sidebar.selected].cf.Canonical
+			sb := tab2.sidebarColumn.Sidebar()
+			got := sb.entries[sb.selected].cf.Canonical
 			if got != tc.canonical {
 				t.Errorf("after %q, selected canonical = %q, want %q", tc.key, got, tc.canonical)
 			}
@@ -728,13 +729,13 @@ func TestAccountTab_FolderJumpClearsSearch(t *testing.T) {
 	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	drainSearch(t, &tab, cmd)
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-	if tab.sidebarSearch.State() != SearchActive {
-		t.Fatalf("expected SearchActive after Enter; got %v", tab.sidebarSearch.State())
+	if tab.sidebarColumn.SidebarSearch().State() != SearchActive {
+		t.Fatalf("expected SearchActive after Enter; got %v", tab.sidebarColumn.SidebarSearch().State())
 	}
 
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
-	if tab.sidebarSearch.State() != SearchIdle {
-		t.Errorf("after D folder jump, search state = %v, want SearchIdle", tab.sidebarSearch.State())
+	if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
+		t.Errorf("after D folder jump, search state = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 	}
 }
 
@@ -1176,7 +1177,7 @@ func TestAccountTab_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
 	if wantLayout.Sidebar > 95/2 {
 		wantLayout.Sidebar = 95 / 2
 	}
-	if got := tab.sidebar.layout; got != wantLayout {
+	if got := tab.sidebarColumn.Sidebar().layout; got != wantLayout {
 		t.Errorf("sidebar.layout = %+v, want %+v", got, wantLayout)
 	}
 	if got := tab.msglist.layout; got != wantLayout {

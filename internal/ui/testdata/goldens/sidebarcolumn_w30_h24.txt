@@ -1,0 +1,24 @@
+                              
+ user@example.com             
+                              
+┃ Inbox                     3 
+  Drafts                      
+  Sent                        
+  Archive                     
+                              
+  Spam                      1 
+  Trash                       
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+   / to search                
+                              
