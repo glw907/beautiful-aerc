@@ -8,6 +8,10 @@ import (
 	"testing"
 )
 
+func TestMockBackendImplementsBackend(t *testing.T) {
+	var _ Backend = (*MockBackend)(nil)
+}
+
 func TestMockBackendThreading(t *testing.T) {
 	b := NewMockBackend()
 	msgs, err := b.FetchHeaders(nil)

@@ -41,6 +41,16 @@ type Backend interface {
 	FetchHeaders(uids []UID) ([]MessageInfo, error)
 	FetchBody(uid UID) ([]byte, error)
 
+	// Attachments returns metadata for non-body parts of uid.
+	// Implementations may issue a roundtrip; callers should expect
+	// this to block.
+	Attachments(uid UID) ([]Attachment, error)
+
+	// FetchAttachment returns decoded bytes for partID on uid.
+	// partID must come from a prior Attachments call on the same
+	// backend instance.
+	FetchAttachment(uid UID, partID string) ([]byte, error)
+
 	Move(uids []UID, dest string) error
 	// Destroy permanently deletes uids from the currently-selected
 	// folder, bypassing Trash. Irreversible. Empty input is a no-op.

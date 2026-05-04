@@ -235,6 +235,14 @@ Reply directly to this email or visit the discussion at https://github.example.c
 `,
 }
 
+// Attachments returns no attachments. Override in tests that need
+// richer fixtures.
+func (m *MockBackend) Attachments(_ UID) ([]Attachment, error) { return nil, nil }
+
+// FetchAttachment returns nil bytes. Override in tests that need
+// richer fixtures.
+func (m *MockBackend) FetchAttachment(_ UID, _ string) ([]byte, error) { return nil, nil }
+
 func (m *MockBackend) Move(uids []UID, dest string) error {
 	m.MoveCalls = append(m.MoveCalls, struct {
 		UIDs []UID
