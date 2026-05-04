@@ -214,12 +214,24 @@ the ADR(s) that justify them.
   helpers used by `cmd/poplar/cache.go`; all path/DSN logic is
   canonical here.
 - `(*Account).QueueOp(ctx, folder, msgUID, args)` is the single
-  write entry point. `OpArgs` is a sealed sum (`MoveArgs`,
+  forward write entry. `OpArgs` is a sealed sum (`MoveArgs`,
   `FlagArgs`, `DestroyArgs`; reserved `SendArgs`, `AppendArgs`).
   Inside one transaction: resolve folder → row id, insert
   outbox row with `status='pending'` and `next_eligible_at=NULL`,
   apply optimistic `ui_flags`/`ui_hide` to the message row,
-  commit, signal drainer.
+  commit, signal drainer. After the drainer marks a row
+  `conflict`, `(*Account).RetryOp(ctx, opID)` and
+  `(*Account).DiscardOp(ctx, opID)` are the user-initiated
+  resolution primitives. Retry resets `attempts = 0` and signals
+  the drainer. Discard reverts the optimistic flip via
+  `revertOptimisticTx` (mirror of `applyOptimisticTx`) and
+  deletes the outbox row in one transaction. Both reject
+  non-conflict rows with `ErrNotConflict`.
+- Cache exposes three read queries for the outbox-visibility
+  surfaces: `OutboxSummary` (grouped by kind/folder/status, where
+  folder is the destination for Move ops via `json_extract` and
+  empty for other kinds), `OutboxConflicts` (decoded error JSON,
+  ordered by enqueued_at ASC), `OutboxDepth` (counts per status).
 - Outbox status is the typed `cache.OpStatus` enum
   (`OpPending`/`OpExecuting`/`OpDone`/`OpFailed`/`OpConflict`)
   stored as the underlying string. Op kind is `cache.OpKind`
@@ -305,3 +317,4 @@ invariant. ADR numbering is chronological.
 | Pass 8.5b Elm conformance audit — URLOpener seam on App; ConfirmModalYesMsg + pendingEmptyConfirm replaces ConfirmRequest.OnYes callback; OpenLinkPickerMsg replaces Viewer.LinkPickerRequest accessor; help_popover row-by-row column join; typed triageOp enum; ui.FolderGroup→mail.Group; key.Bindings for raw keypress dispatch; AccountTab.now seam | 0128 |
 | Pass 8.5c UI structural cleanup — `ModalShell` (named-field embed) for Box-rendering overlays; `SidebarColumn` composite hoists account-line + folders + spacer + shelf; `*<T>Cache` pointer + dirty flag escape hatch for view-stable overlays (MovePicker, HelpPopover) | 0129, 0130 |
 | Pass 8.5d content/filter cleanup — `Block`/`Span` sealed-sum markers reduced to `isBlock()`/`isSpan()`; dead `blockKind`/`spanKind` enums deleted | 0131 |
+| Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |

@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.4c next — Cache III (visible outbox + offline + `Q`/`!` overlays + connection badge).
+**Current pass:** Pass 8.6 next — Attachments I (backend, #24).
 
 ## Passes
 
@@ -12,7 +12,7 @@
 | 8.5b | Elm architecture conformance audit (`internal/ui/`) — ADR-0128 | done |
 | 8.5c | UI structural cleanup — ModalShell + SidebarColumn + overlay render caching (ADR-0129, 0130) | done |
 | 8.5d | Content/filter cleanup — `Block`/`Span` marker simplification (ADR-0131); #23 already shipped in 9174f85 | done |
-| 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge | pending |
+| 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge (ADR-0132, 0133, 0134) | done |
 | 8.6 | Attachments I — backend (#24) | pending |
 | 8.7 | Attachments II — viewer (#24) | pending |
 | 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
@@ -25,35 +25,30 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.4c)
+## Next starter prompt (Pass 8.6)
 
-> **Goal.** Cache III — make the outbox visible to the user: a
-> connection-state badge in the chrome, `Q` overlay listing
-> pending/executing/failed ops, and `!` overlay for conflicts that
-> need user intervention. Plus offline-mode handling so triage
-> queues cleanly when the network is down.
+> **Goal.** Attachments I — backend support for parsing and
+> downloading attachments through the cache. UI follows in Pass 8.7.
 >
-> **Scope.** `internal/cache/` (drainer status surfacing),
-> `internal/ui/` (badge + two new overlays + key dispatch). No
-> changes to backends or to schema (already in place).
+> **Scope.** `internal/cache/` (attachment metadata + download
+> path), `internal/mail/` (Attachment type + Backend method), JMAP
+> + IMAP backends. No UI changes.
 >
-> **Settled (do not re-brainstorm):** Outbox state machine,
-> drainer events, terminal classification — all locked in
-> ADR-0110/0114/0115/0117. Connection-state visual language
-> (`●` / `◐` / `○`) locked by ui-invariants. Modal overlays use
-> `ModalShell` (ADR-0129).
+> **Settled (do not re-brainstorm):** Cache II body lazy
+> population (ADR-0122/0123/0124) is the model — attachments
+> follow the same write-through pattern with a separate size
+> backstop.
 >
-> **Still open — brainstorm these:** `Q` density (per-op vs
-> grouped); `!` action surface (retry / discard); badge placement
-> in chrome; offline-mode failure threshold.
+> **Still open — brainstorm these:** Inline-vs-attachment
+> classification source of truth; per-attachment storage path
+> (`bodies` table or new `attachments` table); MIME type
+> normalization.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-cache-iii.md`, then implement.
-> Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-attachments-i.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Queued
 
-- **Pass 8.4c** — Cache III (visible outbox + offline + `Q`/`!`
-  overlays + connection badge).
 - **#30** — `Sidebar.View` render cache (apply the 8.5c overlay
   cache pattern). Pickup-of-opportunity, not a dedicated pass.
