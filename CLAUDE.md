@@ -82,6 +82,37 @@ writing code.
   update, plan archival, commit + push + install) and the starter-
   prompt format for the next pass.
 
+## Human voice
+
+Code must read as if one experienced Go developer wrote it.
+Contributors recognize AI-generated Go on sight and disengage —
+that's the threat model. Apply as you write, not as cleanup.
+
+The full style guide is `~/.claude/docs/go-comment-voice.md`:
+decision rubric, voice palette (poplar = stdlib-formal base,
+Gerrand-welcoming for package docs, Pike-aphoristic for errors),
+phrasing patterns, error-string rules, and the 32-tell catalogue
+with mechanical avoidance rules per tell. The `go-conventions`
+skill loads the same catalogue inline and is invoked before any Go
+file edit. `/simplify`'s voice lens (Agent 4) scans diffs against
+the catalogue by tell number.
+
+Poplar-specific framing — beyond the universal rules in the guide:
+
+- **Comments default to none.** WHY-comments only when the why is
+  non-obvious. Never restate code. Skip godoc on unexported symbols
+  unless the doc adds information beyond the name (Google's
+  "unobvious" bar — see guide §10).
+- **No defensive checks on internal callers.** Validate at
+  boundaries (user input, config load, external APIs), not between
+  two functions in the same package.
+- **No single-impl interfaces, no zero-line wrappers.** An
+  interface with one impl is a tell unless a real seam (test fake,
+  DI point) is named in the code or in an ADR. Inline.
+
+ADR-0141 codifies the policy and points at the guide as the
+binding artifact.
+
 ## Path-scoped rules
 
 `.claude/rules/ui-invariants.md` auto-loads when editing

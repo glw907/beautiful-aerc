@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9 next — Compose framing.
+**Current pass:** Pass 8.8 active — Human-voice audit I.
 
 ## Passes
 
@@ -15,44 +15,43 @@
 | 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge (ADR-0132, 0133, 0134) | done |
 | 8.6 | Attachments I — backend (#24) (ADR-0135, 0136, 0137) | done |
 | 8.7 | Attachments II — viewer (#24) (ADR-0138, 0139, 0140) | done |
+| 8.8 | Human-voice audit I — research-grounded style guide, persona, ADR-0141, skill + `/simplify` updates; string-only fixes (C1 comments, C7 errors, C4 prose verbosity) | active |
+| 8.9 | Human-voice audit II — structural fixes (C2 defensive cruft, C3 inlines, C5 renames, C6 test boilerplate, C8 structural symmetry) against 8.8's frozen triage | pending |
 | 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
 | 9.5 | Compose enhancements — #5 #12 #24 | pending |
 | 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
 | 10 | Polish II — popover dim (#14); items surfaced during 9–9.6 | pending |
-| 10.5 | Human-voice audit — strip AI fingerprints; ADR-0138, `go-conventions` + `/simplify` updates (spec + plan written 2026-05-04) | pending |
 | 11 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag `v0.9.0` | pending |
 | **Beta soak** | Bug-fix releases on master; data formats frozen; new features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9)
+## Next starter prompt (Pass 8.9)
 
-> **Goal.** Compose framing — wire the Editor interface, ship
-> Catkin (the v1 native bubbletea editor) for the basic compose
-> path, and stand up `go-smtp` for outbound send. Drafts go through
-> the cache outbox just like other writes.
+> **Goal.** Apply the structural human-voice findings against
+> 8.8's frozen triage list — C2 defensive cruft, C6 test
+> boilerplate, C5 renames, C3 inlines, C8 structural symmetry.
 >
-> **Scope.** New `internal/editor/` package for the Editor
-> interface + Catkin impl. New `internal/mailsmtp/` (or extend
-> existing wiring) for SMTP submission. `cache.SendArgs` /
-> `cache.AppendArgs` come off the reserved list and get drainer
-> handlers. UI: a Compose surface launched by `c`/`r`/`R`/`f` —
-> inline, no terminal takeover (ADR-0031/0032).
+> **Scope.** Phase 3b of the plan at
+> `docs/superpowers/plans/2026-05-04-human-voice-audit.md`.
+> One commit per category; `make check` green between; live tmux
+> render at 80×24 + 120×40 after C5 and C3.
 >
-> **Settled (do not re-brainstorm):** Editor is pluggable behind
-> the interface; v1.1 adds the neovim `--embed` adapter (ADR-0033).
-> Compose renders inline, sidebar+chrome stay visible.
-> `mail.Backend` does not gain Send/Append — both go through
-> `cache.QueueOp` so the outbox is the single forward write path.
+> **Settled (do not re-brainstorm):** Triage is frozen at end of
+> 8.8 Phase 2. Style guide, persona, `go-conventions` skill, and
+> `/simplify` voice lens are in production from 8.8. Real-seam
+> guard list is in the plan. Coverage-guard rule for C6 case
+> removal is in the plan.
 >
-> **Still open — brainstorm these:** Catkin's textarea contract
-> (bubbles textarea vs custom); attachment-attach UX; multi-account
-> From: chooser; send feedback shape (toast / banner / both).
+> **Still open — brainstorm these:** None. Pure implementation
+> against the frozen triage.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-compose-framing.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Read the plan's Phase 3b. Execute task-by-task.
+> Standard pass-end checklist applies, plus Phase 6 close-out
+> (archive plan + spec + audit findings — 8.8 deferred archival
+> to here). When done, write Pass 9 starter prompt (compose
+> framing — see git log of this file for prior content).
 
 ## Queued
 
