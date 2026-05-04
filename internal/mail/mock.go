@@ -119,11 +119,6 @@ func (m *MockBackend) FetchHeaders(_ []UID) ([]MessageInfo, error) {
 	return m.msgs, nil
 }
 
-// FetchBody returns a realistic markdown body for stress-testing the
-// content render pipeline. Each mapped UID exercises a distinct wrap
-// path (styled spans straddling the 72-col cap, nested quotes, long
-// URLs, code blocks, list hanging indent, footnote markers at the
-// column boundary). Unmapped UIDs fall back to a short default.
 func (m *MockBackend) FetchBody(uid UID) ([]byte, error) {
 	if body, ok := mockBodies[uid]; ok {
 		return []byte(body), nil
@@ -232,12 +227,8 @@ Reply directly to this email or visit the discussion at https://github.example.c
 `,
 }
 
-// Attachments returns no attachments. Override in tests that need
-// richer fixtures.
-func (m *MockBackend) Attachments(_ UID) ([]Attachment, error) { return nil, nil }
-
-// FetchAttachment returns nil bytes. Override in tests that need
-// richer fixtures.
+// Override in tests that need richer fixtures.
+func (m *MockBackend) Attachments(_ UID) ([]Attachment, error)         { return nil, nil }
 func (m *MockBackend) FetchAttachment(_ UID, _ string) ([]byte, error) { return nil, nil }
 
 func (m *MockBackend) Move(uids []UID, dest string) error {

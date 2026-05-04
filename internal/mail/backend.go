@@ -16,8 +16,7 @@ type SearchCriteria struct {
 }
 
 // Backend is the interface that mail protocol adapters implement.
-// Every method blocks; callers wrap the call in a tea.Cmd if they
-// need it off the UI loop.
+// Every method blocks until the operation completes.
 type Backend interface {
 	// AccountName is the user-facing display label.
 	AccountName() string
@@ -40,8 +39,7 @@ type Backend interface {
 	FetchHeaders(uids []UID) ([]MessageInfo, error)
 	FetchBody(uid UID) ([]byte, error)
 
-	// Attachments returns metadata for non-body parts of uid. May
-	// issue a network roundtrip.
+	// Attachments returns metadata for non-body parts of uid.
 	Attachments(uid UID) ([]Attachment, error)
 
 	// FetchAttachment returns decoded bytes for partID on uid.

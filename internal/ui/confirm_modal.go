@@ -49,29 +49,24 @@ func NewConfirmModal(styles Styles) ConfirmModal {
 	}
 }
 
-// IsOpen reports whether the modal is visible.
 func (m ConfirmModal) IsOpen() bool { return m.shell.IsOpen() }
 
-// Open transitions the modal into the open state with req.
 func (m ConfirmModal) Open(req ConfirmRequest) ConfirmModal {
 	m.shell = m.shell.WithOpen(true)
 	m.req = req
 	return m
 }
 
-// Close transitions the modal out of view.
 func (m ConfirmModal) Close() ConfirmModal {
 	m.shell = m.shell.WithOpen(false)
 	return m
 }
 
-// SetSize updates dimensions. App threads WindowSizeMsg here.
 func (m ConfirmModal) SetSize(width, height int) ConfirmModal {
 	m.shell = m.shell.SetSize(width, height)
 	return m
 }
 
-// Update dispatches a key while the modal is open.
 func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 	if !m.shell.IsOpen() {
 		return m, nil
@@ -98,7 +93,6 @@ const (
 	confirmModalMinWidth = 24
 )
 
-// View renders the modal or "" when closed.
 func (m ConfirmModal) View() string {
 	if !m.shell.IsOpen() {
 		return ""

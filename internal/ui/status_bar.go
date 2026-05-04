@@ -51,20 +51,17 @@ func NewStatusBar(styles Styles) StatusBar {
 	}
 }
 
-// SetCounts returns a copy of sb with the message and unread counts updated.
 func (sb StatusBar) SetCounts(total, unread int) StatusBar {
 	sb.total = total
 	sb.unread = unread
 	return sb
 }
 
-// SetConnectionState returns a copy of sb with the connection state set.
 func (sb StatusBar) SetConnectionState(state ConnectionState) StatusBar {
 	sb.connState = state
 	return sb
 }
 
-// ConnectionState returns the current connection state. Used in tests.
 func (sb StatusBar) ConnectionState() ConnectionState { return sb.connState }
 
 // SetOutboxDepth returns a copy of sb with the outbox segment counts
@@ -82,14 +79,12 @@ func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
 	return sb
 }
 
-// SetMode returns a copy of sb in the given display mode.
 func (sb StatusBar) SetMode(mode StatusMode) StatusBar {
 	sb.mode = mode
 	return sb
 }
 
-// SetScrollPct returns a copy of sb with the viewer scroll percentage
-// updated. Only meaningful when mode == StatusViewer.
+// Only meaningful when mode == StatusViewer.
 func (sb StatusBar) SetScrollPct(pct int) StatusBar {
 	if pct < 0 {
 		pct = 0

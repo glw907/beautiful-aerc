@@ -45,9 +45,7 @@ func (a *Account) Attachments(ctx context.Context, uid mail.UID) ([]mail.Attachm
 	return atts, nil
 }
 
-// lookupAttachments returns cached metadata rows for uid, ordered by
-// id. Empty slice on miss; never returns nil error with non-nil rows
-// on a true miss.
+// Empty slice on miss.
 func (a *Account) lookupAttachments(ctx context.Context, uid mail.UID) ([]mail.Attachment, error) {
 	const q = `
         SELECT a.part_id, a.filename, a.mime_type, a.size, a.content_id, a.disposition

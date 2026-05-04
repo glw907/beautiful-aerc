@@ -12,9 +12,6 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// lookupBody reads a cached body for uid. Returns (bytes, true, nil)
-// on hit, (nil, false, nil) on miss, (nil, false, err) on db error.
-// No last_accessed update — lazy-population only.
 func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, error) {
 	const q = `
         SELECT b.bytes
@@ -32,13 +29,8 @@ func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, e
 	return buf, true, nil
 }
 
-// storeBody writes body bytes into the bodies table for uid. The
-// caller has already cache-missed; this is the population path.
-// Returns an error if uid has no row in messages (caller bug — the
-// header row is established by SyncFolder/upsertMessages first).
-//
-// If maxSize > 0, evicts oldest-by-sent-date bodies before insert
-// so total bytes remain at or below maxSize.
+// Population path. The header row must already exist; storeBody
+// errors if not. Evicts oldest-by-sent-date when maxSize > 0.
 func (a *Account) storeBody(ctx context.Context, uid mail.UID, body []byte) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		newSize := int64(len(body))

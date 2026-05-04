@@ -95,17 +95,12 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 	}
 }
 
-// Title returns the current folder name.
 func (m AccountTab) Title() string { return m.sidebarColumn.Sidebar().SelectedFolder() }
 
-// Backend returns the underlying mail.Backend so the App can drive
-// the connection-state pump without duplicating the cache reference.
 func (m AccountTab) Backend() mail.Backend { return m.acct.Backend }
 
-// Cache returns the *cache.Account so App can pass it to outbox/conflict cmds.
 func (m AccountTab) Cache() *cache.Account { return m.acct }
 
-// Icon returns the folder's Nerd Font icon.
 func (m AccountTab) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
 
 // Closeable returns false — the account tab cannot be closed.
@@ -505,12 +500,7 @@ func (m AccountTab) clearSearchIfActive() AccountTab {
 	return m
 }
 
-// selectionChangedCmds runs every time the selected folder changes:
-// resets the destination page, clears the msglist, sets loading=true,
-// and returns the load Cmd batched with the spinner tick. Returns the
-// updated AccountTab and the Cmd so mutations are visible at the call
-// site. App reads folder counts via SelectedFolderCounts() after
-// delegation rather than via a FolderChangedMsg signal.
+// Returns m alongside the Cmd so mutations are visible at the call site.
 func (m AccountTab) selectionChangedCmds() (AccountTab, tea.Cmd) {
 	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
@@ -626,7 +616,6 @@ func (m AccountTab) WindowCounter() string {
 	return fmt.Sprintf("%d/%d", page.loaded, page.total)
 }
 
-// ViewerOpen reports whether the viewer is currently open.
 func (m AccountTab) ViewerOpen() bool { return m.viewer.IsOpen() }
 
 // SelectedFolderCounts returns the (exists, unseen) counts for the
@@ -649,7 +638,6 @@ func (m AccountTab) ViewerScrollPct() int {
 	return m.viewer.ScrollPct()
 }
 
-// SearchState exposes the sidebar search state machine.
 func (m AccountTab) SearchState() SearchState {
 	return m.sidebarColumn.SidebarSearch().State()
 }

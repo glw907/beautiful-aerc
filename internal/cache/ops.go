@@ -18,21 +18,16 @@ import (
 // rejects them.
 type OpArgs interface{ opKind() OpKind }
 
-// MoveArgs queues a move to dest (canonical folder name).
-type MoveArgs struct{ Dest string }
-
-// FlagArgs queues a flag set/unset.
-type FlagArgs struct {
-	Flag mail.Flag
-	Set  bool
-}
-
-// DestroyArgs queues an irreversible delete.
-type DestroyArgs struct{}
-
-type SendArgs struct{}
-
-type AppendArgs struct{}
+type (
+	MoveArgs    struct{ Dest string } // dest = canonical folder name
+	FlagArgs    struct {
+		Flag mail.Flag
+		Set  bool
+	}
+	DestroyArgs struct{} // irreversible
+	SendArgs    struct{}
+	AppendArgs  struct{}
+)
 
 func (MoveArgs) opKind() OpKind    { return KindMove }
 func (FlagArgs) opKind() OpKind    { return KindFlag }

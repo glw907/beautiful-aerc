@@ -49,19 +49,15 @@ func (c SidebarColumn) SetSize(w, h int) SidebarColumn {
 	return c
 }
 
-// Sidebar returns the current Sidebar child.
 func (c SidebarColumn) Sidebar() Sidebar { return c.sidebar }
 
-// SidebarSearch returns the current SidebarSearch child.
 func (c SidebarColumn) SidebarSearch() SidebarSearch { return c.sidebarSearch }
 
-// WithSidebar returns a copy of c with the Sidebar replaced.
 func (c SidebarColumn) WithSidebar(s Sidebar) SidebarColumn {
 	c.sidebar = s
 	return c
 }
 
-// WithSidebarSearch returns a copy of c with the SidebarSearch replaced.
 func (c SidebarColumn) WithSidebarSearch(s SidebarSearch) SidebarColumn {
 	c.sidebarSearch = s
 	return c

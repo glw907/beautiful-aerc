@@ -47,17 +47,14 @@ func NewOutboxOverlay(styles Styles) OutboxOverlay {
 	}
 }
 
-// IsOpen reports whether the overlay is currently visible.
 func (o OutboxOverlay) IsOpen() bool { return o.shell.IsOpen() }
 
-// Open opens the overlay and sets the groups to display.
 func (o OutboxOverlay) Open(groups []cache.OutboxGroup) OutboxOverlay {
 	o.shell = o.shell.WithOpen(true)
 	o.groups = groups
 	return o
 }
 
-// Close closes the overlay and clears the group list.
 func (o OutboxOverlay) Close() OutboxOverlay {
 	o.shell = o.shell.WithOpen(false)
 	o.groups = nil
@@ -70,13 +67,11 @@ func (o OutboxOverlay) SetGroups(groups []cache.OutboxGroup) OutboxOverlay {
 	return o
 }
 
-// SetSize stores terminal dimensions on the overlay.
 func (o OutboxOverlay) SetSize(w, h int) OutboxOverlay {
 	o.shell = o.shell.SetSize(w, h)
 	return o
 }
 
-// Update handles key events while the overlay is open.
 func (o OutboxOverlay) Update(msg tea.Msg) (OutboxOverlay, tea.Cmd) {
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -93,7 +88,6 @@ func (o OutboxOverlay) Update(msg tea.Msg) (OutboxOverlay, tea.Cmd) {
 	return o, nil
 }
 
-// View renders the overlay, or "" when closed.
 func (o OutboxOverlay) View() string {
 	if !o.shell.IsOpen() {
 		return ""

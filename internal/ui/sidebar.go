@@ -69,7 +69,6 @@ func (s *Sidebar) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UI
 	}
 }
 
-// Selected returns the index of the currently selected folder.
 func (s Sidebar) Selected() int { return s.selected }
 
 // SelectedFolder returns the provider name of the currently selected folder.
@@ -157,7 +156,6 @@ func (s *Sidebar) SelectByCanonical(target string) bool {
 	return false
 }
 
-// SelectedIcon returns the icon of the currently selected folder.
 func (s Sidebar) SelectedIcon() string {
 	if s.selected < len(s.entries) {
 		return s.entries[s.selected].icon
@@ -165,7 +163,6 @@ func (s Sidebar) SelectedIcon() string {
 	return ""
 }
 
-// SetSize updates the sidebar dimensions.
 func (s *Sidebar) SetSize(width, height int) {
 	s.width = width
 	s.height = height
@@ -176,24 +173,20 @@ func (s *Sidebar) SetLayout(l LayoutMode) {
 	s.layout = l
 }
 
-// MoveUp moves the selection up by one.
 func (s *Sidebar) MoveUp() {
 	if s.selected > 0 {
 		s.selected--
 	}
 }
 
-// MoveDown moves the selection down by one.
 func (s *Sidebar) MoveDown() {
 	if s.selected < len(s.entries)-1 {
 		s.selected++
 	}
 }
 
-// MoveToTop moves the selection to the first folder.
 func (s *Sidebar) MoveToTop() { s.selected = 0 }
 
-// MoveToBottom moves the selection to the last folder.
 func (s *Sidebar) MoveToBottom() {
 	if len(s.entries) > 0 {
 		s.selected = len(s.entries) - 1

@@ -62,10 +62,8 @@ func NewConflictOverlay(styles Styles) ConflictOverlay {
 	}
 }
 
-// IsOpen reports whether the overlay is currently visible.
 func (c ConflictOverlay) IsOpen() bool { return c.shell.IsOpen() }
 
-// Open opens the overlay and loads the initial set of conflict rows.
 func (c ConflictOverlay) Open(rows []cache.ConflictRow) ConflictOverlay {
 	c.shell = c.shell.WithOpen(true)
 	c.rows = rows
@@ -74,7 +72,6 @@ func (c ConflictOverlay) Open(rows []cache.ConflictRow) ConflictOverlay {
 	return c
 }
 
-// Close closes the overlay and clears its rows.
 func (c ConflictOverlay) Close() ConflictOverlay {
 	c.shell = c.shell.WithOpen(false)
 	c.rows = nil
@@ -96,14 +93,12 @@ func (c ConflictOverlay) SetRows(rows []cache.ConflictRow) ConflictOverlay {
 // RowCount returns the number of conflict rows currently loaded.
 func (c ConflictOverlay) RowCount() int { return len(c.rows) }
 
-// SetSize updates the terminal dimensions and invalidates the render cache.
 func (c ConflictOverlay) SetSize(w, h int) ConflictOverlay {
 	c.shell = c.shell.SetSize(w, h)
 	c.cache.dirty = true
 	return c
 }
 
-// Update handles key messages when the overlay is open.
 func (c ConflictOverlay) Update(msg tea.Msg) (ConflictOverlay, tea.Cmd) {
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -142,8 +137,8 @@ func (c ConflictOverlay) Update(msg tea.Msg) (ConflictOverlay, tea.Cmd) {
 	return c, nil
 }
 
-// View renders the overlay. Returns "" when closed. Caches the rendered
-// string via the heap-allocated *conflictCache pointer (ADR-0130 escape hatch).
+// Caches the rendered string via the heap-allocated *conflictCache
+// pointer (ADR-0130 escape hatch).
 func (c ConflictOverlay) View() string {
 	if !c.shell.IsOpen() {
 		return ""

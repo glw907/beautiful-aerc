@@ -84,11 +84,7 @@ type CacheEvent struct {
 	Err     string // populated for conflict/failed
 }
 
-// Config tunes per-account cache behavior. Currently the only knobs
-// are the body-cache and attachment-cache size backstops; future
-// fields cover sync-on-open, drainer behavior, etc. The zero Config
-// (all zeroes) disables the size backstops — useful for tests and
-// for users who want no cap.
+// The zero Config disables the size backstops.
 type Config struct {
 	// MaxSize is the body-cache size cap in bytes. 0 disables.
 	// Default 2GB when populated from [cache] in config.toml.

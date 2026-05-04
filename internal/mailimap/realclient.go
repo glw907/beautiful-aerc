@@ -358,7 +358,6 @@ func parseHeaderFields(raw []byte, m map[string]any) {
 	}
 }
 
-// FetchBody fetches the complete RFC 822 body for uid and returns a reader.
 func (r *realClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 	opts := &imap.FetchOptions{
 		UID:         true,
@@ -502,10 +501,7 @@ func (r *realClient) IdleStop() {
 	}
 }
 
-// FetchBodyStructure issues UID FETCH BODYSTRUCTURE for one UID and
-// returns a protocol-agnostic BodyStructure tree. Extended body
-// structure is requested so Disposition and filename params are
-// populated.
+// Extended structure is requested so Disposition and filename params populate.
 func (r *realClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
 	opts := &imap.FetchOptions{
 		UID:           true,
@@ -570,9 +566,7 @@ func convertBodyStructure(bs imap.BodyStructure, path []int) BodyStructure {
 	return BodyStructure{Section: sec}
 }
 
-// FetchBodyPart fetches the raw bytes of a single MIME part identified
-// by its dot-joined section path (e.g. "2", "2.1"). The section is
-// fetched as BODY.PEEK[<section>] (no specifier — full part content).
+// section is the dot-joined path (e.g. "2", "2.1"). Fetched as BODY.PEEK[<section>].
 func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error) {
 	parts, err := parseSectionPath(section)
 	if err != nil {

@@ -65,7 +65,6 @@ func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string, icons
 	}
 }
 
-// IsOpen reports whether the viewer is currently displayed.
 func (v Viewer) IsOpen() bool { return v.open }
 
 // Phase reports the viewer's current load phase. Used by AccountTab
@@ -129,7 +128,6 @@ func (v Viewer) SetSize(width, height int) Viewer {
 // it with the body-fetch Cmd when opening.
 func (v Viewer) SpinnerTick() tea.Cmd { return v.spinner.Tick }
 
-// Links returns the harvested URL list. Exposed for tests.
 func (v Viewer) Links() []string { return v.links }
 
 // SetAttachments installs the attachment metadata list. Idempotent
@@ -142,10 +140,8 @@ func (v Viewer) SetAttachments(items []mail.Attachment) Viewer {
 	return v
 }
 
-// Attachments returns the harvested attachment metadata.
 func (v Viewer) Attachments() []mail.Attachment { return v.attachments }
 
-// ScrollPct returns the current scroll position as 0..100 percent.
 func (v Viewer) ScrollPct() int {
 	if v.phase != viewerReady {
 		return 0
