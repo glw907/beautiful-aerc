@@ -225,6 +225,12 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		}
 		return m, nil
 
+	case attachmentsLoadedMsg:
+		if m.viewer.CurrentUID() == msg.uid {
+			m.viewer = m.viewer.SetAttachments(msg.items)
+		}
+		return m, nil
+
 	case ErrorMsg:
 		// App owns the banner; AccountTab ignores. App.Update runs
 		// before delegation, so the App layer captures the message.
@@ -468,6 +474,7 @@ func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
 	m.viewer = m.viewer.Open(msg)
 	cmds := []tea.Cmd{
 		loadBodyCmd(ctx, m.acct, msg.UID),
+		loadAttachmentsCmd(m.acct, msg.UID),
 		m.viewer.SpinnerTick(),
 	}
 	if msg.Flags&mail.FlagSeen == 0 {

@@ -1314,3 +1314,26 @@ func TestAccountTab_BodyLoaded_ClearsCancelFunc(t *testing.T) {
 		t.Error("bodyFetchCancel should be nil after bodyLoadedMsg for the current UID")
 	}
 }
+
+func TestAccountTab_AttachmentsLoadedMsg_StaleUIDDropped(t *testing.T) {
+	tab := newLoadedTab(t, 120, 30)
+	tab, _ = tab.openMessage(mail.MessageInfo{UID: "u1"})
+
+	// Stale UID — must be dropped.
+	out, _ := tab.updateTab(attachmentsLoadedMsg{
+		uid:   "u2",
+		items: []mail.Attachment{{PartID: "2", Filename: "stale"}},
+	})
+	if got := out.viewer.Attachments(); len(got) != 0 {
+		t.Errorf("stale attachments applied: %v", got)
+	}
+
+	// Matching UID — must be applied.
+	out2, _ := tab.updateTab(attachmentsLoadedMsg{
+		uid:   "u1",
+		items: []mail.Attachment{{PartID: "2", Filename: "real", Size: 1}},
+	})
+	if got := out2.viewer.Attachments(); len(got) != 1 {
+		t.Errorf("expected 1 attachment, got %d", len(got))
+	}
+}
