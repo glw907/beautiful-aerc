@@ -3,6 +3,7 @@
 package content
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,57 +86,57 @@ func TestParseBlocks(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		types []blockKind
+		types []string
 	}{
 		{
 			name:  "single paragraph",
 			input: "Hello world",
-			types: []blockKind{kindParagraph},
+			types: []string{"content.Paragraph"},
 		},
 		{
 			name:  "two paragraphs",
 			input: "First paragraph.\n\nSecond paragraph.",
-			types: []blockKind{kindParagraph, kindParagraph},
+			types: []string{"content.Paragraph", "content.Paragraph"},
 		},
 		{
 			name:  "heading",
 			input: "# Title\n\nBody text.",
-			types: []blockKind{kindHeading, kindParagraph},
+			types: []string{"content.Heading", "content.Paragraph"},
 		},
 		{
 			name:  "heading levels",
 			input: "## Level 2\n\n### Level 3",
-			types: []blockKind{kindHeading, kindHeading},
+			types: []string{"content.Heading", "content.Heading"},
 		},
 		{
 			name:  "blockquote",
 			input: "> quoted text",
-			types: []blockKind{kindBlockquote},
+			types: []string{"content.Blockquote"},
 		},
 		{
 			name:  "nested blockquote",
 			input: "> > deeply quoted",
-			types: []blockKind{kindBlockquote},
+			types: []string{"content.Blockquote"},
 		},
 		{
 			name:  "horizontal rule",
 			input: "Above\n\n---\n\nBelow",
-			types: []blockKind{kindParagraph, kindRule, kindParagraph},
+			types: []string{"content.Paragraph", "content.Rule", "content.Paragraph"},
 		},
 		{
 			name:  "code block",
 			input: "```go\nfmt.Println()\n```",
-			types: []blockKind{kindCodeBlock},
+			types: []string{"content.CodeBlock"},
 		},
 		{
 			name:  "unordered list",
 			input: "- item one\n- item two",
-			types: []blockKind{kindListItem, kindListItem},
+			types: []string{"content.ListItem", "content.ListItem"},
 		},
 		{
 			name:  "ordered list",
 			input: "1. first\n2. second",
-			types: []blockKind{kindListItem, kindListItem},
+			types: []string{"content.ListItem", "content.ListItem"},
 		},
 		{
 			// Gmail-style plain-text bullets: 3-space indent on the bullet,
@@ -144,17 +145,17 @@ func TestParseBlocks(t *testing.T) {
 			// collapse into one paragraph.
 			name:  "indented bullets with continuation",
 			input: "   - first item\n   wraps onto next line\n   - second item",
-			types: []blockKind{kindListItem, kindListItem},
+			types: []string{"content.ListItem", "content.ListItem"},
 		},
 		{
 			name:  "signature",
 			input: "Body text.\n\n-- \nGeoff Wright\ngeoff@907.life",
-			types: []blockKind{kindParagraph, kindSignature},
+			types: []string{"content.Paragraph", "content.Signature"},
 		},
 		{
 			name:  "quote attribution",
 			input: "On Mon, Jan 5, Alice wrote:\n\n> quoted reply",
-			types: []blockKind{kindQuoteAttribution, kindBlockquote},
+			types: []string{"content.QuoteAttribution", "content.Blockquote"},
 		},
 	}
 	for _, tt := range tests {
@@ -164,8 +165,8 @@ func TestParseBlocks(t *testing.T) {
 				t.Fatalf("block count: got %d, want %d\nblocks: %v", len(blocks), len(tt.types), blocks)
 			}
 			for i, b := range blocks {
-				if b.blockType() != tt.types[i] {
-					t.Errorf("block[%d]: got kind %d, want %d", i, b.blockType(), tt.types[i])
+				if got := fmt.Sprintf("%T", b); got != tt.types[i] {
+					t.Errorf("block[%d]: got %s, want %s", i, got, tt.types[i])
 				}
 			}
 		})
@@ -245,27 +246,27 @@ func TestWrapImpliedQuotes(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		types []blockKind
+		types []string
 	}{
 		{
 			name:  "attribution followed by paragraph wraps",
 			input: "Reply text\n\nOn Mon, Jan 5, Alice wrote:\nUnquoted content",
-			types: []blockKind{kindParagraph, kindQuoteAttribution, kindBlockquote},
+			types: []string{"content.Paragraph", "content.QuoteAttribution", "content.Blockquote"},
 		},
 		{
 			name:  "attribution followed by blockquote unchanged",
 			input: "Reply text\n\nOn Mon, Jan 5, Alice wrote:\n> Quoted content",
-			types: []blockKind{kindParagraph, kindQuoteAttribution, kindBlockquote},
+			types: []string{"content.Paragraph", "content.QuoteAttribution", "content.Blockquote"},
 		},
 		{
 			name:  "no attribution unchanged",
 			input: "Just a paragraph",
-			types: []blockKind{kindParagraph},
+			types: []string{"content.Paragraph"},
 		},
 		{
 			name:  "attribution at end unchanged",
 			input: "Text\n\nOn Mon, Jan 5, Alice wrote:",
-			types: []blockKind{kindParagraph, kindQuoteAttribution},
+			types: []string{"content.Paragraph", "content.QuoteAttribution"},
 		},
 	}
 	for _, tt := range tests {
@@ -275,8 +276,8 @@ func TestWrapImpliedQuotes(t *testing.T) {
 				t.Fatalf("block count: got %d, want %d\nblocks: %v", len(blocks), len(tt.types), blocks)
 			}
 			for i, b := range blocks {
-				if b.blockType() != tt.types[i] {
-					t.Errorf("block[%d]: got kind %d, want %d", i, b.blockType(), tt.types[i])
+				if got := fmt.Sprintf("%T", b); got != tt.types[i] {
+					t.Errorf("block[%d]: got %s, want %s", i, got, tt.types[i])
 				}
 			}
 		})

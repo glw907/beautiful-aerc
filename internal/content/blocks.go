@@ -2,39 +2,18 @@
 
 package content
 
-// Block represents a semantic unit of email content.
+// Block represents a semantic unit of email content. The unexported
+// marker method seals the interface to the concrete types in this
+// package; discrimination is by Go type switch on the value.
 type Block interface {
-	blockType() blockKind
+	isBlock()
 }
 
-type blockKind int
-
-const (
-	kindParagraph blockKind = iota
-	kindHeading
-	kindBlockquote
-	kindQuoteAttribution
-	kindSignature
-	kindRule
-	kindCodeBlock
-	kindTable
-	kindListItem
-)
-
-// Span represents an inline styled segment within a block.
+// Span represents an inline styled segment within a block. Sealed
+// the same way as Block.
 type Span interface {
-	spanType() spanKind
+	isSpan()
 }
-
-type spanKind int
-
-const (
-	kindText spanKind = iota
-	kindBold
-	kindItalic
-	kindCode
-	kindLink
-)
 
 type Paragraph struct{ Spans []Span }
 type Heading struct {
@@ -62,15 +41,15 @@ type ListItem struct {
 	Index   int
 }
 
-func (Paragraph) blockType() blockKind        { return kindParagraph }
-func (Heading) blockType() blockKind          { return kindHeading }
-func (Blockquote) blockType() blockKind       { return kindBlockquote }
-func (QuoteAttribution) blockType() blockKind { return kindQuoteAttribution }
-func (Signature) blockType() blockKind        { return kindSignature }
-func (Rule) blockType() blockKind             { return kindRule }
-func (CodeBlock) blockType() blockKind        { return kindCodeBlock }
-func (Table) blockType() blockKind            { return kindTable }
-func (ListItem) blockType() blockKind         { return kindListItem }
+func (Paragraph) isBlock()        {}
+func (Heading) isBlock()          {}
+func (Blockquote) isBlock()       {}
+func (QuoteAttribution) isBlock() {}
+func (Signature) isBlock()        {}
+func (Rule) isBlock()             {}
+func (CodeBlock) isBlock()        {}
+func (Table) isBlock()            {}
+func (ListItem) isBlock()         {}
 
 type Text struct{ Content string }
 type Bold struct{ Content string }
@@ -81,11 +60,11 @@ type Link struct {
 	URL  string
 }
 
-func (Text) spanType() spanKind   { return kindText }
-func (Bold) spanType() spanKind   { return kindBold }
-func (Italic) spanType() spanKind { return kindItalic }
-func (Code) spanType() spanKind   { return kindCode }
-func (Link) spanType() spanKind   { return kindLink }
+func (Text) isSpan()   {}
+func (Bold) isSpan()   {}
+func (Italic) isSpan() {}
+func (Code) isSpan()   {}
+func (Link) isSpan()   {}
 
 // Address is a parsed email address with optional display name.
 type Address struct {
