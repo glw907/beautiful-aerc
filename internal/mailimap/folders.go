@@ -9,7 +9,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// ListFolders satisfies mail.Backend. Uses LIST RETURN (SPECIAL-USE)
+// ListFolders uses LIST RETURN (SPECIAL-USE)
 // when the server advertises it; falls back to plain LIST otherwise.
 // The role is derived from RFC 6154 attributes when present; the
 // classifier (mail.Classify) handles name-based fallback at the UI
@@ -56,7 +56,7 @@ func roleFromAttrs(attrs []string) string {
 	return ""
 }
 
-// OpenFolder satisfies mail.Backend. Selects the folder on the
+// OpenFolder selects the folder on the
 // command connection and signals the idle goroutine to re-IDLE on
 // the new folder.
 func (b *Backend) OpenFolder(name string) error {

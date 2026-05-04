@@ -36,9 +36,8 @@ var ErrCannotCalculateChanges = errors.New("mail: cannot calculate changes")
 // auth failures with %w so the chain unwraps to ErrAuth.
 var ErrAuth = errors.New("mail: authentication failed")
 
-// ErrNotFound is the sentinel for "the message you asked about no
-// longer exists." The cache drainer treats it as idempotent
-// success per spec §D.4 (notFound = done).
+// ErrNotFound signals the message no longer exists on the server.
+// The cache drainer treats it as idempotent success per spec §D.4.
 var ErrNotFound = errors.New("mail: not found")
 
 // ChangeTracker is the protocol-level change-detection sibling of

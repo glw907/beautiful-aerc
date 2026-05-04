@@ -13,7 +13,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// QueryFolder satisfies mail.Backend. It selects the folder to get
+// QueryFolder selects the folder to get
 // the total message count, then issues UID SEARCH ALL to obtain every
 // UID, sorts them newest-first (highest UID = most recently arrived),
 // and slices the result according to offset and limit.
@@ -75,7 +75,7 @@ var fetchItems = []string{
 	"BODY.PEEK[HEADER.FIELDS (FROM TO CC BCC SUBJECT DATE IN-REPLY-TO REFERENCES MESSAGE-ID)]",
 }
 
-// FetchHeaders satisfies mail.Backend. For an empty uid list it
+// FetchHeaders — for an empty uid list it
 // returns immediately. Otherwise it calls Fetch with the standard
 // header item set and translates each result via infoFromFetch.
 func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
@@ -153,7 +153,7 @@ func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 	return info
 }
 
-// FetchBody satisfies mail.Backend. Returns the raw RFC 822 body for
+// FetchBody returns the raw RFC 822 body for
 // the given UID, drained from the IMAP client's underlying reader.
 func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	b.mu.Lock()

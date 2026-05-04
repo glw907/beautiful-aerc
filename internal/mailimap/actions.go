@@ -10,7 +10,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Move satisfies mail.Backend. Uses UID MOVE (RFC 6851) when the
+// Move uses UID MOVE (RFC 6851) when the
 // server advertises MOVE; falls back to COPY + STORE \Deleted +
 // UID EXPUNGE otherwise. The fallback is a single logical
 // operation; partial failure leaves the source folder in a known
@@ -67,7 +67,7 @@ func (b *Backend) resolveTrashFolder() (string, error) {
 	return "", errors.New("no Trash folder")
 }
 
-// Destroy satisfies mail.Backend. Permanently deletes via STORE \Deleted
+// Destroy permanently deletes via STORE \Deleted
 // then UID EXPUNGE. Per ADR-0092: empty input is a no-op, the
 // operation is irreversible, missing UIDs are treated as success
 // (the server silently ignores them).
@@ -106,7 +106,7 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	return nil
 }
 
-// Flag satisfies mail.Backend. item is +FLAGS.SILENT when set is true,
+// Flag item is +FLAGS.SILENT when set is true,
 // -FLAGS.SILENT otherwise. Unknown flag bits are silently ignored.
 func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 	if len(uids) == 0 {
@@ -130,7 +130,7 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 	return nil
 }
 
-// Send satisfies mail.Backend. Compose/SMTP lands with the editor pass.
+// Send — compose/SMTP lands with the editor pass.
 func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
 	return errors.New("send: not implemented")
 }

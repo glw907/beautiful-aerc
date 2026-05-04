@@ -16,9 +16,8 @@ type SearchCriteria struct {
 }
 
 // Backend is the interface that mail protocol adapters implement.
-// Each method blocks until the operation completes. Bubbletea's
-// tea.Cmd model handles async naturally by running blocking calls
-// in commands that return messages on completion.
+// Every method blocks; callers wrap the call in a tea.Cmd if they
+// need it off the UI loop.
 type Backend interface {
 	// AccountName is the user-facing display label.
 	AccountName() string
@@ -41,9 +40,8 @@ type Backend interface {
 	FetchHeaders(uids []UID) ([]MessageInfo, error)
 	FetchBody(uid UID) ([]byte, error)
 
-	// Attachments returns metadata for non-body parts of uid.
-	// Implementations may issue a roundtrip; callers should expect
-	// this to block.
+	// Attachments returns metadata for non-body parts of uid. May
+	// issue a network roundtrip.
 	Attachments(uid UID) ([]Attachment, error)
 
 	// FetchAttachment returns decoded bytes for partID on uid.

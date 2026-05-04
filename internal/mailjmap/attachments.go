@@ -19,7 +19,7 @@ import (
 // the server's precomputed `attachments` subset.
 var attachmentProperties = []string{"id", "bodyStructure"}
 
-// Attachments satisfies mail.Backend. Issues one Email/get for
+// Attachments issues one Email/get for
 // bodyStructure, walks the part tree, and returns the non-body
 // parts. Side effect: populates b.partBlobIDs[uid].
 func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
@@ -99,7 +99,7 @@ func walkBodyStructure(bp *email.BodyPart) ([]mail.Attachment, map[string]string
 	return atts, parts
 }
 
-// FetchAttachment satisfies mail.Backend. Resolves (uid, partID) to
+// FetchAttachment resolves (uid, partID) to
 // a blobID via the cached partBlobIDs map (issuing one Email/get
 // when the cache is cold), then downloads via downloadBlob.
 func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {

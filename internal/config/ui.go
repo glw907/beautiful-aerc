@@ -29,13 +29,11 @@ type UIConfig struct {
 	// UndoSeconds is the toast/undo timer in seconds. Default 6, clamped to [2, 30] on parse.
 	UndoSeconds int
 
-	// TrashRetentionDays is the per-session sweep cutoff for Trash. 0 disables (default).
-	// Clamped to [0, 365] on parse.
+	// TrashRetentionDays and SpamRetentionDays set per-session sweep
+	// cutoffs for the corresponding folders. 0 disables. Each is
+	// clamped to [0, 365] on parse.
 	TrashRetentionDays int
-
-	// SpamRetentionDays is the per-session sweep cutoff for Spam. 0 disables (default).
-	// Clamped to [0, 365] on parse.
-	SpamRetentionDays int
+	SpamRetentionDays  int
 
 	// DownloadDir is where SaveAttachment writes files. Resolved at
 	// LoadUI time: explicit [ui] download_dir > $XDG_DOWNLOAD_DIR >

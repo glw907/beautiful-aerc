@@ -262,50 +262,25 @@ var gruvboxLightPalette = Palette{
 	ColorSuccess:    "#79740e",
 }
 
-// OneDark is the compiled One Dark theme (default).
+// OneDark is poplar's default theme.
 var OneDark = NewCompiledTheme("One Dark", oneDarkPalette)
 
-// Nord is the compiled Nord theme.
-var Nord = NewCompiledTheme("Nord", nordPalette)
-
-// SolarizedDark is the compiled Solarized Dark theme.
-var SolarizedDark = NewCompiledTheme("Solarized Dark", solarizedDarkPalette)
-
-// GruvboxDark is the compiled Gruvbox Dark theme.
-var GruvboxDark = NewCompiledTheme("Gruvbox Dark", gruvboxDarkPalette)
-
-// CatppuccinMocha is the compiled Catppuccin Mocha theme.
-var CatppuccinMocha = NewCompiledTheme("Catppuccin Mocha", catppuccinMochaPalette)
-
-// CatppuccinLatte is the compiled Catppuccin Latte theme.
-var CatppuccinLatte = NewCompiledTheme("Catppuccin Latte", catppuccinLattePalette)
-
-// Dracula is the compiled Dracula theme.
-var Dracula = NewCompiledTheme("Dracula", draculaPalette)
-
-// TokyoNight is the compiled Tokyo Night theme.
-var TokyoNight = NewCompiledTheme("Tokyo Night", tokyoNightPalette)
-
-// RosePine is the compiled Rose Pine theme.
-var RosePine = NewCompiledTheme("Rose Pine", rosePinePalette)
-
-// RosePineDawn is the compiled Rose Pine Dawn theme.
-var RosePineDawn = NewCompiledTheme("Rose Pine Dawn", rosePineDawnPalette)
-
-// Kanagawa is the compiled Kanagawa theme.
-var Kanagawa = NewCompiledTheme("Kanagawa", kanagawaPalette)
-
-// EverforestDark is the compiled Everforest Dark theme.
-var EverforestDark = NewCompiledTheme("Everforest Dark", everforestDarkPalette)
-
-// EverforestLight is the compiled Everforest Light theme.
-var EverforestLight = NewCompiledTheme("Everforest Light", everforestLightPalette)
-
-// SolarizedLight is the compiled Solarized Light theme.
-var SolarizedLight = NewCompiledTheme("Solarized Light", solarizedLightPalette)
-
-// GruvboxLight is the compiled Gruvbox Light theme.
-var GruvboxLight = NewCompiledTheme("Gruvbox Light", gruvboxLightPalette)
+var (
+	Nord            = NewCompiledTheme("Nord", nordPalette)
+	SolarizedDark   = NewCompiledTheme("Solarized Dark", solarizedDarkPalette)
+	GruvboxDark     = NewCompiledTheme("Gruvbox Dark", gruvboxDarkPalette)
+	CatppuccinMocha = NewCompiledTheme("Catppuccin Mocha", catppuccinMochaPalette)
+	CatppuccinLatte = NewCompiledTheme("Catppuccin Latte", catppuccinLattePalette)
+	Dracula         = NewCompiledTheme("Dracula", draculaPalette)
+	TokyoNight      = NewCompiledTheme("Tokyo Night", tokyoNightPalette)
+	RosePine        = NewCompiledTheme("Rose Pine", rosePinePalette)
+	RosePineDawn    = NewCompiledTheme("Rose Pine Dawn", rosePineDawnPalette)
+	Kanagawa        = NewCompiledTheme("Kanagawa", kanagawaPalette)
+	EverforestDark  = NewCompiledTheme("Everforest Dark", everforestDarkPalette)
+	EverforestLight = NewCompiledTheme("Everforest Light", everforestLightPalette)
+	SolarizedLight  = NewCompiledTheme("Solarized Light", solarizedLightPalette)
+	GruvboxLight    = NewCompiledTheme("Gruvbox Light", gruvboxLightPalette)
+)
 
 var Themes = map[string]*CompiledTheme{
 	"catppuccin-latte": CatppuccinLatte,

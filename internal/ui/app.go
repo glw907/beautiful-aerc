@@ -291,11 +291,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ErrorMsg:
-		// Banner state is App-owned. The chrome banner row (error or
-		// toast) takes one row; transitions in or out of having a row
-		// resize the child. An ErrorMsg also clears any in-flight
-		// toast — cache state owns the optimistic flip, so a manual
-		// inverse fire is the user's responsibility.
+		// Errors clear any pending toast; the cache holds the
+		// optimistic flip and the user must fire u to revert.
 		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
 		m.lastErr = msg
@@ -312,12 +309,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case folderLoadedMsg:
-		// A folder change commits any in-flight toast: the optimistic
-		// flip stands, no inverse fires. The pending state simply
-		// clears so the chrome row collapses. Detect "folder change"
-		// by comparing the loaded folder against the message-list's
-		// current contents — only fresh loads (where the page was
-		// reset by selectionChangedCmds) carry a toast-clearing hint.
+		// A fresh folder load (msglist reset by selectionChangedCmds)
+		// commits any in-flight toast.
 		if !m.toast.IsZero() && m.acct.msglist.Count() == 0 {
 			hadBanner := m.hasBannerRow()
 			m.toast = pendingAction{}

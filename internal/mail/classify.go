@@ -24,8 +24,7 @@ type ClassifiedFolder struct {
 
 // ConfigKey returns the lookup key used by UIConfig.Folders and the
 // TOML writer: canonical name for classified canonicals, provider
-// name for custom folders. Callers should prefer this over recomputing
-// the rule — it's the single source of truth.
+// name for custom folders.
 func (cf ClassifiedFolder) ConfigKey() string {
 	if cf.Canonical != "" {
 		return cf.Canonical

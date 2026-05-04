@@ -52,7 +52,6 @@ func New(cfg config.AccountConfig) *Backend {
 	return &Backend{cfg: cfg}
 }
 
-// AccountName satisfies mail.Backend.
 func (b *Backend) AccountName() string {
 	if b.cfg.Display != "" {
 		return b.cfg.Display
@@ -63,7 +62,6 @@ func (b *Backend) AccountName() string {
 	return b.cfg.Name
 }
 
-// AccountEmail satisfies mail.Backend.
 func (b *Backend) AccountEmail() string {
 	if b.cfg.From != nil && b.cfg.From.Address != "" {
 		return b.cfg.From.Address
@@ -71,13 +69,13 @@ func (b *Backend) AccountEmail() string {
 	return b.cfg.Email
 }
 
-// Updates satisfies mail.Backend. Returns a nil channel before
+// Updates returns a nil channel before
 // Connect succeeds.
 func (b *Backend) Updates() <-chan mail.Update { return b.updates }
 
 const updatesBuffer = 64
 
-// Connect satisfies mail.Backend. It resolves the password (running
+// Connect resolves the password (running
 // PasswordCmd if needed, caching the result), dials both connections,
 // authenticates, negotiates capabilities, and starts the idle goroutine.
 // The dial happens in auth.go; tests bypass by setting b.cmd / b.idle
@@ -141,7 +139,7 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 	return nil
 }
 
-// Disconnect satisfies mail.Backend. Tears down the idle goroutine
+// Disconnect tears down the idle goroutine
 // then logs out both connections. Returns the first non-nil error.
 func (b *Backend) Disconnect() error {
 	b.mu.Lock()

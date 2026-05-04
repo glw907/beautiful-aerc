@@ -9,7 +9,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Attachments satisfies mail.Backend. Issues UID FETCH BODYSTRUCTURE
+// Attachments issues UID FETCH BODYSTRUCTURE
 // for uid, walks the part tree, and returns the non-body parts.
 // Top-level text/plain and text/html parts are dropped (they are
 // the displayable body, not attachments).
@@ -65,7 +65,7 @@ func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 	}}
 }
 
-// FetchAttachment satisfies mail.Backend. Issues UID FETCH BODY[<part>]
+// FetchAttachment issues UID FETCH BODY[<part>]
 // and returns the decoded bytes. The transfer encoding (base64,
 // quoted-printable) is decoded by the go-imap client adapter; this
 // returns raw decoded bytes ready to write to disk.

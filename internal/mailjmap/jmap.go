@@ -96,7 +96,7 @@ func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
 	return b
 }
 
-// AccountName satisfies mail.Backend. The cfg.Name fallback only
+// AccountName — the cfg.Name fallback only
 // surfaces during the pre-Connect window, before the JMAP session
 // supplies the email per RFC 8620 §1.6.2.
 func (b *Backend) AccountName() string {
@@ -109,7 +109,6 @@ func (b *Backend) AccountName() string {
 	return b.cfg.Name
 }
 
-// AccountEmail satisfies mail.Backend.
 func (b *Backend) AccountEmail() string {
 	if b.cfg.From != nil && b.cfg.From.Address != "" {
 		return b.cfg.From.Address
@@ -126,7 +125,7 @@ func (b *Backend) AccountEmail() string {
 	return ""
 }
 
-// Updates satisfies mail.Backend. Returns a nil channel before
+// Updates returns a nil channel before
 // Connect succeeds.
 func (b *Backend) Updates() <-chan mail.Update { return b.updates }
 
@@ -181,7 +180,7 @@ func (b *Backend) resolvedPassword() (string, error) {
 	return pw, nil
 }
 
-// Connect satisfies mail.Backend. It resolves the password (running
+// Connect resolves the password (running
 // PasswordCmd if needed, caching the result), authenticates against the
 // JMAP session endpoint, populates the folder map, and initialises the
 // body cache and updates channel.
@@ -344,7 +343,7 @@ func (b *Backend) refreshFoldersLocked() error {
 	return nil
 }
 
-// Disconnect satisfies mail.Backend. It cancels the push loop (Task
+// Disconnect cancels the push loop (Task
 // 13) and tears down all session state.
 func (b *Backend) Disconnect() error {
 	b.mu.Lock()
@@ -375,7 +374,7 @@ func (b *Backend) Disconnect() error {
 	return nil
 }
 
-// ListFolders satisfies mail.Backend. It returns the cached folder
+// ListFolders returns the cached folder
 // map, refreshing from the server if the cache is empty.
 func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	b.mu.Lock()
@@ -392,7 +391,7 @@ func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	return out, nil
 }
 
-// OpenFolder satisfies mail.Backend. It sets the current folder to
+// OpenFolder sets the current folder to
 // name; returns an error if name is not in the cached folder map.
 func (b *Backend) OpenFolder(name string) error {
 	b.mu.Lock()
@@ -403,7 +402,7 @@ func (b *Backend) OpenFolder(name string) error {
 	return nil
 }
 
-// QueryFolder satisfies mail.Backend. It issues Email/query against
+// QueryFolder issues Email/query against
 // the named folder and returns (UIDs, total, error). offset and limit
 // map directly to JMAP Position and Limit. Results are sorted by
 // receivedAt descending (newest first).
@@ -455,7 +454,7 @@ var headerProperties = []string{
 	"keywords", "size", "inReplyTo", "threadId",
 }
 
-// FetchHeaders satisfies mail.Backend. It issues a single Email/get
+// FetchHeaders issues a single Email/get
 // request for the supplied UIDs and translates each response email
 // into mail.MessageInfo. BlobIDs are cached in b.blobIDs so FetchBody
 // can download without a second Email/get.
@@ -586,7 +585,7 @@ func translateKeywords(kw map[string]bool) mail.Flag {
 	return f
 }
 
-// FetchBody satisfies mail.Backend. Returns the raw RFC 822 body for
+// FetchBody returns the raw RFC 822 body for
 // uid, using an LRU cache to avoid redundant downloads. Concurrent
 // callers for the same blobID are collapsed via singleflight so only
 // one download runs. FetchHeaders must be called first to populate
@@ -622,7 +621,7 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	return v.([]byte), nil
 }
 
-// Move satisfies mail.Backend. It moves uids into destFolder by patching
+// Move moves uids into destFolder by patching
 // mailboxIds to contain only the destination mailbox.
 func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 	if len(uids) == 0 {
@@ -708,7 +707,7 @@ func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
 	return fmt.Errorf("Email/set: no response for destroy")
 }
 
-// Flag satisfies mail.Backend. It sets or clears a JMAP keyword for each uid.
+// Flag sets or clears a JMAP keyword for each uid.
 func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	keyword, err := keywordForFlag(flag)
 	if err != nil {
