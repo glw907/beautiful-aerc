@@ -279,3 +279,42 @@ func TestLoadUIMissingFile(t *testing.T) {
 		t.Errorf("expected 'reading ui config' in error, got %q", err.Error())
 	}
 }
+
+func TestLoadUI_DownloadDir(t *testing.T) {
+	t.Setenv("HOME", "/home/test")
+	t.Setenv("XDG_DOWNLOAD_DIR", "")
+	cases := []struct {
+		name string
+		toml string
+		want string
+	}{
+		{"default", `[ui]`, "/home/test/Downloads"},
+		{"explicit absolute", "[ui]\ndownload_dir = \"/tmp/dl\"", "/tmp/dl"},
+		{"tilde expansion", "[ui]\ndownload_dir = \"~/dl\"", "/home/test/dl"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeTempUI(t, c.toml)
+			cfg, err := LoadUI(path)
+			if err != nil {
+				t.Fatalf("LoadUI: %v", err)
+			}
+			if cfg.DownloadDir != c.want {
+				t.Errorf("DownloadDir = %q, want %q", cfg.DownloadDir, c.want)
+			}
+		})
+	}
+}
+
+func TestLoadUI_DownloadDir_XDG(t *testing.T) {
+	t.Setenv("XDG_DOWNLOAD_DIR", "/var/dl")
+	t.Setenv("HOME", "/home/test")
+	path := writeTempUI(t, `[ui]`)
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("LoadUI: %v", err)
+	}
+	if cfg.DownloadDir != "/var/dl" {
+		t.Errorf("DownloadDir = %q, want /var/dl", cfg.DownloadDir)
+	}
+}

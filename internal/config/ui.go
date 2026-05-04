@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -35,6 +36,11 @@ type UIConfig struct {
 	// SpamRetentionDays is the per-session sweep cutoff for Spam. 0 disables (default).
 	// Clamped to [0, 365] on parse.
 	SpamRetentionDays int
+
+	// DownloadDir is where SaveAttachment writes files. Resolved at
+	// LoadUI time: explicit [ui] download_dir > $XDG_DOWNLOAD_DIR >
+	// $HOME/Downloads.
+	DownloadDir string
 }
 
 // FolderConfig holds per-folder overrides from [ui.folders.<name>]
@@ -71,6 +77,7 @@ func DefaultUIConfig() UIConfig {
 		Folders:     map[string]FolderConfig{},
 		Icons:       "auto",
 		UndoSeconds: 6,
+		DownloadDir: defaultDownloadDir(),
 	}
 }
 
@@ -83,6 +90,7 @@ type rawUI struct {
 	UndoSeconds        *int                    `toml:"undo_seconds"`
 	TrashRetentionDays *int                    `toml:"trash_retention_days"`
 	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
+	DownloadDir        string                  `toml:"download_dir"`
 }
 
 type rawFolderCfg struct {
@@ -142,6 +150,10 @@ func LoadUI(path string) (UIConfig, error) {
 		out.SpamRetentionDays = clampRetention(*raw.UI.SpamRetentionDays)
 	}
 
+	if raw.UI.DownloadDir != "" {
+		out.DownloadDir = expandHome(raw.UI.DownloadDir)
+	}
+
 	for name, fc := range raw.UI.Folders {
 		converted, err := convertFolderCfg(name, fc)
 		if err != nil {
@@ -161,6 +173,25 @@ func clampRetention(v int) int {
 		return 365
 	}
 	return v
+}
+
+func defaultDownloadDir() string {
+	if v := os.Getenv("XDG_DOWNLOAD_DIR"); v != "" {
+		return v
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		return home + "/Downloads"
+	}
+	return ""
+}
+
+func expandHome(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		if home := os.Getenv("HOME"); home != "" {
+			return home + p[1:]
+		}
+	}
+	return p
 }
 
 func convertFolderCfg(name string, raw rawFolderCfg) (FolderConfig, error) {
