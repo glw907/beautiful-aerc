@@ -114,3 +114,68 @@ func TestOutboxSummary_FailedCarriesNextAt(t *testing.T) {
 		t.Errorf("NextAt = %+v, want valid %d (MIN)", gs[0].NextAt, t2)
 	}
 }
+
+func TestOutboxConflicts_Empty(t *testing.T) {
+	a := openTestAccount(t)
+	rs, err := a.OutboxConflicts(context.Background())
+	if err != nil {
+		t.Fatalf("OutboxConflicts: %v", err)
+	}
+	if len(rs) != 0 {
+		t.Errorf("empty: got %d, want 0", len(rs))
+	}
+}
+
+func TestOutboxConflicts_DecodesError(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{
+		{UID: "c1", Subject: "x", SentAt: time.Now()},
+	})
+	opID, _ := a.QueueOp(ctx, "Inbox", "c1", FlagArgs{Flag: mail.FlagSeen, Set: true})
+	a.db.Exec(`UPDATE outbox SET status = ?, attempts = 5,
+		error = '{"kind":"auth-failure","message":"invalid creds"}' WHERE id = ?`,
+		OpConflict, opID)
+
+	rs, err := a.OutboxConflicts(ctx)
+	if err != nil {
+		t.Fatalf("OutboxConflicts: %v", err)
+	}
+	if len(rs) != 1 {
+		t.Fatalf("got %d conflicts, want 1", len(rs))
+	}
+	r := rs[0]
+	if r.ID != opID || r.Kind != KindFlag || r.Folder != "Inbox" || r.ProtocolID != "c1" {
+		t.Errorf("row mismatch: %+v", r)
+	}
+	if r.ErrorKind != "auth-failure" || r.ErrorMessage != "invalid creds" {
+		t.Errorf("error decode: kind=%q msg=%q", r.ErrorKind, r.ErrorMessage)
+	}
+	if r.Attempts != 5 {
+		t.Errorf("attempts = %d, want 5", r.Attempts)
+	}
+	if r.EnqueuedAt.IsZero() {
+		t.Errorf("EnqueuedAt zero")
+	}
+}
+
+func TestOutboxConflicts_OrderByEnqueuedAtASC(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	a.upsertMessages(ctx, "Inbox", []mail.MessageInfo{
+		{UID: "o1", SentAt: time.Now()}, {UID: "o2", SentAt: time.Now()},
+	})
+	id1, _ := a.QueueOp(ctx, "Inbox", "o1", FlagArgs{Flag: mail.FlagSeen, Set: true})
+	id2, _ := a.QueueOp(ctx, "Inbox", "o2", FlagArgs{Flag: mail.FlagSeen, Set: true})
+	a.db.Exec(`UPDATE outbox SET enqueued_at = ?, status = ? WHERE id = ?`,
+		time.Now().Add(-time.Hour).UnixNano(), OpConflict, id2)
+	a.db.Exec(`UPDATE outbox SET status = ? WHERE id = ?`, OpConflict, id1)
+
+	rs, err := a.OutboxConflicts(ctx)
+	if err != nil || len(rs) != 2 {
+		t.Fatalf("OutboxConflicts: rs=%v err=%v", rs, err)
+	}
+	if rs[0].ID != id2 || rs[1].ID != id1 {
+		t.Errorf("order: got [%d,%d], want [%d,%d]", rs[0].ID, rs[1].ID, id2, id1)
+	}
+}

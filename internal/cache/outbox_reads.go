@@ -113,6 +113,43 @@ func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {
 	return out, rows.Err()
 }
 
+// OutboxConflicts returns every outbox row in the conflict state,
+// ordered by enqueued_at ASC (oldest grievance first). The error
+// JSON payload (written by encodeErr) is decoded into ErrorKind +
+// ErrorMessage for the UI.
+func (a *Account) OutboxConflicts(ctx context.Context) ([]ConflictRow, error) {
+	const q = `
+        SELECT o.id, o.kind, COALESCE(f.name, ''),
+               COALESCE((SELECT m.protocol_id FROM messages m WHERE m.id = o.message), ''),
+               COALESCE(o.error, ''),
+               o.attempts,
+               o.enqueued_at
+        FROM outbox o
+        LEFT JOIN folders f ON f.id = o.folder
+        WHERE o.status = ?
+        ORDER BY o.enqueued_at ASC, o.id ASC`
+	rows, err := a.db.QueryContext(ctx, q, OpConflict)
+	if err != nil {
+		return nil, fmt.Errorf("outbox conflicts: %w", err)
+	}
+	defer rows.Close()
+	var out []ConflictRow
+	for rows.Next() {
+		var r ConflictRow
+		var kind, errPayload string
+		var enqueuedNS int64
+		if err := rows.Scan(&r.ID, &kind, &r.Folder, &r.ProtocolID,
+			&errPayload, &r.Attempts, &enqueuedNS); err != nil {
+			return nil, err
+		}
+		r.Kind = OpKind(kind)
+		r.ErrorKind, r.ErrorMessage = decodeErrorPayload(errPayload)
+		r.EnqueuedAt = time.Unix(0, enqueuedNS)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // errorPayload is the JSON shape written by encodeErr in drainer.go.
 type errorPayload struct {
 	Kind    string `json:"kind"`
