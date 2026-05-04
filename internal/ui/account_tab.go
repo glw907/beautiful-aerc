@@ -589,11 +589,7 @@ func (m *AccountTab) dispatchEmpty() tea.Cmd {
 	default:
 		return nil
 	}
-	page := m.pages[folder.Name]
-	total := 0
-	if page != nil {
-		total = page.total
-	}
+	total := m.pages[folder.Name].total
 	src := folder.Name
 	return func() tea.Msg {
 		return OpenConfirmEmptyMsg{
@@ -624,7 +620,7 @@ func (m AccountTab) WindowCounter() string {
 		return ""
 	}
 	page, ok := m.pages[name]
-	if !ok || page == nil || page.total <= 0 || page.loaded >= page.total {
+	if !ok || page.total <= 0 || page.loaded >= page.total {
 		return ""
 	}
 	return fmt.Sprintf("%d/%d", page.loaded, page.total)

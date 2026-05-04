@@ -82,10 +82,6 @@ func statsForAccount(ctx context.Context, name string) (statsRow, error) {
 	if err != nil {
 		return statsRow{}, fmt.Errorf("open cache db: %w", err)
 	}
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return statsRow{}, fmt.Errorf("ping cache db: %w", err)
-	}
 	defer db.Close()
 	row := statsRow{Account: name}
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages`).Scan(&row.HeadersCount); err != nil {
@@ -269,10 +265,6 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		db, err := cache.OpenDB(dbPath)
 		if err != nil {
 			return fmt.Errorf("open cache db: %w", err)
-		}
-		if err := db.Ping(); err != nil {
-			db.Close()
-			return fmt.Errorf("ping cache db: %w", err)
 		}
 		db.SetMaxOpenConns(1)
 		if _, err := db.ExecContext(ctx, `VACUUM`); err != nil {
