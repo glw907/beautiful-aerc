@@ -26,9 +26,8 @@ func (f *fakeClient) Do(req *jmap.Request) (*jmap.Response, error) {
 	return f.respond(req)
 }
 
-// fakeResponse constructs a *jmap.Response whose Responses slice
-// contains the given invocations. Tasks 10–14 use this to inject
-// canned method responses into fakeClient.
+// fakeResponse wraps invocations into a *jmap.Response so fakeClient
+// can hand them back as canned method responses.
 func fakeResponse(invocations ...*jmap.Invocation) *jmap.Response {
 	return &jmap.Response{Responses: invocations}
 }

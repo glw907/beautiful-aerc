@@ -15,8 +15,6 @@ const schemaVersion = 5
 // transaction. Index 0 holds the v0→v1 step.
 type migration func(*sql.Tx) error
 
-// migrations is the ordered chain. migrations[i] upgrades from
-// version i to version i+1.
 var migrations = []migration{
 	migrateV1, // v0 → v1: full Cache I schema (spec §A.3)
 	migrateV2, // v1 → v2: next_eligible_at on outbox

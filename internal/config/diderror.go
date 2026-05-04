@@ -2,9 +2,8 @@
 
 package config
 
-// suggestProvider returns the closest known-provider name to s
-// within Levenshtein distance 2, or "" if no close match exists.
-// Includes the imap/jmap fallbacks in the search space.
+// suggestProvider returns the closest known-provider name to s, or ""
+// when nothing's within edit distance 2.
 func suggestProvider(s string) string {
 	if s == "" {
 		return ""

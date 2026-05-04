@@ -13,10 +13,6 @@ import (
 // imapClient is the subset of go-imap's client surface that mailimap
 // uses. The real *imapclient.Client satisfies it (via a thin adapter
 // in auth.go); tests substitute a fake.
-//
-// Method signatures will be fleshed out as each task lands. Each
-// method should return errors with the wrapped IMAP server response
-// when applicable so the error banner can surface useful detail.
 type imapClient interface {
 	// Authenticate runs SASL with the given mechanism name + client.
 	// Logout closes the connection cleanly.

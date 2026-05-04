@@ -12,10 +12,10 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// OpArgs is the sealed sum of queueable operations. Each impl is
-// JSON-serializable for on-disk storage in outbox.args. Cache 0
-// implements MoveArgs / FlagArgs / DestroyArgs; SendArgs and
-// AppendArgs are reserved for Pass 9 (Compose).
+// OpArgs is the sealed sum of queueable operations.
+// Each implementation is JSON-serializable for on-disk storage in
+// outbox.args. SendArgs and AppendArgs are placeholders; QueueOp
+// rejects them.
 type OpArgs interface{ opKind() OpKind }
 
 // MoveArgs queues a move to dest (canonical folder name).
@@ -30,10 +30,8 @@ type FlagArgs struct {
 // DestroyArgs queues an irreversible delete.
 type DestroyArgs struct{}
 
-// SendArgs is reserved for Pass 9.
 type SendArgs struct{}
 
-// AppendArgs is reserved for Pass 9.
 type AppendArgs struct{}
 
 func (MoveArgs) opKind() OpKind    { return KindMove }

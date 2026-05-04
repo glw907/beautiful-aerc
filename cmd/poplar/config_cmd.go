@@ -26,8 +26,6 @@ func configFlagPath(cmd *cobra.Command) string {
 	return f.Value.String()
 }
 
-// newConfigInitTemplateCmd creates the `poplar config init` subcommand,
-// which writes a fresh self-documenting config template to disk.
 func newConfigInitTemplateCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
@@ -59,8 +57,6 @@ func newConfigInitTemplateCmd() *cobra.Command {
 	return cmd
 }
 
-// newConfigPathCmd creates the `poplar config path` subcommand,
-// which prints the resolved config-file path without reading it.
 func newConfigPathCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:          "path",
@@ -78,8 +74,6 @@ func newConfigPathCmd() *cobra.Command {
 	}
 }
 
-// newConfigCheckCmd creates the `poplar config check` subcommand,
-// which validates the config file and tests each account's connection.
 func newConfigCheckCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:          "check",

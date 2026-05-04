@@ -51,7 +51,6 @@ type folderAppendedMsg struct {
 	total int
 }
 
-// cacheEventMsg wraps one CacheEvent for the UI loop.
 type cacheEventMsg struct{ event cache.CacheEvent }
 
 // ErrorMsg carries a failure from any tea.Cmd. App captures the most
@@ -104,14 +103,13 @@ func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	}
 }
 
-// openFolderCmd is queryFolderCmd with sync — used by sidebar
-// navigation to converge with the backend before reading.
+// openFolderCmd queries with a backend sync first.
 func openFolderCmd(c *cache.Account, name string) tea.Cmd {
 	return queryFolderCmd(c, name, true)
 }
 
-// refreshFolderCmd is queryFolderCmd without sync — used after a
-// write op to pick up the optimistic flip the cache already applied.
+// refreshFolderCmd queries without sync, picking up the cache's
+// already-applied optimistic flip.
 func refreshFolderCmd(c *cache.Account, name string) tea.Cmd {
 	return queryFolderCmd(c, name, false)
 }

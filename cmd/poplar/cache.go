@@ -27,7 +27,6 @@ var outboxStatsQ = fmt.Sprintf(`SELECT
 FROM outbox`,
 	cache.OpPending, cache.OpExecuting, cache.OpFailed, cache.OpConflict)
 
-// newCacheCmd assembles the `poplar cache` subcommand tree.
 func newCacheCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "cache",
@@ -105,10 +104,8 @@ func statsForAccount(ctx context.Context, name string) (statsRow, error) {
 	return row, nil
 }
 
-// loadAccounts reads account config via the existing config loader.
 func loadAccounts() ([]config.AccountConfig, string, error) {
-	accts, path, err := config.Load("")
-	return accts, path, err
+	return config.Load("")
 }
 
 func writeStatsHeader(w io.Writer) {
@@ -136,7 +133,6 @@ func formatStatsLine(r statsRow) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// formatThousands inserts commas as thousands separators.
 func formatThousands(n int64) string {
 	if n < 1000 {
 		return fmt.Sprintf("%d", n)
@@ -152,7 +148,6 @@ func formatThousands(n int64) string {
 	return b.String()
 }
 
-// newCacheEvictCmd assembles the `poplar cache evict` subcommand.
 func newCacheEvictCmd() *cobra.Command {
 	var olderThan string
 	var account string
@@ -205,9 +200,8 @@ func parseEvictDuration(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
-// runEvict opens each account (or one if scoped) and runs EvictByAge.
-// Passing nil backend/tracker is safe — Evict only touches the bodies
-// table and performs no backend I/O.
+// Passing nil backend/tracker is safe: Evict only touches the bodies
+// table.
 func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) error {
 	accts, _, err := loadAccounts()
 	if err != nil {
@@ -236,7 +230,6 @@ func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) 
 	return nil
 }
 
-// newCacheVacuumCmd assembles the `poplar cache vacuum` subcommand.
 func newCacheVacuumCmd() *cobra.Command {
 	var account string
 	c := &cobra.Command{
@@ -251,8 +244,6 @@ func newCacheVacuumCmd() *cobra.Command {
 	return c
 }
 
-// runVacuum opens each account's database and runs VACUUM, reporting
-// before/after file sizes.
 func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 	accts, _, err := loadAccounts()
 	if err != nil {

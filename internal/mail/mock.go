@@ -89,12 +89,10 @@ func (m *MockBackend) AccountEmail() string            { return m.email }
 func (m *MockBackend) Connect(_ context.Context) error { return nil }
 func (m *MockBackend) Disconnect() error               { return nil }
 
-// ListFolders returns the hardcoded folder list.
 func (m *MockBackend) ListFolders() ([]Folder, error) {
 	return m.folders, nil
 }
 
-// OpenFolder is a no-op for the mock backend.
 func (m *MockBackend) OpenFolder(_ string) error { return nil }
 
 // QueryFolder slices the hardcoded message list. The mock ignores
@@ -116,8 +114,7 @@ func (m *MockBackend) QueryFolder(_ string, offset, limit int) ([]UID, int, erro
 	return uids, total, nil
 }
 
-// FetchHeaders returns the hardcoded message list. The uids parameter is
-// ignored — the mock always returns all messages.
+// FetchHeaders ignores uids — the mock always returns all messages.
 func (m *MockBackend) FetchHeaders(_ []UID) ([]MessageInfo, error) {
 	return m.msgs, nil
 }
@@ -286,7 +283,7 @@ func (m *MockBackend) Send(_ string, _ []string, _ io.Reader) error {
 	return nil
 }
 
-// Updates returns the update channel. The mock backend never sends updates.
+// Updates never sends; the channel always blocks.
 func (m *MockBackend) Updates() <-chan Update {
 	return m.updates
 }

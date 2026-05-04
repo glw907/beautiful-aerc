@@ -2,11 +2,8 @@
 
 package config
 
-// Template returns poplar's self-documenting config.toml template.
-// poplar writes this to disk on first launch when no config exists.
-//
-// The output is intentionally checked against a golden file so any
-// formatting drift surfaces in code review.
+// Template returns the self-documenting config.toml written on first
+// launch.
 func Template() string {
 	return templateBody
 }

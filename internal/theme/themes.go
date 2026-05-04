@@ -307,7 +307,6 @@ var SolarizedLight = NewCompiledTheme("Solarized Light", solarizedLightPalette)
 // GruvboxLight is the compiled Gruvbox Light theme.
 var GruvboxLight = NewCompiledTheme("Gruvbox Light", gruvboxLightPalette)
 
-// Themes maps lowercase CLI names to compiled themes.
 var Themes = map[string]*CompiledTheme{
 	"catppuccin-latte": CatppuccinLatte,
 	"catppuccin-mocha": CatppuccinMocha,
@@ -326,7 +325,7 @@ var Themes = map[string]*CompiledTheme{
 	"tokyo-night":      TokyoNight,
 }
 
-// ThemeNames returns the available theme names in alphabetical order.
+// ThemeNames returns the keys of Themes, sorted.
 func ThemeNames() []string {
 	names := make([]string, 0, len(Themes))
 	for name := range Themes {

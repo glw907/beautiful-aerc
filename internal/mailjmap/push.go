@@ -239,14 +239,12 @@ func (b *Backend) dispatchMailboxChanges(prevState string) error {
 		return fmt.Errorf("mailbox/changes: no response")
 	}
 
-	// Emit UpdateFolderInfo for each changed mailbox ID.
 	affected := make([]jmap.ID, 0, len(cr.Created)+len(cr.Updated)+len(cr.Destroyed))
 	affected = append(affected, cr.Created...)
 	affected = append(affected, cr.Updated...)
 	affected = append(affected, cr.Destroyed...)
 
 	b.mu.Lock()
-	// Build reverse map: jmap id → folder display name.
 	idToName := make(map[string]string, len(b.folders))
 	for name, e := range b.folders {
 		idToName[e.id] = name
@@ -260,8 +258,8 @@ func (b *Backend) dispatchMailboxChanges(prevState string) error {
 	return nil
 }
 
-// emit sends u to the updates channel. If the channel buffer is full
-// the update is dropped with a stderr log.
+// emit drops u when the buffer is full so a slow consumer can't stall
+// the push loop.
 func (b *Backend) emit(u mail.Update) {
 	b.mu.Lock()
 	ch := b.updates
@@ -276,7 +274,6 @@ func (b *Backend) emit(u mail.Update) {
 	}
 }
 
-// idsToUIDs converts a []jmap.ID to []mail.UID.
 func idsToUIDs(ids []jmap.ID) []mail.UID {
 	out := make([]mail.UID, len(ids))
 	for i, id := range ids {

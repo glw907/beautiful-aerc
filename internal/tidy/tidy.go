@@ -81,7 +81,6 @@ func Tidy(input string, cfg Config, apiKey, apiURL string) (Result, error) {
 	}, nil
 }
 
-// countChangedLines returns the number of lines that differ between a and b.
 func countChangedLines(a, b string) int {
 	aLines := strings.Split(strings.TrimSuffix(a, "\n"), "\n")
 	bLines := strings.Split(strings.TrimSuffix(b, "\n"), "\n")

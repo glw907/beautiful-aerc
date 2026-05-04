@@ -40,10 +40,8 @@ func HasNerdFont() bool {
 	return hasNerdFontResult
 }
 
-// fcListFamilies shells out to fc-list to enumerate font families
-// known to fontconfig. Returns (families, true) on success or
-// (nil, false) when fc-list is not in PATH or exits non-zero.
-// A 2-second context keeps a hung fontconfig from stalling startup.
+// fcListFamilies shells out to fc-list; the 2 s context prevents a
+// hung fontconfig from stalling startup.
 func fcListFamilies() ([]string, bool) {
 	path, err := exec.LookPath("fc-list")
 	if err != nil {

@@ -190,13 +190,14 @@ func (b *Backend) resolvedPassword() (string, error) {
 // once at the end to install the completed state and spawn the push
 // goroutine.
 func (b *Backend) Connect(_ context.Context) error {
-	// --- Phase 1: resolve password (no lock) ---
+	// Steps 1-5 run without b.mu so secret-manager prompts and slow
+	// network calls don't stall other readers; step 6 takes the lock
+	// just to install the result.
 	pw, err := b.resolvedPassword()
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
 
-	// --- Phase 2: authenticate (no lock) ---
 	cli := &jmap.Client{
 		SessionEndpoint: b.cfg.Source,
 	}
@@ -206,19 +207,16 @@ func (b *Backend) Connect(_ context.Context) error {
 	}
 	session := cli.Session
 
-	// --- Phase 3: fetch folders (no lock) ---
 	folders, mailboxState, err := fetchFolders(cli, session)
 	if err != nil {
 		return fmt.Errorf("connect: list folders: %w", err)
 	}
 
-	// --- Phase 4: seed email state (no lock) ---
 	emailState, err := fetchEmailState(cli, session)
 	if err != nil {
 		return fmt.Errorf("connect: seed email state: %w", err)
 	}
 
-	// --- Phase 5: build local values (no lock) ---
 	cache, err := lru.New[string, []byte](bodyCacheSize)
 	if err != nil {
 		return fmt.Errorf("connect: init body cache: %w", err)
@@ -235,7 +233,6 @@ func (b *Backend) Connect(_ context.Context) error {
 		return io.ReadAll(rc)
 	}
 
-	// --- Phase 6: install state under lock, then spawn goroutine ---
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
@@ -311,7 +308,6 @@ func fetchFolders(cli jmapClient, session *jmap.Session) (map[string]folderEntry
 			continue
 		}
 
-		// Build raw mail.Folder slice to run through the classifier.
 		raw := make([]mail.Folder, 0, len(gr.List))
 		for _, mbox := range gr.List {
 			raw = append(raw, mail.Folder{
@@ -511,7 +507,6 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	return out, nil
 }
 
-// translateEmail converts a JMAP *email.Email into mail.MessageInfo.
 func translateEmail(e *email.Email) mail.MessageInfo {
 	info := mail.MessageInfo{
 		UID:       mail.UID(e.ID),
@@ -533,9 +528,8 @@ func translateEmail(e *email.Email) mail.MessageInfo {
 	return info
 }
 
-// formatFromList formats a list of JMAP addresses into a display string.
-// Multiple senders are joined with ", ". Each address uses the display
-// name if present, otherwise falls back to the email address.
+// formatFromList joins addresses with ", ", preferring display name
+// over bare email.
 func formatFromList(addrs []*jmapmail.Address) string {
 	if len(addrs) == 0 {
 		return ""
@@ -572,7 +566,6 @@ func trimSurroundingQuotes(s string) string {
 	return rest[:closeIdx] + rest[closeIdx+1:]
 }
 
-// translateKeywords maps JMAP keyword strings to mail.Flag bits.
 func translateKeywords(kw map[string]bool) mail.Flag {
 	var f mail.Flag
 	if kw["$seen"] {
@@ -724,9 +717,9 @@ func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	return b.setKeyword(uids, keyword, set)
 }
 
-// Send satisfies mail.Backend. Compose is planned for Pass 9.
+// Send is a placeholder; compose is not yet wired up.
 func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
-	return errors.New("send not implemented in pass 3 — see pass 9")
+	return errors.New("jmap: send not implemented")
 }
 
 // accountIDLocked returns the primary JMAP account ID. Caller must hold b.mu.
@@ -734,7 +727,6 @@ func (b *Backend) accountIDLocked() jmap.ID {
 	return b.session.PrimaryAccounts[jmapmail.URI]
 }
 
-// keywordForFlag maps a mail.Flag to its JMAP keyword string.
 func keywordForFlag(flag mail.Flag) (string, error) {
 	switch flag {
 	case mail.FlagSeen:

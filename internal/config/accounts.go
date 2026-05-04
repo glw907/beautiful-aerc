@@ -193,8 +193,6 @@ func resolveEnv(s string) (string, error) {
 	return val, nil
 }
 
-// knownProvidersList returns a sorted, comma-separated list of all
-// recognized provider names (presets + bare "imap"/"jmap").
 func knownProvidersList() string {
 	names := make([]string, 0, len(Providers))
 	for k := range Providers {
@@ -205,9 +203,7 @@ func knownProvidersList() string {
 	return strings.Join(names, ", ")
 }
 
-// isShellName reports whether s is a valid shell variable name:
-// starts with a letter or underscore, followed by letters, digits,
-// or underscores only.
+// isShellName reports whether s is a valid POSIX shell variable name.
 func isShellName(s string) bool {
 	for i, r := range s {
 		if r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {

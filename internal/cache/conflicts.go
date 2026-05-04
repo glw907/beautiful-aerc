@@ -14,11 +14,10 @@ import (
 // the row was resolved by some other path; refresh and continue.
 var ErrNotConflict = errors.New("cache: op is not in conflict state")
 
-// revertOptimisticTx is the local-state mirror of applyOptimisticTx.
-// It reverses the optimistic UI flip applied at QueueOp time so that
-// after a Discard the cache reflects what the server actually has.
-// SendArgs/AppendArgs (Pass 9) return an error — those op kinds carry
-// no optimistic UI state in the cache I schema.
+// revertOptimisticTx mirrors applyOptimisticTx: it undoes the UI flip
+// applied at QueueOp time so a discard leaves the cache reflecting
+// what the server actually has. SendArgs and AppendArgs are placeholder
+// op kinds with no optimistic UI state, so they error out.
 func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 	switch v := args.(type) {
 	case MoveArgs, DestroyArgs:
@@ -81,8 +80,8 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 // server, so no remote reversal is needed — only local cleanup.
 //
 // Returns ErrNotConflict if the row is not currently in conflict.
-// Send/Append op kinds (Pass 9) cannot be discarded via this path
-// because revertOptimisticTx has no semantics for them.
+// Send and Append placeholders cannot be discarded via this path —
+// revertOptimisticTx has no semantics for them.
 func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		var status, kind, argsJSON string

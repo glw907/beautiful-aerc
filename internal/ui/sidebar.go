@@ -299,7 +299,6 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	return fillRowToWidth(row, s.width, bgStyle)
 }
 
-// renderBlankLine renders an empty line at the sidebar width with the sidebar background.
 func (s Sidebar) renderBlankLine() string {
 	return s.styles.SidebarBg.Width(s.width).Render("")
 }

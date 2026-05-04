@@ -11,10 +11,6 @@ import (
 )
 
 func TestCacheStats_OutputFormat(t *testing.T) {
-	// formatStatsLine is a pure helper used by the cache stats
-	// subcommand. It takes a stats struct and returns the tab-aligned
-	// row. Test it in isolation; integration with real accounts is
-	// covered by manual smoke at install.
 	row := formatStatsLine(statsRow{
 		Account:       "fastmail",
 		HeadersCount:  1247,

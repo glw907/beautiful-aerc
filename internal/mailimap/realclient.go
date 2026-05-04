@@ -40,12 +40,10 @@ func (r *realClient) dispatch(u mail.Update) {
 	}
 }
 
-// imapUID converts imap.UID (uint32) to mail.UID (decimal string).
 func imapUID(u imap.UID) mail.UID {
 	return mail.UID(strconv.FormatUint(uint64(u), 10))
 }
 
-// mailUIDsToSet converts a slice of mail.UID (decimal string) to an imap.UIDSet.
 func mailUIDsToSet(uids []mail.UID) imap.UIDSet {
 	var set imap.UIDSet
 	for _, u := range uids {
@@ -102,7 +100,6 @@ func (r *realClient) List(_, pattern string, specialUse bool) ([]listEntry, erro
 	return out, nil
 }
 
-// attrsToStrings converts a slice of imap.MailboxAttr to plain strings.
 func attrsToStrings(attrs []imap.MailboxAttr) []string {
 	out := make([]string, len(attrs))
 	for i, a := range attrs {

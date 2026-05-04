@@ -10,10 +10,6 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// TestIntegration_TriageRoundTrip drives the full pipeline:
-// upsert headers → user queues a flag-set → drainer picks it up →
-// backend confirms → flags converge → CacheEvent fires →
-// QueryFolder reflects the post-confirmation state.
 func TestIntegration_TriageRoundTrip(t *testing.T) {
 	be := &fakeBackend{
 		folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}},
@@ -91,10 +87,7 @@ func TestIntegration_TriageRoundTrip(t *testing.T) {
 	}
 }
 
-// TestIntegration_CrashRecovery exercises the spec §D.2 contract
-// end-to-end: queue ops, simulate a crash by flipping their status
-// to executing, re-Open the DB, assert idempotent ops reset to
-// pending and non-idempotent ops promote to conflict.
+// TestIntegration_CrashRecovery exercises the spec §D.2 contract.
 func TestIntegration_CrashRecovery(t *testing.T) {
 	dir := t.TempDir()
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}

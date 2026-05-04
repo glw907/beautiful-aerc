@@ -122,7 +122,6 @@ func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
 	return m.updateTab(msg)
 }
 
-// updateTab handles the message cases and returns a typed AccountTab.
 func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

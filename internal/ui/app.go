@@ -103,7 +103,6 @@ func (m App) Init() tea.Cmd {
 
 // deriveChromeFromAcct re-reads AccountTab state and propagates it
 // to App-owned chrome (footer, status bar, viewerOpen, linkPicker).
-// Called after every delegation that may have changed child state.
 func (m App) deriveChromeFromAcct() App {
 	prevViewer := m.viewerOpen
 	m.viewerOpen = m.acct.ViewerOpen()
