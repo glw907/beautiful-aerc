@@ -110,7 +110,6 @@ func (p MovePicker) Open(uids []mail.UID, src string, folders []FolderEntry) Mov
 	p.cursor = 0
 	p.offset = 0
 	p = p.recompute()
-	p.cache.dirty = true
 	return p
 }
 
