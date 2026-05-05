@@ -28,9 +28,12 @@ audit:
 install:
 	GOBIN=$(HOME)/.local/bin go install ./cmd/poplar
 
-check: vet test
+voice:
+	@./scripts/voice-check.sh
+
+check: vet voice test
 
 clean:
 	rm -f $(BINARY)
 
-.PHONY: build test test-imap vet lint audit install check clean
+.PHONY: build test test-imap vet voice lint audit install check clean

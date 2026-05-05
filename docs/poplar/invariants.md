@@ -303,6 +303,11 @@ the ADR(s) that justify them.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
   `docs/poplar/styling.md` before any color/style change.
+- `make check` runs `vet`, `voice`, `test`. The `voice` step is
+  `scripts/voice-check.sh` — grep-tier scan for AI-tells (T4,
+  T10, T14, T16, T27, T28). Calibrated to zero false-positives;
+  exits non-zero on any finding. Semantic tells stay with the
+  `/simplify` voice lens.
 - Pass-end ritual lives in the `poplar-pass` skill (trigger:
   "continue development", "next pass", "finish pass", "ship pass").
 - Live UI verification uses the tmux workflow in
@@ -354,4 +359,4 @@ invariant. ADR numbering is chronological.
 | Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |
 | Attachments I (Pass 8.6) — backend support: `mail.Attachment` + `Attachments`/`FetchAttachment` on Backend; cache schema v5 `attachments` table with lazy metadata + lazy bytes under separate `MaxAttachmentSize` backstop; JMAP via Email/get bodyStructure + cli.Download; IMAP via UID FETCH BODYSTRUCTURE + BODY[<part>]; canonical `mail.ClassifyDisposition` (Disposition-first, ContentID fallback); MIME normalization at the protocol→mail boundary | 0135, 0136, 0137 |
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
-| Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage | 0141 |
+| Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
