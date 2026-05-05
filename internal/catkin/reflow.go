@@ -151,10 +151,9 @@ func buildPrefix(c LineContext) string {
 	return sb.String()
 }
 
-// remapCursor maps a rune offset within the original group's joined text to
-// the equivalent offset in the emitted text. It counts non-whitespace runes
-// up to the original offset, then walks the emitted text until it reaches the
-// same count — whitespace boundaries shift on reflow but content chars align.
+// remapCursor approximates the post-reflow cursor by aligning on
+// non-whitespace rune count; whitespace boundaries shift but content
+// chars do not.
 func remapCursor(orig, emitted []string, rel int) int {
 	if len(orig) == 0 || len(emitted) == 0 {
 		return rel

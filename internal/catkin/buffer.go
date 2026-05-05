@@ -35,7 +35,7 @@ func (b Buffer) Focus() tea.Cmd { return b.ta.Focus() }
 func (b *Buffer) Blur()         { b.ta.Blur() }
 func (b Buffer) Focused() bool  { return b.ta.Focused() }
 
-// RuneOffset returns the cursor's absolute rune offset in the buffer.
+// RuneOffset returns the cursor's rune offset from the start of the value.
 func (b Buffer) RuneOffset() int {
 	row := b.ta.Line()
 	value := b.ta.Value()
@@ -53,7 +53,7 @@ func (b Buffer) RuneOffset() int {
 	return off
 }
 
-// SetRuneOffset moves the cursor to the absolute rune offset off.
+// SetRuneOffset positions the cursor at rune offset off.
 func (b *Buffer) SetRuneOffset(off int) {
 	value := b.ta.Value()
 	row := 0
