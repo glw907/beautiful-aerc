@@ -74,11 +74,14 @@ func (b *Buffer) SetRuneOffset(off int) {
 		row = len(lines) - 1
 		col = utf8.RuneCountInString(lines[row])
 	}
-	b.ta.SetCursor(col)
+	// Navigate to the target row first. SetCursor operates on the current row,
+	// so col must be set after the row is in place or it will be clamped to the
+	// wrong line's length.
 	for b.ta.Line() < row {
 		b.ta.CursorDown()
 	}
 	for b.ta.Line() > row {
 		b.ta.CursorUp()
 	}
+	b.ta.SetCursor(col)
 }

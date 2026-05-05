@@ -24,6 +24,15 @@ func TestBufferRuneOffsetClampsPastEnd(t *testing.T) {
 	}
 }
 
+func TestBufferRuneOffsetAtNewline(t *testing.T) {
+	b := NewBuffer(newEmptyTextarea())
+	b.SetValue("hello\nworld\nfoo")
+	b.SetRuneOffset(5)
+	if got := b.RuneOffset(); got != 5 {
+		t.Errorf("RuneOffset at newline boundary: got %d, want 5", got)
+	}
+}
+
 func newEmptyTextarea() textarea.Model {
 	t := textarea.New()
 	t.SetWidth(40)
