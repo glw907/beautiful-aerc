@@ -160,28 +160,30 @@ the ADR(s) that justify them.
 - Catkin (`internal/catkin/`) is poplar's markdown-first
   bubbletea editor, library-pure (`bubbletea`, `bubbles`,
   `lipgloss`, `muesli/reflow`, `charmbracelet/x/ansi`,
-  `alecthomas/chroma/v2` only — no poplar imports). Catkin
-  uses `bubbles/textarea` as the buffer + cursor + edit-op
-  primitive but owns its own `View()`. Block classifier
-  (`Classify`) and reflow engine (`Reflow`) are pure functions
-  over the raw source; cursor remap across reflow uses
+  `alecthomas/chroma/v2` only — no poplar imports). Wraps
+  `bubbles/textarea` as buffer/cursor/edit-op primitive but
+  owns its own `View()`. `Classify` + `Reflow` are pure
+  functions over raw source; cursor remap across reflow uses
   non-whitespace rune count. Display-level wrap soft-breaks
-  long source lines mid-token. Word navigation
-  (`Ctrl+Left/Right`, `Ctrl+Backspace/Delete`) is intercepted
-  in `Model.Update` before delegating to textarea. Scroll-off
-  keeps the cursor 3 rows from the edges. ADR-0144.
-- Live markdown styling is a render-time overlay driven by
-  `catkin.Styles` (Catkin-owned; host maps its theme onto it,
-  zero value yields plain). Inline span tokenizer is
-  single-pass, priority code > bold-italic > bold > italic >
-  link; delimiters always render literally (iA-Writer shape).
-  Fenced blocks highlight via chroma (monokai/terminal256)
-  when the info string names a known lexer, with a `sync.Map`
-  cache for lexer+style+formatter; unknown lexers fall back to
-  `Styles.CodeBlock`. `renderFences` only highlights blocks in
-  the viewport. Cursor `█` is placed in the raw line before
-  styling; cursor on a delimiter degrades the span to plain.
-  Soft-wrap is ANSI-aware via `ansi.Hardwrap`. ADR-0145.
+  long source lines mid-token. Word navigation (`Ctrl+Left/
+  Right`, `Ctrl+Backspace/Delete`) intercepts in `Model.Update`
+  before textarea. Scroll-off keeps the cursor 3 rows from the
+  edges. ADR-0144.
+- Live styling is a render-time overlay via `catkin.Styles`
+  (Catkin-owned; host maps theme onto it; zero value = plain).
+  Single-pass inline span tokenizer, priority code >
+  bold-italic > bold > italic > link; delimiters render
+  literally (iA-Writer shape). Fenced blocks highlight via
+  chroma (monokai/terminal256) for known lexers with `sync.Map`
+  cache; unknown lexers fall back to `Styles.CodeBlock`.
+  `renderFences` only highlights blocks in the viewport.
+  Cursor `█` placed in raw line before styling; cursor on a
+  delimiter degrades the span to plain. Soft-wrap ANSI-aware
+  via `ansi.Hardwrap`. ADR-0145.
+- Editing commands run through `handleCommand` ahead of word-nav:
+  smart Enter (prefix-continuing, ordered-increment, hard-break
+  trim), Tab/Shift-Tab list indent, `Ctrl+B/I/K/L/Q/Space`,
+  `Model.WordCount`/`CharCount`. ADR-0146.
 
 ## Mail model
 
@@ -353,8 +355,7 @@ the ADR(s) that justify them.
 
 ## Decision index
 
-Load the relevant ADR when you need the rationale behind an
-invariant. ADR numbering is chronological.
+Load the relevant ADR when you need rationale. Numbering is chronological.
 
 | Invariant theme | ADRs |
 |---|---|
@@ -396,5 +397,4 @@ invariant. ADR numbering is chronological.
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
-| Catkin core (Pass 9) — package skeleton + Model/Buffer + block classifier + reflow + plain renderer + word nav + scroll-off; renderer ownership | 0144 |
-| Catkin live styling (Pass 9a) — render-time overlay via Catkin-owned `Styles`; iA-Writer-shape span tokenizer (code > bold-italic > bold > italic > link); chroma syntax highlighting for known fences (monokai/terminal256) with `sync.Map` cache and viewport-bounded execution; cursor-in-raw-before-style; ANSI-aware soft-wrap | 0145 |
+| Catkin (Pass 9, 9a, 9b) — core (Model/Buffer + classifier + reflow + plain renderer + word nav + scroll-off; renderer ownership); live styling (Catkin-owned `Styles` overlay; iA-Writer-shape span tokenizer; chroma syntax highlighting w/ `sync.Map` cache and viewport-bounded execution; ANSI-aware soft-wrap); command vocabulary (smart Enter, Tab/Shift-Tab indent, Ctrl+B/I/K/L/Q, Ctrl+Space task toggle, WordCount/CharCount) | 0144, 0145, 0146 |

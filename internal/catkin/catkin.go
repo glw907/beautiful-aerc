@@ -35,6 +35,11 @@ func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok {
+		if handled, b, cmd := handleCommand(m.buf, k); handled {
+			m.buf = b
+			m = applyScrollOff(m)
+			return m, cmd
+		}
 		if handled, b, cmd := handleWordNav(m.buf, k); handled {
 			m.buf = b
 			m = applyScrollOff(m)

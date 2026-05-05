@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9.5 next — Compose enhancements (#5 #12 #24).
+**Current pass:** Pass 9c next — Catkin power-user QoL.
 
 ## Passes
 
@@ -8,19 +8,22 @@
 |------|------|--------|
 | 1 – 8.3 | Scaffold → backends → UI → triage → config v1 → Gmail preset → polish I (see git log; ADRs 0001–0109) | done |
 | 8.4 – 8.4b | Cache 0–II — design, foundation, UI cutover, body cache + CLI (ADR-0110–0124) | done |
-| 8.5 | Overengineering audit — ADR-0125/0126/0127; ~700 LOC net deletion | done |
-| 8.5b | Elm architecture conformance audit (`internal/ui/`) — ADR-0128 | done |
-| 8.5c | UI structural cleanup — ModalShell + SidebarColumn + overlay render caching (ADR-0129, 0130) | done |
-| 8.5d | Content/filter cleanup — `Block`/`Span` marker simplification (ADR-0131); #23 already shipped in 9174f85 | done |
-| 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge (ADR-0132, 0133, 0134) | done |
-| 8.6 | Attachments I — backend (#24) (ADR-0135, 0136, 0137) | done |
-| 8.7 | Attachments II — viewer (#24) (ADR-0138, 0139, 0140) | done |
-| 8.8 | Human-voice audit I — research-grounded style guide, persona, ADR-0141, skill + `/simplify` updates; string-only fixes (C1 comments, C7 errors, C4 prose verbosity) | done |
-| 8.9 | Human-voice audit II — structural fixes (C2/C5/C6/C8/C4-structural) + dedupe of resolvePassword | done |
-| 8.10 | First-sync header population — JMAP per-folder baseline pull (Email/query + sentinel-id state probe in one roundtrip); FetchHeaders chunked at 500 (ADR-0143) | done |
-| 9 | Catkin core — package, classifier, reflow, plain render, word nav, scroll-off (ADR-0144) | done |
-| 9a | Catkin live markdown styling — `Styles` overlay + chroma fences (ADR-0145) | done |
-| 9.5 | Compose enhancements — #5 #12 #24 | pending |
+| 8.4c | Cache III — outbox + offline + `Q`/`!` overlays + status badge (ADR-0132–0134) | done |
+| 8.5 – 8.5d | Overengineering audit, Elm conformance, UI structural cleanup, content/filter cleanup (ADR-0125–0131) | done |
+| 8.6 – 8.7 | Attachments I (backend) + II (viewer) (ADR-0135–0140) | done |
+| 8.8 – 8.9 | Human-voice audit I (string-only) + II (structural) | done |
+| 8.10 | First-sync header population — JMAP per-folder baseline pull (ADR-0143) | done |
+| 9 | Catkin core (ADR-0144) | done |
+| 9a | Catkin live markdown styling (ADR-0145) | done |
+| 9b | Catkin command vocabulary (ADR-0146) | done |
+| 9c | Catkin power-user QoL — undo/redo, find/replace, auto-pair, smart paste, bracket match, typewriter+focus modes | pending |
+| 9d | Annotation pipeline + spellcheck (Track 1 SymSpell + bundled lists; Track 2 hunspell subprocess) | pending |
+| 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
+| 9f | Mail backend Send + Append — JMAP submission, IMAP+SMTP, `[account.smtp]` config | pending |
+| 9g | Cache outbox Send/Append dispatch | pending |
+| 9h | ComposeTab UI + `c` wiring + tidy seam | pending |
+| 9i | Claude Tidy implementation | pending |
+| 9.5 | Attachments-richer compose UI (#24) — multi-attach, attach-from-cache | pending (after 9i) |
 | 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
 | 10 | Polish II — popover dim (#14); items surfaced during 9–9.6 | pending |
 | 11 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag `v0.9.0` | pending |
@@ -29,31 +32,27 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9.5)
+## Next starter prompt (Pass 9c)
 
-> **Goal.** Compose enhancements: wire Catkin into the compose
-> screen (replacing the placeholder textarea, mapping
-> `theme.CompiledTheme` → `catkin.Styles`), then land #5
-> (drafts), #12 (reply quoting), and #24 (attachment send).
+> **Goal.** Catkin power-user QoL: undo/redo (50-step ring buffer
+> of buffer + cursor snapshots), find/replace overlay (literal +
+> case-insensitive toggle, `y`/`n`/`a` per match), markdown
+> auto-pair (six pairs, disabled inside code spans/fences),
+> smart URL paste → `[word](url)`, bracket/span match highlight,
+> typewriter scroll mode, focus mode, `Ctrl+\` mode-cycle key.
 >
-> **Scope.** `internal/ui/compose.go` + theme→catkin.Styles
-> mapping; draft persistence via cache (schema bump if needed);
-> reply quoting via `mail.MessageInfo`; attachment attach UI
-> mirroring the Attachments II picker.
+> **Scope.** All inside `internal/catkin/`. Library-purity
+> preserved. No host-side wiring.
 >
-> **Settled:** Catkin is the editor; Catkin-owned `Styles` is
-> the boundary (ADR-0145). Library-purity preserved — mapping
-> happens host-side. iA-Writer span shape and chroma fence
-> highlighting carry over.
+> **Settled:** Spec at
+> `docs/superpowers/specs/2026-05-04-compose-design.md` § Catkin
+> QoL additions (#1–#11). Smart quotes deferred per spec.
 >
-> **Still open — brainstorm:** draft schema (column on messages
-> vs. separate table); reply quoting style (top-quote vs.
-> bottom-quote vs. configurable); attachment add UX (pick from
-> filesystem at compose time vs. drag-and-drop placeholder).
+> **Still open — brainstorm:** none — pure implementation.
 >
-> **Approach.** Brainstorm open questions, plan at
-> `docs/superpowers/plans/YYYY-MM-DD-compose-enhancements.md`,
-> then implement. Standard pass-end checklist applies.
+> **Approach.** Plan at
+> `docs/superpowers/plans/YYYY-MM-DD-catkin-qol.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Queued
 
