@@ -17,10 +17,11 @@ import (
 
 // Model is Catkin's tea.Model. Construct with New.
 type Model struct {
-	buf     Buffer
-	width   int
-	height  int
-	focused bool
+	buf         Buffer
+	width       int
+	height      int
+	viewportTop int
+	focused     bool
 }
 
 // New returns a Model with default settings.
@@ -39,7 +40,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return m.buf.View()
+	src := m.buf.Value()
+	cur := m.buf.RuneOffset()
+	return Render(src, m.width, m.height, m.viewportTop, cur)
 }
 
 // Value returns the raw markdown source.
