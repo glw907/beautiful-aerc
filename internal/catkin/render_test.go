@@ -97,3 +97,21 @@ func TestRenderZeroStylesUnchangedFromPlain(t *testing.T) {
 		t.Errorf("zero Styles emitted ANSI: %q", got)
 	}
 }
+
+func TestRenderAppliesSquiggle(t *testing.T) {
+	src := "the tradeof is real"
+	anns := []Annotation{
+		{
+			Range: Range{4, 11},
+			Kind:  KindMisspelling,
+			Style: lipgloss.NewStyle().Underline(true),
+		},
+	}
+	set := newAnnotationSet(src, anns)
+	out := RenderAnnotated(src, 80, 1, 0, 0, Styles{}, ModeNormal, set)
+	// lipgloss renders underline as \x1b[4;4m (underline + underline style).
+	// Either form is valid. Check that some underline SGR is present.
+	if !strings.Contains(out, "\x1b[4m") && !strings.Contains(out, "\x1b[4;") {
+		t.Errorf("rendered output missing underline SGR; got:\n%q", out)
+	}
+}

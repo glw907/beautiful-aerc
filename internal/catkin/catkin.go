@@ -119,7 +119,7 @@ func (m *Model) recordSnap() {
 func (m Model) View() string {
 	src := m.buf.Value()
 	cur := m.buf.RuneOffset()
-	body := Render(src, m.width, m.height-m.find.footerRows(), m.viewportTop, cur, m.styles, m.mode)
+	body := RenderAnnotated(src, m.width, m.height-m.find.footerRows(), m.viewportTop, cur, m.styles, m.mode, m.annotations)
 	if !m.find.active() {
 		return body
 	}

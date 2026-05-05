@@ -13,6 +13,12 @@ import (
 // touched. The zero Styles value yields plain output identical
 // to Pass 9.
 func Render(src string, width, height, top, cursor int, styles Styles, mode DisplayMode) string {
+	return RenderAnnotated(src, width, height, top, cursor, styles, mode, nil)
+}
+
+// RenderAnnotated produces Catkin's view content with optional
+// annotations overlaid before the cursor block. ann may be nil.
+func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, mode DisplayMode, ann *AnnotationSet) string {
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
 	cursorRow, cursorCol := offsetToRowCol(src, cursor)
@@ -21,6 +27,8 @@ func Render(src string, width, height, top, cursor int, styles Styles, mode Disp
 	if mode.focus() {
 		focusFirst, focusLast = activeParagraphRange(ctxs, cursorRow)
 	}
+
+	rowOffsets := computeRowOffsets(src)
 
 	var visual []string
 	for i := top; i < len(lines) && len(visual) < height; i++ {
@@ -38,6 +46,9 @@ func Render(src string, width, height, top, cursor int, styles Styles, mode Disp
 			raw = insertCursorBlock(raw, cursorCol)
 		}
 		styled := styleLine(raw, ctxs[i], styles, fenceLines, i, i == cursorRow)
+		if ann != nil {
+			styled = applyAnnotationsToLine(styled, lines[i], rowOffsets[i], ann.rangesOnRow(src, i))
+		}
 		if matchCol >= 0 {
 			styled = overlayMatch(styled, matchCol, matchCh, styles.MatchHighlight)
 		}
@@ -55,6 +66,61 @@ func Render(src string, width, height, top, cursor int, styles Styles, mode Disp
 		visual = append(visual, "")
 	}
 	return strings.Join(visual, "\n")
+}
+
+// computeRowOffsets returns the byte offset of the start of each
+// line in src. The slice has one entry per line (including an empty
+// final line if src ends with '\n').
+func computeRowOffsets(src string) []int {
+	out := []int{0}
+	for i := 0; i < len(src); i++ {
+		if src[i] == '\n' {
+			out = append(out, i+1)
+		}
+	}
+	return out
+}
+
+// applyAnnotationsToLine overlays annotation styles onto the
+// already-styled line. Each annotation's Style.Render is applied
+// to the plain-text byte range, then spliced back into the styled
+// string by display-cell position. Multiple annotations on one line
+// are applied left-to-right. Later splices do not disturb earlier
+// ones because ansiSpliceAtCol works on column offsets from the
+// original plain string.
+func applyAnnotationsToLine(styled, plain string, lineOffset int, anns []Annotation) string {
+	if len(anns) == 0 {
+		return styled
+	}
+	out := styled
+	for _, a := range anns {
+		startInLine := a.Range.Start - lineOffset
+		endInLine := a.Range.End - lineOffset
+		if startInLine < 0 {
+			startInLine = 0
+		}
+		if endInLine > len(plain) {
+			endInLine = len(plain)
+		}
+		if startInLine >= endInLine {
+			continue
+		}
+		preCol := lipgloss.Width(plain[:startInLine])
+		targetPlain := plain[startInLine:endInLine]
+		styledTarget := a.Style.Render(targetPlain)
+		out = ansiSpliceAtCol(out, preCol, lipgloss.Width(targetPlain), styledTarget)
+	}
+	return out
+}
+
+// ansiSpliceAtCol replaces a fixed-width column range of an
+// ANSI-styled string with replacement. Uses ansi.Truncate and
+// ansi.TruncateLeft to slice around the target region.
+func ansiSpliceAtCol(styled string, col, width int, replacement string) string {
+	left := ansi.Truncate(styled, col, "")
+	rest := ansi.TruncateLeft(styled, col, "")
+	right := ansi.TruncateLeft(rest, width, "")
+	return left + replacement + right
 }
 
 // renderFences runs chroma over each fenced block whose

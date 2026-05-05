@@ -34,10 +34,13 @@ type Styles struct {
 	CodeBlock  lipgloss.Style
 	Link       lipgloss.Style
 	URL        lipgloss.Style
-	ListMarker     lipgloss.Style
-	TaskBox        lipgloss.Style
-	MatchHighlight lipgloss.Style
-	Dim            lipgloss.Style
+	ListMarker      lipgloss.Style
+	TaskBox         lipgloss.Style
+	MatchHighlight  lipgloss.Style
+	Dim             lipgloss.Style
+	Squiggle        lipgloss.Style // misspelling underline decoration
+	Popover         lipgloss.Style // suggestion popover frame
+	PopoverSelected lipgloss.Style // highlighted suggestion row
 }
 
 type spanKind int
