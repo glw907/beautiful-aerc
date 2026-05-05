@@ -8,10 +8,6 @@ import (
 // Render produces Catkin's view content: plain text + cursor block +
 // display-level soft-wrap for source lines that exceed width. Pass 9
 // applies no styling — that lands in 9a.
-//
-// width and height are the viewport dimensions in columns and rows.
-// top is the source-line index of the first visible row; cursor is
-// the rune offset of the cursor in src.
 func Render(src string, width, height, top, cursor int) string {
 	lines := strings.Split(src, "\n")
 	cursorRow, cursorCol := offsetToRowCol(src, cursor)
@@ -41,9 +37,9 @@ func Render(src string, width, height, top, cursor int) string {
 	return strings.Join(visual, "\n")
 }
 
-// softWrap breaks line into width-column chunks. Mid-token breaks are
-// acceptable here: Reflow has already done token-aware wrapping on
-// the source, so display overflow is a second-order edge.
+// softWrap splits an overlong source line at the width boundary.
+// Reflow has already done token-aware wrapping, so mid-token breaks
+// here are second-order.
 func softWrap(line string, width int) []string {
 	if width <= 0 || utf8.RuneCountInString(line) <= width {
 		return []string{line}
