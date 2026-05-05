@@ -160,30 +160,37 @@ the ADR(s) that justify them.
 - Catkin (`internal/catkin/`) is poplar's markdown-first
   bubbletea editor, library-pure (`bubbletea`, `bubbles`,
   `lipgloss`, `muesli/reflow`, `charmbracelet/x/ansi`,
-  `alecthomas/chroma/v2` only — no poplar imports). Wraps
-  `bubbles/textarea` as buffer/cursor/edit-op primitive but
-  owns its own `View()`. `Classify` + `Reflow` are pure
-  functions over raw source; cursor remap across reflow uses
-  non-whitespace rune count. Display-level wrap soft-breaks
-  long source lines mid-token. Word navigation (`Ctrl+Left/
-  Right`, `Ctrl+Backspace/Delete`) intercepts in `Model.Update`
-  before textarea. Scroll-off keeps the cursor 3 rows from the
-  edges. ADR-0144.
-- Live styling is a render-time overlay via `catkin.Styles`
-  (Catkin-owned; host maps theme onto it; zero value = plain).
-  Single-pass inline span tokenizer, priority code >
-  bold-italic > bold > italic > link; delimiters render
-  literally (iA-Writer shape). Fenced blocks highlight via
-  chroma (monokai/terminal256) for known lexers with `sync.Map`
-  cache; unknown lexers fall back to `Styles.CodeBlock`.
-  `renderFences` only highlights blocks in the viewport.
-  Cursor `█` placed in raw line before styling; cursor on a
+  `alecthomas/chroma/v2` only). Wraps `bubbles/textarea` as
+  buffer/cursor primitive but owns `View()`. `Classify` +
+  `Reflow` are pure over raw source; reflow cursor remap uses
+  non-whitespace rune count. Word nav (`Ctrl+Left/Right`,
+  `Ctrl+Backspace/Delete`) intercepts before textarea;
+  scroll-off keeps the cursor 3 rows from the edges. ADR-0144.
+- Live styling overlay via Catkin-owned `Styles` (host maps
+  theme on; zero value = plain). Single-pass inline tokenizer,
+  priority code > bold-italic > bold > italic > link;
+  delimiters render literally (iA-Writer shape). Fenced blocks
+  highlight via chroma monokai/terminal256 with `sync.Map`
+  cache, viewport-bounded; unknown lexers fall back to
+  `Styles.CodeBlock`. Cursor `█` placed pre-style; cursor on a
   delimiter degrades the span to plain. Soft-wrap ANSI-aware
   via `ansi.Hardwrap`. ADR-0145.
 - Editing commands run through `handleCommand` ahead of word-nav:
   smart Enter (prefix-continuing, ordered-increment, hard-break
   trim), Tab/Shift-Tab list indent, `Ctrl+B/I/K/L/Q/Space`,
-  `Model.WordCount`/`CharCount`. ADR-0146.
+  `WordCount`/`CharCount`. ADR-0146.
+- Power-user QoL on `Model`: 50-step undo/redo ring with
+  intra-word coalescing (`Ctrl+Z`/`Ctrl+Y`); find/replace
+  overlay (`Ctrl+F`/`Ctrl+R`) reserving 1–2 footer rows, literal
+  substring with `Tab`-toggled case-fold, `Ctrl+Y/N/A`
+  accept/skip/all; markdown auto-pair on `*`/`_`/`` ` ``/`[`
+  with emphasis-doubling and pair-aware backspace, suppressed
+  in code context; smart URL paste wrapping the word at cursor
+  as `[word](url)`; bracket-match highlight via
+  `Styles.MatchHighlight` using the shared `walkSpans` iterator
+  behind `tokenize` and `scanSpans`; `DisplayMode` cycle on
+  `Ctrl+\` — Normal / Typewriter / Focus (`Styles.Dim`) / both.
+  ADR-0147.
 
 ## Mail model
 
@@ -333,25 +340,18 @@ the ADR(s) that justify them.
 ## Build & verification
 
 - Makefile targets: `build`, `test`, `vet`, `lint`, `install`,
-  `check`, `clean`. `make check` (vet+test) is the commit gate;
-  `make install` writes to `~/.local/bin/`.
-- Go module: `github.com/glw907/poplar`. `go.mod` floor is 1.26.0;
-  workstation toolchain is 1.26.1.
+  `check`, `clean`. `make check` runs vet + voice + test (commit
+  gate); `make install` writes to `~/.local/bin/`. The `voice`
+  step is `scripts/voice-check.sh` — grep-tier scan for AI-tells
+  (T4, T10, T14, T16, T27, T28); semantic tells stay with the
+  `/simplify` voice lens.
+- Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
-  `docs/poplar/styling.md` before any color/style change.
-- `make check` runs `vet`, `voice`, `test`. The `voice` step is
-  `scripts/voice-check.sh` — grep-tier scan for AI-tells (T4,
-  T10, T14, T16, T27, T28). Calibrated to zero false-positives;
-  exits non-zero on any finding. Semantic tells stay with the
-  `/simplify` voice lens.
-- Pass-end ritual lives in the `poplar-pass` skill (trigger:
-  "continue development", "next pass", "finish pass", "ship pass").
-- Live UI verification uses the tmux workflow in
-  `.claude/docs/tmux-testing.md`. 80×24 is the design polish bar:
-  every UI surface must look intentional at the default-launch
-  terminal size on every VT100-lineage terminal. Below 80, rendering
-  is best-effort. UI passes capture both 80×24 and 120×40.
+  `docs/poplar/styling.md` before any color/style change. Pass-end
+  ritual lives in `poplar-pass`.
+- Live UI verification uses tmux (`.claude/docs/tmux-testing.md`).
+  80×24 is the polish bar; UI passes capture 80×24 and 120×40.
 
 ## Decision index
 
@@ -360,7 +360,7 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Invariant theme | ADRs |
 |---|---|
 | Monorepo, single binary | 0001, 0058 |
-| Direct-on-libraries mail stack (no aerc fork) | 0002 (superseded by 0075), 0006 (superseded by 0075), 0008 (superseded by 0075), 0010 (superseded by 0075), 0012 (superseded by 0075), 0075 |
+| Direct-on-libraries mail stack (no aerc fork) | 0002, 0006, 0008, 0010, 0012 (all superseded by 0075), 0075 |
 | Lipgloss + compiled themes, styling discipline | 0004, 0043, 0046 |
 | JMAP + IMAP only, minimal account config | 0009, 0075, 0098, 0101, 0104 |
 | Mail backend interface synchronous | 0010 (superseded by 0075), 0075, 0099 |
@@ -384,7 +384,7 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
-| Local cache architecture (design accepted Pass 8.4; revised Pass 8.4-revise; foundation Pass 8.4a; cutover Pass 8.4a-cutover; bodies + CLI Pass 8.4b) — per-account SQLite + junction-table message shape, unified write path with typed Op sum + drainer Events, drain-first sync ordering, outbox + state machine + terminal classification, UIDVALIDITY re-key contract, IMAP scan-and-diff ChangeTracker (CONDSTORE deferred) | 0110 (narrowed by 0114, 0115), 0111 (parts superseded by 0117), 0112 (superseded in part by 0113, 0116; narrowed by 0114), 0113, 0114, 0115, 0116, 0117, 0118, 0120, 0121, 0122, 0123, 0124 |
+| Local cache architecture — per-account SQLite, typed Op sum + drainer, drain-first sync, outbox state machine, UIDVALIDITY re-key, IMAP scan-and-diff | 0110, 0111, 0112, 0113, 0114, 0115, 0116, 0117, 0118, 0120, 0121, 0122, 0123, 0124 |
 | Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |
 | Cache cutover — UI reads/writes via cache.Account; mail.Backend shrunk (Mark*/Delete dropped); MessageList Apply* removed; folders.exists_total/unseen_total seed sidebar | 0121 |
 | Cache II policy — lazy body population, single max-size backstop, no LRU; FetchBody returns []byte; poplar cache CLI | 0122, 0123, 0124 |
@@ -397,4 +397,4 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
-| Catkin (Pass 9, 9a, 9b) — core (Model/Buffer + classifier + reflow + plain renderer + word nav + scroll-off; renderer ownership); live styling (Catkin-owned `Styles` overlay; iA-Writer-shape span tokenizer; chroma syntax highlighting w/ `sync.Map` cache and viewport-bounded execution; ANSI-aware soft-wrap); command vocabulary (smart Enter, Tab/Shift-Tab indent, Ctrl+B/I/K/L/Q, Ctrl+Space task toggle, WordCount/CharCount) | 0144, 0145, 0146 |
+| Catkin — core + live styling + command vocabulary + power-user QoL (undo/redo, find/replace, auto-pair, smart paste, bracket match, typewriter+focus modes) | 0144, 0145, 0146, 0147 |

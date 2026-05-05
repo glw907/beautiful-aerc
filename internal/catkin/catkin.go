@@ -22,41 +22,84 @@ type Model struct {
 	height      int
 	viewportTop int
 	styles      Styles
+	undo        undoRing
+	mode        DisplayMode
+	find        findState
 }
 
 // New returns a Model with default settings.
 func New() Model {
-	return Model{
+	m := Model{
 		buf: NewBuffer(textarea.New()),
 	}
+	m.undo.seed(snap{"", 0})
+	return m
 }
 
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok {
-		if handled, b, cmd := handleCommand(m.buf, k); handled {
-			m.buf = b
-			m = applyScrollOff(m)
-			return m, cmd
+		if m.find.active() {
+			return m.handleFind(k)
 		}
-		if handled, b, cmd := handleWordNav(m.buf, k); handled {
-			m.buf = b
-			m = applyScrollOff(m)
-			return m, cmd
+		switch k.String() {
+		case "ctrl+f":
+			m.find = findState{mode: findFind}
+			return m, nil
+		case "ctrl+r":
+			m.find = findState{mode: findReplace, inputFocus: 1}
+			return m, nil
+		case "ctrl+\\":
+			m.mode = m.mode.next()
+			return applyScrollOff(m), nil
+		case "ctrl+z":
+			if s, ok := m.undo.undo(); ok {
+				m.buf.SetValue(s.val)
+				m.buf.SetRuneOffset(s.cur)
+			}
+			return applyScrollOff(m), nil
+		case "ctrl+y":
+			if s, ok := m.undo.redo(); ok {
+				m.buf.SetValue(s.val)
+				m.buf.SetRuneOffset(s.cur)
+			}
+			return applyScrollOff(m), nil
+		}
+		for _, h := range []func(Buffer, tea.KeyMsg) (bool, Buffer, tea.Cmd){
+			handleCommand, handleWordNav, handleAutoPair, handlePaste,
+		} {
+			if handled, b, cmd := h(m.buf, k); handled {
+				return m.afterEdit(b, cmd)
+			}
 		}
 	}
-	var cmd tea.Cmd
-	m.buf, cmd = m.buf.Update(msg)
-	m = applyScrollOff(m)
-	return m, cmd
+	b, cmd := m.buf.Update(msg)
+	return m.afterEdit(b, cmd)
+}
+
+func (m Model) afterEdit(b Buffer, cmd tea.Cmd) (Model, tea.Cmd) {
+	m.buf = b
+	m.recordSnap()
+	return applyScrollOff(m), cmd
+}
+
+func (m *Model) recordSnap() {
+	m.undo.record(snap{m.buf.Value(), m.buf.RuneOffset()})
 }
 
 func (m Model) View() string {
 	src := m.buf.Value()
 	cur := m.buf.RuneOffset()
-	return Render(src, m.width, m.height, m.viewportTop, cur, m.styles)
+	body := Render(src, m.width, m.height-m.find.footerRows(), m.viewportTop, cur, m.styles, m.mode)
+	if !m.find.active() {
+		return body
+	}
+	return body + "\n" + m.find.renderFindFooter(m.width)
 }
+
+// Mode reports the active display mode.
+func (m Model) Mode() DisplayMode { return m.mode }
 
 // SetStyles replaces the render-time style table. The zero value
 // is no-op styles; consumers map their theme onto Styles at the
@@ -66,8 +109,12 @@ func (m *Model) SetStyles(s Styles) { m.styles = s }
 // Value returns the raw markdown source.
 func (m Model) Value() string { return m.buf.Value() }
 
-// SetValue replaces the buffer with s.
-func (m *Model) SetValue(s string) { m.buf.SetValue(s) }
+// SetValue replaces the buffer with s and re-seeds the undo ring
+// — programmatic loads are not user edits.
+func (m *Model) SetValue(s string) {
+	m.buf.SetValue(s)
+	m.undo.seed(snap{s, m.buf.RuneOffset()})
+}
 
 // SetSize sets the editor's display dimensions.
 func (m *Model) SetSize(w, h int) {

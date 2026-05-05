@@ -12,19 +12,38 @@ import (
 // Styling is a pure render-time overlay; the raw source is not
 // touched. The zero Styles value yields plain output identical
 // to Pass 9.
-func Render(src string, width, height, top, cursor int, styles Styles) string {
+func Render(src string, width, height, top, cursor int, styles Styles, mode DisplayMode) string {
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
 	cursorRow, cursorCol := offsetToRowCol(src, cursor)
 	fenceLines := renderFences(lines, ctxs, styles, top, top+height)
+	focusFirst, focusLast := -1, -1
+	if mode.focus() {
+		focusFirst, focusLast = activeParagraphRange(ctxs, cursorRow)
+	}
 
 	var visual []string
 	for i := top; i < len(lines) && len(visual) < height; i++ {
 		raw := lines[i]
+		var matchCol = -1
+		var matchCh rune
 		if i == cursorRow {
+			if mc, ok := bracketMatchAt(raw, cursorCol); ok && mc != cursorCol {
+				matchRunes := []rune(raw)
+				if mc < len(matchRunes) {
+					matchCh = matchRunes[mc]
+					matchCol = lipgloss.Width(string(matchRunes[:mc]))
+				}
+			}
 			raw = insertCursorBlock(raw, cursorCol)
 		}
 		styled := styleLine(raw, ctxs[i], styles, fenceLines, i, i == cursorRow)
+		if matchCol >= 0 {
+			styled = overlayMatch(styled, matchCol, matchCh, styles.MatchHighlight)
+		}
+		if mode.focus() && (i < focusFirst || i > focusLast) {
+			styled = styles.Dim.Render(ansi.Strip(styled))
+		}
 		for _, w := range softWrap(styled, width) {
 			if len(visual) >= height {
 				break

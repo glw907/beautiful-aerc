@@ -34,8 +34,10 @@ type Styles struct {
 	CodeBlock  lipgloss.Style
 	Link       lipgloss.Style
 	URL        lipgloss.Style
-	ListMarker lipgloss.Style
-	TaskBox    lipgloss.Style
+	ListMarker     lipgloss.Style
+	TaskBox        lipgloss.Style
+	MatchHighlight lipgloss.Style
+	Dim            lipgloss.Style
 }
 
 type spanKind int
@@ -77,61 +79,62 @@ func tokenize(s string) []span {
 			plain.Reset()
 		}
 	}
+	walkSpans(s, func(kind spanKind, text string, sub []string) {
+		if kind == spanText {
+			plain.WriteString(text)
+			return
+		}
+		flush()
+		sp := span{kind: kind, text: text}
+		if kind == spanLink && len(sub) >= 3 {
+			sp.linkText, sp.linkURL = sub[1], sub[2]
+		}
+		out = append(out, sp)
+	})
+	flush()
+	return out
+}
+
+// walkSpans is the shared inline-span scanner used by tokenize
+// (rendering) and scanSpans (cursor matching). For each delim
+// match it calls fn with the span kind and the matched text;
+// untouched bytes are emitted one rune at a time as spanText.
+func walkSpans(s string, fn func(kind spanKind, text string, submatch []string)) {
+	type pat struct {
+		re   *regexp.Regexp
+		kind spanKind
+	}
+	pats := []pat{
+		{codeSpanRE, spanCode},
+		{tripleStarRE, spanBoldItalic},
+		{doubleStarRE, spanBold},
+		{doubleUnderRE, spanBold},
+		{singleStarRE, spanItalic},
+		{singleUnderRE, spanItalic},
+	}
 	for i := 0; i < len(s); {
 		rest := s[i:]
-		if m := codeSpanRE.FindString(rest); m != "" {
-			flush()
-			out = append(out, span{kind: spanCode, text: m})
-			i += len(m)
-			continue
+		matched := false
+		for _, p := range pats {
+			if m := p.re.FindString(rest); m != "" {
+				fn(p.kind, m, nil)
+				i += len(m)
+				matched = true
+				break
+			}
 		}
-		if m := tripleStarRE.FindString(rest); m != "" {
-			flush()
-			out = append(out, span{kind: spanBoldItalic, text: m})
-			i += len(m)
-			continue
-		}
-		if m := doubleStarRE.FindString(rest); m != "" {
-			flush()
-			out = append(out, span{kind: spanBold, text: m})
-			i += len(m)
-			continue
-		}
-		if m := doubleUnderRE.FindString(rest); m != "" {
-			flush()
-			out = append(out, span{kind: spanBold, text: m})
-			i += len(m)
-			continue
-		}
-		if m := singleStarRE.FindString(rest); m != "" {
-			flush()
-			out = append(out, span{kind: spanItalic, text: m})
-			i += len(m)
-			continue
-		}
-		if m := singleUnderRE.FindString(rest); m != "" {
-			flush()
-			out = append(out, span{kind: spanItalic, text: m})
-			i += len(m)
+		if matched {
 			continue
 		}
 		if m := linkRE.FindStringSubmatch(rest); m != nil {
-			flush()
-			out = append(out, span{
-				kind:     spanLink,
-				text:     m[0],
-				linkText: m[1],
-				linkURL:  m[2],
-			})
+			fn(spanLink, m[0], m)
 			i += len(m[0])
 			continue
 		}
 		_, size := utf8.DecodeRuneInString(rest)
-		plain.WriteString(rest[:size])
+		fn(spanText, rest[:size], nil)
 		i += size
 	}
-	flush()
-	return out
 }
 
 func renderSpans(spans []span, st Styles) string {

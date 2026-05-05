@@ -31,8 +31,25 @@ func applyScrollOff(m Model) Model {
 	cur := m.buf.RuneOffset()
 	cursorLine, _ := offsetToRowCol(src, cur)
 	total := lineCount(src)
+	if m.mode.typewriter() && total > m.height && m.height > 0 {
+		m.viewportTop = clampViewportTypewriter(m.height, cursorLine, total)
+		return m
+	}
 	m.viewportTop = ClampViewport(m.viewportTop, m.height, cursorLine, total)
 	return m
+}
+
+// clampViewportTypewriter holds the cursor at the vertical
+// midpoint of height, clamped to the document range.
+func clampViewportTypewriter(height, cursorLine, total int) int {
+	top := cursorLine - height/2
+	if top < 0 {
+		top = 0
+	}
+	if top > total-height {
+		top = total - height
+	}
+	return top
 }
 
 func lineCount(s string) int {

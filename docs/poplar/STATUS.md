@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9c next — Catkin power-user QoL.
+**Current pass:** Pass 9d next — annotation pipeline + spellcheck.
 
 ## Passes
 
@@ -13,10 +13,7 @@
 | 8.6 – 8.7 | Attachments I (backend) + II (viewer) (ADR-0135–0140) | done |
 | 8.8 – 8.9 | Human-voice audit I (string-only) + II (structural) | done |
 | 8.10 | First-sync header population — JMAP per-folder baseline pull (ADR-0143) | done |
-| 9 | Catkin core (ADR-0144) | done |
-| 9a | Catkin live markdown styling (ADR-0145) | done |
-| 9b | Catkin command vocabulary (ADR-0146) | done |
-| 9c | Catkin power-user QoL — undo/redo, find/replace, auto-pair, smart paste, bracket match, typewriter+focus modes | pending |
+| 9 – 9c | Catkin — core, live styling, command vocabulary, power-user QoL (ADR-0144–0147) | done |
 | 9d | Annotation pipeline + spellcheck (Track 1 SymSpell + bundled lists; Track 2 hunspell subprocess) | pending |
 | 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
 | 9f | Mail backend Send + Append — JMAP submission, IMAP+SMTP, `[account.smtp]` config | pending |
@@ -32,27 +29,29 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9c)
+## Next starter prompt (Pass 9d)
 
-> **Goal.** Catkin power-user QoL: undo/redo (50-step ring buffer
-> of buffer + cursor snapshots), find/replace overlay (literal +
-> case-insensitive toggle, `y`/`n`/`a` per match), markdown
-> auto-pair (six pairs, disabled inside code spans/fences),
-> smart URL paste → `[word](url)`, bracket/span match highlight,
-> typewriter scroll mode, focus mode, `Ctrl+\` mode-cycle key.
+> **Goal.** Annotation pipeline + spellcheck. Editor gains
+> `SetAnnotations([]Annotation)`; CatkinEditor implements; renderer
+> underlines per `AnnotationKind`. Track 1: bundled pure-Go SymSpell
+> with eight Latin-script European word lists selected by `[ui]
+> spellcheck_lang`. Track 2: `hunspell -a` subprocess fallback with
+> platform-detected install hint. `AnnotationPicker` (App-owned,
+> `Ctrl+;`). `poplar config check` learns a spellcheck probe.
 >
-> **Scope.** All inside `internal/catkin/`. Library-purity
-> preserved. No host-side wiring.
+> **Scope.** `internal/catkin/`, new `internal/spell/`,
+> `internal/ui/` (overlay), `internal/config/`.
 >
-> **Settled:** Spec at
-> `docs/superpowers/specs/2026-05-04-compose-design.md` § Catkin
-> QoL additions (#1–#11). Smart quotes deferred per spec.
+> **Settled.** Spec
+> `docs/superpowers/specs/2026-05-04-compose-design.md` §
+> Annotation pipeline & spellcheck.
 >
-> **Still open — brainstorm:** none — pure implementation.
+> **Open — brainstorm:** SymSpell library choice; word-list
+> licensing; subprocess pooling shape.
 >
-> **Approach.** Plan at
-> `docs/superpowers/plans/YYYY-MM-DD-catkin-qol.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm, plan at
+> `docs/superpowers/plans/YYYY-MM-DD-annotation-spellcheck.md`,
+> implement. Standard pass-end checklist.
 
 ## Queued
 
