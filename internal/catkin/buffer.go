@@ -1,6 +1,9 @@
 package catkin
 
 import (
+	"strings"
+	"unicode/utf8"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -31,3 +34,43 @@ func (b *Buffer) SetHeight(h int)   { b.ta.SetHeight(h) }
 func (b Buffer) Focus() tea.Cmd { return b.ta.Focus() }
 func (b *Buffer) Blur()         { b.ta.Blur() }
 func (b Buffer) Focused() bool  { return b.ta.Focused() }
+
+// RuneOffset returns the cursor's absolute rune offset in the buffer.
+func (b Buffer) RuneOffset() int {
+	row := b.ta.Line()
+	value := b.ta.Value()
+	lines := strings.Split(value, "\n")
+	off := 0
+	for i := 0; i < row && i < len(lines); i++ {
+		off += utf8.RuneCountInString(lines[i]) + 1
+	}
+	li := b.ta.LineInfo()
+	off += li.StartColumn + li.ColumnOffset
+	total := utf8.RuneCountInString(value)
+	if off > total {
+		off = total
+	}
+	return off
+}
+
+// SetRuneOffset moves the cursor to the absolute rune offset off.
+func (b *Buffer) SetRuneOffset(off int) {
+	value := b.ta.Value()
+	row := 0
+	col := off
+	for _, l := range strings.Split(value, "\n") {
+		ln := utf8.RuneCountInString(l)
+		if col <= ln {
+			break
+		}
+		col -= ln + 1
+		row++
+	}
+	b.ta.SetCursor(col)
+	for b.ta.Line() < row {
+		b.ta.CursorDown()
+	}
+	for b.ta.Line() > row {
+		b.ta.CursorUp()
+	}
+}

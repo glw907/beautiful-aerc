@@ -57,8 +57,16 @@ func (m *Model) SetSize(w, h int) {
 
 // SetWidth sets the body wrap width and re-runs reflow.
 func (m *Model) SetWidth(w int) {
+	if w == m.width {
+		return
+	}
 	m.width = w
 	m.buf.SetWidth(w)
+	src := m.buf.Value()
+	cur := m.buf.RuneOffset()
+	src, cur = Reflow(src, w, cur)
+	m.buf.SetValue(src)
+	m.buf.SetRuneOffset(cur)
 }
 
 // Focus focuses the editor.
