@@ -157,6 +157,22 @@ pass," "ship pass" — invoke the `poplar-pass` skill. That skill
 covers both starting a pass (read STATUS, read invariants, read
 plan, execute) and ending one (the consolidation ritual).
 
+**Pass size budget.** A pass should fit in roughly **8–12 tasks**
+and one ADR (or two tightly-coupled ADRs). When planning, if the
+task list grows past 12 or the ADR splits into two unrelated
+subsystems, **split the pass before coding** — the second
+subsystem becomes its own pass with its own plan, even when both
+are part of the same nominal feature. Symptoms of an oversized
+pass that already started: per-task review fatigue, plan
+deviations the controller waves through, integration bugs that
+only surface at consolidation, ADR-writing that asks "what was
+this pass even about?" When you notice these, split inline:
+land what's done, queue the rest as `<n>.1` / `<n>.2` follow-up
+passes in STATUS, and stop. Pass 9d (Catkin annotations + 14
+tasks + two subsystems in one ADR) is the canonical too-large
+example; its post-hoc 9d.1–9d.4 audits exist *because* the pass
+ran long. Avoid that shape.
+
 ## Build
 
 ```
