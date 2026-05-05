@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 8.10 next — first-sync header population (bug).
+**Current pass:** Pass 9 next — Compose framing.
 
 ## Passes
 
@@ -17,7 +17,7 @@
 | 8.7 | Attachments II — viewer (#24) (ADR-0138, 0139, 0140) | done |
 | 8.8 | Human-voice audit I — research-grounded style guide, persona, ADR-0141, skill + `/simplify` updates; string-only fixes (C1 comments, C7 errors, C4 prose verbosity) | done |
 | 8.9 | Human-voice audit II — structural fixes (C2/C5/C6/C8/C4-structural) + dedupe of resolvePassword | done |
-| 8.10 | First-sync header population — fresh cache + JMAP `Email/changes` since=nil returns no baseline; need an initial-pull path (likely `Email/query` for JMAP, scan for IMAP) so `messages` populates on first folder open | active |
+| 8.10 | First-sync header population — JMAP per-folder baseline pull (Email/query + sentinel-id state probe in one roundtrip); FetchHeaders chunked at 500 (ADR-0143) | done |
 | 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
 | 9.5 | Compose enhancements — #5 #12 #24 | pending |
 | 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
@@ -28,35 +28,33 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 8.10)
+## Next starter prompt (Pass 9)
 
-> **Goal.** First folder open populates `messages`. Verified
-> 2026-05-04 against Fastmail: fresh cache, Inbox shows
-> `exists_total = 62` but msglist stays empty —
-> `Email/changes(since=nil)` returns no baseline; `SyncFolder`
-> stashes a sync_token without ever upserting rows. IMAP
-> scan-and-diff likely the same.
+> **Goal.** Land the Compose framing: `Editor` interface, Catkin
+> native editor, SMTP backend via `emersion/go-smtp`, draft
+> persistence through the cache outbox (`SendArgs`/`AppendArgs`).
 >
-> **Scope.** Initial-baseline-pull path. JMAP: `Email/query`
-> paged + `Email/get`. IMAP: `UID SEARCH ALL` + paged
-> `UID FETCH`. Wire on the empty-token branch of `SyncFolder`;
-> reuse existing upsert. Live-test on the Fastmail account.
+> **Scope.** `internal/compose/` (new), `internal/mail` SMTP
+> shape, `cache.OpKind{KindSend,KindAppend}` wiring, `c` key
+> from the message-list and viewer. Inline render — no
+> `tea.ExecProcess` takeover. Neovim `--embed` adapter is Pass
+> 9.5. References: wireframes.md (compose screen), ADR-0031,
+> 0032, 0033, 0076.
 >
-> **Settled:** ChangeTracker stays per-folder (ADR-0117).
-> Schema unchanged.
+> **Settled:** Compose is bubbletea-native (Catkin) for v1; the
+> Editor interface is the seam neovim plugs into later. SMTP
+> auth re-uses backend `password-cmd`. Outbound mail enters the
+> cache as a `KindSend` outbox row + a `KindAppend` to the Sent
+> folder; the drainer ships them.
 >
-> **Still open — brainstorm:** page size; msglist loading state
-> (spinner vs. "syncing N/M"); interrupted-pull recovery.
+> **Still open — brainstorm:** Catkin's text model (rune buffer
+> vs. line buffer); attachment-add UI inside compose; Reply /
+> Reply-all quoting depth; failure surface for SMTP (toast vs.
+> conflict overlay).
 >
-> **Approach.** Reproduce, plan at
-> `docs/superpowers/plans/YYYY-MM-DD-first-sync.md`, implement.
-
-## After 8.10 (Pass 9 sketch)
-
-Compose: `Editor` interface, Catkin native, neovim `--embed`
-scaffold, SMTP via `emersion/go-smtp`. ADR-0031/0032/0033/0076
-set shape. 9's plan: SMTP backend home, text-entry model, draft
-persistence.
+> **Approach.** Brainstorm the open questions, write a plan at
+> `docs/superpowers/plans/YYYY-MM-DD-compose.md`, then implement.
+> Standard pass-end checklist applies.
 
 ## Queued
 

@@ -223,11 +223,18 @@ the ADR(s) that justify them.
   `content_id`, `disposition`, `bytes`, `fetched_at`; UNIQUE
   `(message, part_id)`; index on `message`).
 - `mail.ChangeTracker` is the protocol-level change-detection
-  sibling of `mail.Backend`; both v1 backends implement it.
-  JMAP impl is account-scoped (Email/changes per RFC 8621 §4.3);
-  IMAP impl is scan-and-diff (`UID SEARCH ALL` vs prior maxuid in
-  SyncToken; CONDSTORE-aware incremental deferred). UIDVALIDITY
-  change → `mail.ErrCannotCalculateChanges` → cache re-anchor.
+  sibling of `mail.Backend`; both v1 backends implement it. On a
+  nil SyncToken both run an initial baseline pull. JMAP pages
+  `Email/query` filtered by inMailbox (page size 500), piggybacks
+  a sentinel-id `Email/get` per page to capture Email-type state
+  in the same roundtrip, and returns all current Email IDs as
+  Added; non-nil tokens route through account-scoped
+  `Email/changes` per RFC 8621 §4.3. IMAP scan-and-diff
+  (`UID SEARCH ALL` vs prior maxuid in SyncToken) handles nil
+  tokens implicitly; CONDSTORE-aware incremental deferred.
+  `Backend.FetchHeaders` chunks ids at 500 per `Email/get` to
+  stay under `maxObjectsInGet`. UIDVALIDITY change →
+  `mail.ErrCannotCalculateChanges` → cache re-anchor.
 - `(*Account).FetchBody(ctx, uid)` is write-through with lazy
   population: cache miss → backend fetch → store; cache hit →
   return stored bytes. `storeBody` runs a size backstop: when an
@@ -360,3 +367,4 @@ invariant. ADR numbering is chronological.
 | Attachments I (Pass 8.6) — backend support: `mail.Attachment` + `Attachments`/`FetchAttachment` on Backend; cache schema v5 `attachments` table with lazy metadata + lazy bytes under separate `MaxAttachmentSize` backstop; JMAP via Email/get bodyStructure + cli.Download; IMAP via UID FETCH BODYSTRUCTURE + BODY[<part>]; canonical `mail.ClassifyDisposition` (Disposition-first, ContentID fallback); MIME normalization at the protocol→mail boundary | 0135, 0136, 0137 |
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
+| JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |

@@ -427,10 +427,16 @@ var headerProperties = []string{
 	"keywords", "size", "inReplyTo", "threadId",
 }
 
-// FetchHeaders issues a single Email/get
-// request for the supplied UIDs and translates each response email
-// into mail.MessageInfo. BlobIDs are cached in b.blobIDs so FetchBody
-// can download without a second Email/get.
+// headerFetchChunk caps the IDs sent in one Email/get to stay under
+// typical maxObjectsInGet limits (Fastmail allows 4096; 500 is the
+// same page size baseline pull uses, so paging is symmetric).
+const headerFetchChunk = 500
+
+// FetchHeaders issues Email/get for the supplied UIDs and translates
+// each response email into mail.MessageInfo. Requests are chunked at
+// headerFetchChunk to stay under server maxObjectsInGet caps.
+// BlobIDs are cached in b.blobIDs so FetchBody can download without
+// a second Email/get.
 func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil
@@ -440,30 +446,42 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	accountID := b.session.PrimaryAccounts[jmapmail.URI]
 	b.mu.Unlock()
 
-	ids := make([]jmap.ID, 0, len(uids))
-	for _, u := range uids {
-		ids = append(ids, jmap.ID(u))
+	out := make([]mail.MessageInfo, 0, len(uids))
+	for start := 0; start < len(uids); start += headerFetchChunk {
+		end := start + headerFetchChunk
+		if end > len(uids) {
+			end = len(uids)
+		}
+		batch, err := b.fetchHeadersChunk(accountID, uids[start:end])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, batch...)
 	}
+	return out, nil
+}
 
+func (b *Backend) fetchHeadersChunk(accountID jmap.ID, uids []mail.UID) ([]mail.MessageInfo, error) {
+	ids := make([]jmap.ID, len(uids))
+	for i, u := range uids {
+		ids[i] = jmap.ID(u)
+	}
 	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
 	req.Invoke(&email.Get{
 		Account:    accountID,
 		IDs:        ids,
 		Properties: headerProperties,
 	})
-
 	resp, err := b.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch headers: %w", err)
 	}
-
-	var out []mail.MessageInfo
 	for _, inv := range resp.Responses {
 		gr, ok := inv.Args.(*email.GetResponse)
 		if !ok {
 			continue
 		}
-		out = make([]mail.MessageInfo, 0, len(gr.List))
+		out := make([]mail.MessageInfo, 0, len(gr.List))
 		for _, e := range gr.List {
 			uid := mail.UID(e.ID)
 			b.mu.Lock()
@@ -471,12 +489,9 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 			b.mu.Unlock()
 			out = append(out, translateEmail(e))
 		}
-		break
+		return out, nil
 	}
-	if out == nil {
-		return nil, fmt.Errorf("fetch headers: no Email/get response")
-	}
-	return out, nil
+	return nil, fmt.Errorf("fetch headers: no Email/get response")
 }
 
 func translateEmail(e *email.Email) mail.MessageInfo {

@@ -410,6 +410,44 @@ func TestFetchHeaders_RequestShape(t *testing.T) {
 	}
 }
 
+func TestFetchHeaders_ChunksLargeRequests(t *testing.T) {
+	const total = headerFetchChunk + 25
+	var batches [][]jmap.ID
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			g := req.Calls[0].Args.(*email.Get)
+			batches = append(batches, append([]jmap.ID(nil), g.IDs...))
+			list := make([]*email.Email, len(g.IDs))
+			for i, id := range g.IDs {
+				list[i] = &email.Email{ID: id, BlobID: jmap.ID("b-" + string(id))}
+			}
+			return fakeResponse(&jmap.Invocation{
+				Name: "Email/get",
+				Args: &email.GetResponse{List: list},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+
+	uids := make([]mail.UID, total)
+	for i := range uids {
+		uids[i] = mail.UID(fmt.Sprintf("e-%d", i))
+	}
+	got, err := b.FetchHeaders(uids)
+	if err != nil {
+		t.Fatalf("FetchHeaders: %v", err)
+	}
+	if len(got) != total {
+		t.Errorf("len(got) = %d, want %d", len(got), total)
+	}
+	if len(batches) != 2 {
+		t.Fatalf("batches = %d, want 2", len(batches))
+	}
+	if len(batches[0]) != headerFetchChunk || len(batches[1]) != 25 {
+		t.Errorf("batch sizes = %d, %d; want %d, 25", len(batches[0]), len(batches[1]), headerFetchChunk)
+	}
+}
+
 // --- FetchBody ---
 
 // newBodyTestBackend returns a Backend with a pre-seeded blobID for uid
