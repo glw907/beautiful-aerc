@@ -6,6 +6,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 )
 
 //go:embed spellcheck/en_US.txt spellcheck/project.txt
@@ -16,9 +17,10 @@ var spellcheckFS embed.FS
 // without a Speller degrade to no-op rather than spurious errors.
 type Speller struct {
 	known map[string]uint32 // lowercased word -> frequency rank (lower = more frequent)
-	// SymSpell deletion-distance index, populated in Task 5.
+	// SymSpell deletion-distance index, populated on first Suggest call.
 	// Speller.Suggest uses it. Check does not.
 	delIdx map[string][]string
+	once   sync.Once
 }
 
 // NewSpeller loads en_US + project from the embedded filesystem
@@ -197,9 +199,7 @@ func (s *Speller) Suggest(word string, n int) []string {
 	if s == nil || word == "" || n <= 0 {
 		return nil
 	}
-	if s.delIdx == nil {
-		s.buildIndex()
-	}
+	s.once.Do(s.buildIndex)
 	w := strings.ToLower(word)
 
 	type cand struct {
