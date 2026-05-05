@@ -3,7 +3,9 @@ package catkin
 import (
 	"bufio"
 	"embed"
+	"errors"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -236,4 +238,29 @@ func (s *Speller) Suggest(word string, n int) []string {
 		out[i] = c.word
 	}
 	return out
+}
+
+// LoadUserWordlist reads one-word-per-line entries from path.
+// Comments ('#') and blank lines are skipped. Whitespace is trimmed.
+// A missing file is not an error and returns (nil, nil). Casing is
+// preserved: the Speller lowercases at lookup time.
+func LoadUserWordlist(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	var out []string
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out, sc.Err()
 }

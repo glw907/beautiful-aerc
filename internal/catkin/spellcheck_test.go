@@ -1,6 +1,8 @@
 package catkin
 
 import (
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -84,5 +86,32 @@ func TestSpellerSuggestFrequencyOrder(t *testing.T) {
 	got := s.Suggest("tee", 5)
 	if len(got) < 2 || got[0] != "the" {
 		t.Errorf("Suggest(tee) = %v, want \"the\" first by frequency", got)
+	}
+}
+
+func TestLoadUserWordlistMissing(t *testing.T) {
+	got, err := LoadUserWordlist(t.TempDir() + "/does-not-exist.txt")
+	if err != nil {
+		t.Errorf("missing file should not be an error; got %v", err)
+	}
+	if got != nil {
+		t.Errorf("missing file should return nil; got %v", got)
+	}
+}
+
+func TestLoadUserWordlistParses(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/wordlist.txt"
+	body := "# comment\nfrobnicate\n\nQuux\n   spaced   \n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := LoadUserWordlist(path)
+	if err != nil {
+		t.Fatalf("LoadUserWordlist: %v", err)
+	}
+	want := []string{"frobnicate", "Quux", "spaced"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("LoadUserWordlist = %v, want %v", got, want)
 	}
 }
