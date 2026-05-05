@@ -386,23 +386,33 @@ func buildSkipMask(src string) skipMask {
 	off = 0
 	for _, l := range lines {
 		lineOff := off
-		// Track position as walkSpans advances so we can derive absolute offsets.
-		pos := 0
+		// after is a forward-only search cursor: for each span we search
+		// l[after:] to find the matched text, then advance after past it.
+		// This is correct even when walkSpans skips literal characters
+		// between spans without calling the callback.
+		after := 0
 		walkSpans(l, func(kind spanKind, text string, sub []string) {
 			switch kind {
 			case spanCode:
-				ranges = append(ranges, Range{Start: lineOff + pos, End: lineOff + pos + len(text)})
+				if idx := strings.Index(l[after:], text); idx >= 0 {
+					abs := lineOff + after + idx
+					ranges = append(ranges, Range{Start: abs, End: abs + len(text)})
+					after += idx + len(text)
+				}
 			case spanLink:
 				// sub: [full, linkText, url]. Skip only the URL portion.
 				if len(sub) >= 3 {
 					urlPart := "(" + sub[2] + ")"
-					if idx := strings.Index(l[pos:], urlPart); idx >= 0 {
-						abs := lineOff + pos + idx
+					if idx := strings.Index(l[after:], urlPart); idx >= 0 {
+						abs := lineOff + after + idx
 						ranges = append(ranges, Range{Start: abs, End: abs + len(urlPart)})
+					}
+					// Advance after past the full link match.
+					if idx := strings.Index(l[after:], text); idx >= 0 {
+						after += idx + len(text)
 					}
 				}
 			}
-			pos += len(text)
 		})
 		off = lineOff + len(l) + 1
 	}

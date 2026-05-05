@@ -164,6 +164,23 @@ func TestSpellcheckAnnotator(t *testing.T) {
 			src:        "QUXXXXX",
 			wantRanges: []Range{{0, 7}},
 		},
+		{
+			// Regression: buildSkipMask multi-span offset tracking.
+			// Line has inline-code, a misspelled word, then a link.
+			// The misspelling must be flagged at its true byte offset.
+			// The link URL must not produce a false positive.
+			name: "multi-span: code + misspelling + link",
+			src:  "`fox` tradeof and [dog](http://exampole.com)",
+			// "tradeof" starts at byte 6 (after "`fox` ").
+			wantRanges: []Range{{6, 13}},
+		},
+		{
+			// Regression: misspelling before first span must survive
+			// when a later span is also present.
+			name:       "multi-span: misspelling + code",
+			src:        "tradeof and `fox`",
+			wantRanges: []Range{{0, 7}},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
