@@ -39,8 +39,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	// Replaced in Task 5. For now defer to buffer's View() so the
-	// smoke test compiles.
 	return m.buf.View()
 }
 
@@ -61,7 +59,6 @@ func (m *Model) SetSize(w, h int) {
 func (m *Model) SetWidth(w int) {
 	m.width = w
 	m.buf.SetWidth(w)
-	// Reflow wiring added in Task 3.
 }
 
 // Focus focuses the editor.
