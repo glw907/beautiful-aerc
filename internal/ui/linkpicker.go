@@ -167,12 +167,12 @@ func (p LinkPicker) clampOffset() LinkPicker {
 }
 
 // linkPickerInlineCap caps the inline URL display length per row,
-// independent of box width — keeps the visual tight even on very wide
+// independent of box width. Keeps the visual tight even on very wide
 // terminals.
 const linkPickerInlineCap = 50
 
 // View renders the picker as a standalone string. App composes via
-// Box + Position + PlaceOverlay; this method is the fallback used by
+// Box + Position + PlaceOverlay. This method is the fallback used by
 // tests and when the box doesn't fit.
 func (p LinkPicker) View() string {
 	if !p.shell.IsOpen() {
@@ -261,7 +261,7 @@ func (p LinkPicker) previewLines(width int) []string {
 }
 
 // linkPickerWrap wraps s to width. URLs are unbreakable tokens, so
-// Wordwrap alone can't split them — Hardwrap forces the residue.
+// Wordwrap alone can't split them. Hardwrap forces the residue.
 func linkPickerWrap(s string, width int) string {
 	if width < 1 {
 		width = 1
@@ -277,7 +277,7 @@ func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
 
 // centerOverlay returns the top-left (x, y) cell coordinates that
 // center box on (totalW, totalH). Shared by the help popover and the
-// link picker; both compose via PlaceOverlay.
+// link picker. Both compose via PlaceOverlay.
 func centerOverlay(box string, totalW, totalH int) (int, int) {
 	x := (totalW - lipgloss.Width(box)) / 2
 	y := (totalH - lipgloss.Height(box)) / 2

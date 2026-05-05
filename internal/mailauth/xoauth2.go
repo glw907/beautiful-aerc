@@ -1,8 +1,8 @@
 // Vendored from git.sr.ht/~rjarry/aerc — auth/xoauth2.go.
-// MIT-licensed. Modifications: package renamed to mailauth; aerc-specific
+// MIT-licensed. Modifications: package renamed to mailauth. Aerc-specific
 // functions (ExchangeRefreshToken, Authenticate, SaveRefreshToken,
 // GetRefreshToken) and their imports (xdg, go-imap/client, golang.org/x/oauth2)
-// omitted — poplar does not use aerc's token-exchange infrastructure.
+// omitted. Poplar does not use aerc's token-exchange infrastructure.
 // Provides the XOAUTH2 SASL mechanism that emersion/go-sasl does not ship.
 //
 // Original copyright notices:

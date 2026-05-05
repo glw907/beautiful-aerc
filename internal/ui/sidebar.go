@@ -51,7 +51,7 @@ func NewSidebar(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.
 
 // SetFolders replaces the sidebar's folder set with a newly classified
 // list under a given UIConfig. Selection is preserved by provider name
-// where possible; otherwise it resets to 0.
+// where possible. Otherwise it resets to 0.
 func (s *Sidebar) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UIConfig) {
 	var prevName string
 	if s.selected < len(s.entries) {
@@ -91,7 +91,7 @@ func (s Sidebar) SelectedFolderInfo() (mail.Folder, bool) {
 // ConfigKey returns the UIConfig.Folders lookup key for the folder
 // with the given provider name (canonical name for canonicals,
 // provider name for custom). Returns "" if no matching folder is in
-// the sidebar — the zero-value FolderConfig falls through to
+// the sidebar. The zero-value FolderConfig falls through to
 // group/global defaults.
 func (s Sidebar) ConfigKey(providerName string) string {
 	for _, e := range s.entries {
@@ -104,7 +104,7 @@ func (s Sidebar) ConfigKey(providerName string) string {
 
 // FolderNameByCanonical returns the provider folder name (e.g.
 // "Archive", "[Gmail]/Trash") whose canonical name matches target.
-// Returns ("", false) when no folder matches — used by triage actions
+// Returns ("", false) when no folder matches. Used by triage actions
 // to look up the Archive/Trash destinations.
 func (s Sidebar) FolderNameByCanonical(target string) (string, bool) {
 	for _, e := range s.entries {
@@ -372,7 +372,7 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 }
 
 // sidebarIconFrom returns the icon for a classified folder from the given
-// IconSet. Canonicals use their canonical icon; all other folders use
+// IconSet. Canonicals use their canonical icon. All other folders use
 // CustomFolder regardless of name.
 func sidebarIconFrom(icons IconSet, cf mail.ClassifiedFolder) string {
 	switch cf.Canonical {

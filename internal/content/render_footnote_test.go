@@ -57,7 +57,7 @@ func TestFootnoteDedupe(t *testing.T) {
 func TestFootnoteSkipAutoLinked(t *testing.T) {
 	// Short bare URL (≤30 cells): appears in picker list but not in the
 	// footnote section. No [^N] marker in body, no horizontal rule, no
-	// footnote line — just inline rendering.
+	// footnote line. Just inline rendering.
 	blocks := []Block{
 		Paragraph{Spans: []Span{
 			Text{Content: "visit "},
@@ -75,7 +75,7 @@ func TestFootnoteSkipAutoLinked(t *testing.T) {
 	if !strings.Contains(flat, "https://bare.example.com") {
 		t.Errorf("bare URL must still render inline: %s", flat)
 	}
-	// No footnote section — no horizontal rule for short-bare-only bodies.
+	// No footnote section. No horizontal rule for short-bare-only bodies.
 	if strings.Contains(flat, "─────") {
 		t.Errorf("no footnote rule should appear for short bare URLs: %s", flat)
 	}
@@ -158,7 +158,7 @@ func TestLongBareURLFootnoted(t *testing.T) {
 
 func TestShortBareURLPassThrough(t *testing.T) {
 	// Short bare URL appears in the picker list (hasMarker=false) but
-	// the span is passed through unchanged — no [^N] marker glued to it.
+	// the span is passed through unchanged. No [^N] marker glued to it.
 	url := "https://example.com/foo"
 	blocks := []Block{Paragraph{Spans: []Span{Link{Text: url, URL: url}}}}
 	rewritten, urls, hasMarker := harvestFootnotes(blocks)
@@ -239,11 +239,11 @@ func TestLongBareURLDedupedWithTextLink(t *testing.T) {
 // and 1-9 dispatch work, but the rendered body has no horizontal rule, no
 // [^1]: footnote line, and no [^1] marker glued to the URL.
 //
-// Numbering design: picker index is position in urls (1-based); footnote
+// Numbering design: picker index is position in urls (1-based). Footnote
 // marker [^N] is position in the marker-bearing subset only. When only short
 // bare URLs are present the marker-bearing subset is empty, so no markers exist.
 func TestHarvestShortBareURLAppearsInPickerNotFootnoteSection(t *testing.T) {
-	url := "https://1password.com" // 21 cells — well under the 30-cell threshold
+	url := "https://1password.com" // 21 cells, well under the 30-cell threshold
 	blocks := []Block{Paragraph{Spans: []Span{Link{Text: url, URL: url}}}}
 
 	_, urls, hasMarker := harvestFootnotes(blocks)
@@ -309,9 +309,9 @@ func TestHarvestLongBareURLAppearsInBoth(t *testing.T) {
 // the first and only marker-bearing entry), even though it is picker index 2.
 //
 // Design note: [^N] in body refers to the Nth marker-bearing URL (footnote-
-// subset numbering); picker index 1..N spans all URLs including short bare
+// subset numbering). Picker index 1..N spans all URLs including short bare
 // ones. These two numbering schemes deliberately diverge when short bare URLs
-// are present. The picker is the canonical URL launcher; markers are a reading
+// are present. The picker is the canonical URL launcher. Markers are a reading
 // aid for marker-bearing links only.
 func TestHarvestMixed(t *testing.T) {
 	shortURL := "https://1password.com"
@@ -332,7 +332,7 @@ func TestHarvestMixed(t *testing.T) {
 	if urls[1] != longURL {
 		t.Errorf("picker urls[1] = %q, want %q", urls[1], longURL)
 	}
-	// Short URL has no marker; long URL has marker.
+	// Short URL has no marker. Long URL has marker.
 	if hasMarker[0] {
 		t.Errorf("hasMarker[0] must be false for short bare URL")
 	}
@@ -356,8 +356,8 @@ func TestHarvestMixed(t *testing.T) {
 	if !strings.Contains(flat, "[^1]: "+longURL) {
 		t.Errorf("footnote section must list long URL as [^1]: %s", flat)
 	}
-	// No [^2] should exist — the short URL does not appear in the footnote section.
+	// No [^2] should exist. The short URL does not appear in the footnote section.
 	if strings.Contains(flat, "[^2]") {
-		t.Errorf("no [^2] should appear — short URL is not in footnote section: %s", flat)
+		t.Errorf("no [^2] should appear; short URL is not in footnote section: %s", flat)
 	}
 }

@@ -9,7 +9,7 @@ import (
 )
 
 // Buffer wraps a bubbles/textarea.Model. Catkin uses textarea for
-// its buffer storage, cursor management, and edit operations; the
+// its buffer storage, cursor management, and edit operations. The
 // renderer is Catkin's own (see render.go).
 type Buffer struct {
 	ta textarea.Model

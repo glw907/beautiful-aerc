@@ -258,7 +258,7 @@ func TestRenderBodyImpliedQuoteWrapping(t *testing.T) {
 }
 
 func TestRenderBodyWidthCap(t *testing.T) {
-	// Caller passes a generous width; renderer caps at maxBodyWidth.
+	// Caller passes a generous width. Renderer caps at maxBodyWidth.
 	long := strings.Repeat("alpha bravo charlie ", 20)
 	blocks := []Block{Paragraph{Spans: []Span{Text{Content: long}}}}
 	result := RenderBody(blocks, theme.Nord, 200)
@@ -291,7 +291,7 @@ func TestRenderBodyWrapStressParagraph(t *testing.T) {
 func TestRenderBodyLongURL(t *testing.T) {
 	// A URL longer than the cap is hard-wrapped so no line exceeds
 	// the width contract. The renderer's job is to honor its width
-	// argument; an unbroken URL would overflow into adjacent panes
+	// argument. An unbroken URL would overflow into adjacent panes
 	// in the bubbletea layout, so hardwrap wins over readability.
 	url := "https://news.example.com/items?category=engineering&id=" + strings.Repeat("0123456789", 6)
 	blocks := []Block{Paragraph{Spans: []Span{

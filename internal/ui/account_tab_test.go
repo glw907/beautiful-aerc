@@ -43,7 +43,7 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 // back into the tab's updateTab. It handles tea.BatchMsg fan-outs and
 // follows the two-hop folder-load chain (openFolderCmd returns
 // folderQueryDoneMsg, which causes fetchHeadersCmd, which returns
-// headersAppliedMsg). The depth limit of 8 hops is generous; normal
+// headersAppliedMsg). The depth limit of 8 hops is generous. Normal
 // load paths are at most 2 hops deep.
 func drain(t *testing.T, tab *AccountTab, cmd tea.Cmd) {
 	t.Helper()
@@ -51,7 +51,7 @@ func drain(t *testing.T, tab *AccountTab, cmd tea.Cmd) {
 }
 
 // runCmdWithTimeout invokes cmd with a short timeout. The cache event
-// pump and other long-poll Cmds block until something happens; drains
+// pump and other long-poll Cmds block until something happens. Drains
 // in tests should skip them rather than hang. Returns nil on timeout.
 func runCmdWithTimeout(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
@@ -743,7 +743,7 @@ func TestAccountTab_StaleBodyLoadedDropped(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 	openUID := tab.viewer.CurrentUID()
-	// Deliver a body for a UID we never opened — must be ignored.
+	// Deliver a body for a UID we never opened. Must be ignored.
 	tab, _ = tab.updateTab(bodyLoadedMsg{uid: mail.UID("nonsense"), blocks: nil})
 	if tab.viewer.phase == viewerReady {
 		t.Errorf("viewer for UID %s readied on stale bodyLoaded", openUID)
@@ -760,7 +760,7 @@ func TestAccountTab_QClosesViewer(t *testing.T) {
 	if tab.viewer.IsOpen() {
 		t.Error("q must close viewer")
 	}
-	// Viewer state is now exposed via accessor; no Cmd is emitted.
+	// Viewer state is now exposed via accessor. No Cmd is emitted.
 	if tab.ViewerOpen() {
 		t.Error("ViewerOpen() must return false after q closes the viewer")
 	}
@@ -777,7 +777,7 @@ func TestAccountTabAccessors(t *testing.T) {
 	}
 	exists, unseen := m.SelectedFolderCounts()
 	_ = exists
-	_ = unseen // smoke test only — values depend on test backend
+	_ = unseen // smoke test only, values depend on the test backend
 	if pct := m.ViewerScrollPct(); pct != 0 {
 		t.Errorf("ViewerScrollPct should be 0 with viewer closed, got %v", pct)
 	}
@@ -851,7 +851,7 @@ func (b *pagingFakeBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error
 }
 
 func TestAccountTab_PaginationInitialLoad(t *testing.T) {
-	// 600 messages — first window fetches 500.
+	// 600 messages. First window fetches 500.
 	backend := newPagingFakeBackend(600)
 	acct := newTestCache(t, backend)
 	// Pre-sync messages so openFolderCmd's QueryFolder finds them
@@ -880,7 +880,7 @@ func TestAccountTab_PaginationInitialLoad(t *testing.T) {
 }
 
 func TestAccountTab_MaybeLoadMore_NearBottom(t *testing.T) {
-	// 600 messages; after initial load of 500, cursor near bottom should trigger load-more.
+	// 600 messages. After initial load of 500, cursor near bottom should trigger load-more.
 	backend := newPagingFakeBackend(600)
 	acct := newTestCache(t, backend)
 	if err := acct.SyncFolder(context.Background(), "Inbox"); err != nil {
@@ -915,7 +915,7 @@ func TestAccountTab_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
 	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	drain(t, &tab, cmd)
 
-	// Move to bottom — sets loadMoreInFlight.
+	// Move to bottom. Sets loadMoreInFlight.
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
 
 	// A second navigation while in-flight must NOT re-dispatch.
@@ -926,7 +926,7 @@ func TestAccountTab_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
 }
 
 func TestAccountTab_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
-	// 14 messages (the mock count) — loaded == total from the start.
+	// 14 messages (the mock count). loaded == total from the start.
 	backend := mail.NewMockBackend()
 	styles := NewStyles(theme.Nord)
 	tab := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
@@ -964,7 +964,7 @@ func TestAccountTab_LoadingSpinner(t *testing.T) {
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
 		tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
-		// Deliver folderLoadedMsg — loading clears.
+		// Deliver folderLoadedMsg. loading clears.
 		tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", total: 1, msgs: []mail.MessageInfo{
 			{UID: "1", Subject: "hello", From: "a", ThreadID: "1"},
 		}})
@@ -1054,7 +1054,7 @@ func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 	if tab.viewer.Phase() != viewerReady {
 		t.Fatal("viewer must be ready after SetBody")
 	}
-	// Send n — must advance to row 1.
+	// Send n. Must advance to row 1.
 	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	newUID := tab.viewer.CurrentUID()
 	if newUID == startUID {
@@ -1104,7 +1104,7 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 
 func TestViewerNDuringLoadInert(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
-	// Open viewer — stays in loading phase (no SetBody call).
+	// Open viewer. Stays in loading phase (no SetBody call).
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open")
@@ -1156,7 +1156,7 @@ func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
 		m := NewAccountTab(styles, theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 		// Trigger loading state by delivering foldersLoadedMsg without
-		// following up with headersApplied — msglist stays empty.
+		// following up with headersApplied. msglist stays empty.
 		folders, _ := backend.ListFolders()
 		m, _ = m.Update(foldersLoadedMsg{classified: mail.Classify(folders)})
 		assertAllLinesWidth(t, m.View(), w)
@@ -1165,7 +1165,7 @@ func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
 	t.Run("viewer loading state", func(t *testing.T) {
 		m := newLoadedTab(t, w, h)
 		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-		// Open viewer — stays in loading phase (no SetBody call).
+		// Open viewer. Stays in loading phase (no SetBody call).
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		if !m.viewer.IsOpen() {
 			t.Fatal("viewer should be open")
@@ -1211,7 +1211,7 @@ func TestAccountTab_NextMessage_WalksFilteredRows(t *testing.T) {
 	// Drive the viewer into Ready by delivering bodyLoadedMsg.
 	tab, _ = tab.updateTab(bodyLoadedMsg{uid: "1", blocks: nil})
 
-	// Press n — cursor should advance to UID 3, skipping the hidden UID 2.
+	// Press n. Cursor should advance to UID 3, skipping the hidden UID 2.
 	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 
 	got, ok := tab.msglist.SelectedMessage()
@@ -1236,7 +1236,7 @@ func TestAccountTab_OpenMessage_CancelsPriorFetch(t *testing.T) {
 		{UID: "2", From: "b@example.com", Subject: "second"},
 	})
 
-	// First openMessage — cancel func should be populated.
+	// First openMessage. Cancel func should be populated.
 	tab, _ = tab.openMessage(mail.MessageInfo{UID: "1"})
 	if tab.bodyFetchCancel == nil {
 		t.Fatal("after first openMessage: bodyFetchCancel is nil")
@@ -1249,7 +1249,7 @@ func TestAccountTab_OpenMessage_CancelsPriorFetch(t *testing.T) {
 	// Replace with our tracked cancel to test cancellation.
 	tab.bodyFetchCancel = firstCancel
 
-	// Second openMessage — should cancel the first and set a new func.
+	// Second openMessage. Should cancel the first and set a new func.
 	tab, _ = tab.openMessage(mail.MessageInfo{UID: "2"})
 	if tab.bodyFetchCancel == nil {
 		t.Fatal("after second openMessage: bodyFetchCancel is nil")
@@ -1258,12 +1258,12 @@ func TestAccountTab_OpenMessage_CancelsPriorFetch(t *testing.T) {
 	// The first context must have been cancelled.
 	select {
 	case <-firstCtx.Done():
-		// good — first fetch was cancelled
+		// good: first fetch was cancelled
 	default:
 		t.Error("first bodyFetchCancel was not called by the second openMessage")
 	}
 
-	// The new cancel func is set; calling it should not panic.
+	// The new cancel func is set. Calling it should not panic.
 	tab.bodyFetchCancel()
 }
 
@@ -1280,7 +1280,7 @@ func TestAccountTab_ViewerClose_CancelsInflightFetch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tab.bodyFetchCancel = cancel
 
-	// Press q — closes the viewer.
+	// Press q. Closes the viewer.
 	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
 	if tab.viewer.IsOpen() {
@@ -1289,7 +1289,7 @@ func TestAccountTab_ViewerClose_CancelsInflightFetch(t *testing.T) {
 
 	select {
 	case <-ctx.Done():
-		// good — cancel was called on close
+		// good: cancel was called on close
 	default:
 		t.Error("viewer close did not cancel the in-flight body fetch")
 	}
@@ -1319,7 +1319,7 @@ func TestAccountTab_AttachmentsLoadedMsg_StaleUIDDropped(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 	tab, _ = tab.openMessage(mail.MessageInfo{UID: "u1"})
 
-	// Stale UID — must be dropped.
+	// Stale UID. Must be dropped.
 	out, _ := tab.updateTab(attachmentsLoadedMsg{
 		uid:   "u2",
 		items: []mail.Attachment{{PartID: "2", Filename: "stale"}},
@@ -1328,7 +1328,7 @@ func TestAccountTab_AttachmentsLoadedMsg_StaleUIDDropped(t *testing.T) {
 		t.Errorf("stale attachments applied: %v", got)
 	}
 
-	// Matching UID — must be applied.
+	// Matching UID. Must be applied.
 	out2, _ := tab.updateTab(attachmentsLoadedMsg{
 		uid:   "u1",
 		items: []mail.Attachment{{PartID: "2", Filename: "real", Size: 1}},

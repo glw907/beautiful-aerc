@@ -23,7 +23,7 @@ type OutboxOverlay struct {
 	styles Styles
 	groups []cache.OutboxGroup
 	keys   outboxKeys
-	// nowSec is a test seam — returns "now" in unix seconds for the
+	// nowSec is a test seam. Returns "now" in unix seconds for the
 	// "retrying in Ns" rendering. Defaults to wall clock.
 	nowSec func() int64
 }
@@ -98,7 +98,7 @@ func (o OutboxOverlay) View() string {
 	return o.shell.Box("Outbox", bodyRows, footerRows, contentW)
 }
 
-// outboxContentWidth caps the modal at 56 cells; clamped for narrow terminals.
+// outboxContentWidth caps the modal at 56 cells, clamped for narrow terminals.
 func outboxContentWidth(termW int) int {
 	w := 56
 	if max := termW - 6; max < w {

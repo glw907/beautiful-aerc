@@ -58,7 +58,7 @@ func looksLikeURL(s string) bool {
 // adjacent to cur. Returns ok=false when the cursor isn't on or
 // touching word runes. The "current word" semantics differ from
 // nextWordBoundary / prevWordBoundary, which jump past the
-// surrounding whitespace — here the bounds are the word itself.
+// surrounding whitespace. Here the bounds are the word itself.
 func wordAt(src string, cur int) (start, end int, ok bool) {
 	runes := []rune(src)
 	on := cur < len(runes) && isWordRune(runes[cur])

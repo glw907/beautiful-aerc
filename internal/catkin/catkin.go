@@ -102,15 +102,15 @@ func (m Model) View() string {
 func (m Model) Mode() DisplayMode { return m.mode }
 
 // SetStyles replaces the render-time style table. The zero value
-// is no-op styles; consumers map their theme onto Styles at the
+// is no-op styles. Consumers map their theme onto Styles at the
 // boundary.
 func (m *Model) SetStyles(s Styles) { m.styles = s }
 
 // Value returns the raw markdown source.
 func (m Model) Value() string { return m.buf.Value() }
 
-// SetValue replaces the buffer with s and re-seeds the undo ring
-// — programmatic loads are not user edits.
+// SetValue replaces the buffer with s and re-seeds the undo ring.
+// Programmatic loads are not user edits.
 func (m *Model) SetValue(s string) {
 	m.buf.SetValue(s)
 	m.undo.seed(snap{s, m.buf.RuneOffset()})

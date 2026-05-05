@@ -17,7 +17,7 @@ import (
 
 // fakeTerminal scripts a slave-side responder that, on seeing the
 // glyph or CSI bytes from the probe, replies with CPRs scripted by
-// the test. It is a simple byte-pattern reader; not a full terminal
+// the test. It is a simple byte-pattern reader, not a full terminal
 // emulator.
 type fakeTerminal struct {
 	slave            *os.File
@@ -43,7 +43,7 @@ func (f *fakeTerminal) run() {
 			}
 			return
 		}
-		// Find ESC [ ... n requests; reply once per request.
+		// Find ESC [ ... n requests. Reply once per request.
 		i := 0
 		for i < n {
 			if i+2 < n && buf[i] == 0x1b && buf[i+1] == '[' {
@@ -120,7 +120,7 @@ func TestMeasureSPUACellsTimeout(t *testing.T) {
 	defer master.Close()
 	defer slave.Close()
 
-	// No goroutine reading the slave — probe should time out.
+	// No goroutine reads the slave. Probe should time out.
 	got, err := measureSPUACellsOn(master, 50*time.Millisecond)
 	if err == nil {
 		t.Fatalf("want timeout error, got nil (returned %d)", got)

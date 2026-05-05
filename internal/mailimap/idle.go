@@ -132,7 +132,7 @@ func (b *Backend) pollLoop(ctx context.Context, folder string, switchCh chan str
 			b.mu.Unlock()
 			return nil
 		case <-t.C:
-			// Fire UpdateFolderInfo unconditionally; UI re-fetches on receipt.
+			// Fire UpdateFolderInfo unconditionally. UI re-fetches on receipt.
 			b.emit(mail.Update{Type: mail.UpdateFolderInfo, Folder: folder})
 		}
 	}

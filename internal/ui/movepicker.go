@@ -40,7 +40,7 @@ type MovePickerClosedMsg struct{}
 // immutable-model contract), we heap-allocate one small cache struct at
 // construction time and access it through a pointer. The pointer itself is
 // copied with the value, so every generation of the picker shares the same
-// cache — a deliberate choice: they all render the same logical state, and
+// cache. A deliberate choice: they all render the same logical state, and
 // the dirty flag ensures stale renders are never served.
 type movePickerCache struct {
 	dirty       bool
@@ -62,7 +62,7 @@ type MovePicker struct {
 	offset  int
 	styles  Styles
 	keys    movePickerKeys
-	cache   *movePickerCache // heap-allocated; shared across value copies
+	cache   *movePickerCache // heap-allocated, shared across value copies
 }
 
 type movePickerKeys struct {
@@ -72,7 +72,7 @@ type movePickerKeys struct {
 	Close     key.Binding
 	Backspace key.Binding
 	// Swallow consumes 'q' so the picker doesn't quit the app while
-	// open — consistent with the other overlay surfaces.
+	// open, consistent with the other overlay surfaces.
 	Swallow key.Binding
 }
 
@@ -246,7 +246,7 @@ func (p MovePicker) Box(w, h int) string {
 
 	// Serve from cache when the rendered inputs are unchanged.
 	// Dimension change (contentW, maxListRows) counts as dirty even if the
-	// flag is clear — SetSize doesn't need to touch the flag.
+	// flag is clear. SetSize doesn't need to touch the flag.
 	c := p.cache
 	if c.dirty || c.contentW != contentW || c.visibleRows != maxListRows {
 		allRows := p.buildListRows(contentW)

@@ -18,7 +18,7 @@ import (
 // UID, sorts them newest-first (highest UID = most recently arrived),
 // and slices the result according to offset and limit.
 //
-// The lock is held only long enough to snapshot b.cmd; the client call
+// The lock is held only long enough to snapshot b.cmd. The client call
 // runs without the lock so other goroutines are not blocked.
 func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, error) {
 	b.mu.Lock()
@@ -75,9 +75,9 @@ var fetchItems = []string{
 	"BODY.PEEK[HEADER.FIELDS (FROM TO CC BCC SUBJECT DATE IN-REPLY-TO REFERENCES MESSAGE-ID)]",
 }
 
-// FetchHeaders — for an empty uid list it
-// returns immediately. Otherwise it calls Fetch with the standard
-// header item set and translates each result via infoFromFetch.
+// FetchHeaders returns immediately for an empty uid list.
+// Otherwise it calls Fetch with the standard header item set and
+// translates each result via infoFromFetch.
 func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil
@@ -99,7 +99,7 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 
 // infoFromFetch translates one FETCH result map into a mail.MessageInfo.
 // The items map is keyed by lowercase field names. Missing keys produce
-// zero values — the caller is responsible for providing a complete map.
+// zero values. The caller is responsible for providing a complete map.
 //
 // Threading: InReplyTo is set from the "in-reply-to" field. ThreadID
 // is not determined at fetch time (thread grouping is a UI concern);

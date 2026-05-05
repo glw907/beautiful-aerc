@@ -152,7 +152,7 @@ func buildPrefix(c LineContext) string {
 }
 
 // remapCursor approximates the post-reflow cursor by aligning on
-// non-whitespace rune count; whitespace boundaries shift but content
+// non-whitespace rune count. Whitespace boundaries shift but content
 // chars do not.
 func remapCursor(orig, emitted []string, rel int) int {
 	if len(orig) == 0 || len(emitted) == 0 {

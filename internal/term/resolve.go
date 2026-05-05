@@ -26,10 +26,10 @@ func (m IconMode) String() string {
 // Resolve maps a config-icons value plus runtime detection results to
 // the (mode, spuaCellWidth) pair the UI uses.
 //
-//	cfg          — UIConfig.Icons literal: "auto" | "simple" | "fancy".
-//	               Unknown values are treated as "auto".
-//	hasNerdFont  — result of HasNerdFont().
-//	probe        — result of MeasureSPUACells(): 1, 2, or 0 (failed).
+//	cfg         UIConfig.Icons literal: "auto" | "simple" | "fancy".
+//	            Unknown values are treated as "auto".
+//	hasNerdFont result of HasNerdFont().
+//	probe       result of MeasureSPUACells(): 1, 2, or 0 (failed).
 //
 // Defaults on probe failure in fancy mode: spuaCellWidth=2 (Mono Nerd
 // Font, the legacy assumption). In simple mode: spuaCellWidth=1

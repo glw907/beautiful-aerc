@@ -110,7 +110,7 @@ func migrateV2(tx *sql.Tx) error {
 
 // migrateV3 adds backend-reported exists/unseen counts on the
 // folders table. The cache's local count from message_mailboxes is a
-// lower bound (only synced folders have rows); the backend-reported
+// lower bound (only synced folders have rows). The backend-reported
 // value covers folders the user hasn't opened yet so the sidebar can
 // surface unread badges immediately.
 func migrateV3(tx *sql.Tx) error {
@@ -144,7 +144,7 @@ func migrateV4(tx *sql.Tx) error {
 }
 
 // migrateV5 adds the attachments table. Metadata populates lazily on
-// first Attachments(uid) call; bytes populate lazily on first
+// the first Attachments(uid) call. Bytes populate lazily on the first
 // FetchAttachment(uid, partID), gated by a separate size backstop.
 func migrateV5(tx *sql.Tx) error {
 	stmts := []string{

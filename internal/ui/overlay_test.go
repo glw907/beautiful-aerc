@@ -60,7 +60,7 @@ func TestPlaceOverlay(t *testing.T) {
 
 	t.Run("off-edge overlay clips without panic", func(t *testing.T) {
 		bg := "AAAA\nBBBB"
-		// Overlay wider than background — PlaceOverlay should clamp and not panic.
+		// Overlay wider than background. PlaceOverlay should clamp and not panic.
 		fg := "XXXXXXXXXXXX" // 12 cells wide, bg is 4
 		got := PlaceOverlay(0, 0, fg, bg)
 		// Since fg is wider than bg in one dimension, fg is returned directly.

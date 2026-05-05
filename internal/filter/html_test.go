@@ -265,7 +265,7 @@ func TestCleanHTML_InlineBoundaryFusion(t *testing.T) {
 		want string
 	}{
 		{name: "br between words", html: "Safari to<br>Safari 18.6", want: "Safari to Safari 18.6"},
-		// Anchors are preserved as markdown links; the important invariant
+		// Anchors are preserved as markdown links. The important invariant
 		// is that a space separates the link from adjacent text, preventing
 		// fusion like "[link](url)text".
 		{name: "anchor abuts trailing text", html: `<a href="https://example.com">link</a>text`, want: "[link](https://example.com) text"},

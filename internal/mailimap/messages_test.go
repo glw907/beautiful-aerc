@@ -58,8 +58,8 @@ func TestQueryFolderPaginationNewestFirst(t *testing.T) {
 	cmd.folderSummary = map[string]mail.Folder{
 		"INBOX": {Name: "INBOX", Exists: 5},
 	}
-	// Simulate five messages with UIDs 1..5; Search ALL returns them in
-	// whatever order — implementation must sort and return newest-first.
+	// Simulate five messages with UIDs 1..5. Search ALL returns them in
+	// whatever order. The implementation must sort and return newest-first.
 	cmd.searchFn = func(mail.SearchCriteria) ([]mail.UID, error) {
 		return []mail.UID{"1", "3", "2", "5", "4"}, nil
 	}
@@ -307,7 +307,7 @@ func TestFetchBodyMissingUID(t *testing.T) {
 
 func TestInfoFromFetchDefaults(t *testing.T) {
 	// A completely empty items map should produce an info with UID set
-	// and zero values for everything else — no panic.
+	// and zero values for everything else. No panic.
 	info := infoFromFetch("99", map[string]any{})
 	if info.UID != "99" {
 		t.Errorf("UID = %q, want 99", info.UID)
@@ -323,7 +323,7 @@ func TestInfoFromFetchDefaults(t *testing.T) {
 }
 
 func TestInfoFromFetchMultipleFrom(t *testing.T) {
-	// from field containing multiple addresses — passed through verbatim.
+	// from field containing multiple addresses, passed through verbatim.
 	info := infoFromFetch("1", map[string]any{
 		"from": "Alice <a@example.com>, Bob <b@example.com>",
 	})

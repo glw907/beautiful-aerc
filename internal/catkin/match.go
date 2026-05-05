@@ -55,8 +55,8 @@ func scanSpans(line string) []spanPos {
 }
 
 // overlayMatch re-renders displayCol in styled with style. The
-// rune drawn is ch (the original delimiter — ANSI styling on the
-// underlying line is replaced for that single cell).
+// rune drawn is ch (the original delimiter). ANSI styling on the
+// underlying line is replaced for that single cell.
 func overlayMatch(styled string, displayCol int, ch rune, style lipgloss.Style) string {
 	width := ansi.StringWidth(styled)
 	if displayCol < 0 || displayCol >= width {

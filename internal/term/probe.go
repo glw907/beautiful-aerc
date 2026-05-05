@@ -37,9 +37,9 @@ func MeasureSPUACells() int {
 	return w
 }
 
-// testGlyph is a Nerd Font SPUA-A icon (nf-md-mailbox U+F01EE — chosen
-// because it is in the same range as poplar's actual icons; per-glyph
-// width is uniform within a Nerd Font).
+// testGlyph is a Nerd Font SPUA-A icon (nf-md-mailbox U+F01EE), chosen
+// because it is in the same range as poplar's actual icons. Per-glyph
+// width is uniform within a Nerd Font.
 const testGlyph = "\U000F01EE"
 
 var probeMu sync.Mutex

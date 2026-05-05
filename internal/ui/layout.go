@@ -6,24 +6,24 @@ import "math"
 
 // LayoutMode is the resolved set of layout decisions for a given
 // terminal width. Computed once per WindowSizeMsg by ComputeLayout
-// and threaded into Sidebar and MessageList. Pure data — no I/O,
+// and threaded into Sidebar and MessageList. Pure data, no I/O,
 // no side effects, no methods that change observable behavior
 // based on flags outside the struct.
 type LayoutMode struct {
 	// Sidebar is the sidebar width in cells (folder list). Range
-	// [14, 30]. Floor 14 fits "Archive" with icons off; ceiling
+	// [14, 30]. Floor 14 fits "Archive" with icons off. Ceiling
 	// 30 gives breathing room for nested custom folder names.
 	Sidebar int
 
 	// Sender is the message-list sender column width in cells.
 	// Range [22, 32]. Floor 22 covers ~86% of real sender names
-	// untruncated; ceiling 32 covers ~95%.
+	// untruncated. Ceiling 32 covers ~95%.
 	Sender int
 
 	// Date is the message-list date column width in cells.
-	//   0 — column hidden
-	//   3 — compact relative format ("now", "5m", "Apr", "'24")
-	//   5 — short absolute format ("04-30" / "3:04p")
+	//   0: column hidden
+	//   3: compact relative format ("now", "5m", "Apr", "'24")
+	//   5: short absolute format ("04-30" / "3:04p")
 	Date int
 
 	// FlagColumn is true when the message-list flag/status icon
@@ -38,7 +38,7 @@ type LayoutMode struct {
 }
 
 // ComputeLayout returns the layout decisions for a given terminal
-// width. See ADR-0109 for the formula derivation; sender slope is
+// width. See ADR-0109 for the formula derivation. Sender slope is
 // 0.125 (matched to sender-name coverage cliffs at 22/28/32 cells)
 // and sidebar slope is 0.2 (covers 14→30 over W=80→160). Discrete
 // thresholds gate the flag column (W>=90), date column (3 cells at

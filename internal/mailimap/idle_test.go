@@ -14,7 +14,7 @@ import (
 )
 
 // idleBackend builds a backend wired for idle tests. It connects with
-// UIDPLUS+IDLE caps and does NOT start the idle goroutine — callers
+// UIDPLUS+IDLE caps and does NOT start the idle goroutine. Callers
 // drive idleLoop manually.
 func idleBackend(t *testing.T, cmd, idle *fakeClient) *Backend {
 	t.Helper()
@@ -90,9 +90,9 @@ func TestIdleFolderSwitch(t *testing.T) {
 	var mu sync.Mutex
 
 	origSelect := idleClient.Select
-	_ = origSelect // fakeClient.Select sets f.selected; we wrap via onIdle
+	_ = origSelect // fakeClient.Select sets f.selected. We wrap via onIdle
 
-	// Track Select calls through a custom fakeClient; we can't easily
+	// Track Select calls through a custom fakeClient. We can't easily
 	// override Select on fakeClient, so track through the idle func.
 	// Instead track idleClient.selected after each IDLE round.
 	idleRound := 0
@@ -227,10 +227,10 @@ func TestIdlePollFallback(t *testing.T) {
 	// Disable IDLE cap.
 	b.caps.IDLE = false
 
-	// pollFallbackInterval is 60s — too long for a test. Stub it via a
+	// pollFallbackInterval is 60s, too long for a test. Stub it via a
 	// dedicated field if we add one. Instead we drive the test by
 	// cancelling the context quickly and checking emit didn't crash.
-	// A real poll-interval test would require a configurable tick — see
+	// A real poll-interval test would require a configurable tick. See
 	// comments below.
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -240,7 +240,7 @@ func TestIdlePollFallback(t *testing.T) {
 
 	// No crash, goroutine exited cleanly. The poll interval (60s) is
 	// longer than the test duration so we won't see a FolderInfo update
-	// here — that's expected and acceptable.
+	// here. That's expected and acceptable.
 }
 
 func TestIdleExitOnContextCancel(t *testing.T) {
@@ -266,7 +266,7 @@ func TestIdleExitOnContextCancel(t *testing.T) {
 	// Wait for connected signal.
 	drainUpdates(b, 1, 2*time.Second)
 
-	// Cancel — should unblock quickly.
+	// Cancel should unblock quickly.
 	cancel()
 
 	select {

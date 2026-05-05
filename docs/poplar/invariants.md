@@ -340,11 +340,11 @@ the ADR(s) that justify them.
 ## Build & verification
 
 - Makefile targets: `build`, `test`, `vet`, `lint`, `install`,
-  `check`, `clean`. `make check` runs vet + voice + test (commit
-  gate); `make install` writes to `~/.local/bin/`. The `voice`
-  step is `scripts/voice-check.sh` — grep-tier scan for AI-tells
-  (T4, T10, T14, T16, T27, T28); semantic tells stay with the
-  `/simplify` voice lens.
+  `check`, `clean`. `make check` runs vet, voice, and test as the
+  commit gate. `make install` writes to `~/.local/bin/`. The
+  voice step is `scripts/voice-check.sh`, a grep-tier scan for
+  AI-tells T4, T10, T14, T16, T27, T28, T33, T34, T35. Semantic
+  tells stay with the `/simplify` voice lens.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
@@ -395,6 +395,6 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |
 | Attachments I (Pass 8.6) — backend support: `mail.Attachment` + `Attachments`/`FetchAttachment` on Backend; cache schema v5 `attachments` table with lazy metadata + lazy bytes under separate `MaxAttachmentSize` backstop; JMAP via Email/get bodyStructure + cli.Download; IMAP via UID FETCH BODYSTRUCTURE + BODY[<part>]; canonical `mail.ClassifyDisposition` (Disposition-first, ContentID fallback); MIME normalization at the protocol→mail boundary | 0135, 0136, 0137 |
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
-| Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
+| Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33, T34, T35 (T33–T35 added Pass 8.11 after a tree-wide cleanup) | 0141, 0142, 0148 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
 | Catkin — core + live styling + command vocabulary + power-user QoL (undo/redo, find/replace, auto-pair, smart paste, bracket match, typewriter+focus modes) | 0144, 0145, 0146, 0147 |

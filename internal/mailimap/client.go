@@ -12,7 +12,7 @@ import (
 
 // imapClient is the subset of go-imap's client surface that mailimap
 // uses. The real *imapclient.Client satisfies it (via a thin adapter
-// in auth.go); tests substitute a fake.
+// in auth.go). Tests substitute a fake.
 type imapClient interface {
 	// Authenticate runs SASL with the given mechanism name + client.
 	// Logout closes the connection cleanly.
@@ -31,7 +31,7 @@ type imapClient interface {
 	// Search runs UID SEARCH with the criteria and returns matching UIDs.
 	Search(criteria mail.SearchCriteria) ([]mail.UID, error)
 
-	// Fetch runs UID FETCH; resultFn is called once per message.
+	// Fetch runs UID FETCH. resultFn is called once per message.
 	Fetch(uids []mail.UID, items []string, resultFn func(uid mail.UID, items map[string]any)) error
 
 	// FetchBody returns a reader for the full RFC 822 body of one UID.
@@ -44,7 +44,7 @@ type imapClient interface {
 	Copy(uids []mail.UID, dest string) error
 	Move(uids []mail.UID, dest string) error
 
-	// Expunge runs plain EXPUNGE; UIDExpunge runs UID EXPUNGE (UIDPLUS).
+	// Expunge runs plain EXPUNGE. UIDExpunge runs UID EXPUNGE (UIDPLUS).
 	UIDExpunge(uids []mail.UID) error
 
 	// Idle blocks until the server tears down or DONE is sent;
@@ -69,7 +69,7 @@ type listEntry struct {
 
 // BodyStructure is the protocol-agnostic shape of a parsed IMAP
 // BODYSTRUCTURE response. Only the fields mailimap needs are
-// retained; the underlying go-imap type carries more.
+// retained. The underlying go-imap type carries more.
 type BodyStructure struct {
 	Section     string          // "" for root, "1", "2", "2.1" for parts
 	MIMEType    string          // "text/plain" lowercased

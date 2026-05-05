@@ -51,7 +51,7 @@ func TestOpenFolderTracksCurrent(t *testing.T) {
 	idle.caps = cmd.caps
 
 	// Set up state that OpenFolder needs without starting the idle
-	// goroutine — finishConnect would spawn it and create a race
+	// goroutine. finishConnect would spawn it and create a race
 	// between the goroutine's b.current write and this test's read.
 	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
 	b.caps = capSet{UIDPLUS: true}

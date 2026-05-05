@@ -17,7 +17,7 @@ const (
 )
 
 // findState owns the find / replace overlay. The zero value is
-// idle; opening sets mode to findFind or findReplace and the
+// idle. Opening sets mode to findFind or findReplace and the
 // overlay reserves footer rows out of Catkin's render height.
 type findState struct {
 	mode            findMode
@@ -41,7 +41,7 @@ func (f findState) footerRows() int {
 	return 0
 }
 
-// recomputeMatches rebuilds matches against src; preserves the
+// recomputeMatches rebuilds matches against src. It preserves the
 // cursor's match-anchor when possible by snapping to the nearest
 // match at or after caretRune.
 func (f *findState) recomputeMatches(src string, caretRune int) {

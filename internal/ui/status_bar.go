@@ -20,7 +20,7 @@ const (
 )
 
 // StatusMode is the left-side content shown in the status bar.
-// Account mode shows message + unread counts; Viewer mode shows the
+// Account mode shows message + unread counts. Viewer mode shows the
 // scroll percentage of the open message body.
 type StatusMode int
 
@@ -65,7 +65,7 @@ func (sb StatusBar) SetConnectionState(state ConnectionState) StatusBar {
 func (sb StatusBar) ConnectionState() ConnectionState { return sb.connState }
 
 // SetOutboxDepth returns a copy of sb with the outbox segment counts
-// updated. inflight = pending + executing + failed; conflict is rendered
+// updated. inflight = pending + executing + failed. conflict is rendered
 // separately so the warning glyph dominates.
 func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
 	if inflight < 0 {

@@ -73,7 +73,7 @@ func splitBareURLs(s string) []Span {
 
 		// Trim trailing sentence punctuation.
 		trimmed := strings.TrimRight(rawURL, trailingPunct)
-		// Reject scheme-only tokens — they're censored placeholders, not launchable URLs.
+		// Reject scheme-only tokens. They are censored placeholders, not launchable URLs.
 		schemeOnly := false
 		for _, scheme := range urlSchemes {
 			if trimmed == scheme {
@@ -123,7 +123,7 @@ func wrapImpliedQuotes(blocks []Block) []Block {
 	}
 
 	// If the first block after the attribution is already a Blockquote,
-	// the HTML had a proper <blockquote> tag — no wrapping needed.
+	// the HTML had a proper <blockquote> tag. No wrapping is needed.
 	if _, ok := blocks[attrIdx+1].(Blockquote); ok {
 		return blocks
 	}
@@ -285,7 +285,7 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 // collectListItem advances past the marker line at *i and merges any
 // indented continuation lines into the item's text. Plain-text mail
 // clients (Gmail) wrap list-item bodies onto the next line with the
-// same indent as the bullet content; without this merge, the wrapped
+// same indent as the bullet content. Without this merge, the wrapped
 // lines fall into a sibling paragraph and the bullet structure
 // visibly collapses.
 func collectListItem(text string, lines []string, i *int) string {

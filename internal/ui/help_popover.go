@@ -25,7 +25,7 @@ const (
 // immutable-model contract), we heap-allocate one small cache struct at
 // construction time and access it through a pointer. The pointer itself
 // is copied with the value, so every generation of the popover shares
-// the same cache — a deliberate choice: they all render the same logical
+// the same cache. A deliberate choice: they all render the same logical
 // state, and the dirty flag ensures stale renders are never served.
 type helpPopoverCache struct {
 	dirty     bool
@@ -42,7 +42,7 @@ type HelpPopover struct {
 	context HelpContext
 	width   int
 	height  int
-	cache   *helpPopoverCache // heap-allocated; shared across value copies
+	cache   *helpPopoverCache // heap-allocated, shared across value copies
 }
 
 // NewHelpPopover constructs a popover for the given context.
@@ -195,13 +195,13 @@ var viewerBottomHints = []bindingRow{
 }
 
 // Box returns the popover box string sized from its content. The returned
-// string does NOT include full-screen padding — it is the raw box ready
+// string does NOT include full-screen padding. It is the raw box ready
 // for overlay compositing. The second return value is a "too narrow"
-// fallback string; it is non-empty when the box does not fit within
+// fallback string, non-empty when the box does not fit within
 // (width, height) and the caller should display it instead.
 //
-// The result is cached keyed on (context, width, height); a context or
-// dimension change counts as dirty even when the flag is clear —
+// The result is cached keyed on (context, width, height). A context or
+// dimension change counts as dirty even when the flag is clear;
 // NewHelpPopover sets dirty=true, so the first call always rebuilds.
 func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
 	c := h.cache
@@ -260,7 +260,7 @@ func (h HelpPopover) Position(box string, width, height int) (x, y int) {
 
 // View renders the popover centered on a width × height area.
 // When the underlying account frame is available the caller should use
-// Box + Position + PlaceOverlay instead; View is retained as a fallback
+// Box + Position + PlaceOverlay instead. View is retained as a fallback
 // for callers that need a standalone full-screen string (e.g. tests).
 func (h HelpPopover) View(width, height int) string {
 	box, tooNarrow := h.Box(width, height)
@@ -373,7 +373,7 @@ func renderRow(styles Styles, r bindingRow) string {
 
 // renderKeyDesc applies the wired-vs-unwired styling to a key+desc
 // pair. Wired: bright-bold key, dim desc. Unwired: entire pair dim
-// (no bold) — the contrast is the future-binding signal.
+// (no bold). The contrast is the future-binding signal.
 func renderKeyDesc(styles Styles, key, desc string, wired bool) string {
 	if wired {
 		return styles.HelpKey.Render(key) + "  " + styles.Dim.Render(desc)
@@ -390,7 +390,7 @@ func renderGap() string {
 // renderGotoGrid builds the Go To group as a 3×2 grid:
 // "I inbox    D drafts    S sent" / "A archive  X spam  T trash".
 // The group's heading is rendered above. Falls back to a flat
-// column if the row count drifts from 6 — defensive against
+// column if the row count drifts from 6. Defensive against
 // careless edits to the binding tables.
 func renderGotoGrid(styles Styles, g bindingGroup) string {
 	heading := styles.HelpGroupHeader.Render(g.title)

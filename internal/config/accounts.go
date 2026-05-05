@@ -17,7 +17,7 @@ import (
 )
 
 // ResolvePassword returns the cleartext password for c. Inline
-// Password wins; otherwise PasswordCmd is run via /bin/sh -c and
+// Password wins. Otherwise PasswordCmd is run via /bin/sh -c and
 // stdout (trimmed of trailing newlines) is the password.
 func (c *AccountConfig) ResolvePassword() (string, error) {
 	if c.Password != "" {
@@ -62,8 +62,9 @@ type AccountConfig struct {
 	// fire near the action. Mutually exclusive with Password.
 	PasswordCmd string
 
-	// Auth — recognized values: "plain", "login", "cram-md5",
-	// "xoauth2", "bearer". Empty string defers to backend default.
+	// Auth holds the SASL mechanism. Recognized values: "plain",
+	// "login", "cram-md5", "xoauth2", "bearer". Empty defers to
+	// the backend default.
 	Auth string
 
 	// Email is the user's address. May be empty when the backend
@@ -75,8 +76,8 @@ type AccountConfig struct {
 	Port     int
 	StartTLS bool
 
-	// InsecureTLS skips TLS verification — for self-hosted servers
-	// with self-signed certs. Never set for hosted providers.
+	// InsecureTLS skips TLS verification. Use only for self-hosted
+	// servers with self-signed certs. Never set for hosted providers.
 	InsecureTLS bool
 
 	// GmailQuirks enables Gmail-specific IMAP behavior in mailimap:
@@ -86,7 +87,7 @@ type AccountConfig struct {
 }
 
 // ExpandHome turns a leading "~" into the user's home directory.
-// "~" → $HOME; "~/x" → $HOME/x; other paths and empty pass through.
+// "~" expands to $HOME. "~/x" expands to $HOME/x. Other paths and empty strings pass through.
 func ExpandHome(p string) (string, error) {
 	if !strings.HasPrefix(p, "~") {
 		return p, nil
@@ -190,8 +191,8 @@ func ParseAccounts(path string) ([]AccountConfig, error) {
 	return ParseAccountsFromBytes(data)
 }
 
-// ParseAccountsFromBytes is the byte-slice form of ParseAccounts; use
-// it when the file has already been read.
+// ParseAccountsFromBytes is the byte-slice form of ParseAccounts.
+// Use it when the file has already been read.
 func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {
 	var cf configFile
 	if err := toml.Unmarshal(data, &cf); err != nil {
@@ -254,7 +255,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		return nil, fmt.Errorf("account %q (provider = %q): both password and password-cmd set; use one", e.Name, e.Provider)
 	}
 	// Validate provider against the registry + fallbacks.
-	// "mock" is permitted for testing; it short-circuits to
+	// "mock" is permitted for testing. It short-circuits to
 	// mail.NewMockBackend in cmd/poplar/backend.go.
 	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
 		if _, ok := Providers[e.Provider]; !ok {
@@ -317,7 +318,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 }
 
 // resolveEnv replaces a leading "$VAR" with os.Getenv("VAR"). The
-// only supported form is the bare $VAR token; anything else is
+// only supported form is the bare $VAR token. Anything else is
 // returned unchanged so passwords containing a literal "$" still
 // work. Empty env returns an error so the user gets a clear
 // failure on misconfiguration.

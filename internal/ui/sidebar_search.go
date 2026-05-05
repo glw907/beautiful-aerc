@@ -30,12 +30,12 @@ const (
 type SearchState int
 
 const (
-	// SearchIdle — no filter, shelf shows hint row.
+	// SearchIdle: no filter, shelf shows hint row.
 	SearchIdle SearchState = iota
-	// SearchTyping — prompt focused, printable runes append to query,
+	// SearchTyping: prompt focused. Printable runes append to query,
 	// filter updates live on each keystroke.
 	SearchTyping
-	// SearchActive — query is live but prompt is unfocused; normal
+	// SearchActive: query is live but prompt is unfocused. Normal
 	// account-view key routing resumes.
 	SearchActive
 )
@@ -51,7 +51,7 @@ type SearchUpdatedMsg struct {
 // SidebarSearch is the 3-row shelf pinned to the bottom of the
 // sidebar column. Owns the text input, mode toggle, and state
 // machine for the search feature. Communicates with AccountTab via
-// SearchUpdatedMsg during Typing; state transitions (Activate,
+// SearchUpdatedMsg during Typing. State transitions (Activate,
 // Commit, Clear) are driven by direct method calls from AccountTab.
 type SidebarSearch struct {
 	input   textinput.Model
@@ -92,7 +92,7 @@ func (s *SidebarSearch) SetSize(width int) {
 	s.width = width
 	// promptOverhead is sized for the widest rendered states
 	// (Typing/Active): leading "  " indent (2), search icon (2),
-	// gap before prompt (1) — see renderPromptRow. The idle state
+	// gap before prompt (1). See renderPromptRow. The idle state
 	// omits the icon so it has a couple cells of unused slack, which
 	// is harmless. Floor at 1 so textinput never gets a negative width.
 	const promptOverhead = 5
@@ -135,8 +135,8 @@ func (s *SidebarSearch) SetResultCount(n int) {
 // SearchUpdatedMsg whenever the query or mode changed. Only
 // meaningful in SearchTyping state.
 //
-// The textinput's own returned Cmd (cursor blink ticker) is dropped
-// — the shelf doesn't need a blinking cursor and it makes tests
+// The textinput's own returned Cmd (cursor blink ticker) is dropped;
+// the shelf doesn't need a blinking cursor and it makes tests
 // 500ms slower per keystroke when drained synchronously.
 func (s SidebarSearch) Update(msg tea.Msg) (SidebarSearch, tea.Cmd) {
 	if s.state != SearchTyping {
@@ -198,7 +198,7 @@ func (s SidebarSearch) renderBlankRow() string {
 //     because the input is Blurred.
 func (s SidebarSearch) renderPromptRow() string {
 	if s.state == SearchIdle {
-		// No icon in the idle state — in simple mode icons.Search == "/"
+		// No icon in the idle state. In simple mode icons.Search == "/"
 		// which would produce "/ / to search" (duplicated slash).
 		hint := applyBg(s.styles.SearchHint, s.styles.SidebarBg).Render(" / to search")
 		content := s.styles.SidebarBg.Render("  ") + hint
@@ -224,7 +224,7 @@ func (s SidebarSearch) renderPromptRow() string {
 }
 
 // renderInfoRow renders the mode badge and result count. Blank in
-// idle state or when the query is empty; in typing/active with a
+// idle state or when the query is empty. In typing/active with a
 // non-empty query renders "[name]" or "[all]" on the left and the
 // result count or "no results" on the right.
 func (s SidebarSearch) renderInfoRow() string {

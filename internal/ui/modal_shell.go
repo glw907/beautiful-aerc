@@ -37,20 +37,20 @@ func (s ModalShell) Width() int { return s.width }
 func (s ModalShell) Height() int { return s.height }
 
 // Box renders the shared ┌─ title ─┐ / ├─┤ / └─┘ frame around the caller-
-// supplied sections. bodyRows are the main content lines; footerRows are
-// rendered between the ├─┤ separator and the └─┘ bottom border; both are
+// supplied sections. bodyRows are the main content lines. footerRows are
+// rendered between the ├─┤ separator and the └─┘ bottom border. Both are
 // rendered with │ side borders. Each row in bodyRows and footerRows must
-// already be padded or truncated to exactly contentW display cells — Box
+// already be padded or truncated to exactly contentW display cells. Box
 // does not re-pad them, it only adds the │ borders.
 //
-// title is plain text; Box truncates it if "─ title " + borders would
+// title is plain text. Box truncates it if "─ title " + borders would
 // exceed contentW+2 (the full box width). The title border uses
 // lipgloss.Width (icon-free strings), consistent with the invariant.
 func (s ModalShell) Box(title string, bodyRows []string, footerRows []string, contentW int) string {
 	boxW := contentW + 2
 
 	// Top border = "┌─" + " title " + dashes + "┐". Fixed overhead is 3
-	// cells ("┌─" + "┐"); remaining dashes fill to boxW.
+	// cells ("┌─" + "┐"). Remaining dashes fill to boxW.
 	titleSeg := " " + title + " "
 	maxTitleW := boxW - 3
 	if maxTitleW < 0 {
@@ -59,7 +59,7 @@ func (s ModalShell) Box(title string, bodyRows []string, footerRows []string, co
 	if lipgloss.Width(titleSeg) > maxTitleW {
 		tgtW := maxTitleW - 2
 		if tgtW < 1 {
-			// No room for even a single-character title; suppress entirely.
+			// No room for even a single-character title. Suppress entirely.
 			titleSeg = ""
 		} else {
 			titleSeg = " " + truncateToWidth(title, tgtW) + " "

@@ -28,7 +28,7 @@ const (
 )
 
 // Viewer renders a single message in the right panel. It owns no
-// backend reference — body fetch and mark-read Cmds are constructed
+// backend reference. Body fetch and mark-read Cmds are constructed
 // at the AccountTab level. The viewer is pure state + render, with
 // scroll position tracked by an embedded bubbles/viewport.
 type Viewer struct {
@@ -104,7 +104,7 @@ func (v Viewer) Close() Viewer {
 }
 
 // SetBody installs parsed blocks and transitions to ready. Idempotent
-// for stale UIDs — callers should drop bodyLoadedMsg with a UID
+// for stale UIDs. Callers should drop bodyLoadedMsg with a UID
 // mismatch before invoking this.
 func (v Viewer) SetBody(blocks []content.Block) Viewer {
 	v.blocks = blocks
@@ -131,7 +131,7 @@ func (v Viewer) SpinnerTick() tea.Cmd { return v.spinner.Tick }
 func (v Viewer) Links() []string { return v.links }
 
 // SetAttachments installs the attachment metadata list. Idempotent
-// for stale UIDs — caller drops stale messages before invoking.
+// for stale UIDs. Caller drops stale messages before invoking.
 func (v Viewer) SetAttachments(items []mail.Attachment) Viewer {
 	v.attachments = items
 	if v.phase == viewerReady && v.open {
@@ -171,7 +171,7 @@ func (v Viewer) Update(msg tea.Msg) (Viewer, tea.Cmd) {
 }
 
 // handleKey runs the viewer's key dispatch. q/esc closes; 1-9 launch
-// links; tab emits OpenLinkPickerMsg for App. All other keys forward
+// links. Tab emits OpenLinkPickerMsg for App. All other keys forward
 // to the viewport, which is configured with a modifier-free keymap
 // (j/k/space/b/g/G).
 func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
@@ -222,7 +222,7 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 // closed so AccountTab.View can fall through to the message list.
 //
 // The output is hard-clipped to v.width so the viewer cannot lie to
-// its parent's JoinHorizontal — content longer than v.width (e.g. a
+// its parent's JoinHorizontal. Content longer than v.width (e.g. a
 // raw URL the body renderer's hardwrap missed) gets truncated rather
 // than overflowing into the sidebar column. This is the bubbles-
 // component idiom: each component owns its size contract.
@@ -243,12 +243,12 @@ func (v Viewer) View() string {
 
 	// Two stacked rectangles: BgElevated panel (with FgDim BorderBottom
 	// drawn natively by lipgloss) above a BgBase body. clipPaneBg
-	// per-line pads the body to v.width with bg-styled spaces — using
+	// per-line pads the body to v.width with bg-styled spaces, using
 	// lipgloss's outer Width.Render directly leaves terminal-default
 	// gaps in the right pad whenever the inner content ends a line
 	// with `\x1b[0m` (lipgloss issue #209).
 	// viewport.View() right-pads each line to its width with plain
-	// (unstyled) spaces. We strip that pad before bg-padding ourselves —
+	// (unstyled) spaces. We strip that pad before bg-padding ourselves.
 	// otherwise fillRowToWidth sees the line at width and skips, leaving
 	// the right side on terminal-default bg.
 	leftPad := bg.Render(" ")
@@ -275,9 +275,9 @@ func (v Viewer) View() string {
 }
 
 // clipPaneBg fits s to exactly width × height. Each content line is
-// padded to width with bgStyle; missing rows get a bg-styled blank.
+// padded to width with bgStyle. Missing rows get a bg-styled blank.
 // Surface-baked leaves (theme styles carry their pane's bg) make the
-// per-line right-pad sufficient — no SGR rewriting needed.
+// per-line right-pad sufficient. No SGR rewriting needed.
 func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	if width < 1 || height < 1 {
 		return ""
@@ -340,7 +340,7 @@ func (v Viewer) renderChipRow(width int) (string, int) {
 
 // layout renders headers + body and populates the viewport. Called
 // from SetBody and from SetSize when the viewer is already ready.
-// Headers stay pinned above the viewport; only the body scrolls.
+// Headers stay pinned above the viewport. Only the body scrolls.
 //
 // contentWidth is v.width - 1 to account for the panel's PaddingLeft.
 // The body region fills the rest of v.height beneath the rendered
@@ -375,7 +375,7 @@ func (v *Viewer) layout() {
 }
 
 // addressesFor returns the To: list to render in the viewer. Real
-// recipient strings from the wire take precedence; otherwise fall
+// recipient strings from the wire take precedence. Otherwise fall
 // back to the user's own address (so the To: row is never empty).
 func addressesFor(to, fallbackEmail string) []content.Address {
 	if to != "" {
@@ -390,7 +390,7 @@ func addressesFor(to, fallbackEmail string) []content.Address {
 // namesAsAddresses splits a flat "Name1, Name2, ..." MessageInfo
 // string into Address values for the header renderer. The split is
 // intentionally naive (commas inside quoted phrases are uncommon in
-// already-formatted display strings); refine if it bites.
+// already-formatted display strings). Refine if it bites.
 func namesAsAddresses(s string) []content.Address {
 	if s == "" {
 		return nil

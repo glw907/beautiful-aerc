@@ -13,10 +13,10 @@ import (
 const maxBodyWidth = 72
 
 // wrap is the renderer's width-honoring word wrap. Wordwrap respects
-// word boundaries; Hardwrap catches the residue when a single token
+// word boundaries. Hardwrap catches the residue when a single token
 // (long URL, code identifier) exceeds width. Together they guarantee
-// no output line is wider than width — the contract every block-
-// renderer below relies on.
+// no output line is wider than width. Every block renderer below
+// relies on this contract.
 func wrap(text string, width int) string {
 	if width < 1 {
 		width = 1
@@ -77,7 +77,7 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 		if b.Level > 1 {
 			style = t.DeepQuote
 		}
-		prefix := "> " // single level; structural nesting handles depth
+		prefix := "> " // single level. Structural nesting handles depth.
 		// Use lipgloss.Width (display cells) not len (bytes) for the
 		// prefix deduction so wide-char prefixes don't undercount.
 		content := joinRenderedBlocks(b.Blocks, t, width-lipgloss.Width(prefix))
@@ -188,9 +188,9 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 }
 
 // RenderHeaders renders parsed headers into a styled string. The
-// Subject is hoisted as a title above the From/To/Cc/Bcc/Date block;
-// a blank line separates the title from the metadata. Header leaf
-// styles carry Background(BgSubtle) (see palette.go); unstyled
+// Subject is hoisted as a title above the From/To/Cc/Bcc/Date block.
+// A blank line separates the title from the metadata. Header leaf
+// styles carry Background(BgSubtle) (see palette.go). Unstyled
 // padding/indent runs are wrapped through bg here to match.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	bg := lipgloss.NewStyle().Background(t.BgSubtle)
@@ -229,8 +229,8 @@ const headerKeyColWidth = 8
 // at the pane's existing 1-cell padding.
 const metadataIndent = "  "
 
-// metadataPrefixWidth is the display-cell width of the row prefix —
-// metadataIndent + headerKeyColWidth + the trailing space — used by
+// metadataPrefixWidth is the display-cell width of the row prefix
+// (metadataIndent + headerKeyColWidth + trailing space), used by
 // the wrap accumulator. Computed against raw strings so it stays
 // correct after surface-baking wraps the prefix in ANSI.
 const metadataPrefixWidth = len(metadataIndent) + headerKeyColWidth + 1

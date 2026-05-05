@@ -16,7 +16,7 @@ import (
 )
 
 // drainerConfig governs backoff and retry caps. Defaults match
-// spec §G; the constructor exposes a hook so tests can compress
+// spec §G. The constructor exposes a hook so tests can compress
 // timings.
 type drainerConfig struct {
 	BackoffMin  time.Duration
@@ -30,19 +30,19 @@ func defaultDrainerConfig() drainerConfig {
 		BackoffMin:  1 * time.Second,
 		BackoffMax:  60 * time.Second,
 		MaxAttempts: 10,
-		// drainSignal handles immediate wake on every QueueOp; the
-		// idle ticker exists only so failed-row backoff windows are
-		// re-checked without an external signal. 5s is a comfortable
-		// floor: well under typical backoff windows, well above what
-		// would burn CPU.
+		// drainSignal handles immediate wake on every QueueOp.
+		// The idle ticker exists only so failed-row backoff windows
+		// are re-checked without an external signal. 5s is a
+		// comfortable floor: well under typical backoff windows,
+		// well above what would burn CPU.
 		Idle: 5 * time.Second,
 	}
 }
 
 // StartDrainer launches the per-account outbox drainer. The
 // goroutine exits when Close is called. Crash-recovered
-// `executing` rows are reset (idempotent kinds → pending; send
-// → conflict with crashed-mid-execute) before the loop starts.
+// `executing` rows are reset before the loop starts: idempotent
+// kinds go back to pending. Send goes to conflict.
 func (a *Account) StartDrainer(ctx context.Context) error {
 	if err := a.recoverExecuting(); err != nil {
 		return fmt.Errorf("recover executing: %w", err)
@@ -54,8 +54,8 @@ func (a *Account) StartDrainer(ctx context.Context) error {
 }
 
 // recoverExecuting handles the crash-recovery contract from spec
-// §D.2. Idempotent kinds reset to pending; non-idempotent (send,
-// append) become conflict with crashed-mid-execute.
+// §D.2. Idempotent kinds reset to pending. Non-idempotent ones
+// (send, append) become conflict with crashed-mid-execute.
 func (a *Account) recoverExecuting() error {
 	if _, err := a.db.Exec(
 		`UPDATE outbox SET status = ? WHERE status = ? AND kind IN (?,?,?)`,
@@ -143,7 +143,7 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		_ = a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0)
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, mail.ErrNotFound):
-		// Idempotent success per spec §D.4 — message already gone.
+		// Idempotent success per spec §D.4: message already gone.
 		_ = a.finalizeSuccess(ctx, row, args)
 		a.publish(row, OpDone, nil)
 	default:
@@ -217,7 +217,7 @@ func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
 	select {
 	case a.events <- ev:
 	default:
-		// Buffer full — record drop so the UI can detect staleness
+		// Buffer full. Record the drop so the UI can detect staleness
 		// and reconcile via a full cache re-read (DroppedEvents).
 		a.droppedEvents.Add(1)
 	}

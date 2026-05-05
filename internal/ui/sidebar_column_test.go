@@ -83,7 +83,7 @@ func TestSidebarColumn_EmptyBeforeSize(t *testing.T) {
 	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, 22, 20, SimpleIcons)
 	ss := NewSidebarSearch(styles, 22, SimpleIcons)
 	col := NewSidebarColumn(styles, SimpleIcons, sb, ss, "user@example.com")
-	// No SetSize call — width and height are zero.
+	// No SetSize call. Width and height are zero.
 	if got := col.View(); got != "" {
 		t.Errorf("View() with zero size returned %q, want empty", got)
 	}

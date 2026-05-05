@@ -12,7 +12,7 @@ import (
 
 // ConfirmRequest holds the content for one modal invocation. The
 // followup action on confirmation is dispatched by App based on
-// state it sets when opening the modal — ConfirmModal itself only
+// state it sets when opening the modal. ConfirmModal itself only
 // emits ConfirmModalYesMsg / ConfirmModalClosedMsg.
 type ConfirmRequest struct {
 	Title string
@@ -84,7 +84,7 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 	case key.Matches(keyMsg, m.keys.Dismiss):
 		return m, func() tea.Msg { return ConfirmModalClosedMsg{} }
 	}
-	// q is swallowed — consistent with help/link/move picker overlays.
+	// q is swallowed, consistent with help/link/move picker overlays.
 	return m, nil
 }
 

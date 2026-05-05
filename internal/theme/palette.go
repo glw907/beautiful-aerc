@@ -78,7 +78,7 @@ func NewCompiledTheme(name string, p Palette) *CompiledTheme {
 
 	// Header-pane styles render on BgSubtle (a small elevation off
 	// BgBase, signaling the header belongs to the message context, not
-	// the sidebar's BgElevated chrome track); body-pane styles render
+	// the sidebar's BgElevated chrome track). Body-pane styles render
 	// on BgBase. Baking the pane bg into every leaf eliminates the
 	// terminal-default-bg gaps lipgloss leaves between pre-styled
 	// segments (issue #209).

@@ -17,7 +17,7 @@ import "strings"
 // SidebarColumn.SetSize stores its own dims for View(). The
 // WindowSizeMsg branch in AccountTab still calls Sidebar.SetLayout and
 // Sidebar.SetSize explicitly, then re-wraps via WithSidebar +
-// WithSidebarSearch + SetSize. Verbose but correct; SidebarColumn never
+// WithSidebarSearch + SetSize. Verbose but correct. SidebarColumn never
 // needs to know about LayoutMode, keeping its API narrow.
 type SidebarColumn struct {
 	styles        Styles
@@ -40,7 +40,7 @@ func NewSidebarColumn(styles Styles, icons IconSet, sidebar Sidebar, sidebarSear
 }
 
 // SetSize records the column's width and height for View(). It does NOT
-// propagate SetSize to child components — the AccountTab WindowSizeMsg
+// propagate SetSize to child components. The AccountTab WindowSizeMsg
 // branch handles child sizing explicitly and then calls SetSize to record
 // the final dims.
 func (c SidebarColumn) SetSize(w, h int) SidebarColumn {
@@ -64,7 +64,7 @@ func (c SidebarColumn) WithSidebarSearch(s SidebarSearch) SidebarColumn {
 }
 
 // View renders the sidebar column: blank / account / blank header rows,
-// folder region, spacer, and search shelf — but not the divider. The
+// folder region, spacer, and search shelf, but not the divider. The
 // AccountTab owns the row-by-row join of sidebar + divider + right pane.
 // Every row is exactly c.width display cells wide (enforced by the child
 // renderers and the blank row style).

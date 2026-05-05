@@ -148,9 +148,9 @@ func TestClassifyKnownProviderFolders(t *testing.T) {
 		// iCloud
 		{"icloud sent", "Sent Messages", "Sent"},
 		{"icloud trash", "Deleted Messages", "Trash"},
-		// Zoho — uses standard names
+		// Zoho uses standard names.
 		{"zoho sent", "Sent", "Sent"},
-		// Gmail (covered fully in Pass 8.1; sample here)
+		// Gmail (covered fully in Pass 8.1, sample here)
 		{"gmail trash", "[Gmail]/Trash", "Trash"},
 	}
 	for _, tc := range cases {

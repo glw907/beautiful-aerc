@@ -1,8 +1,12 @@
 ---
 title: Voice-check grep tier in `make check`
-status: accepted
+status: superseded by 0148
 date: 2026-05-04
 ---
+
+> Superseded by ADR-0148 (2026-05-05), which widens the grep tier
+> from six tells (T4, T10, T14, T16, T27, T28) to nine by adding
+> the prose-rhythm tells T33–T35.
 
 ## Context
 

@@ -17,8 +17,8 @@ import (
 
 // Changes implements mail.ChangeTracker.
 //
-// On a nil since token Changes runs the per-folder baseline pull —
-// Email/query paged by inMailbox, plus a follow-up Email/get to
+// On a nil since token Changes runs the per-folder baseline pull.
+// Email/query is paged by inMailbox, with a follow-up Email/get to
 // capture the current type-state. Email/changes itself has no
 // "give me everything that exists now" mode (RFC 8621 §4.3), so an
 // empty sinceState would return an empty delta and lose the initial
@@ -31,7 +31,7 @@ import (
 // type's state string encoded as UTF-8 bytes.
 //
 // On cannotCalculateChanges the function returns
-// mail.ErrCannotCalculateChanges; the caller (cache syncer) responds
+// mail.ErrCannotCalculateChanges. The caller (cache syncer) responds
 // with the re-anchor path from spec §D.4.
 func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncToken) (mail.ChangeSet, mail.SyncToken, error) {
 	if since == nil {
@@ -87,7 +87,7 @@ const baselinePullPageSize = 500
 // stateProbeID is a deliberately non-existent Email id sent with
 // every baseline-pull request: JSON omitempty drops a nil/empty IDs
 // slice and Fastmail then returns a state-less Email/get response.
-// The id lands in notFound; the response carries the type-state
+// The id lands in notFound. The response carries the type-state
 // the next Changes call needs.
 const stateProbeID jmap.ID = "_poplar_state_probe_"
 
@@ -122,7 +122,7 @@ func (b *Backend) baselinePull(ctx context.Context, folder string) (mail.ChangeS
 		})
 		// Piggyback the state probe so a single-page pull (the common
 		// case) finishes in one roundtrip. Multi-page pulls overwrite
-		// state on each iteration; the last page wins.
+		// state on each iteration. The last page wins.
 		req.Invoke(&email.Get{
 			Account:    accountID,
 			IDs:        []jmap.ID{stateProbeID},

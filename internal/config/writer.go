@@ -17,7 +17,7 @@ import (
 // there is nothing to write.
 //
 // existing may be nil. Keys are canonical name for classified
-// canonicals and provider name for classified custom folders —
+// canonicals and provider name for classified custom folders,
 // matching the same lookup keys Sidebar and UIConfig.Folders use.
 func RenderFolderSubsections(classified []mail.ClassifiedFolder, existing map[string]bool) string {
 	primary, disposal, custom := splitByGroup(classified, existing)
@@ -77,7 +77,7 @@ func renderSubsection(cf mail.ClassifiedFolder) string {
 	return b.String()
 }
 
-// subsectionHeaderKey returns the TOML header key — bare identifier
+// subsectionHeaderKey returns the TOML header key: a bare identifier
 // when possible, otherwise a quoted string.
 func subsectionHeaderKey(cf mail.ClassifiedFolder) string {
 	if cf.Canonical != "" {

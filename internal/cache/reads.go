@@ -17,7 +17,7 @@ import (
 // canonical classification (mail.Classify wraps the same alias
 // table the UI sidebar uses) and per-folder Exists/Unseen counts
 // computed from message_mailboxes ⨝ messages. The cache is the
-// source of truth; the syncer keeps it converged with the backend.
+// source of truth. The syncer keeps it converged with the backend.
 func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
 	const q = `
         SELECT f.name, f.role, f.exists_total, f.unseen_total,
@@ -47,7 +47,7 @@ func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
 		if role.Valid {
 			f.Role = role.String
 		}
-		// Prefer local counts once any messages are synced; otherwise
+		// Prefer local counts once any messages are synced. Otherwise
 		// fall back to backend-reported totals stored at SyncFolders
 		// time so unopened folders still show their unread badges.
 		if localExists > 0 {
@@ -132,9 +132,9 @@ func scanMessageInfo(rows *sql.Rows) (mail.MessageInfo, error) {
 }
 
 // FetchHeaders returns the cached headers for uids. Cache misses
-// fall back to the backend; results are upserted before returning
-// so the next call hits cache. The order of the returned slice
-// matches uids; missing UIDs are silently skipped.
+// fall back to the backend. Results are upserted before returning
+// so the next call hits cache. The returned slice order matches
+// uids. Missing UIDs are silently skipped.
 func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil
@@ -169,11 +169,11 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 		if err != nil {
 			return nil, fmt.Errorf("backend fetch headers: %w", err)
 		}
-		// folder == "" here is intentional: FetchHeaders is called by
-		// callers that already know the folder context (or don't care
-		// about membership — e.g. viewer-side body prefetch). The
+		// folder == "" here is intentional. FetchHeaders is called by
+		// callers that already know the folder context, or that don't
+		// need membership (e.g. viewer-side body prefetch). The
 		// membership row is established by SyncFolder/upsertMessages
-		// at the time the message first lands in a folder.
+		// when the message first lands in a folder.
 		if err := a.upsertMessages(ctx, "", fresh); err != nil {
 			return nil, err
 		}
@@ -190,11 +190,11 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 	return out, nil
 }
 
-// FetchBody returns the body bytes for uid. Cache miss → backend
-// fetch → store → return; cache hit → return stored bytes without a
-// backend round-trip. Store failure is non-fatal; the returned bytes
-// are still valid for the caller. Lazy population, no automatic
-// eviction. The size backstop in storeBody handles cap pressure inline.
+// FetchBody returns the body bytes for uid. Cache miss: fetch from
+// backend, store, return. Cache hit: return without a backend
+// round-trip. Store failure is non-fatal. The returned bytes are
+// still valid for the caller. Lazy population, no automatic eviction.
+// The size backstop in storeBody handles cap pressure inline.
 func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 	ctx := context.Background()
 	if buf, ok, err := a.lookupBody(ctx, uid); err != nil {
@@ -210,7 +210,7 @@ func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 		return nil, err
 	}
 	if storeErr := a.storeBody(ctx, uid, body); storeErr != nil {
-		// store failure is non-fatal: body is still valid for the caller; next view will re-fetch.
+		// Store failure is non-fatal. The returned body is valid. The next view re-fetches.
 		_ = storeErr
 	}
 	return body, nil

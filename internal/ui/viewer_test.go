@@ -57,7 +57,7 @@ func TestViewerBodyLoadedSetsReady(t *testing.T) {
 
 func TestViewerStaleBodyLoadedIgnored(t *testing.T) {
 	// AccountTab is the layer that performs the UID guard. Viewer's
-	// contract is: CurrentUID is the source of truth; SetBody is
+	// contract is: CurrentUID is the source of truth. SetBody is
 	// idempotent and the caller must filter.
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", From: "Alice"})
 	v = v.Close().Open(mail.MessageInfo{UID: "2", From: "Bob"})
@@ -92,7 +92,7 @@ func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 	if v.ScrollPct() != 0 {
 		t.Errorf("initial scroll pct = %d, want 0", v.ScrollPct())
 	}
-	// Press G to jump to bottom — scroll % should change to 100.
+	// Press G to jump to bottom. Scroll % should change to 100.
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
 	if pct := v.ScrollPct(); pct != 100 {
 		t.Errorf("after G scroll pct = %d, want 100", pct)
@@ -193,9 +193,9 @@ func TestViewerHandleKey_CloseViaQ_UsesKeyMatches(t *testing.T) {
 
 // TestViewerLeftPaddingGeometry verifies that every rendered line in the
 // ready phase is exactly v.width display cells wide. Panel rows lead
-// with the panel's BgElevated PaddingLeft cell; the panel's bottom
-// border row leads with a '─' that spans the full panel width; body
-// rows lead with a BgBase gutter cell. Width is the contract — leading
+// with the panel's BgElevated PaddingLeft cell. The panel's bottom
+// border row leads with a '─' that spans the full panel width. Body
+// rows lead with a BgBase gutter cell. Width is the contract. Leading
 // character varies by row class.
 func TestViewerLeftPaddingGeometry(t *testing.T) {
 	const w, h = 80, 20

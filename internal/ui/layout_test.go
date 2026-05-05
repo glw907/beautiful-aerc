@@ -13,7 +13,7 @@ func TestComputeLayout(t *testing.T) {
 		flagColumn bool
 		icons      bool
 	}{
-		// Sub-polish-bar — same shape as 80
+		// Sub-polish-bar: same shape as 80
 		{w: 60, sidebar: 14, sender: 22, date: 0, flagColumn: false, icons: false},
 		{w: 79, sidebar: 14, sender: 22, date: 0, flagColumn: false, icons: false},
 		// Polish bar floor

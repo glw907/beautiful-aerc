@@ -43,7 +43,7 @@ func isWordRune(r rune) bool {
 }
 
 // handleWordNav intercepts Ctrl+Left/Right/Backspace/Delete.
-// Returns (handled, updated buffer, cmd); caller passes through to
+// Returns (handled, updated buffer, cmd). Caller passes through to
 // the buffer's normal Update when handled is false.
 func handleWordNav(b Buffer, msg tea.KeyMsg) (bool, Buffer, tea.Cmd) {
 	if msg.Alt {

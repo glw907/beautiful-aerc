@@ -41,7 +41,7 @@ type AccountTab struct {
 	styles Styles
 	icons  IconSet
 	// acct is the per-account cache handle. UI reads come from
-	// acct.QueryFolder; UI writes funnel through acct.QueueOp. The
+	// acct.QueryFolder. UI writes funnel through acct.QueueOp. The
 	// underlying mail.Backend reference lives behind acct.Backend
 	// (used for AccountName/AccountEmail accessors and body fetch).
 	acct              *cache.Account
@@ -58,10 +58,10 @@ type AccountTab struct {
 	width             int
 	height            int
 	// bodyFetchCancel cancels the in-flight loadBodyCmd goroutine.
-	// Set on every openMessage call; cleared when the result arrives
+	// Set on every openMessage call. Cleared when the result arrives
 	// (matched UID) or when the viewer closes.
 	bodyFetchCancel context.CancelFunc
-	// now returns the wall clock; test seam, defaults to time.Now.
+	// now returns the wall clock. Test seam, defaults to time.Now.
 	now func() time.Time
 }
 
@@ -103,7 +103,7 @@ func (m AccountTab) Cache() *cache.Account { return m.acct }
 
 func (m AccountTab) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
 
-// Closeable returns false — the account tab cannot be closed.
+// Closeable always returns false. The account tab cannot be closed.
 func (m AccountTab) Closeable() bool { return false }
 
 // Init fires the initial folder-list fetch and starts the cache event
@@ -169,7 +169,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		page := m.pageFor(msg.name)
 		// selectionChangedCmds zeroes the page before firing
 		// openFolderCmd, so loaded == 0 reliably means "fresh open"
-		// (cursor reset); any other value means "post-write refresh"
+		// (cursor reset). Any other value means "post-write refresh"
 		// (cursor preserved). Snapshot before mutating page.loaded.
 		isInitial := page.loaded == 0
 		page.loaded = len(msg.msgs)
@@ -226,7 +226,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, nil
 
 	case ErrorMsg:
-		// App owns the banner; AccountTab ignores. App.Update runs
+		// App owns the banner. AccountTab ignores it. App.Update runs
 		// before delegation, so the App layer captures the message.
 		return m, nil
 
@@ -234,7 +234,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, m.dispatchMoveFromPicker(msg)
 
 	case sweepCompletedMsg:
-		// Sweep fired; cache now has ui_hide=1 on each affected row.
+		// Sweep fired. Cache now has ui_hide=1 on each affected row.
 		// Refresh to reflect.
 		if name := m.currentFolderName(); name != "" {
 			return m, refreshFolderCmd(m.acct, name)
@@ -268,7 +268,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		}
 		// Tick belongs to the viewer's spinner (or a stale tick from
 		// a prior generation). Fall through to the viewer-forward
-		// block; the viewer's spinner ID guard rejects stale ticks.
+		// block. The viewer's spinner ID guard rejects stale ticks.
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -286,7 +286,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 
 // handleKey dispatches navigation keys by identity. When the viewer
 // is open, every key routes there first. Otherwise: J/K/G move the
-// sidebar (and dispatch a folder-load Cmd); j/k move the message-list
+// sidebar (and dispatch a folder-load Cmd). j/k move the message-list
 // cursor. During an active search, printable keys flow through
 // SidebarSearch instead of the account-view handlers.
 func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
@@ -315,12 +315,12 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		var cmd tea.Cmd
 		m.viewer, cmd = m.viewer.Update(msg)
 		if !m.viewer.IsOpen() {
-			// Viewer just closed; discard any in-flight body fetch.
+			// Viewer just closed. Discard any in-flight body fetch.
 			m = m.cancelInflightBodyFetch()
 		}
 		return m, cmd
 	}
-	// Route to SidebarSearch when we're in Typing state — it owns
+	// Route to SidebarSearch when we're in Typing state. It owns
 	// the input routing for this modal slice, except for Enter and
 	// Esc which transition state.
 	if ss := m.sidebarColumn.SidebarSearch(); ss.State() == SearchTyping {
@@ -433,7 +433,7 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 }
 
 // jumpToFolder moves the sidebar selection to the canonical folder
-// with the given name. No-op (and no Cmd) when no folder matches —
+// with the given name. No-op (and no Cmd) when no folder matches;
 // e.g. an account that doesn't expose a Drafts folder. Behaves like
 // J/K otherwise: clears any active search, fires the load Cmd via
 // selectionChangedCmds.
@@ -564,7 +564,7 @@ func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.Messag
 }
 
 // dispatchEmpty emits OpenConfirmEmptyMsg when the selected folder is
-// Trash or Spam. Returns nil for all other folders — inert by design.
+// Trash or Spam. Returns nil for all other folders. Inert by design.
 func (m *AccountTab) dispatchEmpty() tea.Cmd {
 	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
@@ -644,7 +644,7 @@ func (m AccountTab) SearchState() SearchState {
 
 // dispatchTriage performs an optimistic triage action through the
 // cache. The cache QueueOp transactionally writes the optimistic flip
-// and the outbox row; the immediate folder refresh re-reads the new
+// and the outbox row. The immediate folder refresh re-reads the new
 // state. Toast carries the inverse Cmd (a compensating QueueOp).
 func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 	uids := m.msglist.ActionTargets()
@@ -787,7 +787,7 @@ func (m *AccountTab) maybeLoadMore() tea.Cmd {
 }
 
 // View renders the sidebar column + divider + right pane. SidebarColumn
-// produces the left column content; AccountTab owns the row-by-row join
+// produces the left column content. AccountTab owns the row-by-row join
 // with the divider and right pane.
 func (m AccountTab) View() string {
 	if m.width == 0 || m.height == 0 {
@@ -818,7 +818,7 @@ func (m AccountTab) View() string {
 	// Font SPUA-A glyphs by 1 cell each. The sidebar and msglist renderers
 	// use displayCells (the correct terminal-cell count) via fillRowToWidth,
 	// so each row is already exactly the right terminal width. Direct
-	// concatenation preserves that property; JoinHorizontal would add
+	// concatenation preserves that property. JoinHorizontal would add
 	// spurious padding to SPUA-A rows and widen them by 1–2 cells.
 	n := min(len(sidebarLines), len(rightLines))
 	assembled := make([]string, n)

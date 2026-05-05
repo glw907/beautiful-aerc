@@ -25,11 +25,11 @@ const nbsp = " "
 // appear in the footnote list. Short bare URLs render inline without a
 // marker and are not emitted in the footnote section.
 //
-// IMPORTANT — numbering divergence: [^N] markers in the body are
+// NOTE: [^N] markers in the body are
 // numbered within the marker-bearing subset only. Picker indices 1..N
 // span all URLs including short bare URLs. These two numbering schemes
 // may differ when short bare URLs are present. The picker is the
-// canonical multi-URL launcher; markers are an inline reading aid.
+// canonical multi-URL launcher. Markers are an inline reading aid.
 // See ADR-0086 (n/N nav), ADR-0085 (long bare URL footnoting),
 // ADR-0087 (link picker).
 func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) (string, []string) {
@@ -49,7 +49,7 @@ func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) 
 	}
 
 	if len(markerURLs) == 0 {
-		// Only short bare URLs present — no rule, no footnote section.
+		// Only short bare URLs present. No rule, no footnote section.
 		return body, pickerURLs
 	}
 
@@ -65,7 +65,7 @@ func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) 
 	for i, u := range markerURLs {
 		b.WriteString("\n")
 		// Wrap before styling: a long URL is an unbreakable token that
-		// wordwrap cannot split; hardwrap catches it so no output line
+		// wordwrap cannot split. Hardwrap catches it so no output line
 		// exceeds the width budget.
 		label := fmt.Sprintf("[^%d]: %s", i+1, u)
 		b.WriteString(t.Link.Render(wrap(label, w)))
@@ -77,7 +77,7 @@ func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) 
 // picker URL list (all outbound URLs, deduped, first-seen order), and
 // a parallel hasMarker slice. hasMarker[i] is true when urls[i] has a
 // [^N] marker glued to it in the body. Short bare URLs are in urls but
-// hasMarker[i] is false — they render inline, no marker, no footnote line.
+// hasMarker[i] is false. They render inline, no marker, no footnote line.
 func harvestFootnotes(blocks []Block) ([]Block, []string, []bool) {
 	w := footnoteWalker{seen: make(map[string]int)}
 	out := w.blocks(blocks)
@@ -99,7 +99,7 @@ func (w *footnoteWalker) markerFor(url string) int {
 	}
 	n := len(w.urls) + 1
 	w.urls = append(w.urls, url)
-	w.hasMarker = append(w.hasMarker, false) // default; caller flips to true if needed
+	w.hasMarker = append(w.hasMarker, false) // default. Caller flips to true if needed.
 	w.seen[url] = n
 	return n
 }
@@ -158,13 +158,13 @@ const longBareURLThreshold = 30
 // markerLabel registers url as a marker-bearing entry and returns the
 // [^N] label where N is its position in the footnote-subset (not the
 // picker list). Footnote-subset numbering counts only marker-bearing
-// entries in picker order — so [^1] is the first marker-bearing URL
-// even if short bare URLs precede it in the picker list.
+// entries in picker order. [^1] is the first marker-bearing URL
+// even when short bare URLs precede it in the picker list.
 //
 // If url was already registered (first occurrence was short bare),
 // its hasMarker entry is promoted to true on the first marker use.
 func (w *footnoteWalker) markerLabel(url string) string {
-	n := w.markerFor(url) // registers if new; returns 1-based picker index
+	n := w.markerFor(url) // registers if new. Returns 1-based picker index.
 	w.hasMarker[n-1] = true
 	// Count marker-bearing entries up to and including position n-1.
 	m := 0
@@ -197,8 +197,8 @@ func (w *footnoteWalker) spans(in []Span) []Span {
 			label := w.markerLabel(link.URL)
 			out[i] = Link{Text: trimURL(link.URL) + nbsp + label, URL: link.URL}
 		default:
-			// Short bare URL: register in picker list (hasMarker stays false),
-			// pass span through unchanged — renders inline, no marker, no footnote line.
+			// Short bare URL: register in picker list (hasMarker stays false).
+			// Pass span through unchanged. Renders inline with no marker and no footnote line.
 			w.markerFor(link.URL)
 			out[i] = s
 		}

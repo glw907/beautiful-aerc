@@ -35,7 +35,7 @@ func TestMovePicker_OpenSetsState(t *testing.T) {
 	if !p.IsOpen() {
 		t.Fatal("picker should be open after Open")
 	}
-	// src "INBOX" is excluded; expect one fewer than full list
+	// src "INBOX" is excluded. Expect one fewer than full list
 	if got, want := len(p.all), len(sampleFolders())-1; got != want {
 		t.Errorf("all len = %d, want %d", got, want)
 	}
@@ -120,8 +120,8 @@ func TestMovePicker_NavigationBounds(t *testing.T) {
 }
 
 func TestMovePicker_EnterEmitsPickedMsg(t *testing.T) {
-	// INBOX excluded; p.all = [Drafts, Sent, Archive, Trash, Receipts/2026, Receipts/2025]
-	// cursor=0 is Drafts; no Down needed.
+	// INBOX excluded. p.all = [Drafts, Sent, Archive, Trash, Receipts/2026, Receipts/2025]
+	// cursor=0 is Drafts. No Down needed.
 	p := newTestPicker().Open([]mail.UID{"42"}, "INBOX", sampleFolders())
 	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -265,8 +265,8 @@ func TestMovePicker_ViewClosedEmpty(t *testing.T) {
 	}
 }
 
-// BenchmarkMovePickerView measures the cost of Box() — the full list-row
-// build path — on a realistic 7-folder list at 80×24. Run before and
+// BenchmarkMovePickerView measures the cost of Box(), the full list-row
+// build path, on a realistic 7-folder list at 80×24. Run before and
 // after the render cache to confirm allocations dropped.
 func BenchmarkMovePickerView(b *testing.B) {
 	p := newTestPicker()

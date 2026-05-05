@@ -41,7 +41,7 @@ func walkBodyStructure(bs BodyStructure) []mail.Attachment {
 }
 
 // walkPart processes one part. isTopLevel is true only for direct
-// children of the outermost multipart; inner multipart children
+// children of the outermost multipart. Inner multipart children
 // always receive false.
 func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 	if len(bs.Children) > 0 {
@@ -67,8 +67,8 @@ func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 
 // FetchAttachment issues UID FETCH BODY[<part>]
 // and returns the decoded bytes. The transfer encoding (base64,
-// quoted-printable) is decoded by the go-imap client adapter; this
-// returns raw decoded bytes ready to write to disk.
+// quoted-printable) is decoded by the go-imap client adapter.
+// Returns raw decoded bytes ready to write to disk.
 func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	b.mu.Lock()
 	cmd := b.cmd

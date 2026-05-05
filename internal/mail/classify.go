@@ -33,10 +33,10 @@ func (cf ClassifiedFolder) ConfigKey() string {
 }
 
 // Classify maps raw backend folders into ClassifiedFolders.
-// Priority: role attribute, then alias table, then Custom fallback.
+// Role attribute wins. Alias table is consulted next. Custom is the fallback.
 // Matching is case-insensitive exact match on the provider name.
-// Order of the input is preserved in the output — callers that want
-// group ordering (sidebar) do that themselves.
+// Order of the input is preserved. Callers that want group ordering
+// (e.g. the sidebar) sort the result themselves.
 func Classify(folders []Folder) []ClassifiedFolder {
 	if len(folders) == 0 {
 		return nil

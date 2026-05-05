@@ -89,11 +89,11 @@ func hasTableHeader(n *html.Node) bool {
 
 func (p *layoutTablePlugin) renderTable(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if hasTableHeader(n) {
-		// Data table — let the table plugin handle it.
+		// Data table. Let the table plugin handle it.
 		return converter.RenderTryNext
 	}
 
-	// Layout table — render each cell's content as a paragraph.
+	// Layout table. Render each cell's content as a paragraph.
 	renderCells(ctx, w, n)
 	return converter.RenderSuccess
 }
@@ -126,7 +126,7 @@ func newConverter() *converter.Converter {
 }
 
 // convertHTML converts an HTML string to markdown. Layout tables are
-// flattened; data tables become pipe tables.
+// flattened. Data tables become pipe tables.
 func convertHTML(input string) (string, error) {
 	conv := newConverter()
 	md, err := conv.ConvertString(input)

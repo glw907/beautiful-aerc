@@ -7,7 +7,7 @@ import (
 
 // isListLine reports whether line is a list item at any
 // indentation depth. The classifier only recognises top-level
-// lists; nested-list lines look like indented paragraphs from its
+// lists. Nested-list lines look like indented paragraphs from its
 // view, so the indent commands check shape directly.
 func isListLine(line string) bool {
 	trimmed := strings.TrimLeft(line, " ")
@@ -20,7 +20,7 @@ func isListLine(line string) bool {
 }
 
 // indentTab handles the Tab key. On a list/task line it deepens
-// the list nesting by prepending two spaces to the line; on any
+// the list nesting by prepending two spaces to the line. On any
 // other line it inserts two spaces at the cursor.
 func indentTab(src string, cur int) (string, int) {
 	lines, p := splitAtCursor(src, cur)

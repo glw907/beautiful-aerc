@@ -3,12 +3,12 @@
 package ui
 
 // IconSet is the per-mode iconography vocabulary for poplar's UI
-// surfaces. SimpleIcons uses Unicode Narrow-class codepoints — every
+// surfaces. SimpleIcons uses Unicode Narrow-class codepoints. Every
 // field has lipgloss.Width == 1. FancyIcons uses Nerd Font SPUA-A
-// glyphs (U+F0000–U+FFFFD); their rendered cell width is determined
+// glyphs (U+F0000–U+FFFFD). Their rendered cell width is determined
 // at startup by term.MeasureSPUACells and applied via spuaCellWidth.
 //
-// Add a field here whenever a new render surface needs an icon; both
+// Add a field here whenever a new render surface needs an icon. Both
 // tables must be updated together. Tests in icons_test.go enforce the
 // class invariants.
 type IconSet struct {
@@ -36,12 +36,12 @@ var SimpleIcons = IconSet{
 	Drafts:       "✎", // U+270E
 	Sent:         "→", // U+2192
 	Archive:      "▢", // U+25A2
-	Spam:         "!", // ASCII; U+26A0 ⚠ is Ambiguous-class on some terminals
+	Spam:         "!", // ASCII (U+26A0 ⚠ is Ambiguous-class on some terminals)
 	Trash:        "✗", // U+2717
 	Notification: "•", // U+2022
 	Reminder:     "◷", // U+25F7
 	CustomFolder: "▪", // U+25AA
-	Search:       "/", // ASCII; canonical search affordance
+	Search:       "/", // ASCII, canonical search affordance
 	FlagFlagged:  "⚑", // U+2691
 	FlagAnswered: "↩", // U+21A9
 	FlagUnread:   "●", // U+25CF
@@ -62,7 +62,7 @@ var FancyIcons = IconSet{
 	CustomFolder: "\U000F0861", // nf-md-folder-outline
 	Search:       "\U000F0349", // nf-md-magnify
 	FlagFlagged:  "\U000F023B", // nf-md-flag
-	FlagAnswered: "\U000F045A", // nf-md-send (placeholder for answered; matches legacy mlIconAnswered)
+	FlagAnswered: "\U000F045A", // nf-md-send (placeholder for answered, matches legacy mlIconAnswered)
 	FlagUnread:   "\U000F01EE", // nf-md-mailbox (matches legacy mlIconUnread)
 	Attachment:   "\U000F0184", // nf-md-paperclip
 }

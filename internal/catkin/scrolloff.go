@@ -5,7 +5,7 @@ import "strings"
 const scrollOff = 3
 
 // ClampViewport returns a viewport top that keeps cursorLine within
-// the scroll-off band; returns 0 when total fits in height.
+// the scroll-off band. Returns 0 when total fits in height.
 func ClampViewport(top, height, cursorLine, total int) int {
 	if total <= height {
 		return 0

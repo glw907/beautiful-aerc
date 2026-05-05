@@ -256,7 +256,7 @@ func TestRecoverExecuting_Send(t *testing.T) {
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	// Insert a synthetic send op directly (cache I doesn't queue
-	// send through QueueOp yet — Pass 9).
+	// send through QueueOp yet, pending Pass 9).
 	folderID, _ := a.folderID("Inbox")
 	a.db.Exec(`INSERT INTO outbox (folder, kind, args, enqueued_at, status) VALUES (?, 'send', '{}', ?, 'executing')`,
 		folderID, time.Now().UnixNano())
@@ -312,10 +312,10 @@ func TestCoordinationInvariant_PendingOp(t *testing.T) {
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1", Flags: 0}})
-	// User toggles Star — the optimistic ui_flags now has FlagFlagged.
+	// User toggles Star. The optimistic ui_flags now has FlagFlagged.
 	a.QueueOp(context.Background(), "Inbox", "1", FlagArgs{Flag: mail.FlagFlagged, Set: true})
 
-	// Syncer pulls — server still says unflagged. Coordination
+	// Syncer pulls. Server still says unflagged. Coordination
 	// invariant: ui_flags must NOT be reverted because an outbox
 	// row is still pending.
 	if err := a.SyncFolder(context.Background(), "Inbox"); err != nil {

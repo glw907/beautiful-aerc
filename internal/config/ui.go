@@ -104,7 +104,7 @@ type rawUIFile struct {
 }
 
 // LoadUI reads the [ui] table from an config.toml file and returns
-// a UIConfig. A missing file is an error; a missing [ui] section
+// a UIConfig. A missing file is an error. A missing [ui] section
 // returns DefaultUIConfig().
 func LoadUI(path string) (UIConfig, error) {
 	data, err := os.ReadFile(path)

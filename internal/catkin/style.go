@@ -17,7 +17,7 @@ import (
 const chromaStyle = "monokai"
 
 // Styles is Catkin's render-time style table. The zero value is
-// no-op styles — Render produces output identical to plain mode.
+// no-op styles. Render produces output identical to plain mode.
 //
 // Catkin defines its own struct rather than borrowing a host
 // theme type so the package stays library-pure: a downstream
@@ -169,7 +169,7 @@ type chromaResolved struct {
 	formatter chroma.Formatter
 }
 
-var chromaCache sync.Map // map[string]chromaResolved; "" key = unknown lang
+var chromaCache sync.Map // map[string]chromaResolved. "" key = unknown lang
 
 func resolveChroma(info string) chromaResolved {
 	if v, ok := chromaCache.Load(info); ok {

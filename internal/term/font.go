@@ -40,7 +40,7 @@ func HasNerdFont() bool {
 	return hasNerdFontResult
 }
 
-// fcListFamilies shells out to fc-list; the 2 s context prevents a
+// fcListFamilies shells out to fc-list. The 2 s context prevents a
 // hung fontconfig from stalling startup.
 func fcListFamilies() ([]string, bool) {
 	path, err := exec.LookPath("fc-list")
@@ -88,7 +88,7 @@ func parseFcList(output string) []string {
 	return families
 }
 
-// hasNerdFontIn is the pure-string check; isolated for testability.
+// hasNerdFontIn is the pure-string check, isolated for testability.
 // A family qualifies if its lower-cased + trimmed name contains
 // "nerd font" or ends with " nf".
 func hasNerdFontIn(families []string) bool {

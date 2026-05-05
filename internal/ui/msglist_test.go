@@ -117,7 +117,7 @@ func TestMessageList(t *testing.T) {
 		if len(lines) != 4 {
 			t.Fatalf("view lines = %d, want 4", len(lines))
 		}
-		// The selected row carries the ▐ cursor; it must be visible.
+		// The selected row carries the ▐ cursor. It must be visible.
 		found := false
 		for _, line := range lines {
 			if strings.HasPrefix(line, "▐") {
@@ -142,7 +142,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("read and unread rows have identical displayCells width at multiple widths", func(t *testing.T) {
 		// SPUA-A flag glyphs (unread/flagged/answered) render as 2 terminal
-		// cells; displayCells is the authoritative counter. Both read and unread
+		// cells. displayCells is the authoritative counter. Both read and unread
 		// rows must reach exactly w display cells so the right border lands at
 		// a fixed column regardless of flag state.
 		//
@@ -636,7 +636,7 @@ func TestMessageListThreading(t *testing.T) {
 		// Default sort puts these in date-desc order: Above, Root, Reply, Below.
 		ml.MoveDown() // cursor on Root (index 1)
 		ml.ToggleFold()
-		// Now visible rows: Above (0), Root (1, folded), Below (3 — index 2 hidden).
+		// Now visible rows: Above (0), Root (1, folded), Below (3, index 2 hidden).
 		// MoveDown from Root should land on Below (index 3), skipping hidden index 2.
 		ml.MoveDown()
 		if got, want := ml.Selected(), 3; got != want {
@@ -702,7 +702,7 @@ func TestMessageListWithMockBackend(t *testing.T) {
 			t.Fatalf("T1 row count = %d, want 4", len(t1Prefixes))
 		}
 		// Frank Lee root, then Grace (├─), then Frank-deep (│  └─), then Henry (└─).
-		// Children sorted chronologically asc; the actual mock dates are all
+		// Children sorted chronologically asc. The actual mock dates are all
 		// "Apr 5" so order falls back to insertion order via SliceStable.
 		want := []string{"", "├─ ", "│  └─ ", "└─ "}
 		for i, w := range want {
@@ -1149,9 +1149,9 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 	msg := mail.MessageInfo{
 		UID:      "1",
 		ThreadID: "1",
-		From:     "Alice Johnson", // 13 chars; padded to 22
-		Subject:  "Hello world",  // short; padded to fill subject budget
-		Date:     "04-27",        // 5 chars; fits date column exactly
+		From:     "Alice Johnson", // 13 chars, padded to 22
+		Subject:  "Hello world",  // short, padded to fill subject budget
+		Date:     "04-27",        // 5 chars, fits date column exactly
 		Flags:    mail.FlagSeen,  // read, no flag glyph
 	}
 	ml := NewMessageList(styles, []mail.MessageInfo{msg}, w, 3, FancyIcons)
@@ -1380,7 +1380,7 @@ func TestMessageList_RefreshSource(t *testing.T) {
 		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
 		ml.MoveDown() // cursor on row 1 ("c")
 		want := ml.rows[ml.Selected()].msg.UID
-		// Refresh with the same set; cursor should stay on "c".
+		// Refresh with the same set. Cursor should stay on "c".
 		ml.RefreshSource(flatMsgs())
 		got := ml.rows[ml.Selected()].msg.UID
 		if got != want {

@@ -18,7 +18,7 @@ type MockBackend struct {
 	msgs    []MessageInfo
 	updates chan Update
 
-	// Recorded calls — exposed for tests that assert dispatch shape.
+	// Recorded calls, exposed for tests that assert dispatch shape.
 	// All slices append in chronological order.
 	DestroyCalls [][]UID
 	MoveCalls    []struct {
@@ -59,7 +59,7 @@ func NewMockBackend() *MockBackend {
 		},
 		msgs: []MessageInfo{
 			// Flat single-message threads: ThreadID == UID, no InReplyTo.
-			// Only SentAt is set; the UI formats the display string via
+			// Only SentAt is set. The UI formats the display string via
 			// formatRelativeDate at render time.
 			{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", SentAt: at(time.April, 13, 10, 23), Flags: 0},
 			{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", SentAt: at(time.April, 13, 9, 45), Flags: 0},
@@ -114,7 +114,7 @@ func (m *MockBackend) QueryFolder(_ string, offset, limit int) ([]UID, int, erro
 	return uids, total, nil
 }
 
-// FetchHeaders ignores uids — the mock always returns all messages.
+// FetchHeaders ignores uids. The mock always returns all messages.
 func (m *MockBackend) FetchHeaders(_ []UID) ([]MessageInfo, error) {
 	return m.msgs, nil
 }
@@ -274,7 +274,7 @@ func (m *MockBackend) Send(_ string, _ []string, _ io.Reader) error {
 	return nil
 }
 
-// Updates never sends; the channel always blocks.
+// Updates never sends. The channel always blocks.
 func (m *MockBackend) Updates() <-chan Update {
 	return m.updates
 }

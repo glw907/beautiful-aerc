@@ -8,8 +8,8 @@ import (
 
 // renderErrorBanner formats an ErrorMsg for the single banner row
 // above the status bar. Returns "" when msg.Err is nil. Output is
-// at most width display cells wide; longer text is truncated with
-// "…". When msg.Op is empty, the format is "⚠ <err>"; otherwise
+// at most width display cells wide. Longer text is truncated with
+// "…". When msg.Op is empty, the format is "⚠ <err>". Otherwise
 // "⚠ <op>: <err>".
 func renderErrorBanner(msg ErrorMsg, width int, styles Styles) string {
 	if msg.Err == nil {
@@ -25,7 +25,7 @@ func renderErrorBanner(msg ErrorMsg, width int, styles Styles) string {
 }
 
 // truncateToWidth shortens s to at most width display cells, adding
-// "…" when truncation occurs. Splits on rune boundaries — never
+// "…" when truncation occurs. Splits on rune boundaries, never
 // inside a multi-byte glyph. Counts cells via lipgloss.Width so
 // double-width CJK characters are accounted for correctly.
 func truncateToWidth(s string, width int) string {

@@ -41,7 +41,7 @@ func (a *Account) SyncFolder(ctx context.Context, folder string) error {
 }
 
 // readSyncToken returns the stored opaque sync cursor for folder.
-// Missing folder rows return a nil token and no error — the syncer
+// Missing folder rows return a nil token and no error. The syncer
 // then treats this as an initial-baseline call.
 func (a *Account) readSyncToken(folder string) (mail.SyncToken, error) {
 	var token []byte
@@ -63,8 +63,8 @@ func (a *Account) writeSyncToken(folder string, token mail.SyncToken) error {
 }
 
 // applyDelta materializes the ChangeSet against the cache. Added
-// and Modified UIDs trigger a header fetch (cache misses) and
-// upsert; Removed UIDs are deleted with CASCADE handling outbox.
+// and Modified UIDs trigger a header fetch and upsert. Removed
+// UIDs are deleted, with CASCADE handling outbox.
 func (a *Account) applyDelta(ctx context.Context, folder string, d mail.ChangeSet) error {
 	if len(d.Removed) > 0 {
 		placeholders, args := uidsPlaceholders(d.Removed)
@@ -108,9 +108,9 @@ func (a *Account) reAnchor(ctx context.Context, folder string) error {
                 SELECT mm.message FROM message_mailboxes mm WHERE mm.folder = ?)`, folderID); err != nil {
 			return fmt.Errorf("promote outbox: %w", err)
 		}
-		// Drop folder membership; CASCADE on the messages row would
-		// be too aggressive (a message in many JMAP mailboxes still
-		// lives elsewhere). We unlink only this folder.
+		// Drop folder membership. CASCADE on the messages row would
+		// be too aggressive: a message in many JMAP mailboxes still
+		// lives elsewhere. Unlink only this folder.
 		if _, err := tx.Exec(`DELETE FROM message_mailboxes WHERE folder = ?`, folderID); err != nil {
 			return fmt.Errorf("clear membership: %w", err)
 		}
@@ -121,7 +121,7 @@ func (a *Account) reAnchor(ctx context.Context, folder string) error {
 	})
 }
 
-// Rows that no longer appear in the backend are removed; CASCADE
+// Rows that no longer appear in the backend are removed. CASCADE
 // reaps their messages and outbox entries.
 func (a *Account) SyncFolders(ctx context.Context) error {
 	if a.Backend == nil {

@@ -121,8 +121,8 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 }
 
 // applyKeepalive tunes kernel TCP keepalive probes and interval on c.
-// Failures are silently ignored — the OS-level KeepAlive on the Dialer
-// already provides basic keepalive; the syscall tuning is advisory.
+// Failures are silently ignored. The OS-level KeepAlive on the Dialer
+// already provides basic keepalive. The syscall tuning is advisory.
 func applyKeepalive(c *net.TCPConn) {
 	_ = c.SetKeepAlive(true)
 	f, err := c.File()
@@ -178,7 +178,7 @@ func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) e
 	case "login":
 		return cli.Login(cfg.Email, pw).Wait()
 	case "cram-md5":
-		// go-sasl v0.0.0-20241020182733 does not ship CRAM-MD5; reject early.
+		// go-sasl v0.0.0-20241020182733 does not ship CRAM-MD5. Reject early.
 		return errors.New("cram-md5: not supported by the bundled go-sasl version")
 	case "xoauth2":
 		if pw == "" {
@@ -191,7 +191,7 @@ func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) e
 }
 
 // looksSelfHosted reports whether host is RFC 1918, IPv6 ULA,
-// .local, or 127.x — gates the "set insecure-tls = true" hint on
+// .local, or 127.x. It gates the "set insecure-tls = true" hint on
 // TLS errors.
 func looksSelfHosted(host string) bool {
 	if strings.HasSuffix(host, ".local") {

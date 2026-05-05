@@ -80,8 +80,8 @@ func (a *Account) lookupAttachments(ctx context.Context, uid mail.UID) ([]mail.A
 }
 
 // storeAttachments writes metadata rows for uid. Caller has already
-// determined the cache was empty; this is the populate path. Errors
-// if uid has no row in messages.
+// determined the cache was empty. This is the populate path. It
+// errors if uid has no row in messages.
 func (a *Account) storeAttachments(ctx context.Context, uid mail.UID, atts []mail.Attachment) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		var msgID int64
@@ -159,8 +159,8 @@ func (a *Account) lookupAttachmentBytes(ctx context.Context, uid mail.UID, partI
 
 // storeAttachmentBytes writes bytes onto the (uid, partID) row,
 // evicting older rows by messages.sent_at when the attachment-size
-// budget would be exceeded. Errors if the row is absent — caller
-// must populate metadata via Attachments() first.
+// budget would be exceeded. Errors if the row is absent. Call
+// Attachments() first to populate metadata.
 func (a *Account) storeAttachmentBytes(ctx context.Context, uid mail.UID, partID string, body []byte) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		newSize := int64(len(body))

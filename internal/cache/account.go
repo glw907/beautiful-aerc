@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 // Package cache is poplar's local mail store. Each account maps to
-// a SQLite database; the cache is the UI-facing read/write layer
-// while mail.Backend / mail.ChangeTracker handle protocol I/O. See
+// a SQLite database. The cache is the UI-facing read/write layer;
+// mail.Backend / mail.ChangeTracker handle protocol I/O. See
 // docs/superpowers/specs/2026-05-02-cache-0-design.md.
 package cache
 
@@ -23,7 +23,7 @@ import (
 )
 
 // Account exposes a single account's handle. The UI reads/writes
-// through this type; the backend pointer is held so the syncer
+// through this type. The backend pointer is held so the syncer
 // and drainer can talk to the protocol layer.
 type Account struct {
 	Backend       mail.Backend
@@ -42,7 +42,7 @@ type Account struct {
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
 
-	// Lifecycle handles. The drainer wakes on signal; the syncer
+	// Lifecycle handles. The drainer wakes on signal. The syncer
 	// runs per-folder when wired up by the App.
 	drainSignal chan struct{}
 	stop        chan struct{}
@@ -50,7 +50,7 @@ type Account struct {
 }
 
 // OpStatus is the lifecycle state of an outbox row. Stored as the
-// underlying string in outbox.status; emitted on CacheEvent.Status.
+// underlying string in outbox.status and emitted on CacheEvent.Status.
 type OpStatus string
 
 const (
@@ -130,7 +130,7 @@ func OpenDB(path string) (*sql.DB, error) {
 // creates) the per-account SQLite database under dir, applies
 // pragmas, and runs schema migrations to the current version.
 //
-// dir is the cache base directory; the per-account subdirectory is
+// dir is the cache base directory. The per-account subdirectory is
 // created if absent. A leading ~ is expanded to the user's home.
 func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string, cfg Config) (*Account, error) {
 	dbPath, err := DBPath(accountName, dir)
@@ -195,9 +195,9 @@ func (a *Account) Dir() string { return a.dir }
 func (a *Account) Events() <-chan CacheEvent { return a.events }
 
 // DroppedEvents returns the count of CacheEvents the drainer has
-// dropped because the events buffer was full. The UI reads this as
-// a staleness signal — when it advances, do a full cache re-read
-// rather than incremental Event handling.
+// dropped because the events buffer was full. When the count
+// advances, do a full cache re-read rather than incremental
+// Event handling.
 func (a *Account) DroppedEvents() uint64 { return a.droppedEvents.Load() }
 
 // Close stops background goroutines and closes the database.
@@ -224,7 +224,7 @@ func (a *Account) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
-// signalDrainer wakes the drainer if it's idle. Non-blocking — a
+// signalDrainer wakes the drainer if it's idle. Non-blocking: a
 // pending wake-up coalesces with the new one.
 func (a *Account) signalDrainer() {
 	select {

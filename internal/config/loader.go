@@ -51,8 +51,8 @@ func defaultConfigDir() (string, error) {
 
 // ErrFirstRun is returned by Load when the default config path
 // did not exist and a fresh template was written. The caller
-// should print a "created <path> — edit and run again" message
-// and exit with status 78 (EX_CONFIG).
+// should print the path with a re-run hint and exit with status
+// 78 (EX_CONFIG).
 var ErrFirstRun = errors.New("first-run: template written")
 
 // ErrOldAccountsToml is returned when the user has an old
@@ -65,7 +65,7 @@ var ErrOldAccountsToml = errors.New("old accounts.toml detected; rename to confi
 // from $POPLAR_CONFIG or the OS default and no file exists, it
 // writes the template and returns ErrFirstRun. When the path was
 // supplied via flagPath and the file is missing, it returns a plain
-// error (the user explicitly chose that path; no template is written).
+// error (the user explicitly chose that path). No template is written.
 func Load(flagPath string) ([]AccountConfig, string, error) {
 	path, err := Resolve(flagPath)
 	if err != nil {

@@ -4,7 +4,7 @@ package ui
 
 // Golden-output baseline tests for the four overlay surfaces and the
 // AccountTab full view. Run with UPDATE_GOLDENS=1 to regenerate all
-// golden files; subsequent runs assert byte-for-byte equality so that
+// golden files. Subsequent runs assert byte-for-byte equality so that
 // refactor steps (ModalShell extraction, SidebarColumn extraction, render
 // caches) leave rendering unchanged.
 //
@@ -54,7 +54,7 @@ func checkGolden(t *testing.T, name, got string) {
 	}
 	want := string(data)
 	if got != want {
-		// Show a short diff hint — first diverging line.
+		// Show a short diff hint at the first diverging line.
 		gotLines := strings.Split(got, "\n")
 		wantLines := strings.Split(want, "\n")
 		for i := 0; i < len(gotLines) && i < len(wantLines); i++ {

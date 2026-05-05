@@ -21,7 +21,7 @@ type OutboxDepth struct {
 
 // OutboxGroup is one row of the Q overlay's grouped summary. One
 // row per (kind, folder, status) tuple. NextAt carries the earliest
-// next_eligible_at within the group; populated only for Failed.
+// next_eligible_at within the group, populated only for Failed.
 type OutboxGroup struct {
 	Kind   OpKind
 	Folder string
@@ -74,9 +74,9 @@ func (a *Account) OutboxDepth(ctx context.Context) (OutboxDepth, error) {
 }
 
 // OutboxSummary returns one OutboxGroup per (kind, folder, status)
-// combination. Result order: status (executing → pending → failed →
+// combination. Result order: status (executing, pending, failed,
 // conflict), then kind ASC, then folder ASC. For move ops Folder is
-// the destination (extracted from args.Dest); for other op kinds the
+// the destination (extracted from args.Dest). For other op kinds the
 // folder column is empty since the UI does not surface a per-row
 // source folder for them.
 func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {

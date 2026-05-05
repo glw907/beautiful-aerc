@@ -11,7 +11,7 @@ import (
 // inlineBoundaryTags is the closed set of inline HTML elements whose
 // boundaries must carry an explicit space when they abut text. Tag
 // names are matched case-insensitively. Block-level tags (p, div,
-// h1-h6, li, etc.) are deliberately excluded — the html→markdown
+// h1-h6, li, etc.) are deliberately excluded. The html→markdown
 // converter handles their separation via blank lines.
 var inlineBoundaryTags = []string{
 	"a", "b", "code", "em", "i", "span", "strong", "u",
@@ -26,8 +26,8 @@ var reBR = regexp.MustCompile(`(?i)<br\s*/?>`)
 
 // inlineBoundaryPad surrounds each inline-element boundary tag with
 // a space so adjacent text runs are separated before tag stripping.
-// <br> is replaced with a plain space directly — it marks a soft line
-// break in prose and should not become a hard markdown line break.
+// <br> is replaced with a plain space. It marks a soft line break in
+// prose and should not become a hard markdown line break.
 func inlineBoundaryPad(body string) string {
 	body = reBR.ReplaceAllString(body, " ")
 	return reInlineBoundary.ReplaceAllStringFunc(body, func(m string) string {
@@ -98,7 +98,7 @@ func stripHiddenElements(body string) string {
 			nextOpen := strings.Index(rest[pos:], "<div")
 			nextClose := strings.Index(rest[pos:], "</div>")
 			if nextClose < 0 {
-				// No closing tag found; remove to end of string.
+				// No closing tag found. Remove to end of string.
 				pos = len(rest)
 				break
 			}
@@ -139,14 +139,24 @@ func normalizeListMarkers(text string) string {
 	return reParenList.ReplaceAllString(text, "${1}${2}. ")
 }
 
-// unflattenQuotes detects email attribution lines followed by inline >
+// unflattenQuotes detects email attribution lines followed by inline '>'
 // markers and reconstructs them as proper markdown blockquotes. Outlook
 // mobile (and some other clients) flatten quoted reply text into a single
-// <p> with literal &gt; characters where line breaks originally were.
-// The html-to-markdown library preserves these as "&gt;" entities.
+// <p>, with the original line breaks rendered as literal entity-encoded
+// quote markers. The html-to-markdown library preserves those entities,
+// so this pass walks the flattened text and re-splits it.
 //
-// Input:  "Person wrote: &gt; line1 &gt; &gt; line2 &gt; line3"
-// Output: "Person wrote:\n\n> line1\n>\n> line2 line3"
+// A flattened input like
+//
+//	Person wrote:&gt;line1&gt;&gt;line2&gt;line3
+//
+// (entities shown without separating spaces) becomes
+//
+//	Person wrote:
+//
+//	> line1
+//	>
+//	> line2 line3
 func unflattenQuotes(text string) string {
 	blocks := strings.Split(text, "\n\n")
 	for i, block := range blocks {
@@ -273,15 +283,15 @@ func mergeBlockRuns(text string, pred func(string) bool, minRun int, sep string)
 
 // collapseShortBlocks joins runs of 3+ consecutive short, plain-text
 // blocks into a single line separated by " · ". This handles content
-// from flattened table cells that was never meant to be read vertically
-// — navigation bars, step trackers, tag lists, etc.
+// from flattened table cells that was never meant to be read vertically:
+// navigation bars, step trackers, tag lists, etc.
 func collapseShortBlocks(text string) string {
 	return mergeBlockRuns(text, isShortPlain, 3, " · ")
 }
 
 // isShortPlain returns true if the block is a single line of plain text
 // under 25 characters with no markdown syntax. Blocks that look like
-// sentences (ending with punctuation) are excluded — those are real
+// sentences (ending with punctuation) are excluded. Those are real
 // content, not table cell fragments.
 func isShortPlain(block string) bool {
 	if strings.Contains(block, "\n") || len(block) > 25 || len(block) == 0 {
@@ -299,7 +309,7 @@ func isShortPlain(block string) bool {
 	if reOrderedList.MatchString(block) {
 		return false
 	}
-	// Sentences end with punctuation — real content, not cell fragments.
+	// Sentences end with punctuation. Real content, not cell fragments.
 	last := block[len(block)-1]
 	if last == '.' || last == '!' || last == '?' || last == ':' || last == ';' {
 		return false
@@ -348,7 +358,7 @@ func stripEmptyLinks(text string) string {
 }
 
 // CleanHTML converts raw HTML email content to normalized markdown.
-// This is the content pipeline only — no rendering or styling.
+// Content pipeline only. No rendering or styling.
 func CleanHTML(html string) string {
 	html = prepareHTML(html)
 	md, err := convertHTML(html)

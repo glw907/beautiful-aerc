@@ -13,7 +13,7 @@ import (
 
 // CacheConfig holds tunables for the local cache. Populated from
 // the [cache] table in config.toml. The zero value is "no body-cache
-// size cap"; LoadCache substitutes 2GB when [cache] is absent.
+// size cap". LoadCache substitutes 2GB when [cache] is absent.
 type CacheConfig struct {
 	// MaxSize is the body-cache size cap in bytes. 0 disables.
 	MaxSize int64

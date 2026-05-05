@@ -52,7 +52,7 @@ func TestIntegration_TriageRoundTrip(t *testing.T) {
 		t.Fatal("optimistic ui_flags not reflected in QueryFolder pre-drain")
 	}
 
-	// Start the drainer; wait for the done event.
+	// Start the drainer. Wait for the done event.
 	if err := a.StartDrainer(ctx); err != nil {
 		t.Fatalf("StartDrainer: %v", err)
 	}

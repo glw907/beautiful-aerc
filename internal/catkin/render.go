@@ -9,7 +9,7 @@ import (
 
 // Render produces Catkin's view content: styled text plus a
 // cursor block, soft-wrapped at width and clipped to height.
-// Styling is a pure render-time overlay; the raw source is not
+// Styling is a pure render-time overlay. The raw source is not
 // touched. The zero Styles value yields plain output identical
 // to Pass 9.
 func Render(src string, width, height, top, cursor int, styles Styles, mode DisplayMode) string {
@@ -96,7 +96,7 @@ func renderFences(lines []string, ctxs []LineContext, st Styles, top, bottom int
 
 // styleLine applies block-aware styling to one source line.
 // On the cursor row the chroma-pre-rendered fence output is
-// skipped — the rune-replaced source no longer matches the
+// skipped: the rune-replaced source no longer matches the
 // pre-tokenised version.
 func styleLine(line string, ctx LineContext, st Styles, fenceLines map[int]string, idx int, isCursorRow bool) string {
 	switch ctx.Kind {
@@ -118,7 +118,7 @@ func styleLine(line string, ctx LineContext, st Styles, fenceLines map[int]strin
 		}
 		pfx := strings.Repeat("#", level) + " "
 		if !strings.HasPrefix(line, pfx) {
-			// Cursor is on one of the # runes; render whole line as
+			// Cursor is on one of the # runes. Render whole line as
 			// the heading face and skip span tokenizing.
 			return st.Heading[level-1].Render(line)
 		}

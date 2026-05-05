@@ -9,7 +9,7 @@ import (
 )
 
 // fakeClient is a jmapClient for offline tests. Set respond to
-// control what Do returns; inspect sent to assert outgoing requests.
+// control what Do returns. Inspect sent to assert outgoing requests.
 type fakeClient struct {
 	mu      sync.Mutex
 	sent    []*jmap.Request

@@ -29,8 +29,8 @@ type Backend struct {
 	idle     imapClient // idle connection
 	caps     capSet
 	current  string // currently-selected folder on cmd
-	trash    string // resolved Trash folder name; empty until first Delete
-	password string // cached PasswordCmd result; empty when cfg.Password is inline
+	trash    string // resolved Trash folder name, empty before first Delete
+	password string // cached PasswordCmd result, empty when cfg.Password is inline
 	updates  chan mail.Update
 
 	idleCancel context.CancelFunc
@@ -78,7 +78,7 @@ const updatesBuffer = 64
 // Connect resolves the password (running
 // PasswordCmd if needed, caching the result), dials both connections,
 // authenticates, negotiates capabilities, and starts the idle goroutine.
-// The dial happens in auth.go; tests bypass by setting b.cmd / b.idle
+// The dial happens in auth.go. Tests bypass by setting b.cmd / b.idle
 // directly and calling finishConnect.
 func (b *Backend) Connect(ctx context.Context) error {
 	pw, err := b.resolvedPassword()

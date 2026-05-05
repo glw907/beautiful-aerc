@@ -10,7 +10,7 @@ import (
 func TestRenderPlainSingleLine(t *testing.T) {
 	got := Render("hello", 20, 5, 0, 5, Styles{}, ModeNormal)
 	want := "hello█"
-	// Render pads to height; only check the first row.
+	// Render pads to height. Only check the first row.
 	first := strings.SplitN(got, "\n", 2)[0]
 	if first != want {
 		t.Errorf("Render plain:\nfirst row %q\nwant      %q", first, want)

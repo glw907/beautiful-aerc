@@ -12,7 +12,7 @@ import (
 // Nerd Font icons live in the Supplementary Private Use Area-A
 // (U+F0000–U+FFFFD). Their rendered cell width depends on the
 // terminal+font+symbol_map configuration. We set spuaCellWidth at
-// startup from term.MeasureSPUACells(); see ADR-0084.
+// startup from term.MeasureSPUACells(). See ADR-0084.
 //
 // In simple mode (no Nerd Font icons present in rendered strings) the
 // value is 1 and displayCells degenerates to lipgloss.Width.
@@ -24,7 +24,7 @@ const (
 var spuaCellWidth = 1
 
 // SetSPUACellWidth sets the per-glyph rendered cell width for SPUA-A
-// runes. Must be 1 or 2; any other value panics. Idempotent.
+// runes. Must be 1 or 2. Any other value panics. Idempotent.
 func SetSPUACellWidth(w int) {
 	if w != 1 && w != 2 {
 		panic("ui: SetSPUACellWidth requires 1 or 2")
@@ -83,7 +83,7 @@ func displayTruncateEllipsis(s string, n int) string {
 
 // displayTruncate truncates the ANSI string s to at most n terminal
 // display cells. ansi.Truncate uses runewidth internally and undercounts
-// SPUA-A by (spuaCellWidth-1) per glyph; this wrapper decrements the
+// SPUA-A by (spuaCellWidth-1) per glyph. This wrapper decrements the
 // runewidth limit until the result is within n cells. At most
 // (spuaCellWidth-1)*spuaCount(s) iterations.
 func displayTruncate(s string, n int) string {
@@ -101,7 +101,7 @@ func displayTruncate(s string, n int) string {
 }
 
 // displayPadOrTruncate pads or truncates s to exactly n display cells.
-// Use for icon-bearing strings; padOrTruncate's lipgloss.Width call
+// Use for icon-bearing strings. padOrTruncate's lipgloss.Width call
 // undercounts SPUA-A glyphs.
 func displayPadOrTruncate(s string, n int) string {
 	w := displayCells(s)

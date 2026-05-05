@@ -31,7 +31,7 @@ import (
 //
 //   - x and y are zero-based cell offsets from the top-left of bg.
 //   - If the overlay extends past the right or bottom edge of bg it is
-//     clipped — no panic.
+//     clipped, no panic.
 //   - If fg is larger than bg in both dimensions, fg is returned as-is.
 func PlaceOverlay(x, y int, fg, bg string) string {
 	fgLines, fgWidth := splitLines(fg)

@@ -109,9 +109,9 @@ func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	b.mu.Unlock()
 
 	if parts == nil {
-		// Cold map: populate via Attachments. Discard the metadata
-		// — the caller already has it, and the side-effect of
-		// populating partBlobIDs is what we need.
+		// Cold map: populate via Attachments. Discard the metadata;
+		// the caller already has it. The side-effect of populating
+		// partBlobIDs is what we need.
 		if _, err := b.Attachments(uid); err != nil {
 			return nil, fmt.Errorf("fetch attachment %s/%s: prime: %w", uid, partID, err)
 		}

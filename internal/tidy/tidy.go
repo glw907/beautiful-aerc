@@ -23,7 +23,7 @@ type Result struct {
 }
 
 // Tidy proofreads input, preserving quoted lines, and returns a Result.
-// It never returns a non-nil error — all failures are captured in Result.Status
+// It never returns a non-nil error. All failures are captured in Result.Status
 // and Result.Message. The error return is reserved for future extensibility.
 func Tidy(input string, cfg Config, apiKey, apiURL string) (Result, error) {
 	if apiURL == "" {

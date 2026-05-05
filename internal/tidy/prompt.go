@@ -12,7 +12,7 @@ func BuildPrompt(cfg Config) string {
 
 	b.WriteString("You are a proofreader. Fix errors in the text below and return ONLY the corrected text with no commentary, explanations, or markdown formatting.\n\n")
 
-	// Rules section — only emit lines for enabled rules.
+	// Only emit lines for enabled rules.
 	var rules []string
 
 	if cfg.Rules.Spelling {
@@ -71,7 +71,7 @@ func BuildPrompt(cfg Config) string {
 		b.WriteString("\n")
 	}
 
-	// Guardrails — always present.
+	// Guardrails are always present.
 	b.WriteString("Do NOT:\n")
 	guardrails := []string{
 		"Rephrase or restructure sentences",

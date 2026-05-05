@@ -72,7 +72,7 @@ func newCacheStatsCmd() *cobra.Command {
 }
 
 // statsForAccount opens the per-account SQLite directly (no Backend
-// or ChangeTracker — stats works offline).
+// or ChangeTracker needed). Stats works offline.
 func statsForAccount(ctx context.Context, name string) (statsRow, error) {
 	dbPath, err := cache.DBPath(name, "")
 	if err != nil {
@@ -261,7 +261,7 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		}
 		// VACUUM cannot run inside a transaction or with concurrent
 		// writers. Use a short-lived dedicated connection with no
-		// pool — single-connection bypass.
+		// pool. Single-connection bypass.
 		db, err := cache.OpenDB(dbPath)
 		if err != nil {
 			return fmt.Errorf("open cache db: %w", err)

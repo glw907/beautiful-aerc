@@ -15,7 +15,7 @@ import (
 
 // OpArgs is the sealed sum of queueable operations.
 // Each implementation is JSON-serializable for on-disk storage in
-// outbox.args. SendArgs and AppendArgs are placeholders; QueueOp
+// outbox.args. SendArgs and AppendArgs are placeholders. QueueOp
 // rejects them.
 type OpArgs interface{ opKind() OpKind }
 
@@ -168,7 +168,7 @@ func (a *Account) finishOp(opID int64, status OpStatus, errPayload string, nextE
 
 // ErrNotConflict is returned by RetryOp/DiscardOp when the targeted
 // op is not in the conflict state. UI callers treat this as benign:
-// the row was resolved by some other path; refresh and continue.
+// the row was resolved by some other path. Refresh and continue.
 var ErrNotConflict = errors.New("cache: op is not in conflict state")
 
 // revertOptimisticTx mirrors applyOptimisticTx: it undoes the UI flip
@@ -182,7 +182,7 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 		return err
 	case FlagArgs:
 		bit := uint32(v.Flag)
-		// Revert: if forward was Set, clear; if forward was clear, set.
+		// Revert: if the forward op set the flag, clear it. Otherwise set it.
 		stmt := `UPDATE messages SET ui_flags = ui_flags & ~? WHERE id = ?`
 		if !v.Set {
 			stmt = `UPDATE messages SET ui_flags = ui_flags | ? WHERE id = ?`
@@ -196,8 +196,8 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 }
 
 // RetryOp transitions a conflicted op back to pending and signals
-// the drainer. attempts is reset to 0 — user-initiated retry grants
-// a fresh budget so an auth-failure with attempts >= max doesn't
+// the drainer. attempts resets to 0: user-initiated retry grants
+// a fresh budget so an auth-failure with attempts >= max does not
 // re-enter conflict on the very next failure.
 //
 // Returns ErrNotConflict if the row is not currently in the conflict
@@ -230,10 +230,10 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 
 // DiscardOp reverts the optimistic UI flip and deletes the outbox
 // row, all in one transaction. The conflicted op never reached the
-// server, so no remote reversal is needed — only local cleanup.
+// server, so only local cleanup is needed.
 //
 // Returns ErrNotConflict if the row is not currently in conflict.
-// Send and Append placeholders cannot be discarded via this path —
+// Send and Append placeholders cannot be discarded via this path;
 // revertOptimisticTx has no semantics for them.
 func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {

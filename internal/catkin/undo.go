@@ -10,7 +10,7 @@ type snap struct {
 }
 
 // undoRing is a bounded linear history of buffer snapshots.
-// Index points at the current entry; everything past it is the
+// Index points at the current entry. Everything past it is the
 // redo stack and is discarded on the next push.
 type undoRing struct {
 	snaps []snap
@@ -65,7 +65,7 @@ func (r *undoRing) redo() (snap, bool) {
 }
 
 // coalesce reports whether two snapshots are part of the same
-// in-word edit run — both values non-empty and ending on a word
+// in-word edit run: both values non-empty and ending on a word
 // rune. Whitespace, punctuation, or newline forces a fresh entry.
 func coalesce(prev, next string) bool {
 	return endsWithWordRune(prev) && endsWithWordRune(next)

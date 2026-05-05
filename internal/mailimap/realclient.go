@@ -109,7 +109,7 @@ func attrsToStrings(attrs []imap.MailboxAttr) []string {
 }
 
 // Select selects (or examines) a folder and returns a summary.
-// go-imap v2 SelectData does not carry an Unseen count; callers that
+// go-imap v2 SelectData does not carry an Unseen count. Callers that
 // need it issue UID SEARCH UNSEEN separately.
 func (r *realClient) Select(folder string, readOnly bool) (mail.Folder, error) {
 	data, err := r.c.Select(folder, &imap.SelectOptions{ReadOnly: readOnly}).Wait()
@@ -132,12 +132,12 @@ func (r *realClient) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
 
 	uidSet, ok := data.All.(imap.UIDSet)
 	if !ok {
-		// Should not happen for UID SEARCH; treat as empty.
+		// Should not happen for UID SEARCH. Treat as empty.
 		return nil, nil
 	}
 	nums, ok := uidSet.Nums()
 	if !ok {
-		// Dynamic set (contains "*") — cannot enumerate.
+		// Dynamic set (contains "*"): cannot enumerate.
 		return nil, nil
 	}
 	out := make([]mail.UID, len(nums))
@@ -219,7 +219,7 @@ func parseFetchBodySection(item string) *imap.FetchItemBodySection {
 
 	switch {
 	case innerUpper == "":
-		// BODY[] — whole body; Specifier stays PartSpecifierNone
+		// BODY[]: whole body. Specifier stays PartSpecifierNone
 	case innerUpper == "TEXT":
 		sec.Specifier = imap.PartSpecifierText
 	case innerUpper == "HEADER":
@@ -328,8 +328,8 @@ func imapFlagsToMailFlags(flags []imap.Flag) mail.Flag {
 // BODY[HEADER.FIELDS …] fetch) and merges fields into m. Keys already
 // present in m are not overwritten, so ENVELOPE data wins.
 //
-// Folded header lines (RFC 5322 section 2.2.3) are not unfolded here —
-// the values are used for display only and folding whitespace is
+// Folded header lines (RFC 5322 section 2.2.3) are not unfolded here.
+// The values are used for display only and folding whitespace is
 // acceptable in that context.
 func parseHeaderFields(raw []byte, m map[string]any) {
 	for len(raw) > 0 {
@@ -525,7 +525,7 @@ func (r *realClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
 
 // convertBodyStructure recursively converts an imap.BodyStructure (go-imap
 // v2 type) to the protocol-agnostic BodyStructure. path is the integer
-// path from the Walk tree; nil means multipart root.
+// path from the Walk tree. nil means multipart root.
 func convertBodyStructure(bs imap.BodyStructure, path []int) BodyStructure {
 	sec := sectionString(path)
 	disp := ""

@@ -24,7 +24,7 @@ func TestFooterView(t *testing.T) {
 	t.Run("account: compressed nav", func(t *testing.T) {
 		f := NewFooter(styles)
 		f = f.SetContext(AccountContext)
-		// Full account footer is ~183 chars wide; use 190 to ensure nav survives.
+		// Full account footer is ~183 chars wide. Use 190 to ensure nav survives.
 		result := stripANSI(f.View(190))
 		if !strings.Contains(result, "j/k/J/K nav") {
 			t.Error("missing j/k/J/K nav")

@@ -97,7 +97,7 @@ func TestAttachments_EmptyMessage(t *testing.T) {
 	}
 	// Second call still hits backend because we cannot distinguish
 	// "populated, zero parts" from "not yet populated" without a marker.
-	// Document this in the implementation; test asserts current behavior.
+	// Document this in the implementation. Test asserts current behavior.
 	_, _ = a.Attachments(context.Background(), "u1")
 	if be.attachCalls < 1 {
 		t.Errorf("attachCalls = %d, want >= 1", be.attachCalls)
@@ -179,7 +179,7 @@ func TestFetchAttachment_EvictBySize(t *testing.T) {
 	}
 
 	// After both fetches, total = 200 > cap 150. Older row (by sent_at)
-	// must have been evicted before the second insert; total should be 100.
+	// must have been evicted before the second insert. Total should be 100.
 	var total int64
 	if err := a.db.QueryRow(`SELECT COALESCE(SUM(length(bytes)), 0) FROM attachments WHERE bytes IS NOT NULL`).Scan(&total); err != nil {
 		t.Fatalf("sum: %v", err)

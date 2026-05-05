@@ -11,9 +11,9 @@ import (
 )
 
 // Move uses UID MOVE (RFC 6851) when the
-// server advertises MOVE; falls back to COPY + STORE \Deleted +
+// server advertises MOVE. It falls back to COPY + STORE \Deleted +
 // UID EXPUNGE otherwise. The fallback is a single logical
-// operation; partial failure leaves the source folder in a known
+// operation. Partial failure leaves the source folder in a known
 // state by surfacing the error before the EXPUNGE fires.
 func (b *Backend) Move(uids []mail.UID, dest string) error {
 	if len(uids) == 0 {
@@ -73,9 +73,9 @@ func (b *Backend) resolveTrashFolder() (string, error) {
 // (the server silently ignores them).
 //
 // On Gmail (b.cfg.GmailQuirks), EXPUNGE outside [Gmail]/Trash only
-// removes labels — it does not delete. Destroy on a Gmail backend
+// removes labels. It does not delete. Destroy on a Gmail backend
 // therefore selects [Gmail]/Trash before STORE+EXPUNGE. The caller
-// must pass UIDs that already live in Trash; both real callers
+// must pass UIDs that already live in Trash. Both real callers
 // (manual Empty Trash per ADR-0094, retention sweep per ADR-0093)
 // satisfy this because they only trigger inside Disposal folders.
 func (b *Backend) Destroy(uids []mail.UID) error {
@@ -130,7 +130,7 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 	return nil
 }
 
-// Send — compose/SMTP lands with the editor pass.
+// Send is not yet implemented. Compose/SMTP lands with the editor pass.
 func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
 	return errors.New("send: not implemented")
 }

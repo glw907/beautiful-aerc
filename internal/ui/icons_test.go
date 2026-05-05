@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// surfaceFields returns one rune (or short string) per IconSet field
-// — added to in lockstep with IconSet itself. Used by both
+// surfaceFields returns one rune (or short string) per IconSet field,
+// added to in lockstep with IconSet itself. Used by both
 // width/range tests below.
 func surfaceFields(s IconSet) map[string]string {
 	return map[string]string{

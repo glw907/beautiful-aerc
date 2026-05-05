@@ -28,7 +28,7 @@ type LineContext struct {
 	ListMarker   string
 	HeadingLevel int
 	InsideFence  bool
-	PrefixWidth  int // rune count of quote+list prefix; 0 if absent
+	PrefixWidth  int // rune count of quote+list prefix. 0 if absent.
 	PostPrefix   string
 }
 

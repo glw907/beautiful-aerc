@@ -48,9 +48,9 @@ func formatRelativeDateCompact(t, now time.Time) string {
 
 // formatRelativeDateShort returns a 5-cell short date string. Same-day
 // values render as 12-hour time with a single-letter AM/PM suffix
-// ("3:41p", "9:05a"); other days render as "MM-DD". Zero time → empty.
+// ("3:41p", "9:05a"). Other days render as "MM-DD". Zero time → empty.
 //
-// Note: the 12-hour display can run 6 cells for `12:30a` etc.; the
+// Note: the 12-hour display can run 6 cells for `12:30a` etc. The
 // caller's column truncation handles that. The 5-cell budget is the
 // design target, not a hard cap.
 func formatRelativeDateShort(t, now time.Time) string {
@@ -78,7 +78,7 @@ func formatRelativeDateShort(t, now time.Time) string {
 // column width. Width 0 means "no date column" (caller skips the
 // column entirely). Width 3 selects the compact relative format;
 // width 5 selects the short absolute format. Other widths are
-// treated as 5 (defensive — should not happen if LayoutMode is the
+// treated as 5 (defensive, should not happen if LayoutMode is the
 // only caller).
 func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
 	if width == 0 {
@@ -86,7 +86,7 @@ func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
 	}
 	t := msg.SentAt
 	if t.IsZero() {
-		// Legacy fixtures predating SentAt — return the wire string
+		// Legacy fixtures predating SentAt. Return the wire string
 		// as-is. Width-aware truncation is the caller's job.
 		return msg.Date
 	}

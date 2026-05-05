@@ -15,7 +15,7 @@ import "strings"
 // often look like this) is byte-capped at maxPathSegmentLen so the
 // trimmed form stays compact.
 //
-// Userinfo, IPv6 brackets, and punycode are pass-through — they do
+// Userinfo, IPv6 brackets, and punycode are pass-through. They do
 // not appear in real bodies poplar surfaces.
 func trimURL(url string) string {
 	if url == "" {

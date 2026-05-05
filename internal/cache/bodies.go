@@ -29,12 +29,12 @@ func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, e
 	return buf, true, nil
 }
 
-// Population path. The header row must already exist; storeBody
+// Population path. The header row must already exist. storeBody
 // errors if not. Evicts oldest-by-sent-date when maxSize > 0.
 func (a *Account) storeBody(ctx context.Context, uid mail.UID, body []byte) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		newSize := int64(len(body))
-		// Size backstop: compute total once; short-circuit if no eviction needed.
+		// Size backstop: compute total once. Short-circuit if no eviction needed.
 		if a.maxSize > 0 {
 			var total int64
 			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(length(bytes)), 0) FROM bodies`).Scan(&total); err != nil {
@@ -103,9 +103,8 @@ func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, total, target int
 		}
 		rs.Close()
 		if len(ids) == 0 {
-			// Nothing left to evict but still over target — caller has
-			// an oversized incoming body. Return what we have; the
-			// store will still proceed.
+			// Nothing left to evict but still over target: the incoming
+			// body is oversized. Return what we have. The store proceeds.
 			return rows, freed, nil
 		}
 		args := make([]any, len(ids))
@@ -124,7 +123,7 @@ func (a *Account) evictBySize(ctx context.Context, tx *sql.Tx, total, target int
 
 // EvictByAge deletes body rows whose fetched_at is older than cutoff.
 // Returns the number of rows removed and total bytes freed. Used by
-// the `poplar cache evict --older-than` CLI; not invoked automatically.
+// the `poplar cache evict --older-than` CLI. Not invoked automatically.
 func (a *Account) EvictByAge(ctx context.Context, cutoff time.Time) (rows int, freed int64, err error) {
 	err = a.tx(ctx, func(tx *sql.Tx) error {
 		rs, err := tx.QueryContext(ctx,

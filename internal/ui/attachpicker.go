@@ -14,7 +14,7 @@ import (
 )
 
 // AttachPicker is the modal overlay launched by `@` in the viewer.
-// Single-column list of attachment metadata; cursor + Enter (open),
+// Single-column list of attachment metadata. Cursor + Enter (open),
 // `o` (open), `s` (save), 1-9 (open Nth), Esc/q/@ close.
 type AttachPicker struct {
 	shell  ModalShell

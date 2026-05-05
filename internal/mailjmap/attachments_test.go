@@ -33,7 +33,7 @@ func TestAttachments_TwoParts(t *testing.T) {
 				Type:   "image/png",
 				Size:   1024,
 				CID:    "logo@x",
-				// No Disposition set — CID present → DispInline.
+				// No Disposition set. CID present means DispInline.
 				Name: "logo.png",
 			},
 		},
@@ -235,7 +235,7 @@ func TestFetchAttachment(t *testing.T) {
 	}
 
 	t.Run("warm_cache", func(t *testing.T) {
-		// Attachments populates partBlobIDs; FetchAttachment should
+		// Attachments populates partBlobIDs. FetchAttachment should
 		// not issue a second Email/get.
 		fake := &fakeClient{
 			respond: func(_ *jmap.Request) (*jmap.Response, error) {

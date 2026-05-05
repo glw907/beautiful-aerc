@@ -11,7 +11,7 @@ import (
 )
 
 // fakeClient is an in-memory imapClient for unit tests. Tests
-// populate the maps directly; methods return canned data or run
+// populate the maps directly. Methods return canned data or run
 // caller-supplied funcs.
 type fakeClient struct {
 	caps          map[string]bool

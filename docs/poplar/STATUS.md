@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9d next — annotation pipeline + spellcheck.
+**Current pass:** Pass 9d next — Catkin annotation pipeline + spellcheck.
 
 ## Passes
 
@@ -14,6 +14,7 @@
 | 8.8 – 8.9 | Human-voice audit I (string-only) + II (structural) | done |
 | 8.10 | First-sync header population — JMAP per-folder baseline pull (ADR-0143) | done |
 | 9 – 9c | Catkin — core, live styling, command vocabulary, power-user QoL (ADR-0144–0147) | done |
+| 8.11 | Voice cleanup III — prose-rhythm sweep + grep gate for T33/T34/T35 (ADR-0148) | done |
 | 9d | Annotation pipeline + spellcheck (Track 1 SymSpell + bundled lists; Track 2 hunspell subprocess) | pending |
 | 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
 | 9f | Mail backend Send + Append — JMAP submission, IMAP+SMTP, `[account.smtp]` config | pending |
@@ -31,27 +32,49 @@
 
 ## Next starter prompt (Pass 9d)
 
-> **Goal.** Annotation pipeline + spellcheck. Editor gains
-> `SetAnnotations([]Annotation)`; CatkinEditor implements; renderer
-> underlines per `AnnotationKind`. Track 1: bundled pure-Go SymSpell
-> with eight Latin-script European word lists selected by `[ui]
-> spellcheck_lang`. Track 2: `hunspell -a` subprocess fallback with
-> platform-detected install hint. `AnnotationPicker` (App-owned,
-> `Ctrl+;`). `poplar config check` learns a spellcheck probe.
+> **Goal.** Wire Catkin's annotation pipeline and add inline
+> spellcheck. Catkin already owns its render (live markdown
+> styling + chroma fences); next it needs an annotation layer
+> that overlays decorations (spellcheck squiggles to start,
+> later: lint marks, link previews, comment author colors).
 >
-> **Scope.** `internal/catkin/`, new `internal/spell/`,
-> `internal/ui/` (overlay), `internal/config/`.
+> **Scope.** `internal/catkin/` only. The annotation pipeline
+> is generic (`Annotation` interface + `Annotator` registry +
+> per-frame composition into the styled overlay). Spellcheck is
+> the first consumer: Track 1 ships SymSpell with bundled
+> wordlists (en-US baseline + project-specific allowlist for
+> "Catkin", "JMAP", etc.); Track 2 (defer to follow-up pass)
+> wraps a hunspell subprocess for users who want richer
+> dictionaries.
 >
-> **Settled.** Spec
-> `docs/superpowers/specs/2026-05-04-compose-design.md` §
-> Annotation pipeline & spellcheck.
+> **Settled (do not re-brainstorm):**
 >
-> **Open — brainstorm:** SymSpell library choice; word-list
-> licensing; subprocess pooling shape.
+> - Catkin owns rendering — annotations compose with the existing
+>   styled overlay, they don't replace it.
+> - Squiggle visuals: single underline in `Styles.Error` (red),
+>   matching iA-Writer's restraint.
+> - Spellcheck runs on idle (not per-keystroke) to keep the typing
+>   path cheap. Reuse `bubbletea`'s tick pattern — no new tickers.
+> - Word boundary detection reuses Catkin's existing word-nav rune
+>   classification.
 >
-> **Approach.** Brainstorm, plan at
-> `docs/superpowers/plans/YYYY-MM-DD-annotation-spellcheck.md`,
-> implement. Standard pass-end checklist.
+> **Still open — brainstorm these:**
+>
+> - Annotation interface shape: range-based vs token-based?
+>   Range avoids re-tokenizing per annotator.
+> - Annotation precedence when two annotators flag the same span
+>   (spellcheck + grammar) — composition rule?
+> - SymSpell wordlist storage — embed via `//go:embed` or load from
+>   XDG data dir? Embed avoids first-run friction; XDG allows
+>   user-extension without a rebuild.
+> - Project allowlist source — checked-in `wordlist.txt` vs
+>   per-user `~/.config/poplar/wordlist.txt`? Probably both.
+> - Suggestion UI — popover? footer hint? deferred entirely to a
+>   follow-up pass?
+>
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-catkin-annotations.md`,
+> then implement. Standard pass-end checklist applies.
 
 ## Queued
 

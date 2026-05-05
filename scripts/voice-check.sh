@@ -80,6 +80,25 @@ scan "T27" \
     '//.*\b(may not handle|could be improved|might not work|perhaps we|maybe we)\b' \
     'apologetic/speculative comment — state real limitations precisely or delete'
 
+# T33: em dash inside a // comment. Stdlib density is ~0.02/file; the
+# Pass 8.11 cleanup brought poplar to zero. Any new em dash in a
+# comment is the AI-prose voice leaking back in.
+scan "T33" \
+    '//[^/]*—' \
+    'em dash in comment. Use a period. Reserve em dashes for short comma-like asides.'
+
+# T34: semicolon as clause-joiner inside a // comment. Matches "; " plus
+# one more char to skip stylistic trailing semicolons.
+scan "T34" \
+    '//[^/]*;[[:space:]][^/]' \
+    'semicolon clause-joiner in comment. Use a period or rewrite as one sentence.'
+
+# T35: documentation labels inside // comments. Conservative noun list.
+# These have no other natural comment use in Go.
+scan "T35" \
+    '//[[:space:]]*(Preference|Fallback|Priority|Rationale|Caveat|Otherwise|Constraint|Invariant):' \
+    'documentation label in code comment. Write prose instead.'
+
 if [[ $hits -gt 0 ]]; then
     echo
     echo "voice-check: $hits finding(s). Catalogue: ~/.claude/docs/go-comment-voice.md §7" >&2

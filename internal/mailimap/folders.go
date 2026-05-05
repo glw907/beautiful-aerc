@@ -10,8 +10,8 @@ import (
 )
 
 // ListFolders uses LIST RETURN (SPECIAL-USE)
-// when the server advertises it; falls back to plain LIST otherwise.
-// The role is derived from RFC 6154 attributes when present; the
+// when the server advertises it. It falls back to plain LIST otherwise.
+// The role is derived from RFC 6154 attributes when present. The
 // classifier (mail.Classify) handles name-based fallback at the UI
 // layer.
 func (b *Backend) ListFolders() ([]mail.Folder, error) {
@@ -74,7 +74,7 @@ func (b *Backend) OpenFolder(name string) error {
 	b.mu.Unlock()
 
 	if switchCh != nil {
-		// Non-blocking — drop earlier pending switches.
+		// Non-blocking: drop earlier pending switches.
 		select {
 		case <-switchCh:
 		default:

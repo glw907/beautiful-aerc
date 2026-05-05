@@ -122,8 +122,8 @@ func TestStoreBody_EvictOverCap(t *testing.T) {
 	a.maxSize = 100 // tiny cap for the test
 
 	now := time.Now()
-	// Three messages with descending sent_at — older messages are
-	// "older sent" and should evict first.
+	// Three messages with descending sent_at. Older messages
+	// should evict first.
 	old := mail.UID("old-msg") // sent 2 days ago
 	mid := mail.UID("mid-msg") // sent 1 day ago
 	new := mail.UID("new-msg") // sent now
@@ -144,7 +144,7 @@ func TestStoreBody_EvictOverCap(t *testing.T) {
 		t.Fatalf("store new: %v", err)
 	}
 
-	// old should be gone; mid and new survive.
+	// old should be gone. mid and new survive.
 	for _, c := range []struct {
 		uid  mail.UID
 		want bool

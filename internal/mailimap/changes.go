@@ -18,15 +18,15 @@ import (
 // encoded in since. UIDVALIDITY change → mail.ErrCannotCalculateChanges
 // (the cache responds with the re-anchor path from spec §D.4).
 //
-// Modified is intentionally always nil — flag-only changes need
+// Modified is intentionally always nil. Flag-only changes need
 // CONDSTORE to detect cheaply. Removed is also nil on the first call
-// and best-effort thereafter; UIDPLUS/VANISHED-driven removal
+// and best-effort thereafter. UIDPLUS/VANISHED-driven removal
 // detection is a follow-up pass (CONDSTORE-aware ChangeTracker).
 //
 // SyncToken layout (12 bytes BE):
 //
-//	bytes 0-3   uidvalidity   (uint32, currently 0 — cap not surfaced)
-//	bytes 4-11  maxuid        (uint64; numeric max of last-known UIDs)
+//	bytes 0-3   uidvalidity   (uint32, currently 0, cap not surfaced)
+//	bytes 4-11  maxuid        (uint64, numeric max of last-known UIDs)
 func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncToken) (mail.ChangeSet, mail.SyncToken, error) {
 	if err := ctx.Err(); err != nil {
 		return mail.ChangeSet{}, since, err

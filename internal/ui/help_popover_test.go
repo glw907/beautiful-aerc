@@ -172,7 +172,7 @@ func TestHelpPopover_ViewerViewContent(t *testing.T) {
 func TestHelpPopover_WiredStyling(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	// Wired rows use HelpKey (Bold) for the key column; unwired rows
+	// Wired rows use HelpKey (Bold) for the key column. Unwired rows
 	// use Dim (not Bold) for the entire row. Test via style properties
 	// rather than rendered ANSI (lipgloss suppresses ANSI without a TTY).
 	if !styles.HelpKey.GetBold() {
@@ -214,7 +214,7 @@ func TestHelpPopover_WiredStyling(t *testing.T) {
 func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	// HelpGroupHeader must be bold — it is used for every group heading
+	// HelpGroupHeader must be bold. It is used for every group heading
 	// including "Reply" which has no wired rows today.
 	if !styles.HelpGroupHeader.GetBold() {
 		t.Error("HelpGroupHeader style must be bold")
@@ -228,7 +228,7 @@ func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
 }
 
 // BenchmarkHelpPopoverBox_Cold measures the full Box rebuild cost (dirty
-// cache) — one new HelpPopover per iteration.
+// cache. One new HelpPopover per iteration.
 func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
 	styles := NewStyles(theme.Nord)
 	b.ReportAllocs()
@@ -240,7 +240,7 @@ func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
 }
 
 // BenchmarkHelpPopoverBox_Warm measures the cache-hit path for Box.
-// After the first call the cache is clean; subsequent calls return the
+// After the first call the cache is clean. Subsequent calls return the
 // stored strings without rebuilding the lipgloss layout.
 func BenchmarkHelpPopoverBox_Warm(b *testing.B) {
 	styles := NewStyles(theme.Nord)
@@ -254,7 +254,7 @@ func BenchmarkHelpPopoverBox_Warm(b *testing.B) {
 }
 
 // BenchmarkHelpPopoverView measures the cost of repeated View calls.
-// View still calls lipgloss.Place on each call; the cache saves the
+// View still calls lipgloss.Place on each call. The cache saves the
 // expensive Box rebuild (lipgloss layout + string assembly).
 func BenchmarkHelpPopoverView(b *testing.B) {
 	styles := NewStyles(theme.Nord)

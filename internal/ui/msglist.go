@@ -22,7 +22,7 @@ const mlFlagWidth = 2
 const mlCursorGlyph = "▐"
 
 // Box-drawing tokens for thread prefixes. Each string is exactly 3
-// display cells; buildPrefix relies on that to keep column math
+// display cells. buildPrefix relies on that to keep column math
 // stable. Edit them as a set.
 const (
 	mlThreadVert  = "│  " // ancestor that still has more siblings below
@@ -32,7 +32,7 @@ const (
 )
 
 // SortOrder is the thread-level sort direction. Children inside a
-// thread always sort chronologically ascending; SortOrder controls
+// thread always sort chronologically ascending. SortOrder controls
 // only the order of thread roots (and of unthreaded messages, which
 // are single-message threads).
 type SortOrder int
@@ -45,16 +45,16 @@ const (
 // displayRow is one rendered row in the message list. The slice of
 // these is computed from the source []MessageInfo by the build
 // pipeline (group, sort, flatten). Hidden rows still occupy indices
-// in the slice; the renderer skips them and j/k navigation walks
+// in the slice. The renderer skips them and j/k navigation walks
 // past them.
 type displayRow struct {
 	msg          mail.MessageInfo
 	prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
-	dateText     string // pre-rendered date column; computed in rebuild
+	dateText     string // pre-rendered date column, computed in rebuild
 	isThreadRoot bool
-	threadSize   int   // set on roots only; 1 for unthreaded
+	threadSize   int   // set on roots only. 1 for unthreaded
 	hidden       bool  // true when collapsed under a folded root
-	depth        uint8 // 0 = root; derived during prefix computation
+	depth        uint8 // 0 = root, derived during prefix computation
 }
 
 // MessageList renders the message list panel: flags, sender, subject,
@@ -166,7 +166,7 @@ func (m *MessageList) rebuild() {
 		m.filterResults = 0
 	}
 	// Precompute each bucket's latest-activity message so the
-	// comparator runs in O(1); pairing with the bucket keeps the
+	// comparator runs in O(1). Pairing with the bucket keeps the
 	// memoized value aligned across the in-place sort's swaps.
 	type bucketSort struct {
 		bucket []mail.MessageInfo
@@ -202,7 +202,7 @@ func (m *MessageList) rebuild() {
 // bucketByThreadID groups messages by their ThreadID, preserving
 // input order within each bucket. Iterates the input twice (once to
 // collect ThreadIDs in encounter order, once to slot messages) so the
-// bucket order is deterministic — important for tests that compare
+// bucket order is deterministic, important for tests that compare
 // against a specific layout.
 func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
 	var order []mail.UID
@@ -224,7 +224,7 @@ func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
 
 // filterBuckets is the filter step of the build pipeline. When the
 // filter query is empty, it returns buckets unchanged. When non-empty,
-// it keeps any bucket containing at least one matching message — the
+// it keeps any bucket containing at least one matching message. The
 // thread-level predicate from ADR 0064.
 func (m *MessageList) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo {
 	if m.filter.query == "" {
@@ -269,7 +269,7 @@ func (m *MessageList) matchMessage(msg mail.MessageInfo, lowerQuery string) bool
 // InReplyTo. Fallback: the earliest message by Sent time (or Date lex
 // for legacy fixtures without a Sent time). The fallback handles
 // broken parent chains (message references a parent that wasn't
-// fetched) without crashing — the synthetic root and any other
+// fetched) without crashing. The synthetic root and any other
 // top-level orphans become depth-1 children in the renderer.
 func pickRoot(bucket []mail.MessageInfo) int {
 	for i, m := range bucket {
@@ -288,7 +288,7 @@ func pickRoot(bucket []mail.MessageInfo) int {
 
 // latestActivity returns the message representing the thread's most
 // recent activity. Used as the inter-thread sort key in step 5 of the
-// build pipeline. Empty bucket returns a zero-value MessageInfo — a
+// build pipeline. Empty bucket returns a zero-value MessageInfo, a
 // caller should not invoke on an empty bucket but the total-function
 // return keeps downstream comparisons safe.
 func latestActivity(bucket []mail.MessageInfo) mail.MessageInfo {
@@ -302,11 +302,11 @@ func latestActivity(bucket []mail.MessageInfo) mail.MessageInfo {
 }
 
 // lessMessage returns true if a is older than b. Uses SentAt when
-// both messages carry a non-zero SentAt; falls back to lexicographic
+// both messages carry a non-zero SentAt. Falls back to lexicographic
 // comparison of the display Date for legacy fixtures that leave
 // SentAt unset. Mixed cases (one has SentAt, one doesn't) sort the
-// zero-SentAt message as the older of the pair — arbitrary but
-// deterministic; real workers always populate SentAt so this branch
+// zero-SentAt message as the older of the pair, arbitrary but
+// deterministic. Real workers always populate SentAt so this branch
 // only fires for older unit-test fixtures.
 func lessMessage(a, b mail.MessageInfo) bool {
 	aZero := a.SentAt.IsZero()
@@ -331,7 +331,7 @@ type threadNode struct {
 // appendThreadRows builds a transient tree from one thread bucket,
 // then emits displayRows in depth-first root-then-children order with
 // the right prefix for each row's position. The tree never escapes
-// this function — it's a scratch structure for prefix computation.
+// this function. It's a scratch structure for prefix computation.
 func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow {
 	rootIdx := pickRoot(bucket)
 	root := &threadNode{msg: bucket[rootIdx]}
@@ -347,7 +347,7 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 	}
 
 	// Hook each non-root child to its parent. If the parent is missing
-	// (broken chain — InReplyTo references a UID outside the bucket),
+	// (broken chain: InReplyTo references a UID outside the bucket),
 	// fall back to attaching it to the root as a top-level child.
 	for i, msg := range bucket {
 		if i == rootIdx {
@@ -448,7 +448,7 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 // the display rows through the filterBuckets pipeline step. On the
 // first transition from unfiltered to filtered, saves the pre-search
 // cursor row so ClearFilter can restore it. Subsequent keystrokes do
-// not overwrite the saved row — the save gate stays armed until clear.
+// not overwrite the saved row. The save gate stays armed until clear.
 func (m *MessageList) SetFilter(q string, mode SearchMode) {
 	if !m.savedByFilter && q != "" {
 		m.preSearchCursor = m.selected
@@ -476,8 +476,8 @@ func (m *MessageList) ClearFilter() {
 }
 
 // FilterResultCount returns the number of threads matching the
-// active filter, or 0 if no filter is active. Thread count — not
-// message count — because the filter predicate runs per bucket and
+// active filter, or 0 if no filter is active. Thread count, not
+// message count, because the filter predicate runs per bucket and
 // keeps whole threads as units.
 func (m MessageList) FilterResultCount() int {
 	return m.filterResults
@@ -494,7 +494,7 @@ func (m *MessageList) SetSort(order SortOrder) {
 // SetThreaded toggles thread grouping. When true (the default),
 // messages are bucketed by ThreadID and the rebuild pipeline emits a
 // thread tree per bucket. When false, every message is its own bucket
-// — display becomes flat (one row per message, no prefixes, no fold
+// Flat display: one row per message, no prefixes, no fold
 // state) but sort and filter still apply. Per-folder
 // `[ui.folders.<name>] threading = false` flips this.
 func (m *MessageList) SetThreaded(threaded bool) {
@@ -591,7 +591,7 @@ func (m *MessageList) SetSize(width, height int) {
 
 // SetLayout updates the column widths and date/flag toggles. Date
 // width changes trigger a rebuild because dateText is precomputed
-// per row; sender/flag widths take effect at next render.
+// per row. Sender/flag widths take effect at next render.
 func (m *MessageList) SetLayout(l LayoutMode) {
 	prevDate := m.layout.Date
 	m.layout = l
@@ -601,7 +601,7 @@ func (m *MessageList) SetLayout(l LayoutMode) {
 }
 
 // SetNow overrides the cached clock snapshot used by displayDate
-// during rebuild. Tests use this to freeze time; production code
+// during rebuild. Tests use this to freeze time. Production code
 // relies on the SetMessages-driven refresh.
 func (m *MessageList) SetNow(now time.Time) {
 	m.now = now
@@ -684,7 +684,7 @@ func (m *MessageList) AppendMessages(extra []mail.MessageInfo) {
 // RefreshSource replaces the source slice and rebuilds rows while
 // preserving the cursor on the same UID, fold state, marks, and any
 // active filter. Use this for cache-driven refreshes that should not
-// disturb the user's view; SetMessages is for fresh folder loads.
+// disturb the user's view. SetMessages is for fresh folder loads.
 func (m *MessageList) RefreshSource(msgs []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = msgs
@@ -734,7 +734,7 @@ func (m *MessageList) MoveUp() { m.moveBy(-1) }
 
 // MoveCursor shifts the cursor by delta visible rows (negative for up,
 // positive for down) and returns the resulting UID and whether the
-// cursor actually moved. Boundaries are inert — at first/last visible
+// cursor actually moved. Boundaries are inert: at first/last visible
 // row, calling with the corresponding direction returns ("", false).
 // Hidden (folded) rows are skipped.
 func (m *MessageList) MoveCursor(delta int) (mail.UID, bool) {
@@ -862,7 +862,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 
 	// fixed: cursor(1) + sp2 + sp2(sender→subject) + sp2(subject→date) + sp(trail) = 8;
 	// +flag(2) + sp2(flag→sender) = 12 with flag column. When Date=0 the trailing
-	// sp2+date block is omitted; fillRowToWidth absorbs the 3-cell slack.
+	// sp2+date block is omitted. fillRowToWidth absorbs the 3-cell slack.
 	var flag string
 	fixed := 8
 	if m.layout.FlagColumn {
@@ -905,7 +905,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 }
 
 // renderFlagCell renders the flag column. Priority: flagged > answered >
-// unread > none. Read state wins over flag state for color — only the
+// unread > none. Read state wins over flag state for color. Only the
 // unread+flagged case escalates to the warning accent. Read rows always
 // use the dim icon style so the glyph dims with the rest of the row.
 //

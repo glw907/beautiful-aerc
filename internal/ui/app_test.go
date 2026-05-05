@@ -62,7 +62,7 @@ func execCmd(cmd tea.Cmd) <-chan tea.Msg {
 
 // drainApp walks a Cmd (including one layer of batching) and feeds
 // every resulting non-batch message back into the app's Update.
-// Cmds that do not return within cmdTimeout are skipped — this handles
+// Cmds that do not return within cmdTimeout are skipped. This handles
 // the pumpUpdatesCmd which blocks indefinitely on a channel.
 func drainApp(t *testing.T, app *App, cmd tea.Cmd) {
 	t.Helper()
@@ -73,7 +73,7 @@ func drainApp(t *testing.T, app *App, cmd tea.Cmd) {
 	select {
 	case msg = <-execCmd(cmd):
 	case <-time.After(cmdTimeout):
-		return // blocking Cmd (e.g. pump) — skip it
+		return // blocking Cmd (e.g. pump), skip it
 	}
 	feed(t, app, msg)
 }
@@ -225,7 +225,7 @@ func TestApp(t *testing.T) {
 	t.Run("status bar tracks nav", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 20)
 		// Navigate to Spam (index 4: Inbox->Drafts->Sent->Archive->Spam).
-		// Each J dispatches a load — drain the chain.
+		// Each J dispatches a load. Drain the chain.
 		for range 4 {
 			var cmd tea.Cmd
 			app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
@@ -270,7 +270,7 @@ func TestApp_ViewerOpenedSwitchesFooterContext(t *testing.T) {
 	if app.footer.context != AccountContext {
 		t.Fatalf("initial footer context = %v, want AccountContext", app.footer.context)
 	}
-	// Open the viewer by pressing Enter — deriveChromeFromAcct reads the
+	// Open the viewer by pressing Enter. deriveChromeFromAcct reads the
 	// new viewer state after delegation and updates footer + statusBar.
 	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	drainApp(t, &app, cmd)
@@ -315,7 +315,7 @@ func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 	app.acct.viewer = app.acct.viewer.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
 	})
-	// Press G — deriveChromeFromAcct reads ViewerScrollPct after delegation.
+	// Press G. deriveChromeFromAcct reads ViewerScrollPct after delegation.
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
 	if app.statusBar.scrollPct != 100 {
 		t.Errorf("statusBar scrollPct = %d, want 100 after G", app.statusBar.scrollPct)
@@ -415,7 +415,7 @@ func TestApp_HelpQuitSwallowed(t *testing.T) {
 func TestApp_HelpContextSwitchesWithViewer(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
 
-	// Open help in account context — title is "Message List".
+	// Open help in account context. Title is "Message List".
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	view := stripANSI(app.View())
 	if !strings.Contains(view, "Message List") {
@@ -423,7 +423,7 @@ func TestApp_HelpContextSwitchesWithViewer(t *testing.T) {
 	}
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}) // close
 
-	// Open the viewer via Enter — deriveChromeFromAcct sets viewerOpen.
+	// Open the viewer via Enter. deriveChromeFromAcct sets viewerOpen.
 	var cmd tea.Cmd
 	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	drainApp(t, &app, cmd)
@@ -431,7 +431,7 @@ func TestApp_HelpContextSwitchesWithViewer(t *testing.T) {
 		t.Fatal("setup: viewer did not open after Enter")
 	}
 
-	// Open help — now the title should be "Message Viewer".
+	// Open help. The title should now be "Message Viewer".
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	view = stripANSI(app.View())
 	if !strings.Contains(view, "Message Viewer") {
@@ -484,8 +484,8 @@ func TestApp_BannerLastWriteWins(t *testing.T) {
 func TestApp_PopoverOverlaysErrorBanner(t *testing.T) {
 	// With the dimmed-overlay design the error banner is part of the dimmed
 	// background that is visible behind the popover. The popover must also
-	// appear in the output — the overlay composites over, not replaces, the
-	// frame. The banner does not steal keys; that's enforced by Update, not
+	// appear in the output. The overlay composites over, not replaces, the
+	// frame. The banner does not steal keys. That's enforced by Update, not
 	// View.
 	app := newLoadedApp(t, 100, 30)
 	app, _ = app.Update(ErrorMsg{Op: "fetch body", Err: errors.New("EOF")})
@@ -505,7 +505,7 @@ func TestApp_PopoverOverlaysErrorBanner(t *testing.T) {
 // TestApp_HelpOverlayDimsBg is the F3b.3 composite test. It verifies:
 //  1. Both the popover box content and the underlying account-view content
 //     appear in the ANSI-stripped output (overlay, not replacement).
-//  2. The raw (ANSI-preserved) output contains ESC[2m or ESC[2; somewhere,
+//  2. The raw (ANSI-preserved) output contains ESC[2m or ESC[2;X somewhere,
 //     confirming the background frame was passed through DimANSI.
 func TestApp_HelpOverlayDimsBg(t *testing.T) {
 	app := newLoadedApp(t, 120, 40)
@@ -922,10 +922,10 @@ func TestApp_FolderChangeCommitsToast(t *testing.T) {
 		t.Fatal("setup: triageStartedMsg should have set the toast")
 	}
 
-	// Simulate folder load completion — this is what selectionChangedCmds
+	// Simulate folder load completion. This is what selectionChangedCmds
 	// resolves to when J/K or a folder-jump key fires.
 	// Simulate a folder change: the msglist is empty (selectionChangedCmds
-	// just reset it) and a folderLoadedMsg arrives — that combination is
+	// just reset it) and a folderLoadedMsg arrives. That combination is
 	// the App's signal to clear the toast.
 	app.acct.msglist.SetMessages(nil)
 	app, _ = app.Update(folderLoadedMsg{name: "Drafts", msgs: nil, total: 0})
@@ -963,7 +963,7 @@ func TestApp_ConfirmYesEmitsConfirmedMsgAndCloses(t *testing.T) {
 	yesMsgs := drainBatch(cmd)
 
 	// Confirm.Update emits ConfirmModalYesMsg + ConfirmModalClosedMsg.
-	// Feed both back through App.Update; the Yes handler then emits
+	// Feed both back through App.Update. The Yes handler then emits
 	// EmptyFolderConfirmedMsg.
 	found := false
 	for _, m := range yesMsgs {

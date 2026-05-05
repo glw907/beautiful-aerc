@@ -51,8 +51,8 @@ func handleAutoPair(b Buffer, k tea.KeyMsg) (handled bool, _ Buffer, _ tea.Cmd) 
 }
 
 // applyAutoPair returns the buffer state after typing r at cur.
-// Three behaviours: step over an existing closer; expand a
-// single-char emphasis pair to double; otherwise insert r and
+// Three behaviours: step over an existing closer, expand a
+// single-char emphasis pair to double, or insert r and
 // its closer with the cursor between.
 func applyAutoPair(src string, cur int, r rune) (string, int) {
 	runes := []rune(src)
@@ -120,7 +120,7 @@ func inCodeContext(src string, cur int) bool {
 }
 
 // inInlineCode reports whether col sits inside a `…` span on
-// line. Counts unescaped backticks up to col; an odd count means
+// line. Counts unescaped backticks up to col. An odd count means
 // we're inside.
 func inInlineCode(line string, col int) bool {
 	n := 0

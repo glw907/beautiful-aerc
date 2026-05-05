@@ -72,8 +72,8 @@ func TestReflowCursorTracking(t *testing.T) {
 func TestReflowCursorTrackingMultibyte(t *testing.T) {
 	src := "über schöne fluß"
 	got, cur := Reflow(src, 10, 6)
-	// "über " is 5 runes; cursor at 6 is inside "schöne".
-	// Exact post-reflow placement is approximate; verify the cursor is in-range.
+	// "über " is 5 runes. Cursor at 6 is inside "schöne".
+	// Exact post-reflow placement is approximate. Verify the cursor is in-range.
 	if cur < 0 || cur > utf8.RuneCountInString(got) {
 		t.Errorf("Reflow multibyte cursor out of range: got %d for %q (len %d)", cur, got, utf8.RuneCountInString(got))
 	}

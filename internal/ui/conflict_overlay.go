@@ -17,7 +17,7 @@ type RetryConflictMsg struct{ OpID int64 }
 type DiscardConflictMsg struct{ OpID int64 }
 
 // conflictCache is the heap-allocated render cache (ADR-0130 escape
-// hatch). Pointer is shared across value copies; dirty flag flips on
+// hatch). Pointer is shared across value copies. Dirty flag flips on
 // rows / cursor / size change.
 type conflictCache struct {
 	dirty bool
@@ -211,7 +211,7 @@ func conflictMaxBodyLines(termH int) int {
 }
 
 // formatConflictHeader returns a one-line summary for the conflict row.
-// Folder is the source folder; for Move ops the destination lives in args
+// Folder is the source folder. For Move ops the destination lives in args
 // (decoded view is out of scope for this overlay).
 func formatConflictHeader(r cache.ConflictRow) string {
 	verb := outboxKindVerb(r.Kind)

@@ -1018,7 +1018,7 @@ func TestDestroy_NotDestroyedError(t *testing.T) {
 }
 
 func TestDestroy_NotFoundIsSuccess(t *testing.T) {
-	// notFound in NotDestroyed is idempotent — message is already gone.
+	// notFound in NotDestroyed is idempotent: message is already gone.
 	fake := &fakeClient{
 		respond: func(_ *jmap.Request) (*jmap.Response, error) {
 			return fakeResponse(&jmap.Invocation{

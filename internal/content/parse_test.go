@@ -355,7 +355,7 @@ func TestParseSpansBareURLAtEndWithPunctuation(t *testing.T) {
 	}
 	link, ok := got[0].(Link)
 	if !ok {
-		// Allow "see " prefix to be span[0]; link may be span[1].
+		// Allow "see " prefix to be span[0]. Link may be span[1].
 		if len(got) < 2 {
 			t.Fatalf("no Link span found: %v", got)
 		}
@@ -483,7 +483,7 @@ func TestParseSpansBareURLInsideBrackets(t *testing.T) {
 func TestParseSpansBareURLBacktickTrim(t *testing.T) {
 	input := "see `https://example.com` here"
 	got := parseSpans(input)
-	// The backtick before the URL triggers a `code` span parse — the URL lands
+	// The backtick before the URL triggers a `code` span parse. The URL lands
 	// inside a Code span, not a Link. Verify the URL is not mangled by checking
 	// the Code span content directly (the bare-URL path is not reached here).
 	// What we care about: no Link span whose URL has a trailing backtick.

@@ -30,13 +30,13 @@ const (
 // pendingAction is the App-owned state for an in-flight optimistic
 // triage action. The zero value means "no toast active". Local
 // roll-back lives entirely in the cache layer (the inverse Cmd queues
-// a compensating QueueOp); App holds only what the toast needs to
+// a compensating QueueOp). App holds only what the toast needs to
 // render plus the undo Cmd to fire on `u`.
 type pendingAction struct {
 	op       triageOp
 	n        int       // affected message count
-	dest     string    // destination folder name; non-empty for opMove
-	inverse  tea.Cmd   // the undo Cmd; nil for unrecoverable ops
+	dest     string    // destination folder name, non-empty for opMove
+	inverse  tea.Cmd   // the undo Cmd, nil for unrecoverable ops
 	deadline time.Time // monotonic moment at which the toast expires
 }
 
@@ -46,7 +46,7 @@ type pendingAction struct {
 func (p pendingAction) IsZero() bool { return p.op == opNone }
 
 // renderToast produces the one-row toast string. Returns "" for the
-// zero pendingAction. Width-bounded; truncates with ellipsis.
+// zero pendingAction. Width-bounded, truncates with ellipsis.
 func renderToast(p pendingAction, width int, styles Styles) string {
 	if p.IsZero() {
 		return ""

@@ -27,7 +27,7 @@ import (
 )
 
 // jmapClient is the subset of *jmap.Client poplar uses. The real
-// *jmap.Client satisfies it; tests substitute a fake.
+// *jmap.Client satisfies it. Tests substitute a fake.
 type jmapClient interface {
 	Do(req *jmap.Request) (*jmap.Response, error)
 }
@@ -39,9 +39,9 @@ type Backend struct {
 
 	mu         sync.Mutex
 	client     jmapClient
-	pushClient *jmap.Client // real client for EventSource; nil in unit tests
+	pushClient *jmap.Client // real client for EventSource (nil in unit tests)
 	session    *jmap.Session
-	password   string // cached PasswordCmd result; empty when cfg.Password is inline
+	password   string // cached PasswordCmd result (empty when cfg.Password is inline)
 	folders    map[string]folderEntry
 	blobIDs    map[mail.UID]string
 	// partBlobIDs caches per-uid (partID → blobID) maps so
@@ -52,7 +52,7 @@ type Backend struct {
 
 	bodies             *lru.Cache[string, []byte]
 	bodyGroup          singleflight.Group
-	downloadBlob       func(blobID string) ([]byte, error) // nil ⇒ set by Connect; tests swap it
+	downloadBlob       func(blobID string) ([]byte, error) // nil until Connect (tests swap it)
 	updates            chan mail.Update
 	runEventSourceFunc func(ctx context.Context) error // swappable for tests
 
@@ -66,7 +66,7 @@ type folderEntry struct {
 }
 
 // New constructs an unconnected Backend for cfg. cfg.Source is the
-// JMAP session URL (e.g. https://api.fastmail.com/jmap/session);
+// JMAP session URL, e.g. https://api.fastmail.com/jmap/session.
 // cfg.Password (post env-var substitution) supplies the bearer token.
 func New(cfg config.AccountConfig) *Backend {
 	return &Backend{
@@ -81,7 +81,7 @@ func New(cfg config.AccountConfig) *Backend {
 // NewWithClient is for tests. It bypasses the network handshake and
 // installs a pre-built client that already satisfies the session
 // contract. The caller is responsible for populating b.session if any
-// method under test reads PrimaryAccounts — assign it directly:
+// method under test reads PrimaryAccounts, assign it directly:
 //
 //	b := NewWithClient(cfg, fake)
 //	b.session = &jmap.Session{...}
@@ -95,9 +95,9 @@ func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
 	return b
 }
 
-// AccountName — the cfg.Name fallback only
-// surfaces during the pre-Connect window, before the JMAP session
-// supplies the email per RFC 8620 §1.6.2.
+// AccountName returns the display name for this account. The cfg.Name
+// fallback surfaces only during the pre-Connect window, before the
+// JMAP session supplies the email per RFC 8620 §1.6.2.
 func (b *Backend) AccountName() string {
 	if b.cfg.Display != "" {
 		return b.cfg.Display
@@ -163,11 +163,11 @@ func (b *Backend) resolvedPassword() (string, error) {
 // goroutine.
 func (b *Backend) Connect(_ context.Context) error {
 	// Steps 1-5 run without b.mu so secret-manager prompts and slow
-	// network calls don't stall other readers; step 6 takes the lock
-	// just to install the result.
+	// network calls don't stall other readers. Step 6 takes the lock
+	// to install the result.
 	pw, err := b.resolvedPassword()
 	if err != nil {
-		return fmt.Errorf("password: %v", err)
+		return fmt.Errorf("password: %w", err)
 	}
 
 	cli := &jmap.Client{
@@ -175,23 +175,23 @@ func (b *Backend) Connect(_ context.Context) error {
 	}
 	cli.WithAccessToken(pw)
 	if err := cli.Authenticate(); err != nil {
-		return fmt.Errorf("authenticate: %v", err)
+		return fmt.Errorf("authenticate: %w", err)
 	}
 	session := cli.Session
 
 	folders, mailboxState, err := fetchFolders(cli, session)
 	if err != nil {
-		return fmt.Errorf("list folders: %v", err)
+		return fmt.Errorf("list folders: %w", err)
 	}
 
 	emailState, err := fetchEmailState(cli, session)
 	if err != nil {
-		return fmt.Errorf("seed email state: %v", err)
+		return fmt.Errorf("seed email state: %w", err)
 	}
 
 	cache, err := lru.New[string, []byte](bodyCacheSize)
 	if err != nil {
-		return fmt.Errorf("body cache: %v", err)
+		return fmt.Errorf("body cache: %w", err)
 	}
 	updates := make(chan mail.Update, updatesBuffer)
 
@@ -231,9 +231,9 @@ func (b *Backend) Connect(_ context.Context) error {
 // fetchEmailState issues Email/get with a single sentinel ID to cheaply
 // fetch the current Email state string. An empty IDs slice would be
 // dropped by omitempty (becoming "fetch all"), which Fastmail rejects on
-// large mailboxes; a single non-existent ID lands in `notFound` and the
-// server still returns the live state. It does not hold b.mu — callers
-// supply the client and session directly.
+// large mailboxes. A single non-existent ID lands in `notFound` and the
+// server still returns the live state. It does not hold b.mu.
+// Callers supply the client and session directly.
 func fetchEmailState(cli jmapClient, session *jmap.Session) (string, error) {
 	accountID := session.PrimaryAccounts[jmapmail.URI]
 	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
@@ -260,7 +260,7 @@ func fetchEmailState(cli jmapClient, session *jmap.Session) (string, error) {
 }
 
 // fetchFolders issues Mailbox/get and returns a populated folder map,
-// the Mailbox state string, and any error. It does not hold b.mu —
+// the Mailbox state string, and any error. It does not hold b.mu;
 // callers supply the client and session directly.
 func fetchFolders(cli jmapClient, session *jmap.Session) (map[string]folderEntry, string, error) {
 	accountID := session.PrimaryAccounts[jmapmail.URI]
@@ -364,8 +364,8 @@ func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	return out, nil
 }
 
-// OpenFolder sets the current folder to
-// name; returns an error if name is not in the cached folder map.
+// OpenFolder sets the current folder to name.
+// Returns an error if name is not in the cached folder map.
 func (b *Backend) OpenFolder(name string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -428,8 +428,8 @@ var headerProperties = []string{
 }
 
 // headerFetchChunk caps the IDs sent in one Email/get to stay under
-// typical maxObjectsInGet limits (Fastmail allows 4096; 500 is the
-// same page size baseline pull uses, so paging is symmetric).
+// typical maxObjectsInGet limits (Fastmail allows 4096). 500 matches
+// the baseline pull page size, keeping paging symmetric.
 const headerFetchChunk = 500
 
 // FetchHeaders issues Email/get for the supplied UIDs and translates
@@ -537,7 +537,7 @@ func formatFromList(addrs []*jmapmail.Address) string {
 
 // trimSurroundingQuotes strips a leading single-quote-wrapped phrase
 // from a display name. Some mailing-list software (Google Groups,
-// etc.) emits names like "'DAVE JOHNSON' via Members" — the literal
+// etc.) emits names like "'DAVE JOHNSON' via Members". The literal
 // single quotes are data, not RFC 5322 syntax, but they offset
 // visual alignment. Names that don't start with a single quote (e.g.
 // "Joe O'Brien") are returned unchanged.
@@ -635,10 +635,10 @@ func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("move: %v", err)
+		return fmt.Errorf("move: %w", err)
 	}
 	if err := checkEmailSetUpdated(resp, callID); err != nil {
-		return fmt.Errorf("move rejected by server: %v", err)
+		return fmt.Errorf("move rejected by server: %w", err)
 	}
 	return nil
 }
@@ -664,17 +664,17 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("destroy: %v", err)
+		return fmt.Errorf("destroy: %w", err)
 	}
 	if err := checkEmailSetDestroyed(resp, callID); err != nil {
-		return fmt.Errorf("destroy rejected by server: %v", err)
+		return fmt.Errorf("destroy rejected by server: %w", err)
 	}
 	return nil
 }
 
 // checkEmailSetDestroyed finds the Email/setResponse matching callID and
 // returns an error if any IDs appear in NotDestroyed with a type other than
-// "notFound". notFound is treated as success (already gone; idempotent).
+// "notFound". notFound is treated as success (already gone, idempotent).
 func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
 	for _, inv := range resp.Responses {
 		if inv.CallID != callID {
@@ -704,7 +704,7 @@ func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	return b.setKeyword(uids, keyword, set)
 }
 
-// Send is a placeholder; compose is not yet wired up.
+// Send is a placeholder. Compose is not yet wired up.
 func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
 	return errors.New("jmap: send not implemented")
 }
@@ -758,10 +758,10 @@ func (b *Backend) setKeyword(uids []mail.UID, keyword string, set bool) error {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		return fmt.Errorf("set keyword %s: %v", keyword, err)
+		return fmt.Errorf("set keyword %s: %w", keyword, err)
 	}
 	if err := checkEmailSetUpdated(resp, callID); err != nil {
-		return fmt.Errorf("keyword %s rejected: %v", keyword, err)
+		return fmt.Errorf("keyword %s rejected: %w", keyword, err)
 	}
 	return nil
 }

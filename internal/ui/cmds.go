@@ -17,7 +17,7 @@ import (
 
 	// Register non-UTF8 charset decoders (iso-8859-1, windows-1252,
 	// etc.) into go-message's charset registry. Without this, MIME
-	// parts with charset="iso-8859-1" — common for plain-text bodies
+	// parts with charset="iso-8859-1", common for plain-text bodies
 	// from Outlook/Exchange senders — fail to decode and the body is
 	// silently dropped.
 	_ "github.com/emersion/go-message/charset"
@@ -54,7 +54,7 @@ type folderAppendedMsg struct {
 type cacheEventMsg struct{ event cache.CacheEvent }
 
 // ErrorMsg carries a failure from any tea.Cmd. App captures the most
-// recent ErrorMsg into lastErr; the banner renders "⚠ <Op>: <Err>".
+// recent ErrorMsg into lastErr. The banner renders "⚠ <Op>: <Err>".
 // Last-write-wins: a subsequent ErrorMsg replaces the prior one.
 type ErrorMsg struct {
 	Op  string
@@ -81,7 +81,7 @@ func loadFoldersCmd(c *cache.Account) tea.Cmd {
 
 // queryFolderCmd reads the first window of cached headers and emits
 // a folderLoadedMsg. When sync is true (folder open), the backend is
-// nudged to converge first; sync errors don't fail the load. An empty
+// nudged to converge first. Sync errors don't fail the load. An empty
 // name returns nil so callers can chain without nil-checks.
 func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	if name == "" {
@@ -167,7 +167,7 @@ type bodyLoadedMsg struct {
 // loadBodyCmd fetches a message body via the cache (Cache I delegates
 // straight to the backend) and parses it into blocks. If ctx is
 // cancelled before FetchBody returns the cmd returns nil and the
-// result is dropped; the backend round-trip still completes.
+// result is dropped. The backend round-trip still completes.
 func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		resultCh := make(chan tea.Msg, 1)
@@ -333,7 +333,7 @@ type LaunchURLMsg struct {
 // flip. App receives it, sets the toast, and schedules a tea.Tick for
 // the undo timer. inverse runs on `u`: a compensating QueueOp via
 // queueOpsCmd. The cache owns the optimistic state, so there is no
-// onUndo callback — undo is the inverse Cmd alone.
+// onUndo callback. undo is the inverse Cmd alone.
 type triageStartedMsg struct {
 	op      triageOp
 	n       int
@@ -570,7 +570,7 @@ func resolveSaveTarget(dir, base string) (string, error) {
 }
 
 // openAttachmentCmd writes att's bytes to a tempfile and shells out
-// to the URLOpener (xdg-open). Fire-and-forget; errors surface via ErrorMsg.
+// to the URLOpener (xdg-open). Fire-and-forget. Errors surface via ErrorMsg.
 func openAttachmentCmd(c *cache.Account, opener URLOpener, uid mail.UID, att mail.Attachment) tea.Cmd {
 	return func() tea.Msg {
 		body, err := c.FetchAttachment(context.Background(), uid, att.PartID)

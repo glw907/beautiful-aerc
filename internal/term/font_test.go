@@ -49,7 +49,7 @@ func TestParseFcList(t *testing.T) {
 			wantIn: []string{"Hack NF"},
 		},
 		{
-			// Real-world output of `fc-list` without `-f` — leading
+			// Real-world output of `fc-list` without `-f`: leading
 			// path before the first ": ", then family list, then style.
 			// Locks in the parser's tolerance for the legacy shape.
 			name: "leading file path stripped",

@@ -18,7 +18,7 @@ func TestThemeRegistryComplete(t *testing.T) {
 		t.Fatalf("Themes map has %d entries, want 15", len(Themes))
 	}
 
-	// ThemeNames derives from Themes map — verify consistency.
+	// ThemeNames derives from Themes map. Verify consistency.
 	names := ThemeNames()
 	if len(names) != len(Themes) {
 		t.Fatalf("ThemeNames() returned %d names, Themes has %d entries",
@@ -57,7 +57,7 @@ func TestThemeRegistryComplete(t *testing.T) {
 			t.Errorf("theme %q has empty bg_base", name)
 		}
 		if other, ok := seen[bg]; ok {
-			// Solarized Light and Everforest Light share #fdf6e3 — skip that known pair.
+			// Solarized Light and Everforest Light share #fdf6e3. Skip that known pair.
 			if !((name == "solarized-light" && other == "everforest-light") ||
 				(name == "everforest-light" && other == "solarized-light")) {
 				t.Errorf("themes %q and %q share bg_base %s", name, other, bg)

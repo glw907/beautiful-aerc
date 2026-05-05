@@ -8,14 +8,14 @@ import (
 )
 
 // SyncToken is an opaque per-folder cursor managed by a backend's
-// ChangeTracker. JMAP encodes its state string; IMAP packs
+// ChangeTracker. JMAP encodes its state string. IMAP packs
 // (uidvalidity, modseq, maxuid) into bytes. The cache stores it on
 // folders.sync_token verbatim and never inspects it.
 type SyncToken []byte
 
 // ChangeSet is a complete delta returned by ChangeTracker.Changes.
 // Implementations must drain all backend pages internally before
-// returning — partial deltas are an implementation bug.
+// returning. Partial deltas are an implementation bug.
 type ChangeSet struct {
 	Added    []UID
 	Modified []UID
@@ -33,14 +33,14 @@ var ErrCannotCalculateChanges = errors.New("mail: cannot calculate changes")
 // interfaces.
 //
 // Implementations MUST loop internally until the backend reports no
-// more pages (JMAP: hasMoreChanges = false; IMAP: VANISHED + FETCH
-// fully drained). Callers receive a single complete delta or an
-// error.
+// more pages. JMAP signals exhaustion with hasMoreChanges = false,
+// IMAP with VANISHED + FETCH fully drained. Callers receive a
+// single complete delta or an error.
 //
 // Errors:
-//   - ErrCannotCalculateChanges (sentinel) — re-anchor required.
-//   - context errors — propagated.
-//   - other errors — transient; the syncer applies backoff.
+//   - ErrCannotCalculateChanges (sentinel): re-anchor required.
+//   - context errors: propagated.
+//   - other errors: transient. The syncer applies backoff.
 type ChangeTracker interface {
 	Changes(ctx context.Context, folder string, since SyncToken) (ChangeSet, SyncToken, error)
 }

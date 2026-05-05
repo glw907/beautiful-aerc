@@ -62,7 +62,7 @@ func ParseHeaders(raw string) ParsedHeaders {
 func parseAddressList(val string) []Address {
 	addrs, err := mail.ParseAddressList(val)
 	if err != nil {
-		// Fallback: treat the whole value as a single bare email
+		// Fall back to treating the whole value as a single bare email.
 		email := strings.TrimSpace(val)
 		email = strings.TrimPrefix(email, "<")
 		email = strings.TrimSuffix(email, ">")

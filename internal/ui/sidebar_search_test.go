@@ -174,7 +174,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 			t.Fatal("Update should return a Cmd emitting SearchUpdatedMsg")
 		}
 		msg := cmd()
-		// cmd may be a tea.Batch wrapping multiple cmds; SearchUpdatedMsg
+		// cmd may be a tea.Batch wrapping multiple cmds. SearchUpdatedMsg
 		// might come back wrapped in a BatchMsg. Handle both shapes.
 		upd, ok := unwrapSearchUpdated(msg)
 		if !ok {

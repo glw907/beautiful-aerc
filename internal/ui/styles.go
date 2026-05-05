@@ -48,7 +48,7 @@ type Styles struct {
 	SidebarUnread    lipgloss.Style
 	SidebarIndicator lipgloss.Style
 
-	// Message list. Rows use MsgListBg as their base; selected rows
+	// Message list. Rows use MsgListBg as their base. Selected rows
 	// override with MsgListSelected (BgSelection). Read state is
 	// encoded by brightness (FgBright/FgDim), not hue. The cursor ▐
 	// and the unread+flagged row are the only places hue is used.
@@ -65,7 +65,7 @@ type Styles struct {
 	MsgListFlagFlagged   lipgloss.Style
 	MsgListThreadPrefix  lipgloss.Style
 
-	// Viewer surfaces. ViewerBg is BgBase (body region); ViewerHeader
+	// Viewer surfaces. ViewerBg is BgBase (body region). ViewerHeader
 	// is the BgSubtle panel above it (a slight elevation off the body,
 	// keeping the header in the message track rather than the sidebar's
 	// BgElevated chrome track). FgDim BorderBottom on BgBase marks the
@@ -96,11 +96,11 @@ type Styles struct {
 	ToastText lipgloss.Style
 
 	// Toast is the one-row undo bar rendered above the status bar after
-	// a triage action. Foreground only; no fill.
+	// a triage action. Foreground only, no fill.
 	Toast lipgloss.Style
 
 	// ErrorBanner is the one-line surface above the status bar that
-	// renders the most recent ErrorMsg. Foreground only; no fill.
+	// renders the most recent ErrorMsg. Foreground only, no fill.
 	ErrorBanner lipgloss.Style
 }
 
@@ -117,7 +117,7 @@ func applyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
 
 // fillRowToWidth fits a fully-rendered row of ANSI segments to
 // exactly width display cells. Short rows are right-padded with
-// bgStyle so the row's background extends to the panel edge; over-
+// bgStyle so the row's background extends to the panel edge, over-
 // wide rows are truncated to width. Shared by sidebar and message
 // list row renderers.
 //

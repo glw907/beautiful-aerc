@@ -4,7 +4,7 @@ package content
 
 // Block represents a semantic unit of email content. The unexported
 // marker method seals the interface to the concrete types in this
-// package; discrimination is by Go type switch on the value.
+// package. Discrimination is by Go type switch on the value.
 type Block interface {
 	isBlock()
 }

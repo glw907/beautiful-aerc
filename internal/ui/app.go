@@ -53,9 +53,9 @@ type App struct {
 	lastErr          ErrorMsg
 	toast       pendingAction
 	undoSeconds int
-	// now returns the wall clock; test seam, defaults to time.Now.
+	// now returns the wall clock. Test seam, defaults to time.Now.
 	now func() time.Time
-	// opener launches URLs; test seam, defaults to xdgOpenURL.
+	// opener launches URLs. Test seam, defaults to xdgOpenURL.
 	opener URLOpener
 	width  int
 	height int
@@ -151,7 +151,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		m.acct, cmd = m.acct.Update(contentMsg)
 		cmds = append(cmds, cmd)
-		// WindowSizeMsg only forwards sizing; chrome derivation is not
+		// WindowSizeMsg only forwards sizing. Chrome derivation is not
 		// needed (sizing alone does not change viewer open/close state
 		// or folder counts).
 		return m, tea.Batch(cmds...)
@@ -291,7 +291,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ErrorMsg:
-		// Errors clear any pending toast; the cache holds the
+		// Errors clear any pending toast. The cache holds the
 		// optimistic flip and the user must fire u to revert.
 		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
@@ -461,7 +461,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		switch {
 		case key.Matches(msg, m.keys.Undo):
-			// Undo is only live while a toast is active; otherwise the
+			// Undo is only live while a toast is active. Otherwise the
 			// 'u' key falls through to AccountTab so other meanings can
 			// take over later.
 			if !m.toast.IsZero() {
@@ -522,7 +522,7 @@ func (m App) renderFrame() string {
 	contentLines := strings.Split(rawContent, "\n")
 	// AccountTab.View honors its width contract: every line is exactly
 	// m.width-1 display cells. Append the right border directly without
-	// per-line measure-and-pad — see TestAccountTabView_HonorsAssignedWidth.
+	// per-line measure-and-pad. See TestAccountTabView_HonorsAssignedWidth.
 	for i := range contentLines {
 		contentLines[i] = contentLines[i] + rightBorder
 	}
@@ -534,7 +534,7 @@ func (m App) renderFrame() string {
 	foot := m.footer.View(m.width)
 
 	parts := []string{topLine, content}
-	// Precedence: error banner wins; otherwise toast; otherwise the
+	// Precedence: error banner wins, then toast, then the
 	// chrome row collapses entirely.
 	if bannerRow := m.chromeBannerRow(m.width); bannerRow != "" {
 		parts = append(parts, bannerRow)
@@ -629,7 +629,7 @@ func (m App) IsConfirmOpen() bool { return m.confirm.IsOpen() }
 
 // contentHeight returns the height available for the content area.
 // The chrome banner row (error banner or toast) takes one extra row
-// when either is present; the row collapses when both are absent.
+// when either is present. The row collapses when both are absent.
 func (m App) contentHeight() int {
 	chrome := 3 // top line + status bar + footer
 	if m.lastErr.Err != nil || !m.toast.IsZero() {
@@ -663,7 +663,7 @@ func (m App) maybeResizeChild(hadBanner bool) (App, tea.Cmd) {
 }
 
 // chromeBannerRow renders the single chrome row above the status bar.
-// Error banner wins precedence; otherwise the toast renders; otherwise
+// Error banner wins precedence. Otherwise the toast renders. Otherwise
 // the empty string collapses the row.
 func (m App) chromeBannerRow(width int) string {
 	if banner := renderErrorBanner(m.lastErr, width, m.styles); banner != "" {

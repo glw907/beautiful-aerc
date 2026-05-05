@@ -16,7 +16,7 @@ type Flag uint32
 
 const (
 	FlagSeen Flag = 1 << iota
-	_              // RFC 3501 \Recent is server-set, never client-passed; bit retained for cache compatibility
+	_              // RFC 3501 \Recent is server-set, never client-passed. Bit retained for cache compatibility.
 	FlagAnswered
 	FlagForwarded
 	FlagDeleted
@@ -54,7 +54,7 @@ const (
 )
 
 // Update represents an asynchronous update from the backend. The
-// ConnState field is populated only for UpdateConnState; for every
+// ConnState field is populated only for UpdateConnState. For every
 // other Type it is the zero value (ConnOffline) and ignored.
 type Update struct {
 	Type      UpdateType
@@ -115,7 +115,7 @@ func ClassifyDisposition(rawDisposition, contentID string) Disposition {
 
 // Attachment carries metadata for a non-body MIME part. PartID is
 // protocol-native (JMAP partId, IMAP section "2", "2.1") and is
-// opaque to consumers — pass it back to FetchAttachment unchanged.
+// opaque to consumers. Pass it back to FetchAttachment unchanged.
 type Attachment struct {
 	PartID      string
 	Filename    string
