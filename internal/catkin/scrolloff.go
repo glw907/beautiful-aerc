@@ -1,11 +1,11 @@
 package catkin
 
+import "strings"
+
 const scrollOff = 3
 
-// ClampViewport returns a new viewport top so the cursor stays at
-// least scrollOff lines from the top and bottom edges of the visible
-// region. When total <= height the document fits entirely, so top
-// clamps to 0.
+// ClampViewport returns a viewport top that keeps cursorLine within
+// the scroll-off band; returns 0 when total fits in height.
 func ClampViewport(top, height, cursorLine, total int) int {
 	if total <= height {
 		return 0
@@ -36,14 +36,5 @@ func applyScrollOff(m Model) Model {
 }
 
 func lineCount(s string) int {
-	if s == "" {
-		return 1
-	}
-	n := 1
-	for _, r := range s {
-		if r == '\n' {
-			n++
-		}
-	}
-	return n
+	return strings.Count(s, "\n") + 1
 }
