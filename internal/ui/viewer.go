@@ -418,4 +418,3 @@ func viewerDateString(msg mail.MessageInfo) string {
 	}
 	return msg.SentAt.Format("Mon, Jan 2 2006 3:04 PM")
 }
-

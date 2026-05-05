@@ -15,16 +15,16 @@ import (
 type triageOp string
 
 const (
-	opNone    triageOp = ""
-	opDelete  triageOp = "delete"
-	opArchive triageOp = "archive"
-	opStar    triageOp = "star"
-	opUnstar  triageOp = "unstar"
-	opRead    triageOp = "read"
-	opUnread  triageOp = "unread"
-	opMove             triageOp = "move"
-	opEmpty            triageOp = "empty"
-	opSaveAttachment   triageOp = "save-attachment"
+	opNone           triageOp = ""
+	opDelete         triageOp = "delete"
+	opArchive        triageOp = "archive"
+	opStar           triageOp = "star"
+	opUnstar         triageOp = "unstar"
+	opRead           triageOp = "read"
+	opUnread         triageOp = "unread"
+	opMove           triageOp = "move"
+	opEmpty          triageOp = "empty"
+	opSaveAttachment triageOp = "save-attachment"
 )
 
 // pendingAction is the App-owned state for an in-flight optimistic

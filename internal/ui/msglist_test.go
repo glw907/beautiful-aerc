@@ -1150,9 +1150,9 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 		UID:      "1",
 		ThreadID: "1",
 		From:     "Alice Johnson", // 13 chars, padded to 22
-		Subject:  "Hello world",  // short, padded to fill subject budget
-		Date:     "04-27",        // 5 chars, fits date column exactly
-		Flags:    mail.FlagSeen,  // read, no flag glyph
+		Subject:  "Hello world",   // short, padded to fill subject budget
+		Date:     "04-27",         // 5 chars, fits date column exactly
+		Flags:    mail.FlagSeen,   // read, no flag glyph
 	}
 	ml := NewMessageList(styles, []mail.MessageInfo{msg}, w, 3, FancyIcons)
 	line := stripANSI(strings.Split(ml.View(), "\n")[0])
@@ -1390,7 +1390,7 @@ func TestMessageList_RefreshSource(t *testing.T) {
 
 	t.Run("RefreshSource clamps cursor when its UID disappears", func(t *testing.T) {
 		ml := NewMessageList(styles, flatMsgs(), 90, 20, FancyIcons)
-		ml.MoveDown() // cursor on "c" (row 1)
+		ml.MoveDown()                                              // cursor on "c" (row 1)
 		shrunk := []mail.MessageInfo{flatMsgs()[0], flatMsgs()[1]} // a, b only
 		ml.RefreshSource(shrunk)
 		if ml.Selected() >= len(ml.rows) || ml.Selected() < 0 {
@@ -1412,7 +1412,6 @@ func TestMessageList_RefreshSource(t *testing.T) {
 		}
 	})
 }
-
 
 func TestMessageListView_SpartanTier(t *testing.T) {
 	// W=80: pane=64. layout: Sender=22, Date=0, FlagColumn=false.

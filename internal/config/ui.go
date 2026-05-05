@@ -82,8 +82,8 @@ func DefaultUIConfig() UIConfig {
 // rawUI is the on-disk shape of the [ui] table. It uses pointers for
 // optional bool fields so we can distinguish "unset" from "explicit false".
 type rawUI struct {
-	Threading   *bool                   `toml:"threading"`
-	Folders     map[string]rawFolderCfg `toml:"folders"`
+	Threading          *bool                   `toml:"threading"`
+	Folders            map[string]rawFolderCfg `toml:"folders"`
 	Icons              string                  `toml:"icons"`
 	UndoSeconds        *int                    `toml:"undo_seconds"`
 	TrashRetentionDays *int                    `toml:"trash_retention_days"`

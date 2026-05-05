@@ -10,8 +10,8 @@ type Provider struct {
 	Host        string // IMAP presets only
 	Port        int
 	StartTLS    bool
-	InsecureTLS bool // true only for self-signed-cert presets (self-hosted)
-	GmailQuirks bool // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
+	InsecureTLS bool   // true only for self-signed-cert presets (self-hosted)
+	GmailQuirks bool   // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
 	URL         string // JMAP presets only
 }
 

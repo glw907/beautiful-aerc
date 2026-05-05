@@ -37,10 +37,10 @@ type CompiledTheme struct {
 	ColorError, ColorWarning, ColorSuccess              lipgloss.Color
 
 	// Composed styles for content rendering
-	HeaderKey    lipgloss.Style
-	HeaderValue  lipgloss.Style
-	HeaderDim    lipgloss.Style
-	SubjectTitle lipgloss.Style
+	HeaderKey      lipgloss.Style
+	HeaderValue    lipgloss.Style
+	HeaderDim      lipgloss.Style
+	SubjectTitle   lipgloss.Style
 	Paragraph      lipgloss.Style
 	Heading        lipgloss.Style
 	Quote          lipgloss.Style
@@ -115,4 +115,3 @@ func NewCompiledTheme(name string, p Palette) *CompiledTheme {
 
 	return t
 }
-

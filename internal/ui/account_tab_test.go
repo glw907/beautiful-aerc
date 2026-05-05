@@ -1174,7 +1174,6 @@ func TestAccountTabView_HonorsAssignedWidth(t *testing.T) {
 	})
 }
 
-
 func TestAccountTab_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
 	tab := newLoadedTab(t, 95, 30)
 

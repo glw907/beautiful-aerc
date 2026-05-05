@@ -220,8 +220,8 @@ func TestFetchAttachment(t *testing.T) {
 	blobBytes := []byte("fake-pdf-content")
 
 	bodyStructure := &email.BodyPart{
-		PartID:  "",
-		Type:    "multipart/mixed",
+		PartID: "",
+		Type:   "multipart/mixed",
 		SubParts: []*email.BodyPart{
 			{
 				PartID:      "1",

@@ -162,23 +162,23 @@ type configFile struct {
 }
 
 type accountEntry struct {
-	Name              string            `toml:"name"`
-	Display           string            `toml:"display"`
-	Provider          string            `toml:"provider"`
-	Source            string            `toml:"source"`
-	Email             string            `toml:"email"`
-	Host              string            `toml:"host"`
-	Port              int               `toml:"port"`
-	StartTLS          bool              `toml:"starttls"`
-	InsecureTLS       bool              `toml:"insecure-tls"`
-	Auth              string            `toml:"auth"`
-	Password          string            `toml:"password"`
-	PasswordCmd       string            `toml:"password-cmd"`
-	CopyTo            string            `toml:"copy-to"`
-	FoldersSort       []string          `toml:"folders-sort"`
-	FoldersExclude    []string          `toml:"folders-exclude"`
-	From              string            `toml:"from"`
-	Params            map[string]string `toml:"params"`
+	Name           string            `toml:"name"`
+	Display        string            `toml:"display"`
+	Provider       string            `toml:"provider"`
+	Source         string            `toml:"source"`
+	Email          string            `toml:"email"`
+	Host           string            `toml:"host"`
+	Port           int               `toml:"port"`
+	StartTLS       bool              `toml:"starttls"`
+	InsecureTLS    bool              `toml:"insecure-tls"`
+	Auth           string            `toml:"auth"`
+	Password       string            `toml:"password"`
+	PasswordCmd    string            `toml:"password-cmd"`
+	CopyTo         string            `toml:"copy-to"`
+	FoldersSort    []string          `toml:"folders-sort"`
+	FoldersExclude []string          `toml:"folders-exclude"`
+	From           string            `toml:"from"`
+	Params         map[string]string `toml:"params"`
 }
 
 // ParseAccounts reads a poplar config.toml file and returns
@@ -281,22 +281,22 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	}
 
 	acct := &AccountConfig{
-		Name:              e.Name,
-		Display:           e.Display,
-		Backend:           backend,
-		Source:            source,
-		Email:             e.Email,
-		Host:              host,
-		Port:              port,
-		StartTLS:          startTLS,
-		InsecureTLS:       insecureTLS,
-		GmailQuirks:       gmailQuirks,
-		Auth:              e.Auth,
-		Password:          password,
-		PasswordCmd:       e.PasswordCmd,
-		Folders:           e.FoldersSort,
-		FoldersExclude:    e.FoldersExclude,
-		Params:            e.Params,
+		Name:           e.Name,
+		Display:        e.Display,
+		Backend:        backend,
+		Source:         source,
+		Email:          e.Email,
+		Host:           host,
+		Port:           port,
+		StartTLS:       startTLS,
+		InsecureTLS:    insecureTLS,
+		GmailQuirks:    gmailQuirks,
+		Auth:           e.Auth,
+		Password:       password,
+		PasswordCmd:    e.PasswordCmd,
+		Folders:        e.FoldersSort,
+		FoldersExclude: e.FoldersExclude,
+		Params:         e.Params,
 	}
 
 	if e.CopyTo != "" {

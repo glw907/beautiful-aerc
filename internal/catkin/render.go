@@ -10,14 +10,13 @@ import (
 // Render produces Catkin's view content: styled text plus a
 // cursor block, soft-wrapped at width and clipped to height.
 // Styling is a pure render-time overlay. The raw source is not
-// touched. The zero Styles value yields plain output identical
-// to Pass 9.
+// touched. The zero Styles value yields plain output.
 func Render(src string, width, height, top, cursor int, styles Styles, mode DisplayMode) string {
 	return RenderAnnotated(src, width, height, top, cursor, styles, mode, nil)
 }
 
-// RenderAnnotated produces Catkin's view content with optional
-// annotations overlaid before the cursor block. ann may be nil.
+// RenderAnnotated overlays ann's decorations before the cursor block.
+// ann may be nil, in which case behavior matches Render.
 func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, mode DisplayMode, ann *AnnotationSet) string {
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
@@ -28,7 +27,10 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 		focusFirst, focusLast = activeParagraphRange(ctxs, cursorRow)
 	}
 
-	rowOffsets := computeRowOffsets(src)
+	var rowOffsets []int
+	if ann != nil {
+		rowOffsets = ann.rowStarts
+	}
 
 	var visual []string
 	for i := top; i < len(lines) && len(visual) < height; i++ {
@@ -72,32 +74,14 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 	return strings.Join(visual, "\n")
 }
 
-// computeRowOffsets returns the byte offset of the start of each
-// line in src. The slice has one entry per line (including an empty
-// final line if src ends with '\n').
-func computeRowOffsets(src string) []int {
-	out := []int{0}
-	for i := 0; i < len(src); i++ {
-		if src[i] == '\n' {
-			out = append(out, i+1)
-		}
-	}
-	return out
-}
-
-// applyAnnotationsToLine overlays annotation styles onto the
-// already-styled line. Each annotation's Style.Render is applied
-// to the plain-text byte range, then spliced back into the styled
-// string by display-cell position. Multiple annotations on one line
-// are applied left-to-right. Later splices do not disturb earlier
-// ones because ansiSpliceAtCol works on column offsets from the
-// original plain string.
+// applyAnnotationsToLine splices annotation styles into the
+// already-styled line at column offsets derived from plain.
 //
 // cursorByteCol is the byte offset within plain of the cursor
-// insertion point on the cursor row. Pass -1 on non-cursor rows.
-// When set, annotations that start at or after cursorByteCol have
-// their splice column shifted right by one cell to account for the
-// cursor-block rune injected into styled before this call.
+// insertion point on the cursor row, or -1 on non-cursor rows.
+// Annotations starting at or after it have their splice column
+// shifted right by one to account for the cursor-block rune
+// already injected into styled.
 func applyAnnotationsToLine(styled, plain string, lineOffset, cursorByteCol int, anns []Annotation) string {
 	if len(anns) == 0 {
 		return styled
@@ -126,9 +110,8 @@ func applyAnnotationsToLine(styled, plain string, lineOffset, cursorByteCol int,
 	return out
 }
 
-// ansiSpliceAtCol replaces a fixed-width column range of an
-// ANSI-styled string with replacement. Uses ansi.Truncate and
-// ansi.TruncateLeft to slice around the target region.
+// ansiSpliceAtCol replaces width display-cells at column col in an
+// ANSI-styled string with replacement.
 func ansiSpliceAtCol(styled string, col, width int, replacement string) string {
 	left := ansi.Truncate(styled, col, "")
 	rest := ansi.TruncateLeft(styled, col, "")
@@ -279,8 +262,8 @@ func offsetToRowCol(src string, off int) (row, col int) {
 	return row, col
 }
 
-// runeToByteOffset converts a rune-count column within line to a
-// byte offset. If col exceeds the rune count, it returns len(line).
+// runeToByteOffset returns the byte offset of the col-th rune in
+// line, or len(line) if col exceeds the rune count.
 func runeToByteOffset(line string, col int) int {
 	n := 0
 	for i := range line {

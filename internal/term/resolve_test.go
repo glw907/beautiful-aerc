@@ -15,7 +15,7 @@ func TestResolve(t *testing.T) {
 	}{
 		{"auto + NF + probe=1", "auto", true, 1, IconModeFancy, 1},
 		{"auto + NF + probe=2", "auto", true, 2, IconModeFancy, 2},
-		{"auto + NF + probe=0", "auto", true, 0, IconModeFancy, 2},    // assume Mono on probe failure
+		{"auto + NF + probe=0", "auto", true, 0, IconModeFancy, 2}, // assume Mono on probe failure
 		{"auto + no NF", "auto", false, 0, IconModeSimple, 1},
 		{"auto + no NF + probe=1 ignored", "auto", false, 1, IconModeSimple, 1},
 		{"simple forced + NF", "simple", true, 2, IconModeSimple, 1},

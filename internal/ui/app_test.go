@@ -770,12 +770,12 @@ func TestApp_ToastLifecycle(t *testing.T) {
 
 func TestApp_BannerToastPrecedence(t *testing.T) {
 	cases := []struct {
-		name     string
-		setupErr bool
-		setTost  bool
-		wantSubs []string
+		name       string
+		setupErr   bool
+		setTost    bool
+		wantSubs   []string
 		bannedSubs []string
-		empty    bool
+		empty      bool
 	}{
 		{name: "neither", empty: true},
 		{name: "toast only", setTost: true, wantSubs: []string{"u undo"}, bannedSubs: []string{"⚠"}},

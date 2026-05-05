@@ -36,4 +36,3 @@ func TestNewCompiledThemeStyles(t *testing.T) {
 		t.Error("HeaderKey.Render produced unstyled string")
 	}
 }
-

@@ -28,31 +28,31 @@ type pendingEmptyConfirm struct {
 
 // App is the root bubbletea model for poplar.
 type App struct {
-	acct        AccountTab
-	icons       IconSet
-	styles     Styles
-	topLine    TopLine
-	statusBar  StatusBar
-	footer     Footer
-	keys       GlobalKeys
-	viewerOpen bool
-	helpOpen    bool
-	help        HelpPopover
-	linkPicker  LinkPicker
-	attachPicker AttachPicker
-	movePicker  MovePicker
-	downloadDir string
-	confirm          ConfirmModal
-	pendingEmpty     pendingEmptyConfirm
-	outbox           OutboxOverlay
-	outboxOpen       bool
-	conflict         ConflictOverlay
-	conflictOpen     bool
-	lastOutboxDepth  cache.OutboxDepth
-	offlineHinted    bool
-	lastErr          ErrorMsg
-	toast       pendingAction
-	undoSeconds int
+	acct            AccountTab
+	icons           IconSet
+	styles          Styles
+	topLine         TopLine
+	statusBar       StatusBar
+	footer          Footer
+	keys            GlobalKeys
+	viewerOpen      bool
+	helpOpen        bool
+	help            HelpPopover
+	linkPicker      LinkPicker
+	attachPicker    AttachPicker
+	movePicker      MovePicker
+	downloadDir     string
+	confirm         ConfirmModal
+	pendingEmpty    pendingEmptyConfirm
+	outbox          OutboxOverlay
+	outboxOpen      bool
+	conflict        ConflictOverlay
+	conflictOpen    bool
+	lastOutboxDepth cache.OutboxDepth
+	offlineHinted   bool
+	lastErr         ErrorMsg
+	toast           pendingAction
+	undoSeconds     int
 	// now returns the wall clock. Test seam, defaults to time.Now.
 	now func() time.Time
 	// opener launches URLs. Test seam, defaults to xdgOpenURL.
@@ -75,23 +75,23 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	sb = sb.SetConnectionState(Offline)
 
 	return App{
-		acct:        NewAccountTab(styles, t, acct, uiCfg, icons),
-		icons:       icons,
-		styles:      styles,
-		topLine:     NewTopLine(styles),
-		statusBar:   sb,
-		footer:      NewFooter(styles),
-		keys:        NewGlobalKeys(),
+		acct:         NewAccountTab(styles, t, acct, uiCfg, icons),
+		icons:        icons,
+		styles:       styles,
+		topLine:      NewTopLine(styles),
+		statusBar:    sb,
+		footer:       NewFooter(styles),
+		keys:         NewGlobalKeys(),
 		linkPicker:   NewLinkPicker(styles),
 		attachPicker: NewAttachPicker(styles, icons),
 		movePicker:   NewMovePicker(styles),
 		downloadDir:  uiCfg.DownloadDir,
-		confirm:     NewConfirmModal(styles),
-		outbox:      NewOutboxOverlay(styles),
-		conflict:    NewConflictOverlay(styles),
-		undoSeconds: uiCfg.UndoSeconds,
-		now:         time.Now,
-		opener:      xdgOpenURL,
+		confirm:      NewConfirmModal(styles),
+		outbox:       NewOutboxOverlay(styles),
+		conflict:     NewConflictOverlay(styles),
+		undoSeconds:  uiCfg.UndoSeconds,
+		now:          time.Now,
+		opener:       xdgOpenURL,
 	}
 }
 

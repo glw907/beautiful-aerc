@@ -27,8 +27,8 @@ func (b *blockingBackend) AccountEmail() string { return "test@example.com" }
 func (b *blockingBackend) Connect(_ context.Context) error { return nil }
 func (b *blockingBackend) Disconnect() error               { return nil }
 
-func (b *blockingBackend) ListFolders() ([]mail.Folder, error)               { return nil, nil }
-func (b *blockingBackend) OpenFolder(_ string) error                         { return nil }
+func (b *blockingBackend) ListFolders() ([]mail.Folder, error) { return nil, nil }
+func (b *blockingBackend) OpenFolder(_ string) error           { return nil }
 func (b *blockingBackend) QueryFolder(_ string, _, _ int) ([]mail.UID, int, error) {
 	return nil, 0, nil
 }

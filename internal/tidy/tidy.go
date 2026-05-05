@@ -9,7 +9,7 @@ import (
 
 // Status codes for Tidy results.
 const (
-	StatusCorrected    = iota
+	StatusCorrected = iota
 	StatusNoChanges
 	StatusNoAuthorText
 	StatusError

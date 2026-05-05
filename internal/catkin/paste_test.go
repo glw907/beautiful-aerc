@@ -26,10 +26,10 @@ func TestLooksLikeURL(t *testing.T) {
 
 func TestWordAt(t *testing.T) {
 	tests := []struct {
-		name      string
-		src       string
-		cur       int
-		ok        bool
+		name       string
+		src        string
+		cur        int
+		ok         bool
 		start, end int
 	}{
 		{"middle of word", "hello world", 3, true, 0, 5},

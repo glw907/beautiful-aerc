@@ -574,9 +574,9 @@ func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error)
 	}
 
 	fetchSec := &imap.FetchItemBodySection{
-		Part:    parts,
+		Part:      parts,
 		Specifier: imap.PartSpecifierNone,
-		Peek:    true,
+		Peek:      true,
 	}
 	opts := &imap.FetchOptions{
 		UID:         true,

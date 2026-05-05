@@ -25,19 +25,19 @@ type fakeBackend struct {
 	updates  chan mail.Update
 }
 
-func (f *fakeBackend) AccountName() string                   { return "fake" }
-func (f *fakeBackend) AccountEmail() string                  { return "fake@example.com" }
-func (f *fakeBackend) Connect(_ context.Context) error       { return nil }
-func (f *fakeBackend) Disconnect() error                     { return nil }
-func (f *fakeBackend) ListFolders() ([]mail.Folder, error)   { return f.folders, nil }
-func (f *fakeBackend) OpenFolder(_ string) error             { return nil }
+func (f *fakeBackend) AccountName() string                 { return "fake" }
+func (f *fakeBackend) AccountEmail() string                { return "fake@example.com" }
+func (f *fakeBackend) Connect(_ context.Context) error     { return nil }
+func (f *fakeBackend) Disconnect() error                   { return nil }
+func (f *fakeBackend) ListFolders() ([]mail.Folder, error) { return f.folders, nil }
+func (f *fakeBackend) OpenFolder(_ string) error           { return nil }
 func (f *fakeBackend) QueryFolder(_ string, _, _ int) ([]mail.UID, int, error) {
 	return nil, 0, nil
 }
 func (f *fakeBackend) FetchHeaders(_ []mail.UID) ([]mail.MessageInfo, error) {
 	return f.headers, nil
 }
-func (f *fakeBackend) FetchBody(_ mail.UID) ([]byte, error) { return []byte{}, nil }
+func (f *fakeBackend) FetchBody(_ mail.UID) ([]byte, error)              { return []byte{}, nil }
 func (f *fakeBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) { return nil, nil }
 func (f *fakeBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) {
 	return nil, nil

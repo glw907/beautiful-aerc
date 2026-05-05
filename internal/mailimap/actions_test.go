@@ -156,9 +156,9 @@ func TestFlagClearRemovesFlag(t *testing.T) {
 
 func TestImapFlagsFor(t *testing.T) {
 	tests := []struct {
-		name  string
-		flag  mail.Flag
-		want  []string
+		name string
+		flag mail.Flag
+		want []string
 	}{
 		{"seen", mail.FlagSeen, []string{"\\Seen"}},
 		{"answered", mail.FlagAnswered, []string{"\\Answered"}},

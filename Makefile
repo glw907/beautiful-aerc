@@ -12,6 +12,14 @@ test-imap:
 vet:
 	go vet ./...
 
+fmt-check:
+	@out=$$(gofmt -l .); \
+	if [ -n "$$out" ]; then \
+		echo "gofmt: $$out"; \
+		echo "run: gofmt -w ."; \
+		exit 1; \
+	fi
+
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run ./... || echo "golangci-lint not installed, skipping"
 
@@ -31,9 +39,9 @@ install:
 voice:
 	@./scripts/voice-check.sh
 
-check: vet voice test
+check: fmt-check vet voice test
 
 clean:
 	rm -f $(BINARY)
 
-.PHONY: build test test-imap vet voice lint audit install check clean
+.PHONY: build test test-imap vet fmt-check voice lint audit install check clean

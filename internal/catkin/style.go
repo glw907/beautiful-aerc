@@ -24,16 +24,16 @@ const chromaStyle = "monokai"
 // consumer (e.g., poplar's compose) maps its theme onto this
 // struct at the boundary.
 type Styles struct {
-	Heading    [6]lipgloss.Style
-	Quote      lipgloss.Style
-	DeepQuote  lipgloss.Style
-	Bold       lipgloss.Style
-	Italic     lipgloss.Style
-	BoldItalic lipgloss.Style
-	CodeInline lipgloss.Style
-	CodeBlock  lipgloss.Style
-	Link       lipgloss.Style
-	URL        lipgloss.Style
+	Heading         [6]lipgloss.Style
+	Quote           lipgloss.Style
+	DeepQuote       lipgloss.Style
+	Bold            lipgloss.Style
+	Italic          lipgloss.Style
+	BoldItalic      lipgloss.Style
+	CodeInline      lipgloss.Style
+	CodeBlock       lipgloss.Style
+	Link            lipgloss.Style
+	URL             lipgloss.Style
 	ListMarker      lipgloss.Style
 	TaskBox         lipgloss.Style
 	MatchHighlight  lipgloss.Style

@@ -137,18 +137,18 @@ func TestFetchHeadersPopulatesMessageInfo(t *testing.T) {
 	cmd.fetchFn = func(uids []mail.UID, items []string, fn func(mail.UID, map[string]any)) error {
 		for _, uid := range uids {
 			fn(uid, map[string]any{
-				"subject":    "Test Subject",
-				"from":       "Alice <alice@example.com>",
-				"to":         "Bob <bob@example.com>",
-				"cc":         "",
-				"bcc":        "",
-				"date":       "Wed, 01 Apr 2026 10:00:00 +0000",
-				"sentAt":     sentAt,
-				"flags":      mail.FlagSeen,
-				"size":       uint32(1024),
+				"subject":     "Test Subject",
+				"from":        "Alice <alice@example.com>",
+				"to":          "Bob <bob@example.com>",
+				"cc":          "",
+				"bcc":         "",
+				"date":        "Wed, 01 Apr 2026 10:00:00 +0000",
+				"sentAt":      sentAt,
+				"flags":       mail.FlagSeen,
+				"size":        uint32(1024),
 				"in-reply-to": "",
-				"references": "",
-				"message-id": string(uid),
+				"references":  "",
+				"message-id":  string(uid),
 			})
 		}
 		return nil

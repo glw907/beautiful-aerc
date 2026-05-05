@@ -32,10 +32,10 @@ func TestIsQuoted(t *testing.T) {
 
 func TestSplitQuoted(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantAuthor  string
-		wantBlocks  []QuotedBlock
+		name       string
+		input      string
+		wantAuthor string
+		wantBlocks []QuotedBlock
 	}{
 		{
 			name:       "no quotes",

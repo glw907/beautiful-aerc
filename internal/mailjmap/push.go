@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"git.sr.ht/~rockorager/go-jmap"
+	"git.sr.ht/~rockorager/go-jmap/core/push"
 	jmapmail "git.sr.ht/~rockorager/go-jmap/mail"
 	"git.sr.ht/~rockorager/go-jmap/mail/email"
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
-	"git.sr.ht/~rockorager/go-jmap/core/push"
 
 	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"

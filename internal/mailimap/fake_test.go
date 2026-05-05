@@ -136,4 +136,3 @@ func (f *fakeClient) IdleStop() {
 		f.idleStop()
 	}
 }
-

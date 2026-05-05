@@ -71,12 +71,12 @@ type listEntry struct {
 // BODYSTRUCTURE response. Only the fields mailimap needs are
 // retained. The underlying go-imap type carries more.
 type BodyStructure struct {
-	Section     string          // "" for root, "1", "2", "2.1" for parts
-	MIMEType    string          // "text/plain" lowercased
+	Section     string // "" for root, "1", "2", "2.1" for parts
+	MIMEType    string // "text/plain" lowercased
 	Filename    string
 	SizeBytes   uint32
 	ContentID   string
-	Disposition string          // "attachment" | "inline" | "" if unset
+	Disposition string // "attachment" | "inline" | "" if unset
 	Children    []BodyStructure
 }
 

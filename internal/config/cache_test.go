@@ -112,4 +112,3 @@ func TestLoadCache(t *testing.T) {
 		})
 	}
 }
-

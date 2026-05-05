@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-const fixtureExtra = "" // overridden in user-overlay test
-
 func newFixtureSpeller(t *testing.T, extra []string) *Speller {
 	t.Helper()
 	s, err := newSpellerFromReader(strings.NewReader(fixtureWordlist), nil, extra)

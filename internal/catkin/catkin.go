@@ -11,6 +11,8 @@
 package catkin
 
 import (
+	"unicode/utf8"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -43,9 +45,8 @@ func New() Model {
 	return m
 }
 
-// RegisterAnnotator adds a to the Model's annotator registry.
-// Annotators run in registration order and their output merges,
-// sorted by Range.Start.
+// RegisterAnnotator appends an annotator. Annotators run in
+// registration order.
 func (m *Model) RegisterAnnotator(a Annotator) {
 	m.annotators = append(m.annotators, a)
 }
@@ -160,27 +161,12 @@ func (m Model) View() string {
 // coordinates within the rendered viewport.
 func (m Model) popoverScreenPosition() (int, int) {
 	src := m.buf.Value()
-	startRow, startCol := offsetToRowCol(src, byteOffsetToRune(src, m.popover.wordRange.Start))
+	startRow, startCol := offsetToRowCol(src, utf8.RuneCountInString(src[:m.popover.wordRange.Start]))
 	screenRow := startRow - m.viewportTop
 	if screenRow < 0 {
 		screenRow = 0
 	}
 	return m.popover.position(screenRow, startCol, m.width, m.height-m.find.footerRows())
-}
-
-// byteOffsetToRune converts a byte offset in src to a rune count.
-func byteOffsetToRune(src string, byteOff int) int {
-	if byteOff <= 0 {
-		return 0
-	}
-	count := 0
-	for i := range src {
-		if i >= byteOff {
-			return count
-		}
-		count++
-	}
-	return count
 }
 
 // Mode reports the active display mode.

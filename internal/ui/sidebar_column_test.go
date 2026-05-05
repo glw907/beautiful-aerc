@@ -47,8 +47,8 @@ func newSidebarColumnAt(t *testing.T, width, height int) SidebarColumn {
 // height with every row exactly width display cells wide.
 func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 	cases := []struct {
-		name  string
-		w, h  int
+		name string
+		w, h int
 	}{
 		{"spartan-14x20", 14, 20},
 		{"intermediate-22x30", 22, 30},
@@ -147,8 +147,8 @@ func TestSidebarColumn_SearchHintAtBottom(t *testing.T) {
 // sidebar layout tiers and a representative terminal height.
 func TestSidebarColumn_GoldenWidths(t *testing.T) {
 	cases := []struct {
-		name  string
-		w, h  int
+		name string
+		w, h int
 	}{
 		// Three layout tiers from ADR-0109: Spartan (14), Intermediate (22), Full (30).
 		{"sidebarcolumn_w14_h24.txt", 14, 24},

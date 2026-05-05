@@ -171,4 +171,3 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	}
 	return buf, nil
 }
-

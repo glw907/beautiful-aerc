@@ -39,5 +39,5 @@ type joined struct {
 	sentinel error
 }
 
-func (j joined) Error() string    { return j.orig.Error() }
-func (j joined) Unwrap() []error  { return []error{j.orig, j.sentinel} }
+func (j joined) Error() string   { return j.orig.Error() }
+func (j joined) Unwrap() []error { return []error{j.orig, j.sentinel} }

@@ -44,19 +44,19 @@ type AccountTab struct {
 	// acct.QueryFolder. UI writes funnel through acct.QueueOp. The
 	// underlying mail.Backend reference lives behind acct.Backend
 	// (used for AccountName/AccountEmail accessors and body fetch).
-	acct              *cache.Account
-	uiCfg             config.UIConfig
-	sidebarColumn     SidebarColumn
-	msglist           MessageList
-	viewer            Viewer
-	keys              AccountKeys
-	pages             map[string]*folderPage
-	swept             map[string]bool
-	loading           bool
-	spinner           spinner.Model
-	layout            LayoutMode
-	width             int
-	height            int
+	acct          *cache.Account
+	uiCfg         config.UIConfig
+	sidebarColumn SidebarColumn
+	msglist       MessageList
+	viewer        Viewer
+	keys          AccountKeys
+	pages         map[string]*folderPage
+	swept         map[string]bool
+	loading       bool
+	spinner       spinner.Model
+	layout        LayoutMode
+	width         int
+	height        int
 	// bodyFetchCancel cancels the in-flight loadBodyCmd goroutine.
 	// Set on every openMessage call. Cleared when the result arrives
 	// (matched UID) or when the viewer closes.
@@ -75,10 +75,10 @@ func (m AccountTab) WithNow(now func() time.Time) AccountTab {
 // fetched via Init's returned Cmd, not synchronously.
 func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons IconSet) AccountTab {
 	return AccountTab{
-		styles:        styles,
-		icons:         icons,
-		acct:          acct,
-		uiCfg:         uiCfg,
+		styles: styles,
+		icons:  icons,
+		acct:   acct,
+		uiCfg:  uiCfg,
 		sidebarColumn: NewSidebarColumn(styles, icons,
 			NewSidebar(styles, nil, uiCfg, 30, 1, icons),
 			NewSidebarSearch(styles, 30, icons),

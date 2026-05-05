@@ -31,8 +31,8 @@ func (b *Buffer) SetWidth(w int)    { b.ta.SetWidth(w) }
 func (b *Buffer) SetHeight(h int)   { b.ta.SetHeight(h) }
 
 func (b *Buffer) Focus() tea.Cmd { return b.ta.Focus() }
-func (b *Buffer) Blur()         { b.ta.Blur() }
-func (b Buffer) Focused() bool  { return b.ta.Focused() }
+func (b *Buffer) Blur()          { b.ta.Blur() }
+func (b Buffer) Focused() bool   { return b.ta.Focused() }
 
 // RuneOffset returns the cursor's rune offset from the start of the value.
 func (b Buffer) RuneOffset() int {

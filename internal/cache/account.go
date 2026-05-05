@@ -156,16 +156,16 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		return nil, err
 	}
 	a := &Account{
-		Backend:       backend,
-		ChangeTracker: ct,
-		db:            db,
-		dir:           acctDir,
-		name:          accountName,
+		Backend:           backend,
+		ChangeTracker:     ct,
+		db:                db,
+		dir:               acctDir,
+		name:              accountName,
 		maxSize:           cfg.MaxSize,
 		maxAttachmentSize: cfg.MaxAttachmentSize,
-		events:        make(chan CacheEvent, 32),
-		drainSignal:   make(chan struct{}, 1),
-		stop:          make(chan struct{}),
+		events:            make(chan CacheEvent, 32),
+		drainSignal:       make(chan struct{}, 1),
+		stop:              make(chan struct{}),
 	}
 	return a, nil
 }
@@ -253,4 +253,3 @@ func Slugify(name string) string {
 	}
 	return strings.Trim(b.String(), "-")
 }
-

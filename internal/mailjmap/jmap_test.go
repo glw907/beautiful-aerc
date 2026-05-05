@@ -799,10 +799,10 @@ func TestSetKeyword_NotUpdatedError(t *testing.T) {
 
 func TestFlag_KeywordMapping(t *testing.T) {
 	tests := []struct {
-		flag            mail.Flag
-		set             bool
-		wantKeyword     string
-		wantVal         interface{}
+		flag        mail.Flag
+		set         bool
+		wantKeyword string
+		wantVal     interface{}
 	}{
 		{mail.FlagSeen, true, "keywords/$seen", true},
 		{mail.FlagSeen, false, "keywords/$seen", nil},
@@ -933,7 +933,6 @@ func TestSend_ReturnsNotImplemented(t *testing.T) {
 		t.Fatal("expected error from Send stub")
 	}
 }
-
 
 // --- Destroy ---
 

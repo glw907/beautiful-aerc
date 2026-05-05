@@ -278,7 +278,6 @@ func (h HelpPopover) View(width, height int) string {
 	)
 }
 
-
 // renderAccountLayout builds the four-section layout for the
 // account context: three rows (Nav/Triage/Reply, then
 // Search/Select/Threads, then Go To grid). Bottom hint line is

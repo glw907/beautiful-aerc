@@ -132,4 +132,3 @@ func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	}
 	return body, nil
 }
-

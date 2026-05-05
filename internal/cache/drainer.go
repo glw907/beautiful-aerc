@@ -164,7 +164,7 @@ func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpAr
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		if !row.MessageID.Valid {
 			_, err := tx.Exec(`UPDATE outbox SET status = ?, error = '' WHERE id = ?`, OpDone, row.ID)
-		return err
+			return err
 		}
 		switch v := args.(type) {
 		case MoveArgs:

@@ -45,7 +45,8 @@ func NewSpeller(extra []string) (*Speller, error) {
 	return newSpellerFromReader(en, proj, extra)
 }
 
-// newSpellerFromReader is the test-friendly constructor. project may be nil.
+// newSpellerFromReader is the test-friendly constructor. A nil
+// project reader skips the project allowlist.
 func newSpellerFromReader(en, project io.Reader, extra []string) (*Speller, error) {
 	known := make(map[string]uint32, 50000)
 	if err := loadInto(known, en, false); err != nil {
@@ -111,11 +112,10 @@ func (s *Speller) Check(word string) bool {
 // index size modest (~10–20 MB resident for top-50k).
 const maxEditDistance = 2
 
-// buildIndex populates s.delIdx. Each known word generates the
-// set of deletes within maxEditDistance, and each delete maps
-// back to the originating word. Suggest then deletes the input
-// candidate, looks up the resulting key, and verifies real
-// edit distance ≤ maxEditDistance against each candidate.
+// buildIndex populates the SymSpell deletion index: each known word
+// generates the set of strings reachable by ≤ maxEditDistance
+// deletions, mapping back to the originator. Lookup deletes the
+// query the same way and verifies real distance against the bucket.
 func (s *Speller) buildIndex() {
 	s.delIdx = make(map[string][]string, len(s.known)*4)
 	for w := range s.known {
@@ -166,7 +166,7 @@ func editDistance(a, b string, limit int) int {
 			if a[i-1] == b[j-1] {
 				cost = 0
 			}
-			curr[j] = min3(curr[j-1]+1, prev[j]+1, prev[j-1]+cost)
+			curr[j] = min(curr[j-1]+1, min(prev[j]+1, prev[j-1]+cost))
 			if curr[j] < rowMin {
 				rowMin = curr[j]
 			}
@@ -184,17 +184,6 @@ func abs(x int) int {
 		return -x
 	}
 	return x
-}
-
-func min3(a, b, c int) int {
-	m := a
-	if b < m {
-		m = b
-	}
-	if c < m {
-		m = c
-	}
-	return m
 }
 
 // Suggest returns up to n correction candidates for word, ordered
@@ -284,8 +273,6 @@ type spellcheckAnnotator struct {
 	styles  Styles
 	ignored map[string]struct{} // session-only word additions
 }
-
-func (s *spellcheckAnnotator) Name() string { return "spellcheck" }
 
 func (s *spellcheckAnnotator) Annotate(src string) []Annotation {
 	if s.speller == nil {
@@ -377,42 +364,39 @@ func buildSkipMask(src string) skipMask {
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
 
-	// Fenced block lines: mask the fence markers and all content inside.
+	// Mask whole-line fenced-block content (markers and interior).
 	off := 0
 	for i, l := range lines {
 		lineEnd := off + len(l)
 		if ctxs[i].Kind == BlockCodeFence || ctxs[i].InsideFence {
 			ranges = append(ranges, Range{Start: off, End: lineEnd})
 		}
-		off = lineEnd + 1 // +1 for '\n'
+		off = lineEnd + 1
 	}
 
-	// Inline code spans and link URLs via walkSpans.
+	// Mask inline code spans and link URLs.
 	off = 0
 	for _, l := range lines {
 		lineOff := off
-		// after is a forward-only search cursor: for each span we search
-		// l[after:] to find the matched text, then advance after past it.
-		// This is correct even when walkSpans skips literal characters
-		// between spans without calling the callback.
+		// after walks forward through l: each span is found by searching
+		// l[after:], then after advances past the match.
 		after := 0
 		walkSpans(l, func(kind spanKind, text string, sub []string) {
 			switch kind {
 			case spanCode:
 				if idx := strings.Index(l[after:], text); idx >= 0 {
-					abs := lineOff + after + idx
-					ranges = append(ranges, Range{Start: abs, End: abs + len(text)})
+					start := lineOff + after + idx
+					ranges = append(ranges, Range{Start: start, End: start + len(text)})
 					after += idx + len(text)
 				}
 			case spanLink:
-				// sub: [full, linkText, url]. Skip only the URL portion.
+				// sub: [full, linkText, url]. Mask only the URL portion.
 				if len(sub) >= 3 {
 					urlPart := "(" + sub[2] + ")"
 					if idx := strings.Index(l[after:], urlPart); idx >= 0 {
-						abs := lineOff + after + idx
-						ranges = append(ranges, Range{Start: abs, End: abs + len(urlPart)})
+						start := lineOff + after + idx
+						ranges = append(ranges, Range{Start: start, End: start + len(urlPart)})
 					}
-					// Advance after past the full link match.
 					if idx := strings.Index(l[after:], text); idx >= 0 {
 						after += idx + len(text)
 					}

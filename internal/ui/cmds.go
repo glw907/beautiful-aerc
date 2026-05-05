@@ -249,7 +249,6 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 	}
 }
 
-
 // markReadCmd queues an optimistic FlagSeen=true op for uid against
 // folder, then re-reads the folder so the read-state flip surfaces.
 func markReadCmd(c *cache.Account, folder string, uid mail.UID) tea.Cmd {

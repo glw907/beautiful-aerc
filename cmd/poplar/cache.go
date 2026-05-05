@@ -283,4 +283,3 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 	}
 	return nil
 }
-

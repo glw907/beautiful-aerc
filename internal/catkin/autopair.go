@@ -136,4 +136,3 @@ func inInlineCode(line string, col int) bool {
 	}
 	return n%2 == 1
 }
-

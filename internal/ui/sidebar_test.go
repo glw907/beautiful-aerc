@@ -448,4 +448,3 @@ func TestSidebarRenderRow_WithIcons(t *testing.T) {
 		}
 	}
 }
-

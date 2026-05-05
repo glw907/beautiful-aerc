@@ -4,12 +4,12 @@ import "testing"
 
 func TestApplyAutoPair(t *testing.T) {
 	tests := []struct {
-		name      string
-		src       string
-		cur       int
-		r         rune
-		wantSrc   string
-		wantCur   int
+		name    string
+		src     string
+		cur     int
+		r       rune
+		wantSrc string
+		wantCur int
 	}{
 		{"insert star", "foo", 3, '*', "foo**", 4},
 		{"insert backtick mid", "ab", 1, '`', "a``b", 2},

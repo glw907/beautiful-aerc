@@ -14,7 +14,7 @@ import (
 type ConnectionState int
 
 const (
-	Connected    ConnectionState = iota
+	Connected ConnectionState = iota
 	Offline
 	Reconnecting
 )

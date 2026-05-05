@@ -338,12 +338,12 @@ the ADR(s) that justify them.
 
 ## Build & verification
 
-- Makefile targets: `build`, `test`, `vet`, `lint`, `install`,
-  `check`, `clean`. `make check` runs vet, voice, and test as the
-  commit gate. `make install` writes to `~/.local/bin/`. The
-  voice step is `scripts/voice-check.sh`, a grep-tier scan for
-  AI-tells T4, T10, T14, T16, T27, T28, T33, T34, T35. Semantic
-  tells stay with the `/simplify` voice lens.
+- Makefile targets: `build`, `test`, `vet`, `fmt-check`, `lint`,
+  `install`, `check`, `clean`. `make check` runs fmt-check (`gofmt
+  -l .`), vet, voice, and test as the commit gate. The voice step
+  is `scripts/voice-check.sh`, a grep-tier scan for AI-tells T4,
+  T10, T14, T16, T27, T28, T33–T35. Semantic tells stay with the
+  `/simplify` voice lens. `make install` writes to `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
@@ -397,4 +397,4 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33, T34, T35 (T33–T35 added Pass 8.11 after a tree-wide cleanup) | 0141, 0142, 0148 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
 | Catkin — core + live styling + command vocabulary + power-user QoL (undo/redo, find/replace, auto-pair, smart paste, bracket match, typewriter+focus modes) | 0144, 0145, 0146, 0147 |
-| Catkin annotation pipeline + spellcheck consumer | 0149, 0150 |
+| Catkin annotation pipeline + spellcheck consumer; 9d.1 voice + dead-code cleanup | 0149, 0150, 0151 |

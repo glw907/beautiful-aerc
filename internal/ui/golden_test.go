@@ -172,9 +172,9 @@ func TestGolden_HelpPopover(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	cases := []struct {
-		name    string
-		ctx     HelpContext
-		w, h    int
+		name string
+		ctx  HelpContext
+		w, h int
 	}{
 		{"helppopover_account_80x24.txt", HelpAccount, 80, 24},
 		{"helppopover_account_120x40.txt", HelpAccount, 120, 40},

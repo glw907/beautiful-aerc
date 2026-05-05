@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // popoverMaxSuggestions caps the suggestion list. 5 matches the
@@ -41,8 +42,6 @@ var popoverKeys = struct {
 	Ignore: key.NewBinding(key.WithKeys("i")),
 }
 
-// findMisspellingAt returns the annotation whose range covers byteOff,
-// or nil if none does.
 func (m Model) findMisspellingAt(byteOff int) *Annotation {
 	if m.annotations == nil {
 		return nil
@@ -79,7 +78,6 @@ func (m Model) openPopover(a *Annotation) Model {
 	return m
 }
 
-// closePopover resets the overlay to its zero state.
 func (m Model) closePopover() Model {
 	m.popover = popoverState{}
 	return m
@@ -122,20 +120,16 @@ func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model, tea.Cmd) {
 }
 
 func (m Model) applySelectedSuggestion() Model {
-	if !m.popover.open || len(m.popover.suggestions) == 0 {
+	if len(m.popover.suggestions) == 0 {
 		return m.closePopover()
 	}
 	repl := m.popover.suggestions[m.popover.cursor]
 	src := m.buf.Value()
 	r := m.popover.wordRange
-	if r.Start < 0 || r.End > len(src) || r.Start >= r.End {
-		return m.closePopover()
-	}
 	newSrc := src[:r.Start] + repl + src[r.End:]
 	m.buf.SetValue(newSrc)
-	// Position cursor at end of the replacement (rune-counted).
-	prefixRunes := len([]rune(src[:r.Start]))
-	replRunes := len([]rune(repl))
+	prefixRunes := utf8.RuneCountInString(src[:r.Start])
+	replRunes := utf8.RuneCountInString(repl)
 	m.buf.SetRuneOffset(prefixRunes + replRunes)
 	m.recordSnap()
 	m = m.closePopover()
@@ -175,11 +169,10 @@ func (m Model) addCurrentWordToWordlist() Model {
 	return m
 }
 
-// appendUserWord opens path in append mode (creating it 0o600 if missing)
-// and writes word + "\n". Errors are swallowed: a persistence failure is
-// recoverable. The in-memory speller picks up the word for this session, and
-// surfacing the error from a key handler would require an error channel this
-// pass deliberately does not introduce.
+// appendUserWord appends word to path, creating it 0o600 if missing.
+// Errors are swallowed: the in-memory speller still picks up the word
+// for this session, and the popover key handler has no surface for
+// reporting an I/O failure.
 func appendUserWord(path, word string) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -189,28 +182,22 @@ func appendUserWord(path, word string) {
 	fmt.Fprintf(f, "%s\n", word)
 }
 
-// width returns the popover's outer width including borders. Sized to the
-// longest content row, capped at 32 cols so the popover stays out of the
-// way of long lines.
+// width returns the popover's outer width including borders. Sized to
+// the longest content row, capped at 32 cols so the popover stays out
+// of the way of long lines.
 func (p popoverState) width() int {
-	const cap = 32
-	max := lipgloss.Width(`"` + p.word + `"`)
+	const maxWidth = 32
+	w := lipgloss.Width(`"` + p.word + `"`)
 	for _, s := range p.suggestions {
-		if w := lipgloss.Width("  " + s); w > max {
-			max = w
-		}
+		w = max(w, lipgloss.Width("  "+s))
 	}
-	if w := lipgloss.Width("a add  i ignore  esc x"); w > max {
-		max = w
+	w = max(w, lipgloss.Width("a add  i ignore  esc x"))
+	if w > maxWidth {
+		w = maxWidth
 	}
-	if max > cap {
-		max = cap
-	}
-	return max + 2 // borders
+	return w + 2
 }
 
-// height returns the popover's outer height including borders.
-// header (1) + suggestions (N) + separator (0 or 1) + actions (1) + borders (2)
 func (p popoverState) height() int {
 	if len(p.suggestions) == 0 {
 		return 4
@@ -296,7 +283,6 @@ func trimTo(xs []string, n int) []string {
 	return out
 }
 
-// byteOffsetForRune translates a rune offset to a byte offset against src.
 func byteOffsetForRune(src string, runeOff int) int {
 	if runeOff <= 0 {
 		return 0

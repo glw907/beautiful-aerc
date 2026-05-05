@@ -94,4 +94,3 @@ func splitLines(s string) ([]string, int) {
 	}
 	return lines, widest
 }
-

@@ -9,10 +9,10 @@ import (
 
 func TestExponential(t *testing.T) {
 	tests := []struct {
-		name             string
-		attempts         int
-		initial, max     time.Duration
-		want             time.Duration
+		name         string
+		attempts     int
+		initial, max time.Duration
+		want         time.Duration
 	}{
 		{"first attempt returns initial", 1, time.Second, 60 * time.Second, time.Second},
 		{"zero attempts treated as first", 0, time.Second, 60 * time.Second, time.Second},

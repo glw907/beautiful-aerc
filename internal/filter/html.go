@@ -45,11 +45,11 @@ var (
 	// Post-conversion whitespace normalization: strip invisible filler
 	// characters that email senders embed for preheader text, collapse
 	// excessive blank lines, and strip leading blanks.
-	reNBSP          = regexp.MustCompile(`[\x{a0}\x{2000}-\x{200a}]+`)
-	reZeroWidth     = regexp.MustCompile(`[\x{ad}\x{34f}\x{180e}\x{200b}-\x{200d}\x{2060}-\x{2064}\x{feff}]`)
-	reBlankSpaces   = regexp.MustCompile(`(?m)^ +$`)
+	reNBSP            = regexp.MustCompile(`[\x{a0}\x{2000}-\x{200a}]+`)
+	reZeroWidth       = regexp.MustCompile(`[\x{ad}\x{34f}\x{180e}\x{200b}-\x{200d}\x{2060}-\x{2064}\x{feff}]`)
+	reBlankSpaces     = regexp.MustCompile(`(?m)^ +$`)
 	reExcessiveBlanks = regexp.MustCompile(`\n{3,}`)
-	reLeadingBlanks = regexp.MustCompile(`\A\n+`)
+	reLeadingBlanks   = regexp.MustCompile(`\A\n+`)
 
 	// Markdown link patterns.
 	reMdLink      = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)

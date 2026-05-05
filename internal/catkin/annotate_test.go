@@ -25,8 +25,6 @@ func TestRangeContains(t *testing.T) {
 }
 
 func TestAnnotationSetByRow(t *testing.T) {
-	// Source: "abc\ndef\nghi". Newlines at offsets 3 and 7.
-	// Annotations on row 0 (Start=0), row 1 (Start=4), row 2 (Start=8).
 	src := "abc\ndef\nghi"
 	anns := []Annotation{
 		{Range: Range{0, 3}, Kind: KindMisspelling},
@@ -34,17 +32,18 @@ func TestAnnotationSetByRow(t *testing.T) {
 		{Range: Range{8, 11}, Kind: KindMisspelling},
 	}
 	set := newAnnotationSet(src, anns)
-	if got := set.firstOnRow(0); got != 0 {
-		t.Errorf("firstOnRow(0) = %d, want 0", got)
+	cases := []struct {
+		row, want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+		{99, -1},
 	}
-	if got := set.firstOnRow(1); got != 1 {
-		t.Errorf("firstOnRow(1) = %d, want 1", got)
-	}
-	if got := set.firstOnRow(2); got != 2 {
-		t.Errorf("firstOnRow(2) = %d, want 2", got)
-	}
-	if got := set.firstOnRow(99); got != -1 {
-		t.Errorf("firstOnRow(99) = %d, want -1", got)
+	for _, c := range cases {
+		if got := set.firstOnRow(c.row); got != c.want {
+			t.Errorf("firstOnRow(%d) = %d, want %d", c.row, got, c.want)
+		}
 	}
 }
 
@@ -66,12 +65,10 @@ func TestAnnotationCarriesStyleAndPayload(t *testing.T) {
 }
 
 type fakeAnnotator struct {
-	name  string
 	calls int
 	out   []Annotation
 }
 
-func (f *fakeAnnotator) Name() string { return f.name }
 func (f *fakeAnnotator) Annotate(src string) []Annotation {
 	f.calls++
 	return f.out
@@ -79,7 +76,7 @@ func (f *fakeAnnotator) Annotate(src string) []Annotation {
 
 func TestRegisterAnnotator(t *testing.T) {
 	m := New()
-	a := &fakeAnnotator{name: "fake", out: []Annotation{{Range: Range{0, 3}, Kind: KindMisspelling}}}
+	a := &fakeAnnotator{out: []Annotation{{Range: Range{0, 3}, Kind: KindMisspelling}}}
 	m.RegisterAnnotator(a)
 	set := runAnnotators(m.annotators, "abc def")
 	if len(set) != 1 || set[0].Range.Start != 0 {
@@ -108,7 +105,7 @@ func TestAnnotateStaleDrop(t *testing.T) {
 
 func TestAnnotateRequestStaleDrop(t *testing.T) {
 	m := New()
-	a := &fakeAnnotator{name: "fake"}
+	a := &fakeAnnotator{}
 	m.RegisterAnnotator(a)
 	m.srcGen = 7
 	// Request from gen 6 should not run annotators.
