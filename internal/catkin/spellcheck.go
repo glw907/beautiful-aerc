@@ -268,16 +268,20 @@ func LoadUserWordlist(path string) ([]string, error) {
 }
 
 // NewSpellcheckAnnotator wires speller into the Annotator interface.
-// Not safe for concurrent use across goroutines.
-func NewSpellcheckAnnotator(speller *Speller) Annotator {
+// styles.Squiggle is applied to each annotation so the renderer picks
+// up the host's decoration without a second lookup. Not safe for
+// concurrent use across goroutines.
+func NewSpellcheckAnnotator(speller *Speller, styles Styles) Annotator {
 	return &spellcheckAnnotator{
 		speller: speller,
+		styles:  styles,
 		ignored: map[string]struct{}{},
 	}
 }
 
 type spellcheckAnnotator struct {
 	speller *Speller
+	styles  Styles
 	ignored map[string]struct{} // session-only word additions
 }
 
@@ -321,6 +325,7 @@ func (s *spellcheckAnnotator) Annotate(src string) []Annotation {
 		out = append(out, Annotation{
 			Range:   Range{Start: start, End: end},
 			Kind:    KindMisspelling,
+			Style:   s.styles.Squiggle,
 			Payload: MisspellingPayload{Word: word, Suggestions: s.speller.Suggest(word, 5)},
 		})
 	}

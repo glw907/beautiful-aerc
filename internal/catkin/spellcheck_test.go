@@ -122,7 +122,7 @@ func TestLoadUserWordlistParses(t *testing.T) {
 
 func TestSpellcheckAnnotator(t *testing.T) {
 	speller := newFixtureSpeller(t, nil)
-	a := NewSpellcheckAnnotator(speller)
+	a := NewSpellcheckAnnotator(speller, Styles{})
 
 	cases := []struct {
 		name       string
@@ -202,7 +202,7 @@ func TestSpellcheckAnnotator(t *testing.T) {
 
 func TestSpellcheckAnnotatorPayload(t *testing.T) {
 	speller := newFixtureSpeller(t, nil)
-	a := NewSpellcheckAnnotator(speller)
+	a := NewSpellcheckAnnotator(speller, Styles{})
 	got := a.Annotate("tradeof here")
 	if len(got) != 1 {
 		t.Fatalf("Annotate returned %d, want 1", len(got))

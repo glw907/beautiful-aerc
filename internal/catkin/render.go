@@ -47,7 +47,11 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 		}
 		styled := styleLine(raw, ctxs[i], styles, fenceLines, i, i == cursorRow)
 		if ann != nil {
-			styled = applyAnnotationsToLine(styled, lines[i], rowOffsets[i], ann.rangesOnRow(src, i))
+			cursorByteInLine := -1
+			if i == cursorRow {
+				cursorByteInLine = runeToByteOffset(lines[i], cursorCol)
+			}
+			styled = applyAnnotationsToLine(styled, lines[i], rowOffsets[i], cursorByteInLine, ann.rangesOnRow(src, i))
 		}
 		if matchCol >= 0 {
 			styled = overlayMatch(styled, matchCol, matchCh, styles.MatchHighlight)
@@ -88,7 +92,13 @@ func computeRowOffsets(src string) []int {
 // are applied left-to-right. Later splices do not disturb earlier
 // ones because ansiSpliceAtCol works on column offsets from the
 // original plain string.
-func applyAnnotationsToLine(styled, plain string, lineOffset int, anns []Annotation) string {
+//
+// cursorByteCol is the byte offset within plain of the cursor
+// insertion point on the cursor row. Pass -1 on non-cursor rows.
+// When set, annotations that start at or after cursorByteCol have
+// their splice column shifted right by one cell to account for the
+// cursor-block rune injected into styled before this call.
+func applyAnnotationsToLine(styled, plain string, lineOffset, cursorByteCol int, anns []Annotation) string {
 	if len(anns) == 0 {
 		return styled
 	}
@@ -106,6 +116,9 @@ func applyAnnotationsToLine(styled, plain string, lineOffset int, anns []Annotat
 			continue
 		}
 		preCol := lipgloss.Width(plain[:startInLine])
+		if cursorByteCol >= 0 && startInLine >= cursorByteCol {
+			preCol++
+		}
 		targetPlain := plain[startInLine:endInLine]
 		styledTarget := a.Style.Render(targetPlain)
 		out = ansiSpliceAtCol(out, preCol, lipgloss.Width(targetPlain), styledTarget)
@@ -264,6 +277,19 @@ func offsetToRowCol(src string, off int) (row, col int) {
 		pos++
 	}
 	return row, col
+}
+
+// runeToByteOffset converts a rune-count column within line to a
+// byte offset. If col exceeds the rune count, it returns len(line).
+func runeToByteOffset(line string, col int) int {
+	n := 0
+	for i := range line {
+		if n == col {
+			return i
+		}
+		n++
+	}
+	return len(line)
 }
 
 func insertCursorBlock(line string, col int) string {
