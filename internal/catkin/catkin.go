@@ -21,7 +21,6 @@ type Model struct {
 	width       int
 	height      int
 	viewportTop int
-	focused     bool
 }
 
 // New returns a Model with default settings.

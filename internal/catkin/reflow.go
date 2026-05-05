@@ -162,23 +162,27 @@ func remapCursor(orig, emitted []string, rel int) int {
 	emitJoined := strings.Join(emitted, "\n")
 
 	nonWS := 0
-	for i, r := range origJoined {
-		if i >= rel {
+	runeIdx := 0
+	for _, r := range origJoined {
+		if runeIdx >= rel {
 			break
 		}
 		if !isReflowWS(r) {
 			nonWS++
 		}
+		runeIdx++
 	}
 
 	count := 0
-	for i, r := range emitJoined {
+	runeIdx = 0
+	for _, r := range emitJoined {
 		if count >= nonWS && !isReflowWS(r) {
-			return i
+			return runeIdx
 		}
 		if !isReflowWS(r) {
 			count++
 		}
+		runeIdx++
 	}
 	return utf8.RuneCountInString(emitJoined)
 }

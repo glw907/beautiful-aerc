@@ -24,7 +24,6 @@ func (b Buffer) Update(msg tea.Msg) (Buffer, tea.Cmd) {
 	return b, cmd
 }
 
-func (b Buffer) View() string  { return b.ta.View() }
 func (b Buffer) Value() string { return b.ta.Value() }
 
 func (b *Buffer) SetValue(s string) { b.ta.SetValue(s) }
