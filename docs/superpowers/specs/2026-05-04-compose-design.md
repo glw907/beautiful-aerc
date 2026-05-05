@@ -37,6 +37,9 @@ on 2026-05-04 closed them and surfaced two more.
 | 4 | SMTP failure surface | Outbox conflict overlay (existing Cache III pattern, ADR-0132/0133/0134). `KindSend`/`KindAppend` failures land on the same `!` overlay and `⚠N` status segment. No new toast surface. |
 | 5 (new) | Markdown live styling | iA-Writer-shaped: source stays raw markdown, `View()` overlays inline span styling on `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `[text](url)`, headings, hard-break glyph. Block styling on quotes, code fences, lists. **Depth-graduated blockquote color** in v1, capped at depth 4. |
 | 6 (new) | Long URL display | Two-layer wrap: source-level reflow never breaks tokens (URL stays one markdown line); display-level wrap soft-breaks long lines mid-token for the editor view only. Buffer unchanged either way. |
+| 7 (new) | QoL batch surfaced from prior-art survey | Twelve additions (§ Catkin QoL Additions) folding in: undo/redo, find/replace, markdown auto-pair, smart URL paste, word-level nav, scroll-off, bracket/span match highlight, task lists, typewriter scroll, focus mode, trailing-whitespace cleanup. Smart quotes deferred (carve-out complexity). |
+| 8 (new) | Annotation pipeline + spellcheck | `Editor.SetAnnotations` is the generic seam. Spellcheck ships in v1 via subprocess to system `hunspell -a` (pure-Go landscape lacks working suggestions). Multilingual via `[ui] spellcheck_lang`. Graceful degrade when binary absent. |
+| 9 (new) | Tidy seam | Catkin stays Claude-unaware. `compose.Tidy` interface + `NoopTidy` ship with Pass 9 framing; full Anthropic-API impl ships in a follow-up sub-pass. Paragraph-level rewrite with review-mode diff UI in ComposeTab. |
 
 ## Architecture
 
@@ -391,6 +394,159 @@ Renumbering ordered lists on insert in the **middle** is out of scope for v1 (po
 
 `Catkin.WordCount()` and `CharCount()` walk the raw buffer. Word count uses `unicode.IsSpace`-delimited splitting; char count is `utf8.RuneCountInString`. ComposeTab renders both in its footer at the right edge: `123 words · 567 chars`. Live update — both methods are O(n) over the buffer; on a 10K-char compose this is well under a render budget.
 
+## Catkin QoL additions
+
+Eleven additions surfaced from a prior-art survey of micro / nano / helix / iA Writer / Typora / Obsidian / VS Code-markdown / aerc-compose. All v1, all in service of "effortless markdown email."
+
+1. **Undo / redo (`Ctrl+Z` / `Ctrl+Y`).** ~50-step linear ring buffer of buffer + cursor snapshots. Without it, no recovery from a bad edit (no selection in v1). Promoted from post-1.0 — Catkin core feature.
+2. **Find / replace (`Ctrl+F` / `Ctrl+R`).** A 1-row prompt at the bottom of Catkin's render area. Literal substring; case-insensitive toggle; `Enter` next match; `Esc` cancels. Replace mode adds a second row; `y`/`n` per match, `a` for all. No regex in v1.
+3. **Markdown auto-pair.** Type `**`, get `**▌**`. Same for `_…_`, `` `…` ``, `[…]`, ` ``` `…` ``` `. **Carve-out:** disabled inside inline code spans and fenced blocks (block classifier already provides context). Generic bracket-pairing (`(`, `{`) **not** included — would be intrusive in markdown prose.
+4. **Smart URL paste → `[word](url)`.** When the clipboard contains a URL and the cursor is on a non-empty word, paste wraps the word as link text. Mirrors VS Code's `markdown.editor.pasteUrlAsFormattedLink`. The plain `Ctrl+K` link-skeleton command still handles the empty-cursor case.
+5. **Word-level navigation.** `Ctrl+Left` / `Ctrl+Right` jump by word; `Ctrl+Backspace` / `Ctrl+Delete` delete by word. Bubbles textarea may already provide some — verify and supplement during Pass 9.
+6. **Scroll-off (3 lines).** Cursor never sits within 3 lines of viewport top or bottom. One constant in the scroll-position calculation.
+7. **Bracket / span match highlight.** When the cursor is on `**`, `_`, `` ` ``, `[`, or `]`, the matching delimiter dims+underlines. Same scanner the inline span styler runs. Catches unbalanced markdown immediately.
+8. **Task lists.** `- [ ] ` and `- [x] ` recognized as a list item subtype. Smart Enter on `- [ ] foo` continues with `- [ ] `. `Ctrl+Space` on a task line toggles `[ ]` ↔ `[x]`. Render: `☐` / `☑` (Fancy icon mode) or `[ ]` / `[x]` (Simple). Goldmark renders as HTML `<input type=checkbox>` in the alternative.
+9. **Typewriter scroll mode.** Cursor stays vertically centered. Toggleable via `Ctrl+\`; default off; footer mode indicator (`▮ typewriter`). One offset adjustment in the scroll-position math.
+10. **Focus mode.** Surrounding paragraphs render at `FgDim`; the active paragraph at full color. Toggleable on the same `Ctrl+\` cycle (`off → typewriter → focus → typewriter+focus → off`). Block classifier already identifies paragraph boundaries.
+11. **Trailing-whitespace cleanup on commit boundary.** At the same boundary as reflow (paragraph break / Enter), strip trailing single space and 3+ trailing spaces. **Preserve exactly `␣␣`** (CommonMark hard break — also rendered with the dimmed `↵` glyph).
+
+**Smart quotes — deferred to post-1.0.** Carve-out complexity (skip inside code spans / fenced blocks / URLs) plus directional inference plus apostrophe edge cases (`don't`, `'twas`) make it more work than the user-visible payoff justifies for v1.
+
+## Annotation pipeline & spellcheck
+
+The annotation pipeline is the seam future linters plug into — spellcheck in v1, grammar check post-1.0 (likely indefinitely deferred; see "Tidy obviates grammar check" below).
+
+### Editor interface extension
+
+```go
+type AnnotationKind int
+const (
+    AnnotationSpelling AnnotationKind = iota
+    AnnotationGrammar          // post-1.0
+    AnnotationStyle            // reserved
+)
+
+type Annotation struct {
+    Start, End  int             // rune offsets into the buffer
+    Kind        AnnotationKind
+    Message     string          // shown in suggestion popover
+    Suggestions []string
+}
+
+type Editor interface {
+    // ... existing ...
+    SetAnnotations(spans []Annotation)
+}
+```
+
+CatkinEditor implements it. The v1.1 neovim adapter will map annotations to neovim's diagnostic signs.
+
+### Catkin annotation rendering
+
+Catkin's renderer applies `lipgloss` underline styling per `Kind`:
+
+- **`AnnotationSpelling`** — red-dim underline on the span. Terminals can't do squiggle; underline is the standard fallback (VS Code's low-color mode does this too).
+- **`AnnotationGrammar`** — blue-dim underline (post-1.0).
+- **`AnnotationStyle`** — green-dim underline (reserved).
+
+Annotations are pure overlay: zero buffer mutation, zero `displayCells` impact (lipgloss styling adds no display cells).
+
+### `AnnotationPicker` overlay
+
+App-owned, mirrors `LinkPicker` (ADR-0087). Opens on `Ctrl+;` when the cursor sits on an annotated span. Renders the `Message` + numbered suggestions. `1`–`9` apply suggestion N; `j/k` + `Enter` apply selected; `Esc` / `Ctrl+;` close.
+
+### Spellcheck — v1
+
+Spellcheck is a core feature, not an opt-in. Two-track design ensures it **works out of the box** for the supermajority of users without any system installation:
+
+**Track 1: English (default) — bundled pure-Go SymSpell.**
+
+- **Library:** pure-Go SymSpell implementation (vendor or use `eskriett/spell`). SymSpell is ~500 lines; vendoring is acceptable if external maintenance is suspect. MIT.
+- **Word list:** SCOWL or the Hunspell-derived `en_US.dic` word list, MPL/MIT-compatible. Covers ~500K words including normal inflections (run/runs/running/ran).
+- **Embedding:** `go:embed` at compile time. Binary impact ~600KB — acceptable.
+- **Suggestions:** edit-distance ranked + word-frequency weighted. Quality approximates Hunspell for the validity check; suggestion quality is competitive (production tools use SymSpell exactly this way).
+- **Zero runtime dependency.** Works the moment `poplar` is installed on any platform.
+
+**Track 1 expanded: bundle eight Latin-script European languages.**
+
+To cover near-99% of poplar's realistic user base (technical, Linux/macOS, Western), Track 1 ships pre-embedded word lists for:
+
+| Language | Code(s) | Notes |
+|---|---|---|
+| English | `en_US`, `en_GB` | Default + UK variant |
+| German | `de_DE` | Heavy due to compound morphology (~3MB) |
+| French | `fr_FR` | ~1.5MB |
+| Spanish | `es_ES`, `es_MX` | Spain + Mexico variants |
+| Portuguese | `pt_BR`, `pt_PT` | Brazilian dominant by volume |
+| Italian | `it_IT` | ~700KB |
+| Dutch | `nl_NL` | Strong Linux/dev representation |
+| Polish | `pl_PL` | Rich morphology (~3MB) |
+
+Total binary size impact: ~12MB. Each list is selected at startup based on `[ui] spellcheck_lang`. Only the configured language's list is loaded into memory.
+
+CJK languages (Chinese / Japanese / Korean) are deliberately **not** bundled — they don't use traditional spellcheck (input is via IME; errors are character-selection mistakes no algorithm catches). RTL scripts (Arabic / Hebrew) are out of v1 scope on a separate axis (require bidi rendering work in Catkin).
+
+**Track 2: Other languages — subprocess hunspell fallback.**
+
+- Triggered when `[ui] spellcheck_lang` is set to a language **outside** the bundled eight.
+- Subprocess `hunspell -a -d <lang>` in pipe mode. One pooled long-lived process per session.
+- **Missing-binary / missing-dictionary handling:** surface a one-time `ErrorMsg` banner explicitly naming the install command (`apt install hunspell hunspell-cs-cz`, `brew install hunspell`). User gets a clear remediation path, not silent failure.
+- Future work: promote additional bundled languages on demonstrated demand.
+
+**Why not subprocess-only?** Linux distros (including Linux Mint, the development workstation) don't ship `hunspell` by default. macOS doesn't make its native `NSSpellChecker` accessible via subprocess. Windows has no equivalent. "Graceful degrade silent" would mean most users get no spellcheck — not viable for a core feature.
+
+**Why not pure-Go-only?** Pure-Go Hunspell-format parsers (`shuLhan/share/lib/hunspell`) exist but lack suggestion APIs — and re-implementing Hunspell's morphological-analysis suggestion engine is months of work for marginal gains over SymSpell. SymSpell + a comprehensive word list is the pragmatic equivalent.
+
+**Behavior (both tracks):**
+
+- Debounce 400ms after last edit.
+- Consults the block classifier; **skips** spans inside inline code spans, fenced code blocks, table cells, and URL tokens.
+- ComposeTab on each Catkin update fires `tea.Cmd` running the spellchecker on debounce.
+- Returns `AnnotationsReadyMsg` → ComposeTab calls `editor.SetAnnotations(spans)`.
+- Standard tea.Cmd off-loop pattern; no goroutine survives across `Update` calls.
+
+## Claude Tidy
+
+Killer feature, exclusive to poplar. Paragraph-level rewrite via the Anthropic API, presented as a unified-diff review the user accepts or rejects. Catkin stays Claude-unaware — all API logic lives in `internal/compose/` and `internal/ui/compose_tab.go`.
+
+### Seam (Pass 9 framing)
+
+```go
+// internal/compose/tidy.go
+type TidyRequest struct {
+    Paragraph string         // current paragraph text
+    Context   string         // surrounding draft for tone/voice
+    Audience  string         // optional ("colleague", "customer")
+}
+
+type TidyResponse struct {
+    Rewrite string
+    Notes   []string         // brief explanations
+}
+
+type Tidy interface {
+    Suggest(ctx context.Context, req TidyRequest) (TidyResponse, error)
+}
+```
+
+Pass 9 ships:
+
+- The `Tidy` interface + `NoopTidy{}` (always returns "no changes"). Compiles, no UI surface yet.
+- `ComposeTab` reserves `Ctrl+G` and an empty handler that calls `tidy.Suggest` if a non-noop impl is wired.
+- Review-mode UI shape sketched but not built.
+
+### Implementation (Pass 9i — see passes table below)
+
+- `internal/anthropic/` — new package wrapping the Anthropic Go SDK. Auth via `$ANTHROPIC_API_KEY` or `[ui] tidy_api_key_cmd`.
+- `compose.ClaudeTidy` impl. Prompt engineering: system prompt that respects the user's voice, preserves markdown structure, never invents facts, never adds salutations or sign-offs.
+- Session caching: identical `(Paragraph, Context, Audience)` triples cached for the session lifetime.
+- `Ctrl+G` on a paragraph dispatches; spinner in the review pane while the request is in flight; `Esc` cancels mid-flight.
+- Review-mode UI: ComposeTab enters a "tidy review" state. Renders the current paragraph and the proposed rewrite as a unified diff in a panel below the body. Keys: `y`/`Enter` accepts (calls `editor.SetValue(newFullBuffer)`); `n`/`Esc` rejects; `e` edits the suggestion before accepting.
+
+### Tidy obviates grammar check
+
+Local grammar check is indefinitely deferred. The Go grammar-checking landscape is barren: no maintained pure-Go library exists; LanguageTool is a Java daemon; `vale` is style-only and not embeddable. Crucially, Claude tidy already catches grammar, clarity, tone, and structural issues in one pass — and respects markdown, where rule-based grammar tools struggle. Grammar check stays in the "post-1.0, only if needed" bucket; for the foreseeable future, tidy fills the role.
+
 ## Reply / Forward seeding
 
 `compose.SeedReply(parent, body, self)`:
@@ -518,40 +674,39 @@ Connection-state Offline + non-empty outbox emits the existing one-shot ErrorMsg
                   ╰─────────────────────────────────────────────────────╯
 ```
 
-## Out of scope for Pass 9
+## Out of scope for Pass 9 (the framing pass — ties to sub-passes below)
 
-Deferred to Pass 9.5 or post-1.0:
+Deferred entirely to post-1.0 or v1.1:
 
-- **Selection-aware Ctrl+B / Ctrl+I** (Catkin v1 has no selection; bare commands wrap the word at cursor).
-- **Undo / redo** (post-1.0; Catkin's snapshot ring buffer per ADR-0076 lands later).
+- **Selection-aware `Ctrl+B` / `Ctrl+I`** (Catkin v1 has no selection model; bare commands wrap the word at cursor).
 - **Renumbering ordered lists** when items inserted mid-list.
-- **Auto-close pairs** (`(` → `()`).
-- **Smart quotes / em-dash** typography (`--` → `—`).
-- **Syntax highlighting** inside fenced code blocks.
-- **Focus mode / typewriter scroll**.
-- **Spellcheck** (#5).
-- **Tidytext** (#12).
-- **Compose-side attachments inline-add UI** beyond Ctrl+T (#24 layers richer attachment management in Pass 9.5).
-- **Neovim adapter** (`v1.1`).
+- **Generic auto-close pairs** (`(` → `()`, `{` → `{}`). Markdown-only auto-pair ships in 9c.
+- **Smart quotes / em-dash typography** (`'` → `'`, `--` → `—`). Carve-out + directional inference + apostrophe edge cases push past the v1 budget.
+- **Syntax highlighting inside fenced code blocks.**
+- **Local grammar check** — no usable pure-Go library; daemon-based options violate constraints. **Claude tidy fills the role**; rule-based grammar check effectively retired from the roadmap.
+- **Multi-cursor / undo tree / Hemingway-mode** — wrong shape for prose email compose.
+- **Neovim adapter** (v1.1).
 - **Runtime editor swap** — config selects at startup only.
-- **Receiving HTML mail** rendering (separate effort; viewer currently renders text/plain only).
+- **Receiving HTML mail rendering** (separate effort; viewer currently handles text/plain).
 
-## Implementation phasing
+## Right-sized passes
 
-Plan-doc-level breakdown (writing-plans skill produces the executable plan):
+Compose framing is too large for a single poplar pass. Breaking into ten sub-passes mirroring the 8.4a/b/c rhythm. Each sub-pass ends with `make check` green, a tmux capture at 80×24 and 120×40, the standard pass-end ritual (ADRs, invariants update, plan archival, commit + push + install), and produces its own STATUS row.
 
-1. **Catkin foundation** — package skeleton, textarea wrap, block classifier, reflow engine, basic `View()` with cursor (no live styling yet). Tests: classifier table, reflow round-trip.
-2. **Catkin live rendering** — inline span styler, block styling, depth-graduated quotes, hard-break glyph, long-URL two-layer wrap. Tests: render-to-string golden files.
-3. **Catkin dispatch** — Ctrl+key commands, smart Enter, Tab/Shift-Tab, word/char count.
-4. **`internal/compose/`** — Editor interface, CatkinEditor adapter, Draft, AssembleMIME (goldmark integration), SeedReply/SeedReplyAll/SeedForward.
-5. **Mail backend extensions** — `Send` + `Append` on the interface; JMAP impl (`Email/submission` + `Email/import`); IMAP impl (SMTP via `emersion/go-smtp` on a third connection; IMAP `APPEND` for append).
-6. **Cache outbox dispatch** — `executeSend` / `executeAppend`, conflict matrix, no optimistic flip.
-7. **ComposeTab UI** — header form, chip row, focus management, async reply seeding, Ctrl+T path prompt, send / save / cancel flows.
-8. **`c` key wiring** — MessageList and Viewer emit `OpenComposeMsg`; App roots ComposeTab.
-9. **Theme + config** — blockquote palette slots, `[account.smtp]` config block, provider preset SMTP defaults, `poplar config check` SMTP probe.
-10. **Conflict overlay text** — extend the existing overlay's per-row text to render send/append failures cleanly.
+| Pass | Goal | Rough scope |
+|------|------|-------------|
+| **9** | **Catkin core** — package skeleton, `bubbles/textarea` wrap, block classifier, reflow engine, basic cursor render (no styling), word-level navigation, scroll-off (3 lines), unit tests for classifier table + reflow round-trip | ~600 LOC |
+| **9a** | **Catkin live rendering** — inline span styler (bold/italic/strike/inline-code/link/bare URL/hard-break glyph), block styling (headings/blockquote/code-fence/list markers), depth-graduated blockquote palette (4 slots), long-URL two-layer wrap, golden render-to-string tests | ~400 LOC |
+| **9b** | **Catkin markdown commands** — `Ctrl+B`/`I`/`K`/`L`/`Q`, smart Enter (list/quote/task continuation; double-Enter ends block), Tab/Shift-Tab list indent + 2-space insert, task list `Ctrl+Space` toggle, word + char count footer, trailing-WS cleanup on commit | ~500 LOC |
+| **9c** | **Catkin power-user QoL** — undo/redo ring buffer (50-step), find/replace overlay (literal + case toggle), markdown auto-pair (six pairs), smart URL paste → `[word](url)`, bracket/span match highlight, typewriter scroll mode, focus mode, `Ctrl+\` mode-cycle key | ~600 LOC |
+| **9d** | **Annotation pipeline + spellcheck** — `Editor.SetAnnotations`, Catkin annotation rendering (kind→underline-color), `AnnotationPicker` overlay, `internal/compose/spellcheck.go` (Track 1: pure-Go SymSpell + bundled word lists for `en_US`, `en_GB`, `de_DE`, `fr_FR`, `es_ES`, `es_MX`, `pt_BR`, `pt_PT`, `it_IT`, `nl_NL`, `pl_PL` embedded via `go:embed`, ~12MB; Track 2: subprocess `hunspell -a` for languages outside the bundled set with explicit install-instruction banner), debounce 400ms, span filtering, language-driven startup load | ~700 LOC (binary +~12MB for embeds) |
+| **9e** | **`internal/compose/` package** — `Editor` interface, `CatkinEditor` adapter, `Draft` struct, `AssembleMIME` (goldmark integration: text/plain + text/html + multipart/mixed for attachments), `SeedReply` / `SeedReplyAll` / `SeedForward`, unit tests against fixture parents | ~400 LOC |
+| **9f** | **Mail backend Send + Append** — `Send` + `Append` on `mail.Backend`; JMAP impl (`Email/submission` + `Email/import`); IMAP-side SMTP via `emersion/go-smtp` on a third connection + IMAP `APPEND`; `[account.smtp]` config block; provider preset SMTP defaults; `poplar config check` SMTP probe | ~700 LOC |
+| **9g** | **Cache outbox Send/Append dispatch** — `cache.SendArgs`/`AppendArgs` flesh out, `executeSend`/`executeAppend` in drainer, conflict matrix (no optimistic flip; crashed-mid-execute → conflict per ADR-0116), conflict overlay row text extension for send/append failures | ~300 LOC |
+| **9h** | **ComposeTab UI + `c` wiring + tidy seam** — `ComposeTab` tea.Model (header form via `bubbles/textinput`, chip row, focus management, async reply seeding, `Ctrl+T` attachment-add prompt, `Ctrl+Enter`/`Ctrl+S`/`Esc` flows), App-level `OpenComposeMsg` routing from MessageList and Viewer, `compose.Tidy` interface + `NoopTidy` + `Ctrl+G` stubbed handler | ~600 LOC |
+| **9i** | **Claude Tidy implementation** — `internal/anthropic/` package (Anthropic SDK wrapper, auth via `$ANTHROPIC_API_KEY` / `[ui] tidy_api_key_cmd`), `compose.ClaudeTidy` impl with prompt engineering (preserve voice, preserve markdown, no fact invention, no salutations), session-scoped response caching, ComposeTab review-mode UI (unified-diff panel, `y`/`n`/`e`/`Esc` keys, in-flight spinner) | ~500 LOC |
 
-Each phase ends with `make check` green and a tmux capture at 80×24 and 120×40.
+**STATUS reconciliation.** The existing Pass 9.5 row in `STATUS.md` previously bundled `#5 (spellcheck) + #12 (tidytext) + #24 (attachments-richer)`. Spellcheck moves to 9d, tidy to 9i. Pass 9.5 collapses to a single coherent goal: **attachments-richer compose UI** (drag-and-drop equivalent, multi-attach, attach-from-cache for #24). Schedule: after 9i.
 
 ## Open risks
 
