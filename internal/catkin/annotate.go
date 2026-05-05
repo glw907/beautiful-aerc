@@ -44,8 +44,9 @@ type Annotator interface {
 // AnnotationSet is the per-frame artifact rendering consults. The
 // All slice is sorted by Range.Start.
 type AnnotationSet struct {
-	All   []Annotation
-	byRow []int // first index of an annotation starting on row r; -1 if none
+	All       []Annotation
+	byRow     []int // first index of an annotation starting on row r; -1 if none
+	rowStarts []int // byte offset of each row's first character
 }
 
 func newAnnotationSet(src string, anns []Annotation) *AnnotationSet {
@@ -68,7 +69,7 @@ func newAnnotationSet(src string, anns []Annotation) *AnnotationSet {
 			byRow[row] = ai
 		}
 	}
-	return &AnnotationSet{All: anns, byRow: byRow}
+	return &AnnotationSet{All: anns, byRow: byRow, rowStarts: rowStarts}
 }
 
 func (s *AnnotationSet) firstOnRow(row int) int {
@@ -78,26 +79,22 @@ func (s *AnnotationSet) firstOnRow(row int) int {
 	return s.byRow[row]
 }
 
-// rangesOnRow returns annotations that intersect row r, where
-// row offsets are derived from src (the same src that built the
-// set). Used by the renderer.
+// rangesOnRow returns annotations that intersect row r. The src
+// parameter is still accepted so callers (the renderer) can pass it
+// unchanged; its length determines the end of the final row, but the
+// newline walk is not repeated — rowStarts was computed once in
+// newAnnotationSet and stored on the set.
 func (s *AnnotationSet) rangesOnRow(src string, row int) []Annotation {
 	if s == nil {
 		return nil
 	}
-	rowStarts := []int{0}
-	for i := range src {
-		if src[i] == '\n' {
-			rowStarts = append(rowStarts, i+1)
-		}
-	}
-	if row < 0 || row >= len(rowStarts) {
+	if row < 0 || row >= len(s.rowStarts) {
 		return nil
 	}
-	rowStart := rowStarts[row]
+	rowStart := s.rowStarts[row]
 	rowEnd := len(src)
-	if row+1 < len(rowStarts) {
-		rowEnd = rowStarts[row+1] - 1 // exclude '\n'
+	if row+1 < len(s.rowStarts) {
+		rowEnd = s.rowStarts[row+1] - 1 // exclude '\n'
 	}
 	var out []Annotation
 	for _, a := range s.All {
