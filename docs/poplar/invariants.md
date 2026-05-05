@@ -155,6 +155,22 @@ the ADR(s) that justify them.
   (`lipgloss.Width == 1`). `FancyIcons` runes are in
   `[U+F0000, U+FFFFD]`. Both class invariants are unit-tested.
 
+### Catkin
+
+- Catkin (`internal/catkin/`) is poplar's markdown-first bubbletea
+  editor, library-pure (`bubbletea`, `bubbles`, `lipgloss`,
+  `muesli/reflow` only — no poplar imports). Catkin uses
+  `bubbles/textarea` as the buffer + cursor + edit-op primitive
+  but owns its own `View()`; the renderer reads the raw buffer.
+  Block classifier (`Classify`) and reflow engine (`Reflow`) are
+  pure functions over the raw source; cursor remap across reflow
+  uses non-whitespace rune count. Display-level wrap soft-breaks
+  long source lines mid-token for the editor view only — the
+  buffer is unchanged. Word navigation (`Ctrl+Left/Right` +
+  `Ctrl+Backspace/Delete`) is intercepted in `Model.Update`
+  before delegating to textarea. Scroll-off keeps the cursor
+  3 rows from the top/bottom edges. ADR-0144.
+
 ## Mail model
 
 - Folder classification is a pure function:
@@ -368,3 +384,4 @@ invariant. ADR numbering is chronological.
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
+| Catkin core (Pass 9) — package skeleton + Model/Buffer + block classifier + reflow + plain renderer + word nav + scroll-off; renderer ownership | 0144 |

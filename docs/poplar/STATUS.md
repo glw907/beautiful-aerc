@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9 next — Compose framing.
+**Current pass:** Pass 9a next — Catkin live markdown styling.
 
 ## Passes
 
@@ -18,7 +18,8 @@
 | 8.8 | Human-voice audit I — research-grounded style guide, persona, ADR-0141, skill + `/simplify` updates; string-only fixes (C1 comments, C7 errors, C4 prose verbosity) | done |
 | 8.9 | Human-voice audit II — structural fixes (C2/C5/C6/C8/C4-structural) + dedupe of resolvePassword | done |
 | 8.10 | First-sync header population — JMAP per-folder baseline pull (Email/query + sentinel-id state probe in one roundtrip); FetchHeaders chunked at 500 (ADR-0143) | done |
-| 9 | Compose framing — Editor interface, neovim adapter, `go-smtp` | pending |
+| 9 | Catkin core — package, classifier, reflow, plain render, word nav, scroll-off (ADR-0144) | done |
+| 9a | Catkin live markdown styling — render-time lipgloss overlay | pending |
 | 9.5 | Compose enhancements — #5 #12 #24 | pending |
 | 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
 | 10 | Polish II — popover dim (#14); items surfaced during 9–9.6 | pending |
@@ -28,33 +29,36 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9)
+## Next starter prompt (Pass 9a)
 
-> **Goal.** Land the Compose framing: `Editor` interface, Catkin
-> native editor, SMTP backend via `emersion/go-smtp`, draft
-> persistence through the cache outbox (`SendArgs`/`AppendArgs`).
+> **Goal.** Layer live markdown styling onto Catkin's renderer.
+> Bold/italic/code spans render with their delimiters visible
+> (iA-Writer-shaped: `**bold**` shows the asterisks AND a bold
+> face). Headings, list markers, quote prefixes, and code blocks
+> render with style classes wired to `theme.CompiledTheme`. The
+> raw buffer is unchanged — styling is purely a render-time
+> overlay of lipgloss styles on top of the plain output Pass 9
+> ships today.
 >
-> **Scope.** `internal/compose/` (new), `internal/mail` SMTP
-> shape, `cache.OpKind{KindSend,KindAppend}` wiring, `c` key
-> from the message-list and viewer. Inline render — no
-> `tea.ExecProcess` takeover. Neovim `--embed` adapter is Pass
-> 9.5. References: wireframes.md (compose screen), ADR-0031,
-> 0032, 0033, 0076.
+> **Scope.** `internal/catkin/render.go` (extend), new
+> `internal/catkin/style.go` (theme-driven style table), no
+> changes to blocks.go or reflow.go. Cursor block keeps its
+> current shape; styling does not change displayCells per row.
+> ADR-0144 invariants hold.
 >
-> **Settled:** Compose is bubbletea-native (Catkin) for v1; the
-> Editor interface is the seam neovim plugs into later. SMTP
-> auth re-uses backend `password-cmd`. Outbound mail enters the
-> cache as a `KindSend` outbox row + a `KindAppend` to the Sent
-> folder; the drainer ships them.
+> **Settled:** Styling reads from `*theme.CompiledTheme` passed
+> through `Model.SetTheme`. Inline span detection runs after the
+> block classifier and uses the same regex toolkit (no full
+> markdown parser).
 >
-> **Still open — brainstorm:** Catkin's text model (rune buffer
-> vs. line buffer); attachment-add UI inside compose; Reply /
-> Reply-all quoting depth; failure surface for SMTP (toast vs.
-> conflict overlay).
+> **Still open — brainstorm:** code-fence syntax-highlighting
+> scope (off / chroma / treesitter); inline span detection
+> precedence (e.g., `***triple***` interleaving rules); whether
+> link `[text](url)` shows the URL inline.
 >
 > **Approach.** Brainstorm the open questions, write a plan at
-> `docs/superpowers/plans/YYYY-MM-DD-compose.md`, then implement.
-> Standard pass-end checklist applies.
+> `docs/superpowers/plans/YYYY-MM-DD-catkin-styling.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Queued
 
