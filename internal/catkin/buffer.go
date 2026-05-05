@@ -56,15 +56,23 @@ func (b Buffer) RuneOffset() int {
 // SetRuneOffset positions the cursor at rune offset off.
 func (b *Buffer) SetRuneOffset(off int) {
 	value := b.ta.Value()
-	row := 0
-	col := off
-	for _, l := range strings.Split(value, "\n") {
+	total := utf8.RuneCountInString(value)
+	if off > total {
+		off = total
+	}
+	lines := strings.Split(value, "\n")
+	row, col := 0, off
+	for i, l := range lines {
 		ln := utf8.RuneCountInString(l)
 		if col <= ln {
 			break
 		}
 		col -= ln + 1
-		row++
+		row = i + 1
+	}
+	if row >= len(lines) {
+		row = len(lines) - 1
+		col = utf8.RuneCountInString(lines[row])
 	}
 	b.ta.SetCursor(col)
 	for b.ta.Line() < row {
