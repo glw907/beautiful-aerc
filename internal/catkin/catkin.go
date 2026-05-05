@@ -30,7 +30,6 @@ type Model struct {
 	annotators  []Annotator
 	annotations *AnnotationSet
 	srcGen      uint64
-	annoGen     uint64
 	popover     popoverState
 }
 
