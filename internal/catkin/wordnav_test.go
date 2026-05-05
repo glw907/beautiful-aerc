@@ -15,6 +15,10 @@ func TestWordBoundaryForward(t *testing.T) {
 	if got != 15 {
 		t.Errorf("nextWordBoundary(end): got %d, want 15", got)
 	}
+	got = nextWordBoundary("the quick brown", 3)
+	if got != 4 {
+		t.Errorf("nextWordBoundary(3): got %d, want 4", got)
+	}
 }
 
 func TestWordBoundaryBackward(t *testing.T) {
@@ -29,5 +33,9 @@ func TestWordBoundaryBackward(t *testing.T) {
 	got = prevWordBoundary("the quick brown", 0)
 	if got != 0 {
 		t.Errorf("prevWordBoundary(0): got %d, want 0", got)
+	}
+	got = prevWordBoundary("the quick brown", 9)
+	if got != 4 {
+		t.Errorf("prevWordBoundary(9): got %d, want 4", got)
 	}
 }
