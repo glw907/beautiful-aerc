@@ -1,0 +1,80 @@
+package catkin
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func newModelWithMisspelling(t *testing.T) (Model, Range) {
+	t.Helper()
+	speller := newFixtureSpeller(t, nil)
+	m := New()
+	m.SetSize(80, 10)
+	m.SetValue("the tradeof is real")
+	m.RegisterAnnotator(NewSpellcheckAnnotator(speller, Styles{}))
+	// Run annotators inline, bypassing the tick.
+	anns := runAnnotators(m.annotators, m.buf.Value())
+	m.annotations = newAnnotationSet(m.buf.Value(), anns)
+	if len(anns) != 1 {
+		t.Fatalf("expected one annotation, got %d", len(anns))
+	}
+	return m, anns[0].Range
+}
+
+func TestPopoverOpensOnRange(t *testing.T) {
+	m, r := newModelWithMisspelling(t)
+	m.buf.SetRuneOffset(r.Start) // cursor on misspelling
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	if !m.popover.open {
+		t.Errorf("; on misspelling should open popover")
+	}
+	if m.popover.word != "tradeof" {
+		t.Errorf("popover.word = %q, want \"tradeof\"", m.popover.word)
+	}
+}
+
+func TestPopoverCloseOnEsc(t *testing.T) {
+	m, r := newModelWithMisspelling(t)
+	m.buf.SetRuneOffset(r.Start)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.popover.open {
+		t.Errorf("Esc should close popover")
+	}
+}
+
+func TestPopoverApplyReplacesRange(t *testing.T) {
+	m, r := newModelWithMisspelling(t)
+	m.buf.SetRuneOffset(r.Start)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // apply first suggestion
+	if got := m.buf.Value(); got != "the tradeoff is real" {
+		t.Errorf("after apply: %q, want \"the tradeoff is real\"", got)
+	}
+	if m.popover.open {
+		t.Errorf("apply should close popover")
+	}
+}
+
+func TestPopoverDoesNotOpenOffRange(t *testing.T) {
+	m, _ := newModelWithMisspelling(t)
+	m.buf.SetRuneOffset(0) // cursor on "the", not on misspelling
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	if m.popover.open {
+		t.Errorf("; off a misspelling should not open popover")
+	}
+}
+
+func TestPopoverDigitJumpApply(t *testing.T) {
+	m, r := newModelWithMisspelling(t)
+	m.buf.SetRuneOffset(r.Start)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	if len(m.popover.suggestions) < 1 {
+		t.Skipf("no suggestions; cannot exercise digit jump")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	if m.popover.open {
+		t.Errorf("digit jump should close popover")
+	}
+}

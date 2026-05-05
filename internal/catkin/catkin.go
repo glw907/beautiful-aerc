@@ -11,6 +11,7 @@
 package catkin
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -29,6 +30,8 @@ type Model struct {
 	annotators  []Annotator
 	annotations *AnnotationSet
 	srcGen      uint64
+	annoGen     uint64
+	popover     popoverState
 }
 
 // New returns a Model with default settings.
@@ -63,6 +66,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
+		if m.popover.open {
+			if handled, mm, cmd := m.handlePopoverKey(k); handled {
+				cmd = m.maybeScheduleAnnotateAfterMutation(mm, cmd)
+				return mm, cmd
+			}
+		}
+		if !m.popover.open && key.Matches(k, popoverKeys.Open) {
+			if a := m.findMisspellingAt(byteOffsetForRune(m.buf.Value(), m.buf.RuneOffset())); a != nil {
+				return m.openPopover(a), nil
+			}
+		}
 		if m.find.active() {
 			return m.handleFind(k)
 		}
