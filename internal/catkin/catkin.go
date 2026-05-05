@@ -134,10 +134,41 @@ func (m Model) View() string {
 	src := m.buf.Value()
 	cur := m.buf.RuneOffset()
 	body := RenderAnnotated(src, m.width, m.height-m.find.footerRows(), m.viewportTop, cur, m.styles, m.mode, m.annotations)
+	if m.popover.open {
+		row, col := m.popoverScreenPosition()
+		body = overlay(body, m.popover.render(0, m.styles), row, col)
+	}
 	if !m.find.active() {
 		return body
 	}
 	return body + "\n" + m.find.renderFindFooter(m.width)
+}
+
+// popoverScreenPosition translates the misspelled word's anchor into screen
+// coordinates within the rendered viewport.
+func (m Model) popoverScreenPosition() (int, int) {
+	src := m.buf.Value()
+	startRow, startCol := offsetToRowCol(src, byteOffsetToRune(src, m.popover.wordRange.Start))
+	screenRow := startRow - m.viewportTop
+	if screenRow < 0 {
+		screenRow = 0
+	}
+	return m.popover.position(screenRow, startCol, m.width, m.height-m.find.footerRows())
+}
+
+// byteOffsetToRune converts a byte offset in src to a rune count.
+func byteOffsetToRune(src string, byteOff int) int {
+	if byteOff <= 0 {
+		return 0
+	}
+	count := 0
+	for i := range src {
+		if i >= byteOff {
+			return count
+		}
+		count++
+	}
+	return count
 }
 
 // Mode reports the active display mode.

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -186,6 +187,102 @@ func appendUserWord(path, word string) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "%s\n", word)
+}
+
+// width returns the popover's outer width including borders. Sized to the
+// longest content row, capped at 32 cols so the popover stays out of the
+// way of long lines.
+func (p popoverState) width() int {
+	const cap = 32
+	max := lipgloss.Width(`"` + p.word + `"`)
+	for _, s := range p.suggestions {
+		if w := lipgloss.Width("  " + s); w > max {
+			max = w
+		}
+	}
+	if w := lipgloss.Width("a add  i ignore  esc x"); w > max {
+		max = w
+	}
+	if max > cap {
+		max = cap
+	}
+	return max + 2 // borders
+}
+
+// height returns the popover's outer height including borders.
+// header (1) + suggestions (N) + separator (0 or 1) + actions (1) + borders (2)
+func (p popoverState) height() int {
+	if len(p.suggestions) == 0 {
+		return 4
+	}
+	return 4 + len(p.suggestions)
+}
+
+// render returns the framed popover content. The width arg is unused;
+// the natural width() drives sizing.
+func (p popoverState) render(_ int, st Styles) string {
+	innerW := p.width() - 2
+	header := lipgloss.NewStyle().Width(innerW).Render(`"` + p.word + `"`)
+	var rows []string
+	rows = append(rows, header)
+	for i, s := range p.suggestions {
+		marker := "  "
+		if i == p.cursor {
+			marker = "> "
+		}
+		row := lipgloss.NewStyle().Width(innerW).Render(marker + s)
+		if i == p.cursor && st.PopoverSelected.GetForeground() != nil {
+			row = st.PopoverSelected.Width(innerW).Render(marker + s)
+		}
+		rows = append(rows, row)
+	}
+	if len(p.suggestions) > 0 {
+		rows = append(rows, lipgloss.NewStyle().Width(innerW).Render(""))
+	}
+	rows = append(rows, lipgloss.NewStyle().Width(innerW).Render("a add  i ignore  esc x"))
+	body := strings.Join(rows, "\n")
+	frame := st.Popover
+	if frame.GetBorderStyle() == (lipgloss.Border{}) {
+		frame = frame.Border(lipgloss.RoundedBorder())
+	}
+	return frame.Render(body)
+}
+
+// position returns the (row, col) where the popover's top-left corner
+// should sit, given the cursor position in screen coordinates and the
+// viewport dimensions.
+func (p popoverState) position(cursorRow, cursorCol, viewportW, viewportH int) (int, int) {
+	row := cursorRow + 1
+	if row+p.height() > viewportH {
+		row = cursorRow - p.height()
+		if row < 0 {
+			row = 0
+		}
+	}
+	col := cursorCol
+	if col+p.width() > viewportW {
+		col = viewportW - p.width()
+		if col < 0 {
+			col = 0
+		}
+	}
+	return row, col
+}
+
+// overlay composites a popover onto rendered body, returning a new string
+// with the popover's rows replacing the corresponding horizontal slices.
+// ANSI-safe via ansiSpliceAtCol.
+func overlay(body, pop string, row, col int) string {
+	bodyLines := strings.Split(body, "\n")
+	popLines := strings.Split(pop, "\n")
+	for i, pl := range popLines {
+		idx := row + i
+		if idx < 0 || idx >= len(bodyLines) {
+			continue
+		}
+		bodyLines[idx] = ansiSpliceAtCol(bodyLines[idx], col, lipgloss.Width(pl), pl)
+	}
+	return strings.Join(bodyLines, "\n")
 }
 
 func trimTo(xs []string, n int) []string {

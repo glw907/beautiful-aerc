@@ -102,3 +102,63 @@ func TestPopoverAddToWordlist(t *testing.T) {
 		t.Errorf("AddToWordlist should close popover")
 	}
 }
+
+func TestPopoverRenderShape(t *testing.T) {
+	pop := popoverState{
+		open:        true,
+		word:        "tradeof",
+		suggestions: []string{"tradeoff", "trade-off"},
+		cursor:      0,
+	}
+	out := pop.render(40, Styles{})
+	lines := strings.Split(out, "\n")
+	// header + 2 suggestions + blank separator + actions + 2 borders = 7
+	if len(lines) != 7 {
+		t.Fatalf("popover lines = %d, want 7\n%s", len(lines), out)
+	}
+	// lines[0] is the top border. lines[1] is the header content row.
+	if !strings.Contains(lines[1], "tradeof") {
+		t.Errorf("header line missing word: %q", lines[1])
+	}
+	if !strings.Contains(out, "tradeoff") || !strings.Contains(out, "trade-off") {
+		t.Errorf("render missing suggestions:\n%s", out)
+	}
+}
+
+func TestPopoverRenderZeroSuggestions(t *testing.T) {
+	pop := popoverState{open: true, word: "qzwxy", suggestions: nil}
+	out := pop.render(40, Styles{})
+	lines := strings.Split(out, "\n")
+	// header + actions + 2 borders = 4
+	if len(lines) != 4 {
+		t.Fatalf("zero-suggestion popover lines = %d, want 4\n%s", len(lines), out)
+	}
+}
+
+func TestPopoverPositionBelow(t *testing.T) {
+	pop := popoverState{open: true, word: "x", suggestions: []string{"y"}}
+	row, col := pop.position(2, 5, 80, 24)
+	if row != 3 {
+		t.Errorf("position row below cursor = %d, want 3", row)
+	}
+	if col != 5 {
+		t.Errorf("position col = %d, want 5", col)
+	}
+}
+
+func TestPopoverPositionAboveOnNoRoom(t *testing.T) {
+	pop := popoverState{open: true, word: "x", suggestions: []string{"y", "z"}}
+	// Cursor near bottom: popover would overflow if drawn below.
+	row, _ := pop.position(22, 0, 80, 24)
+	if row >= 22 {
+		t.Errorf("position row near bottom = %d, want above cursor", row)
+	}
+}
+
+func TestPopoverHorizontalClamp(t *testing.T) {
+	pop := popoverState{open: true, word: "x", suggestions: []string{"y"}}
+	_, col := pop.position(2, 78, 80, 24) // anchor near right edge
+	if col+pop.width() > 80 {
+		t.Errorf("position col+width = %d, want ≤ 80", col+pop.width())
+	}
+}
