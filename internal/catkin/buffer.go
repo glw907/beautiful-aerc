@@ -30,7 +30,7 @@ func (b *Buffer) SetValue(s string) { b.ta.SetValue(s) }
 func (b *Buffer) SetWidth(w int)    { b.ta.SetWidth(w) }
 func (b *Buffer) SetHeight(h int)   { b.ta.SetHeight(h) }
 
-func (b Buffer) Focus() tea.Cmd { return b.ta.Focus() }
+func (b *Buffer) Focus() tea.Cmd { return b.ta.Focus() }
 func (b *Buffer) Blur()         { b.ta.Blur() }
 func (b Buffer) Focused() bool  { return b.ta.Focused() }
 

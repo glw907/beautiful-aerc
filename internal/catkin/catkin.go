@@ -123,7 +123,19 @@ func (m Model) afterEdit(b Buffer, cmd tea.Cmd) (Model, tea.Cmd) {
 		m.srcGen++
 		cmd = tea.Batch(cmd, scheduleAnnotateCmd(m.srcGen))
 	}
+	m = m.closePopoverIfCursorLeftRange()
 	return applyScrollOff(m), cmd
+}
+
+func (m Model) closePopoverIfCursorLeftRange() Model {
+	if !m.popover.open {
+		return m
+	}
+	off := byteOffsetForRune(m.buf.Value(), m.buf.RuneOffset())
+	if !m.popover.wordRange.Contains(off) {
+		return m.closePopover()
+	}
+	return m
 }
 
 func (m *Model) recordSnap() {
@@ -217,7 +229,7 @@ func (m *Model) SetWidth(w int) {
 }
 
 // Focus focuses the editor.
-func (m Model) Focus() tea.Cmd { return m.buf.Focus() }
+func (m *Model) Focus() tea.Cmd { return m.buf.Focus() }
 
 // Blur blurs the editor.
 func (m *Model) Blur() { m.buf.Blur() }

@@ -162,3 +162,24 @@ func TestPopoverHorizontalClamp(t *testing.T) {
 		t.Errorf("position col+width = %d, want ≤ 80", col+pop.width())
 	}
 }
+
+func TestPopoverClosesOnCursorLeave(t *testing.T) {
+	m, r := newModelWithMisspelling(t)
+	m.buf.SetRuneOffset(r.Start)
+	m.Focus()
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	if !m.popover.open {
+		t.Fatalf("setup: popover should be open")
+	}
+	// Move cursor outside the misspelling range with arrow-right
+	// repeated past the word's end.
+	for i := 0; i < 20; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		if !m.popover.open {
+			break
+		}
+	}
+	if m.popover.open {
+		t.Errorf("popover should auto-close once cursor leaves the misspelling range")
+	}
+}
