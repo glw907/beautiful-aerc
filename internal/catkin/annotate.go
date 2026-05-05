@@ -1,6 +1,59 @@
 package catkin
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"sort"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// annotateDebounce is the idle delay after the last edit before
+// annotators run. 350 ms keeps typing cheap and matches common
+// IDE inline-lint timing.
+const annotateDebounce = 350 * time.Millisecond
+
+// annotateRequestMsg fires after the debounce. If gen still
+// matches Model.srcGen, annotators run; otherwise the request is
+// stale and dropped.
+type annotateRequestMsg struct{ gen uint64 }
+
+// annotationsReadyMsg carries a freshly-computed set. Model
+// installs it iff gen still matches Model.srcGen.
+type annotationsReadyMsg struct {
+	gen uint64
+	set *AnnotationSet
+}
+
+// scheduleAnnotateCmd issues a tick that fires
+// annotateRequestMsg{gen} after annotateDebounce.
+func scheduleAnnotateCmd(gen uint64) tea.Cmd {
+	return tea.Tick(annotateDebounce, func(time.Time) tea.Msg {
+		return annotateRequestMsg{gen: gen}
+	})
+}
+
+// runAnnotatorsCmd runs every annotator over src and returns an
+// annotationsReadyMsg{gen, set}. Pure compute; safe inside a Cmd.
+func runAnnotatorsCmd(gen uint64, src string, annotators []Annotator) tea.Cmd {
+	return func() tea.Msg {
+		anns := runAnnotators(annotators, src)
+		return annotationsReadyMsg{gen: gen, set: newAnnotationSet(src, anns)}
+	}
+}
+
+// runAnnotators invokes each registered annotator and merges
+// their output. Result is sorted by Range.Start.
+func runAnnotators(annotators []Annotator, src string) []Annotation {
+	var out []Annotation
+	for _, a := range annotators {
+		out = append(out, a.Annotate(src)...)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Range.Start < out[j].Range.Start
+	})
+	return out
+}
 
 // Range is a half-open byte-offset range over the raw source.
 // Stored as offsets — not row/col — so annotators don't re-derive

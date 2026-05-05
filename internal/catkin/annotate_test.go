@@ -64,3 +64,56 @@ func TestAnnotationCarriesStyleAndPayload(t *testing.T) {
 		t.Errorf("Payload = %#v, want MisspellingPayload{Word:\"abc\"}", a.Payload)
 	}
 }
+
+type fakeAnnotator struct {
+	name  string
+	calls int
+	out   []Annotation
+}
+
+func (f *fakeAnnotator) Name() string { return f.name }
+func (f *fakeAnnotator) Annotate(src string) []Annotation {
+	f.calls++
+	return f.out
+}
+
+func TestRegisterAnnotator(t *testing.T) {
+	m := New()
+	a := &fakeAnnotator{name: "fake", out: []Annotation{{Range: Range{0, 3}, Kind: KindMisspelling}}}
+	m.RegisterAnnotator(a)
+	set := runAnnotators(m.annotators, "abc def")
+	if len(set) != 1 || set[0].Range.Start != 0 {
+		t.Fatalf("runAnnotators output = %#v, want one annotation at 0", set)
+	}
+	if a.calls != 1 {
+		t.Errorf("Annotate calls = %d, want 1", a.calls)
+	}
+}
+
+func TestAnnotateStaleDrop(t *testing.T) {
+	m := New()
+	m.srcGen = 5
+	// Ready msg from generation 4 should be ignored.
+	m, _ = m.Update(annotationsReadyMsg{gen: 4, set: &AnnotationSet{}})
+	if m.annotations != nil {
+		t.Errorf("stale annotationsReadyMsg should not install a set")
+	}
+	// Matching gen installs.
+	want := &AnnotationSet{}
+	m, _ = m.Update(annotationsReadyMsg{gen: 5, set: want})
+	if m.annotations != want {
+		t.Errorf("matching gen should install the set")
+	}
+}
+
+func TestAnnotateRequestStaleDrop(t *testing.T) {
+	m := New()
+	a := &fakeAnnotator{name: "fake"}
+	m.RegisterAnnotator(a)
+	m.srcGen = 7
+	// Request from gen 6 should not run annotators.
+	m, _ = m.Update(annotateRequestMsg{gen: 6})
+	if a.calls != 0 {
+		t.Errorf("stale request should not invoke annotators; calls = %d", a.calls)
+	}
+}

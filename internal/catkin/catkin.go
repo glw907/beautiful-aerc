@@ -25,6 +25,11 @@ type Model struct {
 	undo        undoRing
 	mode        DisplayMode
 	find        findState
+
+	annotators  []Annotator
+	annotations *AnnotationSet
+	srcGen      uint64
+	annoGen     uint64
 }
 
 // New returns a Model with default settings.
@@ -36,9 +41,29 @@ func New() Model {
 	return m
 }
 
+// RegisterAnnotator adds a to the Model's annotator registry.
+// Annotators run in registration order; their output merges and
+// sorts by Range.Start.
+func (m *Model) RegisterAnnotator(a Annotator) {
+	m.annotators = append(m.annotators, a)
+}
+
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	switch tm := msg.(type) {
+	case annotateRequestMsg:
+		if tm.gen != m.srcGen {
+			return m, nil
+		}
+		return m, runAnnotatorsCmd(m.srcGen, m.buf.Value(), m.annotators)
+	case annotationsReadyMsg:
+		if tm.gen == m.srcGen {
+			m.annotations = tm.set
+			m.annoGen = tm.gen
+		}
+		return m, nil
+	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		if m.find.active() {
 			return m.handleFind(k)
@@ -79,8 +104,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) afterEdit(b Buffer, cmd tea.Cmd) (Model, tea.Cmd) {
+	prev := m.buf.Value()
 	m.buf = b
 	m.recordSnap()
+	if m.buf.Value() != prev && len(m.annotators) > 0 {
+		m.srcGen++
+		cmd = tea.Batch(cmd, scheduleAnnotateCmd(m.srcGen))
+	}
 	return applyScrollOff(m), cmd
 }
 
