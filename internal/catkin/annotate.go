@@ -14,8 +14,7 @@ import (
 const annotateDebounce = 350 * time.Millisecond
 
 // annotateRequestMsg fires after the debounce. If gen still
-// matches Model.srcGen, annotators run; otherwise the request is
-// stale and dropped.
+// matches Model.srcGen, annotators run. Stale requests are dropped.
 type annotateRequestMsg struct{ gen uint64 }
 
 // annotationsReadyMsg carries a freshly-computed set. Model
@@ -34,7 +33,7 @@ func scheduleAnnotateCmd(gen uint64) tea.Cmd {
 }
 
 // runAnnotatorsCmd runs every annotator over src and returns an
-// annotationsReadyMsg{gen, set}. Pure compute; safe inside a Cmd.
+// annotationsReadyMsg{gen, set}. Pure compute, safe inside a Cmd.
 func runAnnotatorsCmd(gen uint64, src string, annotators []Annotator) tea.Cmd {
 	return func() tea.Msg {
 		anns := runAnnotators(annotators, src)
@@ -56,8 +55,8 @@ func runAnnotators(annotators []Annotator, src string) []Annotation {
 }
 
 // Range is a half-open byte-offset range over the raw source.
-// Stored as offsets — not row/col — so annotators don't re-derive
-// from a moving cursor; rendering maps offsets to row/col once.
+// Stored as byte offsets, not row/col, so annotators don't re-derive
+// from a moving cursor. The renderer maps offsets to row/col once.
 type Range struct{ Start, End int }
 
 // Contains reports whether off lies in [Start, End).
@@ -98,7 +97,7 @@ type Annotator interface {
 // All slice is sorted by Range.Start.
 type AnnotationSet struct {
 	All       []Annotation
-	byRow     []int // first index in All whose End reaches row r; -1 if none
+	byRow     []int // first index in All whose End reaches row r (-1 if none)
 	rowStarts []int // byte offset of each row's first character
 }
 
@@ -114,7 +113,7 @@ func newAnnotationSet(src string, anns []Annotation) *AnnotationSet {
 		byRow[i] = -1
 	}
 	// byRow[r] = first annotation index whose End reaches past
-	// rowStarts[r] — captures both annotations starting on row r and
+	// rowStarts[r]. Captures annotations starting on row r and
 	// multi-row annotations that span into it from above.
 	// Two-pointer: advance ai until we find an annotation that reaches
 	// the current row, then stamp all subsequent rows it covers.
@@ -140,9 +139,9 @@ func (s *AnnotationSet) firstOnRow(row int) int {
 
 // rangesOnRow returns annotations that intersect row r. The src
 // parameter is still accepted so callers (the renderer) can pass it
-// unchanged; its length determines the end of the final row, but the
-// newline walk is not repeated — rowStarts was computed once in
-// newAnnotationSet and stored on the set.
+// unchanged. Its length determines the end of the final row. The
+// newline walk is not repeated: rowStarts was computed once in
+// newAnnotationSet.
 func (s *AnnotationSet) rangesOnRow(src string, row int) []Annotation {
 	if s == nil {
 		return nil

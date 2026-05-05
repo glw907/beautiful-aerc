@@ -25,7 +25,7 @@ func TestRangeContains(t *testing.T) {
 }
 
 func TestAnnotationSetByRow(t *testing.T) {
-	// Source: "abc\ndef\nghi" — newlines at offsets 3 and 7.
+	// Source: "abc\ndef\nghi". Newlines at offsets 3 and 7.
 	// Annotations on row 0 (Start=0), row 1 (Start=4), row 2 (Start=8).
 	src := "abc\ndef\nghi"
 	anns := []Annotation{

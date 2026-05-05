@@ -41,8 +41,8 @@ func New() Model {
 }
 
 // RegisterAnnotator adds a to the Model's annotator registry.
-// Annotators run in registration order; their output merges and
-// sorts by Range.Start.
+// Annotators run in registration order and their output merges,
+// sorted by Range.Start.
 func (m *Model) RegisterAnnotator(a Annotator) {
 	m.annotators = append(m.annotators, a)
 }
