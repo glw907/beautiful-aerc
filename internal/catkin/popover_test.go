@@ -1,6 +1,8 @@
 package catkin
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -76,5 +78,27 @@ func TestPopoverDigitJumpApply(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
 	if m.popover.open {
 		t.Errorf("digit jump should close popover")
+	}
+}
+
+func TestPopoverAddToWordlist(t *testing.T) {
+	dir := t.TempDir()
+	listPath := dir + "/wordlist.txt"
+
+	m, r := newModelWithMisspelling(t)
+	m.SetUserWordlistPath(listPath)
+	m.buf.SetRuneOffset(r.Start)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+
+	got, err := os.ReadFile(listPath)
+	if err != nil {
+		t.Fatalf("read wordlist: %v", err)
+	}
+	if !strings.Contains(string(got), "tradeof") {
+		t.Errorf("wordlist missing \"tradeof\":\n%s", got)
+	}
+	if m.popover.open {
+		t.Errorf("AddToWordlist should close popover")
 	}
 }

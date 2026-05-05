@@ -1,6 +1,10 @@
 package catkin
 
 import (
+	"fmt"
+	"os"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -102,8 +106,7 @@ func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model, tea.Cmd) {
 	case key.Matches(k, popoverKeys.Ignore):
 		return true, m.ignoreCurrentWord(), nil
 	case key.Matches(k, popoverKeys.Add):
-		// Persistence hook wired in Task 10. Close the popover.
-		return true, m.closePopover(), nil
+		return true, m.addCurrentWordToWordlist(), nil
 	}
 	// Digit jump-and-apply.
 	if len(k.Runes) == 1 && k.Runes[0] >= '1' && k.Runes[0] <= '9' {
@@ -152,6 +155,37 @@ func (m Model) ignoreCurrentWord() Model {
 		m.srcGen++
 	}
 	return m
+}
+
+func (m Model) addCurrentWordToWordlist() Model {
+	word := m.popover.word
+	if m.userWordlistPath != "" {
+		appendUserWord(m.userWordlistPath, word)
+	}
+	for _, a := range m.annotators {
+		if sa, ok := a.(*spellcheckAnnotator); ok && sa.speller != nil {
+			sa.speller.known[strings.ToLower(word)] = 1
+		}
+	}
+	m = m.closePopover()
+	if len(m.annotators) > 0 {
+		m.srcGen++
+	}
+	return m
+}
+
+// appendUserWord opens path in append mode (creating it 0o600 if missing)
+// and writes word + "\n". Errors are swallowed: a persistence failure is
+// recoverable. The in-memory speller picks up the word for this session, and
+// surfacing the error from a key handler would require an error channel this
+// pass deliberately does not introduce.
+func appendUserWord(path, word string) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s\n", word)
 }
 
 func trimTo(xs []string, n int) []string {

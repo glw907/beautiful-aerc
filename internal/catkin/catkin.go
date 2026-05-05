@@ -27,10 +27,11 @@ type Model struct {
 	mode        DisplayMode
 	find        findState
 
-	annotators  []Annotator
-	annotations *AnnotationSet
-	srcGen      uint64
-	popover     popoverState
+	annotators       []Annotator
+	annotations      *AnnotationSet
+	srcGen           uint64
+	popover          popoverState
+	userWordlistPath string
 }
 
 // New returns a Model with default settings.
@@ -155,6 +156,12 @@ func (m Model) Value() string { return m.buf.Value() }
 func (m *Model) SetValue(s string) {
 	m.buf.SetValue(s)
 	m.undo.seed(snap{s, m.buf.RuneOffset()})
+}
+
+// SetUserWordlistPath sets the file the popover's add-action appends to.
+// Empty path disables persistence. Add becomes a session-local addition only.
+func (m *Model) SetUserWordlistPath(path string) {
+	m.userWordlistPath = path
 }
 
 // SetSize sets the editor's display dimensions.
