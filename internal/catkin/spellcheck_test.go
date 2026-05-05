@@ -28,6 +28,10 @@ lazy
 dog
 tradeoff
 markdown
+is
+real
+and
+here
 `
 
 func TestSpellerCheckKnown(t *testing.T) {
@@ -113,5 +117,87 @@ func TestLoadUserWordlistParses(t *testing.T) {
 	want := []string{"frobnicate", "Quux", "spaced"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoadUserWordlist = %v, want %v", got, want)
+	}
+}
+
+func TestSpellcheckAnnotator(t *testing.T) {
+	speller := newFixtureSpeller(t, nil)
+	a := NewSpellcheckAnnotator(speller)
+
+	cases := []struct {
+		name       string
+		src        string
+		wantRanges []Range
+	}{
+		{
+			name:       "single misspelling",
+			src:        "the tradeof is real",
+			wantRanges: []Range{{4, 11}},
+		},
+		{
+			name:       "no misspellings",
+			src:        "the quick brown fox",
+			wantRanges: nil,
+		},
+		{
+			name:       "skip inside fenced code",
+			src:        "the\n```go\nquxxxxxx\n```\nover",
+			wantRanges: nil,
+		},
+		{
+			name:       "skip inside inline code",
+			src:        "the `quxxxxxx` over",
+			wantRanges: nil,
+		},
+		{
+			name:       "skip inside link URL",
+			src:        "the [quick](http://exampole.com/foo) over",
+			wantRanges: nil,
+		},
+		{
+			name:       "skip all-caps acronym <=4 runes",
+			src:        "JMAP and HTTP and IMAP",
+			wantRanges: nil,
+		},
+		{
+			name:       "all-caps >4 still checked",
+			src:        "QUXXXXX",
+			wantRanges: []Range{{0, 7}},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := a.Annotate(c.src)
+			if len(got) != len(c.wantRanges) {
+				t.Fatalf("Annotate(%q) returned %d ranges, want %d: %v", c.src, len(got), len(c.wantRanges), got)
+			}
+			for i, want := range c.wantRanges {
+				if got[i].Range != want {
+					t.Errorf("range %d = %v, want %v", i, got[i].Range, want)
+				}
+				if got[i].Kind != KindMisspelling {
+					t.Errorf("range %d kind = %v, want KindMisspelling", i, got[i].Kind)
+				}
+			}
+		})
+	}
+}
+
+func TestSpellcheckAnnotatorPayload(t *testing.T) {
+	speller := newFixtureSpeller(t, nil)
+	a := NewSpellcheckAnnotator(speller)
+	got := a.Annotate("tradeof here")
+	if len(got) != 1 {
+		t.Fatalf("Annotate returned %d, want 1", len(got))
+	}
+	mp, ok := got[0].Payload.(MisspellingPayload)
+	if !ok {
+		t.Fatalf("Payload type = %T, want MisspellingPayload", got[0].Payload)
+	}
+	if mp.Word != "tradeof" {
+		t.Errorf("Word = %q, want \"tradeof\"", mp.Word)
+	}
+	if len(mp.Suggestions) == 0 || mp.Suggestions[0] != "tradeoff" {
+		t.Errorf("Suggestions = %v, want first \"tradeoff\"", mp.Suggestions)
 	}
 }

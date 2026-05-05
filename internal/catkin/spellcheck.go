@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 //go:embed spellcheck/en_US.txt spellcheck/project.txt
@@ -263,4 +265,147 @@ func LoadUserWordlist(path string) ([]string, error) {
 		out = append(out, line)
 	}
 	return out, sc.Err()
+}
+
+// NewSpellcheckAnnotator wires speller into the Annotator interface.
+// Not safe for concurrent use across goroutines.
+func NewSpellcheckAnnotator(speller *Speller) Annotator {
+	return &spellcheckAnnotator{
+		speller: speller,
+		ignored: map[string]struct{}{},
+	}
+}
+
+type spellcheckAnnotator struct {
+	speller *Speller
+	ignored map[string]struct{} // session-only word additions
+}
+
+func (s *spellcheckAnnotator) Name() string { return "spellcheck" }
+
+func (s *spellcheckAnnotator) Annotate(src string) []Annotation {
+	if s.speller == nil {
+		return nil
+	}
+	mask := buildSkipMask(src)
+	var out []Annotation
+	i := 0
+	for i < len(src) {
+		r, size := utf8.DecodeRuneInString(src[i:])
+		if !isWordRune(r) {
+			i += size
+			continue
+		}
+		start := i
+		for i < len(src) {
+			r, size = utf8.DecodeRuneInString(src[i:])
+			if !isWordRune(r) {
+				break
+			}
+			i += size
+		}
+		end := i
+		if mask.covers(start, end) {
+			continue
+		}
+		word := src[start:end]
+		if isAllUpperShort(word) {
+			continue
+		}
+		if _, ig := s.ignored[strings.ToLower(word)]; ig {
+			continue
+		}
+		if s.speller.Check(word) {
+			continue
+		}
+		out = append(out, Annotation{
+			Range:   Range{Start: start, End: end},
+			Kind:    KindMisspelling,
+			Payload: MisspellingPayload{Word: word, Suggestions: s.speller.Suggest(word, 5)},
+		})
+	}
+	return out
+}
+
+// IgnoreInSession adds word to the in-memory ignore set. Subsequent
+// Annotate calls treat it as known until the annotator is rebuilt.
+// Matching is case-insensitive.
+func (s *spellcheckAnnotator) IgnoreInSession(word string) {
+	s.ignored[strings.ToLower(word)] = struct{}{}
+}
+
+// isAllUpperShort reports whether word is all-uppercase and ≤4
+// runes. Skips common acronyms (HTTP, JMAP) without an allowlist.
+func isAllUpperShort(word string) bool {
+	n := 0
+	for _, r := range word {
+		if !unicode.IsUpper(r) && !unicode.IsDigit(r) {
+			return false
+		}
+		n++
+		if n > 4 {
+			return false
+		}
+	}
+	return n > 0
+}
+
+// skipMask is a set of byte ranges the spellchecker must not flag
+// (fenced code blocks, inline code spans, link URLs).
+type skipMask struct {
+	ranges []Range
+}
+
+func (m skipMask) covers(start, end int) bool {
+	for _, r := range m.ranges {
+		if start >= r.Start && end <= r.End {
+			return true
+		}
+	}
+	return false
+}
+
+// buildSkipMask scans src for fenced blocks, inline code spans, and
+// link URLs and returns the union of their byte ranges.
+func buildSkipMask(src string) skipMask {
+	var ranges []Range
+	lines := strings.Split(src, "\n")
+	ctxs := Classify(lines)
+
+	// Fenced block lines: mask the fence markers and all content inside.
+	off := 0
+	for i, l := range lines {
+		lineEnd := off + len(l)
+		if ctxs[i].Kind == BlockCodeFence || ctxs[i].InsideFence {
+			ranges = append(ranges, Range{Start: off, End: lineEnd})
+		}
+		off = lineEnd + 1 // +1 for '\n'
+	}
+
+	// Inline code spans and link URLs via walkSpans.
+	off = 0
+	for _, l := range lines {
+		lineOff := off
+		// Track position as walkSpans advances so we can derive absolute offsets.
+		pos := 0
+		walkSpans(l, func(kind spanKind, text string, sub []string) {
+			switch kind {
+			case spanCode:
+				ranges = append(ranges, Range{Start: lineOff + pos, End: lineOff + pos + len(text)})
+			case spanLink:
+				// sub: [full, linkText, url]. Skip only the URL portion.
+				if len(sub) >= 3 {
+					urlPart := "(" + sub[2] + ")"
+					if idx := strings.Index(l[pos:], urlPart); idx >= 0 {
+						abs := lineOff + pos + idx
+						ranges = append(ranges, Range{Start: abs, End: abs + len(urlPart)})
+					}
+				}
+			}
+			pos += len(text)
+		})
+		off = lineOff + len(l) + 1
+	}
+
+	return skipMask{ranges: ranges}
 }
