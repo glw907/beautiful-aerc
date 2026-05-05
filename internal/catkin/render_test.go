@@ -115,29 +115,3 @@ func TestRenderAppliesSquiggle(t *testing.T) {
 		t.Errorf("rendered output missing underline SGR; got:\n%q", out)
 	}
 }
-
-// TestRenderCursorRowAnnotationOffset guards the cursor-byte-offset
-// shift in applyAnnotationsToLine: without it, the splice column on
-// the cursor row is short by one cell and decorates the wrong runes.
-func TestRenderCursorRowAnnotationOffset(t *testing.T) {
-	src := "abcdef"
-	squiggle := lipgloss.NewStyle().Underline(true)
-	anns := []Annotation{
-		{Range: Range{3, 6}, Kind: KindMisspelling, Style: squiggle},
-	}
-	set := newAnnotationSet(src, anns)
-	out := RenderAnnotated(src, 80, 1, 0, 2, Styles{}, ModeNormal, set)
-	if !strings.Contains(out, "█") {
-		t.Fatalf("cursor block missing from output: %q", out)
-	}
-	if !strings.Contains(out, "\x1b[4m") && !strings.Contains(out, "\x1b[4;") {
-		t.Errorf("underline SGR missing from cursor-row output: %q", out)
-	}
-	// The cursor block must appear before the underlined segment.
-	cursorIdx := strings.Index(out, "█")
-	// Find first underline SGR after cursor block.
-	underlineIdx := strings.Index(out[cursorIdx:], "\x1b[4")
-	if underlineIdx < 0 {
-		t.Errorf("underline SGR not found after cursor block; full output:\n%q", out)
-	}
-}

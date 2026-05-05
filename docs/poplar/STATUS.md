@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9d.2 next — render-path adversarial review.
+**Current pass:** Pass 9d.2a next — invariants compaction via subsystem extraction.
 
 ## Passes
 
@@ -15,7 +15,8 @@
 | 9 – 9c | Catkin — core, live styling, commands, power-user QoL (ADR-0144–0147) | done |
 | 9d | Annotation pipeline + spellcheck consumer (ADR-0149, 0150) | done |
 | 9d.1 | AI-tells + dead-code sweep on 9d diff; tree-wide gofmt + fmt-check gate (ADR-0151) | done |
-| 9d.2 | Render-path adversarial review (RenderAnnotated, applyAnnotationsToLine, ansiSpliceAtCol, runeToByteOffset) | pending |
+| 9d.2 | Render-path adversarial review — cursor-splice fixes (ADR-0152) | done |
+| 9d.2a | Invariants compaction via subsystem extraction — promote stable subsystems to on-demand docs | pending |
 | 9d.3 | golangci-lint on `internal/catkin/` (errcheck, staticcheck, unused, gocritic, revive, errorlint, unparam, nilerr) | pending |
 | 9d.4 | Live tmux at edge sizes — popover near right + bottom edges at 80×24 | pending |
 | 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
@@ -32,29 +33,39 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9d.2)
+## Next starter prompt (Pass 9d.2a)
 
-> **Goal.** Render-path adversarial review of Catkin's annotation
-> rendering. Construct inputs the per-task review of 9d would not
-> have hit and verify each by hand.
+> **Goal.** Stop invariants.md from bumping the 400-line ceiling
+> every pass. Promote stable subsystems to on-demand docs and
+> leave one-line pointers in invariants.md.
 >
-> **Scope.** `RenderAnnotated`, `applyAnnotationsToLine`,
-> `ansiSpliceAtCol`, `runeToByteOffset`. Adversarial inputs:
-> multi-byte runes mid-annotation; annotation spanning the cursor;
-> annotation abutting the cursor block on either side; two
-> annotations on one row with the cursor between them; annotation
-> at the very last column when soft-wrap kicks in; annotation
-> across a soft-wrap boundary; empty annotation list.
+> **Scope.** Subsystems whose binding facts have settled and
+> rarely change: Cache I/II/III; Attachments I/II; JMAP backend
+> + per-folder baseline pull; IMAP backend + idle; Catkin
+> (core/styling/commands/QoL/annotation/spellcheck — already
+> compacted in 9d.2 but still ~30 lines). Each becomes a doc
+> under `docs/poplar/` (e.g. `cache-invariants.md`,
+> `attachments-invariants.md`, `mail-backends-invariants.md`,
+> `catkin-invariants.md`). Path-scoped auto-load via
+> `.claude/rules/` matching the source paths.
 >
-> **Settled.** Pre-beta posture; gofmt + voice gates green.
+> **Settled.** Pre-beta posture; the path-scoped pattern is
+> already proven by `.claude/rules/ui-invariants.md`. Decision
+> index stays in invariants.md (one source of truth for ADR
+> mapping).
 >
-> **Approach.** Write targeted test cases under
-> `internal/catkin/render_test.go`. Capture findings as either
-> bug fixes (commit) or queued work (BACKLOG.md). Pass-end ritual:
-> ADR only if a binding fact emerges; otherwise commit + STATUS
-> bump.
+> **Still open — brainstorm before coding:** which subsystems
+> are stable enough to promote (mail-backends could still churn
+> for Pass 9.6 OAuth refresh); whether the decision-index table
+> compacts further once subsystem detail moves out; the rule
+> globs for path-scoped auto-load.
+>
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/2026-05-05-invariants-compaction.md`,
+> then execute. Target: invariants.md ≤ 250 lines after the pass.
+> Pass-end ritual: one ADR codifying the split policy.
 
-## Queued passes (after 9d.2)
+## Queued passes (after 9d.2a)
 
 - **9d.3** — golangci-lint on `internal/catkin/` with errcheck,
   staticcheck, unused, gocritic, revive, errorlint, unparam,
@@ -62,9 +73,6 @@
 - **9d.4** — Live tmux verification at edge sizes. 80×24 with the
   popover open over a misspelling near the right edge and the
   bottom edge.
-- **invariants compaction** — file is at the 400-line ceiling.
-  Collapse Catkin entries (0144–0151) into two bullets, prune
-  stabilized Cache facts, compact the decision-index table.
 
 ## Queued
 

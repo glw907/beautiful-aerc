@@ -2,6 +2,7 @@ package catkin
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -79,9 +80,10 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 //
 // cursorByteCol is the byte offset within plain of the cursor
 // insertion point on the cursor row, or -1 on non-cursor rows.
-// Annotations starting at or after it have their splice column
-// shifted right by one to account for the cursor-block rune
-// already injected into styled.
+// insertCursorBlock replaces (not inserts) the rune at the cursor,
+// so column math against plain matches styled directly. When an
+// annotation range encloses the cursor byte, the splice would
+// overwrite the cursor cell. Split it around the cursor instead.
 func applyAnnotationsToLine(styled, plain string, lineOffset, cursorByteCol int, anns []Annotation) string {
 	if len(anns) == 0 {
 		return styled
@@ -99,15 +101,24 @@ func applyAnnotationsToLine(styled, plain string, lineOffset, cursorByteCol int,
 		if startInLine >= endInLine {
 			continue
 		}
-		preCol := lipgloss.Width(plain[:startInLine])
-		if cursorByteCol >= 0 && startInLine >= cursorByteCol {
-			preCol++
+		if cursorByteCol >= 0 && startInLine <= cursorByteCol && cursorByteCol < endInLine {
+			_, runeBytes := utf8.DecodeRuneInString(plain[cursorByteCol:])
+			out = spliceAnnotationRange(out, plain, startInLine, cursorByteCol, a.Style)
+			out = spliceAnnotationRange(out, plain, cursorByteCol+runeBytes, endInLine, a.Style)
+			continue
 		}
-		targetPlain := plain[startInLine:endInLine]
-		styledTarget := a.Style.Render(targetPlain)
-		out = ansiSpliceAtCol(out, preCol, lipgloss.Width(targetPlain), styledTarget)
+		out = spliceAnnotationRange(out, plain, startInLine, endInLine, a.Style)
 	}
 	return out
+}
+
+func spliceAnnotationRange(out, plain string, startByte, endByte int, style lipgloss.Style) string {
+	if startByte >= endByte {
+		return out
+	}
+	preCol := lipgloss.Width(plain[:startByte])
+	target := plain[startByte:endByte]
+	return ansiSpliceAtCol(out, preCol, lipgloss.Width(target), style.Render(target))
 }
 
 // ansiSpliceAtCol replaces width display-cells at column col in an

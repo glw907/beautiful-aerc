@@ -161,35 +161,36 @@ the ADR(s) that justify them.
   bubbletea editor, library-pure (`bubbletea`, `bubbles`,
   `lipgloss`, `muesli/reflow`, `charmbracelet/x/ansi`,
   `alecthomas/chroma/v2`). Wraps `bubbles/textarea` as
-  buffer/cursor but owns `View()`. `Classify` + `Reflow` are
-  pure; reflow cursor remap uses non-whitespace rune count;
-  word nav intercepts before textarea; scroll-off keeps the
-  cursor 3 rows from the edges. ADR-0144.
-- Live styling via Catkin-owned `Styles` (zero value = plain),
-  inline priority code > bold-italic > bold > italic > link
-  with iA-Writer literal-delimiter shape; fenced blocks via
-  chroma with viewport-bounded `sync.Map` cache; soft-wrap via
-  `ansi.Hardwrap`. ADR-0145.
-- `handleCommand` runs ahead of word-nav (smart Enter, list
-  indent, `Ctrl+B/I/K/L/Q/Space`, word/char count). ADR-0146.
-- QoL: 50-step undo/redo with intra-word coalescing; find/replace
-  overlay; markdown auto-pair (suppressed in code); smart URL
-  paste; bracket-match via `walkSpans`; `DisplayMode` cycle on
-  `Ctrl+\`. ADR-0147.
+  buffer/cursor but owns `View()`. Pure `Classify` + `Reflow`
+  (non-whitespace rune count for cursor remap); word nav
+  intercepts before textarea; 3-row scroll-off. Live styling
+  via Catkin-owned `Styles` (zero = plain): inline priority
+  code > bold-italic > bold > italic > link in iA-Writer
+  literal-delimiter shape; fences via chroma + viewport-bounded
+  `sync.Map`; soft-wrap via `ansi.Hardwrap`. `handleCommand`
+  runs ahead of word-nav (smart Enter, list indent,
+  `Ctrl+B/I/K/L/Q/Space`, counts). QoL: 50-step undo/redo with
+  intra-word coalescing, find/replace, markdown auto-pair
+  (suppressed in code), smart URL paste, bracket-match via
+  `walkSpans`, `DisplayMode` cycle on `Ctrl+\`.
+  ADR-0144, 0145, 0146, 0147.
 - Annotation pipeline: pure `Annotator` over raw-source byte
-  ranges; 350 ms idle tick + `srcGen` counter, stale results
-  dropped. `RenderAnnotated` splices via `ansiSpliceAtCol`
-  against unmodified `plain`; cursor-row offsets account for
-  the inserted `█`. ADR-0149.
-- Spellcheck (first consumer): hand-rolled `Speller` with
-  `//go:embed`'d `en_US.txt` (~50k) + `project.txt`; SymSpell
-  delete-index built lazily under `sync.Once`. `LoadUserWordlist`
-  is missing-file-tolerant. `spellcheckAnnotator(speller, styles)`
-  reuses `isWordRune`, masks fences (marker lines too), inline
-  code, link URLs, skips short all-caps. Popover on plain `;`
-  over a misspelling (`Ctrl+;` is not deliverable); digit/arrow
-  apply, `i` session-ignores, `a` appends to
-  `Model.userWordlistPath`. Cursor leaving auto-closes. ADR-0150.
+  ranges; 350 ms idle tick + `srcGen` counter drops stale
+  results. `RenderAnnotated` splices via `ansiSpliceAtCol`
+  against unmodified `plain`. `insertCursorBlock` replaces the
+  rune at the cursor column, so column math matches styled
+  directly with no cursor-aware shift; an annotation enclosing
+  the cursor byte splits its splice around the cursor cell so
+  `█` survives. Spellcheck (first consumer): hand-rolled
+  `Speller` with `//go:embed`'d `en_US.txt` (~50k) +
+  `project.txt`; SymSpell delete-index built lazily under
+  `sync.Once`; `LoadUserWordlist` is missing-file-tolerant.
+  `spellcheckAnnotator` reuses `isWordRune`, masks fences
+  (marker lines too), inline code, link URLs, skips short
+  all-caps. Popover on plain `;` over a misspelling
+  (`Ctrl+;` is not deliverable); digit/arrow apply, `i`
+  session-ignores, `a` appends to `Model.userWordlistPath`;
+  cursor leaving auto-closes. ADR-0149, 0150, 0152.
 
 ## Mail model
 
@@ -396,5 +397,4 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33, T34, T35 (T33–T35 added Pass 8.11 after a tree-wide cleanup) | 0141, 0142, 0148 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
-| Catkin — core + live styling + command vocabulary + power-user QoL (undo/redo, find/replace, auto-pair, smart paste, bracket match, typewriter+focus modes) | 0144, 0145, 0146, 0147 |
-| Catkin annotation pipeline + spellcheck consumer; 9d.1 voice + dead-code cleanup | 0149, 0150, 0151 |
+| Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; 9d.1 cleanup | 0144, 0145, 0146, 0147, 0149, 0150, 0151, 0152 |
