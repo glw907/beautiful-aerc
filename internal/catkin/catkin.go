@@ -21,6 +21,7 @@ type Model struct {
 	width       int
 	height      int
 	viewportTop int
+	styles      Styles
 }
 
 // New returns a Model with default settings.
@@ -49,8 +50,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m Model) View() string {
 	src := m.buf.Value()
 	cur := m.buf.RuneOffset()
-	return Render(src, m.width, m.height, m.viewportTop, cur)
+	return Render(src, m.width, m.height, m.viewportTop, cur, m.styles)
 }
+
+// SetStyles replaces the render-time style table. The zero value
+// is no-op styles; consumers map their theme onto Styles at the
+// boundary.
+func (m *Model) SetStyles(s Styles) { m.styles = s }
 
 // Value returns the raw markdown source.
 func (m Model) Value() string { return m.buf.Value() }

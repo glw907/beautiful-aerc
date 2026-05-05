@@ -157,19 +157,31 @@ the ADR(s) that justify them.
 
 ### Catkin
 
-- Catkin (`internal/catkin/`) is poplar's markdown-first bubbletea
-  editor, library-pure (`bubbletea`, `bubbles`, `lipgloss`,
-  `muesli/reflow` only — no poplar imports). Catkin uses
-  `bubbles/textarea` as the buffer + cursor + edit-op primitive
-  but owns its own `View()`; the renderer reads the raw buffer.
-  Block classifier (`Classify`) and reflow engine (`Reflow`) are
-  pure functions over the raw source; cursor remap across reflow
-  uses non-whitespace rune count. Display-level wrap soft-breaks
-  long source lines mid-token for the editor view only — the
-  buffer is unchanged. Word navigation (`Ctrl+Left/Right` +
-  `Ctrl+Backspace/Delete`) is intercepted in `Model.Update`
-  before delegating to textarea. Scroll-off keeps the cursor
-  3 rows from the top/bottom edges. ADR-0144.
+- Catkin (`internal/catkin/`) is poplar's markdown-first
+  bubbletea editor, library-pure (`bubbletea`, `bubbles`,
+  `lipgloss`, `muesli/reflow`, `charmbracelet/x/ansi`,
+  `alecthomas/chroma/v2` only — no poplar imports). Catkin
+  uses `bubbles/textarea` as the buffer + cursor + edit-op
+  primitive but owns its own `View()`. Block classifier
+  (`Classify`) and reflow engine (`Reflow`) are pure functions
+  over the raw source; cursor remap across reflow uses
+  non-whitespace rune count. Display-level wrap soft-breaks
+  long source lines mid-token. Word navigation
+  (`Ctrl+Left/Right`, `Ctrl+Backspace/Delete`) is intercepted
+  in `Model.Update` before delegating to textarea. Scroll-off
+  keeps the cursor 3 rows from the edges. ADR-0144.
+- Live markdown styling is a render-time overlay driven by
+  `catkin.Styles` (Catkin-owned; host maps its theme onto it,
+  zero value yields plain). Inline span tokenizer is
+  single-pass, priority code > bold-italic > bold > italic >
+  link; delimiters always render literally (iA-Writer shape).
+  Fenced blocks highlight via chroma (monokai/terminal256)
+  when the info string names a known lexer, with a `sync.Map`
+  cache for lexer+style+formatter; unknown lexers fall back to
+  `Styles.CodeBlock`. `renderFences` only highlights blocks in
+  the viewport. Cursor `█` is placed in the raw line before
+  styling; cursor on a delimiter degrades the span to plain.
+  Soft-wrap is ANSI-aware via `ansi.Hardwrap`. ADR-0145.
 
 ## Mail model
 
@@ -385,3 +397,4 @@ invariant. ADR numbering is chronological.
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (32-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; 8.10 grep-tier voice-check in `make check` (T4, T10, T14, T16, T27, T28) | 0141, 0142 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
 | Catkin core (Pass 9) — package skeleton + Model/Buffer + block classifier + reflow + plain renderer + word nav + scroll-off; renderer ownership | 0144 |
+| Catkin live styling (Pass 9a) — render-time overlay via Catkin-owned `Styles`; iA-Writer-shape span tokenizer (code > bold-italic > bold > italic > link); chroma syntax highlighting for known fences (monokai/terminal256) with `sync.Map` cache and viewport-bounded execution; cursor-in-raw-before-style; ANSI-aware soft-wrap | 0145 |

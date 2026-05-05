@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9a next — Catkin live markdown styling.
+**Current pass:** Pass 9.5 next — Compose enhancements (#5 #12 #24).
 
 ## Passes
 
@@ -19,7 +19,7 @@
 | 8.9 | Human-voice audit II — structural fixes (C2/C5/C6/C8/C4-structural) + dedupe of resolvePassword | done |
 | 8.10 | First-sync header population — JMAP per-folder baseline pull (Email/query + sentinel-id state probe in one roundtrip); FetchHeaders chunked at 500 (ADR-0143) | done |
 | 9 | Catkin core — package, classifier, reflow, plain render, word nav, scroll-off (ADR-0144) | done |
-| 9a | Catkin live markdown styling — render-time lipgloss overlay | pending |
+| 9a | Catkin live markdown styling — `Styles` overlay + chroma fences (ADR-0145) | done |
 | 9.5 | Compose enhancements — #5 #12 #24 | pending |
 | 9.6 | First-run wizard (#27) + config template fix (#29) | pending |
 | 10 | Polish II — popover dim (#14); items surfaced during 9–9.6 | pending |
@@ -29,36 +29,31 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9a)
+## Next starter prompt (Pass 9.5)
 
-> **Goal.** Layer live markdown styling onto Catkin's renderer.
-> Bold/italic/code spans render with their delimiters visible
-> (iA-Writer-shaped: `**bold**` shows the asterisks AND a bold
-> face). Headings, list markers, quote prefixes, and code blocks
-> render with style classes wired to `theme.CompiledTheme`. The
-> raw buffer is unchanged — styling is purely a render-time
-> overlay of lipgloss styles on top of the plain output Pass 9
-> ships today.
+> **Goal.** Compose enhancements: wire Catkin into the compose
+> screen (replacing the placeholder textarea, mapping
+> `theme.CompiledTheme` → `catkin.Styles`), then land #5
+> (drafts), #12 (reply quoting), and #24 (attachment send).
 >
-> **Scope.** `internal/catkin/render.go` (extend), new
-> `internal/catkin/style.go` (theme-driven style table), no
-> changes to blocks.go or reflow.go. Cursor block keeps its
-> current shape; styling does not change displayCells per row.
-> ADR-0144 invariants hold.
+> **Scope.** `internal/ui/compose.go` + theme→catkin.Styles
+> mapping; draft persistence via cache (schema bump if needed);
+> reply quoting via `mail.MessageInfo`; attachment attach UI
+> mirroring the Attachments II picker.
 >
-> **Settled:** Styling reads from `*theme.CompiledTheme` passed
-> through `Model.SetTheme`. Inline span detection runs after the
-> block classifier and uses the same regex toolkit (no full
-> markdown parser).
+> **Settled:** Catkin is the editor; Catkin-owned `Styles` is
+> the boundary (ADR-0145). Library-purity preserved — mapping
+> happens host-side. iA-Writer span shape and chroma fence
+> highlighting carry over.
 >
-> **Still open — brainstorm:** code-fence syntax-highlighting
-> scope (off / chroma / treesitter); inline span detection
-> precedence (e.g., `***triple***` interleaving rules); whether
-> link `[text](url)` shows the URL inline.
+> **Still open — brainstorm:** draft schema (column on messages
+> vs. separate table); reply quoting style (top-quote vs.
+> bottom-quote vs. configurable); attachment add UX (pick from
+> filesystem at compose time vs. drag-and-drop placeholder).
 >
-> **Approach.** Brainstorm the open questions, write a plan at
-> `docs/superpowers/plans/YYYY-MM-DD-catkin-styling.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm open questions, plan at
+> `docs/superpowers/plans/YYYY-MM-DD-compose-enhancements.md`,
+> then implement. Standard pass-end checklist applies.
 
 ## Queued
 
