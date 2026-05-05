@@ -490,8 +490,30 @@ CJK languages (Chinese / Japanese / Korean) are deliberately **not** bundled —
 
 - Triggered when `[ui] spellcheck_lang` is set to a language **outside** the bundled eight.
 - Subprocess `hunspell -a -d <lang>` in pipe mode. One pooled long-lived process per session.
-- **Missing-binary / missing-dictionary handling:** surface a one-time `ErrorMsg` banner explicitly naming the install command (`apt install hunspell hunspell-cs-cz`, `brew install hunspell`). User gets a clear remediation path, not silent failure.
 - Future work: promote additional bundled languages on demonstrated demand.
+
+**Surfacing instructions to non-English / non-bundled speakers.**
+
+Three places carry the install guidance, scaling from "user is mid-task" to "user is reading docs":
+
+1. **Inline error banner on first failure.** When `[ui] spellcheck_lang = "cs_CZ"` (or any non-bundled language) is set and the subprocess fails (binary or dictionary missing), the next attempt to spellcheck emits a one-time per-session `ErrorMsg` to the existing chrome banner. The text platform-detects:
+
+   - Linux (apt-family): `spellcheck: cs_CZ unavailable. Install: sudo apt install hunspell hunspell-cs`
+   - Linux (dnf/rpm-family): `spellcheck: cs_CZ unavailable. Install: sudo dnf install hunspell hunspell-cs`
+   - macOS: `spellcheck: cs_CZ unavailable. Install: brew install hunspell, then drop the .aff/.dic files into ~/Library/Spelling/`
+   - Other / detection-failed: `spellcheck: cs_CZ unavailable. Install hunspell + the cs_CZ dictionary, then restart poplar.`
+
+   The banner is fire-and-forget — it doesn't block typing, doesn't requeue, doesn't repeat in the same session. Detection is via `runtime.GOOS` plus a probe of `/etc/os-release` for distro family. Falls back to the generic message if probe fails.
+
+2. **`poplar config check` reports it.** The existing `config check` subcommand learns a spellcheck probe: prints `spellcheck (cs_CZ): not installed — see README.md#spellcheck` (or `ok` on success) per account. Allows users to verify before writing email.
+
+3. **README documentation.** A dedicated `README.md#spellcheck` section lists:
+   - The eight bundled languages by name + code.
+   - Per-platform install commands for the major non-bundled languages (Czech, Russian, Turkish, Greek, Norwegian, Swedish, Danish, Finnish, Hungarian — covering most other significant European email locales).
+   - Where to drop dictionary files when packaging isn't available.
+   - How to set `[ui] spellcheck_lang` in `config.toml`.
+
+This three-tier surfacing ensures users discover the path regardless of how they arrive at the problem — whether they're mid-compose and hit the banner, doing a config sanity-check, or reading docs before setup.
 
 **Why not subprocess-only?** Linux distros (including Linux Mint, the development workstation) don't ship `hunspell` by default. macOS doesn't make its native `NSSpellChecker` accessible via subprocess. Windows has no equivalent. "Graceful degrade silent" would mean most users get no spellcheck — not viable for a core feature.
 
