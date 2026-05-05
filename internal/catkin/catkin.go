@@ -34,6 +34,12 @@ func New() Model {
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	if k, ok := msg.(tea.KeyMsg); ok {
+		if handled, b, cmd := handleWordNav(m.buf, k); handled {
+			m.buf = b
+			return m, cmd
+		}
+	}
 	var cmd tea.Cmd
 	m.buf, cmd = m.buf.Update(msg)
 	return m, cmd
