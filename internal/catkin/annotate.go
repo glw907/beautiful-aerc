@@ -98,7 +98,7 @@ type Annotator interface {
 // All slice is sorted by Range.Start.
 type AnnotationSet struct {
 	All       []Annotation
-	byRow     []int // first index of an annotation starting on row r; -1 if none
+	byRow     []int // first index in All whose End reaches row r; -1 if none
 	rowStarts []int // byte offset of each row's first character
 }
 
@@ -113,13 +113,19 @@ func newAnnotationSet(src string, anns []Annotation) *AnnotationSet {
 	for i := range byRow {
 		byRow[i] = -1
 	}
-	row := 0
-	for ai, a := range anns {
-		for row+1 < len(rowStarts) && a.Range.Start >= rowStarts[row+1] {
-			row++
+	// byRow[r] = first annotation index whose End reaches past
+	// rowStarts[r] — captures both annotations starting on row r and
+	// multi-row annotations that span into it from above.
+	// Two-pointer: advance ai until we find an annotation that reaches
+	// the current row, then stamp all subsequent rows it covers.
+	ai := 0
+	for r, rs := range rowStarts {
+		// Skip annotations that end at or before this row's start.
+		for ai < len(anns) && anns[ai].Range.End <= rs {
+			ai++
 		}
-		if row < len(byRow) && byRow[row] == -1 {
-			byRow[row] = ai
+		if ai < len(anns) {
+			byRow[r] = ai
 		}
 	}
 	return &AnnotationSet{All: anns, byRow: byRow, rowStarts: rowStarts}
@@ -149,9 +155,16 @@ func (s *AnnotationSet) rangesOnRow(src string, row int) []Annotation {
 	if row+1 < len(s.rowStarts) {
 		rowEnd = s.rowStarts[row+1] - 1 // exclude '\n'
 	}
+	start := s.firstOnRow(row)
+	if start == -1 {
+		return nil
+	}
 	var out []Annotation
-	for _, a := range s.All {
-		if a.Range.End <= rowStart || a.Range.Start >= rowEnd {
+	for _, a := range s.All[start:] {
+		if a.Range.Start >= rowEnd {
+			break
+		}
+		if a.Range.End <= rowStart {
 			continue
 		}
 		out = append(out, a)

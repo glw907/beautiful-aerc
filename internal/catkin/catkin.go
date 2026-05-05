@@ -29,7 +29,6 @@ type Model struct {
 	annotators  []Annotator
 	annotations *AnnotationSet
 	srcGen      uint64
-	annoGen     uint64
 }
 
 // New returns a Model with default settings.
@@ -60,7 +59,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case annotationsReadyMsg:
 		if tm.gen == m.srcGen {
 			m.annotations = tm.set
-			m.annoGen = tm.gen
 		}
 		return m, nil
 	}
