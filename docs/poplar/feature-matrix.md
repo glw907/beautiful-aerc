@@ -37,7 +37,8 @@ minutes. Any `—` in the poplar column here is a v1.0 risk.
 | **Compose**                        |      |      |     |    |       |       |      |        |
 | New / reply / reply-all / forward  |  ✓   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ⏳9h  |
 | Quote depth on reply               |  ✓   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ✓    |
-| Drafts (saved & resumable)         |  ✓   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ⏳9h.5|
+| Drafts (saved & resumable)         |  ✓   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ✓    |
+| Drafts cross-device sync           |  —   |  —   |  —  | ✓  |   ✓   |   ✓   |  ✓   |   ✓    |
 | Signatures (per account)           |  ✓   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ⏳9.4 |
 | Spellcheck                         |  ~   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ✓    |
 | Address autocomplete (from history)|  ✓   |  ✓   |  ✓  | ✓  |   ✓   |   ✓   |  ✓   |   ⏳9.1 |
