@@ -29,6 +29,7 @@ import (
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/filter"
 	"github.com/glw907/poplar/internal/mail"
+	uicompose "github.com/glw907/poplar/internal/ui/compose"
 )
 
 // foldersLoadedMsg carries the result of an initial sync + ListFolders
@@ -596,7 +597,7 @@ const (
 )
 
 // composeSeedCmd fetches the parent body and builds a Draft via the
-// matching compose.Seed* function. Result lands as composeSeededMsg.
+// matching compose.Seed* function. Result lands as uicompose.SeededMsg.
 func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, kind composeSeedKind) tea.Cmd {
 	return func() tea.Msg {
 		body, err := acct.FetchBody(parent.UID)
@@ -613,19 +614,13 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 			d = compose.SeedForward(parent, body)
 		}
 		d.From = gomail.Address{Address: self}
-		return composeSeededMsg{Draft: d}
+		return uicompose.SeededMsg{Draft: d}
 	}
-}
-
-// composeSeededMsg carries a pre-filled Draft from r/R/f. App opens
-// ComposeTab and calls Seed when this msg arrives.
-type composeSeededMsg struct {
-	Draft compose.Draft
 }
 
 // composeSendCmd runs the tidy seam, assembles MIME, and queues the
 // outbox op via cache.Account.QueueOutbound. Returns ErrorMsg on any
-// failure, composeSentMsg on success.
+// failure, uicompose.SentMsg on success.
 func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compose.Draft) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -642,7 +637,7 @@ func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compo
 		if err := acct.QueueOutbound(ctx, sentFolder, env, mime); err != nil {
 			return ErrorMsg{Op: "queue outbound", Err: err}
 		}
-		return composeSentMsg{}
+		return uicompose.SentMsg{}
 	}
 }
 
@@ -659,10 +654,6 @@ func envelopeFromDraft(d compose.Draft) mail.Envelope {
 	}
 	return env
 }
-
-// composeSentMsg fires after QueueOutbound returns. App stages a
-// non-undoable "Sending…" toast.
-type composeSentMsg struct{}
 
 // resolveSentFolder picks the Sent folder for outbound mail from the
 // cached folder list. Returns "" if none can be identified.

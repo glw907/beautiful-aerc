@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package compose
 
 import (
 	"fmt"
@@ -11,14 +11,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
-	"github.com/glw907/poplar/internal/compose"
+	mailcompose "github.com/glw907/poplar/internal/compose"
 )
 
-// ComposeTab is the inline compose surface. Send and discard surface
+// Styles holds the subset of UI styles the compose surface needs.
+// Populated from ui.Styles at construction time.
+type Styles struct {
+	ErrorBanner lipgloss.Style
+}
+
+// Model is the inline compose surface. Send and discard surface
 // as tea.Msg values that App translates into cache ops.
-type ComposeTab struct {
+type Model struct {
 	styles Styles
-	icons  IconSet
 
 	from string
 
@@ -26,7 +31,7 @@ type ComposeTab struct {
 	cc      textinput.Model
 	bcc     textinput.Model
 	subject textinput.Model
-	editor  compose.Editor
+	editor  mailcompose.Editor
 
 	focus int
 	// err is rendered as a one-line banner above the divider when set.
@@ -38,54 +43,53 @@ type ComposeTab struct {
 }
 
 const (
-	composeFocusTo = iota
-	composeFocusCc
-	composeFocusBcc
-	composeFocusSubject
-	composeFocusBody
+	focusTo = iota
+	focusCc
+	focusBcc
+	focusSubject
+	focusBody
 )
 
-// composeLabelWidth is the column reserved for header labels. "Subject:"
+// labelWidth is the column reserved for header labels. "Subject:"
 // is 8 cells, plus one space of separation.
-const composeLabelWidth = 9
+const labelWidth = 9
 
-// composeChromeRows is the fixed row count above the body: 5 headers
+// chromeRows is the fixed row count above the body: 5 headers
 // plus the divider rule. The error banner adds one more when set.
-const composeChromeRows = 6
+const chromeRows = 6
 
-// NewComposeTab returns a fresh, empty ComposeTab with focus on To.
-func NewComposeTab(styles Styles, self string, icons IconSet) *ComposeTab {
+// New returns a fresh, empty Model with focus on To.
+func New(styles Styles, self string) *Model {
 	mk := func() textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
 		ti.Placeholder = ""
 		return ti
 	}
-	c := &ComposeTab{
+	c := &Model{
 		styles:  styles,
-		icons:   icons,
 		from:    self,
 		to:      mk(),
 		cc:      mk(),
 		bcc:     mk(),
 		subject: mk(),
-		editor:  compose.NewCatkinEditor(),
+		editor:  mailcompose.NewCatkinEditor(),
 	}
 	c.to.Focus()
-	c.focus = composeFocusTo
+	c.focus = focusTo
 	return c
 }
 
-func (c *ComposeTab) Init() tea.Cmd {
+func (c *Model) Init() tea.Cmd {
 	return c.editor.Init()
 }
 
-func (c *ComposeTab) SetSize(w, h int) {
+func (c *Model) SetSize(w, h int) {
 	c.width = w
 	c.height = h
 	c.divider = strings.Repeat("─", w)
 
-	inputW := w - composeLabelWidth - 1
+	inputW := w - labelWidth - 1
 	if inputW < 1 {
 		inputW = 1
 	}
@@ -94,7 +98,7 @@ func (c *ComposeTab) SetSize(w, h int) {
 	c.bcc.Width = inputW
 	c.subject.Width = inputW
 
-	bodyHeight := h - composeChromeRows
+	bodyHeight := h - chromeRows
 	if c.err != "" {
 		bodyHeight--
 	}
@@ -107,7 +111,7 @@ func (c *ComposeTab) SetSize(w, h int) {
 // View enforces the size contract: every returned line is exactly
 // c.width display cells and the result is exactly c.height rows. The
 // parent joins panes without defensive clipping.
-func (c *ComposeTab) View() string {
+func (c *Model) View() string {
 	if c.width == 0 || c.height == 0 {
 		return ""
 	}
@@ -133,35 +137,51 @@ func (c *ComposeTab) View() string {
 	return strings.Join(rows, "\n")
 }
 
-func (c *ComposeTab) headerRow(label, value string) string {
-	pad := composeLabelWidth - lipgloss.Width(label)
+func (c *Model) headerRow(label, value string) string {
+	pad := labelWidth - lipgloss.Width(label)
 	if pad < 1 {
 		pad = 1
 	}
 	return c.padRow(label + strings.Repeat(" ", pad) + value)
 }
 
-func (c *ComposeTab) padRow(s string) string {
+func (c *Model) padRow(s string) string {
 	w := lipgloss.Width(s)
 	if w >= c.width {
-		return displayTruncate(s, c.width)
+		return truncate(s, c.width)
 	}
 	return s + strings.Repeat(" ", c.width-w)
 }
 
-// ComposeSendMsg is emitted when the user presses Ctrl+X with a valid
-// draft. App assembles MIME and queues the outbox op.
-type ComposeSendMsg struct {
-	Draft compose.Draft
+// truncate clips s to n display cells.
+func truncate(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	cells := 0
+	for i, r := range s {
+		w := lipgloss.Width(string(r))
+		if cells+w > n {
+			return s[:i]
+		}
+		cells += w
+	}
+	return s
 }
 
-// ComposeCancelMsg is emitted when the user presses Ctrl+C. App opens
+// SendMsg is emitted when the user presses Ctrl+X with a valid
+// draft. App assembles MIME and queues the outbox op.
+type SendMsg struct {
+	Draft mailcompose.Draft
+}
+
+// CancelMsg is emitted when the user presses Ctrl+C. App opens
 // a discard ConfirmModal when Dirty. Clean drafts close immediately.
-type ComposeCancelMsg struct {
+type CancelMsg struct {
 	Dirty bool
 }
 
-func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
+func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -170,10 +190,10 @@ func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
 			if err != nil {
 				return c, nil
 			}
-			return c, func() tea.Msg { return ComposeSendMsg{Draft: d} }
+			return c, func() tea.Msg { return SendMsg{Draft: d} }
 		case tea.KeyCtrlC:
 			dirty := c.IsDirty()
-			return c, func() tea.Msg { return ComposeCancelMsg{Dirty: dirty} }
+			return c, func() tea.Msg { return CancelMsg{Dirty: dirty} }
 		case tea.KeyTab:
 			c.advanceFocus(+1)
 			return c, nil
@@ -181,10 +201,10 @@ func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
 			c.advanceFocus(-1)
 			return c, nil
 		case tea.KeyEsc:
-			if c.focus == composeFocusBody {
-				c.setFocus(composeFocusSubject)
+			if c.focus == focusBody {
+				c.setFocus(focusSubject)
 			} else {
-				c.setFocus(composeFocusBody)
+				c.setFocus(focusBody)
 			}
 			return c, nil
 		}
@@ -192,67 +212,67 @@ func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
 
 	var cmd tea.Cmd
 	switch c.focus {
-	case composeFocusTo:
+	case focusTo:
 		c.to, cmd = c.to.Update(msg)
-	case composeFocusCc:
+	case focusCc:
 		c.cc, cmd = c.cc.Update(msg)
-	case composeFocusBcc:
+	case focusBcc:
 		c.bcc, cmd = c.bcc.Update(msg)
-	case composeFocusSubject:
+	case focusSubject:
 		c.subject, cmd = c.subject.Update(msg)
-	case composeFocusBody:
+	case focusBody:
 		c.editor, cmd = c.editor.Update(msg)
 	}
 	return c, cmd
 }
 
-func (c *ComposeTab) advanceFocus(delta int) {
+func (c *Model) advanceFocus(delta int) {
 	const fields = 5
 	c.setFocus(((c.focus + delta) + fields) % fields)
 }
 
-func (c *ComposeTab) setFocus(target int) {
+func (c *Model) setFocus(target int) {
 	c.to.Blur()
 	c.cc.Blur()
 	c.bcc.Blur()
 	c.subject.Blur()
 	c.editor.Blur()
 	switch target {
-	case composeFocusTo:
+	case focusTo:
 		_ = c.to.Focus()
-	case composeFocusCc:
+	case focusCc:
 		_ = c.cc.Focus()
-	case composeFocusBcc:
+	case focusBcc:
 		_ = c.bcc.Focus()
-	case composeFocusSubject:
+	case focusSubject:
 		_ = c.subject.Focus()
-	case composeFocusBody:
+	case focusBody:
 		_ = c.editor.Focus()
 	}
 	c.focus = target
 }
 
-// Draft rebuilds a compose.Draft from the current inputs. Address fields
-// are parsed via net/mail; a parse error is stored in the inline err row
-// and returned to the caller.
-func (c *ComposeTab) Draft() (compose.Draft, error) {
+// Draft rebuilds a mailcompose.Draft from the current inputs. Address
+// fields are parsed via net/mail; a parse error is stored in the
+// inline err row and returned to the caller.
+func (c *Model) Draft() (mailcompose.Draft, error) {
 	to, err := parseAddrField(c.to.Value(), "To")
 	if err != nil {
 		c.err = err.Error()
-		return compose.Draft{}, err
+		return mailcompose.Draft{}, err
 	}
 	cc, err := parseAddrField(c.cc.Value(), "Cc")
 	if err != nil {
 		c.err = err.Error()
-		return compose.Draft{}, err
+		return mailcompose.Draft{}, err
 	}
 	bcc, err := parseAddrField(c.bcc.Value(), "Bcc")
 	if err != nil {
 		c.err = err.Error()
-		return compose.Draft{}, err
+		return mailcompose.Draft{}, err
 	}
 	c.err = ""
-	return compose.Draft{
+	return mailcompose.Draft{
 		From:    gomail.Address{Address: c.from},
 		To:      to,
 		Cc:      cc,
@@ -262,14 +282,41 @@ func (c *ComposeTab) Draft() (compose.Draft, error) {
 	}, nil
 }
 
+// SetErr sets the inline error banner text. Called by App when a
+// pre-send validation step fails (e.g. no Sent folder configured).
+func (c *Model) SetErr(msg string) {
+	c.err = msg
+}
+
+// Err returns the current inline error banner text.
+func (c *Model) Err() string { return c.err }
+
+// Width returns the current render width.
+func (c *Model) Width() int { return c.width }
+
+// Height returns the current render height.
+func (c *Model) Height() int { return c.height }
+
+// SetTo sets the To field value.
+func (c *Model) SetTo(s string) { c.to.SetValue(s) }
+
+// SetSubject sets the Subject field value.
+func (c *Model) SetSubject(s string) { c.subject.SetValue(s) }
+
+// SubjectValue returns the current Subject field content.
+func (c *Model) SubjectValue() string { return c.subject.Value() }
+
+// SetBody sets the editor body content.
+func (c *Model) SetBody(s string) { c.editor.SetValue(s) }
+
 // IsDirty reports whether any input field contains user-entered content.
-func (c *ComposeTab) IsDirty() bool {
+func (c *Model) IsDirty() bool {
 	return c.to.Value() != "" || c.cc.Value() != "" || c.bcc.Value() != "" ||
 		c.subject.Value() != "" || c.editor.Value() != ""
 }
 
 // Seed populates the inputs from d. Called for reply/forward pre-fill.
-func (c *ComposeTab) Seed(d compose.Draft) {
+func (c *Model) Seed(d mailcompose.Draft) {
 	c.to.SetValue(joinAddresses(d.To))
 	c.cc.SetValue(joinAddresses(d.Cc))
 	c.bcc.SetValue(joinAddresses(d.Bcc))

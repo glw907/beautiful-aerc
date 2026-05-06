@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package compose
 
 import (
 	"strings"
@@ -9,14 +9,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
-	"github.com/glw907/poplar/internal/compose"
-	"github.com/glw907/poplar/internal/theme"
+	mailcompose "github.com/glw907/poplar/internal/compose"
 )
 
-func newTestCompose(t *testing.T) *ComposeTab {
+func newTestModel(t *testing.T) *Model {
 	t.Helper()
-	styles := NewStyles(theme.Nord)
-	c := NewComposeTab(styles, "geoff@907.life", SimpleIcons)
+	c := New(Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life")
 	c.SetSize(80, 24)
 	return c
 }
@@ -35,13 +33,13 @@ func keyMsgFromString(s string) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
 
-func sendKey(c *ComposeTab, k string) *ComposeTab {
+func sendKey(c *Model, k string) *Model {
 	next, _ := c.Update(keyMsgFromString(k))
 	return next
 }
 
-func TestComposeTab_View_HonorsAssignedWidth(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_View_HonorsAssignedWidth(t *testing.T) {
+	c := newTestModel(t)
 	c.SetSize(60, 20)
 	for i, line := range strings.Split(c.View(), "\n") {
 		if w := lipgloss.Width(line); w != 60 {
@@ -50,8 +48,8 @@ func TestComposeTab_View_HonorsAssignedWidth(t *testing.T) {
 	}
 }
 
-func TestComposeTab_View_HasHeaderRows(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_View_HasHeaderRows(t *testing.T) {
+	c := newTestModel(t)
 	v := c.View()
 	for _, want := range []string{"From:", "To:", "Cc:", "Bcc:", "Subject:"} {
 		if !strings.Contains(v, want) {
@@ -60,9 +58,9 @@ func TestComposeTab_View_HasHeaderRows(t *testing.T) {
 	}
 }
 
-func TestComposeTab_TabCyclesFields(t *testing.T) {
-	c := newTestCompose(t)
-	want := []int{composeFocusCc, composeFocusBcc, composeFocusSubject, composeFocusBody, composeFocusTo}
+func TestModel_TabCyclesFields(t *testing.T) {
+	c := newTestModel(t)
+	want := []int{focusCc, focusBcc, focusSubject, focusBody, focusTo}
 	for i, w := range want {
 		c = sendKey(c, "tab")
 		if c.focus != w {
@@ -71,30 +69,30 @@ func TestComposeTab_TabCyclesFields(t *testing.T) {
 	}
 }
 
-func TestComposeTab_ShiftTabCyclesBackward(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_ShiftTabCyclesBackward(t *testing.T) {
+	c := newTestModel(t)
 	c = sendKey(c, "shift+tab")
-	if c.focus != composeFocusBody {
+	if c.focus != focusBody {
 		t.Fatalf("Shift+Tab from To should wrap to Body, got %d", c.focus)
 	}
 }
 
-func TestComposeTab_EscFromBodyReturnsToSubject(t *testing.T) {
-	c := newTestCompose(t)
-	c.focus = composeFocusBody
+func TestModel_EscFromBodyReturnsToSubject(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusBody
 	c.editor.Focus()
 	c.to.Blur()
 	c = sendKey(c, "esc")
-	if c.focus != composeFocusSubject {
+	if c.focus != focusSubject {
 		t.Fatalf("Esc from Body should focus Subject, got %d", c.focus)
 	}
 }
 
-func TestComposeTab_EscFromHeaderReturnsToBody(t *testing.T) {
-	c := newTestCompose(t)
-	c.focus = composeFocusTo
+func TestModel_EscFromHeaderReturnsToBody(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusTo
 	c = sendKey(c, "esc")
-	if c.focus != composeFocusBody {
+	if c.focus != focusBody {
 		t.Fatalf("Esc from header should focus Body, got %d", c.focus)
 	}
 }
@@ -103,8 +101,8 @@ func gomailAddress(addr string) gomail.Address {
 	return gomail.Address{Address: addr}
 }
 
-func TestComposeTab_DraftReflectsInputs(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_DraftReflectsInputs(t *testing.T) {
+	c := newTestModel(t)
 	c.to.SetValue("alice@example.com, bob@example.com")
 	c.cc.SetValue("c@example.com")
 	c.subject.SetValue("hi")
@@ -128,16 +126,16 @@ func TestComposeTab_DraftReflectsInputs(t *testing.T) {
 	}
 }
 
-func TestComposeTab_DraftBadAddressFails(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_DraftBadAddressFails(t *testing.T) {
+	c := newTestModel(t)
 	c.to.SetValue("not an address")
 	if _, err := c.Draft(); err == nil {
 		t.Fatalf("want parse error on bad address, got nil")
 	}
 }
 
-func TestComposeTab_IsDirty(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_IsDirty(t *testing.T) {
+	c := newTestModel(t)
 	if c.IsDirty() {
 		t.Fatalf("fresh compose should not be dirty")
 	}
@@ -147,9 +145,9 @@ func TestComposeTab_IsDirty(t *testing.T) {
 	}
 }
 
-func TestComposeTab_Seed(t *testing.T) {
-	c := newTestCompose(t)
-	d := compose.Draft{
+func TestModel_Seed(t *testing.T) {
+	c := newTestModel(t)
+	d := mailcompose.Draft{
 		Subject: "Re: hi",
 		Body:    "> original\n\n",
 	}
@@ -166,28 +164,28 @@ func TestComposeTab_Seed(t *testing.T) {
 	}
 }
 
-func TestComposeTab_CtrlXEmitsSendMsg(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_CtrlXEmitsSendMsg(t *testing.T) {
+	c := newTestModel(t)
 	c.to.SetValue("alice@example.com")
 	c.subject.SetValue("hi")
 	c.editor.SetValue("body")
 
 	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	if cmd == nil {
-		t.Fatal("Ctrl+X should return a Cmd that emits ComposeSendMsg")
+		t.Fatal("Ctrl+X should return a Cmd that emits SendMsg")
 	}
 	msg := cmd()
-	send, ok := msg.(ComposeSendMsg)
+	send, ok := msg.(SendMsg)
 	if !ok {
-		t.Fatalf("want ComposeSendMsg, got %T", msg)
+		t.Fatalf("want SendMsg, got %T", msg)
 	}
 	if send.Draft.Subject != "hi" {
 		t.Fatalf("send carries wrong draft: %+v", send.Draft)
 	}
 }
 
-func TestComposeTab_CtrlCEmitsCancelMsg(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_CtrlCEmitsCancelMsg(t *testing.T) {
+	c := newTestModel(t)
 	c.editor.SetValue("dirty")
 
 	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -195,17 +193,17 @@ func TestComposeTab_CtrlCEmitsCancelMsg(t *testing.T) {
 		t.Fatal("Ctrl+C should return a Cmd")
 	}
 	msg := cmd()
-	cancel, ok := msg.(ComposeCancelMsg)
+	cancel, ok := msg.(CancelMsg)
 	if !ok {
-		t.Fatalf("want ComposeCancelMsg, got %T", msg)
+		t.Fatalf("want CancelMsg, got %T", msg)
 	}
 	if !cancel.Dirty {
 		t.Fatalf("dirty draft should set Dirty=true")
 	}
 }
 
-func TestComposeTab_CtrlXBadAddressInlinesError(t *testing.T) {
-	c := newTestCompose(t)
+func TestModel_CtrlXBadAddressInlinesError(t *testing.T) {
+	c := newTestModel(t)
 	c.to.SetValue("not an address")
 	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	if cmd != nil {

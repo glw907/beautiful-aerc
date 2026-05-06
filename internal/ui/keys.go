@@ -121,7 +121,7 @@ type ViewerKeys struct {
 	Links [9]key.Binding
 }
 
-// ComposeKeys are the bindings active while ComposeTab has focus.
+// ComposeKeys are the bindings active while compose.Model has focus.
 // Ctrl chords are deliberate. Text-entry surfaces are exempt from
 // the modifier-free rule (ADR-0076).
 type ComposeKeys struct {

@@ -4,7 +4,7 @@ package compose
 
 import gomail "github.com/emersion/go-message/mail"
 
-// Mode tags how a Draft was originated. ComposeTab uses it to label
+// Mode tags how a Draft was originated. compose.Model uses it to label
 // the tab title and to drive seed dispatch. AssembleMIME ignores it.
 type Mode int
 

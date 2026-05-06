@@ -4,7 +4,7 @@
 // Editor seam, the Draft value type, MIME assembly, and the
 // reply/forward seeders.
 //
-// The package is UI-free. ComposeTab (internal/ui/) wires Editor into
+// The package is UI-free. compose.Model (internal/ui/compose/) wires Editor into
 // the tea tree. The cache outbox carries the assembled bytes. The
 // mail backends ship them.
 package compose
@@ -15,7 +15,7 @@ import (
 	"github.com/glw907/poplar/internal/catkin"
 )
 
-// Editor is the swappable text-entry surface for ComposeTab. v1
+// Editor is the swappable text-entry surface for compose.Model. v1
 // always uses CatkinEditor. The v1.1 neovim adapter will implement
 // the same surface (ADR-0033).
 //
@@ -45,7 +45,7 @@ type Editor interface {
 
 // CatkinEditor adapts catkin.Model to the Editor interface. The inner
 // model is stored by value. Update reassigns it in place so the
-// adapter stays a stable pointer for ComposeTab to hold.
+// adapter stays a stable pointer for compose.Model to hold.
 type CatkinEditor struct {
 	inner catkin.Model
 }

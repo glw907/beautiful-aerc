@@ -16,6 +16,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	uicompose "github.com/glw907/poplar/internal/ui/compose"
 )
 
 // pendingEmptyConfirm carries the parameters App needs to emit
@@ -70,7 +71,7 @@ type App struct {
 	// defaults to identityTidy.
 	tidy                  TidyFn
 	theme                 *theme.CompiledTheme
-	compose               *ComposeTab
+	compose               *uicompose.Model
 	pendingComposeDiscard bool
 	width                 int
 	height                int
@@ -449,11 +450,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(loadOutboxConflictsCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache()))
 
-	case ComposeSendMsg:
+	case uicompose.SendMsg:
 		sent := resolveSentFolder(m.acct.Cache())
 		if sent == "" {
 			if m.compose != nil {
-				m.compose.err = "no Sent folder configured"
+				m.compose.SetErr("no Sent folder configured")
 			}
 			return m, nil
 		}
@@ -463,7 +464,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.compose = nil
 		return m, composeSendCmd(acct, sent, tidy, d)
 
-	case composeSentMsg:
+	case uicompose.SentMsg:
 		hadBanner := m.hasBannerRow()
 		deadline := m.now().Add(2 * time.Second)
 		m.toast = pendingAction{
@@ -480,14 +481,14 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case composeSeededMsg:
+	case uicompose.SeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = NewComposeTab(m.styles, m.acct.AccountEmail(), m.icons)
+		m.compose = uicompose.New(uicompose.Styles{ErrorBanner: m.styles.ErrorBanner}, m.acct.AccountEmail())
 		m.compose.SetSize(w, h)
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
 
-	case ComposeCancelMsg:
+	case uicompose.CancelMsg:
 		if !msg.Dirty {
 			m.compose = nil
 			return m, nil
@@ -550,7 +551,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
-			m.compose = NewComposeTab(m.styles, m.acct.AccountEmail(), m.icons)
+			m.compose = uicompose.New(uicompose.Styles{ErrorBanner: m.styles.ErrorBanner}, m.acct.AccountEmail())
 			m.compose.SetSize(w, h)
 			return m, m.compose.Init()
 		case key.Matches(msg, m.keys.Reply), key.Matches(msg, m.keys.ReplyAll), key.Matches(msg, m.keys.Forward):

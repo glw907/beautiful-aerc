@@ -16,6 +16,7 @@ import (
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	uicompose "github.com/glw907/poplar/internal/ui/compose"
 )
 
 func init() {
@@ -1204,22 +1205,22 @@ func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open")
 	}
-	app.compose.to.SetValue("alice@example.com")
-	app.compose.subject.SetValue("hi")
-	app.compose.editor.SetValue("hello")
+	app.compose.SetTo("alice@example.com")
+	app.compose.SetSubject("hi")
+	app.compose.SetBody("hello")
 
 	d, err := app.compose.Draft()
 	if err != nil {
 		t.Fatalf("Draft: %v", err)
 	}
 
-	out, cmd := app.Update(ComposeSendMsg{Draft: d})
+	out, cmd := app.Update(uicompose.SendMsg{Draft: d})
 	app = out
 	if app.compose != nil {
-		t.Fatalf("compose should be false after ComposeSendMsg")
+		t.Fatalf("compose should be false after uicompose.SendMsg")
 	}
 	if cmd == nil {
-		t.Fatalf("ComposeSendMsg should return a Cmd that runs QueueOutbound")
+		t.Fatalf("uicompose.SendMsg should return a Cmd that runs QueueOutbound")
 	}
 	_ = cmd()
 	depth, err := app.acct.Cache().OutboxDepth(context.Background())
@@ -1238,12 +1239,12 @@ func TestApp_ComposeSend_NoSentFolder_SurfacesError(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open")
 	}
-	app.compose.to.SetValue("alice@example.com")
-	app.compose.subject.SetValue("hi")
-	app.compose.editor.SetValue("hello")
+	app.compose.SetTo("alice@example.com")
+	app.compose.SetSubject("hi")
+	app.compose.SetBody("hello")
 
 	d, _ := app.compose.Draft()
-	out, cmd := app.Update(ComposeSendMsg{Draft: d})
+	out, cmd := app.Update(uicompose.SendMsg{Draft: d})
 	app = out
 	if app.compose == nil {
 		t.Fatalf("missing Sent folder should keep compose open")
@@ -1251,7 +1252,7 @@ func TestApp_ComposeSend_NoSentFolder_SurfacesError(t *testing.T) {
 	if cmd != nil {
 		_ = cmd()
 	}
-	if app.compose.err == "" {
+	if app.compose.Err() == "" {
 		t.Fatalf("missing Sent folder should surface inline err")
 	}
 }
@@ -1261,7 +1262,7 @@ func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
 	app := newTestApp(t)
 	app.now = func() time.Time { return frozen }
 
-	out, cmd := app.Update(composeSentMsg{})
+	out, cmd := app.Update(uicompose.SentMsg{})
 	app = out
 	if app.toast.op != opSending {
 		t.Fatalf("toast.op = %q, want %q", app.toast.op, opSending)
@@ -1271,7 +1272,7 @@ func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
 		t.Errorf("toast.deadline = %v, want %v", app.toast.deadline, want)
 	}
 	if cmd == nil {
-		t.Error("composeSentMsg should return a Tick Cmd for toast expiry")
+		t.Error("uicompose.SentMsg should return a Tick Cmd for toast expiry")
 	}
 }
 
@@ -1304,7 +1305,7 @@ func TestApp_C_OpensCompose(t *testing.T) {
 		t.Fatal("c should open compose")
 	}
 	if app.compose == nil {
-		t.Fatal("c should construct ComposeTab")
+		t.Fatal("c should construct compose.Model")
 	}
 }
 
@@ -1325,12 +1326,12 @@ func TestApp_ComposeSendMsg_ClosesCompose(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
-	app, _ = app.Update(ComposeSendMsg{})
+	app, _ = app.Update(uicompose.SendMsg{})
 	if app.compose != nil {
-		t.Error("ComposeSendMsg should clear compose")
+		t.Error("uicompose.SendMsg should clear compose")
 	}
 	if app.compose != nil {
-		t.Error("ComposeSendMsg should nil compose")
+		t.Error("uicompose.SendMsg should nil compose")
 	}
 }
 
@@ -1341,12 +1342,12 @@ func TestApp_ComposeCancelMsg_ClosesCompose(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
-	app, cmd := app.Update(ComposeCancelMsg{})
+	app, cmd := app.Update(uicompose.CancelMsg{})
 	if app.compose != nil {
-		t.Error("ComposeCancelMsg should clear compose")
+		t.Error("uicompose.CancelMsg should clear compose")
 	}
 	if app.compose != nil {
-		t.Error("ComposeCancelMsg should nil compose")
+		t.Error("uicompose.CancelMsg should nil compose")
 	}
 	if cmd != nil {
 		t.Error("stub should return nil Cmd")
@@ -1360,12 +1361,12 @@ func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
-	// While compose is open, keys route to ComposeTab. j should not move
+	// While compose is open, keys route to compose.Model. j should not move
 	// the message list cursor.
 	beforeSelected := app.acct.msglist.Selected()
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	if app.acct.msglist.Selected() != beforeSelected {
-		t.Error("j should be consumed by ComposeTab when compose is open, not msglist")
+		t.Error("j should be consumed by compose.Model when compose is open, not msglist")
 	}
 }
 
@@ -1381,8 +1382,8 @@ func TestApp_WindowSizeSetsComposeSize(t *testing.T) {
 		t.Fatal("compose should survive WindowSizeMsg")
 	}
 	// After resize compose should have non-zero dims.
-	if app.compose.width == 0 || app.compose.height == 0 {
-		t.Errorf("compose dims after resize: %dx%d, want non-zero", app.compose.width, app.compose.height)
+	if app.compose.Width() == 0 || app.compose.Height() == 0 {
+		t.Errorf("compose dims after resize: %dx%d, want non-zero", app.compose.Width(), app.compose.Height())
 	}
 }
 
@@ -1408,8 +1409,8 @@ func TestApp_R_OpensReplySeededCompose(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("compose should be non-nil after seeding")
 	}
-	if !strings.HasPrefix(app.compose.subject.Value(), "Re:") {
-		t.Fatalf("subject should be Re:-prefixed, got %q", app.compose.subject.Value())
+	if !strings.HasPrefix(app.compose.SubjectValue(), "Re:") {
+		t.Fatalf("subject should be Re:-prefixed, got %q", app.compose.SubjectValue())
 	}
 }
 
@@ -1420,9 +1421,9 @@ func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
-	app.compose.editor.SetValue("dirty content")
+	app.compose.SetBody("dirty content")
 
-	out, _ := app.Update(ComposeCancelMsg{Dirty: true})
+	out, _ := app.Update(uicompose.CancelMsg{Dirty: true})
 	app = out
 	if !app.confirm.IsOpen() {
 		t.Fatal("dirty cancel should open ConfirmModal")
@@ -1443,7 +1444,7 @@ func TestApp_CtrlC_EmptyClosesImmediately(t *testing.T) {
 		t.Fatal("setup: compose should be open after c")
 	}
 
-	out, _ := app.Update(ComposeCancelMsg{Dirty: false})
+	out, _ := app.Update(uicompose.CancelMsg{Dirty: false})
 	app = out
 	if app.compose != nil {
 		t.Fatal("empty cancel should close immediately")
@@ -1460,9 +1461,9 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
-	app.compose.editor.SetValue("dirty content")
+	app.compose.SetBody("dirty content")
 
-	app, _ = app.Update(ComposeCancelMsg{Dirty: true})
+	app, _ = app.Update(uicompose.CancelMsg{Dirty: true})
 	if !app.confirm.IsOpen() {
 		t.Fatal("setup: confirm should be open after dirty cancel")
 	}
@@ -1486,9 +1487,9 @@ func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
-	app.compose.editor.SetValue("dirty content")
+	app.compose.SetBody("dirty content")
 
-	app, _ = app.Update(ComposeCancelMsg{Dirty: true})
+	app, _ = app.Update(uicompose.CancelMsg{Dirty: true})
 	if !app.confirm.IsOpen() {
 		t.Fatal("setup: confirm should be open")
 	}

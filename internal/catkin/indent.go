@@ -39,7 +39,7 @@ func indentTab(src string, cur int) (string, int) {
 
 // indentShiftTab handles Shift+Tab. On a list/task line with at
 // least two leading spaces it strips them (outdent). Otherwise
-// returns the input unchanged with handled=false so ComposeTab
+// returns the input unchanged with handled=false so compose.Model
 // can claim the keystroke for focus routing at body (0, 0).
 func indentShiftTab(src string, cur int) (newSrc string, newCur int, handled bool) {
 	lines, p := splitAtCursor(src, cur)
