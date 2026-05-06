@@ -127,12 +127,16 @@ func TestRevertOptimistic_Destroy(t *testing.T) {
 	}
 }
 
-func TestRevertOptimistic_SendUnsupported(t *testing.T) {
+func TestRevertOptimistic_SendNoOp(t *testing.T) {
 	a := openTestAccount(t)
 	tx, _ := a.db.Begin()
 	defer tx.Rollback()
-	if err := revertOptimisticTx(tx, 1, SendArgs{}); err == nil {
-		t.Errorf("expected error for SendArgs revert")
+	// Send and Append have no message-row state; revert is a no-op.
+	if err := revertOptimisticTx(tx, 1, SendArgs{}); err != nil {
+		t.Errorf("revertOptimisticTx(SendArgs): unexpected error: %v", err)
+	}
+	if err := revertOptimisticTx(tx, 1, AppendArgs{}); err != nil {
+		t.Errorf("revertOptimisticTx(AppendArgs): unexpected error: %v", err)
 	}
 }
 
@@ -247,5 +251,42 @@ func TestDiscardOp_NonConflict(t *testing.T) {
 	err := a.DiscardOp(ctx, opID)
 	if !errors.Is(err, ErrNotConflict) {
 		t.Errorf("DiscardOp on pending row: err = %v, want ErrNotConflict", err)
+	}
+}
+
+func TestDiscardConflictedSend(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	fb := a.Backend.(*fakeBackend)
+
+	fb.sendErr = mail.ErrAuth
+	opID, err := a.QueueSend(context.Background(), "Inbox",
+		mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}},
+		[]byte("body\r\n"))
+	if err != nil {
+		t.Fatalf("QueueSend: %v", err)
+	}
+
+	a.drainOnce(context.Background(), defaultDrainerConfig())
+
+	// Sanity: row is in conflict.
+	var status string
+	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if OpStatus(status) != OpConflict {
+		t.Fatalf("status = %q, want conflict", status)
+	}
+
+	if err := a.DiscardOp(context.Background(), opID); err != nil {
+		t.Fatalf("DiscardOp: %v", err)
+	}
+
+	var n int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE id = ?`, opID).Scan(&n); err != nil {
+		t.Fatalf("count row: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("row count = %d, want 0", n)
 	}
 }

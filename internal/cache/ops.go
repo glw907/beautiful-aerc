@@ -236,8 +236,8 @@ var ErrNotConflict = errors.New("cache: op is not in conflict state")
 
 // revertOptimisticTx mirrors applyOptimisticTx: it undoes the UI flip
 // applied at QueueOp time so a discard leaves the cache reflecting
-// what the server actually has. SendArgs and AppendArgs have no
-// optimistic UI state, so they are not reversible via this path.
+// what the server actually has. Send and Append have no message-row
+// state to mirror — the discard simply deletes the outbox row.
 func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 	switch v := args.(type) {
 	case MoveArgs, DestroyArgs:
@@ -253,7 +253,7 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 		_, err := tx.Exec(stmt, bit, msgID)
 		return err
 	case SendArgs, AppendArgs:
-		return fmt.Errorf("revertOptimisticTx: %T not supported", args)
+		return nil
 	}
 	return fmt.Errorf("revertOptimisticTx: unknown args %T", args)
 }
@@ -292,12 +292,11 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 }
 
 // DiscardOp reverts the optimistic UI flip and deletes the outbox
-// row, all in one transaction. The conflicted op never reached the
-// server, so only local cleanup is needed.
+// row in one transaction. The conflicted op never reached the server,
+// so only local cleanup is needed. Send and Append rows have no
+// message-row state to revert; their discard is a straight delete.
 //
 // Returns ErrNotConflict if the row is not currently in conflict.
-// Send and Append ops cannot be discarded via this path;
-// revertOptimisticTx has no semantics for them.
 func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		var status, kind, argsJSON string
