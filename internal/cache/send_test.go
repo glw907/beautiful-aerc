@@ -144,3 +144,41 @@ func TestDispatchAppend(t *testing.T) {
 		t.Errorf("mime mismatch")
 	}
 }
+
+func TestSendSucceedsAppendConflicts(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	fb := a.Backend.(*fakeBackend)
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}}
+	mime := []byte("hello\r\n")
+
+	sendID, err := a.QueueSend(context.Background(), "Inbox", env, mime)
+	if err != nil {
+		t.Fatalf("QueueSend: %v", err)
+	}
+	appendID, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime)
+	if err != nil {
+		t.Fatalf("QueueAppend: %v", err)
+	}
+
+	// Append fails permanently with auth error → conflict on first attempt.
+	fb.appErr = mail.ErrAuth
+
+	a.drainOnce(context.Background(), defaultDrainerConfig())
+
+	// Send must be done; append must be conflict.
+	var sendStatus, appendStatus string
+	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, sendID).Scan(&sendStatus); err != nil {
+		t.Fatalf("read send: %v", err)
+	}
+	if OpStatus(sendStatus) != OpDone {
+		t.Errorf("send status = %q, want %q", sendStatus, OpDone)
+	}
+	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, appendID).Scan(&appendStatus); err != nil {
+		t.Fatalf("read append: %v", err)
+	}
+	if OpStatus(appendStatus) != OpConflict {
+		t.Errorf("append status = %q, want %q", appendStatus, OpConflict)
+	}
+}
