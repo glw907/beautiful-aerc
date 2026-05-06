@@ -1121,3 +1121,71 @@ func TestDestroy_NotFoundIsSuccess(t *testing.T) {
 		t.Errorf("Destroy with notFound: expected success, got %v", err)
 	}
 }
+
+// --- PushDraft ---
+
+func TestPushDraft_JMAP_FirstPush(t *testing.T) {
+	folders := map[string]folderEntry{
+		"Drafts": {id: "drafts-mb", folder: mail.Folder{Name: "Drafts", Role: "drafts"}},
+	}
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(&jmap.Invocation{
+				CallID: "0",
+				Args: &email.ImportResponse{
+					Created: map[jmap.ID]*email.Email{"k1": {ID: "new-email-id-1"}},
+				},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", folders)
+	b.uploadBlob = func(_ []byte) (string, error) { return "blob-1", nil }
+
+	uid, err := b.PushDraft("Drafts", []byte("draft mime"), mail.UID(""))
+	if err != nil {
+		t.Fatalf("PushDraft: %v", err)
+	}
+	if uid != "new-email-id-1" {
+		t.Errorf("uid = %q, want new-email-id-1", uid)
+	}
+	// Only one invocation: Email/import, no Email/set destroy.
+	if got := len(fake.sent[0].Calls); got != 1 {
+		t.Errorf("request calls = %d, want 1 (import only)", got)
+	}
+}
+
+func TestPushDraft_JMAP_ReplacesPrev(t *testing.T) {
+	folders := map[string]folderEntry{
+		"Drafts": {id: "drafts-mb", folder: mail.Folder{Name: "Drafts", Role: "drafts"}},
+	}
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(
+				&jmap.Invocation{
+					CallID: "0",
+					Args: &email.ImportResponse{
+						Created: map[jmap.ID]*email.Email{"k1": {ID: "new-email-id-2"}},
+					},
+				},
+				&jmap.Invocation{
+					CallID: "1",
+					Args:   &email.SetResponse{},
+				},
+			), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", folders)
+	b.uploadBlob = func(_ []byte) (string, error) { return "blob-2", nil }
+
+	uid, err := b.PushDraft("Drafts", []byte("updated mime"), mail.UID("old-email-id-1"))
+	if err != nil {
+		t.Fatalf("PushDraft: %v", err)
+	}
+	if uid != "new-email-id-2" {
+		t.Errorf("uid = %q, want new-email-id-2", uid)
+	}
+	// Two invocations: Email/import + Email/set destroy.
+	if got := len(fake.sent[0].Calls); got != 2 {
+		t.Errorf("request calls = %d, want 2 (import + destroy)", got)
+	}
+}

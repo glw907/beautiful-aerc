@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -835,6 +836,92 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 		return fmt.Errorf("append: %w", err)
 	}
 	return checkImportCreated(resp, callID)
+}
+
+// PushDraft uploads mime to folder as a draft. When prevUID is non-empty,
+// the prior server image is destroyed in the same request. Returns the
+// new server UID. The destroy is best-effort: notFound is benign (the
+// prior image is already gone) and does not block the return of the new
+// UID.
+func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
+	b.mu.Lock()
+	upload := b.uploadBlob
+	entry, ok := b.folders[folder]
+	accountID := b.accountIDLocked()
+	b.mu.Unlock()
+	if upload == nil {
+		return "", errors.New("jmap: not connected")
+	}
+	if !ok {
+		return "", fmt.Errorf("push-draft: unknown folder %q", folder)
+	}
+
+	blobID, err := upload(mime)
+	if err != nil {
+		return "", fmt.Errorf("push-draft: upload: %w", classifyErr(err))
+	}
+	now := time.Now().UTC()
+
+	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
+	importCallID := req.Invoke(&email.Import{
+		Account: accountID,
+		Emails: map[string]*email.EmailImport{
+			"k1": {
+				BlobID:     jmap.ID(blobID),
+				MailboxIDs: map[jmap.ID]bool{jmap.ID(entry.id): true},
+				Keywords:   map[string]bool{"$draft": true},
+				ReceivedAt: &now,
+			},
+		},
+	})
+	var destroyCallID string
+	if prevUID != "" {
+		destroyCallID = req.Invoke(&email.Set{
+			Account: accountID,
+			Destroy: []jmap.ID{jmap.ID(prevUID)},
+		})
+	}
+
+	resp, err := b.do(req)
+	if err != nil {
+		return "", fmt.Errorf("push-draft: %w", classifyErr(err))
+	}
+
+	newID, err := importedID(resp, importCallID)
+	if err != nil {
+		return "", fmt.Errorf("push-draft: %w", err)
+	}
+
+	if destroyCallID != "" {
+		if err := checkEmailSetDestroyed(resp, destroyCallID); err != nil {
+			fmt.Fprintln(os.Stderr, "push-draft: destroy prior:", err)
+		}
+	}
+
+	return mail.UID(newID), nil
+}
+
+// importedID extracts the server-assigned ID for the "k1" entry in an
+// Email/importResponse.
+func importedID(resp *jmap.Response, callID string) (jmap.ID, error) {
+	for _, inv := range resp.Responses {
+		if inv.CallID != callID {
+			continue
+		}
+		ir, ok := inv.Args.(*email.ImportResponse)
+		if !ok {
+			continue
+		}
+		if se, bad := ir.NotCreated["k1"]; bad {
+			return "", fmt.Errorf("import rejected: %s", se.Type)
+		}
+		e, ok := ir.Created["k1"]
+		if !ok {
+			return "", errors.New("import: no Created entry")
+		}
+		return e.ID, nil
+	}
+	return "", errors.New("Email/import: no response")
 }
 
 // jmapKeywords maps mail.Flag bits to JMAP $-prefixed keywords. Only

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 // newWithFake returns a Backend wired to a fake client for tests.
@@ -99,4 +100,12 @@ func TestFinishConnect_GmailQuirks_AcceptsXGM(t *testing.T) {
 	}
 	// Tear down the idle goroutine started by finishConnect.
 	_ = b.Disconnect()
+}
+
+func TestPushDraft_IMAP_Unsupported(t *testing.T) {
+	b := New(config.AccountConfig{Name: "t"})
+	_, err := b.PushDraft("Drafts", []byte("mime"), mail.UID(""))
+	if !errors.Is(err, mail.ErrUnsupported) {
+		t.Errorf("PushDraft returned %v, want ErrUnsupported", err)
+	}
 }

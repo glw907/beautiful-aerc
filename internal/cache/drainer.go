@@ -209,6 +209,12 @@ func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
 		return a.Backend.Send(v.Envelope, row.Payload)
 	case AppendArgs:
 		return a.Backend.Append(row.FolderName, row.Payload, v.Flag)
+	case PushDraftArgs:
+		newUID, err := a.Backend.PushDraft(row.FolderName, row.Payload, v.PrevServerUID)
+		if err != nil {
+			return err
+		}
+		return a.MarkDraftPushed(context.Background(), v.DraftID, newUID, row.FolderName)
 	}
 	return fmt.Errorf("dispatch: unknown args %T", args)
 }

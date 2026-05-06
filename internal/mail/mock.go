@@ -280,6 +280,10 @@ func (m *MockBackend) Append(_ string, _ []byte, _ Flag) error {
 	return nil
 }
 
+func (m *MockBackend) PushDraft(_ string, _ []byte, _ UID) (UID, error) {
+	return "", ErrUnsupported
+}
+
 // Updates never sends. The channel always blocks.
 func (m *MockBackend) Updates() <-chan Update {
 	return m.updates

@@ -77,6 +77,9 @@ func (f *fakeBackend) Append(folder string, mime []byte, flag mail.Flag) error {
 	f.appends = append(f.appends, appendCall{Folder: folder, MIME: append([]byte(nil), mime...), Flag: flag})
 	return f.appErr
 }
+func (f *fakeBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
+	return "", mail.ErrUnsupported
+}
 func (f *fakeBackend) Updates() <-chan mail.Update {
 	if f.updates == nil {
 		f.updates = make(chan mail.Update)
