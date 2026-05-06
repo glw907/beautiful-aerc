@@ -25,6 +25,7 @@ const (
 	opMove           triageOp = "move"
 	opEmpty          triageOp = "empty"
 	opSaveAttachment triageOp = "save-attachment"
+	opSending        triageOp = "sending"
 )
 
 // pendingAction is the App-owned state for an in-flight optimistic
@@ -66,11 +67,13 @@ func renderToast(p pendingAction, width int, styles Styles) string {
 		body = fmt.Sprintf("%s %s (%d)", verb, p.dest, p.n)
 	case opSaveAttachment:
 		body = fmt.Sprintf("Saved to %s", p.dest)
+	case opSending:
+		body = "Sending…"
 	default:
 		body = fmt.Sprintf("%s %d %s", verb, p.n, pluralize("message", p.n))
 	}
 	hint := "[u undo]"
-	if p.op == opEmpty || p.op == opSaveAttachment {
+	if p.op == opEmpty || p.op == opSaveAttachment || p.op == opSending {
 		hint = ""
 	}
 	full := "✓ " + body
@@ -112,6 +115,8 @@ func toastVerb(op triageOp) string {
 		return "Emptied"
 	case opSaveAttachment:
 		return "Saved"
+	case opSending:
+		return "Sending"
 	}
 	return string(op)
 }

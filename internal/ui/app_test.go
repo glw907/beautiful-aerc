@@ -1178,6 +1178,103 @@ func newTestApp(t *testing.T) App {
 	return NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
 }
 
+// noSentBackend is a mail.Backend stub whose folder list has no Sent
+// role or Sent-named folder. Used to verify the missing-Sent path.
+type noSentBackend struct {
+	blockingBackend
+}
+
+func (b *noSentBackend) ListFolders() ([]mail.Folder, error) {
+	return []mail.Folder{
+		{Name: "Inbox", Exists: 1, Unseen: 0, Role: "inbox"},
+	}, nil
+}
+
+func newTestAppWithoutSentFolder(t *testing.T) App {
+	t.Helper()
+	backend := &noSentBackend{blockingBackend: blockingBackend{release: make(chan struct{})}}
+	acct := newTestCache(t, backend)
+	return NewApp(theme.Nord, acct, config.DefaultUIConfig(), FancyIcons)
+}
+
+func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen || app.compose == nil {
+		t.Fatal("setup: compose should be open")
+	}
+	app.compose.to.SetValue("alice@example.com")
+	app.compose.subject.SetValue("hi")
+	app.compose.editor.SetValue("hello")
+
+	d, err := app.compose.Draft()
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+
+	out, cmd := app.Update(ComposeSendMsg{Draft: d})
+	app = out
+	if app.composeOpen {
+		t.Fatalf("composeOpen should be false after ComposeSendMsg")
+	}
+	if cmd == nil {
+		t.Fatalf("ComposeSendMsg should return a Cmd that runs QueueOutbound")
+	}
+	_ = cmd()
+	depth, err := app.acct.Cache().OutboxDepth(context.Background())
+	if err != nil {
+		t.Fatalf("OutboxDepth: %v", err)
+	}
+	if depth.Pending+depth.Conflict == 0 {
+		t.Fatalf("outbox should have at least one queued op, got %+v", depth)
+	}
+}
+
+func TestApp_ComposeSend_NoSentFolder_SurfacesError(t *testing.T) {
+	app := newTestAppWithoutSentFolder(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen || app.compose == nil {
+		t.Fatal("setup: compose should be open")
+	}
+	app.compose.to.SetValue("alice@example.com")
+	app.compose.subject.SetValue("hi")
+	app.compose.editor.SetValue("hello")
+
+	d, _ := app.compose.Draft()
+	out, cmd := app.Update(ComposeSendMsg{Draft: d})
+	app = out
+	if !app.composeOpen {
+		t.Fatalf("missing Sent folder should keep compose open")
+	}
+	if cmd != nil {
+		_ = cmd()
+	}
+	if app.compose.err == "" {
+		t.Fatalf("missing Sent folder should surface inline err")
+	}
+}
+
+func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
+	frozen := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	app := newTestApp(t)
+	app.now = func() time.Time { return frozen }
+
+	out, cmd := app.Update(composeSentMsg{})
+	app = out
+	if app.toast.op != opSending {
+		t.Fatalf("toast.op = %q, want %q", app.toast.op, opSending)
+	}
+	want := frozen.Add(2 * time.Second)
+	if !app.toast.deadline.Equal(want) {
+		t.Errorf("toast.deadline = %v, want %v", app.toast.deadline, want)
+	}
+	if cmd == nil {
+		t.Error("composeSentMsg should return a Tick Cmd for toast expiry")
+	}
+}
+
 func TestApp_TidyDefaultIsIdentity(t *testing.T) {
 	app := newTestApp(t)
 	out, err := app.tidy(context.Background(), "hello\n")
@@ -1228,15 +1325,12 @@ func TestApp_ComposeSendMsg_ClosesCompose(t *testing.T) {
 	if !app.composeOpen {
 		t.Fatal("setup: composeOpen should be true")
 	}
-	app, cmd := app.Update(ComposeSendMsg{})
+	app, _ = app.Update(ComposeSendMsg{})
 	if app.composeOpen {
 		t.Error("ComposeSendMsg should clear composeOpen")
 	}
 	if app.compose != nil {
 		t.Error("ComposeSendMsg should nil compose")
-	}
-	if cmd != nil {
-		t.Error("stub should return nil Cmd")
 	}
 }
 

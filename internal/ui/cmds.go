@@ -25,6 +25,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/cache"
+	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/filter"
 	"github.com/glw907/poplar/internal/mail"
@@ -584,6 +585,67 @@ func openAttachmentCmd(c *cache.Account, opener URLOpener, uid mail.UID, att mai
 		_ = opener(path)
 		return nil
 	}
+}
+
+// composeSendCmd runs the tidy seam, assembles MIME, and queues the
+// outbox op via cache.Account.QueueOutbound. Returns ErrorMsg on any
+// failure, composeSentMsg on success.
+func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compose.Draft) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		body, err := tidy(ctx, d.Body)
+		if err != nil {
+			return ErrorMsg{Op: "tidy body", Err: err}
+		}
+		d.Body = body
+		mime, err := compose.AssembleMIME(d, time.Now())
+		if err != nil {
+			return ErrorMsg{Op: "assemble MIME", Err: err}
+		}
+		env := envelopeFromDraft(d)
+		if err := acct.QueueOutbound(ctx, sentFolder, env, mime); err != nil {
+			return ErrorMsg{Op: "queue outbound", Err: err}
+		}
+		return composeSentMsg{}
+	}
+}
+
+func envelopeFromDraft(d compose.Draft) mail.Envelope {
+	env := mail.Envelope{From: d.From.Address}
+	for _, a := range d.To {
+		env.Rcpts = append(env.Rcpts, a.Address)
+	}
+	for _, a := range d.Cc {
+		env.Rcpts = append(env.Rcpts, a.Address)
+	}
+	for _, a := range d.Bcc {
+		env.Rcpts = append(env.Rcpts, a.Address)
+	}
+	return env
+}
+
+// composeSentMsg fires after QueueOutbound returns. App stages a
+// non-undoable "Sending…" toast.
+type composeSentMsg struct{}
+
+// resolveSentFolder picks the Sent folder for outbound mail from the
+// cached folder list. Returns "" if none can be identified.
+func resolveSentFolder(acct *cache.Account) string {
+	classified, err := acct.ListFolders()
+	if err != nil {
+		return ""
+	}
+	for _, cf := range classified {
+		if cf.Canonical == "Sent" {
+			return cf.Folder.Name
+		}
+	}
+	for _, cf := range classified {
+		if strings.EqualFold(cf.Folder.Name, "Sent") {
+			return cf.Folder.Name
+		}
+	}
+	return ""
 }
 
 // saveAttachmentCmd writes att's bytes to dir with collision-suffix

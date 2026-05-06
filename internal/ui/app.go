@@ -444,9 +444,36 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(loadOutboxConflictsCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache()))
 
 	case ComposeSendMsg:
+		sent := resolveSentFolder(m.acct.Cache())
+		if sent == "" {
+			if m.compose != nil {
+				m.compose.err = "no Sent folder configured"
+			}
+			return m, nil
+		}
+		d := msg.Draft
+		tidy := m.tidy
+		acct := m.acct.Cache()
 		m.composeOpen = false
 		m.compose = nil
-		return m, nil
+		return m, composeSendCmd(acct, sent, tidy, d)
+
+	case composeSentMsg:
+		hadBanner := m.hasBannerRow()
+		deadline := m.now().Add(2 * time.Second)
+		m.toast = pendingAction{
+			op:       opSending,
+			deadline: deadline,
+		}
+		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
+			return toastExpireMsg{deadline: deadline}
+		})}
+		var rcmd tea.Cmd
+		m, rcmd = m.maybeResizeChild(hadBanner)
+		if rcmd != nil {
+			cmds = append(cmds, rcmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case ComposeCancelMsg:
 		m.composeOpen = false
