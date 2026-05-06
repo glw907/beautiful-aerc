@@ -4,7 +4,6 @@
 package ui
 
 import (
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -213,14 +212,4 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		ErrorBanner: lipgloss.NewStyle().
 			Foreground(t.ColorError),
 	}
-}
-
-// NewSpinner returns a configured bubbles/spinner.Model with poplar's
-// shared style: Dot variant, FgDim foreground. Centralized so future
-// folder-load and send-progress placeholders inherit the same look.
-func NewSpinner(t *theme.CompiledTheme) spinner.Model {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(t.FgDim)
-	return sp
 }

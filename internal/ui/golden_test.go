@@ -215,24 +215,3 @@ func TestGolden_HelpPopover(t *testing.T) {
 		})
 	}
 }
-
-// TestGolden_AccountTab captures the full AccountTab.View() at both
-// design-polish sizes. The sidebar-column refactor (Task 7) must leave
-// this output byte-for-byte equal.
-func TestGolden_AccountTab(t *testing.T) {
-	cases := []struct {
-		name string
-		w, h int
-	}{
-		{"accounttab_80x24.txt", 80, 24},
-		{"accounttab_120x40.txt", 120, 40},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			tab := newLoadedTab(t, tc.w, tc.h)
-			got := tab.View()
-			checkGolden(t, tc.name, got)
-		})
-	}
-}

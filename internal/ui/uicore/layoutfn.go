@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package uicore
 
-import (
-	"math"
-
-	"github.com/glw907/poplar/internal/ui/uicore"
-)
+import "math"
 
 // ComputeLayout returns the layout decisions for a given terminal
 // width. See ADR-0109 for the formula derivation. Sender slope is
@@ -15,7 +11,7 @@ import (
 // thresholds gate the flag column (W>=90), date column (3 cells at
 // W>=90, 5 cells at W>=100), and sidebar icons (sidebar>=20, i.e.
 // W>=108 with the 0.2 slope and round-half-away-from-zero).
-func ComputeLayout(termWidth int) uicore.LayoutMode {
+func ComputeLayout(termWidth int) LayoutMode {
 	sidebar := clampInt(int(math.Round(14.0+float64(termWidth-80)*0.2)), 14, 30)
 	sender := clampInt(int(math.Round(22.0+float64(termWidth-80)*0.125)), 22, 32)
 	var date int
@@ -27,7 +23,7 @@ func ComputeLayout(termWidth int) uicore.LayoutMode {
 	default:
 		date = 5
 	}
-	return uicore.LayoutMode{
+	return LayoutMode{
 		Sidebar:    sidebar,
 		Sender:     sender,
 		Date:       date,

@@ -16,6 +16,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
@@ -43,7 +44,7 @@ func identityTidy(_ context.Context, body string) (string, error) {
 
 // App is the root bubbletea model for poplar.
 type App struct {
-	acct            AccountTab
+	acct            account.Model
 	icons           uicore.IconSet
 	styles          Styles
 	topLine         TopLine
@@ -94,15 +95,15 @@ func (m App) WithTidy(fn TidyFn) App {
 	return m
 }
 
-// NewApp creates the root model with a single AccountTab. Folder loading
-// happens in Init's Cmd chain, not in the constructor.
+// NewApp creates the root model with a single account.Model. Folder
+// loading happens in Init's Cmd chain, not in the constructor.
 func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
 
 	return App{
-		acct:         NewAccountTab(styles, t, acct, uiCfg, icons),
+		acct:         account.New(t, acct, uiCfg, icons),
 		icons:        icons,
 		styles:       styles,
 		theme:        t,
@@ -243,7 +244,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case OpenConfirmEmptyMsg:
+	case account.OpenConfirmEmptyMsg:
 		body := strconv.Itoa(msg.Total) + " messages will be permanently deleted."
 		m.pendingEmpty = pendingEmptyConfirm{folder: msg.Folder, source: msg.Source}
 		m.confirm = m.confirm.Open(ConfirmRequest{
@@ -262,7 +263,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			folder, source := m.pendingEmpty.folder, m.pendingEmpty.source
 			m.pendingEmpty = pendingEmptyConfirm{}
 			return m, func() tea.Msg {
-				return EmptyFolderConfirmedMsg{Folder: folder, Source: source}
+				return account.EmptyFolderConfirmedMsg{Folder: folder, Source: source}
 			}
 		}
 		return m, nil
@@ -273,7 +274,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.confirm = m.confirm.Close()
 		return m, nil
 
-	case EmptyFolderConfirmedMsg:
+	case account.EmptyFolderConfirmedMsg:
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(msg)
 		m = m.deriveChromeFromAcct()
@@ -282,14 +283,14 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case reader.LaunchURLMsg:
 		return m, launchURLCmd(m.opener, msg.URL)
 
-	case triageStartedMsg:
+	case account.TriageStartedMsg:
 		hadBanner := m.hasBannerRow()
 		deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
 		m.toast = pendingAction{
-			op:       msg.op,
-			n:        msg.n,
-			dest:     msg.dest,
-			inverse:  msg.inverse,
+			op:       msg.Op,
+			n:        msg.N,
+			dest:     msg.Dest,
+			inverse:  msg.Inverse,
 			deadline: deadline,
 		}
 		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
@@ -347,10 +348,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		cmds = append(cmds, fcmd)
 		return m, tea.Batch(cmds...)
 
-	case folderLoadedMsg:
+	case account.FolderLoadedMsg:
 		// A fresh folder load (msglist reset by selectionChangedCmds)
 		// commits any in-flight toast.
-		if !m.toast.IsZero() && m.acct.msglist.Count() == 0 {
+		if !m.toast.IsZero() && m.acct.MessageListCount() == 0 {
 			hadBanner := m.hasBannerRow()
 			m.toast = pendingAction{}
 			var rcmd tea.Cmd
@@ -394,7 +395,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
 
-	case cacheEventMsg:
+	case account.CacheEventMsg:
 		cmds := []tea.Cmd{refreshOutboxDepthCmd(m.acct.Cache())}
 		if m.outboxOpen {
 			cmds = append(cmds, loadOutboxSummaryCmd(m.acct.Cache()))
@@ -644,7 +645,7 @@ func (m App) renderFrame() string {
 	}
 	content := strings.Join(contentLines, "\n")
 
-	dividerCol := ComputeLayout(m.width).Sidebar
+	dividerCol := uicore.ComputeLayout(m.width).Sidebar
 	topLine := m.topLine.View(m.width, dividerCol)
 	status := m.statusBar.View(m.width, dividerCol)
 	foot := m.footer.View(m.width)
@@ -762,7 +763,7 @@ func (m App) contentHeight() int {
 // mirroring the geometry AccountTab derives in its WindowSizeMsg handler.
 func (m App) rightPaneSize() (w, h int) {
 	contentW := m.width - 1 // one cell for the right border App appends
-	layout := ComputeLayout(contentW)
+	layout := uicore.ComputeLayout(contentW)
 	sw := layout.Sidebar
 	if sw > contentW/2 {
 		sw = contentW / 2
@@ -776,7 +777,7 @@ func (m App) rightPaneSize() (w, h int) {
 // account tab's message list, forwarding to the viewer's current
 // message when the viewer is open.
 func (m App) selectedMessage() (mail.MessageInfo, bool) {
-	return m.acct.msglist.SelectedMessage()
+	return m.acct.SelectedMessage()
 }
 
 // hasBannerRow reports whether the chrome row above the status bar is

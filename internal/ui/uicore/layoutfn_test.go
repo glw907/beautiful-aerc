@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package uicore
 
 import "testing"
 

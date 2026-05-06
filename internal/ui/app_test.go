@@ -16,6 +16,7 @@ import (
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/movepicker"
 	"github.com/glw907/poplar/internal/ui/reader"
@@ -257,8 +258,8 @@ func TestAppQuitStolenDuringSearch(t *testing.T) {
 			drainApp(t, &app, cmd)
 		}
 		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if app.acct.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
-			t.Fatalf("setup: state = %v, want SearchActive", app.acct.sidebarColumn.SidebarSearch().State())
+		if app.acct.SidebarColumnValue().SidebarSearch().State() != sidebar.SearchActive {
+			t.Fatalf("setup: state = %v, want SearchActive", app.acct.SidebarColumnValue().SidebarSearch().State())
 		}
 
 		_, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -318,9 +319,9 @@ func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 	}
 	// Inject a long body so G (go-to-bottom) produces a non-zero scroll pct.
 	long := strings.Repeat("alpha bravo charlie delta epsilon ", 50)
-	app.acct.viewer = app.acct.viewer.SetBody([]content.Block{
+	app.acct = app.acct.WithViewer(app.acct.Viewer().SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
-	})
+	}))
 	// Press G. deriveChromeFromAcct reads ViewerScrollPct after delegation.
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
 	if app.statusBar.scrollPct != 100 {
@@ -368,8 +369,8 @@ func TestApp_HelpDismissedByEsc(t *testing.T) {
 
 func TestApp_HelpStealsKeys(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	startMsgSelected := app.acct.msglist.Selected()
-	startFolderSelected := app.acct.sidebarColumn.Sidebar().Selected()
+	startMsgSelected := app.acct.MsgList().Selected()
+	startFolderSelected := app.acct.SidebarColumnValue().Sidebar().Selected()
 
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	if !app.helpOpen {
@@ -382,17 +383,17 @@ func TestApp_HelpStealsKeys(t *testing.T) {
 		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{k}})
 	}
 
-	if app.acct.msglist.Selected() != startMsgSelected {
+	if app.acct.MsgList().Selected() != startMsgSelected {
 		t.Errorf("msglist selection moved while help open: %d → %d",
-			startMsgSelected, app.acct.msglist.Selected())
+			startMsgSelected, app.acct.MsgList().Selected())
 	}
-	if app.acct.sidebarColumn.Sidebar().Selected() != startFolderSelected {
+	if app.acct.SidebarColumnValue().Sidebar().Selected() != startFolderSelected {
 		t.Errorf("sidebar selection moved while help open: %d → %d",
-			startFolderSelected, app.acct.sidebarColumn.Sidebar().Selected())
+			startFolderSelected, app.acct.SidebarColumnValue().Sidebar().Selected())
 	}
-	if app.acct.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
+	if app.acct.SidebarColumnValue().SidebarSearch().State() != sidebar.SearchIdle {
 		t.Errorf("search state changed while help open: got %v",
-			app.acct.sidebarColumn.SidebarSearch().State())
+			app.acct.SidebarColumnValue().SidebarSearch().State())
 	}
 	if !app.helpOpen {
 		t.Error("help closed unexpectedly during key barrage")
@@ -681,16 +682,16 @@ func TestApp_ToastLifecycle(t *testing.T) {
 		return app
 	}
 
-	t.Run("triageStartedMsg sets toast and returns Tick Cmd", func(t *testing.T) {
+	t.Run("account.TriageStartedMsg sets toast and returns Tick Cmd", func(t *testing.T) {
 		app := newApp()
-		app, cmd := app.Update(triageStartedMsg{
-			op:      "delete",
-			n:       1,
-			uids:    []mail.UID{"1"},
-			inverse: func() tea.Msg { return nil },
+		app, cmd := app.Update(account.TriageStartedMsg{
+			Op:      "delete",
+			N:       1,
+			UIDs:    []mail.UID{"1"},
+			Inverse: func() tea.Msg { return nil },
 		})
 		if app.toast.IsZero() {
-			t.Fatal("toast should be set after triageStartedMsg")
+			t.Fatal("toast should be set after account.TriageStartedMsg")
 		}
 		if app.toast.op != "delete" || app.toast.n != 1 {
 			t.Errorf("toast = %+v, want op=delete n=1", app.toast)
@@ -706,7 +707,7 @@ func TestApp_ToastLifecycle(t *testing.T) {
 
 	t.Run("toastExpireMsg with matching deadline clears toast", func(t *testing.T) {
 		app := newApp()
-		app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+		app, _ = app.Update(account.TriageStartedMsg{Op: "delete", N: 1})
 		dl := app.toast.deadline
 		app, _ = app.Update(toastExpireMsg{deadline: dl})
 		if !app.toast.IsZero() {
@@ -716,7 +717,7 @@ func TestApp_ToastLifecycle(t *testing.T) {
 
 	t.Run("toastExpireMsg with stale deadline ignored", func(t *testing.T) {
 		app := newApp()
-		app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+		app, _ = app.Update(account.TriageStartedMsg{Op: "delete", N: 1})
 		stale := frozen.Add(-time.Hour)
 		app, _ = app.Update(toastExpireMsg{deadline: stale})
 		if app.toast.IsZero() {
@@ -727,10 +728,10 @@ func TestApp_ToastLifecycle(t *testing.T) {
 	t.Run("undoRequestedMsg returns inverse, clears toast", func(t *testing.T) {
 		app := newApp()
 		var ranInverse bool
-		app, _ = app.Update(triageStartedMsg{
-			op:      "delete",
-			n:       1,
-			inverse: func() tea.Msg { ranInverse = true; return nil },
+		app, _ = app.Update(account.TriageStartedMsg{
+			Op:      "delete",
+			N:       1,
+			Inverse: func() tea.Msg { ranInverse = true; return nil },
 		})
 		_, cmd := app.Update(undoRequestedMsg{})
 		if cmd == nil {
@@ -752,9 +753,9 @@ func TestApp_ToastLifecycle(t *testing.T) {
 
 	t.Run("ErrorMsg with active toast clears toast", func(t *testing.T) {
 		app := newApp()
-		app, _ = app.Update(triageStartedMsg{
-			op: "delete",
-			n:  1,
+		app, _ = app.Update(account.TriageStartedMsg{
+			Op: "delete",
+			N:  1,
 		})
 		app, _ = app.Update(ErrorMsg{Op: "delete", Err: errors.New("boom")})
 		if !app.toast.IsZero() {
@@ -792,7 +793,7 @@ func TestApp_BannerToastPrecedence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			app := newLoadedApp(t, 100, 30)
 			if tc.setTost {
-				app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+				app, _ = app.Update(account.TriageStartedMsg{Op: "delete", N: 1})
 			}
 			if tc.setupErr {
 				app, _ = app.Update(ErrorMsg{Op: "x", Err: errors.New("y")})
@@ -835,11 +836,11 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 
 	// Inject a body with one harvested link directly into the viewer
 	// so the harvest path is exercised and v.links populates.
-	app.acct.viewer = app.acct.viewer.SetBody([]content.Block{
+	app.acct = app.acct.WithViewer(app.acct.Viewer().SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{
 			content.Link{Text: "click", URL: "https://example.com"},
 		}},
-	})
+	}))
 
 	// Tab → viewer sets pendingLinkPicker → AccountTab relays → App opens picker via deriveChromeFromAcct.
 	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -887,9 +888,9 @@ func TestApp_FolderJumpInertWhilePickerOpen(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
 	folders := []mail.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
 	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
-	beforeFolder := app.acct.currentFolderName()
+	beforeFolder := app.acct.CurrentFolderName()
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
-	if got := app.acct.currentFolderName(); got != beforeFolder {
+	if got := app.acct.CurrentFolderName(); got != beforeFolder {
 		t.Errorf("folder changed to %q while picker open; want %q (key should be swallowed)", got, beforeFolder)
 	}
 }
@@ -898,43 +899,45 @@ func TestApp_MovePickerPickedRoutesToAccountTab(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
 	// Use action targets from the loaded message list so dispatchMoveFromPicker
 	// doesn't short-circuit on empty UIDs.
-	uids := app.acct.msglist.ActionTargets()
-	src := app.acct.currentFolderName()
+	uids := app.acct.MsgList().ActionTargets()
+	src := app.acct.CurrentFolderName()
 	folders := []mail.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
 	app, _ = app.Update(movepicker.OpenMsg{UIDs: uids, Src: src, Folders: folders})
 	_, cmd := app.Update(movepicker.PickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
 	if cmd == nil {
-		t.Fatal("Picked produced nil cmd; expected triageStartedMsg + forward")
+		t.Fatal("Picked produced nil cmd; expected account.TriageStartedMsg + forward")
 	}
 	msgs := drainBatch(cmd)
 	var sawStart bool
 	for _, m := range msgs {
-		if ts, ok := m.(triageStartedMsg); ok {
+		if ts, ok := m.(account.TriageStartedMsg); ok {
 			sawStart = true
-			if ts.dest != "Archive" {
-				t.Errorf("triageStartedMsg.dest = %q, want %q", ts.dest, "Archive")
+			if ts.Dest != "Archive" {
+				t.Errorf("account.TriageStartedMsg.dest = %q, want %q", ts.Dest, "Archive")
 			}
 		}
 	}
 	if !sawStart {
-		t.Errorf("no triageStartedMsg in %v", msgs)
+		t.Errorf("no account.TriageStartedMsg in %v", msgs)
 	}
 }
 
 func TestApp_FolderChangeCommitsToast(t *testing.T) {
 	app := newLoadedApp(t, 100, 30)
-	app, _ = app.Update(triageStartedMsg{op: "delete", n: 1})
+	app, _ = app.Update(account.TriageStartedMsg{Op: "delete", N: 1})
 	if app.toast.IsZero() {
-		t.Fatal("setup: triageStartedMsg should have set the toast")
+		t.Fatal("setup: account.TriageStartedMsg should have set the toast")
 	}
 
 	// Simulate folder load completion. This is what selectionChangedCmds
 	// resolves to when J/K or a folder-jump key fires.
 	// Simulate a folder change: the msglist is empty (selectionChangedCmds
-	// just reset it) and a folderLoadedMsg arrives. That combination is
+	// just reset it) and a account.FolderLoadedMsg arrives. That combination is
 	// the App's signal to clear the toast.
-	app.acct.msglist.SetMessages(nil)
-	app, _ = app.Update(folderLoadedMsg{name: "Drafts", msgs: nil, total: 0})
+	ml := app.acct.MsgList()
+	ml.SetMessages(nil)
+	app.acct = app.acct.WithMsgList(ml)
+	app, _ = app.Update(account.FolderLoadedMsg{Name: "Drafts", Msgs: nil, Total: 0})
 	if !app.toast.IsZero() {
 		t.Errorf("toast should clear on folder change, got %+v", app.toast)
 	}
@@ -945,9 +948,9 @@ func TestApp_OpensConfirmModalOnEmptyMsg(t *testing.T) {
 	if app.IsConfirmOpen() {
 		t.Fatal("confirm should be closed at start")
 	}
-	app, _ = app.Update(OpenConfirmEmptyMsg{Folder: "Trash", Total: 247, Source: "Trash"})
+	app, _ = app.Update(account.OpenConfirmEmptyMsg{Folder: "Trash", Total: 247, Source: "Trash"})
 	if !app.IsConfirmOpen() {
-		t.Fatal("confirm should be open after OpenConfirmEmptyMsg")
+		t.Fatal("confirm should be open after account.OpenConfirmEmptyMsg")
 	}
 	plain := stripANSI(app.View())
 	if !strings.Contains(plain, "Empty Trash") {
@@ -960,7 +963,7 @@ func TestApp_OpensConfirmModalOnEmptyMsg(t *testing.T) {
 
 func TestApp_ConfirmYesEmitsConfirmedMsgAndCloses(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	app, _ = app.Update(OpenConfirmEmptyMsg{Folder: "Trash", Total: 5, Source: "Trash"})
+	app, _ = app.Update(account.OpenConfirmEmptyMsg{Folder: "Trash", Total: 5, Source: "Trash"})
 	if !app.IsConfirmOpen() {
 		t.Fatal("setup: confirm should be open")
 	}
@@ -970,25 +973,25 @@ func TestApp_ConfirmYesEmitsConfirmedMsgAndCloses(t *testing.T) {
 
 	// Confirm.Update emits ConfirmModalYesMsg + ConfirmModalClosedMsg.
 	// Feed both back through App.Update. The Yes handler then emits
-	// EmptyFolderConfirmedMsg.
+	// account.EmptyFolderConfirmedMsg.
 	found := false
 	for _, m := range yesMsgs {
 		var c tea.Cmd
 		app, c = app.Update(m)
 		for _, follow := range drainBatch(c) {
-			if _, ok := follow.(EmptyFolderConfirmedMsg); ok {
+			if _, ok := follow.(account.EmptyFolderConfirmedMsg); ok {
 				found = true
 			}
 		}
 	}
 	if !found {
-		t.Errorf("expected EmptyFolderConfirmedMsg after draining Yes batch; got %v", yesMsgs)
+		t.Errorf("expected account.EmptyFolderConfirmedMsg after draining Yes batch; got %v", yesMsgs)
 	}
 }
 
 func TestApp_ConfirmEscClosesWithoutEmit(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	app, _ = app.Update(OpenConfirmEmptyMsg{Folder: "Trash", Total: 5, Source: "Trash"})
+	app, _ = app.Update(account.OpenConfirmEmptyMsg{Folder: "Trash", Total: 5, Source: "Trash"})
 	if !app.IsConfirmOpen() {
 		t.Fatal("setup: confirm should be open")
 	}
@@ -1002,8 +1005,8 @@ func TestApp_ConfirmEscClosesWithoutEmit(t *testing.T) {
 		if _, ok := m.(ConfirmModalClosedMsg); ok {
 			sawClosed = true
 		}
-		if _, ok := m.(EmptyFolderConfirmedMsg); ok {
-			t.Error("must NOT emit EmptyFolderConfirmedMsg on Esc")
+		if _, ok := m.(account.EmptyFolderConfirmedMsg); ok {
+			t.Error("must NOT emit account.EmptyFolderConfirmedMsg on Esc")
 		}
 	}
 	if !sawClosed {
@@ -1181,6 +1184,41 @@ func newTestApp(t *testing.T) App {
 	t.Helper()
 	backend := mail.NewMockBackend()
 	return NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+}
+
+// blockingBackend is a minimal mail.Backend stub. Methods are no-ops
+// returning zero values. FetchBody blocks on release.
+type blockingBackend struct {
+	release chan struct{}
+}
+
+func (b *blockingBackend) AccountName() string                 { return "test" }
+func (b *blockingBackend) AccountEmail() string                { return "test@example.com" }
+func (b *blockingBackend) Connect(_ context.Context) error     { return nil }
+func (b *blockingBackend) Disconnect() error                   { return nil }
+func (b *blockingBackend) ListFolders() ([]mail.Folder, error) { return nil, nil }
+func (b *blockingBackend) OpenFolder(_ string) error           { return nil }
+func (b *blockingBackend) QueryFolder(_ string, _, _ int) ([]mail.UID, int, error) {
+	return nil, 0, nil
+}
+func (b *blockingBackend) FetchHeaders(_ []mail.UID) ([]mail.MessageInfo, error) { return nil, nil }
+func (b *blockingBackend) FetchBody(_ mail.UID) ([]byte, error) {
+	<-b.release
+	return []byte("body"), nil
+}
+func (b *blockingBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) { return nil, nil }
+func (b *blockingBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) {
+	return nil, nil
+}
+func (b *blockingBackend) Move(_ []mail.UID, _ string) error            { return nil }
+func (b *blockingBackend) Destroy(_ []mail.UID) error                   { return nil }
+func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
+func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
+func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
+func (b *blockingBackend) IsJMAP() bool                                 { return false }
+func (b *blockingBackend) Updates() <-chan mail.Update {
+	ch := make(chan mail.Update)
+	return ch
 }
 
 // noSentBackend is a mail.Backend stub whose folder list has no Sent
@@ -1367,9 +1405,9 @@ func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
 	}
 	// While compose is open, keys route to compose.Model. j should not move
 	// the message list cursor.
-	beforeSelected := app.acct.msglist.Selected()
+	beforeSelected := app.acct.MsgList().Selected()
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	if app.acct.msglist.Selected() != beforeSelected {
+	if app.acct.MsgList().Selected() != beforeSelected {
 		t.Error("j should be consumed by compose.Model when compose is open, not msglist")
 	}
 }

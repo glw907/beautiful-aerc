@@ -11,22 +11,23 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// triageOp identifies which triage action a toast or pendingAction
-// represents. The empty value (opNone) means "no toast active".
-type triageOp string
+// triageOp aliases uicore.TriageOp so the App-side toast code reads
+// without a package prefix. The canonical type lives in uicore so the
+// account subpackage can produce TriageStartedMsg values.
+type triageOp = uicore.TriageOp
 
 const (
-	opNone           triageOp = ""
-	opDelete         triageOp = "delete"
-	opArchive        triageOp = "archive"
-	opStar           triageOp = "star"
-	opUnstar         triageOp = "unstar"
-	opRead           triageOp = "read"
-	opUnread         triageOp = "unread"
-	opMove           triageOp = "move"
-	opEmpty          triageOp = "empty"
-	opSaveAttachment triageOp = "save-attachment"
-	opSending        triageOp = "sending"
+	opNone           = uicore.TriageNone
+	opDelete         = uicore.TriageDelete
+	opArchive        = uicore.TriageArchive
+	opStar           = uicore.TriageStar
+	opUnstar         = uicore.TriageUnstar
+	opRead           = uicore.TriageRead
+	opUnread         = uicore.TriageUnread
+	opMove           = uicore.TriageMove
+	opEmpty          = uicore.TriageEmpty
+	opSaveAttachment = uicore.TriageSaveAttachment
+	opSending        = uicore.TriageSending
 )
 
 // pendingAction is the App-owned state for an in-flight optimistic

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package account
 
 import (
 	"context"
@@ -31,9 +31,9 @@ type folderPage struct {
 	loadMoreInFlight bool
 }
 
-// AccountTab is the main account view. One pane (like pine): every
+// Model is the main account view. One pane (like pine): every
 // key is always live. J/K/G navigate folders, j/k navigate messages.
-type AccountTab struct {
+type Model struct {
 	styles Styles
 	icons  uicore.IconSet
 	// acct is the per-account cache handle. UI reads come from
@@ -45,7 +45,7 @@ type AccountTab struct {
 	sidebarColumn sidebar.Column
 	msglist       messagelist.Model
 	viewer        reader.Model
-	keys          AccountKeys
+	keys          Keys
 	pages         map[string]*folderPage
 	swept         map[string]bool
 	loading       bool
@@ -62,17 +62,17 @@ type AccountTab struct {
 }
 
 // WithNow returns a copy of m with the clock seam replaced.
-func (m AccountTab) WithNow(now func() time.Time) AccountTab {
+func (m Model) WithNow(now func() time.Time) Model {
 	m.now = now
 	return m
 }
 
-// NewAccountTab builds an empty AccountTab. The initial folder list is
+// New builds an empty account Model. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
-func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) AccountTab {
+func New(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) Model {
 	sidebarStyles := sidebar.NewStyles(t)
-	return AccountTab{
-		styles: styles,
+	return Model{
+		styles: NewStyles(t),
 		icons:  icons,
 		acct:   acct,
 		uiCfg:  uiCfg,
@@ -83,45 +83,45 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 		),
 		msglist: messagelist.New(messagelist.NewStyles(t), nil, 1, 1, icons),
 		viewer:  reader.New(reader.NewStyles(t), t, acct.AccountEmail(), icons),
-		keys:    NewAccountKeys(),
+		keys:    NewKeys(),
 		pages:   make(map[string]*folderPage),
 		swept:   make(map[string]bool),
-		spinner: NewSpinner(t),
-		layout:  ComputeLayout(80),
+		spinner: uicore.NewSpinner(t),
+		layout:  uicore.ComputeLayout(80),
 		now:     time.Now,
 	}
 }
 
-func (m AccountTab) Title() string { return m.sidebarColumn.Sidebar().SelectedFolder() }
+func (m Model) Title() string { return m.sidebarColumn.Sidebar().SelectedFolder() }
 
-func (m AccountTab) Backend() mail.Backend { return m.acct.Backend }
+func (m Model) Backend() mail.Backend { return m.acct.Backend }
 
-func (m AccountTab) Cache() *cache.Account { return m.acct }
+func (m Model) Cache() *cache.Account { return m.acct }
 
-func (m AccountTab) AccountEmail() string { return m.acct.AccountEmail() }
+func (m Model) AccountEmail() string { return m.acct.AccountEmail() }
 
-func (m AccountTab) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
+func (m Model) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
 
 // Closeable always returns false. The account tab cannot be closed.
-func (m AccountTab) Closeable() bool { return false }
+func (m Model) Closeable() bool { return false }
 
 // Init fires the initial folder-list fetch and starts the cache event
 // pump.
-func (m AccountTab) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return tea.Batch(loadFoldersCmd(m.acct), pumpCacheCmd(m.acct))
 }
 
 // Update satisfies tea.Model. Delegates to updateTab for typed access.
-func (m AccountTab) Update(msg tea.Msg) (AccountTab, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m.updateTab(msg)
 }
 
-func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
+func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		layout := ComputeLayout(m.width)
+		layout := uicore.ComputeLayout(m.width)
 		if layout.Sidebar > m.width/2 {
 			layout.Sidebar = m.width / 2
 		}
@@ -163,17 +163,17 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 		return m.selectionChangedCmds()
 
-	case folderLoadedMsg:
+	case FolderLoadedMsg:
 		m.loading = false
-		page := m.pageFor(msg.name)
+		page := m.pageFor(msg.Name)
 		// selectionChangedCmds zeroes the page before firing
 		// openFolderCmd, so loaded == 0 reliably means "fresh open"
 		// (cursor reset). Any other value means "post-write refresh"
 		// (cursor preserved). Snapshot before mutating page.loaded.
 		isInitial := page.loaded == 0
-		page.loaded = len(msg.msgs)
-		page.total = msg.total
-		fc := m.uiCfg.Folders[m.sidebarColumn.Sidebar().ConfigKey(msg.name)]
+		page.loaded = len(msg.Msgs)
+		page.total = msg.Total
+		fc := m.uiCfg.Folders[m.sidebarColumn.Sidebar().ConfigKey(msg.Name)]
 		order := messagelist.SortDateDesc
 		if fc.Sort == "date-asc" {
 			order = messagelist.SortDateAsc
@@ -185,11 +185,11 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.msglist.SetSort(order)
 		m.msglist.SetThreaded(threaded)
 		if isInitial {
-			m.msglist.SetMessages(msg.msgs)
+			m.msglist.SetMessages(msg.Msgs)
 		} else {
-			m.msglist.RefreshSource(msg.msgs)
+			m.msglist.RefreshSource(msg.Msgs)
 		}
-		if sweep := m.maybeRetentionSweep(msg.name, msg.msgs); sweep != nil {
+		if sweep := m.maybeRetentionSweep(msg.Name, msg.Msgs); sweep != nil {
 			return m, sweep
 		}
 		return m, nil
@@ -202,7 +202,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.msglist.AppendMessages(msg.msgs)
 		return m, nil
 
-	case cacheEventMsg:
+	case CacheEventMsg:
 		// Drainer transition: re-read current folder so any backing
 		// state change is reflected. Re-arm the pump.
 		cmds := []tea.Cmd{pumpCacheCmd(m.acct)}
@@ -225,7 +225,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		return m, nil
 
 	case ErrorMsg:
-		// App owns the banner. AccountTab ignores it. App.Update runs
+		// App owns the banner. Model ignores it. App.Update runs
 		// before delegation, so the App layer captures the message.
 		return m, nil
 
@@ -248,7 +248,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		folder := msg.folder
 		src := msg.source
 		toast := func() tea.Msg {
-			return triageStartedMsg{op: opEmpty, n: n, dest: folder}
+			return TriageStartedMsg{Op: uicore.TriageEmpty, N: n, Dest: folder}
 		}
 		return m, tea.Batch(toast, refreshFolderCmd(m.acct, src))
 
@@ -288,7 +288,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 // sidebar (and dispatch a folder-load Cmd). j/k move the message-list
 // cursor. During an active search, printable keys flow through
 // SidebarSearch instead of the account-view handlers.
-func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	if m.viewer.IsOpen() {
 		delta := 0
 		switch {
@@ -410,13 +410,13 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 		}
 		m.msglist.ToggleFoldAll()
 	case key.Matches(msg, m.keys.Delete):
-		return m, m.dispatchTriage(opDelete)
+		return m, m.dispatchTriage(uicore.TriageDelete)
 	case key.Matches(msg, m.keys.Archive):
-		return m, m.dispatchTriage(opArchive)
+		return m, m.dispatchTriage(uicore.TriageArchive)
 	case key.Matches(msg, m.keys.Star):
-		return m, m.dispatchTriage(opStar)
+		return m, m.dispatchTriage(uicore.TriageStar)
 	case key.Matches(msg, m.keys.ReadToggle):
-		return m, m.dispatchTriage(opRead)
+		return m, m.dispatchTriage(uicore.TriageRead)
 	case key.Matches(msg, m.keys.EnterVisual):
 		m.msglist.EnterVisual()
 		return m, nil
@@ -436,7 +436,7 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 // e.g. an account that doesn't expose a Drafts folder. Behaves like
 // J/K otherwise: clears any active search, fires the load Cmd via
 // selectionChangedCmds.
-func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
+func (m Model) jumpToFolder(canonical string) (Model, tea.Cmd) {
 	sb := m.sidebarColumn.Sidebar()
 	if !sb.SelectByCanonical(canonical) {
 		return m, nil
@@ -448,7 +448,7 @@ func (m AccountTab) jumpToFolder(canonical string) (AccountTab, tea.Cmd) {
 
 // cancelInflightBodyFetch cancels any in-flight loadBodyCmd and
 // clears the cancel func. No-op when no fetch is in flight.
-func (m AccountTab) cancelInflightBodyFetch() AccountTab {
+func (m Model) cancelInflightBodyFetch() Model {
 	if m.bodyFetchCancel != nil {
 		m.bodyFetchCancel()
 		m.bodyFetchCancel = nil
@@ -460,7 +460,7 @@ func (m AccountTab) cancelInflightBodyFetch() AccountTab {
 // (for unread messages) queues a FlagSeen=true op via the cache.
 // Shared by Enter, n, and N. Cancels any prior in-flight body fetch
 // before issuing the new one.
-func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
+func (m Model) openMessage(msg mail.MessageInfo) (Model, tea.Cmd) {
 	m = m.cancelInflightBodyFetch()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.bodyFetchCancel = cancel
@@ -478,7 +478,7 @@ func (m AccountTab) openMessage(msg mail.MessageInfo) (AccountTab, tea.Cmd) {
 
 // openSelectedMessage delegates to openMessage with the current
 // msglist cursor. No-op when the folder is empty.
-func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
+func (m Model) openSelectedMessage() (Model, tea.Cmd) {
 	msg, ok := m.msglist.SelectedMessage()
 	if !ok {
 		return m, nil
@@ -488,7 +488,7 @@ func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 
 // clearSearchIfActive clears the shelf and the filter if the shelf
 // is in any non-Idle state. No-op when already idle.
-func (m AccountTab) clearSearchIfActive() AccountTab {
+func (m Model) clearSearchIfActive() Model {
 	ss := m.sidebarColumn.SidebarSearch()
 	if ss.State() == sidebar.SearchIdle {
 		return m
@@ -500,13 +500,13 @@ func (m AccountTab) clearSearchIfActive() AccountTab {
 }
 
 // Returns m alongside the Cmd so mutations are visible at the call site.
-func (m AccountTab) selectionChangedCmds() (AccountTab, tea.Cmd) {
+func (m Model) selectionChangedCmds() (Model, tea.Cmd) {
 	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return m, nil
 	}
 	m.loading = true
-	// Reset the page so folderLoadedMsg uses SetMessages (cursor reset)
+	// Reset the page so FolderLoadedMsg uses SetMessages (cursor reset)
 	// rather than RefreshSource (cursor preserved).
 	m.pages[folder.Name] = &folderPage{}
 	m.msglist.SetMessages(nil)
@@ -518,7 +518,7 @@ func (m AccountTab) selectionChangedCmds() (AccountTab, tea.Cmd) {
 
 // IsSwept reports whether the retention sweep has already fired for
 // the named folder this session. Used by tests.
-func (m AccountTab) IsSwept(folder string) bool {
+func (m Model) IsSwept(folder string) bool {
 	return m.swept[folder]
 }
 
@@ -527,7 +527,7 @@ func (m AccountTab) IsSwept(folder string) bool {
 // run yet this session, it marks the folder swept, collects expired
 // UIDs, and returns a destroyCmd (which may be a no-op if no UIDs
 // qualify). Returns nil when retention is disabled or the sweep already ran.
-func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.MessageInfo) tea.Cmd {
+func (m *Model) maybeRetentionSweep(folderName string, loaded []mail.MessageInfo) tea.Cmd {
 	folder, ok := m.sidebarColumn.Sidebar().FolderByProviderName(folderName)
 	if !ok {
 		return nil
@@ -564,7 +564,7 @@ func (m *AccountTab) maybeRetentionSweep(folderName string, loaded []mail.Messag
 
 // dispatchEmpty emits OpenConfirmEmptyMsg when the selected folder is
 // Trash or Spam. Returns nil for all other folders. Inert by design.
-func (m *AccountTab) dispatchEmpty() tea.Cmd {
+func (m *Model) dispatchEmpty() tea.Cmd {
 	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return nil
@@ -591,7 +591,7 @@ func (m *AccountTab) dispatchEmpty() tea.Cmd {
 
 // currentFolderName returns the canonical name of the currently-selected
 // sidebar folder, or "" when nothing is selected.
-func (m AccountTab) currentFolderName() string {
+func (m Model) currentFolderName() string {
 	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return ""
@@ -603,7 +603,7 @@ func (m AccountTab) currentFolderName() string {
 // has more messages available than are loaded, e.g. "500/2347". Returns
 // "" when all messages are loaded, the folder is empty, or no page state
 // exists for the current folder.
-func (m AccountTab) WindowCounter() string {
+func (m Model) WindowCounter() string {
 	name := m.currentFolderName()
 	if name == "" {
 		return ""
@@ -615,12 +615,53 @@ func (m AccountTab) WindowCounter() string {
 	return fmt.Sprintf("%d/%d", page.loaded, page.total)
 }
 
-func (m AccountTab) ViewerOpen() bool { return m.viewer.IsOpen() }
+func (m Model) ViewerOpen() bool { return m.viewer.IsOpen() }
+
+// MessageListCount returns the message-list row count. App reads it to
+// decide whether a FolderLoadedMsg represents a fresh open (cursor
+// reset) so it can commit any in-flight toast.
+func (m Model) MessageListCount() int { return m.msglist.Count() }
+
+// SelectedMessage returns the currently selected message in the
+// message list, or false when the list is empty.
+func (m Model) SelectedMessage() (mail.MessageInfo, bool) {
+	return m.msglist.SelectedMessage()
+}
+
+// MsgList returns the message-list sub-model. Used by tests that need
+// to peek at filter state, action targets, or selection.
+func (m Model) MsgList() messagelist.Model { return m.msglist }
+
+// SidebarColumnValue returns the sidebar column composite. Used by
+// tests that inspect sidebar/search state.
+func (m Model) SidebarColumnValue() sidebar.Column { return m.sidebarColumn }
+
+// Viewer returns the reader sub-model. Used by tests that drive body
+// state directly.
+func (m Model) Viewer() reader.Model { return m.viewer }
+
+// CurrentFolderName returns the canonical name of the currently-
+// selected sidebar folder, or "" when nothing is selected.
+func (m Model) CurrentFolderName() string { return m.currentFolderName() }
+
+// WithViewer returns a copy of m with v as the viewer sub-model. Test
+// seam. Production code mutates the viewer through Update / openMessage.
+func (m Model) WithViewer(v reader.Model) Model {
+	m.viewer = v
+	return m
+}
+
+// WithMsgList returns a copy of m with l as the message-list sub-model.
+// Test seam. Production mutates msglist through Update / RefreshSource.
+func (m Model) WithMsgList(l messagelist.Model) Model {
+	m.msglist = l
+	return m
+}
 
 // SelectedFolderCounts returns the (exists, unseen) counts for the
 // selected folder, or (0, 0) if no folder is selected. Mirrors the
 // payload that FolderChangedMsg used to carry.
-func (m AccountTab) SelectedFolderCounts() (int, int) {
+func (m Model) SelectedFolderCounts() (int, int) {
 	folder, ok := m.sidebarColumn.Sidebar().SelectedFolderInfo()
 	if !ok {
 		return 0, 0
@@ -630,14 +671,14 @@ func (m AccountTab) SelectedFolderCounts() (int, int) {
 
 // ViewerScrollPct returns the viewer's scroll percentage, or 0 when
 // the viewer is closed.
-func (m AccountTab) ViewerScrollPct() int {
+func (m Model) ViewerScrollPct() int {
 	if !m.viewer.IsOpen() {
 		return 0
 	}
 	return m.viewer.ScrollPct()
 }
 
-func (m AccountTab) SearchState() sidebar.SearchState {
+func (m Model) SearchState() sidebar.SearchState {
 	return m.sidebarColumn.SidebarSearch().State()
 }
 
@@ -645,7 +686,7 @@ func (m AccountTab) SearchState() sidebar.SearchState {
 // cache. The cache QueueOp transactionally writes the optimistic flip
 // and the outbox row. The immediate folder refresh re-reads the new
 // state. Toast carries the inverse Cmd (a compensating QueueOp).
-func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
+func (m *Model) dispatchTriage(op uicore.TriageOp) tea.Cmd {
 	uids := m.msglist.ActionTargets()
 	if len(uids) == 0 {
 		return nil
@@ -654,7 +695,7 @@ func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 	m.msglist.ExitVisual()
 
 	switch op {
-	case opDelete:
+	case uicore.TriageDelete:
 		trash, ok := m.sidebarColumn.Sidebar().FolderNameByCanonical("Trash")
 		if !ok {
 			return func() tea.Msg {
@@ -663,7 +704,7 @@ func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 		}
 		return m.queueMove(op, src, trash, uids)
 
-	case opArchive:
+	case uicore.TriageArchive:
 		archive, ok := m.sidebarColumn.Sidebar().FolderNameByCanonical("Archive")
 		if !ok {
 			return func() tea.Msg {
@@ -672,27 +713,27 @@ func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 		}
 		return m.queueMove(op, src, archive, uids)
 
-	case opStar:
+	case uicore.TriageStar:
 		cursor, ok := m.msglist.SelectedMessage()
 		if !ok {
 			return nil
 		}
 		set := cursor.Flags&mail.FlagFlagged == 0
-		toastOp := opStar
+		toastOp := uicore.TriageStar
 		if !set {
-			toastOp = opUnstar
+			toastOp = uicore.TriageUnstar
 		}
 		return m.queueFlag(toastOp, src, uids, mail.FlagFlagged, set)
 
-	case opRead:
+	case uicore.TriageRead:
 		cursor, ok := m.msglist.SelectedMessage()
 		if !ok {
 			return nil
 		}
 		set := cursor.Flags&mail.FlagSeen == 0
-		toastOp := opRead
+		toastOp := uicore.TriageRead
 		if !set {
-			toastOp = opUnread
+			toastOp = uicore.TriageUnread
 		}
 		return m.queueFlag(toastOp, src, uids, mail.FlagSeen, set)
 	}
@@ -702,7 +743,7 @@ func (m *AccountTab) dispatchTriage(op triageOp) tea.Cmd {
 // queueMove queues a move op for each uid from src to dest, then
 // emits triageStartedMsg whose inverse undoes the move (queues
 // a move from dest back to src for each uid).
-func (m *AccountTab) queueMove(op triageOp, src, dest string, uids []mail.UID) tea.Cmd {
+func (m *Model) queueMove(op uicore.TriageOp, src, dest string, uids []mail.UID) tea.Cmd {
 	label := string(op)
 	fwd := queueOpsCmd(m.acct, label, src, uids, func(_ mail.UID) cache.OpArgs {
 		return cache.MoveArgs{Dest: dest}
@@ -715,7 +756,7 @@ func (m *AccountTab) queueMove(op triageOp, src, dest string, uids []mail.UID) t
 
 // queueFlag queues a flag set/unset op for each uid, then emits the
 // triage toast whose inverse flips the flag back.
-func (m *AccountTab) queueFlag(op triageOp, src string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
+func (m *Model) queueFlag(op uicore.TriageOp, src string, uids []mail.UID, flag mail.Flag, set bool) tea.Cmd {
 	label := string(op)
 	fwd := queueOpsCmd(m.acct, label, src, uids, func(_ mail.UID) cache.OpArgs {
 		return cache.FlagArgs{Flag: flag, Set: set}
@@ -726,7 +767,7 @@ func (m *AccountTab) queueFlag(op triageOp, src string, uids []mail.UID, flag ma
 	return startTriageCmd(op, "", uids, fwd, rev)
 }
 
-func (m *AccountTab) dispatchMove() tea.Cmd {
+func (m *Model) dispatchMove() tea.Cmd {
 	uids := m.msglist.ActionTargets()
 	if len(uids) == 0 {
 		return nil
@@ -738,38 +779,25 @@ func (m *AccountTab) dispatchMove() tea.Cmd {
 	}
 }
 
-func (m *AccountTab) dispatchMoveFromPicker(msg movepicker.PickedMsg) tea.Cmd {
+func (m *Model) dispatchMoveFromPicker(msg movepicker.PickedMsg) tea.Cmd {
 	if len(msg.UIDs) == 0 {
 		return nil
 	}
 	m.msglist.ExitVisual()
-	return m.queueMove(opMove, msg.Src, msg.Dest, msg.UIDs)
-}
-
-// startTriageCmd batches the forward queueOpsCmd with a triage-toast
-// emitter so the chrome row appears in the same Update tick the cache
-// flip lands.
-func startTriageCmd(op triageOp, dest string, uids []mail.UID, fwd, rev tea.Cmd) tea.Cmd {
-	start := func() tea.Msg {
-		return triageStartedMsg{op: op, n: len(uids), uids: uids, dest: dest, inverse: rev}
-	}
-	return tea.Batch(start, fwd)
+	return m.queueMove(uicore.TriageMove, msg.Src, msg.Dest, msg.UIDs)
 }
 
 // pageFor returns (creating if absent) the folderPage for name.
-func (m *AccountTab) pageFor(name string) *folderPage {
+func (m *Model) pageFor(name string) *folderPage {
 	if m.pages[name] == nil {
 		m.pages[name] = &folderPage{}
 	}
 	return m.pages[name]
 }
 
-// loadMoreTrigger is how many rows from the bottom trigger a load-more.
-const loadMoreTrigger = 20
-
 // maybeLoadMore issues a loadMoreCmd when the cursor is near the bottom
 // and more messages are available. Returns nil when no action is needed.
-func (m *AccountTab) maybeLoadMore() tea.Cmd {
+func (m *Model) maybeLoadMore() tea.Cmd {
 	name := m.currentFolderName()
 	if name == "" {
 		return nil
@@ -786,9 +814,9 @@ func (m *AccountTab) maybeLoadMore() tea.Cmd {
 }
 
 // View renders the sidebar column + divider + right pane. SidebarColumn
-// produces the left column content. AccountTab owns the row-by-row join
+// produces the left column content. Model owns the row-by-row join
 // with the divider and right pane.
-func (m AccountTab) View() string {
+func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
 	}
@@ -812,7 +840,7 @@ func (m AccountTab) View() string {
 
 // RenderWithRightPane renders the sidebar with an externally-provided right
 // pane string in place of the normal msglist/viewer content.
-func (m AccountTab) RenderWithRightPane(right string) string {
+func (m Model) RenderWithRightPane(right string) string {
 	if m.width == 0 || m.height == 0 {
 		return ""
 	}
@@ -821,7 +849,7 @@ func (m AccountTab) RenderWithRightPane(right string) string {
 
 // assembleColumns uses row-by-row concatenation rather than lipgloss.JoinHorizontal;
 // see the comment block inside for why that matters with SPUA-A glyphs.
-func (m AccountTab) assembleColumns(rightLines []string) string {
+func (m Model) assembleColumns(rightLines []string) string {
 	sidebarLines := strings.Split(m.sidebarColumn.View(), "\n")
 	divLine := m.styles.PanelDivider.Render("│")
 

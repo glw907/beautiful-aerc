@@ -25,6 +25,9 @@ type ConfirmRequest struct {
 // its own pending-confirm state.
 type ConfirmModalYesMsg struct{}
 
+// ConfirmModalClosedMsg signals the modal was dismissed without confirmation.
+type ConfirmModalClosedMsg struct{}
+
 // ConfirmModal is a yes/no confirmation overlay. App owns it and composes it
 // via Box + Position + PlaceOverlay, mirroring MovePicker and LinkPicker.
 type ConfirmModal struct {
