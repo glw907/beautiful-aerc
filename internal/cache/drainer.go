@@ -239,6 +239,18 @@ func decodeArgs(kind string, payload string) (OpArgs, error) {
 		return v, nil
 	case KindDestroy:
 		return DestroyArgs{}, nil
+	case KindSend:
+		var v SendArgs
+		if err := json.Unmarshal([]byte(payload), &v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	case KindAppend:
+		var v AppendArgs
+		if err := json.Unmarshal([]byte(payload), &v); err != nil {
+			return nil, err
+		}
+		return v, nil
 	}
 	return nil, fmt.Errorf("unknown op kind %q", kind)
 }
