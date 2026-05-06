@@ -151,3 +151,66 @@ func (c *ComposeTab) padRow(s string) string {
 	}
 	return s + strings.Repeat(" ", c.width-w)
 }
+
+// Update implements the Update half of tea.Model.
+func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyTab:
+			c.advanceFocus(+1)
+			return c, nil
+		case tea.KeyShiftTab:
+			c.advanceFocus(-1)
+			return c, nil
+		case tea.KeyEsc:
+			if c.focus == composeFocusBody {
+				c.setFocus(composeFocusSubject)
+			} else {
+				c.setFocus(composeFocusBody)
+			}
+			return c, nil
+		}
+	}
+
+	var cmd tea.Cmd
+	switch c.focus {
+	case composeFocusTo:
+		c.to, cmd = c.to.Update(msg)
+	case composeFocusCc:
+		c.cc, cmd = c.cc.Update(msg)
+	case composeFocusBcc:
+		c.bcc, cmd = c.bcc.Update(msg)
+	case composeFocusSubject:
+		c.subject, cmd = c.subject.Update(msg)
+	case composeFocusBody:
+		c.editor, cmd = c.editor.Update(msg)
+	}
+	return c, cmd
+}
+
+func (c *ComposeTab) advanceFocus(delta int) {
+	const fields = 5
+	c.setFocus(((c.focus + delta) + fields) % fields)
+}
+
+func (c *ComposeTab) setFocus(target int) {
+	c.to.Blur()
+	c.cc.Blur()
+	c.bcc.Blur()
+	c.subject.Blur()
+	c.editor.Blur()
+	switch target {
+	case composeFocusTo:
+		_ = c.to.Focus()
+	case composeFocusCc:
+		_ = c.cc.Focus()
+	case composeFocusBcc:
+		_ = c.bcc.Focus()
+	case composeFocusSubject:
+		_ = c.subject.Focus()
+	case composeFocusBody:
+		_ = c.editor.Focus()
+	}
+	c.focus = target
+}
