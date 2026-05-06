@@ -13,10 +13,10 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// OpArgs is the sealed sum of queueable operations.
-// Each implementation is JSON-serializable for on-disk storage in
-// outbox.args. SendArgs and AppendArgs are placeholders. QueueOp
-// rejects them.
+// OpArgs is the sealed sum of queueable operations. Each
+// implementation is JSON-serializable for on-disk storage in
+// outbox.args. Send/Append carry only metadata; their MIME
+// payload lives in outbox.payload.
 type OpArgs interface{ opKind() OpKind }
 
 type (
@@ -26,8 +26,14 @@ type (
 		Set  bool
 	}
 	DestroyArgs struct{} // irreversible
-	SendArgs    struct{}
-	AppendArgs  struct{}
+	// SendArgs carries the SMTP-level envelope. The MIME body
+	// lives in outbox.payload. The destination Sent folder is the
+	// outbox row's folder (informational on JMAP, target on IMAP).
+	SendArgs struct{ Envelope mail.Envelope }
+	// AppendArgs carries the IMAP APPEND flags. The destination
+	// folder is the outbox row's folder. The MIME body lives in
+	// outbox.payload.
+	AppendArgs struct{ Flag mail.Flag }
 )
 
 func (MoveArgs) opKind() OpKind    { return KindMove }
@@ -173,8 +179,8 @@ var ErrNotConflict = errors.New("cache: op is not in conflict state")
 
 // revertOptimisticTx mirrors applyOptimisticTx: it undoes the UI flip
 // applied at QueueOp time so a discard leaves the cache reflecting
-// what the server actually has. SendArgs and AppendArgs are placeholder
-// op kinds with no optimistic UI state, so they error out.
+// what the server actually has. SendArgs and AppendArgs have no
+// optimistic UI state, so they are not reversible via this path.
 func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 	switch v := args.(type) {
 	case MoveArgs, DestroyArgs:
@@ -233,7 +239,7 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 // server, so only local cleanup is needed.
 //
 // Returns ErrNotConflict if the row is not currently in conflict.
-// Send and Append placeholders cannot be discarded via this path;
+// Send and Append ops cannot be discarded via this path;
 // revertOptimisticTx has no semantics for them.
 func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
