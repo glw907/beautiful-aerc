@@ -28,6 +28,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -88,7 +89,7 @@ func blankBackground(w, h int) string {
 // compositeOverlay renders box onto a blank w×h background using the
 // same PlaceOverlay + centerOverlay path that App uses.
 func compositeOverlay(box string, w, h int) string {
-	x, y := centerOverlay(box, w, h)
+	x, y := uicore.CenterOverlay(box, w, h)
 	return uicore.PlaceOverlay(x, y, box, blankBackground(w, h))
 }
 
@@ -121,7 +122,6 @@ func TestGolden_ConfirmModal(t *testing.T) {
 // TestGolden_LinkPicker captures the rendered link picker with a
 // representative 3-URL set (mix of short and long URLs).
 func TestGolden_LinkPicker(t *testing.T) {
-	styles := NewStyles(theme.Nord)
 	links := []string{
 		"https://go.dev",
 		"https://pkg.go.dev/github.com/charmbracelet/bubbletea",
@@ -138,7 +138,7 @@ func TestGolden_LinkPicker(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			p := NewLinkPicker(styles)
+			p := reader.NewLinkPicker(reader.NewStyles(theme.Nord))
 			p = p.SetSize(tc.w, tc.h)
 			p = p.Open(links)
 			box := p.Box(tc.w, tc.h)

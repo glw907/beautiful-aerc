@@ -30,6 +30,7 @@ import (
 	"github.com/glw907/poplar/internal/filter"
 	"github.com/glw907/poplar/internal/mail"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
+	"github.com/glw907/poplar/internal/ui/reader"
 )
 
 // foldersLoadedMsg carries the result of an initial sync + ListFolders
@@ -157,15 +158,6 @@ func enqueueDestroys(ctx context.Context, c *cache.Account, folder string, uids 
 	return nil
 }
 
-// bodyLoadedMsg carries the parsed-block representation of a fetched
-// message body. AccountTab compares uid against the viewer's current
-// UID and drops mismatches (user closed and reopened on a different
-// UID before the Cmd resolved).
-type bodyLoadedMsg struct {
-	uid    mail.UID
-	blocks []content.Block
-}
-
 // loadBodyCmd fetches a message body via the cache (Cache I delegates
 // straight to the backend) and parses it into blocks. If ctx is
 // cancelled before FetchBody returns the cmd returns nil and the
@@ -240,7 +232,7 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 					}
 				}
 			}
-			resultCh <- bodyLoadedMsg{uid: uid, blocks: content.ParseBlocks(text)}
+			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text)}
 		}()
 		select {
 		case <-ctx.Done():
@@ -305,23 +297,6 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 		}
 		return cacheEventMsg{event: ev}
 	}
-}
-
-// OpenLinkPickerMsg requests App open the link picker with the given
-// harvested URLs. Emitted by Viewer when the user presses Tab on a
-// message that has at least one harvested link.
-type OpenLinkPickerMsg struct {
-	Links []string
-}
-
-// LinkPickerClosedMsg signals the picker has closed (Esc, Tab, Enter,
-// or numeric launch). Handled at the App level to flip linkPicker.open.
-type LinkPickerClosedMsg struct{}
-
-// LaunchURLMsg requests App fire launchURLCmd for the given URL.
-// Emitted by the link picker on Enter or 1-9 in-range.
-type LaunchURLMsg struct {
-	URL string
 }
 
 // triageStartedMsg is emitted by AccountTab after an optimistic triage
@@ -492,34 +467,6 @@ func discardConflictCmd(c *cache.Account, opID int64) tea.Cmd {
 	}
 }
 
-// attachmentsLoadedMsg carries metadata for the viewer's current UID.
-// Stale UIDs are dropped at the AccountTab boundary like bodyLoadedMsg.
-type attachmentsLoadedMsg struct {
-	uid   mail.UID
-	items []mail.Attachment
-}
-
-type OpenAttachPickerMsg struct {
-	UID   mail.UID
-	Items []mail.Attachment
-}
-
-type AttachPickerClosedMsg struct{}
-
-type OpenAttachmentMsg struct {
-	UID mail.UID
-	Att mail.Attachment
-}
-
-type SaveAttachmentMsg struct {
-	UID mail.UID
-	Att mail.Attachment
-}
-
-type attachmentSavedMsg struct {
-	path string
-}
-
 // loadAttachmentsCmd resolves attachment metadata via the cache.
 // Errors route through the standard ErrorMsg banner. Stale-UID
 // drops happen at the AccountTab boundary.
@@ -529,7 +476,7 @@ func loadAttachmentsCmd(c *cache.Account, uid mail.UID) tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Op: "fetch attachments", Err: err}
 		}
-		return attachmentsLoadedMsg{uid: uid, items: items}
+		return reader.AttachmentsLoadedMsg{UID: uid, Items: items}
 	}
 }
 
@@ -662,7 +609,7 @@ func resolveSentFolder(acct *cache.Account) string {
 }
 
 // saveAttachmentCmd writes att's bytes to dir with collision-suffix
-// resolution and emits attachmentSavedMsg with the final path.
+// resolution and emits reader.AttachmentSavedMsg with the final path.
 func saveAttachmentCmd(c *cache.Account, dir string, uid mail.UID, att mail.Attachment) tea.Cmd {
 	return func() tea.Msg {
 		if dir == "" {
@@ -683,6 +630,6 @@ func saveAttachmentCmd(c *cache.Account, dir string, uid mail.UID, att mail.Atta
 		if err := os.WriteFile(target, body, 0o600); err != nil {
 			return ErrorMsg{Op: "save attachment", Err: err}
 		}
-		return attachmentSavedMsg{path: target}
+		return reader.AttachmentSavedMsg{Path: target}
 	}
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package reader
 
 import (
 	"fmt"
@@ -147,16 +147,10 @@ func visibleLinkRows(total, height int) int {
 	return maxRows
 }
 
-// clampScrollOffset returns offset adjusted so cursor lies within
-// [offset, offset+visible). Delegates to uicore.ClampScrollOffset.
-func clampScrollOffset(cursor, visible, offset int) int {
-	return uicore.ClampScrollOffset(cursor, visible, offset)
-}
-
 // clampOffset returns p with p.offset adjusted so p.cursor is
 // within the visible window. Called after every cursor move.
 func (p LinkPicker) clampOffset() LinkPicker {
-	p.offset = clampScrollOffset(p.cursor, visibleLinkRows(len(p.links), p.shell.Height()), p.offset)
+	p.offset = uicore.ClampScrollOffset(p.cursor, visibleLinkRows(len(p.links), p.shell.Height()), p.offset)
 	return p
 }
 
@@ -266,11 +260,5 @@ func linkPickerWrap(s string, width int) string {
 // Position returns the centered top-left for the rendered box at
 // (totalW, totalH). Used by App to feed PlaceOverlay.
 func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
-	return centerOverlay(box, totalW, totalH)
-}
-
-// centerOverlay returns the top-left (x, y) cell coordinates that
-// center box on (totalW, totalH). Delegates to uicore.CenterOverlay.
-func centerOverlay(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
 }

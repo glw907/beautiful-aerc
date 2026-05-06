@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package reader
 
 import (
 	"fmt"
@@ -18,23 +18,61 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// viewerPhase tracks whether the viewer is fetching the body or
-// rendering it. The closed state is encoded by the open flag, not a
-// phase, so phase transitions only run when the viewer is open.
-type viewerPhase int
+// Styles holds the subset of UI styles the reader surface needs.
+// Populated from ui.Styles at construction time.
+type Styles struct {
+	ViewerBg      lipgloss.Style
+	ViewerHeader  lipgloss.Style
+	Dim           lipgloss.Style
+	MsgListCursor lipgloss.Style
+}
+
+// Phase tracks whether the viewer is fetching the body or rendering
+// it. The closed state is encoded by the open flag, not a phase, so
+// phase transitions only run when the viewer is open.
+type Phase int
 
 const (
-	viewerLoading viewerPhase = iota
-	viewerReady
+	PhaseLoading Phase = iota
+	PhaseReady
 )
 
-// Viewer renders a single message in the right panel. It owns no
+// viewerKeys are handled by Model.handleKey. Body scrolling
+// (j/k/space/b) is delegated to the embedded viewport's own KeyMap;
+// only the keys Model consumes directly appear here. Links is a
+// fixed-size array indexed by harvested-link position minus one
+// (Links[0] is "1", Links[8] is "9").
+type viewerKeys struct {
+	Close            key.Binding
+	OpenPicker       key.Binding
+	OpenAttachPicker key.Binding
+	BodyTop          key.Binding
+	BodyBottom       key.Binding
+	Links            [9]key.Binding
+}
+
+func newViewerKeys() viewerKeys {
+	vk := viewerKeys{
+		Close:            key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "close")),
+		OpenPicker:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "links")),
+		OpenAttachPicker: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "attachments")),
+		BodyTop:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top of body")),
+		BodyBottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of body")),
+	}
+	for i := range vk.Links {
+		d := string(rune('1' + i))
+		vk.Links[i] = key.NewBinding(key.WithKeys(d), key.WithHelp(d, "link "+d))
+	}
+	return vk
+}
+
+// Model renders a single message in the right panel. It owns no
 // backend reference. Body fetch and mark-read Cmds are constructed
 // at the AccountTab level. The viewer is pure state + render, with
 // scroll position tracked by an embedded bubbles/viewport.
-type Viewer struct {
+type Model struct {
 	open         bool
-	phase        viewerPhase
+	phase        Phase
 	msg          mail.MessageInfo
 	accountEmail string
 	blocks       []content.Block
@@ -48,33 +86,55 @@ type Viewer struct {
 	spinner      spinner.Model
 	styles       Styles
 	theme        *theme.CompiledTheme
-	keys         ViewerKeys
+	keys         viewerKeys
 	width        int
 	height       int
 }
 
-// NewViewer constructs an empty (closed) viewer. accountEmail
-// populates the To: header in the rendered message view.
-func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Viewer {
-	return Viewer{
+// NewStyles builds the reader Styles from a compiled theme. Called at
+// startup by the parent ui package to construct the Styles value it
+// passes to New.
+func NewStyles(t *theme.CompiledTheme) Styles {
+	return Styles{
+		ViewerBg: lipgloss.NewStyle().
+			Background(t.BgBase),
+		ViewerHeader: lipgloss.NewStyle().
+			Background(t.BgSubtle).
+			Padding(1, 0, 1, 1).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderBottom(true).
+			BorderForeground(t.FgDim).
+			BorderBackground(t.BgBase),
+		Dim:           lipgloss.NewStyle().Foreground(t.FgDim),
+		MsgListCursor: lipgloss.NewStyle().Foreground(t.AccentPrimary),
+	}
+}
+
+// New constructs an empty (closed) viewer. accountEmail populates the
+// To: header in the rendered message view.
+func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Model {
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(t.FgDim)
+	return Model{
 		styles:       styles,
 		theme:        t,
 		accountEmail: accountEmail,
 		icons:        icons,
-		spinner:      NewSpinner(t),
-		keys:         NewViewerKeys(),
+		spinner:      sp,
+		keys:         newViewerKeys(),
 	}
 }
 
-func (v Viewer) IsOpen() bool { return v.open }
+func (v Model) IsOpen() bool { return v.open }
 
 // Phase reports the viewer's current load phase. Used by AccountTab
 // to gate n/N during loading so a second fetch isn't queued.
-func (v Viewer) Phase() viewerPhase { return v.phase }
+func (v Model) Phase() Phase { return v.phase }
 
 // CurrentUID returns the UID of the message in the viewer, or empty
-// when closed. Used by AccountTab to drop stale bodyLoadedMsg events.
-func (v Viewer) CurrentUID() mail.UID {
+// when closed. Used by AccountTab to drop stale BodyLoadedMsg events.
+func (v Model) CurrentUID() mail.UID {
 	if !v.open {
 		return ""
 	}
@@ -83,9 +143,9 @@ func (v Viewer) CurrentUID() mail.UID {
 
 // Open transitions the viewer into the loading phase for msg. The
 // caller fires the body-fetch Cmd in the same Update batch.
-func (v Viewer) Open(msg mail.MessageInfo) Viewer {
+func (v Model) Open(msg mail.MessageInfo) Model {
 	v.open = true
-	v.phase = viewerLoading
+	v.phase = PhaseLoading
 	v.msg = msg
 	v.blocks = nil
 	v.links = nil
@@ -98,28 +158,28 @@ func (v Viewer) Open(msg mail.MessageInfo) Viewer {
 
 // Close transitions the viewer out of view. App reads viewer state
 // via AccountTab.ViewerOpen() after delegation and reverts chrome.
-func (v Viewer) Close() Viewer {
+func (v Model) Close() Model {
 	v.open = false
-	v.phase = viewerLoading
+	v.phase = PhaseLoading
 	return v
 }
 
 // SetBody installs parsed blocks and transitions to ready. Idempotent
-// for stale UIDs. Callers should drop bodyLoadedMsg with a UID
+// for stale UIDs. Callers should drop BodyLoadedMsg with a UID
 // mismatch before invoking this.
-func (v Viewer) SetBody(blocks []content.Block) Viewer {
+func (v Model) SetBody(blocks []content.Block) Model {
 	v.blocks = blocks
-	v.phase = viewerReady
+	v.phase = PhaseReady
 	v.layout()
 	return v
 }
 
 // SetSize updates dimensions. When ready, re-renders headers + body
 // at the new width and recomputes the viewport height.
-func (v Viewer) SetSize(width, height int) Viewer {
+func (v Model) SetSize(width, height int) Model {
 	v.width = width
 	v.height = height
-	if v.phase == viewerReady && v.open {
+	if v.phase == PhaseReady && v.open {
 		v.layout()
 	}
 	return v
@@ -127,24 +187,24 @@ func (v Viewer) SetSize(width, height int) Viewer {
 
 // SpinnerTick returns the spinner's initial tick Cmd. Caller batches
 // it with the body-fetch Cmd when opening.
-func (v Viewer) SpinnerTick() tea.Cmd { return v.spinner.Tick }
+func (v Model) SpinnerTick() tea.Cmd { return v.spinner.Tick }
 
-func (v Viewer) Links() []string { return v.links }
+func (v Model) Links() []string { return v.links }
 
 // SetAttachments installs the attachment metadata list. Idempotent
 // for stale UIDs. Caller drops stale messages before invoking.
-func (v Viewer) SetAttachments(items []mail.Attachment) Viewer {
+func (v Model) SetAttachments(items []mail.Attachment) Model {
 	v.attachments = items
-	if v.phase == viewerReady && v.open {
+	if v.phase == PhaseReady && v.open {
 		v.layout()
 	}
 	return v
 }
 
-func (v Viewer) Attachments() []mail.Attachment { return v.attachments }
+func (v Model) Attachments() []mail.Attachment { return v.attachments }
 
-func (v Viewer) ScrollPct() int {
-	if v.phase != viewerReady {
+func (v Model) ScrollPct() int {
+	if v.phase != PhaseReady {
 		return 0
 	}
 	return int(v.viewport.ScrollPercent() * 100)
@@ -153,13 +213,13 @@ func (v Viewer) ScrollPct() int {
 // Update handles spinner ticks and key events while open. Returns the
 // updated viewer + any Cmds (link launch, viewer-closed signal,
 // scroll-position broadcast). Caller is responsible for batching.
-func (v Viewer) Update(msg tea.Msg) (Viewer, tea.Cmd) {
+func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !v.open {
 		return v, nil
 	}
 	switch m := msg.(type) {
 	case spinner.TickMsg:
-		if v.phase == viewerLoading {
+		if v.phase == PhaseLoading {
 			var c tea.Cmd
 			v.spinner, c = v.spinner.Update(m)
 			return v, c
@@ -175,7 +235,7 @@ func (v Viewer) Update(msg tea.Msg) (Viewer, tea.Cmd) {
 // links. Tab emits OpenLinkPickerMsg for App. All other keys forward
 // to the viewport, which is configured with a modifier-free keymap
 // (j/k/space/b/g/G).
-func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
+func (v Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, v.keys.Close):
 		v = v.Close()
@@ -203,7 +263,7 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 			return v, nil
 		}
 	}
-	if v.phase != viewerReady {
+	if v.phase != PhaseReady {
 		return v, nil
 	}
 	switch {
@@ -227,12 +287,12 @@ func (v Viewer) handleKey(msg tea.KeyMsg) (Viewer, tea.Cmd) {
 // raw URL the body renderer's hardwrap missed) gets truncated rather
 // than overflowing into the sidebar column. This is the bubbles-
 // component idiom: each component owns its size contract.
-func (v Viewer) View() string {
+func (v Model) View() string {
 	if !v.open {
 		return ""
 	}
 	bg := v.styles.ViewerBg
-	if v.phase == viewerLoading {
+	if v.phase == PhaseLoading {
 		text := v.spinner.View() + " Loading message…"
 		placed := lipgloss.Place(
 			v.width, v.height,
@@ -250,7 +310,7 @@ func (v Viewer) View() string {
 	// with `\x1b[0m` (lipgloss issue #209).
 	// viewport.View() right-pads each line to its width with plain
 	// (unstyled) spaces. We strip that pad before bg-padding ourselves.
-	// otherwise fillRowToWidth sees the line at width and skips, leaving
+	// otherwise FillRowToWidth sees the line at width and skips, leaving
 	// the right side on terminal-default bg.
 	leftPad := bg.Render(" ")
 	bodyHeight := max(0, v.height-lipgloss.Height(v.panel)-v.chipHeight)
@@ -259,7 +319,7 @@ func (v Viewer) View() string {
 		bodyLines = bodyLines[:bodyHeight]
 	}
 	for i, l := range bodyLines {
-		bodyLines[i] = fillRowToWidth(leftPad+strings.TrimRight(l, " "), v.width, bg)
+		bodyLines[i] = uicore.FillRowToWidth(leftPad+strings.TrimRight(l, " "), v.width, bg)
 	}
 	if len(bodyLines) < bodyHeight {
 		blank := bg.Render(strings.Repeat(" ", v.width))
@@ -288,7 +348,7 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 		lines = lines[:height]
 	}
 	for i, line := range lines {
-		lines[i] = fillRowToWidth(line, width, bg)
+		lines[i] = uicore.FillRowToWidth(line, width, bg)
 	}
 	blank := bg.Render(strings.Repeat(" ", width))
 	for len(lines) < height {
@@ -299,7 +359,7 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 
 // renderChipRow returns the wrapped chip block plus its row count,
 // rendered at width. Returns ("", 0) when there are no attachments.
-func (v Viewer) renderChipRow(width int) (string, int) {
+func (v Model) renderChipRow(width int) (string, int) {
 	if len(v.attachments) == 0 || width < 1 {
 		return "", 0
 	}
@@ -334,7 +394,7 @@ func (v Viewer) renderChipRow(width int) (string, int) {
 		lines = append(lines, cur)
 	}
 	for i, l := range lines {
-		lines[i] = fillRowToWidth(l, width, bg)
+		lines[i] = uicore.FillRowToWidth(l, width, bg)
 	}
 	return strings.Join(lines, "\n"), len(lines)
 }
@@ -346,7 +406,7 @@ func (v Viewer) renderChipRow(width int) (string, int) {
 // contentWidth is v.width - 1 to account for the panel's PaddingLeft.
 // The body region fills the rest of v.height beneath the rendered
 // panel (which includes its bottom border row).
-func (v *Viewer) layout() {
+func (v *Model) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
 		To:      addressesFor(v.msg.To, v.accountEmail),

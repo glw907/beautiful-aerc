@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package reader
 
 import (
 	"fmt"
@@ -142,7 +142,7 @@ func (p AttachPicker) saveCursor() tea.Cmd {
 const attachPickerMaxWidth = 70
 
 func (p AttachPicker) clampOffset() AttachPicker {
-	p.offset = clampScrollOffset(p.cursor, visibleLinkRows(len(p.items), p.shell.Height()), p.offset)
+	p.offset = uicore.ClampScrollOffset(p.cursor, visibleLinkRows(len(p.items), p.shell.Height()), p.offset)
 	return p
 }
 
@@ -199,5 +199,5 @@ func (p AttachPicker) formatRow(row, maxIndexDigits, contentW int) string {
 }
 
 func (p AttachPicker) Position(box string, totalW, totalH int) (int, int) {
-	return centerOverlay(box, totalW, totalH)
+	return uicore.CenterOverlay(box, totalW, totalH)
 }

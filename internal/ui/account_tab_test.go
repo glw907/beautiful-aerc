@@ -13,6 +13,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -745,8 +746,8 @@ func TestAccountTab_StaleBodyLoadedDropped(t *testing.T) {
 	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
 	openUID := tab.viewer.CurrentUID()
 	// Deliver a body for a UID we never opened. Must be ignored.
-	tab, _ = tab.updateTab(bodyLoadedMsg{uid: mail.UID("nonsense"), blocks: nil})
-	if tab.viewer.phase == viewerReady {
+	tab, _ = tab.updateTab(reader.BodyLoadedMsg{UID: mail.UID("nonsense"), Blocks: nil})
+	if tab.viewer.Phase() == reader.PhaseReady {
 		t.Errorf("viewer for UID %s readied on stale bodyLoaded", openUID)
 	}
 }
@@ -1052,7 +1053,7 @@ func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 	startUID := tab.viewer.CurrentUID()
 	// Transition to ready by calling SetBody.
 	tab.viewer = tab.viewer.SetBody(nil)
-	if tab.viewer.Phase() != viewerReady {
+	if tab.viewer.Phase() != reader.PhaseReady {
 		t.Fatal("viewer must be ready after SetBody")
 	}
 	// Send n. Must advance to row 1.
@@ -1110,7 +1111,7 @@ func TestViewerNDuringLoadInert(t *testing.T) {
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open")
 	}
-	if tab.viewer.Phase() == viewerReady {
+	if tab.viewer.Phase() == reader.PhaseReady {
 		t.Fatal("viewer must still be loading (no SetBody called)")
 	}
 	loadingUID := tab.viewer.CurrentUID()
@@ -1209,7 +1210,7 @@ func TestAccountTab_NextMessage_WalksFilteredRows(t *testing.T) {
 	tab, _ = tab.openMessage(msgs[0])
 
 	// Drive the viewer into Ready by delivering bodyLoadedMsg.
-	tab, _ = tab.updateTab(bodyLoadedMsg{uid: "1", blocks: nil})
+	tab, _ = tab.updateTab(reader.BodyLoadedMsg{UID: "1", Blocks: nil})
 
 	// Press n. Cursor should advance to UID 3, skipping the hidden UID 2.
 	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
@@ -1308,7 +1309,7 @@ func TestAccountTab_BodyLoaded_ClearsCancelFunc(t *testing.T) {
 	_, cancel := context.WithCancel(context.Background())
 	tab.bodyFetchCancel = cancel
 
-	tab, _ = tab.updateTab(bodyLoadedMsg{uid: "1", blocks: nil})
+	tab, _ = tab.updateTab(reader.BodyLoadedMsg{UID: "1", Blocks: nil})
 
 	if tab.bodyFetchCancel != nil {
 		t.Error("bodyFetchCancel should be nil after bodyLoadedMsg for the current UID")
@@ -1320,18 +1321,18 @@ func TestAccountTab_AttachmentsLoadedMsg_StaleUIDDropped(t *testing.T) {
 	tab, _ = tab.openMessage(mail.MessageInfo{UID: "u1"})
 
 	// Stale UID. Must be dropped.
-	out, _ := tab.updateTab(attachmentsLoadedMsg{
-		uid:   "u2",
-		items: []mail.Attachment{{PartID: "2", Filename: "stale"}},
+	out, _ := tab.updateTab(reader.AttachmentsLoadedMsg{
+		UID:   "u2",
+		Items: []mail.Attachment{{PartID: "2", Filename: "stale"}},
 	})
 	if got := out.viewer.Attachments(); len(got) != 0 {
 		t.Errorf("stale attachments applied: %v", got)
 	}
 
 	// Matching UID. Must be applied.
-	out2, _ := tab.updateTab(attachmentsLoadedMsg{
-		uid:   "u1",
-		items: []mail.Attachment{{PartID: "2", Filename: "real", Size: 1}},
+	out2, _ := tab.updateTab(reader.AttachmentsLoadedMsg{
+		UID:   "u1",
+		Items: []mail.Attachment{{PartID: "2", Filename: "real", Size: 1}},
 	})
 	if got := out2.viewer.Attachments(); len(got) != 1 {
 		t.Errorf("expected 1 attachment, got %d", len(got))

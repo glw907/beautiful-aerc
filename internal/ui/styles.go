@@ -64,14 +64,6 @@ type Styles struct {
 	MsgListFlagFlagged   lipgloss.Style
 	MsgListThreadPrefix  lipgloss.Style
 
-	// Viewer surfaces. ViewerBg is BgBase (body region). ViewerHeader
-	// is the BgSubtle panel above it (a slight elevation off the body,
-	// keeping the header in the message track rather than the sidebar's
-	// BgElevated chrome track). FgDim BorderBottom on BgBase marks the
-	// panel/body divider.
-	ViewerBg     lipgloss.Style
-	ViewerHeader lipgloss.Style
-
 	// Help popover (modal overlay, `?`)
 	HelpTitle       lipgloss.Style
 	HelpGroupHeader lipgloss.Style
@@ -197,16 +189,6 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.ColorWarning),
 		MsgListThreadPrefix: lipgloss.NewStyle().
 			Foreground(t.FgDim),
-
-		ViewerBg: lipgloss.NewStyle().
-			Background(t.BgBase),
-		ViewerHeader: lipgloss.NewStyle().
-			Background(t.BgSubtle).
-			Padding(1, 0, 1, 1).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderBottom(true).
-			BorderForeground(t.FgDim).
-			BorderBackground(t.BgBase),
 
 		HelpTitle: lipgloss.NewStyle().
 			Foreground(t.AccentPrimary).Bold(true),

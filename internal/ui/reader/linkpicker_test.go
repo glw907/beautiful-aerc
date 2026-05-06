@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package reader
 
 import (
 	"strings"
@@ -12,8 +12,7 @@ import (
 
 func newTestLinkPicker(t *testing.T) LinkPicker {
 	t.Helper()
-	styles := NewStyles(theme.Nord)
-	p := NewLinkPicker(styles)
+	p := NewLinkPicker(NewStyles(theme.Nord))
 	p = p.SetSize(80, 24)
 	return p
 }

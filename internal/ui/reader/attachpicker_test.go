@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package reader
 
 import (
 	"strings"
@@ -14,8 +14,7 @@ import (
 
 func newTestAttachPicker(t *testing.T) AttachPicker {
 	t.Helper()
-	th := theme.Nord
-	return NewAttachPicker(NewStyles(th), uicore.SimpleIcons).SetSize(120, 40)
+	return NewAttachPicker(NewStyles(theme.Nord), uicore.SimpleIcons).SetSize(120, 40)
 }
 
 func TestAttachPicker_OpenClose(t *testing.T) {

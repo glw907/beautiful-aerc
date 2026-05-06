@@ -19,6 +19,7 @@ import (
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -52,8 +53,8 @@ type App struct {
 	viewerOpen      bool
 	helpOpen        bool
 	help            helppopover.Model
-	linkPicker      LinkPicker
-	attachPicker    AttachPicker
+	linkPicker      reader.LinkPicker
+	attachPicker    reader.AttachPicker
 	movePicker      movepicker.Model
 	downloadDir     string
 	confirm         ConfirmModal
@@ -109,8 +110,8 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		statusBar:    sb,
 		footer:       NewFooter(styles),
 		keys:         NewGlobalKeys(),
-		linkPicker:   NewLinkPicker(styles),
-		attachPicker: NewAttachPicker(styles, icons),
+		linkPicker:   reader.NewLinkPicker(reader.NewStyles(t)),
+		attachPicker: reader.NewAttachPicker(reader.NewStyles(t), icons),
 		movePicker:   movepicker.New(movepicker.Styles{Dim: styles.Dim, MsgListCursor: styles.MsgListCursor}),
 		downloadDir:  uiCfg.DownloadDir,
 		confirm:      NewConfirmModal(styles),
@@ -188,11 +189,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// or folder counts).
 		return m, tea.Batch(cmds...)
 
-	case OpenLinkPickerMsg:
+	case reader.OpenLinkPickerMsg:
 		m.linkPicker = m.linkPicker.Open(msg.Links)
 		return m, nil
 
-	case LinkPickerClosedMsg:
+	case reader.LinkPickerClosedMsg:
 		m.linkPicker = m.linkPicker.Close()
 		return m, nil
 
@@ -210,26 +211,26 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m = m.deriveChromeFromAcct()
 		return m, cmd
 
-	case OpenAttachPickerMsg:
+	case reader.OpenAttachPickerMsg:
 		m.attachPicker = m.attachPicker.Open(msg.UID, msg.Items)
 		return m, nil
 
-	case AttachPickerClosedMsg:
+	case reader.AttachPickerClosedMsg:
 		m.attachPicker = m.attachPicker.Close()
 		return m, nil
 
-	case OpenAttachmentMsg:
+	case reader.OpenAttachmentMsg:
 		return m, openAttachmentCmd(m.acct.Cache(), m.opener, msg.UID, msg.Att)
 
-	case SaveAttachmentMsg:
+	case reader.SaveAttachmentMsg:
 		return m, saveAttachmentCmd(m.acct.Cache(), m.downloadDir, msg.UID, msg.Att)
 
-	case attachmentSavedMsg:
+	case reader.AttachmentSavedMsg:
 		hadBanner := m.hasBannerRow()
 		deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
 		m.toast = pendingAction{
 			op:       opSaveAttachment,
-			dest:     msg.path,
+			dest:     msg.Path,
 			deadline: deadline,
 		}
 		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
@@ -278,7 +279,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m = m.deriveChromeFromAcct()
 		return m, cmd
 
-	case LaunchURLMsg:
+	case reader.LaunchURLMsg:
 		return m, launchURLCmd(m.opener, msg.URL)
 
 	case triageStartedMsg:
@@ -700,14 +701,14 @@ func (m App) View() string {
 
 	if m.conflictOpen {
 		body := m.conflict.View()
-		x, y := centerOverlay(body, m.width, m.height)
+		x, y := uicore.CenterOverlay(body, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
 		return uicore.PlaceOverlay(x, y, body, dimmed)
 	}
 
 	if m.outboxOpen {
 		body := m.outbox.View()
-		x, y := centerOverlay(body, m.width, m.height)
+		x, y := uicore.CenterOverlay(body, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
 		return uicore.PlaceOverlay(x, y, body, dimmed)
 	}

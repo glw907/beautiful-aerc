@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package reader
 
 import (
 	"strings"
@@ -13,8 +13,8 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-func newTestViewer() Viewer {
-	return NewViewer(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", uicore.SimpleIcons)
+func newTestViewer() Model {
+	return New(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", uicore.SimpleIcons)
 }
 
 func TestViewerOpenTransitionsToLoading(t *testing.T) {
@@ -26,8 +26,8 @@ func TestViewerOpenTransitionsToLoading(t *testing.T) {
 	if !v.IsOpen() {
 		t.Fatal("Open must mark viewer open")
 	}
-	if v.phase != viewerLoading {
-		t.Errorf("phase = %v, want loading", v.phase)
+	if v.Phase() != PhaseLoading {
+		t.Errorf("phase = %v, want loading", v.Phase())
 	}
 	if v.CurrentUID() != "1" {
 		t.Errorf("CurrentUID = %q, want 1", v.CurrentUID())
@@ -41,8 +41,8 @@ func TestViewerBodyLoadedSetsReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
 	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello world"}}}}
 	v = v.SetBody(blocks)
-	if v.phase != viewerReady {
-		t.Errorf("phase = %v, want ready", v.phase)
+	if v.Phase() != PhaseReady {
+		t.Errorf("phase = %v, want ready", v.Phase())
 	}
 	out := v.View()
 	if !strings.Contains(out, "Hello world") {

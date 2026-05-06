@@ -18,6 +18,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -1155,7 +1156,7 @@ func TestApp_OfflineBannerLatchedOncePerOfflineEpisode(t *testing.T) {
 func TestApp_OpenAttachPickerMsg_OpensOverlay(t *testing.T) {
 	backend := mail.NewMockBackend()
 	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
-	app2, _ := app.Update(OpenAttachPickerMsg{
+	app2, _ := app.Update(reader.OpenAttachPickerMsg{
 		UID:   "u1",
 		Items: []mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}},
 	})
@@ -1167,7 +1168,7 @@ func TestApp_OpenAttachPickerMsg_OpensOverlay(t *testing.T) {
 func TestApp_SaveAttachmentMsg_DispatchesCmd(t *testing.T) {
 	backend := mail.NewMockBackend()
 	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
-	_, cmd := app.Update(SaveAttachmentMsg{
+	_, cmd := app.Update(reader.SaveAttachmentMsg{
 		UID: "u1",
 		Att: mail.Attachment{PartID: "2", Filename: "x.pdf", Size: 1},
 	})

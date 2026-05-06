@@ -19,6 +19,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/messagelist"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -43,7 +44,7 @@ type AccountTab struct {
 	uiCfg         config.UIConfig
 	sidebarColumn sidebar.Column
 	msglist       messagelist.Model
-	viewer        Viewer
+	viewer        reader.Model
 	keys          AccountKeys
 	pages         map[string]*folderPage
 	swept         map[string]bool
@@ -81,7 +82,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 			acct.AccountEmail(),
 		),
 		msglist: messagelist.New(messagelist.NewStyles(t), nil, 1, 1, icons),
-		viewer:  NewViewer(styles, t, acct.AccountEmail(), icons),
+		viewer:  reader.New(reader.NewStyles(t), t, acct.AccountEmail(), icons),
 		keys:    NewAccountKeys(),
 		pages:   make(map[string]*folderPage),
 		swept:   make(map[string]bool),
@@ -210,16 +211,16 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case bodyLoadedMsg:
-		if m.viewer.CurrentUID() == msg.uid {
+	case reader.BodyLoadedMsg:
+		if m.viewer.CurrentUID() == msg.UID {
 			m.bodyFetchCancel = nil
-			m.viewer = m.viewer.SetBody(msg.blocks)
+			m.viewer = m.viewer.SetBody(msg.Blocks)
 		}
 		return m, nil
 
-	case attachmentsLoadedMsg:
-		if m.viewer.CurrentUID() == msg.uid {
-			m.viewer = m.viewer.SetAttachments(msg.items)
+	case reader.AttachmentsLoadedMsg:
+		if m.viewer.CurrentUID() == msg.UID {
+			m.viewer = m.viewer.SetAttachments(msg.Items)
 		}
 		return m, nil
 
@@ -297,7 +298,7 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 			delta = -1
 		}
 		if delta != 0 {
-			if m.viewer.Phase() != viewerReady {
+			if m.viewer.Phase() != reader.PhaseReady {
 				return m, nil
 			}
 			uid, moved := m.msglist.MoveCursor(delta)

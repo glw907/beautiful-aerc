@@ -134,5 +134,5 @@ func (m ConfirmModal) Box(w, h int) string {
 
 // Position returns the centered top-left for PlaceOverlay.
 func (m ConfirmModal) Position(box string, totalW, totalH int) (int, int) {
-	return centerOverlay(box, totalW, totalH)
+	return uicore.CenterOverlay(box, totalW, totalH)
 }
