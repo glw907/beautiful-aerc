@@ -89,8 +89,21 @@ the ADR(s) that justify them.
   submission call.
 - IMAP `Send` runs SMTP `MAIL`/`RCPT`/`DATA`; `Append` runs IMAP
   APPEND on the cmd connection. Sent placement is a separate
-  `Append` issued by the caller (the cache outbox in Pass 9g).
+  `Append` issued by the caller (the cache outbox).
   SASL: plain (default), login, xoauth2.
+- Cache outbox dispatches Send and Append. Schema v6 adds
+  `outbox.payload BLOB` carrying assembled MIME bytes, locked in
+  at queue time (no reassembly on dispatch).
+  `(*Account).QueueSend(ctx, sentFolder, env, mime)` and
+  `(*Account).QueueAppend(ctx, folder, flag, mime)` are the
+  payload-bearing entry points; `SendArgs{Envelope}` /
+  `AppendArgs{Flag}` carry the metadata in `outbox.args`. The
+  drainer's `dispatch(args, row)` routes to `Backend.Send`/`Append`
+  using `row.FolderName` / `row.Payload`. `revertOptimisticTx`
+  no-ops on Send/Append, so `DiscardOp` works on conflicted rows.
+  IMAP enqueues two ops (Send then Append-to-Sent); JMAP enqueues
+  one Send (server lands the Sent copy atomically). Partial
+  failure surfaces through the standard outbox visibility.
 
 ### Elm architecture & idiomatic bubbletea
 
@@ -318,4 +331,5 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; 9d.1 cleanup; 9d.3 targeted lint sweep; 9d.4 popover overlay padding | 0144, 0145, 0146, 0147, 0149, 0150, 0151, 0152, 0154, 0155 |
 | Compose foundation — Editor interface + CatkinEditor adapter, Draft, AssembleMIME (multipart/alternative via shared filter.MarkdownToHTML, multipart/mixed when attachments), Seed{Reply,ReplyAll,Forward} parsing parent headers from raw bytes; content.ParseAddressList exported | 0156 |
 | Backend Send + Append — `Send(env Envelope, mime []byte)` + `Append(folder, mime, flags)` on mail.Backend; JMAP via `Email/import` + `EmailSubmission/set` (atomic via `#k1` ref); IMAP via lazy `emersion/go-smtp` for Send + APPEND for Append; `[account.smtp]` block with provider preset SMTP defaults; `mailimap.ProbeSMTP` for `poplar config check` | 0157 |
+| Cache outbox Send/Append dispatch — schema v6 adds `outbox.payload`; `SendArgs{Envelope}` + `AppendArgs{Flag}`; `QueueSend`/`QueueAppend` payload-bearing entry points; drainer `dispatch(args, row)` routes to `Backend.Send`/`Append`; `revertOptimisticTx` no-ops on Send/Append so `DiscardOp` works; IMAP enqueues two ops, JMAP one | 0158 |
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
