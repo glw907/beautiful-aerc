@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9h.1 next — core organizational sweep before v1.0.
+**Current pass:** Pass 9h.2 next — finish core reorg (account/ extract + cmds.go decomp).
 
 ## Passes
 
@@ -8,8 +8,9 @@
 |------|------|--------|
 | 1 – 9g | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep → popover overlay padding → compose foundation → backend Send + Append → cache outbox Send/Append dispatch (ADRs 0001–0158) | done |
 | 9h | ComposeTab + `c`/`r`/`R`/`f` wiring + tidy seam (ADRs 0159–0160) | done |
-| 9h.1 | Core organizational sweep — naming, package boundaries, msg taxonomy | pending |
-| 9h.5 | Drafts persistence (#33) | pending (after 9h.1) |
+| 9h.1 | Core reorg leaves — extract compose / movepicker / helppopover / messagelist / sidebar / reader subpackages + uicore sibling; hoist mail.FolderEntry (ADRs 0161–0162) | done |
+| 9h.2 | Core reorg parent — extract account/ + decompose cmds.go + system-map refresh + live tmux verification | pending |
+| 9h.5 | Drafts persistence (#33) | pending (after 9h.2) |
 | 9.1 | Address autocomplete from CardDAV (#34) | pending |
 | 9.4 | Email signatures + multiple identities (#32) | pending |
 | 9i | Claude Tidy implementation | pending |
@@ -26,37 +27,54 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9h.1)
+## Next starter prompt (Pass 9h.2)
 
-> **Goal.** Lock in a clean organizational shape before v1.0 —
-> naming, package boundaries, msg taxonomy, file layout. Must
-> accommodate post-1.0 contacts (CardDAV) and richer calendar
-> surfaces beyond 9.7's .ics viewer.
+> **Goal.** Finish the core reorg started in 9h.1 — extract the
+> `AccountTab` parent into `internal/ui/account/` as
+> `account.Model`, lift its folder/outbox/triage/sweep cmds and
+> msgs out of `internal/ui/cmds.go`, audit the residual `cmds.go`
+> down to App-only cross-cutting concerns, and refresh the
+> system map.
 >
-> **Scope.** All packages fair game. Up for review: the
-> `AccountTab` / `ComposeTab` "Tab" suffix; the `cmds.go`
-> kitchen-sink; subpackage split for reader and compose; whether
-> any of `internal/mail|cache|compose|content|filter|tidy` have
-> names that won't survive contact with future consumers; where
-> `internal/contacts/` and `internal/calendar/` live. **Out:**
-> any feature work — pure structural pass.
+> **Scope.** `AccountTab` → `account.Model` (largest extraction
+> by responsibility — composes sidebar/messagelist/reader and
+> threads outbox/triage/sweep state). Lift roughly 14 cmds and 12
+> msgs from `internal/ui/cmds.go` per the original plan's Task 7
+> table. App-level types (`URLOpener`, `TidyFn`, `Styles`,
+> `IconSet`) stay in `internal/ui/` and pass through structural
+> function-typed parameters where needed. Final `cmds.go` audit
+> + `docs/poplar/system-map.md` refresh. Live tmux capture at
+> 80×24 and 120×40 (the 9h.1 pass deferred capture pending the
+> full reorg). **Out:** any feature work.
 >
-> **Settled.** "Tab" suffix is misleading; bubbles-style
-> `package.Model` is the strongest external convention; pre-beta
-> posture endorses breaking renames; on-disk data is untouched.
+> **Settled (do not re-brainstorm).**
+> - Naming: `package.Model` + `New(...)`; `*Tab` suffix dropped
+>   (ADR-0162). The account subpackage will be `account.Model`.
+> - Per-package Msg namespace: outbound msgs in `<subpkg>/msgs.go`,
+>   App qualifies them at the switch arm (ADR-0162).
+> - `uicore` is the shared-chrome home; subpackages cannot import
+>   the parent (ADR-0161).
+> - Cmds that emit `ErrorMsg` stay in `internal/ui/cmds.go` and
+>   take App seams as function-typed parameters.
+> - Per-subpackage `Styles` lives in `<subpkg>/styles.go` with
+>   `NewStyles(*theme.CompiledTheme)`.
 >
-> **Still open — brainstorm:** subpackage split for compose now
-> or at first substate (9.1)? Same for reader? Where do shared UI
-> types (Styles, IconSet, theme) live once subpackages exist? How
-> do future contacts/calendar surfaces compose with the reader —
-> embedded panels, overlays, full screens? Msg-naming convention
-> across the App ↔ child-package boundary? Does `cmds.go` survive
-> or fragment per-screen?
+> **Still open — brainstorm:**
+> - Cycle risk in the account extract: any seam that App owns
+>   (`URLOpener`, `TidyFn`, the confirm-modal trio) and account
+>   needs to consume during Update — confirm the function-typed
+>   parameter pattern handles all of them, or flag a residual.
+> - Final residual shape of `internal/ui/cmds.go`: what stays
+>   App-level (pumps, ErrorMsg, LaunchURLMsg, confirm-modal)
+>   vs. what hoists to account or splits per-screen.
 >
-> **Approach.** Brainstorm openly first; plan at
-> `docs/superpowers/plans/YYYY-MM-DD-core-reorg.md`. Likely 2–3
-> ADRs (naming, package boundary, msg-namespace policies).
-> Standard pass-end checklist applies.
+> **Approach.** Read this pass's plan + spec in
+> `docs/superpowers/archive/plans/` for the original Task 7
+> table. Plan at `docs/superpowers/plans/YYYY-MM-DD-core-reorg-finish.md`.
+> Likely one ADR (account extract details) plus an update to
+> ADR-0161 if the residual `cmds.go` shape settles differently
+> than predicted. Standard pass-end checklist applies, plus the
+> live tmux verification deferred from 9h.1.
 
 ## Queued
 

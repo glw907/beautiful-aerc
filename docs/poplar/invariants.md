@@ -21,8 +21,14 @@ the ADR(s) that justify them.
 - Poplar is a single-binary bubbletea terminal email client built
   from one Go module: `cmd/poplar`.
 - Repository organization: `cmd/poplar/` (CLI wiring only),
-  `internal/ui/` (tea.Model tree), `internal/mail/` (`Backend`
-  interface + classifier), `internal/mailjmap/` (Fastmail via
+  `internal/ui/` (tea.Model tree, with bubbles-shaped subpackages
+  `compose`, `helppopover`, `messagelist`, `movepicker`, `reader`,
+  `sidebar`, plus `uicore` for shared chrome — see ADR-0161;
+  `account/` extraction is queued for Pass 9h.2),
+  `internal/mail/` (`Backend`
+  interface + classifier; `mail.FolderEntry` is the display
+  projection threaded through sidebar/movepicker),
+  `internal/mailjmap/` (Fastmail via
   `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/` (generic
   IMAP via `emersion/go-imap` v2; two physical connections per
   Backend — command + idle), `internal/mailauth/` (vendored XOAUTH2
@@ -116,23 +122,52 @@ the ADR(s) that justify them.
 - Idiomatic bubbletea is the default. UI uses `bubbles` components
   as primary analogues; deviations are ADR'd. `View()` self-enforces
   size via `clipPane`; renderers honor `width` via wordwrap +
-  hardwrap; width math uses `displayCells(s, spuaCellWidth)` for
-  icon-bearing strings and `lipgloss.Width` for icon-free strings
+  hardwrap; width math uses `uicore.DisplayCells(s, uicore.SPUACellWidth())`
+  for icon-bearing strings and `lipgloss.Width` for icon-free strings
   (never `len()`); truncation of icon-bearing strings goes through
-  `displayTruncate`. `lipgloss.JoinHorizontal`/`JoinVertical` are
+  `uicore.DisplayTruncate` / `uicore.DisplayTruncateEllipsis`.
+  `lipgloss.JoinHorizontal`/`JoinVertical` are
   forbidden when `spuaCellWidth != 1`; use row-by-row `strings.Join`
   with pre-padded children (kept under both modes — see ADR-0084).
   Keys declared as `key.Binding`, dispatched via `key.Matches`;
   `WindowSizeMsg` handlers both `SetSize` children and forward the
   msg. Full contract in `docs/poplar/bubbletea-conventions.md`.
+- `internal/ui/` is a flat parent plus seven bubbles-shaped
+  subpackages (`compose`, `helppopover`, `messagelist`,
+  `movepicker`, `reader`, `sidebar`) and the `uicore` sibling.
+  Subpackages cannot import the parent. `uicore` holds
+  `ModalShell`, `PlaceOverlay`, `DimANSI`, render primitives
+  (`PadOrTruncate`, `TruncateToWidth`, `DisplayCells`,
+  `DisplayTruncate`, `CenterOverlay`, `ApplyBg`, `FillRowToWidth`,
+  …), and the `LayoutMode` / `IconSet` / `SearchMode` enums plus
+  the `SimpleIcons`/`FancyIcons` tables. Each subpackage exposes
+  a single `Model` + `New(...)` (sub-models like `sidebar.Column`,
+  `sidebar.Search`, `reader.LinkPicker`, `reader.AttachPicker` are
+  exported alongside). Per-subpackage `Styles` lives in that
+  subpackage's `styles.go` with a `NewStyles(*theme.CompiledTheme)`
+  constructor — those `styles.go` files are the only places
+  outside `internal/ui/styles.go` and `internal/theme/palette.go`
+  permitted to call `lipgloss.NewStyle()`. Msg types live in the
+  package that produces them: subpackage-private msgs are
+  unexported and never cross the boundary; cross-boundary msgs
+  are exported in `<subpkg>/msgs.go` and qualified at the call
+  site (`reader.BodyLoadedMsg`, `sidebar.ClearSearchMsg`). Cmds
+  that emit App-level `ErrorMsg` stay in `internal/ui/cmds.go`
+  and accept App seams (`URLOpener`, `TidyFn`) as function-typed
+  parameters. The `internal/ui/compose` import shadows the
+  `internal/compose` domain package — App-side imports use
+  `uicompose "github.com/glw907/poplar/internal/ui/compose"`;
+  inside `internal/ui/compose/` the domain package is aliased
+  `mailcompose`. ADRs 0161, 0162.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
-  tree. `AccountTab` holds the cache handle (backend reachable via
+  tree. `AccountTab` (renamed to `account.Model` in Pass 9h.2)
+  holds the cache handle (backend reachable via
   `AccountTab.Backend()` for `pumpUpdatesCmd`); reads come from
   `cache.Account.QueryFolder`/`ListFolders`, writes from
-  `cache.Account.QueueOp`. `MessageList` is presentation-only —
+  `cache.Account.QueueOp`. `messagelist.Model` is presentation-only —
   `RefreshSource` re-reads cache state after every write,
-  preserving cursor on UID. `Viewer` holds the theme reference for
-  markdown rendering. `mail.Backend` was shrunk in cutover and
+  preserving cursor on UID. `reader.Model` holds the theme reference
+  for markdown rendering. `mail.Backend` was shrunk in cutover and
   trimmed further in Pass 8.5:
   `MarkRead`/`MarkUnread`/`MarkAnswered`/`Delete`/`Search`/`Copy`
   are all gone. `Flag(uids, flag, set)` is canonical and "delete"
@@ -181,8 +216,11 @@ the ADR(s) that justify them.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
-  `lipgloss.NewStyle()` is permitted only in `internal/ui/styles.go`
-  and `internal/theme/palette.go`. Hex literals only in `themes.go`.
+  `lipgloss.NewStyle()` is permitted only in
+  `internal/theme/palette.go`, `internal/ui/styles.go`, and
+  per-subpackage `styles.go` files (each subpackage's `Styles` is
+  a narrow projection of `internal/ui.Styles` constructed by
+  `NewStyles(*theme.CompiledTheme)`). Hex literals only in `themes.go`.
   The semantic map from palette slots to UI surfaces lives in
   `docs/poplar/styling.md`; update it before changing any color.
 
@@ -190,12 +228,12 @@ the ADR(s) that justify them.
 
 - Icon mode is resolved once at startup. `cmd/poplar/root.go` calls
   `term.HasNerdFont`, `term.MeasureSPUACells`, and `term.Resolve` to
-  produce `(IconMode, spuaCellWidth)`. `ui.SetSPUACellWidth` is
-  called before `tea.NewProgram`. The resolved `IconSet` is threaded
-  into `ui.NewApp`. No runtime mode toggling.
-- `internal/ui/icons.go` is the only place icon literals live.
-  `SimpleIcons` runes are East Asian Width Na/N
-  (`lipgloss.Width == 1`). `FancyIcons` runes are in
+  produce `(IconMode, spuaCellWidth)`. `uicore.SetSPUACellWidth` is
+  called before `tea.NewProgram`. The resolved `uicore.IconSet` is
+  threaded into `ui.NewApp`. No runtime mode toggling.
+- `internal/ui/uicore/layout.go` is the only place icon literals live.
+  `uicore.SimpleIcons` runes are East Asian Width Na/N
+  (`lipgloss.Width == 1`). `uicore.FancyIcons` runes are in
   `[U+F0000, U+FFFFD]`. Both class invariants are unit-tested.
 
 ### Catkin
@@ -334,3 +372,4 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Cache outbox Send/Append dispatch — schema v6 adds `outbox.payload`; `SendArgs{Envelope}` + `AppendArgs{Flag}`; `QueueSend`/`QueueAppend` payload-bearing entry points; drainer `dispatch(args, row)` routes to `Backend.Send`/`Append`; `revertOptimisticTx` no-ops on Send/Append so `DiscardOp` works; IMAP enqueues two ops, JMAP one | 0158 |
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
 | ComposeTab — App-owned inline compose surface, Tab/Shift+Tab focus cycling, Esc as focus toggle, Ctrl+X send + Ctrl+C cancel; cache.Account.QueueOutbound (one op JMAP, two ops IMAP) + Backend.IsJMAP() predicate; TidyFn function-pointer seam on App | 0159, 0160 |
+| internal/ui/ package layout — bubbles-shaped subpackages (compose, helppopover, messagelist, movepicker, reader, sidebar) plus uicore sibling for shared chrome; mail.FolderEntry hoisted; per-package Msg-namespace policy; *Tab suffix dropped | 0161, 0162 |
