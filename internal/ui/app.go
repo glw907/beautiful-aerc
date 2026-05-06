@@ -75,13 +75,12 @@ type App struct {
 	opener URLOpener
 	// tidy rewrites the markdown body before MIME assembly. Test seam,
 	// defaults to identityTidy.
-	tidy                  TidyFn
-	theme                 *theme.CompiledTheme
-	compose               *uicompose.Model
-	pendingComposeSave    bool // Save? modal is open for a dirty compose
-	pendingComposeDiscard bool // legacy: clean-close confirm (IMAP path only)
-	width                 int
-	height                int
+	tidy               TidyFn
+	theme              *theme.CompiledTheme
+	compose            *uicompose.Model
+	pendingComposeSave bool // Save? modal is open for a dirty compose
+	width              int
+	height             int
 }
 
 // WithOpener returns a copy of m with the URL opener replaced.
@@ -271,10 +270,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				return m, upsertAndPushDraftCmd(m.acct.Cache(), draftID, draftsFolder, d, prevUID)
 			}
 			return m, nil
-		case m.pendingComposeDiscard:
-			m.pendingComposeDiscard = false
-			m.compose = nil
-			return m, nil
 		case m.pendingEmpty.folder != "":
 			folder, source := m.pendingEmpty.folder, m.pendingEmpty.source
 			m.pendingEmpty = pendingEmptyConfirm{}
@@ -304,7 +299,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.confirm = m.confirm.Close()
 			return m, nil
 		}
-		m.pendingComposeDiscard = false
 		m.pendingEmpty = pendingEmptyConfirm{}
 		m.confirm = m.confirm.Close()
 		return m, nil
@@ -438,6 +432,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if m.conflictOpen {
 			cmds = append(cmds, loadOutboxConflictsCmd(m.acct.Cache()))
 		}
+		if msg.Event.Note != "" {
+			m.lastErr = ErrorMsg{Op: "draft", Err: errors.New(msg.Event.Note)}
+		}
 		acct, fcmd := m.acct.Update(msg)
 		m.acct = acct
 		cmds = append(cmds, fcmd)
@@ -503,7 +500,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		tidy := m.tidy
 		acct := m.acct.Cache()
 		cmds := []tea.Cmd{composeSendCmd(acct, sent, tidy, d)}
-		if m.compose != nil && m.compose.DraftID() != "" && m.acct.Backend().IsJMAP() {
+		if m.compose != nil && m.compose.DraftID() != "" {
 			draftID := m.compose.DraftID()
 			prevUID := mail.UID(m.compose.PrevServerUID())
 			draftsFolder := resolveDraftsFolder(acct)
@@ -558,21 +555,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.compose = nil
 			return m, nil
 		}
-		if m.acct.Backend().IsJMAP() {
-			// Dirty draft on JMAP: offer save / discard / keep-editing.
-			m.confirm = m.confirm.Open(ConfirmRequest{
-				Title: "Save draft?",
-				Body:  "[y] Save and close   [n] Discard   [Esc] Keep editing",
-			})
-			m.pendingComposeSave = true
-		} else {
-			// IMAP path is in-memory-only. Show the legacy discard confirm.
-			m.confirm = m.confirm.Open(ConfirmRequest{
-				Title: "Discard draft?",
-				Body:  "Your draft will be lost.",
-			})
-			m.pendingComposeDiscard = true
-		}
+		m.confirm = m.confirm.Open(ConfirmRequest{
+			Title: "Save draft?",
+			Body:  "[y] Save and close   [n] Discard   [Esc] Keep editing",
+		})
+		m.pendingComposeSave = true
 		return m, nil
 
 	case tea.KeyMsg:
@@ -624,8 +611,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			return m, cmd
 		}
 		// Intercept Enter in the Drafts folder to open compose instead of
-		// the viewer. Only JMAP backends support server-side draft push.
-		if msg.Type == tea.KeyEnter && m.acct.Backend().IsJMAP() && !m.viewerOpen {
+		// the viewer.
+		if msg.Type == tea.KeyEnter && !m.viewerOpen {
 			if info, ok := m.acct.SelectedMessage(); ok {
 				draftsFolder := resolveDraftsFolder(m.acct.Cache())
 				if draftsFolder != "" && m.acct.CurrentFolderName() == draftsFolder {
@@ -641,11 +628,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			w, h := m.rightPaneSize()
 			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail())
 			m.compose.SetSize(w, h)
-			if m.acct.Backend().IsJMAP() {
-				m.compose.SetCache(m.acct.Cache())
-				draftsFolder := resolveDraftsFolder(m.acct.Cache())
-				m.compose.SetDraftTarget(draftsFolder, "")
-			}
+			m.compose.SetCache(m.acct.Cache())
+			draftsFolder := resolveDraftsFolder(m.acct.Cache())
+			m.compose.SetDraftTarget(draftsFolder, "")
 			return m, m.compose.Init()
 		case key.Matches(msg, m.keys.Reply), key.Matches(msg, m.keys.ReplyAll), key.Matches(msg, m.keys.Forward):
 			parent, ok := m.selectedMessage()

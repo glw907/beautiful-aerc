@@ -1277,7 +1277,7 @@ func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("uicompose.SendMsg should return a Cmd that runs QueueOutbound")
 	}
-	_ = cmd()
+	drainApp(t, &app, cmd)
 	depth, err := app.acct.Cache().OutboxDepth(context.Background())
 	if err != nil {
 		t.Fatalf("OutboxDepth: %v", err)
@@ -1486,8 +1486,8 @@ func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("compose should remain open while confirming")
 	}
-	if !app.pendingComposeDiscard {
-		t.Fatal("pendingComposeDiscard should be set")
+	if !app.pendingComposeSave {
+		t.Fatal("pendingComposeSave should be set")
 	}
 }
 
@@ -1530,12 +1530,13 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	if app.compose != nil {
 		t.Fatal("compose should be nil after Yes discard")
 	}
-	if app.pendingComposeDiscard {
-		t.Fatal("pendingComposeDiscard should be cleared after Yes")
+	if app.pendingComposeSave {
+		t.Fatal("pendingComposeSave should be cleared after Yes")
 	}
 }
 
-func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
+// Pressing n on the Save? modal discards the draft and closes compose.
+func TestApp_ConfirmModalNo_DiscardsCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -1549,17 +1550,12 @@ func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
 		t.Fatal("setup: confirm should be open")
 	}
 
-	// Pressing n emits ConfirmModalClosedMsg (no Yes). Feed it through.
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
-	msgs := drainBatch(cmd)
-	for _, m := range msgs {
-		app, _ = app.Update(m)
+	app, _ = app.Update(ConfirmModalNoMsg{})
+	if app.compose != nil {
+		t.Fatal("compose should be nil after No (discard) on Save? modal")
 	}
-	if app.compose == nil {
-		t.Fatal("compose should remain open after No on discard confirm")
-	}
-	if app.pendingComposeDiscard {
-		t.Fatal("pendingComposeDiscard should be cleared after No")
+	if app.pendingComposeSave {
+		t.Fatal("pendingComposeSave should be cleared after No")
 	}
 }
 
@@ -1595,8 +1591,8 @@ func TestApp_DraftsEnterLooksUpLocalRow(t *testing.T) {
 		t.Fatalf("EncodeDraft: %v", err)
 	}
 	const draftID = "d-test-known"
-	if err := acct.UpsertDraft(ctx, draftID, payload); err != nil {
-		t.Fatalf("UpsertDraft: %v", err)
+	if err := acct.CreateDraft(ctx, draftID, payload); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
 	}
 	if err := acct.MarkDraftPushed(ctx, draftID, "1", "Drafts"); err != nil {
 		t.Fatalf("MarkDraftPushed: %v", err)
@@ -1657,9 +1653,6 @@ func TestApp_EscOnDirtyJMAPComposeOpensSaveDraftModal(t *testing.T) {
 	}
 	if !app.pendingComposeSave {
 		t.Fatal("pendingComposeSave should be set")
-	}
-	if app.pendingComposeDiscard {
-		t.Fatal("pendingComposeDiscard should not be set on JMAP path")
 	}
 	if app.compose == nil {
 		t.Fatal("compose should remain open while confirm is pending")

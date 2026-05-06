@@ -83,6 +83,11 @@ type CacheEvent struct {
 	Kind    OpKind
 	Status  OpStatus
 	Err     string // populated for conflict/failed
+	// Note carries an out-of-band advisory the App should surface as
+	// a one-shot banner. Currently used for draft-superseded events
+	// where the op succeeded server-side but the local row was gone.
+	// See the drainer's KindPushDraft handler.
+	Note string
 }
 
 // The zero Config disables the size backstops.

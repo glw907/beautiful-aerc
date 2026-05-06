@@ -102,10 +102,52 @@ func TestFinishConnect_GmailQuirks_AcceptsXGM(t *testing.T) {
 	_ = b.Disconnect()
 }
 
-func TestPushDraft_IMAP_Unsupported(t *testing.T) {
-	b := New(config.AccountConfig{Name: "t"})
-	_, err := b.PushDraft("Drafts", []byte("mime"), mail.UID(""))
-	if !errors.Is(err, mail.ErrUnsupported) {
-		t.Errorf("PushDraft returned %v, want ErrUnsupported", err)
+func TestPushDraft_IMAP_FirstPush(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.nextUID = 42
+	idle := newFakeClient()
+	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
+
+	uid, err := b.PushDraft("Drafts", []byte("draft mime"), mail.UID(""))
+	if err != nil {
+		t.Fatalf("PushDraft: %v", err)
+	}
+	if uid != mail.UID("42") {
+		t.Errorf("uid = %q, want 42", uid)
+	}
+	if len(cmd.appendCalls) != 1 {
+		t.Fatalf("appendCalls = %d, want 1", len(cmd.appendCalls))
+	}
+	ac := cmd.appendCalls[0]
+	if ac.folder != "Drafts" || string(ac.mime) != "draft mime" || len(ac.flags) != 1 || ac.flags[0] != "\\Draft" {
+		t.Errorf("append call = %+v", ac)
+	}
+	if len(cmd.storeCalls) != 0 || len(cmd.expungeCalls) != 0 {
+		t.Errorf("first push expunged prior image: store=%d expunge=%d",
+			len(cmd.storeCalls), len(cmd.expungeCalls))
+	}
+}
+
+func TestPushDraft_IMAP_ReplacesPrev(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.nextUID = 99
+	idle := newFakeClient()
+	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
+
+	uid, err := b.PushDraft("Drafts", []byte("v2"), mail.UID("42"))
+	if err != nil {
+		t.Fatalf("PushDraft: %v", err)
+	}
+	if uid != mail.UID("99") {
+		t.Errorf("uid = %q, want 99", uid)
+	}
+	if cmd.selected != "Drafts" {
+		t.Errorf("selected = %q, want Drafts", cmd.selected)
+	}
+	if len(cmd.storeCalls) != 1 {
+		t.Fatalf("storeCalls = %d, want 1", len(cmd.storeCalls))
+	}
+	if len(cmd.expungeCalls) != 1 || len(cmd.expungeCalls[0]) != 1 || cmd.expungeCalls[0][0] != mail.UID("42") {
+		t.Errorf("expunge calls = %v, want [[42]]", cmd.expungeCalls)
 	}
 }

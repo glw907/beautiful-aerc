@@ -344,7 +344,7 @@ func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d 
 		if err != nil {
 			return ErrorMsg{Op: "encode draft", Err: err}
 		}
-		if err := acct.UpsertDraft(ctx, draftID, payload); err != nil {
+		if err := acct.CreateDraft(ctx, draftID, payload); err != nil {
 			return ErrorMsg{Op: "save draft", Err: err}
 		}
 		mime, err := compose.AssembleMIME(d, time.Now())
@@ -362,7 +362,7 @@ func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d 
 // found it emits openDraftMsg with that row. When not found it fetches
 // the raw bytes from the cache (body fetch), parses them via
 // ParseDraftMIME, and emits openDraftMsg with a freshly allocated row
-// so the App can UpsertDraft and open compose. A fetch error emits
+// so the App can CreateDraft and open compose. A fetch error emits
 // uicore.ErrorMsg.
 func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder string) tea.Cmd {
 	return func() tea.Msg {
@@ -392,7 +392,7 @@ func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder s
 			return uicore.ErrorMsg{Op: "encode draft", Err: err}
 		}
 		newID := uicompose.AllocDraftID()
-		if err := acct.UpsertDraft(ctx, newID, payload); err != nil {
+		if err := acct.CreateDraft(ctx, newID, payload); err != nil {
 			return uicore.ErrorMsg{Op: "save draft", Err: err}
 		}
 		if err := acct.MarkDraftPushed(ctx, newID, uid, draftsFolder); err != nil {

@@ -142,6 +142,10 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		// Idempotent success per spec §D.4: message already gone.
 		_ = a.finalizeSuccess(ctx, row, args)
 		a.publish(row, OpDone, nil)
+	case errors.Is(dispatchErr, ErrDraftSuperseded):
+		// PushDraft succeeded server-side. The local row was already gone.
+		_ = a.finalizeSuccess(ctx, row, args)
+		a.publishNote(row, OpDone, "draft superseded by another client")
 	default:
 		if cfg.MaxAttempts > 0 && row.Attempts+1 >= cfg.MaxAttempts {
 			_ = a.finishOp(row.ID, OpConflict, encodeErr("max-attempts-exceeded", dispatchErr), 0)
@@ -224,6 +228,22 @@ func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
 	if err != nil {
 		ev.Err = err.Error()
 	}
+	a.emit(ev)
+}
+
+// publishNote is publish + a non-empty Note string for advisory
+// banners (e.g. draft-superseded).
+func (a *Account) publishNote(row *outboxRow, status OpStatus, note string) {
+	a.emit(CacheEvent{
+		Account: a.name,
+		OpID:    row.ID,
+		Kind:    OpKind(row.Kind),
+		Status:  status,
+		Note:    note,
+	})
+}
+
+func (a *Account) emit(ev CacheEvent) {
 	select {
 	case a.events <- ev:
 	default:

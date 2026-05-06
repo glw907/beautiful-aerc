@@ -15,12 +15,19 @@ import (
 )
 
 type fakeCache struct {
-	upsertCalls int
+	createCalls int
+	updateCalls int
 	lastPayload []byte
 }
 
-func (f *fakeCache) UpsertDraft(_ context.Context, _ string, payload []byte) error {
-	f.upsertCalls++
+func (f *fakeCache) CreateDraft(_ context.Context, _ string, payload []byte) error {
+	f.createCalls++
+	f.lastPayload = payload
+	return nil
+}
+
+func (f *fakeCache) UpdateDraft(_ context.Context, _ string, payload []byte) error {
+	f.updateCalls++
 	f.lastPayload = payload
 	return nil
 }
@@ -247,17 +254,17 @@ func TestModel_AutosaveDebounce(t *testing.T) {
 		t.Fatalf("localDirty should be cleared after autosave tick")
 	}
 
-	// Drive the upsert directly via runUpsert. Same logic as the Cmd closure.
-	msg := runUpsert(next.draftID, cache, next.currentDraft())
+	// Drive the update Cmd directly. Same logic as the Cmd closure.
+	msg := next.updateDraftCmd()()
 	persisted, ok := msg.(DraftPersistedMsg)
 	if !ok {
-		t.Fatalf("runUpsert returned %T, want DraftPersistedMsg", msg)
+		t.Fatalf("updateDraftCmd returned %T, want DraftPersistedMsg", msg)
 	}
 	if persisted.DraftID != next.draftID {
 		t.Fatalf("DraftPersistedMsg.DraftID = %q, want %q", persisted.DraftID, next.draftID)
 	}
-	if cache.upsertCalls != 1 {
-		t.Fatalf("cache.upsertCalls = %d, want 1", cache.upsertCalls)
+	if cache.updateCalls != 1 {
+		t.Fatalf("cache.updateCalls = %d, want 1", cache.updateCalls)
 	}
 	if len(cache.lastPayload) == 0 {
 		t.Fatalf("cache.lastPayload is empty; no bytes written")
@@ -277,8 +284,8 @@ func TestModel_AutosaveNoopBeforeDebounce(t *testing.T) {
 	if !next.localDirty {
 		t.Fatalf("localDirty should not be cleared when debounce window hasn't elapsed")
 	}
-	if cache.upsertCalls != 0 {
-		t.Fatalf("cache.upsertCalls = %d, want 0 before debounce window", cache.upsertCalls)
+	if cache.updateCalls != 0 {
+		t.Fatalf("cache.updateCalls = %d, want 0 before debounce window", cache.updateCalls)
 	}
 }
 

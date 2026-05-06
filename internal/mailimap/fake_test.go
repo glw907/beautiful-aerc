@@ -5,6 +5,7 @@ package mailimap
 import (
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/glw907/poplar/internal/mail"
@@ -28,6 +29,9 @@ type fakeClient struct {
 	copyCalls    [][2]any
 	expungeCalls [][]mail.UID
 	appendCalls  []appendCall
+	// nextUID is the APPENDUID returned by the next Append call. Zero
+	// disables: Append returns "" with no error.
+	nextUID uint32
 
 	onIdle   func(emit func(mail.Update)) error
 	idleStop func()
@@ -144,7 +148,12 @@ type appendCall struct {
 	flags  []string
 }
 
-func (f *fakeClient) Append(folder string, mime []byte, flags []string) error {
+func (f *fakeClient) Append(folder string, mime []byte, flags []string) (mail.UID, error) {
 	f.appendCalls = append(f.appendCalls, appendCall{folder: folder, mime: append([]byte(nil), mime...), flags: append([]string(nil), flags...)})
-	return nil
+	if f.nextUID == 0 {
+		return "", nil
+	}
+	uid := f.nextUID
+	f.nextUID++
+	return mail.UID(strconv.FormatUint(uint64(uid), 10)), nil
 }

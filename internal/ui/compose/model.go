@@ -22,7 +22,8 @@ import (
 // interface lives here so model_test.go can inject a fake without
 // importing internal/cache.
 type CacheStore interface {
-	UpsertDraft(ctx context.Context, draftID string, payload []byte) error
+	CreateDraft(ctx context.Context, draftID string, payload []byte) error
+	UpdateDraft(ctx context.Context, draftID string, payload []byte) error
 	LoadDraft(ctx context.Context, draftID string) ([]byte, error)
 }
 
@@ -141,22 +142,39 @@ func (c *Model) scheduleServerPushCmd() tea.Cmd {
 	return tea.Tick(serverPushDelay, func(time.Time) tea.Msg { return serverPushTickMsg{} })
 }
 
-func (c *Model) upsertDraftCmd() tea.Cmd {
+// createDraftCmd inserts the row on compose Init.
+func (c *Model) createDraftCmd() tea.Cmd {
 	id := c.draftID
 	cache := c.cache
 	d := c.currentDraft()
-	return func() tea.Msg { return runUpsert(id, cache, d) }
+	return func() tea.Msg {
+		payload, err := mailcompose.EncodeDraft(d)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "encode draft", Err: err}
+		}
+		if err := cache.CreateDraft(context.Background(), id, payload); err != nil {
+			return uicore.ErrorMsg{Op: "save draft", Err: err}
+		}
+		return DraftPersistedMsg{DraftID: id}
+	}
 }
 
-func runUpsert(id string, cache CacheStore, d mailcompose.Draft) tea.Msg {
-	payload, err := mailcompose.EncodeDraft(d)
-	if err != nil {
-		return uicore.ErrorMsg{Op: "encode draft", Err: err}
+// updateDraftCmd persists the autosave snapshot. UPDATE-only: a
+// deleted row makes the in-flight cmd a benign 0-row no-op.
+func (c *Model) updateDraftCmd() tea.Cmd {
+	id := c.draftID
+	cache := c.cache
+	d := c.currentDraft()
+	return func() tea.Msg {
+		payload, err := mailcompose.EncodeDraft(d)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "encode draft", Err: err}
+		}
+		if err := cache.UpdateDraft(context.Background(), id, payload); err != nil {
+			return uicore.ErrorMsg{Op: "save draft", Err: err}
+		}
+		return DraftPersistedMsg{DraftID: id}
 	}
-	if err := cache.UpsertDraft(context.Background(), id, payload); err != nil {
-		return uicore.ErrorMsg{Op: "save draft", Err: err}
-	}
-	return DraftPersistedMsg{DraftID: id}
 }
 
 // currentDraft snapshots the current inputs as a Draft without address
@@ -176,7 +194,7 @@ func (c *Model) Init() tea.Cmd {
 		c.scheduleServerPushCmd(),
 	}
 	if c.cache != nil {
-		cmds = append(cmds, c.upsertDraftCmd())
+		cmds = append(cmds, c.createDraftCmd())
 	}
 	return tea.Batch(cmds...)
 }
@@ -283,7 +301,7 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case autosaveTickMsg:
 		if c.cache != nil && c.localDirty && time.Since(c.lastEditAt) >= autosaveDelay {
 			c.localDirty = false
-			return c, tea.Batch(c.upsertDraftCmd(), c.scheduleAutosaveCmd())
+			return c, tea.Batch(c.updateDraftCmd(), c.scheduleAutosaveCmd())
 		}
 		return c, c.scheduleAutosaveCmd()
 

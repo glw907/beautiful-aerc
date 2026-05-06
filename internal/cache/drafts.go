@@ -4,11 +4,16 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/glw907/poplar/internal/mail"
 )
+
+// ErrDraftSuperseded reports that a successful PushDraft landed on a
+// draft row that no longer exists locally.
+var ErrDraftSuperseded = errors.New("cache: draft superseded by another client")
 
 // DraftRow is the in-memory shape of one drafts row. ServerUID is
 // empty until the first successful PushDraft op. LastPushedAt is the
@@ -60,12 +65,11 @@ func (a *Account) LookupDraftByServerUID(ctx context.Context, uid mail.UID) (Dra
 	return scanDraftRow(row.Scan)
 }
 
-// UpsertDraft writes payload for draftID, marking dirty and bumping
-// updated_at. Creates the row on first call. Last writer wins.
-// Caller is the compose autosave timer.
-func (a *Account) UpsertDraft(ctx context.Context, draftID string, payload []byte) error {
+// CreateDraft inserts a new drafts row, or updates payload + bumps
+// updated_at when one already exists for draftID.
+func (a *Account) CreateDraft(ctx context.Context, draftID string, payload []byte) error {
 	if draftID == "" {
-		return fmt.Errorf("upsert draft: empty draftID")
+		return fmt.Errorf("create draft: empty draftID")
 	}
 	now := time.Now().UnixNano()
 	_, err := a.db.ExecContext(ctx, `
@@ -76,6 +80,21 @@ func (a *Account) UpsertDraft(ctx context.Context, draftID string, payload []byt
             dirty      = 1,
             updated_at = excluded.updated_at`,
 		draftID, payload, now, now)
+	return err
+}
+
+// UpdateDraft writes payload for an existing draftID. When the row
+// was already deleted, the update is a 0-row no-op rather than
+// resurrecting the row.
+func (a *Account) UpdateDraft(ctx context.Context, draftID string, payload []byte) error {
+	if draftID == "" {
+		return fmt.Errorf("update draft: empty draftID")
+	}
+	_, err := a.db.ExecContext(ctx, `
+        UPDATE drafts
+        SET payload = ?, dirty = 1, updated_at = ?
+        WHERE draft_id = ?`,
+		payload, time.Now().UnixNano(), draftID)
 	return err
 }
 
@@ -139,7 +158,7 @@ func (a *Account) MarkDraftPushed(ctx context.Context, draftID string, serverUID
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("mark draft pushed %s: draft not found", draftID)
+		return fmt.Errorf("mark draft pushed %s: %w", draftID, ErrDraftSuperseded)
 	}
 	return nil
 }

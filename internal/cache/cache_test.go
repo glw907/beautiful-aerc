@@ -15,17 +15,18 @@ import (
 
 // fakeBackend records dispatched calls and returns canned errors.
 type fakeBackend struct {
-	moves    []mail.UID
-	flags    []mail.UID
-	destroys []mail.UID
-	sends    []sendCall
-	appends  []appendCall
-	sendErr  error
-	appErr   error
-	err      error
-	folders  []mail.Folder
-	headers  []mail.MessageInfo
-	updates  chan mail.Update
+	moves        []mail.UID
+	flags        []mail.UID
+	destroys     []mail.UID
+	sends        []sendCall
+	appends      []appendCall
+	sendErr      error
+	appErr       error
+	err          error
+	folders      []mail.Folder
+	headers      []mail.MessageInfo
+	updates      chan mail.Update
+	pushDraftUID mail.UID // when non-empty, PushDraft returns this UID with no error
 }
 
 type sendCall struct {
@@ -78,6 +79,9 @@ func (f *fakeBackend) Append(folder string, mime []byte, flag mail.Flag) error {
 	return f.appErr
 }
 func (f *fakeBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
+	if f.pushDraftUID != "" {
+		return f.pushDraftUID, nil
+	}
 	return "", mail.ErrUnsupported
 }
 func (f *fakeBackend) Updates() <-chan mail.Update {

@@ -138,17 +138,39 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 	b.mu.Lock()
 	cmd := b.cmd
 	b.mu.Unlock()
-	if err := cmd.Append(folder, mime, imapFlagsFor(flags)); err != nil {
+	if _, err := cmd.Append(folder, mime, imapFlagsFor(flags)); err != nil {
 		return fmt.Errorf("append: %w", classifyErr(err))
 	}
 	return nil
 }
 
-// PushDraft returns ErrUnsupported. Pass 9h.6 will implement IMAP
-// draft persistence. The App gates on IsJMAP() so this stub never
-// fires for IMAP accounts in production.
-func (b *Backend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
-	return "", mail.ErrUnsupported
+// PushDraft writes mime to folder via APPEND \Draft and best-effort
+// expunges prevUID's prior server image. APPEND failure aborts. An
+// EXPUNGE failure orphans the prior image but the new draft is good.
+// Symmetric to JMAP's destroy-best-effort policy (ADR-0164).
+func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
+	if folder == "" {
+		return "", errors.New("push-draft: empty folder")
+	}
+	b.mu.Lock()
+	cmd := b.cmd
+	b.mu.Unlock()
+
+	newUID, err := cmd.Append(folder, mime, []string{"\\Draft"})
+	if err != nil {
+		return "", fmt.Errorf("push-draft: append: %w", classifyErr(err))
+	}
+	if prevUID == "" {
+		return newUID, nil
+	}
+	if _, err := cmd.Select(folder, false); err != nil {
+		return newUID, nil
+	}
+	if err := cmd.Store([]mail.UID{prevUID}, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
+		return newUID, nil
+	}
+	_ = cmd.UIDExpunge([]mail.UID{prevUID})
+	return newUID, nil
 }
 
 // smtpClientLocked returns the cached SMTP client, dialing on first

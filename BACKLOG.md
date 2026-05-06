@@ -4,8 +4,8 @@
 
 ## High
 
-- [ ] **#39** Discard path leaves the local drafts row behind `#bug` `#poplar` `#compose` *(2026-05-06)*
-  Pass 9h.5 smoke test: typed into compose, Ctrl+C → modal → `n` (discard). Compose closes correctly but `drafts` table still shows the row after the discard fires. `discardDraftCmd` in `internal/ui/cmds.go:323` calls `acct.DeleteDraft(ctx, draftID)` — verify the draftID threaded through `m.compose.DraftID()` matches the row's `draft_id`, or whether the autosave timer's in-flight `upsertDraftCmd` is racing the delete and re-creating the row after `m.compose` is nilled. Same risk applies to the empty-close path in `app.go` `cleanupComposeOnEmpty`. Likely fix: cancel the autosave/push tickers before issuing DeleteDraft, or have DeleteDraft race-safely no-op when the row was just upserted (sentinel + version).
+- [x] ~~**#39** Discard path leaves the local drafts row behind~~ `#bug` `#poplar` `#compose` *(2026-05-06)* (closed 2026-05-06)
+  Resolved in Pass 9h.6: root cause was the in-flight autosave Cmd's `UpsertDraft` racing `DeleteDraft` and re-inserting the row after `m.compose` was nilled. Fix split `cache.UpsertDraft` into `CreateDraft` (Init, insert-or-update) and `UpdateDraft` (autosave, UPDATE-only — 0 rows = no-op). After DeleteDraft, the in-flight Update is a benign 0-row no-op rather than resurrecting the row. ADR-0165.
 
 - [x] **#25** ~~Some emails render with no body text~~ `#bug` `#poplar` *(2026-04-29)* (closed 2026-04-29)
   Resolved 2026-04-29: root cause was a missing `_ "github.com/emersion/go-message/charset"` blank import in `internal/ui/cmds.go`. go-message's charset registry only carries UTF-8 by default; MIME parts declaring `charset="iso-8859-1"` (Outlook/Exchange default) failed to decode and `mr.NextPart()` errored on the first part, exiting the extraction loop with both plain and html unset. The blank import registers all standard email charsets (iso-8859-1, windows-1252, koi8-r, gb2312, shift_jis, big5, ...) side-effectfully.

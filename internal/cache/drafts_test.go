@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/mail"
@@ -22,13 +23,13 @@ func mustEnsureFolder(t *testing.T, a *Account, name string) {
 	}
 }
 
-func TestUpsertLoadDraft(t *testing.T) {
+func TestCreateLoadDraft(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
 	ctx := context.Background()
 
-	if err := a.UpsertDraft(ctx, "d1", []byte("payload-v1")); err != nil {
-		t.Fatalf("UpsertDraft v1: %v", err)
+	if err := a.CreateDraft(ctx, "d1", []byte("payload-v1")); err != nil {
+		t.Fatalf("CreateDraft v1: %v", err)
 	}
 	got, err := a.LoadDraft(ctx, "d1")
 	if err != nil {
@@ -38,8 +39,8 @@ func TestUpsertLoadDraft(t *testing.T) {
 		t.Errorf("LoadDraft = %q, want %q", got, "payload-v1")
 	}
 
-	if err := a.UpsertDraft(ctx, "d1", []byte("payload-v2")); err != nil {
-		t.Fatalf("UpsertDraft v2: %v", err)
+	if err := a.CreateDraft(ctx, "d1", []byte("payload-v2")); err != nil {
+		t.Fatalf("CreateDraft v2: %v", err)
 	}
 	got, err = a.LoadDraft(ctx, "d1")
 	if err != nil {
@@ -64,11 +65,11 @@ func TestListDrafts(t *testing.T) {
 	defer a.Close()
 	ctx := context.Background()
 
-	if err := a.UpsertDraft(ctx, "d1", []byte("a")); err != nil {
-		t.Fatalf("UpsertDraft d1: %v", err)
+	if err := a.CreateDraft(ctx, "d1", []byte("a")); err != nil {
+		t.Fatalf("CreateDraft d1: %v", err)
 	}
-	if err := a.UpsertDraft(ctx, "d2", []byte("b")); err != nil {
-		t.Fatalf("UpsertDraft d2: %v", err)
+	if err := a.CreateDraft(ctx, "d2", []byte("b")); err != nil {
+		t.Fatalf("CreateDraft d2: %v", err)
 	}
 	if err := a.MarkDraftPushed(ctx, "d2", mail.UID("server-id-99"), "Drafts"); err != nil {
 		t.Fatalf("MarkDraftPushed: %v", err)
@@ -94,8 +95,8 @@ func TestMarkDraftPushed_NotFound(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
 	err := a.MarkDraftPushed(context.Background(), "missing", mail.UID("x"), "Drafts")
-	if err == nil {
-		t.Fatal("MarkDraftPushed on missing draft = nil error, want non-nil")
+	if !errors.Is(err, ErrDraftSuperseded) {
+		t.Fatalf("MarkDraftPushed on missing draft = %v, want ErrDraftSuperseded", err)
 	}
 }
 
@@ -103,8 +104,8 @@ func TestDeleteDraft(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
 	ctx := context.Background()
-	if err := a.UpsertDraft(ctx, "d1", []byte("x")); err != nil {
-		t.Fatalf("UpsertDraft: %v", err)
+	if err := a.CreateDraft(ctx, "d1", []byte("x")); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
 	}
 	if err := a.DeleteDraft(ctx, "d1"); err != nil {
 		t.Fatalf("DeleteDraft: %v", err)
@@ -115,6 +116,26 @@ func TestDeleteDraft(t *testing.T) {
 	}
 }
 
+func TestUpdateDraft_DeletedRow_NoOp(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	ctx := context.Background()
+
+	if err := a.CreateDraft(ctx, "d1", []byte("v1")); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	if err := a.DeleteDraft(ctx, "d1"); err != nil {
+		t.Fatalf("DeleteDraft: %v", err)
+	}
+	// In-flight autosave on a deleted row must not resurrect it.
+	if err := a.UpdateDraft(ctx, "d1", []byte("v2")); err != nil {
+		t.Fatalf("UpdateDraft: %v", err)
+	}
+	if _, err := a.LoadDraft(ctx, "d1"); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("UpdateDraft resurrected the row: err = %v, want sql.ErrNoRows", err)
+	}
+}
+
 func TestQueuePushDraft(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
@@ -122,8 +143,8 @@ func TestQueuePushDraft(t *testing.T) {
 
 	mustEnsureFolder(t, a, "Drafts")
 
-	if err := a.UpsertDraft(ctx, "d1", []byte("encoded-draft")); err != nil {
-		t.Fatalf("UpsertDraft: %v", err)
+	if err := a.CreateDraft(ctx, "d1", []byte("encoded-draft")); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
 	}
 	opID, err := a.QueuePushDraft(ctx, "d1", "Drafts", []byte("MIME"), mail.UID(""))
 	if err != nil {
@@ -163,6 +184,44 @@ func TestQueuePushDraft(t *testing.T) {
 	}
 }
 
+func TestDrainer_PushDraft_SupersededEmitsNote(t *testing.T) {
+	be := &fakeBackend{
+		folders:      []mail.Folder{{Name: "Drafts", Role: "drafts"}},
+		pushDraftUID: mail.UID("server-99"),
+	}
+	a := openTestAccountWith(t, be)
+	ctx := context.Background()
+
+	// Queue a push for a draftID that has no local row. The drainer
+	// will succeed at the backend, then MarkDraftPushed reports
+	// ErrDraftSuperseded.
+	if _, err := a.QueuePushDraft(ctx, "missing-id", "Drafts", []byte("MIME"), mail.UID("")); err != nil {
+		t.Fatalf("QueuePushDraft: %v", err)
+	}
+	if err := a.StartDrainer(ctx); err != nil {
+		t.Fatalf("StartDrainer: %v", err)
+	}
+
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case ev := <-a.Events():
+			if ev.Kind != KindPushDraft {
+				continue
+			}
+			if ev.Status != OpDone {
+				t.Fatalf("status = %v, want OpDone (superseded counts as success)", ev.Status)
+			}
+			if ev.Note == "" {
+				t.Fatal("Note should be populated for superseded draft")
+			}
+			return
+		case <-deadline:
+			t.Fatal("timed out waiting for superseded event")
+		}
+	}
+}
+
 func TestQueryFolder_DraftsLocalOnly(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
@@ -177,8 +236,8 @@ func TestQueryFolder_DraftsLocalOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if err := a.UpsertDraft(ctx, "d-local", payload); err != nil {
-		t.Fatalf("UpsertDraft: %v", err)
+	if err := a.CreateDraft(ctx, "d-local", payload); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
 	}
 
 	msgs, total, err := a.QueryFolder("Drafts", 0, 100)
@@ -213,8 +272,8 @@ func TestQueryFolder_DraftsPushedExcluded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if err := a.UpsertDraft(ctx, "d-pushed", payload); err != nil {
-		t.Fatalf("UpsertDraft: %v", err)
+	if err := a.CreateDraft(ctx, "d-pushed", payload); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
 	}
 	if err := a.MarkDraftPushed(ctx, "d-pushed", mail.UID("server-99"), "Drafts"); err != nil {
 		t.Fatalf("MarkDraftPushed: %v", err)

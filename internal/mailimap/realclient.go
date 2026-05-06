@@ -448,7 +448,7 @@ func (r *realClient) Move(uids []mail.UID, dest string) error {
 	return nil
 }
 
-func (r *realClient) Append(folder string, mime []byte, flags []string) error {
+func (r *realClient) Append(folder string, mime []byte, flags []string) (mail.UID, error) {
 	opts := &imap.AppendOptions{}
 	for _, f := range flags {
 		opts.Flags = append(opts.Flags, imap.Flag(f))
@@ -456,15 +456,19 @@ func (r *realClient) Append(folder string, mime []byte, flags []string) error {
 	cmd := r.c.Append(folder, int64(len(mime)), opts)
 	if _, err := cmd.Write(mime); err != nil {
 		_ = cmd.Close()
-		return fmt.Errorf("append %q: write: %w", folder, err)
+		return "", fmt.Errorf("append %q: write: %w", folder, err)
 	}
 	if err := cmd.Close(); err != nil {
-		return fmt.Errorf("append %q: close: %w", folder, err)
+		return "", fmt.Errorf("append %q: close: %w", folder, err)
 	}
-	if _, err := cmd.Wait(); err != nil {
-		return fmt.Errorf("append %q: %w", folder, err)
+	data, err := cmd.Wait()
+	if err != nil {
+		return "", fmt.Errorf("append %q: %w", folder, err)
 	}
-	return nil
+	if data == nil || data.UID == 0 {
+		return "", nil
+	}
+	return imapUID(data.UID), nil
 }
 
 // UIDExpunge runs UID EXPUNGE (UIDPLUS / IMAP4rev2).
