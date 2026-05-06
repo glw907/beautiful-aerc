@@ -34,7 +34,9 @@ each fact back to its ADR(s).
   adds the `attachments` table (metadata + lazy bytes; columns
   `id`, `message`, `part_id`, `filename`, `mime_type`, `size`,
   `content_id`, `disposition`, `bytes`, `fetched_at`; UNIQUE
-  `(message, part_id)`; index on `message`).
+  `(message, part_id)`; index on `message`). v6 adds
+  `outbox.payload BLOB NULL` carrying the assembled MIME bytes
+  for `KindSend`/`KindAppend` (NULL for Move/Flag/Destroy).
 - `mail.ChangeTracker` is the protocol-level change-detection
   sibling of `mail.Backend`; both v1 backends implement it. On a
   nil SyncToken both run an initial baseline pull. JMAP pages
@@ -68,19 +70,26 @@ each fact back to its ADR(s).
   helpers used by `cmd/poplar/cache.go`; all path/DSN logic is
   canonical here.
 - `(*Account).QueueOp(ctx, folder, msgUID, args)` is the single
-  forward write entry. `OpArgs` is a sealed sum (`MoveArgs`,
-  `FlagArgs`, `DestroyArgs`; reserved `SendArgs`, `AppendArgs`).
-  Inside one transaction: resolve folder → row id, insert
-  outbox row with `status='pending'` and `next_eligible_at=NULL`,
-  apply optimistic `ui_flags`/`ui_hide` to the message row,
-  commit, signal drainer. After the drainer marks a row
-  `conflict`, `(*Account).RetryOp(ctx, opID)` and
+  forward write entry for Move/Flag/Destroy. `OpArgs` is a sealed
+  sum (`MoveArgs`, `FlagArgs`, `DestroyArgs`,
+  `SendArgs{Envelope}`, `AppendArgs{Flag}`).
+  `(*Account).QueueSend(ctx, sentFolder, env, mime)` and
+  `(*Account).QueueAppend(ctx, folder, flag, mime)` are the
+  payload-bearing entry points for outbound mail; both insert a
+  folder-scoped row with the assembled MIME bytes in
+  `outbox.payload` and skip optimistic UI (no message-row state
+  to mirror). Inside one transaction: resolve folder → row id,
+  insert outbox row with `status='pending'` and
+  `next_eligible_at=NULL`, apply optimistic `ui_flags`/`ui_hide`
+  to the message row (Move/Flag/Destroy only), commit, signal
+  drainer. After the drainer marks a row `conflict`,
+  `(*Account).RetryOp(ctx, opID)` and
   `(*Account).DiscardOp(ctx, opID)` are the user-initiated
   resolution primitives. Retry resets `attempts = 0` and signals
   the drainer. Discard reverts the optimistic flip via
-  `revertOptimisticTx` (mirror of `applyOptimisticTx`) and
-  deletes the outbox row in one transaction. Both reject
-  non-conflict rows with `ErrNotConflict`.
+  `revertOptimisticTx` (mirror of `applyOptimisticTx`; no-op for
+  Send/Append) and deletes the outbox row in one transaction.
+  Both reject non-conflict rows with `ErrNotConflict`.
 - Cache exposes three read queries for the outbox-visibility
   surfaces: `OutboxSummary` (grouped by kind/folder/status, where
   folder is the destination for Move ops via `json_extract` and
