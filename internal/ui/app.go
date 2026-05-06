@@ -112,7 +112,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		keys:         NewGlobalKeys(),
 		linkPicker:   reader.NewLinkPicker(reader.NewStyles(t)),
 		attachPicker: reader.NewAttachPicker(reader.NewStyles(t), icons),
-		movePicker:   movepicker.New(movepicker.Styles{Dim: styles.Dim, MsgListCursor: styles.MsgListCursor}),
+		movePicker:   movepicker.New(movepicker.NewStyles(t)),
 		downloadDir:  uiCfg.DownloadDir,
 		confirm:      NewConfirmModal(styles),
 		outbox:       NewOutboxOverlay(styles),
@@ -488,7 +488,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case uicompose.SeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(uicompose.Styles{ErrorBanner: m.styles.ErrorBanner}, m.acct.AccountEmail())
+		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail())
 		m.compose.SetSize(w, h)
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
@@ -556,7 +556,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
-			m.compose = uicompose.New(uicompose.Styles{ErrorBanner: m.styles.ErrorBanner}, m.acct.AccountEmail())
+			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail())
 			m.compose.SetSize(w, h)
 			return m, m.compose.Init()
 		case key.Matches(msg, m.keys.Reply), key.Matches(msg, m.keys.ReplyAll), key.Matches(msg, m.keys.Forward):

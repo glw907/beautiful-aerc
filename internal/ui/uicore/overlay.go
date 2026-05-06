@@ -2,7 +2,8 @@
 
 // Vendored from github.com/yorukot/superfile (MIT) commit main/2025.
 // Source: src/pkg/string_function/overplace.go
-// Purpose: composite an overlay string at (x,y) atop a background string,
+//
+// Composites an overlay string at (x,y) atop a background string,
 // preserving background ANSI outside the overlay rect.
 //
 // Rewritten to use only github.com/charmbracelet/x/ansi (already a poplar

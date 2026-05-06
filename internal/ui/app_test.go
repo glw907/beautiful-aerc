@@ -1385,9 +1385,9 @@ func TestApp_WindowSizeSetsComposeSize(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("compose should survive WindowSizeMsg")
 	}
-	// After resize compose should have non-zero dims.
-	if app.compose.Width() == 0 || app.compose.Height() == 0 {
-		t.Errorf("compose dims after resize: %dx%d, want non-zero", app.compose.Width(), app.compose.Height())
+	// After resize compose should render non-empty content.
+	if app.compose.View() == "" {
+		t.Error("compose.View() is empty after resize, want non-empty")
 	}
 }
 

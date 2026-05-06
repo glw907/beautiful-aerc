@@ -14,12 +14,6 @@ import (
 	mailcompose "github.com/glw907/poplar/internal/compose"
 )
 
-// Styles holds the subset of UI styles the compose surface needs.
-// Populated from ui.Styles at construction time.
-type Styles struct {
-	ErrorBanner lipgloss.Style
-}
-
 // Model is the inline compose surface. Send and discard surface
 // as tea.Msg values that App translates into cache ops.
 type Model struct {
@@ -282,31 +276,18 @@ func (c *Model) Draft() (mailcompose.Draft, error) {
 	}, nil
 }
 
-// SetErr sets the inline error banner text. Called by App when a
-// pre-send validation step fails (e.g. no Sent folder configured).
 func (c *Model) SetErr(msg string) {
 	c.err = msg
 }
 
-// Err returns the current inline error banner text.
 func (c *Model) Err() string { return c.err }
 
-// Width returns the current render width.
-func (c *Model) Width() int { return c.width }
-
-// Height returns the current render height.
-func (c *Model) Height() int { return c.height }
-
-// SetTo sets the To field value.
 func (c *Model) SetTo(s string) { c.to.SetValue(s) }
 
-// SetSubject sets the Subject field value.
 func (c *Model) SetSubject(s string) { c.subject.SetValue(s) }
 
-// SubjectValue returns the current Subject field content.
 func (c *Model) SubjectValue() string { return c.subject.Value() }
 
-// SetBody sets the editor body content.
 func (c *Model) SetBody(s string) { c.editor.SetValue(s) }
 
 // IsDirty reports whether any input field contains user-entered content.
@@ -315,7 +296,7 @@ func (c *Model) IsDirty() bool {
 		c.subject.Value() != "" || c.editor.Value() != ""
 }
 
-// Seed populates the inputs from d. Called for reply/forward pre-fill.
+// Seed populates the inputs from d.
 func (c *Model) Seed(d mailcompose.Draft) {
 	c.to.SetValue(joinAddresses(d.To))
 	c.cc.SetValue(joinAddresses(d.Cc))

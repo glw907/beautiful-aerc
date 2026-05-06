@@ -8,7 +8,6 @@ import (
 )
 
 // Styles holds the subset of UI styles the sidebar package needs.
-// Populated from ui.Styles at construction time.
 type Styles struct {
 	SidebarBg        lipgloss.Style
 	SidebarAccount   lipgloss.Style

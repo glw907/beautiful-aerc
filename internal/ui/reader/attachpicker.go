@@ -193,7 +193,7 @@ func (p AttachPicker) formatRow(row, maxIndexDigits, contentW int) string {
 	body := uicore.DisplayPadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
 		idxPad, p.icons.Attachment, row+1, name, size), contentW)
 	if row == p.cursor {
-		return p.styles.MsgListCursor.Render(body)
+		return p.styles.Cursor.Render(body)
 	}
 	return body
 }

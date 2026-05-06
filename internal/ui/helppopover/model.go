@@ -6,12 +6,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // Styles holds the subset of UI styles the help popover needs.
-// Populated from ui.Styles at construction time.
 type Styles struct {
 	HelpBoxBorder   lipgloss.Style
 	HelpTitle       lipgloss.Style
@@ -393,11 +391,7 @@ func renderKeyDesc(styles Styles, key, desc string, wired bool) string {
 	return styles.Dim.Render(key + "  " + desc)
 }
 
-// renderGap returns the inter-column spacer used between groups
-// on a layout row.
-func renderGap() string {
-	return "    "
-}
+func renderGap() string { return "    " }
 
 // renderGotoGrid builds the Go To group as a 3×2 grid:
 // "I inbox    D drafts    S sent" / "A archive  X spam  T trash".
@@ -426,24 +420,4 @@ func renderHintLine(styles Styles, hints []bindingRow) string {
 		parts = append(parts, renderKeyDesc(styles, h.key, h.desc, h.wired))
 	}
 	return strings.Join(parts, "    ")
-}
-
-// NewStyles builds a Styles from a compiled theme.
-func NewStyles(t *theme.CompiledTheme) Styles {
-	return Styles{
-		HelpTitle: lipgloss.NewStyle().
-			Foreground(t.AccentPrimary).Bold(true),
-		HelpGroupHeader: lipgloss.NewStyle().
-			Foreground(t.FgBright).Bold(true),
-		HelpKey: lipgloss.NewStyle().
-			Foreground(t.FgBright).Bold(true),
-		HelpBoxBorder: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder(), false, true, true, true).
-			BorderForeground(t.BgBorder).
-			Padding(1, 2),
-		FrameBorder: lipgloss.NewStyle().
-			Foreground(t.BgBorder).Background(t.BgBase),
-		Dim: lipgloss.NewStyle().
-			Foreground(t.FgDim),
-	}
 }

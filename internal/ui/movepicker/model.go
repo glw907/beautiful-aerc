@@ -16,10 +16,9 @@ import (
 )
 
 // Styles holds the subset of UI styles the move picker needs.
-// Populated from ui.Styles at construction time.
 type Styles struct {
-	Dim           lipgloss.Style
-	MsgListCursor lipgloss.Style
+	Dim    lipgloss.Style
+	Cursor lipgloss.Style
 }
 
 // OpenMsg asks App to open the move-to-folder picker.
@@ -319,7 +318,7 @@ func (p Model) buildListRows(contentW int) []string {
 		}
 		row := marker + entry.Display
 		if i == p.cursor {
-			row = p.styles.MsgListCursor.Render(uicore.PadOrTruncate(row, contentW))
+			row = p.styles.Cursor.Render(uicore.PadOrTruncate(row, contentW))
 		}
 		rows = append(rows, row)
 	}

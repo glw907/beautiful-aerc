@@ -18,15 +18,6 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// Styles holds the subset of UI styles the reader surface needs.
-// Populated from ui.Styles at construction time.
-type Styles struct {
-	ViewerBg      lipgloss.Style
-	ViewerHeader  lipgloss.Style
-	Dim           lipgloss.Style
-	MsgListCursor lipgloss.Style
-}
-
 // Phase tracks whether the viewer is fetching the body or rendering
 // it. The closed state is encoded by the open flag, not a phase, so
 // phase transitions only run when the viewer is open.
@@ -91,25 +82,6 @@ type Model struct {
 	height       int
 }
 
-// NewStyles builds the reader Styles from a compiled theme. Called at
-// startup by the parent ui package to construct the Styles value it
-// passes to New.
-func NewStyles(t *theme.CompiledTheme) Styles {
-	return Styles{
-		ViewerBg: lipgloss.NewStyle().
-			Background(t.BgBase),
-		ViewerHeader: lipgloss.NewStyle().
-			Background(t.BgSubtle).
-			Padding(1, 0, 1, 1).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderBottom(true).
-			BorderForeground(t.FgDim).
-			BorderBackground(t.BgBase),
-		Dim:           lipgloss.NewStyle().Foreground(t.FgDim),
-		MsgListCursor: lipgloss.NewStyle().Foreground(t.AccentPrimary),
-	}
-}
-
 // New constructs an empty (closed) viewer. accountEmail populates the
 // To: header in the rendered message view.
 func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Model {
@@ -156,8 +128,7 @@ func (v Model) Open(msg mail.MessageInfo) Model {
 	return v
 }
 
-// Close transitions the viewer out of view. App reads viewer state
-// via AccountTab.ViewerOpen() after delegation and reverts chrome.
+// Close transitions the viewer out of view.
 func (v Model) Close() Model {
 	v.open = false
 	v.phase = PhaseLoading

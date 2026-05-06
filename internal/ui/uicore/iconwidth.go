@@ -32,7 +32,6 @@ func SetSPUACellWidth(w int) {
 	spuaCellWidth = w
 }
 
-// SPUACellWidth returns the current SPUA-A cell width setting.
 func SPUACellWidth() int { return spuaCellWidth }
 
 // DisplayCells returns the actual terminal display width of s, given

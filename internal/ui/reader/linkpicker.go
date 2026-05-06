@@ -222,7 +222,7 @@ func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 	}
 	body := uicore.PadOrTruncate(fmt.Sprintf("%s[%d] %s", pad, row+1, url), contentW)
 	if row == p.cursor {
-		return p.styles.MsgListCursor.Render(body)
+		return p.styles.Cursor.Render(body)
 	}
 	return body
 }

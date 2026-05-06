@@ -22,13 +22,10 @@ const ShelfRows = 3
 //
 // Column is immutable-style: all mutating helpers return a new value.
 // AccountTab holds one by value and replaces it via the With* accessors,
-// preserving the Elm contract.
-//
-// Layout/SetSize threading choice (verbose-explicit path, per plan):
-// Column.SetSize stores its own dims for View(). The WindowSizeMsg branch in
-// AccountTab still calls Model.SetLayout and Model.SetSize explicitly, then
-// re-wraps via WithSidebar + WithSidebarSearch + SetSize. Verbose but correct.
-// Column never needs to know about LayoutMode, keeping its API narrow.
+// preserving the Elm contract. Column.SetSize stores its own dims for
+// View() but does not propagate to children. AccountTab.WindowSizeMsg
+// calls SetLayout/SetSize on each child directly, then wraps via SetSize.
+// Column never needs to know about LayoutMode.
 type Column struct {
 	styles        Styles
 	icons         uicore.IconSet

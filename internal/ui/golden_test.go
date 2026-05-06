@@ -163,8 +163,8 @@ func goldenMovePickerFolders() []mail.FolderEntry {
 func goldenNewMovePicker() movepicker.Model {
 	th := theme.Themes[theme.DefaultThemeName]
 	return movepicker.New(movepicker.Styles{
-		Dim:           lipgloss.NewStyle().Foreground(th.FgDim),
-		MsgListCursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
+		Dim:    lipgloss.NewStyle().Foreground(th.FgDim),
+		Cursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
 	})
 }
 

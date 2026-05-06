@@ -2,16 +2,6 @@
 
 package uicore
 
-// SearchMode selects which fields the message filter matches against.
-type SearchMode int
-
-const (
-	// SearchModeName matches subject + sender. Default.
-	SearchModeName SearchMode = iota
-	// SearchModeAll matches subject + sender + date text.
-	SearchModeAll
-)
-
 // LayoutMode is the resolved set of layout decisions for a given
 // terminal width. Computed once per WindowSizeMsg by ComputeLayout
 // and threaded into Sidebar and MessageList. Pure data, no I/O,

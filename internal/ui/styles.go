@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/theme"
-	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // Styles holds composed lipgloss styles derived from a CompiledTheme.
@@ -93,21 +92,6 @@ type Styles struct {
 	// ErrorBanner is the one-line surface above the status bar that
 	// renders the most recent ErrorMsg. Foreground only, no fill.
 	ErrorBanner lipgloss.Style
-}
-
-// applyBg layers the background of bgStyle onto base. Used by row
-// renderers (sidebar, message list) to compose a foreground style
-// with the row's background color without clobbering already-rendered
-// ANSI segments. Delegates to uicore.ApplyBg.
-func applyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
-	return uicore.ApplyBg(base, bgStyle)
-}
-
-// fillRowToWidth fits a fully-rendered row of ANSI segments to
-// exactly width display cells. Shared by sidebar and message
-// list row renderers. Delegates to uicore.FillRowToWidth.
-func fillRowToWidth(row string, width int, bgStyle lipgloss.Style) string {
-	return uicore.FillRowToWidth(row, width, bgStyle)
 }
 
 // NewStyles creates a Styles from a CompiledTheme.

@@ -27,8 +27,8 @@ func sampleFolders() []mail.FolderEntry {
 func newTestPicker() Model {
 	th := theme.Themes[theme.DefaultThemeName]
 	return New(Styles{
-		Dim:           lipgloss.NewStyle().Foreground(th.FgDim),
-		MsgListCursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
+		Dim:    lipgloss.NewStyle().Foreground(th.FgDim),
+		Cursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
 	})
 }
 

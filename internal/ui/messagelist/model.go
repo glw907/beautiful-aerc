@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
-	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/mattn/go-runewidth"
 )
@@ -45,7 +44,6 @@ const (
 )
 
 // Styles holds the subset of UI styles the message list needs.
-// Populated from ui.Styles at construction time.
 type Styles struct {
 	MsgListBg            lipgloss.Style
 	MsgListSelected      lipgloss.Style
@@ -63,8 +61,7 @@ type Styles struct {
 }
 
 // Row is a rendered row in the message list. Exported for cross-package
-// test assertions in account_tab_test (package ui). Production code
-// does not use this type.
+// test assertions in account_tab_test (package ui).
 type Row struct {
 	Msg          mail.MessageInfo
 	Prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
@@ -293,13 +290,9 @@ func (m *Model) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
 	return false
 }
 
-// pickRoot returns the index within bucket of the message that should
-// be treated as the thread root. Preference: the message with empty
-// InReplyTo. Fallback: the earliest message by Sent time (or Date lex
-// for legacy fixtures without a Sent time). The fallback handles
-// broken parent chains (message references a parent that wasn't
-// fetched) without crashing. The synthetic root and any other
-// top-level orphans become depth-1 children in the renderer.
+// pickRoot returns the index within bucket of the thread root: the
+// message with empty InReplyTo, or the earliest by sent time when
+// no such message exists (broken parent chain fallback).
 func pickRoot(bucket []mail.MessageInfo) int {
 	for i, m := range bucket {
 		if m.InReplyTo == "" {
@@ -611,14 +604,13 @@ func (m Model) threadRootIndex(idx int) int {
 	return -1
 }
 
-// SetSize updates the panel dimensions.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampOffset()
 }
 
-// Layout returns the current layout settings. Used by cross-package tests.
+// Layout returns the current layout settings.
 func (m Model) Layout() uicore.LayoutMode { return m.layout }
 
 // SetLayout updates the column widths and date/flag toggles. Date
@@ -632,9 +624,7 @@ func (m *Model) SetLayout(l uicore.LayoutMode) {
 	}
 }
 
-// SetNow overrides the cached clock snapshot used by displayDate
-// during rebuild. Tests use this to freeze time. Production code
-// relies on the SetMessages-driven refresh.
+// SetNow overrides the clock snapshot used during rebuild. Test seam.
 func (m *Model) SetNow(now time.Time) {
 	m.now = now
 	m.rebuild()
@@ -670,7 +660,6 @@ func (m Model) Count() int { return len(m.source) }
 func (m Model) Source() []mail.MessageInfo { return m.source }
 
 // Rows returns the rendered displayRow slice as exported Row values.
-// Used by cross-package tests that need to inspect fold/thread state.
 func (m Model) Rows() []Row {
 	out := make([]Row, len(m.rows))
 	for i, r := range m.rows {
@@ -1108,25 +1097,6 @@ func (m Model) threadUIDs(root mail.UID) []mail.UID {
 		}
 	}
 	return out
-}
-
-// NewStyles builds a messagelist.Styles from a compiled theme.
-func NewStyles(t *theme.CompiledTheme) Styles {
-	return Styles{
-		MsgListBg:            lipgloss.NewStyle().Background(t.BgBase),
-		MsgListSelected:      lipgloss.NewStyle().Background(t.BgSelection),
-		MsgListCursor:        lipgloss.NewStyle().Foreground(t.AccentPrimary),
-		MsgListUnreadSender:  lipgloss.NewStyle().Foreground(t.FgBright).Bold(true),
-		MsgListUnreadSubject: lipgloss.NewStyle().Foreground(t.FgBright),
-		MsgListReadSender:    lipgloss.NewStyle().Foreground(t.FgDim),
-		MsgListReadSubject:   lipgloss.NewStyle().Foreground(t.FgDim),
-		MsgListDate:          lipgloss.NewStyle().Foreground(t.FgDim),
-		MsgListIconUnread:    lipgloss.NewStyle().Foreground(t.FgBright),
-		MsgListIconRead:      lipgloss.NewStyle().Foreground(t.FgDim),
-		MsgListFlagFlagged:   lipgloss.NewStyle().Foreground(t.ColorWarning),
-		MsgListThreadPrefix:  lipgloss.NewStyle().Foreground(t.FgDim),
-		MsgListPlaceholder:   lipgloss.NewStyle().Foreground(t.FgDim),
-	}
 }
 
 // truncateCells cuts s to fit width display cells, appending an
