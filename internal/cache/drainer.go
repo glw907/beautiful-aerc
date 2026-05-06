@@ -255,6 +255,12 @@ func decodeArgs(kind string, payload string) (OpArgs, error) {
 			return nil, err
 		}
 		return v, nil
+	case KindPushDraft:
+		var v PushDraftArgs
+		if err := json.Unmarshal([]byte(payload), &v); err != nil {
+			return nil, err
+		}
+		return v, nil
 	}
 	return nil, fmt.Errorf("unknown op kind %q", kind)
 }

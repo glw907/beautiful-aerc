@@ -66,11 +66,12 @@ const (
 type OpKind string
 
 const (
-	KindMove    OpKind = "move"
-	KindFlag    OpKind = "flag"
-	KindDestroy OpKind = "destroy"
-	KindSend    OpKind = "send"
-	KindAppend  OpKind = "append"
+	KindMove      OpKind = "move"
+	KindFlag      OpKind = "flag"
+	KindDestroy   OpKind = "destroy"
+	KindSend      OpKind = "send"
+	KindAppend    OpKind = "append"
+	KindPushDraft OpKind = "push-draft"
 )
 
 // CacheEvent is the drainer→UI signal channel payload. App's

@@ -11,6 +11,16 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
+func mustEnsureFolder(t *testing.T, a *Account, name string) {
+	t.Helper()
+	_, err := a.db.Exec(
+		`INSERT OR IGNORE INTO folders (name, protocol_name) VALUES (?, ?)`,
+		name, name)
+	if err != nil {
+		t.Fatalf("ensure folder %q: %v", name, err)
+	}
+}
+
 func TestUpsertLoadDraft(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
@@ -101,5 +111,53 @@ func TestDeleteDraft(t *testing.T) {
 	_, err := a.LoadDraft(ctx, "d1")
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("LoadDraft after delete = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestQueuePushDraft(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	ctx := context.Background()
+
+	mustEnsureFolder(t, a, "Drafts")
+
+	if err := a.UpsertDraft(ctx, "d1", []byte("encoded-draft")); err != nil {
+		t.Fatalf("UpsertDraft: %v", err)
+	}
+	opID, err := a.QueuePushDraft(ctx, "d1", "Drafts", []byte("MIME"), mail.UID(""))
+	if err != nil {
+		t.Fatalf("QueuePushDraft: %v", err)
+	}
+	if opID == 0 {
+		t.Errorf("QueuePushDraft returned zero opID")
+	}
+
+	var kind, argsJSON string
+	var payload []byte
+	err = a.db.QueryRow(
+		`SELECT kind, args, payload FROM outbox WHERE id = ?`, opID).
+		Scan(&kind, &argsJSON, &payload)
+	if err != nil {
+		t.Fatalf("read outbox row: %v", err)
+	}
+	if kind != string(KindPushDraft) {
+		t.Errorf("kind = %q, want %q", kind, KindPushDraft)
+	}
+	if string(payload) != "MIME" {
+		t.Errorf("payload = %q, want MIME", payload)
+	}
+	args, err := decodeArgs(kind, argsJSON)
+	if err != nil {
+		t.Fatalf("decodeArgs: %v", err)
+	}
+	pd, ok := args.(PushDraftArgs)
+	if !ok {
+		t.Fatalf("decoded type = %T, want PushDraftArgs", args)
+	}
+	if pd.DraftID != "d1" {
+		t.Errorf("DraftID = %q, want d1", pd.DraftID)
+	}
+	if pd.PrevServerUID != "" {
+		t.Errorf("PrevServerUID = %q, want empty", pd.PrevServerUID)
 	}
 }

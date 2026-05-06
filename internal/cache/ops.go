@@ -34,13 +34,23 @@ type (
 	// folder is the outbox row's folder. The MIME body lives in
 	// outbox.payload.
 	AppendArgs struct{ Flag mail.Flag }
+	// PushDraftArgs carries the local draft identifier and the
+	// server UID of the previous server-side image. The assembled
+	// MIME lives in outbox.payload. When PrevServerUID is non-empty
+	// the backend destroys the prior image as part of the same op,
+	// keeping exactly one server copy per draft.
+	PushDraftArgs struct {
+		DraftID       string
+		PrevServerUID mail.UID
+	}
 )
 
-func (MoveArgs) opKind() OpKind    { return KindMove }
-func (FlagArgs) opKind() OpKind    { return KindFlag }
-func (DestroyArgs) opKind() OpKind { return KindDestroy }
-func (SendArgs) opKind() OpKind    { return KindSend }
-func (AppendArgs) opKind() OpKind  { return KindAppend }
+func (MoveArgs) opKind() OpKind      { return KindMove }
+func (FlagArgs) opKind() OpKind      { return KindFlag }
+func (DestroyArgs) opKind() OpKind   { return KindDestroy }
+func (SendArgs) opKind() OpKind      { return KindSend }
+func (AppendArgs) opKind() OpKind    { return KindAppend }
+func (PushDraftArgs) opKind() OpKind { return KindPushDraft }
 
 // QueueOp atomically inserts an outbox row and applies the
 // optimistic UI flip to the message row. On commit it signals the
@@ -147,6 +157,16 @@ func (a *Account) QueueSend(ctx context.Context, sentFolder string, env mail.Env
 // flag. Drainer dispatch calls Backend.Append.
 func (a *Account) QueueAppend(ctx context.Context, folder string, flag mail.Flag, mime []byte) (int64, error) {
 	return a.insertFolderOp(ctx, folder, AppendArgs{Flag: flag}, mime)
+}
+
+// QueuePushDraft enqueues a PushDraft op carrying mime as the
+// assembled payload. prevUID is empty on first push for a draft
+// and the previous server_uid on subsequent pushes; the backend
+// destroys the prior image as part of the same op when prevUID
+// is non-empty.
+func (a *Account) QueuePushDraft(ctx context.Context, draftID, folder string, mime []byte, prevUID mail.UID) (int64, error) {
+	return a.insertFolderOp(ctx, folder,
+		PushDraftArgs{DraftID: draftID, PrevServerUID: prevUID}, mime)
 }
 
 // QueueOutbound enqueues outbound mail through the outbox. JMAP
@@ -267,7 +287,7 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 		}
 		_, err := tx.Exec(stmt, bit, msgID)
 		return err
-	case SendArgs, AppendArgs:
+	case SendArgs, AppendArgs, PushDraftArgs:
 		return nil
 	}
 	return fmt.Errorf("revertOptimisticTx: unknown args %T", args)
