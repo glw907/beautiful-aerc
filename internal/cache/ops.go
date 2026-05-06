@@ -93,6 +93,48 @@ func (a *Account) QueueOp(ctx context.Context, folder string, msgUID mail.UID, a
 	return opID, nil
 }
 
+// insertFolderOp inserts a folder-scoped outbox row carrying a MIME
+// payload. Shared by QueueSend and QueueAppend. No optimistic UI
+// flip — these ops have no message-row state to mirror.
+func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs, payload []byte) (int64, error) {
+	if args == nil {
+		return 0, fmt.Errorf("queue: nil args")
+	}
+	if len(payload) == 0 {
+		return 0, fmt.Errorf("queue: empty payload for %s", args.opKind())
+	}
+	body, err := json.Marshal(args)
+	if err != nil {
+		return 0, fmt.Errorf("encode args: %w", err)
+	}
+	folderID, err := a.folderID(folder)
+	if err != nil {
+		return 0, err
+	}
+	var opID int64
+	err = a.tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.Exec(`
+            INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at)
+            VALUES (?, NULL, ?, ?, ?, ?, ?, 0, NULL)`,
+			folderID, string(args.opKind()), string(body), payload,
+			time.Now().UnixNano(), OpPending)
+		if err != nil {
+			return fmt.Errorf("insert outbox: %w", err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		opID = id
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	a.signalDrainer()
+	return opID, nil
+}
+
 // applyOptimisticTx writes the optimistic UI hint for one op against
 // one message row. Move/Destroy hide the source; Flag updates ui_flags.
 func applyOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
