@@ -1,22 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 9d.2a next — invariants compaction via subsystem extraction.
+**Current pass:** Pass 9d.3 next — golangci-lint on `internal/catkin/`.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 8.3 | Scaffold → backends → UI → triage → config v1 → Gmail preset → polish I (ADRs 0001–0109) | done |
-| 8.4 – 8.4c | Cache 0–III (ADR-0110–0134) | done |
-| 8.5 – 8.5d | Overengineering audit, Elm conformance, UI structural cleanup, content/filter cleanup (ADR-0125–0131) | done |
-| 8.6 – 8.7 | Attachments I + II (ADR-0135–0140) | done |
-| 8.8 – 8.11 | Human-voice audits + grep gate (ADR-0141, 0142, 0148) | done |
-| 8.10 | JMAP per-folder baseline pull (ADR-0143) | done |
-| 9 – 9c | Catkin — core, live styling, commands, power-user QoL (ADR-0144–0147) | done |
-| 9d | Annotation pipeline + spellcheck consumer (ADR-0149, 0150) | done |
-| 9d.1 | AI-tells + dead-code sweep on 9d diff; tree-wide gofmt + fmt-check gate (ADR-0151) | done |
-| 9d.2 | Render-path adversarial review — cursor-splice fixes (ADR-0152) | done |
-| 9d.2a | Invariants compaction via subsystem extraction — promote stable subsystems to on-demand docs | pending |
+| 1 – 9d.2a | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split (ADRs 0001–0153) | done |
 | 9d.3 | golangci-lint on `internal/catkin/` (errcheck, staticcheck, unused, gocritic, revive, errorlint, unparam, nilerr) | pending |
 | 9d.4 | Live tmux at edge sizes — popover near right + bottom edges at 80×24 | pending |
 | 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
@@ -33,43 +23,33 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9d.2a)
+## Next starter prompt (Pass 9d.3)
 
-> **Goal.** Stop invariants.md from bumping the 400-line ceiling
-> every pass. Promote stable subsystems to on-demand docs and
-> leave one-line pointers in invariants.md.
+> **Goal.** Run golangci-lint over `internal/catkin/` with a
+> targeted linter set; fix every flagged issue inline.
 >
-> **Scope.** Subsystems whose binding facts have settled and
-> rarely change: Cache I/II/III; Attachments I/II; JMAP backend
-> + per-folder baseline pull; IMAP backend + idle; Catkin
-> (core/styling/commands/QoL/annotation/spellcheck — already
-> compacted in 9d.2 but still ~30 lines). Each becomes a doc
-> under `docs/poplar/` (e.g. `cache-invariants.md`,
-> `attachments-invariants.md`, `mail-backends-invariants.md`,
-> `catkin-invariants.md`). Path-scoped auto-load via
-> `.claude/rules/` matching the source paths.
+> **Scope.** `internal/catkin/` only. Linters: `errcheck`,
+> `staticcheck`, `unused`, `gocritic`, `revive`, `errorlint`,
+> `unparam`, `nilerr`. Add a `lint-catkin` Makefile target if a
+> permanent gate is warranted; otherwise one-shot.
 >
-> **Settled.** Pre-beta posture; the path-scoped pattern is
-> already proven by `.claude/rules/ui-invariants.md`. Decision
-> index stays in invariants.md (one source of truth for ADR
-> mapping).
+> **Settled.** Pre-beta posture (apply findings, don't defer).
+> Voice and idiom rules from `go-conventions` apply to any
+> rewrites. Catkin's binding facts now live in
+> `.claude/rules/catkin-invariants.md` (auto-loaded).
 >
-> **Still open — brainstorm before coding:** which subsystems
-> are stable enough to promote (mail-backends could still churn
-> for Pass 9.6 OAuth refresh); whether the decision-index table
-> compacts further once subsystem detail moves out; the rule
-> globs for path-scoped auto-load.
+> **Still open — brainstorm before coding:** whether to wire
+> `lint-catkin` into `make check` permanently or run it
+> opportunistically; which findings (if any) point at structural
+> issues that should grow into their own follow-up pass instead
+> of being fixed inline.
 >
 > **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/2026-05-05-invariants-compaction.md`,
-> then execute. Target: invariants.md ≤ 250 lines after the pass.
-> Pass-end ritual: one ADR codifying the split policy.
+> at `docs/superpowers/plans/YYYY-MM-DD-catkin-lint.md`, then
+> execute. Standard pass-end checklist applies.
 
-## Queued passes (after 9d.2a)
+## Queued passes (after 9d.3)
 
-- **9d.3** — golangci-lint on `internal/catkin/` with errcheck,
-  staticcheck, unused, gocritic, revive, errorlint, unparam,
-  nilerr.
 - **9d.4** — Live tmux verification at edge sizes. 80×24 with the
   popover open over a misspelling near the right edge and the
   bottom edge.

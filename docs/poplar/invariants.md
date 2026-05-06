@@ -128,13 +128,6 @@ the ADR(s) that justify them.
   + connect-test each account, sequentially), `path` (print
   resolved path), `discover-folders` (connect each account and
   merge default folder ordering into `[ui.folders]`).
-- `[ui] download_dir` is the attachment-save target. Resolved at
-  `LoadUI` time: explicit value (tilde-expanded via
-  `config.ExpandHome`) wins, else `$XDG_DOWNLOAD_DIR`, else
-  `<UserHomeDir>/Downloads`. Empty resolution surfaces as an
-  `ErrorMsg` on save (no silent fallback to `/tmp` or cwd).
-  `saveAttachmentCmd` `MkdirAll(0o700)` and resolves collisions via
-  `-N` suffix before the extension, capped at 999.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
@@ -157,40 +150,9 @@ the ADR(s) that justify them.
 
 ### Catkin
 
-- Catkin (`internal/catkin/`) is poplar's markdown-first
-  bubbletea editor, library-pure (`bubbletea`, `bubbles`,
-  `lipgloss`, `muesli/reflow`, `charmbracelet/x/ansi`,
-  `alecthomas/chroma/v2`). Wraps `bubbles/textarea` as
-  buffer/cursor but owns `View()`. Pure `Classify` + `Reflow`
-  (non-whitespace rune count for cursor remap); word nav
-  intercepts before textarea; 3-row scroll-off. Live styling
-  via Catkin-owned `Styles` (zero = plain): inline priority
-  code > bold-italic > bold > italic > link in iA-Writer
-  literal-delimiter shape; fences via chroma + viewport-bounded
-  `sync.Map`; soft-wrap via `ansi.Hardwrap`. `handleCommand`
-  runs ahead of word-nav (smart Enter, list indent,
-  `Ctrl+B/I/K/L/Q/Space`, counts). QoL: 50-step undo/redo with
-  intra-word coalescing, find/replace, markdown auto-pair
-  (suppressed in code), smart URL paste, bracket-match via
-  `walkSpans`, `DisplayMode` cycle on `Ctrl+\`.
-  ADR-0144, 0145, 0146, 0147.
-- Annotation pipeline: pure `Annotator` over raw-source byte
-  ranges; 350 ms idle tick + `srcGen` counter drops stale
-  results. `RenderAnnotated` splices via `ansiSpliceAtCol`
-  against unmodified `plain`. `insertCursorBlock` replaces the
-  rune at the cursor column, so column math matches styled
-  directly with no cursor-aware shift; an annotation enclosing
-  the cursor byte splits its splice around the cursor cell so
-  `█` survives. Spellcheck (first consumer): hand-rolled
-  `Speller` with `//go:embed`'d `en_US.txt` (~50k) +
-  `project.txt`; SymSpell delete-index built lazily under
-  `sync.Once`; `LoadUserWordlist` is missing-file-tolerant.
-  `spellcheckAnnotator` reuses `isWordRune`, masks fences
-  (marker lines too), inline code, link URLs, skips short
-  all-caps. Popover on plain `;` over a misspelling
-  (`Ctrl+;` is not deliverable); digit/arrow apply, `i`
-  session-ignores, `a` appends to `Model.userWordlistPath`;
-  cursor leaving auto-closes. ADR-0149, 0150, 0152.
+Auto-loaded via `.claude/rules/catkin-invariants.md` when
+editing `internal/catkin/` or planning passes. ADRs 0144–0147,
+0149, 0150, 0152.
 
 ## Mail model
 
@@ -223,119 +185,18 @@ the ADR(s) that justify them.
   `ErrAuth`, `NONEXISTENT` → `ErrNotFound`. The cache drainer's
   conflict matrix routes via `errors.Is` against these sentinels
   (no substring matching).
-- `mail.Attachment` carries `PartID`, `Filename`, `MIMEType` (lowercased
-  `type/subtype`, params dropped), `Size`, `ContentID` (unwrapped from
-  `<>`), and `Disposition`. PartID is protocol-native (JMAP `partId`,
-  IMAP section `"2"` / `"2.1"`) and opaque to consumers.
-  `mail.Backend.Attachments(uid)` returns metadata for non-body parts;
-  `FetchAttachment(uid, partID)` returns decoded bytes. JMAP impl
-  issues `Email/get` for `bodyStructure`, walks the part tree, and
-  caches partID→blobID per Backend instance for follow-up downloads
-  via `cli.Download`. IMAP impl issues `UID FETCH BODYSTRUCTURE` then
-  `UID FETCH BODY[<part>]`. Top-level `text/plain` and `text/html`
-  parts are dropped (displayable body, not attachments); the
-  classification rule lives in `mail.ClassifyDisposition` and trusts
-  `Content-Disposition` first, falls back to `ContentID != ""` →
-  inline, defaults to attachment.
+
+Attachment wire shape and the picker/viewer surface live in
+`.claude/rules/attachments-invariants.md` (auto-loaded on
+`internal/ui/attachpicker*.go` / `internal/ui/viewer*.go` and on
+plan/spec docs).
 
 ## Cache
 
-- `internal/cache` is the on-disk store. One `*cache.Account` per
-  email account; one SQLite database per account at
-  `$XDG_CACHE_HOME/poplar/<slug>/mail.db` (slug = lowercased
-  account name with non-`[a-z0-9-]` runs replaced by `-`).
-  `modernc.org/sqlite` driver, WAL mode, foreign_keys ON,
-  synchronous=NORMAL, busy_timeout=5000. Pool capped to
-  4 open / 2 idle.
-- Schema is versioned in `schema_version`; migrations run
-  transactionally on `Open`. v1 installs the full Cache I shape
-  (folders / messages / message_mailboxes / bodies / outbox per
-  spec §A.3). v2 adds `outbox.next_eligible_at` so the drainer's
-  pickup query filters the failed-row backoff window in SQL. v3
-  adds `folders.exists_total`/`unseen_total` for unread badges on
-  unopened folders. v4 drops `bodies.last_accessed` and the
-  `bodies_lru` index (LRU eviction replaced by size backstop). v5
-  adds the `attachments` table (metadata + lazy bytes; columns
-  `id`, `message`, `part_id`, `filename`, `mime_type`, `size`,
-  `content_id`, `disposition`, `bytes`, `fetched_at`; UNIQUE
-  `(message, part_id)`; index on `message`).
-- `mail.ChangeTracker` is the protocol-level change-detection
-  sibling of `mail.Backend`; both v1 backends implement it. On a
-  nil SyncToken both run an initial baseline pull. JMAP pages
-  `Email/query` filtered by inMailbox (page size 500), piggybacks
-  a sentinel-id `Email/get` per page to capture Email-type state
-  in the same roundtrip, and returns all current Email IDs as
-  Added; non-nil tokens route through account-scoped
-  `Email/changes` per RFC 8621 §4.3. IMAP scan-and-diff
-  (`UID SEARCH ALL` vs prior maxuid in SyncToken) handles nil
-  tokens implicitly; CONDSTORE-aware incremental deferred.
-  `Backend.FetchHeaders` chunks ids at 500 per `Email/get` to
-  stay under `maxObjectsInGet`. UIDVALIDITY change →
-  `mail.ErrCannotCalculateChanges` → cache re-anchor.
-- `(*Account).FetchBody(ctx, uid)` is write-through with lazy
-  population: cache miss → backend fetch → store; cache hit →
-  return stored bytes. `storeBody` runs a size backstop: when an
-  insert would push total stored size over `cache.Config.MaxSize`
-  (default 2 GB from `[cache] max-size` in `config.toml`), it
-  evicts the oldest messages by `messages.sent_at` inline.
-  `Backend.FetchBody` returns `([]byte, error)` — no `io.Reader`.
-- `(*Account).Attachments(ctx, uid)` and `FetchAttachment(ctx, uid,
-  partID)` mirror the body pattern. Metadata populates lazily on
-  first `Attachments` call (zero-length results are not cached);
-  bytes populate lazily on first `FetchAttachment`. Bytes eviction
-  runs a separate size backstop against
-  `cache.Config.MaxAttachmentSize` (default 2 GB from `[cache]
-  max-attachment-size` in `config.toml`), oldest by
-  `messages.sent_at`, clearing `bytes`/`fetched_at` while keeping
-  the metadata row. Bodies and attachments evict independently.
-- `cache.Slugify`, `cache.DBPath`, `cache.OpenDB` are exported
-  helpers used by `cmd/poplar/cache.go`; all path/DSN logic is
-  canonical here.
-- `(*Account).QueueOp(ctx, folder, msgUID, args)` is the single
-  forward write entry. `OpArgs` is a sealed sum (`MoveArgs`,
-  `FlagArgs`, `DestroyArgs`; reserved `SendArgs`, `AppendArgs`).
-  Inside one transaction: resolve folder → row id, insert
-  outbox row with `status='pending'` and `next_eligible_at=NULL`,
-  apply optimistic `ui_flags`/`ui_hide` to the message row,
-  commit, signal drainer. After the drainer marks a row
-  `conflict`, `(*Account).RetryOp(ctx, opID)` and
-  `(*Account).DiscardOp(ctx, opID)` are the user-initiated
-  resolution primitives. Retry resets `attempts = 0` and signals
-  the drainer. Discard reverts the optimistic flip via
-  `revertOptimisticTx` (mirror of `applyOptimisticTx`) and
-  deletes the outbox row in one transaction. Both reject
-  non-conflict rows with `ErrNotConflict`.
-- Cache exposes three read queries for the outbox-visibility
-  surfaces: `OutboxSummary` (grouped by kind/folder/status, where
-  folder is the destination for Move ops via `json_extract` and
-  empty for other kinds), `OutboxConflicts` (decoded error JSON,
-  ordered by enqueued_at ASC), `OutboxDepth` (counts per status).
-- Outbox status is the typed `cache.OpStatus` enum
-  (`OpPending`/`OpExecuting`/`OpDone`/`OpFailed`/`OpConflict`)
-  stored as the underlying string. Op kind is `cache.OpKind`
-  (`KindMove`/`KindFlag`/`KindDestroy`/`KindSend`/`KindAppend`).
-  `CacheEvent` carries both as typed values.
-- Drainer is per-account, single goroutine. Wakes on `drainSignal`
-  (every QueueOp) or a 5-second idle ticker. Conflict matrix:
-  success → `OpDone`; `ErrAuth` → `OpConflict auth-failure`;
-  `ErrNotFound` → idempotent `OpDone`; transient → `OpFailed`
-  with exponential `next_eligible_at`; `attempts >= max` →
-  `OpConflict max-attempts-exceeded`. Crash recovery resets
-  `OpExecuting`: idempotent kinds → `OpPending`;
-  `send`/`append` → `OpConflict crashed-mid-execute`.
-- Syncer/drainer coordination invariant (ADR-0113): the syncer's
-  upsert path uses an `EXISTS (… outbox_message …)` guard so an
-  in-flight pending/executing op's `ui_flags` is never reverted
-  by a concurrent server-side change.
-- `(*Account).Events()` is the drainer→UI signal channel
-  (buffered 32). Drops on backpressure are counted in
-  `(*Account).DroppedEvents()` so the UI can detect staleness
-  and reconcile via a full cache re-read.
-- `internal/backoff.Exponential(attempts, initial, max)` is the
-  shared exponential-backoff helper used by the cache drainer,
-  the JMAP push loop, and the IMAP idle reconnect loop. Returns
-  `initial` on attempt ≤ 1; doubles each subsequent attempt;
-  caps at `max`.
+The cache layer (per-account SQLite, schema versions, drainer,
+outbox state machine, body + attachment storage) lives in
+`.claude/rules/cache-invariants.md`. Auto-loaded when editing
+`internal/cache/`, `cmd/poplar/cache*.go`, or planning passes.
 
 ## Build & verification
 
@@ -398,3 +259,4 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33, T34, T35 (T33–T35 added Pass 8.11 after a tree-wide cleanup) | 0141, 0142, 0148 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
 | Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; 9d.1 cleanup | 0144, 0145, 0146, 0147, 0149, 0150, 0151, 0152 |
+| Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
