@@ -1,13 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 9e next — `internal/compose/` Editor interface + CatkinEditor adapter.
+**Current pass:** Pass 9f next — mail backend Send + Append.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 9d.4 | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep → popover overlay padding (ADRs 0001–0155) | done |
-| 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
+| 1 – 9e | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep → popover overlay padding → compose foundation (ADRs 0001–0156) | done |
 | 9f | Mail backend Send + Append — JMAP submission, IMAP+SMTP, `[account.smtp]` config | pending |
 | 9g | Cache outbox Send/Append dispatch | pending |
 | 9h | ComposeTab UI + `c` wiring + tidy seam | pending |
@@ -21,34 +20,39 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9e)
+## Next starter prompt (Pass 9f)
 
-> **Goal.** Stand up `internal/compose/` — the message-composition
-> layer. Define an `Editor` interface, wrap Catkin as the first
-> implementation (`CatkinEditor`), introduce a `Draft` value type,
-> and implement `AssembleMIME` plus `Seed{Reply,ReplyAll,Forward}`.
+> **Goal.** Add `Send` and `Append` to `mail.Backend` and implement
+> them on both v1 backends. JMAP uses `Email/submission` plus
+> `Email/import`. Generic IMAP grows a third connection — an SMTP
+> client via `emersion/go-smtp`. Add the `[account.smtp]` config
+> block with provider-preset defaults.
 >
-> **Scope.** New package `internal/compose/`. No UI wiring yet
-> (that's Pass 9h). No backend Send (Pass 9f). No outbox dispatch
-> (Pass 9g). The MIME assembly path stays inside the package and
-> writes only to a `Draft`.
+> **Scope.** `internal/mail/backend.go` (interface), `internal/mailjmap/`,
+> `internal/mailimap/` (SMTP sibling, third connection), `internal/config/`
+> (`[account.smtp]`, provider preset SMTP defaults), `poplar config check`
+> (SMTP probe). No cache outbox dispatch (Pass 9g). No ComposeTab UI
+> (Pass 9h). The current `Backend.Send(from, rcpts, body io.Reader)`
+> shape is reshaped to take pre-assembled MIME bytes from
+> `compose.AssembleMIME`.
 >
-> **Settled.** Catkin is the editor (ADR-0146 / 0147). Backends
-> `Append`/`Send` arrive in Pass 9f. Outbox already carries Op
-> sums (ADR-0114).
+> **Settled.** Compose foundation landed (ADR-0156). SMTP via
+> `emersion/go-smtp` with the same backoff/reconnect rules as the
+> IMAP idle connection (ADR-0107 lineage). Auth via `password-cmd`,
+> XOAUTH2 mirror for Gmail (ADR-0102 / ADR-0108). JMAP `Email/submission`
+> collapses Send + Append-to-Sent atomically; IMAP path queues a
+> separate `Append` for the Sent copy. Provider presets fill SMTP
+> defaults at decode time (mirrors the IMAP preset path).
 >
-> **Still open — brainstorm before coding:** Editor interface
-> shape (sync surface vs. tea.Model surface); Draft layout
-> (headers + body in markdown vs. headers + body parts);
-> reply quoting strategy (top-quote vs. inline vs. configurable);
-> attachment threading from `mail.Attachment` into the draft.
+> **Still open — brainstorm before coding:** Backend.Send signature
+> after the reshape (raw bytes plus envelope, or accept a `Draft`?);
+> SMTP connection lifetime (lazy on first Send vs. eager on Connect);
+> connect-test surface in `poplar config check` (sequential vs.
+> parallel with IMAP/JMAP probes).
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-compose-foundation.md`,
-> then implement. Pass size budget applies — stop at the
-> Editor + CatkinEditor + Draft + AssembleMIME + Seed surface,
-> defer ComposeTab UI to Pass 9h. Standard pass-end checklist
-> applies.
+> **Approach.** Brainstorm the open questions, write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-backend-send.md`, then implement.
+> Pass size budget applies. Standard pass-end checklist applies.
 
 ## Queued
 

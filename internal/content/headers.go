@@ -41,13 +41,13 @@ func ParseHeaders(raw string) ParsedHeaders {
 
 		switch key {
 		case "from":
-			h.From = parseAddressList(val)
+			h.From = ParseAddressList(val)
 		case "to":
-			h.To = parseAddressList(val)
+			h.To = ParseAddressList(val)
 		case "cc":
-			h.Cc = parseAddressList(val)
+			h.Cc = ParseAddressList(val)
 		case "bcc":
-			h.Bcc = parseAddressList(val)
+			h.Bcc = ParseAddressList(val)
 		case "date":
 			h.Date = val
 		case "subject":
@@ -58,8 +58,8 @@ func ParseHeaders(raw string) ParsedHeaders {
 	return h
 }
 
-// parseAddressList parses a comma-separated list of RFC 5322 addresses.
-func parseAddressList(val string) []Address {
+// ParseAddressList parses a comma-separated list of RFC 5322 addresses.
+func ParseAddressList(val string) []Address {
 	addrs, err := mail.ParseAddressList(val)
 	if err != nil {
 		// Fall back to treating the whole value as a single bare email.

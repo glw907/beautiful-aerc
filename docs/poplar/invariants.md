@@ -154,6 +154,26 @@ Auto-loaded via `.claude/rules/catkin-invariants.md` when
 editing `internal/catkin/` or planning passes. ADRs 0144–0147,
 0149, 0150, 0152.
 
+### Compose
+
+- `internal/compose/` is the outbound-mail surface. UI-free package
+  owning the `Editor` seam (bubbletea sub-model contract used by
+  ComposeTab and the future v1.1 neovim adapter), `CatkinEditor`
+  (v1's only Editor impl, wraps `catkin.Model`), the `Draft` value
+  type (headers + raw markdown body + filesystem attachment paths),
+  `AssembleMIME(d, now)` (pure function emitting
+  multipart/alternative text/plain + text/html via
+  `filter.MarkdownToHTML`, wrapped in multipart/mixed when
+  attachments are present), and `SeedReply` /
+  `SeedReplyAll(parent, body, self)` / `SeedForward`. Reply seeders
+  parse Message-Id and References from the parent's raw RFC 5322
+  bytes (no `mail.MessageInfo` wire extension); quoting is
+  depth-preserving (`> ` runs deepen). `gomail.Address` is the
+  address type on Drafts; `content.ParseAddressList` is the shared
+  RFC 5322 list parser. `internal/filter` gained `MarkdownBody` /
+  `MarkdownToHTML` as the shared goldmark entry points (Linkify +
+  Table extensions).
+
 ## Mail model
 
 - Folder classification is a pure function:
@@ -259,4 +279,5 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33, T34, T35 (T33–T35 added Pass 8.11 after a tree-wide cleanup) | 0141, 0142, 0148 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
 | Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; 9d.1 cleanup; 9d.3 targeted lint sweep; 9d.4 popover overlay padding | 0144, 0145, 0146, 0147, 0149, 0150, 0151, 0152, 0154, 0155 |
+| Compose foundation — Editor interface + CatkinEditor adapter, Draft, AssembleMIME (multipart/alternative via shared filter.MarkdownToHTML, multipart/mixed when attachments), Seed{Reply,ReplyAll,Forward} parsing parent headers from raw bytes; content.ParseAddressList exported | 0156 |
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
