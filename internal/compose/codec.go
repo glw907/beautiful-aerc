@@ -11,8 +11,8 @@ import (
 
 // gobDraft is the gob-serializable shape of Draft. gomail.Address
 // is a type alias for net/mail.Address (two exported string fields)
-// and encodes cleanly with gob; json.Marshal mishandles non-ASCII
-// Name values — gob avoids that roundtrip failure.
+// and encodes cleanly with gob. json.Marshal mishandles non-ASCII
+// Name values, so gob avoids that roundtrip failure.
 //
 // Parallel name/addr slices avoid the gobAddress mirror type that
 // would otherwise be required to satisfy gob's exported-field rule

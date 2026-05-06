@@ -25,6 +25,11 @@ type ConfirmRequest struct {
 // its own pending-confirm state.
 type ConfirmModalYesMsg struct{}
 
+// ConfirmModalNoMsg fires when the user presses 'n' on an open ConfirmModal,
+// explicitly rejecting the action. App may use this to distinguish an active
+// rejection from a neutral Esc-dismiss.
+type ConfirmModalNoMsg struct{}
+
 // ConfirmModalClosedMsg signals the modal was dismissed without confirmation.
 type ConfirmModalClosedMsg struct{}
 
@@ -38,8 +43,9 @@ type ConfirmModal struct {
 }
 
 type confirmKeys struct {
-	Yes     key.Binding
-	Dismiss key.Binding
+	Yes key.Binding
+	No  key.Binding
+	Esc key.Binding
 }
 
 // NewConfirmModal returns a closed modal.
@@ -47,8 +53,9 @@ func NewConfirmModal(styles Styles) ConfirmModal {
 	return ConfirmModal{
 		styles: styles,
 		keys: confirmKeys{
-			Yes:     key.NewBinding(key.WithKeys("y")),
-			Dismiss: key.NewBinding(key.WithKeys("n", "esc")),
+			Yes: key.NewBinding(key.WithKeys("y")),
+			No:  key.NewBinding(key.WithKeys("n")),
+			Esc: key.NewBinding(key.WithKeys("esc")),
 		},
 	}
 }
@@ -85,7 +92,12 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 			func() tea.Msg { return ConfirmModalYesMsg{} },
 			func() tea.Msg { return ConfirmModalClosedMsg{} },
 		)
-	case key.Matches(keyMsg, m.keys.Dismiss):
+	case key.Matches(keyMsg, m.keys.No):
+		return m, tea.Batch(
+			func() tea.Msg { return ConfirmModalNoMsg{} },
+			func() tea.Msg { return ConfirmModalClosedMsg{} },
+		)
+	case key.Matches(keyMsg, m.keys.Esc):
 		return m, func() tea.Msg { return ConfirmModalClosedMsg{} }
 	}
 	// q is swallowed, consistent with help/link/move picker overlays.

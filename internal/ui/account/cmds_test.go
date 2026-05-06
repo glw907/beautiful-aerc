@@ -48,8 +48,8 @@ func (b *blockingBackend) Destroy(_ []mail.UID) error        { return nil }
 
 func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
 
-func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error                    { return nil }
-func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error            { return nil }
+func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
+func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
 func (b *blockingBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
 	return "", mail.ErrUnsupported
 }

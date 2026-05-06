@@ -4,6 +4,7 @@ package ui
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -94,6 +95,14 @@ type outboxConflictsMsg struct {
 type conflictResolvedMsg struct {
 	opID int64
 	err  error
+}
+
+// openDraftMsg is returned by openDraftFromServerUIDCmd when a DraftRow is
+// resolved (either from the local cache or freshly reconstructed). Draft is
+// the already-decoded value so the App handler is decode-free.
+type openDraftMsg struct {
+	row   cache.DraftRow
+	draft compose.Draft
 }
 
 func refreshOutboxDepthCmd(c *cache.Account) tea.Cmd {
@@ -276,6 +285,127 @@ func envelopeFromDraft(d compose.Draft) mail.Envelope {
 		env.Rcpts = append(env.Rcpts, a.Address)
 	}
 	return env
+}
+
+// resolveDraftsFolder returns the backend folder name for the Drafts
+// canonical, or "" if none can be identified.
+func resolveDraftsFolder(acct *cache.Account) string {
+	classified, err := acct.ListFolders()
+	if err != nil {
+		return ""
+	}
+	for _, cf := range classified {
+		if cf.Canonical == "Drafts" {
+			return cf.Folder.Name
+		}
+	}
+	for _, cf := range classified {
+		if strings.EqualFold(cf.Folder.Name, "Drafts") {
+			return cf.Folder.Name
+		}
+	}
+	return ""
+}
+
+// enqueuePushDraftCmd forwards a push request from compose to the outbox.
+func enqueuePushDraftCmd(acct *cache.Account, draftID, folder string, mime []byte, prevUID mail.UID) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		if _, err := acct.QueuePushDraft(ctx, draftID, folder, mime, prevUID); err != nil {
+			return ErrorMsg{Op: "queue push draft", Err: err}
+		}
+		return nil
+	}
+}
+
+// discardDraftCmd deletes the local draft row and, when prevUID is set,
+// queues a server-side Destroy so the stale image is removed.
+func discardDraftCmd(acct *cache.Account, draftID, draftsFolder string, prevUID mail.UID) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		if prevUID != "" && draftsFolder != "" {
+			if _, err := acct.QueueOp(ctx, draftsFolder, prevUID, cache.DestroyArgs{}); err != nil {
+				return ErrorMsg{Op: "queue destroy draft", Err: err}
+			}
+		}
+		if err := acct.DeleteDraft(ctx, draftID); err != nil {
+			return ErrorMsg{Op: "delete draft", Err: err}
+		}
+		return nil
+	}
+}
+
+// upsertAndPushDraftCmd persists draft payload and enqueues a server push.
+// Used by the save-on-close path.
+func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d compose.Draft, prevUID mail.UID) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		payload, err := compose.EncodeDraft(d)
+		if err != nil {
+			return ErrorMsg{Op: "encode draft", Err: err}
+		}
+		if err := acct.UpsertDraft(ctx, draftID, payload); err != nil {
+			return ErrorMsg{Op: "save draft", Err: err}
+		}
+		mime, err := compose.AssembleMIME(d, time.Now())
+		if err != nil {
+			return ErrorMsg{Op: "assemble draft MIME", Err: err}
+		}
+		if _, err := acct.QueuePushDraft(ctx, draftID, draftsFolder, mime, prevUID); err != nil {
+			return ErrorMsg{Op: "queue push draft", Err: err}
+		}
+		return nil
+	}
+}
+
+// openDraftFromServerUIDCmd looks up the local DraftRow for uid. When
+// found it emits openDraftMsg with that row. When not found it fetches
+// the raw bytes from the cache (body fetch), parses them via
+// ParseDraftMIME, and emits openDraftMsg with a freshly allocated row
+// so the App can UpsertDraft and open compose. A fetch error emits
+// uicore.ErrorMsg.
+func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		row, err := acct.LookupDraftByServerUID(ctx, uid)
+		if err == nil {
+			d, derr := compose.DecodeDraft(row.Payload)
+			if derr != nil {
+				return uicore.ErrorMsg{Op: "decode draft", Err: derr}
+			}
+			return openDraftMsg{row: row, draft: d}
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return uicore.ErrorMsg{Op: "open draft", Err: err}
+		}
+		// No local row. Reconstruct from the server image.
+		raw, err := acct.FetchBody(uid)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "fetch draft body", Err: err}
+		}
+		d, err := compose.ParseDraftMIME(raw)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "parse draft", Err: err}
+		}
+		payload, err := compose.EncodeDraft(d)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "encode draft", Err: err}
+		}
+		newID := uicompose.AllocDraftID()
+		if err := acct.UpsertDraft(ctx, newID, payload); err != nil {
+			return uicore.ErrorMsg{Op: "save draft", Err: err}
+		}
+		if err := acct.MarkDraftPushed(ctx, newID, uid, draftsFolder); err != nil {
+			return uicore.ErrorMsg{Op: "mark draft pushed", Err: err}
+		}
+		row = cache.DraftRow{
+			DraftID:      newID,
+			ServerUID:    uid,
+			ServerFolder: draftsFolder,
+			Payload:      payload,
+		}
+		return openDraftMsg{row: row, draft: d}
+	}
 }
 
 // resolveSentFolder picks the Sent folder for outbound mail from the

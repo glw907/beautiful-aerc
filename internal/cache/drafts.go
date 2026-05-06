@@ -24,6 +24,42 @@ type DraftRow struct {
 	LastPushedAt time.Time
 }
 
+// scanDraftRow reads one DraftRow from a database scanner (sql.Row or
+// sql.Rows). The caller must supply a scanner that returns the columns:
+// draft_id, server_uid, server_folder, payload, dirty, created_at,
+// updated_at, last_pushed_at. Both ListDrafts and
+// LookupDraftByServerUID use this column order.
+func scanDraftRow(scan func(...any) error) (DraftRow, error) {
+	var r DraftRow
+	var serverUID, serverFolder string
+	var dirtyInt int
+	var created, updated, pushed int64
+	if err := scan(&r.DraftID, &serverUID, &serverFolder, &r.Payload,
+		&dirtyInt, &created, &updated, &pushed); err != nil {
+		return DraftRow{}, err
+	}
+	r.ServerUID = mail.UID(serverUID)
+	r.ServerFolder = serverFolder
+	r.Dirty = dirtyInt != 0
+	r.CreatedAt = time.Unix(0, created)
+	r.UpdatedAt = time.Unix(0, updated)
+	if pushed != 0 {
+		r.LastPushedAt = time.Unix(0, pushed)
+	}
+	return r, nil
+}
+
+// LookupDraftByServerUID returns the draft row whose server_uid matches uid.
+// Returns sql.ErrNoRows when absent.
+func (a *Account) LookupDraftByServerUID(ctx context.Context, uid mail.UID) (DraftRow, error) {
+	row := a.db.QueryRowContext(ctx, `
+        SELECT draft_id, COALESCE(server_uid, ''), COALESCE(server_folder, ''),
+               payload, dirty, created_at, updated_at,
+               COALESCE(last_pushed_at, 0)
+        FROM drafts WHERE server_uid = ?`, string(uid))
+	return scanDraftRow(row.Scan)
+}
+
 // UpsertDraft writes payload for draftID, marking dirty and bumping
 // updated_at. Creates the row on first call. Last writer wins.
 // Caller is the compose autosave timer.
@@ -70,21 +106,9 @@ func (a *Account) ListDrafts(ctx context.Context) ([]DraftRow, error) {
 	defer rows.Close()
 	var out []DraftRow
 	for rows.Next() {
-		var r DraftRow
-		var serverUID, serverFolder string
-		var dirtyInt int
-		var created, updated, pushed int64
-		if err := rows.Scan(&r.DraftID, &serverUID, &serverFolder,
-			&r.Payload, &dirtyInt, &created, &updated, &pushed); err != nil {
+		r, err := scanDraftRow(rows.Scan)
+		if err != nil {
 			return nil, err
-		}
-		r.ServerUID = mail.UID(serverUID)
-		r.ServerFolder = serverFolder
-		r.Dirty = dirtyInt != 0
-		r.CreatedAt = time.Unix(0, created)
-		r.UpdatedAt = time.Unix(0, updated)
-		if pushed != 0 {
-			r.LastPushedAt = time.Unix(0, pushed)
 		}
 		out = append(out, r)
 	}
@@ -100,7 +124,7 @@ func (a *Account) DeleteDraft(ctx context.Context, draftID string) error {
 }
 
 // MarkDraftPushed records a successful PushDraft. The drainer calls
-// this in its post-success path; clears dirty and records the server
+// this in its post-success path. Clears dirty and records the server
 // coordinates.
 func (a *Account) MarkDraftPushed(ctx context.Context, draftID string, serverUID mail.UID, serverFolder string) error {
 	res, err := a.db.ExecContext(ctx, `

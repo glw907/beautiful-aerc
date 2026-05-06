@@ -13,9 +13,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
-	"github.com/google/uuid"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/ui/uicore"
+	"github.com/google/uuid"
 )
 
 // CacheStore is the subset of cache.Account compose needs. The
@@ -109,8 +109,8 @@ func New(styles Styles, self string) *Model {
 }
 
 // Open returns a Model wired to an existing draftID, with d pre-seeded.
-// localDirty and pushDirty start cleared — the draft is already in the
-// cache and the server image is current.
+// localDirty and pushDirty start cleared because the draft is already in
+// the cache and the server image is current.
 func Open(styles Styles, self string, draftID string, d mailcompose.Draft) *Model {
 	c := newModel(styles, self)
 	c.draftID = draftID
@@ -160,7 +160,7 @@ func runUpsert(id string, cache CacheStore, d mailcompose.Draft) tea.Msg {
 }
 
 // currentDraft snapshots the current inputs as a Draft without address
-// validation — partial input is normal during editing.
+// validation. Partial input is normal during editing.
 func (c *Model) currentDraft() mailcompose.Draft {
 	return mailcompose.Draft{
 		From:    gomail.Address{Address: c.from},
@@ -454,6 +454,31 @@ func (c *Model) IsDirty() bool {
 	return c.to.Value() != "" || c.cc.Value() != "" || c.bcc.Value() != "" ||
 		c.subject.Value() != "" || c.editor.Value() != ""
 }
+
+// CurrentDraft returns the draft built from the current inputs without
+// address validation. Partial input (incomplete addresses, empty fields)
+// is preserved as-is. Use Draft for the send path where valid addresses
+// are required.
+func (c *Model) CurrentDraft() mailcompose.Draft { return c.currentDraft() }
+
+// HasContent reports whether any meaningful content has been entered,
+// including attachment paths (checked on Draft). It mirrors IsDirty but
+// is the gate for the save-on-close path: an empty compose opened for a
+// Drafts-row can be discarded silently without a confirm.
+func (c *Model) HasContent() bool {
+	d := c.currentDraft()
+	return len(d.To) > 0 || len(d.Cc) > 0 || len(d.Bcc) > 0 ||
+		d.Subject != "" || d.Body != "" || len(d.Attachments) > 0
+}
+
+// PrevServerUID returns the server UID of the last pushed image, or ""
+// if the draft has never been pushed. App uses this to queue a Destroy
+// on the stale server copy when discarding or sending.
+func (c *Model) PrevServerUID() string { return c.prevServerUID }
+
+// AllocDraftID returns a fresh draft UUID. App calls this when
+// reconstructing a server-side draft that has no matching local row.
+func AllocDraftID() string { return uuid.NewString() }
 
 // Seed populates the inputs from d.
 func (c *Model) Seed(d mailcompose.Draft) {

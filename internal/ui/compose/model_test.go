@@ -241,13 +241,13 @@ func TestModel_AutosaveDebounce(t *testing.T) {
 	c.localDirty = true
 	c.lastEditAt = time.Now().Add(-2 * autosaveDelay)
 
-	// autosave tick fires; debounce condition is met.
+	// Autosave tick fires. Debounce condition is met.
 	next, _ := c.Update(autosaveTickMsg{})
 	if next.localDirty {
 		t.Fatalf("localDirty should be cleared after autosave tick")
 	}
 
-	// Drive the upsert directly via runUpsert — same logic the Cmd closure calls.
+	// Drive the upsert directly via runUpsert. Same logic as the Cmd closure.
 	msg := runUpsert(next.draftID, cache, next.currentDraft())
 	persisted, ok := msg.(DraftPersistedMsg)
 	if !ok {
@@ -260,7 +260,7 @@ func TestModel_AutosaveDebounce(t *testing.T) {
 		t.Fatalf("cache.upsertCalls = %d, want 1", cache.upsertCalls)
 	}
 	if len(cache.lastPayload) == 0 {
-		t.Fatalf("cache.lastPayload is empty — no bytes written")
+		t.Fatalf("cache.lastPayload is empty; no bytes written")
 	}
 }
 
@@ -269,7 +269,7 @@ func TestModel_AutosaveNoopBeforeDebounce(t *testing.T) {
 	c := newTestModel(t)
 	c.SetCache(cache)
 
-	// dirty but lastEditAt is recent — debounce not satisfied.
+	// Dirty but lastEditAt is recent. Debounce not satisfied.
 	c.localDirty = true
 	c.lastEditAt = time.Now()
 

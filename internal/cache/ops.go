@@ -160,10 +160,9 @@ func (a *Account) QueueAppend(ctx context.Context, folder string, flag mail.Flag
 }
 
 // QueuePushDraft enqueues a PushDraft op carrying mime as the
-// assembled payload. prevUID is empty on first push for a draft
-// and the previous server_uid on subsequent pushes; the backend
-// destroys the prior image as part of the same op when prevUID
-// is non-empty.
+// assembled payload. prevUID is empty on first push and holds the
+// prior server_uid on subsequent pushes. The backend destroys the
+// prior image as part of the same op when prevUID is non-empty.
 func (a *Account) QueuePushDraft(ctx context.Context, draftID, folder string, mime []byte, prevUID mail.UID) (int64, error) {
 	return a.insertFolderOp(ctx, folder,
 		PushDraftArgs{DraftID: draftID, PrevServerUID: prevUID}, mime)

@@ -20,8 +20,8 @@ var ErrAuth = errors.New("mail: authentication failed")
 var ErrNotFound = errors.New("mail: not found")
 
 // ErrUnsupported signals that the backend does not implement the
-// operation. Not routed through the drainer conflict matrix — callers
-// must gate on capability (e.g. IsJMAP) before queuing.
+// operation. Callers must gate on capability (e.g. IsJMAP) before
+// queuing. Not routed through the drainer conflict matrix.
 var ErrUnsupported = errors.New("mail: operation unsupported by backend")
 
 // SearchCriteria defines message search parameters.
@@ -93,7 +93,7 @@ type Backend interface {
 	// PushDraft writes mime to folder as a draft, destroying the prior
 	// server image identified by prevUID in the same operation when
 	// prevUID is non-empty. Returns the new server UID. JMAP batches
-	// import + destroy into one request; IMAP is not atomic and may
+	// import + destroy into one request. IMAP is not atomic and may
 	// orphan the prior image. Returns ErrUnsupported for backends that
 	// do not implement server-side draft persistence.
 	PushDraft(folder string, mime []byte, prevUID UID) (UID, error)

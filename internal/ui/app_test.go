@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/cache"
+	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
@@ -1186,6 +1187,15 @@ func newTestApp(t *testing.T) App {
 	return NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
 }
 
+// newJMAPTestApp is like newTestApp but with IsJMAP() = true.
+func newJMAPTestApp(t *testing.T) (App, *mail.MockBackend) {
+	t.Helper()
+	backend := mail.NewMockBackend()
+	backend.SetJMAP(true)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	return app, backend
+}
+
 // blockingBackend is a minimal mail.Backend stub. Methods are no-ops
 // returning zero values. FetchBody blocks on release.
 type blockingBackend struct {
@@ -1213,8 +1223,8 @@ func (b *blockingBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) 
 func (b *blockingBackend) Move(_ []mail.UID, _ string) error            { return nil }
 func (b *blockingBackend) Destroy(_ []mail.UID) error                   { return nil }
 func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
-func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error                    { return nil }
-func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error            { return nil }
+func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
+func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
 func (b *blockingBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
 	return "", mail.ErrUnsupported
 }
@@ -1550,5 +1560,108 @@ func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
 	}
 	if app.pendingComposeDiscard {
 		t.Fatal("pendingComposeDiscard should be cleared after No")
+	}
+}
+
+// TestApp_FreshComposeAllocatesDraftID verifies that pressing c on a JMAP
+// account opens compose with a non-empty draftID and wires the cache store.
+func TestApp_FreshComposeAllocatesDraftID(t *testing.T) {
+	app, _ := newJMAPTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if app.compose == nil {
+		t.Fatal("compose should be open after c")
+	}
+	if app.compose.DraftID() == "" {
+		t.Error("compose DraftID should be non-empty")
+	}
+}
+
+// TestApp_DraftsEnterLooksUpLocalRow verifies that pressing Enter in the
+// Drafts folder on a JMAP account emits openDraftFromServerUIDCmd which
+// resolves to an openDraftMsg carrying the seeded DraftRow.
+func TestApp_DraftsEnterLooksUpLocalRow(t *testing.T) {
+	app, _ := newJMAPTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	drainApp(t, &app, app.Init())
+
+	ctx := context.Background()
+	acct := app.acct.Cache()
+
+	// Seed a local draft tied to server UID "1" (first UID MockBackend returns).
+	d := compose.Draft{Subject: "draft subject", Body: "draft body"}
+	payload, err := compose.EncodeDraft(d)
+	if err != nil {
+		t.Fatalf("EncodeDraft: %v", err)
+	}
+	const draftID = "d-test-known"
+	if err := acct.UpsertDraft(ctx, draftID, payload); err != nil {
+		t.Fatalf("UpsertDraft: %v", err)
+	}
+	if err := acct.MarkDraftPushed(ctx, draftID, "1", "Drafts"); err != nil {
+		t.Fatalf("MarkDraftPushed: %v", err)
+	}
+
+	// Navigate to Drafts via D key, then inject a synthetic FolderLoadedMsg
+	// so the message list is populated without relying on async cache sync.
+	app, jumpCmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	drainApp(t, &app, jumpCmd)
+
+	if app.acct.CurrentFolderName() != "Drafts" {
+		t.Fatalf("current folder = %q, want Drafts", app.acct.CurrentFolderName())
+	}
+
+	// Populate the message list with a single message whose UID matches the
+	// seeded server UID "1", bypassing the async cache sync.
+	draftMsg := mail.MessageInfo{UID: "1", ThreadID: "1", Subject: "draft subject"}
+	app, _ = app.Update(account.FolderLoadedMsg{Name: "Drafts", Msgs: []mail.MessageInfo{draftMsg}, Total: 1})
+
+	msg, ok := app.acct.SelectedMessage()
+	if !ok {
+		t.Fatal("no message selected after FolderLoadedMsg injection")
+	}
+	if msg.UID != "1" {
+		t.Fatalf("selected UID = %q, want 1", msg.UID)
+	}
+
+	// Press Enter: should return openDraftFromServerUIDCmd.
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter in Drafts should return a cmd")
+	}
+	result := cmd()
+	odm, ok := result.(openDraftMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want openDraftMsg", result)
+	}
+	if odm.row.DraftID != draftID {
+		t.Errorf("DraftID = %q, want %q", odm.row.DraftID, draftID)
+	}
+}
+
+// TestApp_EscOnDirtyJMAPComposeOpensSaveDraftModal verifies that on a JMAP
+// account, a CancelMsg with Dirty=true opens the Save? ConfirmModal and sets
+// pendingComposeSave.
+func TestApp_EscOnDirtyJMAPComposeOpensSaveDraftModal(t *testing.T) {
+	app, _ := newJMAPTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if app.compose == nil {
+		t.Fatal("setup: compose should be open after c")
+	}
+	app.compose.SetBody("draft content")
+
+	app, _ = app.Update(uicompose.CancelMsg{Dirty: true})
+	if !app.confirm.IsOpen() {
+		t.Fatal("dirty cancel on JMAP should open ConfirmModal")
+	}
+	if !app.pendingComposeSave {
+		t.Fatal("pendingComposeSave should be set")
+	}
+	if app.pendingComposeDiscard {
+		t.Fatal("pendingComposeDiscard should not be set on JMAP path")
+	}
+	if app.compose == nil {
+		t.Fatal("compose should remain open while confirm is pending")
 	}
 }

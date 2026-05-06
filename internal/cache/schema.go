@@ -183,7 +183,7 @@ func migrateV6(tx *sql.Tx) error {
 }
 
 // migrateV7 adds the drafts table. The local row is the high-frequency
-// edit buffer for compose; server_uid points at the JMAP/IMAP image
+// edit buffer for compose. server_uid points at the JMAP/IMAP image
 // once a PushDraftOp has succeeded. Drafts with server_uid == NULL are
 // local-only (never pushed yet, e.g., offline-created). server_uid and
 // server_folder are paired by a CHECK: both NULL (local-only) or both

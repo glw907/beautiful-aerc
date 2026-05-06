@@ -15,7 +15,7 @@ import (
 // ParseDraftMIME reverses AssembleMIME for the fields a Draft carries.
 // It walks the message tree to extract the text/plain part as the body;
 // HTML siblings are dropped (re-assembled from markdown on next push).
-// Attachments come back as filenames only — the outbox payload carries
+// Attachments come back as filenames only. The outbox payload carries
 // the full bytes, so a draft round-trip via the local store loses
 // nothing the user can see in compose.
 func ParseDraftMIME(raw []byte) (Draft, error) {
@@ -72,7 +72,7 @@ func ParseDraftMIME(raw []byte) (Draft, error) {
 				if err != nil {
 					return d, fmt.Errorf("read body: %w", err)
 				}
-				// MIME wire format uses CRLF; the Draft body is markdown source
+				// MIME wire format uses CRLF. The Draft body is markdown source
 				// with bare LF. Strip CR so the round-trip is transparent.
 				d.Body = strings.ReplaceAll(string(body), "\r\n", "\n")
 			}

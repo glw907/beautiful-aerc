@@ -78,7 +78,8 @@ type App struct {
 	tidy                  TidyFn
 	theme                 *theme.CompiledTheme
 	compose               *uicompose.Model
-	pendingComposeDiscard bool
+	pendingComposeSave    bool // Save? modal is open for a dirty compose
+	pendingComposeDiscard bool // legacy: clean-close confirm (IMAP path only)
 	width                 int
 	height                int
 }
@@ -255,6 +256,21 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case ConfirmModalYesMsg:
 		switch {
+		case m.pendingComposeSave:
+			m.pendingComposeSave = false
+			if m.compose == nil {
+				return m, nil
+			}
+			// Save path: persist current draft and queue a server push.
+			draftsFolder := resolveDraftsFolder(m.acct.Cache())
+			d := m.compose.CurrentDraft()
+			draftID := m.compose.DraftID()
+			prevUID := mail.UID(m.compose.PrevServerUID())
+			m.compose = nil
+			if draftsFolder != "" {
+				return m, upsertAndPushDraftCmd(m.acct.Cache(), draftID, draftsFolder, d, prevUID)
+			}
+			return m, nil
 		case m.pendingComposeDiscard:
 			m.pendingComposeDiscard = false
 			m.compose = nil
@@ -268,7 +284,26 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, nil
 
+	case ConfirmModalNoMsg:
+		if m.pendingComposeSave {
+			m.pendingComposeSave = false
+			if m.compose != nil {
+				draftID := m.compose.DraftID()
+				prevUID := mail.UID(m.compose.PrevServerUID())
+				draftsFolder := resolveDraftsFolder(m.acct.Cache())
+				m.compose = nil
+				return m, discardDraftCmd(m.acct.Cache(), draftID, draftsFolder, prevUID)
+			}
+		}
+		return m, nil
+
 	case ConfirmModalClosedMsg:
+		// When the save-draft modal was Esc'd, keep compose mounted.
+		if m.pendingComposeSave {
+			m.pendingComposeSave = false
+			m.confirm = m.confirm.Close()
+			return m, nil
+		}
 		m.pendingComposeDiscard = false
 		m.pendingEmpty = pendingEmptyConfirm{}
 		m.confirm = m.confirm.Close()
@@ -467,8 +502,15 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		d := msg.Draft
 		tidy := m.tidy
 		acct := m.acct.Cache()
+		cmds := []tea.Cmd{composeSendCmd(acct, sent, tidy, d)}
+		if m.compose != nil && m.compose.DraftID() != "" && m.acct.Backend().IsJMAP() {
+			draftID := m.compose.DraftID()
+			prevUID := mail.UID(m.compose.PrevServerUID())
+			draftsFolder := resolveDraftsFolder(acct)
+			cmds = append(cmds, discardDraftCmd(acct, draftID, draftsFolder, prevUID))
+		}
 		m.compose = nil
-		return m, composeSendCmd(acct, sent, tidy, d)
+		return m, tea.Batch(cmds...)
 
 	case uicompose.SentMsg:
 		hadBanner := m.hasBannerRow()
@@ -494,16 +536,43 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
 
+	case openDraftMsg:
+		// Opened from Drafts-folder Enter. Wire cache/target then open.
+		w, h := m.rightPaneSize()
+		row := msg.row
+		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft)
+		c.SetSize(w, h)
+		c.SetCache(m.acct.Cache())
+		c.SetDraftTarget(row.ServerFolder, string(row.ServerUID))
+		m.compose = c
+		return m, m.compose.Init()
+
+	case uicompose.EnqueuePushDraftMsg:
+		return m, enqueuePushDraftCmd(m.acct.Cache(), msg.DraftID, msg.Folder, msg.MIME, mail.UID(msg.PrevServerUID))
+
 	case uicompose.CancelMsg:
+		if m.compose == nil {
+			return m, nil
+		}
 		if !msg.Dirty {
 			m.compose = nil
 			return m, nil
 		}
-		m.confirm = m.confirm.Open(ConfirmRequest{
-			Title: "Discard draft?",
-			Body:  "Your draft will be lost.",
-		})
-		m.pendingComposeDiscard = true
+		if m.acct.Backend().IsJMAP() {
+			// Dirty draft on JMAP: offer save / discard / keep-editing.
+			m.confirm = m.confirm.Open(ConfirmRequest{
+				Title: "Save draft?",
+				Body:  "[y] Save and close   [n] Discard   [Esc] Keep editing",
+			})
+			m.pendingComposeSave = true
+		} else {
+			// IMAP path is in-memory-only. Show the legacy discard confirm.
+			m.confirm = m.confirm.Open(ConfirmRequest{
+				Title: "Discard draft?",
+				Body:  "Your draft will be lost.",
+			})
+			m.pendingComposeDiscard = true
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -554,11 +623,26 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.compose = next
 			return m, cmd
 		}
+		// Intercept Enter in the Drafts folder to open compose instead of
+		// the viewer. Only JMAP backends support server-side draft push.
+		if msg.Type == tea.KeyEnter && m.acct.Backend().IsJMAP() && !m.viewerOpen {
+			if info, ok := m.acct.SelectedMessage(); ok {
+				draftsFolder := resolveDraftsFolder(m.acct.Cache())
+				if draftsFolder != "" && m.acct.CurrentFolderName() == draftsFolder {
+					return m, openDraftFromServerUIDCmd(m.acct.Cache(), info.UID, draftsFolder)
+				}
+			}
+		}
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
 			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail())
 			m.compose.SetSize(w, h)
+			if m.acct.Backend().IsJMAP() {
+				m.compose.SetCache(m.acct.Cache())
+				draftsFolder := resolveDraftsFolder(m.acct.Cache())
+				m.compose.SetDraftTarget(draftsFolder, "")
+			}
 			return m, m.compose.Init()
 		case key.Matches(msg, m.keys.Reply), key.Matches(msg, m.keys.ReplyAll), key.Matches(msg, m.keys.Forward):
 			parent, ok := m.selectedMessage()

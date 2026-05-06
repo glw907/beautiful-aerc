@@ -145,7 +145,7 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 }
 
 // PushDraft returns ErrUnsupported. Pass 9h.6 will implement IMAP
-// draft persistence; the App gates on IsJMAP() so this stub never
+// draft persistence. The App gates on IsJMAP() so this stub never
 // fires for IMAP accounts in production.
 func (b *Backend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
 	return "", mail.ErrUnsupported
