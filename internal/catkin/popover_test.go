@@ -163,6 +163,117 @@ func TestPopoverHorizontalClamp(t *testing.T) {
 	}
 }
 
+func TestOverlayPadsShortLines(t *testing.T) {
+	// Body has two short lines. Popover requested at col 10 must render
+	// at col 10 on the second line, not collapse to col 0.
+	body := "abc\ndef"
+	pop := "[POP]"
+	out := overlay(body, pop, 1, 10)
+	lines := strings.Split(out, "\n")
+	if lines[0] != "abc" {
+		t.Errorf("row 0 untouched: got %q", lines[0])
+	}
+	want := "def" + strings.Repeat(" ", 7) + "[POP]"
+	if lines[1] != want {
+		t.Errorf("row 1: got %q, want %q", lines[1], want)
+	}
+}
+
+func TestOverlaySkipsOutOfRangeRows(t *testing.T) {
+	// Row 0 stays untouched. Popover row 0 splices into body row 1.
+	// Popover rows 1..2 fall outside the body and must not append.
+	body := "abc\ndef"
+	pop := "X\nY\nZ"
+	out := overlay(body, pop, 1, 0)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("rows = %d, want 2: %q", len(lines), out)
+	}
+	if lines[0] != "abc" {
+		t.Errorf("row 0: got %q, want %q", lines[0], "abc")
+	}
+	if lines[1] != "Xef" {
+		t.Errorf("row 1: got %q, want %q", lines[1], "Xef")
+	}
+}
+
+// modelWithPopoverOpen builds an 80×24 model with the spellcheck annotator
+// registered, opens the popover on the first misspelling matching word
+// (or the first misspelling if word is empty), and returns the model.
+func modelWithPopoverOpen(t *testing.T, value, word string) Model {
+	t.Helper()
+	speller := newFixtureSpeller(t, nil)
+	m := New()
+	m.SetSize(80, 24)
+	m.SetValue(value)
+	m.RegisterAnnotator(NewSpellcheckAnnotator(speller, Styles{}))
+	anns := runAnnotators(m.annotators, m.buf.Value())
+	m.annotations = newAnnotationSet(m.buf.Value(), anns)
+	off := -1
+	for _, a := range anns {
+		if a.Kind != KindMisspelling {
+			continue
+		}
+		mp, _ := a.Payload.(MisspellingPayload)
+		if word == "" || mp.Word == word {
+			off = a.Range.Start
+			break
+		}
+	}
+	if off < 0 {
+		t.Fatalf("no misspelling matching %q in %d annotations", word, len(anns))
+	}
+	m.buf.SetRuneOffset(off)
+	m.Focus()
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	if !m.popover.open {
+		t.Fatalf("popover did not open on %q", word)
+	}
+	return m
+}
+
+func TestPopoverRendersAtRightShiftedColumn(t *testing.T) {
+	pad := strings.Repeat(" ", 73)
+	m := modelWithPopoverOpen(t, pad+"tradeof", "tradeof")
+	out := m.View()
+	rows := strings.Split(out, "\n")
+	// The popover top-border row is the second body row (cursorRow=0,
+	// position returns row=1). It should start near col 80-popover.width().
+	wantCol := 80 - m.popover.width()
+	border := rows[1]
+	idx := strings.Index(border, "╭")
+	if idx != wantCol {
+		t.Errorf("popover top-border at col %d, want %d\nfull row: %q",
+			idx, wantCol, border)
+	}
+}
+
+func TestPopoverFlipsAboveAtBottomEdge(t *testing.T) {
+	var ls []string
+	for i := 0; i < 22; i++ {
+		ls = append(ls, "the quick brown fox")
+	}
+	ls = append(ls, "the tradeof here")
+	m := modelWithPopoverOpen(t, strings.Join(ls, "\n"), "tradeof")
+	out := m.View()
+	rows := strings.Split(out, "\n")
+	// Cursor is on the last visible row (22). Popover height ≥ 4 must
+	// flip up. The top border should appear strictly above row 22.
+	var topBorderRow = -1
+	for i, r := range rows {
+		if strings.Contains(r, "╭") {
+			topBorderRow = i
+			break
+		}
+	}
+	if topBorderRow < 0 {
+		t.Fatalf("no popover border found:\n%s", out)
+	}
+	if topBorderRow >= 22 {
+		t.Errorf("popover top border at row %d, want < 22 (flip-above)", topBorderRow)
+	}
+}
+
 func TestPopoverClosesOnCursorLeave(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(r.Start)

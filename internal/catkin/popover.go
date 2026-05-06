@@ -258,7 +258,8 @@ func (p popoverState) position(cursorRow, cursorCol, viewportW, viewportH int) (
 
 // overlay composites a popover onto rendered body, returning a new string
 // with the popover's rows replacing the corresponding horizontal slices.
-// ANSI-safe via ansiSpliceAtCol.
+// Body lines shorter than col are right-padded with spaces so the popover
+// lands at its requested column rather than collapsing to col 0.
 func overlay(body, pop string, row, col int) string {
 	bodyLines := strings.Split(body, "\n")
 	popLines := strings.Split(pop, "\n")
@@ -267,7 +268,11 @@ func overlay(body, pop string, row, col int) string {
 		if idx < 0 || idx >= len(bodyLines) {
 			continue
 		}
-		bodyLines[idx] = ansiSpliceAtCol(bodyLines[idx], col, lipgloss.Width(pl), pl)
+		line := bodyLines[idx]
+		if w := lipgloss.Width(line); w < col {
+			line += strings.Repeat(" ", col-w)
+		}
+		bodyLines[idx] = ansiSpliceAtCol(line, col, lipgloss.Width(pl), pl)
 	}
 	return strings.Join(bodyLines, "\n")
 }

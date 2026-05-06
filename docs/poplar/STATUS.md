@@ -1,13 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 9d.4 next — live tmux at popover edge sizes.
+**Current pass:** Pass 9e next — `internal/compose/` Editor interface + CatkinEditor adapter.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 9d.3 | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep (ADRs 0001–0154) | done |
-| 9d.4 | Live tmux at edge sizes — popover near right + bottom edges at 80×24 | pending |
+| 1 – 9d.4 | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep → popover overlay padding (ADRs 0001–0155) | done |
 | 9e | `internal/compose/` — Editor interface, CatkinEditor adapter, Draft, AssembleMIME, Seed{Reply,ReplyAll,Forward} | pending |
 | 9f | Mail backend Send + Append — JMAP submission, IMAP+SMTP, `[account.smtp]` config | pending |
 | 9g | Cache outbox Send/Append dispatch | pending |
@@ -22,31 +21,34 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9d.4)
+## Next starter prompt (Pass 9e)
 
-> **Goal.** Verify the spellcheck popover renders correctly when
-> opened over a misspelling near the right or bottom edge of an
-> 80×24 terminal. Fix any clipping or off-screen positioning the
-> capture reveals.
+> **Goal.** Stand up `internal/compose/` — the message-composition
+> layer. Define an `Editor` interface, wrap Catkin as the first
+> implementation (`CatkinEditor`), introduce a `Draft` value type,
+> and implement `AssembleMIME` plus `Seed{Reply,ReplyAll,Forward}`.
 >
-> **Scope.** `internal/catkin/popover.go` placement math and any
-> renderer that splices the popover into the editor view. Live
-> tmux sessions per `.claude/docs/tmux-testing.md`. Capture both
-> 80×24 (polish bar) and 120×40.
+> **Scope.** New package `internal/compose/`. No UI wiring yet
+> (that's Pass 9h). No backend Send (Pass 9f). No outbox dispatch
+> (Pass 9g). The MIME assembly path stays inside the package and
+> writes only to a `Draft`.
 >
-> **Settled.** Idiomatic-bubbletea size contract (popover honors
-> assigned width via wordwrap + hardwrap; no parent-side clipping).
-> ADR-0144 / 0149 / 0150 / 0152 stand.
+> **Settled.** Catkin is the editor (ADR-0146 / 0147). Backends
+> `Append`/`Send` arrive in Pass 9f. Outbox already carries Op
+> sums (ADR-0114).
 >
-> **Still open — brainstorm before coding:** whether right-edge
-> clipping should flip the popover to anchor on its right corner
-> (mirroring the misspelling) or just shift it left to fit; same
-> question for bottom edge (flip vs. shift up).
+> **Still open — brainstorm before coding:** Editor interface
+> shape (sync surface vs. tea.Model surface); Draft layout
+> (headers + body in markdown vs. headers + body parts);
+> reply quoting strategy (top-quote vs. inline vs. configurable);
+> attachment threading from `mail.Attachment` into the draft.
 >
-> **Approach.** Capture the current behavior at 80×24 first.
-> Brainstorm the flip-vs-shift question, write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-popover-edges.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-compose-foundation.md`,
+> then implement. Pass size budget applies — stop at the
+> Editor + CatkinEditor + Draft + AssembleMIME + Seed surface,
+> defer ComposeTab UI to Pass 9h. Standard pass-end checklist
+> applies.
 
 ## Queued
 
