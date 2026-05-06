@@ -16,7 +16,7 @@ import (
 func newTestCompose(t *testing.T) *ComposeTab {
 	t.Helper()
 	styles := NewStyles(theme.Nord)
-	c := NewComposeTab(styles, theme.Nord, "geoff@907.life", SimpleIcons)
+	c := NewComposeTab(styles, "geoff@907.life", SimpleIcons)
 	c.SetSize(80, 24)
 	return c
 }

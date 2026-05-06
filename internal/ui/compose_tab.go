@@ -12,13 +12,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/compose"
-	"github.com/glw907/poplar/internal/theme"
 )
 
-// ComposeTab is the inline compose surface. Owns header inputs and the
-// body editor. Send and discard surface as tea.Msg values that App
-// translates into cache ops. Focus model and key routing land in the
-// next task.
+// ComposeTab is the inline compose surface. Send and discard surface
+// as tea.Msg values that App translates into cache ops.
 type ComposeTab struct {
 	styles Styles
 	icons  IconSet
@@ -31,14 +28,13 @@ type ComposeTab struct {
 	subject textinput.Model
 	editor  compose.Editor
 
-	// focus is the active input field: 0=To … 4=Body.
 	focus int
-	// err is an inline error row rendered above the divider rule. Empty
-	// when there is nothing to report.
+	// err is rendered as a one-line banner above the divider when set.
 	err string
 
-	width  int
-	height int
+	width   int
+	height  int
+	divider string
 }
 
 const (
@@ -50,14 +46,15 @@ const (
 )
 
 // composeLabelWidth is the column reserved for header labels. "Subject:"
-// is 8 cells with one space of separation giving 9.
+// is 8 cells, plus one space of separation.
 const composeLabelWidth = 9
 
+// composeChromeRows is the fixed row count above the body: 5 headers
+// plus the divider rule. The error banner adds one more when set.
+const composeChromeRows = 6
+
 // NewComposeTab returns a fresh, empty ComposeTab with focus on To.
-// The theme parameter is reserved for Catkin theme threading in a
-// later pass and is not yet consumed here.
-func NewComposeTab(styles Styles, t *theme.CompiledTheme, self string, icons IconSet) *ComposeTab {
-	_ = t // reserved: will thread into compose.NewCatkinEditor once the seam lands
+func NewComposeTab(styles Styles, self string, icons IconSet) *ComposeTab {
 	mk := func() textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
@@ -83,10 +80,10 @@ func (c *ComposeTab) Init() tea.Cmd {
 	return c.editor.Init()
 }
 
-// SetSize propagates dimensions to all child inputs and the body editor.
 func (c *ComposeTab) SetSize(w, h int) {
 	c.width = w
 	c.height = h
+	c.divider = strings.Repeat("─", w)
 
 	inputW := w - composeLabelWidth - 1
 	if inputW < 1 {
@@ -97,8 +94,7 @@ func (c *ComposeTab) SetSize(w, h int) {
 	c.bcc.Width = inputW
 	c.subject.Width = inputW
 
-	// 5 header rows + 1 divider row. Error row takes one more when set.
-	bodyHeight := h - 5 - 1
+	bodyHeight := h - composeChromeRows
 	if c.err != "" {
 		bodyHeight--
 	}
@@ -108,14 +104,14 @@ func (c *ComposeTab) SetSize(w, h int) {
 	c.editor.SetSize(w, bodyHeight)
 }
 
-// View renders the compose surface. Every returned line is exactly
-// c.width display cells. The width contract is self-enforced so the
-// parent can join panes without defensive clipping.
+// View enforces the size contract: every returned line is exactly
+// c.width display cells and the result is exactly c.height rows. The
+// parent joins panes without defensive clipping.
 func (c *ComposeTab) View() string {
 	if c.width == 0 || c.height == 0 {
 		return ""
 	}
-	var rows []string
+	rows := make([]string, 0, c.height)
 	rows = append(rows, c.headerRow("From:", c.from))
 	rows = append(rows, c.headerRow("To:", c.to.View()))
 	rows = append(rows, c.headerRow("Cc:", c.cc.View()))
@@ -124,7 +120,7 @@ func (c *ComposeTab) View() string {
 	if c.err != "" {
 		rows = append(rows, c.padRow(c.styles.ErrorBanner.Render(c.err)))
 	}
-	rows = append(rows, c.padRow(strings.Repeat("─", c.width)))
+	rows = append(rows, c.padRow(c.divider))
 	for _, line := range strings.Split(c.editor.View(), "\n") {
 		rows = append(rows, c.padRow(line))
 	}
@@ -137,7 +133,6 @@ func (c *ComposeTab) View() string {
 	return strings.Join(rows, "\n")
 }
 
-// headerRow builds one label+value row padded to exactly c.width cells.
 func (c *ComposeTab) headerRow(label, value string) string {
 	pad := composeLabelWidth - lipgloss.Width(label)
 	if pad < 1 {
@@ -146,7 +141,6 @@ func (c *ComposeTab) headerRow(label, value string) string {
 	return c.padRow(label + strings.Repeat(" ", pad) + value)
 }
 
-// padRow pads or truncates s to exactly c.width display cells.
 func (c *ComposeTab) padRow(s string) string {
 	w := lipgloss.Width(s)
 	if w >= c.width {
@@ -167,7 +161,6 @@ type ComposeCancelMsg struct {
 	Dirty bool
 }
 
-// Update implements the Update half of tea.Model.
 func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:

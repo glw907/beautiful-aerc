@@ -1201,7 +1201,7 @@ func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen || app.compose == nil {
+	if app.compose == nil {
 		t.Fatal("setup: compose should be open")
 	}
 	app.compose.to.SetValue("alice@example.com")
@@ -1215,8 +1215,8 @@ func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
 
 	out, cmd := app.Update(ComposeSendMsg{Draft: d})
 	app = out
-	if app.composeOpen {
-		t.Fatalf("composeOpen should be false after ComposeSendMsg")
+	if app.compose != nil {
+		t.Fatalf("compose should be false after ComposeSendMsg")
 	}
 	if cmd == nil {
 		t.Fatalf("ComposeSendMsg should return a Cmd that runs QueueOutbound")
@@ -1235,7 +1235,7 @@ func TestApp_ComposeSend_NoSentFolder_SurfacesError(t *testing.T) {
 	app := newTestAppWithoutSentFolder(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen || app.compose == nil {
+	if app.compose == nil {
 		t.Fatal("setup: compose should be open")
 	}
 	app.compose.to.SetValue("alice@example.com")
@@ -1245,7 +1245,7 @@ func TestApp_ComposeSend_NoSentFolder_SurfacesError(t *testing.T) {
 	d, _ := app.compose.Draft()
 	out, cmd := app.Update(ComposeSendMsg{Draft: d})
 	app = out
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatalf("missing Sent folder should keep compose open")
 	}
 	if cmd != nil {
@@ -1300,8 +1300,8 @@ func TestApp_C_OpensCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
-		t.Fatal("c should set composeOpen")
+	if app.compose == nil {
+		t.Fatal("c should open compose")
 	}
 	if app.compose == nil {
 		t.Fatal("c should construct ComposeTab")
@@ -1314,7 +1314,7 @@ func TestApp_View_RendersComposeWhenOpen(t *testing.T) {
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	v := stripANSI(app.View())
 	if !strings.Contains(v, "From:") || !strings.Contains(v, "Subject:") {
-		t.Fatalf("View should include compose headers when composeOpen:\n%s", v)
+		t.Fatalf("View should include compose headers when compose:\n%s", v)
 	}
 }
 
@@ -1322,12 +1322,12 @@ func TestApp_ComposeSendMsg_ClosesCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
-		t.Fatal("setup: composeOpen should be true")
+	if app.compose == nil {
+		t.Fatal("setup: compose should be true")
 	}
 	app, _ = app.Update(ComposeSendMsg{})
-	if app.composeOpen {
-		t.Error("ComposeSendMsg should clear composeOpen")
+	if app.compose != nil {
+		t.Error("ComposeSendMsg should clear compose")
 	}
 	if app.compose != nil {
 		t.Error("ComposeSendMsg should nil compose")
@@ -1338,12 +1338,12 @@ func TestApp_ComposeCancelMsg_ClosesCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
-		t.Fatal("setup: composeOpen should be true")
+	if app.compose == nil {
+		t.Fatal("setup: compose should be true")
 	}
 	app, cmd := app.Update(ComposeCancelMsg{})
-	if app.composeOpen {
-		t.Error("ComposeCancelMsg should clear composeOpen")
+	if app.compose != nil {
+		t.Error("ComposeCancelMsg should clear compose")
 	}
 	if app.compose != nil {
 		t.Error("ComposeCancelMsg should nil compose")
@@ -1357,8 +1357,8 @@ func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
-		t.Fatal("setup: composeOpen should be true")
+	if app.compose == nil {
+		t.Fatal("setup: compose should be true")
 	}
 	// While compose is open, keys route to ComposeTab. j should not move
 	// the message list cursor.
@@ -1402,7 +1402,7 @@ func TestApp_R_OpensReplySeededCompose(t *testing.T) {
 	msg := cmd()
 	app, _ = app.Update(msg)
 
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("r should open compose after seeding")
 	}
 	if app.compose == nil {
@@ -1417,7 +1417,7 @@ func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
 	app.compose.editor.SetValue("dirty content")
@@ -1427,7 +1427,7 @@ func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
 	if !app.confirm.IsOpen() {
 		t.Fatal("dirty cancel should open ConfirmModal")
 	}
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("compose should remain open while confirming")
 	}
 	if !app.pendingComposeDiscard {
@@ -1439,13 +1439,13 @@ func TestApp_CtrlC_EmptyClosesImmediately(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
 
 	out, _ := app.Update(ComposeCancelMsg{Dirty: false})
 	app = out
-	if app.composeOpen {
+	if app.compose != nil {
 		t.Fatal("empty cancel should close immediately")
 	}
 	if app.compose != nil {
@@ -1457,7 +1457,7 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
 	app.compose.editor.SetValue("dirty content")
@@ -1468,7 +1468,7 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	}
 
 	app, _ = app.Update(ConfirmModalYesMsg{})
-	if app.composeOpen {
+	if app.compose != nil {
 		t.Fatal("Yes on discard should close compose")
 	}
 	if app.compose != nil {
@@ -1483,7 +1483,7 @@ func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
 	app.compose.editor.SetValue("dirty content")
@@ -1499,7 +1499,7 @@ func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
 	for _, m := range msgs {
 		app, _ = app.Update(m)
 	}
-	if !app.composeOpen {
+	if app.compose == nil {
 		t.Fatal("compose should remain open after No on discard confirm")
 	}
 	if app.pendingComposeDiscard {

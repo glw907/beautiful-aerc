@@ -152,8 +152,7 @@ func (a *Account) QueueAppend(ctx context.Context, folder string, flag mail.Flag
 // QueueOutbound enqueues outbound mail through the outbox. JMAP
 // backends place the Sent copy atomically inside Send, so one op
 // suffices. IMAP requires a separate Append for the Sent copy,
-// so two ops are queued in order. If the Send op fails to enqueue,
-// the Append is not attempted.
+// so two ops are queued in order.
 func (a *Account) QueueOutbound(ctx context.Context, sentFolder string, env mail.Envelope, mime []byte) error {
 	if _, err := a.QueueSend(ctx, sentFolder, env, mime); err != nil {
 		return err

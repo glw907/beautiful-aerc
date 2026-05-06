@@ -27,8 +27,8 @@ type pendingEmptyConfirm struct {
 	source string
 }
 
-// TidyFn rewrites the markdown body before MIME assembly. Pass 9h
-// ships a no-op identity. Pass 9i swaps in Claude Tidy.
+// TidyFn rewrites the markdown body before MIME assembly. The default
+// is identity passthrough. Callers swap in a real implementation.
 type TidyFn func(ctx context.Context, body string) (string, error)
 
 func identityTidy(_ context.Context, body string) (string, error) {
@@ -71,7 +71,6 @@ type App struct {
 	tidy                  TidyFn
 	theme                 *theme.CompiledTheme
 	compose               *ComposeTab
-	composeOpen           bool
 	pendingComposeDiscard bool
 	width                 int
 	height                int
@@ -251,7 +250,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case m.pendingComposeDiscard:
 			m.pendingComposeDiscard = false
-			m.composeOpen = false
 			m.compose = nil
 			return m, nil
 		case m.pendingEmpty.folder != "":
@@ -462,7 +460,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		d := msg.Draft
 		tidy := m.tidy
 		acct := m.acct.Cache()
-		m.composeOpen = false
 		m.compose = nil
 		return m, composeSendCmd(acct, sent, tidy, d)
 
@@ -485,15 +482,13 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case composeSeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = NewComposeTab(m.styles, m.theme, m.acct.AccountEmail(), m.icons)
+		m.compose = NewComposeTab(m.styles, m.acct.AccountEmail(), m.icons)
 		m.compose.SetSize(w, h)
 		m.compose.Seed(msg.Draft)
-		m.composeOpen = true
 		return m, m.compose.Init()
 
 	case ComposeCancelMsg:
 		if !msg.Dirty {
-			m.composeOpen = false
 			m.compose = nil
 			return m, nil
 		}
@@ -547,33 +542,27 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.movePicker, cmd = m.movePicker.Update(msg)
 			return m, cmd
 		}
-		if m.composeOpen {
+		if m.compose != nil {
 			next, cmd := m.compose.Update(msg)
 			m.compose = next
 			return m, cmd
 		}
 		switch {
 		case key.Matches(msg, m.keys.Compose):
-			if !m.composeOpen {
-				w, h := m.rightPaneSize()
-				m.compose = NewComposeTab(m.styles, m.theme, m.acct.AccountEmail(), m.icons)
-				m.compose.SetSize(w, h)
-				m.composeOpen = true
-				return m, m.compose.Init()
-			}
+			w, h := m.rightPaneSize()
+			m.compose = NewComposeTab(m.styles, m.acct.AccountEmail(), m.icons)
+			m.compose.SetSize(w, h)
+			return m, m.compose.Init()
 		case key.Matches(msg, m.keys.Reply), key.Matches(msg, m.keys.ReplyAll), key.Matches(msg, m.keys.Forward):
-			if m.composeOpen {
-				break
-			}
 			parent, ok := m.selectedMessage()
 			if !ok {
 				break
 			}
-			kind := seedReply
+			kind := composeSeedReply
 			if key.Matches(msg, m.keys.ReplyAll) {
-				kind = seedReplyAll
+				kind = composeSeedReplyAll
 			} else if key.Matches(msg, m.keys.Forward) {
-				kind = seedForward
+				kind = composeSeedForward
 			}
 			return m, composeSeedCmd(m.acct.Cache(), parent, m.acct.AccountEmail(), kind)
 		case key.Matches(msg, m.keys.Undo):
@@ -634,7 +623,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 // from View so it can be dimmed and composited under the help popover.
 func (m App) renderFrame() string {
 	var rawContent string
-	if m.composeOpen {
+	if m.compose != nil {
 		rawContent = m.acct.RenderWithRightPane(m.compose.View())
 	} else {
 		rawContent = m.acct.View()
