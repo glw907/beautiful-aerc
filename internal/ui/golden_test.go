@@ -23,7 +23,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/movepicker"
 )
 
 const goldensDir = "testdata/goldens"
@@ -143,6 +146,26 @@ func TestGolden_LinkPicker(t *testing.T) {
 	}
 }
 
+func goldenMovePickerFolders() []movepicker.FolderEntry {
+	return []movepicker.FolderEntry{
+		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
+		{Display: "Drafts", Provider: "Drafts", Group: mail.GroupPrimary},
+		{Display: "Sent", Provider: "Sent", Group: mail.GroupPrimary},
+		{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal},
+		{Display: "Trash", Provider: "Trash", Group: mail.GroupDisposal},
+		{Display: "Receipts/2026", Provider: "Receipts/2026", Group: mail.GroupCustom},
+		{Display: "Receipts/2025", Provider: "Receipts/2025", Group: mail.GroupCustom},
+	}
+}
+
+func goldenNewMovePicker() movepicker.Model {
+	th := theme.Themes[theme.DefaultThemeName]
+	return movepicker.New(movepicker.Styles{
+		Dim:           lipgloss.NewStyle().Foreground(th.FgDim),
+		MsgListCursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
+	})
+}
+
 // TestGolden_MovePicker captures the rendered move picker with
 // sampleFolders(), no query, cursor at 0.
 func TestGolden_MovePicker(t *testing.T) {
@@ -156,8 +179,8 @@ func TestGolden_MovePicker(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			p := newTestPicker() // from movepicker_test.go
-			p = p.Open(nil, "", sampleFolders())
+			p := goldenNewMovePicker()
+			p = p.Open(nil, "", goldenMovePickerFolders())
 			p = p.SetSize(tc.w, tc.h)
 			box := p.Box(tc.w, tc.h)
 			got := compositeOverlay(box, tc.w, tc.h)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package movepicker
 
 import (
 	"strings"
@@ -24,9 +24,12 @@ func sampleFolders() []FolderEntry {
 	}
 }
 
-func newTestPicker() MovePicker {
-	t := theme.Themes[theme.DefaultThemeName]
-	return NewMovePicker(NewStyles(t))
+func newTestPicker() Model {
+	th := theme.Themes[theme.DefaultThemeName]
+	return New(Styles{
+		Dim:           lipgloss.NewStyle().Foreground(th.FgDim),
+		MsgListCursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
+	})
 }
 
 func TestMovePicker_OpenSetsState(t *testing.T) {
@@ -128,21 +131,21 @@ func TestMovePicker_EnterEmitsPickedMsg(t *testing.T) {
 		t.Fatal("Enter returned nil cmd")
 	}
 	msgs := drainBatch(cmd)
-	var picked *MovePickerPickedMsg
+	var picked *PickedMsg
 	var sawClosed bool
 	for _, m := range msgs {
 		switch v := m.(type) {
-		case MovePickerPickedMsg:
+		case PickedMsg:
 			picked = &v
-		case MovePickerClosedMsg:
+		case ClosedMsg:
 			sawClosed = true
 		}
 	}
 	if picked == nil {
-		t.Fatal("did not see MovePickerPickedMsg")
+		t.Fatal("did not see PickedMsg")
 	}
 	if !sawClosed {
-		t.Error("did not see MovePickerClosedMsg")
+		t.Error("did not see ClosedMsg")
 	}
 	if picked.Dest != "Drafts" {
 		t.Errorf("Dest = %q, want %q", picked.Dest, "Drafts")
@@ -178,10 +181,10 @@ func TestMovePicker_EscClosesNoOp(t *testing.T) {
 	msgs := drainBatch(cmd)
 	var sawClosed bool
 	for _, m := range msgs {
-		if _, ok := m.(MovePickerClosedMsg); ok {
+		if _, ok := m.(ClosedMsg); ok {
 			sawClosed = true
 		}
-		if _, ok := m.(MovePickerPickedMsg); ok {
+		if _, ok := m.(PickedMsg); ok {
 			t.Error("Esc emitted PickedMsg")
 		}
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
+	"github.com/glw907/poplar/internal/ui/movepicker"
 )
 
 func init() {
@@ -859,30 +860,30 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 
 func TestApp_OpenMovePickerOpensOverlay(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	folders := []FolderEntry{
+	folders := []movepicker.FolderEntry{
 		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
 		{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal},
 	}
-	app, _ = app.Update(OpenMovePickerMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
+	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
 	if !app.movePicker.IsOpen() {
-		t.Error("movePicker should be open after OpenMovePickerMsg")
+		t.Error("movePicker should be open after movepicker.OpenMsg")
 	}
 }
 
 func TestApp_MovePickerClosedFlipsState(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	folders := []FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
-	app, _ = app.Update(OpenMovePickerMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
-	app, _ = app.Update(MovePickerClosedMsg{})
+	folders := []movepicker.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
+	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
+	app, _ = app.Update(movepicker.ClosedMsg{})
 	if app.movePicker.IsOpen() {
-		t.Error("movePicker should be closed after MovePickerClosedMsg")
+		t.Error("movePicker should be closed after movepicker.ClosedMsg")
 	}
 }
 
 func TestApp_FolderJumpInertWhilePickerOpen(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	folders := []FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
-	app, _ = app.Update(OpenMovePickerMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
+	folders := []movepicker.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
+	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
 	beforeFolder := app.acct.currentFolderName()
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
 	if got := app.acct.currentFolderName(); got != beforeFolder {
@@ -896,9 +897,9 @@ func TestApp_MovePickerPickedRoutesToAccountTab(t *testing.T) {
 	// doesn't short-circuit on empty UIDs.
 	uids := app.acct.msglist.ActionTargets()
 	src := app.acct.currentFolderName()
-	folders := []FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
-	app, _ = app.Update(OpenMovePickerMsg{UIDs: uids, Src: src, Folders: folders})
-	_, cmd := app.Update(MovePickerPickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
+	folders := []movepicker.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
+	app, _ = app.Update(movepicker.OpenMsg{UIDs: uids, Src: src, Folders: folders})
+	_, cmd := app.Update(movepicker.PickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
 	if cmd == nil {
 		t.Fatal("Picked produced nil cmd; expected triageStartedMsg + forward")
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/movepicker"
 )
 
 // sidebarHeaderRows is the blank/account/blank padding reserved at
@@ -232,7 +233,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		// before delegation, so the App layer captures the message.
 		return m, nil
 
-	case MovePickerPickedMsg:
+	case movepicker.PickedMsg:
 		return m, m.dispatchMoveFromPicker(msg)
 
 	case sweepCompletedMsg:
@@ -735,13 +736,17 @@ func (m *AccountTab) dispatchMove() tea.Cmd {
 		return nil
 	}
 	src := m.currentFolderName()
-	folders := m.sidebarColumn.Sidebar().OrderedFolders()
+	uiFolders := m.sidebarColumn.Sidebar().OrderedFolders()
+	folders := make([]movepicker.FolderEntry, len(uiFolders))
+	for i, f := range uiFolders {
+		folders[i] = movepicker.FolderEntry{Display: f.Display, Provider: f.Provider, Group: f.Group}
+	}
 	return func() tea.Msg {
-		return OpenMovePickerMsg{UIDs: uids, Src: src, Folders: folders}
+		return movepicker.OpenMsg{UIDs: uids, Src: src, Folders: folders}
 	}
 }
 
-func (m *AccountTab) dispatchMoveFromPicker(msg MovePickerPickedMsg) tea.Cmd {
+func (m *AccountTab) dispatchMoveFromPicker(msg movepicker.PickedMsg) tea.Cmd {
 	if len(msg.UIDs) == 0 {
 		return nil
 	}

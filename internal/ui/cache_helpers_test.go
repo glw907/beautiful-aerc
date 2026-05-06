@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/mail"
 )
@@ -41,6 +42,26 @@ func (f *fullSyncChangeTracker) Changes(_ context.Context, folder string, _ mail
 		return mail.ChangeSet{}, nil, err
 	}
 	return mail.ChangeSet{Added: uids}, mail.SyncToken("done"), nil
+}
+
+// drainBatch executes cmd and recursively expands any tea.BatchMsg,
+// returning all leaf Msg values. Used across multiple test files.
+func drainBatch(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if msg == nil {
+		return nil
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, drainBatch(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
 }
 
 // newTestCache opens a fresh cache.Account in t.TempDir against backend,

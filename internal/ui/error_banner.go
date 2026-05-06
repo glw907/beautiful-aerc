@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -22,6 +24,18 @@ func renderErrorBanner(msg ErrorMsg, width int, styles Styles) string {
 	text += msg.Err.Error()
 	text = truncateToWidth(text, width)
 	return styles.ErrorBanner.Render(text)
+}
+
+// padOrTruncate pads s with spaces or truncates it to exactly width display cells.
+func padOrTruncate(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w == width {
+		return s
+	}
+	if w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return truncateToWidth(s, width)
 }
 
 // truncateToWidth shortens s to at most width display cells, adding

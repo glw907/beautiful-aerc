@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
+	"github.com/glw907/poplar/internal/ui/movepicker"
 )
 
 // pendingEmptyConfirm carries the parameters App needs to emit
@@ -50,7 +51,7 @@ type App struct {
 	help            HelpPopover
 	linkPicker      LinkPicker
 	attachPicker    AttachPicker
-	movePicker      MovePicker
+	movePicker      movepicker.Model
 	downloadDir     string
 	confirm         ConfirmModal
 	pendingEmpty    pendingEmptyConfirm
@@ -107,7 +108,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		keys:         NewGlobalKeys(),
 		linkPicker:   NewLinkPicker(styles),
 		attachPicker: NewAttachPicker(styles, icons),
-		movePicker:   NewMovePicker(styles),
+		movePicker:   movepicker.New(movepicker.Styles{Dim: styles.Dim, MsgListCursor: styles.MsgListCursor}),
 		downloadDir:  uiCfg.DownloadDir,
 		confirm:      NewConfirmModal(styles),
 		outbox:       NewOutboxOverlay(styles),
@@ -192,15 +193,15 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.linkPicker = m.linkPicker.Close()
 		return m, nil
 
-	case OpenMovePickerMsg:
+	case movepicker.OpenMsg:
 		m.movePicker = m.movePicker.Open(msg.UIDs, msg.Src, msg.Folders)
 		return m, nil
 
-	case MovePickerClosedMsg:
+	case movepicker.ClosedMsg:
 		m.movePicker = m.movePicker.Close()
 		return m, nil
 
-	case MovePickerPickedMsg:
+	case movepicker.PickedMsg:
 		var cmd tea.Cmd
 		m.acct, cmd = m.acct.Update(msg)
 		m = m.deriveChromeFromAcct()
