@@ -23,14 +23,3 @@ func renderErrorBanner(msg ErrorMsg, width int, styles Styles) string {
 	text = uicore.TruncateToWidth(text, width)
 	return styles.ErrorBanner.Render(text)
 }
-
-// padOrTruncate pads s with spaces or truncates it to exactly width display cells.
-func padOrTruncate(s string, width int) string {
-	return uicore.PadOrTruncate(s, width)
-}
-
-// truncateToWidth shortens s to at most width display cells, adding
-// "…" when truncation occurs.
-func truncateToWidth(s string, width int) string {
-	return uicore.TruncateToWidth(s, width)
-}

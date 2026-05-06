@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // ConfirmRequest holds the content for one modal invocation. The
@@ -27,7 +28,7 @@ type ConfirmModalYesMsg struct{}
 // ConfirmModal is a yes/no confirmation overlay. App owns it and composes it
 // via Box + Position + PlaceOverlay, mirroring MovePicker and LinkPicker.
 type ConfirmModal struct {
-	shell  ModalShell
+	shell  uicore.ModalShell
 	req    ConfirmRequest
 	styles Styles
 	keys   confirmKeys
@@ -121,12 +122,12 @@ func (m ConfirmModal) Box(w, h int) string {
 	// Pad body lines to exactly contentW cells.
 	bodyRows := make([]string, len(bodyLines))
 	for i, line := range bodyLines {
-		bodyRows[i] = padOrTruncate(line, contentW)
+		bodyRows[i] = uicore.PadOrTruncate(line, contentW)
 	}
 
 	// Footer row: help text.
 	help := "[y] yes   [n] no   [esc] cancel"
-	footerRows := []string{m.styles.Dim.Render(padOrTruncate(help, contentW))}
+	footerRows := []string{m.styles.Dim.Render(uicore.PadOrTruncate(help, contentW))}
 
 	return m.shell.Box(m.req.Title, bodyRows, footerRows, contentW)
 }

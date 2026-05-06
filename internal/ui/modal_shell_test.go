@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// buildShellBox is a helper that exercises ModalShell.Box with the given
+// buildShellBox is a helper that exercises uicore.ModalShell.Box with the given
 // parameters and returns the raw box string (no overlay compositing).
 func buildShellBox(title string, bodyRows, footerRows []string, contentW int) string {
-	var s ModalShell
+	var s uicore.ModalShell
 	return s.Box(title, bodyRows, footerRows, contentW)
 }
 
@@ -29,9 +30,9 @@ func lineWidths(s string) ([]string, []int) {
 
 // TestModalShell_OpenWithOpen verifies IsOpen / WithOpen lifecycle.
 func TestModalShell_OpenWithOpen(t *testing.T) {
-	var s ModalShell
+	var s uicore.ModalShell
 	if s.IsOpen() {
-		t.Fatal("zero-value ModalShell should not be open")
+		t.Fatal("zero-value uicore.ModalShell should not be open")
 	}
 	s = s.WithOpen(true)
 	if !s.IsOpen() {
@@ -45,7 +46,7 @@ func TestModalShell_OpenWithOpen(t *testing.T) {
 
 // TestModalShell_SetSize verifies Width / Height accessors after SetSize.
 func TestModalShell_SetSize(t *testing.T) {
-	var s ModalShell
+	var s uicore.ModalShell
 	s = s.SetSize(80, 24)
 	if s.Width() != 80 || s.Height() != 24 {
 		t.Fatalf("SetSize(80,24): got (%d,%d), want (80,24)", s.Width(), s.Height())

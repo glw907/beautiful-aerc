@@ -5,13 +5,15 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func TestPlaceOverlay(t *testing.T) {
 	t.Run("plain text overlay over plain text background", func(t *testing.T) {
 		bg := "AAAAAAAAAA\nBBBBBBBBBB\nCCCCCCCCCC"
 		fg := "XY\nXY"
-		got := PlaceOverlay(2, 1, fg, bg)
+		got := uicore.PlaceOverlay(2, 1, fg, bg)
 		lines := strings.Split(got, "\n")
 		if len(lines) != 3 {
 			t.Fatalf("expected 3 lines, got %d: %q", len(lines), got)
@@ -45,7 +47,7 @@ func TestPlaceOverlay(t *testing.T) {
 		bg := blue + "AAAAAAAAAA" + reset + "\n" + blue + "BBBBBBBBBB" + reset
 		fg := red + "XY" + reset
 
-		got := PlaceOverlay(0, 0, fg, bg)
+		got := uicore.PlaceOverlay(0, 0, fg, bg)
 		lines := strings.Split(got, "\n")
 
 		// Row 0 should contain the red overlay bytes.
@@ -62,7 +64,7 @@ func TestPlaceOverlay(t *testing.T) {
 		bg := "AAAA\nBBBB"
 		// Overlay wider than background. PlaceOverlay should clamp and not panic.
 		fg := "XXXXXXXXXXXX" // 12 cells wide, bg is 4
-		got := PlaceOverlay(0, 0, fg, bg)
+		got := uicore.PlaceOverlay(0, 0, fg, bg)
 		// Since fg is wider than bg in one dimension, fg is returned directly.
 		if got != fg && !strings.Contains(got, "XXXX") {
 			t.Errorf("off-edge overlay returned unexpected result: %q", got)
@@ -72,7 +74,7 @@ func TestPlaceOverlay(t *testing.T) {
 	t.Run("overlay at x=0 y=0 replaces top-left", func(t *testing.T) {
 		bg := "0123456789\n0123456789"
 		fg := "AB\nCD"
-		got := PlaceOverlay(0, 0, fg, bg)
+		got := uicore.PlaceOverlay(0, 0, fg, bg)
 		lines := strings.Split(got, "\n")
 		if !strings.HasPrefix(lines[0], "AB") {
 			t.Errorf("row 0 should start with AB: %q", lines[0])

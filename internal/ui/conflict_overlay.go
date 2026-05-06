@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/cache"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // RetryConflictMsg / DiscardConflictMsg are emitted by the overlay
@@ -27,7 +28,7 @@ type conflictCache struct {
 // ConflictOverlay is the modal opened by !. Lists conflicted ops
 // with per-row retry / discard. App owns load → SetRows → render.
 type ConflictOverlay struct {
-	shell  ModalShell
+	shell  uicore.ModalShell
 	styles Styles
 	rows   []cache.ConflictRow
 	cursor int
@@ -167,7 +168,7 @@ func conflictContentWidth(termW int) int {
 
 func (c ConflictOverlay) bodyRows(contentW int) []string {
 	if len(c.rows) == 0 {
-		return []string{padOrTruncate(" No conflicts.", contentW)}
+		return []string{uicore.PadOrTruncate(" No conflicts.", contentW)}
 	}
 	maxRows := conflictMaxBodyLines(c.shell.Height())
 	visible := c.rows
@@ -183,20 +184,20 @@ func (c ConflictOverlay) bodyRows(contentW int) []string {
 		if i == c.cursor {
 			marker = "┃ "
 		}
-		rows = append(rows, padOrTruncate(marker+formatConflictHeader(r), contentW))
-		rows = append(rows, padOrTruncate("│   "+formatConflictDetail(r, now), contentW))
+		rows = append(rows, uicore.PadOrTruncate(marker+formatConflictHeader(r), contentW))
+		rows = append(rows, uicore.PadOrTruncate("│   "+formatConflictDetail(r, now), contentW))
 	}
 	if overflow > 0 {
-		rows = append(rows, padOrTruncate(fmt.Sprintf("│ +%d more (resolve to see)", overflow), contentW))
+		rows = append(rows, uicore.PadOrTruncate(fmt.Sprintf("│ +%d more (resolve to see)", overflow), contentW))
 	}
 	return rows
 }
 
 func (c ConflictOverlay) footerRows(contentW int) []string {
 	if len(c.rows) == 0 {
-		return []string{padOrTruncate(" q close", contentW)}
+		return []string{uicore.PadOrTruncate(" q close", contentW)}
 	}
-	return []string{padOrTruncate(" r retry  ·  d discard  ·  q close", contentW)}
+	return []string{uicore.PadOrTruncate(" r retry  ·  d discard  ·  q close", contentW)}
 }
 
 func conflictMaxBodyLines(termH int) int {

@@ -11,13 +11,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // AttachPicker is the modal overlay launched by `@` in the viewer.
 // Single-column list of attachment metadata. Cursor + Enter (open),
 // `o` (open), `s` (save), 1-9 (open Nth), Esc/q/@ close.
 type AttachPicker struct {
-	shell  ModalShell
+	shell  uicore.ModalShell
 	uid    mail.UID
 	items  []mail.Attachment
 	cursor int
@@ -168,13 +169,13 @@ func (p AttachPicker) Box(w, h int) string {
 	for i := 0; i < visibleRows; i++ {
 		row := p.offset + i
 		if row >= len(p.items) {
-			bodyRows[i] = padOrTruncate("", contentW)
+			bodyRows[i] = uicore.PadOrTruncate("", contentW)
 			continue
 		}
 		bodyRows[i] = p.formatRow(row, maxIndexDigits, contentW)
 	}
 
-	footer := padOrTruncate("Enter/o open  s save  Esc close", contentW)
+	footer := uicore.PadOrTruncate("Enter/o open  s save  Esc close", contentW)
 	footerRows := []string{footer}
 
 	return p.shell.Box("Attachments", bodyRows, footerRows, contentW)

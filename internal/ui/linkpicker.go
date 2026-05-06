@@ -18,7 +18,7 @@ import (
 // Enter, 1-9 quick launch, Esc/Tab close. App owns the open state and
 // the overlay composition (mirrors help popover, ADR-0082).
 type LinkPicker struct {
-	shell  ModalShell
+	shell  uicore.ModalShell
 	links  []string
 	cursor int
 	offset int
@@ -198,7 +198,7 @@ func (p LinkPicker) Box(w, h int) string {
 	for i := 0; i < visibleRows; i++ {
 		row := p.offset + i
 		if row >= len(p.links) {
-			bodyRows[i] = padOrTruncate("", contentW)
+			bodyRows[i] = uicore.PadOrTruncate("", contentW)
 			continue
 		}
 		bodyRows[i] = p.formatRow(row, maxIndexDigits, urlW, contentW)
@@ -211,7 +211,7 @@ func (p LinkPicker) Box(w, h int) string {
 		if i < len(previewLines) {
 			line = previewLines[i]
 		}
-		footerRows[i] = padOrTruncate(line, contentW)
+		footerRows[i] = uicore.PadOrTruncate(line, contentW)
 	}
 
 	return p.shell.Box("Links", bodyRows, footerRows, contentW)
@@ -226,7 +226,7 @@ func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 	if displayCells(url) > urlW {
 		url = displayTruncate(url, urlW)
 	}
-	body := padOrTruncate(fmt.Sprintf("%s[%d] %s", pad, row+1, url), contentW)
+	body := uicore.PadOrTruncate(fmt.Sprintf("%s[%d] %s", pad, row+1, url), contentW)
 	if row == p.cursor {
 		return p.styles.MsgListCursor.Render(body)
 	}

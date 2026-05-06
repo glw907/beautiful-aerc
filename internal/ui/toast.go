@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // triageOp identifies which triage action a toast or pendingAction
@@ -84,14 +85,14 @@ func renderToast(p pendingAction, width int, styles Styles) string {
 		return styles.Toast.Render(full)
 	}
 	if hint == "" {
-		return styles.Toast.Render(truncateToWidth(full, width))
+		return styles.Toast.Render(uicore.TruncateToWidth(full, width))
 	}
 	hintW := lipgloss.Width(hint)
 	bodyBudget := width - hintW - 4 // "✓ " + "   "
 	if bodyBudget < 1 {
-		return styles.Toast.Render(truncateToWidth(full, width))
+		return styles.Toast.Render(uicore.TruncateToWidth(full, width))
 	}
-	bodyTrunc := truncateToWidth("✓ "+body, bodyBudget+2)
+	bodyTrunc := uicore.TruncateToWidth("✓ "+body, bodyBudget+2)
 	return styles.Toast.Render(bodyTrunc + "   " + hint)
 }
 

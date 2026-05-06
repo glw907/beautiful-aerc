@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // HelpContext selects which binding layout the popover renders.
@@ -349,7 +350,7 @@ func joinColumnsRow(gap string, cols ...string) string {
 			if r < len(lines) {
 				line = lines[r]
 			}
-			b.WriteString(padOrTruncate(line, widths[i]))
+			b.WriteString(uicore.PadOrTruncate(line, widths[i]))
 			if i < len(splits)-1 {
 				b.WriteString(gap)
 			}

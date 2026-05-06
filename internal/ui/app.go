@@ -18,6 +18,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // pendingEmptyConfirm carries the parameters App needs to emit
@@ -674,7 +675,7 @@ func (m App) View() string {
 
 	if m.helpOpen {
 		box, tooNarrow := m.help.Box(m.width, m.height)
-		dimmed := DimANSI(frame)
+		dimmed := uicore.DimANSI(frame)
 		if tooNarrow != "" {
 			// Terminal too narrow for the full popover: show the notice
 			// centered over the dimmed frame.
@@ -682,52 +683,52 @@ func (m App) View() string {
 			if x < 0 {
 				x = 0
 			}
-			return PlaceOverlay(x, y, tooNarrow, dimmed)
+			return uicore.PlaceOverlay(x, y, tooNarrow, dimmed)
 		}
 		x, y := m.help.Position(box, m.width, m.height)
-		return PlaceOverlay(x, y, box, dimmed)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
 	if m.confirm.IsOpen() {
 		box := m.confirm.Box(m.width, m.height)
 		x, y := m.confirm.Position(box, m.width, m.height)
-		dimmed := DimANSI(frame)
-		return PlaceOverlay(x, y, box, dimmed)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
 	if m.conflictOpen {
 		body := m.conflict.View()
 		x, y := centerOverlay(body, m.width, m.height)
-		dimmed := DimANSI(frame)
-		return PlaceOverlay(x, y, body, dimmed)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, body, dimmed)
 	}
 
 	if m.outboxOpen {
 		body := m.outbox.View()
 		x, y := centerOverlay(body, m.width, m.height)
-		dimmed := DimANSI(frame)
-		return PlaceOverlay(x, y, body, dimmed)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, body, dimmed)
 	}
 
 	if m.linkPicker.IsOpen() {
 		box := m.linkPicker.Box(m.width, m.height)
 		x, y := m.linkPicker.Position(box, m.width, m.height)
-		dimmed := DimANSI(frame)
-		return PlaceOverlay(x, y, box, dimmed)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
 	if m.attachPicker.IsOpen() {
 		box := m.attachPicker.Box(m.width, m.height)
 		x, y := m.attachPicker.Position(box, m.width, m.height)
-		dimmed := DimANSI(frame)
-		return PlaceOverlay(x, y, box, dimmed)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
 	if m.movePicker.IsOpen() {
 		box := m.movePicker.Box(m.width, m.height)
 		x, y := m.movePicker.Position(box, m.width, m.height)
-		dimmed := DimANSI(frame)
-		return PlaceOverlay(x, y, box, dimmed)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
 	return frame

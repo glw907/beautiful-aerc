@@ -27,6 +27,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 const goldensDir = "testdata/goldens"
@@ -87,7 +88,7 @@ func blankBackground(w, h int) string {
 // same PlaceOverlay + centerOverlay path that App uses.
 func compositeOverlay(box string, w, h int) string {
 	x, y := centerOverlay(box, w, h)
-	return PlaceOverlay(x, y, box, blankBackground(w, h))
+	return uicore.PlaceOverlay(x, y, box, blankBackground(w, h))
 }
 
 // TestGolden_ConfirmModal captures the rendered confirm modal at both

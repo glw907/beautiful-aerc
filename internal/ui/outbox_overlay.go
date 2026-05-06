@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/cache"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // OpenConflictsFromOutboxMsg is emitted by the outbox overlay when
@@ -19,7 +20,7 @@ type OpenConflictsFromOutboxMsg struct{}
 // drainer's queue, grouped by (kind, folder, status). App owns the
 // load → SetGroups → render lifecycle.
 type OutboxOverlay struct {
-	shell  ModalShell
+	shell  uicore.ModalShell
 	styles Styles
 	groups []cache.OutboxGroup
 	keys   outboxKeys
@@ -112,18 +113,18 @@ func outboxContentWidth(termW int) int {
 
 func (o OutboxOverlay) bodyRows(contentW int) []string {
 	if len(o.groups) == 0 {
-		return []string{padOrTruncate(" Outbox is empty.", contentW)}
+		return []string{uicore.PadOrTruncate(" Outbox is empty.", contentW)}
 	}
 	now := o.nowSec()
 	rows := make([]string, 0, len(o.groups))
 	for _, g := range o.groups {
-		rows = append(rows, padOrTruncate(" "+formatOutboxGroup(g, now), contentW))
+		rows = append(rows, uicore.PadOrTruncate(" "+formatOutboxGroup(g, now), contentW))
 	}
 	return rows
 }
 
 func (o OutboxOverlay) footerRows(contentW int) []string {
-	return []string{padOrTruncate(" ! conflicts  ·  q close", contentW)}
+	return []string{uicore.PadOrTruncate(" ! conflicts  ·  q close", contentW)}
 }
 
 // formatOutboxGroup renders a single group line. Examples:
