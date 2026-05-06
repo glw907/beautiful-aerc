@@ -4,7 +4,6 @@ package cache
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -33,17 +32,15 @@ func (a *Account) UpsertDraft(ctx context.Context, draftID string, payload []byt
 		return fmt.Errorf("upsert draft: empty draftID")
 	}
 	now := time.Now().UnixNano()
-	return a.tx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`
-            INSERT INTO drafts (draft_id, payload, dirty, created_at, updated_at)
-            VALUES (?, ?, 1, ?, ?)
-            ON CONFLICT(draft_id) DO UPDATE SET
-                payload    = excluded.payload,
-                dirty      = 1,
-                updated_at = excluded.updated_at`,
-			draftID, payload, now, now)
-		return err
-	})
+	_, err := a.db.ExecContext(ctx, `
+        INSERT INTO drafts (draft_id, payload, dirty, created_at, updated_at)
+        VALUES (?, ?, 1, ?, ?)
+        ON CONFLICT(draft_id) DO UPDATE SET
+            payload    = excluded.payload,
+            dirty      = 1,
+            updated_at = excluded.updated_at`,
+		draftID, payload, now, now)
+	return err
 }
 
 // LoadDraft returns the payload for draftID, or sql.ErrNoRows when absent.
@@ -106,7 +103,7 @@ func (a *Account) DeleteDraft(ctx context.Context, draftID string) error {
 // this in its post-success path; clears dirty and records the server
 // coordinates.
 func (a *Account) MarkDraftPushed(ctx context.Context, draftID string, serverUID mail.UID, serverFolder string) error {
-	_, err := a.db.ExecContext(ctx, `
+	res, err := a.db.ExecContext(ctx, `
         UPDATE drafts
         SET server_uid     = ?,
             server_folder  = ?,
@@ -114,5 +111,11 @@ func (a *Account) MarkDraftPushed(ctx context.Context, draftID string, serverUID
             last_pushed_at = ?
         WHERE draft_id = ?`,
 		string(serverUID), serverFolder, time.Now().UnixNano(), draftID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("mark draft pushed %s: draft not found", draftID)
+	}
+	return nil
 }

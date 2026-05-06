@@ -79,6 +79,15 @@ func TestListDrafts(t *testing.T) {
 	}
 }
 
+func TestMarkDraftPushed_NotFound(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	err := a.MarkDraftPushed(context.Background(), "missing", mail.UID("x"), "Drafts")
+	if err == nil {
+		t.Fatal("MarkDraftPushed on missing draft = nil error, want non-nil")
+	}
+}
+
 func TestDeleteDraft(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
