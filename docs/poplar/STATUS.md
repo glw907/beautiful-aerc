@@ -1,19 +1,20 @@
 # Poplar Status
 
-**Current pass:** Pass 9h next — ComposeTab UI + `c` wiring + tidy seam.
+**Current pass:** Pass 9h.1 next — core organizational sweep before v1.0.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
 | 1 – 9g | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep → popover overlay padding → compose foundation → backend Send + Append → cache outbox Send/Append dispatch (ADRs 0001–0158) | done |
-| 9h | ComposeTab UI + `c` wiring + tidy seam (drafts deferred to 9h.5) | pending |
-| 9h.5 | Drafts persistence (#33) | pending (after 9h) |
-| 9.1 | Address autocomplete from CardDAV (#34) | pending (after 9h) |
-| 9.4 | Email signatures + multiple identities (#32) | pending (after 9.1; brainstorm first) |
+| 9h | ComposeTab + `c`/`r`/`R`/`f` wiring + tidy seam (ADRs 0159–0160) | done |
+| 9h.1 | Core organizational sweep — naming, package boundaries, msg taxonomy | pending |
+| 9h.5 | Drafts persistence (#33) | pending (after 9h.1) |
+| 9.1 | Address autocomplete from CardDAV (#34) | pending |
+| 9.4 | Email signatures + multiple identities (#32) | pending |
 | 9i | Claude Tidy implementation | pending |
-| 9.5 | Attachments-richer compose UI (#24) | pending (after 9i) |
-| 9.2 | Outbox delivery controls — undo + schedule send (#35) | pending (after 9.5) |
+| 9.5 | Attachments-richer compose UI (#24) | pending |
+| 9.2 | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 9.3 | List-Unsubscribe one-click, RFC 8058 (#36) | pending |
 | 9.7 | Calendar invite (.ics) viewer (#37) | pending |
 | 9.8 | Full-account / cross-folder search (#38) | pending |
@@ -25,36 +26,37 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9h)
+## Next starter prompt (Pass 9h.1)
 
-> **Goal.** Land ComposeTab — a new tab wrapping a Catkin body
-> editor + header fields (To/Cc/Bcc/Subject). `c` opens new; `r`
-> / `R` / `f` open pre-seeded via `compose.Seed*`. Send assembles
-> via `compose.AssembleMIME` and queues through `cache.QueueSend`
-> (+ `QueueAppend(Sent, FlagSeen)` on IMAP). Land a no-op tidy
-> seam for Pass 9i.
+> **Goal.** Lock in a clean organizational shape before v1.0 —
+> naming, package boundaries, msg taxonomy, file layout. Must
+> accommodate post-1.0 contacts (CardDAV) and richer calendar
+> surfaces beyond 9.7's .ics viewer.
 >
-> **Scope.** `internal/ui/compose_tab.go`; key wiring; plain
-> `textinput` address fields (autocomplete is 9.1); discard-
-> confirm via `ConfirmModal` on `Esc`. **Out:** drafts persistence
-> (9h.5), autocomplete (9.1), signatures (9.4), undo-send (9.2),
-> attach UI (9.5).
+> **Scope.** All packages fair game. Up for review: the
+> `AccountTab` / `ComposeTab` "Tab" suffix; the `cmds.go`
+> kitchen-sink; subpackage split for reader and compose; whether
+> any of `internal/mail|cache|compose|content|filter|tidy` have
+> names that won't survive contact with future consumers; where
+> `internal/contacts/` and `internal/calendar/` live. **Out:**
+> any feature work — pure structural pass.
 >
-> **Settled.** Editor seam + AssembleMIME + Seed* (ADR-0156);
-> Backend Send/Append (ADR-0157); cache QueueSend/QueueAppend +
-> payload column (ADR-0158); two-step IMAP, JMAP atomic Sent.
+> **Settled.** "Tab" suffix is misleading; bubbles-style
+> `package.Model` is the strongest external convention; pre-beta
+> posture endorses breaking renames; on-disk data is untouched.
 >
-> **Still open — brainstorm:** ComposeTab as top-level tab vs.
-> AccountTab mode (vim-norm: buffer, not popup); header layout
-> (stacked vs. single-line cycling); `Tab`/`Shift+Tab` cycling
-> across address fields ↔ body; tidy seam shape (`Tidy interface`
-> vs. function pointer).
+> **Still open — brainstorm:** subpackage split for compose now
+> or at first substate (9.1)? Same for reader? Where do shared UI
+> types (Styles, IconSet, theme) live once subpackages exist? How
+> do future contacts/calendar surfaces compose with the reader —
+> embedded panels, overlays, full screens? Msg-naming convention
+> across the App ↔ child-package boundary? Does `cmds.go` survive
+> or fragment per-screen?
 >
-> **Approach.** Read `docs/poplar/research/2026-05-05-compose-cluster.md`
-> for the feature-cluster context. Brainstorm, write plan at
-> `docs/superpowers/plans/YYYY-MM-DD-compose-tab.md`, implement.
-> UI pass: read `docs/poplar/bubbletea-conventions.md`; plan must
-> name bubbles analogues. Standard pass-end checklist applies.
+> **Approach.** Brainstorm openly first; plan at
+> `docs/superpowers/plans/YYYY-MM-DD-core-reorg.md`. Likely 2–3
+> ADRs (naming, package boundary, msg-namespace policies).
+> Standard pass-end checklist applies.
 
 ## Queued
 

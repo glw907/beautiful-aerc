@@ -153,12 +153,37 @@ file describes behavior, not the key tables.
 - Spinner placeholders go through `NewSpinner(t)` (Dot, `FgDim`) in
   `internal/ui/styles.go`; shared across viewer/folder/send.
 
-### Compose (planned)
+### Compose
 
-- Compose is pluggable behind an `Editor` interface. v1 ships
-  Catkin (native bubbletea editor); v1.1 adds neovim via `--embed`
-  RPC. Compose renders inline — sidebar and chrome stay visible.
-  No `tea.ExecProcess` terminal takeover.
+- `ComposeTab` (`internal/ui/compose_tab.go`) is the App-owned
+  inline compose surface. While `App.compose != nil`, App routes
+  keys into ComposeTab and renders its `View()` in place of
+  AccountTab's right pane via `AccountTab.RenderWithRightPane` —
+  sidebar and chrome stay drawn, no overlay, no
+  `tea.ExecProcess`. Five focusable fields: To/Cc/Bcc/Subject as
+  `bubbles/textinput`, body as `compose.Editor` (CatkinEditor in
+  v1; v1.1 will add a neovim adapter behind the same interface).
+- Focus model. `Tab` / `Shift+Tab` cycles To→Cc→Bcc→Subject→Body
+  and wraps. `Esc` is a focus toggle only (Body→Subject; any
+  header→Body) and never closes compose. `Ctrl+X` sends — emits
+  `ComposeSendMsg` with the assembled draft. `Ctrl+C` cancels —
+  emits `ComposeCancelMsg{Dirty}`; App opens `ConfirmModal` when
+  Dirty, closes immediately otherwise. Per ADR-0076 text-entry
+  surfaces are exempt from the modifier-free rule, so these
+  chords coexist with Catkin's `Ctrl+B/I/K/L/Q/Space`.
+- App owns the lifecycle: `compose *ComposeTab` (nil when closed)
+  + `tidy TidyFn` (function-pointer seam, default identity, Pass
+  9i swaps in Claude Tidy). `c` opens fresh; `r`/`R`/`f` open via
+  `composeSeedCmd` after fetching the parent body. The send path
+  runs `tidy`, calls `compose.AssembleMIME`, then
+  `cache.Account.QueueOutbound` (one op JMAP, two ops IMAP per
+  ADR-0160). Sent folder resolves via the cached classified-
+  folder list (`cf.Canonical == "Sent"`) with case-fold "Sent"
+  name fallback; missing surfaces inline as `c.err`.
+- Single-instance for Pass 9h. Drafts persistence is 9h.5;
+  address autocomplete is 9.1; signatures + identities is 9.4.
+  `ComposeTab`/`AccountTab` names are placeholders pending the
+  Pass 9h.1 organizational sweep.
 
 ## UX
 

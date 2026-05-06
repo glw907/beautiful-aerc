@@ -64,6 +64,19 @@ delegating to AccountTab, so no conflict.
 | `f` | Forward | A, V |
 | `c` | Compose new | A, V |
 
+## Compose
+
+Bindings active while ComposeTab has focus. Per ADR-0076,
+text-entry surfaces are exempt from the modifier-free rule.
+
+| Key       | Action |
+|-----------|--------|
+| `Tab`     | Next field |
+| `⇧Tab`    | Previous field |
+| `Esc`     | Toggle focus headers ↔ body |
+| `^X`      | Send |
+| `^C`      | Cancel (confirms if dirty) |
+
 ## Folder Jump
 
 Single uppercase key jumps to a canonical folder from any context.
