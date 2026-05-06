@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"strings"
@@ -1168,5 +1169,32 @@ func TestApp_SaveAttachmentMsg_DispatchesCmd(t *testing.T) {
 	})
 	if cmd == nil {
 		t.Error("SaveAttachmentMsg should dispatch a Cmd")
+	}
+}
+
+func newTestApp(t *testing.T) App {
+	t.Helper()
+	backend := mail.NewMockBackend()
+	return NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), FancyIcons)
+}
+
+func TestApp_TidyDefaultIsIdentity(t *testing.T) {
+	app := newTestApp(t)
+	out, err := app.tidy(context.Background(), "hello\n")
+	if err != nil {
+		t.Fatalf("tidy: %v", err)
+	}
+	if out != "hello\n" {
+		t.Fatalf("want identity passthrough, got %q", out)
+	}
+}
+
+func TestApp_WithTidy_Replaces(t *testing.T) {
+	app := newTestApp(t).WithTidy(func(_ context.Context, s string) (string, error) {
+		return s + " [tidied]", nil
+	})
+	out, _ := app.tidy(context.Background(), "x")
+	if out != "x [tidied]" {
+		t.Fatalf("want WithTidy override, got %q", out)
 	}
 }

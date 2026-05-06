@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -24,6 +25,14 @@ import (
 type pendingEmptyConfirm struct {
 	folder string
 	source string
+}
+
+// TidyFn rewrites the markdown body before MIME assembly. Pass 9h
+// ships a no-op identity. Pass 9i swaps in Claude Tidy.
+type TidyFn func(ctx context.Context, body string) (string, error)
+
+func identityTidy(_ context.Context, body string) (string, error) {
+	return body, nil
 }
 
 // App is the root bubbletea model for poplar.
@@ -57,6 +66,9 @@ type App struct {
 	now func() time.Time
 	// opener launches URLs. Test seam, defaults to xdgOpenURL.
 	opener URLOpener
+	// tidy rewrites the markdown body before MIME assembly. Test seam,
+	// defaults to identityTidy.
+	tidy   TidyFn
 	width  int
 	height int
 }
@@ -64,6 +76,12 @@ type App struct {
 // WithOpener returns a copy of m with the URL opener replaced.
 func (m App) WithOpener(opener URLOpener) App {
 	m.opener = opener
+	return m
+}
+
+// WithTidy returns a copy of m with the body tidy seam replaced.
+func (m App) WithTidy(fn TidyFn) App {
+	m.tidy = fn
 	return m
 }
 
@@ -92,6 +110,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		undoSeconds:  uiCfg.UndoSeconds,
 		now:          time.Now,
 		opener:       xdgOpenURL,
+		tidy:         identityTidy,
 	}
 }
 
