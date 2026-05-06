@@ -3,14 +3,31 @@
 package compose
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 )
+
+type fakeCache struct {
+	upsertCalls int
+	lastPayload []byte
+}
+
+func (f *fakeCache) UpsertDraft(_ context.Context, _ string, payload []byte) error {
+	f.upsertCalls++
+	f.lastPayload = payload
+	return nil
+}
+
+func (f *fakeCache) LoadDraft(_ context.Context, _ string) ([]byte, error) {
+	return f.lastPayload, nil
+}
 
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
@@ -211,5 +228,78 @@ func TestModel_CtrlXBadAddressInlinesError(t *testing.T) {
 	}
 	if c.err == "" {
 		t.Fatalf("inline err row should be set")
+	}
+}
+
+func TestModel_AutosaveDebounce(t *testing.T) {
+	cache := &fakeCache{}
+	c := newTestModel(t)
+	c.SetCache(cache)
+
+	// Simulate a key edit, then wind lastEditAt back so the debounce
+	// condition is satisfied without sleeping.
+	c.localDirty = true
+	c.lastEditAt = time.Now().Add(-2 * autosaveDelay)
+
+	// autosave tick fires; debounce condition is met.
+	next, _ := c.Update(autosaveTickMsg{})
+	if next.localDirty {
+		t.Fatalf("localDirty should be cleared after autosave tick")
+	}
+
+	// Drive the upsert directly via runUpsert — same logic the Cmd closure calls.
+	msg := runUpsert(next.draftID, cache, next.currentDraft())
+	persisted, ok := msg.(DraftPersistedMsg)
+	if !ok {
+		t.Fatalf("runUpsert returned %T, want DraftPersistedMsg", msg)
+	}
+	if persisted.DraftID != next.draftID {
+		t.Fatalf("DraftPersistedMsg.DraftID = %q, want %q", persisted.DraftID, next.draftID)
+	}
+	if cache.upsertCalls != 1 {
+		t.Fatalf("cache.upsertCalls = %d, want 1", cache.upsertCalls)
+	}
+	if len(cache.lastPayload) == 0 {
+		t.Fatalf("cache.lastPayload is empty — no bytes written")
+	}
+}
+
+func TestModel_AutosaveNoopBeforeDebounce(t *testing.T) {
+	cache := &fakeCache{}
+	c := newTestModel(t)
+	c.SetCache(cache)
+
+	// dirty but lastEditAt is recent — debounce not satisfied.
+	c.localDirty = true
+	c.lastEditAt = time.Now()
+
+	next, _ := c.Update(autosaveTickMsg{})
+	if !next.localDirty {
+		t.Fatalf("localDirty should not be cleared when debounce window hasn't elapsed")
+	}
+	if cache.upsertCalls != 0 {
+		t.Fatalf("cache.upsertCalls = %d, want 0 before debounce window", cache.upsertCalls)
+	}
+}
+
+func TestModel_DraftIDIsSet(t *testing.T) {
+	c := newTestModel(t)
+	if c.DraftID() == "" {
+		t.Fatalf("New() should assign a non-empty draftID")
+	}
+}
+
+func TestModel_OpenPreservesID(t *testing.T) {
+	styles := Styles{ErrorBanner: lipgloss.NewStyle()}
+	d := mailcompose.Draft{Subject: "saved", Body: "body text"}
+	c := Open(styles, "geoff@907.life", "fixed-id", d)
+	if c.DraftID() != "fixed-id" {
+		t.Fatalf("Open draftID = %q, want fixed-id", c.DraftID())
+	}
+	if c.subject.Value() != "saved" {
+		t.Fatalf("Open did not seed draft: subject = %q", c.subject.Value())
+	}
+	if c.localDirty || c.pushDirty {
+		t.Fatalf("Open should not mark dirty: localDirty=%v pushDirty=%v", c.localDirty, c.pushDirty)
 	}
 }

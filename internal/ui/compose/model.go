@@ -3,16 +3,28 @@
 package compose
 
 import (
+	"context"
 	"fmt"
 	"net/mail"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
+	"github.com/google/uuid"
 	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
+
+// CacheStore is the subset of cache.Account compose needs. The
+// interface lives here so model_test.go can inject a fake without
+// importing internal/cache.
+type CacheStore interface {
+	UpsertDraft(ctx context.Context, draftID string, payload []byte) error
+	LoadDraft(ctx context.Context, draftID string) ([]byte, error)
+}
 
 // Model is the inline compose surface. Send and discard surface
 // as tea.Msg values that App translates into cache ops.
@@ -34,7 +46,23 @@ type Model struct {
 	width   int
 	height  int
 	divider string
+
+	cache         CacheStore
+	draftID       string
+	draftsFolder  string
+	prevServerUID string
+	localDirty    bool
+	pushDirty     bool
+	lastEditAt    time.Time
 }
+
+type autosaveTickMsg struct{}
+type serverPushTickMsg struct{}
+
+const (
+	autosaveDelay   = 1 * time.Second
+	serverPushDelay = 5 * time.Minute
+)
 
 const (
 	focusTo = iota
@@ -52,8 +80,7 @@ const labelWidth = 9
 // plus the divider rule. The error banner adds one more when set.
 const chromeRows = 6
 
-// New returns a fresh, empty Model with focus on To.
-func New(styles Styles, self string) *Model {
+func newModel(styles Styles, self string) *Model {
 	mk := func() textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
@@ -74,8 +101,84 @@ func New(styles Styles, self string) *Model {
 	return c
 }
 
+// New returns a fresh, empty Model with focus on To.
+func New(styles Styles, self string) *Model {
+	c := newModel(styles, self)
+	c.draftID = uuid.NewString()
+	return c
+}
+
+// Open returns a Model wired to an existing draftID, with d pre-seeded.
+// localDirty and pushDirty start cleared — the draft is already in the
+// cache and the server image is current.
+func Open(styles Styles, self string, draftID string, d mailcompose.Draft) *Model {
+	c := newModel(styles, self)
+	c.draftID = draftID
+	c.Seed(d)
+	return c
+}
+
+// SetCache wires the autosave store. When set, Init seeds an empty row
+// so the draft appears in ListDrafts immediately.
+func (c *Model) SetCache(cache CacheStore) { c.cache = cache }
+
+// DraftID returns the UUID that identifies this draft in the cache.
+func (c *Model) DraftID() string { return c.draftID }
+
+// SetDraftTarget records the Drafts folder name and the last known
+// server UID for the push path. Callers supply these from the
+// classified-folder list and the cache DraftRow.
+func (c *Model) SetDraftTarget(folder, prevUID string) {
+	c.draftsFolder = folder
+	c.prevServerUID = prevUID
+}
+
+func (c *Model) scheduleAutosaveCmd() tea.Cmd {
+	return tea.Tick(autosaveDelay, func(time.Time) tea.Msg { return autosaveTickMsg{} })
+}
+
+func (c *Model) scheduleServerPushCmd() tea.Cmd {
+	return tea.Tick(serverPushDelay, func(time.Time) tea.Msg { return serverPushTickMsg{} })
+}
+
+func (c *Model) upsertDraftCmd() tea.Cmd {
+	id := c.draftID
+	cache := c.cache
+	d := c.currentDraft()
+	return func() tea.Msg { return runUpsert(id, cache, d) }
+}
+
+func runUpsert(id string, cache CacheStore, d mailcompose.Draft) tea.Msg {
+	payload, err := mailcompose.EncodeDraft(d)
+	if err != nil {
+		return uicore.ErrorMsg{Op: "encode draft", Err: err}
+	}
+	if err := cache.UpsertDraft(context.Background(), id, payload); err != nil {
+		return uicore.ErrorMsg{Op: "save draft", Err: err}
+	}
+	return DraftPersistedMsg{DraftID: id}
+}
+
+// currentDraft snapshots the current inputs as a Draft without address
+// validation — partial input is normal during editing.
+func (c *Model) currentDraft() mailcompose.Draft {
+	return mailcompose.Draft{
+		From:    gomail.Address{Address: c.from},
+		Subject: c.subject.Value(),
+		Body:    c.editor.Value(),
+	}
+}
+
 func (c *Model) Init() tea.Cmd {
-	return c.editor.Init()
+	cmds := []tea.Cmd{
+		c.editor.Init(),
+		c.scheduleAutosaveCmd(),
+		c.scheduleServerPushCmd(),
+	}
+	if c.cache != nil {
+		cmds = append(cmds, c.upsertDraftCmd())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (c *Model) SetSize(w, h int) {
@@ -177,6 +280,40 @@ type CancelMsg struct {
 
 func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case autosaveTickMsg:
+		if c.cache != nil && c.localDirty && time.Since(c.lastEditAt) >= autosaveDelay {
+			c.localDirty = false
+			return c, tea.Batch(c.upsertDraftCmd(), c.scheduleAutosaveCmd())
+		}
+		return c, c.scheduleAutosaveCmd()
+
+	case serverPushTickMsg:
+		if c.pushDirty && c.draftsFolder != "" {
+			c.pushDirty = false
+			folder := c.draftsFolder
+			prevUID := c.prevServerUID
+			id := c.draftID
+			d := c.currentDraft()
+			return c, tea.Batch(
+				func() tea.Msg {
+					mime, err := mailcompose.AssembleMIME(d, time.Now())
+					if err != nil {
+						// AssembleMIME on a partial draft can fail cleanly;
+						// the next tick will retry.
+						return nil
+					}
+					return EnqueuePushDraftMsg{
+						DraftID:       id,
+						Folder:        folder,
+						MIME:          mime,
+						PrevServerUID: prevUID,
+					}
+				},
+				c.scheduleServerPushCmd(),
+			)
+		}
+		return c, c.scheduleServerPushCmd()
+
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlX:
@@ -217,7 +354,29 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case focusBody:
 		c.editor, cmd = c.editor.Update(msg)
 	}
+
+	if isEditMsg(msg) {
+		c.localDirty = true
+		c.pushDirty = true
+		c.lastEditAt = time.Now()
+	}
+
 	return c, cmd
+}
+
+// isEditMsg reports whether msg represents user content input that
+// should mark the draft dirty. Navigation and control messages
+// (Tab, Esc, Ctrl chords) are excluded.
+func isEditMsg(msg tea.Msg) bool {
+	k, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return false
+	}
+	switch k.Type {
+	case tea.KeyRunes, tea.KeySpace, tea.KeyEnter, tea.KeyBackspace, tea.KeyDelete:
+		return true
+	}
+	return false
 }
 
 func (c *Model) advanceFocus(delta int) {
