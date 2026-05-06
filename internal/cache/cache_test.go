@@ -440,6 +440,9 @@ func TestSchemaMigration_V7Drafts(t *testing.T) {
 		}
 		got[name] = typ
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterating table_info(drafts): %v", err)
+	}
 	for col, typ := range want {
 		if got[col] != typ {
 			t.Errorf("drafts.%s type = %q, want %q", col, got[col], typ)

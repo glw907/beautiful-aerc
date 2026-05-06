@@ -185,7 +185,9 @@ func migrateV6(tx *sql.Tx) error {
 // migrateV7 adds the drafts table. The local row is the high-frequency
 // edit buffer for compose; server_uid points at the JMAP/IMAP image
 // once a PushDraftOp has succeeded. Drafts with server_uid == NULL are
-// local-only (never pushed yet, e.g., offline-created).
+// local-only (never pushed yet, e.g., offline-created). server_uid and
+// server_folder are paired by a CHECK: both NULL (local-only) or both
+// NOT NULL (pushed).
 func migrateV7(tx *sql.Tx) error {
 	stmts := []string{
 		`CREATE TABLE drafts (
@@ -196,7 +198,8 @@ func migrateV7(tx *sql.Tx) error {
             dirty          INTEGER NOT NULL DEFAULT 1,
             created_at     INTEGER NOT NULL,
             updated_at     INTEGER NOT NULL,
-            last_pushed_at INTEGER
+            last_pushed_at INTEGER,
+            CHECK ((server_uid IS NULL) = (server_folder IS NULL))
         )`,
 		`CREATE INDEX drafts_by_server_uid
             ON drafts(server_uid) WHERE server_uid IS NOT NULL`,
