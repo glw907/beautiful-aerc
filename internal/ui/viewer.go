@@ -15,6 +15,7 @@ import (
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // viewerPhase tracks whether the viewer is fetching the body or
@@ -41,7 +42,7 @@ type Viewer struct {
 	attachments  []mail.Attachment
 	chipRow      string
 	chipHeight   int
-	icons        IconSet
+	icons        uicore.IconSet
 	panel        string // headers rendered through ViewerHeader at v.width
 	viewport     viewport.Model
 	spinner      spinner.Model
@@ -54,7 +55,7 @@ type Viewer struct {
 
 // NewViewer constructs an empty (closed) viewer. accountEmail
 // populates the To: header in the rendered message view.
-func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string, icons IconSet) Viewer {
+func NewViewer(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Viewer {
 	return Viewer{
 		styles:       styles,
 		theme:        t,
@@ -315,14 +316,14 @@ func (v Viewer) renderChipRow(width int) (string, int) {
 	var lines []string
 	var cur string
 	for _, c := range chips {
-		if displayCells(c) > width {
-			c = displayTruncate(c, width)
+		if uicore.DisplayCells(c) > width {
+			c = uicore.DisplayTruncate(c, width)
 		}
 		if cur == "" {
 			cur = c
 			continue
 		}
-		if displayCells(cur)+2+displayCells(c) > width {
+		if uicore.DisplayCells(cur)+2+uicore.DisplayCells(c) > width {
 			lines = append(lines, cur)
 			cur = c
 			continue

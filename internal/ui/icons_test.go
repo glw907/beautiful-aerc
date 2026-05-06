@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// surfaceFields returns one rune (or short string) per IconSet field,
-// added to in lockstep with IconSet itself. Used by both
+// surfaceFields returns one rune (or short string) per uicore.IconSet field,
+// added to in lockstep with uicore.IconSet itself. Used by both
 // width/range tests below.
-func surfaceFields(s IconSet) map[string]string {
+func surfaceFields(s uicore.IconSet) map[string]string {
 	return map[string]string{
 		"Inbox":        s.Inbox,
 		"Drafts":       s.Drafts,
@@ -31,37 +32,37 @@ func surfaceFields(s IconSet) map[string]string {
 }
 
 func TestSimpleIcons_AllNarrow(t *testing.T) {
-	for name, s := range surfaceFields(SimpleIcons) {
+	for name, s := range surfaceFields(uicore.SimpleIcons) {
 		if s == "" {
-			t.Errorf("SimpleIcons.%s is empty", name)
+			t.Errorf("uicore.SimpleIcons.%s is empty", name)
 			continue
 		}
 		if w := lipgloss.Width(s); w != 1 {
-			t.Errorf("SimpleIcons.%s = %q has lipgloss.Width=%d, want 1 (must be Narrow class)", name, s, w)
+			t.Errorf("uicore.SimpleIcons.%s = %q has lipgloss.Width=%d, want 1 (must be Narrow class)", name, s, w)
 		}
 		// Reject any rune in SPUA-A.
 		for _, r := range s {
 			if r >= 0xF0000 && r <= 0xFFFFD {
-				t.Errorf("SimpleIcons.%s = %q contains SPUA-A rune U+%X", name, s, r)
+				t.Errorf("uicore.SimpleIcons.%s = %q contains SPUA-A rune U+%X", name, s, r)
 			}
 		}
 	}
 }
 
 func TestFancyIcons_AllSPUA(t *testing.T) {
-	for name, s := range surfaceFields(FancyIcons) {
+	for name, s := range surfaceFields(uicore.FancyIcons) {
 		if s == "" {
-			t.Errorf("FancyIcons.%s is empty", name)
+			t.Errorf("uicore.FancyIcons.%s is empty", name)
 			continue
 		}
 		runes := []rune(s)
 		if len(runes) != 1 {
-			t.Errorf("FancyIcons.%s = %q is %d runes, want 1", name, s, len(runes))
+			t.Errorf("uicore.FancyIcons.%s = %q is %d runes, want 1", name, s, len(runes))
 			continue
 		}
 		r := runes[0]
 		if r < 0xF0000 || r > 0xFFFFD {
-			t.Errorf("FancyIcons.%s = U+%X is outside SPUA-A [F0000..FFFFD]", name, r)
+			t.Errorf("uicore.FancyIcons.%s = U+%X is outside SPUA-A [F0000..FFFFD]", name, r)
 		}
 	}
 }

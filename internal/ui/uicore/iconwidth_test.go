@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package uicore
 
 import "testing"
 
@@ -28,9 +28,9 @@ func TestDisplayCells(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			SetSPUACellWidth(tt.cellWidth)
 			defer SetSPUACellWidth(1) // restore default for other tests
-			got := displayCells(tt.in)
+			got := DisplayCells(tt.in)
 			if got != tt.want {
-				t.Errorf("displayCells(%q) @ w=%d = %d, want %d", tt.in, tt.cellWidth, got, tt.want)
+				t.Errorf("DisplayCells(%q) @ w=%d = %d, want %d", tt.in, tt.cellWidth, got, tt.want)
 			}
 		})
 	}
@@ -53,14 +53,14 @@ func TestDisplayTruncateEllipsis(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := displayTruncateEllipsis(tc.in, tc.n)
+			got := DisplayTruncateEllipsis(tc.in, tc.n)
 			if got != tc.want {
-				t.Errorf("displayTruncateEllipsis(%q, %d) = %q, want %q",
+				t.Errorf("DisplayTruncateEllipsis(%q, %d) = %q, want %q",
 					tc.in, tc.n, got, tc.want)
 			}
-			if displayCells(got) > tc.n && tc.n > 0 {
-				t.Errorf("displayTruncateEllipsis(%q, %d): result %q has %d cells, exceeds budget %d",
-					tc.in, tc.n, got, displayCells(got), tc.n)
+			if DisplayCells(got) > tc.n && tc.n > 0 {
+				t.Errorf("DisplayTruncateEllipsis(%q, %d): result %q has %d cells, exceeds budget %d",
+					tc.in, tc.n, got, DisplayCells(got), tc.n)
 			}
 		})
 	}

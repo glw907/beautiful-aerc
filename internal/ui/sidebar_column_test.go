@@ -9,6 +9,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // sidebarColumnFolders returns a representative classified folder set
@@ -34,11 +35,11 @@ func newSidebarColumnAt(t *testing.T, width, height int) SidebarColumn {
 	layout := ComputeLayout(width)
 	uiCfg := config.DefaultUIConfig()
 
-	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, width, max(1, height-sidebarHeaderRows-searchShelfRows), SimpleIcons)
+	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, width, max(1, height-sidebarHeaderRows-searchShelfRows), uicore.SimpleIcons)
 	sb.SetLayout(layout)
-	ss := NewSidebarSearch(styles, width, SimpleIcons)
+	ss := NewSidebarSearch(styles, width, uicore.SimpleIcons)
 	ss.SetSize(width)
-	return NewSidebarColumn(styles, SimpleIcons, sb, ss, "user@example.com").
+	return NewSidebarColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com").
 		SetSize(width, height)
 }
 
@@ -67,7 +68,7 @@ func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 				t.Errorf("View() returned %d lines, want %d", len(lines), tc.h)
 			}
 			for i, line := range lines {
-				if w := displayCells(line); w != tc.w {
+				if w := uicore.DisplayCells(line); w != tc.w {
 					t.Errorf("line %d: width %d, want %d (line=%q)", i, w, tc.w, line)
 				}
 			}
@@ -80,9 +81,9 @@ func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 func TestSidebarColumn_EmptyBeforeSize(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	uiCfg := config.DefaultUIConfig()
-	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, 22, 20, SimpleIcons)
-	ss := NewSidebarSearch(styles, 22, SimpleIcons)
-	col := NewSidebarColumn(styles, SimpleIcons, sb, ss, "user@example.com")
+	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, 22, 20, uicore.SimpleIcons)
+	ss := NewSidebarSearch(styles, 22, uicore.SimpleIcons)
+	col := NewSidebarColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com")
 	// No SetSize call. Width and height are zero.
 	if got := col.View(); got != "" {
 		t.Errorf("View() with zero size returned %q, want empty", got)

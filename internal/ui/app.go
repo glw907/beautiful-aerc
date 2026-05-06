@@ -42,7 +42,7 @@ func identityTidy(_ context.Context, body string) (string, error) {
 // App is the root bubbletea model for poplar.
 type App struct {
 	acct            AccountTab
-	icons           IconSet
+	icons           uicore.IconSet
 	styles          Styles
 	topLine         TopLine
 	statusBar       StatusBar
@@ -94,7 +94,7 @@ func (m App) WithTidy(fn TidyFn) App {
 
 // NewApp creates the root model with a single AccountTab. Folder loading
 // happens in Init's Cmd chain, not in the constructor.
-func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons IconSet) App {
+func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)

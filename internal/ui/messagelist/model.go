@@ -44,24 +44,6 @@ const (
 	SortDateAsc                   // oldest activity first
 )
 
-// LayoutMode is the resolved set of column-width decisions. Alias for
-// uicore.LayoutMode, re-exported so callers don't need to import uicore.
-type LayoutMode = uicore.LayoutMode
-
-// IconSet is the per-mode iconography vocabulary. Alias for uicore.IconSet.
-type IconSet = uicore.IconSet
-
-// SearchMode selects which fields the message filter matches against.
-// Alias for uicore.SearchMode so sidebar and messagelist share the same type.
-type SearchMode = uicore.SearchMode
-
-const (
-	// SearchModeName matches subject + sender. Default.
-	SearchModeName = uicore.SearchModeName
-	// SearchModeAll matches subject + sender + date text.
-	SearchModeAll = uicore.SearchModeAll
-)
-
 // Styles holds the subset of UI styles the message list needs.
 // Populated from ui.Styles at construction time.
 type Styles struct {
@@ -80,8 +62,9 @@ type Styles struct {
 	MsgListPlaceholder   lipgloss.Style
 }
 
-// Row is a rendered row in the message list, exposed for cross-package
-// test assertions (account_tab_test accesses rows via tab.msglist.Rows).
+// Row is a rendered row in the message list. Exported for cross-package
+// test assertions in account_tab_test (package ui). Production code
+// does not use this type.
 type Row struct {
 	Msg          mail.MessageInfo
 	Prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
@@ -104,10 +87,10 @@ type displayRow struct {
 }
 
 // searchFilter holds the active filter's query and mode. The zero
-// value (empty query, SearchModeName) means "no filter."
+// value (empty query, uicore.SearchModeName) means "no filter."
 type searchFilter struct {
 	query string
-	mode  SearchMode
+	mode  uicore.SearchMode
 }
 
 // Model renders the message list panel: flags, sender, subject,
@@ -301,7 +284,7 @@ func (m *Model) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
 	if strings.Contains(strings.ToLower(msg.From), lowerQuery) {
 		return true
 	}
-	if m.filter.mode == SearchModeAll {
+	if m.filter.mode == uicore.SearchModeAll {
 		dateText := displayDate(msg, m.now, m.layout.Date)
 		if strings.Contains(strings.ToLower(dateText), lowerQuery) {
 			return true
@@ -495,7 +478,7 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 // first transition from unfiltered to filtered, saves the pre-search
 // cursor row so ClearFilter can restore it. Subsequent keystrokes do
 // not overwrite the saved row. The save gate stays armed until clear.
-func (m *Model) SetFilter(q string, mode SearchMode) {
+func (m *Model) SetFilter(q string, mode uicore.SearchMode) {
 	if !m.savedByFilter && q != "" {
 		m.preSearchCursor = m.selected
 		m.savedByFilter = true

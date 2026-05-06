@@ -19,6 +19,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/messagelist"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // sidebarHeaderRows is the blank/account/blank padding reserved at
@@ -41,7 +42,7 @@ type folderPage struct {
 // key is always live. J/K/G navigate folders, j/k navigate messages.
 type AccountTab struct {
 	styles Styles
-	icons  IconSet
+	icons  uicore.IconSet
 	// acct is the per-account cache handle. UI reads come from
 	// acct.QueryFolder. UI writes funnel through acct.QueueOp. The
 	// underlying mail.Backend reference lives behind acct.Backend
@@ -56,7 +57,7 @@ type AccountTab struct {
 	swept         map[string]bool
 	loading       bool
 	spinner       spinner.Model
-	layout        LayoutMode
+	layout        uicore.LayoutMode
 	width         int
 	height        int
 	// bodyFetchCancel cancels the in-flight loadBodyCmd goroutine.
@@ -75,7 +76,7 @@ func (m AccountTab) WithNow(now func() time.Time) AccountTab {
 
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
-func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons IconSet) AccountTab {
+func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) AccountTab {
 	return AccountTab{
 		styles: styles,
 		icons:  icons,

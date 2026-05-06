@@ -12,6 +12,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func TestSidebar(t *testing.T) {
@@ -19,7 +20,7 @@ func TestSidebar(t *testing.T) {
 	folders := mockFolders()
 
 	t.Run("renders all folders", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		plain := stripANSI(view)
 		for _, f := range folders {
@@ -30,7 +31,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("groups separated by blank lines", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		plain := stripANSI(view)
 		lines := strings.Split(plain, "\n")
@@ -47,7 +48,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("initial selection is first folder", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		if sb.Selected() != 0 {
 			t.Errorf("initial selection = %d, want 0", sb.Selected())
 		}
@@ -57,7 +58,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("unread count shown only when positive", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		plain := stripANSI(view)
 		lines := strings.Split(plain, "\n")
@@ -81,7 +82,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("selected row has selection indicator", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		plain := stripANSI(view)
 		lines := strings.Split(plain, "\n")
@@ -99,11 +100,11 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("all lines same display width", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		lines := strings.Split(view, "\n")
 		for i, line := range lines {
-			w := displayCells(line)
+			w := uicore.DisplayCells(line)
 			if w != 30 {
 				t.Errorf("line %d width = %d, want 30: %q",
 					i, w, stripANSI(line))
@@ -112,7 +113,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("j moves down", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		sb.MoveDown()
 		if sb.Selected() != 1 {
 			t.Errorf("after MoveDown, selected = %d, want 1", sb.Selected())
@@ -123,7 +124,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("k moves up", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		sb.MoveDown()
 		sb.MoveDown()
 		sb.MoveUp()
@@ -133,7 +134,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("k at top stays at 0", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		sb.MoveUp()
 		if sb.Selected() != 0 {
 			t.Errorf("MoveUp at top: selected = %d, want 0", sb.Selected())
@@ -141,7 +142,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("j at bottom stays at last", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		for i := 0; i < 20; i++ {
 			sb.MoveDown()
 		}
@@ -152,7 +153,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("G moves to bottom", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		sb.MoveToBottom()
 		last := len(folders) - 1
 		if sb.Selected() != last {
@@ -161,7 +162,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("gg moves to top", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		sb.MoveDown()
 		sb.MoveDown()
 		sb.MoveDown()
@@ -172,7 +173,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("height exactly matches", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 15, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 15, uicore.FancyIcons)
 		view := sb.View()
 		lines := strings.Split(view, "\n")
 		if len(lines) != 15 {
@@ -181,7 +182,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("spam shows unread count 12", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		plain := stripANSI(view)
 		lines := strings.Split(plain, "\n")
@@ -195,7 +196,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("selected icon tracks selection", func(t *testing.T) {
-		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		if sb.SelectedIcon() != "󰇰" {
 			t.Errorf("SelectedIcon() = %q, want inbox icon", sb.SelectedIcon())
 		}
@@ -206,7 +207,7 @@ func TestSidebar(t *testing.T) {
 	})
 
 	t.Run("empty folders returns empty view", func(t *testing.T) {
-		sb := NewSidebar(styles, nil, config.DefaultUIConfig(), 30, 20, FancyIcons)
+		sb := NewSidebar(styles, nil, config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		if sb.View() != "" {
 			t.Error("expected empty view for nil folders")
 		}
@@ -224,7 +225,7 @@ func TestSidebarOrdering_DefaultGroups(t *testing.T) {
 		{Name: "Sent", Role: "sent"},
 		{Name: "Spam", Role: "junk"},
 	}
-	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), config.DefaultUIConfig(), 30, 20, FancyIcons)
+	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 
 	got := displayNames(sb)
 	want := []string{"Inbox", "Drafts", "Sent", "Archive", "Spam", "Trash", "Lists/golang", "Lists/rust"}
@@ -242,7 +243,7 @@ func TestSidebarOrdering_ExplicitRank(t *testing.T) {
 	uiCfg.Folders["Lists/rust"] = config.FolderConfig{Rank: 1, RankSet: true}
 	uiCfg.Folders["Notifications"] = config.FolderConfig{Rank: 2, RankSet: true}
 
-	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), uiCfg, 30, 20, FancyIcons)
+	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), uiCfg, 30, 20, uicore.FancyIcons)
 	got := displayNames(sb)
 	want := []string{"Inbox", "Lists/rust", "Notifications", "Lists/golang"}
 	assertNames(t, got, want)
@@ -257,7 +258,7 @@ func TestSidebarHide(t *testing.T) {
 	uiCfg := config.DefaultUIConfig()
 	uiCfg.Folders["Archive"] = config.FolderConfig{Hide: true}
 
-	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), uiCfg, 30, 20, FancyIcons)
+	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), uiCfg, 30, 20, uicore.FancyIcons)
 	got := displayNames(sb)
 	want := []string{"Inbox", "Lists/golang"}
 	assertNames(t, got, want)
@@ -271,7 +272,7 @@ func TestSidebarLabelOverride(t *testing.T) {
 	uiCfg := config.DefaultUIConfig()
 	uiCfg.Folders["[Gmail]/Starred"] = config.FolderConfig{Label: "Starred"}
 
-	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), uiCfg, 30, 20, FancyIcons)
+	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), uiCfg, 30, 20, uicore.FancyIcons)
 	got := displayNames(sb)
 	want := []string{"Inbox", "Starred"}
 	assertNames(t, got, want)
@@ -282,7 +283,7 @@ func TestSidebarDisplayNormalizesCanonicals(t *testing.T) {
 		{Name: "[Gmail]/Sent Mail"},
 		{Name: "Deleted Items"},
 	}
-	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), config.DefaultUIConfig(), 30, 20, FancyIcons)
+	sb := NewSidebar(NewStyles(theme.Nord), mail.Classify(input), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 	got := displayNames(sb)
 	want := []string{"Sent", "Trash"}
 	assertNames(t, got, want)
@@ -334,7 +335,7 @@ func TestSidebar_OrderedFolders(t *testing.T) {
 		{Folder: mail.Folder{Name: "Trash"}, Canonical: "Trash", Group: mail.GroupDisposal},
 		{Folder: mail.Folder{Name: "Receipts/2026"}, Canonical: "Receipts/2026", Group: mail.GroupCustom},
 	}
-	s := NewSidebar(NewStyles(theme.OneDark), classified, config.UIConfig{}, 30, 20, SimpleIcons)
+	s := NewSidebar(NewStyles(theme.OneDark), classified, config.UIConfig{}, 30, 20, uicore.SimpleIcons)
 	got := s.OrderedFolders()
 	if len(got) != 4 {
 		t.Fatalf("len = %d, want 4", len(got))
@@ -354,7 +355,7 @@ func TestSidebar_OrderedFolders(t *testing.T) {
 
 // newTestSidebarWithFolder builds a Sidebar with a single custom folder
 // at the given width, display name, and unseen count. Icons are enabled
-// (SimpleIcons) to match the pre-LayoutMode behavior of these tests.
+// (uicore.SimpleIcons) to match the pre-uicore.LayoutMode behavior of these tests.
 func newTestSidebarWithFolder(t *testing.T, w int, label string, unread int) *Sidebar {
 	t.Helper()
 	folders := []mail.ClassifiedFolder{
@@ -365,8 +366,8 @@ func newTestSidebarWithFolder(t *testing.T, w int, label string, unread int) *Si
 			Group:       mail.GroupCustom,
 		},
 	}
-	s := NewSidebar(NewStyles(theme.OneDark), folders, config.DefaultUIConfig(), w, 5, SimpleIcons)
-	s.SetLayout(LayoutMode{Sidebar: w, Icons: true})
+	s := NewSidebar(NewStyles(theme.OneDark), folders, config.DefaultUIConfig(), w, 5, uicore.SimpleIcons)
+	s.SetLayout(uicore.LayoutMode{Sidebar: w, Icons: true})
 	return &s
 }
 
@@ -393,9 +394,9 @@ func TestSidebarRenderRow_PreservesRightMargin(t *testing.T) {
 				continue
 			}
 			plain := ansi.Strip(line)
-			if displayCells(plain) != w {
+			if uicore.DisplayCells(plain) != w {
 				t.Errorf("width=%d row %d: cells=%d, want %d (%q)",
-					w, i, displayCells(plain), w, plain)
+					w, i, uicore.DisplayCells(plain), w, plain)
 			}
 			runes := []rune(plain)
 			if len(runes) == 0 {
@@ -415,8 +416,8 @@ func TestSidebarRenderRow_NoIcons(t *testing.T) {
 	folders := []mail.ClassifiedFolder{
 		{DisplayName: "Inbox", Folder: mail.Folder{Name: "Inbox", Unseen: 3}, Group: mail.GroupPrimary},
 	}
-	s := NewSidebar(styles, folders, config.DefaultUIConfig(), 14, 10, IconSet{})
-	s.SetLayout(LayoutMode{Sidebar: 14, Icons: false})
+	s := NewSidebar(styles, folders, config.DefaultUIConfig(), 14, 10, uicore.IconSet{})
+	s.SetLayout(uicore.LayoutMode{Sidebar: 14, Icons: false})
 
 	got := s.View()
 	if !strings.Contains(got, "Inbox") {
@@ -434,9 +435,9 @@ func TestSidebarRenderRow_WithIcons(t *testing.T) {
 	folders := []mail.ClassifiedFolder{
 		{DisplayName: "Inbox", Folder: mail.Folder{Name: "Inbox", Unseen: 3}, Group: mail.GroupPrimary},
 	}
-	icons := SimpleIcons
+	icons := uicore.SimpleIcons
 	s := NewSidebar(styles, folders, config.DefaultUIConfig(), 24, 10, icons)
-	s.SetLayout(LayoutMode{Sidebar: 24, Icons: true})
+	s.SetLayout(uicore.LayoutMode{Sidebar: 24, Icons: true})
 
 	got := s.View()
 	if !strings.Contains(got, "Inbox") {

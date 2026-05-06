@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // folderEntry holds a classified folder plus its rendered metadata.
@@ -23,8 +24,8 @@ type Sidebar struct {
 	entries  []folderEntry
 	selected int
 	styles   Styles
-	icons    IconSet
-	layout   LayoutMode
+	icons    uicore.IconSet
+	layout   uicore.LayoutMode
 	width    int
 	height   int
 }
@@ -32,7 +33,7 @@ type Sidebar struct {
 // NewSidebar creates a Sidebar from a pre-classified folder list and
 // a UIConfig. Ordering, hiding, labelling, and indent calculation
 // happen here. Hidden folders are dropped before indexing.
-func NewSidebar(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons IconSet) Sidebar {
+func NewSidebar(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons uicore.IconSet) Sidebar {
 	return Sidebar{
 		entries:  buildEntries(classified, uiCfg, icons),
 		selected: 0,
@@ -163,7 +164,7 @@ func (s *Sidebar) SetSize(width, height int) {
 }
 
 // SetLayout updates the icon toggle. Width is owned by SetSize.
-func (s *Sidebar) SetLayout(l LayoutMode) {
+func (s *Sidebar) SetLayout(l uicore.LayoutMode) {
 	s.layout = l
 }
 
@@ -244,9 +245,9 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	var leadCells int
 	if s.layout.Icons {
 		icon = applyBg(textStyle, bgStyle).Render(entry.icon)
-		leadCells = displayCells(indicator) + 1 + displayCells(icon) + 2
+		leadCells = uicore.DisplayCells(indicator) + 1 + uicore.DisplayCells(icon) + 2
 	} else {
-		leadCells = displayCells(indicator) + 1
+		leadCells = uicore.DisplayCells(indicator) + 1
 	}
 
 	var countStr string
@@ -265,7 +266,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	if labelBudget < 1 {
 		labelBudget = 1
 	}
-	displayName := displayTruncateEllipsis(entry.cf.DisplayName, labelBudget)
+	displayName := uicore.DisplayTruncateEllipsis(entry.cf.DisplayName, labelBudget)
 	name := applyBg(textStyle, bgStyle).Render(displayName)
 
 	var leftContent string
@@ -274,7 +275,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	} else {
 		leftContent = indicator + bgStyle.Render(" ") + name
 	}
-	leftWidth := displayCells(leftContent)
+	leftWidth := uicore.DisplayCells(leftContent)
 
 	gap := max(1, s.width-leftWidth-countWidth-rightMargin)
 
@@ -293,7 +294,7 @@ func (s Sidebar) renderBlankLine() string {
 // buildEntries applies UIConfig to the classified folders: drops hidden
 // folders, resolves display labels, sorts each group by rank then display
 // name, and concatenates Primary + Disposal + Custom in that order.
-func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, icons IconSet) []folderEntry {
+func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, icons uicore.IconSet) []folderEntry {
 	var primary, disposal, custom []folderEntry
 	for _, cf := range classified {
 		fc := uiCfg.Folders[cf.ConfigKey()]
@@ -366,9 +367,9 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 }
 
 // sidebarIconFrom returns the icon for a classified folder from the given
-// IconSet. Canonicals use their canonical icon. All other folders use
+// uicore.IconSet. Canonicals use their canonical icon. All other folders use
 // CustomFolder regardless of name.
-func sidebarIconFrom(icons IconSet, cf mail.ClassifiedFolder) string {
+func sidebarIconFrom(icons uicore.IconSet, cf mail.ClassifiedFolder) string {
 	switch cf.Canonical {
 	case "Inbox":
 		return icons.Inbox

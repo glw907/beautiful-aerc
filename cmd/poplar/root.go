@@ -16,6 +16,7 @@ import (
 	"github.com/glw907/poplar/internal/term"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui"
+	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/spf13/cobra"
 )
 
@@ -101,11 +102,11 @@ func runRoot(f rootFlags) error {
 	probe := term.MeasureSPUACells()
 	mode, cellWidth := term.Resolve(uiCfg.Icons, hasNF, probe)
 
-	iconSet := ui.SimpleIcons
+	iconSet := uicore.SimpleIcons
 	if mode == term.IconModeFancy {
-		iconSet = ui.FancyIcons
+		iconSet = uicore.FancyIcons
 	}
-	ui.SetSPUACellWidth(cellWidth)
+	uicore.SetSPUACellWidth(cellWidth)
 
 	cacheCfg, err := config.LoadCache(configPath)
 	if err != nil {

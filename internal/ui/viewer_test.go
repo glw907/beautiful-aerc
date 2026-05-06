@@ -10,10 +10,11 @@ import (
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func newTestViewer() Viewer {
-	return NewViewer(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", SimpleIcons)
+	return NewViewer(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", uicore.SimpleIcons)
 }
 
 func TestViewerOpenTransitionsToLoading(t *testing.T) {
@@ -212,7 +213,7 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		if got := displayCells(line); got != w {
+		if got := uicore.DisplayCells(line); got != w {
 			t.Errorf("line %d width = %d, want %d: %q", i, got, w, line)
 		}
 	}

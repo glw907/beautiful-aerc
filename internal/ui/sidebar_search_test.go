@@ -8,13 +8,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func TestSidebarSearchIdle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("idle: hint row", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		plain := stripANSI(s.View())
 		if !strings.Contains(plain, "/ to search") {
 			t.Errorf("idle view missing hint: %q", plain)
@@ -22,14 +23,14 @@ func TestSidebarSearchIdle(t *testing.T) {
 	})
 
 	t.Run("idle: state", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		if s.State() != SearchIdle {
 			t.Errorf("State() = %v, want SearchIdle", s.State())
 		}
 	})
 
 	t.Run("idle renders exactly 3 rows", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		lines := strings.Split(s.View(), "\n")
 		if len(lines) != 3 {
 			t.Errorf("idle view rows = %d, want 3", len(lines))
@@ -37,16 +38,16 @@ func TestSidebarSearchIdle(t *testing.T) {
 	})
 
 	t.Run("idle Query is empty", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		if s.Query() != "" {
 			t.Errorf("Query() = %q, want empty", s.Query())
 		}
 	})
 
-	t.Run("idle Mode is SearchModeName", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
-		if s.Mode() != SearchModeName {
-			t.Errorf("Mode() = %v, want SearchModeName", s.Mode())
+	t.Run("idle Mode is uicore.SearchModeName", func(t *testing.T) {
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
+		if s.Mode() != uicore.SearchModeName {
+			t.Errorf("Mode() = %v, want uicore.SearchModeName", s.Mode())
 		}
 	})
 }
@@ -55,7 +56,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("Activate: Idle → Typing", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		if s.State() != SearchTyping {
 			t.Errorf("State() = %v, want SearchTyping", s.State())
@@ -66,7 +67,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("Clear returns to Idle and resets query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("hello")
 		s.Clear()
@@ -82,17 +83,17 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("Clear: mode reset", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
-		s.mode = SearchModeAll
+		s.mode = uicore.SearchModeAll
 		s.Clear()
-		if s.Mode() != SearchModeName {
-			t.Errorf("Mode() after Clear = %v, want SearchModeName", s.Mode())
+		if s.Mode() != uicore.SearchModeName {
+			t.Errorf("Mode() after Clear = %v, want uicore.SearchModeName", s.Mode())
 		}
 	})
 
 	t.Run("typing state renders icon + slash + query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("proj")
 		plain := stripANSI(s.View())
@@ -105,7 +106,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("typing state with query renders [name] mode badge", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("x")
 		plain := stripANSI(s.View())
@@ -119,7 +120,7 @@ func TestSidebarSearchCommit(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("Commit transitions Typing → Active", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("hello")
 		s.Commit()
@@ -135,7 +136,7 @@ func TestSidebarSearchCommit(t *testing.T) {
 	})
 
 	t.Run("re-Activate from Active preserves query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("hello")
 		s.Commit()
@@ -156,7 +157,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("printable rune during typing appends to query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
@@ -167,7 +168,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	})
 
 	t.Run("Update: SearchUpdatedMsg", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 		if cmd == nil {
@@ -183,13 +184,13 @@ func TestSidebarSearchUpdate(t *testing.T) {
 		if upd.Query != "p" {
 			t.Errorf("SearchUpdatedMsg.Query = %q, want 'p'", upd.Query)
 		}
-		if upd.Mode != SearchModeName {
-			t.Errorf("SearchUpdatedMsg.Mode = %v, want SearchModeName", upd.Mode)
+		if upd.Mode != uicore.SearchModeName {
+			t.Errorf("SearchUpdatedMsg.Mode = %v, want uicore.SearchModeName", upd.Mode)
 		}
 	})
 
 	t.Run("Backspace during typing emits SearchUpdatedMsg with shorter query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("proj")
 		var cmd tea.Cmd
@@ -209,22 +210,22 @@ func TestSidebarSearchModeCycle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("Tab: cycle [name] → [all]", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
-		if s.Mode() != SearchModeAll {
-			t.Errorf("after first Tab: Mode = %v, want SearchModeAll", s.Mode())
+		if s.Mode() != uicore.SearchModeAll {
+			t.Errorf("after first Tab: Mode = %v, want uicore.SearchModeAll", s.Mode())
 		}
 
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
-		if s.Mode() != SearchModeName {
-			t.Errorf("after second Tab: Mode = %v, want SearchModeName", s.Mode())
+		if s.Mode() != uicore.SearchModeName {
+			t.Errorf("after second Tab: Mode = %v, want uicore.SearchModeName", s.Mode())
 		}
 	})
 
 	t.Run("Tab cycle emits SearchUpdatedMsg with new mode", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("proj")
 
@@ -237,8 +238,8 @@ func TestSidebarSearchModeCycle(t *testing.T) {
 		if !ok {
 			t.Fatalf("Cmd returned %T, want SearchUpdatedMsg", msg)
 		}
-		if upd.Mode != SearchModeAll {
-			t.Errorf("SearchUpdatedMsg.Mode = %v, want SearchModeAll", upd.Mode)
+		if upd.Mode != uicore.SearchModeAll {
+			t.Errorf("SearchUpdatedMsg.Mode = %v, want uicore.SearchModeAll", upd.Mode)
 		}
 		if upd.Query != "proj" {
 			t.Errorf("SearchUpdatedMsg.Query = %q, want 'proj'", upd.Query)
@@ -246,7 +247,7 @@ func TestSidebarSearchModeCycle(t *testing.T) {
 	})
 
 	t.Run("view shows [all] after Tab with non-empty query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("x")
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -261,7 +262,7 @@ func TestSidebarSearchEmptyQuerySuppressesCount(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("info row has no count text when query is empty after Activate", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		lines := strings.Split(stripANSI(s.View()), "\n")
 		if len(lines) != 3 {
@@ -280,7 +281,7 @@ func TestSidebarSearchEmptyQuerySuppressesCount(t *testing.T) {
 	})
 
 	t.Run("count appears after typing one character", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.SetResultCount(5)
 		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
@@ -299,7 +300,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("SetResultCount stores the value", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("proj")
 		s.SetResultCount(3)
@@ -310,7 +311,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 	})
 
 	t.Run("zero results, non-empty query", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("asdf")
 		s.SetResultCount(0)
@@ -321,7 +322,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 	})
 
 	t.Run("singular '1 result' for count 1", func(t *testing.T) {
-		s := NewSidebarSearch(styles, 30, FancyIcons)
+		s := NewSidebarSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("proj")
 		s.SetResultCount(1)

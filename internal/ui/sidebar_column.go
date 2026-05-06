@@ -2,7 +2,11 @@
 
 package ui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/glw907/poplar/internal/ui/uicore"
+)
 
 // SidebarColumn is the composite left-hand column component: account
 // header rows, folder list (Sidebar), spacer, and search shelf
@@ -21,7 +25,7 @@ import "strings"
 // needs to know about LayoutMode, keeping its API narrow.
 type SidebarColumn struct {
 	styles        Styles
-	icons         IconSet
+	icons         uicore.IconSet
 	sidebar       Sidebar
 	sidebarSearch SidebarSearch
 	accountEmail  string
@@ -29,7 +33,7 @@ type SidebarColumn struct {
 }
 
 // NewSidebarColumn assembles a SidebarColumn from its constituent parts.
-func NewSidebarColumn(styles Styles, icons IconSet, sidebar Sidebar, sidebarSearch SidebarSearch, accountEmail string) SidebarColumn {
+func NewSidebarColumn(styles Styles, icons uicore.IconSet, sidebar Sidebar, sidebarSearch SidebarSearch, accountEmail string) SidebarColumn {
 	return SidebarColumn{
 		styles:        styles,
 		icons:         icons,
@@ -74,7 +78,7 @@ func (c SidebarColumn) View() string {
 	}
 	sw := c.width
 
-	acctName := displayTruncateEllipsis(c.accountEmail, sw-1)
+	acctName := uicore.DisplayTruncateEllipsis(c.accountEmail, sw-1)
 	acctLine := c.styles.SidebarAccount.Width(sw).Render(" " + acctName)
 	blank := c.styles.SidebarBg.Width(sw).Render("")
 

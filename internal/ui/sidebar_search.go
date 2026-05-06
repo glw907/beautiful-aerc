@@ -17,17 +17,6 @@ import (
 // shelf is in SearchTyping state.
 var sidebarSearchCycleMode = key.NewBinding(key.WithKeys("tab"))
 
-// SearchMode selects which fields the message filter matches against.
-// Alias for uicore.SearchMode so messagelist and sidebar share the same type.
-type SearchMode = uicore.SearchMode
-
-const (
-	// SearchModeName matches subject + sender. Default.
-	SearchModeName = uicore.SearchModeName
-	// SearchModeAll matches subject + sender + date text.
-	SearchModeAll = uicore.SearchModeAll
-)
-
 // SearchState is the lifecycle state of the sidebar search UI.
 type SearchState int
 
@@ -47,7 +36,7 @@ const (
 // state.
 type SearchUpdatedMsg struct {
 	Query string
-	Mode  SearchMode
+	Mode  uicore.SearchMode
 }
 
 // SidebarSearch is the 3-row shelf pinned to the bottom of the
@@ -57,11 +46,11 @@ type SearchUpdatedMsg struct {
 // Commit, Clear) are driven by direct method calls from AccountTab.
 type SidebarSearch struct {
 	input   textinput.Model
-	mode    SearchMode
+	mode    uicore.SearchMode
 	state   SearchState
 	results int
 	styles  Styles
-	icons   IconSet
+	icons   uicore.IconSet
 	width   int
 }
 
@@ -69,13 +58,13 @@ type SidebarSearch struct {
 // width. The textinput is created with "/" as its prompt so the
 // rendered view shows "/query▏" directly without our shelf having
 // to stitch a prefix in front of it.
-func NewSidebarSearch(styles Styles, width int, icons IconSet) SidebarSearch {
+func NewSidebarSearch(styles Styles, width int, icons uicore.IconSet) SidebarSearch {
 	ti := textinput.New()
 	ti.Prompt = "/"
 	ti.CharLimit = 0
 	return SidebarSearch{
 		input:  ti,
-		mode:   SearchModeName,
+		mode:   uicore.SearchModeName,
 		state:  SearchIdle,
 		styles: styles,
 		icons:  icons,
@@ -83,9 +72,9 @@ func NewSidebarSearch(styles Styles, width int, icons IconSet) SidebarSearch {
 	}
 }
 
-func (s SidebarSearch) State() SearchState { return s.state }
-func (s SidebarSearch) Query() string      { return s.input.Value() }
-func (s SidebarSearch) Mode() SearchMode   { return s.mode }
+func (s SidebarSearch) State() SearchState      { return s.state }
+func (s SidebarSearch) Query() string           { return s.input.Value() }
+func (s SidebarSearch) Mode() uicore.SearchMode { return s.mode }
 
 // SetSize updates the shelf's width. Height is fixed at
 // searchShelfRows. Also clamps the embedded textinput so its
@@ -110,12 +99,12 @@ func (s *SidebarSearch) Activate() {
 }
 
 // Clear returns the shelf to Idle, empties the query, blurs the
-// input, and resets the mode to SearchModeName.
+// input, and resets the mode to uicore.SearchModeName.
 func (s *SidebarSearch) Clear() {
 	s.state = SearchIdle
 	s.input.Reset()
 	s.input.Blur()
-	s.mode = SearchModeName
+	s.mode = uicore.SearchModeName
 	s.results = 0
 }
 
@@ -147,10 +136,10 @@ func (s SidebarSearch) Update(msg tea.Msg) (SidebarSearch, tea.Cmd) {
 
 	// Intercept Tab: cycle the mode without routing to textinput.
 	if k, ok := msg.(tea.KeyMsg); ok && key.Matches(k, sidebarSearchCycleMode) {
-		if s.mode == SearchModeName {
-			s.mode = SearchModeAll
+		if s.mode == uicore.SearchModeName {
+			s.mode = uicore.SearchModeAll
 		} else {
-			s.mode = SearchModeName
+			s.mode = uicore.SearchModeName
 		}
 		query := s.input.Value()
 		mode := s.mode
@@ -234,7 +223,7 @@ func (s SidebarSearch) renderInfoRow() string {
 		return s.renderBlankRow()
 	}
 	modeLabel := "[name]"
-	if s.mode == SearchModeAll {
+	if s.mode == uicore.SearchModeAll {
 		modeLabel = "[all]"
 	}
 	mode := applyBg(s.styles.SearchModeBadge, s.styles.SidebarBg).Render(modeLabel)

@@ -223,8 +223,8 @@ func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 	idxStr := strconv.Itoa(row + 1)
 	pad := strings.Repeat(" ", maxIndexDigits-len(idxStr))
 	url := p.links[row]
-	if displayCells(url) > urlW {
-		url = displayTruncate(url, urlW)
+	if uicore.DisplayCells(url) > urlW {
+		url = uicore.DisplayTruncate(url, urlW)
 	}
 	body := uicore.PadOrTruncate(fmt.Sprintf("%s[%d] %s", pad, row+1, url), contentW)
 	if row == p.cursor {
@@ -246,8 +246,8 @@ func (p LinkPicker) previewLines(width int) []string {
 		return wrapped
 	}
 	row2 := wrapped[1]
-	if displayCells(row2) >= width {
-		row2 = displayTruncate(row2, width-1) + "…"
+	if uicore.DisplayCells(row2) >= width {
+		row2 = uicore.DisplayTruncate(row2, width-1) + "…"
 	} else {
 		row2 += "…"
 	}

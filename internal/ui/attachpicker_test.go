@@ -9,12 +9,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func newTestAttachPicker(t *testing.T) AttachPicker {
 	t.Helper()
 	th := theme.Nord
-	return NewAttachPicker(NewStyles(th), SimpleIcons).SetSize(120, 40)
+	return NewAttachPicker(NewStyles(th), uicore.SimpleIcons).SetSize(120, 40)
 }
 
 func TestAttachPicker_OpenClose(t *testing.T) {

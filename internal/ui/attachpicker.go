@@ -24,7 +24,7 @@ type AttachPicker struct {
 	cursor int
 	offset int
 	styles Styles
-	icons  IconSet
+	icons  uicore.IconSet
 	keys   attachPickerKeys
 }
 
@@ -38,7 +38,7 @@ type attachPickerKeys struct {
 	Digits [9]key.Binding
 }
 
-func NewAttachPicker(styles Styles, icons IconSet) AttachPicker {
+func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
 	keys := attachPickerKeys{
 		Up:    key.NewBinding(key.WithKeys("k", "up")),
 		Down:  key.NewBinding(key.WithKeys("j", "down")),
@@ -190,7 +190,7 @@ func (p AttachPicker) formatRow(row, maxIndexDigits, contentW int) string {
 		name = "attachment"
 	}
 	size := humanize.Bytes(int64(att.Size))
-	body := displayPadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
+	body := uicore.DisplayPadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
 		idxPad, p.icons.Attachment, row+1, name, size), contentW)
 	if row == p.cursor {
 		return p.styles.MsgListCursor.Render(body)

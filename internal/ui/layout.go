@@ -8,10 +8,6 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// LayoutMode is the resolved set of layout decisions for a given
-// terminal width. Defined in uicore for shared access across subpackages.
-type LayoutMode = uicore.LayoutMode
-
 // ComputeLayout returns the layout decisions for a given terminal
 // width. See ADR-0109 for the formula derivation. Sender slope is
 // 0.125 (matched to sender-name coverage cliffs at 22/28/32 cells)
@@ -19,7 +15,7 @@ type LayoutMode = uicore.LayoutMode
 // thresholds gate the flag column (W>=90), date column (3 cells at
 // W>=90, 5 cells at W>=100), and sidebar icons (sidebar>=20, i.e.
 // W>=108 with the 0.2 slope and round-half-away-from-zero).
-func ComputeLayout(termWidth int) LayoutMode {
+func ComputeLayout(termWidth int) uicore.LayoutMode {
 	sidebar := clampInt(int(math.Round(14.0+float64(termWidth-80)*0.2)), 14, 30)
 	sender := clampInt(int(math.Round(22.0+float64(termWidth-80)*0.125)), 22, 32)
 	var date int
@@ -31,7 +27,7 @@ func ComputeLayout(termWidth int) LayoutMode {
 	default:
 		date = 5
 	}
-	return LayoutMode{
+	return uicore.LayoutMode{
 		Sidebar:    sidebar,
 		Sender:     sender,
 		Date:       date,
