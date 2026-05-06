@@ -587,6 +587,43 @@ func openAttachmentCmd(c *cache.Account, opener URLOpener, uid mail.UID, att mai
 	}
 }
 
+// composeSeedKind identifies which seed function to call.
+type composeSeedKind int
+
+const (
+	seedReply composeSeedKind = iota
+	seedReplyAll
+	seedForward
+)
+
+// composeSeedCmd fetches the parent body, builds a Draft via the
+// appropriate compose.Seed* function, and returns composeSeededMsg.
+func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, kind composeSeedKind) tea.Cmd {
+	return func() tea.Msg {
+		body, err := acct.FetchBody(parent.UID)
+		if err != nil {
+			return ErrorMsg{Op: "fetch parent body", Err: err}
+		}
+		var d compose.Draft
+		switch kind {
+		case seedReply:
+			d = compose.SeedReply(parent, body)
+		case seedReplyAll:
+			d = compose.SeedReplyAll(parent, body, gomail.Address{Address: self})
+		default:
+			d = compose.SeedForward(parent, body)
+		}
+		d.From = gomail.Address{Address: self}
+		return composeSeededMsg{Draft: d}
+	}
+}
+
+// composeSeededMsg carries a pre-filled Draft from r/R/f. App opens
+// ComposeTab and calls Seed when this msg arrives.
+type composeSeededMsg struct {
+	Draft compose.Draft
+}
+
 // composeSendCmd runs the tidy seam, assembles MIME, and queues the
 // outbox op via cache.Account.QueueOutbound. Returns ErrorMsg on any
 // failure, composeSentMsg on success.

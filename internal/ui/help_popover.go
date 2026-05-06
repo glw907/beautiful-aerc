@@ -102,10 +102,10 @@ var accountGroups = []bindingGroup{
 	{
 		title: "Reply",
 		rows: []bindingRow{
-			{"r", "reply", false},
-			{"R", "all", false},
-			{"f", "forward", false},
-			{"c", "compose", false},
+			{"r", "reply", true},
+			{"R", "all", true},
+			{"f", "forward", true},
+			{"c", "compose", true},
 		},
 	},
 	{
@@ -176,10 +176,10 @@ var viewerGroups = []bindingGroup{
 	{
 		title: "Reply",
 		rows: []bindingRow{
-			{"r", "reply", false},
-			{"R", "all", false},
-			{"f", "forward", false},
-			{"c", "compose", false},
+			{"r", "reply", true},
+			{"R", "all", true},
+			{"f", "forward", true},
+			{"c", "compose", true},
 		},
 	},
 }

@@ -1385,3 +1385,124 @@ func TestApp_WindowSizeSetsComposeSize(t *testing.T) {
 		t.Errorf("compose dims after resize: %dx%d, want non-zero", app.compose.width, app.compose.height)
 	}
 }
+
+func TestApp_R_OpensReplySeededCompose(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	_, ok := app.selectedMessage()
+	if !ok {
+		t.Fatal("setup: no selected message in loaded app")
+	}
+
+	out, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	app = out
+	if cmd == nil {
+		t.Fatal("r should return a Cmd to fetch parent body and seed compose")
+	}
+	// Execute the seed Cmd and feed the result back.
+	msg := cmd()
+	app, _ = app.Update(msg)
+
+	if !app.composeOpen {
+		t.Fatal("r should open compose after seeding")
+	}
+	if app.compose == nil {
+		t.Fatal("compose should be non-nil after seeding")
+	}
+	if !strings.HasPrefix(app.compose.subject.Value(), "Re:") {
+		t.Fatalf("subject should be Re:-prefixed, got %q", app.compose.subject.Value())
+	}
+}
+
+func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: compose should be open after c")
+	}
+	app.compose.editor.SetValue("dirty content")
+
+	out, _ := app.Update(ComposeCancelMsg{Dirty: true})
+	app = out
+	if !app.confirm.IsOpen() {
+		t.Fatal("dirty cancel should open ConfirmModal")
+	}
+	if !app.composeOpen {
+		t.Fatal("compose should remain open while confirming")
+	}
+	if !app.pendingComposeDiscard {
+		t.Fatal("pendingComposeDiscard should be set")
+	}
+}
+
+func TestApp_CtrlC_EmptyClosesImmediately(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: compose should be open after c")
+	}
+
+	out, _ := app.Update(ComposeCancelMsg{Dirty: false})
+	app = out
+	if app.composeOpen {
+		t.Fatal("empty cancel should close immediately")
+	}
+	if app.compose != nil {
+		t.Fatal("compose should be nil after empty cancel")
+	}
+}
+
+func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: compose should be open after c")
+	}
+	app.compose.editor.SetValue("dirty content")
+
+	app, _ = app.Update(ComposeCancelMsg{Dirty: true})
+	if !app.confirm.IsOpen() {
+		t.Fatal("setup: confirm should be open after dirty cancel")
+	}
+
+	app, _ = app.Update(ConfirmModalYesMsg{})
+	if app.composeOpen {
+		t.Fatal("Yes on discard should close compose")
+	}
+	if app.compose != nil {
+		t.Fatal("compose should be nil after Yes discard")
+	}
+	if app.pendingComposeDiscard {
+		t.Fatal("pendingComposeDiscard should be cleared after Yes")
+	}
+}
+
+func TestApp_ConfirmModalNo_LeavesComposeOpen(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: compose should be open after c")
+	}
+	app.compose.editor.SetValue("dirty content")
+
+	app, _ = app.Update(ComposeCancelMsg{Dirty: true})
+	if !app.confirm.IsOpen() {
+		t.Fatal("setup: confirm should be open")
+	}
+
+	// Pressing n emits ConfirmModalClosedMsg (no Yes). Feed it through.
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	msgs := drainBatch(cmd)
+	for _, m := range msgs {
+		app, _ = app.Update(m)
+	}
+	if !app.composeOpen {
+		t.Fatal("compose should remain open after No on discard confirm")
+	}
+	if app.pendingComposeDiscard {
+		t.Fatal("pendingComposeDiscard should be cleared after No")
+	}
+}

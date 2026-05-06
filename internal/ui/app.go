@@ -68,12 +68,13 @@ type App struct {
 	opener URLOpener
 	// tidy rewrites the markdown body before MIME assembly. Test seam,
 	// defaults to identityTidy.
-	tidy        TidyFn
-	theme       *theme.CompiledTheme
-	compose     *ComposeTab
-	composeOpen bool
-	width       int
-	height      int
+	tidy                  TidyFn
+	theme                 *theme.CompiledTheme
+	compose               *ComposeTab
+	composeOpen           bool
+	pendingComposeDiscard bool
+	width                 int
+	height                int
 }
 
 // WithOpener returns a copy of m with the URL opener replaced.
@@ -247,7 +248,13 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalYesMsg:
-		if m.pendingEmpty.folder != "" {
+		switch {
+		case m.pendingComposeDiscard:
+			m.pendingComposeDiscard = false
+			m.composeOpen = false
+			m.compose = nil
+			return m, nil
+		case m.pendingEmpty.folder != "":
 			folder, source := m.pendingEmpty.folder, m.pendingEmpty.source
 			m.pendingEmpty = pendingEmptyConfirm{}
 			return m, func() tea.Msg {
@@ -257,6 +264,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalClosedMsg:
+		m.pendingComposeDiscard = false
 		m.pendingEmpty = pendingEmptyConfirm{}
 		m.confirm = m.confirm.Close()
 		return m, nil
@@ -475,9 +483,25 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case composeSeededMsg:
+		w, h := m.rightPaneSize()
+		m.compose = NewComposeTab(m.styles, m.theme, m.acct.AccountEmail(), m.icons)
+		m.compose.SetSize(w, h)
+		m.compose.Seed(msg.Draft)
+		m.composeOpen = true
+		return m, m.compose.Init()
+
 	case ComposeCancelMsg:
-		m.composeOpen = false
-		m.compose = nil
+		if !msg.Dirty {
+			m.composeOpen = false
+			m.compose = nil
+			return m, nil
+		}
+		m.confirm = m.confirm.Open(ConfirmRequest{
+			Title: "Discard draft?",
+			Body:  "Your draft will be lost.",
+		})
+		m.pendingComposeDiscard = true
 		return m, nil
 
 	case tea.KeyMsg:
@@ -537,6 +561,21 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				m.composeOpen = true
 				return m, m.compose.Init()
 			}
+		case key.Matches(msg, m.keys.Reply), key.Matches(msg, m.keys.ReplyAll), key.Matches(msg, m.keys.Forward):
+			if m.composeOpen {
+				break
+			}
+			parent, ok := m.selectedMessage()
+			if !ok {
+				break
+			}
+			kind := seedReply
+			if key.Matches(msg, m.keys.ReplyAll) {
+				kind = seedReplyAll
+			} else if key.Matches(msg, m.keys.Forward) {
+				kind = seedForward
+			}
+			return m, composeSeedCmd(m.acct.Cache(), parent, m.acct.AccountEmail(), kind)
 		case key.Matches(msg, m.keys.Undo):
 			// Undo is only live while a toast is active. Otherwise the
 			// 'u' key falls through to AccountTab so other meanings can
@@ -736,6 +775,13 @@ func (m App) rightPaneSize() (w, h int) {
 	w = max(1, contentW-sw-1) // -1 for divider
 	h = m.contentHeight()
 	return w, h
+}
+
+// selectedMessage returns the currently-selected message from the
+// account tab's message list, forwarding to the viewer's current
+// message when the viewer is open.
+func (m App) selectedMessage() (mail.MessageInfo, bool) {
+	return m.acct.msglist.SelectedMessage()
 }
 
 // hasBannerRow reports whether the chrome row above the status bar is

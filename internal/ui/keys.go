@@ -16,6 +16,9 @@ type GlobalKeys struct {
 	OutboxOverlay   key.Binding
 	ConflictOverlay key.Binding
 	Compose         key.Binding
+	Reply           key.Binding
+	ReplyAll        key.Binding
+	Forward         key.Binding
 }
 
 // NewGlobalKeys returns the default global key bindings.
@@ -29,6 +32,9 @@ func NewGlobalKeys() GlobalKeys {
 		OutboxOverlay:   key.NewBinding(key.WithKeys("Q"), key.WithHelp("Q", "outbox")),
 		ConflictOverlay: key.NewBinding(key.WithKeys("!"), key.WithHelp("!", "conflicts")),
 		Compose:         key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compose")),
+		Reply:           key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
+		ReplyAll:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reply all")),
+		Forward:         key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "forward")),
 	}
 }
 

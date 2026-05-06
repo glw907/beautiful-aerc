@@ -50,7 +50,10 @@ func TestHelpPopover_WiredFlagsAccount(t *testing.T) {
 		{"Navigate", "j/k", true},
 		{"Triage", "d", true},
 		{"Triage", "u", true},
-		{"Reply", "c", false},
+		{"Reply", "r", true},
+		{"Reply", "R", true},
+		{"Reply", "f", true},
+		{"Reply", "c", true},
 		{"Search", "/", true},
 		{"Select", "v", true},
 		{"Threads", "F", true},
@@ -192,13 +195,13 @@ func TestHelpPopover_WiredStyling(t *testing.T) {
 		t.Error("Navigate j/k: expected wired=true")
 	}
 
-	// "Reply" rows remain unwired (compose/reply not yet implemented).
-	unwiredRow, ok := findAccountRow("Reply", "c")
+	// "Reply" rows are all wired.
+	replyRow, ok := findAccountRow("Reply", "c")
 	if !ok {
 		t.Fatal("Reply c row not found in accountGroups")
 	}
-	if unwiredRow.wired {
-		t.Error("Reply c: expected wired=false")
+	if !replyRow.wired {
+		t.Error("Reply c: expected wired=true")
 	}
 
 	// Confirm render path routes correctly: wired row content is
