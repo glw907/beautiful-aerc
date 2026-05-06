@@ -2,40 +2,15 @@
 
 package ui
 
-import "math"
+import (
+	"math"
+
+	"github.com/glw907/poplar/internal/ui/uicore"
+)
 
 // LayoutMode is the resolved set of layout decisions for a given
-// terminal width. Computed once per WindowSizeMsg by ComputeLayout
-// and threaded into Sidebar and MessageList. Pure data, no I/O,
-// no side effects, no methods that change observable behavior
-// based on flags outside the struct.
-type LayoutMode struct {
-	// Sidebar is the sidebar width in cells (folder list). Range
-	// [14, 30]. Floor 14 fits "Archive" with icons off. Ceiling
-	// 30 gives breathing room for nested custom folder names.
-	Sidebar int
-
-	// Sender is the message-list sender column width in cells.
-	// Range [22, 32]. Floor 22 covers ~86% of real sender names
-	// untruncated. Ceiling 32 covers ~95%.
-	Sender int
-
-	// Date is the message-list date column width in cells.
-	//   0: column hidden
-	//   3: compact relative format ("now", "5m", "Apr", "'24")
-	//   5: short absolute format ("04-30" / "3:04p")
-	Date int
-
-	// FlagColumn is true when the message-list flag/status icon
-	// column is rendered. When false, the column is omitted
-	// entirely (saves 4 cells: glyph + inter-column gap).
-	FlagColumn bool
-
-	// Icons is true when the sidebar renders folder icons. When
-	// false, the icon block is omitted from each sidebar row,
-	// shrinking the lead from 8 (fancy) to 2 cells.
-	Icons bool
-}
+// terminal width. Defined in uicore for shared access across subpackages.
+type LayoutMode = uicore.LayoutMode
 
 // ComputeLayout returns the layout decisions for a given terminal
 // width. See ADR-0109 for the formula derivation. Sender slope is

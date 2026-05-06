@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // sidebarSearchCycleMode binds Tab to the mode toggle while the
@@ -17,13 +18,14 @@ import (
 var sidebarSearchCycleMode = key.NewBinding(key.WithKeys("tab"))
 
 // SearchMode selects which fields the message filter matches against.
-type SearchMode int
+// Alias for uicore.SearchMode so messagelist and sidebar share the same type.
+type SearchMode = uicore.SearchMode
 
 const (
 	// SearchModeName matches subject + sender. Default.
-	SearchModeName SearchMode = iota
+	SearchModeName = uicore.SearchModeName
 	// SearchModeAll matches subject + sender + date text.
-	SearchModeAll
+	SearchModeAll = uicore.SearchModeAll
 )
 
 // SearchState is the lifecycle state of the sidebar search UI.

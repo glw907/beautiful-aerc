@@ -290,11 +290,11 @@ func TestAccountTab_PerFolderThreadingOverride(t *testing.T) {
 	}
 	tab, _ = tab.updateTab(folderLoadedMsg{name: "Inbox", msgs: msgs, total: len(msgs)})
 
-	if got := visibleRowCount(tab.msglist); got != 2 {
+	if got := tab.msglist.VisibleCount(); got != 2 {
 		t.Fatalf("flat display visible rows = %d, want 2 (no thread tree)", got)
 	}
-	for i, r := range tab.msglist.rows {
-		if !r.isThreadRoot {
+	for i, r := range tab.msglist.Rows() {
+		if !r.IsThreadRoot {
 			t.Errorf("rows[%d] isThreadRoot = false, want true under threading=false", i)
 		}
 	}
@@ -303,13 +303,13 @@ func TestAccountTab_PerFolderThreadingOverride(t *testing.T) {
 func TestAccountTabFoldKeys(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 
-	if got, want := visibleRowCount(tab.msglist), 14; got != want {
+	if got, want := tab.msglist.VisibleCount(), 14; got != want {
 		t.Fatalf("initial visible rows = %d, want %d", got, want)
 	}
 
 	t.Run("F folds all threads", func(t *testing.T) {
 		tab2, _ := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
-		if got := visibleRowCount(tab2.msglist); got != 11 {
+		if got := tab2.msglist.VisibleCount(); got != 11 {
 			t.Errorf("after F, visible = %d, want 11", got)
 		}
 	})
@@ -317,7 +317,7 @@ func TestAccountTabFoldKeys(t *testing.T) {
 	t.Run("U unfolds all threads after F", func(t *testing.T) {
 		tab2, _ := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
 		tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
-		if got := visibleRowCount(tab2.msglist); got != 14 {
+		if got := tab2.msglist.VisibleCount(); got != 14 {
 			t.Errorf("after F then U, visible = %d, want 14", got)
 		}
 	})
@@ -326,8 +326,8 @@ func TestAccountTabFoldKeys(t *testing.T) {
 		// Use a fresh tab to avoid aliasing the folded map with the F subtest.
 		tabS := newLoadedTab(t, 120, 30)
 		var t1Idx int = -1
-		for i, r := range tabS.msglist.rows {
-			if r.isThreadRoot && r.msg.ThreadID == "T1" {
+		for i, r := range tabS.msglist.Rows() {
+			if r.IsThreadRoot && r.Msg.ThreadID == "T1" {
 				t1Idx = i
 				break
 			}
@@ -340,7 +340,7 @@ func TestAccountTabFoldKeys(t *testing.T) {
 			tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		}
 		tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeySpace})
-		if got := visibleRowCount(tab2.msglist); got != 11 {
+		if got := tab2.msglist.VisibleCount(); got != 11 {
 			t.Errorf("after Space on T1 root, visible = %d, want 11", got)
 		}
 	})
@@ -433,9 +433,9 @@ func TestAccountTabSearchActivation(t *testing.T) {
 
 	t.Run("/ in Idle does not start filtering yet (empty query)", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		rowCountBefore := len(tab.msglist.rows)
+		rowCountBefore := len(tab.msglist.Rows())
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-		if got := len(tab.msglist.rows); got != rowCountBefore {
+		if got := len(tab.msglist.Rows()); got != rowCountBefore {
 			t.Errorf("row count after / = %d, want %d (no filter yet)", got, rowCountBefore)
 		}
 	})
@@ -445,7 +445,7 @@ func TestAccountTabSearchFilter(t *testing.T) {
 	t.Run("typing during search filters the message list", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-		rowsBefore := len(tab.msglist.rows)
+		rowsBefore := len(tab.msglist.Rows())
 
 		for _, r := range []rune{'a', 'l', 'i'} {
 			var cmd tea.Cmd
@@ -453,16 +453,16 @@ func TestAccountTabSearchFilter(t *testing.T) {
 			drainSearch(t, &tab, cmd)
 		}
 
-		if got := len(tab.msglist.rows); got >= rowsBefore {
+		if got := len(tab.msglist.Rows()); got >= rowsBefore {
 			t.Errorf("row count after typing = %d, want < %d", got, rowsBefore)
 		}
 	})
 
 	t.Run("SearchUpdatedMsg directly sets the filter", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		rowsBefore := len(tab.msglist.rows)
+		rowsBefore := len(tab.msglist.Rows())
 		tab, _ = tab.updateTab(SearchUpdatedMsg{Query: "alice", Mode: SearchModeName})
-		if got := len(tab.msglist.rows); got >= rowsBefore {
+		if got := len(tab.msglist.Rows()); got >= rowsBefore {
 			t.Errorf("row count after SearchUpdatedMsg = %d, want < %d", got, rowsBefore)
 		}
 	})
@@ -496,16 +496,16 @@ func TestAccountTabSearchCommitClear(t *testing.T) {
 		var cmd tea.Cmd
 		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 		drainSearch(t, &tab, cmd)
-		filteredRows := len(tab.msglist.rows)
+		filteredRows := len(tab.msglist.Rows())
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		if got := len(tab.msglist.rows); got != filteredRows {
+		if got := len(tab.msglist.Rows()); got != filteredRows {
 			t.Errorf("row count after Enter = %d, want %d (filter preserved)", got, filteredRows)
 		}
 	})
 
 	t.Run("Esc in Typing clears the filter and returns to Idle", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		rowsBefore := len(tab.msglist.rows)
+		rowsBefore := len(tab.msglist.Rows())
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		var cmd tea.Cmd
 		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
@@ -514,14 +514,14 @@ func TestAccountTabSearchCommitClear(t *testing.T) {
 		if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
 			t.Errorf("state after Esc = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
-		if got := len(tab.msglist.rows); got != rowsBefore {
+		if got := len(tab.msglist.Rows()); got != rowsBefore {
 			t.Errorf("row count after Esc = %d, want %d (full restore)", got, rowsBefore)
 		}
 	})
 
 	t.Run("Esc in Active clears the filter", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		rowsBefore := len(tab.msglist.rows)
+		rowsBefore := len(tab.msglist.Rows())
 		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		var cmd tea.Cmd
 		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
@@ -531,7 +531,7 @@ func TestAccountTabSearchCommitClear(t *testing.T) {
 		if tab.sidebarColumn.SidebarSearch().State() != SearchIdle {
 			t.Errorf("state after Esc in Active = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
-		if got := len(tab.msglist.rows); got != rowsBefore {
+		if got := len(tab.msglist.Rows()); got != rowsBefore {
 			t.Errorf("row count after Esc in Active = %d, want %d", got, rowsBefore)
 		}
 	})
@@ -1184,7 +1184,7 @@ func TestAccountTab_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
 	if got := tab.sidebarColumn.Sidebar().layout; got != wantLayout {
 		t.Errorf("sidebar.layout = %+v, want %+v", got, wantLayout)
 	}
-	if got := tab.msglist.layout; got != wantLayout {
+	if got := tab.msglist.Layout(); got != wantLayout {
 		t.Errorf("msglist.layout = %+v, want %+v", got, wantLayout)
 	}
 }

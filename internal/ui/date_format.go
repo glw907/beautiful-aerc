@@ -4,10 +4,21 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
 )
+
+// padRight right-pads s with spaces to width display cells. Input is
+// plain text (no ANSI), so lipgloss.Width measures correctly.
+func padRight(s string, width int) string {
+	if w := lipgloss.Width(s); w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return s
+}
 
 // formatRelativeDateCompact returns a 3-cell relative date string,
 // always right-padded to width 3. Used in Intermediate-tier message

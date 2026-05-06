@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package messagelist
 
 import (
 	"fmt"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -42,11 +44,55 @@ const (
 	SortDateAsc                   // oldest activity first
 )
 
-// displayRow is one rendered row in the message list. The slice of
-// these is computed from the source []MessageInfo by the build
-// pipeline (group, sort, flatten). Hidden rows still occupy indices
-// in the slice. The renderer skips them and j/k navigation walks
-// past them.
+// LayoutMode is the resolved set of column-width decisions. Alias for
+// uicore.LayoutMode, re-exported so callers don't need to import uicore.
+type LayoutMode = uicore.LayoutMode
+
+// IconSet is the per-mode iconography vocabulary. Alias for uicore.IconSet.
+type IconSet = uicore.IconSet
+
+// SearchMode selects which fields the message filter matches against.
+// Alias for uicore.SearchMode so sidebar and messagelist share the same type.
+type SearchMode = uicore.SearchMode
+
+const (
+	// SearchModeName matches subject + sender. Default.
+	SearchModeName = uicore.SearchModeName
+	// SearchModeAll matches subject + sender + date text.
+	SearchModeAll = uicore.SearchModeAll
+)
+
+// Styles holds the subset of UI styles the message list needs.
+// Populated from ui.Styles at construction time.
+type Styles struct {
+	MsgListBg            lipgloss.Style
+	MsgListSelected      lipgloss.Style
+	MsgListCursor        lipgloss.Style
+	MsgListUnreadSender  lipgloss.Style
+	MsgListUnreadSubject lipgloss.Style
+	MsgListReadSender    lipgloss.Style
+	MsgListReadSubject   lipgloss.Style
+	MsgListDate          lipgloss.Style
+	MsgListIconUnread    lipgloss.Style
+	MsgListIconRead      lipgloss.Style
+	MsgListFlagFlagged   lipgloss.Style
+	MsgListThreadPrefix  lipgloss.Style
+	MsgListPlaceholder   lipgloss.Style
+}
+
+// Row is a rendered row in the message list, exposed for cross-package
+// test assertions (account_tab_test accesses rows via tab.msglist.Rows).
+type Row struct {
+	Msg          mail.MessageInfo
+	Prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
+	IsThreadRoot bool
+	ThreadSize   int  // set on roots only. 1 for unthreaded
+	Hidden       bool // true when collapsed under a folded root
+	Depth        uint8
+}
+
+// displayRow is the internal row type, kept unexported. Rows() converts
+// it to Row for external consumers.
 type displayRow struct {
 	msg          mail.MessageInfo
 	prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
@@ -57,14 +103,21 @@ type displayRow struct {
 	depth        uint8 // 0 = root, derived during prefix computation
 }
 
-// MessageList renders the message list panel: flags, sender, subject,
+// searchFilter holds the active filter's query and mode. The zero
+// value (empty query, SearchModeName) means "no filter."
+type searchFilter struct {
+	query string
+	mode  SearchMode
+}
+
+// Model renders the message list panel: flags, sender, subject,
 // and date columns. Hand-rolled (not bubbles/list) to match the
 // sidebar pattern and allow the ▐ cursor + selection background.
 //
-// MessageList owns thread grouping, fold state, and sort direction.
+// Model owns thread grouping, fold state, and sort direction.
 // The source slice is preserved alongside a derived []displayRow so
 // fold mutations re-flatten without a backend refetch.
-type MessageList struct {
+type Model struct {
 	source   []mail.MessageInfo
 	rows     []displayRow
 	folded   map[mail.UID]bool
@@ -73,8 +126,8 @@ type MessageList struct {
 	selected int
 	offset   int
 	styles   Styles
-	icons    IconSet
-	layout   LayoutMode
+	icons    uicore.IconSet
+	layout   uicore.LayoutMode
 	width    int
 	height   int
 	// now is the clock snapshot fed into displayDate during rebuild.
@@ -91,22 +144,15 @@ type MessageList struct {
 	marked     map[mail.UID]struct{}
 }
 
-// searchFilter holds the active filter's query and mode. The zero
-// value (empty query, SearchModeName) means "no filter."
-type searchFilter struct {
-	query string
-	mode  SearchMode
-}
-
-// NewMessageList creates a MessageList with the given messages and size.
+// New creates a Model with the given messages and size.
 // layout defaults to a legacy-compatible value (Sender=22, Date=5,
 // FlagColumn=true) so callers that haven't yet called SetLayout (e.g.
 // tests that bypass WindowSizeMsg) get sensible output.
-func NewMessageList(styles Styles, msgs []mail.MessageInfo, width, height int, icons IconSet) MessageList {
-	m := MessageList{
+func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore.IconSet) Model {
+	m := Model{
 		styles:   styles,
 		icons:    icons,
-		layout:   LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
+		layout:   uicore.LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
 		width:    width,
 		height:   height,
 		folded:   map[mail.UID]bool{},
@@ -123,7 +169,7 @@ func NewMessageList(styles Styles, msgs []mail.MessageInfo, width, height int, i
 // list. Resets fold state, cursor, viewport, and any active filter.
 // Also refreshes the clock snapshot so newly-delivered messages get
 // the same-day relative formatting.
-func (m *MessageList) SetMessages(msgs []mail.MessageInfo) {
+func (m *Model) SetMessages(msgs []mail.MessageInfo) {
 	m.source = msgs
 	m.folded = map[mail.UID]bool{}
 	m.marked = map[mail.UID]struct{}{}
@@ -149,7 +195,7 @@ func (m *MessageList) SetMessages(msgs []mail.MessageInfo) {
 //  4. Walk each thread, emit displayRows root-then-children,
 //     computing depth and box-drawing prefix.
 //  5. Apply fold state.
-func (m *MessageList) rebuild() {
+func (m *Model) rebuild() {
 	var buckets [][]mail.MessageInfo
 	if m.threaded {
 		buckets = bucketByThreadID(m.source)
@@ -226,7 +272,7 @@ func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
 // filter query is empty, it returns buckets unchanged. When non-empty,
 // it keeps any bucket containing at least one matching message. The
 // thread-level predicate from ADR 0064.
-func (m *MessageList) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo {
+func (m *Model) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo {
 	if m.filter.query == "" {
 		return buckets
 	}
@@ -248,7 +294,7 @@ func (m *MessageList) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.Messa
 // [all] additionally matches the rendered date text the user sees
 // in the date column (not the wire RFC2822 string). Each field is
 // lowercased once per call.
-func (m *MessageList) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
+func (m *Model) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
 	if strings.Contains(strings.ToLower(msg.Subject), lowerQuery) {
 		return true
 	}
@@ -449,7 +495,7 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 // first transition from unfiltered to filtered, saves the pre-search
 // cursor row so ClearFilter can restore it. Subsequent keystrokes do
 // not overwrite the saved row. The save gate stays armed until clear.
-func (m *MessageList) SetFilter(q string, mode SearchMode) {
+func (m *Model) SetFilter(q string, mode SearchMode) {
 	if !m.savedByFilter && q != "" {
 		m.preSearchCursor = m.selected
 		m.savedByFilter = true
@@ -462,7 +508,7 @@ func (m *MessageList) SetFilter(q string, mode SearchMode) {
 // ClearFilter removes any active filter, rebuilds rows, and restores
 // the pre-search cursor row if one was saved. A cursor that points
 // past the new end of rows clamps to 0.
-func (m *MessageList) ClearFilter() {
+func (m *Model) ClearFilter() {
 	m.filter = searchFilter{}
 	m.rebuild()
 	if m.savedByFilter {
@@ -479,14 +525,14 @@ func (m *MessageList) ClearFilter() {
 // active filter, or 0 if no filter is active. Thread count, not
 // message count, because the filter predicate runs per bucket and
 // keeps whole threads as units.
-func (m MessageList) FilterResultCount() int {
+func (m Model) FilterResultCount() int {
 	return m.filterResults
 }
 
 // SetSort changes the thread-level sort direction and re-runs the
 // build pipeline. Children inside a thread always sort ascending
 // regardless of this setting.
-func (m *MessageList) SetSort(order SortOrder) {
+func (m *Model) SetSort(order SortOrder) {
 	m.sort = order
 	m.rebuild()
 }
@@ -497,7 +543,7 @@ func (m *MessageList) SetSort(order SortOrder) {
 // Flat display: one row per message, no prefixes, no fold
 // state) but sort and filter still apply. Per-folder
 // `[ui.folders.<name>] threading = false` flips this.
-func (m *MessageList) SetThreaded(threaded bool) {
+func (m *Model) SetThreaded(threaded bool) {
 	if m.threaded == threaded {
 		return
 	}
@@ -509,7 +555,7 @@ func (m *MessageList) SetThreaded(threaded bool) {
 // currently inside. If the cursor is on a child row, the toggle still
 // operates on that child's thread root. After folding, the cursor
 // snaps to the nearest visible row so it doesn't land on a hidden one.
-func (m *MessageList) ToggleFold() {
+func (m *Model) ToggleFold() {
 	if len(m.rows) == 0 {
 		return
 	}
@@ -528,7 +574,7 @@ func (m *MessageList) ToggleFold() {
 // otherwise it unfolds everything. The "mixed state → fold" direction
 // matches what users usually want from a bulk reset (collapse the
 // noise, then open the specific thread you're reading).
-func (m *MessageList) ToggleFoldAll() {
+func (m *Model) ToggleFoldAll() {
 	anyUnfolded := false
 	for _, r := range m.rows {
 		if r.isThreadRoot && r.threadSize > 1 && !m.folded[r.msg.UID] {
@@ -553,7 +599,7 @@ func (m *MessageList) ToggleFoldAll() {
 // after a rebuild. Children always sit below their thread root in the
 // slice, so walking back from a hidden child lands on the root that
 // owns it. Re-clamps the viewport.
-func (m *MessageList) snapToVisible() {
+func (m *Model) snapToVisible() {
 	if m.selected < len(m.rows) && !m.rows[m.selected].hidden {
 		m.clampOffset()
 		return
@@ -570,7 +616,7 @@ func (m *MessageList) snapToVisible() {
 // threadRootIndex returns the row index of the thread root that owns
 // the row at idx. Walks backwards from idx until it finds a row with
 // isThreadRoot == true. Returns -1 if no root is found above idx.
-func (m MessageList) threadRootIndex(idx int) int {
+func (m Model) threadRootIndex(idx int) int {
 	if idx < 0 || idx >= len(m.rows) {
 		return -1
 	}
@@ -583,16 +629,19 @@ func (m MessageList) threadRootIndex(idx int) int {
 }
 
 // SetSize updates the panel dimensions.
-func (m *MessageList) SetSize(width, height int) {
+func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampOffset()
 }
 
+// Layout returns the current layout settings. Used by cross-package tests.
+func (m Model) Layout() uicore.LayoutMode { return m.layout }
+
 // SetLayout updates the column widths and date/flag toggles. Date
 // width changes trigger a rebuild because dateText is precomputed
 // per row. Sender/flag widths take effect at next render.
-func (m *MessageList) SetLayout(l LayoutMode) {
+func (m *Model) SetLayout(l uicore.LayoutMode) {
 	prevDate := m.layout.Date
 	m.layout = l
 	if prevDate != l.Date {
@@ -603,17 +652,17 @@ func (m *MessageList) SetLayout(l LayoutMode) {
 // SetNow overrides the cached clock snapshot used by displayDate
 // during rebuild. Tests use this to freeze time. Production code
 // relies on the SetMessages-driven refresh.
-func (m *MessageList) SetNow(now time.Time) {
+func (m *Model) SetNow(now time.Time) {
 	m.now = now
 	m.rebuild()
 }
 
 // Selected returns the index of the currently selected message.
-func (m MessageList) Selected() int { return m.selected }
+func (m Model) Selected() int { return m.selected }
 
 // SelectedMessage returns the currently selected message. ok is false
 // if the list is empty.
-func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
+func (m Model) SelectedMessage() (mail.MessageInfo, bool) {
 	if m.selected < 0 || m.selected >= len(m.rows) {
 		return mail.MessageInfo{}, false
 	}
@@ -622,7 +671,7 @@ func (m MessageList) SelectedMessage() (mail.MessageInfo, bool) {
 
 // MessageByUID returns the message info for uid, or ok=false when not
 // found in the source set.
-func (m MessageList) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
+func (m Model) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
 	for i := range m.source {
 		if m.source[i].UID == uid {
 			return m.source[i], true
@@ -632,14 +681,42 @@ func (m MessageList) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
 }
 
 // Count returns the number of source messages in the list.
-func (m MessageList) Count() int { return len(m.source) }
+func (m Model) Count() int { return len(m.source) }
 
 // Source returns the underlying source message slice (read-only).
-func (m MessageList) Source() []mail.MessageInfo { return m.source }
+func (m Model) Source() []mail.MessageInfo { return m.source }
+
+// Rows returns the rendered displayRow slice as exported Row values.
+// Used by cross-package tests that need to inspect fold/thread state.
+func (m Model) Rows() []Row {
+	out := make([]Row, len(m.rows))
+	for i, r := range m.rows {
+		out[i] = Row{
+			Msg:          r.msg,
+			Prefix:       r.prefix,
+			IsThreadRoot: r.isThreadRoot,
+			ThreadSize:   r.threadSize,
+			Hidden:       r.hidden,
+			Depth:        r.depth,
+		}
+	}
+	return out
+}
+
+// VisibleCount returns the number of non-hidden rows.
+func (m Model) VisibleCount() int {
+	n := 0
+	for _, r := range m.rows {
+		if !r.hidden {
+			n++
+		}
+	}
+	return n
+}
 
 // cursorUID returns the UID under the cursor, or empty if no rows.
 // Used as an anchor across rebuild.
-func (m *MessageList) cursorUID() mail.UID {
+func (m *Model) cursorUID() mail.UID {
 	if len(m.rows) == 0 || m.selected >= len(m.rows) {
 		return ""
 	}
@@ -648,7 +725,7 @@ func (m *MessageList) cursorUID() mail.UID {
 
 // snapToUID positions the cursor on the row whose UID matches uid.
 // Falls back to clamp at len(rows)-1 when not found.
-func (m *MessageList) snapToUID(uid mail.UID) {
+func (m *Model) snapToUID(uid mail.UID) {
 	if uid == "" || len(m.rows) == 0 {
 		m.selected = 0
 		return
@@ -665,7 +742,7 @@ func (m *MessageList) snapToUID(uid mail.UID) {
 // IsNearBottom reports whether the cursor is within k rows of the
 // last row. Used by AccountTab to trigger lazy-load before the user
 // runs out of messages.
-func (m *MessageList) IsNearBottom(k int) bool {
+func (m *Model) IsNearBottom(k int) bool {
 	return len(m.rows) > 0 && m.selected >= len(m.rows)-k
 }
 
@@ -673,7 +750,7 @@ func (m *MessageList) IsNearBottom(k int) bool {
 // group→sort→flatten pipeline, and restores the cursor by UID.
 // Used for lazy-loading the next window of a large folder. Safe
 // against duplicate UIDs (rebuild dedups).
-func (m *MessageList) AppendMessages(extra []mail.MessageInfo) {
+func (m *Model) AppendMessages(extra []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = append(m.source, extra...)
 	m.now = time.Now()
@@ -685,7 +762,7 @@ func (m *MessageList) AppendMessages(extra []mail.MessageInfo) {
 // preserving the cursor on the same UID, fold state, marks, and any
 // active filter. Use this for cache-driven refreshes that should not
 // disturb the user's view. SetMessages is for fresh folder loads.
-func (m *MessageList) RefreshSource(msgs []mail.MessageInfo) {
+func (m *Model) RefreshSource(msgs []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = msgs
 	m.now = time.Now()
@@ -695,7 +772,7 @@ func (m *MessageList) RefreshSource(msgs []mail.MessageInfo) {
 
 // moveBy shifts the cursor by delta visible rows, walking past any
 // hidden rows in the requested direction. Empty list is a no-op.
-func (m *MessageList) moveBy(delta int) {
+func (m *Model) moveBy(delta int) {
 	if len(m.rows) == 0 {
 		return
 	}
@@ -727,17 +804,17 @@ func (m *MessageList) moveBy(delta int) {
 }
 
 // MoveDown advances the cursor by one visible row.
-func (m *MessageList) MoveDown() { m.moveBy(1) }
+func (m *Model) MoveDown() { m.moveBy(1) }
 
 // MoveUp retreats the cursor by one visible row.
-func (m *MessageList) MoveUp() { m.moveBy(-1) }
+func (m *Model) MoveUp() { m.moveBy(-1) }
 
 // MoveCursor shifts the cursor by delta visible rows (negative for up,
 // positive for down) and returns the resulting UID and whether the
 // cursor actually moved. Boundaries are inert: at first/last visible
 // row, calling with the corresponding direction returns ("", false).
 // Hidden (folded) rows are skipped.
-func (m *MessageList) MoveCursor(delta int) (mail.UID, bool) {
+func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
 	before := m.selected
 	m.moveBy(delta)
 	if m.selected == before {
@@ -747,7 +824,7 @@ func (m *MessageList) MoveCursor(delta int) (mail.UID, bool) {
 }
 
 // MoveToTop jumps the cursor to the first visible row.
-func (m *MessageList) MoveToTop() {
+func (m *Model) MoveToTop() {
 	for i := 0; i < len(m.rows); i++ {
 		if !m.rows[i].hidden {
 			m.selected = i
@@ -759,7 +836,7 @@ func (m *MessageList) MoveToTop() {
 }
 
 // MoveToBottom jumps the cursor to the last visible row.
-func (m *MessageList) MoveToBottom() {
+func (m *Model) MoveToBottom() {
 	for i := len(m.rows) - 1; i >= 0; i-- {
 		if !m.rows[i].hidden {
 			m.selected = i
@@ -770,19 +847,19 @@ func (m *MessageList) MoveToBottom() {
 }
 
 // HalfPageDown moves the cursor down by half the visible height.
-func (m *MessageList) HalfPageDown() { m.moveBy(max(1, m.height/2)) }
+func (m *Model) HalfPageDown() { m.moveBy(max(1, m.height/2)) }
 
 // HalfPageUp moves the cursor up by half the visible height.
-func (m *MessageList) HalfPageUp() { m.moveBy(-max(1, m.height/2)) }
+func (m *Model) HalfPageUp() { m.moveBy(-max(1, m.height/2)) }
 
 // PageDown moves the cursor down by one full visible page.
-func (m *MessageList) PageDown() { m.moveBy(max(1, m.height)) }
+func (m *Model) PageDown() { m.moveBy(max(1, m.height)) }
 
 // PageUp moves the cursor up by one full visible page.
-func (m *MessageList) PageUp() { m.moveBy(-max(1, m.height)) }
+func (m *Model) PageUp() { m.moveBy(-max(1, m.height)) }
 
 // clampOffset adjusts the viewport so the cursor stays visible.
-func (m *MessageList) clampOffset() {
+func (m *Model) clampOffset() {
 	if m.height <= 0 {
 		m.offset = 0
 		return
@@ -800,7 +877,7 @@ func (m *MessageList) clampOffset() {
 
 // View renders the visible window of message rows. Empty state shows
 // a centered "No messages" placeholder.
-func (m MessageList) View() string {
+func (m Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
 	}
@@ -831,7 +908,7 @@ func (m MessageList) View() string {
 }
 
 // renderRow renders one message row at the configured width.
-func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
+func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 	row := m.rows[idx]
 	msg := row.msg
 	isSelected := idx == m.selected
@@ -839,7 +916,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 
 	var cursor string
 	if isSelected {
-		cursor = applyBg(m.styles.MsgListCursor, bgStyle).Render(mlCursorGlyph)
+		cursor = uicore.ApplyBg(m.styles.MsgListCursor, bgStyle).Render(mlCursorGlyph)
 	} else {
 		cursor = bgStyle.Render(" ")
 	}
@@ -852,12 +929,12 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	}
 
 	senderText := padRight(truncateCells(msg.From, m.layout.Sender), m.layout.Sender)
-	sender := applyBg(senderStyle, bgStyle).Render(senderText)
+	sender := uicore.ApplyBg(senderStyle, bgStyle).Render(senderText)
 
 	var date string
 	if m.layout.Date > 0 {
 		dateText := padLeft(truncateCells(row.dateText, m.layout.Date), m.layout.Date)
-		date = applyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
+		date = uicore.ApplyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
 	}
 
 	// fixed: cursor(1) + sp2 + sp2(sender→subject) + sp2(subject→date) + sp(trail) = 8;
@@ -875,16 +952,16 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	// budget so displayCells(assembled row) == m.width regardless of flag
 	// content.
 	flagAdjust := 0
-	if spuaCellWidth > 1 && m.layout.FlagColumn {
-		flagAdjust = spuaCount(flag) * (spuaCellWidth - 1)
+	if uicore.SPUACellWidth() > 1 && m.layout.FlagColumn {
+		flagAdjust = uicore.SpuaCount(flag) * (uicore.SPUACellWidth() - 1)
 	}
 	subjectWidth := max(1, m.width-fixed-m.layout.Sender-m.layout.Date-flagAdjust)
 	prefixCells := lipgloss.Width(row.prefix)
 	subjectCells := max(0, subjectWidth-prefixCells)
 
-	prefixStyled := applyBg(m.styles.MsgListThreadPrefix, bgStyle).Render(row.prefix)
+	prefixStyled := uicore.ApplyBg(m.styles.MsgListThreadPrefix, bgStyle).Render(row.prefix)
 	subjectText := padRight(truncateCells(msg.Subject, subjectCells), subjectCells)
-	subjectStyled := applyBg(subjectStyle, bgStyle).Render(subjectText)
+	subjectStyled := uicore.ApplyBg(subjectStyle, bgStyle).Render(subjectText)
 	subject := prefixStyled + subjectStyled
 
 	sp2 := bgStyle.Render("  ")
@@ -901,7 +978,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 	}
 	rowStr += sp1
 
-	return fillRowToWidth(rowStr, m.width, bgStyle)
+	return uicore.FillRowToWidth(rowStr, m.width, bgStyle)
 }
 
 // renderFlagCell renders the flag column. Priority: flagged > answered >
@@ -912,7 +989,7 @@ func (m MessageList) renderRow(idx int, bgStyle lipgloss.Style) string {
 // The rendered output is always exactly mlFlagWidth display cells. In
 // simple-icon mode, narrow glyphs (1 cell) are padded with one trailing
 // space so flagged and unflagged rows keep the sender column aligned.
-func (m MessageList) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgloss.Style) string {
+func (m Model) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgloss.Style) string {
 	iconStyle := m.styles.MsgListIconRead
 	if isUnread {
 		iconStyle = m.styles.MsgListIconUnread
@@ -931,12 +1008,12 @@ func (m MessageList) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle
 	default:
 		return bgStyle.Render("  ")
 	}
-	rendered := applyBg(iconStyle, bgStyle).Render(glyph)
+	rendered := uicore.ApplyBg(iconStyle, bgStyle).Render(glyph)
 	// Pad with background spaces until the cell is exactly mlFlagWidth display
 	// cells wide. In fancy mode the SPUA-A glyph already occupies 2 cells
 	// (spuaCellWidth == 2), so displayCells == mlFlagWidth and the loop is a
 	// no-op. In simple mode the narrow glyph is 1 cell, so one space is added.
-	for displayCells(rendered) < mlFlagWidth {
+	for uicore.DisplayCells(rendered) < mlFlagWidth {
 		rendered += bgStyle.Render(" ")
 	}
 	return rendered
@@ -944,7 +1021,7 @@ func (m MessageList) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle
 
 // renderBlankLine returns a blank line at panel width with the base
 // message-list background.
-func (m MessageList) renderBlankLine() string {
+func (m Model) renderBlankLine() string {
 	return m.styles.MsgListBg.Width(m.width).Render("")
 }
 
@@ -952,7 +1029,7 @@ func (m MessageList) renderBlankLine() string {
 // why the list is empty: "No messages" when the source has no
 // messages at all, "No matches" when a filter is active and matched
 // nothing.
-func (m MessageList) renderEmpty() string {
+func (m Model) renderEmpty() string {
 	label := "No messages"
 	if m.filter.query != "" {
 		label = "No matches"
@@ -975,19 +1052,19 @@ func (m MessageList) renderEmpty() string {
 }
 
 // VisualMode reports whether the list is in visual-select mode.
-func (m MessageList) VisualMode() bool { return m.visualMode }
+func (m Model) VisualMode() bool { return m.visualMode }
 
 // EnterVisual enters visual-select mode. The marked set is unchanged.
-func (m *MessageList) EnterVisual() { m.visualMode = true }
+func (m *Model) EnterVisual() { m.visualMode = true }
 
 // ExitVisual leaves visual-select mode and clears the marked set.
-func (m *MessageList) ExitVisual() {
+func (m *Model) ExitVisual() {
 	m.visualMode = false
 	m.marked = map[mail.UID]struct{}{}
 }
 
 // ToggleMark flips membership of uid in the marked set.
-func (m *MessageList) ToggleMark(uid mail.UID) {
+func (m *Model) ToggleMark(uid mail.UID) {
 	if _, ok := m.marked[uid]; ok {
 		delete(m.marked, uid)
 		return
@@ -997,7 +1074,7 @@ func (m *MessageList) ToggleMark(uid mail.UID) {
 
 // Marked returns the marked UIDs in source order. Returns nil when none
 // are marked.
-func (m MessageList) Marked() []mail.UID {
+func (m Model) Marked() []mail.UID {
 	if len(m.marked) == 0 {
 		return nil
 	}
@@ -1014,7 +1091,7 @@ func (m MessageList) Marked() []mail.UID {
 // If any UIDs are marked, those are returned in source order.
 // Otherwise the cursor UID is returned. For a folded thread root,
 // the cursor case expands to root + all child UIDs (WYSIWYG).
-func (m MessageList) ActionTargets() []mail.UID {
+func (m Model) ActionTargets() []mail.UID {
 	if len(m.marked) > 0 {
 		return m.Marked()
 	}
@@ -1030,7 +1107,7 @@ func (m MessageList) ActionTargets() []mail.UID {
 
 // threadUIDs returns the root UID followed by all child UIDs in source
 // order. Children are identified by matching ThreadID.
-func (m MessageList) threadUIDs(root mail.UID) []mail.UID {
+func (m Model) threadUIDs(root mail.UID) []mail.UID {
 	var threadID mail.UID
 	for _, msg := range m.source {
 		if msg.UID == root {
@@ -1048,6 +1125,25 @@ func (m MessageList) threadUIDs(root mail.UID) []mail.UID {
 		}
 	}
 	return out
+}
+
+// NewStyles builds a messagelist.Styles from a compiled theme.
+func NewStyles(t *theme.CompiledTheme) Styles {
+	return Styles{
+		MsgListBg:            lipgloss.NewStyle().Background(t.BgBase),
+		MsgListSelected:      lipgloss.NewStyle().Background(t.BgSelection),
+		MsgListCursor:        lipgloss.NewStyle().Foreground(t.AccentPrimary),
+		MsgListUnreadSender:  lipgloss.NewStyle().Foreground(t.FgBright).Bold(true),
+		MsgListUnreadSubject: lipgloss.NewStyle().Foreground(t.FgBright),
+		MsgListReadSender:    lipgloss.NewStyle().Foreground(t.FgDim),
+		MsgListReadSubject:   lipgloss.NewStyle().Foreground(t.FgDim),
+		MsgListDate:          lipgloss.NewStyle().Foreground(t.FgDim),
+		MsgListIconUnread:    lipgloss.NewStyle().Foreground(t.FgBright),
+		MsgListIconRead:      lipgloss.NewStyle().Foreground(t.FgDim),
+		MsgListFlagFlagged:   lipgloss.NewStyle().Foreground(t.ColorWarning),
+		MsgListThreadPrefix:  lipgloss.NewStyle().Foreground(t.FgDim),
+		MsgListPlaceholder:   lipgloss.NewStyle().Foreground(t.FgDim),
+	}
 }
 
 // truncateCells cuts s to fit width display cells, appending an
@@ -1080,4 +1176,71 @@ func padLeft(s string, width int) string {
 		return strings.Repeat(" ", width-w) + s
 	}
 	return s
+}
+
+// displayDate returns the date column text for a message at the given
+// width. Width 0 means no column. Width 3 uses compact relative format;
+// other widths use short absolute format.
+func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
+	if width == 0 {
+		return ""
+	}
+	t := msg.SentAt
+	if t.IsZero() {
+		return msg.Date
+	}
+	switch width {
+	case 3:
+		return formatRelativeDateCompact(t, now)
+	default:
+		return formatRelativeDateShort(t, now)
+	}
+}
+
+// formatRelativeDateCompact returns a 3-cell relative date string.
+func formatRelativeDateCompact(t, now time.Time) string {
+	if t.IsZero() {
+		return "   "
+	}
+	t = t.In(now.Location())
+	delta := now.Sub(t)
+	switch {
+	case delta < 5*time.Minute && delta >= 0:
+		return "now"
+	case delta < time.Hour:
+		return padRight(fmt.Sprintf("%dm", int(delta.Minutes())), 3)
+	case delta < 24*time.Hour:
+		return padRight(fmt.Sprintf("%dh", int(delta.Hours())), 3)
+	case delta < 7*24*time.Hour:
+		return padRight(fmt.Sprintf("%dd", int(delta.Hours()/24)), 3)
+	case delta < 28*24*time.Hour:
+		return padRight(fmt.Sprintf("%dw", int(delta.Hours()/(24*7))), 3)
+	case t.Year() == now.Year():
+		return t.Format("Jan")
+	default:
+		yy := t.Year() % 100
+		return fmt.Sprintf("'%02d", yy)
+	}
+}
+
+// formatRelativeDateShort returns a 5-cell short date string.
+func formatRelativeDateShort(t, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	t = t.In(now.Location())
+	ty, tm, td := t.Date()
+	ny, nm, nd := now.Date()
+	if ty == ny && tm == nm && td == nd {
+		hour := t.Hour() % 12
+		if hour == 0 {
+			hour = 12
+		}
+		ap := "a"
+		if t.Hour() >= 12 {
+			ap = "p"
+		}
+		return fmt.Sprintf("%d:%02d%s", hour, t.Minute(), ap)
+	}
+	return t.Format("01-02")
 }

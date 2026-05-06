@@ -4,11 +4,10 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // Styles holds composed lipgloss styles derived from a CompiledTheme.
@@ -107,31 +106,16 @@ type Styles struct {
 // applyBg layers the background of bgStyle onto base. Used by row
 // renderers (sidebar, message list) to compose a foreground style
 // with the row's background color without clobbering already-rendered
-// ANSI segments.
+// ANSI segments. Delegates to uicore.ApplyBg.
 func applyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
-	if bg, ok := bgStyle.GetBackground().(lipgloss.Color); ok {
-		return base.Background(bg)
-	}
-	return base
+	return uicore.ApplyBg(base, bgStyle)
 }
 
 // fillRowToWidth fits a fully-rendered row of ANSI segments to
-// exactly width display cells. Short rows are right-padded with
-// bgStyle so the row's background extends to the panel edge, over-
-// wide rows are truncated to width. Shared by sidebar and message
-// list row renderers.
-//
-// Width is measured with displayCells so Nerd Font SPUA-A icons are
-// counted at their true 2-cell width.
+// exactly width display cells. Shared by sidebar and message
+// list row renderers. Delegates to uicore.FillRowToWidth.
 func fillRowToWidth(row string, width int, bgStyle lipgloss.Style) string {
-	rw := displayCells(row)
-	if rw < width {
-		return row + bgStyle.Render(strings.Repeat(" ", width-rw))
-	}
-	if rw > width {
-		return displayTruncate(row, width)
-	}
-	return row
+	return uicore.FillRowToWidth(row, width, bgStyle)
 }
 
 // NewStyles creates a Styles from a CompiledTheme.

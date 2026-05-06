@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/messagelist"
 	"github.com/glw907/poplar/internal/ui/movepicker"
 )
 
@@ -48,7 +49,7 @@ type AccountTab struct {
 	acct          *cache.Account
 	uiCfg         config.UIConfig
 	sidebarColumn SidebarColumn
-	msglist       MessageList
+	msglist       messagelist.Model
 	viewer        Viewer
 	keys          AccountKeys
 	pages         map[string]*folderPage
@@ -85,7 +86,7 @@ func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, u
 			NewSidebarSearch(styles, 30, icons),
 			acct.AccountEmail(),
 		),
-		msglist: NewMessageList(styles, nil, 1, 1, icons),
+		msglist: messagelist.New(messagelist.NewStyles(t), nil, 1, 1, icons),
 		viewer:  NewViewer(styles, t, acct.AccountEmail(), icons),
 		keys:    NewAccountKeys(),
 		pages:   make(map[string]*folderPage),
@@ -178,9 +179,9 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		page.loaded = len(msg.msgs)
 		page.total = msg.total
 		fc := m.uiCfg.Folders[m.sidebarColumn.Sidebar().ConfigKey(msg.name)]
-		order := SortDateDesc
+		order := messagelist.SortDateDesc
 		if fc.Sort == "date-asc" {
-			order = SortDateAsc
+			order = messagelist.SortDateAsc
 		}
 		threaded := m.uiCfg.Threading
 		if fc.ThreadingSet {
