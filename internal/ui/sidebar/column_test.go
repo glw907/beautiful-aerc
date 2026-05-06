@@ -1,16 +1,59 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package sidebar_test
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
+
+var ansiReCol = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSICol(s string) string {
+	return ansiReCol.ReplaceAllString(s, "")
+}
+
+const columnGoldensDir = "testdata/goldens"
+
+func checkColumnGolden(t *testing.T, name, got string) {
+	t.Helper()
+	path := filepath.Join(columnGoldensDir, name)
+	if os.Getenv("UPDATE_GOLDENS") == "1" {
+		if err := os.MkdirAll(columnGoldensDir, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", columnGoldensDir, err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+			t.Fatalf("write golden %s: %v", path, err)
+		}
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v (run with UPDATE_GOLDENS=1 to create)", path, err)
+	}
+	want := string(data)
+	if got != want {
+		gotLines := strings.Split(got, "\n")
+		wantLines := strings.Split(want, "\n")
+		for i := 0; i < len(gotLines) && i < len(wantLines); i++ {
+			if gotLines[i] != wantLines[i] {
+				t.Fatalf("golden %s mismatch at line %d:\n  got  %q\n  want %q",
+					name, i+1, gotLines[i], wantLines[i])
+			}
+		}
+		t.Fatalf("golden %s mismatch: got %d lines, want %d lines",
+			name, len(gotLines), len(wantLines))
+	}
+}
 
 // sidebarColumnFolders returns a representative classified folder set
 // for SidebarColumn render tests: Inbox (unread), Drafts, Sent, Archive,
@@ -26,20 +69,32 @@ func sidebarColumnFolders() []mail.ClassifiedFolder {
 	})
 }
 
-// newSidebarColumnAt builds a SidebarColumn at a given width with
+// computeLayoutMode returns a LayoutMode for the sidebar widths used
+// in these tests (14, 22, 30). The old column tests called ComputeLayout
+// with the sidebar width directly (sub-80), which always produces
+// Icons=false via the ADR-0109 formula. We replicate that behaviour
+// here so the goldens remain valid without re-generating them.
+func computeLayoutMode(sidebarWidth int) uicore.LayoutMode {
+	return uicore.LayoutMode{
+		Sidebar: sidebarWidth,
+		Icons:   false,
+	}
+}
+
+// newSidebarColumnAt builds a Column at a given width with
 // representative content.  height is the total column height so the
 // search shelf lands correctly.
-func newSidebarColumnAt(t *testing.T, width, height int) SidebarColumn {
+func newSidebarColumnAt(t *testing.T, width, height int) sidebar.Column {
 	t.Helper()
-	styles := NewStyles(theme.Nord)
-	layout := ComputeLayout(width)
+	styles := sidebar.NewStyles(theme.Nord)
+	layout := computeLayoutMode(width)
 	uiCfg := config.DefaultUIConfig()
 
-	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, width, max(1, height-sidebarHeaderRows-searchShelfRows), uicore.SimpleIcons)
+	sb := sidebar.New(styles, sidebarColumnFolders(), uiCfg, width, max(1, height-sidebar.HeaderRows-sidebar.ShelfRows), uicore.SimpleIcons)
 	sb.SetLayout(layout)
-	ss := NewSidebarSearch(styles, width, uicore.SimpleIcons)
+	ss := sidebar.NewSearch(styles, width, uicore.SimpleIcons)
 	ss.SetSize(width)
-	return NewSidebarColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com").
+	return sidebar.NewColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com").
 		SetSize(width, height)
 }
 
@@ -79,11 +134,11 @@ func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 // TestSidebarColumn_EmptyBeforeSize verifies that View() is a no-op when
 // SetSize has not been called (width or height zero).
 func TestSidebarColumn_EmptyBeforeSize(t *testing.T) {
-	styles := NewStyles(theme.Nord)
+	styles := sidebar.NewStyles(theme.Nord)
 	uiCfg := config.DefaultUIConfig()
-	sb := NewSidebar(styles, sidebarColumnFolders(), uiCfg, 22, 20, uicore.SimpleIcons)
-	ss := NewSidebarSearch(styles, 22, uicore.SimpleIcons)
-	col := NewSidebarColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com")
+	sb := sidebar.New(styles, sidebarColumnFolders(), uiCfg, 22, 20, uicore.SimpleIcons)
+	ss := sidebar.NewSearch(styles, 22, uicore.SimpleIcons)
+	col := sidebar.NewColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com")
 	// No SetSize call. Width and height are zero.
 	if got := col.View(); got != "" {
 		t.Errorf("View() with zero size returned %q, want empty", got)
@@ -97,15 +152,15 @@ func TestSidebarColumn_Accessors(t *testing.T) {
 
 	sb := col.Sidebar()
 	sb2 := col.WithSidebar(sb).Sidebar()
-	if sb.selected != sb2.selected || sb.width != sb2.width {
-		t.Errorf("WithSidebar round-trip changed sidebar: got selected=%d w=%d, want %d %d",
-			sb2.selected, sb2.width, sb.selected, sb.width)
+	if sb.Selected() != sb2.Selected() {
+		t.Errorf("WithSidebar round-trip changed selected: got %d, want %d",
+			sb2.Selected(), sb.Selected())
 	}
 
 	ss := col.SidebarSearch()
 	ss2 := col.WithSidebarSearch(ss).SidebarSearch()
-	if ss.state != ss2.state {
-		t.Errorf("WithSidebarSearch round-trip changed state: got %v, want %v", ss2.state, ss.state)
+	if ss.State() != ss2.State() {
+		t.Errorf("WithSidebarSearch round-trip changed state: got %v, want %v", ss2.State(), ss.State())
 	}
 }
 
@@ -113,7 +168,7 @@ func TestSidebarColumn_Accessors(t *testing.T) {
 // appears in the second row of View() (the header row after the leading blank).
 func TestSidebarColumn_AccountEmailRendered(t *testing.T) {
 	col := newSidebarColumnAt(t, 22, 20)
-	lines := strings.Split(stripANSI(col.View()), "\n")
+	lines := strings.Split(stripANSICol(col.View()), "\n")
 	// Row 0 = blank, row 1 = account line.
 	if len(lines) < 2 {
 		t.Fatal("not enough lines")
@@ -124,10 +179,10 @@ func TestSidebarColumn_AccountEmailRendered(t *testing.T) {
 }
 
 // TestSidebarColumn_SearchHintAtBottom verifies that the search hint row
-// lands in the last searchShelfRows of the output.
+// lands in the last sidebar.ShelfRows of the output.
 func TestSidebarColumn_SearchHintAtBottom(t *testing.T) {
 	col := newSidebarColumnAt(t, 22, 20)
-	lines := strings.Split(stripANSI(col.View()), "\n")
+	lines := strings.Split(stripANSICol(col.View()), "\n")
 	hintRow := -1
 	for i, line := range lines {
 		if strings.Contains(line, "/ to search") {
@@ -138,9 +193,9 @@ func TestSidebarColumn_SearchHintAtBottom(t *testing.T) {
 	if hintRow < 0 {
 		t.Fatal("'/ to search' hint not found in SidebarColumn output")
 	}
-	if hintRow < len(lines)-searchShelfRows {
+	if hintRow < len(lines)-sidebar.ShelfRows {
 		t.Errorf("hint row %d is above the bottom shelf (total rows=%d, shelf=%d)",
-			hintRow, len(lines), searchShelfRows)
+			hintRow, len(lines), sidebar.ShelfRows)
 	}
 }
 
@@ -161,7 +216,7 @@ func TestSidebarColumn_GoldenWidths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			col := newSidebarColumnAt(t, tc.w, tc.h)
 			got := col.View()
-			checkGolden(t, tc.name, got)
+			checkColumnGolden(t, tc.name, got)
 		})
 	}
 }

@@ -19,6 +19,7 @@ import (
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -585,12 +586,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				m = m.deriveChromeFromAcct()
 				return m, cmd
 			}
-			if m.acct.SearchState() != SearchIdle {
+			if m.acct.SearchState() != sidebar.SearchIdle {
 				// Steal q while search is active so it doesn't quit
 				// the app mid-search. Send a typed clear msg to
 				// AccountTab.
 				var cmd tea.Cmd
-				m.acct, cmd = m.acct.Update(ClearSidebarSearchMsg{})
+				m.acct, cmd = m.acct.Update(sidebar.ClearSearchMsg{})
 				m = m.deriveChromeFromAcct()
 				return m, cmd
 			}

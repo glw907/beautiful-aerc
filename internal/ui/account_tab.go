@@ -19,17 +19,9 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/messagelist"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
-
-// sidebarHeaderRows is the blank/account/blank padding reserved at
-// the top of the sidebar before the folder list. AccountTab.View
-// and the sidebar's own sizing both depend on this number matching.
-const sidebarHeaderRows = 3
-
-// searchShelfRows is the height of the SidebarSearch shelf pinned
-// to the bottom of the sidebar column.
-const searchShelfRows = 3
 
 // folderPage tracks lazy-load state for one folder.
 type folderPage struct {
@@ -49,7 +41,7 @@ type AccountTab struct {
 	// (used for AccountName/AccountEmail accessors and body fetch).
 	acct          *cache.Account
 	uiCfg         config.UIConfig
-	sidebarColumn SidebarColumn
+	sidebarColumn sidebar.Column
 	msglist       messagelist.Model
 	viewer        Viewer
 	keys          AccountKeys
@@ -77,14 +69,15 @@ func (m AccountTab) WithNow(now func() time.Time) AccountTab {
 // NewAccountTab builds an empty AccountTab. The initial folder list is
 // fetched via Init's returned Cmd, not synchronously.
 func NewAccountTab(styles Styles, t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) AccountTab {
+	sidebarStyles := sidebar.NewStyles(t)
 	return AccountTab{
 		styles: styles,
 		icons:  icons,
 		acct:   acct,
 		uiCfg:  uiCfg,
-		sidebarColumn: NewSidebarColumn(styles, icons,
-			NewSidebar(styles, nil, uiCfg, 30, 1, icons),
-			NewSidebarSearch(styles, 30, icons),
+		sidebarColumn: sidebar.NewColumn(sidebarStyles, icons,
+			sidebar.New(sidebarStyles, nil, uiCfg, 30, 1, icons),
+			sidebar.NewSearch(sidebarStyles, 30, icons),
 			acct.AccountEmail(),
 		),
 		msglist: messagelist.New(messagelist.NewStyles(t), nil, 1, 1, icons),
@@ -135,7 +128,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		m.msglist.SetLayout(layout)
 
 		sw := layout.Sidebar
-		folderHeight := max(1, m.height-sidebarHeaderRows-searchShelfRows)
+		folderHeight := max(1, m.height-sidebar.HeaderRows-sidebar.ShelfRows)
 		sb := m.sidebarColumn.Sidebar()
 		sb.SetLayout(layout)
 		sb.SetSize(sw, folderHeight)
@@ -159,7 +152,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		cmds = append(cmds, c)
 		return m, tea.Batch(cmds...)
 
-	case ClearSidebarSearchMsg:
+	case sidebar.ClearSearchMsg:
 		m = m.clearSearchIfActive()
 		return m, nil
 
@@ -258,7 +251,7 @@ func (m AccountTab) updateTab(msg tea.Msg) (AccountTab, tea.Cmd) {
 		}
 		return m, tea.Batch(toast, refreshFolderCmd(m.acct, src))
 
-	case SearchUpdatedMsg:
+	case sidebar.SearchUpdatedMsg:
 		m.msglist.SetFilter(msg.Query, msg.Mode)
 		ss := m.sidebarColumn.SidebarSearch()
 		ss.SetResultCount(m.msglist.FilterResultCount())
@@ -328,7 +321,7 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	// Route to SidebarSearch when we're in Typing state. It owns
 	// the input routing for this modal slice, except for Enter and
 	// Esc which transition state.
-	if ss := m.sidebarColumn.SidebarSearch(); ss.State() == SearchTyping {
+	if ss := m.sidebarColumn.SidebarSearch(); ss.State() == sidebar.SearchTyping {
 		switch {
 		case key.Matches(msg, m.keys.SearchCommit):
 			ss.Commit()
@@ -349,14 +342,14 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.OpenSearch):
 		ss := m.sidebarColumn.SidebarSearch()
-		if st := ss.State(); st == SearchIdle || st == SearchActive {
+		if st := ss.State(); st == sidebar.SearchIdle || st == sidebar.SearchActive {
 			ss.Activate()
 			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			return m, nil
 		}
 	case key.Matches(msg, m.keys.ClearSearch):
 		ss := m.sidebarColumn.SidebarSearch()
-		if ss.State() == SearchActive {
+		if ss.State() == sidebar.SearchActive {
 			ss.Clear()
 			m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 			m.msglist.ClearFilter()
@@ -406,12 +399,12 @@ func (m AccountTab) handleKey(msg tea.KeyMsg) (AccountTab, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.sidebarColumn.SidebarSearch().State() == SearchActive {
+		if m.sidebarColumn.SidebarSearch().State() == sidebar.SearchActive {
 			return m, nil
 		}
 		m.msglist.ToggleFold()
 	case key.Matches(msg, m.keys.ToggleFoldAll):
-		if m.sidebarColumn.SidebarSearch().State() == SearchActive {
+		if m.sidebarColumn.SidebarSearch().State() == sidebar.SearchActive {
 			return m, nil
 		}
 		m.msglist.ToggleFoldAll()
@@ -496,7 +489,7 @@ func (m AccountTab) openSelectedMessage() (AccountTab, tea.Cmd) {
 // is in any non-Idle state. No-op when already idle.
 func (m AccountTab) clearSearchIfActive() AccountTab {
 	ss := m.sidebarColumn.SidebarSearch()
-	if ss.State() == SearchIdle {
+	if ss.State() == sidebar.SearchIdle {
 		return m
 	}
 	ss.Clear()
@@ -643,7 +636,7 @@ func (m AccountTab) ViewerScrollPct() int {
 	return m.viewer.ScrollPct()
 }
 
-func (m AccountTab) SearchState() SearchState {
+func (m AccountTab) SearchState() sidebar.SearchState {
 	return m.sidebarColumn.SidebarSearch().State()
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/movepicker"
+	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -255,7 +256,7 @@ func TestAppQuitStolenDuringSearch(t *testing.T) {
 			drainApp(t, &app, cmd)
 		}
 		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if app.acct.sidebarColumn.SidebarSearch().State() != SearchActive {
+		if app.acct.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
 			t.Fatalf("setup: state = %v, want SearchActive", app.acct.sidebarColumn.SidebarSearch().State())
 		}
 
@@ -388,7 +389,7 @@ func TestApp_HelpStealsKeys(t *testing.T) {
 		t.Errorf("sidebar selection moved while help open: %d → %d",
 			startFolderSelected, app.acct.sidebarColumn.Sidebar().Selected())
 	}
-	if app.acct.sidebarColumn.SidebarSearch().State() != SearchIdle {
+	if app.acct.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 		t.Errorf("search state changed while help open: got %v",
 			app.acct.sidebarColumn.SidebarSearch().State())
 	}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package sidebar
 
 import (
 	"sort"
@@ -19,8 +19,8 @@ type folderEntry struct {
 	icon string
 }
 
-// Sidebar renders the folder list with groups, selection, and unread badges.
-type Sidebar struct {
+// Model renders the folder list with groups, selection, and unread badges.
+type Model struct {
 	entries  []folderEntry
 	selected int
 	styles   Styles
@@ -30,11 +30,11 @@ type Sidebar struct {
 	height   int
 }
 
-// NewSidebar creates a Sidebar from a pre-classified folder list and
-// a UIConfig. Ordering, hiding, labelling, and indent calculation
-// happen here. Hidden folders are dropped before indexing.
-func NewSidebar(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons uicore.IconSet) Sidebar {
-	return Sidebar{
+// New creates a Model from a pre-classified folder list and a UIConfig.
+// Ordering, hiding, labelling, and indent calculation happen here.
+// Hidden folders are dropped before indexing.
+func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons uicore.IconSet) Model {
+	return Model{
 		entries:  buildEntries(classified, uiCfg, icons),
 		selected: 0,
 		styles:   styles,
@@ -44,10 +44,10 @@ func NewSidebar(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.
 	}
 }
 
-// SetFolders replaces the sidebar's folder set with a newly classified
-// list under a given UIConfig. Selection is preserved by provider name
-// where possible. Otherwise it resets to 0.
-func (s *Sidebar) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UIConfig) {
+// SetFolders replaces the folder set with a newly classified list under a
+// given UIConfig. Selection is preserved by provider name where possible;
+// otherwise it resets to 0.
+func (s *Model) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UIConfig) {
 	var prevName string
 	if s.selected < len(s.entries) {
 		prevName = s.entries[s.selected].cf.Folder.Name
@@ -64,31 +64,38 @@ func (s *Sidebar) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UI
 	}
 }
 
-func (s Sidebar) Selected() int { return s.selected }
+func (s Model) Selected() int { return s.selected }
 
 // SelectedFolder returns the provider name of the currently selected folder.
 // Backends look up folders by provider name, not display name.
-func (s Sidebar) SelectedFolder() string {
+func (s Model) SelectedFolder() string {
 	if s.selected < len(s.entries) {
 		return s.entries[s.selected].cf.Folder.Name
 	}
 	return ""
 }
 
+// SelectedCanonical returns the canonical name (e.g. "Inbox", "Sent") of the
+// currently selected folder. Returns "" for custom folders.
+func (s Model) SelectedCanonical() string {
+	if s.selected < len(s.entries) {
+		return s.entries[s.selected].cf.Canonical
+	}
+	return ""
+}
+
 // SelectedFolderInfo returns the raw backend Folder at the current selection.
-func (s Sidebar) SelectedFolderInfo() (mail.Folder, bool) {
+func (s Model) SelectedFolderInfo() (mail.Folder, bool) {
 	if s.selected < len(s.entries) {
 		return s.entries[s.selected].cf.Folder, true
 	}
 	return mail.Folder{}, false
 }
 
-// ConfigKey returns the UIConfig.Folders lookup key for the folder
-// with the given provider name (canonical name for canonicals,
-// provider name for custom). Returns "" if no matching folder is in
-// the sidebar. The zero-value FolderConfig falls through to
-// group/global defaults.
-func (s Sidebar) ConfigKey(providerName string) string {
+// ConfigKey returns the UIConfig.Folders lookup key for the folder with the
+// given provider name (canonical name for canonicals, provider name for
+// custom). Returns "" if no matching folder is in the sidebar.
+func (s Model) ConfigKey(providerName string) string {
 	for _, e := range s.entries {
 		if e.cf.Folder.Name == providerName {
 			return e.cf.ConfigKey()
@@ -97,11 +104,10 @@ func (s Sidebar) ConfigKey(providerName string) string {
 	return ""
 }
 
-// FolderNameByCanonical returns the provider folder name (e.g.
-// "Archive", "[Gmail]/Trash") whose canonical name matches target.
-// Returns ("", false) when no folder matches. Used by triage actions
-// to look up the Archive/Trash destinations.
-func (s Sidebar) FolderNameByCanonical(target string) (string, bool) {
+// FolderNameByCanonical returns the provider folder name whose canonical name
+// matches target. Returns ("", false) when no folder matches. Used by triage
+// actions to look up Archive/Trash destinations.
+func (s Model) FolderNameByCanonical(target string) (string, bool) {
 	for _, e := range s.entries {
 		if e.cf.Canonical == target {
 			return e.cf.Folder.Name, true
@@ -112,7 +118,7 @@ func (s Sidebar) FolderNameByCanonical(target string) (string, bool) {
 
 // FolderByProviderName returns the mail.Folder whose backend name matches.
 // Returns (Folder{}, false) when no entry matches.
-func (s Sidebar) FolderByProviderName(name string) (mail.Folder, bool) {
+func (s Model) FolderByProviderName(name string) (mail.Folder, bool) {
 	for _, e := range s.entries {
 		if e.cf.Folder.Name == name {
 			return e.cf.Folder, true
@@ -121,10 +127,13 @@ func (s Sidebar) FolderByProviderName(name string) (mail.Folder, bool) {
 	return mail.Folder{}, false
 }
 
-func (s Sidebar) OrderedFolders() []mail.FolderEntry {
+func (s Model) OrderedFolders() []mail.FolderEntry {
 	out := make([]mail.FolderEntry, 0, len(s.entries))
 	for _, e := range s.entries {
-		display := e.cf.Canonical
+		display := e.cf.DisplayName
+		if display == "" {
+			display = e.cf.Canonical
+		}
 		if display == "" {
 			display = e.cf.Folder.Name
 		}
@@ -137,11 +146,9 @@ func (s Sidebar) OrderedFolders() []mail.FolderEntry {
 	return out
 }
 
-// SelectByCanonical moves the selection to the folder whose
-// canonical name matches target (e.g. "Inbox", "Drafts"). Returns
-// true if a matching folder was found and selected. No-op when no
-// folder matches.
-func (s *Sidebar) SelectByCanonical(target string) bool {
+// SelectByCanonical moves the selection to the folder whose canonical name
+// matches target (e.g. "Inbox", "Drafts"). Returns true if found.
+func (s *Model) SelectByCanonical(target string) bool {
 	for i, e := range s.entries {
 		if e.cf.Canonical == target {
 			s.selected = i
@@ -151,45 +158,49 @@ func (s *Sidebar) SelectByCanonical(target string) bool {
 	return false
 }
 
-func (s Sidebar) SelectedIcon() string {
+func (s Model) SelectedIcon() string {
 	if s.selected < len(s.entries) {
 		return s.entries[s.selected].icon
 	}
 	return ""
 }
 
-func (s *Sidebar) SetSize(width, height int) {
+func (s *Model) SetSize(width, height int) {
 	s.width = width
 	s.height = height
 }
 
+// Layout returns the current layout mode. Used in tests to verify
+// that WindowSizeMsg propagation wired the correct layout.
+func (s Model) Layout() uicore.LayoutMode { return s.layout }
+
 // SetLayout updates the icon toggle. Width is owned by SetSize.
-func (s *Sidebar) SetLayout(l uicore.LayoutMode) {
+func (s *Model) SetLayout(l uicore.LayoutMode) {
 	s.layout = l
 }
 
-func (s *Sidebar) MoveUp() {
+func (s *Model) MoveUp() {
 	if s.selected > 0 {
 		s.selected--
 	}
 }
 
-func (s *Sidebar) MoveDown() {
+func (s *Model) MoveDown() {
 	if s.selected < len(s.entries)-1 {
 		s.selected++
 	}
 }
 
-func (s *Sidebar) MoveToTop() { s.selected = 0 }
+func (s *Model) MoveToTop() { s.selected = 0 }
 
-func (s *Sidebar) MoveToBottom() {
+func (s *Model) MoveToBottom() {
 	if len(s.entries) > 0 {
 		s.selected = len(s.entries) - 1
 	}
 }
 
 // View renders the sidebar as a vertical list of folder rows.
-func (s Sidebar) View() string {
+func (s Model) View() string {
 	if len(s.entries) == 0 || s.width == 0 || s.height == 0 {
 		return ""
 	}
@@ -222,16 +233,15 @@ func (s Sidebar) View() string {
 }
 
 // renderRow renders a single folder row with proper background layering.
-// The selection indicator ┃ always sits in column 0. All folders render
-// at the same indent regardless of nesting. The icon block is included
-// only when s.layout.Icons is true.
-func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) string {
+// The selection indicator ┃ always sits in column 0. The icon block is
+// included only when s.layout.Icons is true.
+func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) string {
 	isSelected := idx == s.selected
 	hasUnread := entry.cf.Folder.Unseen > 0
 
 	var indicator string
 	if isSelected {
-		indicator = applyBg(s.styles.SidebarIndicator, bgStyle).Render("┃")
+		indicator = uicore.ApplyBg(s.styles.SidebarIndicator, bgStyle).Render("┃")
 	} else {
 		indicator = bgStyle.Render(" ")
 	}
@@ -244,7 +254,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	var icon string
 	var leadCells int
 	if s.layout.Icons {
-		icon = applyBg(textStyle, bgStyle).Render(entry.icon)
+		icon = uicore.ApplyBg(textStyle, bgStyle).Render(entry.icon)
 		leadCells = uicore.DisplayCells(indicator) + 1 + uicore.DisplayCells(icon) + 2
 	} else {
 		leadCells = uicore.DisplayCells(indicator) + 1
@@ -253,7 +263,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 	var countStr string
 	var countWidth int
 	if hasUnread {
-		countStr = applyBg(textStyle, bgStyle).Render(strconv.Itoa(entry.cf.Folder.Unseen))
+		countStr = uicore.ApplyBg(textStyle, bgStyle).Render(strconv.Itoa(entry.cf.Folder.Unseen))
 		countWidth = lipgloss.Width(countStr)
 	}
 
@@ -267,7 +277,7 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 		labelBudget = 1
 	}
 	displayName := uicore.DisplayTruncateEllipsis(entry.cf.DisplayName, labelBudget)
-	name := applyBg(textStyle, bgStyle).Render(displayName)
+	name := uicore.ApplyBg(textStyle, bgStyle).Render(displayName)
 
 	var leftContent string
 	if s.layout.Icons {
@@ -284,10 +294,10 @@ func (s Sidebar) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) s
 		countStr +
 		bgStyle.Render(strings.Repeat(" ", rightMargin))
 
-	return fillRowToWidth(row, s.width, bgStyle)
+	return uicore.FillRowToWidth(row, s.width, bgStyle)
 }
 
-func (s Sidebar) renderBlankLine() string {
+func (s Model) renderBlankLine() string {
 	return s.styles.SidebarBg.Width(s.width).Render("")
 }
 
@@ -303,7 +313,7 @@ func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, ico
 		}
 		entry := folderEntry{
 			cf:   cf,
-			icon: sidebarIconFrom(icons, cf),
+			icon: iconFrom(icons, cf),
 		}
 		if fc.Label != "" {
 			entry.cf.DisplayName = fc.Label
@@ -332,9 +342,7 @@ func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, ico
 // (Canonical == ""). It sorts after every canonical default.
 const nonCanonicalDefaultRank = 1000
 
-// sortEntries orders a group by (rank, display name). Rank comes
-// from user config if set, otherwise from canonicalDefaultRank for
-// canonicals or nonCanonicalDefaultRank for custom folders.
+// sortEntries orders a group by (rank, display name).
 func sortEntries(entries []folderEntry, uiCfg config.UIConfig) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		ri := rankOf(entries[i].cf, uiCfg)
@@ -366,10 +374,9 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 	return nonCanonicalDefaultRank
 }
 
-// sidebarIconFrom returns the icon for a classified folder from the given
-// uicore.IconSet. Canonicals use their canonical icon. All other folders use
-// CustomFolder regardless of name.
-func sidebarIconFrom(icons uicore.IconSet, cf mail.ClassifiedFolder) string {
+// iconFrom returns the icon for a classified folder from the given IconSet.
+// Canonicals use their canonical icon. All others use CustomFolder.
+func iconFrom(icons uicore.IconSet, cf mail.ClassifiedFolder) string {
 	switch cf.Canonical {
 	case "Inbox":
 		return icons.Inbox
