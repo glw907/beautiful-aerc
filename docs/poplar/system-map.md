@@ -14,7 +14,15 @@ Single binary: `cmd/poplar/`. Build with `make build`. Install with
 | Package | Role |
 |---------|------|
 | `cmd/poplar/` | Cobra CLI wiring, `main`, `root`, subcommands (`themes`, `config init`); resolves icon mode at startup |
-| `internal/ui/` | Bubbletea components — `App`, `AccountTab`, `Sidebar` + `SidebarSearch`, `MessageList`, `Viewer`, overlays (`HelpPopover`, `ConfirmModal`, `LinkPicker`, `MovePicker`), chrome (`TopLine`, `StatusBar`, `Footer`, `Toast`, `ErrorBanner`), shared `styles.go`, `icons.go`, `keys.go` |
+| `internal/ui/` | Bubbletea root: `App`, App-level chrome (`TopLine`, `StatusBar`, `Footer`, `Toast`, `ErrorBanner`, `ConfirmModal`, `OutboxOverlay`, `ConflictOverlay`), shared `styles.go` + `icons.go` + `keys.go`, residual `cmds.go` (App-scoped pumps, URL launcher, outbox, reader/compose orchestration). Bubbles-shaped subpackages live below |
+| `internal/ui/account/` | `account.Model` — composes sidebar/messagelist/reader, threads outbox/triage/sweep state. Folder + cache cmds and msgs (`LoadFoldersCmd`, `OpenFolderCmd`, `CacheEventMsg`, `TriageStartedMsg`, `OpenConfirmEmptyMsg`, …) |
+| `internal/ui/sidebar/` | `sidebar.Model` + `sidebar.Column` + `sidebar.Search` |
+| `internal/ui/messagelist/` | `messagelist.Model` — thread grouping, fold state, render |
+| `internal/ui/reader/` | `reader.Model` — viewer, plus `reader.LinkPicker` and `reader.AttachPicker` sub-overlays |
+| `internal/ui/compose/` | `compose.Model` — App-owned inline compose surface (imported as `uicompose` to disambiguate from the `internal/compose` domain package) |
+| `internal/ui/movepicker/` | `movepicker.Model` |
+| `internal/ui/helppopover/` | `helppopover.Model` |
+| `internal/ui/uicore/` | Shared chrome library: `LayoutMode`, `IconSet`, `ComputeLayout`, `NewSpinner`, `ErrorMsg`, `TriageOp`, `ModalShell`, `PlaceOverlay`, `DimANSI`, render primitives. Subpackages and `internal/ui/` both import; subpackages cannot import `internal/ui/` |
 | `internal/mail/` | `Backend` interface, poplar-native types (`Folder`, `MessageInfo`, `UID`), `Classify([]Folder) []ClassifiedFolder`, mock backend |
 | `internal/mailjmap/` | Fastmail JMAP backend, direct on `git.sr.ht/~rockorager/go-jmap` (synchronous) |
 | `internal/mailauth/` | Vendored MIT-licensed snippets: XOAUTH2 against `go-sasl`, Gmail X-GM-EXT keepalive against `go-imap`. Top-of-file provenance comments |

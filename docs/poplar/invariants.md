@@ -21,10 +21,10 @@ the ADR(s) that justify them.
 - Poplar is a single-binary bubbletea terminal email client built
   from one Go module: `cmd/poplar`.
 - Repository organization: `cmd/poplar/` (CLI wiring only),
-  `internal/ui/` (tea.Model tree, with bubbles-shaped subpackages
-  `compose`, `helppopover`, `messagelist`, `movepicker`, `reader`,
-  `sidebar`, plus `uicore` for shared chrome — see ADR-0161;
-  `account/` extraction is queued for Pass 9h.2),
+  `internal/ui/` (App + App-owned chrome; bubbles-shaped subpackages
+  `account`, `compose`, `helppopover`, `messagelist`, `movepicker`,
+  `reader`, `sidebar`, plus `uicore` for shared chrome. ADRs 0161,
+  0163),
   `internal/mail/` (`Backend`
   interface + classifier; `mail.FolderEntry` is the display
   projection threaded through sidebar/movepicker),
@@ -132,37 +132,42 @@ the ADR(s) that justify them.
   Keys declared as `key.Binding`, dispatched via `key.Matches`;
   `WindowSizeMsg` handlers both `SetSize` children and forward the
   msg. Full contract in `docs/poplar/bubbletea-conventions.md`.
-- `internal/ui/` is a flat parent plus seven bubbles-shaped
-  subpackages (`compose`, `helppopover`, `messagelist`,
+- `internal/ui/` is the App parent plus seven bubbles-shaped
+  subpackages (`account`, `compose`, `helppopover`, `messagelist`,
   `movepicker`, `reader`, `sidebar`) and the `uicore` sibling.
-  Subpackages cannot import the parent. `uicore` holds
-  `ModalShell`, `PlaceOverlay`, `DimANSI`, render primitives
-  (`PadOrTruncate`, `TruncateToWidth`, `DisplayCells`,
-  `DisplayTruncate`, `CenterOverlay`, `ApplyBg`, `FillRowToWidth`,
-  …), and the `LayoutMode` / `IconSet` / `SearchMode` enums plus
-  the `SimpleIcons`/`FancyIcons` tables. Each subpackage exposes
-  a single `Model` + `New(...)` (sub-models like `sidebar.Column`,
-  `sidebar.Search`, `reader.LinkPicker`, `reader.AttachPicker` are
-  exported alongside). Per-subpackage `Styles` lives in that
-  subpackage's `styles.go` with a `NewStyles(*theme.CompiledTheme)`
-  constructor — those `styles.go` files are the only places
-  outside `internal/ui/styles.go` and `internal/theme/palette.go`
-  permitted to call `lipgloss.NewStyle()`. Msg types live in the
-  package that produces them: subpackage-private msgs are
-  unexported and never cross the boundary; cross-boundary msgs
-  are exported in `<subpkg>/msgs.go` and qualified at the call
-  site (`reader.BodyLoadedMsg`, `sidebar.ClearSearchMsg`). Cmds
-  that emit App-level `ErrorMsg` stay in `internal/ui/cmds.go`
-  and accept App seams (`URLOpener`, `TidyFn`) as function-typed
-  parameters. The `internal/ui/compose` import shadows the
-  `internal/compose` domain package — App-side imports use
-  `uicompose "github.com/glw907/poplar/internal/ui/compose"`;
-  inside `internal/ui/compose/` the domain package is aliased
-  `mailcompose`. ADRs 0161, 0162.
+  Subpackages cannot import the parent. `uicore` holds shared
+  chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
+  `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
+  `DimANSI`, render primitives (`PadOrTruncate`, `TruncateToWidth`,
+  `DisplayCells`, `DisplayTruncate`, `CenterOverlay`, `ApplyBg`,
+  `FillRowToWidth`, …), and the `LayoutMode` / `IconSet` /
+  `SearchMode` enums plus the `SimpleIcons`/`FancyIcons` tables.
+  Each subpackage exposes a single `Model` + `New(...)` (sub-models
+  like `sidebar.Column`, `sidebar.Search`, `reader.LinkPicker`,
+  `reader.AttachPicker` are exported alongside). Per-subpackage
+  `Styles` lives in that subpackage's `styles.go` with a
+  `NewStyles(*theme.CompiledTheme)` constructor. Those `styles.go`
+  files are the only places outside `internal/ui/styles.go` and
+  `internal/theme/palette.go` permitted to call
+  `lipgloss.NewStyle()`. Msg types live in the package that
+  produces them: subpackage-private msgs are unexported and never
+  cross the boundary; cross-boundary msgs are exported in
+  `<subpkg>/msgs.go` and qualified at the call site
+  (`account.TriageStartedMsg`, `account.CacheEventMsg`,
+  `account.OpenConfirmEmptyMsg`, `account.EmptyFolderConfirmedMsg`,
+  `account.FolderLoadedMsg`, `reader.BodyLoadedMsg`,
+  `sidebar.ClearSearchMsg`). Reader and compose cmds that emit
+  `uicore.ErrorMsg` and orchestrate App seams (`URLOpener`,
+  `TidyFn`) currently live in `internal/ui/cmds.go`; they
+  accept App seams as function-typed parameters. The
+  `internal/ui/compose` import shadows the `internal/compose`
+  domain package, so App-side imports use `uicompose
+  "github.com/glw907/poplar/internal/ui/compose"`; inside
+  `internal/ui/compose/` the domain package is aliased
+  `mailcompose`. ADRs 0161, 0162, 0163.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
-  tree. `AccountTab` (renamed to `account.Model` in Pass 9h.2)
-  holds the cache handle (backend reachable via
-  `AccountTab.Backend()` for `pumpUpdatesCmd`); reads come from
+  tree. `account.Model` holds the cache handle (backend reachable via
+  `account.Model.Backend()` for `pumpUpdatesCmd`); reads come from
   `cache.Account.QueryFolder`/`ListFolders`, writes from
   `cache.Account.QueueOp`. `messagelist.Model` is presentation-only —
   `RefreshSource` re-reads cache state after every write,
@@ -372,4 +377,4 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Cache outbox Send/Append dispatch — schema v6 adds `outbox.payload`; `SendArgs{Envelope}` + `AppendArgs{Flag}`; `QueueSend`/`QueueAppend` payload-bearing entry points; drainer `dispatch(args, row)` routes to `Backend.Send`/`Append`; `revertOptimisticTx` no-ops on Send/Append so `DiscardOp` works; IMAP enqueues two ops, JMAP one | 0158 |
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
 | ComposeTab — App-owned inline compose surface, Tab/Shift+Tab focus cycling, Esc as focus toggle, Ctrl+X send + Ctrl+C cancel; cache.Account.QueueOutbound (one op JMAP, two ops IMAP) + Backend.IsJMAP() predicate; TidyFn function-pointer seam on App | 0159, 0160 |
-| internal/ui/ package layout — bubbles-shaped subpackages (compose, helppopover, messagelist, movepicker, reader, sidebar) plus uicore sibling for shared chrome; mail.FolderEntry hoisted; per-package Msg-namespace policy; *Tab suffix dropped | 0161, 0162 |
+| internal/ui/ package layout — bubbles-shaped subpackages (account, compose, helppopover, messagelist, movepicker, reader, sidebar) plus uicore sibling for shared chrome; mail.FolderEntry hoisted; per-package Msg-namespace policy; *Tab suffix dropped; ErrorMsg + TriageOp + ComputeLayout + NewSpinner hoisted to uicore; account-scoped cmds (folder/cache/triage/sweep) lifted; AccountTab → account.Model | 0161, 0162, 0163 |

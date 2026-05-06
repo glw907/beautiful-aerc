@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9h.2 next — finish core reorg (account/ extract + cmds.go decomp).
+**Current pass:** Pass 9h.5 next — drafts persistence (issue #33).
 
 ## Passes
 
@@ -9,8 +9,8 @@
 | 1 – 9g | Scaffold → backends → UI → triage → config → Gmail → polish I → Cache 0–III → audits → Attachments I+II → voice → JMAP baseline → Catkin core/QoL/annotations → render fixes → invariants split → catkin lint sweep → popover overlay padding → compose foundation → backend Send + Append → cache outbox Send/Append dispatch (ADRs 0001–0158) | done |
 | 9h | ComposeTab + `c`/`r`/`R`/`f` wiring + tidy seam (ADRs 0159–0160) | done |
 | 9h.1 | Core reorg leaves — extract compose / movepicker / helppopover / messagelist / sidebar / reader subpackages + uicore sibling; hoist mail.FolderEntry (ADRs 0161–0162) | done |
-| 9h.2 | Core reorg parent — extract account/ + decompose cmds.go + system-map refresh + live tmux verification | pending |
-| 9h.5 | Drafts persistence (#33) | pending (after 9h.2) |
+| 9h.2 | Core reorg parent — extract account/, hoist ErrorMsg/TriageOp/ComputeLayout/NewSpinner to uicore, lift account-scoped cmds (ADR-0163) | done |
+| 9h.5 | Drafts persistence (#33) | pending |
 | 9.1 | Address autocomplete from CardDAV (#34) | pending |
 | 9.4 | Email signatures + multiple identities (#32) | pending |
 | 9i | Claude Tidy implementation | pending |
@@ -27,54 +27,43 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9h.2)
+## Next starter prompt (Pass 9h.5)
 
-> **Goal.** Finish the core reorg started in 9h.1 — extract the
-> `AccountTab` parent into `internal/ui/account/` as
-> `account.Model`, lift its folder/outbox/triage/sweep cmds and
-> msgs out of `internal/ui/cmds.go`, audit the residual `cmds.go`
-> down to App-only cross-cutting concerns, and refresh the
-> system map.
+> **Goal.** Persist compose drafts so closing the compose surface
+> (Esc / Ctrl+C with discard / app quit) preserves the draft and
+> reopening (`c` from anywhere, or selecting a Drafts row) restores
+> it. GitHub issue #33.
 >
-> **Scope.** `AccountTab` → `account.Model` (largest extraction
-> by responsibility — composes sidebar/messagelist/reader and
-> threads outbox/triage/sweep state). Lift roughly 14 cmds and 12
-> msgs from `internal/ui/cmds.go` per the original plan's Task 7
-> table. App-level types (`URLOpener`, `TidyFn`, `Styles`,
-> `IconSet`) stay in `internal/ui/` and pass through structural
-> function-typed parameters where needed. Final `cmds.go` audit
-> + `docs/poplar/system-map.md` refresh. Live tmux capture at
-> 80×24 and 120×40 (the 9h.1 pass deferred capture pending the
-> full reorg). **Out:** any feature work.
+> **Scope.** Cache schema bump for a `drafts` table keyed by
+> draft-id (UUID), columns mirroring `compose.Draft` (To/Cc/Bcc/
+> Subject/Body/From + attachment paths) plus `created_at` /
+> `updated_at`. Auto-save on dirty during compose. New
+> `compose.Model` lifecycle: opening with no draft-id creates one,
+> opening with an id seeds from the cache. App routes Drafts-folder
+> Enter to compose-with-id. Discard removes the row; Send removes
+> the row after queuing (cache-tx). **Out:** signatures (9.4),
+> address autocomplete (9.1), schedule send (9.2), attachments-rich
+> compose UI (9.5).
 >
 > **Settled (do not re-brainstorm).**
-> - Naming: `package.Model` + `New(...)`; `*Tab` suffix dropped
->   (ADR-0162). The account subpackage will be `account.Model`.
-> - Per-package Msg namespace: outbound msgs in `<subpkg>/msgs.go`,
->   App qualifies them at the switch arm (ADR-0162).
-> - `uicore` is the shared-chrome home; subpackages cannot import
->   the parent (ADR-0161).
-> - Cmds that emit `ErrorMsg` stay in `internal/ui/cmds.go` and
->   take App seams as function-typed parameters.
-> - Per-subpackage `Styles` lives in `<subpkg>/styles.go` with
->   `NewStyles(*theme.CompiledTheme)`.
+> - Cache schema migration is welcomed pre-beta (ADR-0125 posture).
+> - Cache schema currently at v6 (ADR-0158). Bump to v7 with the
+>   drafts table.
+> - `compose.Model` is App-owned; lifecycle stays in App.
 >
 > **Still open — brainstorm:**
-> - Cycle risk in the account extract: any seam that App owns
->   (`URLOpener`, `TidyFn`, the confirm-modal trio) and account
->   needs to consume during Update — confirm the function-typed
->   parameter pattern handles all of them, or flag a residual.
-> - Final residual shape of `internal/ui/cmds.go`: what stays
->   App-level (pumps, ErrorMsg, LaunchURLMsg, confirm-modal)
->   vs. what hoists to account or splits per-screen.
+> - Auto-save cadence — every Update tick, debounced, or on focus
+>   change between fields? Trade-off: write amplification vs. lost
+>   characters on crash.
+> - Drafts-folder UX: does the Drafts row show the cached draft
+>   contents, or does it still go through `Append`-to-Sent-style
+>   server round-trip? IMAP/JMAP behavior differs here.
+> - Multi-draft model: one open compose at a time stays the rule
+>   (ADR-0159). Confirm draft-id assignment doesn't change that.
 >
-> **Approach.** Read this pass's plan + spec in
-> `docs/superpowers/archive/plans/` for the original Task 7
-> table. Plan at `docs/superpowers/plans/YYYY-MM-DD-core-reorg-finish.md`.
-> Likely one ADR (account extract details) plus an update to
-> ADR-0161 if the residual `cmds.go` shape settles differently
-> than predicted. Standard pass-end checklist applies, plus the
-> live tmux verification deferred from 9h.1.
+> **Approach.** Brainstorm the open questions first, write a plan
+> doc at `docs/superpowers/plans/YYYY-MM-DD-drafts-persistence.md`,
+> then implement. Standard pass-end checklist applies.
 
 ## Queued
 
