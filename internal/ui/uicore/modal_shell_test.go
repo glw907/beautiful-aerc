@@ -3,11 +3,46 @@
 package uicore
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+const goldensDir = "testdata/goldens"
+
+func checkGolden(t *testing.T, name, got string) {
+	t.Helper()
+	path := filepath.Join(goldensDir, name)
+	if os.Getenv("UPDATE_GOLDENS") == "1" {
+		if err := os.MkdirAll(goldensDir, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", goldensDir, err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+			t.Fatalf("write golden %s: %v", path, err)
+		}
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v (run with UPDATE_GOLDENS=1 to create)", path, err)
+	}
+	want := string(data)
+	if got != want {
+		gotLines := strings.Split(got, "\n")
+		wantLines := strings.Split(want, "\n")
+		for i := 0; i < len(gotLines) && i < len(wantLines); i++ {
+			if gotLines[i] != wantLines[i] {
+				t.Fatalf("golden %s mismatch at line %d:\n  got  %q\n  want %q",
+					name, i+1, gotLines[i], wantLines[i])
+			}
+		}
+		t.Fatalf("golden %s mismatch: got %d lines, want %d lines",
+			name, len(gotLines), len(wantLines))
+	}
+}
 
 // buildShellBox is a helper that exercises ModalShell.Box with the given
 // parameters and returns the raw box string (no overlay compositing).
@@ -143,5 +178,51 @@ func TestModalShell_TitleTruncation(t *testing.T) {
 	topBorder := lines[0]
 	if strings.Contains(topBorder, longTitle) {
 		t.Errorf("top border contains untrimmed title: %q", topBorder)
+	}
+}
+
+// TestModalShell_BoxGolden captures golden output for Box at two typical
+// sizes used in the overlay golden tests. Each golden records the raw box
+// string (before overlay compositing) so the test is self-contained.
+func TestModalShell_BoxGolden(t *testing.T) {
+	cases := []struct {
+		name       string
+		title      string
+		bodyRows   []string
+		footerRows []string
+		contentW   int
+	}{
+		{
+			// Matches a 28-cell-wide modal (contentW=26) at a narrow terminal.
+			name:  "modal_shell_narrow.txt",
+			title: "Confirm",
+			bodyRows: []string{
+				"Delete all messages?      ",
+			},
+			footerRows: []string{
+				"[y] yes   [n] no          ",
+			},
+			contentW: 26,
+		},
+		{
+			// Matches a 60-cell-wide modal (contentW=58) at a typical terminal.
+			name:  "modal_shell_wide.txt",
+			title: "Empty Trash",
+			bodyRows: []string{
+				"Permanently delete all 42 messages in Trash?             ",
+			},
+			footerRows: []string{
+				"[y] yes   [n] no   [esc] cancel                          ",
+			},
+			contentW: 58,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildShellBox(tc.title, tc.bodyRows, tc.footerRows, tc.contentW)
+			checkGolden(t, tc.name, got)
+		})
 	}
 }
