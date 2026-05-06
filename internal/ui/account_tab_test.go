@@ -840,6 +840,7 @@ func (b *pagingFakeBackend) Destroy(_ []mail.UID) error                   { retu
 func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
 func (b *pagingFakeBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
 func (b *pagingFakeBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
+func (b *pagingFakeBackend) IsJMAP() bool                                 { return false }
 func (b *pagingFakeBackend) Updates() <-chan mail.Update                  { return nil }
 func (b *pagingFakeBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) {
 	return nil, nil

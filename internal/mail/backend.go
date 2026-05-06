@@ -85,6 +85,11 @@ type Backend interface {
 	// \Seen on Sent copies.
 	Append(folder string, mime []byte, flags Flag) error
 
+	// IsJMAP reports whether this backend is the JMAP adapter. Used by
+	// the cache outbox to decide whether the Sent copy is appended
+	// separately (IMAP) or implicit in Send (JMAP).
+	IsJMAP() bool
+
 	Updates() <-chan Update
 }
 

@@ -13,6 +13,7 @@ import (
 type MockBackend struct {
 	name    string
 	email   string
+	isJMAP  bool
 	folders []Folder
 	msgs    []MessageInfo
 	updates chan Update
@@ -85,6 +86,7 @@ func NewMockBackend() *MockBackend {
 
 func (m *MockBackend) AccountName() string             { return m.name }
 func (m *MockBackend) AccountEmail() string            { return m.email }
+func (m *MockBackend) IsJMAP() bool                    { return m.isJMAP }
 func (m *MockBackend) Connect(_ context.Context) error { return nil }
 func (m *MockBackend) Disconnect() error               { return nil }
 

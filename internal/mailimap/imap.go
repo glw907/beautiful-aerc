@@ -70,6 +70,8 @@ func (b *Backend) AccountEmail() string {
 	return b.cfg.Email
 }
 
+func (b *Backend) IsJMAP() bool { return false }
+
 // Updates returns a nil channel before
 // Connect succeeds.
 func (b *Backend) Updates() <-chan mail.Update { return b.updates }

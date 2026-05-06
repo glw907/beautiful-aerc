@@ -52,6 +52,7 @@ func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return
 
 func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
 func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
+func (b *blockingBackend) IsJMAP() bool                                 { return false }
 
 func (b *blockingBackend) Updates() <-chan mail.Update {
 	ch := make(chan mail.Update)

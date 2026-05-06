@@ -41,6 +41,7 @@ type appendCall struct {
 
 func (f *fakeBackend) AccountName() string                 { return "fake" }
 func (f *fakeBackend) AccountEmail() string                { return "fake@example.com" }
+func (f *fakeBackend) IsJMAP() bool                        { return false }
 func (f *fakeBackend) Connect(_ context.Context) error     { return nil }
 func (f *fakeBackend) Disconnect() error                   { return nil }
 func (f *fakeBackend) ListFolders() ([]mail.Folder, error) { return f.folders, nil }
