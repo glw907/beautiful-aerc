@@ -559,11 +559,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			if !ok {
 				break
 			}
-			kind := composeSeedReply
+			kind := uicompose.SeedReply
 			if key.Matches(msg, m.keys.ReplyAll) {
-				kind = composeSeedReplyAll
+				kind = uicompose.SeedReplyAll
 			} else if key.Matches(msg, m.keys.Forward) {
-				kind = composeSeedForward
+				kind = uicompose.SeedForward
 			}
 			return m, composeSeedCmd(m.acct.Cache(), parent, m.acct.AccountEmail(), kind)
 		case key.Matches(msg, m.keys.Undo):

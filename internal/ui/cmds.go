@@ -588,17 +588,9 @@ func openAttachmentCmd(c *cache.Account, opener URLOpener, uid mail.UID, att mai
 	}
 }
 
-type composeSeedKind int
-
-const (
-	composeSeedReply composeSeedKind = iota
-	composeSeedReplyAll
-	composeSeedForward
-)
-
 // composeSeedCmd fetches the parent body and builds a Draft via the
 // matching compose.Seed* function. Result lands as uicompose.SeededMsg.
-func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, kind composeSeedKind) tea.Cmd {
+func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, kind uicompose.SeedKind) tea.Cmd {
 	return func() tea.Msg {
 		body, err := acct.FetchBody(parent.UID)
 		if err != nil {
@@ -606,9 +598,9 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 		}
 		var d compose.Draft
 		switch kind {
-		case composeSeedReply:
+		case uicompose.SeedReply:
 			d = compose.SeedReply(parent, body)
-		case composeSeedReplyAll:
+		case uicompose.SeedReplyAll:
 			d = compose.SeedReplyAll(parent, body, gomail.Address{Address: self})
 		default:
 			d = compose.SeedForward(parent, body)
