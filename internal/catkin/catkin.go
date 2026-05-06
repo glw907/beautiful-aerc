@@ -68,9 +68,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 	if k, ok := msg.(tea.KeyMsg); ok {
 		if m.popover.open {
-			if handled, mm, cmd := m.handlePopoverKey(k); handled {
-				cmd = m.maybeScheduleAnnotateAfterMutation(mm, cmd)
-				return mm, cmd
+			if handled, mm := m.handlePopoverKey(k); handled {
+				return mm, m.maybeScheduleAnnotateAfterMutation(mm, nil)
 			}
 		}
 		if !m.popover.open && key.Matches(k, popoverKeys.Open) {

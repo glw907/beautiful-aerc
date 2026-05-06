@@ -69,7 +69,7 @@ type fakeAnnotator struct {
 	out   []Annotation
 }
 
-func (f *fakeAnnotator) Annotate(src string) []Annotation {
+func (f *fakeAnnotator) Annotate(_ string) []Annotation {
 	f.calls++
 	return f.out
 }

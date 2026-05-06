@@ -84,39 +84,39 @@ func (m Model) closePopover() Model {
 }
 
 // handlePopoverKey dispatches a KeyMsg while the popover is open.
-// Returns (handled, model, cmd). When handled is false, the caller
-// falls through to normal Update handling.
-func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model, tea.Cmd) {
+// Returns (handled, model). When handled is false, the caller falls
+// through to normal Update handling.
+func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model) {
 	switch {
 	case key.Matches(k, popoverKeys.Close):
-		return true, m.closePopover(), nil
+		return true, m.closePopover()
 	case key.Matches(k, popoverKeys.Next):
 		if len(m.popover.suggestions) > 0 {
 			m.popover.cursor = (m.popover.cursor + 1) % len(m.popover.suggestions)
 		}
-		return true, m, nil
+		return true, m
 	case key.Matches(k, popoverKeys.Prev):
 		if n := len(m.popover.suggestions); n > 0 {
 			m.popover.cursor = (m.popover.cursor - 1 + n) % n
 		}
-		return true, m, nil
+		return true, m
 	case key.Matches(k, popoverKeys.Apply):
-		return true, m.applySelectedSuggestion(), nil
+		return true, m.applySelectedSuggestion()
 	case key.Matches(k, popoverKeys.Ignore):
-		return true, m.ignoreCurrentWord(), nil
+		return true, m.ignoreCurrentWord()
 	case key.Matches(k, popoverKeys.Add):
-		return true, m.addCurrentWordToWordlist(), nil
+		return true, m.addCurrentWordToWordlist()
 	}
 	// Digit jump-and-apply.
 	if len(k.Runes) == 1 && k.Runes[0] >= '1' && k.Runes[0] <= '9' {
 		idx := int(k.Runes[0] - '1')
 		if idx < len(m.popover.suggestions) {
 			m.popover.cursor = idx
-			return true, m.applySelectedSuggestion(), nil
+			return true, m.applySelectedSuggestion()
 		}
-		return true, m, nil
+		return true, m
 	}
-	return false, m, nil
+	return false, m
 }
 
 func (m Model) applySelectedSuggestion() Model {

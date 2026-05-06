@@ -43,7 +43,7 @@ func Reflow(src string, width int, oldCursor int) (string, int) {
 		if isPreservedBlock(groupCtx[0]) {
 			emitted = group
 		} else {
-			emitted = reflowGroup(group, groupCtx, width)
+			emitted = reflowGroup(groupCtx, width)
 		}
 
 		if newCursor < 0 && oldCursor >= groupStart && oldCursor <= groupStart+groupChars {
@@ -99,7 +99,7 @@ func isPreservedBlock(c LineContext) bool {
 	return false
 }
 
-func reflowGroup(lines []string, ctx []LineContext, width int) []string {
+func reflowGroup(ctx []LineContext, width int) []string {
 	prefix := buildPrefix(ctx[0])
 	budget := width - utf8.RuneCountInString(prefix)
 	if budget < 1 {
