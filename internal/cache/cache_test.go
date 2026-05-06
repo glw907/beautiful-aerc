@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -42,14 +41,10 @@ func (f *fakeBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) { retur
 func (f *fakeBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) {
 	return nil, nil
 }
-func (f *fakeBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) {
-	return nil, nil
-}
 func (f *fakeBackend) Move(uids []mail.UID, _ string) error {
 	f.moves = append(f.moves, uids...)
 	return f.err
 }
-func (f *fakeBackend) Copy(_ []mail.UID, _ string) error { return nil }
 func (f *fakeBackend) Destroy(uids []mail.UID) error {
 	f.destroys = append(f.destroys, uids...)
 	return f.err
@@ -58,9 +53,8 @@ func (f *fakeBackend) Flag(uids []mail.UID, _ mail.Flag, _ bool) error {
 	f.flags = append(f.flags, uids...)
 	return f.err
 }
-func (f *fakeBackend) Send(_ string, _ []string, _ io.Reader) error {
-	return nil
-}
+func (f *fakeBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
+func (f *fakeBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
 func (f *fakeBackend) Updates() <-chan mail.Update {
 	if f.updates == nil {
 		f.updates = make(chan mail.Update)

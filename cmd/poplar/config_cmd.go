@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mailimap"
 	"github.com/spf13/cobra"
 )
 
@@ -99,6 +100,13 @@ func newConfigCheckCmd() *cobra.Command {
 					continue
 				}
 				_ = b.Disconnect()
+				if a.Backend == "imap" {
+					if err := mailimap.ProbeSMTP(a); err != nil {
+						fmt.Fprintf(cmd.OutOrStdout(), "%-20s smtp error: %v\n", a.Name, err)
+						anyFail = true
+						continue
+					}
+				}
 				fmt.Fprintf(cmd.OutOrStdout(), "%-20s OK\n", a.Name)
 			}
 			if anyFail {

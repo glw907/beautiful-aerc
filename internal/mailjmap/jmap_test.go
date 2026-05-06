@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,8 @@ import (
 	"git.sr.ht/~rockorager/go-jmap"
 	jmapmail "git.sr.ht/~rockorager/go-jmap/mail"
 	"git.sr.ht/~rockorager/go-jmap/mail/email"
+	"git.sr.ht/~rockorager/go-jmap/mail/emailsubmission"
+	"git.sr.ht/~rockorager/go-jmap/mail/identity"
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
 
 	"github.com/glw907/poplar/internal/config"
@@ -924,13 +927,94 @@ func TestMove_UnknownFolder(t *testing.T) {
 	}
 }
 
-// --- Send ---
+// --- Send / Append ---
 
-func TestSend_ReturnsNotImplemented(t *testing.T) {
+func TestSend_BeforeConnectErrors(t *testing.T) {
 	b := newTestBackend(&fakeClient{}, "acct-1", nil)
-	err := b.Send("from@example.com", []string{"to@example.com"}, nil)
+	err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi"))
 	if err == nil {
-		t.Fatal("expected error from Send stub")
+		t.Fatal("expected error when not connected")
+	}
+}
+
+func TestSend_BatchesImportAndSubmission(t *testing.T) {
+	folders := map[string]folderEntry{
+		"Sent": {id: "sent-mb", folder: mail.Folder{Name: "Sent", Role: "sent"}},
+	}
+	identityResp := &jmap.Invocation{
+		CallID: "0",
+		Args: &identity.GetResponse{
+			List: []*identity.Identity{{ID: "id-1", Email: "alice@example.com"}},
+		},
+	}
+	importResp := &jmap.Invocation{
+		CallID: "0",
+		Args: &email.ImportResponse{
+			Created: map[jmap.ID]*email.Email{"k1": {}},
+		},
+	}
+	subResp := &jmap.Invocation{
+		CallID: "1",
+		Args: &emailsubmission.SetResponse{
+			Created: map[jmap.ID]*emailsubmission.EmailSubmission{"s1": {}},
+		},
+	}
+	calls := 0
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			calls++
+			switch calls {
+			case 1:
+				return fakeResponse(identityResp), nil
+			case 2:
+				return fakeResponse(importResp, subResp), nil
+			}
+			return nil, fmt.Errorf("unexpected call %d", calls)
+		},
+	}
+	b := newTestBackend(fake, "acct-1", folders)
+	b.cfg.Email = "alice@example.com"
+	b.uploadBlob = func(_ []byte) (string, error) { return "blob-1", nil }
+
+	err := b.Send(mail.Envelope{From: "alice@example.com", Rcpts: []string{"bob@example.com"}}, []byte("Subject: hi\r\n\r\nbody"))
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("calls = %d, want 2 (identity probe + send batch)", calls)
+	}
+	// Second request should batch import + submission.
+	if got := len(fake.sent[1].Calls); got != 2 {
+		t.Errorf("send batch calls = %d, want 2", got)
+	}
+}
+
+func TestSend_NoSentMailboxFails(t *testing.T) {
+	b := newTestBackend(&fakeClient{}, "acct-1", nil)
+	b.uploadBlob = func(_ []byte) (string, error) { return "x", nil }
+	err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi"))
+	if err == nil || !strings.Contains(err.Error(), "Sent") {
+		t.Fatalf("expected no-sent-mailbox error, got %v", err)
+	}
+}
+
+func TestAppend_ImportsToFolder(t *testing.T) {
+	folders := map[string]folderEntry{
+		"Drafts": {id: "drafts-mb", folder: mail.Folder{Name: "Drafts", Role: "drafts"}},
+	}
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			return fakeResponse(&jmap.Invocation{
+				CallID: "0",
+				Args:   &email.ImportResponse{Created: map[jmap.ID]*email.Email{"k1": {}}},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", folders)
+	b.uploadBlob = func(_ []byte) (string, error) { return "blob-2", nil }
+
+	if err := b.Append("Drafts", []byte("draft"), mail.FlagDraft); err != nil {
+		t.Fatalf("Append: %v", err)
 	}
 }
 

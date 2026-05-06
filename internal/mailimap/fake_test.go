@@ -27,6 +27,7 @@ type fakeClient struct {
 	moveCalls    [][2]any // {uids, dest}
 	copyCalls    [][2]any
 	expungeCalls [][]mail.UID
+	appendCalls  []appendCall
 
 	onIdle   func(emit func(mail.Update)) error
 	idleStop func()
@@ -135,4 +136,15 @@ func (f *fakeClient) IdleStop() {
 	if f.idleStop != nil {
 		f.idleStop()
 	}
+}
+
+type appendCall struct {
+	folder string
+	mime   []byte
+	flags  []string
+}
+
+func (f *fakeClient) Append(folder string, mime []byte, flags []string) error {
+	f.appendCalls = append(f.appendCalls, appendCall{folder: folder, mime: append([]byte(nil), mime...), flags: append([]string(nil), flags...)})
+	return nil
 }

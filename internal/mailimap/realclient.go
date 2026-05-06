@@ -448,6 +448,25 @@ func (r *realClient) Move(uids []mail.UID, dest string) error {
 	return nil
 }
 
+func (r *realClient) Append(folder string, mime []byte, flags []string) error {
+	opts := &imap.AppendOptions{}
+	for _, f := range flags {
+		opts.Flags = append(opts.Flags, imap.Flag(f))
+	}
+	cmd := r.c.Append(folder, int64(len(mime)), opts)
+	if _, err := cmd.Write(mime); err != nil {
+		_ = cmd.Close()
+		return fmt.Errorf("append %q: write: %w", folder, err)
+	}
+	if err := cmd.Close(); err != nil {
+		return fmt.Errorf("append %q: close: %w", folder, err)
+	}
+	if _, err := cmd.Wait(); err != nil {
+		return fmt.Errorf("append %q: %w", folder, err)
+	}
+	return nil
+}
+
 // UIDExpunge runs UID EXPUNGE (UIDPLUS / IMAP4rev2).
 func (r *realClient) UIDExpunge(uids []mail.UID) error {
 	if len(uids) == 0 {

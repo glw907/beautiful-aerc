@@ -5,7 +5,6 @@ package mail
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 )
 
@@ -270,7 +269,11 @@ func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
 	return nil
 }
 
-func (m *MockBackend) Send(_ string, _ []string, _ io.Reader) error {
+func (m *MockBackend) Send(_ Envelope, _ []byte) error {
+	return nil
+}
+
+func (m *MockBackend) Append(_ string, _ []byte, _ Flag) error {
 	return nil
 }
 

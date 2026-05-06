@@ -5,7 +5,6 @@ package mailimap
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/glw907/poplar/internal/mail"
 )
@@ -128,11 +127,6 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 		return fmt.Errorf("store flags: %w", classifyErr(err))
 	}
 	return nil
-}
-
-// Send is not yet implemented. Compose/SMTP lands with the editor pass.
-func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
-	return errors.New("send: not implemented")
 }
 
 // imapFlagsFor maps mail.Flag bits to IMAP system flag strings.

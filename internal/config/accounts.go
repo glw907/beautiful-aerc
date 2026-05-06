@@ -20,23 +20,49 @@ import (
 // Password wins. Otherwise PasswordCmd is run via /bin/sh -c and
 // stdout (trimmed of trailing newlines) is the password.
 func (c *AccountConfig) ResolvePassword() (string, error) {
-	if c.Password != "" {
-		return c.Password, nil
+	return resolvePasswordCmd(c.Password, c.PasswordCmd, "password-cmd")
+}
+
+// resolvePasswordCmd is the shared body for AccountConfig.ResolvePassword
+// and SMTPConfig.ResolvePassword. errPrefix labels the command in the
+// error chain ("password-cmd" or "smtp password-cmd").
+func resolvePasswordCmd(password, cmd, errPrefix string) (string, error) {
+	if password != "" {
+		return password, nil
 	}
-	if c.PasswordCmd == "" {
-		return "", errors.New("account has no password or password-cmd")
+	if cmd == "" {
+		return "", fmt.Errorf("no password or %s", errPrefix)
 	}
-	out, err := exec.Command("/bin/sh", "-c", c.PasswordCmd).Output()
+	out, err := exec.Command("/bin/sh", "-c", cmd).Output()
 	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			if stderr := strings.TrimSpace(string(ee.Stderr)); stderr != "" {
-				return "", fmt.Errorf("password-cmd: %s", stderr)
+				return "", fmt.Errorf("%s: %s", errPrefix, stderr)
 			}
 		}
-		return "", fmt.Errorf("password-cmd: %v", err)
+		return "", fmt.Errorf("%s: %v", errPrefix, err)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
+}
+
+// SMTPConfig is the per-account submission transport. Filled from
+// provider preset SMTP fields at decode time, then overridden by an
+// explicit [account.smtp] block. Auth, Password, and PasswordCmd
+// default to the IMAP-side credentials when not set. The typical
+// case is "same login as IMAP."
+type SMTPConfig struct {
+	Host        string
+	Port        int
+	StartTLS    bool
+	InsecureTLS bool
+	Auth        string
+	Password    string
+	PasswordCmd string
+}
+
+func (s *SMTPConfig) ResolvePassword() (string, error) {
+	return resolvePasswordCmd(s.Password, s.PasswordCmd, "smtp password-cmd")
 }
 
 // AccountConfig holds the configuration for a single email account.
@@ -84,6 +110,10 @@ type AccountConfig struct {
 	// X-GM-EXT-1 assertion at Connect, and Destroy routed via
 	// SELECT [Gmail]/Trash before EXPUNGE. Set by the gmail preset.
 	GmailQuirks bool
+
+	// SMTP holds the submission transport for IMAP-backed accounts.
+	// JMAP accounts ignore this. Submission rides the JMAP session.
+	SMTP SMTPConfig
 }
 
 // ExpandHome turns a leading "~" into the user's home directory.
@@ -179,6 +209,17 @@ type accountEntry struct {
 	FoldersExclude []string          `toml:"folders-exclude"`
 	From           string            `toml:"from"`
 	Params         map[string]string `toml:"params"`
+	SMTP           smtpEntry         `toml:"smtp"`
+}
+
+type smtpEntry struct {
+	Host        string `toml:"host"`
+	Port        int    `toml:"port"`
+	StartTLS    bool   `toml:"starttls"`
+	InsecureTLS bool   `toml:"insecure-tls"`
+	Auth        string `toml:"auth"`
+	Password    string `toml:"password"`
+	PasswordCmd string `toml:"password-cmd"`
 }
 
 // ParseAccounts reads a poplar config.toml file and returns
@@ -227,6 +268,16 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	gmailQuirks := false
 	source := e.Source
 
+	smtp := SMTPConfig{
+		Host:        e.SMTP.Host,
+		Port:        e.SMTP.Port,
+		StartTLS:    e.SMTP.StartTLS,
+		InsecureTLS: e.SMTP.InsecureTLS,
+		Auth:        e.SMTP.Auth,
+		Password:    e.SMTP.Password,
+		PasswordCmd: e.SMTP.PasswordCmd,
+	}
+
 	if preset, ok := Providers[e.Provider]; ok {
 		backend = preset.Backend
 		if host == "" {
@@ -244,6 +295,18 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		gmailQuirks = preset.GmailQuirks
 		if source == "" {
 			source = preset.URL
+		}
+		if smtp.Host == "" {
+			smtp.Host = preset.SMTPHost
+		}
+		if smtp.Port == 0 {
+			smtp.Port = preset.SMTPPort
+		}
+		if !smtp.StartTLS {
+			smtp.StartTLS = preset.SMTPStartTLS
+		}
+		if !smtp.InsecureTLS {
+			smtp.InsecureTLS = preset.SMTPInsecureTLS
 		}
 	}
 
@@ -280,6 +343,31 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 			e.Name, e.Provider)
 	}
 
+	smtpPassword, err := resolveEnv(smtp.Password)
+	if err != nil {
+		return nil, fmt.Errorf("account %q (provider = %q) smtp password: %w", e.Name, e.Provider, err)
+	}
+	if smtpPassword != "" && smtp.PasswordCmd != "" {
+		return nil, fmt.Errorf("account %q (provider = %q): smtp.password and smtp.password-cmd both set; use one", e.Name, e.Provider)
+	}
+	smtp.Password = smtpPassword
+
+	// SMTP credentials default to IMAP credentials when the user
+	// didn't set anything explicit. Typical case is the same login
+	// for both transports.
+	if smtp.Password == "" && smtp.PasswordCmd == "" {
+		smtp.Password = password
+		smtp.PasswordCmd = e.PasswordCmd
+	}
+	if smtp.Auth == "" {
+		smtp.Auth = e.Auth
+	}
+
+	if backend == "imap" && smtp.Host == "" {
+		return nil, fmt.Errorf("account %q (provider = %q): smtp.host is required for imap accounts (set [account.smtp].host)",
+			e.Name, e.Provider)
+	}
+
 	acct := &AccountConfig{
 		Name:           e.Name,
 		Display:        e.Display,
@@ -297,6 +385,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		Folders:        e.FoldersSort,
 		FoldersExclude: e.FoldersExclude,
 		Params:         e.Params,
+		SMTP:           smtp,
 	}
 
 	if e.CopyTo != "" {

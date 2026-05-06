@@ -38,21 +38,11 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 		port = 993
 	}
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(port))
-
-	d := &net.Dialer{
-		Timeout:   dialTimeout,
-		KeepAlive: time.Duration(keepAliveInterval) * time.Second,
-	}
 	tlsCfg := &tls.Config{ServerName: cfg.Host, InsecureSkipVerify: cfg.InsecureTLS} //nolint:gosec // InsecureTLS is opt-in for self-hosted dev servers
 
-	// Dial the raw TCP connection so we can apply kernel keepalive tuning
-	// before handing the conn to imapclient.
-	raw, err := d.Dial("tcp", addr)
+	raw, err := dialRawTCP(addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s (%s): %w", addr, role, err)
-	}
-	if tcp, ok := raw.(*net.TCPConn); ok {
-		applyKeepalive(tcp)
 	}
 
 	// Pre-allocate the realClient so its dispatch method can be wired
@@ -118,6 +108,24 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 
 	rc.c = cli
 	return rc, nil
+}
+
+// dialRawTCP opens a TCP connection with the dial timeout and OS-level
+// keepalive applied, then tunes kernel keepalive probes/intervals on
+// the resulting *net.TCPConn. The caller layers TLS or STARTTLS on top.
+func dialRawTCP(addr string) (net.Conn, error) {
+	d := &net.Dialer{
+		Timeout:   dialTimeout,
+		KeepAlive: time.Duration(keepAliveInterval) * time.Second,
+	}
+	raw, err := d.Dial("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	if tcp, ok := raw.(*net.TCPConn); ok {
+		applyKeepalive(tcp)
+	}
+	return raw, nil
 }
 
 // applyKeepalive tunes kernel TCP keepalive probes and interval on c.

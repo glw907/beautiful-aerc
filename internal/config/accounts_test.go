@@ -40,6 +40,10 @@ name = "Personal"
 provider = "imap"
 host = "imap.personal.com"
 port = 993
+
+[account.smtp]
+host = "smtp.personal.com"
+port = 465
 `,
 			wantN: 2,
 		},
@@ -282,6 +286,10 @@ port     = 143
 starttls = true
 auth     = "plain"
 password = "$IMAP_PASS"
+
+[account.smtp]
+host = "smtp.example.com"
+port = 465
 `
 	got, err := ParseAccountsFromBytes([]byte(toml))
 	if err != nil {
@@ -322,6 +330,8 @@ func TestParseAccountsPresetSetsInsecureTLS(t *testing.T) {
 		Host:        "test.local",
 		Port:        993,
 		InsecureTLS: true,
+		SMTPHost:    "smtp.test.local",
+		SMTPPort:    465,
 	}
 	t.Cleanup(func() { delete(Providers, "test-insecure") })
 

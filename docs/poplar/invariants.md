@@ -65,7 +65,32 @@ the ADR(s) that justify them.
   `X-GM-EXT-1` at Connect and route `Destroy` through `SELECT
   [Gmail]/Trash` first so EXPUNGE truly deletes; XOAUTH2 access
   tokens come from `password-cmd` with no internal refresh until
-  Pass 9.6.
+  Pass 9.6. SMTP is a third connection dialed lazily on first
+  `Send` via `emersion/go-smtp`; the cached client is dropped on
+  any send error so the next call redials. `Append(folder, mime,
+  flags)` runs `APPEND` on the cmd connection. `mailimap.ProbeSMTP`
+  is the connect-test surface for `poplar config check`. `dialRawTCP`
+  in `auth.go` is the shared TCP-setup helper used by both IMAP and
+  SMTP dials.
+
+### Send + Append
+
+- `mail.Backend.Send(env Envelope, mime []byte) error` and
+  `Append(folder string, mime []byte, flags Flag) error` are the
+  outbound primitives. `Envelope = { From, Rcpts }` is the
+  RFC 5321 envelope; mime is pre-assembled by
+  `compose.AssembleMIME`. `internal/mail/` does not import
+  `internal/compose/`; bytes flow one way through the stack.
+- JMAP `Send` batches `Email/import` (into the Sent mailbox) and
+  `EmailSubmission/set` in one request, using the JMAP `#k1`
+  creation reference so submission and Sent placement are atomic.
+  `Identity/get` resolves the identity ID on first Send and caches
+  it on the Backend. `Append` is the same shape minus the
+  submission call.
+- IMAP `Send` runs SMTP `MAIL`/`RCPT`/`DATA`; `Append` runs IMAP
+  APPEND on the cmd connection. Sent placement is a separate
+  `Append` issued by the caller (the cache outbox in Pass 9g).
+  SASL: plain (default), login, xoauth2.
 
 ### Elm architecture & idiomatic bubbletea
 
@@ -125,9 +150,21 @@ the ADR(s) that justify them.
   suggestion within edit distance 2.
 - `poplar config` subcommands: `init` (write template; refuses to
   overwrite without `--force`), `init --force`, `check` (validate
-  + connect-test each account, sequentially), `path` (print
+  + connect-test each account, sequentially — IMAP probe followed
+  by `mailimap.ProbeSMTP` for IMAP-backed accounts), `path` (print
   resolved path), `discover-folders` (connect each account and
   merge default folder ordering into `[ui.folders]`).
+- `[account.smtp]` is a TOML sub-table under each `[[account]]`.
+  Provider presets carry `SMTPHost`/`SMTPPort`/`SMTPStartTLS`/
+  `SMTPInsecureTLS` fields filling the canonical submission
+  endpoints (gmail/fastmail/yahoo/zoho on 465 implicit-TLS;
+  outlook/icloud on 587 STARTTLS; protonmail on the bridge's
+  loopback 1025 STARTTLS with `insecure-tls`). `SMTPConfig.Auth`/
+  `Password`/`PasswordCmd` default to mirroring the IMAP-side
+  credentials when unset; the explicit block overrides only when
+  SMTP differs from IMAP. JMAP accounts ignore `[account.smtp]`
+  (submission rides the JMAP session). Validation requires
+  `smtp.host` for `provider = "imap"` after preset resolution.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
@@ -280,4 +317,5 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
 | Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; 9d.1 cleanup; 9d.3 targeted lint sweep; 9d.4 popover overlay padding | 0144, 0145, 0146, 0147, 0149, 0150, 0151, 0152, 0154, 0155 |
 | Compose foundation — Editor interface + CatkinEditor adapter, Draft, AssembleMIME (multipart/alternative via shared filter.MarkdownToHTML, multipart/mixed when attachments), Seed{Reply,ReplyAll,Forward} parsing parent headers from raw bytes; content.ParseAddressList exported | 0156 |
+| Backend Send + Append — `Send(env Envelope, mime []byte)` + `Append(folder, mime, flags)` on mail.Backend; JMAP via `Email/import` + `EmailSubmission/set` (atomic via `#k1` ref); IMAP via lazy `emersion/go-smtp` for Send + APPEND for Append; `[account.smtp]` block with provider preset SMTP defaults; `mailimap.ProbeSMTP` for `poplar config check` | 0157 |
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |

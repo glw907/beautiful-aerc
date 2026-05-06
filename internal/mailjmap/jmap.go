@@ -8,16 +8,20 @@
 package mailjmap
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"git.sr.ht/~rockorager/go-jmap"
 	jmapmail "git.sr.ht/~rockorager/go-jmap/mail"
 	"git.sr.ht/~rockorager/go-jmap/mail/email"
+	"git.sr.ht/~rockorager/go-jmap/mail/emailsubmission"
+	"git.sr.ht/~rockorager/go-jmap/mail/identity"
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/sync/singleflight"
@@ -52,7 +56,9 @@ type Backend struct {
 
 	bodies             *lru.Cache[string, []byte]
 	bodyGroup          singleflight.Group
-	downloadBlob       func(blobID string) ([]byte, error) // nil until Connect (tests swap it)
+	downloadBlob       func(blobID string) ([]byte, error)          // nil until Connect (tests swap it)
+	uploadBlob         func(data []byte) (blobID string, err error) // nil until Connect (tests swap it)
+	identityID         jmap.ID                                      // cached on first Send
 	updates            chan mail.Update
 	runEventSourceFunc func(ctx context.Context) error // swappable for tests
 
@@ -204,6 +210,13 @@ func (b *Backend) Connect(_ context.Context) error {
 		defer rc.Close()
 		return io.ReadAll(rc)
 	}
+	upBlob := func(data []byte) (string, error) {
+		resp, err := cli.Upload(accountID, bytes.NewReader(data))
+		if err != nil {
+			return "", err
+		}
+		return string(resp.ID), nil
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -217,6 +230,7 @@ func (b *Backend) Connect(_ context.Context) error {
 	b.bodies = cache
 	b.updates = updates
 	b.downloadBlob = dlBlob
+	b.uploadBlob = upBlob
 	b.pushClient = cli
 	b.runEventSourceFunc = b.runEventSource
 	b.pushCancel = cancel
@@ -704,9 +718,226 @@ func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	return b.setKeyword(uids, keyword, set)
 }
 
-// Send is a placeholder. Compose is not yet wired up.
-func (b *Backend) Send(_ string, _ []string, _ io.Reader) error {
-	return errors.New("jmap: send not implemented")
+// Send uploads mime, imports it into the Sent mailbox, and submits
+// it for delivery in one JMAP request. Email/import + EmailSubmission/set
+// are batched so server-side Sent placement is atomic with submission.
+func (b *Backend) Send(env mail.Envelope, mime []byte) error {
+	b.mu.Lock()
+	upload := b.uploadBlob
+	sent, hasSent := b.folders["Sent"]
+	accountID := b.accountIDLocked()
+	b.mu.Unlock()
+	if upload == nil {
+		return errors.New("jmap: not connected")
+	}
+	if !hasSent {
+		return errors.New("jmap: send: no Sent mailbox on account")
+	}
+
+	identityID, err := b.resolveIdentityID(accountID)
+	if err != nil {
+		return fmt.Errorf("send: %w", err)
+	}
+
+	blobID, err := upload(mime)
+	if err != nil {
+		return fmt.Errorf("send: upload: %w", classifyErr(err))
+	}
+
+	rcpt := make([]*emailsubmission.Address, 0, len(env.Rcpts))
+	for _, r := range env.Rcpts {
+		rcpt = append(rcpt, &emailsubmission.Address{Email: r})
+	}
+	now := time.Now().UTC()
+
+	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI, emailsubmission.URI}}
+	importCallID := req.Invoke(&email.Import{
+		Account: accountID,
+		Emails: map[string]*email.EmailImport{
+			"k1": {
+				BlobID:     jmap.ID(blobID),
+				MailboxIDs: map[jmap.ID]bool{jmap.ID(sent.id): true},
+				Keywords:   map[string]bool{"$seen": true},
+				ReceivedAt: &now,
+			},
+		},
+	})
+	subCallID := req.Invoke(&emailsubmission.Set{
+		Account: accountID,
+		Create: map[jmap.ID]*emailsubmission.EmailSubmission{
+			"s1": {
+				IdentityID: identityID,
+				EmailID:    jmap.ID("#k1"),
+				Envelope: &emailsubmission.Envelope{
+					MailFrom: &emailsubmission.Address{Email: env.From},
+					RcptTo:   rcpt,
+				},
+			},
+		},
+	})
+
+	resp, err := b.do(req)
+	if err != nil {
+		return fmt.Errorf("send: %w", err)
+	}
+	if err := checkImportCreated(resp, importCallID); err != nil {
+		return fmt.Errorf("send: import: %w", err)
+	}
+	if err := checkSubmissionCreated(resp, subCallID); err != nil {
+		return fmt.Errorf("send: submission: %w", err)
+	}
+	return nil
+}
+
+// Append uploads mime and imports it into folder with the given flags.
+func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
+	b.mu.Lock()
+	upload := b.uploadBlob
+	entry, ok := b.folders[folder]
+	accountID := b.accountIDLocked()
+	b.mu.Unlock()
+	if upload == nil {
+		return errors.New("jmap: not connected")
+	}
+	if !ok {
+		return fmt.Errorf("append: unknown folder %q", folder)
+	}
+
+	blobID, err := upload(mime)
+	if err != nil {
+		return fmt.Errorf("append: upload: %w", classifyErr(err))
+	}
+	now := time.Now().UTC()
+	keywords := map[string]bool{}
+	for bit, kw := range jmapKeywords {
+		if flags&bit != 0 {
+			keywords[kw] = true
+		}
+	}
+
+	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
+	callID := req.Invoke(&email.Import{
+		Account: accountID,
+		Emails: map[string]*email.EmailImport{
+			"k1": {
+				BlobID:     jmap.ID(blobID),
+				MailboxIDs: map[jmap.ID]bool{jmap.ID(entry.id): true},
+				Keywords:   keywords,
+				ReceivedAt: &now,
+			},
+		},
+	})
+
+	resp, err := b.do(req)
+	if err != nil {
+		return fmt.Errorf("append: %w", err)
+	}
+	return checkImportCreated(resp, callID)
+}
+
+// jmapKeywords maps mail.Flag bits to JMAP $-prefixed keywords. Only
+// the flags JMAP recognizes appear here.
+var jmapKeywords = map[mail.Flag]string{
+	mail.FlagSeen:      "$seen",
+	mail.FlagFlagged:   "$flagged",
+	mail.FlagAnswered:  "$answered",
+	mail.FlagDraft:     "$draft",
+	mail.FlagForwarded: "$forwarded",
+}
+
+// resolveIdentityID returns the cached identityID, fetching it on
+// first use via Identity/get and matching by email address.
+func (b *Backend) resolveIdentityID(accountID jmap.ID) (jmap.ID, error) {
+	b.mu.Lock()
+	if b.identityID != "" {
+		id := b.identityID
+		b.mu.Unlock()
+		return id, nil
+	}
+	want := b.cfg.Email
+	if b.cfg.From != nil && b.cfg.From.Address != "" {
+		want = b.cfg.From.Address
+	}
+	b.mu.Unlock()
+
+	req := &jmap.Request{Using: []jmap.URI{emailsubmission.URI}}
+	callID := req.Invoke(&identity.Get{Account: accountID})
+	resp, err := b.do(req)
+	if err != nil {
+		return "", fmt.Errorf("identity/get: %w", err)
+	}
+	for _, inv := range resp.Responses {
+		if inv.CallID != callID {
+			continue
+		}
+		gr, ok := inv.Args.(*identity.GetResponse)
+		if !ok {
+			continue
+		}
+		var fallback jmap.ID
+		for _, id := range gr.List {
+			if fallback == "" {
+				fallback = id.ID
+			}
+			if strings.EqualFold(id.Email, want) {
+				b.mu.Lock()
+				b.identityID = id.ID
+				b.mu.Unlock()
+				return id.ID, nil
+			}
+		}
+		if fallback != "" {
+			b.mu.Lock()
+			b.identityID = fallback
+			b.mu.Unlock()
+			return fallback, nil
+		}
+	}
+	return "", fmt.Errorf("identity/get: no identity for %q", want)
+}
+
+// checkImportCreated finds the Email/importResponse matching callID
+// and returns an error if "k1" lands in NotCreated.
+func checkImportCreated(resp *jmap.Response, callID string) error {
+	for _, inv := range resp.Responses {
+		if inv.CallID != callID {
+			continue
+		}
+		ir, ok := inv.Args.(*email.ImportResponse)
+		if !ok {
+			continue
+		}
+		if se, bad := ir.NotCreated["k1"]; bad {
+			return fmt.Errorf("import rejected: %s", se.Type)
+		}
+		if _, ok := ir.Created["k1"]; !ok {
+			return errors.New("import: no Created entry")
+		}
+		return nil
+	}
+	return errors.New("Email/import: no response")
+}
+
+// checkSubmissionCreated finds the EmailSubmission/setResponse matching
+// callID and returns an error if "s1" lands in NotCreated.
+func checkSubmissionCreated(resp *jmap.Response, callID string) error {
+	for _, inv := range resp.Responses {
+		if inv.CallID != callID {
+			continue
+		}
+		sr, ok := inv.Args.(*emailsubmission.SetResponse)
+		if !ok {
+			continue
+		}
+		if se, bad := sr.NotCreated["s1"]; bad {
+			return fmt.Errorf("submission rejected: %s", se.Type)
+		}
+		if _, ok := sr.Created["s1"]; !ok {
+			return errors.New("submission: no Created entry")
+		}
+		return nil
+	}
+	return errors.New("EmailSubmission/set: no response")
 }
 
 // accountIDLocked returns the primary JMAP account ID. Caller must hold b.mu.
@@ -715,20 +946,10 @@ func (b *Backend) accountIDLocked() jmap.ID {
 }
 
 func keywordForFlag(flag mail.Flag) (string, error) {
-	switch flag {
-	case mail.FlagSeen:
-		return "$seen", nil
-	case mail.FlagFlagged:
-		return "$flagged", nil
-	case mail.FlagAnswered:
-		return "$answered", nil
-	case mail.FlagDraft:
-		return "$draft", nil
-	case mail.FlagForwarded:
-		return "$forwarded", nil
-	default:
-		return "", fmt.Errorf("unsupported flag for JMAP: %v", flag)
+	if kw, ok := jmapKeywords[flag]; ok {
+		return kw, nil
 	}
+	return "", fmt.Errorf("unsupported flag for JMAP: %v", flag)
 }
 
 // setKeyword patches the given JMAP keyword to set (true) or unset (nil) for

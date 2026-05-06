@@ -27,6 +27,7 @@ type Backend struct {
 	mu       sync.Mutex
 	cmd      imapClient // command connection (nil before Connect)
 	idle     imapClient // idle connection
+	smtp     smtpClient // submission connection, lazily dialed on first Send
 	caps     capSet
 	current  string // currently-selected folder on cmd
 	trash    string // resolved Trash folder name, empty before first Delete
@@ -147,6 +148,8 @@ func (b *Backend) Disconnect() error {
 	done := b.idleDone
 	cmd := b.cmd
 	idle := b.idle
+	smtp := b.smtp
+	b.smtp = nil
 	b.mu.Unlock()
 
 	if cancel != nil {
@@ -164,6 +167,11 @@ func (b *Backend) Disconnect() error {
 	}
 	if idle != nil {
 		if err := idle.Logout(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if smtp != nil {
+		if err := smtp.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

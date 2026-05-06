@@ -5,7 +5,6 @@ package mail
 import (
 	"context"
 	"errors"
-	"io"
 	"time"
 )
 
@@ -25,6 +24,15 @@ type SearchCriteria struct {
 	Header map[string][]string
 	Body   []string
 	Text   []string
+}
+
+// Envelope is the SMTP-style envelope passed to Backend.Send. From
+// is the bounce address (RFC 5321 MAIL FROM). Rcpts is the recipient
+// list (RFC 5321 RCPT TO) and includes Bcc addresses that the MIME
+// body omits.
+type Envelope struct {
+	From  string
+	Rcpts []string
 }
 
 // Backend is the interface that mail protocol adapters implement.
@@ -65,7 +73,17 @@ type Backend interface {
 	Destroy(uids []UID) error
 	Flag(uids []UID, flag Flag, set bool) error
 
-	Send(from string, rcpts []string, body io.Reader) error
+	// Send transmits mime to the recipients in env. Backends that
+	// collapse send + Sent-copy into one operation (JMAP) do so
+	// atomically. IMAP+SMTP only transmits. The caller issues a
+	// separate Append for the Sent copy.
+	Send(env Envelope, mime []byte) error
+
+	// Append writes mime to folder with the given flags. Used by
+	// the cache outbox to deposit the Sent copy on IMAP, and to
+	// save manual drafts. Empty flags is allowed. The caller sets
+	// \Seen on Sent copies.
+	Append(folder string, mime []byte, flags Flag) error
 
 	Updates() <-chan Update
 }

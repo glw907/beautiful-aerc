@@ -205,6 +205,30 @@ password-cmd = "op read op://Personal/Fastmail/credential"
 #       the server returns them.
 
 
+# Sending (SMTP)
+# ──────────────
+#
+# IMAP-backed accounts need an SMTP submission server to send
+# mail. Preset providers fill these in automatically; you only
+# need an [account.smtp] block when overriding defaults or
+# configuring a self-hosted server.
+#
+# JMAP accounts (fastmail) ignore [account.smtp] — submission
+# rides the existing JMAP session.
+#
+# When [account.smtp] is omitted, SMTP credentials default to
+# the IMAP-side `password` / `password-cmd` and `auth` — the
+# typical case is "same login as IMAP."
+#
+# [account.smtp]
+# host         = "smtp.example.com"
+# port         = 465        # 465 implicit TLS (default), 587 STARTTLS
+# starttls     = false
+# insecure-tls = false
+# auth         = "plain"    # plain, login, xoauth2
+# password-cmd = "..."      # only when SMTP creds differ from IMAP
+
+
 # Self-hosted IMAP example
 # ────────────────────────
 # [[account]]

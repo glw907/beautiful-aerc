@@ -59,6 +59,10 @@ type imapClient interface {
 	// FetchBodyPart returns the decoded bytes of one MIME part.
 	// section is an IMAP section identifier ("2", "2.1", etc.).
 	FetchBodyPart(uid mail.UID, section string) ([]byte, error)
+
+	// Append writes mime to folder via APPEND with the given flag
+	// strings ("\\Seen", "\\Draft", ...).
+	Append(folder string, mime []byte, flags []string) error
 }
 
 // listEntry is the result of a LIST command for one folder.

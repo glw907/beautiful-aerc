@@ -4,7 +4,6 @@ package ui
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,15 +45,13 @@ func (b *blockingBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) 
 	return nil, nil
 }
 
-func (b *blockingBackend) Search(_ mail.SearchCriteria) ([]mail.UID, error) { return nil, nil }
-
 func (b *blockingBackend) Move(_ []mail.UID, _ string) error { return nil }
-func (b *blockingBackend) Copy(_ []mail.UID, _ string) error { return nil }
 func (b *blockingBackend) Destroy(_ []mail.UID) error        { return nil }
 
 func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
 
-func (b *blockingBackend) Send(_ string, _ []string, _ io.Reader) error { return nil }
+func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
+func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
 
 func (b *blockingBackend) Updates() <-chan mail.Update {
 	ch := make(chan mail.Update)
