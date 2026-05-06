@@ -10,6 +10,83 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
+// jmapFakeBackend wraps fakeBackend with IsJMAP returning true.
+type jmapFakeBackend struct{ fakeBackend }
+
+func (j *jmapFakeBackend) IsJMAP() bool { return true }
+
+// openTestAccountWith opens an account backed by the given backend.
+func openTestAccountWith(t *testing.T, be mail.Backend) *Account {
+	t.Helper()
+	ct := &fakeChangeTracker{}
+	a, err := Open("Test Account", be, ct, t.TempDir(), Config{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { a.Close() })
+	if err := a.SyncFolders(context.Background()); err != nil {
+		t.Fatalf("SyncFolders: %v", err)
+	}
+	return a
+}
+
+// outboxKinds returns the kind strings for all outbox rows, ordered by id.
+func outboxKinds(t *testing.T, a *Account) []string {
+	t.Helper()
+	rows, err := a.db.Query(`SELECT kind FROM outbox ORDER BY id`)
+	if err != nil {
+		t.Fatalf("query outbox: %v", err)
+	}
+	defer rows.Close()
+	var kinds []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatalf("scan kind: %v", err)
+		}
+		kinds = append(kinds, k)
+	}
+	return kinds
+}
+
+func TestQueueOutbound_JMAP_OneOp(t *testing.T) {
+	be := &jmapFakeBackend{fakeBackend{
+		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
+	}}
+	a := openTestAccountWith(t, be)
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
+	if err := a.QueueOutbound(context.Background(), "Sent", env, []byte("MIME bytes")); err != nil {
+		t.Fatalf("QueueOutbound: %v", err)
+	}
+	kinds := outboxKinds(t, a)
+	if len(kinds) != 1 {
+		t.Fatalf("want 1 outbox row, got %d", len(kinds))
+	}
+	if kinds[0] != string(KindSend) {
+		t.Fatalf("want kind=%q, got %q", KindSend, kinds[0])
+	}
+}
+
+func TestQueueOutbound_IMAP_TwoOps(t *testing.T) {
+	be := &fakeBackend{
+		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
+	}
+	a := openTestAccountWith(t, be)
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
+	if err := a.QueueOutbound(context.Background(), "Sent", env, []byte("MIME bytes")); err != nil {
+		t.Fatalf("QueueOutbound: %v", err)
+	}
+	kinds := outboxKinds(t, a)
+	if len(kinds) != 2 {
+		t.Fatalf("want 2 outbox rows, got %d", len(kinds))
+	}
+	if kinds[0] != string(KindSend) || kinds[1] != string(KindAppend) {
+		t.Fatalf("want [send, append], got %v", kinds)
+	}
+}
+
 func TestQueueSendRoundTrip(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
