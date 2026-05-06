@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
+	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -49,7 +50,7 @@ type App struct {
 	keys            GlobalKeys
 	viewerOpen      bool
 	helpOpen        bool
-	help            HelpPopover
+	help            helppopover.Model
 	linkPicker      LinkPicker
 	attachPicker    AttachPicker
 	movePicker      movepicker.Model
@@ -606,11 +607,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			return m, loadOutboxConflictsCmd(m.acct.Cache())
 		case key.Matches(msg, m.keys.Help):
 			m.helpOpen = true
-			ctx := HelpAccount
+			ctx := helppopover.Account
 			if m.viewerOpen {
-				ctx = HelpViewer
+				ctx = helppopover.Viewer
 			}
-			m.help = NewHelpPopover(m.styles, ctx).SetSize(m.width, m.height)
+			m.help = helppopover.New(helppopover.NewStyles(m.theme), ctx).SetSize(m.width, m.height)
 			return m, nil
 		}
 	}

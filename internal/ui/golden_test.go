@@ -26,6 +26,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -193,22 +194,20 @@ func TestGolden_MovePicker(t *testing.T) {
 // TestGolden_HelpPopover captures both HelpAccount and HelpViewer
 // contexts at both design-polish sizes.
 func TestGolden_HelpPopover(t *testing.T) {
-	styles := NewStyles(theme.Nord)
-
 	cases := []struct {
 		name string
-		ctx  HelpContext
+		ctx  helppopover.Context
 		w, h int
 	}{
-		{"helppopover_account_80x24.txt", HelpAccount, 80, 24},
-		{"helppopover_account_120x40.txt", HelpAccount, 120, 40},
-		{"helppopover_viewer_80x24.txt", HelpViewer, 80, 24},
-		{"helppopover_viewer_120x40.txt", HelpViewer, 120, 40},
+		{"helppopover_account_80x24.txt", helppopover.Account, 80, 24},
+		{"helppopover_account_120x40.txt", helppopover.Account, 120, 40},
+		{"helppopover_viewer_80x24.txt", helppopover.Viewer, 80, 24},
+		{"helppopover_viewer_120x40.txt", helppopover.Viewer, 120, 40},
 	}
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHelpPopover(styles, tc.ctx)
+			h := helppopover.New(helppopover.NewStyles(theme.Nord), tc.ctx)
 			h = h.SetSize(tc.w, tc.h)
 			// HelpPopover.View already centers with lipgloss.Place.
 			got := h.View(tc.w, tc.h)

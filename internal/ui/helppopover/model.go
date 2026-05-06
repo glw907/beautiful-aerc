@@ -1,26 +1,38 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package helppopover
 
 import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// HelpContext selects which binding layout the popover renders.
-type HelpContext int
+// Styles holds the subset of UI styles the help popover needs.
+// Populated from ui.Styles at construction time.
+type Styles struct {
+	HelpBoxBorder   lipgloss.Style
+	HelpTitle       lipgloss.Style
+	HelpGroupHeader lipgloss.Style
+	HelpKey         lipgloss.Style
+	FrameBorder     lipgloss.Style
+	Dim             lipgloss.Style
+}
+
+// Context selects which binding layout the popover renders.
+type Context int
 
 const (
-	HelpAccount HelpContext = iota
-	HelpViewer
+	Account Context = iota
+	Viewer
 )
 
-// helpPopoverCache holds the memoised Box output and the inputs that
+// cache holds the memoised Box output and the inputs that
 // determine when it must be rebuilt.
 //
-// Pre-beta escape hatch: HelpPopover is an immutable value type, so a
+// Pre-beta escape hatch: Model is an immutable value type, so a
 // cache that lives in the value would be lost on every SetSize/return.
 // Rather than switching to pointer receivers (which would break the Elm
 // immutable-model contract), we heap-allocate one small cache struct at
@@ -28,36 +40,36 @@ const (
 // is copied with the value, so every generation of the popover shares
 // the same cache. A deliberate choice: they all render the same logical
 // state, and the dirty flag ensures stale renders are never served.
-type helpPopoverCache struct {
+type cache struct {
 	dirty     bool
-	context   HelpContext
+	context   Context
 	w, h      int
 	box       string
 	tooNarrow string
 }
 
-// HelpPopover is the modal help overlay. App owns key routing;
+// Model is the modal help overlay. App owns key routing;
 // this model only renders.
-type HelpPopover struct {
+type Model struct {
 	styles  Styles
-	context HelpContext
+	context Context
 	width   int
 	height  int
-	cache   *helpPopoverCache // heap-allocated, shared across value copies
+	c       *cache // heap-allocated, shared across value copies
 }
 
-// NewHelpPopover constructs a popover for the given context.
-func NewHelpPopover(styles Styles, context HelpContext) HelpPopover {
-	return HelpPopover{
+// New constructs a popover for the given context.
+func New(styles Styles, context Context) Model {
+	return Model{
 		styles:  styles,
 		context: context,
-		cache:   &helpPopoverCache{dirty: true},
+		c:       &cache{dirty: true},
 	}
 }
 
 // SetSize updates the popover's box dimensions. App threads
 // WindowSizeMsg here, mirroring the other overlay surfaces.
-func (h HelpPopover) SetSize(width, height int) HelpPopover {
+func (h Model) SetSize(width, height int) Model {
 	h.width = width
 	h.height = height
 	return h
@@ -204,8 +216,8 @@ var viewerBottomHints = []bindingRow{
 // The result is cached keyed on (context, width, height). A context or
 // dimension change counts as dirty even when the flag is clear;
 // NewHelpPopover sets dirty=true, so the first call always rebuilds.
-func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
-	c := h.cache
+func (h Model) Box(width, height int) (box string, tooNarrow string) {
+	c := h.c
 	if !c.dirty && c.context == h.context && c.w == width && c.h == height {
 		return c.box, c.tooNarrow
 	}
@@ -213,7 +225,7 @@ func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
 	var title, body string
 	var bottomHints []bindingRow
 	switch h.context {
-	case HelpViewer:
+	case Viewer:
 		title = "Message Viewer"
 		body = renderViewerLayout(h.styles, viewerGroups)
 		bottomHints = viewerBottomHints
@@ -255,15 +267,15 @@ func (h HelpPopover) Box(width, height int) (box string, tooNarrow string) {
 
 // Position returns the top-left (x, y) cell coordinates at which the
 // popover box should be placed to appear centered on (width, height).
-func (h HelpPopover) Position(box string, width, height int) (x, y int) {
-	return centerOverlay(box, width, height)
+func (h Model) Position(box string, width, height int) (x, y int) {
+	return uicore.CenterOverlay(box, width, height)
 }
 
 // View renders the popover centered on a width × height area.
 // When the underlying account frame is available the caller should use
 // Box + Position + PlaceOverlay instead. View is retained as a fallback
 // for callers that need a standalone full-screen string (e.g. tests).
-func (h HelpPopover) View(width, height int) string {
+func (h Model) View(width, height int) string {
 	box, tooNarrow := h.Box(width, height)
 	if tooNarrow != "" {
 		return lipgloss.Place(
@@ -414,4 +426,24 @@ func renderHintLine(styles Styles, hints []bindingRow) string {
 		parts = append(parts, renderKeyDesc(styles, h.key, h.desc, h.wired))
 	}
 	return strings.Join(parts, "    ")
+}
+
+// NewStyles builds a Styles from a compiled theme.
+func NewStyles(t *theme.CompiledTheme) Styles {
+	return Styles{
+		HelpTitle: lipgloss.NewStyle().
+			Foreground(t.AccentPrimary).Bold(true),
+		HelpGroupHeader: lipgloss.NewStyle().
+			Foreground(t.FgBright).Bold(true),
+		HelpKey: lipgloss.NewStyle().
+			Foreground(t.FgBright).Bold(true),
+		HelpBoxBorder: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder(), false, true, true, true).
+			BorderForeground(t.BgBorder).
+			Padding(1, 2),
+		FrameBorder: lipgloss.NewStyle().
+			Foreground(t.BgBorder).Background(t.BgBase),
+		Dim: lipgloss.NewStyle().
+			Foreground(t.FgDim),
+	}
 }

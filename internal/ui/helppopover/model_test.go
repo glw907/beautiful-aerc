@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MIT
 
-package ui
+package helppopover
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/glw907/poplar/internal/theme"
 )
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
 
 func TestHelpPopover_AccountGroupsCoverage(t *testing.T) {
 	wantGroups := []string{
@@ -91,7 +98,7 @@ func findAccountRow(group, key string) (bindingRow, bool) {
 
 func TestHelpPopover_AccountViewContent(t *testing.T) {
 	styles := NewStyles(theme.Nord)
-	h := NewHelpPopover(styles, HelpAccount)
+	h := New(styles, Account)
 
 	view := stripANSI(h.View(80, 24))
 
@@ -136,7 +143,7 @@ func TestHelpPopover_AccountViewContent(t *testing.T) {
 
 func TestHelpPopover_ViewerViewContent(t *testing.T) {
 	styles := NewStyles(theme.Nord)
-	h := NewHelpPopover(styles, HelpViewer)
+	h := New(styles, Viewer)
 
 	view := stripANSI(h.View(80, 24))
 
@@ -206,7 +213,7 @@ func TestHelpPopover_WiredStyling(t *testing.T) {
 
 	// Confirm render path routes correctly: wired row content is
 	// present in the account popover, unwired row content is present too.
-	view := stripANSI(NewHelpPopover(styles, HelpAccount).View(120, 30))
+	view := stripANSI(New(styles, Account).View(120, 30))
 	for _, want := range []string{"j/k", "up/down", "d", "delete"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("account popover missing %q", want)
@@ -224,20 +231,20 @@ func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
 	}
 
 	// Confirm "Reply" heading appears in the rendered account popover.
-	view := stripANSI(NewHelpPopover(styles, HelpAccount).View(120, 30))
+	view := stripANSI(New(styles, Account).View(120, 30))
 	if !strings.Contains(view, "Reply") {
 		t.Error("account popover: Reply group heading not found")
 	}
 }
 
 // BenchmarkHelpPopoverBox_Cold measures the full Box rebuild cost (dirty
-// cache. One new HelpPopover per iteration.
+// cache. One new Model per iteration.
 func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
 	styles := NewStyles(theme.Nord)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		h := NewHelpPopover(styles, HelpAccount)
+		h := New(styles, Account)
 		_, _ = h.Box(120, 40)
 	}
 }
@@ -247,7 +254,7 @@ func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
 // stored strings without rebuilding the lipgloss layout.
 func BenchmarkHelpPopoverBox_Warm(b *testing.B) {
 	styles := NewStyles(theme.Nord)
-	h := NewHelpPopover(styles, HelpAccount)
+	h := New(styles, Account)
 	_, _ = h.Box(120, 40) // warm the cache
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -261,7 +268,7 @@ func BenchmarkHelpPopoverBox_Warm(b *testing.B) {
 // expensive Box rebuild (lipgloss layout + string assembly).
 func BenchmarkHelpPopoverView(b *testing.B) {
 	styles := NewStyles(theme.Nord)
-	h := NewHelpPopover(styles, HelpAccount).SetSize(120, 40)
+	h := New(styles, Account).SetSize(120, 40)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -275,7 +282,7 @@ func BenchmarkHelpPopoverView(b *testing.B) {
 func TestHelpPopover_VerticallyCentered(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	for _, dims := range []struct{ w, h int }{{120, 30}, {120, 40}, {160, 50}} {
-		view := stripANSI(NewHelpPopover(styles, HelpAccount).View(dims.w, dims.h))
+		view := stripANSI(New(styles, Account).View(dims.w, dims.h))
 		lines := strings.Split(view, "\n")
 		var first, last int = -1, -1
 		for i, ln := range lines {
