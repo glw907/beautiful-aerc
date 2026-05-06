@@ -167,7 +167,7 @@ func TestSendSucceedsAppendConflicts(t *testing.T) {
 
 	a.drainOnce(context.Background(), defaultDrainerConfig())
 
-	// Send must be done; append must be conflict.
+	// Send must be done. Append must be conflict.
 	var sendStatus, appendStatus string
 	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, sendID).Scan(&sendStatus); err != nil {
 		t.Fatalf("read send: %v", err)

@@ -131,7 +131,7 @@ func TestRevertOptimistic_SendNoOp(t *testing.T) {
 	a := openTestAccount(t)
 	tx, _ := a.db.Begin()
 	defer tx.Rollback()
-	// Send and Append have no message-row state; revert is a no-op.
+	// Send and Append have no message-row state. Revert is a no-op.
 	if err := revertOptimisticTx(tx, 1, SendArgs{}); err != nil {
 		t.Errorf("revertOptimisticTx(SendArgs): unexpected error: %v", err)
 	}

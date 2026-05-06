@@ -94,8 +94,8 @@ func (a *Account) QueueOp(ctx context.Context, folder string, msgUID mail.UID, a
 }
 
 // insertFolderOp inserts a folder-scoped outbox row carrying a MIME
-// payload. Shared by QueueSend and QueueAppend. No optimistic UI
-// flip — these ops have no message-row state to mirror.
+// payload. Shared by QueueSend and QueueAppend. These ops have no
+// message-row state to mirror, so there is no optimistic UI flip.
 func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs, payload []byte) (int64, error) {
 	if args == nil {
 		return 0, fmt.Errorf("queue: nil args")
@@ -237,7 +237,7 @@ var ErrNotConflict = errors.New("cache: op is not in conflict state")
 // revertOptimisticTx mirrors applyOptimisticTx: it undoes the UI flip
 // applied at QueueOp time so a discard leaves the cache reflecting
 // what the server actually has. Send and Append have no message-row
-// state to mirror — the discard simply deletes the outbox row.
+// state to mirror, so the discard simply deletes the outbox row.
 func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 	switch v := args.(type) {
 	case MoveArgs, DestroyArgs:
@@ -294,7 +294,7 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 // DiscardOp reverts the optimistic UI flip and deletes the outbox
 // row in one transaction. The conflicted op never reached the server,
 // so only local cleanup is needed. Send and Append rows have no
-// message-row state to revert; their discard is a straight delete.
+// message-row state to revert. Their discard is a straight delete.
 //
 // Returns ErrNotConflict if the row is not currently in conflict.
 func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
