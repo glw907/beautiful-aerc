@@ -36,7 +36,12 @@ each fact back to its ADR(s).
   `content_id`, `disposition`, `bytes`, `fetched_at`; UNIQUE
   `(message, part_id)`; index on `message`). v6 adds
   `outbox.payload BLOB NULL` carrying the assembled MIME bytes
-  for `KindSend`/`KindAppend` (NULL for Move/Flag/Destroy).
+  for `KindSend`/`KindAppend` (NULL for Move/Flag/Destroy). v7
+  adds the `drafts` table (`draft_id` PK, `server_uid` nullable
+  pointer at the server-side image, `server_folder`, `payload`
+  BLOB holding the gob-encoded `compose.Draft`, `dirty`,
+  `created_at`, `updated_at`, `last_pushed_at`) plus a partial
+  index `drafts_by_server_uid` on non-null `server_uid`.
 - `mail.ChangeTracker` is the protocol-level change-detection
   sibling of `mail.Backend`; both v1 backends implement it. On a
   nil SyncToken both run an initial baseline pull. JMAP pages

@@ -402,6 +402,51 @@ func TestAttachmentsTableShape(t *testing.T) {
 	}
 }
 
+func TestSchemaMigration_V7Drafts(t *testing.T) {
+	a := openTestAccount(t)
+
+	var version int
+	if err := a.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != 7 {
+		t.Errorf("schema version = %d, want 7", version)
+	}
+
+	rows, err := a.db.Query(`PRAGMA table_info(drafts)`)
+	if err != nil {
+		t.Fatalf("table_info(drafts): %v", err)
+	}
+	defer rows.Close()
+
+	want := map[string]string{
+		"draft_id":       "TEXT",
+		"server_uid":     "TEXT",
+		"server_folder":  "TEXT",
+		"payload":        "BLOB",
+		"dirty":          "INTEGER",
+		"created_at":     "INTEGER",
+		"updated_at":     "INTEGER",
+		"last_pushed_at": "INTEGER",
+	}
+	got := map[string]string{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got[name] = typ
+	}
+	for col, typ := range want {
+		if got[col] != typ {
+			t.Errorf("drafts.%s type = %q, want %q", col, got[col], typ)
+		}
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"Geoff Wright", "geoff-wright"},

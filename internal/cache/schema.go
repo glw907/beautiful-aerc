@@ -9,7 +9,7 @@ import (
 
 // schemaVersion is the current schema version. Migrations from any
 // older version up to this one run in order at Open.
-const schemaVersion = 6
+const schemaVersion = 7
 
 // migration applies one schema version step inside a single
 // transaction. Index 0 holds the v0→v1 step.
@@ -22,6 +22,7 @@ var migrations = []migration{
 	migrateV4, // v3 → v4: drop last_accessed + bodies_lru
 	migrateV5, // v4 → v5: attachments table (metadata + lazy bytes)
 	migrateV6, // v5 → v6: outbox.payload BLOB for Send/Append MIME bytes
+	migrateV7, // v6 → v7: drafts table (local-buffer + server_uid pointer)
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -177,6 +178,33 @@ func migrateV5(tx *sql.Tx) error {
 func migrateV6(tx *sql.Tx) error {
 	if _, err := tx.Exec(`ALTER TABLE outbox ADD COLUMN payload BLOB`); err != nil {
 		return fmt.Errorf("add outbox.payload: %v", err)
+	}
+	return nil
+}
+
+// migrateV7 adds the drafts table. The local row is the high-frequency
+// edit buffer for compose; server_uid points at the JMAP/IMAP image
+// once a PushDraftOp has succeeded. Drafts with server_uid == NULL are
+// local-only (never pushed yet, e.g., offline-created).
+func migrateV7(tx *sql.Tx) error {
+	stmts := []string{
+		`CREATE TABLE drafts (
+            draft_id       TEXT PRIMARY KEY,
+            server_uid     TEXT,
+            server_folder  TEXT,
+            payload        BLOB    NOT NULL,
+            dirty          INTEGER NOT NULL DEFAULT 1,
+            created_at     INTEGER NOT NULL,
+            updated_at     INTEGER NOT NULL,
+            last_pushed_at INTEGER
+        )`,
+		`CREATE INDEX drafts_by_server_uid
+            ON drafts(server_uid) WHERE server_uid IS NOT NULL`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("add drafts table: %v", err)
+		}
 	}
 	return nil
 }
