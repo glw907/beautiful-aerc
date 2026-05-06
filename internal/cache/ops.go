@@ -135,6 +135,20 @@ func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs
 	return opID, nil
 }
 
+// QueueSend enqueues a Send op carrying mime as the assembled
+// payload. sentFolder names the canonical Sent folder for the
+// account (informational on JMAP, the IMAP target Append will
+// reuse on follow-up). Drainer dispatch calls Backend.Send.
+func (a *Account) QueueSend(ctx context.Context, sentFolder string, env mail.Envelope, mime []byte) (int64, error) {
+	return a.insertFolderOp(ctx, sentFolder, SendArgs{Envelope: env}, mime)
+}
+
+// QueueAppend enqueues an Append op writing mime to folder with
+// flag. Drainer dispatch calls Backend.Append.
+func (a *Account) QueueAppend(ctx context.Context, folder string, flag mail.Flag, mime []byte) (int64, error) {
+	return a.insertFolderOp(ctx, folder, AppendArgs{Flag: flag}, mime)
+}
+
 // applyOptimisticTx writes the optimistic UI hint for one op against
 // one message row. Move/Destroy hide the source; Flag updates ui_flags.
 func applyOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
