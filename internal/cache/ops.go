@@ -122,6 +122,7 @@ type outboxRow struct {
 	Kind       string
 	ArgsJSON   string
 	Attempts   int
+	Payload    []byte
 }
 
 // nextOutboxRow returns the next eligible op or sql.ErrNoRows if
@@ -132,7 +133,7 @@ func (a *Account) nextOutboxRow(now time.Time) (*outboxRow, error) {
 	const q = `
         SELECT o.id, o.folder, f.name, o.message,
                COALESCE((SELECT m.protocol_id FROM messages m WHERE m.id = o.message), ''),
-               o.kind, o.args, o.attempts
+               o.kind, o.args, o.attempts, o.payload
         FROM outbox o
         JOIN folders f ON f.id = o.folder
         WHERE o.status = ?
@@ -141,7 +142,7 @@ func (a *Account) nextOutboxRow(now time.Time) (*outboxRow, error) {
 	var row outboxRow
 	err := a.db.QueryRow(q, OpPending, OpFailed, now.UnixNano()).Scan(
 		&row.ID, &row.FolderID, &row.FolderName, &row.MessageID,
-		&row.ProtocolID, &row.Kind, &row.ArgsJSON, &row.Attempts)
+		&row.ProtocolID, &row.Kind, &row.ArgsJSON, &row.Attempts, &row.Payload)
 	if err != nil {
 		return nil, err
 	}
