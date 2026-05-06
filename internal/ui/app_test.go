@@ -1198,3 +1198,96 @@ func TestApp_WithTidy_Replaces(t *testing.T) {
 		t.Fatalf("want WithTidy override, got %q", out)
 	}
 }
+
+func TestApp_C_OpensCompose(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("c should set composeOpen")
+	}
+	if app.compose == nil {
+		t.Fatal("c should construct ComposeTab")
+	}
+}
+
+func TestApp_View_RendersComposeWhenOpen(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	v := stripANSI(app.View())
+	if !strings.Contains(v, "From:") || !strings.Contains(v, "Subject:") {
+		t.Fatalf("View should include compose headers when composeOpen:\n%s", v)
+	}
+}
+
+func TestApp_ComposeSendMsg_ClosesCompose(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: composeOpen should be true")
+	}
+	app, cmd := app.Update(ComposeSendMsg{})
+	if app.composeOpen {
+		t.Error("ComposeSendMsg should clear composeOpen")
+	}
+	if app.compose != nil {
+		t.Error("ComposeSendMsg should nil compose")
+	}
+	if cmd != nil {
+		t.Error("stub should return nil Cmd")
+	}
+}
+
+func TestApp_ComposeCancelMsg_ClosesCompose(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: composeOpen should be true")
+	}
+	app, cmd := app.Update(ComposeCancelMsg{})
+	if app.composeOpen {
+		t.Error("ComposeCancelMsg should clear composeOpen")
+	}
+	if app.compose != nil {
+		t.Error("ComposeCancelMsg should nil compose")
+	}
+	if cmd != nil {
+		t.Error("stub should return nil Cmd")
+	}
+}
+
+func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if !app.composeOpen {
+		t.Fatal("setup: composeOpen should be true")
+	}
+	// While compose is open, keys route to ComposeTab. j should not move
+	// the message list cursor.
+	beforeSelected := app.acct.msglist.Selected()
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if app.acct.msglist.Selected() != beforeSelected {
+		t.Error("j should be consumed by ComposeTab when compose is open, not msglist")
+	}
+}
+
+func TestApp_WindowSizeSetsComposeSize(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if app.compose == nil {
+		t.Fatal("setup: compose should not be nil")
+	}
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	if app.compose == nil {
+		t.Fatal("compose should survive WindowSizeMsg")
+	}
+	// After resize compose should have non-zero dims.
+	if app.compose.width == 0 || app.compose.height == 0 {
+		t.Errorf("compose dims after resize: %dx%d, want non-zero", app.compose.width, app.compose.height)
+	}
+}

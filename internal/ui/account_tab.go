@@ -101,6 +101,8 @@ func (m AccountTab) Backend() mail.Backend { return m.acct.Backend }
 
 func (m AccountTab) Cache() *cache.Account { return m.acct }
 
+func (m AccountTab) AccountEmail() string { return m.acct.AccountEmail() }
+
 func (m AccountTab) Icon() string { return m.sidebarColumn.Sidebar().SelectedIcon() }
 
 // Closeable always returns false. The account tab cannot be closed.
@@ -794,10 +796,6 @@ func (m AccountTab) View() string {
 		return ""
 	}
 
-	sidebarLines := strings.Split(m.sidebarColumn.View(), "\n")
-
-	divLine := m.styles.PanelDivider.Render("│")
-
 	var rightLines []string
 	switch {
 	case m.viewer.IsOpen():
@@ -812,6 +810,23 @@ func (m AccountTab) View() string {
 	default:
 		rightLines = strings.Split(m.msglist.View(), "\n")
 	}
+	return m.assembleColumns(rightLines)
+}
+
+// RenderWithRightPane renders the sidebar with an externally-provided right
+// pane string in place of the normal msglist/viewer content.
+func (m AccountTab) RenderWithRightPane(right string) string {
+	if m.width == 0 || m.height == 0 {
+		return ""
+	}
+	return m.assembleColumns(strings.Split(right, "\n"))
+}
+
+// assembleColumns uses row-by-row concatenation rather than lipgloss.JoinHorizontal;
+// see the comment block inside for why that matters with SPUA-A glyphs.
+func (m AccountTab) assembleColumns(rightLines []string) string {
+	sidebarLines := strings.Split(m.sidebarColumn.View(), "\n")
+	divLine := m.styles.PanelDivider.Render("│")
 
 	// Assemble columns row-by-row rather than via lipgloss.JoinHorizontal.
 	// JoinHorizontal pads based on lipgloss.Width, which undercounts Nerd

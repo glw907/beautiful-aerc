@@ -15,6 +15,7 @@ type GlobalKeys struct {
 	Undo            key.Binding
 	OutboxOverlay   key.Binding
 	ConflictOverlay key.Binding
+	Compose         key.Binding
 }
 
 // NewGlobalKeys returns the default global key bindings.
@@ -27,6 +28,7 @@ func NewGlobalKeys() GlobalKeys {
 		Undo:            key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
 		OutboxOverlay:   key.NewBinding(key.WithKeys("Q"), key.WithHelp("Q", "outbox")),
 		ConflictOverlay: key.NewBinding(key.WithKeys("!"), key.WithHelp("!", "conflicts")),
+		Compose:         key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compose")),
 	}
 }
 

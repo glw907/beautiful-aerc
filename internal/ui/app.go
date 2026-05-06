@@ -68,9 +68,12 @@ type App struct {
 	opener URLOpener
 	// tidy rewrites the markdown body before MIME assembly. Test seam,
 	// defaults to identityTidy.
-	tidy   TidyFn
-	width  int
-	height int
+	tidy        TidyFn
+	theme       *theme.CompiledTheme
+	compose     *ComposeTab
+	composeOpen bool
+	width       int
+	height      int
 }
 
 // WithOpener returns a copy of m with the URL opener replaced.
@@ -96,6 +99,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		acct:         NewAccountTab(styles, t, acct, uiCfg, icons),
 		icons:        icons,
 		styles:       styles,
+		theme:        t,
 		topLine:      NewTopLine(styles),
 		statusBar:    sb,
 		footer:       NewFooter(styles),
@@ -170,6 +174,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		contentMsg := tea.WindowSizeMsg{Width: m.width - 1, Height: m.contentHeight()}
 		m.acct, cmd = m.acct.Update(contentMsg)
 		cmds = append(cmds, cmd)
+		if m.compose != nil {
+			w, h := m.rightPaneSize()
+			m.compose.SetSize(w, h)
+		}
 		// WindowSizeMsg only forwards sizing. Chrome derivation is not
 		// needed (sizing alone does not change viewer open/close state
 		// or folder counts).
@@ -435,6 +443,16 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(loadOutboxConflictsCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache()))
 
+	case ComposeSendMsg:
+		m.composeOpen = false
+		m.compose = nil
+		return m, nil
+
+	case ComposeCancelMsg:
+		m.composeOpen = false
+		m.compose = nil
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.helpOpen {
 			if key.Matches(msg, m.keys.CloseHelp) {
@@ -478,7 +496,20 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.movePicker, cmd = m.movePicker.Update(msg)
 			return m, cmd
 		}
+		if m.composeOpen {
+			next, cmd := m.compose.Update(msg)
+			m.compose = next
+			return m, cmd
+		}
 		switch {
+		case key.Matches(msg, m.keys.Compose):
+			if !m.composeOpen {
+				w, h := m.rightPaneSize()
+				m.compose = NewComposeTab(m.styles, m.theme, m.acct.AccountEmail(), m.icons)
+				m.compose.SetSize(w, h)
+				m.composeOpen = true
+				return m, m.compose.Init()
+			}
 		case key.Matches(msg, m.keys.Undo):
 			// Undo is only live while a toast is active. Otherwise the
 			// 'u' key falls through to AccountTab so other meanings can
@@ -536,7 +567,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 // renderFrame builds the full-screen account layout string. It is extracted
 // from View so it can be dimmed and composited under the help popover.
 func (m App) renderFrame() string {
-	rawContent := m.acct.View()
+	var rawContent string
+	if m.composeOpen {
+		rawContent = m.acct.RenderWithRightPane(m.compose.View())
+	} else {
+		rawContent = m.acct.View()
+	}
 	rightBorder := m.styles.FrameBorder.Render("│")
 	contentLines := strings.Split(rawContent, "\n")
 	// AccountTab.View honors its width contract: every line is exactly
@@ -659,6 +695,20 @@ func (m App) contentHeight() int {
 		return 1
 	}
 	return h
+}
+
+// rightPaneSize returns the width and height available for the right pane,
+// mirroring the geometry AccountTab derives in its WindowSizeMsg handler.
+func (m App) rightPaneSize() (w, h int) {
+	contentW := m.width - 1 // one cell for the right border App appends
+	layout := ComputeLayout(contentW)
+	sw := layout.Sidebar
+	if sw > contentW/2 {
+		sw = contentW / 2
+	}
+	w = max(1, contentW-sw-1) // -1 for divider
+	h = m.contentHeight()
+	return w, h
 }
 
 // hasBannerRow reports whether the chrome row above the status bar is
