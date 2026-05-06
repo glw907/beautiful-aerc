@@ -3,11 +3,14 @@
 package ui
 
 import (
+	"fmt"
+	"net/mail"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -213,4 +216,76 @@ func (c *ComposeTab) setFocus(target int) {
 		_ = c.editor.Focus()
 	}
 	c.focus = target
+}
+
+// Draft rebuilds a compose.Draft from the current inputs. Address fields
+// are parsed via net/mail; a parse error is stored in the inline err row
+// and returned to the caller.
+func (c *ComposeTab) Draft() (compose.Draft, error) {
+	to, err := parseAddrField(c.to.Value(), "To")
+	if err != nil {
+		c.err = err.Error()
+		return compose.Draft{}, err
+	}
+	cc, err := parseAddrField(c.cc.Value(), "Cc")
+	if err != nil {
+		c.err = err.Error()
+		return compose.Draft{}, err
+	}
+	bcc, err := parseAddrField(c.bcc.Value(), "Bcc")
+	if err != nil {
+		c.err = err.Error()
+		return compose.Draft{}, err
+	}
+	c.err = ""
+	return compose.Draft{
+		From:    gomail.Address{Address: c.from},
+		To:      to,
+		Cc:      cc,
+		Bcc:     bcc,
+		Subject: c.subject.Value(),
+		Body:    c.editor.Value(),
+	}, nil
+}
+
+// IsDirty reports whether any input field contains user-entered content.
+func (c *ComposeTab) IsDirty() bool {
+	return c.to.Value() != "" || c.cc.Value() != "" || c.bcc.Value() != "" ||
+		c.subject.Value() != "" || c.editor.Value() != ""
+}
+
+// Seed populates the inputs from d. Called for reply/forward pre-fill.
+func (c *ComposeTab) Seed(d compose.Draft) {
+	c.to.SetValue(joinAddresses(d.To))
+	c.cc.SetValue(joinAddresses(d.Cc))
+	c.bcc.SetValue(joinAddresses(d.Bcc))
+	c.subject.SetValue(d.Subject)
+	c.editor.SetValue(d.Body)
+}
+
+func parseAddrField(raw, label string) ([]gomail.Address, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	addrs, err := mail.ParseAddressList(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
+	}
+	out := make([]gomail.Address, len(addrs))
+	for i, a := range addrs {
+		out[i] = gomail.Address{Name: a.Name, Address: a.Address}
+	}
+	return out, nil
+}
+
+func joinAddresses(addrs []gomail.Address) string {
+	parts := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		if a.Name != "" {
+			parts = append(parts, fmt.Sprintf("%q <%s>", a.Name, a.Address))
+		} else {
+			parts = append(parts, a.Address)
+		}
+	}
+	return strings.Join(parts, ", ")
 }

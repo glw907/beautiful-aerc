@@ -8,6 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	gomail "github.com/emersion/go-message/mail"
+	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -94,5 +96,72 @@ func TestComposeTab_EscFromHeaderReturnsToBody(t *testing.T) {
 	c = sendKey(c, "esc")
 	if c.focus != composeFocusBody {
 		t.Fatalf("Esc from header should focus Body, got %d", c.focus)
+	}
+}
+
+func gomailAddress(addr string) gomail.Address {
+	return gomail.Address{Address: addr}
+}
+
+func TestComposeTab_DraftReflectsInputs(t *testing.T) {
+	c := newTestCompose(t)
+	c.to.SetValue("alice@example.com, bob@example.com")
+	c.cc.SetValue("c@example.com")
+	c.subject.SetValue("hi")
+	c.editor.SetValue("hello world")
+
+	d, err := c.Draft()
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if len(d.To) != 2 || d.To[0].Address != "alice@example.com" {
+		t.Fatalf("To not parsed: %+v", d.To)
+	}
+	if len(d.Cc) != 1 || d.Cc[0].Address != "c@example.com" {
+		t.Fatalf("Cc not parsed: %+v", d.Cc)
+	}
+	if d.Subject != "hi" || d.Body != "hello world" {
+		t.Fatalf("subject/body wrong: %q %q", d.Subject, d.Body)
+	}
+	if d.From.Address != "geoff@907.life" {
+		t.Fatalf("From wrong: %+v", d.From)
+	}
+}
+
+func TestComposeTab_DraftBadAddressFails(t *testing.T) {
+	c := newTestCompose(t)
+	c.to.SetValue("not an address")
+	if _, err := c.Draft(); err == nil {
+		t.Fatalf("want parse error on bad address, got nil")
+	}
+}
+
+func TestComposeTab_IsDirty(t *testing.T) {
+	c := newTestCompose(t)
+	if c.IsDirty() {
+		t.Fatalf("fresh compose should not be dirty")
+	}
+	c.editor.SetValue("hi")
+	if !c.IsDirty() {
+		t.Fatalf("body content should mark dirty")
+	}
+}
+
+func TestComposeTab_Seed(t *testing.T) {
+	c := newTestCompose(t)
+	d := compose.Draft{
+		Subject: "Re: hi",
+		Body:    "> original\n\n",
+	}
+	d.To = append(d.To, gomailAddress("alice@example.com"))
+	c.Seed(d)
+	if c.subject.Value() != "Re: hi" {
+		t.Fatalf("subject not seeded: %q", c.subject.Value())
+	}
+	if c.editor.Value() != "> original\n\n" {
+		t.Fatalf("body not seeded: %q", c.editor.Value())
+	}
+	if c.to.Value() != "alice@example.com" {
+		t.Fatalf("To not seeded: %q", c.to.Value())
 	}
 }
