@@ -155,11 +155,32 @@ func (c *ComposeTab) padRow(s string) string {
 	return s + strings.Repeat(" ", c.width-w)
 }
 
+// ComposeSendMsg is emitted when the user presses Ctrl+X with a valid
+// draft. App assembles MIME and queues the outbox op.
+type ComposeSendMsg struct {
+	Draft compose.Draft
+}
+
+// ComposeCancelMsg is emitted when the user presses Ctrl+C. App opens
+// a discard ConfirmModal when Dirty. Clean drafts close immediately.
+type ComposeCancelMsg struct {
+	Dirty bool
+}
+
 // Update implements the Update half of tea.Model.
 func (c *ComposeTab) Update(msg tea.Msg) (*ComposeTab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
+		case tea.KeyCtrlX:
+			d, err := c.Draft()
+			if err != nil {
+				return c, nil
+			}
+			return c, func() tea.Msg { return ComposeSendMsg{Draft: d} }
+		case tea.KeyCtrlC:
+			dirty := c.IsDirty()
+			return c, func() tea.Msg { return ComposeCancelMsg{Dirty: dirty} }
 		case tea.KeyTab:
 			c.advanceFocus(+1)
 			return c, nil

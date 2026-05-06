@@ -113,6 +113,28 @@ type ViewerKeys struct {
 	Links [9]key.Binding
 }
 
+// ComposeKeys are the bindings active while ComposeTab has focus.
+// Ctrl chords are deliberate. Text-entry surfaces are exempt from
+// the modifier-free rule (ADR-0076).
+type ComposeKeys struct {
+	Send       key.Binding
+	Cancel     key.Binding
+	NextField  key.Binding
+	PrevField  key.Binding
+	EscapeBody key.Binding
+}
+
+// NewComposeKeys returns the default compose key bindings.
+func NewComposeKeys() ComposeKeys {
+	return ComposeKeys{
+		Send:       key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("^X", "send")),
+		Cancel:     key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^C", "cancel")),
+		NextField:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("⇥", "next")),
+		PrevField:  key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("⇧⇥", "prev")),
+		EscapeBody: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "focus")),
+	}
+}
+
 // NewViewerKeys returns the default viewer key bindings.
 func NewViewerKeys() ViewerKeys {
 	vk := ViewerKeys{

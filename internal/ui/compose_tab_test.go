@@ -165,3 +165,53 @@ func TestComposeTab_Seed(t *testing.T) {
 		t.Fatalf("To not seeded: %q", c.to.Value())
 	}
 }
+
+func TestComposeTab_CtrlXEmitsSendMsg(t *testing.T) {
+	c := newTestCompose(t)
+	c.to.SetValue("alice@example.com")
+	c.subject.SetValue("hi")
+	c.editor.SetValue("body")
+
+	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if cmd == nil {
+		t.Fatal("Ctrl+X should return a Cmd that emits ComposeSendMsg")
+	}
+	msg := cmd()
+	send, ok := msg.(ComposeSendMsg)
+	if !ok {
+		t.Fatalf("want ComposeSendMsg, got %T", msg)
+	}
+	if send.Draft.Subject != "hi" {
+		t.Fatalf("send carries wrong draft: %+v", send.Draft)
+	}
+}
+
+func TestComposeTab_CtrlCEmitsCancelMsg(t *testing.T) {
+	c := newTestCompose(t)
+	c.editor.SetValue("dirty")
+
+	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("Ctrl+C should return a Cmd")
+	}
+	msg := cmd()
+	cancel, ok := msg.(ComposeCancelMsg)
+	if !ok {
+		t.Fatalf("want ComposeCancelMsg, got %T", msg)
+	}
+	if !cancel.Dirty {
+		t.Fatalf("dirty draft should set Dirty=true")
+	}
+}
+
+func TestComposeTab_CtrlXBadAddressInlinesError(t *testing.T) {
+	c := newTestCompose(t)
+	c.to.SetValue("not an address")
+	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if cmd != nil {
+		t.Fatalf("Ctrl+X with bad address should not emit send")
+	}
+	if c.err == "" {
+		t.Fatalf("inline err row should be set")
+	}
+}
