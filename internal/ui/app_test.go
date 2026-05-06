@@ -860,7 +860,7 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 
 func TestApp_OpenMovePickerOpensOverlay(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	folders := []movepicker.FolderEntry{
+	folders := []mail.FolderEntry{
 		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
 		{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal},
 	}
@@ -872,7 +872,7 @@ func TestApp_OpenMovePickerOpensOverlay(t *testing.T) {
 
 func TestApp_MovePickerClosedFlipsState(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	folders := []movepicker.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
+	folders := []mail.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
 	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
 	app, _ = app.Update(movepicker.ClosedMsg{})
 	if app.movePicker.IsOpen() {
@@ -882,7 +882,7 @@ func TestApp_MovePickerClosedFlipsState(t *testing.T) {
 
 func TestApp_FolderJumpInertWhilePickerOpen(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	folders := []movepicker.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
+	folders := []mail.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
 	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
 	beforeFolder := app.acct.currentFolderName()
 	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
@@ -897,7 +897,7 @@ func TestApp_MovePickerPickedRoutesToAccountTab(t *testing.T) {
 	// doesn't short-circuit on empty UIDs.
 	uids := app.acct.msglist.ActionTargets()
 	src := app.acct.currentFolderName()
-	folders := []movepicker.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
+	folders := []mail.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
 	app, _ = app.Update(movepicker.OpenMsg{UIDs: uids, Src: src, Folders: folders})
 	_, cmd := app.Update(movepicker.PickedMsg{UIDs: uids, Src: src, Dest: "Archive"})
 	if cmd == nil {

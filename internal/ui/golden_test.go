@@ -146,8 +146,8 @@ func TestGolden_LinkPicker(t *testing.T) {
 	}
 }
 
-func goldenMovePickerFolders() []movepicker.FolderEntry {
-	return []movepicker.FolderEntry{
+func goldenMovePickerFolders() []mail.FolderEntry {
+	return []mail.FolderEntry{
 		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
 		{Display: "Drafts", Provider: "Drafts", Group: mail.GroupPrimary},
 		{Display: "Sent", Provider: "Sent", Group: mail.GroupPrimary},

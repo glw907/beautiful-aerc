@@ -12,8 +12,8 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-func sampleFolders() []FolderEntry {
-	return []FolderEntry{
+func sampleFolders() []mail.FolderEntry {
+	return []mail.FolderEntry{
 		{Display: "Inbox", Provider: "INBOX", Group: mail.GroupPrimary},
 		{Display: "Drafts", Provider: "Drafts", Group: mail.GroupPrimary},
 		{Display: "Sent", Provider: "Sent", Group: mail.GroupPrimary},

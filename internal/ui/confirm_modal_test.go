@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -113,7 +114,7 @@ func TestConfirmModal_ViewWidthContract(t *testing.T) {
 	m = m.SetSize(80, 24)
 
 	box := m.Box(80, 24)
-	lines, _ := splitLines(box)
+	lines := strings.Split(box, "\n")
 	if len(lines) == 0 {
 		t.Fatal("box produced no lines")
 	}

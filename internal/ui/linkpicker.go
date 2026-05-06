@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // LinkPicker is the modal overlay launched by Tab while the viewer is
@@ -148,15 +148,9 @@ func visibleLinkRows(total, height int) int {
 }
 
 // clampScrollOffset returns offset adjusted so cursor lies within
-// [offset, offset+visible). Shared by overlay scroll-window logic.
+// [offset, offset+visible). Delegates to uicore.ClampScrollOffset.
 func clampScrollOffset(cursor, visible, offset int) int {
-	if cursor < offset {
-		return cursor
-	}
-	if cursor >= offset+visible {
-		return cursor - visible + 1
-	}
-	return offset
+	return uicore.ClampScrollOffset(cursor, visible, offset)
 }
 
 // clampOffset returns p with p.offset adjusted so p.cursor is
@@ -276,16 +270,7 @@ func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
 }
 
 // centerOverlay returns the top-left (x, y) cell coordinates that
-// center box on (totalW, totalH). Shared by the help popover and the
-// link picker. Both compose via PlaceOverlay.
+// center box on (totalW, totalH). Delegates to uicore.CenterOverlay.
 func centerOverlay(box string, totalW, totalH int) (int, int) {
-	x := (totalW - lipgloss.Width(box)) / 2
-	y := (totalH - lipgloss.Height(box)) / 2
-	if x < 0 {
-		x = 0
-	}
-	if y < 0 {
-		y = 0
-	}
-	return x, y
+	return uicore.CenterOverlay(box, totalW, totalH)
 }

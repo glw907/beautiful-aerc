@@ -12,12 +12,6 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-type FolderEntry struct {
-	Display  string
-	Provider string
-	Group    mail.Group
-}
-
 // folderEntry holds a classified folder plus its rendered metadata.
 type folderEntry struct {
 	cf   mail.ClassifiedFolder
@@ -126,14 +120,14 @@ func (s Sidebar) FolderByProviderName(name string) (mail.Folder, bool) {
 	return mail.Folder{}, false
 }
 
-func (s Sidebar) OrderedFolders() []FolderEntry {
-	out := make([]FolderEntry, 0, len(s.entries))
+func (s Sidebar) OrderedFolders() []mail.FolderEntry {
+	out := make([]mail.FolderEntry, 0, len(s.entries))
 	for _, e := range s.entries {
 		display := e.cf.Canonical
 		if display == "" {
 			display = e.cf.Folder.Name
 		}
-		out = append(out, FolderEntry{
+		out = append(out, mail.FolderEntry{
 			Display:  display,
 			Provider: e.cf.Folder.Name,
 			Group:    e.cf.Group,

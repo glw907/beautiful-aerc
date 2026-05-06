@@ -3,9 +3,7 @@
 package ui
 
 import (
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // renderErrorBanner formats an ErrorMsg for the single banner row
@@ -22,47 +20,17 @@ func renderErrorBanner(msg ErrorMsg, width int, styles Styles) string {
 		text += msg.Op + ": "
 	}
 	text += msg.Err.Error()
-	text = truncateToWidth(text, width)
+	text = uicore.TruncateToWidth(text, width)
 	return styles.ErrorBanner.Render(text)
 }
 
 // padOrTruncate pads s with spaces or truncates it to exactly width display cells.
 func padOrTruncate(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w == width {
-		return s
-	}
-	if w < width {
-		return s + strings.Repeat(" ", width-w)
-	}
-	return truncateToWidth(s, width)
+	return uicore.PadOrTruncate(s, width)
 }
 
 // truncateToWidth shortens s to at most width display cells, adding
-// "…" when truncation occurs. Splits on rune boundaries, never
-// inside a multi-byte glyph. Counts cells via lipgloss.Width so
-// double-width CJK characters are accounted for correctly.
+// "…" when truncation occurs.
 func truncateToWidth(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if lipgloss.Width(s) <= width {
-		return s
-	}
-	const ellipsis = "…"
-	if width == 1 {
-		return ellipsis
-	}
-	limit := width - lipgloss.Width(ellipsis)
-	out := make([]rune, 0, len(s))
-	w := 0
-	for _, r := range s {
-		rw := lipgloss.Width(string(r))
-		if w+rw > limit {
-			break
-		}
-		out = append(out, r)
-		w += rw
-	}
-	return string(out) + ellipsis
+	return uicore.TruncateToWidth(s, width)
 }

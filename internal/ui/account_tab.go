@@ -736,11 +736,7 @@ func (m *AccountTab) dispatchMove() tea.Cmd {
 		return nil
 	}
 	src := m.currentFolderName()
-	uiFolders := m.sidebarColumn.Sidebar().OrderedFolders()
-	folders := make([]movepicker.FolderEntry, len(uiFolders))
-	for i, f := range uiFolders {
-		folders[i] = movepicker.FolderEntry{Display: f.Display, Provider: f.Provider, Group: f.Group}
-	}
+	folders := m.sidebarColumn.Sidebar().OrderedFolders()
 	return func() tea.Msg {
 		return movepicker.OpenMsg{UIDs: uids, Src: src, Folders: folders}
 	}

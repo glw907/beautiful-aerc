@@ -22,6 +22,14 @@ type ClassifiedFolder struct {
 	Group       Group
 }
 
+// FolderEntry is a compact folder descriptor used by the UI layer to pass
+// folder lists across package boundaries (e.g. sidebar → move picker).
+type FolderEntry struct {
+	Display  string
+	Provider string
+	Group    Group
+}
+
 // ConfigKey returns the lookup key used by UIConfig.Folders and the
 // TOML writer: canonical name for classified canonicals, provider
 // name for custom folders.
