@@ -18,10 +18,25 @@ type fakeBackend struct {
 	moves    []mail.UID
 	flags    []mail.UID
 	destroys []mail.UID
+	sends    []sendCall
+	appends  []appendCall
+	sendErr  error
+	appErr   error
 	err      error
 	folders  []mail.Folder
 	headers  []mail.MessageInfo
 	updates  chan mail.Update
+}
+
+type sendCall struct {
+	Env  mail.Envelope
+	MIME []byte
+}
+
+type appendCall struct {
+	Folder string
+	MIME   []byte
+	Flag   mail.Flag
 }
 
 func (f *fakeBackend) AccountName() string                 { return "fake" }
@@ -53,8 +68,14 @@ func (f *fakeBackend) Flag(uids []mail.UID, _ mail.Flag, _ bool) error {
 	f.flags = append(f.flags, uids...)
 	return f.err
 }
-func (f *fakeBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
-func (f *fakeBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
+func (f *fakeBackend) Send(env mail.Envelope, mime []byte) error {
+	f.sends = append(f.sends, sendCall{Env: env, MIME: append([]byte(nil), mime...)})
+	return f.sendErr
+}
+func (f *fakeBackend) Append(folder string, mime []byte, flag mail.Flag) error {
+	f.appends = append(f.appends, appendCall{Folder: folder, MIME: append([]byte(nil), mime...), Flag: flag})
+	return f.appErr
+}
 func (f *fakeBackend) Updates() <-chan mail.Update {
 	if f.updates == nil {
 		f.updates = make(chan mail.Update)

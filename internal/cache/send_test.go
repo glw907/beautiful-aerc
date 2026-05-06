@@ -92,3 +92,55 @@ func TestQueueAppendRoundTrip(t *testing.T) {
 		t.Errorf("Flag = %v, want FlagSeen", aa.Flag)
 	}
 }
+
+func TestDispatchSend(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	fb := a.Backend.(*fakeBackend)
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}}
+	mime := []byte("hi\r\n")
+	if _, err := a.QueueSend(context.Background(), "Inbox", env, mime); err != nil {
+		t.Fatalf("QueueSend: %v", err)
+	}
+
+	a.drainOnce(context.Background(), defaultDrainerConfig())
+
+	if len(fb.sends) != 1 {
+		t.Fatalf("backend Send calls = %d, want 1", len(fb.sends))
+	}
+	got := fb.sends[0]
+	if got.Env.From != env.From || len(got.Env.Rcpts) != 1 {
+		t.Errorf("envelope mismatch: %+v", got.Env)
+	}
+	if string(got.MIME) != string(mime) {
+		t.Errorf("mime mismatch")
+	}
+}
+
+func TestDispatchAppend(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	fb := a.Backend.(*fakeBackend)
+
+	mime := []byte("body\r\n")
+	if _, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime); err != nil {
+		t.Fatalf("QueueAppend: %v", err)
+	}
+
+	a.drainOnce(context.Background(), defaultDrainerConfig())
+
+	if len(fb.appends) != 1 {
+		t.Fatalf("backend Append calls = %d, want 1", len(fb.appends))
+	}
+	got := fb.appends[0]
+	if got.Folder != "Inbox" {
+		t.Errorf("folder = %q, want Inbox", got.Folder)
+	}
+	if got.Flag != mail.FlagSeen {
+		t.Errorf("flag = %v, want FlagSeen", got.Flag)
+	}
+	if string(got.MIME) != string(mime) {
+		t.Errorf("mime mismatch")
+	}
+}

@@ -130,11 +130,7 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 			time.Now().Add(cfg.BackoffMax).UnixNano())
 		return
 	}
-	uids := []mail.UID{}
-	if row.ProtocolID.Valid && row.ProtocolID.String != "" {
-		uids = append(uids, mail.UID(row.ProtocolID.String))
-	}
-	dispatchErr := a.dispatch(args, uids)
+	dispatchErr := a.dispatch(args, row)
 	switch {
 	case dispatchErr == nil:
 		_ = a.finalizeSuccess(ctx, row, args)
@@ -197,7 +193,11 @@ func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpAr
 }
 
 // dispatch routes one decoded op to the backend.
-func (a *Account) dispatch(args OpArgs, uids []mail.UID) error {
+func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
+	uids := []mail.UID{}
+	if row.ProtocolID.Valid && row.ProtocolID.String != "" {
+		uids = append(uids, mail.UID(row.ProtocolID.String))
+	}
 	switch v := args.(type) {
 	case MoveArgs:
 		return a.Backend.Move(uids, v.Dest)
@@ -205,6 +205,10 @@ func (a *Account) dispatch(args OpArgs, uids []mail.UID) error {
 		return a.Backend.Flag(uids, v.Flag, v.Set)
 	case DestroyArgs:
 		return a.Backend.Destroy(uids)
+	case SendArgs:
+		return a.Backend.Send(v.Envelope, row.Payload)
+	case AppendArgs:
+		return a.Backend.Append(row.FolderName, row.Payload, v.Flag)
 	}
 	return fmt.Errorf("dispatch: unknown args %T", args)
 }
