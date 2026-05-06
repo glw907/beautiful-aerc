@@ -629,6 +629,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			if info, ok := m.acct.SelectedMessage(); ok {
 				draftsFolder := resolveDraftsFolder(m.acct.Cache())
 				if draftsFolder != "" && m.acct.CurrentFolderName() == draftsFolder {
+					if id, ok := draftLocalID(info.UID); ok {
+						return m, openLocalDraftCmd(m.acct.Cache(), id)
+					}
 					return m, openDraftFromServerUIDCmd(m.acct.Cache(), info.UID, draftsFolder)
 				}
 			}

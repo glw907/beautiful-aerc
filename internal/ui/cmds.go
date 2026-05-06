@@ -408,6 +408,34 @@ func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder s
 	}
 }
 
+// draftLocalID reports whether uid carries the "draft:" prefix and
+// returns the local draft ID if so.
+func draftLocalID(uid mail.UID) (string, bool) {
+	s := string(uid)
+	after, ok := strings.CutPrefix(s, "draft:")
+	return after, ok
+}
+
+// openLocalDraftCmd loads a locally-stored draft by its draftID
+// and emits openDraftMsg so the App's handler can mount compose.
+func openLocalDraftCmd(acct *cache.Account, draftID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		payload, err := acct.LoadDraft(ctx, draftID)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "load draft", Err: err}
+		}
+		d, err := compose.DecodeDraft(payload)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "decode draft", Err: err}
+		}
+		return openDraftMsg{
+			row:   cache.DraftRow{DraftID: draftID, Payload: payload},
+			draft: d,
+		}
+	}
+}
+
 // resolveSentFolder picks the Sent folder for outbound mail from the
 // cached folder list. Returns "" if none can be identified.
 func resolveSentFolder(acct *cache.Account) string {

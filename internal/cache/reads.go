@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -103,7 +104,68 @@ func (a *Account) QueryFolder(folder string, offset, limit int) ([]mail.MessageI
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
+	role, _ := a.folderRole(folder)
+	if role == "drafts" {
+		extras, err := a.draftsAsMessageInfo(context.Background())
+		if err != nil {
+			return nil, 0, fmt.Errorf("project drafts: %w", err)
+		}
+		out = append(out, extras...)
+		total += len(extras)
+	}
 	return out, total, nil
+}
+
+// folderRole returns the role string stored for folder, or "" when
+// the row is absent or the role column is NULL.
+func (a *Account) folderRole(folder string) (string, error) {
+	var role sql.NullString
+	err := a.db.QueryRow(`SELECT role FROM folders WHERE name = ?`, folder).Scan(&role)
+	if err != nil {
+		return "", err
+	}
+	if !role.Valid {
+		return "", nil
+	}
+	return role.String, nil
+}
+
+// draftsAsMessageInfo projects local-only drafts (server_uid = NULL)
+// into the message-list shape with synthetic UIDs "draft:<id>". The
+// App's Enter handler keys off the prefix to route through LoadDraft.
+// Pushed drafts (server_uid != NULL) reach the list via the normal
+// server-message path, so they're excluded here.
+func (a *Account) draftsAsMessageInfo(ctx context.Context) ([]mail.MessageInfo, error) {
+	rows, err := a.ListDrafts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []mail.MessageInfo
+	for _, r := range rows {
+		if r.ServerUID != "" {
+			continue
+		}
+		d, err := compose.DecodeDraft(r.Payload)
+		if err != nil {
+			// Skip undecodable rows. Recoverable via the cache CLI.
+			continue
+		}
+		mi := mail.MessageInfo{
+			UID:    mail.UID("draft:" + r.DraftID),
+			From:   d.From.String(),
+			SentAt: r.UpdatedAt,
+		}
+		if d.Subject != "" {
+			mi.Subject = d.Subject
+		} else {
+			mi.Subject = "(no subject)"
+		}
+		if len(d.To) > 0 {
+			mi.To = d.To[0].String()
+		}
+		out = append(out, mi)
+	}
+	return out, nil
 }
 
 // scanMessageInfo decodes one row of the canonical 12-column SELECT

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -159,5 +160,71 @@ func TestQueuePushDraft(t *testing.T) {
 	}
 	if pd.PrevServerUID != "" {
 		t.Errorf("PrevServerUID = %q, want empty", pd.PrevServerUID)
+	}
+}
+
+func TestQueryFolder_DraftsLocalOnly(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	ctx := context.Background()
+
+	mustEnsureFolder(t, a, "Drafts")
+	if _, err := a.db.Exec(`UPDATE folders SET role = 'drafts' WHERE name = 'Drafts'`); err != nil {
+		t.Fatalf("set drafts role: %v", err)
+	}
+
+	payload, err := compose.EncodeDraft(compose.Draft{Subject: "local-only"})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if err := a.UpsertDraft(ctx, "d-local", payload); err != nil {
+		t.Fatalf("UpsertDraft: %v", err)
+	}
+
+	msgs, total, err := a.QueryFolder("Drafts", 0, 100)
+	if err != nil {
+		t.Fatalf("QueryFolder: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("total = %d, want 1", total)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1", len(msgs))
+	}
+	if string(msgs[0].UID) != "draft:d-local" {
+		t.Errorf("UID = %q, want draft:d-local", msgs[0].UID)
+	}
+	if msgs[0].Subject != "local-only" {
+		t.Errorf("Subject = %q, want local-only", msgs[0].Subject)
+	}
+}
+
+func TestQueryFolder_DraftsPushedExcluded(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	ctx := context.Background()
+
+	mustEnsureFolder(t, a, "Drafts")
+	if _, err := a.db.Exec(`UPDATE folders SET role = 'drafts' WHERE name = 'Drafts'`); err != nil {
+		t.Fatalf("set drafts role: %v", err)
+	}
+
+	payload, err := compose.EncodeDraft(compose.Draft{Subject: "pushed"})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if err := a.UpsertDraft(ctx, "d-pushed", payload); err != nil {
+		t.Fatalf("UpsertDraft: %v", err)
+	}
+	if err := a.MarkDraftPushed(ctx, "d-pushed", mail.UID("server-99"), "Drafts"); err != nil {
+		t.Fatalf("MarkDraftPushed: %v", err)
+	}
+
+	msgs, total, err := a.QueryFolder("Drafts", 0, 100)
+	if err != nil {
+		t.Fatalf("QueryFolder: %v", err)
+	}
+	if total != 0 || len(msgs) != 0 {
+		t.Errorf("pushed draft should be excluded: total=%d len=%d", total, len(msgs))
 	}
 }
