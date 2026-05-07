@@ -19,6 +19,7 @@ type GlobalKeys struct {
 	Reply           key.Binding
 	ReplyAll        key.Binding
 	Forward         key.Binding
+	SenderPopover   key.Binding
 }
 
 // NewGlobalKeys returns the default global key bindings.
@@ -35,6 +36,7 @@ func NewGlobalKeys() GlobalKeys {
 		Reply:           key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
 		ReplyAll:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reply all")),
 		Forward:         key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "forward")),
+		SenderPopover:   key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "sender info")),
 	}
 }
 

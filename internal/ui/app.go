@@ -14,10 +14,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
+	"github.com/glw907/poplar/internal/ui/contacts"
 	"github.com/glw907/poplar/internal/ui/helppopover"
 	"github.com/glw907/poplar/internal/ui/movepicker"
 	"github.com/glw907/poplar/internal/ui/reader"
@@ -79,6 +81,7 @@ type App struct {
 	theme              *theme.CompiledTheme
 	compose            *uicompose.Model
 	pendingComposeSave bool // Save? modal is open for a dirty compose
+	popover            *contacts.Popover
 	width              int
 	height             int
 }
@@ -225,6 +228,37 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case reader.SaveAttachmentMsg:
 		return m, saveAttachmentCmd(m.acct.Cache(), m.downloadDir, msg.UID, msg.Att)
+
+	case contacts.OpenPopoverMsg:
+		p := contacts.NewPopover(contacts.NewStyles(m.theme))
+		p.SetSize(m.width, m.height)
+		var match contacts.Contact
+		found := false
+		lc := strings.ToLower(msg.Email)
+		for _, c := range contacts.Fixtures() {
+			for _, e := range c.Emails {
+				if strings.ToLower(e.Address) == lc {
+					match = c
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		p.SetMatch(msg.DisplayName, msg.Email, match, found)
+		m.popover = &p
+		return m, nil
+
+	case contacts.ClosePopoverMsg:
+		m.popover = nil
+		return m, nil
+
+	case contacts.OpenFormMsg:
+		// Task 8 wires the form. Dismiss the popover.
+		m.popover = nil
+		return m, nil
 
 	case reader.AttachmentSavedMsg:
 		hadBanner := m.hasBannerRow()
@@ -605,6 +639,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.movePicker, cmd = m.movePicker.Update(msg)
 			return m, cmd
 		}
+		if m.popover != nil {
+			next, cmd := m.popover.Update(msg)
+			m.popover = &next
+			return m, cmd
+		}
 		if m.compose != nil {
 			next, cmd := m.compose.Update(msg)
 			m.compose = next
@@ -688,6 +727,16 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			m.help = helppopover.New(helppopover.NewStyles(m.theme), ctx).SetSize(m.width, m.height)
 			return m, nil
+		case key.Matches(msg, m.keys.SenderPopover):
+			if !m.viewerOpen {
+				info, ok := m.acct.SelectedMessage()
+				if ok {
+					displayName, email := parseSender(info.From)
+					return m, func() tea.Msg {
+						return contacts.OpenPopoverMsg{DisplayName: displayName, Email: email}
+					}
+				}
+			}
 		}
 	}
 
@@ -807,6 +856,13 @@ func (m App) View() string {
 		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
+	if m.popover != nil {
+		box := m.popover.Box(m.width, m.height)
+		x, y := m.popover.Position(box, m.width, m.height)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
+	}
+
 	return frame
 }
 
@@ -870,6 +926,21 @@ func (m App) maybeResizeChild(hadBanner bool) (App, tea.Cmd) {
 	acct, cmd := m.acct.Update(contentMsg)
 	m.acct = acct
 	return m, cmd
+}
+
+// parseSender splits the From display string into a (displayName, email)
+// pair using the RFC 5322 address parser. Falls back to (from, from) when
+// the string cannot be parsed or contains no addresses.
+func parseSender(from string) (displayName, email string) {
+	addrs := content.ParseAddressList(from)
+	if len(addrs) == 0 {
+		return from, from
+	}
+	a := addrs[0]
+	if a.Name != "" {
+		return a.Name, a.Email
+	}
+	return a.Email, a.Email
 }
 
 // chromeBannerRow renders the single chrome row above the status bar.
