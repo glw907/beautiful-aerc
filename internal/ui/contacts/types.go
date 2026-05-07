@@ -2,7 +2,7 @@
 
 // Package contacts provides poplar's address-book UI surfaces:
 // the i-popover, Contacts mode, and the contact edit form. Pass 9.1
-// renders these against in-memory fixtures; data wiring lands in 9.2.
+// renders these against in-memory fixtures. Data wiring lands in 9.2.
 package contacts
 
 // Kind distinguishes a person card from an organization card.
@@ -16,10 +16,10 @@ const (
 // Contact is the value rendered by every surface in this package.
 // It mirrors the schema in docs/superpowers/specs/2026-05-06-addressbook-design.md
 // minus the storage columns (id, source, account, external_id, rev,
-// updated_at) — those land in 9.2 alongside the SQLite layer.
+// updated_at). Those land in 9.2 alongside the SQLite layer.
 type Contact struct {
 	Kind   Kind
-	Name   string // FN; for KindOrg this is the entire visible identity
+	Name   string // FN. For KindOrg this is the entire visible identity.
 	Family string // empty for KindOrg
 	Given  string // empty for KindOrg
 	Org    string // empty for KindOrg
@@ -30,7 +30,7 @@ type Contact struct {
 }
 
 // Email pairs an address with an optional label. Index 0 is the
-// primary email; the form reorders the slice on change.
+// primary email. The form reorders the slice on change.
 type Email struct {
 	Address string
 	Label   string // "work", "home", or "" for unlabeled
@@ -43,11 +43,11 @@ type Phone struct {
 }
 
 // Suggestion is one row in the compose autocomplete dropdown.
-// A contact with N emails appears N times — each suggestion is one
+// A contact with N emails appears N times. Each suggestion is one
 // (contact, email) pair with the org annotation flattened in.
 type Suggestion struct {
 	Name  string // person FN or org name
 	Email string
-	Org   string // dim suffix; empty when Kind == KindOrg or Org unset
+	Org   string // dim suffix. Empty when Kind == KindOrg or Org unset.
 	IsOrg bool
 }
