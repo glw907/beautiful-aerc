@@ -8,17 +8,16 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// do calls the underlying JMAP client and routes the error through
-// classifyErr so callers see typed sentinels for auth/notfound.
+// do calls the JMAP client and routes errors through classifyErr so
+// callers see the typed mail.Err* sentinels.
 func (b *Backend) do(req *jmap.Request) (*jmap.Response, error) {
 	resp, err := b.client.Do(req)
 	return resp, classifyErr(err)
 }
 
-// classifyErr wraps a JMAP transport/method error with the
-// poplar-internal sentinels (mail.ErrAuth, mail.ErrNotFound) so the
-// cache drainer can route on errors.Is. Pass-through for unrecognized
-// shapes.
+// classifyErr wraps a JMAP transport or method error with mail.ErrAuth
+// or mail.ErrNotFound so the cache drainer can route on errors.Is.
+// Unrecognized shapes pass through.
 func classifyErr(err error) error {
 	if err == nil {
 		return nil
@@ -35,8 +34,8 @@ func classifyErr(err error) error {
 	return err
 }
 
-// errJoin wraps two errors so errors.Is matches the sentinel and
-// the original message stays in Error().
+// errJoin keeps the original message in Error() while letting
+// errors.Is match the sentinel.
 func errJoin(orig, sentinel error) error { return joined{orig: orig, sentinel: sentinel} }
 
 type joined struct {

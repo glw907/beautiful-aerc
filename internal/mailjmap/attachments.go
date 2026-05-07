@@ -11,15 +11,14 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// attachmentProperties is the Email/get property set for attachment
-// metadata. bodyStructure carries every part with disposition + cid,
-// which is enough to classify inline-vs-attachment ourselves without
-// the server's precomputed `attachments` subset.
+// attachmentProperties uses bodyStructure rather than the server's
+// precomputed attachments subset because it carries disposition + cid
+// for every part, which is enough to classify inline-vs-attachment
+// in the client.
 var attachmentProperties = []string{"id", "bodyStructure"}
 
-// Attachments issues one Email/get for
-// bodyStructure, walks the part tree, and returns the non-body
-// parts. Side effect: populates b.partBlobIDs[uid].
+// Attachments runs one Email/get for bodyStructure and walks the part
+// tree. Side effect: populates b.partBlobIDs[uid].
 func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
 	b.mu.Lock()
 	accountID := b.session.PrimaryAccounts[jmapmail.URI]
@@ -51,10 +50,9 @@ func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
 	return nil, fmt.Errorf("attachments %s: no Email/get response", uid)
 }
 
-// walkBodyStructure flattens the JMAP body structure into a list of
-// non-body parts, applying the spec classification rule. The returned
-// map carries partID→blobID for every walked leaf so FetchAttachment
-// can resolve without a second roundtrip.
+// walkBodyStructure flattens bp into the non-body parts plus a
+// partID→blobID map so FetchAttachment can resolve without a second
+// round-trip.
 func walkBodyStructure(bp *email.BodyPart) ([]mail.Attachment, map[string]string) {
 	if bp == nil {
 		return nil, map[string]string{}
@@ -73,7 +71,6 @@ func walkBodyStructure(bp *email.BodyPart) ([]mail.Attachment, map[string]string
 			return
 		}
 		mt := strings.ToLower(p.Type)
-		// Skip the displayable body candidates at the top level.
 		if isTopLevelBody && (mt == "text/plain" || mt == "text/html") {
 			return
 		}
@@ -97,9 +94,9 @@ func walkBodyStructure(bp *email.BodyPart) ([]mail.Attachment, map[string]string
 	return atts, parts
 }
 
-// FetchAttachment resolves (uid, partID) to
-// a blobID via the cached partBlobIDs map (issuing one Email/get
-// when the cache is cold), then downloads via downloadBlob.
+// FetchAttachment resolves (uid, partID) to a blobID via the cached
+// partBlobIDs map (priming via Attachments when cold), then downloads
+// via downloadBlob.
 func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	b.mu.Lock()
 	parts := b.partBlobIDs[uid]
@@ -107,9 +104,8 @@ func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	b.mu.Unlock()
 
 	if parts == nil {
-		// Cold map: populate via Attachments. Discard the metadata;
-		// the caller already has it. The side-effect of populating
-		// partBlobIDs is what we need.
+		// Prime partBlobIDs via Attachments. The returned metadata is
+		// unused. The side effect is what we need.
 		if _, err := b.Attachments(uid); err != nil {
 			return nil, fmt.Errorf("fetch attachment %s/%s: prime: %w", uid, partID, err)
 		}

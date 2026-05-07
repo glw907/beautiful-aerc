@@ -22,8 +22,8 @@ const (
 	pushBackoffMax     = 30 * time.Second
 )
 
-// pushLoop runs until ctx is cancelled. On each runEventSourceFunc
-// return it backs off exponentially and emits ConnReconnecting.
+// pushLoop runs until ctx is cancelled, backing off exponentially and
+// emitting ConnReconnecting between runEventSourceFunc returns.
 func (b *Backend) pushLoop(ctx context.Context) {
 	defer close(b.pushDone)
 	attempts := 0
@@ -50,8 +50,10 @@ func (b *Backend) pushLoop(ctx context.Context) {
 }
 
 // runEventSource opens a JMAP EventSource stream and blocks until the
-// stream closes or ctx is cancelled. On stream open it emits
-// ConnConnected. Each StateChange dispatches handleStateChange.
+// stream closes or ctx is cancelled. ConnConnected is emitted on the
+// first received event, the earliest signal that the SSE socket is
+// genuinely open. The push package does not accept a context, so a
+// goroutine closes the response body when ctx is done.
 func (b *Backend) runEventSource(ctx context.Context) error {
 	b.mu.Lock()
 	cli := b.pushClient
@@ -60,11 +62,6 @@ func (b *Backend) runEventSource(ctx context.Context) error {
 		return fmt.Errorf("run event source: no push client")
 	}
 
-	// Wire the context cancellation to closing the EventSource.
-	// The push package does not accept a context directly. We close
-	// the response body from a separate goroutine when ctx is done.
-	// ConnConnected is emitted on the first received event, the
-	// earliest signal that the SSE socket is genuinely open.
 	var connectedOnce sync.Once
 	es := &push.EventSource{
 		Client: cli,
@@ -107,9 +104,8 @@ func (b *Backend) runEventSource(ctx context.Context) error {
 	return err
 }
 
-// handleStateChange compares newState to the previously known state for
-// typ. If unchanged, returns immediately. Otherwise dispatches the
-// appropriate change fetch and, on success, updates b.states[typ].
+// handleStateChange dispatches a change fetch when newState differs
+// from b.states[typ] and updates b.states[typ] on success.
 func (b *Backend) handleStateChange(typ string, newState string) {
 	b.mu.Lock()
 	old := b.states[typ]
@@ -137,8 +133,8 @@ func (b *Backend) handleStateChange(typ string, newState string) {
 	b.mu.Unlock()
 }
 
-// dispatchEmailChanges issues Email/changes since prevState and emits
-// UpdateNewMail, UpdateFlagsChanged, and UpdateExpunge as appropriate.
+// dispatchEmailChanges runs Email/changes and emits UpdateNewMail,
+// UpdateFlagsChanged, or UpdateExpunge as appropriate.
 func (b *Backend) dispatchEmailChanges(prevState string) error {
 	b.mu.Lock()
 	accountID := b.session.PrimaryAccounts[jmapmail.URI]
@@ -172,7 +168,6 @@ func (b *Backend) dispatchEmailChanges(prevState string) error {
 	if len(cr.Updated) > 0 {
 		uids := idsToUIDs(cr.Updated)
 		b.emit(mail.Update{Type: mail.UpdateFlagsChanged, UIDs: uids})
-		// Refresh blobIDs for updated messages in the background.
 		go b.refreshBlobIDs(accountID, cr.Updated)
 	}
 	if len(cr.Destroyed) > 0 {
@@ -182,7 +177,6 @@ func (b *Backend) dispatchEmailChanges(prevState string) error {
 	return nil
 }
 
-// refreshBlobIDs issues Email/get for ids and updates b.blobIDs cache.
 func (b *Backend) refreshBlobIDs(accountID jmap.ID, ids []jmap.ID) {
 	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
 	req.Invoke(&email.Get{
@@ -209,8 +203,8 @@ func (b *Backend) refreshBlobIDs(accountID jmap.ID, ids []jmap.ID) {
 	}
 }
 
-// dispatchMailboxChanges issues Mailbox/changes since prevState and
-// emits UpdateFolderInfo for each affected mailbox.
+// dispatchMailboxChanges runs Mailbox/changes and emits
+// UpdateFolderInfo for each affected mailbox.
 func (b *Backend) dispatchMailboxChanges(prevState string) error {
 	b.mu.Lock()
 	accountID := b.session.PrimaryAccounts[jmapmail.URI]
@@ -256,8 +250,8 @@ func (b *Backend) dispatchMailboxChanges(prevState string) error {
 	return nil
 }
 
-// emit drops u when the buffer is full so a slow consumer can't stall
-// the push loop.
+// emit drops u when the buffer is full so a slow consumer cannot
+// stall the push loop.
 func (b *Backend) emit(u mail.Update) {
 	b.mu.Lock()
 	ch := b.updates

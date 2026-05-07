@@ -29,8 +29,8 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// jmapClient is the subset of *jmap.Client poplar uses. The real
-// *jmap.Client satisfies it. Tests substitute a fake.
+// jmapClient is the subset of *jmap.Client poplar uses. Tests
+// substitute a fake.
 type jmapClient interface {
 	Do(req *jmap.Request) (*jmap.Response, error)
 }
@@ -42,22 +42,21 @@ type Backend struct {
 
 	mu         sync.Mutex
 	client     jmapClient
-	pushClient *jmap.Client // real client for EventSource (nil in unit tests)
+	pushClient *jmap.Client // for EventSource, nil in unit tests
 	session    *jmap.Session
-	password   string // cached PasswordCmd result (empty when cfg.Password is inline)
+	password   string
 	folders    map[string]folderEntry
 	blobIDs    map[mail.UID]string
-	// partBlobIDs caches per-uid (partID → blobID) maps so
-	// FetchAttachment doesn't require an extra Email/get when the
-	// caller has already invoked Attachments.
+	// partBlobIDs lets FetchAttachment skip the extra Email/get when
+	// Attachments has already populated the per-uid (partID → blobID).
 	partBlobIDs map[mail.UID]map[string]string
 	states      map[string]string
 
 	bodies             *lru.Cache[string, []byte]
 	bodyGroup          singleflight.Group
-	downloadBlob       func(blobID string) ([]byte, error)          // nil until Connect (tests swap it)
-	uploadBlob         func(data []byte) (blobID string, err error) // nil until Connect (tests swap it)
-	identityID         jmap.ID                                      // cached on first Send
+	downloadBlob       func(blobID string) ([]byte, error)
+	uploadBlob         func(data []byte) (blobID string, err error)
+	identityID         jmap.ID
 	updates            chan mail.Update
 	runEventSourceFunc func(ctx context.Context) error // swappable for tests
 
@@ -70,9 +69,9 @@ type folderEntry struct {
 	folder mail.Folder
 }
 
-// New constructs an unconnected Backend for cfg. cfg.Source is the
-// JMAP session URL, e.g. https://api.fastmail.com/jmap/session.
-// cfg.Password (post env-var substitution) supplies the bearer token.
+// New constructs an unconnected Backend. cfg.Source is the JMAP
+// session URL (e.g. https://api.fastmail.com/jmap/session) and
+// cfg.Password supplies the bearer token after env-var substitution.
 func New(cfg config.AccountConfig) *Backend {
 	return &Backend{
 		cfg:         cfg,
@@ -83,13 +82,9 @@ func New(cfg config.AccountConfig) *Backend {
 	}
 }
 
-// NewWithClient is for tests. It bypasses the network handshake and
-// installs a pre-built client that already satisfies the session
-// contract. The caller is responsible for populating b.session if any
-// method under test reads PrimaryAccounts, assign it directly:
-//
-//	b := NewWithClient(cfg, fake)
-//	b.session = &jmap.Session{...}
+// NewWithClient bypasses the network handshake for tests. The caller
+// must assign b.session directly when the method under test reads
+// PrimaryAccounts.
 func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
 	b := New(cfg)
 	b.client = c
@@ -100,9 +95,8 @@ func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
 	return b
 }
 
-// AccountName returns the display name for this account. The cfg.Name
-// fallback surfaces only during the pre-Connect window, before the
-// JMAP session supplies the email per RFC 8620 §1.6.2.
+// AccountName falls back to cfg.Name only during the pre-Connect
+// window, before the JMAP session supplies the email (RFC 8620 §1.6.2).
 func (b *Backend) AccountName() string {
 	if b.cfg.Display != "" {
 		return b.cfg.Display
@@ -131,8 +125,7 @@ func (b *Backend) AccountEmail() string {
 
 func (b *Backend) IsJMAP() bool { return true }
 
-// Updates returns a nil channel before
-// Connect succeeds.
+// Updates returns a nil channel before Connect succeeds.
 func (b *Backend) Updates() <-chan mail.Update { return b.updates }
 
 const (
@@ -140,9 +133,8 @@ const (
 	updatesBuffer = 64
 )
 
-// resolvedPassword returns the cached password for b, resolving it on
-// the first call. The cached value is stored under b.mu so reconnects
-// within the session reuse the same credential without re-running the cmd.
+// resolvedPassword caches the resolved password so reconnects reuse
+// the credential without re-running password-cmd.
 func (b *Backend) resolvedPassword() (string, error) {
 	b.mu.Lock()
 	cached := b.password
@@ -160,18 +152,11 @@ func (b *Backend) resolvedPassword() (string, error) {
 	return pw, nil
 }
 
-// Connect resolves the password (running
-// PasswordCmd if needed, caching the result), authenticates against the
-// JMAP session endpoint, populates the folder map, and initialises the
-// body cache and updates channel.
-//
-// All network RPCs run without holding b.mu. The lock is acquired
-// once at the end to install the completed state and spawn the push
-// goroutine.
+// Connect resolves the password, authenticates against the JMAP
+// session endpoint, populates the folder map, and initialises the
+// body cache and updates channel. Network RPCs run without holding
+// b.mu so secret-manager prompts and slow calls don't stall readers.
 func (b *Backend) Connect(_ context.Context) error {
-	// Steps 1-5 run without b.mu so secret-manager prompts and slow
-	// network calls don't stall other readers. Step 6 takes the lock
-	// to install the result.
 	pw, err := b.resolvedPassword()
 	if err != nil {
 		return fmt.Errorf("password: %w", err)
@@ -244,11 +229,10 @@ func (b *Backend) Connect(_ context.Context) error {
 }
 
 // fetchEmailState issues Email/get with a single sentinel ID to cheaply
-// fetch the current Email state string. An empty IDs slice would be
-// dropped by omitempty (becoming "fetch all"), which Fastmail rejects on
-// large mailboxes. A single non-existent ID lands in `notFound` and the
-// server still returns the live state. It does not hold b.mu.
-// Callers supply the client and session directly.
+// read the current Email state string. An empty IDs slice would be
+// dropped by omitempty (becoming "fetch all"), which Fastmail rejects
+// on large mailboxes. A sentinel lands in notFound and the server
+// still returns the live state.
 func fetchEmailState(cli jmapClient, session *jmap.Session) (string, error) {
 	accountID := session.PrimaryAccounts[jmapmail.URI]
 	req := &jmap.Request{Using: []jmap.URI{jmapmail.URI}}
@@ -274,9 +258,8 @@ func fetchEmailState(cli jmapClient, session *jmap.Session) (string, error) {
 	return "", fmt.Errorf("email/get: no response")
 }
 
-// fetchFolders issues Mailbox/get and returns a populated folder map,
-// the Mailbox state string, and any error. It does not hold b.mu;
-// callers supply the client and session directly.
+// fetchFolders issues Mailbox/get and returns a populated folder map
+// keyed by canonical poplar name, plus the Mailbox state string.
 func fetchFolders(cli jmapClient, session *jmap.Session) (map[string]folderEntry, string, error) {
 	accountID := session.PrimaryAccounts[jmapmail.URI]
 
@@ -318,9 +301,8 @@ func fetchFolders(cli jmapClient, session *jmap.Session) (map[string]folderEntry
 	return folders, "", nil
 }
 
-// refreshFoldersLocked issues Mailbox/get, populates b.folders keyed
-// by canonical poplar name, and captures the state string into
-// b.states["Mailbox"]. Caller must hold b.mu.
+// refreshFoldersLocked refreshes b.folders and b.states["Mailbox"].
+// Caller holds b.mu.
 func (b *Backend) refreshFoldersLocked() error {
 	folders, state, err := fetchFolders(b.client, b.session)
 	if err != nil {
@@ -331,8 +313,7 @@ func (b *Backend) refreshFoldersLocked() error {
 	return nil
 }
 
-// Disconnect cancels the push loop (Task
-// 13) and tears down all session state.
+// Disconnect cancels the push loop and tears down session state.
 func (b *Backend) Disconnect() error {
 	b.mu.Lock()
 	cancel := b.pushCancel
@@ -362,8 +343,8 @@ func (b *Backend) Disconnect() error {
 	return nil
 }
 
-// ListFolders returns the cached folder
-// map, refreshing from the server if the cache is empty.
+// ListFolders returns the cached folder map, refreshing from the
+// server when empty.
 func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -379,8 +360,7 @@ func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	return out, nil
 }
 
-// OpenFolder sets the current folder to name.
-// Returns an error if name is not in the cached folder map.
+// OpenFolder validates name against the cached folder map.
 func (b *Backend) OpenFolder(name string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -390,10 +370,8 @@ func (b *Backend) OpenFolder(name string) error {
 	return nil
 }
 
-// QueryFolder issues Email/query against
-// the named folder and returns (UIDs, total, error). offset and limit
-// map directly to JMAP Position and Limit. Results are sorted by
-// receivedAt descending (newest first).
+// QueryFolder runs Email/query sorted by receivedAt descending.
+// offset and limit map directly to JMAP Position and Limit.
 func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, error) {
 	b.mu.Lock()
 	entry, ok := b.folders[name]
@@ -442,16 +420,12 @@ var headerProperties = []string{
 	"keywords", "size", "inReplyTo", "threadId",
 }
 
-// headerFetchChunk caps the IDs sent in one Email/get to stay under
-// typical maxObjectsInGet limits (Fastmail allows 4096). 500 matches
-// the baseline pull page size, keeping paging symmetric.
+// headerFetchChunk caps IDs per Email/get to stay under typical
+// maxObjectsInGet limits and matches the baseline pull page size.
 const headerFetchChunk = 500
 
-// FetchHeaders issues Email/get for the supplied UIDs and translates
-// each response email into mail.MessageInfo. Requests are chunked at
-// headerFetchChunk to stay under server maxObjectsInGet caps.
-// BlobIDs are cached in b.blobIDs so FetchBody can download without
-// a second Email/get.
+// FetchHeaders chunks Email/get at headerFetchChunk and caches each
+// blobID so FetchBody can download without a second Email/get.
 func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil
@@ -530,7 +504,7 @@ func translateEmail(e *email.Email) mail.MessageInfo {
 	return info
 }
 
-// formatFromList joins addresses with ", ", preferring display name
+// formatFromList joins addresses with ", " preferring display name
 // over bare email.
 func formatFromList(addrs []*jmapmail.Address) string {
 	if len(addrs) == 0 {
@@ -550,12 +524,11 @@ func formatFromList(addrs []*jmapmail.Address) string {
 	return strings.Join(parts, ", ")
 }
 
-// trimSurroundingQuotes strips a leading single-quote-wrapped phrase
-// from a display name. Some mailing-list software (Google Groups,
-// etc.) emits names like "'DAVE JOHNSON' via Members". The literal
-// single quotes are data, not RFC 5322 syntax, but they offset
-// visual alignment. Names that don't start with a single quote (e.g.
-// "Joe O'Brien") are returned unchanged.
+// trimSurroundingQuotes strips the literal single-quote pair some
+// mailing-list software (Google Groups) wraps around the leading
+// phrase, as in "'DAVE JOHNSON' via Members". The quotes are data,
+// not RFC 5322 syntax, but they offset visual alignment. Names that
+// don't start with a single quote ("Joe O'Brien") are unchanged.
 func trimSurroundingQuotes(s string) string {
 	if !strings.HasPrefix(s, "'") {
 		return s
@@ -588,11 +561,9 @@ func translateKeywords(kw map[string]bool) mail.Flag {
 	return f
 }
 
-// FetchBody returns the raw RFC 822 body for
-// uid, using an LRU cache to avoid redundant downloads. Concurrent
-// callers for the same blobID are collapsed via singleflight so only
-// one download runs. FetchHeaders must be called first to populate
-// the blobID map.
+// FetchBody downloads the raw RFC 822 body for uid through an LRU
+// cache, collapsing concurrent callers via singleflight. FetchHeaders
+// must run first to populate the blobID map.
 func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	b.mu.Lock()
 	blobID, ok := b.blobIDs[uid]
@@ -624,8 +595,7 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	return v.([]byte), nil
 }
 
-// Move moves uids into destFolder by patching
-// mailboxIds to contain only the destination mailbox.
+// Move patches mailboxIds so each uid lives only in destFolder.
 func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 	if len(uids) == 0 {
 		return nil
@@ -658,8 +628,8 @@ func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 	return nil
 }
 
-// Destroy permanently deletes uids via JMAP Email/set destroy, bypassing
-// Trash. Irreversible. Empty input is a no-op.
+// Destroy permanently deletes uids via Email/set destroy, bypassing
+// Trash. Empty input is a no-op.
 func (b *Backend) Destroy(uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
@@ -687,9 +657,8 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	return nil
 }
 
-// checkEmailSetDestroyed finds the Email/setResponse matching callID and
-// returns an error if any IDs appear in NotDestroyed with a type other than
-// "notFound". notFound is treated as success (already gone, idempotent).
+// checkEmailSetDestroyed treats notFound as success (already gone)
+// and returns an error for any other NotDestroyed entry.
 func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
 	for _, inv := range resp.Responses {
 		if inv.CallID != callID {
@@ -710,7 +679,6 @@ func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
 	return fmt.Errorf("Email/set: no response for destroy")
 }
 
-// Flag sets or clears a JMAP keyword for each uid.
 func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	keyword, err := keywordForFlag(flag)
 	if err != nil {
@@ -719,9 +687,9 @@ func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 	return b.setKeyword(uids, keyword, set)
 }
 
-// Send uploads mime, imports it into the Sent mailbox, and submits
-// it for delivery in one JMAP request. Email/import + EmailSubmission/set
-// are batched so server-side Sent placement is atomic with submission.
+// Send batches Email/import (Sent mailbox) and EmailSubmission/set
+// in one request so server-side Sent placement is atomic with
+// submission.
 func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 	b.mu.Lock()
 	upload := b.uploadBlob
@@ -790,7 +758,6 @@ func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 	return nil
 }
 
-// Append uploads mime and imports it into folder with the given flags.
 func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 	b.mu.Lock()
 	upload := b.uploadBlob
@@ -836,11 +803,9 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 	return checkImportCreated(resp, callID)
 }
 
-// PushDraft uploads mime to folder as a draft. When prevUID is non-empty,
-// the prior server image is destroyed in the same request. Returns the
-// new server UID. The destroy is best-effort: notFound is benign (the
-// prior image is already gone) and does not block the return of the new
-// UID.
+// PushDraft uploads mime as a draft and, when prevUID is non-empty,
+// destroys the prior server image in the same request. The destroy
+// is best-effort and does not block returning the new UID.
 func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
 	b.mu.Lock()
 	upload := b.uploadBlob
@@ -899,8 +864,6 @@ func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.
 	return mail.UID(newID), nil
 }
 
-// importedID extracts the server-assigned ID for the "k1" entry in an
-// Email/importResponse.
 func importedID(resp *jmap.Response, callID string) (jmap.ID, error) {
 	for _, inv := range resp.Responses {
 		if inv.CallID != callID {
@@ -922,8 +885,8 @@ func importedID(resp *jmap.Response, callID string) (jmap.ID, error) {
 	return "", errors.New("Email/import: no response")
 }
 
-// jmapKeywords maps mail.Flag bits to JMAP $-prefixed keywords. Only
-// the flags JMAP recognizes appear here.
+// jmapKeywords maps the mail.Flag bits JMAP recognizes to their
+// $-prefixed keyword names.
 var jmapKeywords = map[mail.Flag]string{
 	mail.FlagSeen:      "$seen",
 	mail.FlagFlagged:   "$flagged",
@@ -932,8 +895,8 @@ var jmapKeywords = map[mail.Flag]string{
 	mail.FlagForwarded: "$forwarded",
 }
 
-// resolveIdentityID returns the cached identityID, fetching it on
-// first use via Identity/get and matching by email address.
+// resolveIdentityID returns the cached identityID, fetching via
+// Identity/get and matching on email address on first use.
 func (b *Backend) resolveIdentityID(accountID jmap.ID) (jmap.ID, error) {
 	b.mu.Lock()
 	if b.identityID != "" {
@@ -983,8 +946,6 @@ func (b *Backend) resolveIdentityID(accountID jmap.ID) (jmap.ID, error) {
 	return "", fmt.Errorf("identity/get: no identity for %q", want)
 }
 
-// checkImportCreated finds the Email/importResponse matching callID
-// and returns an error if "k1" lands in NotCreated.
 func checkImportCreated(resp *jmap.Response, callID string) error {
 	for _, inv := range resp.Responses {
 		if inv.CallID != callID {
@@ -1005,8 +966,6 @@ func checkImportCreated(resp *jmap.Response, callID string) error {
 	return errors.New("Email/import: no response")
 }
 
-// checkSubmissionCreated finds the EmailSubmission/setResponse matching
-// callID and returns an error if "s1" lands in NotCreated.
 func checkSubmissionCreated(resp *jmap.Response, callID string) error {
 	for _, inv := range resp.Responses {
 		if inv.CallID != callID {
@@ -1027,7 +986,7 @@ func checkSubmissionCreated(resp *jmap.Response, callID string) error {
 	return errors.New("EmailSubmission/set: no response")
 }
 
-// accountIDLocked returns the primary JMAP account ID. Caller must hold b.mu.
+// accountIDLocked returns the primary JMAP account ID. Caller holds b.mu.
 func (b *Backend) accountIDLocked() jmap.ID {
 	return b.session.PrimaryAccounts[jmapmail.URI]
 }
@@ -1039,8 +998,8 @@ func keywordForFlag(flag mail.Flag) (string, error) {
 	return "", fmt.Errorf("unsupported flag for JMAP: %v", flag)
 }
 
-// setKeyword patches the given JMAP keyword to set (true) or unset (nil) for
-// all uids in a single Email/set request.
+// setKeyword patches keyword to true (set) or nil (unset) on all
+// uids in one Email/set request.
 func (b *Backend) setKeyword(uids []mail.UID, keyword string, set bool) error {
 	if len(uids) == 0 {
 		return nil
@@ -1074,8 +1033,6 @@ func (b *Backend) setKeyword(uids []mail.UID, keyword string, set bool) error {
 	return nil
 }
 
-// checkEmailSetUpdated finds the Email/setResponse matching callID and returns
-// an error if any ids appear in NotUpdated.
 func checkEmailSetUpdated(resp *jmap.Response, callID string) error {
 	for _, inv := range resp.Responses {
 		if inv.CallID != callID {

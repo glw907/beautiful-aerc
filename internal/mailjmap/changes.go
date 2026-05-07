@@ -15,22 +15,15 @@ import (
 
 // Changes implements mail.ChangeTracker.
 //
-// On a nil since token Changes runs the per-folder baseline pull.
-// Email/query is paged by inMailbox, with a follow-up Email/get to
-// capture the current type-state. Email/changes itself has no
-// "give me everything that exists now" mode (RFC 8621 §4.3), so an
-// empty sinceState would return an empty delta and lose the initial
-// population.
+// A nil since runs the per-folder baseline pull: Email/query paged by
+// inMailbox plus a piggybacked Email/get for the current type-state.
+// Email/changes has no "everything that exists now" mode (RFC 8621
+// §4.3), so an empty sinceState would lose the initial population.
 //
-// For a non-nil since the call is account-scoped Email/changes
-// (folder argument ignored). The cache routes returned Email IDs
-// through FetchHeaders to recover per-mailbox membership via the
-// message_mailboxes junction. The SyncToken is the JMAP Email
-// type's state string encoded as UTF-8 bytes.
-//
-// On cannotCalculateChanges the function returns
-// mail.ErrCannotCalculateChanges. The caller (cache syncer) responds
-// with the re-anchor path from spec §D.4.
+// A non-nil since is account-scoped Email/changes (folder ignored).
+// The SyncToken is the JMAP Email type's state string as UTF-8 bytes.
+// cannotCalculateChanges is reported as mail.ErrCannotCalculateChanges
+// so the cache syncer re-anchors.
 func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncToken) (mail.ChangeSet, mail.SyncToken, error) {
 	if since == nil {
 		return b.baselinePull(ctx, folder)
@@ -76,17 +69,15 @@ func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncTok
 	return out, mail.SyncToken(state), nil
 }
 
-// baselinePullPageSize is the per-page limit for Email/query during
-// the initial folder pull. Sized to land any inbox under that count
-// in a single round-trip while keeping per-page latency bounded;
-// also the chunk size FetchHeaders uses for the follow-up Email/get.
+// baselinePullPageSize lands any inbox under that count in one
+// round-trip while bounding per-page latency. It matches the chunk
+// size FetchHeaders uses for the follow-up Email/get.
 const baselinePullPageSize = 500
 
-// stateProbeID is a deliberately non-existent Email id sent with
-// every baseline-pull request: JSON omitempty drops a nil/empty IDs
-// slice and Fastmail then returns a state-less Email/get response.
-// The id lands in notFound. The response carries the type-state
-// the next Changes call needs.
+// stateProbeID is a deliberately non-existent Email id. JSON
+// omitempty drops a nil/empty IDs slice and Fastmail then returns a
+// state-less Email/get response, so a sentinel id (which lands in
+// notFound) gets us the type-state the next Changes call needs.
 const stateProbeID jmap.ID = "_poplar_state_probe_"
 
 func (b *Backend) baselinePull(ctx context.Context, folder string) (mail.ChangeSet, mail.SyncToken, error) {
@@ -119,8 +110,8 @@ func (b *Backend) baselinePull(ctx context.Context, folder string) (mail.ChangeS
 			CalculateTotal: true,
 		})
 		// Piggyback the state probe so a single-page pull (the common
-		// case) finishes in one roundtrip. Multi-page pulls overwrite
-		// state on each iteration. The last page wins.
+		// case) finishes in one round-trip. On multi-page pulls the
+		// last page wins.
 		req.Invoke(&email.Get{
 			Account:    accountID,
 			IDs:        []jmap.ID{stateProbeID},
@@ -161,10 +152,9 @@ func (b *Backend) baselinePull(ctx context.Context, folder string) (mail.ChangeS
 	return mail.ChangeSet{Added: added}, mail.SyncToken(state), nil
 }
 
-// isCannotCalculateChanges sniffs a JMAP method-error name.
-// Substring match on the rendered error string is the workaround
-// until go-jmap exposes a typed method-error value (upstream issue);
-// the JSON wire shape places the kind under "type".
+// isCannotCalculateChanges substring-matches the rendered error
+// string. The workaround stays until go-jmap exposes a typed method-
+// error value upstream.
 func isCannotCalculateChanges(err error) bool {
 	if err == nil {
 		return false
