@@ -517,3 +517,65 @@ crashed-mid-execute).
 - Empty state: "No conflicts." Footer hides retry/discard hints.
 - Overflow: when `2 * len(rows) > available body rows`, the list
   hard-caps and the last row reads `+N more (resolve to see)`.
+
+---
+
+## 12. Contact edit form
+
+Two render contexts:
+
+- **Right-pane mode** — `n` (new) or `e` (edit on cursor) from
+  Contacts mode replaces the detail card with the form. Sidebar
+  + middle list stay drawn but inert.
+- **Modal mode** — `n` from the `i`-popover's "no contact"
+  affordance opens the form centered, with mail chrome dimmed
+  underneath.
+
+Person variant:
+
+```
+┌─ New contact ──────────────────────────────────────────┐
+│                                                        │
+│  Kind:    ● Person   ○ Business                        │
+│                                                        │
+│  First:   [Alice___________________________]           │
+│  Last:    [Chen____________________________]           │
+│  Org:     [ACME____________________________]           │
+│  Title:   [Senior Engineer_________________]           │
+│                                                        │
+│  Emails:  [alice@example.com_______________] ◀Work▶ ★− │
+│           [a.chen@personal.io______________] ◀Home▶  − │
+│           [+ add email]                                │
+│                                                        │
+│  Phones:  [+1 555-0100_____________________] ◀Mob.▶ ★− │
+│           [+1 555-0199_____________________] ◀Work▶  − │
+│           [+ add phone]                                │
+│                                                        │
+│  Note:    [Met at GopherCon 2024.________________]     │
+│           [Cares about error messages.___________]     │
+│                                                        │
+│  Save to: ● Local file   ○ geoff@907.life              │
+├────────────────────────────────────────────────────────┤
+│ Tab/Shift+Tab navigate · Ctrl+S save · Esc cancel      │
+└────────────────────────────────────────────────────────┘
+```
+
+Business variant: kind toggle hides First/Last/Org/Title and
+replaces with a single `Name:` row. Email/phone/note/save layout
+matches Person.
+
+Field rules:
+- Kind toggle: `Tab` reaches it. `Space`, `←`, or `→` flips. The
+  flip leaves text-field state untouched but drops the now-hidden
+  fields from tab order.
+- `★` filled = primary (row 0). `☆` hollow = non-primary. Pressing
+  Enter on `☆` promotes that row to row 0 (slice rotate).
+- `−` deletes a row. Disabled on the only email row.
+- Validation runs on `Ctrl+S`. Failure sets a one-line warn under
+  the Save row and blocks save. Success emits ContactSaveMsg
+  carrying the assembled Contact and chosen Save-to destination.
+- `Esc` cancels. Pristine forms close immediately. Dirty forms
+  open the "Discard changes?" confirm.
+
+Right-pane mode renders without the `┌─┐` chrome. The surrounding
+contacts frame already supplies borders.

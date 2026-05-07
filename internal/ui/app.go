@@ -86,6 +86,8 @@ type App struct {
 	contactsSidebar    contacts.Sidebar
 	contactsList       contacts.List
 	contactsStyles     contacts.Styles
+	form               *contacts.Form
+	pendingFormDiscard bool
 	width              int
 	height             int
 }
@@ -200,6 +202,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if m.contactsMode {
 			m.contactsSidebar, m.contactsList = m.sizedContactsChildren()
 		}
+		if m.form != nil {
+			w, h := m.formSize(m.form.FromPopover())
+			next := m.form.SetSize(w, h)
+			m.form = &next
+		}
 		// WindowSizeMsg only forwards sizing. Chrome derivation is not
 		// needed (sizing alone does not change viewer open/close state
 		// or folder counts).
@@ -254,8 +261,34 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case contacts.OpenFormMsg:
-		// form lands in 9.1b
 		m.popover = nil
+		saveTo := []string{"Local file"}
+		if email := m.acct.AccountEmail(); email != "" {
+			saveTo = append(saveTo, email)
+		}
+		f := contacts.NewForm(m.contactsStyles, msg.Initial, msg.FromPopover, saveTo)
+		w, h := m.formSize(msg.FromPopover)
+		f = f.SetSize(w, h)
+		m.form = &f
+		return m, nil
+
+	case contacts.ContactSaveMsg:
+		m.form = nil
+		return m, nil
+
+	case contacts.ContactCancelMsg:
+		if m.form == nil {
+			return m, nil
+		}
+		if !msg.Dirty {
+			m.form = nil
+			return m, nil
+		}
+		m.pendingFormDiscard = true
+		m.confirm = m.confirm.Open(ConfirmRequest{
+			Title: "Discard changes?",
+			Body:  "Unsaved edits to this contact will be lost.",
+		})
 		return m, nil
 
 	case contacts.EnterContactsModeMsg:
@@ -296,6 +329,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case ConfirmModalYesMsg:
 		switch {
+		case m.pendingFormDiscard:
+			m.pendingFormDiscard = false
+			m.form = nil
+			return m, nil
 		case m.pendingComposeSave:
 			m.pendingComposeSave = false
 			if m.compose == nil {
@@ -321,6 +358,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalNoMsg:
+		if m.pendingFormDiscard {
+			m.pendingFormDiscard = false
+			return m, nil
+		}
 		if m.pendingComposeSave {
 			m.pendingComposeSave = false
 			if m.compose != nil {
@@ -334,6 +375,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalClosedMsg:
+		// Esc on the discard-changes modal keeps the form mounted.
+		if m.pendingFormDiscard {
+			m.pendingFormDiscard = false
+			m.confirm = m.confirm.Close()
+			return m, nil
+		}
 		// When the save-draft modal was Esc'd, keep compose mounted.
 		if m.pendingComposeSave {
 			m.pendingComposeSave = false
@@ -646,6 +693,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.movePicker, cmd = m.movePicker.Update(msg)
 			return m, cmd
 		}
+		if m.form != nil {
+			next, cmd := m.form.Update(msg)
+			m.form = &next
+			return m, cmd
+		}
 		if m.popover != nil {
 			next, cmd := m.popover.Update(msg)
 			m.popover = &next
@@ -871,6 +923,13 @@ func (m App) View() string {
 		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
+	if m.form != nil && m.form.FromPopover() {
+		box := m.form.Box(m.width, m.height)
+		x, y := m.form.Position(box, m.width, m.height)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
+	}
+
 	if m.popover != nil {
 		box := m.popover.Box(m.width, m.height)
 		x, y := m.popover.Position(box, m.width, m.height)
@@ -1038,7 +1097,7 @@ func (m App) updateContactsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 
 // renderContactsFrame builds the full-screen contacts layout string.
 func (m App) renderContactsFrame() string {
-	sbW, _, detailW := m.contactsColumnWidths()
+	sbW, listW, detailW := m.contactsColumnWidths()
 	contentH := m.contactsBodyHeight()
 
 	var content string
@@ -1050,20 +1109,26 @@ func (m App) renderContactsFrame() string {
 		listLines := strings.Split(m.contactsList.View(), "\n")
 		divLine := m.styles.FrameBorder.Render("│")
 
-		cursor := m.contactsList.Cursor()
-		detailCard := contacts.RenderDetailCard(cursor, detailW, m.contactsStyles)
-		detailLines := strings.Split(detailCard, "\n")
-
-		n := contentH
-		if len(sbLines) < n {
-			n = len(sbLines)
-		}
-		if len(listLines) < n {
-			n = len(listLines)
+		var detailLines []string
+		if m.form != nil && !m.form.FromPopover() {
+			detailLines = strings.Split(m.form.View(), "\n")
+		} else {
+			cursor := m.contactsList.Cursor()
+			detailLines = strings.Split(contacts.RenderDetailCard(cursor, detailW, m.contactsStyles), "\n")
 		}
 
-		assembled := make([]string, n)
-		for i := range n {
+		assembled := make([]string, contentH)
+		for i := range contentH {
+			sb := ""
+			if i < len(sbLines) {
+				sb = sbLines[i]
+			}
+			sb = uicore.PadOrTruncate(sb, sbW)
+			ls := ""
+			if i < len(listLines) {
+				ls = listLines[i]
+			}
+			ls = uicore.PadOrTruncate(ls, listW)
 			dl := ""
 			if detailW > 0 {
 				if i < len(detailLines) {
@@ -1071,7 +1136,7 @@ func (m App) renderContactsFrame() string {
 				}
 				dl = uicore.PadOrTruncate(dl, detailW)
 			}
-			assembled[i] = sbLines[i] + divLine + listLines[i] + divLine + dl
+			assembled[i] = sb + divLine + ls + divLine + dl
 		}
 		content = strings.Join(assembled, "\n")
 	}
@@ -1092,4 +1157,16 @@ func (m App) renderContactsFrame() string {
 	}
 	parts = append(parts, m.statusBar.View(m.width, sbW+1), footerLine)
 	return strings.Join(parts, "\n")
+}
+
+// formSize returns the (width, height) the contact form should be sized
+// to. Modal mode (fromPopover) uses the full terminal so the form's
+// internal width budget can clamp itself. Right-pane mode mirrors the
+// detail column width in Contacts mode.
+func (m App) formSize(fromPopover bool) (int, int) {
+	if fromPopover {
+		return m.width, m.height
+	}
+	_, _, detailW := m.contactsColumnWidths()
+	return detailW, m.contactsBodyHeight()
 }

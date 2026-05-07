@@ -156,6 +156,32 @@ the list shows the dimmed (read) styling immediately.
 | `1`–`9` | Open Nth attachment |
 | `Esc`, `q`, `@` | Close picker |
 
+## Contacts
+
+| Key | Action | Context |
+|-----|--------|---------|
+| `i` | Sender popover (extract address from message From) | A |
+| `C` | Enter Contacts mode | A |
+| `M` | Return to mail mode | Contacts |
+| `j`/`k` | Cursor down/up in list | Contacts |
+| `J`/`K` | Next/prev T9 sidebar group | Contacts |
+| `a`–`z` | Jump to that letter within the active group | Contacts |
+| `n` | New contact (opens form) | Contacts, popover (no-match) |
+| `e` | Edit contact under cursor (opens form) | Contacts |
+| `D` | Delete contact (wired in 9.3) | Contacts |
+
+### Contact edit form
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Cycle focus across visible widgets |
+| `Space` / `←` / `→` | Toggle Person/Business when kind is focused; cycle email/phone label cycler when focused; advance Save destination |
+| `Enter` on `+ add email` / `+ add phone` | Append a row |
+| `Enter` on ★ (row > 0) | Promote that row to primary |
+| `Enter` on − | Remove that row (disabled on the only email row) |
+| `Ctrl+S` | Validate and save (text-entry exempt per ADR-0076) |
+| `Esc` | Cancel; opens "Discard changes?" confirm if dirty |
+
 ## App
 
 | Key | Action | Context |

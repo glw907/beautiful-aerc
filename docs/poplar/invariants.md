@@ -245,50 +245,51 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
 
 ### Compose
 
-- `internal/compose/` is the outbound-mail surface. UI-free package
-  owning the `Editor` seam (bubbletea sub-model contract used by
-  ComposeTab and the future v1.1 neovim adapter), `CatkinEditor`
-  (v1's only Editor impl, wraps `catkin.Model`), the `Draft` value
-  type (headers + raw markdown body + filesystem attachment paths),
-  `AssembleMIME(d, now)` (pure function emitting
-  multipart/alternative text/plain + text/html via
-  `filter.MarkdownToHTML`, wrapped in multipart/mixed when
-  attachments are present), and `SeedReply` /
-  `SeedReplyAll(parent, body, self)` / `SeedForward`. Reply seeders
-  parse Message-Id and References from the parent's raw RFC 5322
-  bytes (no `mail.MessageInfo` wire extension); quoting is
-  depth-preserving (`> ` runs deepen). `gomail.Address` is the
-  address type on Drafts; `content.ParseAddressList` is the shared
-  RFC 5322 list parser. `internal/filter` gained `MarkdownBody` /
-  `MarkdownToHTML` as the shared goldmark entry points (Linkify +
-  Table extensions).
+- `internal/compose/` is the UI-free outbound-mail surface: the
+  `Editor` seam (CatkinEditor wraps `catkin.Model`; v1.1 will add a
+  neovim adapter), the `Draft` value type, pure
+  `AssembleMIME(d, now)` (multipart/alternative text+html via
+  `filter.MarkdownToHTML`; multipart/mixed when attachments are
+  present), and `SeedReply`/`SeedReplyAll`/`SeedForward` parsing
+  parent Message-Id and References from raw RFC 5322 bytes with
+  depth-preserving `>` quoting. `gomail.Address` is the Draft
+  address type; `content.ParseAddressList` is the shared list
+  parser. `internal/filter` exposes `MarkdownBody`/`MarkdownToHTML` as the shared goldmark entries (Linkify + Table).
 
 ### Address book
 
-- `internal/ui/contacts/` is the address-book UI surface: `Contact`/
-  `Email`/`Phone`/`Suggestion`/`Kind` value types, the in-memory
-  fixture pool + `LookupByEmail`, per-package `Styles`, the pure
-  `RenderDetailCard(c, s, width)` shared by popover and Contacts mode,
-  `Popover`/`Sidebar`/`List` sub-models, cross-package Msg types,
-  package key bindings. Pass 9.1a ships popover + Contacts mode shell
-  against fixtures; 9.1b adds the edit form, 9.1c the compose
-  autocomplete dropdown, 9.2 swaps fixtures for a CardDAV-backed
-  cache. `i` from the account view extracts (DisplayName, Email) via
-  `parseSender` ↔ `content.ParseAddressList` and emits
-  `OpenPopoverMsg`; App calls `contacts.LookupByEmail(Fixtures(),
-  email)` and stores a `*Popover` on the cascade tail (confirm >
-  conflict > outbox > help > linkpicker > attachpicker > movepicker >
-  popover). `C` from the account view enters Contacts mode (App owns
-  `contactsMode bool` + `contactsSidebar`/`contactsList`/
-  `contactsStyles`); `M` exits. Mode body is row-by-row three-column
-  composition (Sidebar | List | RenderDetailCard) per ADR-0084 —
-  Sidebar fixed at 14, List/Detail split the remainder. Sidebar bins
-  by `firstSortLetterMode(c, SortLastName)` into eight T9 groups
-  (`ABC`, `DEF`, `GHI`, `JKL`, `MNO`, `PQRS`, `TUV`, `WXYZ`); `J/K`
-  walks groups, `a`–`z` jumps per-letter with the `┃` tick on the
-  active letter. List uses `bubbles/viewport` with `SortFirstName`
-  (default) or `SortLastName`; `j/k` cursor, `n`/`e` emit
-  `OpenFormMsg`, `D` inert until 9.3.
+- `internal/ui/contacts/` is the address-book UI surface: value
+  types (`Contact`/`Email`/`Phone`/`Suggestion`/`Kind`), fixture
+  pool + `LookupByEmail`, per-package `Styles`, pure
+  `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form`
+  sub-models. 9.1a/9.1b run on fixtures; 9.1c autocomplete; 9.2
+  swaps for CardDAV. `i` opens the popover via
+  `parseSender`↔`content.ParseAddressList`; `C`/`M` toggle Contacts
+  mode (Sidebar T9 groups `ABC`…`WXYZ` with `J/K` group + `a`–`z`
+  letter + `┃` tick | List `bubbles/viewport`, `n`/`e` emit
+  `OpenFormMsg`, `D` inert until 9.3 | RenderDetailCard). Sidebar
+  fixed at 14; sidebar/list rows pad to `contentH` so a tall Form
+  doesn't collapse the body. Overlay cascade tail: confirm >
+  conflict > outbox > help > linkpicker > attachpicker > movepicker
+  > form > popover.
+- `contacts.Form` is the contact edit sub-model — one value type,
+  two render contexts. `fromPopover=true` renders as a ModalShell
+  box; `fromPopover=false` renders body+footer without chrome so
+  the Contacts-mode frame supplies borders. Focus is one `focusIdx`
+  against `focusList()` (kind toggle, name fields per kind,
+  `(input, cycler, ★, −)` quartets per email/phone row, add buttons,
+  note, save destination); Tab/Shift+Tab cycle; Space/← /→ flips
+  kind; ★ on row > 0 rotates to primary; − removes (disabled at one
+  email). Dirty is `currentContact() != initial` (initial =
+  post-construction snapshot). `Ctrl+S` validates (Person: First or
+  Last; Business: Name; ≥1 email via `net/mail.ParseAddress`;
+  saveIdx in range) and emits `ContactSaveMsg{Contact, SaveTo}`;
+  `Esc` emits `ContactCancelMsg{Dirty}`. App owns
+  `form *contacts.Form` + `pendingFormDiscard bool`; Yes-confirm
+  routes form-discard before compose-save / empty-folder. Phone
+  validation accepts any non-empty string until `phonenumbers`
+  lands in 9.2; saves are logged-and-discarded until the
+  cache→outbox bridge lands with vCard ingest.
 
 ## Mail model
 
@@ -395,5 +396,5 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
 | ComposeTab — App-owned inline compose surface, Tab/Shift+Tab focus cycling, Esc as focus toggle, Ctrl+X send + Ctrl+C cancel; cache.Account.QueueOutbound (one op JMAP, two ops IMAP) + Backend.IsJMAP() predicate; TidyFn function-pointer seam on App | 0159, 0160 |
 | internal/ui/ package layout — bubbles-shaped subpackages (account, compose, helppopover, messagelist, movepicker, reader, sidebar) plus uicore sibling for shared chrome; mail.FolderEntry hoisted; per-package Msg-namespace policy; *Tab suffix dropped; ErrorMsg + TriageOp + ComputeLayout + NewSpinner hoisted to uicore; account-scoped cmds (folder/cache/triage/sweep) lifted; AccountTab → account.Model | 0161, 0162, 0163 |
-| Address book mockups (Pass 9.1a) — single `internal/ui/contacts/` package; fixture-backed; i-popover + Contacts mode three-column shell wired into App; `LookupByEmail` lookup; T9 sidebar with per-letter `┃` micro-highlight; List with first-name/last-name sort modes; 9.1b lands form, 9.1c lands compose autocomplete, 9.2 swaps fixtures for CardDAV cache | 0166 |
+| Address book — `internal/ui/contacts/` package; fixture-backed; popover, T9 sidebar + List + RenderDetailCard for Contacts mode (9.1a); `Form` (Person/Business, two render contexts, focusList model, `Ctrl+S` validate, `Esc`/dirty-confirm via `pendingFormDiscard`) (9.1b); 9.1c autocomplete, 9.2 CardDAV swap | 0166, 0167 |
 | Drafts persistence — schema v7 `drafts` (server_uid/server_folder paired), gob payload via `compose.EncodeDraft`/`DecodeDraft`; `KindPushDraft` outbox op + `QueuePushDraft`; `mail.Backend.PushDraft` on both backends (JMAP one-request `Email/import`+`Email/set destroy`; IMAP `APPEND \Draft` + best-effort prior-image expunge); cache writes split — `CreateDraft` insert-or-update vs. `UpdateDraft` UPDATE-only (0-row = race-immune discard); `ErrDraftSuperseded` → drainer publishes `CacheEvent.Note` "draft superseded by another client", App routes non-empty Notes to error banner; `compose.Model` 1s autosave + 5min push tick; App routes Drafts-folder Enter through `LookupDraftByServerUID` or `draft:<id>` synthetic UIDs; unified Save/Discard/Keep modal | 0164, 0165 |
