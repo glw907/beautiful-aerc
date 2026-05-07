@@ -509,27 +509,53 @@ This pass owns the visual decisions; nothing wires to data.
 
 ## vCard library
 
-`emersion/go-vcard` (MIT, GitHub `emersion/go-vcard`).
+`emersion/go-vcard` (MIT, GitHub `emersion/go-vcard`). Confirmed
+via direct source review of `decoder.go`, `card.go`, and `v4.go`
+on master at commit `c9703dd` (Oct 2024).
 
-Confirmed via `pkg.go.dev` lookup:
-- Map-based `Card` type — round-trip preservation likely (unknown
-  fields stay in the map).
-- KIND, PREF, TYPE all exposed via dedicated methods (`Card.Kind`,
-  `Card.Preferred`, `Params.Types` / `HasType`).
-- MIT license, no copyleft concerns.
+**The decoder is version-agnostic.** No `VERSION`-field branching
+anywhere in the parse path; it reads vCard 2.1, 3.0, and 4.0 into
+the same `map[string][]*Field` shape. The "primarily 4.0" framing
+on `pkg.go.dev` is misleading — the parser doesn't care about
+versions, only the conversion helper `ToV4()` does, and we don't
+need that helper because our field set is syntactically identical
+across 3.0 and 4.0:
 
-Open risks (verify in 9.2 spec):
-- "Primarily targets vCard 4.0" with no documented 3.0 support.
-  May need a small version-shim or wrapper to read 3.0 inputs
-  cleanly. (3.0 is the dominant export format from Apple, Google,
-  and most existing .vcf files in the wild.)
-- No stable tagged release (latest is a pseudo-version dated
-  Oct 2024). Vendor at a pinned commit; revisit if upstream
-  releases v1.
+- `FN`, `N`, `ORG`, `TITLE`, `EMAIL`+`TYPE`+`PREF`, `TEL`+`TYPE`+
+  `PREF`, `NOTE`, `UID`, `REV` — same syntax in both versions.
+- `KIND` is 4.0-only but harmless when missing on 3.0 import (we
+  default to `'individual'`).
 
-If 3.0 support proves problematic, alternatives are
-`mapichat/go-vcard` (newer fork) or hand-rolled parsing against
-the small subset of fields we read. Decision parked to Pass 9.2.
+**`Card` round-trips unknown fields automatically.** The
+map-based type means any field we don't read passes through to
+export untouched. Solves preservation for `KIND`, `REV`, `UID`,
+and any `X-*` fields without explicit code on our side.
+
+**KIND, PREF, TYPE all have dedicated accessors:** `Card.Kind`,
+`Card.Preferred`, `Params.Types`, `Params.HasType`.
+
+**Documented limitations** (acceptable):
+
+- Issue #32 — `ENCODING=QUOTED-PRINTABLE` unsupported. This is
+  vCard 2.1 territory (old Apple Address Book <= OS X 10.7).
+  Modern exports don't use it. Imports of such files fail; we
+  document the limitation and accept it.
+- Issue #5 — comma-joined multi-value properties (e.g.,
+  `EMAIL:a@x.com,b@y.com`) only partially supported. Real-world
+  EMAIL/TEL exports use repeated lines, not comma-joins. Not
+  affecting our import path.
+- No stable tagged release; pseudo-version `v0.0.0-…-c9703dd`.
+  Vendor at a pinned commit. Library is ~18 KB total source —
+  small enough to fork in-tree if the project ever stalls.
+
+**Maintenance signal:** last commit Oct 2024 (deterministic
+encoder merged from `oliverpool`). Sporadic but alive. emersion
+maintains the rest of the email-stack we already vendor
+(`go-imap`, `go-message`, `go-smtp`, `go-sasl`, `go-webdav`);
+library-family consistency is itself a reason to stay.
+
+**Decision: keep `emersion/go-vcard`.** No shim needed for 3.0.
+Pass 9.2 imports the library directly.
 
 ## Library: phonenumbers
 
@@ -594,11 +620,8 @@ New bindings landing across the three passes (full table goes in
 
 ## Open questions
 
-None remaining from the brainstorm. Decisions deferred to
-sub-pass plans:
+None remaining. Decisions deferred to sub-pass plans:
 - Exact module split for `internal/ui/contacts/` vs
   `internal/ui/contactspopover/` (one package vs two). Plan-time.
 - Fixture file format for 9.1 mockups (Go literal slice vs JSON).
   Plan-time.
-- vCard 3.0 read strategy if `emersion/go-vcard` fails on 3.0
-  inputs. Pass 9.2 spec.
