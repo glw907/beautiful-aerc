@@ -341,8 +341,11 @@ outbox state machine, body + attachment storage) lives in
   `install`, `check`, `clean`. `make check` runs fmt-check (`gofmt
   -l .`), vet, voice, and test as the commit gate. The voice step
   is `scripts/voice-check.sh`, a grep-tier scan for AI-tells T4,
-  T10, T14, T16, T27, T28, T33–T35. Semantic tells stay with the
-  `/simplify` voice lens. `make install` writes to `~/.local/bin/`.
+  T10, T14, T16, T27, T28, T33, T35, T39, T40. T34 (semicolon
+  clause-joiner) is voice-lens only as of ADR-0173. Semantic tells
+  stay with the `/simplify` voice lens. The voice rules apply to
+  all Claude-authored docs (skills, ADRs, plan docs, the catalogue
+  itself), not only Go source. `make install` writes to `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
