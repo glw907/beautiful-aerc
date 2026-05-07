@@ -12,17 +12,14 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// mlFlagWidth is the width of the flag/status icon cell in display cells.
-// Nerd Font SPUA-A glyphs render as 2 cells in real terminals, and the
-// no-flag case pads to match (see renderFlagCell).
+// mlFlagWidth pads the flag cell to match the Nerd Font SPUA-A 2-cell glyph
+// so flagged and unflagged rows keep the sender column aligned.
 const mlFlagWidth = 2
 
-// mlCursorGlyph is the cursor indicator in column 0.
 const mlCursorGlyph = "▐"
 
-// Box-drawing tokens for thread prefixes. Each string is exactly 3
-// display cells. buildPrefix relies on that to keep column math
-// stable. Edit them as a set.
+// Thread-prefix tokens are each exactly 3 display cells. buildPrefix
+// relies on that to keep column math stable. Edit them as a set.
 const (
 	mlThreadVert  = "│  " // ancestor that still has more siblings below
 	mlThreadGap   = "   " // ancestor that was the last sibling
@@ -30,10 +27,8 @@ const (
 	mlThreadElbow = "└─ " // current row, last sibling
 )
 
-// SortOrder is the thread-level sort direction. Children inside a
-// thread always sort chronologically ascending. SortOrder controls
-// only the order of thread roots (and of unthreaded messages, which
-// are single-message threads).
+// SortOrder controls the order of thread roots. Children inside a thread
+// always sort chronologically ascending regardless of this setting.
 type SortOrder int
 
 const (
@@ -41,7 +36,6 @@ const (
 	SortDateAsc                   // oldest activity first
 )
 
-// Styles holds the subset of UI styles the message list needs.
 type Styles struct {
 	MsgListBg            lipgloss.Style
 	MsgListSelected      lipgloss.Style
@@ -58,8 +52,7 @@ type Styles struct {
 	MsgListPlaceholder   lipgloss.Style
 }
 
-// Row is a rendered row in the message list. Exported for cross-package
-// test assertions in account_tab_test (package ui).
+// Row is the public projection of displayRow returned by Rows.
 type Row struct {
 	Msg          mail.MessageInfo
 	Prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
@@ -69,8 +62,6 @@ type Row struct {
 	Depth        uint8
 }
 
-// displayRow is the internal row type, kept unexported. Rows() converts
-// it to Row for external consumers.
 type displayRow struct {
 	msg          mail.MessageInfo
 	prefix       string // "", "├─ ", "└─ ", "│  └─ ", or "[N] " for a folded root
@@ -81,20 +72,17 @@ type displayRow struct {
 	depth        uint8 // 0 = root, derived during prefix computation
 }
 
-// searchFilter holds the active filter's query and mode. The zero
-// value (empty query, uicore.SearchModeName) means "no filter."
+// The zero searchFilter (empty query, SearchModeName) means no filter.
 type searchFilter struct {
 	query string
 	mode  uicore.SearchMode
 }
 
-// Model renders the message list panel: flags, sender, subject,
-// and date columns. Hand-rolled (not bubbles/list) to match the
-// sidebar pattern and allow the ▐ cursor + selection background.
-//
-// Model owns thread grouping, fold state, and sort direction.
-// The source slice is preserved alongside a derived []displayRow so
-// fold mutations re-flatten without a backend refetch.
+// Model renders the message list panel: flags, sender, subject, date.
+// Hand-rolled (not bubbles/list) to match the sidebar pattern and to give
+// the ▐ cursor + selection background. Owns thread grouping, fold state,
+// and sort direction. The source slice is preserved alongside a derived
+// []displayRow so fold mutations re-flatten without a backend refetch.
 type Model struct {
 	source   []mail.MessageInfo
 	rows     []displayRow
@@ -108,24 +96,20 @@ type Model struct {
 	layout   uicore.LayoutMode
 	width    int
 	height   int
-	// now is the clock snapshot fed into displayDate during rebuild.
-	// Captured at construction and refreshed on SetMessages so View
-	// never has to call time.Now() itself (keeps I/O out of the
-	// render path). Tests assign directly to freeze the clock.
+	// Captured at construction and refreshed on SetMessages so View never
+	// calls time.Now itself. Tests assign directly to freeze the clock.
 	now             time.Time
 	filter          searchFilter
 	preSearchCursor int
 	savedByFilter   bool
 	filterResults   int
-	// Visual-select mode state.
-	visualMode bool
-	marked     map[mail.UID]struct{}
+	visualMode      bool
+	marked          map[mail.UID]struct{}
 }
 
-// New creates a Model with the given messages and size.
-// layout defaults to a legacy-compatible value (Sender=22, Date=5,
-// FlagColumn=true) so callers that haven't yet called SetLayout (e.g.
-// tests that bypass WindowSizeMsg) get sensible output.
+// New constructs a Model. layout defaults to (Sender=22, Date=5,
+// FlagColumn=true) so tests that bypass WindowSizeMsg get sensible output
+// before any SetLayout call.
 func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore.IconSet) Model {
 	m := Model{
 		styles:   styles,
@@ -143,10 +127,9 @@ func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore
 	return m
 }
 
-// SetMessages replaces the source slice and rebuilds the displayRow
-// list. Resets fold state, cursor, viewport, and any active filter.
-// Also refreshes the clock snapshot so newly-delivered messages get
-// the same-day relative formatting.
+// SetMessages replaces the source slice and rebuilds rows. Resets fold
+// state, cursor, viewport, and any active filter. Refreshes the clock
+// snapshot so newly-delivered messages get same-day relative formatting.
 func (m *Model) SetMessages(msgs []mail.MessageInfo) {
 	m.source = msgs
 	m.folded = map[mail.UID]bool{}
@@ -161,18 +144,11 @@ func (m *Model) SetMessages(msgs []mail.MessageInfo) {
 	m.rebuild()
 }
 
-// rebuild runs the group → sort → flatten pipeline against m.source
-// and applies fold state, producing m.rows. Called from SetMessages
-// and from any fold-mutating method.
-//
-// Pipeline:
-//
-//  1. Bucket by ThreadID.
-//  2. Pick a root per bucket (empty InReplyTo, fallback earliest by date).
-//  3. Sort threads by latest-activity in m.sort direction.
-//  4. Walk each thread, emit displayRows root-then-children,
-//     computing depth and box-drawing prefix.
-//  5. Apply fold state.
+// rebuild runs the group→sort→flatten pipeline against m.source: bucket by
+// ThreadID, pick a root per bucket (empty InReplyTo, falling back to
+// earliest by date), sort threads by latest-activity in m.sort direction,
+// walk each thread root-then-children to compute depth and prefix, apply
+// fold state.
 func (m *Model) rebuild() {
 	var buckets [][]mail.MessageInfo
 	if m.threaded {
@@ -189,9 +165,8 @@ func (m *Model) rebuild() {
 	} else {
 		m.filterResults = 0
 	}
-	// Precompute each bucket's latest-activity message so the
-	// comparator runs in O(1). Pairing with the bucket keeps the
-	// memoized value aligned across the in-place sort's swaps.
+	// Pair each bucket with its latest-activity key so the comparator runs
+	// in O(1) and the memoized value stays aligned through the in-place sort.
 	type bucketSort struct {
 		bucket []mail.MessageInfo
 		latest mail.MessageInfo
@@ -223,11 +198,9 @@ func (m *Model) rebuild() {
 	m.rows = rows
 }
 
-// bucketByThreadID groups messages by their ThreadID, preserving
-// input order within each bucket. Iterates the input twice (once to
-// collect ThreadIDs in encounter order, once to slot messages) so the
-// bucket order is deterministic, important for tests that compare
-// against a specific layout.
+// bucketByThreadID groups messages by ThreadID, preserving input order
+// within and across buckets. The two-pass shape (collect IDs, then slot)
+// keeps bucket order deterministic for layout-comparing tests.
 func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
 	var order []mail.UID
 	seen := make(map[mail.UID]int)
@@ -246,10 +219,8 @@ func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
 	return buckets
 }
 
-// filterBuckets is the filter step of the build pipeline. When the
-// filter query is empty, it returns buckets unchanged. When non-empty,
-// it keeps any bucket containing at least one matching message. The
-// thread-level predicate from ADR 0064.
+// filterBuckets keeps any bucket containing at least one matching message.
+// Thread-level predicate per ADR-0064.
 func (m *Model) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo {
 	if m.filter.query == "" {
 		return buckets
@@ -267,11 +238,9 @@ func (m *Model) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo
 	return out
 }
 
-// matchMessage tests one message against a pre-lowercased query
-// under the active filter mode. [name] matches subject + sender;
-// [all] additionally matches the rendered date text the user sees
-// in the date column (not the wire RFC2822 string). Each field is
-// lowercased once per call.
+// matchMessage tests one message against a pre-lowercased query. [name]
+// matches subject + sender. [all] additionally matches the rendered date
+// text the user sees in the date column, not the wire RFC2822 string.
 func (m *Model) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
 	if strings.Contains(strings.ToLower(msg.Subject), lowerQuery) {
 		return true
@@ -288,9 +257,8 @@ func (m *Model) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
 	return false
 }
 
-// pickRoot returns the index within bucket of the thread root: the
-// message with empty InReplyTo, or the earliest by sent time when
-// no such message exists (broken parent chain fallback).
+// pickRoot returns the index of the thread root: the message with empty
+// InReplyTo, or the earliest by sent time when the parent chain is broken.
 func pickRoot(bucket []mail.MessageInfo) int {
 	for i, m := range bucket {
 		if m.InReplyTo == "" {
@@ -306,11 +274,9 @@ func pickRoot(bucket []mail.MessageInfo) int {
 	return earliest
 }
 
-// latestActivity returns the message representing the thread's most
-// recent activity. Used as the inter-thread sort key in step 5 of the
-// build pipeline. Empty bucket returns a zero-value MessageInfo, a
-// caller should not invoke on an empty bucket but the total-function
-// return keeps downstream comparisons safe.
+// latestActivity returns the message representing the thread's most recent
+// activity. Empty bucket returns a zero-value MessageInfo so downstream
+// comparisons stay safe even though callers should not pass one.
 func latestActivity(bucket []mail.MessageInfo) mail.MessageInfo {
 	var latest mail.MessageInfo
 	for _, m := range bucket {
@@ -321,13 +287,10 @@ func latestActivity(bucket []mail.MessageInfo) mail.MessageInfo {
 	return latest
 }
 
-// lessMessage returns true if a is older than b. Uses SentAt when
-// both messages carry a non-zero SentAt. Falls back to lexicographic
-// comparison of the display Date for legacy fixtures that leave
-// SentAt unset. Mixed cases (one has SentAt, one doesn't) sort the
-// zero-SentAt message as the older of the pair, arbitrary but
-// deterministic. Real workers always populate SentAt so this branch
-// only fires for older unit-test fixtures.
+// lessMessage reports whether a is older than b. SentAt is authoritative
+// when both carry a non-zero value. The Date-string fallback exists for
+// legacy fixtures predating SentAt. Mixed cases sort the zero-SentAt side
+// as older (arbitrary but deterministic).
 func lessMessage(a, b mail.MessageInfo) bool {
 	aZero := a.SentAt.IsZero()
 	bZero := b.SentAt.IsZero()
@@ -340,23 +303,20 @@ func lessMessage(a, b mail.MessageInfo) bool {
 	return aZero
 }
 
-// threadNode is a transient tree node used during prefix computation.
-// The tree exists only for the duration of one appendThreadRows call;
-// after the walk produces displayRows it's discarded.
+// threadNode is a transient tree node used only during prefix computation
+// inside appendThreadRows. The tree is discarded after the walk.
 type threadNode struct {
 	msg      mail.MessageInfo
 	children []*threadNode
 }
 
-// appendThreadRows builds a transient tree from one thread bucket,
-// then emits displayRows in depth-first root-then-children order with
-// the right prefix for each row's position. The tree never escapes
-// this function. It's a scratch structure for prefix computation.
+// appendThreadRows builds a transient tree from one thread bucket and
+// emits displayRows in depth-first root-then-children order with the
+// box-drawing prefix for each row's position.
 func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow {
 	rootIdx := pickRoot(bucket)
 	root := &threadNode{msg: bucket[rootIdx]}
 
-	// Index every message by UID so children can find their parent.
 	byUID := map[mail.UID]*threadNode{}
 	for i, msg := range bucket {
 		if i == rootIdx {
@@ -366,9 +326,8 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 		byUID[msg.UID] = &threadNode{msg: msg}
 	}
 
-	// Hook each non-root child to its parent. If the parent is missing
-	// (broken chain: InReplyTo references a UID outside the bucket),
-	// fall back to attaching it to the root as a top-level child.
+	// Broken chains (InReplyTo points outside the bucket) attach to the
+	// root as top-level children.
 	for i, msg := range bucket {
 		if i == rootIdx {
 			continue
@@ -381,7 +340,6 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 		parent.children = append(parent.children, node)
 	}
 
-	// Sort children chronologically ascending at every level.
 	var sortChildren func(n *threadNode)
 	sortChildren = func(n *threadNode) {
 		sort.SliceStable(n.children, func(i, j int) bool {
@@ -393,7 +351,6 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 	}
 	sortChildren(root)
 
-	// Emit the root.
 	rows = append(rows, displayRow{
 		msg:          root.msg,
 		isThreadRoot: true,
@@ -401,8 +358,8 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 		depth:        0,
 	})
 
-	// Walk children depth-first, building the prefix from the trail
-	// of "is-last-sibling" flags at each ancestor level.
+	// Build the prefix from the trail of "is-last-sibling" flags at each
+	// ancestor level.
 	var walk func(node *threadNode, ancestorLastFlags []bool)
 	walk = func(node *threadNode, ancestorLastFlags []bool) {
 		for i, child := range node.children {
@@ -422,10 +379,8 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 	return rows
 }
 
-// buildPrefix constructs the box-drawing prefix string for a row.
-// ancestorLastFlags has one entry per ancestor level above this row,
-// indicating whether that ancestor was the last sibling at its own
-// level. isLast reports whether the current row is the last sibling.
+// buildPrefix renders the box-drawing prefix from the per-ancestor
+// "is-last-sibling" trail and the current row's own last-sibling flag.
 func buildPrefix(ancestorLastFlags []bool, isLast bool) string {
 	var b strings.Builder
 	for _, last := range ancestorLastFlags {
@@ -443,9 +398,9 @@ func buildPrefix(ancestorLastFlags []bool, isLast bool) string {
 	return b.String()
 }
 
-// applyFoldState mutates rows in place: for any folded thread root,
-// every subsequent row up to the next root is marked hidden, and the
-// root's prefix is replaced with "[N] " where N is threadSize.
+// applyFoldState mutates rows in place. For any folded root, the root's
+// prefix becomes "[N] " (N = threadSize) and every row down to the next
+// root is marked hidden.
 func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 	for i := 0; i < len(rows); i++ {
 		if !rows[i].isThreadRoot {
@@ -464,11 +419,9 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 	}
 }
 
-// SetFilter applies a search filter to the message list, rebuilding
-// the display rows through the filterBuckets pipeline step. On the
-// first transition from unfiltered to filtered, saves the pre-search
-// cursor row so ClearFilter can restore it. Subsequent keystrokes do
-// not overwrite the saved row. The save gate stays armed until clear.
+// SetFilter applies a search filter and rebuilds rows. The first
+// unfiltered→filtered transition snapshots the cursor row so ClearFilter
+// can restore it. Later keystrokes leave the snapshot alone.
 func (m *Model) SetFilter(q string, mode uicore.SearchMode) {
 	if !m.savedByFilter && q != "" {
 		m.preSearchCursor = m.selected
@@ -479,9 +432,9 @@ func (m *Model) SetFilter(q string, mode uicore.SearchMode) {
 	m.clampOffset()
 }
 
-// ClearFilter removes any active filter, rebuilds rows, and restores
-// the pre-search cursor row if one was saved. A cursor that points
-// past the new end of rows clamps to 0.
+// ClearFilter clears the active filter, rebuilds rows, and restores the
+// pre-search cursor row when one was saved (clamped to 0 if it would
+// land past the new end).
 func (m *Model) ClearFilter() {
 	m.filter = searchFilter{}
 	m.rebuild()
@@ -495,28 +448,23 @@ func (m *Model) ClearFilter() {
 	m.clampOffset()
 }
 
-// FilterResultCount returns the number of threads matching the
-// active filter, or 0 if no filter is active. Thread count, not
-// message count, because the filter predicate runs per bucket and
-// keeps whole threads as units.
+// FilterResultCount returns the number of threads matching the active
+// filter (0 when no filter is active). The filter predicate runs per
+// bucket so the count is always thread-shaped, not message-shaped.
 func (m Model) FilterResultCount() int {
 	return m.filterResults
 }
 
-// SetSort changes the thread-level sort direction and re-runs the
-// build pipeline. Children inside a thread always sort ascending
-// regardless of this setting.
+// SetSort changes the thread-level sort direction. Children inside a
+// thread always sort ascending regardless of this setting.
 func (m *Model) SetSort(order SortOrder) {
 	m.sort = order
 	m.rebuild()
 }
 
-// SetThreaded toggles thread grouping. When true (the default),
-// messages are bucketed by ThreadID and the rebuild pipeline emits a
-// thread tree per bucket. When false, every message is its own bucket
-// Flat display: one row per message, no prefixes, no fold
-// state) but sort and filter still apply. Per-folder
-// `[ui.folders.<name>] threading = false` flips this.
+// SetThreaded toggles thread grouping. When false the list flattens to one
+// row per message: sort and filter still apply, prefixes and fold state do
+// not. Per-folder [ui.folders.<name>] threading = false flips this.
 func (m *Model) SetThreaded(threaded bool) {
 	if m.threaded == threaded {
 		return
@@ -525,10 +473,9 @@ func (m *Model) SetThreaded(threaded bool) {
 	m.rebuild()
 }
 
-// ToggleFold flips the fold state of the thread the cursor is
-// currently inside. If the cursor is on a child row, the toggle still
-// operates on that child's thread root. After folding, the cursor
-// snaps to the nearest visible row so it doesn't land on a hidden one.
+// ToggleFold flips the fold state of the thread the cursor is inside.
+// Cursor on a child row still toggles that child's root. After folding
+// the cursor snaps to the nearest visible row.
 func (m *Model) ToggleFold() {
 	if len(m.rows) == 0 {
 		return
@@ -543,11 +490,10 @@ func (m *Model) ToggleFold() {
 	m.snapToVisible()
 }
 
-// ToggleFoldAll is the bulk toggle counterpart to ToggleFold: if any
-// multi-message thread is currently unfolded it folds every thread,
-// otherwise it unfolds everything. The "mixed state → fold" direction
-// matches what users usually want from a bulk reset (collapse the
-// noise, then open the specific thread you're reading).
+// ToggleFoldAll is the bulk counterpart to ToggleFold. If any multi-message
+// thread is unfolded it folds every thread, otherwise it unfolds
+// everything. The "mixed state → fold" direction matches the typical bulk
+// reset: collapse the noise, then open the specific thread you're reading.
 func (m *Model) ToggleFoldAll() {
 	anyUnfolded := false
 	for _, r := range m.rows {
@@ -569,10 +515,9 @@ func (m *Model) ToggleFoldAll() {
 	m.snapToVisible()
 }
 
-// snapToVisible walks the cursor backwards to the nearest visible row
-// after a rebuild. Children always sit below their thread root in the
-// slice, so walking back from a hidden child lands on the root that
-// owns it. Re-clamps the viewport.
+// snapToVisible walks the cursor backwards to the nearest visible row.
+// Children always sit below their thread root, so walking back from a
+// hidden child lands on the root that owns it.
 func (m *Model) snapToVisible() {
 	if m.selected < len(m.rows) && !m.rows[m.selected].hidden {
 		m.clampOffset()
@@ -587,9 +532,8 @@ func (m *Model) snapToVisible() {
 	m.clampOffset()
 }
 
-// threadRootIndex returns the row index of the thread root that owns
-// the row at idx. Walks backwards from idx until it finds a row with
-// isThreadRoot == true. Returns -1 if no root is found above idx.
+// threadRootIndex returns the row index of the thread root that owns the
+// row at idx, or -1 if no root sits above idx.
 func (m Model) threadRootIndex(idx int) int {
 	if idx < 0 || idx >= len(m.rows) {
 		return -1
@@ -608,12 +552,11 @@ func (m *Model) SetSize(width, height int) {
 	m.clampOffset()
 }
 
-// Layout returns the current layout settings.
 func (m Model) Layout() uicore.LayoutMode { return m.layout }
 
-// SetLayout updates the column widths and date/flag toggles. Date
-// width changes trigger a rebuild because dateText is precomputed
-// per row. Sender/flag widths take effect at next render.
+// SetLayout updates the column widths and date/flag toggles. A Date-width
+// change triggers rebuild because dateText is precomputed per row;
+// sender/flag widths take effect on the next render.
 func (m *Model) SetLayout(l uicore.LayoutMode) {
 	prevDate := m.layout.Date
 	m.layout = l
@@ -628,11 +571,8 @@ func (m *Model) SetNow(now time.Time) {
 	m.rebuild()
 }
 
-// Selected returns the index of the currently selected message.
 func (m Model) Selected() int { return m.selected }
 
-// SelectedMessage returns the currently selected message. ok is false
-// if the list is empty.
 func (m Model) SelectedMessage() (mail.MessageInfo, bool) {
 	if m.selected < 0 || m.selected >= len(m.rows) {
 		return mail.MessageInfo{}, false
@@ -640,8 +580,6 @@ func (m Model) SelectedMessage() (mail.MessageInfo, bool) {
 	return m.rows[m.selected].msg, true
 }
 
-// MessageByUID returns the message info for uid, or ok=false when not
-// found in the source set.
 func (m Model) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
 	for i := range m.source {
 		if m.source[i].UID == uid {
@@ -651,13 +589,9 @@ func (m Model) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
 	return mail.MessageInfo{}, false
 }
 
-// Count returns the number of source messages in the list.
-func (m Model) Count() int { return len(m.source) }
-
-// Source returns the underlying source message slice (read-only).
+func (m Model) Count() int                 { return len(m.source) }
 func (m Model) Source() []mail.MessageInfo { return m.source }
 
-// Rows returns the rendered displayRow slice as exported Row values.
 func (m Model) Rows() []Row {
 	out := make([]Row, len(m.rows))
 	for i, r := range m.rows {
@@ -673,7 +607,6 @@ func (m Model) Rows() []Row {
 	return out
 }
 
-// VisibleCount returns the number of non-hidden rows.
 func (m Model) VisibleCount() int {
 	n := 0
 	for _, r := range m.rows {
@@ -684,8 +617,8 @@ func (m Model) VisibleCount() int {
 	return n
 }
 
-// cursorUID returns the UID under the cursor, or empty if no rows.
-// Used as an anchor across rebuild.
+// cursorUID returns the UID under the cursor (empty if no rows). Used as
+// an anchor across rebuild.
 func (m *Model) cursorUID() mail.UID {
 	if len(m.rows) == 0 || m.selected >= len(m.rows) {
 		return ""
@@ -693,8 +626,8 @@ func (m *Model) cursorUID() mail.UID {
 	return m.rows[m.selected].msg.UID
 }
 
-// snapToUID positions the cursor on the row whose UID matches uid.
-// Falls back to clamp at len(rows)-1 when not found.
+// snapToUID positions the cursor on the row whose UID matches uid, or
+// clamps to the last row when not found.
 func (m *Model) snapToUID(uid mail.UID) {
 	if uid == "" || len(m.rows) == 0 {
 		m.selected = 0
@@ -709,17 +642,14 @@ func (m *Model) snapToUID(uid mail.UID) {
 	m.selected = len(m.rows) - 1
 }
 
-// IsNearBottom reports whether the cursor is within k rows of the
-// last row. Used by AccountTab to trigger lazy-load before the user
-// runs out of messages.
+// IsNearBottom reports whether the cursor is within k rows of the last
+// row, used to trigger lazy-load before the user runs out of messages.
 func (m *Model) IsNearBottom(k int) bool {
 	return len(m.rows) > 0 && m.selected >= len(m.rows)-k
 }
 
-// AppendMessages adds extra to the message list, re-runs the
-// group→sort→flatten pipeline, and restores the cursor by UID.
-// Used for lazy-loading the next window of a large folder. Safe
-// against duplicate UIDs (rebuild dedups).
+// AppendMessages adds extra to the source slice, rebuilds, and restores
+// the cursor by UID. Lazy-load entry point for large folders.
 func (m *Model) AppendMessages(extra []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = append(m.source, extra...)
@@ -729,9 +659,8 @@ func (m *Model) AppendMessages(extra []mail.MessageInfo) {
 }
 
 // RefreshSource replaces the source slice and rebuilds rows while
-// preserving the cursor on the same UID, fold state, marks, and any
-// active filter. Use this for cache-driven refreshes that should not
-// disturb the user's view. SetMessages is for fresh folder loads.
+// preserving the cursor UID, fold state, marks, and any active filter.
+// Use for cache-driven refreshes. SetMessages is for fresh folder loads.
 func (m *Model) RefreshSource(msgs []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = msgs
@@ -740,8 +669,8 @@ func (m *Model) RefreshSource(msgs []mail.MessageInfo) {
 	m.snapToUID(uid)
 }
 
-// moveBy shifts the cursor by delta visible rows, walking past any
-// hidden rows in the requested direction. Empty list is a no-op.
+// moveBy shifts the cursor by delta visible rows, skipping hidden rows
+// in the requested direction.
 func (m *Model) moveBy(delta int) {
 	if len(m.rows) == 0 {
 		return
@@ -773,17 +702,12 @@ func (m *Model) moveBy(delta int) {
 	m.clampOffset()
 }
 
-// MoveDown advances the cursor by one visible row.
 func (m *Model) MoveDown() { m.moveBy(1) }
+func (m *Model) MoveUp()   { m.moveBy(-1) }
 
-// MoveUp retreats the cursor by one visible row.
-func (m *Model) MoveUp() { m.moveBy(-1) }
-
-// MoveCursor shifts the cursor by delta visible rows (negative for up,
-// positive for down) and returns the resulting UID and whether the
-// cursor actually moved. Boundaries are inert: at first/last visible
-// row, calling with the corresponding direction returns ("", false).
-// Hidden (folded) rows are skipped.
+// MoveCursor shifts by delta visible rows and returns the resulting UID
+// plus whether the cursor moved. Boundaries are inert: calling at the
+// first or last visible row returns ("", false).
 func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
 	before := m.selected
 	m.moveBy(delta)
@@ -793,7 +717,6 @@ func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
 	return m.cursorUID(), true
 }
 
-// MoveToTop jumps the cursor to the first visible row.
 func (m *Model) MoveToTop() {
 	for i := 0; i < len(m.rows); i++ {
 		if !m.rows[i].hidden {
@@ -805,7 +728,6 @@ func (m *Model) MoveToTop() {
 	}
 }
 
-// MoveToBottom jumps the cursor to the last visible row.
 func (m *Model) MoveToBottom() {
 	for i := len(m.rows) - 1; i >= 0; i-- {
 		if !m.rows[i].hidden {
@@ -816,19 +738,11 @@ func (m *Model) MoveToBottom() {
 	}
 }
 
-// HalfPageDown moves the cursor down by half the visible height.
 func (m *Model) HalfPageDown() { m.moveBy(max(1, m.height/2)) }
+func (m *Model) HalfPageUp()   { m.moveBy(-max(1, m.height/2)) }
+func (m *Model) PageDown()     { m.moveBy(max(1, m.height)) }
+func (m *Model) PageUp()       { m.moveBy(-max(1, m.height)) }
 
-// HalfPageUp moves the cursor up by half the visible height.
-func (m *Model) HalfPageUp() { m.moveBy(-max(1, m.height/2)) }
-
-// PageDown moves the cursor down by one full visible page.
-func (m *Model) PageDown() { m.moveBy(max(1, m.height)) }
-
-// PageUp moves the cursor up by one full visible page.
-func (m *Model) PageUp() { m.moveBy(-max(1, m.height)) }
-
-// clampOffset adjusts the viewport so the cursor stays visible.
 func (m *Model) clampOffset() {
 	if m.height <= 0 {
 		m.offset = 0
@@ -845,8 +759,8 @@ func (m *Model) clampOffset() {
 	}
 }
 
-// View renders the visible window of message rows. Empty state shows
-// a centered "No messages" placeholder.
+// View renders the visible window of message rows. An empty list renders
+// the centered placeholder from renderEmpty.
 func (m Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
@@ -877,7 +791,6 @@ func (m Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// renderRow renders one message row at the configured width.
 func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 	row := m.rows[idx]
 	msg := row.msg
@@ -907,9 +820,9 @@ func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 		date = uicore.ApplyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
 	}
 
-	// fixed: cursor(1) + sp2 + sp2(sender→subject) + sp2(subject→date) + sp(trail) = 8;
-	// +flag(2) + sp2(flag→sender) = 12 with flag column. When Date=0 the trailing
-	// sp2+date block is omitted. fillRowToWidth absorbs the 3-cell slack.
+	// Fixed overhead: cursor(1) + 3×sp2(separators) + sp(trail) = 8 cells.
+	// Flag column adds flag(2) + sp2 = 12 cells. When Date=0 the trailing
+	// sp2+date block is omitted. FillRowToWidth absorbs the slack.
 	var flag string
 	fixed := 8
 	if m.layout.FlagColumn {
@@ -917,10 +830,9 @@ func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 		fixed = 12
 	}
 
-	// When a SPUA-A glyph is in the flag cell, lipgloss.Width undercounts
-	// it by (spuaCellWidth-1). Subtract the under-count from the subject
-	// budget so displayCells(assembled row) == m.width regardless of flag
-	// content.
+	// SPUA-A glyphs in the flag cell are undercounted by lipgloss.Width by
+	// (spuaCellWidth-1) per glyph. Subtract the undercount from the subject
+	// budget so the assembled row measures exactly m.width.
 	flagAdjust := 0
 	if uicore.SPUACellWidth() > 1 && m.layout.FlagColumn {
 		flagAdjust = uicore.SpuaCount(flag) * (uicore.SPUACellWidth() - 1)
@@ -951,14 +863,12 @@ func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 	return uicore.FillRowToWidth(rowStr, m.width, bgStyle)
 }
 
-// renderFlagCell renders the flag column. Priority: flagged > answered >
-// unread > none. Read state wins over flag state for color. Only the
-// unread+flagged case escalates to the warning accent. Read rows always
-// use the dim icon style so the glyph dims with the rest of the row.
-//
-// The rendered output is always exactly mlFlagWidth display cells. In
-// simple-icon mode, narrow glyphs (1 cell) are padded with one trailing
-// space so flagged and unflagged rows keep the sender column aligned.
+// renderFlagCell renders the flag column. Glyph priority is flagged >
+// answered > unread > none. Color is gated on read state: read rows use
+// the dim icon style so the glyph dims with the rest of the row. Only
+// the unread+flagged case escalates to the warning accent. Output is
+// always exactly mlFlagWidth display cells. Simple-mode narrow glyphs
+// pad with one trailing space so the sender column stays aligned.
 func (m Model) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgloss.Style) string {
 	iconStyle := m.styles.MsgListIconRead
 	if isUnread {
@@ -979,26 +889,20 @@ func (m Model) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgl
 		return bgStyle.Render("  ")
 	}
 	rendered := uicore.ApplyBg(iconStyle, bgStyle).Render(glyph)
-	// Pad with background spaces until the cell is exactly mlFlagWidth display
-	// cells wide. In fancy mode the SPUA-A glyph already occupies 2 cells
-	// (spuaCellWidth == 2), so displayCells == mlFlagWidth and the loop is a
-	// no-op. In simple mode the narrow glyph is 1 cell, so one space is added.
+	// Fancy-mode SPUA-A glyphs are already 2 cells, so the loop is a no-op.
+	// Simple-mode narrow glyphs add one trailing space.
 	for uicore.DisplayCells(rendered) < mlFlagWidth {
 		rendered += bgStyle.Render(" ")
 	}
 	return rendered
 }
 
-// renderBlankLine returns a blank line at panel width with the base
-// message-list background.
 func (m Model) renderBlankLine() string {
 	return m.styles.MsgListBg.Width(m.width).Render("")
 }
 
-// renderEmpty renders the centered placeholder. Wording depends on
-// why the list is empty: "No messages" when the source has no
-// messages at all, "No matches" when a filter is active and matched
-// nothing.
+// renderEmpty renders the centered placeholder. The wording is "No
+// messages" for an empty source, "No matches" when a filter is active.
 func (m Model) renderEmpty() string {
 	label := "No messages"
 	if m.filter.query != "" {
@@ -1021,19 +925,18 @@ func (m Model) renderEmpty() string {
 	return strings.Join(lines, "\n")
 }
 
-// VisualMode reports whether the list is in visual-select mode.
 func (m Model) VisualMode() bool { return m.visualMode }
 
-// EnterVisual enters visual-select mode. The marked set is unchanged.
+// EnterVisual enters visual-select mode without disturbing the marked set.
+// Marks survive ExitVisual and are consumed by the next dispatch.
 func (m *Model) EnterVisual() { m.visualMode = true }
 
-// ExitVisual leaves visual-select mode and clears the marked set.
+// ExitVisual leaves visual-select mode and clears any marks.
 func (m *Model) ExitVisual() {
 	m.visualMode = false
 	m.marked = map[mail.UID]struct{}{}
 }
 
-// ToggleMark flips membership of uid in the marked set.
 func (m *Model) ToggleMark(uid mail.UID) {
 	if _, ok := m.marked[uid]; ok {
 		delete(m.marked, uid)
@@ -1042,8 +945,7 @@ func (m *Model) ToggleMark(uid mail.UID) {
 	m.marked[uid] = struct{}{}
 }
 
-// Marked returns the marked UIDs in source order. Returns nil when none
-// are marked.
+// Marked returns the marked UIDs in source order, or nil when empty.
 func (m Model) Marked() []mail.UID {
 	if len(m.marked) == 0 {
 		return nil
@@ -1057,10 +959,10 @@ func (m Model) Marked() []mail.UID {
 	return out
 }
 
-// ActionTargets returns the UIDs a triage action should operate on.
-// If any UIDs are marked, those are returned in source order.
-// Otherwise the cursor UID is returned. For a folded thread root,
-// the cursor case expands to root + all child UIDs (WYSIWYG).
+// ActionTargets returns the UIDs a triage action should operate on:
+// marks (in source order) when any are set, otherwise the cursor UID.
+// A folded thread root expands to root + all child UIDs so the action
+// matches what the user sees.
 func (m Model) ActionTargets() []mail.UID {
 	if len(m.marked) > 0 {
 		return m.Marked()
@@ -1075,8 +977,8 @@ func (m Model) ActionTargets() []mail.UID {
 	return []mail.UID{row.msg.UID}
 }
 
-// threadUIDs returns the root UID followed by all child UIDs in source
-// order. Children are identified by matching ThreadID.
+// threadUIDs returns root + all children sharing its ThreadID in source
+// order.
 func (m Model) threadUIDs(root mail.UID) []mail.UID {
 	var threadID mail.UID
 	for _, msg := range m.source {
@@ -1097,10 +999,9 @@ func (m Model) threadUIDs(root mail.UID) []mail.UID {
 	return out
 }
 
-// truncateCells cuts s to fit width display cells, appending an
-// ellipsis when truncated. Inputs are plain mail header text (no ANSI
-// escapes), so runewidth handles cell measurement directly without
-// the ANSI-stripping pass that lipgloss.Width would do.
+// truncateCells cuts s to width display cells, appending an ellipsis when
+// truncated. Inputs are plain header text without ANSI escapes, so
+// runewidth measures directly without lipgloss.Width's stripping pass.
 func truncateCells(s string, width int) string {
 	if width <= 0 {
 		return ""
@@ -1111,8 +1012,7 @@ func truncateCells(s string, width int) string {
 	return runewidth.Truncate(s, width, "…")
 }
 
-// padRight right-pads s with spaces to width display cells. Input is
-// plain text (post-truncateCells), so runewidth measures directly.
+// padRight pads s on the right with spaces to width display cells.
 func padRight(s string, width int) string {
 	if w := runewidth.StringWidth(s); w < width {
 		return s + strings.Repeat(" ", width-w)
@@ -1120,8 +1020,7 @@ func padRight(s string, width int) string {
 	return s
 }
 
-// padLeft left-pads s with spaces to width display cells. Input is
-// plain text (post-truncateCells), so runewidth measures directly.
+// padLeft pads s on the left with spaces to width display cells.
 func padLeft(s string, width int) string {
 	if w := runewidth.StringWidth(s); w < width {
 		return strings.Repeat(" ", width-w) + s
@@ -1129,9 +1028,9 @@ func padLeft(s string, width int) string {
 	return s
 }
 
-// displayDate returns the date column text for a message at the given
-// width. Width 0 means no column. Width 3 uses compact relative format;
-// other widths use short absolute format.
+// displayDate returns the date column text. Width 0 hides the column,
+// width 3 picks the compact relative format, anything else picks short
+// absolute.
 func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
 	if width == 0 {
 		return ""
@@ -1148,7 +1047,6 @@ func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
 	}
 }
 
-// formatRelativeDateCompact returns a 3-cell relative date string.
 func formatRelativeDateCompact(t, now time.Time) string {
 	if t.IsZero() {
 		return "   "
@@ -1174,7 +1072,6 @@ func formatRelativeDateCompact(t, now time.Time) string {
 	}
 }
 
-// formatRelativeDateShort returns a 5-cell short date string.
 func formatRelativeDateShort(t, now time.Time) string {
 	if t.IsZero() {
 		return ""
