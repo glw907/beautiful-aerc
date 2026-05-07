@@ -18,10 +18,9 @@ func PadOrTruncate(s string, width int) string {
 	return TruncateToWidth(s, width)
 }
 
-// TruncateToWidth shortens s to at most width display cells, adding
-// "…" when truncation occurs. Splits on rune boundaries, never
-// inside a multi-byte glyph. Counts cells via lipgloss.Width so
-// double-width CJK characters are accounted for correctly.
+// TruncateToWidth shortens s to at most width display cells, adding "…"
+// when truncation occurs. Cells are measured with lipgloss.Width and
+// truncation respects rune boundaries.
 func TruncateToWidth(s string, width int) string {
 	if width <= 0 {
 		return ""
@@ -48,7 +47,7 @@ func TruncateToWidth(s string, width int) string {
 }
 
 // ClampScrollOffset returns offset adjusted so cursor lies within
-// [offset, offset+visible). Used by overlay scroll-window logic.
+// [offset, offset+visible).
 func ClampScrollOffset(cursor, visible, offset int) int {
 	if cursor < offset {
 		return cursor
@@ -59,9 +58,8 @@ func ClampScrollOffset(cursor, visible, offset int) int {
 	return offset
 }
 
-// CenterOverlay returns the top-left (x, y) cell coordinates that
-// center box on a terminal of totalW × totalH cells. Used by
-// overlay components to feed PlaceOverlay.
+// CenterOverlay returns the top-left cell coordinates that center box on a
+// terminal of totalW × totalH cells.
 func CenterOverlay(box string, totalW, totalH int) (int, int) {
 	x := (totalW - lipgloss.Width(box)) / 2
 	y := (totalH - lipgloss.Height(box)) / 2

@@ -1,46 +1,33 @@
 package uicore
 
-// LayoutMode is the resolved set of layout decisions for a given
-// terminal width. Computed once per WindowSizeMsg by ComputeLayout
-// and threaded into Sidebar and MessageList. Pure data, no I/O,
-// no side effects, no methods that change observable behavior
-// based on flags outside the struct.
+// LayoutMode is the resolved set of layout decisions for a given terminal
+// width, recomputed once per WindowSizeMsg and threaded into Sidebar and
+// MessageList.
 type LayoutMode struct {
-	// Sidebar is the sidebar width in cells (folder list). Range
-	// [14, 30]. Floor 14 fits "Archive" with icons off. Ceiling
-	// 30 gives breathing room for nested custom folder names.
+	// Range [14, 30]. Floor 14 fits "Archive" with icons off. Ceiling 30
+	// gives breathing room for nested custom folder names.
 	Sidebar int
 
-	// Sender is the message-list sender column width in cells.
-	// Range [22, 32]. Floor 22 covers ~86% of real sender names
-	// untruncated. Ceiling 32 covers ~95%.
+	// Range [22, 32]. Floor 22 covers ~86% of real sender names, ceiling
+	// 32 covers ~95%.
 	Sender int
 
-	// Date is the message-list date column width in cells.
-	//   0: column hidden
-	//   3: compact relative format ("now", "5m", "Apr", "'24")
-	//   5: short absolute format ("04-30" / "3:04p")
+	// Date column width in cells:
+	//   0: hidden
+	//   3: compact relative ("now", "5m", "Apr", "'24")
+	//   5: short absolute ("04-30" / "3:04p")
 	Date int
 
-	// FlagColumn is true when the message-list flag/status icon
-	// column is rendered. When false, the column is omitted
-	// entirely (saves 4 cells: glyph + inter-column gap).
+	// FlagColumn omits glyph + inter-column gap (4 cells) when false.
 	FlagColumn bool
 
-	// Icons is true when the sidebar renders folder icons. When
-	// false, the icon block is omitted from each sidebar row,
-	// shrinking the lead from 8 (fancy) to 2 cells.
+	// Icons shrinks the sidebar lead from 8 (fancy) to 2 cells when false.
 	Icons bool
 }
 
-// IconSet is the per-mode iconography vocabulary for poplar's UI
-// surfaces. SimpleIcons uses Unicode Narrow-class codepoints. Every
-// field has lipgloss.Width == 1. FancyIcons uses Nerd Font SPUA-A
-// glyphs (U+F0000–U+FFFFD). Their rendered cell width is determined
-// at startup by term.MeasureSPUACells and applied via SPUACellWidth.
-//
-// Add a field here whenever a new render surface needs an icon. Both
-// tables must be updated together. Tests enforce the class invariants.
+// IconSet is the per-mode iconography vocabulary. Add a field here when a
+// new render surface needs an icon. SimpleIcons and FancyIcons must stay in
+// lockstep. Tests enforce the class invariants.
 type IconSet struct {
 	Inbox        string
 	Drafts       string
@@ -58,8 +45,8 @@ type IconSet struct {
 	Attachment   string
 }
 
-// SimpleIcons is the Unicode-Narrow iconography used when no Nerd Font
-// is detected. Every rune must be East Asian Width Na or N.
+// SimpleIcons is the Unicode-Narrow iconography used when no Nerd Font is
+// detected. Every rune must be East Asian Width Na or N.
 var SimpleIcons = IconSet{
 	Inbox:        "▣", // U+25A3
 	Drafts:       "✎", // U+270E
