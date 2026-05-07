@@ -17,14 +17,11 @@ import (
 	"github.com/glw907/poplar/internal/filter"
 )
 
-// AssembleMIME renders d into an RFC 5322 message. Bodies are emitted
-// as multipart/alternative with text/plain holding the markdown source
-// verbatim and text/html holding the goldmark render. When d carries
-// attachments, the alternative is wrapped inside multipart/mixed and
-// each attachment becomes a sibling part.
-//
-// now stamps the Date header and the Message-Id timestamp suffix.
-// Tests pass a fixed clock for determinism.
+// AssembleMIME renders d into an RFC 5322 message. The body is
+// multipart/alternative with text/plain (markdown verbatim) and
+// text/html (goldmark render). With attachments, the alternative
+// is wrapped in multipart/mixed and each attachment is a sibling
+// part. now stamps the Date header and Message-Id suffix.
 func AssembleMIME(d Draft, now time.Time) ([]byte, error) {
 	from := d.From
 	if from.Address == "" {
@@ -155,9 +152,8 @@ func writeAttachment(mw *gomail.Writer, path string) error {
 	return nil
 }
 
-// newMessageID returns a Message-Id of the form
-// "<hex-random.unix-nano@host>". The random suffix protects against
-// same-instant collisions across processes.
+// newMessageID returns a "<hex-random.unix-nano@host>" Message-Id.
+// The random suffix avoids same-instant collisions across processes.
 func newMessageID(fromAddr string, now time.Time) string {
 	host := "localhost"
 	if at := strings.LastIndex(fromAddr, "@"); at >= 0 && at+1 < len(fromAddr) {
@@ -168,8 +164,7 @@ func newMessageID(fromAddr string, now time.Time) string {
 	return fmt.Sprintf("<%x.%d@%s>", rb[:], now.UnixNano(), host)
 }
 
-// angleAddr wraps s in <...> if it isn't already. Idempotent on
-// already-wrapped input.
+// angleAddr wraps s in <...> if it isn't already. Idempotent.
 func angleAddr(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {

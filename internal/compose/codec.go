@@ -7,14 +7,10 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 )
 
-// gobDraft is the gob-serializable shape of Draft. gomail.Address
-// is a type alias for net/mail.Address (two exported string fields)
-// and encodes cleanly with gob. json.Marshal mishandles non-ASCII
-// Name values, so gob avoids that roundtrip failure.
-//
-// Parallel name/addr slices avoid the gobAddress mirror type that
-// would otherwise be required to satisfy gob's exported-field rule
-// for aliased types across packages.
+// gobDraft is the gob-serializable shape of Draft. JSON mishandles
+// non-ASCII Name values, so the local persistence path uses gob.
+// Parallel name/addr slices avoid a mirror Address type that gob's
+// exported-field rule would otherwise require for the cross-package alias.
 type gobDraft struct {
 	FromName    string
 	FromAddr    string

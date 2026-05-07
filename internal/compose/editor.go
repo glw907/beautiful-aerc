@@ -15,11 +15,8 @@ import (
 
 // Editor is the swappable text-entry surface for compose.Model. v1
 // always uses CatkinEditor. The v1.1 neovim adapter will implement
-// the same surface (ADR-0033).
-//
-// Update returns Editor rather than tea.Model so callers chain
-// without a type assertion. Implementations may use pointer
-// receivers.
+// the same surface (ADR-0033). Update returns Editor so callers
+// chain without a type assertion.
 type Editor interface {
 	Init() tea.Cmd
 	Update(msg tea.Msg) (Editor, tea.Cmd)
@@ -41,14 +38,13 @@ type Editor interface {
 	CharCount() int
 }
 
-// CatkinEditor adapts catkin.Model to the Editor interface. The inner
-// model is stored by value. Update reassigns it in place so the
-// adapter stays a stable pointer for compose.Model to hold.
+// CatkinEditor adapts catkin.Model to the Editor interface. Update
+// reassigns the inner model in place so the adapter stays a stable
+// pointer for compose.Model to hold.
 type CatkinEditor struct {
 	inner catkin.Model
 }
 
-// NewCatkinEditor returns a CatkinEditor wrapping a fresh catkin.Model.
 func NewCatkinEditor() *CatkinEditor {
 	return &CatkinEditor{inner: catkin.New()}
 }

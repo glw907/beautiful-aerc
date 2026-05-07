@@ -12,8 +12,8 @@ import (
 	pmail "github.com/glw907/poplar/internal/mail"
 )
 
-// SeedReply builds a Draft replying to parent. body is the raw RFC
-// 5322 message bytes, used to extract Message-Id, References, and a
+// SeedReply builds a Draft replying to parent. body is the parent's
+// raw RFC 5322 bytes, mined for Message-Id, References, and a
 // quotable text/plain body.
 func SeedReply(parent pmail.MessageInfo, body []byte) Draft {
 	d := seedCommon(parent, body)
@@ -35,8 +35,8 @@ func SeedReplyAll(parent pmail.MessageInfo, body []byte, self gomail.Address) Dr
 }
 
 // SeedForward builds a Draft forwarding parent. To and Cc are empty
-// for the user to fill. Forwards start a new thread, so In-Reply-To
-// and References stay empty.
+// for the user to fill, and forwards start a fresh thread, so
+// In-Reply-To and References stay empty.
 func SeedForward(parent pmail.MessageInfo, body []byte) Draft {
 	return Draft{
 		Subject: ensurePrefix(parent.Subject, "Fwd:"),
@@ -61,10 +61,9 @@ func seedCommon(parent pmail.MessageInfo, body []byte) Draft {
 	return d
 }
 
-// quoteAttribution prefixes an attribution line and the parent's
-// quotable body, with one additional level of "> " on every line.
-// The leading "\n\n" puts the cursor on an empty row above the
-// attribution so reply text bottom-posts naturally.
+// quoteAttribution returns an empty row, an attribution line, and
+// the parent body with one additional "> " level. The empty row
+// puts the cursor above the attribution so reply text bottom-posts.
 func quoteAttribution(parent pmail.MessageInfo, body []byte) string {
 	plain := extractPlainBody(body)
 	quoted := quoteLines(plain)
@@ -72,8 +71,8 @@ func quoteAttribution(parent pmail.MessageInfo, body []byte) string {
 	return "\n\n" + attribution + "\n" + quoted
 }
 
-// quoteLines prefixes every line with "> ". Existing "> " runs are
-// preserved, deepening quote depth by one.
+// quoteLines prefixes every line with "> ", deepening any existing
+// quote depth by one.
 func quoteLines(s string) string {
 	if s == "" {
 		return ""
@@ -89,9 +88,8 @@ func quoteLines(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// extractPlainBody walks body looking for a text/plain inline part.
-// Falls back to the raw body when go-message can't parse it as
-// multipart.
+// extractPlainBody returns the first text/plain inline part, or the
+// raw body when go-message can't parse it as multipart.
 func extractPlainBody(body []byte) string {
 	if len(body) == 0 {
 		return ""
@@ -128,9 +126,8 @@ func extractPlainBody(body []byte) string {
 	return string(b)
 }
 
-// ensurePrefix returns subject with prefix attached, collapsing any
-// repeated prefix runs. "Re: Re: foo" becomes "Re: foo". Matching is
-// case-insensitive.
+// ensurePrefix attaches prefix to subject, collapsing repeated runs
+// case-insensitively. "Re: Re: foo" becomes "Re: foo".
 func ensurePrefix(subject, prefix string) string {
 	s := strings.TrimSpace(subject)
 	for strings.HasPrefix(strings.ToLower(s), strings.ToLower(prefix)) {

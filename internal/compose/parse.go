@@ -10,17 +10,14 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 )
 
-// ParseDraftMIME reverses AssembleMIME for the fields a Draft carries.
-// It walks the message tree to extract the text/plain part as the body;
-// HTML siblings are dropped (re-assembled from markdown on next push).
-// Attachments come back as filenames only. The outbox payload carries
-// the full bytes, so a draft round-trip via the local store loses
+// ParseDraftMIME reverses AssembleMIME for the fields Draft carries.
+// HTML siblings are dropped and re-assembled from markdown on the
+// next push. Attachments come back as filenames only. The outbox
+// payload still carries the full bytes, so a local round-trip loses
 // nothing the user can see in compose.
 func ParseDraftMIME(raw []byte) (Draft, error) {
 	mr, err := gomail.CreateReader(bytes.NewReader(raw))
 	if err != nil {
-		// Non-multipart or headers-only content (legacy / hand-typed drafts
-		// that haven't gone through AssembleMIME) land here.
 		return parsePlain(raw)
 	}
 	defer mr.Close()
@@ -46,7 +43,6 @@ func ParseDraftMIME(raw []byte) (Draft, error) {
 		}
 	}
 	d.Subject, _ = hdr.Subject()
-	// MsgIDList strips angle brackets, matching the bare-ID convention in Draft.
 	if ids, err := hdr.MsgIDList("In-Reply-To"); err == nil && len(ids) > 0 {
 		d.InReplyTo = ids[0]
 	}
@@ -70,8 +66,7 @@ func ParseDraftMIME(raw []byte) (Draft, error) {
 				if err != nil {
 					return d, fmt.Errorf("read body: %w", err)
 				}
-				// MIME wire format uses CRLF. The Draft body is markdown source
-				// with bare LF. Strip CR so the round-trip is transparent.
+				// Draft body is bare-LF markdown. Strip MIME's CRLF.
 				d.Body = strings.ReplaceAll(string(body), "\r\n", "\n")
 			}
 		case *gomail.AttachmentHeader:
@@ -84,8 +79,8 @@ func ParseDraftMIME(raw []byte) (Draft, error) {
 	return d, nil
 }
 
-// parsePlain reads headers and body from a non-multipart message.
-// Covers headers-only or hand-typed drafts that aren't multipart/mixed.
+// parsePlain reads a non-multipart message: headers-only or
+// hand-typed drafts that never went through AssembleMIME.
 func parsePlain(raw []byte) (Draft, error) {
 	m, err := gomessage.Read(bytes.NewReader(raw))
 	if err != nil {
