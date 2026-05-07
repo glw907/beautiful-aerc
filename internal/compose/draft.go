@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package compose
 
 import gomail "github.com/emersion/go-message/mail"

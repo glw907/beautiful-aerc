@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package reader
 
 import (
@@ -83,7 +81,7 @@ type Model struct {
 }
 
 // New constructs an empty (closed) viewer. accountEmail populates the
-// To: header in the rendered message view.
+// rendered "To" header in the message view.
 func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot

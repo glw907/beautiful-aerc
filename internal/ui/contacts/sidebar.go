@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package contacts
 
 import (
@@ -48,8 +46,8 @@ func groupOfLetter(r rune) int {
 // It renders one row per group with a right-aligned count, and shows a
 // per-letter ┃ cursor when the user has jumped to a specific letter.
 //
-// Navigation: J/K walk groups; a–z jump to per-letter precision.
-// Letter separators within a group use a single space: "A B C".
+// J/K walk groups; a–z jump to per-letter precision. Letter separators
+// within a group use a single space ("A B C").
 type Sidebar struct {
 	styles        Styles
 	contacts      []Contact

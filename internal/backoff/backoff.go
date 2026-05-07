@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package backoff is poplar's exponential-backoff helper, shared by
 // the JMAP push loop, the IMAP idle loop, and the cache drainer's
 // failed-op pickup window.

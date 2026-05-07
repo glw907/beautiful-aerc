@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package uicore
 
 // SearchMode selects which fields the message filter matches against.

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package humanize
 
 import "fmt"

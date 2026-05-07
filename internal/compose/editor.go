@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package compose is poplar's outbound-mail surface. It defines the
 // Editor seam, the Draft value type, MIME assembly, and the
 // reply/forward seeders.

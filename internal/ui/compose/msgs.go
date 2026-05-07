@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package compose
 
 import mailcompose "github.com/glw907/poplar/internal/compose"

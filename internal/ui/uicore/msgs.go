@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package uicore
 
 // ErrorMsg carries a failure from any tea.Cmd. App captures the most

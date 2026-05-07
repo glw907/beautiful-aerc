@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package config
 
 // Template returns the self-documenting config.toml written on first

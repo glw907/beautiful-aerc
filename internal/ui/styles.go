@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package ui implements poplar's bubbletea terminal UI.
 package ui
 

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package contacts provides poplar's address-book UI surfaces:
 // the i-popover, Contacts mode, and the contact edit form.
 package contacts

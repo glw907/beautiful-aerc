@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package theme
 
 import "github.com/charmbracelet/lipgloss"

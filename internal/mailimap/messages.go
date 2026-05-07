@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package mailimap
 
 import (
@@ -98,12 +96,10 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 }
 
 // infoFromFetch translates one FETCH result map into a mail.MessageInfo.
-// The items map is keyed by lowercase field names. Missing keys produce
-// zero values. The caller is responsible for providing a complete map.
-//
-// Threading: InReplyTo is set from the "in-reply-to" field. ThreadID
-// is not determined at fetch time (thread grouping is a UI concern);
-// it defaults to UID so every standalone message forms a size-1 thread.
+// items is keyed by lowercase field names. Missing keys produce zero
+// values. InReplyTo is read from the "in-reply-to" field. ThreadID is
+// not determined at fetch time (grouping is a UI concern) and defaults
+// to UID so every standalone message forms a size-1 thread.
 func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 	info := mail.MessageInfo{
 		UID:      uid,

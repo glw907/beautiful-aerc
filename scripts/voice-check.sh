@@ -99,6 +99,29 @@ scan "T35" \
     '//[[:space:]]*(Preference|Fallback|Priority|Rationale|Caveat|Otherwise|Constraint|Invariant):' \
     'documentation label in code comment. Write prose instead.'
 
+# T39: label-colon godoc shape — a comment line that opens with a single
+# capitalized word followed by ": " is the AI-document-section signature
+# (Picker list:, Footnote section:, Threading:, Navigation:, …). Calibrated
+# zero-FP at Pass 9j; vendored provenance comments dodge the regex by
+# phrasing source attribution as prose. See ADR-0168.
+scan "T39" \
+    '^// [A-Z][a-zA-Z]+: ' \
+    'label-colon godoc opener. Idiomatic Go godoc is prose paragraphs — drop the label and write the rule.'
+
+# T40a: NOTE: / IMPORTANT: / TODO: prefixes. Real TODOs use TODO(owner):;
+# notes belong in prose. Calibrated zero-FP at Pass 9j.
+scan "T40" \
+    '^[[:space:]]*// (NOTE|IMPORTANT|TODO):' \
+    'NOTE/IMPORTANT/TODO prefix. Use TODO(owner): for tracked TODOs and prose for notes.'
+
+# T41: SPDX-License-Identifier header. ADR-0169 dropped the per-file header;
+# LICENSE at the repo root is canonical. Vendored files use a prose
+# provenance comment (source repo + commit + license) that is strictly more
+# informative than SPDX. The Pass 9j sweep brought the tree to zero hits.
+scan "T41" \
+    '^// SPDX-License-Identifier:' \
+    'SPDX header in source file. ADR-0169 — repo-level LICENSE is canonical; remove the line.'
+
 if [[ $hits -gt 0 ]]; then
     echo
     echo "voice-check: $hits finding(s). Catalogue: ~/.claude/docs/go-comment-voice.md §7" >&2

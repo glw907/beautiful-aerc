@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package compose
 
 // SeedKind selects which seeding function composeSeedCmd invokes.

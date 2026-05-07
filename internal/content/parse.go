@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package content
 
 import (
@@ -21,9 +19,8 @@ var (
 // urlSchemes is the ordered list of bare-URL schemes that splitBareURLs recognizes.
 var urlSchemes = []string{"https://", "http://", "mailto:"}
 
-// trailingPunct is the set of characters trimmed from the right end of a bare
-// URL: characters that close a sentence, bracket, or code-span context but
-// never a URL.
+// trailingPunct holds characters trimmed from the right end of a bare URL.
+// These close a sentence, bracket, or code-span context but never a URL.
 const trailingPunct = `.,;:!?)]>'"` + "`"
 
 // splitBareURLs splits a plain-text string on bare URL occurrences,
@@ -337,8 +334,7 @@ func parseBlockquote(lines []string, level int) Blockquote {
 	}
 }
 
-// parseSpans parses inline markdown formatting into a slice of Span values.
-// Handles: **bold**, *italic*, `code`, [text](url).
+// parseSpans parses **bold**, *italic*, `code`, and [text](url) into Spans.
 func parseSpans(input string) []Span {
 	if input == "" {
 		return nil

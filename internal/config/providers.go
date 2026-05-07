@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package config
 
 // Provider is a built-in account preset that fills in protocol,

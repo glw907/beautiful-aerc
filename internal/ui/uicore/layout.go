@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package uicore
 
 // LayoutMode is the resolved set of layout decisions for a given

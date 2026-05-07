@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package content
 
 import (
@@ -13,25 +11,10 @@ import (
 // nbsp is the no-break space wordwrap will not split.
 const nbsp = " "
 
-// RenderBodyWithFootnotes renders blocks via RenderBody and harvests
-// outbound links into a picker URL list and a footnote section.
-// Returns the rendered body and the ordered picker URL list.
-//
-// Picker list: all outbound URLs in first-seen order, deduped. This
-// includes both marker-bearing URLs (markdown links, long bare URLs)
-// and short bare URLs. The caller uses this list for Tab/1-9 dispatch.
-//
-// Footnote section: only URLs that received a [^N] marker in the body
-// appear in the footnote list. Short bare URLs render inline without a
-// marker and are not emitted in the footnote section.
-//
-// NOTE: [^N] markers in the body are
-// numbered within the marker-bearing subset only. Picker indices 1..N
-// span all URLs including short bare URLs. These two numbering schemes
-// may differ when short bare URLs are present. The picker is the
-// canonical multi-URL launcher. Markers are an inline reading aid.
-// See ADR-0086 (n/N nav), ADR-0085 (long bare URL footnoting),
-// ADR-0087 (link picker).
+// RenderBodyWithFootnotes renders blocks and harvests outbound URLs.
+// The picker list spans every URL in first-seen order. The footnote
+// section spans only URLs that received a [^N] marker, so short bare
+// URLs appear in the picker but not the footnote list. See ADR-0086.
 func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) (string, []string) {
 	rewritten, pickerURLs, hasMarker := harvestFootnotes(blocks)
 	body := RenderBody(rewritten, t, width)
@@ -39,8 +22,8 @@ func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) 
 		return body, pickerURLs
 	}
 
-	// Collect only marker-bearing URLs for the footnote section.
-	// Footnote labels [^1]..[^M] index this subset, not the picker list.
+	// [^N] labels index marker-bearing URLs only. The picker list spans
+	// all URLs including short bare ones, so the two index spaces differ.
 	var markerURLs []string
 	for i, u := range pickerURLs {
 		if hasMarker[i] {

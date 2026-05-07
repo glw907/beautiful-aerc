@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package ui
 
 // Golden-output baseline tests for the four overlay surfaces and the

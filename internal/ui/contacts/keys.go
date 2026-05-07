@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package contacts
 
 import "github.com/charmbracelet/bubbles/key"

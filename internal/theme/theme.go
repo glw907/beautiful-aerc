@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package theme provides compiled color themes for poplar.
 //
 // Themes are defined as Go values in themes.go. Each theme is built

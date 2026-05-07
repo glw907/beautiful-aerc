@@ -1,6 +1,5 @@
 //go:build unix
 
-// SPDX-License-Identifier: MIT
 package term
 
 import (

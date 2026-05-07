@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package contacts
 
 // OpenPopoverMsg asks App to open the sender popover for the given display

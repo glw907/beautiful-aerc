@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package sidebar_test
 
 import (

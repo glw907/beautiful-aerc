@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package mailimap implements mail.Backend over IMAP4rev1 using
 // emersion/go-imap. Capabilities are negotiated at Connect; UIDPLUS
 // is required, MOVE / SPECIAL-USE / IDLE are used opportunistically.

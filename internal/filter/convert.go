@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package filter cleans inbound email bodies (HTML or plain text)
 // into normalized markdown for the content renderer, and converts
 // outbound markdown to HTML for multipart/alternative send.

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package ui
 
 import (
@@ -61,9 +59,9 @@ func formatRelativeDateCompact(t, now time.Time) string {
 // values render as 12-hour time with a single-letter AM/PM suffix
 // ("3:41p", "9:05a"). Other days render as "MM-DD". Zero time → empty.
 //
-// Note: the 12-hour display can run 6 cells for `12:30a` etc. The
-// caller's column truncation handles that. The 5-cell budget is the
-// design target, not a hard cap.
+// The 12-hour display can run 6 cells for `12:30a` etc. The caller's
+// column truncation handles that. The 5-cell budget is the design
+// target, not a hard cap.
 func formatRelativeDateShort(t, now time.Time) string {
 	if t.IsZero() {
 		return ""

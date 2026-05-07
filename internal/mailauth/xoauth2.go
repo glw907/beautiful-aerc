@@ -9,8 +9,6 @@
 //
 // Copyright (c) 2016 emersion
 // Copyright (c) 2022, Oracle and/or its affiliates.
-//
-// SPDX-License-Identifier: MIT
 
 package mailauth
 

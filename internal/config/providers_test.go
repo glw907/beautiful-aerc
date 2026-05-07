@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package config
 
 import "testing"

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 // Package cache is poplar's local mail store. Each account maps to
 // a SQLite database. The cache is the UI-facing read/write layer;
 // mail.Backend / mail.ChangeTracker handle protocol I/O. See

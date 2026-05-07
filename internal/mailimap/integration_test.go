@@ -1,7 +1,5 @@
 //go:build integration
 
-// SPDX-License-Identifier: MIT
-
 package mailimap
 
 import (

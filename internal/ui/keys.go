@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package ui
 
 import "github.com/charmbracelet/bubbles/key"

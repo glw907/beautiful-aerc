@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package sidebar
 
 // ClearSearchMsg tells AccountTab to clear an active sidebar search and

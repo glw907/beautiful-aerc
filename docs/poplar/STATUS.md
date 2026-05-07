@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9.1c next — compose autocomplete dropdown.
+**Current pass:** Pass 9k next — file-by-file comment voice sweep.
 
 ## Passes
 
@@ -9,6 +9,8 @@
 | 1 – 9h.6 | Scaffold through drafts persistence (ADRs 0001–0165) | done |
 | 9.1a | Address book mockups — package + popover + Contacts mode (ADR-0166) | done |
 | 9.1b | Contact edit form — Person/Business, modal + right-pane modes (ADR-0167) | done |
+| 9j | Comment voice infrastructure — §0 rubric, T38–T40, SPDX removal (ADRs 0168, 0169) | done |
+| 9k | File-by-file comment sweep across `internal/` against the new gates | pending |
 | 9.1c | Compose autocomplete dropdown (To/Cc/Bcc) | pending |
 | 9.2 | CardDAV ingest — swap fixtures for real contacts cache (#34) | pending |
 | 9.4 | Email signatures + multiple identities (#32) | pending |
@@ -26,7 +28,41 @@
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 | 2.5b-train | Tooling: mailrender training capture | opportunistic |
 
-## Next starter prompt (Pass 9.1c)
+## Next starter prompt (Pass 9k)
+
+> **Goal.** File-by-file sweep across `cmd/` and `internal/` to
+> bring existing comments into compliance with the §0 write-time
+> rubric and the T38–T40 structural tells installed in Pass 9j.
+> The pre-Pass-9j audit measured 13.7% comment-line ratio and
+> 1,227 in-function comments clustered at structural seams; the
+> target is application-code density (~7–9%) with zero
+> paraphrase-of-next-5-lines comments and zero markdown-shaped
+> godocs (label-colon paragraphs, closing aphoristic sentences,
+> reference-stuffing). The grep tier (T39 narrow form, T40a, T41)
+> already prevents regressions; this pass cleans up the
+> pre-existing tree the gates can't catch.
+>
+> **Scope.** Walk `cmd/` and `internal/` package-by-package.
+> For each file, run §0 on every comment. Apply the paraphrase
+> test on every in-function comment. Rewrite shape on every
+> godoc that carries label-colon paragraphs or closing
+> aphoristic sentences. Bound-the-pass: split on subsystem
+> fatigue per ADR-0105 / pass size budget (8–12 tasks).
+>
+> **Settled.** §0 rubric, T38–T40 catalogue entries, the new
+> grep-tier scans, and the calibrated good/bad pairs in §9b of
+> the voice doc are locked by ADR-0168. SPDX removal is locked
+> by ADR-0169.
+>
+> **Still open.** Whether the sweep fits in one pass or needs
+> 9k.1 / 9k.2 splits — decide after the first package walk.
+>
+> **Approach.** Write `docs/superpowers/plans/YYYY-MM-DD-comment-
+> voice-sweep.md` with a per-package task breakdown. Standard
+> pass-end ritual. The voice-check gate is live, so each commit
+> is verified against the new rules automatically.
+
+## Next-next starter prompt (Pass 9.1c)
 
 > **Goal.** Compose autocomplete dropdown for To/Cc/Bcc fields,
 > driven by the contacts fixture pool until 9.2 swaps in the

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 package contacts
 
 import (
@@ -103,7 +101,7 @@ func labelSuffix(label string, primary bool) string {
 // 12 chars total) become "+1 NXX-XXXX" style using the 7-digit local
 // number (e.g. "+15555550100" → "+1 555-0100"). Everything else is
 // returned unchanged.
-// TODO: replace with phonenumbers.Format once libphonenumber lands (9.2).
+// TODO(glw907): replace with phonenumbers.Format once libphonenumber lands in 9.2.
 func formatPhone(e164 string) string {
 	if len(e164) == 12 && e164[0] == '+' && e164[1] == '1' {
 		digits := e164[2:] // 10-digit NANP number
