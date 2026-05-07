@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -37,7 +36,6 @@ var listKeys = struct {
 	D: key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete contact")),
 }
 
-// Column widths for the list row layout. Total = 22 + 1 + 30 + 1 + 16 + 1 + rest.
 const (
 	colName  = 22
 	colEmail = 30
@@ -104,7 +102,6 @@ func (l List) SetSize(w, h int) List {
 	return l
 }
 
-// Update handles j/k cursor movement and n/e/D key actions.
 func (l List) Update(msg tea.Msg) (List, tea.Cmd) {
 	k, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -167,7 +164,6 @@ func (l List) formatRow(c Contact) string {
 	return namePad + " " + emailPad + " " + phonePad + " " + metaTrunc
 }
 
-// nameCol returns the name string for c according to the list's sort mode.
 func (l List) nameCol(c Contact) string {
 	if c.Kind == KindOrg {
 		return c.Name
@@ -181,7 +177,6 @@ func (l List) nameCol(c Contact) string {
 	return c.Name
 }
 
-// rebuildViewport re-renders all rows and sets viewport content.
 func (l *List) rebuildViewport() {
 	rows := make([]string, len(l.all))
 	for i, c := range l.all {
@@ -194,7 +189,6 @@ func (l *List) rebuildViewport() {
 	l.vp.SetContent(strings.Join(rows, "\n"))
 }
 
-// syncViewport scrolls the viewport to keep the cursor row visible.
 func (l *List) syncViewport() {
 	if l.height <= 0 {
 		return
@@ -208,8 +202,6 @@ func (l *List) syncViewport() {
 	}
 }
 
-// firstSortLetterMode returns the uppercase letter that governs sort and
-// letter-jump positioning for c under the given mode. Falls back to 'A'.
 func firstSortLetterMode(c Contact, mode SortMode) rune {
 	var s string
 	if c.Kind == KindOrg {
@@ -231,14 +223,12 @@ func firstSortLetterMode(c Contact, mode SortMode) rune {
 	return 'A'
 }
 
-// sortContacts sorts in place according to mode.
 func sortContacts(cs []Contact, mode SortMode) {
 	sort.SliceStable(cs, func(i, j int) bool {
 		return sortKey(cs[i], mode) < sortKey(cs[j], mode)
 	})
 }
 
-// sortKey returns the string used for comparison in sortContacts.
 func sortKey(c Contact, mode SortMode) string {
 	if c.Kind == KindOrg {
 		return strings.ToLower(c.Name)
@@ -249,7 +239,6 @@ func sortKey(c Contact, mode SortMode) string {
 	return strings.ToLower(c.Given + "\x00" + c.Family)
 }
 
-// primaryEmail returns the first email address or "".
 func primaryEmail(c Contact) string {
 	if len(c.Emails) == 0 {
 		return ""
@@ -257,7 +246,6 @@ func primaryEmail(c Contact) string {
 	return c.Emails[0].Address
 }
 
-// primaryPhone returns the first phone E164 number or "".
 func primaryPhone(c Contact) string {
 	if len(c.Phones) == 0 {
 		return ""
@@ -286,7 +274,3 @@ func metaCol(c Contact) string {
 		return ""
 	}
 }
-
-// lipglossWidthGuard is a compile-time confirmation that the lipgloss import
-// is used (the viewport integration calls lipgloss.Width indirectly via uicore).
-var _ = lipgloss.Width

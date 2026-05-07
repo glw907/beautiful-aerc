@@ -242,23 +242,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, saveAttachmentCmd(m.acct.Cache(), m.downloadDir, msg.UID, msg.Att)
 
 	case contacts.OpenPopoverMsg:
-		p := contacts.NewPopover(contacts.NewStyles(m.theme))
+		p := contacts.NewPopover(m.contactsStyles)
 		p.SetSize(m.width, m.height)
-		var match contacts.Contact
-		found := false
-		lc := strings.ToLower(msg.Email)
-		for _, c := range contacts.Fixtures() {
-			for _, e := range c.Emails {
-				if strings.ToLower(e.Address) == lc {
-					match = c
-					found = true
-					break
-				}
-			}
-			if found {
-				break
-			}
-		}
+		match, found := contacts.LookupByEmail(contacts.Fixtures(), msg.Email)
 		p.SetMatch(msg.DisplayName, msg.Email, match, found)
 		m.popover = &p
 		return m, nil

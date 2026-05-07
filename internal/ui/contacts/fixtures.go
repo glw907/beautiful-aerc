@@ -311,6 +311,20 @@ func Fixtures() []Contact {
 	}
 }
 
+// LookupByEmail finds the contact whose email list contains addr,
+// case-insensitive. Returns the contact and true on hit.
+func LookupByEmail(all []Contact, addr string) (Contact, bool) {
+	lc := strings.ToLower(addr)
+	for _, c := range all {
+		for _, e := range c.Emails {
+			if strings.ToLower(e.Address) == lc {
+				return c, true
+			}
+		}
+	}
+	return Contact{}, false
+}
+
 // FixtureSuggestions returns autocomplete suggestions matching prefix.
 // Each contact expands to one Suggestion per email. Matches when the
 // lowercase prefix matches the start of Name or Email. Returns up to

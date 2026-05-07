@@ -14,7 +14,9 @@ import (
 func newTestPopover(t *testing.T) Popover {
 	t.Helper()
 	s := NewStyles(theme.OneDark)
-	return NewPopover(s).SetSize(80, 24)
+	p := NewPopover(s)
+	p.SetSize(80, 24)
+	return p
 }
 
 func TestPopover_MatchRender(t *testing.T) {

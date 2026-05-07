@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package contacts provides poplar's address-book UI surfaces:
-// the i-popover, Contacts mode, and the contact edit form. Pass 9.1
-// renders these against in-memory fixtures. Data wiring lands in 9.2.
+// the i-popover, Contacts mode, and the contact edit form.
 package contacts
 
 // Kind distinguishes a person card from an organization card.

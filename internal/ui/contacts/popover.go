@@ -42,12 +42,11 @@ func (p *Popover) SetMatch(displayName, email string, match Contact, hasMatch bo
 	p.hasMatch = hasMatch
 }
 
-// SetSize returns a copy of p with updated terminal dimensions.
-func (p Popover) SetSize(w, h int) Popover {
+// SetSize updates the terminal dimensions in place.
+func (p *Popover) SetSize(w, h int) {
 	p.width = w
 	p.height = h
 	p.shell = p.shell.SetSize(w, h)
-	return p
 }
 
 // Update handles keyboard input. Mutations are on the returned copy.

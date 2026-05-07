@@ -37,28 +37,14 @@ func RenderDetailCard(c Contact, width int, s Styles) string {
 
 	// Email rows.
 	for i, e := range c.Emails {
-		addr := s.Body.Render(e.Address)
-		suffix := labelSuffix(e.Label, i == 0)
-		if suffix != "" {
-			row := addr + " " + s.Dim.Render(suffix)
-			lines = append(lines, uicore.TruncateToWidth(row, width))
-		} else {
-			lines = append(lines, uicore.TruncateToWidth(addr, width))
-		}
+		lines = append(lines, renderLabelRow(e.Address, e.Label, i == 0, s, width))
 	}
 
 	// Blank between emails and phones, only when phones present.
 	if len(c.Phones) > 0 {
 		lines = append(lines, "")
 		for i, p := range c.Phones {
-			num := s.Body.Render(formatPhone(p.E164))
-			suffix := labelSuffix(p.Label, i == 0)
-			if suffix != "" {
-				row := num + " " + s.Dim.Render(suffix)
-				lines = append(lines, uicore.TruncateToWidth(row, width))
-			} else {
-				lines = append(lines, uicore.TruncateToWidth(num, width))
-			}
+			lines = append(lines, renderLabelRow(formatPhone(p.E164), p.Label, i == 0, s, width))
 		}
 	}
 
@@ -73,6 +59,17 @@ func RenderDetailCard(c Contact, width int, s Styles) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// renderLabelRow renders "<value>  (<label>, primary)" with the label
+// suffix dimmed. Truncates to width cells.
+func renderLabelRow(value, label string, primary bool, s Styles, width int) string {
+	v := s.Body.Render(value)
+	suffix := labelSuffix(label, primary)
+	if suffix != "" {
+		return uicore.TruncateToWidth(v+" "+s.Dim.Render(suffix), width)
+	}
+	return uicore.TruncateToWidth(v, width)
 }
 
 func buildTitleOrg(title, org string) string {
@@ -105,8 +102,8 @@ func labelSuffix(label string, primary bool) string {
 // formatPhone pretty-prints an E.164 number. US numbers (+1XXXXXXXXXX,
 // 12 chars total) become "+1 NXX-XXXX" style using the 7-digit local
 // number (e.g. "+15555550100" → "+1 555-0100"). Everything else is
-// returned unchanged. Pass 9.2 swaps this for phonenumbers.Format when
-// the libphonenumber dependency lands.
+// returned unchanged.
+// TODO: replace with phonenumbers.Format once libphonenumber lands (9.2).
 func formatPhone(e164 string) string {
 	if len(e164) == 12 && e164[0] == '+' && e164[1] == '1' {
 		digits := e164[2:] // 10-digit NANP number

@@ -44,29 +44,6 @@ func groupOfLetter(r rune) int {
 	}
 }
 
-// firstSortLetter returns the uppercase letter used to bin a contact
-// into a T9 group. For KindPerson it uses Family, falling back to
-// Given. For KindOrg it uses Name. Non-letter first runes return 'A'
-// (bins to group 0).
-func firstSortLetter(c Contact) rune {
-	var s string
-	if c.Kind == KindPerson {
-		s = c.Family
-		if s == "" {
-			s = c.Given
-		}
-	} else {
-		s = c.Name
-	}
-	for _, r := range s {
-		up := unicode.ToUpper(r)
-		if up >= 'A' && up <= 'Z' {
-			return up
-		}
-	}
-	return 'A'
-}
-
 // Sidebar is the compact T9 letter-group column used in Contacts mode.
 // It renders one row per group with a right-aligned count, and shows a
 // per-letter ┃ cursor when the user has jumped to a specific letter.
@@ -155,15 +132,9 @@ func (s Sidebar) renderGroup(idx int, group string) string {
 	countStr := s.styles.GroupCount.Render(fmt.Sprintf("%d", count))
 	countW := lipgloss.Width(countStr)
 
-	// Budget for the label: width minus count and the space before it.
-	labelBudget := s.width - countW - 1
-	if labelBudget < 0 {
-		labelBudget = 0
-	}
-
 	var label string
 	if idx == s.activeGroup {
-		label = s.renderActiveGroupLabel(group, labelBudget)
+		label = s.renderActiveGroupLabel(group)
 	} else {
 		label = s.styles.GroupLabel.Render(group)
 	}
@@ -176,16 +147,15 @@ func (s Sidebar) renderGroup(idx int, group string) string {
 	return label + strings.Repeat(" ", gap) + countStr
 }
 
-// renderActiveGroupLabel builds the label for the selected group.
-// When activeLetter is set, the matching letter gets a ┃ prefix.
-// When only the group is selected (J/K navigation), the whole group
-// name is rendered with CursorRow styling.
-func (s Sidebar) renderActiveGroupLabel(group string, budget int) string {
+// renderActiveGroupLabel builds the label for the active group.
+// When activeLetter is set, the matching letter gets a ┃ prefix
+// ("A ┃B C"). When only the group is selected (J/K navigation),
+// the whole group name renders with CursorRow styling.
+func (s Sidebar) renderActiveGroupLabel(group string) string {
 	if s.activeLetter == 0 {
 		return s.styles.CursorRow.Render(group)
 	}
 
-	// Per-letter micro-highlight: "A ┃B C" with spaces between letters.
 	letters := []rune(group)
 	parts := make([]string, len(letters))
 	for i, l := range letters {
@@ -195,15 +165,13 @@ func (s Sidebar) renderActiveGroupLabel(group string, budget int) string {
 			parts[i] = s.styles.GroupLabel.Render(string(l))
 		}
 	}
-	_ = budget // display cells stay within 14 for all groups
 	return strings.Join(parts, " ")
 }
 
-// recount rebuilds groupCounts from s.contacts.
 func (s *Sidebar) recount() {
 	var counts [8]int
 	for _, c := range s.contacts {
-		l := firstSortLetter(c)
+		l := firstSortLetterMode(c, SortLastName)
 		counts[groupOfLetter(l)]++
 	}
 	s.groupCounts = counts
