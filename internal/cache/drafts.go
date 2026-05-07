@@ -13,9 +13,8 @@ import (
 // draft row that no longer exists locally.
 var ErrDraftSuperseded = errors.New("cache: draft superseded by another client")
 
-// DraftRow is the in-memory shape of one drafts row. ServerUID is
-// empty until the first successful PushDraft op. LastPushedAt is the
-// zero time until then.
+// DraftRow is one drafts row. ServerUID and LastPushedAt are zero
+// until the first successful PushDraft op.
 type DraftRow struct {
 	DraftID      string
 	ServerUID    mail.UID
@@ -27,11 +26,10 @@ type DraftRow struct {
 	LastPushedAt time.Time
 }
 
-// scanDraftRow reads one DraftRow from a database scanner (sql.Row or
-// sql.Rows). The caller must supply a scanner that returns the columns:
+// scanDraftRow reads one DraftRow. The scanner must return columns
+// in the order shared by ListDrafts and LookupDraftByServerUID:
 // draft_id, server_uid, server_folder, payload, dirty, created_at,
-// updated_at, last_pushed_at. Both ListDrafts and
-// LookupDraftByServerUID use this column order.
+// updated_at, last_pushed_at.
 func scanDraftRow(scan func(...any) error) (DraftRow, error) {
 	var r DraftRow
 	var serverUID, serverFolder string
@@ -63,8 +61,8 @@ func (a *Account) LookupDraftByServerUID(ctx context.Context, uid mail.UID) (Dra
 	return scanDraftRow(row.Scan)
 }
 
-// CreateDraft inserts a new drafts row, or updates payload + bumps
-// updated_at when one already exists for draftID.
+// CreateDraft inserts a drafts row, or upserts payload + updated_at
+// when draftID already exists.
 func (a *Account) CreateDraft(ctx context.Context, draftID string, payload []byte) error {
 	if draftID == "" {
 		return fmt.Errorf("create draft: empty draftID")
@@ -81,9 +79,8 @@ func (a *Account) CreateDraft(ctx context.Context, draftID string, payload []byt
 	return err
 }
 
-// UpdateDraft writes payload for an existing draftID. When the row
-// was already deleted, the update is a 0-row no-op rather than
-// resurrecting the row.
+// UpdateDraft writes payload for an existing draftID. A deleted row
+// stays deleted: the UPDATE is a 0-row no-op, never a resurrect.
 func (a *Account) UpdateDraft(ctx context.Context, draftID string, payload []byte) error {
 	if draftID == "" {
 		return fmt.Errorf("update draft: empty draftID")
@@ -108,8 +105,6 @@ func (a *Account) LoadDraft(ctx context.Context, draftID string) ([]byte, error)
 }
 
 // ListDrafts returns every drafts row, oldest-first by created_at.
-// The App reads these to project local-only drafts into the
-// Drafts-folder message-list view.
 func (a *Account) ListDrafts(ctx context.Context) ([]DraftRow, error) {
 	rows, err := a.db.QueryContext(ctx, `
         SELECT draft_id, COALESCE(server_uid, ''), COALESCE(server_folder, ''),
@@ -132,17 +127,16 @@ func (a *Account) ListDrafts(ctx context.Context) ([]DraftRow, error) {
 	return out, rows.Err()
 }
 
-// DeleteDraft removes the local row. Caller is responsible for
-// queueing a Destroy op against any server image in the same logical
-// flow (handled by the App's Discard / Send paths).
+// DeleteDraft removes the local row. The caller queues any Destroy
+// op against the server image (App's Discard / Send paths handle this).
 func (a *Account) DeleteDraft(ctx context.Context, draftID string) error {
 	_, err := a.db.ExecContext(ctx, `DELETE FROM drafts WHERE draft_id = ?`, draftID)
 	return err
 }
 
-// MarkDraftPushed records a successful PushDraft. The drainer calls
-// this in its post-success path. Clears dirty and records the server
-// coordinates.
+// MarkDraftPushed records a successful PushDraft: clears dirty and
+// stores the server coordinates. Returns ErrDraftSuperseded when the
+// local row is gone.
 func (a *Account) MarkDraftPushed(ctx context.Context, draftID string, serverUID mail.UID, serverFolder string) error {
 	res, err := a.db.ExecContext(ctx, `
         UPDATE drafts

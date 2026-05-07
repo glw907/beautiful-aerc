@@ -11,13 +11,10 @@ import (
 )
 
 // Attachments returns metadata for non-body parts of uid. On cache
-// miss the backend is consulted and the rows persisted. On cache
-// hit no backend roundtrip occurs.
-//
-// A zero-length result is not cached: empty cannot be distinguished
-// from "not yet populated" without a marker, and the cost of an
-// occasional re-fetch on truly attachment-free messages is lower
-// than a schema column for the marker.
+// miss the backend is consulted and the rows persisted. Zero-length
+// results are not cached, since empty is indistinguishable from
+// "not populated yet" without a schema marker. Attachment-free
+// messages take a re-fetch on each call.
 func (a *Account) Attachments(ctx context.Context, uid mail.UID) ([]mail.Attachment, error) {
 	rows, err := a.lookupAttachments(ctx, uid)
 	if err != nil {
@@ -37,13 +34,11 @@ func (a *Account) Attachments(ctx context.Context, uid mail.UID) ([]mail.Attachm
 		return nil, nil
 	}
 	if err := a.storeAttachments(ctx, uid, atts); err != nil {
-		// Store failure is non-fatal: caller still has valid metadata.
 		_ = err
 	}
 	return atts, nil
 }
 
-// Empty slice on miss.
 func (a *Account) lookupAttachments(ctx context.Context, uid mail.UID) ([]mail.Attachment, error) {
 	const q = `
         SELECT a.part_id, a.filename, a.mime_type, a.size, a.content_id, a.disposition
@@ -77,9 +72,8 @@ func (a *Account) lookupAttachments(ctx context.Context, uid mail.UID) ([]mail.A
 	return out, rs.Err()
 }
 
-// storeAttachments writes metadata rows for uid. Caller has already
-// determined the cache was empty. This is the populate path. It
-// errors if uid has no row in messages.
+// storeAttachments writes the metadata rows for uid. Errors if the
+// uid has no row in messages.
 func (a *Account) storeAttachments(ctx context.Context, uid mail.UID, atts []mail.Attachment) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		var msgID int64
@@ -113,7 +107,6 @@ func (a *Account) storeAttachments(ctx context.Context, uid mail.UID, atts []mai
 
 // FetchAttachment returns bytes for partID on uid. Cache miss →
 // backend → store under the attachment-size backstop → return.
-// Storage failure is non-fatal: returned bytes are still valid.
 func (a *Account) FetchAttachment(ctx context.Context, uid mail.UID, partID string) ([]byte, error) {
 	if buf, ok, err := a.lookupAttachmentBytes(ctx, uid, partID); err != nil {
 		return nil, fmt.Errorf("fetch attachment %s/%s: lookup: %w", uid, partID, err)
@@ -133,8 +126,7 @@ func (a *Account) FetchAttachment(ctx context.Context, uid mail.UID, partID stri
 	return body, nil
 }
 
-// lookupAttachmentBytes reads cached bytes for (uid, partID). Misses
-// when the row is absent OR the row exists with bytes IS NULL.
+// lookupAttachmentBytes misses on absent row or NULL bytes.
 func (a *Account) lookupAttachmentBytes(ctx context.Context, uid mail.UID, partID string) ([]byte, bool, error) {
 	const q = `
         SELECT a.bytes
@@ -156,9 +148,8 @@ func (a *Account) lookupAttachmentBytes(ctx context.Context, uid mail.UID, partI
 }
 
 // storeAttachmentBytes writes bytes onto the (uid, partID) row,
-// evicting older rows by messages.sent_at when the attachment-size
-// budget would be exceeded. Errors if the row is absent. Call
-// Attachments() first to populate metadata.
+// evicting older rows under the attachment-size budget. Call
+// Attachments() first to populate the metadata row.
 func (a *Account) storeAttachmentBytes(ctx context.Context, uid mail.UID, partID string, body []byte) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		newSize := int64(len(body))
@@ -195,9 +186,8 @@ func (a *Account) storeAttachmentBytes(ctx context.Context, uid mail.UID, partID
 	})
 }
 
-// evictAttachmentBytesBySize removes oldest-by-sent-date attachment
-// bytes (clears bytes + fetched_at, keeps the metadata row) until
-// total cached bytes are at or below target.
+// evictAttachmentBytesBySize clears bytes (keeps metadata) on the
+// oldest-by-sent-date rows until total is at or below target.
 func (a *Account) evictAttachmentBytesBySize(ctx context.Context, tx *sql.Tx, total, target int64) (rows int, freed int64, err error) {
 	const batchSize = 32
 	const pickQ = `

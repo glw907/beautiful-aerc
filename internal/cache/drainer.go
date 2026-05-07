@@ -13,14 +13,15 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// drainerConfig governs backoff and retry caps. Defaults match
-// spec §G. The constructor exposes a hook so tests can compress
-// timings.
+// drainerConfig governs backoff and retry caps.
 type drainerConfig struct {
 	BackoffMin  time.Duration
 	BackoffMax  time.Duration
 	MaxAttempts int
-	Idle        time.Duration // poll cadence when no signal arrives
+	// Idle is the fallback poll cadence. drainSignal handles wakes
+	// on QueueOp. The ticker only re-checks failed-row backoff
+	// windows when no signal arrives.
+	Idle time.Duration
 }
 
 func defaultDrainerConfig() drainerConfig {
@@ -28,19 +29,13 @@ func defaultDrainerConfig() drainerConfig {
 		BackoffMin:  1 * time.Second,
 		BackoffMax:  60 * time.Second,
 		MaxAttempts: 10,
-		// drainSignal handles immediate wake on every QueueOp.
-		// The idle ticker exists only so failed-row backoff windows
-		// are re-checked without an external signal. 5s is a
-		// comfortable floor: well under typical backoff windows,
-		// well above what would burn CPU.
-		Idle: 5 * time.Second,
+		Idle:        5 * time.Second,
 	}
 }
 
-// StartDrainer launches the per-account outbox drainer. The
-// goroutine exits when Close is called. Crash-recovered
-// `executing` rows are reset before the loop starts: idempotent
-// kinds go back to pending. Send goes to conflict.
+// StartDrainer launches the per-account outbox drainer. Crash-
+// recovered `executing` rows are reset before the loop starts.
+// The goroutine exits when Close is called.
 func (a *Account) StartDrainer(ctx context.Context) error {
 	if err := a.recoverExecuting(); err != nil {
 		return fmt.Errorf("recover executing: %w", err)
@@ -51,9 +46,9 @@ func (a *Account) StartDrainer(ctx context.Context) error {
 	return nil
 }
 
-// recoverExecuting handles the crash-recovery contract from spec
-// §D.2. Idempotent kinds reset to pending. Non-idempotent ones
-// (send, append) become conflict with crashed-mid-execute.
+// recoverExecuting resets `executing` rows after a crash. Idempotent
+// kinds go back to pending. Non-idempotent kinds (send, append,
+// push-draft) land in conflict with crashed-mid-execute.
 func (a *Account) recoverExecuting() error {
 	if _, err := a.db.Exec(
 		`UPDATE outbox SET status = ? WHERE status = ? AND kind IN (?,?,?)`,
@@ -69,9 +64,6 @@ func (a *Account) recoverExecuting() error {
 	return err
 }
 
-// drainLoop is the single-account drainer goroutine. It blocks on
-// drainSignal or Idle ticks, picks one eligible row at a time, and
-// routes through executeOp.
 func (a *Account) drainLoop(ctx context.Context, cfg drainerConfig) {
 	defer a.wg.Done()
 	ticker := time.NewTicker(cfg.Idle)
@@ -89,8 +81,7 @@ func (a *Account) drainLoop(ctx context.Context, cfg drainerConfig) {
 	}
 }
 
-// drainOnce attempts to clear all eligible rows in a single sweep.
-// It runs until nextOutboxRow returns sql.ErrNoRows.
+// drainOnce clears all eligible rows in a single sweep.
 func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
 	for {
 		if ctx.Err() != nil {
@@ -108,9 +99,9 @@ func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
 	}
 }
 
-// executeOne runs one op against the backend and writes its
-// terminal state. It emits a CacheEvent on every terminal
-// transition (done, conflict, failed→retry not included).
+// executeOne runs one op against the backend and writes its terminal
+// state. CacheEvents fire only on terminal transitions, never on
+// failed→retry.
 func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerConfig) {
 	if err := a.markExecuting(row.ID); err != nil {
 		fmt.Fprintln(stderrLog(), "cache: mark executing:", err)
@@ -137,11 +128,9 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		_ = a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0)
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, mail.ErrNotFound):
-		// Idempotent success per spec §D.4: message already gone.
 		_ = a.finalizeSuccess(ctx, row, args)
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, ErrDraftSuperseded):
-		// PushDraft succeeded server-side. The local row was already gone.
 		_ = a.finalizeSuccess(ctx, row, args)
 		a.publishNote(row, OpDone, "draft superseded by another client")
 	default:
@@ -155,9 +144,9 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 	}
 }
 
-// finalizeSuccess writes the post-success cache mutation: drop
-// junction row for move sources, delete the message row for
-// destroy, sync flags for flag.
+// finalizeSuccess writes the post-success cache mutation: junction
+// row swap for Move, message-row delete for Destroy, flag sync for
+// Flag.
 func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpArgs) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		if !row.MessageID.Valid {
@@ -194,7 +183,6 @@ func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpAr
 	})
 }
 
-// dispatch routes one decoded op to the backend.
 func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
 	uids := []mail.UID{}
 	if row.ProtocolID.Valid && row.ProtocolID.String != "" {
@@ -229,8 +217,7 @@ func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
 	a.emit(ev)
 }
 
-// publishNote is publish + a non-empty Note string for advisory
-// banners (e.g. draft-superseded).
+// publishNote is publish + an advisory banner string.
 func (a *Account) publishNote(row *outboxRow, status OpStatus, note string) {
 	a.emit(CacheEvent{
 		Account: a.name,
@@ -245,8 +232,6 @@ func (a *Account) emit(ev CacheEvent) {
 	select {
 	case a.events <- ev:
 	default:
-		// Buffer full. Record the drop so the UI can detect staleness
-		// and reconcile via a full cache re-read (DroppedEvents).
 		a.droppedEvents.Add(1)
 	}
 }
@@ -298,6 +283,5 @@ func encodeErr(kind string, err error) string {
 	return string(b)
 }
 
-// stderrLog returns the writer for diagnostic logs. Tests reassign
-// it to capture output. Default writes to os.Stderr.
+// stderrLog returns the writer for diagnostic logs. Tests reassign it.
 var stderrLog = func() interface{ Write(p []byte) (int, error) } { return os.Stderr }

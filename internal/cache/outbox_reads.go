@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// OutboxDepth is the per-status count of outbox rows. Feeds the
-// status-bar depth segment.
+// OutboxDepth counts outbox rows by status, feeding the status bar.
 type OutboxDepth struct {
 	Pending   int
 	Executing int
@@ -17,9 +16,9 @@ type OutboxDepth struct {
 	Conflict  int
 }
 
-// OutboxGroup is one row of the Q overlay's grouped summary. One
-// row per (kind, folder, status) tuple. NextAt carries the earliest
-// next_eligible_at within the group, populated only for Failed.
+// OutboxGroup is one row of the Q overlay's grouped summary, keyed
+// by (kind, folder, status). NextAt holds the earliest next_eligible_at
+// within the group and is populated only for Failed rows.
 type OutboxGroup struct {
 	Kind   OpKind
 	Folder string
@@ -28,8 +27,8 @@ type OutboxGroup struct {
 	NextAt sql.NullInt64
 }
 
-// ConflictRow is one row of the ! overlay. ErrorKind/ErrorMessage
-// are decoded from the outbox.error JSON payload.
+// ConflictRow is one row of the ! overlay. ErrorKind and ErrorMessage
+// come from the outbox.error JSON payload.
 type ConflictRow struct {
 	ID           int64
 	Kind         OpKind
@@ -41,8 +40,7 @@ type ConflictRow struct {
 	EnqueuedAt   time.Time
 }
 
-// OutboxDepth returns counts grouped by status. Empty outbox returns
-// the zero value.
+// OutboxDepth returns counts grouped by status.
 func (a *Account) OutboxDepth(ctx context.Context) (OutboxDepth, error) {
 	rows, err := a.db.QueryContext(ctx,
 		`SELECT status, COUNT(*) FROM outbox GROUP BY status`)
@@ -71,12 +69,10 @@ func (a *Account) OutboxDepth(ctx context.Context) (OutboxDepth, error) {
 	return d, rows.Err()
 }
 
-// OutboxSummary returns one OutboxGroup per (kind, folder, status)
-// combination. Result order: status (executing, pending, failed,
-// conflict), then kind ASC, then folder ASC. For move ops Folder is
-// the destination (extracted from args.Dest). For other op kinds the
-// folder column is empty since the UI does not surface a per-row
-// source folder for them.
+// OutboxSummary returns one OutboxGroup per (kind, folder, status),
+// ordered by status (executing, pending, failed, conflict), then
+// kind, then folder. Folder is the Move destination from args.Dest
+// and is empty for other kinds.
 func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {
 	const q = `
         SELECT o.kind,
@@ -116,10 +112,9 @@ func (a *Account) OutboxSummary(ctx context.Context) ([]OutboxGroup, error) {
 	return out, rows.Err()
 }
 
-// OutboxConflicts returns every outbox row in the conflict state,
-// ordered by enqueued_at ASC (oldest grievance first). The error
-// JSON payload (written by encodeErr) is decoded into ErrorKind +
-// ErrorMessage for the UI.
+// OutboxConflicts returns conflict-state rows oldest-first. The
+// outbox.error JSON written by encodeErr is decoded into
+// ErrorKind/ErrorMessage for the UI.
 func (a *Account) OutboxConflicts(ctx context.Context) ([]ConflictRow, error) {
 	const q = `
         SELECT o.id, o.kind, COALESCE(f.name, ''),
@@ -153,7 +148,7 @@ func (a *Account) OutboxConflicts(ctx context.Context) ([]ConflictRow, error) {
 	return out, rows.Err()
 }
 
-// errorPayload is the JSON shape written by encodeErr in drainer.go.
+// errorPayload mirrors the JSON shape encodeErr writes in drainer.go.
 type errorPayload struct {
 	Kind    string `json:"kind"`
 	Message string `json:"message"`

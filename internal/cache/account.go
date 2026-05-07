@@ -20,9 +20,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Account exposes a single account's handle. The UI reads/writes
-// through this type. The backend pointer is held so the syncer
-// and drainer can talk to the protocol layer.
+// Account is a single account's UI-facing read/write handle.
 type Account struct {
 	Backend       mail.Backend
 	ChangeTracker mail.ChangeTracker
@@ -31,24 +29,18 @@ type Account struct {
 	dir  string
 	name string
 
-	// maxSize is the body-cache size cap in bytes. 0 disables. When an insert
-	// would push total over maxSize, evict by messages.sent_at ASC until under cap.
-	maxSize int64
-	// maxAttachmentSize is the attachment-bytes-cache size cap. 0 disables.
+	maxSize           int64
 	maxAttachmentSize int64
 
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
 
-	// Lifecycle handles. The drainer wakes on signal. The syncer
-	// runs per-folder when wired up by the App.
 	drainSignal chan struct{}
 	stop        chan struct{}
 	wg          sync.WaitGroup
 }
 
-// OpStatus is the lifecycle state of an outbox row. Stored as the
-// underlying string in outbox.status and emitted on CacheEvent.Status.
+// OpStatus is the lifecycle state of an outbox row.
 type OpStatus string
 
 const (
@@ -59,8 +51,7 @@ const (
 	OpConflict  OpStatus = "conflict"
 )
 
-// OpKind is the discriminator for OpArgs. The string value is
-// stored in outbox.kind and returned by OpArgs.opKind().
+// OpKind is the discriminator for OpArgs.
 type OpKind string
 
 const (
@@ -72,29 +63,24 @@ const (
 	KindPushDraft OpKind = "push-draft"
 )
 
-// CacheEvent is the drainer→UI signal channel payload. App's
-// pumpCacheCmd ranges (*Account).Events() and re-emits these as
-// tea.Msg.
+// CacheEvent is the drainer→UI signal payload.
 type CacheEvent struct {
 	Account string
 	OpID    int64
 	Kind    OpKind
 	Status  OpStatus
-	Err     string // populated for conflict/failed
-	// Note carries an out-of-band advisory the App should surface as
-	// a one-shot banner. Currently used for draft-superseded events
-	// where the op succeeded server-side but the local row was gone.
-	// See the drainer's KindPushDraft handler.
+	Err     string
+	// Note carries an out-of-band advisory the App surfaces as a
+	// one-shot banner. The current consumer is draft-superseded
+	// events where the server op succeeded but the local row was gone.
 	Note string
 }
 
-// The zero Config disables the size backstops.
+// Config sets the cache size backstops. Zero values disable.
 type Config struct {
-	// MaxSize is the body-cache size cap in bytes. 0 disables.
-	// Default 2GB when populated from [cache] in config.toml.
+	// MaxSize caps the body-cache in bytes. Default 2GB from [cache] in config.toml.
 	MaxSize int64
-	// MaxAttachmentSize is the attachment-bytes-cache size cap in
-	// bytes. 0 disables. Tracked separately from MaxSize.
+	// MaxAttachmentSize caps attachment bytes, tracked separately from MaxSize.
 	MaxAttachmentSize int64
 }
 
@@ -149,10 +135,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// modernc.org/sqlite uses one connection per pragma scope by
-	// default. Cap to a small pool with the same DSN so writers
-	// serialize on a single connection (matches the WAL "one writer,
-	// many readers" pattern).
+	// WAL is one writer, many readers. Keep the pool small so writers serialize.
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(2)
 	if err := applyMigrations(db); err != nil {
@@ -198,10 +181,9 @@ func (a *Account) Dir() string { return a.dir }
 
 func (a *Account) Events() <-chan CacheEvent { return a.events }
 
-// DroppedEvents returns the count of CacheEvents the drainer has
-// dropped because the events buffer was full. When the count
-// advances, do a full cache re-read rather than incremental
-// Event handling.
+// DroppedEvents counts CacheEvents the drainer dropped on a full
+// buffer. A change since the last read means incremental Event
+// handling has lost ground. Re-read the cache instead.
 func (a *Account) DroppedEvents() uint64 { return a.droppedEvents.Load() }
 
 // Close stops background goroutines and closes the database.
@@ -228,8 +210,7 @@ func (a *Account) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
-// signalDrainer wakes the drainer if it's idle. Non-blocking: a
-// pending wake-up coalesces with the new one.
+// signalDrainer wakes the drainer. Pending wakes coalesce.
 func (a *Account) signalDrainer() {
 	select {
 	case a.drainSignal <- struct{}{}:
@@ -237,8 +218,8 @@ func (a *Account) signalDrainer() {
 	}
 }
 
-// Slugify lowercases name and reduces non-[a-z0-9-] runs to a
-// single dash. Leading/trailing dashes are stripped.
+// Slugify lowercases name and replaces non-[a-z0-9-] runs with a
+// single dash. Leading and trailing dashes are stripped.
 func Slugify(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))

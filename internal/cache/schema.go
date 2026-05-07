@@ -5,12 +5,9 @@ import (
 	"fmt"
 )
 
-// schemaVersion is the current schema version. Migrations from any
-// older version up to this one run in order at Open.
 const schemaVersion = 7
 
-// migration applies one schema version step inside a single
-// transaction. Index 0 holds the v0→v1 step.
+// migration applies one schema step inside a transaction. Index 0 is v0→v1.
 type migration func(*sql.Tx) error
 
 var migrations = []migration{
@@ -90,10 +87,8 @@ func migrateV1(tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV2 adds outbox.next_eligible_at so the drainer's pickup
-// query can filter the backoff window in SQL instead of scanning
-// every failed row in Go. NULL = "eligible immediately" (matches
-// the v1 default for fresh inserts).
+// migrateV2 adds outbox.next_eligible_at so the drainer filters the
+// backoff window in SQL. NULL means eligible immediately.
 func migrateV2(tx *sql.Tx) error {
 	stmts := []string{
 		`ALTER TABLE outbox ADD COLUMN next_eligible_at INTEGER`,
@@ -108,11 +103,8 @@ func migrateV2(tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV3 adds backend-reported exists/unseen counts on the
-// folders table. The cache's local count from message_mailboxes is a
-// lower bound (only synced folders have rows). The backend-reported
-// value covers folders the user hasn't opened yet so the sidebar can
-// surface unread badges immediately.
+// migrateV3 adds backend-reported exists/unseen counts so unopened
+// folders can show unread badges before any sync.
 func migrateV3(tx *sql.Tx) error {
 	stmts := []string{
 		`ALTER TABLE folders ADD COLUMN exists_total INTEGER NOT NULL DEFAULT 0`,
@@ -126,10 +118,8 @@ func migrateV3(tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV4 narrows the bodies table to (message, bytes, fetched_at).
-// The lazy-population, no-LRU policy makes last_accessed and its index
-// obsolete. SQLite has supported DROP COLUMN since 3.35 (March 2021);
-// modernc.org/sqlite is past that.
+// migrateV4 drops bodies.last_accessed and its index. The lazy-
+// population, no-LRU policy made them dead weight.
 func migrateV4(tx *sql.Tx) error {
 	stmts := []string{
 		`DROP INDEX IF EXISTS bodies_lru`,
@@ -143,9 +133,7 @@ func migrateV4(tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV5 adds the attachments table. Metadata populates lazily on
-// the first Attachments(uid) call. Bytes populate lazily on the first
-// FetchAttachment(uid, partID), gated by a separate size backstop.
+// migrateV5 adds the attachments table for lazy metadata + bytes.
 func migrateV5(tx *sql.Tx) error {
 	stmts := []string{
 		`CREATE TABLE attachments (
@@ -180,12 +168,10 @@ func migrateV6(tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV7 adds the drafts table. The local row is the high-frequency
-// edit buffer for compose. server_uid points at the JMAP/IMAP image
-// once a PushDraftOp has succeeded. Drafts with server_uid == NULL are
-// local-only (never pushed yet, e.g., offline-created). server_uid and
-// server_folder are paired by a CHECK: both NULL (local-only) or both
-// NOT NULL (pushed).
+// migrateV7 adds the drafts table for compose's local edit buffer.
+// server_uid points at the JMAP/IMAP image once a PushDraftOp has
+// succeeded. The CHECK pairs server_uid and server_folder so a draft
+// is either local-only or fully pushed, never half-and-half.
 func migrateV7(tx *sql.Tx) error {
 	stmts := []string{
 		`CREATE TABLE drafts (
@@ -210,9 +196,9 @@ func migrateV7(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigrations brings db up to schemaVersion. Runs each step in
-// its own transaction so a partial failure leaves a known version on
-// disk.
+// applyMigrations brings db up to schemaVersion. Each step runs in
+// its own transaction so a partial failure leaves a known version
+// on disk.
 func applyMigrations(db *sql.DB) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`); err != nil {
 		return fmt.Errorf("create schema_version: %w", err)

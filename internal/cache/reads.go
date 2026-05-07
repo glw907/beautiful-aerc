@@ -12,11 +12,9 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// ListFolders returns the cache's folder rows joined with the
-// canonical classification (mail.Classify wraps the same alias
-// table the UI sidebar uses) and per-folder Exists/Unseen counts
-// computed from message_mailboxes ⨝ messages. The cache is the
-// source of truth. The syncer keeps it converged with the backend.
+// ListFolders returns folder rows with classification and per-folder
+// Exists/Unseen counts. The cache is the source of truth; the syncer
+// keeps it converged with the backend.
 func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
 	const q = `
         SELECT f.name, f.role, f.exists_total, f.unseen_total,
@@ -46,9 +44,8 @@ func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
 		if role.Valid {
 			f.Role = role.String
 		}
-		// Prefer local counts once any messages are synced. Otherwise
-		// fall back to backend-reported totals stored at SyncFolders
-		// time so unopened folders still show their unread badges.
+		// Local counts win once any messages are synced. Otherwise the
+		// SyncFolders-cached server totals seed unopened-folder badges.
 		if localExists > 0 {
 			f.Exists = localExists
 			if localUnseen.Valid {
@@ -66,9 +63,8 @@ func (a *Account) ListFolders() ([]mail.ClassifiedFolder, error) {
 	return mail.Classify(raw), nil
 }
 
-// QueryFolder returns up to limit messages from folder starting at
-// offset. Sort is sent_at DESC. Rows with ui_hide = 1 are filtered
-// (mid-move source rows).
+// QueryFolder returns up to limit messages from folder, sent_at DESC,
+// from offset. Rows with ui_hide = 1 (mid-move sources) are filtered.
 func (a *Account) QueryFolder(folder string, offset, limit int) ([]mail.MessageInfo, int, error) {
 	folderID, err := a.folderID(folder)
 	if err != nil {
@@ -114,8 +110,7 @@ func (a *Account) QueryFolder(folder string, offset, limit int) ([]mail.MessageI
 	return out, total, nil
 }
 
-// folderRole returns the role string stored for folder, or "" when
-// the row is absent or the role column is NULL.
+// folderRole returns the role for folder, or "" if absent or NULL.
 func (a *Account) folderRole(folder string) (string, error) {
 	var role sql.NullString
 	err := a.db.QueryRow(`SELECT role FROM folders WHERE name = ?`, folder).Scan(&role)
@@ -128,11 +123,10 @@ func (a *Account) folderRole(folder string) (string, error) {
 	return role.String, nil
 }
 
-// draftsAsMessageInfo projects local-only drafts (server_uid = NULL)
-// into the message-list shape with synthetic UIDs "draft:<id>". The
-// App's Enter handler keys off the prefix to route through LoadDraft.
-// Pushed drafts (server_uid != NULL) reach the list via the normal
-// server-message path, so they're excluded here.
+// draftsAsMessageInfo projects local-only drafts as message-list
+// rows with synthetic UIDs "draft:<id>". The App's Enter handler
+// keys off the prefix to route through LoadDraft. Pushed drafts
+// already reach the list via the normal server-message path.
 func (a *Account) draftsAsMessageInfo(ctx context.Context) ([]mail.MessageInfo, error) {
 	rows, err := a.ListDrafts(ctx)
 	if err != nil {
@@ -145,7 +139,6 @@ func (a *Account) draftsAsMessageInfo(ctx context.Context) ([]mail.MessageInfo, 
 		}
 		d, err := compose.DecodeDraft(r.Payload)
 		if err != nil {
-			// Skip undecodable rows. Recoverable via the cache CLI.
 			continue
 		}
 		mi := mail.MessageInfo{
@@ -166,10 +159,9 @@ func (a *Account) draftsAsMessageInfo(ctx context.Context) ([]mail.MessageInfo, 
 	return out, nil
 }
 
-// scanMessageInfo decodes one row of the canonical 12-column SELECT
-// (protocol_id, subject, from, to, cc, bcc, date, sent_at, ui_flags,
-// size, thread_id, in_reply_to). Both QueryFolder and FetchHeaders
-// share this shape.
+// scanMessageInfo decodes one row of the 12-column SELECT shared by
+// QueryFolder and FetchHeaders: protocol_id, subject, from, to, cc,
+// bcc, date, sent_at, ui_flags, size, thread_id, in_reply_to.
 func scanMessageInfo(rows *sql.Rows) (mail.MessageInfo, error) {
 	var (
 		pid, subj, from, to, cc, bcc, date, thread, irt string
@@ -191,10 +183,9 @@ func scanMessageInfo(rows *sql.Rows) (mail.MessageInfo, error) {
 	return mi, nil
 }
 
-// FetchHeaders returns the cached headers for uids. Cache misses
-// fall back to the backend. Results are upserted before returning
-// so the next call hits cache. The returned slice order matches
-// uids. Missing UIDs are silently skipped.
+// FetchHeaders returns cached headers for uids. Misses fetch from
+// the backend and upsert. Result order matches uids. UIDs not found
+// in either layer are skipped.
 func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil
@@ -229,11 +220,8 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 		if err != nil {
 			return nil, fmt.Errorf("backend fetch headers: %w", err)
 		}
-		// folder == "" here is intentional. FetchHeaders is called by
-		// callers that already know the folder context, or that don't
-		// need membership (e.g. viewer-side body prefetch). The
-		// membership row is established by SyncFolder/upsertMessages
-		// when the message first lands in a folder.
+		// Empty folder skips the membership write. Callers that need
+		// it have already paired the message with a folder via SyncFolder.
 		if err := a.upsertMessages(ctx, "", fresh); err != nil {
 			return nil, err
 		}
@@ -250,11 +238,9 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 	return out, nil
 }
 
-// FetchBody returns the body bytes for uid. Cache miss: fetch from
-// backend, store, return. Cache hit: return without a backend
-// round-trip. Store failure is non-fatal. The returned bytes are
-// still valid for the caller. Lazy population, no automatic eviction.
-// The size backstop in storeBody handles cap pressure inline.
+// FetchBody returns body bytes for uid. Cache miss falls through to
+// the backend. On success the body is stored under storeBody's size
+// backstop. Lazy population, no automatic eviction.
 func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 	ctx := context.Background()
 	if buf, ok, err := a.lookupBody(ctx, uid); err != nil {
@@ -270,13 +256,11 @@ func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 		return nil, err
 	}
 	if storeErr := a.storeBody(ctx, uid, body); storeErr != nil {
-		// Store failure is non-fatal. The returned body is valid. The next view re-fetches.
 		_ = storeErr
 	}
 	return body, nil
 }
 
-// folderID resolves a canonical folder name to its row id.
 func (a *Account) folderID(name string) (int64, error) {
 	var id int64
 	err := a.db.QueryRow(`SELECT id FROM folders WHERE name = ?`, name).Scan(&id)
@@ -286,8 +270,8 @@ func (a *Account) folderID(name string) (int64, error) {
 	return id, nil
 }
 
-// upsertMessages inserts or updates header rows and (when folder is
-// non-empty) records membership in message_mailboxes.
+// upsertMessages inserts or updates header rows. A non-empty folder
+// also records membership in message_mailboxes.
 func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail.MessageInfo) error {
 	if len(msgs) == 0 {
 		return nil
@@ -356,7 +340,7 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 	})
 }
 
-// sqlPlaceholders returns "?,?,...,?" with n question marks comma-separated.
+// sqlPlaceholders returns "?,?,...,?" with n question marks.
 func sqlPlaceholders(n int) string {
 	if n <= 0 {
 		return ""
@@ -364,8 +348,8 @@ func sqlPlaceholders(n int) string {
 	return strings.Repeat("?,", n-1) + "?"
 }
 
-// uidsPlaceholders returns "?,?,?" and the matching args slice for
-// UIDs in IN clauses.
+// uidsPlaceholders returns the placeholder string and matching args
+// slice for UIDs in IN clauses.
 func uidsPlaceholders(uids []mail.UID) (string, []any) {
 	if len(uids) == 0 {
 		return "", nil
