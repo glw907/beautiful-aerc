@@ -11,13 +11,9 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// QueryFolder selects the folder to get
-// the total message count, then issues UID SEARCH ALL to obtain every
-// UID, sorts them newest-first (highest UID = most recently arrived),
-// and slices the result according to offset and limit.
-//
-// The lock is held only long enough to snapshot b.cmd. The client call
-// runs without the lock so other goroutines are not blocked.
+// QueryFolder selects the folder, runs UID SEARCH ALL, sorts the
+// returned UIDs newest-first (highest UID), and slices by offset and
+// limit.
 func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, error) {
 	b.mu.Lock()
 	cmd := b.cmd
@@ -33,13 +29,11 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 		return nil, 0, nil
 	}
 
-	// UID SEARCH ALL returns all UIDs in the selected folder.
 	all, err := cmd.Search(mail.SearchCriteria{})
 	if err != nil {
 		return nil, total, fmt.Errorf("search all %q: %w", name, err)
 	}
 
-	// Sort descending: highest UID first (newest-arrived).
 	sort.Slice(all, func(i, j int) bool {
 		return uidGreater(all[i], all[j])
 	})
@@ -54,16 +48,15 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 	return all[offset:end], total, nil
 }
 
-// uidGreater reports a > b as IMAP UIDs (unsigned 32-bit decimals).
-// Sort by UID as a proxy for newest-first when SORT is unavailable.
+// uidGreater compares IMAP UIDs as unsigned 32-bit decimals. Used as
+// the newest-first proxy when SORT is unavailable.
 func uidGreater(a, b mail.UID) bool {
 	ai, _ := strconv.ParseUint(string(a), 10, 32)
 	bi, _ := strconv.ParseUint(string(b), 10, 32)
 	return ai > bi
 }
 
-// fetchItems is the set of FETCH data items requested by FetchHeaders.
-// BODY.PEEK[...] fetches without setting \Seen.
+// fetchItems uses BODY.PEEK[...] so reading headers does not set \Seen.
 var fetchItems = []string{
 	"UID",
 	"ENVELOPE",
@@ -73,9 +66,6 @@ var fetchItems = []string{
 	"BODY.PEEK[HEADER.FIELDS (FROM TO CC BCC SUBJECT DATE IN-REPLY-TO REFERENCES MESSAGE-ID)]",
 }
 
-// FetchHeaders returns immediately for an empty uid list.
-// Otherwise it calls Fetch with the standard header item set and
-// translates each result via infoFromFetch.
 func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	if len(uids) == 0 {
 		return nil, nil
@@ -95,15 +85,13 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	return results, nil
 }
 
-// infoFromFetch translates one FETCH result map into a mail.MessageInfo.
-// items is keyed by lowercase field names. Missing keys produce zero
-// values. InReplyTo is read from the "in-reply-to" field. ThreadID is
-// not determined at fetch time (grouping is a UI concern) and defaults
-// to UID so every standalone message forms a size-1 thread.
+// infoFromFetch translates one FETCH result map (lowercase field
+// keys) into a mail.MessageInfo. Threading is a UI concern, so
+// ThreadID defaults to UID and InReplyTo is read from "in-reply-to".
 func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 	info := mail.MessageInfo{
 		UID:      uid,
-		ThreadID: uid, // fallback: each message is its own thread
+		ThreadID: uid,
 	}
 	if v, ok := items["subject"]; ok {
 		info.Subject, _ = v.(string)
@@ -149,8 +137,7 @@ func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 	return info
 }
 
-// FetchBody returns the raw RFC 822 body for
-// the given UID, drained from the IMAP client's underlying reader.
+// FetchBody returns the raw RFC 822 body for uid.
 func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 	b.mu.Lock()
 	cmd := b.cmd

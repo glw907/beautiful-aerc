@@ -15,20 +15,16 @@ import (
 )
 
 // realClient adapts *imapclient.Client to the imapClient interface.
-// The unilateralHandler field is set around each Idle call;
-// auth.go wires the *imapclient.Client's UnilateralDataHandler to
-// dispatch here so EXPUNGE and FETCH FLAGS updates reach the caller.
+// auth.go wires the UnilateralDataHandler to dispatch here so EXPUNGE
+// and FETCH FLAGS updates reach the active Idle callback.
 type realClient struct {
 	c *imapclient.Client
 
 	mu                sync.Mutex
-	unilateralHandler func(mail.Update) // set during Idle, nil otherwise
+	unilateralHandler func(mail.Update) // set only during Idle
 	idleCmd           *imapclient.IdleCommand
 }
 
-// dispatch is called by the UnilateralDataHandler callbacks registered
-// in auth.go. It forwards the update to whatever Idle callback is
-// currently active.
 func (r *realClient) dispatch(u mail.Update) {
 	r.mu.Lock()
 	fn := r.unilateralHandler
@@ -54,14 +50,10 @@ func mailUIDsToSet(uids []mail.UID) imap.UIDSet {
 	return set
 }
 
-// Logout sends LOGOUT and waits for the server acknowledgement.
 func (r *realClient) Logout() error {
 	return r.c.Logout().Wait()
 }
 
-// Capabilities issues a CAPABILITY command and converts the go-imap v2
-// CapSet (map[imap.Cap]struct{}) to the map[string]bool form the
-// imapClient interface requires.
 func (r *realClient) Capabilities() (map[string]bool, error) {
 	caps, err := r.c.Capability().Wait()
 	if err != nil {
@@ -74,9 +66,8 @@ func (r *realClient) Capabilities() (map[string]bool, error) {
 	return out, nil
 }
 
-// List issues a LIST command. When specialUse is true, LIST RETURN
-// (SPECIAL-USE) is requested so role attributes arrive without a
-// separate STATUS round-trip.
+// List issues LIST. When specialUse is true, LIST RETURN (SPECIAL-USE)
+// fetches role attributes in the same round-trip.
 func (r *realClient) List(_, pattern string, specialUse bool) ([]listEntry, error) {
 	var opts *imap.ListOptions
 	if specialUse {
@@ -106,9 +97,8 @@ func attrsToStrings(attrs []imap.MailboxAttr) []string {
 	return out
 }
 
-// Select selects (or examines) a folder and returns a summary.
-// go-imap v2 SelectData does not carry an Unseen count. Callers that
-// need it issue UID SEARCH UNSEEN separately.
+// Select selects or examines a folder. go-imap v2 SelectData omits
+// Unseen, so callers run UID SEARCH UNSEEN separately.
 func (r *realClient) Select(folder string, readOnly bool) (mail.Folder, error) {
 	data, err := r.c.Select(folder, &imap.SelectOptions{ReadOnly: readOnly}).Wait()
 	if err != nil {
@@ -120,8 +110,7 @@ func (r *realClient) Select(folder string, readOnly bool) (mail.Folder, error) {
 	}, nil
 }
 
-// Search runs UID SEARCH, translating mail.SearchCriteria to go-imap v2's
-// imap.SearchCriteria. An empty criteria matches all messages (ALL).
+// Search runs UID SEARCH. An empty criteria matches ALL.
 func (r *realClient) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
 	data, err := r.c.UIDSearch(translateSearchCriteria(criteria), nil).Wait()
 	if err != nil {
@@ -130,12 +119,10 @@ func (r *realClient) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
 
 	uidSet, ok := data.All.(imap.UIDSet)
 	if !ok {
-		// Should not happen for UID SEARCH. Treat as empty.
 		return nil, nil
 	}
 	nums, ok := uidSet.Nums()
 	if !ok {
-		// Dynamic set (contains "*"): cannot enumerate.
 		return nil, nil
 	}
 	out := make([]mail.UID, len(nums))
@@ -145,7 +132,6 @@ func (r *realClient) Search(criteria mail.SearchCriteria) ([]mail.UID, error) {
 	return out, nil
 }
 
-// translateSearchCriteria converts mail.SearchCriteria to imap.SearchCriteria.
 func translateSearchCriteria(in mail.SearchCriteria) *imap.SearchCriteria {
 	var sc imap.SearchCriteria
 	for k, vals := range in.Header {
@@ -158,10 +144,9 @@ func translateSearchCriteria(in mail.SearchCriteria) *imap.SearchCriteria {
 	return &sc
 }
 
-// Fetch runs UID FETCH for the given UIDs, calling resultFn once per
-// message with a map of the fetched attributes. Item strings use IMAP
-// wire format ("ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE",
-// "UID", and BODY.PEEK[…] variants).
+// Fetch runs UID FETCH and calls resultFn once per message. Item
+// strings use IMAP wire format ("ENVELOPE", "FLAGS", "INTERNALDATE",
+// "RFC822.SIZE", "UID", and BODY.PEEK[...] variants).
 func (r *realClient) Fetch(uids []mail.UID, items []string, resultFn func(mail.UID, map[string]any)) error {
 	if len(uids) == 0 {
 		return nil
@@ -178,14 +163,12 @@ func (r *realClient) Fetch(uids []mail.UID, items []string, resultFn func(mail.U
 	return nil
 }
 
-// buildFetchOptions translates IMAP item name strings into imap.FetchOptions.
 func buildFetchOptions(items []string) *imap.FetchOptions {
 	opts := &imap.FetchOptions{UID: true}
 	for _, item := range items {
 		upper := strings.ToUpper(item)
 		switch {
 		case upper == "UID":
-			// already set
 		case upper == "ENVELOPE":
 			opts.Envelope = true
 		case upper == "FLAGS":
@@ -201,9 +184,8 @@ func buildFetchOptions(items []string) *imap.FetchOptions {
 	return opts
 }
 
-// parseFetchBodySection parses a BODY[…] or BODY.PEEK[…] item string
-// into an imap.FetchItemBodySection. Handles HEADER.FIELDS, HEADER, TEXT,
-// and whole-body (empty bracket) sections.
+// parseFetchBodySection parses BODY[...] or BODY.PEEK[...] item
+// strings. Handles HEADER.FIELDS, HEADER, TEXT, and whole-body.
 func parseFetchBodySection(item string) *imap.FetchItemBodySection {
 	sec := &imap.FetchItemBodySection{Peek: true}
 
@@ -217,7 +199,6 @@ func parseFetchBodySection(item string) *imap.FetchItemBodySection {
 
 	switch {
 	case innerUpper == "":
-		// BODY[]: whole body. Specifier stays PartSpecifierNone
 	case innerUpper == "TEXT":
 		sec.Specifier = imap.PartSpecifierText
 	case innerUpper == "HEADER":
@@ -234,8 +215,8 @@ func parseFetchBodySection(item string) *imap.FetchItemBodySection {
 }
 
 // extractFieldList parses the parenthesised field name list from a
-// HEADER.FIELDS or HEADER.FIELDS.NOT section specifier.
-// Example input: "HEADER.FIELDS (FROM TO CC SUBJECT)"
+// HEADER.FIELDS or HEADER.FIELDS.NOT section specifier (e.g.
+// "HEADER.FIELDS (FROM TO CC SUBJECT)").
 func extractFieldList(s string) []string {
 	open := strings.Index(s, "(")
 	close := strings.LastIndex(s, ")")
@@ -245,8 +226,6 @@ func extractFieldList(s string) []string {
 	return strings.Fields(s[open+1 : close])
 }
 
-// fetchBufToMap converts a FetchMessageBuffer to the map[string]any
-// form consumed by infoFromFetch.
 func fetchBufToMap(buf *imapclient.FetchMessageBuffer) map[string]any {
 	m := make(map[string]any)
 
@@ -278,8 +257,8 @@ func fetchBufToMap(buf *imapclient.FetchMessageBuffer) map[string]any {
 		m["size"] = uint32(buf.RFC822Size)
 	}
 
-	// Merge header fields fetched via BODY[HEADER.FIELDS …] into m;
-	// ENVELOPE data already written above takes priority.
+	// ENVELOPE data already written above takes priority over header
+	// fields fetched via BODY[HEADER.FIELDS ...].
 	for _, bs := range buf.BodySection {
 		if bs.Section != nil && bs.Section.Specifier == imap.PartSpecifierHeader {
 			parseHeaderFields(bs.Bytes, m)
@@ -289,7 +268,6 @@ func fetchBufToMap(buf *imapclient.FetchMessageBuffer) map[string]any {
 	return m
 }
 
-// formatAddresses formats a slice of imap.Address into a display string.
 func formatAddresses(addrs []imap.Address) string {
 	parts := make([]string, 0, len(addrs))
 	for _, a := range addrs {
@@ -302,7 +280,6 @@ func formatAddresses(addrs []imap.Address) string {
 	return strings.Join(parts, ", ")
 }
 
-// imapFlagsToMailFlags maps imap.Flag values to poplar's mail.Flag bitfield.
 func imapFlagsToMailFlags(flags []imap.Flag) mail.Flag {
 	var out mail.Flag
 	for _, f := range flags {
@@ -322,13 +299,10 @@ func imapFlagsToMailFlags(flags []imap.Flag) mail.Flag {
 	return out
 }
 
-// parseHeaderFields parses a raw RFC 5322 header block (bytes from a
-// BODY[HEADER.FIELDS …] fetch) and merges fields into m. Keys already
-// present in m are not overwritten, so ENVELOPE data wins.
-//
-// Folded header lines (RFC 5322 section 2.2.3) are not unfolded here.
-// The values are used for display only and folding whitespace is
-// acceptable in that context.
+// parseHeaderFields parses the raw RFC 5322 header block from a
+// BODY[HEADER.FIELDS ...] fetch and merges fields into m without
+// overwriting (so ENVELOPE wins). Folded continuation lines stay
+// folded. The values are display-only.
 func parseHeaderFields(raw []byte, m map[string]any) {
 	for len(raw) > 0 {
 		idx := bytes.IndexByte(raw, '\n')
@@ -359,7 +333,7 @@ func parseHeaderFields(raw []byte, m map[string]any) {
 func (r *realClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 	opts := &imap.FetchOptions{
 		UID:         true,
-		BodySection: []*imap.FetchItemBodySection{{Peek: true}}, // BODY.PEEK[]
+		BodySection: []*imap.FetchItemBodySection{{Peek: true}},
 	}
 
 	msgs, err := r.c.Fetch(mailUIDsToSet([]mail.UID{uid}), opts).Collect()
@@ -377,9 +351,9 @@ func (r *realClient) FetchBody(uid mail.UID) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(raw)), nil
 }
 
-// Store runs UID STORE. item uses the wire format ("+FLAGS.SILENT",
-// "-FLAGS.SILENT", "FLAGS.SILENT"). value must be []string of IMAP
-// flag literals (e.g. "\\Seen").
+// Store runs UID STORE. item is a wire-format prefix
+// ("+FLAGS.SILENT", "-FLAGS.SILENT", "FLAGS.SILENT") and value must be
+// a []string of IMAP flag literals.
 func (r *realClient) Store(uids []mail.UID, item string, value any) error {
 	if len(uids) == 0 {
 		return nil
@@ -398,7 +372,6 @@ func (r *realClient) Store(uids []mail.UID, item string, value any) error {
 	return r.c.Store(mailUIDsToSet(uids), sf, nil).Close()
 }
 
-// parseStoreFlagsOp maps a STORE item prefix to a StoreFlagsOp value.
 func parseStoreFlagsOp(item string) imap.StoreFlagsOp {
 	switch {
 	case strings.HasPrefix(item, "+"):
@@ -410,7 +383,6 @@ func parseStoreFlagsOp(item string) imap.StoreFlagsOp {
 	}
 }
 
-// toFlagSlice coerces value to []imap.Flag. value must be []string.
 func toFlagSlice(value any) ([]imap.Flag, error) {
 	ss, ok := value.([]string)
 	if !ok {
@@ -423,7 +395,6 @@ func toFlagSlice(value any) ([]imap.Flag, error) {
 	return flags, nil
 }
 
-// Copy runs UID COPY.
 func (r *realClient) Copy(uids []mail.UID, dest string) error {
 	if len(uids) == 0 {
 		return nil
@@ -434,8 +405,8 @@ func (r *realClient) Copy(uids []mail.UID, dest string) error {
 	return nil
 }
 
-// Move runs UID MOVE. go-imap v2 falls back to COPY+STORE+EXPUNGE when
-// the server does not advertise MOVE.
+// Move runs UID MOVE. go-imap v2 falls back to COPY+STORE+EXPUNGE
+// when the server lacks MOVE.
 func (r *realClient) Move(uids []mail.UID, dest string) error {
 	if len(uids) == 0 {
 		return nil
@@ -469,7 +440,6 @@ func (r *realClient) Append(folder string, mime []byte, flags []string) (mail.UI
 	return imapUID(data.UID), nil
 }
 
-// UIDExpunge runs UID EXPUNGE (UIDPLUS / IMAP4rev2).
 func (r *realClient) UIDExpunge(uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
@@ -478,9 +448,8 @@ func (r *realClient) UIDExpunge(uids []mail.UID) error {
 }
 
 // Idle starts IDLE and blocks until IdleStop is called or the server
-// disconnects. Unilateral updates (EXISTS → UpdateNewMail, EXPUNGE →
-// UpdateExpunge, FETCH FLAGS → UpdateFlagsChanged) are forwarded to
-// onUpdate via the UnilateralDataHandler wired in auth.go.
+// disconnects. Unilateral updates flow to onUpdate via the
+// UnilateralDataHandler wired in auth.go.
 func (r *realClient) Idle(onUpdate func(mail.Update)) error {
 	r.mu.Lock()
 	r.unilateralHandler = onUpdate
@@ -511,7 +480,6 @@ func (r *realClient) Idle(onUpdate func(mail.Update)) error {
 	return nil
 }
 
-// IdleStop sends DONE to stop the running IDLE command.
 func (r *realClient) IdleStop() {
 	r.mu.Lock()
 	cmd := r.idleCmd
@@ -522,7 +490,8 @@ func (r *realClient) IdleStop() {
 	}
 }
 
-// Extended structure is requested so Disposition and filename params populate.
+// FetchBodyStructure requests the extended form so Disposition and
+// filename params populate.
 func (r *realClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
 	opts := &imap.FetchOptions{
 		UID:           true,
@@ -544,9 +513,9 @@ func (r *realClient) FetchBodyStructure(uid mail.UID) (BodyStructure, error) {
 	return convertBodyStructure(msgs[0].BodyStructure, nil), nil
 }
 
-// convertBodyStructure recursively converts an imap.BodyStructure (go-imap
-// v2 type) to the protocol-agnostic BodyStructure. path is the integer
-// path from the Walk tree. nil means multipart root.
+// convertBodyStructure walks the go-imap v2 tree into the protocol-
+// agnostic BodyStructure. path is the integer path (nil = multipart
+// root).
 func convertBodyStructure(bs imap.BodyStructure, path []int) BodyStructure {
 	sec := sectionString(path)
 	disp := ""
@@ -587,7 +556,8 @@ func convertBodyStructure(bs imap.BodyStructure, path []int) BodyStructure {
 	return BodyStructure{Section: sec}
 }
 
-// section is the dot-joined path (e.g. "2", "2.1"). Fetched as BODY.PEEK[<section>].
+// FetchBodyPart fetches BODY.PEEK[section] where section is a
+// dot-joined IMAP part path ("2", "2.1").
 func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error) {
 	parts, err := parseSectionPath(section)
 	if err != nil {
@@ -619,8 +589,6 @@ func (r *realClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error)
 	return raw, nil
 }
 
-// parseSectionPath converts a dot-joined section string ("2.1") to the
-// []int slice expected by imap.FetchItemBodySection.Part.
 func parseSectionPath(section string) ([]int, error) {
 	if section == "" {
 		return nil, nil

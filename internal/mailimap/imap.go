@@ -23,22 +23,20 @@ type Backend struct {
 	cfg config.AccountConfig
 
 	mu       sync.Mutex
-	cmd      imapClient // command connection (nil before Connect)
-	idle     imapClient // idle connection
-	smtp     smtpClient // submission connection, lazily dialed on first Send
+	cmd      imapClient // command connection, nil before Connect
+	idle     imapClient
+	smtp     smtpClient // dialed lazily on first Send
 	caps     capSet
-	current  string // currently-selected folder on cmd
-	trash    string // resolved Trash folder name, empty before first Delete
-	password string // cached PasswordCmd result, empty when cfg.Password is inline
+	current  string // selected folder on cmd
+	trash    string // resolved on first Delete
+	password string // cached PasswordCmd result
 	updates  chan mail.Update
 
 	idleCancel context.CancelFunc
 	idleDone   chan struct{}
-	switchCh   chan string // folder-switch signal to idle goroutine
+	switchCh   chan string
 }
 
-// capSet records the capabilities advertised by the server. UIDPLUS
-// is required and Connect refuses to proceed without it.
 type capSet struct {
 	UIDPLUS    bool
 	MOVE       bool
@@ -46,7 +44,6 @@ type capSet struct {
 	SpecialUse bool
 }
 
-// New constructs an unconnected Backend for cfg.
 func New(cfg config.AccountConfig) *Backend {
 	return &Backend{cfg: cfg}
 }
@@ -70,17 +67,15 @@ func (b *Backend) AccountEmail() string {
 
 func (b *Backend) IsJMAP() bool { return false }
 
-// Updates returns a nil channel before
-// Connect succeeds.
+// Updates returns a nil channel before Connect succeeds.
 func (b *Backend) Updates() <-chan mail.Update { return b.updates }
 
 const updatesBuffer = 64
 
-// Connect resolves the password (running
-// PasswordCmd if needed, caching the result), dials both connections,
-// authenticates, negotiates capabilities, and starts the idle goroutine.
-// The dial happens in auth.go. Tests bypass by setting b.cmd / b.idle
-// directly and calling finishConnect.
+// Connect resolves the password, dials both connections, authenticates,
+// negotiates capabilities, and starts the idle goroutine. UIDPLUS is
+// required. Tests bypass by setting b.cmd / b.idle directly and
+// calling finishConnect.
 func (b *Backend) Connect(ctx context.Context) error {
 	pw, err := b.resolvedPassword()
 	if err != nil {
@@ -103,9 +98,8 @@ func (b *Backend) Connect(ctx context.Context) error {
 	return b.finishConnect(ctx)
 }
 
-// finishConnect runs the post-dial bringup: capability negotiation,
-// channel setup, idle-goroutine spawn. Split out so unit tests can
-// drive it with fakes.
+// finishConnect runs the post-dial bringup. Split out so unit tests
+// can drive it with fakes.
 func (b *Backend) finishConnect(ctx context.Context) error {
 	caps, err := b.cmd.Capabilities()
 	if err != nil {
@@ -118,7 +112,7 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 		SpecialUse: caps["SPECIAL-USE"],
 	}
 	if !cs.UIDPLUS {
-		return errors.New("server does not advertise UIDPLUS — required for safe deletion")
+		return errors.New("server does not advertise UIDPLUS, required for safe deletion")
 	}
 	if b.cfg.GmailQuirks && !caps["X-GM-EXT-1"] {
 		return errors.New("gmail account but server does not advertise X-GM-EXT-1")
@@ -140,8 +134,8 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 	return nil
 }
 
-// Disconnect tears down the idle goroutine
-// then logs out both connections. Returns the first non-nil error.
+// Disconnect tears down the idle goroutine then logs out both
+// connections. Returns the first non-nil error.
 func (b *Backend) Disconnect() error {
 	b.mu.Lock()
 	cancel := b.idleCancel
@@ -177,6 +171,3 @@ func (b *Backend) Disconnect() error {
 	}
 	return firstErr
 }
-
-// idleLoop, runIdleSession, pollLoop, and emit are implemented in
-// idle.go.

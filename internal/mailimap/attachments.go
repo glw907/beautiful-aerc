@@ -7,10 +7,9 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Attachments issues UID FETCH BODYSTRUCTURE
-// for uid, walks the part tree, and returns the non-body parts.
-// Top-level text/plain and text/html parts are dropped (they are
-// the displayable body, not attachments).
+// Attachments runs UID FETCH BODYSTRUCTURE on uid and walks the part
+// tree. Top-level text/plain and text/html parts are dropped because
+// they are the displayable body.
 func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
 	b.mu.Lock()
 	cmd := b.cmd
@@ -23,10 +22,9 @@ func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
 	return walkBodyStructure(bs), nil
 }
 
-// walkBodyStructure flattens bs to leaves, applying the Q1
-// classification rule. Direct children of the outermost multipart
-// that are text/plain or text/html are skipped (displayable body).
-// Parts nested inside inner multiparts are never suppressed.
+// walkBodyStructure flattens bs to leaves. Direct children of the
+// outermost multipart that are text/plain or text/html are dropped
+// as displayable body. Parts nested deeper are never suppressed.
 func walkBodyStructure(bs BodyStructure) []mail.Attachment {
 	if len(bs.Children) > 0 {
 		var out []mail.Attachment
@@ -39,8 +37,7 @@ func walkBodyStructure(bs BodyStructure) []mail.Attachment {
 }
 
 // walkPart processes one part. isTopLevel is true only for direct
-// children of the outermost multipart. Inner multipart children
-// always receive false.
+// children of the outermost multipart.
 func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 	if len(bs.Children) > 0 {
 		var out []mail.Attachment
@@ -63,10 +60,9 @@ func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 	}}
 }
 
-// FetchAttachment issues UID FETCH BODY[<part>]
-// and returns the decoded bytes. The transfer encoding (base64,
-// quoted-printable) is decoded by the go-imap client adapter.
-// Returns raw decoded bytes ready to write to disk.
+// FetchAttachment runs UID FETCH BODY[partID] and returns the
+// decoded bytes. The go-imap adapter handles base64 and
+// quoted-printable transfer encoding.
 func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
 	b.mu.Lock()
 	cmd := b.cmd

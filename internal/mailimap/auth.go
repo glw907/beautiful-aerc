@@ -24,9 +24,9 @@ const (
 	keepAliveProbes   = 3
 )
 
-// dial opens one IMAP connection for the given role ("command" or "idle").
-// It applies TCP keepalives, performs TLS or STARTTLS, then authenticates.
-// pw is the resolved cleartext password / bearer token.
+// dial opens one IMAP connection for role ("command" or "idle"),
+// applies keepalives, performs TLS or STARTTLS, then authenticates
+// with pw (resolved cleartext password or bearer token).
 func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) {
 	if cfg.Host == "" {
 		return nil, errors.New("imap: host is required")
@@ -46,22 +46,21 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 	// Pre-allocate the realClient so its dispatch method can be wired
 	// into the UnilateralDataHandler before the imapclient.Client is
 	// constructed. The c field is set once the client is ready.
+	// Pre-allocate so dispatch can wire into UnilateralDataHandler
+	// before c is set.
 	rc := &realClient{}
 
 	opts := &imapclient.Options{
 		TLSConfig: tlsCfg,
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
-			// EXISTS increase: signal new mail arrived.
 			Mailbox: func(data *imapclient.UnilateralDataMailbox) {
 				if data.NumMessages != nil {
 					rc.dispatch(mail.Update{Type: mail.UpdateNewMail})
 				}
 			},
-			// EXPUNGE: a message was removed.
 			Expunge: func(_ uint32) {
 				rc.dispatch(mail.Update{Type: mail.UpdateExpunge})
 			},
-			// Unilateral FETCH FLAGS: flags changed on one message.
 			Fetch: func(msg *imapclient.FetchMessageData) {
 				buf, _ := msg.Collect()
 				if buf == nil {
@@ -81,13 +80,11 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 
 	var cli *imapclient.Client
 	if cfg.StartTLS {
-		// Plain TCP then STARTTLS upgrade via imapclient.NewStartTLS.
 		cli, err = imapclient.NewStartTLS(raw, opts)
 		if err != nil {
 			return nil, fmt.Errorf("starttls %s (%s): %w", addr, role, err)
 		}
 	} else {
-		// Implicit TLS: wrap raw connection with TLS before handing to imapclient.
 		tlsConn := tls.Client(raw, tlsCfg)
 		if err := tlsConn.Handshake(); err != nil {
 			_ = raw.Close()
@@ -108,9 +105,8 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 	return rc, nil
 }
 
-// dialRawTCP opens a TCP connection with the dial timeout and OS-level
-// keepalive applied, then tunes kernel keepalive probes/intervals on
-// the resulting *net.TCPConn. The caller layers TLS or STARTTLS on top.
+// dialRawTCP opens a TCP connection with dial timeout and keepalive
+// tuning applied. Callers layer TLS or STARTTLS on top.
 func dialRawTCP(addr string) (net.Conn, error) {
 	d := &net.Dialer{
 		Timeout:   dialTimeout,
@@ -126,9 +122,9 @@ func dialRawTCP(addr string) (net.Conn, error) {
 	return raw, nil
 }
 
-// applyKeepalive tunes kernel TCP keepalive probes and interval on c.
-// Failures are silently ignored. The OS-level KeepAlive on the Dialer
-// already provides basic keepalive. The syscall tuning is advisory.
+// applyKeepalive tunes kernel TCP keepalive probes and interval. The
+// Dialer's KeepAlive already provides basic keepalive. Syscall tuning
+// is advisory and failures are silently ignored.
 func applyKeepalive(c *net.TCPConn) {
 	_ = c.SetKeepAlive(true)
 	f, err := c.File()
@@ -141,15 +137,10 @@ func applyKeepalive(c *net.TCPConn) {
 	_ = keepalive.SetTcpKeepaliveInterval(fd, keepAliveInterval)
 }
 
-// resolvedPassword returns the cached password for b, resolving it on
-// the first call. The cached value is stored under b.mu so reconnects
-// within the session reuse the same credential without re-running the cmd.
-//
-// XOAUTH2 access tokens are short-lived (~1h on Gmail). For
-// cfg.Auth == "xoauth2", the cache is bypassed: every dial re-runs
-// password-cmd to fetch a current token. Internal refresh against
-// the provider's token endpoint will land with the first-run wizard
-// (Pass 9.6).
+// resolvedPassword returns the cached password, resolving on first
+// call so reconnects reuse the credential without re-running
+// password-cmd. XOAUTH2 access tokens bypass the cache: every dial
+// re-runs password-cmd because tokens are short-lived (~1h on Gmail).
 func (b *Backend) resolvedPassword() (string, error) {
 	if b.cfg.Auth == "xoauth2" {
 		return b.cfg.ResolvePassword()
@@ -170,9 +161,8 @@ func (b *Backend) resolvedPassword() (string, error) {
 	return pw, nil
 }
 
-// authenticate runs the SASL exchange specified by cfg.Auth.
-// pw is the resolved cleartext password / bearer token.
-// Supported mechanisms: plain (default), login, cram-md5, xoauth2.
+// authenticate runs the SASL exchange named by cfg.Auth. Supported
+// mechanisms: plain (default), login, cram-md5, xoauth2.
 func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) error {
 	mech := cfg.Auth
 	if mech == "" {
@@ -196,9 +186,8 @@ func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) e
 	}
 }
 
-// looksSelfHosted reports whether host is RFC 1918, IPv6 ULA,
-// .local, or 127.x. It gates the "set insecure-tls = true" hint on
-// TLS errors.
+// looksSelfHosted gates the "set insecure-tls = true" TLS-error hint
+// to RFC 1918, IPv6 ULA, .local, and loopback.
 func looksSelfHosted(host string) bool {
 	if strings.HasSuffix(host, ".local") {
 		return true

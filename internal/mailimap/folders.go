@@ -7,11 +7,9 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// ListFolders uses LIST RETURN (SPECIAL-USE)
-// when the server advertises it. It falls back to plain LIST otherwise.
-// The role is derived from RFC 6154 attributes when present. The
-// classifier (mail.Classify) handles name-based fallback at the UI
-// layer.
+// ListFolders uses LIST RETURN (SPECIAL-USE) when advertised, plain
+// LIST otherwise. Role comes from RFC 6154 attributes. mail.Classify
+// handles name-based fallback at the UI layer.
 func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	b.mu.Lock()
 	cmd := b.cmd
@@ -23,17 +21,16 @@ func (b *Backend) ListFolders() ([]mail.Folder, error) {
 		return nil, fmt.Errorf("list: %w", classifyErr(err))
 	}
 
+	// Exists/Unseen stay zero; OpenFolder returns fresh counts.
 	out := make([]mail.Folder, 0, len(entries))
 	for _, e := range entries {
-		// Exists/Unseen left at zero; OpenFolder/Select returns fresh counts.
 		out = append(out, mail.Folder{Name: e.Name, Role: roleFromAttrs(e.Attributes)})
 	}
 	return out, nil
 }
 
-// roleFromAttrs maps RFC 6154 LIST attributes to mail.Folder.Role
-// values used by mail.Classify ("inbox", "drafts", "sent", "trash",
-// "junk", "archive"). Unknown attributes return "".
+// roleFromAttrs maps RFC 6154 LIST attributes to the role values used
+// by mail.Classify. Unknown or non-canonical attributes return "".
 func roleFromAttrs(attrs []string) string {
 	for _, a := range attrs {
 		switch strings.ToLower(strings.TrimPrefix(a, "\\")) {
@@ -47,16 +44,13 @@ func roleFromAttrs(attrs []string) string {
 			return "junk"
 		case "archive", "all":
 			return "archive"
-		case "important", "flagged":
-			// Not currently surfaced as a canonical role.
 		}
 	}
 	return ""
 }
 
-// OpenFolder selects the folder on the
-// command connection and signals the idle goroutine to re-IDLE on
-// the new folder.
+// OpenFolder selects on the command connection and signals the idle
+// goroutine to re-IDLE on the new folder.
 func (b *Backend) OpenFolder(name string) error {
 	b.mu.Lock()
 	cmd := b.cmd
@@ -72,7 +66,7 @@ func (b *Backend) OpenFolder(name string) error {
 	b.mu.Unlock()
 
 	if switchCh != nil {
-		// Non-blocking: drop earlier pending switches.
+		// Drop any earlier pending switch so only the latest wins.
 		select {
 		case <-switchCh:
 		default:

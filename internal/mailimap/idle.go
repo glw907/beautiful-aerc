@@ -15,9 +15,9 @@ const (
 	reconnectMax         = 30 * time.Second
 )
 
-// idleLoop runs until ctx is cancelled. It selects the current
-// folder on the idle connection, runs IDLE (or poll fallback),
-// honors folder-switch signals from OpenFolder, and reconnects
+// idleLoop runs until ctx is cancelled, selecting the current folder
+// on the idle connection, running IDLE (or the poll fallback),
+// honoring folder-switch signals from OpenFolder, and reconnecting
 // with exponential backoff on failure.
 func (b *Backend) idleLoop(ctx context.Context) {
 	defer close(b.idleDone)
@@ -45,10 +45,9 @@ func (b *Backend) idleLoop(ctx context.Context) {
 	}
 }
 
-// runIdleSession selects the current folder on the idle connection,
-// runs IDLE (or poll), and listens for folder-switch signals. It
-// returns nil on clean refresh-cycle completion (caller re-loops),
-// or an error on connection failure.
+// runIdleSession selects the current folder, runs IDLE or poll, and
+// listens for folder-switch signals. Returns nil on clean refresh-
+// cycle completion (caller re-loops) or an error on connection failure.
 func (b *Backend) runIdleSession(ctx context.Context) error {
 	b.mu.Lock()
 	idle := b.idle
@@ -99,7 +98,7 @@ func (b *Backend) runIdleSession(ctx context.Context) error {
 			if err := <-idleErrCh; err != nil {
 				return err
 			}
-			return nil // re-enter loop, fresh IDLE
+			return nil
 		case f := <-switchCh:
 			idle.IdleStop()
 			if err := <-idleErrCh; err != nil {
@@ -108,15 +107,15 @@ func (b *Backend) runIdleSession(ctx context.Context) error {
 			b.mu.Lock()
 			b.current = f
 			b.mu.Unlock()
-			return nil // re-enter loop with new folder
+			return nil
 		case err := <-idleErrCh:
 			return err
 		}
 	}
 }
 
-// pollLoop runs when the server lacks IDLE. STATUS every 60s and
-// emit UpdateFolderInfo on change. Honors folder-switch signals.
+// pollLoop is the IDLE-less fallback. UpdateFolderInfo fires every
+// pollFallbackInterval. The UI re-fetches on receipt.
 func (b *Backend) pollLoop(ctx context.Context, folder string, switchCh chan string) error {
 	t := time.NewTicker(pollFallbackInterval)
 	defer t.Stop()
@@ -130,13 +129,12 @@ func (b *Backend) pollLoop(ctx context.Context, folder string, switchCh chan str
 			b.mu.Unlock()
 			return nil
 		case <-t.C:
-			// Fire UpdateFolderInfo unconditionally. UI re-fetches on receipt.
 			b.emit(mail.Update{Type: mail.UpdateFolderInfo, Folder: folder})
 		}
 	}
 }
 
-// emit sends u to the updates channel, dropping if buffer is full.
+// emit drops u when the buffer is full.
 func (b *Backend) emit(u mail.Update) {
 	b.mu.Lock()
 	ch := b.updates

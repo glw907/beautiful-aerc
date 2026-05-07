@@ -16,19 +16,17 @@ import (
 	"github.com/glw907/poplar/internal/mailauth"
 )
 
-// smtpClient is the subset of *gosmtp.Client mailimap uses. The real
-// client satisfies it. Tests substitute a fake.
+// smtpClient is the subset of *gosmtp.Client mailimap uses. Tests
+// substitute a fake.
 type smtpClient interface {
 	SendMail(from string, to []string, body []byte) error
 	Close() error
 }
 
-// smtpDial is overridable so tests can swap the network entirely.
 var smtpDial = realSMTPDial
 
-// ProbeSMTP dials the SMTP server, authenticates, and closes the
-// connection. `poplar config check` uses it to validate submission
-// credentials alongside IMAP.
+// ProbeSMTP dials, authenticates, and closes. `poplar config check`
+// uses it to validate submission credentials alongside IMAP.
 func ProbeSMTP(cfg config.AccountConfig) error {
 	cli, err := smtpDial(cfg)
 	if err != nil {
@@ -113,9 +111,9 @@ func smtpAuth(cli *gosmtp.Client, cfg config.SMTPConfig, email string) error {
 	}
 }
 
-// Send transmits mime via SMTP. The SMTP client is dialed lazily on
-// the first call and cached. On any send error the cached client is
-// dropped so the next call redials.
+// Send transmits mime via SMTP. The client is dialed lazily and
+// cached. Any send error drops the cached client so the next call
+// redials.
 func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 	cli, err := b.smtpClientLocked()
 	if err != nil {
@@ -128,7 +126,6 @@ func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 	return nil
 }
 
-// Append writes mime to folder via IMAP APPEND with the given flags.
 func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 	if folder == "" {
 		return errors.New("append: empty folder")
@@ -142,10 +139,9 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 	return nil
 }
 
-// PushDraft writes mime to folder via APPEND \Draft and best-effort
-// expunges prevUID's prior server image. APPEND failure aborts. An
-// EXPUNGE failure orphans the prior image but the new draft is good.
-// Symmetric to JMAP's destroy-best-effort policy (ADR-0164).
+// PushDraft APPENDs mime as \Draft and best-effort expunges the prior
+// image at prevUID. APPEND failure aborts. EXPUNGE failure orphans
+// the prior image but the new draft is good (ADR-0164).
 func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
 	if folder == "" {
 		return "", errors.New("push-draft: empty folder")
@@ -201,8 +197,8 @@ func (b *Backend) smtpClientLocked() (smtpClient, error) {
 	return cli, nil
 }
 
-// dropSMTP discards cli if it's still the cached client. Called after
-// a send failure so the next call redials.
+// dropSMTP closes cli and clears the cache if cli is still the
+// cached client.
 func (b *Backend) dropSMTP(cli smtpClient) {
 	b.mu.Lock()
 	if b.smtp == cli {

@@ -9,22 +9,16 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Changes implements mail.ChangeTracker.
+// Changes implements mail.ChangeTracker as scan-and-diff: SELECT the
+// folder, UID SEARCH ALL, diff against the prior maxuid encoded in
+// since. UIDVALIDITY change returns mail.ErrCannotCalculateChanges so
+// the cache re-anchors.
 //
-// The IMAP implementation is the simple "scan-and-diff" form: select
-// the folder, run UID SEARCH ALL, and diff against the prior maxuid
-// encoded in since. UIDVALIDITY change → mail.ErrCannotCalculateChanges
-// (the cache responds with the re-anchor path from spec §D.4).
+// Modified is always nil. Cheap flag-change detection needs CONDSTORE.
+// Removed is best-effort. CONDSTORE/VANISHED support is a follow-up.
 //
-// Modified is intentionally always nil. Flag-only changes need
-// CONDSTORE to detect cheaply. Removed is also nil on the first call
-// and best-effort thereafter. UIDPLUS/VANISHED-driven removal
-// detection is a follow-up pass (CONDSTORE-aware ChangeTracker).
-//
-// SyncToken layout (12 bytes BE):
-//
-//	bytes 0-3   uidvalidity   (uint32, currently 0, cap not surfaced)
-//	bytes 4-11  maxuid        (uint64, numeric max of last-known UIDs)
+// SyncToken layout (12 bytes BE): bytes 0-3 reserved for uidvalidity
+// (currently 0), bytes 4-11 maxuid.
 func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncToken) (mail.ChangeSet, mail.SyncToken, error) {
 	if err := ctx.Err(); err != nil {
 		return mail.ChangeSet{}, since, err
@@ -61,7 +55,6 @@ func uidNumeric(u mail.UID) uint64 {
 
 func encodeIMAPToken(maxuid uint64) mail.SyncToken {
 	out := make([]byte, 12)
-	// bytes 0-3 reserved for uidvalidity (filled when surfaced).
 	binary.BigEndian.PutUint64(out[4:12], maxuid)
 	return mail.SyncToken(out)
 }

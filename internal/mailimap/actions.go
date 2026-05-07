@@ -7,11 +7,10 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Move uses UID MOVE (RFC 6851) when the
-// server advertises MOVE. It falls back to COPY + STORE \Deleted +
-// UID EXPUNGE otherwise. The fallback is a single logical
-// operation. Partial failure leaves the source folder in a known
-// state by surfacing the error before the EXPUNGE fires.
+// Move uses UID MOVE (RFC 6851) when the server advertises MOVE,
+// otherwise COPY + STORE \Deleted + UID EXPUNGE. Partial failure of
+// the fallback surfaces before EXPUNGE fires, so the source folder
+// stays in a known state.
 func (b *Backend) Move(uids []mail.UID, dest string) error {
 	if len(uids) == 0 {
 		return nil
@@ -40,8 +39,7 @@ func (b *Backend) Move(uids []mail.UID, dest string) error {
 }
 
 // resolveTrashFolder returns the server-side name of the Trash folder,
-// caching the result on the Backend so repeated Deletes don't re-LIST.
-// Returns an error if no folder with Canonical == "Trash" is found.
+// caching the result so repeated Deletes don't re-LIST.
 func (b *Backend) resolveTrashFolder() (string, error) {
 	b.mu.Lock()
 	cached := b.trash
@@ -64,17 +62,13 @@ func (b *Backend) resolveTrashFolder() (string, error) {
 	return "", errors.New("no Trash folder")
 }
 
-// Destroy permanently deletes via STORE \Deleted
-// then UID EXPUNGE. Per ADR-0092: empty input is a no-op, the
-// operation is irreversible, missing UIDs are treated as success
-// (the server silently ignores them).
+// Destroy permanently deletes via STORE \Deleted then UID EXPUNGE
+// (ADR-0092). Missing UIDs are silent successes.
 //
-// On Gmail (b.cfg.GmailQuirks), EXPUNGE outside [Gmail]/Trash only
-// removes labels. It does not delete. Destroy on a Gmail backend
-// therefore selects [Gmail]/Trash before STORE+EXPUNGE. The caller
-// must pass UIDs that already live in Trash. Both real callers
-// (manual Empty Trash per ADR-0094, retention sweep per ADR-0093)
-// satisfy this because they only trigger inside Disposal folders.
+// On Gmail, EXPUNGE outside [Gmail]/Trash only removes labels, so
+// Destroy selects [Gmail]/Trash first. The caller must pass UIDs that
+// already live in Trash, which both Empty Trash and the retention
+// sweep do.
 func (b *Backend) Destroy(uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
@@ -103,8 +97,8 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	return nil
 }
 
-// Flag item is +FLAGS.SILENT when set is true,
-// -FLAGS.SILENT otherwise. Unknown flag bits are silently ignored.
+// Flag uses +FLAGS.SILENT when set is true, -FLAGS.SILENT otherwise.
+// Unknown flag bits are silently ignored.
 func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 	if len(uids) == 0 {
 		return nil
@@ -127,7 +121,6 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 	return nil
 }
 
-// imapFlagsFor maps mail.Flag bits to IMAP system flag strings.
 func imapFlagsFor(f mail.Flag) []string {
 	var out []string
 	if f&mail.FlagSeen != 0 {
