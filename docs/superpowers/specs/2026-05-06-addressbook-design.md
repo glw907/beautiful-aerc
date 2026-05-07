@@ -10,9 +10,10 @@ Poplar grows a built-in address book — a streamlined digital
 rolodex backed by SQLite, syncing read-and-write to CardDAV,
 reachable from compose autocomplete, the mail viewer (`i`-popover
 on a focused message), and a dedicated Contacts mode (`C` from the
-account view). Five stored fields per contact: name, optional
-org/title, multi-email with labels, multi-phone with labels,
-optional note. No addresses, URLs, birthdays, photos, IM handles,
+account view). A small, fixed field set: structured name
+(first/last), optional org/title, multi-email with labels,
+multi-phone with labels, optional note, plus a Person/Business
+kind toggle. No addresses, URLs, birthdays, photos, IM handles,
 PGP keys. The card you'd actually keep on a desk, not the HR
 record.
 
@@ -45,10 +46,12 @@ Contacts mode browse to real data. `poplar contacts
 import/export/list` CLI.
 
 **Pass 9.3 — Edit + CardDAV write.** Wire the contact form's save
-paths. CardDAV PUT with ETag conflict handling. New
-`KindContactPush` outbox op (mirrors `KindPushDraft` shape from
-9h.6). Conflict surface: ETag mismatch on PUT routes through the
-existing conflict overlay (`!`).
+paths. Wire `D` (delete cursor) in Contacts mode with ConfirmModal
+gate. CardDAV PUT with ETag conflict handling and CardDAV DELETE
+for removals. New `KindContactPush` and `KindContactDelete` outbox
+ops (mirror `KindPushDraft` shape from 9h.6). Conflict surface:
+ETag mismatch on PUT routes through the existing conflict overlay
+(`!`).
 
 ### Out (deferred to 1.x or never)
 
@@ -86,8 +89,8 @@ brainstorm:
 | `given` | first-name sort key | First field (Person only) | `N` given component |
 | `org` | second line, after title | Org field (Person only) | `ORG` |
 | `title` | second line, before org | Title field (Person only) | `TITLE` |
-| `emails[]` + label + position | one line each (`label, primary`) | Repeating rows | `EMAIL` + `TYPE` + `PREF` |
-| `phones[]` + label + position | one line each (`label, primary`) | Repeating rows | `TEL` + `TYPE` + `PREF` |
+| `emails[]` + label | one line each (`label, primary`) | Repeating rows | `EMAIL` + `TYPE` + `PREF` |
+| `phones[]` + label | one line each (`label, primary`) | Repeating rows | `TEL` + `TYPE` + `PREF` |
 | `note` | bottom block, under separator | Multi-line textarea | `NOTE` |
 
 `kind` enum: `'individual'` (default) | `'org'`. vCard `KIND:org`
@@ -196,8 +199,11 @@ header-cache`. Dedup on `emails.normalized`.
 from the re-import batch are *not* deleted (supports importing
 multiple .vcf files independently). `poplar contacts purge
 --source=file` clears the file source explicitly when the user
-wants a full reset. Export emits all `source='file'` contacts to
-a single vCard file.
+wants a full reset. vCards lacking a `UID` field get a synthetic
+UUIDv4 assigned at import time (stored in `external_id`); the
+generated UUID is also written back into the in-memory `Card`
+before re-export so the round-trip stabilizes. Export emits all
+`source='file'` contacts to a single vCard file.
 
 **`carddav`** — Per-account. Configured under `[[account.contacts]]`
 sub-table on each `[[account]]` (mirrors `[account.smtp]` from
@@ -241,11 +247,11 @@ Dim `· {org}` suffix only when `org` is set and `kind='individual'`.
 Org rows render the org name as the primary visible text already
 (`name` IS the org), so no suffix.
 
-Accept rewrites the textinput to `Name <email>, ` and bumps
-header-cache `seen_at` (when the matched row is `source='header-
-cache'`). The `seen_at` bump biases future ranking toward
-recently-used addresses without exposing a separate frequency
-field in the UI.
+Accept rewrites the textinput to `Name <email>, `. v1 ranks
+results lexicographically by name (then email) — no recency or
+frequency weighting. Use-tracking columns and ranking heuristics
+are deferred to a 1.x pass once we have real-world data on
+whether plain prefix-match feels insufficient.
 
 ### `i`-popover (mail viewer / message list)
 
@@ -350,10 +356,14 @@ Render rules:
 - Line 2: `{title} · {org}` for `kind='individual'`. Skip if both
   empty. Single-side render if only one populated. Suppressed
   entirely for `kind='org'`.
-- Email block: always present (at least one row required by
-  schema invariant). Each row: `address    (label, primary)` for
-  the first row; `address    (label)` for subsequent rows.
-  Label parens omitted entirely if `label IS NULL`.
+- Email block: always present. Maintained by an import-time
+  invariant — CardDAV/file imports of vCards without any EMAIL
+  field are silently skipped (logged at debug). Form save
+  validation requires ≥1 email. The renderer can therefore
+  assume at least one email row per contact. Each row:
+  `address    (label, primary)` for the first row;
+  `address    (label)` for subsequent rows. Label parens
+  omitted entirely if `label IS NULL`.
 - Phone block: present iff at least one phone exists. Same
   per-row format as emails.
 - Note block: present iff `note IS NOT NULL` and non-empty after
@@ -418,8 +428,10 @@ Field rules:
 - **Note** — small multiline textarea, 3 visible rows, scrolls.
 - **Save to** — required. Options: `Local file` plus one entry
   per CardDAV-configured account by name. Header-cache is never
-  a save destination. Prefilled from the source of the edited
-  row (or first available for `n`).
+  a save destination. For `e` (edit), prefilled from the source
+  of the edited row. For `n` (new), default destination
+  resolution is plan-time — likely "first CardDAV account if
+  any, else Local file," but TBD when the form lands.
 
 Validation summary (Save blocked unless all true):
 - Name (Person: First or Last non-empty; Business: Name non-empty)
@@ -609,7 +621,7 @@ New bindings landing across the three passes (full table goes in
 | `a`–`z` | Contacts mode | Letter precision jump | 9.1 |
 | `n` | Contacts mode | New contact form | 9.1 |
 | `e` | Contacts mode | Edit cursor contact | 9.1 |
-| `D` | Contacts mode | Delete cursor (ConfirmModal) | 9.2 |
+| `D` | Contacts mode | Delete cursor (ConfirmModal) | 9.3 |
 | `Tab` / `Shift+Tab` | autocomplete dropdown | Cycle suggestions | 9.1 |
 | `Enter` | autocomplete dropdown | Accept cursor suggestion | 9.1 |
 | `Esc` | autocomplete dropdown | Dismiss | 9.1 |
