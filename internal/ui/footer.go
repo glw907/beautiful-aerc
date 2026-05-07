@@ -16,6 +16,7 @@ const (
 	// AccountContext is the unified one-pane account view (folders + messages).
 	AccountContext FooterContext = iota
 	ViewerContext
+	ContactsContext
 )
 
 // footerHint is one entry in the footer's keybinding display. dropRank
@@ -98,6 +99,25 @@ func viewerFooterGroups() [][]footerHint {
 	}
 }
 
+// contactsFooterGroups returns the contacts-mode footer hint groups.
+func contactsFooterGroups() [][]footerHint {
+	return [][]footerHint{
+		{
+			hint("j/k", "cursor", 10),
+			hint("J/K", "group", 9),
+			hint("a–z", "jump", 8),
+		},
+		{
+			hint("n", "new", 3),
+			hint("e", "edit", 3),
+		},
+		{
+			hint("M", "mail", 0),
+			hint("q", "quit", 0),
+		},
+	}
+}
+
 // Footer renders context-appropriate keybinding hints with group separators.
 type Footer struct {
 	styles  Styles
@@ -139,6 +159,8 @@ func (f Footer) View(width int) string {
 	switch f.context {
 	case ViewerContext:
 		groups = viewerFooterGroups()
+	case ContactsContext:
+		groups = contactsFooterGroups()
 	default:
 		base := accountFooterGroups()
 		if f.counter != "" {

@@ -82,6 +82,10 @@ type App struct {
 	compose            *uicompose.Model
 	pendingComposeSave bool // Save? modal is open for a dirty compose
 	popover            *contacts.Popover
+	contactsMode       bool
+	contactsSidebar    contacts.Sidebar
+	contactsList       contacts.List
+	contactsStyles     contacts.Styles
 	width              int
 	height             int
 }
@@ -105,26 +109,31 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
 
+	cStyles := contacts.NewStyles(t)
+	cFixtures := contacts.Fixtures()
 	return App{
-		acct:         account.New(t, acct, uiCfg, icons),
-		icons:        icons,
-		styles:       styles,
-		theme:        t,
-		topLine:      NewTopLine(styles),
-		statusBar:    sb,
-		footer:       NewFooter(styles),
-		keys:         NewGlobalKeys(),
-		linkPicker:   reader.NewLinkPicker(reader.NewStyles(t)),
-		attachPicker: reader.NewAttachPicker(reader.NewStyles(t), icons),
-		movePicker:   movepicker.New(movepicker.NewStyles(t)),
-		downloadDir:  uiCfg.DownloadDir,
-		confirm:      NewConfirmModal(styles),
-		outbox:       NewOutboxOverlay(styles),
-		conflict:     NewConflictOverlay(styles),
-		undoSeconds:  uiCfg.UndoSeconds,
-		now:          time.Now,
-		opener:       xdgOpenURL,
-		tidy:         identityTidy,
+		acct:            account.New(t, acct, uiCfg, icons),
+		icons:           icons,
+		styles:          styles,
+		theme:           t,
+		topLine:         NewTopLine(styles),
+		statusBar:       sb,
+		footer:          NewFooter(styles),
+		keys:            NewGlobalKeys(),
+		linkPicker:      reader.NewLinkPicker(reader.NewStyles(t)),
+		attachPicker:    reader.NewAttachPicker(reader.NewStyles(t), icons),
+		movePicker:      movepicker.New(movepicker.NewStyles(t)),
+		downloadDir:     uiCfg.DownloadDir,
+		confirm:         NewConfirmModal(styles),
+		outbox:          NewOutboxOverlay(styles),
+		conflict:        NewConflictOverlay(styles),
+		undoSeconds:     uiCfg.UndoSeconds,
+		now:             time.Now,
+		opener:          xdgOpenURL,
+		tidy:            identityTidy,
+		contactsStyles:  cStyles,
+		contactsSidebar: contacts.NewSidebar(cStyles, cFixtures),
+		contactsList:    contacts.NewList(cStyles, cFixtures, contacts.SortFirstName),
 	}
 }
 
@@ -187,6 +196,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if m.compose != nil {
 			w, h := m.rightPaneSize()
 			m.compose.SetSize(w, h)
+		}
+		if m.contactsMode {
+			m.contactsSidebar, m.contactsList = m.sizedContactsChildren()
 		}
 		// WindowSizeMsg only forwards sizing. Chrome derivation is not
 		// needed (sizing alone does not change viewer open/close state
@@ -256,8 +268,17 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case contacts.OpenFormMsg:
-		// Task 8 wires the form. Dismiss the popover.
+		// form lands in 9.1b
 		m.popover = nil
+		return m, nil
+
+	case contacts.EnterContactsModeMsg:
+		m.contactsMode = true
+		m.contactsSidebar, m.contactsList = m.sizedContactsChildren()
+		return m, nil
+
+	case contacts.ExitContactsModeMsg:
+		m.contactsMode = false
 		return m, nil
 
 	case reader.AttachmentSavedMsg:
@@ -649,6 +670,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.compose = next
 			return m, cmd
 		}
+		if m.contactsMode {
+			return m.updateContactsKey(msg)
+		}
 		// Intercept Enter in the Drafts folder to open compose instead of
 		// the viewer.
 		if msg.Type == tea.KeyEnter && !m.viewerOpen {
@@ -737,6 +761,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 					}
 				}
 			}
+		case key.Matches(msg, m.keys.ContactsMode):
+			return m, func() tea.Msg { return contacts.EnterContactsModeMsg{} }
 		}
 	}
 
@@ -747,9 +773,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	return m, cmd
 }
 
-// renderFrame builds the full-screen account layout string. It is extracted
-// from View so it can be dimmed and composited under the help popover.
+// renderFrame builds the full-screen layout string. It is extracted
+// from View so it can be dimmed and composited under overlays.
 func (m App) renderFrame() string {
+	if m.contactsMode {
+		return m.renderContactsFrame()
+	}
 	var rawContent string
 	if m.compose != nil {
 		rawContent = m.acct.RenderWithRightPane(m.compose.View())
@@ -954,4 +983,127 @@ func (m App) chromeBannerRow(width int) string {
 		return renderToast(m.toast, width, m.styles)
 	}
 	return ""
+}
+
+// contactsColumnWidths returns (sidebarW, listW, detailW) for the contacts
+// three-column layout at the current terminal width. Falls back to a single
+// column when content width is below 60 cells. detailW may be zero.
+func (m App) contactsColumnWidths() (sidebarW, listW, detailW int) {
+	contentW := m.width - 1 // one cell for the right border App appends
+	if contentW < 60 {
+		// Narrow: single-column fallback. List only, no sidebar or detail.
+		return 0, contentW, 0
+	}
+	const sidebarFloor = 14
+	const dividers = 2
+	listMin := 30
+	detail := contentW - sidebarFloor - dividers - listMin
+	if detail < 0 {
+		detail = 0
+		listMin = contentW - sidebarFloor - dividers
+		if listMin < 1 {
+			listMin = 1
+		}
+	}
+	return sidebarFloor, listMin, detail
+}
+
+// sizedContactsChildren returns sidebar and list sized for the current terminal.
+// The contacts frame adds one header row, so children get contentHeight-1.
+func (m App) sizedContactsChildren() (contacts.Sidebar, contacts.List) {
+	h := m.contactsBodyHeight()
+	sbW, listW, _ := m.contactsColumnWidths()
+	sb := m.contactsSidebar.SetSize(sbW, h)
+	ls := m.contactsList.SetSize(listW, h)
+	return sb, ls
+}
+
+func (m App) contactsBodyHeight() int {
+	h := m.contentHeight() - 1
+	if h < 1 {
+		return 1
+	}
+	return h
+}
+
+// updateContactsKey handles a key press while contacts mode is active.
+// M returns to mail mode. q quits. j/k/J/K and a–z route to sidebar/list.
+func (m App) updateContactsKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if key.Matches(msg, m.keys.MailMode) {
+		return m, func() tea.Msg { return contacts.ExitContactsModeMsg{} }
+	}
+	if key.Matches(msg, m.keys.Quit) || key.Matches(msg, m.keys.ForceQuit) {
+		return m, tea.Quit
+	}
+
+	prevLetter := m.contactsSidebar.SelectionLetter()
+	var sbCmd, listCmd tea.Cmd
+	m.contactsSidebar, sbCmd = m.contactsSidebar.Update(msg)
+	m.contactsList, listCmd = m.contactsList.Update(msg)
+
+	// When the sidebar letter changed, scroll the list to match.
+	newLetter := m.contactsSidebar.SelectionLetter()
+	if newLetter != prevLetter && newLetter != 0 {
+		m.contactsList = m.contactsList.SetSelectionLetter(newLetter)
+	}
+
+	return m, tea.Batch(sbCmd, listCmd)
+}
+
+// renderContactsFrame builds the full-screen contacts layout string.
+func (m App) renderContactsFrame() string {
+	sbW, _, detailW := m.contactsColumnWidths()
+	contentH := m.contactsBodyHeight()
+
+	var content string
+	if sbW == 0 {
+		// Narrow fallback: list only.
+		content = m.contactsList.View()
+	} else {
+		sbLines := strings.Split(m.contactsSidebar.View(), "\n")
+		listLines := strings.Split(m.contactsList.View(), "\n")
+		divLine := m.styles.FrameBorder.Render("│")
+
+		cursor := m.contactsList.Cursor()
+		detailCard := contacts.RenderDetailCard(cursor, detailW, m.contactsStyles)
+		detailLines := strings.Split(detailCard, "\n")
+
+		n := contentH
+		if len(sbLines) < n {
+			n = len(sbLines)
+		}
+		if len(listLines) < n {
+			n = len(listLines)
+		}
+
+		assembled := make([]string, n)
+		for i := range n {
+			dl := ""
+			if detailW > 0 {
+				if i < len(detailLines) {
+					dl = detailLines[i]
+				}
+				dl = uicore.PadOrTruncate(dl, detailW)
+			}
+			assembled[i] = sbLines[i] + divLine + listLines[i] + divLine + dl
+		}
+		content = strings.Join(assembled, "\n")
+	}
+
+	rightBorder := m.styles.FrameBorder.Render("│")
+	contentLines := strings.Split(content, "\n")
+	for i := range contentLines {
+		contentLines[i] = contentLines[i] + rightBorder
+	}
+	body := strings.Join(contentLines, "\n")
+
+	header := uicore.PadOrTruncate("CONTACTS · All sources", m.width-2) + rightBorder
+	footerLine := m.footer.SetContext(ContactsContext).View(m.width)
+
+	parts := []string{m.topLine.View(m.width, sbW+1), header, body}
+	if bannerRow := m.chromeBannerRow(m.width); bannerRow != "" {
+		parts = append(parts, bannerRow)
+	}
+	parts = append(parts, m.statusBar.View(m.width, sbW+1), footerLine)
+	return strings.Join(parts, "\n")
 }

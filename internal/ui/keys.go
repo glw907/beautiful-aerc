@@ -20,6 +20,8 @@ type GlobalKeys struct {
 	ReplyAll        key.Binding
 	Forward         key.Binding
 	SenderPopover   key.Binding
+	ContactsMode    key.Binding
+	MailMode        key.Binding
 }
 
 // NewGlobalKeys returns the default global key bindings.
@@ -37,6 +39,8 @@ func NewGlobalKeys() GlobalKeys {
 		ReplyAll:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reply all")),
 		Forward:         key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "forward")),
 		SenderPopover:   key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "sender info")),
+		ContactsMode:    key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "contacts")),
+		MailMode:        key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mail")),
 	}
 }
 
