@@ -11,7 +11,6 @@ const (
 	IconModeFancy
 )
 
-// String returns the display name of the icon mode.
 func (m IconMode) String() string {
 	switch m {
 	case IconModeFancy:
@@ -21,17 +20,12 @@ func (m IconMode) String() string {
 	}
 }
 
-// Resolve maps a config-icons value plus runtime detection results to
-// the (mode, spuaCellWidth) pair the UI uses.
-//
-//	cfg         UIConfig.Icons literal: "auto" | "simple" | "fancy".
-//	            Unknown values are treated as "auto".
-//	hasNerdFont result of HasNerdFont().
-//	probe       result of MeasureSPUACells(): 1, 2, or 0 (failed).
-//
-// Defaults on probe failure in fancy mode: spuaCellWidth=2 (Mono Nerd
-// Font, the legacy assumption). In simple mode: spuaCellWidth=1
-// (lipgloss.Width is canonical and the helper degenerates).
+// Resolve maps the configured icons preference plus runtime detection
+// to (mode, spuaCellWidth). cfg is the UIConfig.Icons literal
+// ("auto", "simple", "fancy", or unknown which auto-resolves). probe
+// is MeasureSPUACells's result: 1, 2, or 0 for failure. On fancy mode
+// with probe failure, the legacy Mono Nerd Font assumption (width=2)
+// stands. Simple mode pins width=1, where lipgloss.Width is canonical.
 func Resolve(cfg string, hasNerdFont bool, probe int) (IconMode, int) {
 	mode := IconModeSimple
 	switch cfg {
@@ -39,7 +33,7 @@ func Resolve(cfg string, hasNerdFont bool, probe int) (IconMode, int) {
 		mode = IconModeFancy
 	case "simple":
 		mode = IconModeSimple
-	default: // "auto" or unknown
+	default:
 		if hasNerdFont {
 			mode = IconModeFancy
 		}

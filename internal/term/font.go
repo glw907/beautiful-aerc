@@ -17,11 +17,10 @@ var (
 	hasNerdFontResult bool
 )
 
-// HasNerdFont reports whether a Nerd Font is installed on this system.
-// On Linux, uses fc-list as the primary source because sysfont misses
-// fonts installed under ~/.local/share/fonts. Falls back to sysfont
-// enumeration when fc-list is unavailable or exits non-zero.
-// Subsequent calls return the cached result.
+// HasNerdFont reports whether a Nerd Font is installed. On Linux it
+// uses fc-list because sysfont misses fonts under
+// ~/.local/share/fonts, falling back to sysfont when fc-list is
+// unavailable. The result is cached.
 func HasNerdFont() bool {
 	hasNerdFontOnce.Do(func() {
 		if families, ok := fcListFamilies(); ok {
@@ -38,8 +37,8 @@ func HasNerdFont() bool {
 	return hasNerdFontResult
 }
 
-// fcListFamilies shells out to fc-list. The 2 s context prevents a
-// hung fontconfig from stalling startup.
+// fcListFamilies shells out to fc-list with a 2-second deadline so a
+// hung fontconfig cannot stall startup.
 func fcListFamilies() ([]string, bool) {
 	path, err := exec.LookPath("fc-list")
 	if err != nil {
@@ -57,9 +56,10 @@ func fcListFamilies() ([]string, bool) {
 	return parseFcList(out.String()), true
 }
 
-// parseFcList extracts font family names from fc-list output formatted
-// with `-f "%{family}\n"`. Each line is a comma-separated family list.
-// Also tolerates the legacy default `path:family[,family]:style=…` shape.
+// parseFcList extracts family names from fc-list output. The
+// preferred form is `-f "%{family}\n"` (one comma-separated family
+// list per line). The legacy `path:family[,family]:style=...` form is
+// also tolerated.
 func parseFcList(output string) []string {
 	seen := make(map[string]bool)
 	var families []string
@@ -86,9 +86,8 @@ func parseFcList(output string) []string {
 	return families
 }
 
-// hasNerdFontIn is the pure-string check, isolated for testability.
-// A family qualifies if its lower-cased + trimmed name contains
-// "nerd font" or ends with " nf".
+// hasNerdFontIn matches lower-cased family names that contain
+// "nerd font" or end with " nf".
 func hasNerdFontIn(families []string) bool {
 	for _, f := range families {
 		s := strings.ToLower(strings.TrimSpace(f))

@@ -7,17 +7,14 @@ import (
 	"strconv"
 )
 
-var errCPRParse = errors.New("term: failed to parse CPR response")
+var errCPRParse = errors.New("term: malformed CPR response")
 
-// parseCPR reads bytes from r until it consumes a complete
-// Cursor-Position-Report sequence "ESC[<row>;<col>R" and returns
-// the (row, col) pair. Bytes preceding the ESC are skipped. Bytes
-// following 'R' are left in the reader if r supports it. Otherwise they
-// are discarded (we only parse the first complete sequence).
+// parseCPR reads "ESC[<row>;<col>R" from r and returns (row, col).
+// Bytes preceding ESC are skipped. Trailing bytes after 'R' are
+// either left in the reader or discarded.
 func parseCPR(r io.Reader) (row, col int, err error) {
 	br := bufio.NewReader(r)
 
-	// Skip until ESC.
 	for {
 		b, e := br.ReadByte()
 		if e != nil {

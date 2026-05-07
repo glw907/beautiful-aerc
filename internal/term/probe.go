@@ -13,16 +13,12 @@ import (
 )
 
 // MeasureSPUACells returns the rendered cell width (1 or 2) of an
-// SPUA-A glyph in the current terminal+font, or 0 on any failure.
+// SPUA-A glyph in the current terminal+font, or 0 on failure. The
+// probe runs ESC[6n, writes a test glyph, runs ESC[6n again, and
+// returns the column delta.
 //
-// The probe writes ESC[6n, records the cursor column, writes a test
-// SPUA-A glyph, writes ESC[6n again, and computes the delta. Falls
-// back to 0 if /dev/tty cannot be opened, the terminal does not
-// reply within the timeout, or the response is unparseable.
-//
-// Adapted from github.com/hymkor/go-cursorposition (MIT) — credit
-// retained per the prior-art-with-license discipline. The
-// AmbiguousWidth pattern (probe-glyph-probe) is the same shape.
+// The probe-glyph-probe shape is adapted from
+// github.com/hymkor/go-cursorposition (MIT).
 func MeasureSPUACells() int {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
@@ -36,9 +32,9 @@ func MeasureSPUACells() int {
 	return w
 }
 
-// testGlyph is a Nerd Font SPUA-A icon (nf-md-mailbox U+F01EE), chosen
-// because it is in the same range as poplar's actual icons. Per-glyph
-// width is uniform within a Nerd Font.
+// testGlyph is nf-md-mailbox (U+F01EE), in the same SPUA-A range as
+// poplar's actual icons. Per-glyph width is uniform within a Nerd
+// Font.
 const testGlyph = "\U000F01EE"
 
 var probeMu sync.Mutex
