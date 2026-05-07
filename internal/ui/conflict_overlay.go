@@ -10,21 +10,22 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// RetryConflictMsg / DiscardConflictMsg are emitted by the overlay
-// in response to r / d. App handles them by issuing the cache cmd.
+// RetryConflictMsg / DiscardConflictMsg fire on r / d; App issues the
+// cache cmd in response.
 type RetryConflictMsg struct{ OpID int64 }
 type DiscardConflictMsg struct{ OpID int64 }
 
 // conflictCache is the heap-allocated render cache (ADR-0130 escape
-// hatch). Pointer is shared across value copies. Dirty flag flips on
+// hatch). The pointer is shared across value copies; dirty flips on any
 // rows / cursor / size change.
 type conflictCache struct {
 	dirty bool
 	view  string
 }
 
-// ConflictOverlay is the modal opened by !. Lists conflicted ops
-// with per-row retry / discard. App owns load → SetRows → render.
+// ConflictOverlay is the modal opened by `!`: a list of conflicted ops
+// with per-row retry / discard. App owns the load → SetRows → render
+// lifecycle.
 type ConflictOverlay struct {
 	shell  uicore.ModalShell
 	styles Styles
@@ -44,7 +45,6 @@ type conflictKeys struct {
 	Swallow key.Binding
 }
 
-// NewConflictOverlay returns a closed ConflictOverlay with the given styles.
 func NewConflictOverlay(styles Styles) ConflictOverlay {
 	return ConflictOverlay{
 		styles: styles,
@@ -79,7 +79,7 @@ func (c ConflictOverlay) Close() ConflictOverlay {
 	return c
 }
 
-// SetRows replaces the displayed rows. Clamps cursor to the new length.
+// SetRows replaces the displayed rows and clamps cursor.
 func (c ConflictOverlay) SetRows(rows []cache.ConflictRow) ConflictOverlay {
 	c.rows = rows
 	if c.cursor >= len(rows) {
@@ -89,7 +89,6 @@ func (c ConflictOverlay) SetRows(rows []cache.ConflictRow) ConflictOverlay {
 	return c
 }
 
-// RowCount returns the number of conflict rows currently loaded.
 func (c ConflictOverlay) RowCount() int { return len(c.rows) }
 
 func (c ConflictOverlay) SetSize(w, h int) ConflictOverlay {
@@ -136,7 +135,7 @@ func (c ConflictOverlay) Update(msg tea.Msg) (ConflictOverlay, tea.Cmd) {
 	return c, nil
 }
 
-// Caches the rendered string via the heap-allocated *conflictCache
+// View caches the rendered string via the heap-allocated *conflictCache
 // pointer (ADR-0130 escape hatch).
 func (c ConflictOverlay) View() string {
 	if !c.shell.IsOpen() {
@@ -209,9 +208,8 @@ func conflictMaxBodyLines(termH int) int {
 	return avail
 }
 
-// formatConflictHeader returns a one-line summary for the conflict row.
-// Folder is the source folder. For Move ops the destination lives in args
-// (decoded view is out of scope for this overlay).
+// formatConflictHeader returns a one-line summary. Folder is the source.
+// Move-op destinations live in args (decoded view is out of scope here).
 func formatConflictHeader(r cache.ConflictRow) string {
 	verb := outboxKindVerb(r.Kind)
 	id := shortPID(r.ProtocolID)

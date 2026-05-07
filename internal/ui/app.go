@@ -25,24 +25,23 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// pendingEmptyConfirm carries the parameters App needs to emit
-// EmptyFolderConfirmedMsg when the user accepts the active confirm
-// modal. Zero value (empty folder) means no empty-folder confirm is
-// pending.
+// pendingEmptyConfirm holds the parameters needed to emit
+// EmptyFolderConfirmedMsg when the user accepts the confirm modal. The
+// zero value means no empty-folder confirm is pending.
 type pendingEmptyConfirm struct {
 	folder string
 	source string
 }
 
 // TidyFn rewrites the markdown body before MIME assembly. The default
-// is identity passthrough. Callers swap in a real implementation.
+// (identityTidy) is a passthrough; Pass 9i will swap in Claude Tidy.
 type TidyFn func(ctx context.Context, body string) (string, error)
 
 func identityTidy(_ context.Context, body string) (string, error) {
 	return body, nil
 }
 
-// App is the root bubbletea model for poplar.
+// App is the root bubbletea model.
 type App struct {
 	acct            account.Model
 	icons           uicore.IconSet
@@ -69,13 +68,10 @@ type App struct {
 	lastErr         ErrorMsg
 	toast           pendingAction
 	undoSeconds     int
-	// now returns the wall clock. Test seam, defaults to time.Now.
-	now func() time.Time
-	// opener launches URLs. Test seam, defaults to xdgOpenURL.
-	opener URLOpener
-	// tidy rewrites the markdown body before MIME assembly. Test seam,
-	// defaults to identityTidy.
-	tidy               TidyFn
+	now             func() time.Time // test seam, defaults to time.Now
+	opener          URLOpener        // test seam, defaults to xdgOpenURL
+	tidy            TidyFn           // test seam, defaults to identityTidy
+
 	theme              *theme.CompiledTheme
 	compose            *uicompose.Model
 	pendingComposeSave bool // Save? modal is open for a dirty compose
@@ -90,20 +86,20 @@ type App struct {
 	height             int
 }
 
-// WithOpener returns a copy of m with the URL opener replaced.
+// WithOpener replaces the URL-opener seam.
 func (m App) WithOpener(opener URLOpener) App {
 	m.opener = opener
 	return m
 }
 
-// WithTidy returns a copy of m with the body tidy seam replaced.
+// WithTidy replaces the body-tidy seam.
 func (m App) WithTidy(fn TidyFn) App {
 	m.tidy = fn
 	return m
 }
 
-// NewApp creates the root model with a single account.Model. Folder
-// loading happens in Init's Cmd chain, not in the constructor.
+// NewApp creates the root model. Folder loading runs in Init's Cmd chain,
+// not synchronously.
 func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
@@ -137,14 +133,14 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	}
 }
 
-// Init delegates to the account tab so the initial folder fetch fires,
-// and starts the backend update pump.
+// Init kicks off the account tab's initial folder fetch and starts the
+// backend update pump.
 func (m App) Init() tea.Cmd {
 	return tea.Batch(m.acct.Init(), pumpUpdatesCmd(m.acct.Backend()))
 }
 
-// deriveChromeFromAcct re-reads AccountTab state and propagates it
-// to App-owned chrome (footer, status bar, viewerOpen, linkPicker).
+// deriveChromeFromAcct re-reads AccountTab state into the App-owned
+// chrome (footer, status bar, viewerOpen).
 func (m App) deriveChromeFromAcct() App {
 	prevViewer := m.viewerOpen
 	m.viewerOpen = m.acct.ViewerOpen()
@@ -166,8 +162,8 @@ func (m App) deriveChromeFromAcct() App {
 }
 
 // Update handles global keys and delegates everything else to the
-// account tab. Chrome (footer, status bar, link picker) is derived
-// by reading AccountTab accessors after each delegation.
+// account tab. Chrome (footer, status bar, link picker) is re-read from
+// AccountTab accessors after each delegation.
 func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -205,9 +201,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			next := m.form.SetSize(w, h)
 			m.form = &next
 		}
-		// WindowSizeMsg only forwards sizing. Chrome derivation is not
-		// needed (sizing alone does not change viewer open/close state
-		// or folder counts).
+		// Sizing alone does not change viewer state or folder counts, so
+		// no chrome derivation is needed here.
 		return m, tea.Batch(cmds...)
 
 	case reader.OpenLinkPickerMsg:
@@ -336,7 +331,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			if m.compose == nil {
 				return m, nil
 			}
-			// Save path: persist current draft and queue a server push.
+			// Persist the current draft and queue a server push.
 			draftsFolder := resolveDraftsFolder(m.acct.Cache())
 			d := m.compose.CurrentDraft()
 			draftID := m.compose.DraftID()
@@ -373,13 +368,13 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalClosedMsg:
-		// Esc on the discard-changes modal keeps the form mounted.
+		// Esc on discard-changes keeps the form mounted.
 		if m.pendingFormDiscard {
 			m.pendingFormDiscard = false
 			m.confirm = m.confirm.Close()
 			return m, nil
 		}
-		// When the save-draft modal was Esc'd, keep compose mounted.
+		// Esc on save-draft keeps compose mounted.
 		if m.pendingComposeSave {
 			m.pendingComposeSave = false
 			m.confirm = m.confirm.Close()
@@ -446,8 +441,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ErrorMsg:
-		// Errors clear any pending toast. The cache holds the
-		// optimistic flip and the user must fire u to revert.
+		// An error clears any pending toast. The cache still holds the
+		// optimistic flip; the user must fire u to revert.
 		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
 		m.lastErr = msg
@@ -464,8 +459,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case account.FolderLoadedMsg:
-		// A fresh folder load (msglist reset by selectionChangedCmds)
-		// commits any in-flight toast.
+		// A fresh folder load commits any in-flight toast (msglist was
+		// reset by selectionChangedCmds).
 		if !m.toast.IsZero() && m.acct.MessageListCount() == 0 {
 			hadBanner := m.hasBannerRow()
 			m.toast = pendingAction{}
@@ -506,8 +501,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			m.statusBar = m.statusBar.SetConnectionState(cs)
 		}
-		// Other Update types (UpdateNewMail, UpdateFlagsChanged, etc.)
-		// delegate to AccountTab in a later pass.
+		// Non-ConnState Update types delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
 
 	case account.CacheEventMsg:
@@ -620,7 +614,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, m.compose.Init()
 
 	case openDraftMsg:
-		// Opened from Drafts-folder Enter. Wire cache/target then open.
+		// Drafts-folder Enter: wire cache/target, then open compose.
 		w, h := m.rightPaneSize()
 		row := msg.row
 		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft)
@@ -709,8 +703,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if m.contactsMode {
 			return m.updateContactsKey(msg)
 		}
-		// Intercept Enter in the Drafts folder to open compose instead of
-		// the viewer.
+		// In the Drafts folder, Enter opens compose instead of the viewer.
 		if msg.Type == tea.KeyEnter && !m.viewerOpen {
 			if info, ok := m.acct.SelectedMessage(); ok {
 				draftsFolder := resolveDraftsFolder(m.acct.Cache())
@@ -744,25 +737,23 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			return m, composeSeedCmd(m.acct.Cache(), parent, m.acct.AccountEmail(), kind)
 		case key.Matches(msg, m.keys.Undo):
-			// Undo is only live while a toast is active. Otherwise the
-			// 'u' key falls through to AccountTab so other meanings can
-			// take over later.
+			// Undo is only live while a toast is active. Otherwise 'u'
+			// falls through to AccountTab so other consumers can claim it.
 			if !m.toast.IsZero() {
 				return m, func() tea.Msg { return undoRequestedMsg{} }
 			}
 		case key.Matches(msg, m.keys.Quit):
 			if m.viewerOpen {
-				// Viewer-open: q closes the viewer, not the app.
-				// Delegate so AccountTab routes to viewer.handleKey.
+				// q closes the viewer, not the app. Delegate so AccountTab
+				// routes into viewer.handleKey.
 				var cmd tea.Cmd
 				m.acct, cmd = m.acct.Update(msg)
 				m = m.deriveChromeFromAcct()
 				return m, cmd
 			}
 			if m.acct.SearchState() != sidebar.SearchIdle {
-				// Steal q while search is active so it doesn't quit
-				// the app mid-search. Send a typed clear msg to
-				// AccountTab.
+				// Steal q while search is active so it doesn't quit the
+				// app mid-search; route a typed clear msg to AccountTab.
 				var cmd tea.Cmd
 				m.acct, cmd = m.acct.Update(sidebar.ClearSearchMsg{})
 				m = m.deriveChromeFromAcct()
@@ -809,8 +800,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	return m, cmd
 }
 
-// renderFrame builds the full-screen layout string. It is extracted
-// from View so it can be dimmed and composited under overlays.
+// renderFrame builds the full-screen layout string, extracted from View
+// so it can be dimmed and composited under overlays.
 func (m App) renderFrame() string {
 	if m.contactsMode {
 		return m.renderContactsFrame()
@@ -823,9 +814,9 @@ func (m App) renderFrame() string {
 	}
 	rightBorder := m.styles.FrameBorder.Render("│")
 	contentLines := strings.Split(rawContent, "\n")
-	// AccountTab.View honors its width contract: every line is exactly
-	// m.width-1 display cells. Append the right border directly without
-	// per-line measure-and-pad. See TestAccountTabView_HonorsAssignedWidth.
+	// AccountTab.View honors its width contract (each line is exactly
+	// m.width-1 display cells), so the right border can be appended
+	// without per-line measure-and-pad.
 	for i := range contentLines {
 		contentLines[i] = contentLines[i] + rightBorder
 	}
@@ -837,18 +828,16 @@ func (m App) renderFrame() string {
 	foot := m.footer.View(m.width)
 
 	parts := []string{topLine, content}
-	// Precedence: error banner wins, then toast, then the
-	// chrome row collapses entirely.
+	// Precedence: error banner wins, then toast, then the chrome row
+	// collapses entirely.
 	if bannerRow := m.chromeBannerRow(m.width); bannerRow != "" {
 		parts = append(parts, bannerRow)
 	}
 	parts = append(parts, status, foot)
-	// Use strings.Join rather than lipgloss.JoinVertical. JoinVertical pads
-	// all rows to the widest row using lipgloss.Width, which undercounts
-	// SPUA-A Nerd Font glyphs by 1 cell each. Content rows already have the
-	// correct terminal width (guaranteed by AccountTab's width contract);
-	// JoinVertical would add spurious 1-cell padding to any row with SPUA-A
-	// content, causing those rows to land 1 cell outside the terminal width.
+	// strings.Join over lipgloss.JoinVertical: JoinVertical pads to the
+	// widest row using lipgloss.Width, which undercounts SPUA-A glyphs by
+	// 1 cell each and would push those rows outside the terminal. Content
+	// already honors the terminal-width contract. See ADR-0084.
 	return strings.Join(parts, "\n")
 }
 
@@ -867,8 +856,7 @@ func (m App) View() string {
 		box, tooNarrow := m.help.Box(m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
 		if tooNarrow != "" {
-			// Terminal too narrow for the full popover: show the notice
-			// centered over the dimmed frame.
+			// Terminal too narrow for the popover; center the notice instead.
 			x, y := (m.width-lipgloss.Width(tooNarrow))/2, m.height/2
 			if x < 0 {
 				x = 0
@@ -938,15 +926,12 @@ func (m App) View() string {
 	return frame
 }
 
-// IsLinkPickerOpen reports whether the link picker overlay is visible.
 func (m App) IsLinkPickerOpen() bool { return m.linkPicker.IsOpen() }
+func (m App) IsConfirmOpen() bool    { return m.confirm.IsOpen() }
 
-// IsConfirmOpen reports whether the confirm modal overlay is visible.
-func (m App) IsConfirmOpen() bool { return m.confirm.IsOpen() }
-
-// contentHeight returns the height available for the content area.
-// The chrome banner row (error banner or toast) takes one extra row
-// when either is present. The row collapses when both are absent.
+// contentHeight returns the height available for content. The chrome
+// banner row above the status bar adds one row when either an error
+// banner or an active toast is showing.
 func (m App) contentHeight() int {
 	chrome := 3 // top line + status bar + footer
 	if m.lastErr.Err != nil || !m.toast.IsZero() {
@@ -959,8 +944,8 @@ func (m App) contentHeight() int {
 	return h
 }
 
-// rightPaneSize returns the width and height available for the right pane,
-// mirroring the geometry AccountTab derives in its WindowSizeMsg handler.
+// rightPaneSize mirrors the geometry AccountTab derives in its
+// WindowSizeMsg handler.
 func (m App) rightPaneSize() (w, h int) {
 	contentW := m.width - 1 // one cell for the right border App appends
 	layout := uicore.ComputeLayout(contentW)
@@ -973,23 +958,19 @@ func (m App) rightPaneSize() (w, h int) {
 	return w, h
 }
 
-// selectedMessage returns the currently-selected message from the
-// account tab's message list, forwarding to the viewer's current
-// message when the viewer is open.
 func (m App) selectedMessage() (mail.MessageInfo, bool) {
 	return m.acct.SelectedMessage()
 }
 
 // hasBannerRow reports whether the chrome row above the status bar is
-// occupied (either by the error banner or by an active toast).
+// occupied by an error banner or an active toast.
 func (m App) hasBannerRow() bool {
 	return m.lastErr.Err != nil || !m.toast.IsZero()
 }
 
 // maybeResizeChild re-forwards a WindowSizeMsg to the child when the
 // chrome banner row's occupancy has changed since hadBanner was
-// captured. Returns the (possibly-updated) App and the resize Cmd, or
-// the input App and nil when no resize is needed.
+// captured.
 func (m App) maybeResizeChild(hadBanner bool) (App, tea.Cmd) {
 	if hadBanner == m.hasBannerRow() || m.width <= 0 || m.height <= 0 {
 		return m, nil
@@ -1000,9 +981,9 @@ func (m App) maybeResizeChild(hadBanner bool) (App, tea.Cmd) {
 	return m, cmd
 }
 
-// parseSender splits the From display string into a (displayName, email)
-// pair using the RFC 5322 address parser. Falls back to (from, from) when
-// the string cannot be parsed or contains no addresses.
+// parseSender splits the From display string into (displayName, email)
+// via content.ParseAddressList. Falls back to (from, from) when parsing
+// fails or yields no addresses.
 func parseSender(from string) (displayName, email string) {
 	addrs := content.ParseAddressList(from)
 	if len(addrs) == 0 {
@@ -1015,9 +996,9 @@ func parseSender(from string) (displayName, email string) {
 	return a.Email, a.Email
 }
 
-// chromeBannerRow renders the single chrome row above the status bar.
-// Error banner wins precedence. Otherwise the toast renders. Otherwise
-// the empty string collapses the row.
+// chromeBannerRow renders the chrome row above the status bar. Error
+// banner wins, otherwise the toast renders, otherwise "" collapses the
+// row.
 func (m App) chromeBannerRow(width int) string {
 	if banner := renderErrorBanner(m.lastErr, width, m.styles); banner != "" {
 		return banner
@@ -1028,13 +1009,12 @@ func (m App) chromeBannerRow(width int) string {
 	return ""
 }
 
-// contactsColumnWidths returns (sidebarW, listW, detailW) for the contacts
-// three-column layout at the current terminal width. Falls back to a single
-// column when content width is below 60 cells. detailW may be zero.
+// contactsColumnWidths returns (sidebarW, listW, detailW) for the
+// contacts three-column layout. Below 60 cells the layout collapses to
+// list-only with sidebarW=detailW=0.
 func (m App) contactsColumnWidths() (sidebarW, listW, detailW int) {
 	contentW := m.width - 1 // one cell for the right border App appends
 	if contentW < 60 {
-		// Narrow: single-column fallback. List only, no sidebar or detail.
 		return 0, contentW, 0
 	}
 	const sidebarFloor = 14
@@ -1051,8 +1031,8 @@ func (m App) contactsColumnWidths() (sidebarW, listW, detailW int) {
 	return sidebarFloor, listMin, detail
 }
 
-// sizedContactsChildren returns sidebar and list sized for the current terminal.
-// The contacts frame adds one header row, so children get contentHeight-1.
+// sizedContactsChildren returns sidebar and list sized for the current
+// terminal; the contacts frame's header row reserves one line.
 func (m App) sizedContactsChildren() (contacts.Sidebar, contacts.List) {
 	h := m.contactsBodyHeight()
 	sbW, listW, _ := m.contactsColumnWidths()
@@ -1069,8 +1049,8 @@ func (m App) contactsBodyHeight() int {
 	return h
 }
 
-// updateContactsKey handles a key press while contacts mode is active.
-// M returns to mail mode. q quits. j/k/J/K and a–z route to sidebar/list.
+// updateContactsKey handles a key press in contacts mode. M returns to
+// mail, q quits, j/k/J/K and a–z route to sidebar/list.
 func (m App) updateContactsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	if key.Matches(msg, m.keys.MailMode) {
 		return m, func() tea.Msg { return contacts.ExitContactsModeMsg{} }
@@ -1084,7 +1064,7 @@ func (m App) updateContactsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	m.contactsSidebar, sbCmd = m.contactsSidebar.Update(msg)
 	m.contactsList, listCmd = m.contactsList.Update(msg)
 
-	// When the sidebar letter changed, scroll the list to match.
+	// Scroll the list to match when the sidebar letter changed.
 	newLetter := m.contactsSidebar.SelectionLetter()
 	if newLetter != prevLetter && newLetter != 0 {
 		m.contactsList = m.contactsList.SetSelectionLetter(newLetter)
@@ -1093,14 +1073,13 @@ func (m App) updateContactsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	return m, tea.Batch(sbCmd, listCmd)
 }
 
-// renderContactsFrame builds the full-screen contacts layout string.
 func (m App) renderContactsFrame() string {
 	sbW, listW, detailW := m.contactsColumnWidths()
 	contentH := m.contactsBodyHeight()
 
 	var content string
 	if sbW == 0 {
-		// Narrow fallback: list only.
+		// Narrow: list only.
 		content = m.contactsList.View()
 	} else {
 		sbLines := strings.Split(m.contactsSidebar.View(), "\n")
@@ -1157,10 +1136,10 @@ func (m App) renderContactsFrame() string {
 	return strings.Join(parts, "\n")
 }
 
-// formSize returns the (width, height) the contact form should be sized
-// to. Modal mode (fromPopover) uses the full terminal so the form's
-// internal width budget can clamp itself. Right-pane mode mirrors the
-// detail column width in Contacts mode.
+// formSize returns the (width, height) the contact form should occupy.
+// Modal mode (fromPopover) uses the full terminal so the form's internal
+// width budget can clamp itself; right-pane mode mirrors the detail
+// column width.
 func (m App) formSize(fromPopover bool) (int, int) {
 	if fromPopover {
 		return m.width, m.height

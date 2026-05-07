@@ -9,7 +9,7 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// padRight right-pads s with spaces to width display cells. Input is
+// padRight right-pads s with spaces to width display cells. Inputs are
 // plain text (no ANSI), so lipgloss.Width measures correctly.
 func padRight(s string, width int) string {
 	if w := lipgloss.Width(s); w < width {
@@ -57,11 +57,9 @@ func formatRelativeDateCompact(t, now time.Time) string {
 
 // formatRelativeDateShort returns a 5-cell short date string. Same-day
 // values render as 12-hour time with a single-letter AM/PM suffix
-// ("3:41p", "9:05a"). Other days render as "MM-DD". Zero time → empty.
-//
-// The 12-hour display can run 6 cells for `12:30a` etc. The caller's
-// column truncation handles that. The 5-cell budget is the design
-// target, not a hard cap.
+// ("3:41p", "9:05a"); other days render as "MM-DD"; zero time renders
+// empty. The 12-hour display can spill to 6 cells for "12:30a"; the
+// caller's column truncation handles that.
 func formatRelativeDateShort(t, now time.Time) string {
 	if t.IsZero() {
 		return ""
@@ -83,20 +81,16 @@ func formatRelativeDateShort(t, now time.Time) string {
 	return t.Format("01-02")
 }
 
-// displayDate returns the date string for a message row at the given
-// column width. Width 0 means "no date column" (caller skips the
-// column entirely). Width 3 selects the compact relative format;
-// width 5 selects the short absolute format. Other widths are
-// treated as 5 (defensive, should not happen if LayoutMode is the
-// only caller).
+// displayDate returns the date string for a message row. Width 0 hides
+// the column, 3 selects compact relative, 5 selects short absolute.
+// Other widths fall through to short absolute as a safety net.
 func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
 	if width == 0 {
 		return ""
 	}
 	t := msg.SentAt
 	if t.IsZero() {
-		// Legacy fixtures predating SentAt. Return the wire string
-		// as-is. Width-aware truncation is the caller's job.
+		// Legacy fixtures predating SentAt return the wire string as-is.
 		return msg.Date
 	}
 	switch width {

@@ -6,8 +6,8 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// Styles holds composed lipgloss styles derived from a CompiledTheme.
-// Created once at startup and passed read-only to all child components.
+// Styles holds the composed lipgloss styles derived from a CompiledTheme.
+// Built once at startup and passed read-only to child components.
 type Styles struct {
 	// Tab bar
 	TabActiveBorder lipgloss.Style
@@ -91,7 +91,6 @@ type Styles struct {
 	ErrorBanner lipgloss.Style
 }
 
-// NewStyles creates a Styles from a CompiledTheme.
 func NewStyles(t *theme.CompiledTheme) Styles {
 	return Styles{
 		TabActiveBorder: lipgloss.NewStyle().

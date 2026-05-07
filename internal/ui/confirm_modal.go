@@ -9,30 +9,26 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// ConfirmRequest holds the content for one modal invocation. The
-// followup action on confirmation is dispatched by App based on
-// state it sets when opening the modal. ConfirmModal itself only
-// emits ConfirmModalYesMsg / ConfirmModalClosedMsg.
+// ConfirmRequest holds the content for one modal invocation. App
+// dispatches the followup action based on its own pending-confirm state;
+// the modal only emits Yes/No/Closed msgs.
 type ConfirmRequest struct {
 	Title string
 	Body  string
 }
 
-// ConfirmModalYesMsg fires when the user presses 'y' on an open
-// ConfirmModal. App dispatches the appropriate followup based on
-// its own pending-confirm state.
+// ConfirmModalYesMsg fires on 'y'. App dispatches the followup.
 type ConfirmModalYesMsg struct{}
 
-// ConfirmModalNoMsg fires when the user presses 'n' on an open ConfirmModal,
-// explicitly rejecting the action. App may use this to distinguish an active
-// rejection from a neutral Esc-dismiss.
+// ConfirmModalNoMsg fires on 'n', distinguishing active rejection from
+// the neutral Esc-dismiss.
 type ConfirmModalNoMsg struct{}
 
 // ConfirmModalClosedMsg signals the modal was dismissed without confirmation.
 type ConfirmModalClosedMsg struct{}
 
-// ConfirmModal is a yes/no confirmation overlay. App owns it and composes it
-// via Box + Position + PlaceOverlay, mirroring MovePicker and LinkPicker.
+// ConfirmModal is a yes/no confirmation overlay composed via Box +
+// Position + PlaceOverlay, mirroring MovePicker and LinkPicker.
 type ConfirmModal struct {
 	shell  uicore.ModalShell
 	req    ConfirmRequest
@@ -46,7 +42,6 @@ type confirmKeys struct {
 	Esc key.Binding
 }
 
-// NewConfirmModal returns a closed modal.
 func NewConfirmModal(styles Styles) ConfirmModal {
 	return ConfirmModal{
 		styles: styles,
@@ -98,7 +93,7 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 	case key.Matches(keyMsg, m.keys.Esc):
 		return m, func() tea.Msg { return ConfirmModalClosedMsg{} }
 	}
-	// q is swallowed, consistent with help/link/move picker overlays.
+	// q is swallowed, matching help/link/move picker behavior.
 	return m, nil
 }
 
@@ -114,7 +109,7 @@ func (m ConfirmModal) View() string {
 	return m.Box(m.shell.Width(), m.shell.Height())
 }
 
-// Box returns the rendered modal at the size derived from (w, h).
+// Box renders the modal at the size derived from (w, h).
 func (m ConfirmModal) Box(w, h int) string {
 	boxW := confirmModalMaxWidth
 	if w-4 < boxW {
@@ -132,20 +127,17 @@ func (m ConfirmModal) Box(w, h int) string {
 	body := ansi.Hardwrap(ansi.Wordwrap(m.req.Body, wrapW, ""), wrapW, false)
 	bodyLines := strings.Split(body, "\n")
 
-	// Pad body lines to exactly contentW cells.
 	bodyRows := make([]string, len(bodyLines))
 	for i, line := range bodyLines {
 		bodyRows[i] = uicore.PadOrTruncate(line, contentW)
 	}
 
-	// Footer row: help text.
 	help := "[y] yes   [n] no   [esc] cancel"
 	footerRows := []string{m.styles.Dim.Render(uicore.PadOrTruncate(help, contentW))}
 
 	return m.shell.Box(m.req.Title, bodyRows, footerRows, contentW)
 }
 
-// Position returns the centered top-left for PlaceOverlay.
 func (m ConfirmModal) Position(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
 }

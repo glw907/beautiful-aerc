@@ -10,20 +10,20 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// OpenConflictsFromOutboxMsg is emitted by the outbox overlay when
-// the user presses ! to transition to the conflict overlay.
+// OpenConflictsFromOutboxMsg fires on `!` to transition to the conflict
+// overlay.
 type OpenConflictsFromOutboxMsg struct{}
 
-// OutboxOverlay is the modal opened by Q. Read-only summary of the
-// drainer's queue, grouped by (kind, folder, status). App owns the
-// load → SetGroups → render lifecycle.
+// OutboxOverlay is the modal opened by Q: a read-only summary of the
+// drainer's queue grouped by (kind, folder, status). App owns the load
+// → SetGroups → render lifecycle.
 type OutboxOverlay struct {
 	shell  uicore.ModalShell
 	styles Styles
 	groups []cache.OutboxGroup
 	keys   outboxKeys
-	// nowSec is a test seam. Returns "now" in unix seconds for the
-	// "retrying in Ns" rendering. Defaults to wall clock.
+	// nowSec is a test seam returning unix seconds for the "retrying in
+	// Ns" rendering. Defaults to the wall clock.
 	nowSec func() int64
 }
 
@@ -33,7 +33,6 @@ type outboxKeys struct {
 	Swallow       key.Binding
 }
 
-// NewOutboxOverlay constructs a closed OutboxOverlay with default keys.
 func NewOutboxOverlay(styles Styles) OutboxOverlay {
 	return OutboxOverlay{
 		styles: styles,
@@ -60,7 +59,7 @@ func (o OutboxOverlay) Close() OutboxOverlay {
 	return o
 }
 
-// SetGroups replaces the displayed groups without toggling open state.
+// SetGroups replaces the displayed groups without changing open state.
 func (o OutboxOverlay) SetGroups(groups []cache.OutboxGroup) OutboxOverlay {
 	o.groups = groups
 	return o
@@ -82,7 +81,7 @@ func (o OutboxOverlay) Update(msg tea.Msg) (OutboxOverlay, tea.Cmd) {
 	case key.Matches(km, o.keys.Close):
 		return o.Close(), nil
 	case key.Matches(km, o.keys.Swallow):
-		return o, nil // overlay does not quit the app
+		return o, nil // q is swallowed; the overlay does not quit poplar
 	}
 	return o, nil
 }

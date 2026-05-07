@@ -2,9 +2,9 @@ package ui
 
 import "github.com/charmbracelet/bubbles/key"
 
-// GlobalKeys are handled by the root App model. Quit is split from
-// ForceQuit because q is context-sensitive (closes the viewer, clears
-// an active search, then quits) while Ctrl+C always quits.
+// GlobalKeys are handled by the root App model. Quit and ForceQuit are
+// split because q is context-sensitive (closes the viewer, clears an
+// active search, then quits) while Ctrl+C always quits.
 type GlobalKeys struct {
 	Help            key.Binding
 	Quit            key.Binding
@@ -22,7 +22,6 @@ type GlobalKeys struct {
 	MailMode        key.Binding
 }
 
-// NewGlobalKeys returns the default global key bindings.
 func NewGlobalKeys() GlobalKeys {
 	return GlobalKeys{
 		Help:            key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
@@ -43,8 +42,8 @@ func NewGlobalKeys() GlobalKeys {
 }
 
 // ComposeKeys are the bindings active while compose.Model has focus.
-// Ctrl chords are deliberate. Text-entry surfaces are exempt from
-// the modifier-free rule (ADR-0076).
+// Ctrl chords are deliberate; text-entry surfaces are exempt from the
+// modifier-free rule (ADR-0076).
 type ComposeKeys struct {
 	Send       key.Binding
 	Cancel     key.Binding
@@ -53,7 +52,6 @@ type ComposeKeys struct {
 	EscapeBody key.Binding
 }
 
-// NewComposeKeys returns the default compose key bindings.
 func NewComposeKeys() ComposeKeys {
 	return ComposeKeys{
 		Send:       key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("^X", "send")),

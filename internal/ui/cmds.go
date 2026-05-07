@@ -24,15 +24,15 @@ import (
 
 // ErrorMsg aliases uicore.ErrorMsg so App-side cmds and the banner
 // consumer keep their unqualified spelling. The canonical declaration
-// is in uicore. Account-subpackage cmds emit uicore.ErrorMsg directly.
+// is in uicore; account cmds emit uicore.ErrorMsg directly.
 type ErrorMsg = uicore.ErrorMsg
 
-// URLOpener launches a URL in the user's browser. App holds one;
-// tests inject a stub via App.WithOpener.
+// URLOpener launches a URL in the user's browser. App holds one; tests
+// inject a stub via App.WithOpener.
 type URLOpener func(string) error
 
 // launchURLCmd opens url via opener. xdg-open detaches and its exit
-// status is unreliable, so errors are intentionally discarded.
+// status is unreliable, so errors are intentionally dropped.
 func launchURLCmd(opener URLOpener, url string) tea.Cmd {
 	return func() tea.Msg {
 		_ = opener(url)
@@ -40,7 +40,7 @@ func launchURLCmd(opener URLOpener, url string) tea.Cmd {
 	}
 }
 
-// xdgOpenURL is the default URLOpener: shells out to xdg-open.
+// xdgOpenURL is the default URLOpener; it shells out to xdg-open.
 func xdgOpenURL(url string) error {
 	return exec.Command("xdg-open", url).Start()
 }
@@ -48,10 +48,8 @@ func xdgOpenURL(url string) error {
 // backendUpdateMsg wraps a single mail.Update in a tea.Msg.
 type backendUpdateMsg struct{ update mail.Update }
 
-// pumpUpdatesCmd waits for one mail.Update on the backend channel,
-// returns it as a backendUpdateMsg, then re-arms itself. App's
-// Update loop is responsible for re-dispatching this Cmd so the
-// pump stays alive.
+// pumpUpdatesCmd waits for one mail.Update and returns it as a msg.
+// App.Update re-dispatches after each event so the pump stays alive.
 func pumpUpdatesCmd(b mail.Backend) tea.Cmd {
 	return func() tea.Msg {
 		u, ok := <-b.Updates()
@@ -62,19 +60,18 @@ func pumpUpdatesCmd(b mail.Backend) tea.Cmd {
 	}
 }
 
-// toastExpireMsg fires when the undo timer elapses. App ignores it if
-// deadline does not match the active toast (stale tick from a prior
-// generation).
+// toastExpireMsg fires when the undo timer elapses. App ignores it
+// when deadline does not match the active toast (stale tick from a
+// prior generation).
 type toastExpireMsg struct {
 	deadline time.Time
 }
 
-// undoRequestedMsg is emitted when the user presses `u` while a toast
-// is active. App fires the inverse Cmd.
+// undoRequestedMsg fires on `u` while a toast is active. App fires the
+// inverse Cmd.
 type undoRequestedMsg struct{}
 
-// outboxDepthMsg carries the latest cache.OutboxDepth into the App
-// for status-bar refresh.
+// outboxDepthMsg refreshes the App's status-bar segment.
 type outboxDepthMsg struct{ depth cache.OutboxDepth }
 
 // outboxSummaryMsg refreshes the open Q overlay.
@@ -89,15 +86,14 @@ type outboxConflictsMsg struct {
 	err  error
 }
 
-// conflictResolvedMsg carries the result of a Retry / Discard call.
 type conflictResolvedMsg struct {
 	opID int64
 	err  error
 }
 
-// openDraftMsg is returned by openDraftFromServerUIDCmd when a DraftRow is
-// resolved (either from the local cache or freshly reconstructed). Draft is
-// the already-decoded value so the App handler is decode-free.
+// openDraftMsg is returned by openDraftFromServerUIDCmd when a DraftRow
+// is resolved (cache hit or freshly reconstructed). Draft is already
+// decoded so the App handler is decode-free.
 type openDraftMsg struct {
 	row   cache.DraftRow
 	draft compose.Draft
@@ -163,9 +159,9 @@ func sanitizeAttachFilename(name, partID string) string {
 	return name
 }
 
-// resolveSaveTarget returns the first non-existing path in dir
-// derived from base, suffixing -1, -2, ... before the extension.
-// Caps at 999 to avoid pathological loops.
+// resolveSaveTarget returns the first non-existing path in dir derived
+// from base, suffixing -1, -2, ... before the extension. Bounded at 999
+// to avoid pathological loops.
 func resolveSaveTarget(dir, base string) (string, error) {
 	candidate := filepath.Join(dir, base)
 	if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
@@ -182,8 +178,9 @@ func resolveSaveTarget(dir, base string) (string, error) {
 	return "", fmt.Errorf("collision suffix exhausted for %q", base)
 }
 
-// openAttachmentCmd writes att's bytes to a tempfile and shells out
-// to the URLOpener (xdg-open). Fire-and-forget. Errors surface via ErrorMsg.
+// openAttachmentCmd writes att to a tempfile and shells out to the
+// URLOpener (xdg-open). Fire-and-forget; fetch and write errors surface
+// via ErrorMsg, opener errors are dropped.
 func openAttachmentCmd(c *cache.Account, opener URLOpener, uid mail.UID, att mail.Attachment) tea.Cmd {
 	return func() tea.Msg {
 		body, err := c.FetchAttachment(context.Background(), uid, att.PartID)
@@ -227,7 +224,7 @@ func saveAttachmentCmd(c *cache.Account, dir string, uid mail.UID, att mail.Atta
 }
 
 // composeSeedCmd fetches the parent body and builds a Draft via the
-// matching compose.Seed* function. Result lands as uicompose.SeededMsg.
+// matching compose.Seed* function, emitting uicompose.SeededMsg.
 func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, kind uicompose.SeedKind) tea.Cmd {
 	return func() tea.Msg {
 		body, err := acct.FetchBody(parent.UID)
@@ -249,8 +246,8 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 }
 
 // composeSendCmd runs the tidy seam, assembles MIME, and queues the
-// outbox op via cache.Account.QueueOutbound. Returns ErrorMsg on any
-// failure, uicompose.SentMsg on success.
+// outbox op via cache.Account.QueueOutbound. Emits uicompose.SentMsg on
+// success, ErrorMsg on any failure.
 func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compose.Draft) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -286,7 +283,7 @@ func envelopeFromDraft(d compose.Draft) mail.Envelope {
 }
 
 // resolveDraftsFolder returns the backend folder name for the Drafts
-// canonical, or "" if none can be identified.
+// canonical, or "" when none can be identified.
 func resolveDraftsFolder(acct *cache.Account) string {
 	classified, err := acct.ListFolders()
 	if err != nil {
@@ -305,7 +302,6 @@ func resolveDraftsFolder(acct *cache.Account) string {
 	return ""
 }
 
-// enqueuePushDraftCmd forwards a push request from compose to the outbox.
 func enqueuePushDraftCmd(acct *cache.Account, draftID, folder string, mime []byte, prevUID mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -316,8 +312,8 @@ func enqueuePushDraftCmd(acct *cache.Account, draftID, folder string, mime []byt
 	}
 }
 
-// discardDraftCmd deletes the local draft row and, when prevUID is set,
-// queues a server-side Destroy so the stale image is removed.
+// discardDraftCmd deletes the local draft row and queues a server-side
+// Destroy when prevUID is set so the stale image is cleaned up.
 func discardDraftCmd(acct *cache.Account, draftID, draftsFolder string, prevUID mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -333,8 +329,8 @@ func discardDraftCmd(acct *cache.Account, draftID, draftsFolder string, prevUID 
 	}
 }
 
-// upsertAndPushDraftCmd persists draft payload and enqueues a server push.
-// Used by the save-on-close path.
+// upsertAndPushDraftCmd persists draft payload and enqueues a server
+// push, used by the save-on-close path.
 func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d compose.Draft, prevUID mail.UID) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -356,12 +352,10 @@ func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d 
 	}
 }
 
-// openDraftFromServerUIDCmd looks up the local DraftRow for uid. When
-// found it emits openDraftMsg with that row. When not found it fetches
-// the raw bytes from the cache (body fetch), parses them via
-// ParseDraftMIME, and emits openDraftMsg with a freshly allocated row
-// so the App can CreateDraft and open compose. A fetch error emits
-// uicore.ErrorMsg.
+// openDraftFromServerUIDCmd resolves a DraftRow for uid. On a local hit
+// it emits openDraftMsg with that row; on miss it fetches the raw bytes,
+// parses via ParseDraftMIME, allocates a fresh row, and emits
+// openDraftMsg. Fetch and parse errors surface via uicore.ErrorMsg.
 func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -376,7 +370,7 @@ func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder s
 		if !errors.Is(err, sql.ErrNoRows) {
 			return uicore.ErrorMsg{Op: "open draft", Err: err}
 		}
-		// No local row. Reconstruct from the server image.
+		// Reconstruct from the server image when no local row exists.
 		raw, err := acct.FetchBody(uid)
 		if err != nil {
 			return uicore.ErrorMsg{Op: "fetch draft body", Err: err}
@@ -407,15 +401,15 @@ func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder s
 }
 
 // draftLocalID reports whether uid carries the "draft:" prefix and
-// returns the local draft ID if so.
+// returns the local draft ID when it does.
 func draftLocalID(uid mail.UID) (string, bool) {
 	s := string(uid)
 	after, ok := strings.CutPrefix(s, "draft:")
 	return after, ok
 }
 
-// openLocalDraftCmd loads a locally-stored draft by its draftID
-// and emits openDraftMsg so the App's handler can mount compose.
+// openLocalDraftCmd loads a locally-stored draft by draftID and emits
+// openDraftMsg so the App handler can mount compose.
 func openLocalDraftCmd(acct *cache.Account, draftID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -435,7 +429,7 @@ func openLocalDraftCmd(acct *cache.Account, draftID string) tea.Cmd {
 }
 
 // resolveSentFolder picks the Sent folder for outbound mail from the
-// cached folder list. Returns "" if none can be identified.
+// cached folder list, or "" when none can be identified.
 func resolveSentFolder(acct *cache.Account) string {
 	classified, err := acct.ListFolders()
 	if err != nil {

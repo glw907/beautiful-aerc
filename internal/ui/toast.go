@@ -9,9 +9,9 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// triageOp aliases uicore.TriageOp so the App-side toast code reads
-// without a package prefix. The canonical type lives in uicore so the
-// account subpackage can produce TriageStartedMsg values.
+// triageOp aliases uicore.TriageOp so App-side toast code reads without
+// a package prefix. The canonical type lives in uicore so account can
+// produce TriageStartedMsg values.
 type triageOp = uicore.TriageOp
 
 const (
@@ -28,11 +28,10 @@ const (
 	opSending        = uicore.TriageSending
 )
 
-// pendingAction is the App-owned state for an in-flight optimistic
-// triage action. The zero value means "no toast active". Local
-// roll-back lives entirely in the cache layer (the inverse Cmd queues
-// a compensating QueueOp). App holds only what the toast needs to
-// render plus the undo Cmd to fire on `u`.
+// pendingAction is App's state for an in-flight optimistic triage. The
+// zero value means no toast is active. Local roll-back lives entirely
+// in the cache layer (inverse queues a compensating QueueOp); App
+// keeps only what the toast renders plus the undo Cmd to fire on `u`.
 type pendingAction struct {
 	op       triageOp
 	n        int       // affected message count
@@ -41,13 +40,12 @@ type pendingAction struct {
 	deadline time.Time // monotonic moment at which the toast expires
 }
 
-// IsZero reports whether p represents "no active toast". Every active
-// pending action has op set (the verb is required for rendering), so a
-// single check suffices.
+// IsZero reports whether p represents no active toast. Every active
+// pending action has op set, so a single check suffices.
 func (p pendingAction) IsZero() bool { return p.op == opNone }
 
-// renderToast produces the one-row toast string. Returns "" for the
-// zero pendingAction. Width-bounded, truncates with ellipsis.
+// renderToast produces the one-row toast string, "" for the zero value.
+// Truncated with ellipsis to fit width.
 func renderToast(p pendingAction, width int, styles Styles) string {
 	if p.IsZero() {
 		return ""

@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ConnectionState represents the mail connection status.
 type ConnectionState int
 
 const (
@@ -17,9 +16,8 @@ const (
 	Reconnecting
 )
 
-// StatusMode is the left-side content shown in the status bar.
-// Account mode shows message + unread counts. Viewer mode shows the
-// scroll percentage of the open message body.
+// StatusMode picks the left-side content. Account shows message + unread
+// counts; Viewer shows the scroll percentage of the open body.
 type StatusMode int
 
 const (
@@ -27,7 +25,8 @@ const (
 	StatusViewer
 )
 
-// StatusBar renders the bottom frame edge with combined status indicator.
+// StatusBar renders the bottom frame edge with the combined status
+// indicator.
 type StatusBar struct {
 	styles    Styles
 	total     int
@@ -35,13 +34,12 @@ type StatusBar struct {
 	scrollPct int
 	mode      StatusMode
 	connState ConnectionState
-	// Outbox segment: rendered between counts and the connection
-	// indicator. Hidden when both counts are zero.
+	// Outbox segment between counts and connection indicator, hidden
+	// when both counts are zero.
 	outboxInflight int // pending + executing + failed
 	outboxConflict int // conflict only
 }
 
-// NewStatusBar creates a StatusBar with the given styles.
 func NewStatusBar(styles Styles) StatusBar {
 	return StatusBar{
 		styles:    styles,
@@ -62,9 +60,9 @@ func (sb StatusBar) SetConnectionState(state ConnectionState) StatusBar {
 
 func (sb StatusBar) ConnectionState() ConnectionState { return sb.connState }
 
-// SetOutboxDepth returns a copy of sb with the outbox segment counts
-// updated. inflight = pending + executing + failed. conflict is rendered
-// separately so the warning glyph dominates.
+// SetOutboxDepth updates the outbox segment counts. inflight bundles
+// pending+executing+failed; conflict is rendered separately so the
+// warning glyph dominates.
 func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
 	if inflight < 0 {
 		inflight = 0
@@ -82,7 +80,7 @@ func (sb StatusBar) SetMode(mode StatusMode) StatusBar {
 	return sb
 }
 
-// Only meaningful when mode == StatusViewer.
+// SetScrollPct is only consulted when mode == StatusViewer.
 func (sb StatusBar) SetScrollPct(pct int) StatusBar {
 	if pct < 0 {
 		pct = 0
@@ -94,7 +92,8 @@ func (sb StatusBar) SetScrollPct(pct int) StatusBar {
 	return sb
 }
 
-// buildFill creates a horizontal line of width chars with ┴ at dividerCol.
+// buildFill builds a horizontal rule of width characters with the ┴
+// junction placed at dividerCol.
 func buildFill(width, dividerCol int) string {
 	var buf strings.Builder
 	buf.Grow(width * 3) // UTF-8 box-drawing chars are 3 bytes
@@ -108,8 +107,8 @@ func buildFill(width, dividerCol int) string {
 	return buf.String()
 }
 
-// View renders the status bar at the given width. dividerCol is the
-// column position of the panel divider (0 to skip the junction).
+// View renders the status bar at width. dividerCol places the ┴
+// junction; pass 0 to omit it.
 func (sb StatusBar) View(width, dividerCol int) string {
 	var counts string
 	switch sb.mode {
@@ -139,11 +138,10 @@ func (sb StatusBar) View(width, dividerCol int) string {
 		connStyle = sb.styles.StatusReconnect
 	}
 
-	// Build the styled segments first, then measure them with the
-	// same primitive (lipgloss.Width) used everywhere else. Measuring
-	// the plain-text template with a different primitive caused
-	// rounding drift on the connection icons and forced a corrective
-	// re-render.
+	// Build the styled segments first, then measure them with
+	// lipgloss.Width. Measuring the plain-text template with a
+	// different primitive caused rounding drift on the connection icons
+	// and forced a corrective re-render.
 	countsPart := sb.styles.StatusBar.Render(" " + counts + " · ")
 	outboxPart := sb.renderOutboxSegment()
 	connIconPart := connStyle.Render(connIcon)
@@ -158,8 +156,8 @@ func (sb StatusBar) View(width, dividerCol int) string {
 	return fillPart + countsPart + outboxPart + connIconPart + connTextPart + endPart
 }
 
-// renderOutboxSegment formats the outbox depth indicator. Returns the
-// empty string when both counts are zero (segment omitted).
+// renderOutboxSegment formats the outbox depth indicator, returning ""
+// when both counts are zero so the segment is omitted.
 func (sb StatusBar) renderOutboxSegment() string {
 	if sb.outboxInflight == 0 && sb.outboxConflict == 0 {
 		return ""

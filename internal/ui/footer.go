@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// FooterContext identifies which keybinding set to display.
+// FooterContext picks which keybinding set the footer displays.
 type FooterContext int
 
 const (
@@ -17,10 +17,10 @@ const (
 	ContactsContext
 )
 
-// footerHint is one entry in the footer's keybinding display. dropRank
+// footerHint is one entry in the footer keybinding display. dropRank
 // controls responsive behavior: when the footer can't fit the full hint
-// list, hints with higher dropRank are dropped first. dropRank 0 hints
-// are always kept (escape hatch so the user can always reach help/quit).
+// list, higher dropRanks are dropped first. dropRank 0 hints are always
+// kept so the user can always reach help/quit.
 type footerHint struct {
 	key      string
 	desc     string
@@ -32,7 +32,7 @@ func hint(key, desc string, dropRank int) footerHint {
 }
 
 // triageHints and replyHints are shared by the account and viewer
-// footers. Both contexts use identical bindings for these groups.
+// footers; both contexts bind these groups identically.
 var (
 	triageHints = []footerHint{
 		hint("d", "del", 1),
@@ -48,14 +48,12 @@ var (
 )
 
 // accountFooterGroups returns the unified one-pane account footer hint
-// groups in display order.
-//
-// Drop order (highest rank first):
+// groups in display order. Drop order (highest rank first):
 //   - nav entries (10, 9): vim/arrow users don't need the hint
-//   - v select (8), n/N results (7) — niche modes, discoverable via help
-//   - F fold all (5), . read (5), s star (4), ␣ fold (4),
-//     f fwd (3), / find (3) — secondary actions
-//   - r/R reply (2), c compose (2) — primary compose actions
+//   - v select (8), n/N results (7): niche, discoverable via help
+//   - secondary actions (5, 4, 3): F fold all, . read, s star, ␣ fold,
+//     f fwd, / find
+//   - r/R reply (2), c compose (2): primary compose actions
 //   - d del (1), a archive (1): primary triage
 //   - ? help (0), q quit (0): always kept
 func accountFooterGroups() [][]footerHint {
@@ -82,8 +80,8 @@ func accountFooterGroups() [][]footerHint {
 	}
 }
 
-// viewerFooterGroups returns the viewer footer hint groups. Reply
-// drops before triage (triage is more essential in the viewer). The
+// viewerFooterGroups returns the viewer footer hint groups. Reply drops
+// before triage because triage is more essential in the viewer. The
 // viewer/app group is always kept.
 func viewerFooterGroups() [][]footerHint {
 	return [][]footerHint{
@@ -97,7 +95,6 @@ func viewerFooterGroups() [][]footerHint {
 	}
 }
 
-// contactsFooterGroups returns the contacts-mode footer hint groups.
 func contactsFooterGroups() [][]footerHint {
 	return [][]footerHint{
 		{
@@ -116,14 +113,14 @@ func contactsFooterGroups() [][]footerHint {
 	}
 }
 
-// Footer renders context-appropriate keybinding hints with group separators.
+// Footer renders context-appropriate keybinding hints with group
+// separators.
 type Footer struct {
 	styles  Styles
 	context FooterContext
 	counter string
 }
 
-// NewFooter creates a Footer with the given styles.
 func NewFooter(styles Styles) Footer {
 	return Footer{
 		styles:  styles,
@@ -131,27 +128,24 @@ func NewFooter(styles Styles) Footer {
 	}
 }
 
-// SetContext returns a copy of f with the displayed keybinding set switched.
 func (f Footer) SetContext(ctx FooterContext) Footer {
 	f.context = ctx
 	return f
 }
 
-// SetCounter returns a copy of f with a dynamic window counter string.
-// When non-empty and context is AccountContext, the counter is injected
-// as a rank-8 hint group between the fold group and the help/quit group.
-// Pass "" to remove the counter hint.
+// SetCounter sets a dynamic window-counter string. When non-empty and
+// context is AccountContext, the counter renders as a rank-8 hint group
+// between the fold group and the help/quit group. Pass "" to remove it.
 func (f Footer) SetCounter(counter string) Footer {
 	f.counter = counter
 	return f
 }
 
-// View renders the footer at the given width.
-//
-// Hints are progressively dropped (highest dropRank first) when the
-// full hint list would exceed width. Groups that become empty collapse
-// along with their preceding separator. dropRank 0 hints are always
-// kept. If they alone still exceed width, the line overflows.
+// View renders the footer at the given width. Hints are dropped (highest
+// dropRank first) when the full list would overflow; groups that lose
+// every hint vanish along with their preceding separator. dropRank 0
+// hints are always kept, so the line can still overflow if those alone
+// exceed width.
 func (f Footer) View(width int) string {
 	var groups [][]footerHint
 	switch f.context {
@@ -162,9 +156,9 @@ func (f Footer) View(width int) string {
 	default:
 		base := accountFooterGroups()
 		if f.counter != "" {
-			// Inject the window counter as a one-element group between
-			// the fold group (second-to-last) and the help/quit group
-			// (last). dropRank 8 keeps it peer to "v select".
+			// Inject the window counter as a one-element group between the
+			// fold group (second-to-last) and the help/quit group (last).
+			// dropRank 8 makes it peer to "v select".
 			counterGroup := []footerHint{hint("", f.counter, 8)}
 			n := len(base)
 			groups = make([][]footerHint, 0, n+1)
@@ -200,9 +194,8 @@ func (f Footer) View(width int) string {
 }
 
 // fitFooterHints returns a trimmed copy of groups that fits within
-// width, dropping hints with the highest dropRank first. When a group
-// loses all of its hints, it vanishes from the output (taking its
-// separator with it).
+// width, dropping the highest-dropRank hint first. A group that loses
+// every hint vanishes along with its preceding separator.
 func fitFooterHints(groups [][]footerHint, width int) [][]footerHint {
 	visible := make([][]footerHint, len(groups))
 	for i, g := range groups {
@@ -219,8 +212,7 @@ func fitFooterHints(groups [][]footerHint, width int) [][]footerHint {
 }
 
 // highestDropRank returns the (group, hint) index of the highest
-// dropRank hint across all groups, or (-1, -1) if nothing is droppable
-// (everything left is dropRank 0).
+// dropRank across all groups, or (-1, -1) when only dropRank 0 remains.
 func highestDropRank(groups [][]footerHint) (int, int) {
 	bestGroup, bestHint, bestRank := -1, -1, 0
 	for gi, g := range groups {
@@ -236,9 +228,8 @@ func highestDropRank(groups [][]footerHint) (int, int) {
 	return bestGroup, bestHint
 }
 
-// measureFooter returns the visual cell width of the rendered footer:
-// leading space, hints joined by two spaces within a group, and
-// non-empty groups joined by " ┊  " separators.
+// measureFooter returns the rendered footer's cell width: leading space,
+// hints joined by "  " within a group, non-empty groups joined by " ┊  ".
 func measureFooter(groups [][]footerHint) int {
 	total := 1 // leading space
 	first := true

@@ -9,13 +9,12 @@ type TopLine struct {
 	styles Styles
 }
 
-// NewTopLine creates a TopLine with the given styles.
 func NewTopLine(styles Styles) TopLine {
 	return TopLine{styles: styles}
 }
 
-// View renders the top line at the given width. dividerCol is the
-// column position of the panel divider (0 to skip the junction).
+// View renders the top line at width. dividerCol places the ┬ junction;
+// pass 0 to omit it.
 func (tl TopLine) View(width, dividerCol int) string {
 	const rightEnd = "─╮"
 	const rightEndWidth = 2
