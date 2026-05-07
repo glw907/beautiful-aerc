@@ -144,7 +144,7 @@ func Fixtures() []Contact {
 		// --- M (MNO group) ---
 		{
 			Kind:   KindPerson,
-			Name:   "Méndez, Rafael",
+			Name:   "Rafael Méndez",
 			Given:  "Rafael",
 			Family: "Méndez",
 			Emails: []Email{{Address: "rafael.mendez@example.mx", Label: "work"}},
