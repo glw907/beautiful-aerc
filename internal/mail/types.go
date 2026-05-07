@@ -72,9 +72,8 @@ const (
 	DispInline
 )
 
-// String returns the canonical lowercase token. The string form is
-// what the cache stores in attachments.disposition and what backends
-// emit on the wire.
+// String returns the canonical lowercase token used on the wire and
+// in the cache attachments row.
 func (d Disposition) String() string {
 	switch d {
 	case DispInline:
@@ -84,8 +83,8 @@ func (d Disposition) String() string {
 	}
 }
 
-// ParseDisposition is the inverse of String. Empty / unknown input
-// returns an error so callers can apply their own fallback.
+// ParseDisposition is the inverse of String. Empty or unknown input
+// returns an error so callers can pick a fallback.
 func ParseDisposition(s string) (Disposition, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "attachment":
@@ -98,9 +97,9 @@ func ParseDisposition(s string) (Disposition, error) {
 }
 
 // ClassifyDisposition resolves a MIME part's disposition from the
-// Content-Disposition header value when present, falling back to
-// ContentID-presence as inline, then to attachment as the default.
-// Both backends call this at the protocol→mail boundary.
+// Content-Disposition header, falling back to ContentID-presence as
+// inline and otherwise to attachment. Both backends call this at the
+// protocol→mail boundary.
 func ClassifyDisposition(rawDisposition, contentID string) Disposition {
 	if d, err := ParseDisposition(rawDisposition); err == nil {
 		return d

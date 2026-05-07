@@ -38,11 +38,10 @@ func (cf ClassifiedFolder) ConfigKey() string {
 	return cf.Folder.Name
 }
 
-// Classify maps raw backend folders into ClassifiedFolders.
-// Role attribute wins. Alias table is consulted next. Custom is the fallback.
-// Matching is case-insensitive exact match on the provider name.
-// Order of the input is preserved. Callers that want group ordering
-// (e.g. the sidebar) sort the result themselves.
+// Classify maps raw backend folders into ClassifiedFolders. Role wins.
+// The alias table is consulted next, otherwise Custom. Alias matching
+// is case-insensitive exact match on the provider name. Input order is
+// preserved. Callers that want group ordering sort the result.
 func Classify(folders []Folder) []ClassifiedFolder {
 	if len(folders) == 0 {
 		return nil
@@ -97,9 +96,9 @@ func canonicalFromRole(role string) string {
 	return ""
 }
 
-// aliasTable maps lowercased provider names to canonical names.
-// Verified against Gmail, Fastmail, Outlook/M365, iCloud, Yahoo/AOL,
-// Proton Mail Bridge.
+// aliasTable maps lowercased provider names to canonical names,
+// verified against Gmail, Fastmail, Outlook/M365, iCloud, Yahoo/AOL,
+// and Proton Mail Bridge.
 var aliasTable = map[string]string{
 	"inbox": "Inbox",
 

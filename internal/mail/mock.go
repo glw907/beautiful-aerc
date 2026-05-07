@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// MockBackend implements Backend with hardcoded data.
-// Used for prototype development, testing, and demos.
+// MockBackend implements Backend with hardcoded data for prototype
+// development, tests, and demos.
 type MockBackend struct {
 	name    string
 	email   string
@@ -16,8 +16,8 @@ type MockBackend struct {
 	msgs    []MessageInfo
 	updates chan Update
 
-	// Recorded calls, exposed for tests that assert dispatch shape.
-	// All slices append in chronological order.
+	// Recorded calls in chronological order, for tests that assert
+	// dispatch shape.
 	DestroyCalls [][]UID
 	MoveCalls    []struct {
 		UIDs []UID
@@ -32,11 +32,8 @@ type MockBackend struct {
 
 // NewMockBackend creates a MockBackend with realistic sample data.
 func NewMockBackend() *MockBackend {
-	// Mock timestamps live in time.Local so the hour/minute values
-	// below render verbatim for an interactive demo, regardless of
-	// the developer's timezone. A CI/golden-file setup that needs
-	// reproducible output across timezones should pin a fixed
-	// location here instead.
+	// Timestamps in time.Local so the hour/minute values render
+	// verbatim during an interactive demo regardless of timezone.
 	at := func(month time.Month, day, hour, min int) time.Time {
 		return time.Date(2026, month, day, hour, min, 0, 0, time.Local)
 	}
@@ -57,8 +54,6 @@ func NewMockBackend() *MockBackend {
 		},
 		msgs: []MessageInfo{
 			// Flat single-message threads: ThreadID == UID, no InReplyTo.
-			// Only SentAt is set. The UI formats the display string via
-			// formatRelativeDate at render time.
 			{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", SentAt: at(time.April, 13, 10, 23), Flags: 0},
 			{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", SentAt: at(time.April, 13, 9, 45), Flags: 0},
 			{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", SentAt: at(time.April, 13, 9, 12), Flags: 0},
@@ -70,9 +65,10 @@ func NewMockBackend() *MockBackend {
 			{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", SentAt: at(time.April, 7, 15, 45), Flags: FlagSeen},
 			{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", SentAt: at(time.April, 7, 10, 15), Flags: FlagSeen | FlagFlagged},
 
-			// Threaded conversation T1: branching shape (root + linear chain + sibling).
-			// Exercises the full ├─ │ └─ prefix vocabulary. First child unread so a
-			// folded thread can still carry "contains unread" status.
+			// Threaded conversation T1: root + linear chain + sibling so
+			// rendering exercises the full ├─ │ └─ prefix vocabulary.
+			// First child stays unread so a folded thread can still carry
+			// "contains unread" status.
 			{UID: "20", ThreadID: "T1", InReplyTo: "", Subject: "Server migration plan", From: "Frank Lee", SentAt: at(time.April, 5, 9, 0), Flags: FlagSeen | FlagAnswered},
 			{UID: "21", ThreadID: "T1", InReplyTo: "20", Subject: "Re: Server migration plan", From: "Grace Kim", SentAt: at(time.April, 5, 11, 30), Flags: 0},
 			{UID: "22", ThreadID: "T1", InReplyTo: "21", Subject: "Re: Server migration plan", From: "Frank Lee", SentAt: at(time.April, 5, 14, 15), Flags: FlagSeen},
@@ -95,9 +91,7 @@ func (m *MockBackend) ListFolders() ([]Folder, error) {
 
 func (m *MockBackend) OpenFolder(_ string) error { return nil }
 
-// QueryFolder slices the hardcoded message list. The mock ignores
-// folder name (always returns the same set) and clamps offset/limit
-// to the available range.
+// QueryFolder slices the hardcoded list. Folder name is ignored.
 func (m *MockBackend) QueryFolder(_ string, offset, limit int) ([]UID, int, error) {
 	total := len(m.msgs)
 	if offset >= total {
@@ -114,7 +108,7 @@ func (m *MockBackend) QueryFolder(_ string, offset, limit int) ([]UID, int, erro
 	return uids, total, nil
 }
 
-// FetchHeaders ignores uids. The mock always returns all messages.
+// FetchHeaders ignores uids and always returns the full message set.
 func (m *MockBackend) FetchHeaders(_ []UID) ([]MessageInfo, error) {
 	return m.msgs, nil
 }
@@ -126,10 +120,10 @@ func (m *MockBackend) FetchBody(uid UID) ([]byte, error) {
 	return []byte(fmt.Sprintf("Mock body for message %s\n\nNo extended content available for this UID.", uid)), nil
 }
 
-// mockBodies holds realistic markdown bodies keyed by UID, chosen to
-// stress the wrap pipeline (styled spans across the cap, nested
-// quotes, long URLs, code blocks, list hanging indent, footnote
-// markers at the column boundary).
+// mockBodies holds realistic markdown bodies keyed by UID, shaped to
+// stress the wrap pipeline: styled spans across the cap, nested
+// quotes, long URLs, code blocks, hanging-indent lists, footnote
+// markers at the column boundary.
 var mockBodies = map[UID]string{
 	"1": `Hi Geoff,
 
@@ -227,7 +221,6 @@ Reply directly to this email or visit the discussion at https://github.example.c
 `,
 }
 
-// Override in tests that need richer fixtures.
 func (m *MockBackend) Attachments(_ UID) ([]Attachment, error)         { return nil, nil }
 func (m *MockBackend) FetchAttachment(_ UID, _ string) ([]byte, error) { return nil, nil }
 
@@ -239,8 +232,7 @@ func (m *MockBackend) Move(uids []UID, dest string) error {
 	return nil
 }
 
-// Destroy permanently removes uids from the in-memory message list,
-// bypassing Trash. Empty input is a no-op.
+// Destroy removes uids from the in-memory list. Empty input is a no-op.
 func (m *MockBackend) Destroy(uids []UID) error {
 	if len(uids) == 0 {
 		return nil
@@ -282,7 +274,7 @@ func (m *MockBackend) PushDraft(_ string, _ []byte, _ UID) (UID, error) {
 	return "", ErrUnsupported
 }
 
-// Updates never sends. The channel always blocks.
+// Updates returns a channel that never sends.
 func (m *MockBackend) Updates() <-chan Update {
 	return m.updates
 }
