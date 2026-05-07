@@ -15,12 +15,12 @@ import (
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/mailauth"
-	"github.com/glw907/poplar/internal/mailauth/keepalive"
 )
 
 const (
 	dialTimeout       = 30 * time.Second
-	keepAliveInterval = 30 // seconds, for both net.Dialer and syscall tuning
+	keepAliveIdle     = 30 * time.Second
+	keepAliveInterval = 30 * time.Second
 	keepAliveProbes   = 3
 )
 
@@ -106,35 +106,18 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 }
 
 // dialRawTCP opens a TCP connection with dial timeout and keepalive
-// tuning applied. Callers layer TLS or STARTTLS on top.
+// tuning. Callers layer TLS or STARTTLS on top.
 func dialRawTCP(addr string) (net.Conn, error) {
 	d := &net.Dialer{
-		Timeout:   dialTimeout,
-		KeepAlive: time.Duration(keepAliveInterval) * time.Second,
+		Timeout: dialTimeout,
+		KeepAliveConfig: net.KeepAliveConfig{
+			Enable:   true,
+			Idle:     keepAliveIdle,
+			Interval: keepAliveInterval,
+			Count:    keepAliveProbes,
+		},
 	}
-	raw, err := d.Dial("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	if tcp, ok := raw.(*net.TCPConn); ok {
-		applyKeepalive(tcp)
-	}
-	return raw, nil
-}
-
-// applyKeepalive tunes kernel TCP keepalive probes and interval. The
-// Dialer's KeepAlive already provides basic keepalive. Syscall tuning
-// is advisory and failures are silently ignored.
-func applyKeepalive(c *net.TCPConn) {
-	_ = c.SetKeepAlive(true)
-	f, err := c.File()
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fd := int(f.Fd())
-	_ = keepalive.SetTcpKeepaliveProbes(fd, keepAliveProbes)
-	_ = keepalive.SetTcpKeepaliveInterval(fd, keepAliveInterval)
+	return d.Dial("tcp", addr)
 }
 
 // resolvedPassword returns the cached password, resolving on first

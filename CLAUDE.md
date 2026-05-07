@@ -144,7 +144,9 @@ binding facts that are not universal.
 - `docs/poplar/keybindings.md` — authoritative key map.
 - `docs/poplar/STATUS.md` — current pass + next starter prompt.
 - `docs/poplar/decisions/` — ADR archive. Load a specific ADR when
-  you need the rationale behind an invariant.
+  you need the rationale behind an invariant; load
+  `docs/poplar/decisions/INDEX.md` when you need the themed map
+  from binding facts to ADR numbers.
 
 ## Development workflow
 

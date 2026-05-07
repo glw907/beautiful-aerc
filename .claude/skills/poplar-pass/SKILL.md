@@ -127,13 +127,13 @@ binding facts. For each ADR written in step 2:
 - **Rewrite** an existing fact if the decision changed it.
 - **Remove** a fact if the decision made it obsolete.
 
-**Never append blindly.** The file is 300 lines max (enforced by
+**Never append blindly.** The file is 400 lines max (enforced by
 `.claude/hooks/claude-md-size.sh`). If you add without removing, it
 grows unbounded. Consider which existing facts this pass made
 redundant or wrong.
 
-Update the decision index table at the bottom to include the new
-ADR numbers.
+Update `docs/poplar/decisions/INDEX.md` (the themed map of binding
+facts to ADR numbers) with rows for the new ADRs.
 
 ### 4. Update STATUS.md
 
