@@ -1,14 +1,12 @@
 package content
 
-// Block represents a semantic unit of email content. The unexported
-// marker method seals the interface to the concrete types in this
-// package. Discrimination is by Go type switch on the value.
+// Block is one semantic unit of email content. The unexported
+// marker seals the interface. Type-switch on the value to discriminate.
 type Block interface {
 	isBlock()
 }
 
-// Span represents an inline styled segment within a block. Sealed
-// the same way as Block.
+// Span is an inline styled segment within a block. Sealed like Block.
 type Span interface {
 	isSpan()
 }
@@ -64,13 +62,13 @@ func (Italic) isSpan() {}
 func (Code) isSpan()   {}
 func (Link) isSpan()   {}
 
-// Address is a parsed email address with optional display name.
+// Address is an email address with optional display name.
 type Address struct {
 	Name  string
 	Email string
 }
 
-// ParsedHeaders holds the structured header fields from an email.
+// ParsedHeaders are the structured header fields of an email.
 type ParsedHeaders struct {
 	From    []Address
 	To      []Address

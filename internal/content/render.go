@@ -12,9 +12,8 @@ const maxBodyWidth = 72
 
 // wrap is the renderer's width-honoring word wrap. Wordwrap respects
 // word boundaries. Hardwrap catches the residue when a single token
-// (long URL, code identifier) exceeds width. Together they guarantee
-// no output line is wider than width. Every block renderer below
-// relies on this contract.
+// exceeds width. Every block renderer below relies on the resulting
+// no-line-wider-than-width contract.
 func wrap(text string, width int) string {
 	if width < 1 {
 		width = 1
@@ -33,9 +32,8 @@ func RenderBody(blocks []Block, t *theme.CompiledTheme, width int) string {
 	return joinRenderedBlocks(blocks, t, w)
 }
 
-// joinRenderedBlocks renders blocks and joins them with appropriate
-// separators: single newline between consecutive list items, double
-// newline between all other blocks.
+// joinRenderedBlocks renders blocks and joins them. Consecutive list
+// items get a single newline. Everything else gets a blank line.
 func joinRenderedBlocks(blocks []Block, t *theme.CompiledTheme, width int) string {
 	if len(blocks) == 0 {
 		return ""
@@ -75,9 +73,7 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 		if b.Level > 1 {
 			style = t.DeepQuote
 		}
-		prefix := "> " // single level. Structural nesting handles depth.
-		// Use lipgloss.Width (display cells) not len (bytes) for the
-		// prefix deduction so wide-char prefixes don't undercount.
+		prefix := "> "
 		content := joinRenderedBlocks(b.Blocks, t, width-lipgloss.Width(prefix))
 		var lines []string
 		for _, line := range strings.Split(content, "\n") {
@@ -119,8 +115,6 @@ func renderBlock(block Block, t *theme.CompiledTheme, width int) string {
 		if b.Ordered {
 			prefix = string(rune('0'+b.Index%10)) + ". "
 		}
-		// Use lipgloss.Width (display cells) not len (bytes) for the
-		// prefix deduction and indent width.
 		prefixW := lipgloss.Width(prefix)
 		indent := strings.Repeat(" ", prefixW)
 		wrapped := wrap(text, width-prefixW)
@@ -185,11 +179,10 @@ func renderTable(table Table, t *theme.CompiledTheme) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// RenderHeaders renders parsed headers into a styled string. The
-// Subject is hoisted as a title above the From/To/Cc/Bcc/Date block.
-// A blank line separates the title from the metadata. Header leaf
-// styles carry Background(BgSubtle) (see palette.go). Unstyled
-// padding/indent runs are wrapped through bg here to match.
+// RenderHeaders renders parsed headers into a styled string with
+// Subject hoisted as a title above the From/To/Cc/Bcc/Date block.
+// Header leaf styles carry Background(BgSubtle), so unstyled padding
+// runs are wrapped through bg here to match.
 func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	bg := lipgloss.NewStyle().Background(t.BgSubtle)
 
@@ -215,22 +208,19 @@ func RenderHeaders(h ParsedHeaders, t *theme.CompiledTheme, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// headerKeyColWidth is the cell width of the label column. The
-// longest visible label after the Subject hoist is "date" (4 cells);
-// the column stays at 8 cells for alignment headroom and to keep
-// values landing where the prior layout placed them.
+// headerKeyColWidth keeps the label column at 8 cells (longest
+// visible label is "date" at 4) so values land where prior layouts
+// placed them.
 const headerKeyColWidth = 8
 
-// metadataIndent is the leading whitespace prefix on every metadata
-// row (From/To/Cc/Bcc/Date). The two-cell inset reads as a margin
-// annotation, distinct from the subject and body which sit flush
-// at the pane's existing 1-cell padding.
+// metadataIndent is the two-cell inset on From/To/Cc/Bcc/Date rows.
+// The inset reads as a margin annotation, distinct from the subject
+// and body which sit flush at the pane's 1-cell padding.
 const metadataIndent = "  "
 
-// metadataPrefixWidth is the display-cell width of the row prefix
-// (metadataIndent + headerKeyColWidth + trailing space), used by
-// the wrap accumulator. Computed against raw strings so it stays
-// correct after surface-baking wraps the prefix in ANSI.
+// metadataPrefixWidth is the display-cell width of the row prefix:
+// metadataIndent + headerKeyColWidth + trailing space. Computed from
+// raw strings so it stays correct after ANSI wrapping.
 const metadataPrefixWidth = len(metadataIndent) + headerKeyColWidth + 1
 
 func renderHeaderKey(key string, t *theme.CompiledTheme, bg lipgloss.Style) string {
@@ -250,12 +240,11 @@ func renderHeaderScalar(key, value string, t *theme.CompiledTheme, bg lipgloss.S
 }
 
 // visibleAddrWidth returns the printed width of an Address as
-// rendered by renderHeaderAddresses. Used by the wrap accumulator to
-// decide where to break.
+// rendered by renderHeaderAddresses, for the wrap accumulator.
 func visibleAddrWidth(a Address) int {
 	switch {
 	case a.Name != "" && a.Email != "":
-		return len(a.Name) + len(a.Email) + 3 // " <" + ">"
+		return len(a.Name) + len(a.Email) + 3
 	case a.Name != "":
 		return len(a.Name)
 	default:

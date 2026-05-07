@@ -5,22 +5,20 @@ import (
 	"strings"
 )
 
-// ParseHeaders parses raw RFC 2822 headers into structured fields.
-// Handles continuation lines, CRLF, and bare email addresses.
+// ParseHeaders parses raw RFC 2822 headers into structured fields,
+// handling continuation lines, CRLF, and bare email addresses.
 func ParseHeaders(raw string) ParsedHeaders {
 	var h ParsedHeaders
 
-	// Unfold continuation lines and normalize CRLF
 	raw = strings.ReplaceAll(raw, "\r\n", "\n")
 	lines := strings.Split(raw, "\n")
 
 	var unfolded []string
 	for _, line := range lines {
 		if line == "" {
-			break // end of headers
+			break
 		}
 		if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
-			// Continuation line
 			if len(unfolded) > 0 {
 				unfolded[len(unfolded)-1] += " " + strings.TrimSpace(line)
 			}
@@ -60,7 +58,6 @@ func ParseHeaders(raw string) ParsedHeaders {
 func ParseAddressList(val string) []Address {
 	addrs, err := mail.ParseAddressList(val)
 	if err != nil {
-		// Fall back to treating the whole value as a single bare email.
 		email := strings.TrimSpace(val)
 		email = strings.TrimPrefix(email, "<")
 		email = strings.TrimSuffix(email, ">")

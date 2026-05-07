@@ -2,19 +2,14 @@ package content
 
 import "strings"
 
-// trimURL produces a compact inline form of a URL for the long-bare-URL
-// footnote path. Strips the scheme, keeps the host (with port), and
-// optionally appends "/" + the first path segment. A trailing "/" is
-// preserved only when it terminates the URL. Appends "…" when anything
-// was removed.
-//
-// The trim cuts on '/', '?', '#', '&'. A single oversized opaque path
-// segment with no further separators (Google/Facebook tracking URLs
-// often look like this) is byte-capped at maxPathSegmentLen so the
-// trimmed form stays compact.
-//
-// Userinfo, IPv6 brackets, and punycode are pass-through. They do
-// not appear in real bodies poplar surfaces.
+// trimURL produces a compact inline form of a URL for the long-bare-
+// URL footnote path. The scheme is dropped, the host (with port) is
+// kept, and the first path segment is appended when one exists. A
+// trailing "/" survives only at end-of-URL. "…" marks anything cut.
+// Cuts fall on '/', '?', '#', '&'. A single oversized opaque segment
+// (Google/Facebook tracking URLs often look like this) is byte-capped
+// at maxPathSegmentLen. Userinfo, IPv6 brackets, and punycode pass
+// through, since they don't appear in real poplar surfaces.
 func trimURL(url string) string {
 	if url == "" {
 		return ""
@@ -46,9 +41,8 @@ func trimURL(url string) string {
 	return host + tail[:segEnd] + "…"
 }
 
-// maxPathSegmentLen caps the inlined first path segment (not counting
-// the leading "/"). Above this, trimURL elides the rest of the
-// segment with "…".
+// maxPathSegmentLen caps the inlined first path segment, leading "/"
+// excluded. Trailing bytes get elided with "…".
 const maxPathSegmentLen = 16
 
 func stripScheme(url string) string {

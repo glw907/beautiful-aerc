@@ -16,18 +16,16 @@ var (
 	reSignature   = regexp.MustCompile(`^-- $`)
 )
 
-// urlSchemes is the ordered list of bare-URL schemes that splitBareURLs recognizes.
 var urlSchemes = []string{"https://", "http://", "mailto:"}
 
-// trailingPunct holds characters trimmed from the right end of a bare URL.
-// These close a sentence, bracket, or code-span context but never a URL.
+// trailingPunct holds characters trimmed from the right of a bare URL.
+// They close a sentence, bracket, or code span but never a URL.
 const trailingPunct = `.,;:!?)]>'"` + "`"
 
-// splitBareURLs splits a plain-text string on bare URL occurrences,
-// returning a mix of Text and Link spans. Recognized schemes: https://,
-// http://, mailto:. Trailing sentence punctuation is trimmed from each URL.
-// This function must only be called on raw Text content, never on content
-// already inside a Link/Bold/Italic/Code span.
+// splitBareURLs replaces https://, http://, and mailto: URLs in a
+// plain Text string with Link spans, trimming trailing sentence
+// punctuation. Call only on raw Text, never on content already inside
+// a Link/Bold/Italic/Code span.
 func splitBareURLs(s string) []Span {
 	if s == "" {
 		return nil
@@ -37,7 +35,6 @@ func splitBareURLs(s string) []Span {
 	remaining := s
 
 	for len(remaining) > 0 {
-		// Find the earliest URL scheme.
 		earliest := -1
 		for _, scheme := range urlSchemes {
 			idx := strings.Index(remaining, scheme)
@@ -46,18 +43,15 @@ func splitBareURLs(s string) []Span {
 			}
 		}
 		if earliest < 0 {
-			// No more URLs.
 			out = append(out, Text{Content: remaining})
 			break
 		}
 
-		// Emit text before the URL.
 		if earliest > 0 {
 			out = append(out, Text{Content: remaining[:earliest]})
 		}
 		remaining = remaining[earliest:]
 
-		// URL continues until whitespace or end of string.
 		end := strings.IndexAny(remaining, " \t\n\r")
 		var rawURL string
 		if end < 0 {
@@ -68,9 +62,8 @@ func splitBareURLs(s string) []Span {
 			remaining = remaining[end:]
 		}
 
-		// Trim trailing sentence punctuation.
 		trimmed := strings.TrimRight(rawURL, trailingPunct)
-		// Reject scheme-only tokens. They are censored placeholders, not launchable URLs.
+		// Scheme-only tokens are censored placeholders, not launchable URLs.
 		schemeOnly := false
 		for _, scheme := range urlSchemes {
 			if trimmed == scheme {
@@ -92,22 +85,20 @@ func splitBareURLs(s string) []Span {
 	return out
 }
 
-// ParseBlocks parses normalized markdown into email-aware block types.
-// Strips carriage returns as a defensive measure: the filter layer removes
-// them, but ParseBlocks may be called directly in tests or future paths.
+// ParseBlocks parses normalized markdown into email-aware block
+// types. Carriage returns are stripped here too so callers that
+// bypass the filter layer (tests, future paths) still get clean input.
 func ParseBlocks(markdown string) []Block {
 	markdown = strings.ReplaceAll(markdown, "\r", "")
 	blocks := parseBlocksAtLevel(markdown, 1)
 	return wrapImpliedQuotes(blocks)
 }
 
-// wrapImpliedQuotes fixes HTML emails where the first reply level lacks
-// a <blockquote> tag. When a QuoteAttribution at the top level is
-// followed by non-Blockquote content, all subsequent blocks are wrapped
-// in a Blockquote{Level: 1}. Only triggers at the top level to avoid
-// compounding nesting on recursive attributions.
+// wrapImpliedQuotes patches HTML emails whose first reply level
+// lacks a <blockquote>. A top-level QuoteAttribution followed by
+// non-Blockquote content gets wrapped in a Blockquote{Level: 1}.
+// Top-level only, since recursive attributions would compound.
 func wrapImpliedQuotes(blocks []Block) []Block {
-	// Find the first QuoteAttribution.
 	attrIdx := -1
 	for i, b := range blocks {
 		if _, ok := b.(QuoteAttribution); ok {
@@ -119,14 +110,10 @@ func wrapImpliedQuotes(blocks []Block) []Block {
 		return blocks
 	}
 
-	// If the first block after the attribution is already a Blockquote,
-	// the HTML had a proper <blockquote> tag. No wrapping is needed.
 	if _, ok := blocks[attrIdx+1].(Blockquote); ok {
 		return blocks
 	}
 
-	// Wrap all blocks after the attribution in a level-1 Blockquote.
-	// Existing Blockquotes within get their levels incremented.
 	inner := make([]Block, len(blocks[attrIdx+1:]))
 	for i, b := range blocks[attrIdx+1:] {
 		inner[i] = incrementQuoteLevels(b)
@@ -158,13 +145,11 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 	for i < len(lines) {
 		line := lines[i]
 
-		// Skip blank lines between blocks
 		if strings.TrimSpace(line) == "" {
 			i++
 			continue
 		}
 
-		// Signature: "-- " marker, everything after is signature
 		if reSignature.MatchString(line) {
 			var sigLines [][]Span
 			for i++; i < len(lines); i++ {
@@ -186,7 +171,7 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 				i++
 			}
 			if i < len(lines) {
-				i++ // skip closing fence
+				i++
 			}
 			blocks = append(blocks, CodeBlock{
 				Text: strings.Join(codeLines, "\n"),
@@ -195,7 +180,6 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 			continue
 		}
 
-		// Heading
 		if m := reHeading.FindStringSubmatch(line); m != nil {
 			blocks = append(blocks, Heading{
 				Level: len(m[1]),
@@ -205,21 +189,20 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 			continue
 		}
 
-		// Horizontal rule
 		if reRule.MatchString(strings.TrimSpace(line)) {
 			blocks = append(blocks, Rule{})
 			i++
 			continue
 		}
 
-		// Quote attribution (must check before blockquote)
+		// Attribution must precede blockquote: a "> On ... wrote:"
+		// line matches both, and we want the attribution interpretation.
 		if reAttribution.MatchString(strings.TrimSpace(line)) {
 			blocks = append(blocks, QuoteAttribution{Spans: parseSpans(strings.TrimSpace(line))})
 			i++
 			continue
 		}
 
-		// Blockquote
 		if reQuotePrefix.MatchString(line) {
 			var quoteLines []string
 			for i < len(lines) && reQuotePrefix.MatchString(lines[i]) {
@@ -230,7 +213,6 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 			continue
 		}
 
-		// List items (unordered)
 		if m := reUnordered.FindStringSubmatch(line); m != nil {
 			blocks = append(blocks, ListItem{
 				Spans:   parseSpans(collectListItem(m[1], lines, &i)),
@@ -239,7 +221,6 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 			continue
 		}
 
-		// List items (ordered)
 		if m := reOrdered.FindStringSubmatch(line); m != nil {
 			idx := 0
 			for _, c := range m[1] {
@@ -253,7 +234,6 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 			continue
 		}
 
-		// Paragraph: collect consecutive non-blank, non-special lines
 		var paraLines []string
 		for i < len(lines) {
 			l := lines[i]
@@ -279,12 +259,11 @@ func parseBlocksAtLevel(markdown string, quoteLevel int) []Block {
 	return blocks
 }
 
-// collectListItem advances past the marker line at *i and merges any
-// indented continuation lines into the item's text. Plain-text mail
-// clients (Gmail) wrap list-item bodies onto the next line with the
-// same indent as the bullet content. Without this merge, the wrapped
-// lines fall into a sibling paragraph and the bullet structure
-// visibly collapses.
+// collectListItem advances past the marker at *i and folds indented
+// continuation lines into the item. Plain-text Gmail wraps list-item
+// bodies onto the next line at the bullet-content indent. Without
+// this merge those wrapped lines become a sibling paragraph and the
+// bullet structure visibly collapses.
 func collectListItem(text string, lines []string, i *int) string {
 	*i++
 	var b strings.Builder
@@ -311,7 +290,6 @@ func collectListItem(text string, lines []string, i *int) string {
 // parseBlockquote parses collected quote-prefixed lines into a
 // Blockquote with recursive nesting.
 func parseBlockquote(lines []string, level int) Blockquote {
-	// Strip one level of "> " prefix
 	var stripped []string
 	for _, line := range lines {
 		m := reQuotePrefix.FindStringSubmatch(line)
@@ -343,14 +321,12 @@ func parseSpans(input string) []Span {
 	remaining := input
 
 	for len(remaining) > 0 {
-		// Find the earliest inline marker
 		boldIdx := strings.Index(remaining, "**")
 		italicIdx := -1
-		// Only match single * that isn't part of **
 		for i := 0; i < len(remaining); i++ {
 			if remaining[i] == '*' {
 				if i+1 < len(remaining) && remaining[i+1] == '*' {
-					i++ // skip **
+					i++
 					continue
 				}
 				italicIdx = i
@@ -360,7 +336,6 @@ func parseSpans(input string) []Span {
 		codeIdx := strings.Index(remaining, "`")
 		linkIdx := strings.Index(remaining, "[")
 
-		// Find the earliest marker
 		best := len(remaining)
 		bestKind := -1
 		for _, candidate := range []struct {
@@ -383,7 +358,6 @@ func parseSpans(input string) []Span {
 			break
 		}
 
-		// Add any text before the marker
 		if best > 0 {
 			spans = append(spans, Text{Content: remaining[:best]})
 		}
@@ -439,10 +413,9 @@ func parseSpans(input string) []Span {
 		}
 	}
 
-	// Post-process: expand Text spans that contain bare URLs into Link spans.
-	// Non-Text spans (Bold, Italic, Code, Link) pass through untouched.
-	// Short-circuit: if no Text span contains a URL scheme, return spans unchanged
-	// to avoid allocating a new slice on the hot path.
+	// Expand Text spans containing bare URLs into Link spans. Other
+	// span kinds pass through. The hot-path short-circuit avoids
+	// allocating a new slice when no Text span carries a URL scheme.
 	hasURL := false
 	for _, s := range spans {
 		if t, ok := s.(Text); ok {
