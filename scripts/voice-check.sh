@@ -87,11 +87,10 @@ scan "T33" \
     '//[^/]*—' \
     'em dash in comment. Use a period. Reserve em dashes for short comma-like asides.'
 
-# T34: semicolon as clause-joiner inside a // comment. Matches "; " plus
-# one more char to skip stylistic trailing semicolons.
-scan "T34" \
-    '//[^/]*;[[:space:]][^/]' \
-    'semicolon clause-joiner in comment. Use a period or rewrite as one sentence.'
+# T34 (semicolon clause-joiner) was a mechanical gate through Pass 9k.2.
+# Demoted to the /simplify voice lens during 9k.3. Periods are still the
+# default, but a considered semicolon between two tightly-related clauses
+# is fair game when the prose reads better. Reviews flag overuse.
 
 # T35: documentation labels inside // comments. Conservative noun list.
 # These have no other natural comment use in Go.

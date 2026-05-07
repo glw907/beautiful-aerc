@@ -2,9 +2,9 @@ package account
 
 import "github.com/charmbracelet/bubbles/key"
 
-// Keys are handled by account.Model. The set spans message-list
-// motion, sidebar motion, folder jumps, search shelf, fold control,
-// and the n/N message advance keys consumed when the viewer is open.
+// Keys spans message-list motion, sidebar motion, folder jumps, the
+// search shelf, fold control, and the n/N advance keys consumed while
+// the viewer is open.
 type Keys struct {
 	OpenSearch    key.Binding
 	ClearSearch   key.Binding
@@ -35,7 +35,6 @@ type Keys struct {
 	Empty         key.Binding
 }
 
-// NewKeys returns the default account-view key bindings.
 func NewKeys() Keys {
 	return Keys{
 		OpenSearch:    key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
