@@ -214,6 +214,30 @@ See ADR for help popover future-binding policy.
 | `TabInactiveText` | `FgDim` | — | Inactive tab label |
 | `TabConnectLine` | `BgBorder` | — | Tab-to-frame connector |
 
+### Contacts (i-popover, sidebar, list, form, detail card)
+
+The contacts surfaces render on whatever background their parent
+provides — no package-level background fill. The `contacts.Styles`
+struct lives in `internal/ui/contacts/styles.go`.
+
+| Field | fg | bg | Role |
+|-------|----|----|------|
+| `Name` | `FgBright` bold | — | Contact display name in the detail card |
+| `TitleOrg` | `FgBase` | — | Job title / org line under the name |
+| `Body` | `FgBase` | — | Address and phone values in the detail card |
+| `Dim` | `FgDim` | — | Parenthetical metadata and label suffixes (e.g. "work") in autocomplete and detail card |
+| `Rule` | `FgDim` | — | Separator rule under the name/title block |
+| `CursorRow` | `AccentPrimary` | — | Selected row in the contacts list and T9 sidebar |
+| `GroupLabel` | `AccentPrimary` | — | T9 group letter label (e.g. "A") |
+| `GroupCount` | `FgDim` | — | Contact count within a T9 group |
+| `LetterTick` | `AccentPrimary` | — | Per-letter cursor tick within a T9 group (`A · ┃B · C`) |
+| `Border` | `FgDim` | — | Form input border (alias for FieldBlur; retained for non-focus contexts) |
+| `FieldFocus` | `AccentPrimary` | — | Form field border in focus state |
+| `FieldBlur` | `FgDim` | — | Form field border in blur state |
+| `KindOn` | `AccentPrimary` bold | — | Kind toggle (Person / Org) selected state |
+| `KindOff` | `FgDim` | — | Kind toggle unselected state |
+| `Warn` | `ColorWarning` | — | Validation error text |
+
 ### Miscellaneous
 
 | Field | fg | bg | Role |
