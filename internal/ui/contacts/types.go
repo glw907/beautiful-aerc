@@ -4,8 +4,6 @@
 package contacts
 
 // Kind distinguishes a person card from an organization card.
-// Person cards render first/last, org/title; org cards collapse to a
-// single name line plus emails/phones/note.
 type Kind int
 
 const (
@@ -29,8 +27,8 @@ type Contact struct {
 	Phones []Phone
 }
 
-// Email pairs an address with an optional label. Position-as-primary:
-// index 0 is the primary email; the form rewrites the slice to reorder.
+// Email pairs an address with an optional label. Index 0 is the
+// primary email; the form reorders the slice on change.
 type Email struct {
 	Address string
 	Label   string // "work", "home", or "" for unlabeled
