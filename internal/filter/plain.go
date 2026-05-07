@@ -20,17 +20,17 @@ func detectHTML(text string) bool {
 	return htmlTagRe.MatchString(sample)
 }
 
-// CleanPlain normalizes plain text email content to markdown.
-// Detects HTML-in-plain-text and routes through CleanHTML if found.
+// CleanPlain normalizes plain-text email content to markdown,
+// rerouting through CleanHTML when HTML-in-plain-text is detected.
 func CleanPlain(text string) string {
-	// Strip carriage returns from CRLF line endings (RFC 2822 7bit/8bit bodies)
-	// before any other processing, including the HTML detection branch.
+	// Strip CRs before HTML detection so the sniff sees a clean buffer.
 	text = strings.ReplaceAll(text, "\r", "")
 	if detectHTML(text) {
 		return CleanHTML(text)
 	}
 	text = html.UnescapeString(text)
-	// Normalize tab-indented list items to prevent 8-space expansion.
+	// Drop tab indentation on list items. Otherwise the renderer
+	// treats it as 8-space indent and the list visually disintegrates.
 	text = reTabListItem.ReplaceAllString(text, "$1")
 	return text
 }

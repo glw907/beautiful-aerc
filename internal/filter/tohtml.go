@@ -20,8 +20,8 @@ const htmlSkeletonTail = `</body>
 `
 
 // MarkdownToHTML renders src to a standalone HTML document with the
-// poplar default extension set (Linkify + Table). Use [MarkdownBody]
-// when embedding the body in a larger MIME message.
+// poplar default extensions (Linkify + Table). Use MarkdownBody when
+// embedding the result inside a larger MIME message.
 func MarkdownToHTML(src []byte) (string, error) {
 	body, err := MarkdownBody(src)
 	if err != nil {
@@ -30,8 +30,8 @@ func MarkdownToHTML(src []byte) (string, error) {
 	return htmlSkeletonHead + body + htmlSkeletonTail, nil
 }
 
-// MarkdownBody renders src to inner HTML. No skeleton, no enclosing
-// elements. Used by compose.AssembleMIME for the text/html part of a
+// MarkdownBody renders src to inner HTML, with no document skeleton.
+// Used by compose.AssembleMIME for the text/html part of a
 // multipart/alternative.
 func MarkdownBody(src []byte) (string, error) {
 	md := goldmark.New(
@@ -44,8 +44,7 @@ func MarkdownBody(src []byte) (string, error) {
 	return body.String(), nil
 }
 
-// ToHTML reads markdown from r and writes the rendered HTML document
-// to w. Replaces pandoc in aerc's multipart-converters.
+// ToHTML reads markdown from r and writes the rendered HTML to w.
 func ToHTML(r io.Reader, w io.Writer) error {
 	src, err := io.ReadAll(r)
 	if err != nil {
