@@ -156,29 +156,25 @@ the ADR(s) that justify them.
   (`account.TriageStartedMsg`, `account.CacheEventMsg`,
   `account.OpenConfirmEmptyMsg`, `account.EmptyFolderConfirmedMsg`,
   `account.FolderLoadedMsg`, `reader.BodyLoadedMsg`,
-  `sidebar.ClearSearchMsg`). Reader and compose cmds that emit
-  `uicore.ErrorMsg` and orchestrate App seams (`URLOpener`,
-  `TidyFn`) currently live in `internal/ui/cmds.go`; they
-  accept App seams as function-typed parameters. The
-  `internal/ui/compose` import shadows the `internal/compose`
-  domain package, so App-side imports use `uicompose
-  "github.com/glw907/poplar/internal/ui/compose"`; inside
-  `internal/ui/compose/` the domain package is aliased
+  `sidebar.ClearSearchMsg`). Reader/compose cmds emitting
+  `uicore.ErrorMsg` and orchestrating App seams (`URLOpener`,
+  `TidyFn`) live in `internal/ui/cmds.go`, accepting seams as
+  function-typed parameters. `internal/ui/compose` shadows the
+  `internal/compose` domain package: App-side imports use `uicompose`,
+  and inside `internal/ui/compose/` the domain package is aliased
   `mailcompose`. ADRs 0161, 0162, 0163.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
   tree. `account.Model` holds the cache handle (backend reachable via
   `account.Model.Backend()` for `pumpUpdatesCmd`); reads come from
   `cache.Account.QueryFolder`/`ListFolders`, writes from
-  `cache.Account.QueueOp`. `messagelist.Model` is presentation-only —
-  `RefreshSource` re-reads cache state after every write,
-  preserving cursor on UID. `reader.Model` holds the theme reference
-  for markdown rendering. `mail.Backend` was shrunk in cutover and
-  trimmed further in Pass 8.5:
-  `MarkRead`/`MarkUnread`/`MarkAnswered`/`Delete`/`Search`/`Copy`
-  are all gone. `Flag(uids, flag, set)` is canonical and "delete"
-  is a `MoveArgs{Dest: trash}` queued op. IMAP `Move` still uses
-  the lower-level `cmd.Copy` as its no-`MOVE` fallback (internal
-  helper, not on the interface).
+  `cache.Account.QueueOp`. `messagelist.Model` is presentation-only;
+  `RefreshSource` re-reads cache state after every write, preserving
+  cursor on UID. `reader.Model` holds the theme reference for
+  markdown rendering. `mail.Backend` shrunk in cutover and Pass 8.5:
+  `Mark{Read,Unread,Answered}`/`Delete`/`Search`/`Copy` are gone.
+  `Flag(uids, flag, set)` is canonical; "delete" is a
+  `MoveArgs{Dest: trash}` queued op. IMAP `Move` falls back to
+  `cmd.Copy` when MOVE is absent (internal helper, not on interface).
 
 ### Config & theming
 
@@ -267,6 +263,33 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   `MarkdownToHTML` as the shared goldmark entry points (Linkify +
   Table extensions).
 
+### Address book
+
+- `internal/ui/contacts/` is the address-book UI surface: `Contact`/
+  `Email`/`Phone`/`Suggestion`/`Kind` value types, the in-memory
+  fixture pool + `LookupByEmail`, per-package `Styles`, the pure
+  `RenderDetailCard(c, s, width)` shared by popover and Contacts mode,
+  `Popover`/`Sidebar`/`List` sub-models, cross-package Msg types,
+  package key bindings. Pass 9.1a ships popover + Contacts mode shell
+  against fixtures; 9.1b adds the edit form, 9.1c the compose
+  autocomplete dropdown, 9.2 swaps fixtures for a CardDAV-backed
+  cache. `i` from the account view extracts (DisplayName, Email) via
+  `parseSender` ↔ `content.ParseAddressList` and emits
+  `OpenPopoverMsg`; App calls `contacts.LookupByEmail(Fixtures(),
+  email)` and stores a `*Popover` on the cascade tail (confirm >
+  conflict > outbox > help > linkpicker > attachpicker > movepicker >
+  popover). `C` from the account view enters Contacts mode (App owns
+  `contactsMode bool` + `contactsSidebar`/`contactsList`/
+  `contactsStyles`); `M` exits. Mode body is row-by-row three-column
+  composition (Sidebar | List | RenderDetailCard) per ADR-0084 —
+  Sidebar fixed at 14, List/Detail split the remainder. Sidebar bins
+  by `firstSortLetterMode(c, SortLastName)` into eight T9 groups
+  (`ABC`, `DEF`, `GHI`, `JKL`, `MNO`, `PQRS`, `TUV`, `WXYZ`); `J/K`
+  walks groups, `a`–`z` jumps per-letter with the `┃` tick on the
+  active letter. List uses `bubbles/viewport` with `SortFirstName`
+  (default) or `SortLastName`; `j/k` cursor, `n`/`e` emit
+  `OpenFormMsg`, `D` inert until 9.3.
+
 ## Mail model
 
 - Folder classification is a pure function:
@@ -343,7 +366,7 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
 | Sidebar groups, nested indent, classification | 0018, 0019, 0034, 0049, 0050 |
 | Message list, threading, fold | 0041, 0045, 0047, 0048, 0055, 0059, 0060, 0061, 0062, 0063 |
-| Vim-first keybindings, no command mode, no multi-key, no modifiers (reading/nav surfaces; text-entry exempt per 0076) | 0015, 0024, 0051, 0068, 0076 |
+| Vim-first keybindings — no command mode, no multi-key, no modifiers (text-entry exempt per 0076) | 0015, 0024, 0051, 0068, 0076 |
 | Compose, Catkin, editor interface, library foundation | 0031, 0032, 0033, 0076 |
 | Per-screen prototype passes | 0022 (superseded by 0070), 0070 |
 | Sidebar search shelf, filter-and-hide, thread-level | 0064 |
@@ -352,30 +375,25 @@ Load the relevant ADR when you need rationale. Numbering is chronological.
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
 | Optimistic triage with toast/undo, ActionTargets, visual mode, move picker | 0089, 0090, 0091 |
 | Permanent-delete primitive, retention sweep, manual empty + ConfirmModal | 0092, 0093, 0094, 0100 |
-| Bubbletea conventions: research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg, displayCells-everywhere | 0077, 0078, 0079 (superseded by 0084), 0080, 0081, 0083 (narrowed by 0084) |
+| Bubbletea conventions — research-grounded, lint hook, displayCells, key dispatch, WindowSizeMsg | 0077, 0078, 0079 (sup. 0084), 0080, 0081, 0083 (narrowed 0084) |
 | Icon-mode policy: NF autodetect + CPR probe + simple/fancy tables | 0084 |
 | Path-scoped UI rule (split from invariants) | 0095 |
 | Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
-| Local cache architecture — per-account SQLite, typed Op sum + drainer, drain-first sync, outbox state machine, UIDVALIDITY re-key, IMAP scan-and-diff | 0110, 0111, 0112, 0113, 0114, 0115, 0116, 0117, 0118, 0120, 0121, 0122, 0123, 0124 |
+| Local cache architecture — per-account SQLite, typed Op sum + drainer, drain-first sync, outbox state machine, UIDVALIDITY re-key, IMAP scan-and-diff | 0110–0118, 0120–0124 |
 | Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |
-| Cache cutover — UI reads/writes via cache.Account; mail.Backend shrunk (Mark*/Delete dropped); MessageList Apply* removed; folders.exists_total/unseen_total seed sidebar | 0121 |
-| Cache II policy — lazy body population, single max-size backstop, no LRU; FetchBody returns []byte; poplar cache CLI | 0122, 0123, 0124 |
-| Pass 8.5 overengineering audit — mail.Backend trim (Search/Copy removed), config.Source enum dropped, Provider doc fields removed, AccountConfig dead-field cleanup, cache.Cache aggregator removed, theme palette deletions, helper inlines, --config flag threading | 0125, 0126, 0127 |
-| Pass 8.5b Elm conformance audit — URLOpener seam on App; ConfirmModalYesMsg + pendingEmptyConfirm replaces ConfirmRequest.OnYes callback; OpenLinkPickerMsg replaces Viewer.LinkPickerRequest accessor; help_popover row-by-row column join; typed triageOp enum; ui.FolderGroup→mail.Group; key.Bindings for raw keypress dispatch; AccountTab.now seam | 0128 |
-| Pass 8.5c UI structural cleanup — `ModalShell` (named-field embed) for Box-rendering overlays; `SidebarColumn` composite hoists account-line + folders + spacer + shelf; `*<T>Cache` pointer + dirty flag escape hatch for view-stable overlays (MovePicker, HelpPopover) | 0129, 0130 |
-| Pass 8.5d content/filter cleanup — `Block`/`Span` sealed-sum markers reduced to `isBlock()`/`isSpan()`; dead `blockKind`/`spanKind` enums deleted | 0131 |
+| Cache cutover + II policy — UI reads/writes via cache.Account; mail.Backend shrunk; MessageList Apply* removed; lazy body population with single max-size backstop, no LRU; FetchBody returns []byte; poplar cache CLI | 0121, 0122, 0123, 0124 |
+| Pass 8.5 audits — overengineering trim (Backend/config/AccountConfig/cache.Cache/theme cleanup); Elm conformance (URLOpener seam, ConfirmModalYesMsg, OpenLinkPickerMsg, typed triageOp, key.Bindings, AccountTab.now); UI structural (`ModalShell`, `SidebarColumn`, `*<T>Cache` view-stable escape hatch); content/filter sealed-sum markers | 0125–0131 |
 | Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |
-| Attachments I (Pass 8.6) — backend support: `mail.Attachment` + `Attachments`/`FetchAttachment` on Backend; cache schema v5 `attachments` table with lazy metadata + lazy bytes under separate `MaxAttachmentSize` backstop; JMAP via Email/get bodyStructure + cli.Download; IMAP via UID FETCH BODYSTRUCTURE + BODY[<part>]; canonical `mail.ClassifyDisposition` (Disposition-first, ContentID fallback); MIME normalization at the protocol→mail boundary | 0135, 0136, 0137 |
-| Attachments II (Pass 8.7) — viewer surface: chip row between header panel and body (hidden when empty); `@` opens App-owned `AttachPicker` overlay (`o`/Enter/digit open via `xdg-open` on tempfile, `s` saves to `[ui] download_dir`); `[ui] download_dir` resolves explicit > `$XDG_DOWNLOAD_DIR` > `~/Downloads`; collision suffixing capped at 999; `internal/humanize` package shared with cache CLI | 0138, 0139, 0140 |
-| Human-voice policy — research-grounded style guide at `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` skill carries the catalogue inline + experienced-Go-developer persona; `/simplify` voice lens flags tells by number; 8.8/8.9 split (string-only fixes vs. structural) against one frozen triage; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33, T34, T35 (T33–T35 added Pass 8.11 after a tree-wide cleanup) | 0141, 0142, 0148 |
+| Attachments — backend support (`mail.Attachment`, `Attachments`/`FetchAttachment`, schema v5, lazy metadata + bytes, `MaxAttachmentSize` backstop, JMAP/IMAP wiring, `mail.ClassifyDisposition`); viewer chip row + App-owned `AttachPicker` (`@` opens, `o`/Enter/digit open via `xdg-open`, `s` saves to `[ui] download_dir`); `internal/humanize` shared with cache CLI | 0135–0140 |
+| Human-voice policy — `~/.claude/docs/go-comment-voice.md` (37-tell catalogue, voice palette); `go-conventions` carries it inline; `/simplify` flags tells by number; grep-tier voice-check in `make check` covers T4, T10, T14, T16, T27, T28, T33–T35 | 0141, 0142, 0148 |
 | JMAP per-folder baseline pull on nil SyncToken — Email/query paged by inMailbox + sentinel-id Email/get for state in the same roundtrip; FetchHeaders chunked at 500 | 0143 |
-| Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; 9d.1 cleanup; 9d.3 targeted lint sweep; 9d.4 popover overlay padding | 0144, 0145, 0146, 0147, 0149, 0150, 0151, 0152, 0154, 0155 |
-| Compose foundation — Editor interface + CatkinEditor adapter, Draft, AssembleMIME (multipart/alternative via shared filter.MarkdownToHTML, multipart/mixed when attachments), Seed{Reply,ReplyAll,Forward} parsing parent headers from raw bytes; content.ParseAddressList exported | 0156 |
-| Backend Send + Append — `Send(env Envelope, mime []byte)` + `Append(folder, mime, flags)` on mail.Backend; JMAP via `Email/import` + `EmailSubmission/set` (atomic via `#k1` ref); IMAP via lazy `emersion/go-smtp` for Send + APPEND for Append; `[account.smtp]` block with provider preset SMTP defaults; `mailimap.ProbeSMTP` for `poplar config check` | 0157 |
+| Catkin — core, live styling, commands, QoL, annotation pipeline + spellcheck, render-cursor splice; cleanup + lint sweeps + popover overlay padding | 0144–0147, 0149–0152, 0154, 0155 |
+| Compose foundation + Send/Append — Editor interface + CatkinEditor adapter, Draft, AssembleMIME (multipart/alternative via filter.MarkdownToHTML, multipart/mixed for attachments), Seed{Reply,ReplyAll,Forward} parsing parent headers from raw bytes; `Send`/`Append` on mail.Backend (JMAP `Email/import` + `EmailSubmission/set`; IMAP lazy `emersion/go-smtp` + APPEND); `[account.smtp]` provider preset defaults; `mailimap.ProbeSMTP` | 0156, 0157 |
 | Cache outbox Send/Append dispatch — schema v6 adds `outbox.payload`; `SendArgs{Envelope}` + `AppendArgs{Flag}`; `QueueSend`/`QueueAppend` payload-bearing entry points; drainer `dispatch(args, row)` routes to `Backend.Send`/`Append`; `revertOptimisticTx` no-ops on Send/Append so `DiscardOp` works; IMAP enqueues two ops, JMAP one | 0158 |
 | Path-scoped subsystem invariants — Cache, Catkin, Attachments split into `.claude/rules/<name>-invariants.md`; extraction-readiness criteria (settled, ≥ ~25 lines, natural path scope) | 0153 |
 | ComposeTab — App-owned inline compose surface, Tab/Shift+Tab focus cycling, Esc as focus toggle, Ctrl+X send + Ctrl+C cancel; cache.Account.QueueOutbound (one op JMAP, two ops IMAP) + Backend.IsJMAP() predicate; TidyFn function-pointer seam on App | 0159, 0160 |
 | internal/ui/ package layout — bubbles-shaped subpackages (account, compose, helppopover, messagelist, movepicker, reader, sidebar) plus uicore sibling for shared chrome; mail.FolderEntry hoisted; per-package Msg-namespace policy; *Tab suffix dropped; ErrorMsg + TriageOp + ComputeLayout + NewSpinner hoisted to uicore; account-scoped cmds (folder/cache/triage/sweep) lifted; AccountTab → account.Model | 0161, 0162, 0163 |
-| Drafts persistence — schema v7 `drafts` (server_uid/server_folder paired by CHECK), gob payload via `compose.EncodeDraft`/`DecodeDraft`; `KindPushDraft` outbox op with payload-bearing `QueuePushDraft`; `mail.Backend.PushDraft` on both backends; JMAP one-request `Email/import` + `Email/set destroy` (atomic, last-write-wins, notFound on destroy benign); IMAP `APPEND \Draft` on cmd conn (APPENDUID parsed via `cmd.Wait()`), `SELECT`+`UID STORE \Deleted`+`UID EXPUNGE prevUID` best-effort prior-image expunge (UIDPLUS asserted at Connect); cache draft writes split — `CreateDraft` (Init, insert-or-update) and `UpdateDraft` (autosave, UPDATE-only — 0 rows = no-op makes the discard race benign); `cache.ErrDraftSuperseded` returned by `MarkDraftPushed` on 0 rows; drainer treats as `OpDone` and publishes `CacheEvent.Note` "draft superseded by another client" — App routes any non-empty Note into the error banner; `compose.Model` lifecycle — `CacheStore` test seam, 1s autosave debounce, 5min server push tick; App routes Drafts-folder Enter through `LookupDraftByServerUID` (server-pushed) or `draft:<id>` synthetic UIDs from `QueryFolder` (local-only); Ctrl+C dirty → unified Save/Discard/Keep modal on both backends | 0164, 0165 |
+| Address book mockups (Pass 9.1a) — single `internal/ui/contacts/` package; fixture-backed; i-popover + Contacts mode three-column shell wired into App; `LookupByEmail` lookup; T9 sidebar with per-letter `┃` micro-highlight; List with first-name/last-name sort modes; 9.1b lands form, 9.1c lands compose autocomplete, 9.2 swaps fixtures for CardDAV cache | 0166 |
+| Drafts persistence — schema v7 `drafts` (server_uid/server_folder paired), gob payload via `compose.EncodeDraft`/`DecodeDraft`; `KindPushDraft` outbox op + `QueuePushDraft`; `mail.Backend.PushDraft` on both backends (JMAP one-request `Email/import`+`Email/set destroy`; IMAP `APPEND \Draft` + best-effort prior-image expunge); cache writes split — `CreateDraft` insert-or-update vs. `UpdateDraft` UPDATE-only (0-row = race-immune discard); `ErrDraftSuperseded` → drainer publishes `CacheEvent.Note` "draft superseded by another client", App routes non-empty Notes to error banner; `compose.Model` 1s autosave + 5min push tick; App routes Drafts-folder Enter through `LookupDraftByServerUID` or `draft:<id>` synthetic UIDs; unified Save/Discard/Keep modal | 0164, 0165 |
