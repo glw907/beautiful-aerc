@@ -16,9 +16,9 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// Phase tracks whether the viewer is fetching the body or rendering
-// it. The closed state is encoded by the open flag, not a phase, so
-// phase transitions only run when the viewer is open.
+// Phase tracks whether the viewer is fetching the body or rendering it.
+// Closed is encoded by the open flag instead of a phase, so phase
+// transitions only run while the viewer is open.
 type Phase int
 
 const (
@@ -26,11 +26,9 @@ const (
 	PhaseReady
 )
 
-// viewerKeys are handled by Model.handleKey. Body scrolling
-// (j/k/space/b) is delegated to the embedded viewport's own KeyMap;
-// only the keys Model consumes directly appear here. Links is a
-// fixed-size array indexed by harvested-link position minus one
-// (Links[0] is "1", Links[8] is "9").
+// viewerKeys covers the keys Model consumes directly. Body scrolling
+// (j/k/space/b) delegates to the viewport's own KeyMap. Links is indexed
+// by harvested-link position minus one (Links[0] is "1", Links[8] is "9").
 type viewerKeys struct {
 	Close            key.Binding
 	OpenPicker       key.Binding
@@ -55,10 +53,10 @@ func newViewerKeys() viewerKeys {
 	return vk
 }
 
-// Model renders a single message in the right panel. It owns no
-// backend reference. Body fetch and mark-read Cmds are constructed
-// at the AccountTab level. The viewer is pure state + render, with
-// scroll position tracked by an embedded bubbles/viewport.
+// Model renders one message in the right panel. It holds no backend
+// reference; body fetch and mark-read Cmds are built at the AccountTab
+// level. Pure state + render, with scroll tracked by the embedded
+// bubbles/viewport.
 type Model struct {
 	open         bool
 	phase        Phase
@@ -81,7 +79,7 @@ type Model struct {
 }
 
 // New constructs an empty (closed) viewer. accountEmail populates the
-// rendered "To" header in the message view.
+// rendered "To" header.
 func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -97,13 +95,10 @@ func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicor
 }
 
 func (v Model) IsOpen() bool { return v.open }
-
-// Phase reports the viewer's current load phase. Used by AccountTab
-// to gate n/N during loading so a second fetch isn't queued.
 func (v Model) Phase() Phase { return v.phase }
 
-// CurrentUID returns the UID of the message in the viewer, or empty
-// when closed. Used by AccountTab to drop stale BodyLoadedMsg events.
+// CurrentUID returns the UID in the viewer, or "" when closed. AccountTab
+// uses it to drop stale BodyLoadedMsg events.
 func (v Model) CurrentUID() mail.UID {
 	if !v.open {
 		return ""
@@ -111,8 +106,8 @@ func (v Model) CurrentUID() mail.UID {
 	return v.msg.UID
 }
 
-// Open transitions the viewer into the loading phase for msg. The
-// caller fires the body-fetch Cmd in the same Update batch.
+// Open transitions the viewer into the loading phase for msg. The caller
+// fires the body-fetch Cmd in the same Update batch.
 func (v Model) Open(msg mail.MessageInfo) Model {
 	v.open = true
 	v.phase = PhaseLoading
@@ -126,16 +121,14 @@ func (v Model) Open(msg mail.MessageInfo) Model {
 	return v
 }
 
-// Close transitions the viewer out of view.
 func (v Model) Close() Model {
 	v.open = false
 	v.phase = PhaseLoading
 	return v
 }
 
-// SetBody installs parsed blocks and transitions to ready. Idempotent
-// for stale UIDs. Callers should drop BodyLoadedMsg with a UID
-// mismatch before invoking this.
+// SetBody installs parsed blocks and transitions to ready. Callers must
+// drop BodyLoadedMsg with a UID mismatch before invoking.
 func (v Model) SetBody(blocks []content.Block) Model {
 	v.blocks = blocks
 	v.phase = PhaseReady
@@ -143,8 +136,7 @@ func (v Model) SetBody(blocks []content.Block) Model {
 	return v
 }
 
-// SetSize updates dimensions. When ready, re-renders headers + body
-// at the new width and recomputes the viewport height.
+// SetSize updates dimensions and re-runs layout when the viewer is ready.
 func (v Model) SetSize(width, height int) Model {
 	v.width = width
 	v.height = height
@@ -154,14 +146,14 @@ func (v Model) SetSize(width, height int) Model {
 	return v
 }
 
-// SpinnerTick returns the spinner's initial tick Cmd. Caller batches
+// SpinnerTick returns the spinner's initial tick Cmd; the caller batches
 // it with the body-fetch Cmd when opening.
 func (v Model) SpinnerTick() tea.Cmd { return v.spinner.Tick }
 
 func (v Model) Links() []string { return v.links }
 
-// SetAttachments installs the attachment metadata list. Idempotent
-// for stale UIDs. Caller drops stale messages before invoking.
+// SetAttachments installs the attachment metadata list. Caller drops
+// stale messages before invoking.
 func (v Model) SetAttachments(items []mail.Attachment) Model {
 	v.attachments = items
 	if v.phase == PhaseReady && v.open {
@@ -179,9 +171,8 @@ func (v Model) ScrollPct() int {
 	return int(v.viewport.ScrollPercent() * 100)
 }
 
-// Update handles spinner ticks and key events while open. Returns the
-// updated viewer + any Cmds (link launch, viewer-closed signal,
-// scroll-position broadcast). Caller is responsible for batching.
+// Update handles spinner ticks and key events while open and returns
+// any emitted Cmd (link launch, viewer-closed signal, scroll broadcast).
 func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !v.open {
 		return v, nil
@@ -200,10 +191,9 @@ func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return v, nil
 }
 
-// handleKey runs the viewer's key dispatch. q/esc closes; 1-9 launch
-// links. Tab emits OpenLinkPickerMsg for App. All other keys forward
-// to the viewport, which is configured with a modifier-free keymap
-// (j/k/space/b/g/G).
+// handleKey runs the viewer's key dispatch. q/esc closes, 1-9 launch
+// links, Tab emits OpenLinkPickerMsg. Everything else falls through to
+// the viewport's modifier-free keymap (j/k/space/b/g/G).
 func (v Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, v.keys.Close):
@@ -248,14 +238,10 @@ func (v Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return v, nil
 }
 
-// View renders the viewer in its current phase. Returns "" when
-// closed so AccountTab.View can fall through to the message list.
-//
-// The output is hard-clipped to v.width so the viewer cannot lie to
-// its parent's JoinHorizontal. Content longer than v.width (e.g. a
-// raw URL the body renderer's hardwrap missed) gets truncated rather
-// than overflowing into the sidebar column. This is the bubbles-
-// component idiom: each component owns its size contract.
+// View renders the viewer at the current phase, returning "" when closed
+// so AccountTab.View can fall through to the message list. Output is
+// hard-clipped to v.width so a stray oversized line (e.g. a raw URL the
+// body renderer's hardwrap missed) cannot bleed into the sidebar column.
 func (v Model) View() string {
 	if !v.open {
 		return ""
@@ -271,16 +257,13 @@ func (v Model) View() string {
 		return clipPaneBg(placed, v.width, v.height, bg)
 	}
 
-	// Two stacked rectangles: BgElevated panel (with FgDim BorderBottom
-	// drawn natively by lipgloss) above a BgBase body. clipPaneBg
-	// per-line pads the body to v.width with bg-styled spaces, using
-	// lipgloss's outer Width.Render directly leaves terminal-default
-	// gaps in the right pad whenever the inner content ends a line
-	// with `\x1b[0m` (lipgloss issue #209).
-	// viewport.View() right-pads each line to its width with plain
-	// (unstyled) spaces. We strip that pad before bg-padding ourselves.
-	// otherwise FillRowToWidth sees the line at width and skips, leaving
-	// the right side on terminal-default bg.
+	// Body is two stacked rects: BgElevated panel (FgDim BorderBottom drawn
+	// by lipgloss) above a BgBase body. lipgloss's outer Width.Render
+	// leaves terminal-default gaps in the right pad whenever inner content
+	// ends with \x1b[0m (lipgloss #209), so per-line bg-padding is needed.
+	// viewport.View() right-pads with plain unstyled spaces; strip that
+	// before re-padding, otherwise FillRowToWidth sees full width and
+	// skips, leaving the right edge unstyled.
 	leftPad := bg.Render(" ")
 	bodyHeight := max(0, v.height-lipgloss.Height(v.panel)-v.chipHeight)
 	bodyLines := strings.Split(v.viewport.View(), "\n")
@@ -304,10 +287,10 @@ func (v Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
-// clipPaneBg fits s to exactly width × height. Each content line is
-// padded to width with bgStyle. Missing rows get a bg-styled blank.
-// Surface-baked leaves (theme styles carry their pane's bg) make the
-// per-line right-pad sufficient. No SGR rewriting needed.
+// clipPaneBg fits s to exactly width × height, padding each content line
+// to width with bgStyle and filling missing rows with a bg-styled blank.
+// Surface-baked theme styles already carry the pane's bg, so per-line
+// right-padding is sufficient and no SGR rewriting is needed.
 func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	if width < 1 || height < 1 {
 		return ""
@@ -326,8 +309,8 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderChipRow returns the wrapped chip block plus its row count,
-// rendered at width. Returns ("", 0) when there are no attachments.
+// renderChipRow returns the wrapped chip block and its row count.
+// Returns ("", 0) when there are no attachments.
 func (v Model) renderChipRow(width int) (string, int) {
 	if len(v.attachments) == 0 || width < 1 {
 		return "", 0
@@ -368,13 +351,9 @@ func (v Model) renderChipRow(width int) (string, int) {
 	return strings.Join(lines, "\n"), len(lines)
 }
 
-// layout renders headers + body and populates the viewport. Called
-// from SetBody and from SetSize when the viewer is already ready.
-// Headers stay pinned above the viewport. Only the body scrolls.
-//
-// contentWidth is v.width - 1 to account for the panel's PaddingLeft.
-// The body region fills the rest of v.height beneath the rendered
-// panel (which includes its bottom border row).
+// layout renders headers + body and populates the viewport. Headers stay
+// pinned above the viewport, only the body scrolls. contentWidth is
+// v.width - 1 to account for the panel's PaddingLeft.
 func (v *Model) layout() {
 	hdrs := content.ParsedHeaders{
 		From:    []content.Address{{Name: v.msg.From}},
@@ -392,8 +371,7 @@ func (v *Model) layout() {
 	v.links = urls
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.chipHeight)
 	vp := viewport.New(contentWidth, bodyHeight)
-	// Modifier-free viewport bindings: j/k for line nav, space/b for
-	// page nav. g/G are handled by the viewer wrapper itself.
+	// Modifier-free viewport bindings. g/G are handled by the wrapper.
 	vp.KeyMap = viewport.KeyMap{
 		Up:       key.NewBinding(key.WithKeys("k", "up")),
 		Down:     key.NewBinding(key.WithKeys("j", "down")),
@@ -404,9 +382,9 @@ func (v *Model) layout() {
 	v.viewport = vp
 }
 
-// addressesFor returns the To: list to render in the viewer. Real
-// recipient strings from the wire take precedence. Otherwise fall
-// back to the user's own address (so the To: row is never empty).
+// addressesFor returns the To: list to render. Real recipient strings
+// from the wire take precedence. The fallback to the user's own address
+// keeps the To: row from rendering empty.
 func addressesFor(to, fallbackEmail string) []content.Address {
 	if to != "" {
 		return namesAsAddresses(to)
@@ -417,10 +395,9 @@ func addressesFor(to, fallbackEmail string) []content.Address {
 	return []content.Address{{Email: fallbackEmail}}
 }
 
-// namesAsAddresses splits a flat "Name1, Name2, ..." MessageInfo
-// string into Address values for the header renderer. The split is
-// intentionally naive (commas inside quoted phrases are uncommon in
-// already-formatted display strings). Refine if it bites.
+// namesAsAddresses splits a flat "Name1, Name2, ..." string into Address
+// values. The split is intentionally naive (commas inside quoted phrases
+// are rare in already-formatted display strings). Refine if it bites.
 func namesAsAddresses(s string) []content.Address {
 	if s == "" {
 		return nil
@@ -435,10 +412,10 @@ func namesAsAddresses(s string) []content.Address {
 	return out
 }
 
-// viewerDateString returns the date string for the viewer's Date row.
-// Prefers msg.Date when populated, otherwise formats msg.SentAt as a
-// full unambiguous timestamp ("Mon, Jan 2 2006 3:04 PM"). Returns ""
-// when neither is set so the row is omitted.
+// viewerDateString returns the Date-row string. msg.Date wins when
+// populated, otherwise SentAt is formatted as an unambiguous timestamp
+// ("Mon, Jan 2 2006 3:04 PM"). Returns "" so the row is omitted when
+// neither is set.
 func viewerDateString(msg mail.MessageInfo) string {
 	if msg.Date != "" {
 		return msg.Date

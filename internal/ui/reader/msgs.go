@@ -5,17 +5,16 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// BodyLoadedMsg carries the parsed-block representation of a fetched
-// message body. AccountTab compares uid against the viewer's current
-// UID and drops mismatches (user closed and reopened on a different
-// UID before the Cmd resolved).
+// BodyLoadedMsg carries the parsed-block body. AccountTab drops mismatches
+// against the viewer's current UID (user closed and reopened on a
+// different UID before the Cmd resolved).
 type BodyLoadedMsg struct {
 	UID    mail.UID
 	Blocks []content.Block
 }
 
 // AttachmentsLoadedMsg carries metadata for the viewer's current UID.
-// Stale UIDs are dropped at the AccountTab boundary like BodyLoadedMsg.
+// Stale UIDs are dropped at the AccountTab boundary.
 type AttachmentsLoadedMsg struct {
 	UID   mail.UID
 	Items []mail.Attachment
@@ -26,39 +25,37 @@ type AttachmentSavedMsg struct {
 	Path string
 }
 
-// OpenLinkPickerMsg requests App open the link picker with the given
-// harvested URLs. Emitted by Model when the user presses Tab on a
-// message that has at least one harvested link.
+// OpenLinkPickerMsg asks App to open the link picker with harvested URLs.
+// Emitted on Tab when the message has at least one harvested link.
 type OpenLinkPickerMsg struct {
 	Links []string
 }
 
-// LinkPickerClosedMsg signals the picker has closed (Esc, Tab, Enter,
-// or numeric launch). Handled at the App level to flip linkPicker.open.
+// LinkPickerClosedMsg signals Esc, Tab, Enter, or a numeric launch closed
+// the picker. App flips linkPicker.open.
 type LinkPickerClosedMsg struct{}
 
-// LaunchURLMsg requests App fire launchURLCmd for the given URL.
-// Emitted by the link picker on Enter or 1-9 in-range.
+// LaunchURLMsg asks App to fire launchURLCmd for the given URL. Emitted by
+// the link picker on Enter or 1-9 in-range.
 type LaunchURLMsg struct {
 	URL string
 }
 
-// OpenAttachPickerMsg requests App open the attachment picker.
+// OpenAttachPickerMsg asks App to open the attachment picker.
 type OpenAttachPickerMsg struct {
 	UID   mail.UID
 	Items []mail.Attachment
 }
 
-// AttachPickerClosedMsg signals the attachment picker has closed.
 type AttachPickerClosedMsg struct{}
 
-// OpenAttachmentMsg requests App open the attachment via xdg-open.
+// OpenAttachmentMsg asks App to open the attachment via xdg-open.
 type OpenAttachmentMsg struct {
 	UID mail.UID
 	Att mail.Attachment
 }
 
-// SaveAttachmentMsg requests App save the attachment to download_dir.
+// SaveAttachmentMsg asks App to save the attachment to download_dir.
 type SaveAttachmentMsg struct {
 	UID mail.UID
 	Att mail.Attachment

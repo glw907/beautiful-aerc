@@ -5,7 +5,6 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// Styles holds the subset of UI styles the reader surface needs.
 type Styles struct {
 	ViewerBg     lipgloss.Style
 	ViewerHeader lipgloss.Style
@@ -13,7 +12,6 @@ type Styles struct {
 	Cursor       lipgloss.Style
 }
 
-// NewStyles builds reader Styles from a compiled theme.
 func NewStyles(t *theme.CompiledTheme) Styles {
 	return Styles{
 		ViewerBg: lipgloss.NewStyle().

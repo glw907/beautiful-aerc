@@ -12,9 +12,9 @@ import (
 )
 
 // LinkPicker is the modal overlay launched by Tab while the viewer is
-// open and ready. Single-column list of harvested URLs, cursor +
-// Enter, 1-9 quick launch, Esc/Tab close. App owns the open state and
-// the overlay composition (mirrors help popover, ADR-0082).
+// open and ready. Single-column list of harvested URLs with cursor +
+// Enter, 1-9 quick launch, Esc/Tab to close. App owns open state and
+// overlay composition (ADR-0082).
 type LinkPicker struct {
 	shell  uicore.ModalShell
 	links  []string
@@ -33,7 +33,6 @@ type linkPickerKeys struct {
 	Digits [9]key.Binding
 }
 
-// NewLinkPicker returns a closed picker.
 func NewLinkPicker(styles Styles) LinkPicker {
 	keys := linkPickerKeys{
 		Up:    key.NewBinding(key.WithKeys("k", "up")),
@@ -51,14 +50,11 @@ func NewLinkPicker(styles Styles) LinkPicker {
 	}
 }
 
-// IsOpen reports whether the picker is visible.
 func (p LinkPicker) IsOpen() bool { return p.shell.IsOpen() }
-
-// Cursor returns the highlighted row index. Exposed for tests.
-func (p LinkPicker) Cursor() int { return p.cursor }
+func (p LinkPicker) Cursor() int  { return p.cursor }
 
 // Open transitions the picker into the open state with the given URL
-// list. Cursor and offset reset to 0.
+// list, resetting cursor and offset.
 func (p LinkPicker) Open(links []string) LinkPicker {
 	p.shell = p.shell.WithOpen(true)
 	p.links = links
@@ -67,23 +63,18 @@ func (p LinkPicker) Open(links []string) LinkPicker {
 	return p
 }
 
-// Close transitions the picker out of view. Caller is responsible for
-// any chrome-revert side effects (App handles this via Msg flow).
 func (p LinkPicker) Close() LinkPicker {
 	p.shell = p.shell.WithOpen(false)
 	return p
 }
 
-// SetSize updates the picker's box dimensions. App threads
-// WindowSizeMsg here.
 func (p LinkPicker) SetSize(width, height int) LinkPicker {
 	p.shell = p.shell.SetSize(width, height)
 	return p
 }
 
-// Update dispatches a tea.Msg while the picker is open. Returns the
-// updated picker and any Cmds (launch + close on Enter / numeric;
-// close on Esc/Tab; nil otherwise).
+// Update dispatches a tea.Msg while the picker is open and emits the
+// launch/close Cmds for Enter, 1-9, Esc, and Tab.
 func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 	if !p.shell.IsOpen() {
 		return p, nil
@@ -128,12 +119,11 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 	return p, nil
 }
 
-// linkPickerMaxWidth caps the picker's natural width.
 const linkPickerMaxWidth = 70
 
-// visibleLinkRows is the number of list rows the picker shows at
-// the given total box height. The 7-row reservation is for top +
-// bottom border + rule + 2 preview lines + 1 title slack.
+// visibleLinkRows is the number of list rows the picker shows at the
+// given box height. The 7-row reservation is top + bottom border + rule
+// + 2 preview lines + 1 title slack.
 func visibleLinkRows(total, height int) int {
 	maxRows := height - 7
 	if maxRows < 1 {
@@ -145,21 +135,19 @@ func visibleLinkRows(total, height int) int {
 	return maxRows
 }
 
-// clampOffset returns p with p.offset adjusted so p.cursor is
-// within the visible window. Called after every cursor move.
+// clampOffset adjusts p.offset so p.cursor stays in the visible window.
 func (p LinkPicker) clampOffset() LinkPicker {
 	p.offset = uicore.ClampScrollOffset(p.cursor, visibleLinkRows(len(p.links), p.shell.Height()), p.offset)
 	return p
 }
 
-// linkPickerInlineCap caps the inline URL display length per row,
-// independent of box width. Keeps the visual tight even on very wide
-// terminals.
+// linkPickerInlineCap caps the per-row inline URL display so the picker
+// stays visually tight on wide terminals.
 const linkPickerInlineCap = 50
 
-// View renders the picker as a standalone string. App composes via
-// Box + Position + PlaceOverlay. This method is the fallback used by
-// tests and when the box doesn't fit.
+// View renders the picker as a standalone string. Production composition
+// goes through Box + Position + PlaceOverlay; this is the fallback for
+// tests and degenerate sizes.
 func (p LinkPicker) View() string {
 	if !p.shell.IsOpen() {
 		return ""
@@ -167,7 +155,7 @@ func (p LinkPicker) View() string {
 	return p.Box(p.shell.Width(), p.shell.Height())
 }
 
-// Box returns the rendered modal at the size derived from (w, h).
+// Box renders the modal at the size derived from (w, h).
 func (p LinkPicker) Box(w, h int) string {
 	boxW := linkPickerMaxWidth
 	if w-4 < boxW {
@@ -209,8 +197,8 @@ func (p LinkPicker) Box(w, h int) string {
 	return p.shell.Box("Links", bodyRows, footerRows, contentW)
 }
 
-// formatRow renders one list row: leading-space-pad + [N] + space + URL.
-// Painted with cursor background when row == p.cursor.
+// formatRow renders one list row as "  [N] URL", painted with the cursor
+// background when row == p.cursor.
 func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 	idxStr := strconv.Itoa(row + 1)
 	pad := strings.Repeat(" ", maxIndexDigits-len(idxStr))
@@ -226,8 +214,8 @@ func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 }
 
 // previewLines returns up to 2 wrapped lines of the cursor row's full
-// URL. The 2nd line is truncated with "…" when the URL exceeds 2
-// rows worth of cells.
+// URL. The second line is truncated with "…" when the URL exceeds two
+// rows of cells.
 func (p LinkPicker) previewLines(width int) []string {
 	if p.cursor < 0 || p.cursor >= len(p.links) {
 		return nil
@@ -246,8 +234,8 @@ func (p LinkPicker) previewLines(width int) []string {
 	return []string{wrapped[0], row2}
 }
 
-// linkPickerWrap wraps s to width. URLs are unbreakable tokens, so
-// Wordwrap alone can't split them. Hardwrap forces the residue.
+// linkPickerWrap wraps s to width. URLs are unbreakable tokens that
+// Wordwrap can't split, so a Hardwrap pass forces the residue.
 func linkPickerWrap(s string, width int) string {
 	if width < 1 {
 		width = 1
@@ -255,8 +243,8 @@ func linkPickerWrap(s string, width int) string {
 	return ansi.Hardwrap(ansi.Wordwrap(s, width, ""), width, false)
 }
 
-// Position returns the centered top-left for the rendered box at
-// (totalW, totalH). Used by App to feed PlaceOverlay.
+// Position returns the centered top-left for the rendered box; App
+// feeds it to PlaceOverlay.
 func (p LinkPicker) Position(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
 }
