@@ -237,7 +237,8 @@ When a flagged term has a legitimate use:
 
 ```make
 VALE := vale
-VALE_PATHS := docs/poplar CLAUDE.md .claude/rules .claude/skills internal cmd
+VALE_PATHS := docs/poplar docs/superpowers/plans docs/superpowers/specs \
+              CLAUDE.md .claude/rules .claude/skills internal cmd
 
 vale:
 	@command -v $(VALE) >/dev/null || { \
@@ -298,7 +299,12 @@ findings on the in-scope tree. One-time backlog drain.
 - Archived plans (`docs/superpowers/archive/`): not touched
   (archived plans are immutable).
 - Active `docs/superpowers/plans/` and `specs/`: fixed for
-  errors.
+  errors. These trees are in `VALE_PATHS` going forward, so
+  every new spec and plan ships under the same gate as the rest
+  of the repo. The spec you are reading now is a working example:
+  brainstorm-time drafting drifted toward em dashes, and a
+  pre-Vale self-check caught them. With Vale in `make check`,
+  the pre-commit gate catches them automatically.
 - `docs/poplar/research/*`: fixed for errors. Dated artifacts.
   We remove tells, we don't rewrite voice.
 
