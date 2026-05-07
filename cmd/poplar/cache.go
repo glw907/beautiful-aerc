@@ -18,7 +18,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// outboxStatsQ counts pending vs other (executing+failed+conflict) outbox rows.
+// outboxStatsQ counts pending vs everything else (executing, failed,
+// conflict).
 var outboxStatsQ = fmt.Sprintf(`SELECT
     COALESCE(SUM(CASE WHEN status = '%s' THEN 1 ELSE 0 END), 0),
     COALESCE(SUM(CASE WHEN status IN ('%s','%s','%s') THEN 1 ELSE 0 END), 0)
@@ -36,7 +37,6 @@ func newCacheCmd() *cobra.Command {
 	return c
 }
 
-// statsRow is one account's worth of stats output.
 type statsRow struct {
 	Account       string
 	HeadersCount  int64
@@ -69,8 +69,8 @@ func newCacheStatsCmd() *cobra.Command {
 	}
 }
 
-// statsForAccount opens the per-account SQLite directly (no Backend
-// or ChangeTracker needed). Stats works offline.
+// statsForAccount opens the per-account SQLite directly so stats
+// works offline, with no Backend or ChangeTracker.
 func statsForAccount(ctx context.Context, name string) (statsRow, error) {
 	dbPath, err := cache.DBPath(name, "")
 	if err != nil {
@@ -166,9 +166,9 @@ func newCacheEvictCmd() *cobra.Command {
 	return c
 }
 
-// parseDuration extends time.ParseDuration with day (d) and
-// week (w) suffixes since cache eviction operates at coarser
-// granularity than time.ParseDuration's hour ceiling.
+// parseDuration extends time.ParseDuration with d and w suffixes
+// since cache eviction operates at coarser granularity than the
+// stdlib hour ceiling.
 func parseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -194,8 +194,8 @@ func parseDuration(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
-// Passing nil backend/tracker is safe: Evict only touches the bodies
-// table.
+// runEvict passes nil backend/tracker because Evict only touches the
+// bodies table.
 func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) error {
 	accts, _, err := loadAccounts()
 	if err != nil {
@@ -257,9 +257,8 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		if fi, statErr := os.Stat(dbPath); statErr == nil {
 			before = fi.Size()
 		}
-		// VACUUM cannot run inside a transaction or with concurrent
-		// writers. Use a short-lived dedicated connection with no
-		// pool. Single-connection bypass.
+		// VACUUM cannot run inside a transaction or alongside other
+		// writers. Use a single-connection short-lived handle.
 		db, err := cache.OpenDB(dbPath)
 		if err != nil {
 			return fmt.Errorf("open cache db: %w", err)

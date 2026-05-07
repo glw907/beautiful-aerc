@@ -11,7 +11,6 @@ import (
 	xterm "golang.org/x/term"
 )
 
-// newDiagnoseCmd returns the diagnose subcommand.
 func newDiagnoseCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:          "diagnose",

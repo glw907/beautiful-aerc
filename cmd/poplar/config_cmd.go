@@ -10,9 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// configFlagPath returns the value of the root command's --config
-// persistent flag, or "" when the flag is not registered (e.g. tests
-// that exercise a subcommand in isolation).
+// configFlagPath returns the root command's --config flag value, or
+// "" when the flag is not registered (subcommand-isolated tests).
 func configFlagPath(cmd *cobra.Command) string {
 	root := cmd.Root()
 	if root == nil {

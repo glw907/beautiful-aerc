@@ -9,8 +9,8 @@ import (
 	"github.com/glw907/poplar/internal/mailjmap"
 )
 
-// openBackend constructs a mail.Backend for the given account based on
-// its backend type. Mock is the default for unconfigured (or test) accounts.
+// openBackend constructs a mail.Backend for acct. Mock is the default
+// for unconfigured or test accounts.
 func openBackend(acct config.AccountConfig) (mail.Backend, error) {
 	switch acct.Backend {
 	case "mock", "":

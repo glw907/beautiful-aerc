@@ -37,7 +37,6 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 				return fmt.Errorf("no accounts in %s", path)
 			}
 
-			// v1 is single-account. Connect to the first account's backend.
 			backend, err := openBackend(accounts[0])
 			if err != nil {
 				return fmt.Errorf("backend for %q: %v", accounts[0].Name, err)
@@ -72,7 +71,6 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 	return cmd
 }
 
-// writeAtomically writes content to path via a temp file + rename.
 func writeAtomically(path, content string) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".config.toml.tmp-*")
@@ -80,7 +78,7 @@ func writeAtomically(path, content string) error {
 		return fmt.Errorf("temp file in %s: %v", dir, err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) // no-op on success after Rename
+	defer os.Remove(tmpPath)
 
 	if _, err := tmp.WriteString(content); err != nil {
 		tmp.Close()
@@ -94,7 +92,7 @@ func writeAtomically(path, content string) error {
 		return fmt.Errorf("close %s: %v", tmpPath, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("rename %s → %s: %v", tmpPath, path, err)
+		return fmt.Errorf("rename %s to %s: %v", tmpPath, path, err)
 	}
 	return nil
 }

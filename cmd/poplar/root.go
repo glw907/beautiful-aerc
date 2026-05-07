@@ -41,7 +41,8 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-// appModel wraps ui.App to satisfy tea.Model (returns tea.Model, not App).
+// appModel wraps ui.App so its Update returns the tea.Model interface
+// rather than ui.App.
 type appModel struct {
 	app ui.App
 }
