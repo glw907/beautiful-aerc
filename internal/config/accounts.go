@@ -14,16 +14,15 @@ import (
 	"github.com/emersion/go-message/mail"
 )
 
-// ResolvePassword returns the cleartext password for c. Inline
-// Password wins. Otherwise PasswordCmd is run via /bin/sh -c and
-// stdout (trimmed of trailing newlines) is the password.
+// ResolvePassword returns the cleartext password. Inline Password
+// wins. Otherwise PasswordCmd runs via /bin/sh -c and trimmed stdout
+// is the password.
 func (c *AccountConfig) ResolvePassword() (string, error) {
 	return resolvePasswordCmd(c.Password, c.PasswordCmd, "password-cmd")
 }
 
-// resolvePasswordCmd is the shared body for AccountConfig.ResolvePassword
-// and SMTPConfig.ResolvePassword. errPrefix labels the command in the
-// error chain ("password-cmd" or "smtp password-cmd").
+// resolvePasswordCmd is shared by AccountConfig and SMTPConfig.
+// errPrefix labels the command in the error chain.
 func resolvePasswordCmd(password, cmd, errPrefix string) (string, error) {
 	if password != "" {
 		return password, nil
@@ -45,10 +44,9 @@ func resolvePasswordCmd(password, cmd, errPrefix string) (string, error) {
 }
 
 // SMTPConfig is the per-account submission transport. Filled from
-// provider preset SMTP fields at decode time, then overridden by an
+// provider preset SMTP fields at decode, then overridden by an
 // explicit [account.smtp] block. Auth, Password, and PasswordCmd
-// default to the IMAP-side credentials when not set. The typical
-// case is "same login as IMAP."
+// default to the IMAP-side credentials when unset.
 type SMTPConfig struct {
 	Host        string
 	Port        int
@@ -77,45 +75,42 @@ type AccountConfig struct {
 	From   *mail.Address
 	CopyTo []string
 
-	// Password is the bearer token or password after env-var substitution.
-	// In config.toml use "$VAR_NAME" to pull from the environment.
+	// Password is the bearer token or password after env-var
+	// substitution. Use "$VAR_NAME" in config.toml to pull from env.
 	Password string
 
-	// PasswordCmd is a shell command whose stdout becomes the
-	// password. Deferred to first Connect so secret-manager prompts
-	// fire near the action. Mutually exclusive with Password.
+	// PasswordCmd's stdout becomes the password. Resolution defers to
+	// first Connect so secret-manager prompts fire near the action.
+	// Mutually exclusive with Password.
 	PasswordCmd string
 
-	// Auth holds the SASL mechanism. Recognized values: "plain",
-	// "login", "cram-md5", "xoauth2", "bearer". Empty defers to
-	// the backend default.
+	// Auth is the SASL mechanism. Empty defers to the backend default.
+	// Recognized: "plain", "login", "cram-md5", "xoauth2", "bearer".
 	Auth string
 
-	// Email is the user's address. May be empty when the backend
-	// auto-discovers (e.g. JMAP session).
+	// Email may be empty when the backend auto-discovers it (JMAP).
 	Email string
 
-	// IMAP transport (set directly or via a provider preset).
 	Host     string
 	Port     int
 	StartTLS bool
 
-	// InsecureTLS skips TLS verification. Use only for self-hosted
-	// servers with self-signed certs. Never set for hosted providers.
+	// InsecureTLS skips TLS verification. Self-hosted, self-signed
+	// only. Never for hosted providers.
 	InsecureTLS bool
 
-	// GmailQuirks enables Gmail-specific IMAP behavior in mailimap:
-	// X-GM-EXT-1 assertion at Connect, and Destroy routed via
-	// SELECT [Gmail]/Trash before EXPUNGE. Set by the gmail preset.
+	// GmailQuirks enables Gmail-specific IMAP behavior: X-GM-EXT-1
+	// assertion at Connect, and Destroy routed via SELECT
+	// [Gmail]/Trash before EXPUNGE. Set by the gmail preset.
 	GmailQuirks bool
 
-	// SMTP holds the submission transport for IMAP-backed accounts.
-	// JMAP accounts ignore this. Submission rides the JMAP session.
+	// SMTP is the submission transport for IMAP-backed accounts. JMAP
+	// accounts ignore it because submission rides the JMAP session.
 	SMTP SMTPConfig
 }
 
-// ExpandHome turns a leading "~" into the user's home directory.
-// "~" expands to $HOME. "~/x" expands to $HOME/x. Other paths and empty strings pass through.
+// ExpandHome rewrites a leading "~" to the user's home directory.
+// Other paths and empty strings pass through.
 func ExpandHome(p string) (string, error) {
 	if !strings.HasPrefix(p, "~") {
 		return p, nil
@@ -130,8 +125,8 @@ func ExpandHome(p string) (string, error) {
 	return filepath.Join(home, strings.TrimPrefix(p, "~/")), nil
 }
 
-// suggestProvider returns the closest known-provider name to s, or ""
-// when nothing's within edit distance 2.
+// suggestProvider returns the closest known provider within edit
+// distance 2, or "".
 func suggestProvider(s string) string {
 	if s == "" {
 		return ""
@@ -220,8 +215,8 @@ type smtpEntry struct {
 	PasswordCmd string `toml:"password-cmd"`
 }
 
-// ParseAccounts reads a poplar config.toml file and returns
-// configured accounts with credentials resolved.
+// ParseAccounts reads config.toml and returns the configured accounts
+// with credentials resolved.
 func ParseAccounts(path string) ([]AccountConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -231,7 +226,6 @@ func ParseAccounts(path string) ([]AccountConfig, error) {
 }
 
 // ParseAccountsFromBytes is the byte-slice form of ParseAccounts.
-// Use it when the file has already been read.
 func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {
 	var cf configFile
 	if err := toml.Unmarshal(data, &cf); err != nil {
@@ -315,9 +309,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if password != "" && e.PasswordCmd != "" {
 		return nil, fmt.Errorf("account %q (provider = %q): both password and password-cmd set; use one", e.Name, e.Provider)
 	}
-	// Validate provider against the registry + fallbacks.
-	// "mock" is permitted for testing. It short-circuits to
-	// mail.NewMockBackend in cmd/poplar/backend.go.
+	// "mock" short-circuits to mail.NewMockBackend in cmd/poplar/backend.go.
 	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
 		if _, ok := Providers[e.Provider]; !ok {
 			hint := ""
@@ -329,13 +321,11 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
-	// IMAP requires a host (after preset resolution).
 	if backend == "imap" && host == "" {
 		return nil, fmt.Errorf("account %q (provider = %q): host is required for imap accounts",
 			e.Name, e.Provider)
 	}
 
-	// JMAP requires a session URL (after preset resolution).
 	if backend == "jmap" && source == "" {
 		return nil, fmt.Errorf("account %q (provider = %q): source URL is required for jmap accounts",
 			e.Name, e.Provider)
@@ -350,9 +340,8 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	}
 	smtp.Password = smtpPassword
 
-	// SMTP credentials default to IMAP credentials when the user
-	// didn't set anything explicit. Typical case is the same login
-	// for both transports.
+	// Default SMTP credentials to IMAP credentials when nothing is
+	// explicit. Typical case is the same login for both transports.
 	if smtp.Password == "" && smtp.PasswordCmd == "" {
 		smtp.Password = password
 		smtp.PasswordCmd = e.PasswordCmd
@@ -404,11 +393,9 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	return acct, nil
 }
 
-// resolveEnv replaces a leading "$VAR" with os.Getenv("VAR"). The
-// only supported form is the bare $VAR token. Anything else is
-// returned unchanged so passwords containing a literal "$" still
-// work. Empty env returns an error so the user gets a clear
-// failure on misconfiguration.
+// resolveEnv replaces a leading bare "$VAR" with os.Getenv("VAR").
+// Anything else passes through so passwords with a literal "$" still
+// work. An empty env value returns an error.
 func resolveEnv(s string) (string, error) {
 	if !strings.HasPrefix(s, "$") || len(s) < 2 {
 		return s, nil
@@ -434,7 +421,6 @@ func knownProvidersList() string {
 	return strings.Join(names, ", ")
 }
 
-// isShellName reports whether s is a valid POSIX shell variable name.
 func isShellName(s string) bool {
 	for i, r := range s {
 		if r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {

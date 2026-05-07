@@ -8,14 +8,10 @@ import (
 	"runtime"
 )
 
-// Resolve returns the config-file path to use. Precedence:
-// --config flag, then $POPLAR_CONFIG, then the OS default.
-//
-// Linux/macOS default: ~/.config/poplar/config.toml.
-// Windows default:     %APPDATA%\poplar\config.toml.
-//
-// macOS deliberately uses ~/.config/ rather than the OS-default
-// ~/Library/Application Support/, matching the convention used by
+// Resolve returns the config-file path. Precedence: --config flag,
+// $POPLAR_CONFIG, then the OS default (~/.config/poplar/config.toml
+// on Linux and macOS, %APPDATA%\poplar\config.toml on Windows). macOS
+// uses ~/.config/ rather than ~/Library/Application Support/ to match
 // pass, nvim, tmux, and git.
 func Resolve(flagPath string) (string, error) {
 	if flagPath != "" {
@@ -47,23 +43,20 @@ func defaultConfigDir() (string, error) {
 	}
 }
 
-// ErrFirstRun is returned by Load when the default config path
-// did not exist and a fresh template was written. The caller
-// should print the path with a re-run hint and exit with status
-// 78 (EX_CONFIG).
+// ErrFirstRun signals that Load wrote a fresh template at the default
+// path. Callers should print the path with a re-run hint and exit
+// with status 78 (EX_CONFIG).
 var ErrFirstRun = errors.New("first-run: template written")
 
-// ErrOldAccountsToml is returned when the user has an old
-// accounts.toml file (pre-1.0 carryover) and no config.toml.
-var ErrOldAccountsToml = errors.New("old accounts.toml detected; rename to config.toml")
+// ErrOldAccountsToml signals a pre-1.0 accounts.toml with no
+// config.toml.
+var ErrOldAccountsToml = errors.New("old accounts.toml detected, rename to config.toml")
 
-// Load resolves the config path and returns the parsed accounts
-// alongside the resolved path (so callers can reuse it for sibling
-// loads such as LoadUI without re-resolving). When the path comes
-// from $POPLAR_CONFIG or the OS default and no file exists, it
-// writes the template and returns ErrFirstRun. When the path was
-// supplied via flagPath and the file is missing, it returns a plain
-// error (the user explicitly chose that path). No template is written.
+// Load resolves the config path and returns the parsed accounts plus
+// the resolved path (callers reuse it for sibling loads like LoadUI).
+// A missing default-path file triggers a template write and returns
+// ErrFirstRun. A missing --config path returns a plain error with no
+// template write.
 func Load(flagPath string) ([]AccountConfig, string, error) {
 	path, err := Resolve(flagPath)
 	if err != nil {

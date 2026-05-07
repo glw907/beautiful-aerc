@@ -8,65 +8,58 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// UIConfig holds poplar's UI tuning. Currently scoped to folder/sidebar
-// behavior. Populated from the [ui] table in config.toml.
+// UIConfig holds the [ui] table values.
 type UIConfig struct {
-	// Threading is the default threading state for folders that do not
-	// specify a per-folder override. Default true.
+	// Threading is the default threading state for folders without an
+	// override. Defaults to true.
 	Threading bool
 
-	// Folders holds per-folder overrides keyed by canonical name for
-	// canonical folders (Inbox, Drafts, Sent, Archive, Spam, Trash) or
-	// literal provider name for custom folders.
+	// Folders maps canonical name (Inbox, Drafts, Sent, Archive, Spam,
+	// Trash) or literal provider name to its overrides.
 	Folders map[string]FolderConfig
 
-	// Icons is the iconography mode: "auto" (default), "simple", or
-	// "fancy". See ADR-0084.
+	// Icons is "auto" (default), "simple", or "fancy" (ADR-0084).
 	Icons string
 
-	// UndoSeconds is the toast/undo timer in seconds. Default 6, clamped to [2, 30] on parse.
+	// UndoSeconds clamps to [2, 30] at parse. Default 6.
 	UndoSeconds int
 
-	// TrashRetentionDays and SpamRetentionDays set per-session sweep
-	// cutoffs for the corresponding folders. 0 disables. Each is
-	// clamped to [0, 365] on parse.
+	// TrashRetentionDays and SpamRetentionDays drive per-session
+	// retention sweeps. 0 disables. Each clamps to [0, 365].
 	TrashRetentionDays int
 	SpamRetentionDays  int
 
-	// DownloadDir is where SaveAttachment writes files. Resolved at
-	// LoadUI time: explicit [ui] download_dir > $XDG_DOWNLOAD_DIR >
-	// $HOME/Downloads.
+	// DownloadDir resolution order: explicit [ui] download_dir,
+	// $XDG_DOWNLOAD_DIR, $HOME/Downloads.
 	DownloadDir string
 }
 
-// FolderConfig holds per-folder overrides from [ui.folders.<name>]
-// subsections. Any field left at its zero value is treated as "unset"
-// and falls back to the group default.
+// FolderConfig holds the overrides from one [ui.folders.<name>]
+// subsection. Zero-value fields fall back to the group default.
 type FolderConfig struct {
-	// Rank is the within-group sort key. Zero means "use group default".
-	// Lower values sort first. Ties break on display name.
-	Rank int
-
-	// RankSet distinguishes "unset" from "explicit 0".
+	// Rank is the within-group sort key. Lower sorts first. Ties
+	// break on display name. RankSet separates "explicit 0" from
+	// "unset".
+	Rank    int
 	RankSet bool
 
-	// Label overrides the display name. Empty = use default
-	// (canonical name for canonicals, provider name for custom).
+	// Label overrides the display name.
 	Label string
 
-	// Threading overrides the global threading default when Set.
+	// ThreadingSet separates "explicit false" from "unset".
 	Threading    bool
 	ThreadingSet bool
 
-	// Sort is the per-folder sort order. Empty = "date-desc".
+	// Sort is "date-asc", "date-desc", or empty (defaults to
+	// date-desc).
 	Sort string
 
-	// Hide drops the folder from the sidebar entirely.
+	// Hide drops the folder from the sidebar.
 	Hide bool
 }
 
-// DefaultUIConfig returns an empty UIConfig with sensible defaults.
-// Use as a fallback when config.toml has no [ui] section.
+// DefaultUIConfig is the fallback for a config.toml with no [ui]
+// section.
 func DefaultUIConfig() UIConfig {
 	return UIConfig{
 		Threading:   true,
@@ -77,8 +70,8 @@ func DefaultUIConfig() UIConfig {
 	}
 }
 
-// rawUI is the on-disk shape of the [ui] table. It uses pointers for
-// optional bool fields so we can distinguish "unset" from "explicit false".
+// rawUI uses pointers for optional booleans so "unset" reads
+// differently from "explicit false".
 type rawUI struct {
 	Threading          *bool                   `toml:"threading"`
 	Folders            map[string]rawFolderCfg `toml:"folders"`
@@ -101,9 +94,8 @@ type rawUIFile struct {
 	UI rawUI `toml:"ui"`
 }
 
-// LoadUI reads the [ui] table from an config.toml file and returns
-// a UIConfig. A missing file is an error. A missing [ui] section
-// returns DefaultUIConfig().
+// LoadUI reads the [ui] table. A missing file is an error. A missing
+// [ui] section returns DefaultUIConfig.
 func LoadUI(path string) (UIConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

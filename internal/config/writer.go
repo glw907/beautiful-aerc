@@ -8,15 +8,12 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// RenderFolderSubsections renders `[ui.folders.<name>]` subsections
-// with commented default hints for each classified folder not already
-// present in the existing set. Output is grouped: Primary, then
-// Disposal, then Custom, separated by blank lines. Returns "" when
-// there is nothing to write.
-//
-// existing may be nil. Keys are canonical name for classified
-// canonicals and provider name for classified custom folders,
-// matching the same lookup keys Sidebar and UIConfig.Folders use.
+// RenderFolderSubsections renders [ui.folders.<name>] stubs with
+// commented hints for each classified folder not already in existing.
+// Output is grouped Primary, Disposal, Custom and returns "" when
+// nothing needs writing. existing keys match Sidebar/UIConfig.Folders
+// lookup (canonical for classified canonicals, provider name for
+// custom).
 func RenderFolderSubsections(classified []mail.ClassifiedFolder, existing map[string]bool) string {
 	primary, disposal, custom := splitByGroup(classified, existing)
 
@@ -75,8 +72,8 @@ func renderSubsection(cf mail.ClassifiedFolder) string {
 	return b.String()
 }
 
-// subsectionHeaderKey returns the TOML header key: a bare identifier
-// when possible, otherwise a quoted string.
+// subsectionHeaderKey prefers a bare identifier and falls back to a
+// quoted string.
 func subsectionHeaderKey(cf mail.ClassifiedFolder) string {
 	if cf.Canonical != "" {
 		return cf.Canonical
@@ -105,8 +102,8 @@ func isBareKey(s string) bool {
 	return true
 }
 
-// FolderKeys parses config.toml bytes and returns the set
-// of subsection keys already present under [ui.folders.<name>].
+// FolderKeys returns the set of subsection keys present under
+// [ui.folders.<name>] in data.
 func FolderKeys(data []byte) (map[string]bool, error) {
 	var raw rawUIFile
 	if err := toml.Unmarshal(data, &raw); err != nil {
@@ -119,10 +116,9 @@ func FolderKeys(data []byte) (map[string]bool, error) {
 	return out, nil
 }
 
-// MergeFolderSubsections appends newContent to the end of the
-// existing config bytes and returns the merged file contents.
-// Existing content is preserved byte-for-byte. If newContent is
-// empty, the original contents are returned unchanged.
+// MergeFolderSubsections appends newContent to existing config bytes,
+// preserving the original byte-for-byte. Empty newContent passes
+// through unchanged.
 func MergeFolderSubsections(existing []byte, newContent string) string {
 	if newContent == "" {
 		return string(existing)

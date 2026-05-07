@@ -1,21 +1,20 @@
 package config
 
-// Provider is a built-in account preset that fills in protocol,
-// host/port (IMAP), or session URL (JMAP) so users don't have to
-// look those up. Auth is still supplied per-account in config.toml.
+// Provider is a built-in account preset filling in protocol,
+// host/port (IMAP), or session URL (JMAP). Auth is still supplied
+// per-account in config.toml.
 //
-// SMTP fields (SMTPHost/SMTPPort/SMTPStartTLS/SMTPInsecureTLS) fill
-// the [account.smtp] block at decode time when the user hasn't set
-// them. JMAP presets ignore these. Submission rides the JMAP
-// session.
+// SMTP fields fill the [account.smtp] block at decode time when the
+// user hasn't set them. JMAP presets ignore these because submission
+// rides the JMAP session.
 type Provider struct {
-	Backend     string // "imap" or "jmap"
-	Host        string // IMAP presets only
+	Backend     string
+	Host        string
 	Port        int
 	StartTLS    bool
-	InsecureTLS bool   // true only for self-signed-cert presets (self-hosted)
-	GmailQuirks bool   // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
-	URL         string // JMAP presets only
+	InsecureTLS bool // self-signed-cert presets only
+	GmailQuirks bool // X-GM-EXT-1 + Trash-precondition-on-EXPUNGE
+	URL         string
 
 	SMTPHost        string
 	SMTPPort        int
@@ -23,7 +22,7 @@ type Provider struct {
 	SMTPInsecureTLS bool
 }
 
-// Providers maps preset name → Provider. Adding a new well-known
+// Providers maps preset name to Provider. Adding a new well-known
 // service is one struct literal.
 var Providers = map[string]Provider{
 	"fastmail": {
