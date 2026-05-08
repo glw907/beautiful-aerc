@@ -5,12 +5,11 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// Styles holds the subset of UI styles the compose surface needs.
+// Styles is the compose surface's projection of internal/ui.Styles.
 type Styles struct {
 	ErrorBanner lipgloss.Style
 }
 
-// NewStyles builds compose Styles from a compiled theme.
 func NewStyles(t *theme.CompiledTheme) Styles {
 	return Styles{
 		ErrorBanner: lipgloss.NewStyle().Foreground(t.ColorError),

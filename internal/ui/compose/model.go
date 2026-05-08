@@ -16,17 +16,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// CacheStore is the subset of cache.Account compose needs. The
-// interface lives here so model_test.go can inject a fake without
-// importing internal/cache.
+// CacheStore is the subset of cache.Account compose needs. Defined here
+// so tests can inject a fake without importing internal/cache.
 type CacheStore interface {
 	CreateDraft(ctx context.Context, draftID string, payload []byte) error
 	UpdateDraft(ctx context.Context, draftID string, payload []byte) error
 	LoadDraft(ctx context.Context, draftID string) ([]byte, error)
 }
 
-// Model is the inline compose surface. Send and discard surface
-// as tea.Msg values that App translates into cache ops.
+// Model is the inline compose surface. Send and discard surface as
+// tea.Msg values that App translates into cache ops.
 type Model struct {
 	styles Styles
 
@@ -39,8 +38,7 @@ type Model struct {
 	editor  mailcompose.Editor
 
 	focus int
-	// err is rendered as a one-line banner above the divider when set.
-	err string
+	err   string
 
 	width   int
 	height  int
@@ -71,12 +69,11 @@ const (
 	focusBody
 )
 
-// labelWidth is the column reserved for header labels. "Subject:"
-// is 8 cells, plus one space of separation.
+// labelWidth fits "Subject:" (8 cells) plus a separating space.
 const labelWidth = 9
 
-// chromeRows is the fixed row count above the body: 5 headers
-// plus the divider rule. The error banner adds one more when set.
+// chromeRows counts the 5 headers plus the divider; the error banner
+// adds one more when set.
 const chromeRows = 6
 
 func newModel(styles Styles, self string) *Model {
@@ -100,16 +97,14 @@ func newModel(styles Styles, self string) *Model {
 	return c
 }
 
-// New returns a fresh, empty Model with focus on To.
 func New(styles Styles, self string) *Model {
 	c := newModel(styles, self)
 	c.draftID = uuid.NewString()
 	return c
 }
 
-// Open returns a Model wired to an existing draftID, with d pre-seeded.
-// localDirty and pushDirty start cleared because the draft is already in
-// the cache and the server image is current.
+// Open returns a Model wired to an existing draftID, pre-seeded with d.
+// Both dirty flags start clear because the cache and server images match.
 func Open(styles Styles, self string, draftID string, d mailcompose.Draft) *Model {
 	c := newModel(styles, self)
 	c.draftID = draftID
@@ -121,12 +116,10 @@ func Open(styles Styles, self string, draftID string, d mailcompose.Draft) *Mode
 // so the draft appears in ListDrafts immediately.
 func (c *Model) SetCache(cache CacheStore) { c.cache = cache }
 
-// DraftID returns the UUID that identifies this draft in the cache.
 func (c *Model) DraftID() string { return c.draftID }
 
-// SetDraftTarget records the Drafts folder name and the last known
-// server UID for the push path. Callers supply these from the
-// classified-folder list and the cache DraftRow.
+// SetDraftTarget records the Drafts folder and the last known server UID
+// for the push path.
 func (c *Model) SetDraftTarget(folder, prevUID string) {
 	c.draftsFolder = folder
 	c.prevServerUID = prevUID
@@ -140,7 +133,6 @@ func (c *Model) scheduleServerPushCmd() tea.Cmd {
 	return tea.Tick(serverPushDelay, func(time.Time) tea.Msg { return serverPushTickMsg{} })
 }
 
-// createDraftCmd inserts the row on compose Init.
 func (c *Model) createDraftCmd() tea.Cmd {
 	id := c.draftID
 	cache := c.cache
@@ -157,8 +149,8 @@ func (c *Model) createDraftCmd() tea.Cmd {
 	}
 }
 
-// updateDraftCmd persists the autosave snapshot. UPDATE-only: a
-// deleted row makes the in-flight cmd a benign 0-row no-op.
+// updateDraftCmd persists the autosave snapshot. UPDATE-only so a deleted
+// row makes the in-flight cmd a benign zero-row no-op.
 func (c *Model) updateDraftCmd() tea.Cmd {
 	id := c.draftID
 	cache := c.cache
@@ -176,7 +168,7 @@ func (c *Model) updateDraftCmd() tea.Cmd {
 }
 
 // currentDraft snapshots the current inputs as a Draft without address
-// validation. Partial input is normal during editing.
+// validation; partial input is normal during editing.
 func (c *Model) currentDraft() mailcompose.Draft {
 	return mailcompose.Draft{
 		From:    gomail.Address{Address: c.from},
@@ -221,9 +213,8 @@ func (c *Model) SetSize(w, h int) {
 	c.editor.SetSize(w, bodyHeight)
 }
 
-// View enforces the size contract: every returned line is exactly
-// c.width display cells and the result is exactly c.height rows. The
-// parent joins panes without defensive clipping.
+// View enforces the size contract: every line is exactly c.width cells
+// and the output is exactly c.height rows.
 func (c *Model) View() string {
 	if c.width == 0 || c.height == 0 {
 		return ""
@@ -266,7 +257,6 @@ func (c *Model) padRow(s string) string {
 	return s + strings.Repeat(" ", c.width-w)
 }
 
-// truncate clips s to n display cells.
 func truncate(s string, n int) string {
 	if n <= 0 {
 		return ""
@@ -282,14 +272,14 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// SendMsg is emitted when the user presses Ctrl+X with a valid
-// draft. App assembles MIME and queues the outbox op.
+// SendMsg fires on Ctrl+X with a valid draft. App assembles MIME and
+// queues the outbox op.
 type SendMsg struct {
 	Draft mailcompose.Draft
 }
 
-// CancelMsg is emitted when the user presses Ctrl+C. App opens
-// a discard ConfirmModal when Dirty. Clean drafts close immediately.
+// CancelMsg fires on Ctrl+C. App opens a discard ConfirmModal when
+// Dirty; clean drafts close immediately.
 type CancelMsg struct {
 	Dirty bool
 }
@@ -314,8 +304,7 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				func() tea.Msg {
 					mime, err := mailcompose.AssembleMIME(d, time.Now())
 					if err != nil {
-						// AssembleMIME on a partial draft can fail cleanly;
-						// the next tick will retry.
+						// Partial drafts can fail to assemble; the next tick retries.
 						return nil
 					}
 					return EnqueuePushDraftMsg{
@@ -380,9 +369,8 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	return c, cmd
 }
 
-// isEditMsg reports whether msg represents user content input that
-// should mark the draft dirty. Navigation and control messages
-// (Tab, Esc, Ctrl chords) are excluded.
+// isEditMsg reports whether msg should mark the draft dirty. Navigation
+// and control messages (Tab, Esc, Ctrl chords) are excluded.
 func isEditMsg(msg tea.Msg) bool {
 	k, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -422,8 +410,7 @@ func (c *Model) setFocus(target int) {
 }
 
 // Draft rebuilds a mailcompose.Draft from the current inputs. Address
-// fields are parsed via net/mail; a parse error is stored in the
-// inline err row and returned to the caller.
+// parse errors are written to c.err and also returned.
 func (c *Model) Draft() (mailcompose.Draft, error) {
 	to, err := parseAddrField(c.to.Value(), "To")
 	if err != nil {
@@ -465,22 +452,17 @@ func (c *Model) SubjectValue() string { return c.subject.Value() }
 
 func (c *Model) SetBody(s string) { c.editor.SetValue(s) }
 
-// IsDirty reports whether any input field contains user-entered content.
 func (c *Model) IsDirty() bool {
 	return c.to.Value() != "" || c.cc.Value() != "" || c.bcc.Value() != "" ||
 		c.subject.Value() != "" || c.editor.Value() != ""
 }
 
-// CurrentDraft returns the draft built from the current inputs without
-// address validation. Partial input (incomplete addresses, empty fields)
-// is preserved as-is. Use Draft for the send path where valid addresses
-// are required.
+// CurrentDraft returns the draft built from current inputs without
+// validation. Use Draft for the send path where addresses must parse.
 func (c *Model) CurrentDraft() mailcompose.Draft { return c.currentDraft() }
 
-// HasContent reports whether any meaningful content has been entered,
-// including attachment paths (checked on Draft). It mirrors IsDirty but
-// is the gate for the save-on-close path: an empty compose opened for a
-// Drafts-row can be discarded silently without a confirm.
+// HasContent gates the save-on-close path: an empty compose opened for
+// a Drafts-row can be discarded silently without a confirm.
 func (c *Model) HasContent() bool {
 	d := c.currentDraft()
 	return len(d.To) > 0 || len(d.Cc) > 0 || len(d.Bcc) > 0 ||
@@ -488,15 +470,14 @@ func (c *Model) HasContent() bool {
 }
 
 // PrevServerUID returns the server UID of the last pushed image, or ""
-// if the draft has never been pushed. App uses this to queue a Destroy
-// on the stale server copy when discarding or sending.
+// if the draft has never been pushed. App queues a Destroy on the stale
+// server copy when discarding or sending.
 func (c *Model) PrevServerUID() string { return c.prevServerUID }
 
-// AllocDraftID returns a fresh draft UUID. App calls this when
-// reconstructing a server-side draft that has no matching local row.
+// AllocDraftID returns a fresh draft UUID for reconstructing a server-
+// side draft that has no matching local row.
 func AllocDraftID() string { return uuid.NewString() }
 
-// Seed populates the inputs from d.
 func (c *Model) Seed(d mailcompose.Draft) {
 	c.to.SetValue(joinAddresses(d.To))
 	c.cc.SetValue(joinAddresses(d.Cc))
