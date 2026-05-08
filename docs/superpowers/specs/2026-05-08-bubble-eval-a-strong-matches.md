@@ -148,3 +148,86 @@ field names are useful terminology to mirror.
 - `JoinHorizontal` ban (ADR-0084) applies equally to any candidate
   whose render path calls it internally.
 - No other Eval A candidate depends on this evaluation's outcome.
+
+---
+
+## `daltonsw/bubbleup`
+
+**Does this make poplar better?** No. `bubbleup` solves the wrong
+problem for poplar's toast. The library renders categorized status
+alerts (Info/Warn/Error/Debug) with color-fade-in animation via a
+`curLerpStep` lerp against a black `BackColor`. Poplar's toast is a
+domain-aware triage feedback row: it carries a `triageOp` payload,
+a `tea.Cmd` inverse for undo on `u`, and a monotonic `deadline` for
+the undo countdown. The two models diverge at every seam. Adopting
+`bubbleup` means importing the timing/animation chrome (100 ms tick
+loop, `go-colorful` Lab-space lerp, `go.dalton.dog/bubbleup` +
+`lucasb-eyer/go-colorful` as new deps) while still owning 100% of
+the domain-specific content — `renderToast` is the entire hard part,
+and it stays.
+
+**Feature parity:** `bubbleup` covers the auto-dismiss timer and
+position logic (six `Position` constants: top/bottom × left/center/
+right). Poplar has both already: a `tea.Tick` to `toastExpireMsg`
+handles expiry, and the toast renders inside the shared chrome row
+above the status bar (fixed position, no float). What `bubbleup`
+cannot provide: caller-supplied `View()` — the library owns its
+render entirely via `Render(content string)` (string overlay, not
+a `Model` the caller styles); no slot for a `triageOp` payload;
+no undo inverse Cmd hook; no countdown display. `HasActiveAlert()`
+is the only seam back to the caller, and it returns a bool, not
+the active payload.
+
+**Customization seams:** None that reach poplar's requirements.
+`AlertDefinition` fields — `ForeColor`, `Style`, `Prefix`, `Key` —
+cover category-level styling. The toast body is assembled inside
+`alert.render()` as `"<prefix> <message>"` with a hardcoded
+`baseStyle` (rounded border, padding (0,1)). Callers pass a string
+message; they cannot inject a rendered row or read back the active
+alert's domain type. The undo-hint slice (`[u undo]`) and the
+per-op verb (`Deleted 3 messages`) live in `renderToast` and cannot
+be delegated to `bubbleup` without reconstructing them as a plain
+string, which means the caller still owns all the formatting work.
+
+**Theming integration:** Partial and conflicting. `ForeColor` is a
+hex string passed at registration time; the lerp blends it against
+a hardcoded `BackColor = "#000000"`. Poplar's `Styles.Toast` is a
+`lipgloss.Style` bound to the compiled theme palette — the two color
+systems are orthogonal. Getting poplar's `AccentSuccess` color into
+`bubbleup` means hex-encoding the palette slot and accepting that
+the library will lerp it against black, not the terminal background.
+That is wrong for dark-on-light themes.
+
+**Maintenance signal:** Last commit 2026-05-01 (three commits that
+week). 41 stars. Single-author project; no released tags beyond
+`v0.x` cadence visible in the API response. Module path is
+`go.dalton.dog/bubbleup` (personal vanity domain), not a Go module
+proxy canonical path. Active but small-community.
+
+**Code delta estimate:** Adopting `bubbleup` would add two new
+dependencies (`go.dalton.dog/bubbleup`, `lucasb-eyer/go-colorful`)
+and remove approximately 0 LOC from `toast.go`: the 10-line
+`alert.render()` call cannot replace `renderToast` (85 LOC) because
+the domain content is the whole function. The only deletable code
+would be the `tea.Tick` + `toastExpireMsg` pattern (~10 LOC in
+`app.go`) replaced by `bubbleup`'s internal 100 ms tick loop — a
+wash that adds a goroutine firing 10× per second while a toast is
+active. The animation lerp is net-new behavior poplar does not want:
+pine-spirit clients show static status rows, not color-fade alerts.
+
+**License:** MIT License (spdx: MIT, confirmed via GitHub API).
+
+**Verdict:** **Keep + harvest**
+
+**Rationale (one line):** `bubbleup`'s value is the animation/color-fade
+chrome — exactly the part poplar does not want; the triage payload,
+undo Cmd, and domain verb are hand-rolled content that cannot move
+into the library, so adoption adds two deps and a 10 Hz tick for
+zero LOC reduction.
+
+**Interacts with:**
+- No other Eval A candidate is affected by skipping this library.
+- The hand-rolled `tea.Tick` + `toastExpireMsg` pattern in `app.go`
+  remains the timer mechanism regardless of this verdict.
+- If poplar ever wanted animated notifications (post-1.0), this
+  library or the pattern it uses could be revisited then.
