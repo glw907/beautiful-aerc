@@ -252,6 +252,37 @@ func TestDiscardOp_NonConflict(t *testing.T) {
 	}
 }
 
+func TestDecodeArgs_ContactKinds(t *testing.T) {
+	cases := []struct {
+		kind    OpKind
+		payload string
+	}{
+		{KindContactPut, `{"BookHref":"/books/a","Href":"/books/a/1.vcf","IfMatch":"\"etag1\""}`},
+		{KindContactDelete, `{"Href":"/books/a/1.vcf","IfMatch":"\"etag1\""}`},
+	}
+	for _, tc := range cases {
+		got, err := decodeArgs(string(tc.kind), tc.payload)
+		if err != nil {
+			t.Errorf("decodeArgs(%q): %v", tc.kind, err)
+			continue
+		}
+		if got.opKind() != tc.kind {
+			t.Errorf("opKind() = %q, want %q", got.opKind(), tc.kind)
+		}
+	}
+}
+
+func TestRevertOptimisticTx_ContactKindsAreNoop(t *testing.T) {
+	// Contact ops have no message-row state. Revert is a no-op and must
+	// not touch the tx at all (nil tx exercises this guarantee).
+	if err := revertOptimisticTx(nil, 0, ContactPutArgs{}); err != nil {
+		t.Errorf("revertOptimisticTx(ContactPutArgs): %v", err)
+	}
+	if err := revertOptimisticTx(nil, 0, ContactDeleteArgs{}); err != nil {
+		t.Errorf("revertOptimisticTx(ContactDeleteArgs): %v", err)
+	}
+}
+
 func TestDiscardConflictedSend(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()

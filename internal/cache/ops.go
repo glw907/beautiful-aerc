@@ -33,14 +33,30 @@ type (
 		DraftID       string
 		PrevServerUID mail.UID
 	}
+	// ContactPutArgs carries the CardDAV addressing for a PUT. BookHref
+	// is the collection; Href is the object path; IfMatch guards against
+	// mid-air collisions (empty on creates).
+	ContactPutArgs struct {
+		BookHref string
+		Href     string
+		IfMatch  string
+	}
+	// ContactDeleteArgs carries the object path and optional ETag guard
+	// for a CardDAV DELETE.
+	ContactDeleteArgs struct {
+		Href    string
+		IfMatch string
+	}
 )
 
-func (MoveArgs) opKind() OpKind      { return KindMove }
-func (FlagArgs) opKind() OpKind      { return KindFlag }
-func (DestroyArgs) opKind() OpKind   { return KindDestroy }
-func (SendArgs) opKind() OpKind      { return KindSend }
-func (AppendArgs) opKind() OpKind    { return KindAppend }
-func (PushDraftArgs) opKind() OpKind { return KindPushDraft }
+func (MoveArgs) opKind() OpKind          { return KindMove }
+func (FlagArgs) opKind() OpKind          { return KindFlag }
+func (DestroyArgs) opKind() OpKind       { return KindDestroy }
+func (SendArgs) opKind() OpKind          { return KindSend }
+func (AppendArgs) opKind() OpKind        { return KindAppend }
+func (PushDraftArgs) opKind() OpKind     { return KindPushDraft }
+func (ContactPutArgs) opKind() OpKind    { return KindContactPut }
+func (ContactDeleteArgs) opKind() OpKind { return KindContactDelete }
 
 // QueueOp inserts an outbox row and the optimistic UI flip in one
 // transaction, then signals the drainer. An empty msgUID makes the
@@ -259,7 +275,7 @@ func revertOptimisticTx(tx *sql.Tx, msgID int64, args OpArgs) error {
 		}
 		_, err := tx.Exec(stmt, bit, msgID)
 		return err
-	case SendArgs, AppendArgs, PushDraftArgs:
+	case SendArgs, AppendArgs, PushDraftArgs, ContactPutArgs, ContactDeleteArgs:
 		return nil
 	}
 	return fmt.Errorf("revertOptimisticTx: unknown args %T", args)

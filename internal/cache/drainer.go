@@ -49,10 +49,12 @@ func (a *Account) StartDrainer(ctx context.Context) error {
 // recoverExecuting resets `executing` rows after a crash. Idempotent
 // kinds go back to pending. Non-idempotent kinds (send, append,
 // push-draft) land in conflict with crashed-mid-execute.
+// contact-put and contact-delete are idempotent (PUT/DELETE are safe
+// to replay).
 func (a *Account) recoverExecuting() error {
 	if _, err := a.db.Exec(
-		`UPDATE outbox SET status = ? WHERE status = ? AND kind IN (?,?,?)`,
-		OpPending, OpExecuting, KindMove, KindFlag, KindDestroy); err != nil {
+		`UPDATE outbox SET status = ? WHERE status = ? AND kind IN (?,?,?,?,?)`,
+		OpPending, OpExecuting, KindMove, KindFlag, KindDestroy, KindContactPut, KindContactDelete); err != nil {
 		return err
 	}
 	_, err := a.db.Exec(
@@ -266,6 +268,18 @@ func decodeArgs(kind string, payload string) (OpArgs, error) {
 		return v, nil
 	case KindPushDraft:
 		var v PushDraftArgs
+		if err := json.Unmarshal([]byte(payload), &v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	case KindContactPut:
+		var v ContactPutArgs
+		if err := json.Unmarshal([]byte(payload), &v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	case KindContactDelete:
+		var v ContactDeleteArgs
 		if err := json.Unmarshal([]byte(payload), &v); err != nil {
 			return nil, err
 		}

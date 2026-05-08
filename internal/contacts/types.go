@@ -3,6 +3,12 @@
 // they import these types directly.
 package contacts
 
+import (
+	"context"
+
+	"github.com/emersion/go-webdav/carddav"
+)
+
 // Kind distinguishes a person card from an organization card.
 type Kind int
 
@@ -54,4 +60,13 @@ type AddressBook struct {
 	Href        string
 	DisplayName string
 	Description string
+}
+
+// Writer is the CardDAV write seam. cache.Account wires it at startup;
+// tests supply a fake. The cache drainer calls through it on ContactPut
+// and ContactDelete ops.
+type Writer interface {
+	PutAddressObject(ctx context.Context, bookHref, href, ifMatch string, obj carddav.AddressObject) (carddav.AddressObject, error)
+	DeleteAddressObject(ctx context.Context, href, ifMatch string) error
+	Multiget(ctx context.Context, bookHref string, hrefs []string) ([]carddav.AddressObject, error)
 }

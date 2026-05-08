@@ -17,13 +17,15 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/mail"
 )
 
 // Account is a single account's UI-facing read/write handle.
 type Account struct {
-	Backend       mail.Backend
-	ChangeTracker mail.ChangeTracker
+	Backend        mail.Backend
+	ChangeTracker  mail.ChangeTracker
+	ContactsWriter contacts.Writer
 
 	db   *sql.DB
 	dir  string
@@ -55,12 +57,14 @@ const (
 type OpKind string
 
 const (
-	KindMove      OpKind = "move"
-	KindFlag      OpKind = "flag"
-	KindDestroy   OpKind = "destroy"
-	KindSend      OpKind = "send"
-	KindAppend    OpKind = "append"
-	KindPushDraft OpKind = "push-draft"
+	KindMove          OpKind = "move"
+	KindFlag          OpKind = "flag"
+	KindDestroy       OpKind = "destroy"
+	KindSend          OpKind = "send"
+	KindAppend        OpKind = "append"
+	KindPushDraft     OpKind = "push-draft"
+	KindContactPut    OpKind = "contact-put"
+	KindContactDelete OpKind = "contact-delete"
 )
 
 // CacheEvent is the drainer→UI signal payload.
