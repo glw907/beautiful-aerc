@@ -1,6 +1,11 @@
 package compose
 
 import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -87,8 +92,78 @@ func (p AttachPicker) SetSize(w, h int) AttachPicker {
 	return p
 }
 
-// Update is a no-op stub. Filled in by later tasks.
+type readDirMsg struct {
+	id      int
+	entries []attachEntry
+	err     error
+}
+
+func (p AttachPicker) Open(dir string) (AttachPicker, tea.Cmd) {
+	p.shell = p.shell.WithOpen(true)
+	p.id++
+	p.dir = dir
+	p.entries = nil
+	p.cursor = 0
+	p.offset = 0
+	p.selected = map[string]bool{}
+	p.stack = nil
+	p.err = ""
+	return p, readDirCmd(p.id, dir, p.showHidden)
+}
+
+func readDirCmd(id int, dir string, showHidden bool) tea.Cmd {
+	return func() tea.Msg {
+		raw, err := os.ReadDir(dir)
+		if err != nil {
+			return readDirMsg{id: id, err: err}
+		}
+		out := make([]attachEntry, 0, len(raw))
+		for _, e := range raw {
+			name := e.Name()
+			if !showHidden && strings.HasPrefix(name, ".") {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			out = append(out, attachEntry{
+				name:  name,
+				path:  filepath.Join(dir, name),
+				isDir: e.IsDir(),
+				size:  info.Size(),
+			})
+		}
+		sort.SliceStable(out, func(i, j int) bool {
+			if out[i].isDir != out[j].isDir {
+				return out[i].isDir
+			}
+			return strings.ToLower(out[i].name) < strings.ToLower(out[j].name)
+		})
+		return readDirMsg{id: id, entries: out}
+	}
+}
+
 func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
+	if !p.shell.IsOpen() {
+		return p, nil
+	}
+	switch m := msg.(type) {
+	case readDirMsg:
+		if m.id != p.id {
+			return p, nil
+		}
+		if m.err != nil {
+			p.err = "cannot read " + p.dir + ": " + m.err.Error()
+			return p, nil
+		}
+		p.entries = m.entries
+		p.err = ""
+		if p.cursor >= len(p.entries) {
+			p.cursor = 0
+		}
+		return p, nil
+	}
 	return p, nil
 }
 
