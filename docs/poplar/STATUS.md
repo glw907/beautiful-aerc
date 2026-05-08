@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9o next — Claude Tidy implementation.
+**Current pass:** Pass 9p next — Attachments-richer compose UI (#24).
 
 ## Passes
 
@@ -17,7 +17,7 @@
 | 9m | CardDAV ingest — swap fixtures for real contacts cache (ADR-0175) | done |
 | 9m.1 | CardDAV write-back — form save round-trip via outbox (ADR-0176) | done |
 | 9n | Email signatures + multiple identities (ADR-0177) | done |
-| 9o | Claude Tidy implementation | pending |
+| 9o | Claude Tidy — user-invoked Ctrl+T (ADR-0178) | done |
 | 9p | Attachments-richer compose UI (#24) | pending |
 | 9q | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 9r–9t | List-Unsubscribe (#36), .ics viewer (#37), full-account search (#38) | pending |
@@ -28,31 +28,23 @@
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9o)
+## Next starter prompt (Pass 9p)
 
-> **Goal.** Claude Tidy implementation. Replace the identity
-> `TidyFn` seam in `internal/ui/app.go` with a Claude-API-backed
-> rewrite that runs before MIME assembly on send.
+> **Goal.** Attachments-richer compose UI (#24). Add an
+> attachments list under the body and a picker overlay for
+> adding/removing attachments before send.
 >
-> **Scope.** `internal/tidy/` already exists as the home for the
-> implementation. Wire it as the default `TidyFn` (replacing
-> `identityTidy`), gated by config so users can opt in. The body
-> goes through tidy → goldmark → MIME. Failure modes: tidy
-> errors surface inline as `c.err` and block the send (the user
-> can disable tidy and resend).
+> **Scope.** `internal/ui/compose/` plus `internal/compose/`
+> AssembleMIME path (already supports multipart/mixed). New file
+> picker overlay in `internal/ui/compose/attach_picker.go` (or
+> reuse the viewer's `attachpicker` shape). Footer hint at
+> appropriate rank.
 >
-> **Settled.** TidyFn is a function-pointer seam (ADR-0159).
-> Claude API access uses the existing `claude-api` skill / SDK
-> shape. Tidy runs on send, not on autosave or draft push.
->
-> **Still open — brainstorm:** Config gate (per-account opt-in
-> vs global); model selection (Haiku vs Sonnet); prompt shape
-> (rewrite vs suggest-and-confirm); error UX (inline banner vs
-> overlay); whether to dry-run with a diff preview before send.
->
-> **Approach.** Brainstorm the open questions, write
-> `docs/superpowers/plans/YYYY-MM-DD-claude-tidy.md`, then
-> implement. Standard pass-end ritual via `poplar-pass`.
+> **Approach.** Brainstorm the picker shape (xdg-portal vs raw
+> filesystem vs inline path entry), write a spec under
+> `docs/superpowers/specs/`, then a plan under
+> `docs/superpowers/plans/`, then execute. Standard pass-end
+> ritual via `poplar-pass`.
 
 ## Queued
 

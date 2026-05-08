@@ -118,10 +118,10 @@ type rawTidyRule struct {
 }
 
 type rawTidySty struct {
-	EmDashSpaces       *bool     `toml:"em_dash_spaces"`
-	Ellipsis           *string   `toml:"ellipsis"`
-	TimeFormat         *string   `toml:"time_format"`
-	CustomInstructions []string  `toml:"custom_instructions"`
+	EmDashSpaces       *bool    `toml:"em_dash_spaces"`
+	Ellipsis           *string  `toml:"ellipsis"`
+	TimeFormat         *string  `toml:"time_format"`
+	CustomInstructions []string `toml:"custom_instructions"`
 }
 
 type rawFolderCfg struct {

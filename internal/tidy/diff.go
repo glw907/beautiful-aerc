@@ -8,7 +8,7 @@ type ByteRange struct{ Start, End int }
 // DiffRanges returns the byte ranges in newText whose runes were not
 // matched against oldText by a longest common subsequence walk.
 // Adjacent change positions coalesce into one range. Pure deletions
-// (runes in oldText that disappear from newText) produce no range —
+// (runes in oldText that disappear from newText) produce no range:
 // there is no place in newText to underline.
 //
 // Runes that are technically kept by the LCS but sit inside a replace

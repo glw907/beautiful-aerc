@@ -159,8 +159,8 @@ the ADR(s) that justify them.
   `account.OpenConfirmEmptyMsg`, `account.EmptyFolderConfirmedMsg`,
   `account.FolderLoadedMsg`, `reader.BodyLoadedMsg`,
   `sidebar.ClearSearchMsg`). Reader/compose cmds emitting
-  `uicore.ErrorMsg` and orchestrating App seams (`URLOpener`,
-  `TidyFn`) live in `internal/ui/cmds.go`, accepting seams as
+  `uicore.ErrorMsg` and orchestrating the App `URLOpener` seam
+  live in `internal/ui/cmds.go`, accepting seams as
   function-typed parameters. `internal/ui/compose` shadows the
   `internal/compose` domain package: App-side imports use `uicompose`,
   and inside `internal/ui/compose/` the domain package is aliased

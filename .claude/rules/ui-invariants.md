@@ -172,14 +172,22 @@ file describes behavior, not the key tables.
   surfaces are exempt from the modifier-free rule, so these
   chords coexist with Catkin's `Ctrl+B/I/K/L/Q/Space`.
 - App owns the lifecycle: `compose *ComposeTab` (nil when closed)
-  + `tidy TidyFn` (function-pointer seam, default identity, Pass
-  9i swaps in Claude Tidy). `c` opens fresh; `r`/`R`/`f` open via
-  `composeSeedCmd` after fetching the parent body. The send path
-  runs `tidy`, calls `compose.AssembleMIME`, then
+  + `(tidyEnabled, tidyAPIKey, tidyCfg)` resolved once at
+  construction from `[ui.tidy]` and `tidy.ResolveAPIKey`, threaded
+  into every new `compose.Model` via `SetTidy`. `c` opens fresh;
+  `r`/`R`/`f` open via `composeSeedCmd` after fetching the parent
+  body. The send path calls `compose.AssembleMIME`, then
   `cache.Account.QueueOutbound` (one op JMAP, two ops IMAP per
   ADR-0160). Sent folder resolves via the cached classified-
   folder list (`cf.Canonical == "Sent"`) with case-fold "Sent"
   name fallback; missing surfaces inline as `c.err`.
+- `Ctrl+T` in the body runs `tidy.Tidy` in a `tea.Cmd`; on
+  return compose replaces the catkin buffer and feeds
+  character-range diffs to a `tidyAnnotator` painted in
+  `Styles.TidyChange` (`AccentPrimary` underline). Highlights
+  clear on first body mutation. Tidy never runs on send. The
+  footer shows a gated `^T tidy` hint at rank 6 when
+  `[ui.tidy] enabled` and the body is focused. ADR-0178.
 - Single-instance for Pass 9h. Drafts persistence is 9h.5;
   address autocomplete is 9.1; signatures + identities is 9.4.
   `ComposeTab`/`AccountTab` names are placeholders pending the

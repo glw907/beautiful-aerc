@@ -120,7 +120,7 @@ func TestTidyAnnotator(t *testing.T) {
 	style := lipgloss.NewStyle().Underline(true)
 	a.SetStyle(style)
 
-	// No state set — no annotations.
+	// No state set, so no annotations.
 	if got := a.Annotate("anything"); len(got) != 0 {
 		t.Errorf("empty state: got %d annotations, want 0", len(got))
 	}

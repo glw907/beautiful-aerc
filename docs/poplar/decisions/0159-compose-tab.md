@@ -70,3 +70,6 @@ Single-instance for Pass 9h. Drafts persistence (multi-compose) is
   outbox can branch protocol shapes — see ADR-0160.
 - The `r`/`R`/`f`/`c` keys are now wired (previously unbound). The
   help popover flips them to `wired: true`.
+- The `TidyFn` seam is **superseded by ADR-0178**: tidy is now
+  user-invoked from inside compose (`Ctrl+T`) and never runs on
+  the send path.
