@@ -99,6 +99,7 @@ func newModel(styles Styles, self string, suggest SuggestFn) *Model {
 		editor:  mailcompose.NewCatkinEditor(),
 		suggest: NewDropdown(suggest).WithStyles(styles),
 	}
+	c.editor.SetStyles(styles.CatkinStyles())
 	c.to.Focus()
 	c.focus = focusTo
 	return c
