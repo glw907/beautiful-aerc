@@ -484,3 +484,64 @@ letter-jump + dynamic `metaCol` for `contacts/List` — onto
 - Pass 9v's scope does not include a `contacts/List` or
   `messagelist` rewrite; this verdict blocks neither pass from
   proceeding.
+
+---
+
+## Outcome and harvest targets
+
+### Verdict tally
+
+All five Eval A candidates landed **Keep + harvest**. No adoption is
+authorized by this triage. The original roadmap assumption (9v.1
+`bubbletea-overlay` swap, 9v.2 `huh` swap) is rescinded.
+
+### Why every candidate failed
+
+Two blockers recur across the set. ADR-0084 bans `lipgloss.JoinHorizontal`
+under SPUA-A icon mode; `bubbles/help` and `bubble-table` both call it
+in their core render path with no seam to override. The second blocker
+is poplar's domain shape: wired/unwired help bindings, payload-bearing
+triage toast with an undo inverse, dynamic contact-form rows, and the
+threading walk plus `ActionTargets` expansion are all runtime-mutable
+constructs that the candidates model at construction time. Adoption
+would require forking or accepting behavior loss at the product-defining
+seams — in each case the fork cost meets or exceeds the hand-roll.
+
+### Harvest targets
+
+- `rmhubbert/bubbletea-overlay`: The `Position` enum vocabulary
+  (Top/Center/Bottom/Left/Right) is useful if a future overlay
+  grows semantic placement beyond the current centered default.
+  Nothing to lift now; the shared Superfile algorithm is already
+  in `overlay.go`.
+- `bubbles/help`: The `Styles` field names — `FullKey`, `FullDesc`,
+  `FullSeparator`, `ShortKey`, `ShortDesc`, `ShortSeparator`,
+  `Ellipsis` — are cleaner terminology than the current
+  `helppopover` names. Worth mirroring in `helppopover/styles.go`
+  on the next pass that touches that file.
+- `daltonsw/bubbleup`: Nothing to lift. The animation/color-fade
+  chrome is the library's value proposition; poplar does not want
+  it. The hand-rolled `tea.Tick` + `toastExpireMsg` pattern stays.
+- `charmbracelet/huh`: The `(Focused, Blurred)` style-pair naming
+  in `huh.Styles` is cleaner than poplar's current `(FieldFocus,
+  FieldBlur)` — rename in `contacts/styles.go` for readability
+  parity. Note: the 9u first-run wizard has a fully static field
+  set (account name, provider, host, port, credentials); `huh`
+  may still fit that surface. This eval does not foreclose a
+  bounded 9u adoption — that decision belongs to the 9u plan.
+- `evertras/bubble-table`: Nothing actionable. The `JoinHorizontal`
+  blocker (ADR-0084) applies to any future table candidate whose
+  core render path calls it; flag this in Eval B if table
+  sub-candidates appear there.
+
+### Implications for upcoming passes
+
+- **9q (outbox delivery controls):** unaffected — the schedule-send
+  modal builds on the existing `ModalShell` + `PlaceOverlay` chrome.
+- **9u (first-run wizard):** the 9u plan may still evaluate `huh`
+  against a static field set; this eval does not authorize or
+  foreclose that.
+- **Eval B (medium matches):** proceeds as planned — pickers,
+  viewport, and table sub-candidates not covered here.
+- **9y consolidation:** no swaps queued from Eval A; consolidation
+  focuses on Eval B outcomes.
