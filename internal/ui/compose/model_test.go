@@ -525,6 +525,33 @@ func TestCompose_AttachAcceptedDedupes(t *testing.T) {
 	}
 }
 
+func TestCompose_FocusAttachRemoveCollapsesEmpty(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a.pdf"}})
+	c.setFocus(focusAttach)
+	_, _ = c.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("d")}))
+	if d := c.CurrentDraft(); len(d.Attachments) != 0 {
+		t.Fatalf("attachments not removed: %v", d.Attachments)
+	}
+	if c.focus != focusSubject {
+		t.Errorf("focus did not collapse to Subject: %d", c.focus)
+	}
+}
+
+func TestCompose_FocusAttachArrowsAndDeleteMid(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a", "/tmp/b", "/tmp/c"}})
+	c.setFocus(focusAttach)
+	_, _ = c.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRight}))
+	_, _ = c.Update(tea.KeyMsg(tea.Key{Type: tea.KeyBackspace}))
+	d := c.CurrentDraft()
+	if len(d.Attachments) != 2 || d.Attachments[1] != "/tmp/c" {
+		t.Errorf("after middle delete: %v", d.Attachments)
+	}
+}
+
 func TestCompose_AttachRowHiddenWhenEmpty(t *testing.T) {
 	c := newComposeForTest(t)
 	c.SetSize(80, 24)
