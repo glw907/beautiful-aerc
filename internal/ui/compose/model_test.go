@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/ui/contacts"
 )
 
 type fakeCache struct {
@@ -36,7 +37,7 @@ func (f *fakeCache) LoadDraft(_ context.Context, _ string) ([]byte, error) {
 
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
-	c := New(Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life")
+	c := New(Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life", nil)
 	c.SetSize(80, 24)
 	return c
 }
@@ -287,6 +288,73 @@ func TestModel_AutosaveNoopBeforeDebounce(t *testing.T) {
 	}
 }
 
+func TestModel_AcceptsSuggestionWithTab(t *testing.T) {
+	suggest := staticSuggest([]contacts.Suggestion{
+		{Name: "Alice Adams", Email: "alice@example.com"},
+	})
+	c := New(Styles{}, "geoff@907.life", suggest)
+	c.SetSize(80, 24)
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("al")})
+	if c.suggest.Empty() {
+		t.Fatalf("dropdown should populate after typing 'al'")
+	}
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if !c.suggest.Empty() {
+		t.Fatalf("Tab should clear the dropdown after accept")
+	}
+	if got := c.to.Value(); got != "Alice Adams <alice@example.com>, " {
+		t.Fatalf("To value after accept = %q, want %q", got, "Alice Adams <alice@example.com>, ")
+	}
+	if c.focus != focusTo {
+		t.Fatalf("focus should stay on To after accept; got %d", c.focus)
+	}
+}
+
+func TestModel_TabAdvancesFocusWhenDropdownEmpty(t *testing.T) {
+	c := newTestModel(t)
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if c.focus != focusCc {
+		t.Fatalf("Tab should advance focus when dropdown is empty; focus=%d", c.focus)
+	}
+}
+
+func TestModel_DropdownPrefixUsesTrailingFragment(t *testing.T) {
+	suggest := staticSuggest([]contacts.Suggestion{
+		{Name: "Bob", Email: "bob@example.com"},
+	})
+	c := New(Styles{}, "geoff@907.life", suggest)
+	c.SetSize(80, 24)
+	c.to.SetValue("Alice <alice@example.com>, ")
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("bo")})
+	if c.suggest.Empty() {
+		t.Fatalf("dropdown should populate from trailing 'bo' fragment")
+	}
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	want := "Alice <alice@example.com>, Bob <bob@example.com>, "
+	if got := c.to.Value(); got != want {
+		t.Fatalf("To value after accept = %q, want %q", got, want)
+	}
+}
+
+func TestModel_View_WidthHonoredWhileDropdownOpen(t *testing.T) {
+	suggest := staticSuggest([]contacts.Suggestion{
+		{Name: "Alice Adams", Email: "alice@example.com", Org: "Acme"},
+		{Name: "Alex Brown", Email: "alex@example.com"},
+	})
+	c := New(Styles{}, "geoff@907.life", suggest)
+	c.SetSize(80, 24)
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("al")})
+	if c.suggest.Empty() {
+		t.Fatalf("precondition: dropdown should populate")
+	}
+	v := c.View()
+	for i, line := range strings.Split(v, "\n") {
+		if w := lipgloss.Width(line); w != 80 {
+			t.Fatalf("line %d width = %d, want 80: %q", i, w, line)
+		}
+	}
+}
+
 func TestModel_DraftIDIsSet(t *testing.T) {
 	c := newTestModel(t)
 	if c.DraftID() == "" {
@@ -297,7 +365,7 @@ func TestModel_DraftIDIsSet(t *testing.T) {
 func TestModel_OpenPreservesID(t *testing.T) {
 	styles := Styles{ErrorBanner: lipgloss.NewStyle()}
 	d := mailcompose.Draft{Subject: "saved", Body: "body text"}
-	c := Open(styles, "geoff@907.life", "fixed-id", d)
+	c := Open(styles, "geoff@907.life", "fixed-id", d, nil)
 	if c.DraftID() != "fixed-id" {
 		t.Fatalf("Open draftID = %q, want fixed-id", c.DraftID())
 	}

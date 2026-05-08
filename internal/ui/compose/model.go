@@ -51,6 +51,8 @@ type Model struct {
 	localDirty    bool
 	pushDirty     bool
 	lastEditAt    time.Time
+
+	suggest Dropdown
 }
 
 type autosaveTickMsg struct{}
@@ -76,7 +78,7 @@ const labelWidth = 9
 // adds one more when set.
 const chromeRows = 6
 
-func newModel(styles Styles, self string) *Model {
+func newModel(styles Styles, self string, suggest SuggestFn) *Model {
 	mk := func() textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
@@ -91,22 +93,23 @@ func newModel(styles Styles, self string) *Model {
 		bcc:     mk(),
 		subject: mk(),
 		editor:  mailcompose.NewCatkinEditor(),
+		suggest: NewDropdown(suggest).WithStyles(styles),
 	}
 	c.to.Focus()
 	c.focus = focusTo
 	return c
 }
 
-func New(styles Styles, self string) *Model {
-	c := newModel(styles, self)
+func New(styles Styles, self string, suggest SuggestFn) *Model {
+	c := newModel(styles, self, suggest)
 	c.draftID = uuid.NewString()
 	return c
 }
 
 // Open returns a Model wired to an existing draftID, pre-seeded with d.
 // Both dirty flags start clear because the cache and server images match.
-func Open(styles Styles, self string, draftID string, d mailcompose.Draft) *Model {
-	c := newModel(styles, self)
+func Open(styles Styles, self string, draftID string, d mailcompose.Draft, suggest SuggestFn) *Model {
+	c := newModel(styles, self, suggest)
 	c.draftID = draftID
 	c.Seed(d)
 	return c
@@ -221,9 +224,26 @@ func (c *Model) View() string {
 	}
 	rows := make([]string, 0, c.height)
 	rows = append(rows, c.headerRow("From:", c.from))
-	rows = append(rows, c.headerRow("To:", c.to.View()))
-	rows = append(rows, c.headerRow("Cc:", c.cc.View()))
-	rows = append(rows, c.headerRow("Bcc:", c.bcc.View()))
+	addrFields := []struct {
+		label string
+		view  string
+		focus int
+	}{
+		{"To:", c.to.View(), focusTo},
+		{"Cc:", c.cc.View(), focusCc},
+		{"Bcc:", c.bcc.View(), focusBcc},
+	}
+	showDropdown := c.dropdownActive()
+	var dropRows []string
+	if showDropdown {
+		dropRows = c.dropdownRows()
+	}
+	for _, f := range addrFields {
+		rows = append(rows, c.headerRow(f.label, f.view))
+		if showDropdown && c.focus == f.focus {
+			rows = append(rows, dropRows...)
+		}
+	}
 	rows = append(rows, c.headerRow("Subject:", c.subject.View()))
 	if c.err != "" {
 		rows = append(rows, c.padRow(c.styles.ErrorBanner.Render(c.err)))
@@ -239,6 +259,21 @@ func (c *Model) View() string {
 		rows = rows[:c.height]
 	}
 	return strings.Join(rows, "\n")
+}
+
+// dropdownRows pads each suggest line to c.width so splicing into View
+// preserves the width contract.
+func (c *Model) dropdownRows() []string {
+	view := c.suggest.View()
+	if view == "" {
+		return nil
+	}
+	lines := strings.Split(view, "\n")
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = c.padRow(l)
+	}
+	return out
 }
 
 func (c *Model) headerRow(label, value string) string {
@@ -320,6 +355,19 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		return c, c.scheduleServerPushCmd()
 
 	case tea.KeyMsg:
+		if c.dropdownActive() {
+			switch msg.Type {
+			case tea.KeyTab, tea.KeyEnter:
+				c.acceptSuggestion()
+				return c, nil
+			case tea.KeyEsc:
+				c.suggest = c.suggest.Clear()
+				return c, nil
+			case tea.KeyUp, tea.KeyDown:
+				c.suggest, _ = c.suggest.Update(msg)
+				return c, nil
+			}
+		}
 		switch msg.Type {
 		case tea.KeyCtrlX:
 			d, err := c.Draft()
@@ -366,7 +414,78 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		c.lastEditAt = time.Now()
 	}
 
+	if _, isKey := msg.(tea.KeyMsg); isKey {
+		c.refreshSuggest()
+	}
 	return c, cmd
+}
+
+// dropdownActive reports whether the dropdown should consume navigation
+// keys.
+func (c *Model) dropdownActive() bool {
+	if c.suggest.Empty() {
+		return false
+	}
+	switch c.focus {
+	case focusTo, focusCc, focusBcc:
+		return true
+	}
+	return false
+}
+
+func (c *Model) refreshSuggest() {
+	ti := c.focusedAddrField()
+	if ti == nil {
+		c.suggest = c.suggest.Clear()
+		return
+	}
+	c.suggest = c.suggest.SetPrefix(trailingFragment(ti.Value()))
+}
+
+func (c *Model) focusedAddrField() *textinput.Model {
+	switch c.focus {
+	case focusTo:
+		return &c.to
+	case focusCc:
+		return &c.cc
+	case focusBcc:
+		return &c.bcc
+	}
+	return nil
+}
+
+// trailingFragment returns the text after the last comma, with leading
+// whitespace trimmed. The caller is typing into this fragment; earlier
+// addresses are already committed.
+func trailingFragment(s string) string {
+	if i := strings.LastIndex(s, ","); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.TrimLeft(s, " \t")
+}
+
+// acceptSuggestion rewrites the focused field's trailing fragment as
+// `Name <email>, ` so the next address types in cleanly.
+func (c *Model) acceptSuggestion() {
+	sel, ok := c.suggest.Selected()
+	if !ok {
+		return
+	}
+	ti := c.focusedAddrField()
+	if ti == nil {
+		return
+	}
+	prefix := ""
+	if i := strings.LastIndex(ti.Value(), ","); i >= 0 {
+		prefix = ti.Value()[:i+1] + " "
+	}
+	rendered := fmt.Sprintf("%s <%s>, ", sel.Name, sel.Email)
+	ti.SetValue(prefix + rendered)
+	ti.CursorEnd()
+	c.suggest = c.suggest.Clear()
+	c.localDirty = true
+	c.pushDirty = true
+	c.lastEditAt = time.Now()
 }
 
 // isEditMsg reports whether msg should mark the draft dirty. Navigation

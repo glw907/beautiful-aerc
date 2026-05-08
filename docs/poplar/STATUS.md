@@ -1,6 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 9l next — compose autocomplete dropdown.
+**Current pass:** Pass 9m next — CardDAV ingest, swap fixture
+suggestions for real contacts cache.
 
 ## Passes
 
@@ -13,7 +14,7 @@
 | 9k.2 | Comment sweep — cache + outbound chain | done |
 | 9k.3 | Comment sweep — UI core; T34 demoted to voice-lens (ADR-0173) | done |
 | 9k.4 | Comment sweep — UI subpackages + catkin | done |
-| 9l | Compose autocomplete dropdown (To/Cc/Bcc) | pending |
+| 9l | Compose autocomplete dropdown — fixture-backed To/Cc/Bcc (ADR-0174) | done |
 | 9m | CardDAV ingest — swap fixtures for real contacts cache (#34) | pending |
 | 9n | Email signatures + multiple identities (#32) | pending |
 | 9o | Claude Tidy implementation | pending |
@@ -27,33 +28,33 @@
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9l)
+## Next starter prompt (Pass 9m)
 
-> **Goal.** Compose autocomplete dropdown wired to fixtures: a
-> `compose.Dropdown` sub-model that anchors under the focused
-> To/Cc/Bcc textinput and rewrites the field on Tab/Enter.
+> **Goal.** Swap `contacts.FixtureSuggestions` for a real
+> CardDAV-backed contacts cache feeding the compose autocomplete
+> seam (`SuggestFn`) and the `i`-popover lookup.
 >
-> **Scope.** New `internal/ui/compose/suggest.go` +
-> `suggest_test.go`; splice into `internal/ui/compose/model.go`;
-> wire `App` to pass a `SuggestFn` defaulting to
-> `contacts.FixtureSuggestions`. Reference: archived plan
-> `docs/superpowers/archive/plans/2026-05-07-address-book-
-> mockups.md` Task 9.
+> **Scope.** New CardDAV ingest path (`emersion/go-webdav` +
+> `emersion/go-vcard`), per-account contacts cache schema, sync
+> command, and the cache-backed `SuggestFn` + `LookupByEmail`
+> wired into App in place of the fixture pool. Reference issue
+> #34. The `compose.Dropdown` shape is fixed (ADR-0174) — only
+> the function pointer changes.
 >
-> **Settled.** Dropdown renders only when the focused field is
-> To/Cc/Bcc, prefix ≥ 2 chars, and `SuggestFn` returns a non-empty
-> slice. Up/Down cursor (wrap); Tab/Enter accepts and rewrites
-> textinput to `Name <email>, ` then clears; Esc dismisses. Splice
-> rows positionally below the focused field (no overlay math).
-> 9.2 swaps `FixtureSuggestions` for the cache-backed query.
+> **Settled.** ADR-0174 locks the dropdown contract; only the
+> `SuggestFn` pointer changes. Phone validation upgrade and vCard
+> ingest of saved-form contacts ride along.
 >
-> **Still open.** None — pure implementation pass.
+> **Still open — brainstorm:** schema (separate `contacts.db` vs.
+> tables in the per-account cache); sync model (full pull vs.
+> CTAG/ETag incremental); ranking with real data (recency /
+> frequency, 7-row cap re-evaluated); save destination when
+> multiple address books exist.
 >
-> **Approach.** Write `docs/superpowers/plans/YYYY-MM-DD-compose-
-> autocomplete.md`, then implement. Standard pass-end ritual via
-> `poplar-pass`.
+> **Approach.** Brainstorm, write
+> `docs/superpowers/plans/YYYY-MM-DD-carddav-ingest.md`, implement.
+> Standard pass-end ritual via `poplar-pass`.
 
 ## Queued
 
 - **#30** — `Sidebar.View` render cache (8.5c overlay pattern). Pickup-of-opportunity.
-- **9l** prompt details: see archived 2026-05-07-address-book-mockups.md Task 9.

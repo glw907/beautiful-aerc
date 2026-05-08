@@ -255,6 +255,18 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   depth-preserving `>` quoting. `gomail.Address` is the Draft
   address type; `content.ParseAddressList` is the shared list
   parser. `internal/filter` exposes `MarkdownBody`/`MarkdownToHTML` as the shared goldmark entries (Linkify + Table).
+- `internal/ui/compose/` owns the live compose surface. `Dropdown`
+  is a value-type sub-model on `compose.Model` for To/Cc/Bcc
+  autocomplete; the `SuggestFn func(prefix string) []contacts.Suggestion`
+  seam threads through `compose.New` / `compose.Open` and is wired
+  to `contacts.FixtureSuggestions` in App. 9m swaps the function
+  pointer for the cache-backed query. The dropdown renders only
+  when focus is To/Cc/Bcc and the trailing fragment (text after
+  the last comma, leading whitespace trimmed) has ≥ 2 chars and
+  the seam returns rows. Up/Down wrap; Tab/Enter accept (rewrite
+  the trailing fragment as `Name <email>, ` and clear); Esc
+  dismisses. Splices positionally below the focused-header row.
+  ADR-0174.
 
 ### Address book
 

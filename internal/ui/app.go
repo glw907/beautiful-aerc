@@ -608,7 +608,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case uicompose.SeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail())
+		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), contacts.FixtureSuggestions)
 		m.compose.SetSize(w, h)
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
@@ -617,7 +617,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Drafts-folder Enter: wire cache/target, then open compose.
 		w, h := m.rightPaneSize()
 		row := msg.row
-		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft)
+		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, contacts.FixtureSuggestions)
 		c.SetSize(w, h)
 		c.SetCache(m.acct.Cache())
 		c.SetDraftTarget(row.ServerFolder, string(row.ServerUID))
@@ -718,7 +718,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
-			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail())
+			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), contacts.FixtureSuggestions)
 			m.compose.SetSize(w, h)
 			m.compose.SetCache(m.acct.Cache())
 			draftsFolder := resolveDraftsFolder(m.acct.Cache())
