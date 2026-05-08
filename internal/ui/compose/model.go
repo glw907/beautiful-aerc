@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/tidy"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/google/uuid"
@@ -282,6 +283,9 @@ func (c *Model) View() string {
 		}
 	}
 	rows = append(rows, c.headerRow("Subject:", c.subject.View()))
+	if len(c.attachments) > 0 {
+		rows = append(rows, c.attachRow(c.attachments))
+	}
 	if c.err != "" {
 		rows = append(rows, c.padRow(c.styles.ErrorBanner.Render(c.err)))
 	}
@@ -858,6 +862,58 @@ func (c *Model) removeAttachAtCursor() tea.Cmd {
 		c.attachCursor = len(c.attachments) - 1
 	}
 	return c.scheduleAutosaveCmd()
+}
+
+func (c *Model) attachRow(atts []string) string {
+	label := c.styles.AttachLabel.Render("Attach: ")
+	avail := c.width - lipgloss.Width(label)
+	if avail < 1 {
+		return c.padRow(label)
+	}
+	chips := make([]string, 0, len(atts))
+	for i, p := range atts {
+		size := ""
+		if info, err := os.Stat(p); err == nil {
+			size = " (" + humanize.Bytes(info.Size()) + ")"
+		}
+		body := filepath.Base(p) + size
+		style := c.styles.AttachChip
+		if c.focus == focusAttach && i == c.attachCursor {
+			style = c.styles.AttachChipFocus
+		}
+		chips = append(chips, style.Render(body))
+	}
+	joined := strings.Join(chips, "  ")
+	if lipgloss.Width(joined) > avail {
+		joined = c.fitChips(chips, avail)
+	}
+	return c.padRow(label + joined)
+}
+
+// fitChips greedily includes leading chips until they no longer fit,
+// then appends a "+N" chip for overflow.
+func (c *Model) fitChips(chips []string, avail int) string {
+	var b strings.Builder
+	used := 0
+	for i, ch := range chips {
+		sep := ""
+		if b.Len() > 0 {
+			sep = "  "
+		}
+		piece := sep + ch
+		remaining := len(chips) - i - 1
+		reserve := 0
+		if remaining > 0 {
+			reserve = lipgloss.Width(fmt.Sprintf("  +%d", remaining))
+		}
+		if used+lipgloss.Width(piece)+reserve > avail {
+			fmt.Fprintf(&b, "  +%d", len(chips)-i)
+			return b.String()
+		}
+		b.WriteString(piece)
+		used += lipgloss.Width(piece)
+	}
+	return b.String()
 }
 
 func parseAddrField(raw, label string) ([]gomail.Address, error) {

@@ -525,6 +525,28 @@ func TestCompose_AttachAcceptedDedupes(t *testing.T) {
 	}
 }
 
+func TestCompose_AttachRowHiddenWhenEmpty(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	out := c.View()
+	if strings.Contains(out, "Attach:") {
+		t.Errorf("attach row should not render when no attachments")
+	}
+}
+
+func TestCompose_AttachRowVisibleWithAttachments(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/notes.pdf"}})
+	out := stripANSI(c.View())
+	if !strings.Contains(out, "Attach:") {
+		t.Errorf("attach row should render:\n%s", out)
+	}
+	if !strings.Contains(out, "notes.pdf") {
+		t.Errorf("chip should show basename:\n%s", out)
+	}
+}
+
 func TestComposeFromRowRendersChip(t *testing.T) {
 	c := newTestModel(t)
 	c.SetSize(80, 24)

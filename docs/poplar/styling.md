@@ -249,6 +249,9 @@ struct lives in `internal/ui/contacts/styles.go`.
 | `compose.Styles.PickerCursor` | `BgBase` | `AccentPrimary` | AttachPicker cursor row (inverted: bg becomes fg so text remains legible) |
 | `compose.Styles.PickerDim` | `FgDim` | — | AttachPicker de-emphasized text (file sizes, path row, hint text) |
 | `compose.Styles.PickerError` | `ColorError` | — | AttachPicker error row (readDir failure message) |
+| `compose.Styles.AttachLabel` | `FgDim` | — | "Attach:" label in the compose attach row |
+| `compose.Styles.AttachChip` | `FgBase` | — | Attachment chip (filename + size) in the compose attach row |
+| `compose.Styles.AttachChipFocus` | `BgBase` | `AccentPrimary` | Attachment chip with cursor focus in the compose attach row |
 
 ## Guidelines
 
