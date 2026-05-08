@@ -197,9 +197,47 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 				p.cursor = 0
 			}
 			return p.clampOffset(), nil
+		case key.Matches(m, p.keys.Open):
+			if len(p.entries) == 0 {
+				return p, nil
+			}
+			e := p.entries[p.cursor]
+			if e.isDir {
+				return p.descend(e.path)
+			}
+			// file handling added in Task 7
+			return p, nil
+		case key.Matches(m, p.keys.Back):
+			return p.ascend()
 		}
 	}
 	return p, nil
+}
+
+func (p AttachPicker) descend(path string) (AttachPicker, tea.Cmd) {
+	p.stack = append(p.stack, attachViewState{cursor: p.cursor, offset: p.offset})
+	p.id++
+	p.dir = path
+	p.entries = nil
+	p.cursor, p.offset = 0, 0
+	return p, readDirCmd(p.id, p.dir, p.showHidden)
+}
+
+func (p AttachPicker) ascend() (AttachPicker, tea.Cmd) {
+	parent := filepath.Dir(p.dir)
+	if parent == p.dir {
+		return p, nil
+	}
+	var prev attachViewState
+	if n := len(p.stack); n > 0 {
+		prev = p.stack[n-1]
+		p.stack = p.stack[:n-1]
+	}
+	p.id++
+	p.dir = parent
+	p.entries = nil
+	p.cursor, p.offset = prev.cursor, prev.offset
+	return p, readDirCmd(p.id, p.dir, p.showHidden)
 }
 
 // viewportRows is the body height available for entries inside the

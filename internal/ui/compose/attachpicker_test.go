@@ -110,6 +110,52 @@ func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 	}
 }
 
+func TestAttachPicker_DescendAndAscendRestoresCursor(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a", "b", "child/", "child/inner.txt")
+	p := loadDir(t, newTestPicker(t), dir)
+
+	// find the "child" entry and cursor onto it
+	idx := -1
+	for i, e := range p.entries {
+		if e.name == "child" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatal("child not in entries")
+	}
+	for p.cursor < idx {
+		p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
+	}
+
+	// descend — Enter returns a readDirCmd
+	p, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+	if cmd == nil {
+		t.Fatal("descend should issue readDirCmd")
+	}
+	p, _ = p.Update(cmd())
+	if !strings.HasSuffix(p.dir, "/child") {
+		t.Fatalf("after descend dir = %q, want suffix /child", p.dir)
+	}
+	if p.cursor != 0 {
+		t.Errorf("after descend cursor = %d, want 0", p.cursor)
+	}
+
+	// ascend — Backspace returns a readDirCmd
+	p, cmd = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyBackspace}))
+	if cmd != nil {
+		p, _ = p.Update(cmd())
+	}
+	if p.dir != dir {
+		t.Errorf("after ascend dir = %q, want %q", p.dir, dir)
+	}
+	if p.cursor != idx {
+		t.Errorf("after ascend cursor = %d, want %d (restored to child entry)", p.cursor, idx)
+	}
+}
+
 func TestAttachPicker_Nav(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "a", "b", "c", "d", "e")
