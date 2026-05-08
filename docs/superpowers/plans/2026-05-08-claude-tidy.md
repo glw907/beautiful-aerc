@@ -318,6 +318,8 @@ Append to `internal/catkin/annotate_test.go`:
 ```go
 func TestTidyAnnotator(t *testing.T) {
 	a := newTidyAnnotator()
+	style := lipgloss.NewStyle().Underline(true)
+	a.SetStyle(style)
 
 	// No state set — no annotations.
 	if got := a.Annotate("anything"); len(got) != 0 {
@@ -326,7 +328,7 @@ func TestTidyAnnotator(t *testing.T) {
 
 	a.Set("hello world", []Range{{0, 5}, {6, 11}})
 
-	// Matching src returns the stored ranges.
+	// Matching src returns the stored ranges with configured style.
 	got := a.Annotate("hello world")
 	if len(got) != 2 {
 		t.Fatalf("matching src: got %d, want 2", len(got))
@@ -336,6 +338,9 @@ func TestTidyAnnotator(t *testing.T) {
 	}
 	if got[0].Kind != KindTidyChange {
 		t.Errorf("kind = %v, want KindTidyChange", got[0].Kind)
+	}
+	if got[0].Style.GetUnderline() != true {
+		t.Errorf("style not propagated: GetUnderline() = false")
 	}
 
 	// Any divergence returns empty.
@@ -895,14 +900,14 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/catkin"
-	"github.com/glw907/poplar/internal/tidy"
+	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/tidy"
 )
 
 func newTestComposeModel() *Model {
-	t := theme.OneDark()
-	st := NewStyles(t)
-	return New(st, "test@example.com", func(string) []contactsSuggestion { return nil })
+	st := NewStyles(theme.OneDark)
+	return New(st, "test@example.com", func(string) []contacts.Suggestion { return nil })
 }
 
 // helper to inject a fake tidyFn
@@ -1036,7 +1041,6 @@ func TestUpdate_TidyResult_Error(t *testing.T) {
 var _ = catkin.Range{}
 ```
 
-(`contactsSuggestion` is the local alias for `contacts.Suggestion`; if the existing test file already imports the contacts package directly, mirror that.)
 
 - [ ] **Step 2: Run, confirm fail**
 
@@ -1235,6 +1239,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `internal/ui/app.go`
+- Modify: `internal/ui/app_test.go` (delete `TestApp_WithTidy_Replaces` at line 1344 — calls the now-removed `WithTidy`)
 - Modify: `internal/ui/cmds.go`
 - Modify: `cmd/poplar/root.go` (or wherever `NewApp` is called) — pass `[ui.tidy]` config + resolved API key into App
 
@@ -1257,6 +1262,13 @@ func identityTidy(_ context.Context, body string) (string, error) {
 Remove the `tidy TidyFn` field from `App`. Remove the `WithTidy` method. Remove the `tidy: identityTidy` initialization in `NewApp`. Remove the `tidy := m.tidy` line and pass-through in the `composeSendCmd` callsite.
 
 If `context` is now unused in this file, drop it from imports.
+
+Also delete `TestApp_WithTidy_Replaces` from `internal/ui/app_test.go` (around line 1344) — the test covers the removed `WithTidy` setter and will fail to compile after this step. If `context` becomes unused in the test file, drop it from imports there too. Verify with:
+
+```bash
+grep -n "WithTidy\|TidyFn\|identityTidy" internal/ui/
+```
+Expected: no matches.
 
 - [ ] **Step 2: Drop tidy parameter from composeSendCmd**
 
