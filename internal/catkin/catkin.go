@@ -32,6 +32,7 @@ type Model struct {
 	annotators       []Annotator
 	annotations      *AnnotationSet
 	srcGen           uint64
+	tidyA            *tidyAnnotator
 	popover          popoverState
 	userWordlistPath string
 }
@@ -41,12 +42,26 @@ func New() Model {
 		buf: NewBuffer(textarea.New()),
 	}
 	m.undo.seed(snap{"", 0})
+	tidy := newTidyAnnotator()
+	m.tidyA = tidy
+	m.annotators = append(m.annotators, tidy)
 	return m
 }
 
 // RegisterAnnotator appends an annotator; they run in registration order.
 func (m *Model) RegisterAnnotator(a Annotator) {
 	m.annotators = append(m.annotators, a)
+}
+
+// SetTidyHighlights configures the post-Tidy character-range highlights.
+// The annotator returns annotations only while the buffer matches src.
+// Any subsequent buffer mutation invalidates the match and clears the
+// highlights on the next annotate tick.
+func (m *Model) SetTidyHighlights(src string, ranges []Range) {
+	if m.tidyA == nil {
+		return
+	}
+	m.tidyA.Set(src, ranges)
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -168,7 +183,12 @@ func (m Model) Mode() DisplayMode { return m.mode }
 
 // SetStyles replaces the render-time style table. The zero value is
 // no-op styles; consumers map their theme onto Styles at the boundary.
-func (m *Model) SetStyles(s Styles) { m.styles = s }
+func (m *Model) SetStyles(s Styles) {
+	m.styles = s
+	if m.tidyA != nil {
+		m.tidyA.SetStyle(s.TidyChange)
+	}
+}
 
 func (m Model) Value() string { return m.buf.Value() }
 

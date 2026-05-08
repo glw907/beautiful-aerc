@@ -57,6 +57,7 @@ type AnnotationKind int
 
 const (
 	KindMisspelling AnnotationKind = iota
+	KindTidyChange
 )
 
 // Annotation is one decoration over a source range.
@@ -147,6 +148,43 @@ func (s *AnnotationSet) rangesOnRow(src string, row int) []Annotation {
 			continue
 		}
 		out = append(out, a)
+	}
+	return out
+}
+
+// tidyAnnotator paints changed character ranges after a Tidy rewrite.
+// State is set via Model.SetTidyHighlights and cleared by any buffer
+// mutation: the next Annotate(src) call sees a divergent src and
+// returns no annotations, so highlights vanish on first keystroke.
+type tidyAnnotator struct {
+	src    string
+	ranges []Range
+	style  lipgloss.Style
+}
+
+func newTidyAnnotator() *tidyAnnotator { return &tidyAnnotator{} }
+
+// Set replaces the stored src and ranges. Style is configured separately
+// via SetStyle so the annotator picks up theme changes.
+func (a *tidyAnnotator) Set(src string, ranges []Range) {
+	a.src = src
+	a.ranges = ranges
+}
+
+// SetStyle replaces the per-annotation style. Called by Model.SetStyles.
+func (a *tidyAnnotator) SetStyle(s lipgloss.Style) { a.style = s }
+
+func (a *tidyAnnotator) Annotate(src string) []Annotation {
+	if a.src == "" || src != a.src || len(a.ranges) == 0 {
+		return nil
+	}
+	out := make([]Annotation, 0, len(a.ranges))
+	for _, r := range a.ranges {
+		out = append(out, Annotation{
+			Range: r,
+			Kind:  KindTidyChange,
+			Style: a.style,
+		})
 	}
 	return out
 }

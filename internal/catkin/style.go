@@ -35,6 +35,7 @@ type Styles struct {
 	MatchHighlight  lipgloss.Style
 	Dim             lipgloss.Style
 	Squiggle        lipgloss.Style
+	TidyChange      lipgloss.Style
 	Popover         lipgloss.Style
 	PopoverSelected lipgloss.Style
 }
