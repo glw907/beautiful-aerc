@@ -51,15 +51,49 @@ each fact back to its ADR(s).
   role IN ('from','to','cc'), address, name, sent_at; PK
   (message_uid, role, address); NOCASE+sent_at-DESC index for the
   ranking query). Migration backfills `message_recipients` from
-  existing `messages` rows in the same transaction.
+  existing `messages` rows in the same transaction. v9 drops
+  `NOT NULL` from `outbox.folder` so contact ops (folderless) sit
+  alongside mail ops in the same outbox; the drainer's pickup
+  query `LEFT JOIN`s `folders` rather than inner-joins.
 - The contacts ingest path lives in `internal/contacts/` (Client
   + Sync + Store seam); `cache.Account` implements `contacts.Store`
   (`Books`/`UpsertBook`/`ApplyChangeset`) and adds
   `SuggestAddresses(ctx, prefix)` (recency-decayed score over
-  `message_recipients` joined to the carded pool, LIMIT 7) and
-  `LookupContact(ctx, address)` (uid-keyed child rows). Per-message
-  `writeRecipientsTx` runs inside the upsert transaction in
-  `reads.go` so `message_recipients` stays current.
+  `message_recipients` joined to the carded pool, LIMIT 7),
+  `LookupContact(ctx, address) (Contact, uid, ok)` (uid-keyed
+  child rows; UID returned so callers can thread it onto
+  `OpenFormMsg`), `LoadStoredVCard(ctx, uid) StoredVCard` for the
+  patch path, and `DefaultBookHref(ctx)` for the single-book v1
+  save destination. The CardDAV writer is `contacts.Writer`
+  (`PutAddressObject`, `DeleteAddressObject`, `Multiget`); the
+  App constructs `*contacts.Client` once and stores it on
+  `Account.ContactsWriter`, shared with the existing
+  `SyncContacts` path. Per-message `writeRecipientsTx` runs
+  inside the upsert transaction in `reads.go` so
+  `message_recipients` stays current.
+- Contact write-back rides the existing outbox: `KindContactPut`
+  + `ContactPutArgs{BookHref, Href, IfMatch}` carries the assembled
+  vCard bytes in `outbox.payload`; `KindContactDelete` +
+  `ContactDeleteArgs{Href, IfMatch}` carries no payload.
+  `(*Account).QueueContactPut(ctx, uid, c, args, vcardBytes)`
+  upserts the local row + emails (re-derived PREF) and inserts the
+  outbox row in one tx; `QueueContactDelete(ctx, uid)` reads
+  href/etag from the existing row, deletes (FK cascades
+  `contact_emails`/`contact_phones`), inserts the outbox row.
+  Drainer dispatch routes via `Account.ContactsWriter`; sentinel
+  matrix uses `errors.Is(contacts.ErrAuth | ErrNotFound |
+  ErrPreconditionFailed)`. `ErrPreconditionFailed` (412 = stale
+  ETag) maps to `OpConflict precondition-failed`. `ErrNotFound`
+  on Delete is idempotent success. `revertOptimisticTx` no-ops on
+  both kinds (refetch is the conceptual revert; `DiscardOp` works
+  on conflicted rows). `recoverExecuting` resets contact ops to
+  `OpPending` (idempotent under If-Match). vCard edits are
+  lossless: `contacts.PatchVCard(stored, c, now)` mutates only
+  the keys poplar models (FN/N/ORG/TITLE/NOTE/EMAIL/TEL/REV/KIND/UID);
+  every other field round-trips verbatim. `contacts.BuildVCard(c,
+  uid, now)` covers the new-contact case. Index 0 of EMAIL/TEL
+  gets `PREF=1`; retained rows keep their existing TYPE param;
+  added rows get poplar's canonical labels.
 - `mail.ChangeTracker` is the protocol-level change-detection
   sibling of `mail.Backend`; both v1 backends implement it. On a
   nil SyncToken both run an initial baseline pull. JMAP pages
@@ -121,7 +155,8 @@ each fact back to its ADR(s).
 - Outbox status is the typed `cache.OpStatus` enum
   (`OpPending`/`OpExecuting`/`OpDone`/`OpFailed`/`OpConflict`)
   stored as the underlying string. Op kind is `cache.OpKind`
-  (`KindMove`/`KindFlag`/`KindDestroy`/`KindSend`/`KindAppend`).
+  (`KindMove`/`KindFlag`/`KindDestroy`/`KindSend`/`KindAppend`/
+  `KindPushDraft`/`KindContactPut`/`KindContactDelete`).
   `CacheEvent` carries both as typed values.
 - Drainer is per-account, single goroutine. Wakes on `drainSignal`
   (every QueueOp) or a 5-second idle ticker. Conflict matrix:

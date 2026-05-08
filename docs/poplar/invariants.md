@@ -297,7 +297,7 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   `parseSender`↔`content.ParseAddressList`; `C`/`M` toggle Contacts
   mode (Sidebar T9 groups `ABC`…`WXYZ` with `J/K` group + `a`–`z`
   letter + `┃` tick | List `bubbles/viewport`, `n`/`e` emit
-  `OpenFormMsg`, `D` inert until 9.3 | RenderDetailCard). Sidebar
+  `OpenFormMsg`, `D` opens delete-confirm | RenderDetailCard). Sidebar
   fixed at 14; sidebar/list rows pad to `contentH` so a tall Form
   doesn't collapse the body. Overlay cascade tail: confirm >
   conflict > outbox > help > linkpicker > attachpicker > movepicker
@@ -314,12 +314,17 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   post-construction snapshot). `Ctrl+S` validates (Person: First or
   Last; Business: Name; ≥1 email via `net/mail.ParseAddress`;
   saveIdx in range) and emits `ContactSaveMsg{Contact, SaveTo}`;
-  `Esc` emits `ContactCancelMsg{Dirty}`. App owns
-  `form *contacts.Form` + `pendingFormDiscard bool`; Yes-confirm
-  routes form-discard before compose-save / empty-folder. Phone
-  validation accepts any non-empty string until `phonenumbers`
-  lands in 9.2; saves are logged-and-discarded until the
-  cache→outbox bridge lands with vCard ingest.
+  `Esc` emits `ContactCancelMsg{Dirty}`. `D` (gated on
+  `existingUID != ""` and on focus not being a text input)
+  emits `OpenContactDeleteConfirmMsg{UID, DisplayName}`. App owns
+  `form` + `pendingFormDiscard` + `pendingContactDelete`;
+  Yes-confirm cascade orders form-discard before contact-delete
+  before compose-save before empty-folder. Save: `queueContactPutCmd`
+  → `PatchVCard` (existing) or `BuildVCard` (new, `uuid.NewString()`)
+  → `QueueContactPut`. Delete: confirm-Yes → `queueContactDeleteCmd`
+  → `QueueContactDelete`. Multi-book destination is post-1.0; the
+  cmd uses `Account.DefaultBookHref` and ignores
+  `ContactSaveMsg.SaveTo`. ADR-0176.
 
 ## Mail model
 

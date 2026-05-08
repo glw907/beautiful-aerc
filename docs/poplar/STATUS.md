@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 9m.1 next — CardDAV write-back: form save
-round-trip via outbox, ETag round-trip, deletion UI.
+**Current pass:** Pass 9n next — Email signatures + multiple
+identities (#32).
 
 ## Passes
 
@@ -16,7 +16,7 @@ round-trip via outbox, ETag round-trip, deletion UI.
 | 9k.4 | Comment sweep — UI subpackages + catkin | done |
 | 9l | Compose autocomplete dropdown — fixture-backed To/Cc/Bcc (ADR-0174) | done |
 | 9m | CardDAV ingest — swap fixtures for real contacts cache (ADR-0175) | done |
-| 9m.1 | CardDAV write-back — form save round-trip via outbox | pending |
+| 9m.1 | CardDAV write-back — form save round-trip via outbox (ADR-0176) | done |
 | 9n | Email signatures + multiple identities (#32) | pending |
 | 9o | Claude Tidy implementation | pending |
 | 9p | Attachments-richer compose UI (#24) | pending |
@@ -29,30 +29,31 @@ round-trip via outbox, ETag round-trip, deletion UI.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9m.1)
+## Next starter prompt (Pass 9n)
 
-> **Goal.** Round-trip the contact-edit Form: form save → cache
-> upsert → outbox PUT → CardDAV server. Round-trip the form
-> discard via the existing outbox DiscardOp.
+> **Goal.** Signatures + multiple identities (#32). Per-account
+> configurable signatures; per-identity selection in compose;
+> identity affects `From` header and the JMAP `Identity/get`
+> submission identity.
 >
-> **Scope.** Extend `cache.OpKind` with `KindContactPut` and
-> `KindContactDelete`; outbox payload carries vCard bytes for
-> these kinds. Drainer dispatches via the CardDAV client added in
-> 9m. Form's "Save to" cycler now affects the destination address
-> book (uses `contacts.AddressBook` value type).
+> **Scope.** `[account.identities]` TOML block (display name +
+> email + signature text or signature-file). Compose adds an
+> identity cycler and a signature toggle. JMAP `Send` uses the
+> selected identity's `IdentityID`; IMAP path threads the From
+> override into the assembled MIME. Signature is appended below
+> the user's body on send; the user-facing editor never sees it.
 >
-> **Settled.** Storage shape (vCard blob + projection columns) is
-> 9m's; no schema migration. Default-addressbook config pin
-> already implemented. Conflict matrix (auth/not-found/transient)
-> mirrors mail outbox semantics. Phone validation already in
-> place via `phonenumbers.Parse`.
+> **Settled.** One identity per `[[account]]` is default;
+> `[account.identities]` opt-in. Markdown signatures go through
+> the same goldmark pipeline as the body. Per-identity From at
+> compose time.
 >
-> **Still open — brainstorm:** vCard regeneration on edit (fully
-> rebuild from projection vs. patch the stored blob); ETag
-> round-trip across local edits; deletion UI in the Form.
+> **Still open — brainstorm:** Signature delimiter (`-- \n` or
+> none); whether to render signatures in the reader (probably yes,
+> dimmed); identity selection UX (cycler vs picker).
 >
 > **Approach.** Brainstorm, write
-> `docs/superpowers/plans/YYYY-MM-DD-carddav-writeback.md`,
+> `docs/superpowers/plans/YYYY-MM-DD-signatures-identities.md`,
 > implement. Standard pass-end ritual via `poplar-pass`.
 
 ## Queued
