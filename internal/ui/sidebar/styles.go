@@ -5,7 +5,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// Styles holds the subset of UI styles the sidebar package needs.
+// Styles is the sidebar's projection of internal/ui.Styles.
 type Styles struct {
 	SidebarBg        lipgloss.Style
 	SidebarAccount   lipgloss.Style
@@ -22,7 +22,6 @@ type Styles struct {
 	SearchNoResults   lipgloss.Style
 }
 
-// NewStyles builds a sidebar.Styles from a compiled theme.
 func NewStyles(t *theme.CompiledTheme) Styles {
 	return Styles{
 		SidebarBg: lipgloss.NewStyle().

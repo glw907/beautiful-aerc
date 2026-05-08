@@ -6,24 +6,16 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// HeaderRows is the blank/account/blank padding reserved at the top of the
-// sidebar before the folder list. AccountTab.View and sidebar sizing both
-// depend on this number matching.
+// HeaderRows is the blank/account/blank padding above the folder list.
+// AccountTab.View and sidebar sizing both depend on this number.
 const HeaderRows = 3
 
 // ShelfRows is the height of the Search shelf pinned to the bottom of Column.
 const ShelfRows = 3
 
-// Column is the composite left-hand column component: account header rows,
-// folder list (Model), spacer, and search shelf (Search). It owns the column
-// geometry and delegates SetSize/SetLayout to its children.
-//
-// Column is immutable-style: all mutating helpers return a new value.
-// AccountTab holds one by value and replaces it via the With* accessors,
-// preserving the Elm contract. Column.SetSize stores its own dims for
-// View() but does not propagate to children. AccountTab.WindowSizeMsg
-// calls SetLayout/SetSize on each child directly, then wraps via SetSize.
-// Column never needs to know about LayoutMode.
+// Column is the composite left-hand column: account header rows, folder
+// list, spacer, and search shelf. AccountTab holds one by value and
+// replaces it via the With* accessors.
 type Column struct {
 	styles        Styles
 	icons         uicore.IconSet
@@ -33,7 +25,6 @@ type Column struct {
 	width, height int
 }
 
-// NewColumn assembles a Column from its constituent parts.
 func NewColumn(styles Styles, icons uicore.IconSet, model Model, search Search, accountEmail string) Column {
 	return Column{
 		styles:       styles,
@@ -44,9 +35,8 @@ func NewColumn(styles Styles, icons uicore.IconSet, model Model, search Search, 
 	}
 }
 
-// SetSize records the column's width and height for View(). It does NOT
-// propagate SetSize to child components. The AccountTab WindowSizeMsg branch
-// handles child sizing explicitly and then calls SetSize to record the final dims.
+// SetSize records the column's dims for View(). It does not propagate to
+// children; AccountTab.WindowSizeMsg sizes them directly.
 func (c Column) SetSize(w, h int) Column {
 	c.width = w
 	c.height = h
@@ -66,10 +56,8 @@ func (c Column) WithSidebarSearch(s Search) Column {
 	return c
 }
 
-// View renders the sidebar column: blank / account / blank header rows,
-// folder region, spacer, and search shelf, but not the divider. The
-// AccountTab owns the row-by-row join of sidebar + divider + right pane.
-// Every row is exactly c.width display cells wide.
+// View renders the sidebar column without the right-edge divider, which
+// AccountTab joins on row by row. Every row is exactly c.width cells wide.
 func (c Column) View() string {
 	if c.width == 0 || c.height == 0 {
 		return ""
@@ -88,7 +76,6 @@ func (c Column) View() string {
 	if sidebarFolders != "" {
 		lines = append(lines, strings.Split(sidebarFolders, "\n")...)
 	}
-	// Pad the folder region so the search shelf lands at the bottom.
 	targetFolderEnd := c.height - ShelfRows
 	for len(lines) < targetFolderEnd {
 		lines = append(lines, blank)

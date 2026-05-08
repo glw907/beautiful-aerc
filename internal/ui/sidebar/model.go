@@ -11,7 +11,6 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// folderEntry holds a classified folder plus its rendered metadata.
 type folderEntry struct {
 	cf   mail.ClassifiedFolder
 	icon string
@@ -28,9 +27,8 @@ type Model struct {
 	height   int
 }
 
-// New creates a Model from a pre-classified folder list and a UIConfig.
-// Ordering, hiding, labelling, and indent calculation happen here.
-// Hidden folders are dropped before indexing.
+// New builds a Model from a pre-classified folder list. UIConfig drives
+// ordering, hiding, and labelling; hidden folders are dropped before indexing.
 func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons uicore.IconSet) Model {
 	return Model{
 		entries:  buildEntries(classified, uiCfg, icons),
@@ -42,9 +40,8 @@ func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfi
 	}
 }
 
-// SetFolders replaces the folder set with a newly classified list under a
-// given UIConfig. Selection is preserved by provider name where possible;
-// otherwise it resets to 0.
+// SetFolders replaces the folder set under a given UIConfig. Selection
+// is preserved by provider name where possible; otherwise it resets to 0.
 func (s *Model) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UIConfig) {
 	var prevName string
 	if s.selected < len(s.entries) {
@@ -82,7 +79,6 @@ func (s Model) SelectedCanonical() string {
 	return ""
 }
 
-// SelectedFolderInfo returns the raw backend Folder at the current selection.
 func (s Model) SelectedFolderInfo() (mail.Folder, bool) {
 	if s.selected < len(s.entries) {
 		return s.entries[s.selected].cf.Folder, true
@@ -102,9 +98,8 @@ func (s Model) ConfigKey(providerName string) string {
 	return ""
 }
 
-// FolderNameByCanonical returns the provider folder name whose canonical name
-// matches target. Returns ("", false) when no folder matches. Used by triage
-// actions to look up Archive/Trash destinations.
+// FolderNameByCanonical returns the provider folder name whose canonical
+// matches target. Returns ("", false) when no folder matches.
 func (s Model) FolderNameByCanonical(target string) (string, bool) {
 	for _, e := range s.entries {
 		if e.cf.Canonical == target {
@@ -114,8 +109,6 @@ func (s Model) FolderNameByCanonical(target string) (string, bool) {
 	return "", false
 }
 
-// FolderByProviderName returns the mail.Folder whose backend name matches.
-// Returns (Folder{}, false) when no entry matches.
 func (s Model) FolderByProviderName(name string) (mail.Folder, bool) {
 	for _, e := range s.entries {
 		if e.cf.Folder.Name == name {
@@ -168,8 +161,6 @@ func (s *Model) SetSize(width, height int) {
 	s.height = height
 }
 
-// Layout returns the current layout mode. Used in tests to verify
-// that WindowSizeMsg propagation wired the correct layout.
 func (s Model) Layout() uicore.LayoutMode { return s.layout }
 
 // SetLayout updates the icon toggle. Width is owned by SetSize.
@@ -197,7 +188,6 @@ func (s *Model) MoveToBottom() {
 	}
 }
 
-// View renders the sidebar as a vertical list of folder rows.
 func (s Model) View() string {
 	if len(s.entries) == 0 || s.width == 0 || s.height == 0 {
 		return ""
@@ -230,9 +220,8 @@ func (s Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// renderRow renders a single folder row with proper background layering.
-// The selection indicator ┃ always sits in column 0. The icon block is
-// included only when s.layout.Icons is true.
+// renderRow draws one folder row. The selection indicator ┃ sits in
+// column 0; the icon block is included only when s.layout.Icons is true.
 func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) string {
 	isSelected := idx == s.selected
 	hasUnread := entry.cf.Folder.Unseen > 0
@@ -299,9 +288,9 @@ func (s Model) renderBlankLine() string {
 	return s.styles.SidebarBg.Width(s.width).Render("")
 }
 
-// buildEntries applies UIConfig to the classified folders: drops hidden
-// folders, resolves display labels, sorts each group by rank then display
-// name, and concatenates Primary + Disposal + Custom in that order.
+// buildEntries drops hidden folders, resolves display labels, and sorts
+// each group by rank then display name. Output order is Primary, Disposal,
+// Custom.
 func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, icons uicore.IconSet) []folderEntry {
 	var primary, disposal, custom []folderEntry
 	for _, cf := range classified {
@@ -340,7 +329,6 @@ func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, ico
 // (Canonical == ""). It sorts after every canonical default.
 const nonCanonicalDefaultRank = 1000
 
-// sortEntries orders a group by (rank, display name).
 func sortEntries(entries []folderEntry, uiCfg config.UIConfig) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		ri := rankOf(entries[i].cf, uiCfg)
@@ -356,9 +344,6 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 	if fc := uiCfg.Folders[cf.ConfigKey()]; fc.RankSet {
 		return fc.Rank
 	}
-	// In-group default ranks for canonicals. Primary group:
-	// Inbox/Drafts/Sent/Archive at 100/200/300/400. Disposal group:
-	// Spam/Trash at 100/200.
 	switch cf.Canonical {
 	case "Inbox", "Spam":
 		return 100
@@ -372,8 +357,6 @@ func rankOf(cf mail.ClassifiedFolder, uiCfg config.UIConfig) int {
 	return nonCanonicalDefaultRank
 }
 
-// iconFrom returns the icon for a classified folder from the given IconSet.
-// Canonicals use their canonical icon. All others use CustomFolder.
 func iconFrom(icons uicore.IconSet, cf mail.ClassifiedFolder) string {
 	switch cf.Canonical {
 	case "Inbox":
