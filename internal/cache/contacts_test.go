@@ -172,7 +172,7 @@ func TestQueueContactPut_ReconcilesEmails(t *testing.T) {
 		Emails: []contacts.Email{{Address: "new@x.example"}},
 	}
 	body := []byte("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:u1\r\nEMAIL;PREF=1:new@x.example\r\nEND:VCARD\r\n")
-	if err := a.QueueContactPut(ctx, "/b/", "u1", "/b/u1.vcf", `"e1"`, c, body); err != nil {
+	if err := a.QueueContactPut(ctx, "u1", c, ContactPutArgs{BookHref: "/b/", Href: "/b/u1.vcf", IfMatch: `"e1"`}, body); err != nil {
 		t.Fatal(err)
 	}
 

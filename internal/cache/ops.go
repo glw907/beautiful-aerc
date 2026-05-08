@@ -215,11 +215,11 @@ type outboxRow struct {
 // Eligibility = pending, or failed past its next_eligible_at window.
 func (a *Account) nextOutboxRow(now time.Time) (*outboxRow, error) {
 	const q = `
-        SELECT o.id, o.folder, f.name, o.message,
+        SELECT o.id, COALESCE(o.folder, 0), COALESCE(f.name, ''), o.message,
                COALESCE((SELECT m.protocol_id FROM messages m WHERE m.id = o.message), ''),
                o.kind, o.args, o.attempts, o.payload
         FROM outbox o
-        JOIN folders f ON f.id = o.folder
+        LEFT JOIN folders f ON f.id = o.folder
         WHERE o.status = ?
            OR (o.status = ? AND (o.next_eligible_at IS NULL OR o.next_eligible_at <= ?))
         ORDER BY o.id LIMIT 1`

@@ -27,24 +27,28 @@ var (
 type Client struct {
 	cl         *carddav.Client
 	httpClient webdav.HTTPClient
-	base       string
+	base       *url.URL
 }
 
 // NewClient builds a CardDAV client for the given server URL with HTTP Basic
 // auth. insecureTLS skips certificate verification for self-hosted servers.
 func NewClient(serverURL, username, password string, insecureTLS bool) (*Client, error) {
-	base := http.DefaultClient
+	baseURL, err := url.Parse(serverURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse server URL: %w", err)
+	}
+	httpBase := http.DefaultClient
 	if insecureTLS {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user-opt-in for self-signed certs
-		base = &http.Client{Transport: tr}
+		httpBase = &http.Client{Transport: tr}
 	}
-	hc := webdav.HTTPClientWithBasicAuth(base, username, password)
+	hc := webdav.HTTPClientWithBasicAuth(httpBase, username, password)
 	cl, err := carddav.NewClient(hc, serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("carddav client: %w", err)
 	}
-	return &Client{cl: cl, httpClient: hc, base: serverURL}, nil
+	return &Client{cl: cl, httpClient: hc, base: baseURL}, nil
 }
 
 // HomeSet resolves the principal's addressbook-home-set. Falls back to the
@@ -53,11 +57,11 @@ func NewClient(serverURL, username, password string, insecureTLS bool) (*Client,
 func (c *Client) HomeSet(ctx context.Context) (string, error) {
 	principal, err := c.cl.FindCurrentUserPrincipal(ctx)
 	if err != nil {
-		return c.base, nil
+		return c.base.String(), nil
 	}
 	home, err := c.cl.FindAddressBookHomeSet(ctx, principal)
 	if err != nil || home == "" {
-		return c.base, nil
+		return c.base.String(), nil
 	}
 	return home, nil
 }
@@ -84,7 +88,7 @@ func (c *Client) CTAG(ctx context.Context, bookHref string) (string, error) {
 		`<D:prop><CS:getctag/></D:prop>` +
 		`</D:propfind>`
 
-	req, err := http.NewRequestWithContext(ctx, "PROPFIND", bookHref, bytes.NewBufferString(body))
+	req, err := c.newReq(ctx, "PROPFIND", bookHref, bytes.NewBufferString(body))
 	if err != nil {
 		return "", fmt.Errorf("ctag propfind %s: %w", bookHref, err)
 	}
@@ -195,8 +199,7 @@ func (c *Client) DeleteAddressObject(ctx context.Context, href, ifMatch string) 
 func (c *Client) newReq(ctx context.Context, method, href string, body io.Reader) (*http.Request, error) {
 	target := href
 	if u, err := url.Parse(href); err == nil && !u.IsAbs() {
-		base, _ := url.Parse(c.base)
-		target = base.ResolveReference(u).String()
+		target = c.base.ResolveReference(u).String()
 	}
 	return http.NewRequestWithContext(ctx, method, target, body)
 }

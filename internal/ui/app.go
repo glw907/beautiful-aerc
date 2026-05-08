@@ -323,7 +323,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			uid = m.form.ExistingUID()
 		}
 		m.form = nil
-		return m, queueContactPutCmd(m.acct.Cache(), uid, msg.Contact, msg.SaveTo)
+		return m, queueContactPutCmd(m.acct.Cache(), uid, msg.Contact)
 
 	case contacts.ContactCancelMsg:
 		if m.form == nil {
@@ -439,7 +439,6 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.confirm = m.confirm.Close()
 			return m, nil
 		}
-		// Esc on delete-contact keeps the form mounted.
 		if m.pendingContactDelete != "" {
 			m.pendingContactDelete = ""
 			m.confirm = m.confirm.Close()

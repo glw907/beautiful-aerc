@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const schemaVersion = 8
+const schemaVersion = 9
 
 // migration applies one schema step inside a transaction. Index 0 is v0→v1.
 type migration func(*sql.Tx) error
@@ -21,6 +21,7 @@ var migrations = []migration{
 	migrateV6, // v5 → v6: outbox.payload BLOB for Send/Append MIME bytes
 	migrateV7, // v6 → v7: drafts table (local-buffer + server_uid pointer)
 	migrateV8, // v7 → v8: contacts cache + recipient projection
+	migrateV9, // v8 → v9: outbox.folder nullable (contact ops have no folder scope)
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -310,6 +311,49 @@ func writeRoleAddrs(stmt *sql.Stmt, msgID, sentAt int64, role, raw string) error
 	for _, a := range addrs {
 		if _, err := stmt.Exec(msgID, role, strings.ToLower(a.Address), a.Name, sentAt); err != nil {
 			return fmt.Errorf("backfill insert: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV9 makes outbox.folder nullable. Contact ops (contact-put,
+// contact-delete) are not scoped to any mail folder; NULL replaces the
+// __contacts__ sentinel that previously satisfied the NOT NULL constraint.
+// SQLite does not support ALTER COLUMN, so this rebuilds the table.
+func migrateV9(tx *sql.Tx) error {
+	stmts := []string{
+		`ALTER TABLE outbox RENAME TO outbox_old`,
+		`CREATE TABLE outbox (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            folder       INTEGER          REFERENCES folders(id)  ON DELETE CASCADE,
+            message      INTEGER          REFERENCES messages(id) ON DELETE CASCADE,
+            kind         TEXT    NOT NULL,
+            args         TEXT    NOT NULL,
+            enqueued_at  INTEGER NOT NULL,
+            status       TEXT    NOT NULL DEFAULT 'pending',
+            attempts     INTEGER NOT NULL DEFAULT 0,
+            last_attempt INTEGER,
+            error        TEXT,
+            next_eligible_at INTEGER,
+            payload      BLOB
+        )`,
+		`INSERT INTO outbox
+            SELECT outbox_old.id,
+                   CASE WHEN f.name = '__contacts__' THEN NULL ELSE outbox_old.folder END,
+                   outbox_old.message, outbox_old.kind, outbox_old.args,
+                   outbox_old.enqueued_at, outbox_old.status, outbox_old.attempts,
+                   outbox_old.last_attempt, outbox_old.error,
+                   outbox_old.next_eligible_at, outbox_old.payload
+              FROM outbox_old
+              LEFT JOIN folders f ON f.id = outbox_old.folder`,
+		`DROP TABLE outbox_old`,
+		`CREATE INDEX outbox_pickup ON outbox(next_eligible_at, id) WHERE status IN ('pending', 'failed')`,
+		`CREATE INDEX outbox_message ON outbox(message) WHERE status IN ('pending', 'executing')`,
+		`DELETE FROM folders WHERE name = '__contacts__'`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("nullable outbox.folder: %v", err)
 		}
 	}
 	return nil

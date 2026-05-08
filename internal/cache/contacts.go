@@ -91,12 +91,20 @@ SELECT c.uid, c.fn, c.family, c.given, c.org, c.title, c.note
 	return c, uid, true
 }
 
-// LoadStoredVCard returns the raw vCard bytes, etag, and href for uid.
-func (a *Account) LoadStoredVCard(ctx context.Context, uid string) (raw []byte, etag, href string, err error) {
-	err = a.db.QueryRowContext(ctx,
+// StoredVCard holds the raw vCard bytes, ETag, and href for a cached contact.
+type StoredVCard struct {
+	Raw  []byte
+	ETag string
+	Href string
+}
+
+// LoadStoredVCard returns the cached vCard record for uid.
+func (a *Account) LoadStoredVCard(ctx context.Context, uid string) (StoredVCard, error) {
+	var v StoredVCard
+	err := a.db.QueryRowContext(ctx,
 		`SELECT vcard, etag, href FROM contacts WHERE uid = ?`, uid,
-	).Scan(&raw, &etag, &href)
-	return
+	).Scan(&v.Raw, &v.ETag, &v.Href)
+	return v, err
 }
 
 func (a *Account) loadEmails(ctx context.Context, uid string) []contacts.Email {
@@ -246,47 +254,16 @@ func upsertContactTx(ctx context.Context, tx *sql.Tx, bookHref string, s contact
 	return nil
 }
 
-// contactsFolderID returns the ID of the __contacts__ sentinel folder,
-// creating it inside tx if absent. Contact ops are not scoped to a mail
-// folder; this sentinel satisfies the outbox.folder NOT NULL constraint
-// without polluting the user-visible folder list.
-func contactsFolderID(ctx context.Context, tx *sql.Tx) (int64, error) {
-	const name = "__contacts__"
-	if _, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO folders(name, protocol_name) VALUES (?, '')`, name); err != nil {
-		return 0, fmt.Errorf("ensure contacts sentinel folder: %w", err)
-	}
-	var id int64
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM folders WHERE name = ?`, name).Scan(&id); err != nil {
-		return 0, fmt.Errorf("read contacts sentinel folder: %w", err)
-	}
-	return id, nil
-}
-
 // QueueContactPut writes vcardBytes to the cache and enqueues a CardDAV
-// PUT in one transaction. ifMatch is the etag for optimistic concurrency
-// (empty for new contacts). The caller assembles vcardBytes via
-// contacts.PatchVCard or contacts.BuildVCard.
-func (a *Account) QueueContactPut(
-	ctx context.Context,
-	bookHref string,
-	uid string,
-	href string,
-	ifMatch string,
-	c contacts.Contact,
-	vcardBytes []byte,
-) error {
-	args := ContactPutArgs{BookHref: bookHref, Href: href, IfMatch: ifMatch}
+// PUT in one transaction. args.IfMatch is empty for new contacts;
+// contact_emails is reconciled at read time via schema joins.
+func (a *Account) QueueContactPut(ctx context.Context, uid string, c contacts.Contact, args ContactPutArgs, vcardBytes []byte) error {
 	body, err := json.Marshal(args)
 	if err != nil {
 		return fmt.Errorf("encode args: %w", err)
 	}
 	now := time.Now()
 	err = a.tx(ctx, func(tx *sql.Tx) error {
-		oldEmails, err := loadEmailsTx(ctx, tx, uid)
-		if err != nil {
-			return err
-		}
 		stored := contacts.Stored{
 			Parsed: contacts.Parsed{
 				UID:     uid,
@@ -294,23 +271,16 @@ func (a *Account) QueueContactPut(
 				Raw:     vcardBytes,
 				Contact: c,
 			},
-			Href: href,
-			ETag: ifMatch,
+			Href: args.Href,
+			ETag: args.IfMatch,
 		}
-		if err := upsertContactTx(ctx, tx, bookHref, stored, now.Unix()); err != nil {
+		if err := upsertContactTx(ctx, tx, args.BookHref, stored, now.Unix()); err != nil {
 			return err
 		}
-		if err := reconcileRecipientsTx(ctx, tx, uid, oldEmails, c.Emails); err != nil {
-			return err
-		}
-		folderID, err := contactsFolderID(ctx, tx)
-		if err != nil {
-			return err
-		}
-		_, err = tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(ctx, `
 			INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at)
-			VALUES (?, NULL, ?, ?, ?, ?, ?, 0, NULL)`,
-			folderID, string(KindContactPut), string(body), vcardBytes, now.UnixNano(), OpPending)
+			VALUES (NULL, NULL, ?, ?, ?, ?, ?, 0, NULL)`,
+			string(KindContactPut), string(body), vcardBytes, now.UnixNano(), OpPending)
 		return err
 	})
 	if err != nil {
@@ -341,14 +311,10 @@ func (a *Account) QueueContactDelete(ctx context.Context, uid string) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM contacts WHERE uid = ?`, uid); err != nil {
 			return err
 		}
-		folderID, err := contactsFolderID(ctx, tx)
-		if err != nil {
-			return err
-		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at)
-			VALUES (?, NULL, ?, ?, NULL, ?, ?, 0, NULL)`,
-			folderID, string(KindContactDelete), string(body), now.UnixNano(), OpPending)
+			VALUES (NULL, NULL, ?, ?, NULL, ?, ?, 0, NULL)`,
+			string(KindContactDelete), string(body), now.UnixNano(), OpPending)
 		return err
 	})
 	if err != nil {
@@ -358,39 +324,18 @@ func (a *Account) QueueContactDelete(ctx context.Context, uid string) error {
 	return nil
 }
 
-// loadEmailsTx returns the stored emails for uid in pref order. Used
-// by reconcileRecipientsTx to diff old-vs-new addresses.
-func loadEmailsTx(ctx context.Context, tx *sql.Tx, uid string) ([]contacts.Email, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT address, label FROM contact_emails WHERE contact_uid = ? ORDER BY pref ASC`, uid)
+// DefaultBookHref returns the href of the first cached address book.
+// Returns an error when no books are cached.
+func (a *Account) DefaultBookHref(ctx context.Context) (string, error) {
+	var href string
+	err := a.db.QueryRowContext(ctx, `SELECT href FROM addressbooks LIMIT 1`).Scan(&href)
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("no address book configured: %w", err)
 	}
-	defer rows.Close()
-	var out []contacts.Email
-	for rows.Next() {
-		var e contacts.Email
-		if err := rows.Scan(&e.Address, &e.Label); err != nil {
-			return nil, err
-		}
-		out = append(out, e)
-	}
-	return out, rows.Err()
+	return href, nil
 }
 
-// reconcileRecipientsTx is a no-op stub: contact_emails is the only
-// address-keyed pivot, and upsertContactTx already replaces it.
-// message_recipients rows are keyed by (message_uid, role, address);
-// changing a contact's emails does not invalidate any historical row.
-// A future pass adding a contact_uid FK to message_recipients will
-// populate it here.
-func reconcileRecipientsTx(_ context.Context, _ *sql.Tx, _ string, _, _ []contacts.Email) error {
-	return nil
-}
-
-// SyncContacts runs one CardDAV sync pass. cfg==nil is a no-op (account has no contacts config).
-// When ContactsWriter is already a *contacts.Client (wired at startup), it is reused; otherwise a
-// new client is constructed from cfg.
+// SyncContacts runs one CardDAV sync pass. cfg==nil is a no-op.
 func (a *Account) SyncContacts(ctx context.Context, cfg *contacts.ClientConfig) error {
 	if cfg == nil {
 		return nil

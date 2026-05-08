@@ -295,22 +295,6 @@ func seedContact(t *testing.T, a *Account, uid, etag string) {
 		uid, uid, etag)
 }
 
-// contactsSentinelFolderID inserts the __contacts__ sentinel folder if absent
-// and returns its id. Used to satisfy the outbox.folder NOT NULL constraint
-// in drainer tests that seed outbox rows directly.
-func contactsSentinelFolderID(t *testing.T, a *Account) int64 {
-	t.Helper()
-	_, err := a.db.Exec(`INSERT OR IGNORE INTO folders(name, protocol_name) VALUES ('__contacts__', '')`)
-	if err != nil {
-		t.Fatalf("ensure contacts sentinel folder: %v", err)
-	}
-	var id int64
-	if err := a.db.QueryRow(`SELECT id FROM folders WHERE name = '__contacts__'`).Scan(&id); err != nil {
-		t.Fatalf("read contacts sentinel folder id: %v", err)
-	}
-	return id
-}
-
 type fakeContactsWriter struct {
 	putErr  error
 	delErr  error
@@ -347,10 +331,9 @@ func TestDrainer_ContactPut_Success(t *testing.T) {
 	ctx := context.Background()
 
 	seedContact(t, a, "u1", `"old"`)
-	folderID := contactsSentinelFolderID(t, a)
 	args, _ := json.Marshal(ContactPutArgs{BookHref: "/b/", Href: "/b/u1.vcf", IfMatch: `"old"`})
-	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (?, NULL, ?, ?, x'', 0, ?, 0, NULL)`,
-		folderID, string(KindContactPut), string(args), string(OpPending))
+	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (NULL, NULL, ?, ?, x'', 0, ?, 0, NULL)`,
+		string(KindContactPut), string(args), string(OpPending))
 
 	a.drainOnce(ctx, defaultDrainerConfig())
 
@@ -375,10 +358,9 @@ func TestDrainer_ContactPut_PreconditionConflict(t *testing.T) {
 	ctx := context.Background()
 
 	seedContact(t, a, "u1", `"stale"`)
-	folderID := contactsSentinelFolderID(t, a)
 	args, _ := json.Marshal(ContactPutArgs{BookHref: "/b/", Href: "/b/u1.vcf", IfMatch: `"stale"`})
-	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (?, NULL, ?, ?, x'', 0, ?, 0, NULL)`,
-		folderID, string(KindContactPut), string(args), string(OpPending))
+	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (NULL, NULL, ?, ?, x'', 0, ?, 0, NULL)`,
+		string(KindContactPut), string(args), string(OpPending))
 
 	a.drainOnce(ctx, defaultDrainerConfig())
 
@@ -394,10 +376,9 @@ func TestDrainer_ContactDelete_NotFoundIsSuccess(t *testing.T) {
 	a.ContactsWriter = &fakeContactsWriter{delErr: contacts.ErrNotFound}
 	ctx := context.Background()
 
-	folderID := contactsSentinelFolderID(t, a)
 	args, _ := json.Marshal(ContactDeleteArgs{Href: "/b/u1.vcf", IfMatch: `"e"`})
-	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (?, NULL, ?, ?, NULL, 0, ?, 0, NULL)`,
-		folderID, string(KindContactDelete), string(args), string(OpPending))
+	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (NULL, NULL, ?, ?, NULL, 0, ?, 0, NULL)`,
+		string(KindContactDelete), string(args), string(OpPending))
 
 	a.drainOnce(ctx, defaultDrainerConfig())
 
