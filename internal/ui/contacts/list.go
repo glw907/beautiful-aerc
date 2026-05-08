@@ -15,11 +15,10 @@ import (
 type SortMode int
 
 const (
-	SortFirstName SortMode = iota // Given Family for persons, Name for orgs
-	SortLastName                  // Family, Given for persons, Name for orgs
+	SortFirstName SortMode = iota
+	SortLastName
 )
 
-// listKeys are the bindings for the contact list.
 var listKeys = struct {
 	J key.Binding
 	K key.Binding
@@ -40,20 +39,19 @@ const (
 	colPhone = 16
 )
 
-// List is the scrollable middle column in Contacts mode. It renders one
-// row per contact with name, primary email, primary phone, and role/org.
-// Navigation is j/k; n opens a blank form; e opens the cursor contact.
+// List is the scrollable middle column in Contacts mode. j/k navigates;
+// n opens a blank form; e opens the cursor contact.
 type List struct {
 	styles        Styles
-	all           []Contact // sorted at construction, never mutated after that
+	all           []Contact
 	sortMode      SortMode
 	cursor        int
 	vp            viewport.Model
 	width, height int
 }
 
-// NewList builds a List with contacts sorted according to sortMode.
-// The caller-supplied slice is copied. The original is not retained.
+// NewList builds a List with contacts sorted by sortMode. The input
+// slice is copied.
 func NewList(s Styles, all []Contact, sortMode SortMode) List {
 	sorted := make([]Contact, len(all))
 	copy(sorted, all)
@@ -68,7 +66,6 @@ func NewList(s Styles, all []Contact, sortMode SortMode) List {
 	return l
 }
 
-// Cursor returns the contact at the current cursor position.
 func (l List) Cursor() Contact {
 	if len(l.all) == 0 {
 		return Contact{}
@@ -76,9 +73,8 @@ func (l List) Cursor() Contact {
 	return l.all[l.cursor]
 }
 
-// SetSelectionLetter scrolls the cursor to the first contact whose sort
-// key starts with letter (case-folded). If no match exists, cursor is
-// unchanged.
+// SetSelectionLetter moves the cursor to the first contact whose sort
+// key starts with letter; the cursor is unchanged when no match exists.
 func (l List) SetSelectionLetter(letter rune) List {
 	target := unicode.ToUpper(letter)
 	for i, c := range l.all {
@@ -91,7 +87,6 @@ func (l List) SetSelectionLetter(letter rune) List {
 	return l
 }
 
-// SetSize updates the display area and rebuilds the viewport content.
 func (l List) SetSize(w, h int) List {
 	l.width, l.height = w, h
 	l.vp.Width = w
@@ -125,14 +120,13 @@ func (l List) Update(msg tea.Msg) (List, tea.Cmd) {
 		c := l.Cursor()
 		return l, func() tea.Msg { return OpenFormMsg{Initial: c, FromPopover: false} }
 	case key.Matches(k, listKeys.D):
-		// D is intercepted (no-op until 9.3 deletes the contact).
+		// Inert until 9.3 wires the delete path.
 		return l, nil
 	}
 
 	return l, nil
 }
 
-// View renders the contact list. Returns "" when width or height is zero.
 func (l List) View() string {
 	if l.width <= 0 || l.height <= 0 {
 		return ""
@@ -140,11 +134,10 @@ func (l List) View() string {
 	return l.vp.View()
 }
 
-// formatRow renders one contact as a padded multi-column row string.
-// The name column is 22 cells, email 30, phone 16, and the remainder
-// holds title · org (or just org for KindOrg).
+// formatRow renders one contact as a padded multi-column row. Name is
+// 22 cells, email 30, phone 16; the remainder holds title · org.
 func (l List) formatRow(c Contact) string {
-	rest := l.width - colName - colEmail - colPhone - 3 // 3 separating spaces
+	rest := l.width - colName - colEmail - colPhone - 3
 	if rest < 0 {
 		rest = 0
 	}
@@ -251,13 +244,12 @@ func primaryPhone(c Contact) string {
 	return c.Phones[0].E164
 }
 
-// metaCol returns the title · org string, or just org/name-note for KindOrg.
+// metaCol returns "title · org" for persons; for orgs it falls back to
+// the first line of Note.
 func metaCol(c Contact) string {
 	if c.Kind == KindOrg {
-		// Use first line of Note as supplementary text when Name is the only identity.
 		if c.Note != "" {
-			note := strings.SplitN(c.Note, "\n", 2)[0]
-			return note
+			return strings.SplitN(c.Note, "\n", 2)[0]
 		}
 		return ""
 	}

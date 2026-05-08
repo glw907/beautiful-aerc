@@ -10,10 +10,8 @@ const (
 	KindOrg
 )
 
-// Contact is the value rendered by every surface in this package.
-// It mirrors the schema in docs/superpowers/specs/2026-05-06-addressbook-design.md
-// minus the storage columns (id, source, account, external_id, rev,
-// updated_at). Those land in 9.2 alongside the SQLite layer.
+// Contact is the value rendered by every surface in this package. It
+// matches the spec schema minus the storage columns added in 9.2.
 type Contact struct {
 	Kind   Kind
 	Name   string // FN. For KindOrg this is the entire visible identity.
@@ -26,8 +24,8 @@ type Contact struct {
 	Phones []Phone
 }
 
-// Email pairs an address with an optional label. Index 0 is the
-// primary email. The form reorders the slice on change.
+// Email pairs an address with an optional label. Index 0 is primary;
+// the form reorders the slice on change.
 type Email struct {
 	Address string
 	Label   string // "work", "home", or "" for unlabeled
@@ -39,9 +37,8 @@ type Phone struct {
 	Label string // "mobile", "work", "home", "fax", or ""
 }
 
-// Suggestion is one row in the compose autocomplete dropdown.
-// A contact with N emails appears N times. Each suggestion is one
-// (contact, email) pair with the org annotation flattened in.
+// Suggestion is one row in the compose autocomplete dropdown: one row
+// per (contact, email) pair, with the org annotation flattened in.
 type Suggestion struct {
 	Name  string // person FN or org name
 	Email string

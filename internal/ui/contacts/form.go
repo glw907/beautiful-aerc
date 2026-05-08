@@ -12,7 +12,7 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// Email and phone label tables. Index 0 of each is the default.
+// Index 0 of each table is the default label.
 var (
 	emailLabels = []string{"Work", "Home", ""}
 	phoneLabels = []string{"Mobile", "Work", "Home", "Fax", ""}
@@ -26,17 +26,16 @@ const (
 
 type emailRow struct {
 	input textinput.Model
-	label int // index into emailLabels
+	label int
 }
 
 type phoneRow struct {
 	input textinput.Model
-	label int // index into phoneLabels
+	label int
 }
 
-// Form is the contact edit modal. Two render contexts: centered modal
-// over dimmed mail chrome (FromPopover), or right-pane replacement in
-// Contacts mode.
+// Form is the contact edit modal. fromPopover picks the centered-modal
+// context; otherwise it replaces the right pane in Contacts mode.
 type Form struct {
 	shell       uicore.ModalShell
 	styles      Styles
@@ -62,10 +61,8 @@ type Form struct {
 	width, height int
 }
 
-// NewForm builds a Form pre-seeded from initial. saveTo lists the
-// destinations the radio button cycles through. fromPopover selects
-// the centered-modal render path. Otherwise the form replaces the
-// right pane in Contacts mode.
+// NewForm builds a Form pre-seeded from initial; saveTo lists the
+// destinations the radio button cycles through.
 func NewForm(s Styles, initial Contact, fromPopover bool, saveTo []string) Form {
 	mk := func(value string) textinput.Model {
 		ti := textinput.New()
@@ -102,8 +99,7 @@ func NewForm(s Styles, initial Contact, fromPopover bool, saveTo []string) Form 
 	last := mk(initial.Family)
 	bizName := mk(initial.Name)
 	if initial.Kind == KindPerson {
-		// Person carries the FN in Name when we lack first/last; fall
-		// back to splitting Name on first space.
+		// Persons can arrive with only Name set; fall back to that.
 		if initial.Given == "" && initial.Family == "" && initial.Name != "" {
 			first.SetValue(initial.Name)
 		}
@@ -122,12 +118,11 @@ func NewForm(s Styles, initial Contact, fromPopover bool, saveTo []string) Form 
 		emails:      emails,
 		phones:      phones,
 		note:        note,
-		focusIdx:    1, // first text field, past the kind toggle
+		focusIdx:    1,
 	}
 	f = f.applyFocus()
-	// Snapshot initial state from the form's own derivation so the dirty
-	// check compares apples to apples (Name = Given + " " + Family for
-	// Person, etc.).
+	// Snapshot through the form's own derivation so the dirty check
+	// compares like-for-like (Name = Given + " " + Family, etc.).
 	f.initial = f.currentContact()
 	return f
 }
@@ -138,14 +133,11 @@ func labelIndex(labels []string, want string) int {
 			return i
 		}
 	}
-	return len(labels) - 1 // blank
+	return len(labels) - 1
 }
 
-// FromPopover reports whether the form was opened from the i-popover
-// (centered modal) or from Contacts mode (right-pane replacement).
 func (f Form) FromPopover() bool { return f.fromPopover }
 
-// SetSize stores the terminal dimensions and resizes children.
 func (f Form) SetSize(w, h int) Form {
 	f.width = w
 	f.height = h
@@ -168,9 +160,8 @@ func (f Form) SetSize(w, h int) Form {
 }
 
 func (f Form) contentW() int {
-	// Right-pane mode renders without ┌─┐ chrome, so the entire width
-	// is content. Modal mode reserves 2 cells for borders and clamps
-	// to formContentW for visual balance against the popover.
+	// Right-pane mode has no ┌─┐ chrome, so all width is content.
+	// Modal mode reserves 2 cells for borders and clamps to formContentW.
 	if !f.fromPopover {
 		if f.width <= 0 {
 			return formMinContentW
@@ -187,15 +178,13 @@ func (f Form) contentW() int {
 	return cw
 }
 
-// inputWidth returns the textinput width given a row content width.
-// The label column eats labelCol cells, then a space, then the input.
+// labelCol is the width of the leading label column on each form row.
 const labelCol = 8
 
 func (f Form) inputWidth(contentW int) int {
-	// Reserve label column + leading space + outer brackets + trailing
-	// row chrome (cycler, star, minus add ~10 cells). The cycler/buttons
-	// only show on email/phone rows but a uniform input width keeps
-	// columns aligned and the textinput body inside the panel.
+	// Reserve label column + space + brackets + ~10 cells of trailing
+	// chrome (cycler, star, minus). Email/phone rows alone need them, but
+	// a uniform width keeps columns aligned across all rows.
 	w := contentW - labelCol - 14
 	if w < 10 {
 		w = 10
@@ -203,15 +192,12 @@ func (f Form) inputWidth(contentW int) int {
 	return w
 }
 
-// Update routes a tea.Msg into the focused widget or handles a global
-// form binding (Tab, Ctrl+S, Esc, Space/← /→ on the kind toggle).
 func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 	k, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return f, nil
 	}
 
-	// Global form keys.
 	switch k.Type {
 	case tea.KeyCtrlS:
 		if err := f.Validate(); err != nil {
@@ -236,7 +222,6 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 		return f, nil
 	}
 
-	// Focused-widget routing.
 	w := f.focusedWidget()
 	switch w.kind {
 	case widKind:
@@ -327,7 +312,6 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 		return f, nil
 	}
 
-	// Text-input routing for the regular widgets.
 	var cmd tea.Cmd
 	switch w.kind {
 	case widFirst:
@@ -364,8 +348,7 @@ func toggleKind(k Kind) Kind {
 	return KindPerson
 }
 
-// Validate applies the spec rules. Returns nil when the form is
-// ready to save.
+// Validate returns nil when the form passes the spec rules.
 func (f Form) Validate() error {
 	switch f.kind {
 	case KindPerson:
@@ -395,7 +378,6 @@ func (f Form) Validate() error {
 	return nil
 }
 
-// dirty reports whether the form's current state differs from initial.
 func (f Form) dirty() bool {
 	return !sameContact(f.initial, f.currentContact())
 }
@@ -450,8 +432,6 @@ func sameContact(a, b Contact) bool {
 	return true
 }
 
-// --- Focus model ---
-
 type widgetKind int
 
 const (
@@ -477,12 +457,11 @@ const (
 
 type widget struct {
 	kind widgetKind
-	row  int // for email/phone widgets; -1 otherwise
+	row  int
 }
 
-// focusList builds the ordered list of focusable widgets given the
-// current kind and row counts. Recomputed on every mutation so
-// indices remain stable for tests via the helper methods below.
+// focusList rebuilds the ordered list on every mutation. Helper methods
+// below resolve stable indices for tests.
 func (f Form) focusList() []widget {
 	out := []widget{{kind: widKind}}
 	if f.kind == KindPerson {
@@ -527,11 +506,9 @@ func (f Form) advanceFocus(delta int) Form {
 	return f.applyFocus()
 }
 
-// applyFocus blurs every text input then focuses the one (if any)
-// targeted by the current focusIdx. Cycler/button widgets carry
-// keyboard focus implicitly via the highlight in View.
+// applyFocus blurs every text input and focuses the one targeted by
+// focusIdx. Cycler/button widgets carry focus via their View highlight.
 func (f Form) applyFocus() Form {
-	// Clamp focusIdx in case the list shrank.
 	list := f.focusList()
 	if f.focusIdx >= len(list) {
 		f.focusIdx = len(list) - 1
@@ -602,9 +579,7 @@ func (f Form) emailRowStarIdx(row int) int {
 	return 0
 }
 
-// --- Rendering ---
-
-// Box renders the form as a bordered modal (used in fromPopover mode).
+// Box renders the form as a bordered modal (fromPopover mode).
 func (f Form) Box(termW, _ int) string {
 	cw := f.contentW()
 	bodyRows := f.bodyRows(cw)
@@ -616,15 +591,13 @@ func (f Form) Box(termW, _ int) string {
 	return f.shell.Box(title, bodyRows, footerRows, cw)
 }
 
-// Position centers the box.
 func (f Form) Position(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
 }
 
-// View renders the form. Right-pane mode (Contacts mode) returns the
-// body + footer rows without ┌─┐ chrome since the contacts frame
-// already supplies its own borders. Modal mode (popover origin) wraps
-// the rows in a ModalShell box. The App composites it via PlaceOverlay.
+// View renders the form. Right-pane mode emits body + footer with no
+// ┌─┐ chrome (the Contacts frame supplies borders); modal mode wraps
+// the rows in a ModalShell box.
 func (f Form) View() string {
 	if f.width == 0 || f.height == 0 {
 		return ""

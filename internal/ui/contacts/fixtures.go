@@ -9,7 +9,6 @@ import (
 // tests assert against indices.
 func Fixtures() []Contact {
 	return []Contact{
-		// --- A (ABC group) ---
 		{
 			Kind: KindPerson, Name: "Alice Chen", Given: "Alice", Family: "Chen",
 			Org: "ACME", Title: "Senior Engineer",
@@ -23,7 +22,6 @@ func Fixtures() []Contact {
 			},
 			Note: "Met at GopherCon 2024.\nCares about error messages.",
 		},
-		// --- B (ABC group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Bob Iyer",
@@ -32,7 +30,6 @@ func Fixtures() []Contact {
 			Emails: []Email{{Address: "bob@iyer.dev"}},
 			Phones: []Phone{{E164: "+15555550101", Label: "mobile"}},
 		},
-		// --- C (ABC group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Carol Nguyen",
@@ -47,7 +44,6 @@ func Fixtures() []Contact {
 			},
 			Phones: []Phone{{E164: "+15555550102", Label: "mobile"}},
 		},
-		// --- D (DEF group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "David Park",
@@ -55,7 +51,6 @@ func Fixtures() []Contact {
 			Family: "Park",
 			Emails: []Email{{Address: "dpark@example.org", Label: "work"}},
 		},
-		// --- E (DEF group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Elena Vasquez",
@@ -72,7 +67,6 @@ func Fixtures() []Contact {
 				{E164: "+15555550106", Label: "mobile"},
 			},
 		},
-		// --- F (DEF group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Frank Osei",
@@ -81,7 +75,6 @@ func Fixtures() []Contact {
 			Emails: []Email{{Address: "frank.osei@example.net"}},
 			Note:   "Prefers async communication.",
 		},
-		// --- G (GHI group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Grace Liu",
@@ -92,7 +85,6 @@ func Fixtures() []Contact {
 			Emails: []Email{{Address: "grace@acme-research.example", Label: "work"}},
 			Phones: []Phone{{E164: "+15555550107", Label: "work"}},
 		},
-		// --- H (GHI group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Hiroshi Tanaka",
@@ -103,7 +95,6 @@ func Fixtures() []Contact {
 				{Address: "hiroshi.personal@example.jp", Label: "home"},
 			},
 		},
-		// --- I (GHI group) ---
 		{
 			Kind:   KindOrg,
 			Name:   "IANA Registry",
@@ -111,7 +102,6 @@ func Fixtures() []Contact {
 			Phones: []Phone{{E164: "+15555550108"}},
 			Note:   "Standards body.",
 		},
-		// --- J (JKL group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Jasmine Brooks",
@@ -119,7 +109,6 @@ func Fixtures() []Contact {
 			Family: "Brooks",
 			Emails: []Email{{Address: "jasmine@brooks.example", Label: "home"}},
 		},
-		// --- K (JKL group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Kenji Mori",
@@ -130,7 +119,6 @@ func Fixtures() []Contact {
 			Emails: []Email{{Address: "kenji@softworks.example", Label: "work"}},
 			Phones: []Phone{{E164: "+15555550109", Label: "mobile"}},
 		},
-		// --- L (JKL group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Laura Schmidt",
@@ -141,7 +129,6 @@ func Fixtures() []Contact {
 				{Address: "l.schmidt@work.example", Label: "work"},
 			},
 		},
-		// --- M (MNO group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Rafael Méndez",
@@ -151,7 +138,6 @@ func Fixtures() []Contact {
 			Phones: []Phone{{E164: "+525555550110", Label: "mobile"}},
 			Note:   "Unicode name; tests non-ASCII display and sort.",
 		},
-		// --- N (MNO group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Nadia Petrov",
@@ -159,13 +145,11 @@ func Fixtures() []Contact {
 			Family: "Petrov",
 			Emails: []Email{{Address: "nadia@petrov.example"}},
 		},
-		// --- O (MNO group) ---
 		{
 			Kind:   KindOrg,
 			Name:   "OpenInfra Foundation",
 			Emails: []Email{{Address: "info@openinfra.example"}},
 		},
-		// --- P (PQRS group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Priya Sharma",
@@ -183,14 +167,12 @@ func Fixtures() []Contact {
 				{E164: "+15555550113", Label: "fax"},
 			},
 		},
-		// --- Q (PQRS group) ---
 		{
 			Kind:   KindOrg,
 			Name:   "QuickSupport Ltd.",
 			Emails: []Email{{Address: "support@quicksupport.example"}},
 			Phones: []Phone{{E164: "+15555550114"}},
 		},
-		// --- R (PQRS group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Rosa Ferreira",
@@ -198,7 +180,6 @@ func Fixtures() []Contact {
 			Family: "Ferreira",
 			Emails: []Email{{Address: "rosa.ferreira@example.br"}},
 		},
-		// --- S (PQRS group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Samuel Okafor",
@@ -210,7 +191,6 @@ func Fixtures() []Contact {
 			Phones: []Phone{{E164: "+15555550115", Label: "work"}},
 			Note:   "Prefers calendar invites over email.",
 		},
-		// --- T (TUV group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Tomás García",
@@ -218,7 +198,6 @@ func Fixtures() []Contact {
 			Family: "García",
 			Emails: []Email{{Address: "tomas.garcia@example.es", Label: "home"}},
 		},
-		// --- U (TUV group) ---
 		{
 			Kind: KindOrg,
 			Name: "Upstream Systems",
@@ -229,7 +208,6 @@ func Fixtures() []Contact {
 			Phones: []Phone{{E164: "+15555550116"}},
 			Note:   "Vendor for the build-pipeline contract.",
 		},
-		// --- V (TUV group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Victoria Holst",
@@ -237,7 +215,6 @@ func Fixtures() []Contact {
 			Family: "Holst",
 			Emails: []Email{{Address: "v.holst@example.dk", Label: "work"}},
 		},
-		// --- W (WXYZ group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Wei Zhang",
@@ -251,13 +228,11 @@ func Fixtures() []Contact {
 			},
 			Phones: []Phone{{E164: "+15555550117", Label: "mobile"}},
 		},
-		// --- X (WXYZ group) ---
 		{
 			Kind:   KindOrg,
 			Name:   "Xenon Networks",
 			Emails: []Email{{Address: "hello@xenon.example"}},
 		},
-		// --- Y (WXYZ group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Yuki Kobayashi",
@@ -265,7 +240,6 @@ func Fixtures() []Contact {
 			Family: "Kobayashi",
 			Emails: []Email{{Address: "yuki@kobayashi.example"}},
 		},
-		// --- Z (WXYZ group) ---
 		{
 			Kind:   KindPerson,
 			Name:   "Zara Ahmed",
@@ -274,7 +248,6 @@ func Fixtures() []Contact {
 			Emails: []Email{{Address: "zara.ahmed@example.ae", Label: "work"}},
 			Note:   "Key account contact.",
 		},
-		// --- Long names for 80-cell truncation tests ---
 		{
 			Kind:   KindPerson,
 			Name:   "Bartholomew Featherington-Smythe",
@@ -289,7 +262,6 @@ func Fixtures() []Contact {
 			Name:   "International Consortium for Advanced Distributed Systems Research",
 			Emails: []Email{{Address: "contact@icadsr.example"}},
 		},
-		// --- No org/title ---
 		{
 			Kind:   KindPerson,
 			Name:   "Alex Rivera",
@@ -298,7 +270,6 @@ func Fixtures() []Contact {
 			Emails: []Email{{Address: "alex@rivera.example"}},
 			Phones: []Phone{{E164: "+15555550118", Label: "mobile"}},
 		},
-		// --- ACME Support org (referenced elsewhere) ---
 		{
 			Kind:   KindOrg,
 			Name:   "ACME Support",
@@ -309,8 +280,7 @@ func Fixtures() []Contact {
 	}
 }
 
-// LookupByEmail finds the contact whose email list contains addr,
-// case-insensitive. Returns the contact and true on hit.
+// LookupByEmail finds the contact whose email list contains addr (case-insensitive).
 func LookupByEmail(all []Contact, addr string) (Contact, bool) {
 	lc := strings.ToLower(addr)
 	for _, c := range all {
@@ -323,10 +293,9 @@ func LookupByEmail(all []Contact, addr string) (Contact, bool) {
 	return Contact{}, false
 }
 
-// FixtureSuggestions returns autocomplete suggestions matching prefix.
-// Each contact expands to one Suggestion per email. Matches when the
-// lowercase prefix matches the start of Name or Email. Returns up to
-// 7 results in lexicographic order by Name then Email.
+// FixtureSuggestions returns up to 7 autocomplete suggestions whose
+// lowercase Name or Email starts with prefix, sorted by Name then Email.
+// Each contact expands to one suggestion per email.
 func FixtureSuggestions(prefix string) []Suggestion {
 	if len(prefix) < 2 {
 		return nil

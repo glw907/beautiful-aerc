@@ -14,7 +14,7 @@ const (
 )
 
 // Popover is the sender-info overlay opened by 'i' from the account view.
-// App owns open state. Popover is constructed fresh on each open.
+// App owns open state and constructs a fresh Popover per open.
 type Popover struct {
 	shell       uicore.ModalShell
 	styles      Styles
@@ -26,13 +26,11 @@ type Popover struct {
 	height      int
 }
 
-// NewPopover returns a Popover using the given styles.
 func NewPopover(s Styles) Popover {
 	return Popover{styles: s}
 }
 
-// SetMatch stores the sender identity and resolved contact (if any). hasMatch
-// is false when no fixture matched the email address.
+// SetMatch stores the sender identity and the resolved contact, if any.
 func (p *Popover) SetMatch(displayName, email string, match Contact, hasMatch bool) {
 	p.displayName = displayName
 	p.email = email
@@ -40,14 +38,12 @@ func (p *Popover) SetMatch(displayName, email string, match Contact, hasMatch bo
 	p.hasMatch = hasMatch
 }
 
-// SetSize updates the terminal dimensions in place.
 func (p *Popover) SetSize(w, h int) {
 	p.width = w
 	p.height = h
 	p.shell = p.shell.SetSize(w, h)
 }
 
-// Update handles keyboard input. Mutations are on the returned copy.
 func (p Popover) Update(msg tea.Msg) (Popover, tea.Cmd) {
 	k, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -69,7 +65,6 @@ func (p Popover) Update(msg tea.Msg) (Popover, tea.Cmd) {
 	return p, nil
 }
 
-// View renders the popover box. Returns "" when dimensions are unset.
 func (p Popover) View() string {
 	if p.width == 0 || p.height == 0 {
 		return ""
@@ -77,8 +72,8 @@ func (p Popover) View() string {
 	return p.Box(p.width, p.height)
 }
 
-// Box renders the popover at the given terminal dimensions. App calls this to
-// obtain the overlay string before passing to uicore.PlaceOverlay.
+// Box renders the popover at the given terminal dims. App passes the
+// result to uicore.PlaceOverlay.
 func (p Popover) Box(termW, _ int) string {
 	cw := popoverContentW
 	if termW-4 < cw {
@@ -117,7 +112,6 @@ func (p Popover) Box(termW, _ int) string {
 	return p.shell.Box("Sender", bodyRows, footerRows, cw)
 }
 
-// Position returns the top-left coordinates to center the popover.
 func (p Popover) Position(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
 }

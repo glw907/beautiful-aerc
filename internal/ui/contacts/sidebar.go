@@ -10,15 +10,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// t9Groups lists the eight phone-keypad letter groups in fixed order.
-// The sidebar renders one row per group, with a per-letter cursor when
-// a letter jump is active. Non-letter-starting contacts bin to group 0
-// by convention. The fixture pool has only letter starts, so this is a
-// safety valve, not a display concern.
+// t9Groups are the eight phone-keypad letter groups in fixed order.
+// Non-letter-starting contacts bin to group 0 as a safety valve.
 var t9Groups = []string{"ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ"}
 
-// groupOfLetter maps an uppercase letter to its t9Groups index.
-// Letters outside A–Z (should not occur after uppercasing) return 0.
+// groupOfLetter maps an uppercase letter to its t9Groups index. Anything
+// outside A–Z bins to 0.
 func groupOfLetter(r rune) int {
 	switch {
 	case r >= 'A' && r <= 'C':
@@ -43,11 +40,7 @@ func groupOfLetter(r rune) int {
 }
 
 // Sidebar is the compact T9 letter-group column used in Contacts mode.
-// It renders one row per group with a right-aligned count, and shows a
-// per-letter ┃ cursor when the user has jumped to a specific letter.
-//
-// J/K walk groups; a–z jump to per-letter precision. Letter separators
-// within a group use a single space ("A B C").
+// J/K walk groups; a–z jump to per-letter precision with a ┃ cursor.
 type Sidebar struct {
 	styles        Styles
 	contacts      []Contact
@@ -57,26 +50,23 @@ type Sidebar struct {
 	width, height int
 }
 
-// NewSidebar constructs a Sidebar with group counts precomputed from all.
 func NewSidebar(s Styles, all []Contact) Sidebar {
 	sb := Sidebar{styles: s, contacts: all}
 	sb.recount()
 	return sb
 }
 
-// SelectionLetter reports the currently active letter (uppercase), or 0.
+// SelectionLetter is the active letter (uppercase) or 0.
 func (s Sidebar) SelectionLetter() rune { return s.activeLetter }
 
-// SelectionGroup reports the index into t9Groups of the active group.
+// SelectionGroup is the t9Groups index of the active group.
 func (s Sidebar) SelectionGroup() int { return s.activeGroup }
 
-// SetSize stores width and height. Returns a new Sidebar (pure).
 func (s Sidebar) SetSize(w, h int) Sidebar {
 	s.width, s.height = w, h
 	return s
 }
 
-// Update handles J/K group navigation and a–z letter jumps.
 func (s Sidebar) Update(msg tea.Msg) (Sidebar, tea.Cmd) {
 	k, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -94,7 +84,6 @@ func (s Sidebar) Update(msg tea.Msg) (Sidebar, tea.Cmd) {
 		}
 		s.activeLetter = 0
 	default:
-		// Lowercase a–z: letter jump.
 		if len(k.Runes) == 1 {
 			r := k.Runes[0]
 			if r >= 'a' && r <= 'z' {
@@ -107,7 +96,6 @@ func (s Sidebar) Update(msg tea.Msg) (Sidebar, tea.Cmd) {
 	return s, nil
 }
 
-// View renders the sidebar. Returns "" when width or height is not set.
 func (s Sidebar) View() string {
 	if s.width <= 0 || s.height <= 0 {
 		return ""
@@ -124,7 +112,6 @@ func (s Sidebar) View() string {
 	return strings.Join(rows, "\n")
 }
 
-// renderGroup builds one sidebar row for a T9 group.
 func (s Sidebar) renderGroup(idx int, group string) string {
 	count := s.groupCounts[idx]
 	countStr := s.styles.GroupCount.Render(fmt.Sprintf("%d", count))
@@ -145,10 +132,9 @@ func (s Sidebar) renderGroup(idx int, group string) string {
 	return label + strings.Repeat(" ", gap) + countStr
 }
 
-// renderActiveGroupLabel builds the label for the active group.
-// When activeLetter is set, the matching letter gets a ┃ prefix
-// ("A ┃B C"). When only the group is selected (J/K navigation),
-// the whole group name renders with CursorRow styling.
+// renderActiveGroupLabel labels the active group. With activeLetter set
+// the matching letter gets a ┃ prefix ("A ┃B C"); otherwise the whole
+// group renders with CursorRow styling.
 func (s Sidebar) renderActiveGroupLabel(group string) string {
 	if s.activeLetter == 0 {
 		return s.styles.CursorRow.Render(group)

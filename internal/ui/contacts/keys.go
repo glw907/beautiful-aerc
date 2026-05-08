@@ -2,9 +2,7 @@ package contacts
 
 import "github.com/charmbracelet/bubbles/key"
 
-// keys holds the bindings active inside contacts surfaces (popover, sidebar,
-// list, form). Package-level so all surfaces share the same declarations
-// without a per-instance allocator.
+// keys are the bindings active inside contacts surfaces.
 var keys = struct {
 	Esc    key.Binding
 	I      key.Binding
