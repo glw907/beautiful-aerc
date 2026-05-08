@@ -316,3 +316,84 @@ func TestLoadUI_DownloadDir_XDG(t *testing.T) {
 		t.Errorf("DownloadDir = %q, want /var/dl", cfg.DownloadDir)
 	}
 }
+
+func TestLoadUI_TidyDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("LoadUI: %v", err)
+	}
+	if cfg.Tidy.Enabled {
+		t.Errorf("Tidy.Enabled default = true, want false")
+	}
+	if cfg.Tidy.Config.API.Model == "" {
+		t.Errorf("Tidy.Config.API.Model default empty, want package default")
+	}
+	if !cfg.Tidy.Config.Rules.Spelling {
+		t.Errorf("Tidy.Config.Rules.Spelling default = false, want true")
+	}
+}
+
+func TestLoadUI_TidyPopulated(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := `
+[ui.tidy]
+enabled = true
+
+[ui.tidy.api]
+model   = "claude-sonnet-4-6"
+api_key = "sk-test"
+
+[ui.tidy.rules]
+spelling     = false
+oxford_comma = "insert"
+
+[ui.tidy.style]
+ellipsis = "dots"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("LoadUI: %v", err)
+	}
+	if !cfg.Tidy.Enabled {
+		t.Errorf("Tidy.Enabled = false, want true")
+	}
+	if cfg.Tidy.Config.API.Model != "claude-sonnet-4-6" {
+		t.Errorf("API.Model = %q, want claude-sonnet-4-6", cfg.Tidy.Config.API.Model)
+	}
+	if cfg.Tidy.Config.API.APIKey != "sk-test" {
+		t.Errorf("API.APIKey = %q, want sk-test", cfg.Tidy.Config.API.APIKey)
+	}
+	if cfg.Tidy.Config.Rules.Spelling {
+		t.Errorf("Rules.Spelling = true, want false")
+	}
+	if cfg.Tidy.Config.Rules.OxfordComma != "insert" {
+		t.Errorf("OxfordComma = %q, want insert", cfg.Tidy.Config.Rules.OxfordComma)
+	}
+	if cfg.Tidy.Config.Style.Ellipsis != "dots" {
+		t.Errorf("Ellipsis = %q, want dots", cfg.Tidy.Config.Style.Ellipsis)
+	}
+}
+
+func TestLoadUI_TidyBadEnum(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := `
+[ui.tidy.rules]
+oxford_comma = "yes"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadUI(path); err == nil {
+		t.Error("LoadUI accepted bad oxford_comma, want error")
+	}
+}

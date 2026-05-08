@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+	"github.com/glw907/poplar/internal/tidy"
 )
 
 // UIConfig holds the [ui] table values.
@@ -32,6 +33,15 @@ type UIConfig struct {
 	// DownloadDir resolution order: explicit [ui] download_dir,
 	// $XDG_DOWNLOAD_DIR, $HOME/Downloads.
 	DownloadDir string
+
+	Tidy TidyConfig
+}
+
+// TidyConfig carries the [ui.tidy] block. Enabled gates the Ctrl+T
+// binding; Config is the package-native settings struct.
+type TidyConfig struct {
+	Enabled bool
+	Config  tidy.Config
 }
 
 // FolderConfig holds the overrides from one [ui.folders.<name>]
@@ -67,6 +77,7 @@ func DefaultUIConfig() UIConfig {
 		Icons:       "auto",
 		UndoSeconds: 6,
 		DownloadDir: defaultDownloadDir(),
+		Tidy:        TidyConfig{Enabled: false, Config: tidy.DefaultConfig()},
 	}
 }
 
@@ -80,6 +91,37 @@ type rawUI struct {
 	TrashRetentionDays *int                    `toml:"trash_retention_days"`
 	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
 	DownloadDir        string                  `toml:"download_dir"`
+	Tidy               *rawTidy                `toml:"tidy"`
+}
+
+type rawTidy struct {
+	Enabled *bool        `toml:"enabled"`
+	API     *rawTidyAPI  `toml:"api"`
+	Rules   *rawTidyRule `toml:"rules"`
+	Style   *rawTidySty  `toml:"style"`
+}
+
+type rawTidyAPI struct {
+	Model  *string `toml:"model"`
+	APIKey *string `toml:"api_key"`
+}
+
+type rawTidyRule struct {
+	Spelling           *bool   `toml:"spelling"`
+	Grammar            *bool   `toml:"grammar"`
+	Punctuation        *bool   `toml:"punctuation"`
+	Whitespace         *bool   `toml:"whitespace"`
+	Capitalization     *bool   `toml:"capitalization"`
+	RepeatedWords      *bool   `toml:"repeated_words"`
+	MissingPunctuation *bool   `toml:"missing_punctuation"`
+	OxfordComma        *string `toml:"oxford_comma"`
+}
+
+type rawTidySty struct {
+	EmDashSpaces       *bool     `toml:"em_dash_spaces"`
+	Ellipsis           *string   `toml:"ellipsis"`
+	TimeFormat         *string   `toml:"time_format"`
+	CustomInstructions []string  `toml:"custom_instructions"`
 }
 
 type rawFolderCfg struct {
@@ -144,6 +186,65 @@ func LoadUI(path string) (UIConfig, error) {
 			return UIConfig{}, fmt.Errorf("ui.download_dir: %w", err)
 		}
 		out.DownloadDir = expanded
+	}
+
+	if raw.UI.Tidy != nil {
+		tcfg := tidy.DefaultConfig()
+		if r := raw.UI.Tidy.API; r != nil {
+			if r.Model != nil {
+				tcfg.API.Model = *r.Model
+			}
+			if r.APIKey != nil {
+				tcfg.API.APIKey = *r.APIKey
+			}
+		}
+		if r := raw.UI.Tidy.Rules; r != nil {
+			if r.Spelling != nil {
+				tcfg.Rules.Spelling = *r.Spelling
+			}
+			if r.Grammar != nil {
+				tcfg.Rules.Grammar = *r.Grammar
+			}
+			if r.Punctuation != nil {
+				tcfg.Rules.Punctuation = *r.Punctuation
+			}
+			if r.Whitespace != nil {
+				tcfg.Rules.Whitespace = *r.Whitespace
+			}
+			if r.Capitalization != nil {
+				tcfg.Rules.Capitalization = *r.Capitalization
+			}
+			if r.RepeatedWords != nil {
+				tcfg.Rules.RepeatedWords = *r.RepeatedWords
+			}
+			if r.MissingPunctuation != nil {
+				tcfg.Rules.MissingPunctuation = *r.MissingPunctuation
+			}
+			if r.OxfordComma != nil {
+				tcfg.Rules.OxfordComma = *r.OxfordComma
+			}
+		}
+		if r := raw.UI.Tidy.Style; r != nil {
+			if r.EmDashSpaces != nil {
+				tcfg.Style.EmDashSpaces = *r.EmDashSpaces
+			}
+			if r.Ellipsis != nil {
+				tcfg.Style.Ellipsis = *r.Ellipsis
+			}
+			if r.TimeFormat != nil {
+				tcfg.Style.TimeFormat = *r.TimeFormat
+			}
+			if r.CustomInstructions != nil {
+				tcfg.Style.CustomInstructions = r.CustomInstructions
+			}
+		}
+		if err := tidy.Validate(tcfg); err != nil {
+			return UIConfig{}, fmt.Errorf("ui.tidy: %w", err)
+		}
+		out.Tidy.Config = tcfg
+		if raw.UI.Tidy.Enabled != nil {
+			out.Tidy.Enabled = *raw.UI.Tidy.Enabled
+		}
 	}
 
 	for name, fc := range raw.UI.Folders {
