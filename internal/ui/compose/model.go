@@ -665,6 +665,10 @@ func (c *Model) HasSignatures() bool {
 // IsFocusFrom reports whether the From field currently has focus.
 func (c *Model) IsFocusFrom() bool { return c.focus == focusFrom }
 
+func (c *Model) IsFocusBody() bool { return c.focus == focusBody }
+
+func (c *Model) TidyEnabled() bool { return c.tidyEnabled }
+
 func (c *Model) SetSignature(idx int) { c.signature = idx }
 
 func (c *Model) Focus() int { return c.focus }

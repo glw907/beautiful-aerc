@@ -909,7 +909,8 @@ func (m App) renderFrame() string {
 	status := m.statusBar.View(m.width, dividerCol)
 	var foot string
 	if m.compose != nil {
-		foot = m.footer.ViewGroups(composeFooterGroups(m.compose.HasSignatures(), m.compose.IsFocusFrom()), m.width)
+		tidyVisible := m.compose.TidyEnabled() && m.compose.IsFocusBody()
+		foot = m.footer.ViewGroups(composeFooterGroups(m.compose.HasSignatures(), m.compose.IsFocusFrom(), tidyVisible), m.width)
 	} else {
 		foot = m.footer.View(m.width)
 	}

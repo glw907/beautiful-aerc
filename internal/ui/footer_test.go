@@ -219,23 +219,37 @@ func TestFooterThreadsGroup(t *testing.T) {
 }
 
 func TestComposeFooterIncludesSigHint(t *testing.T) {
-	g := composeFooterGroups(true, false)
+	g := composeFooterGroups(true, false, false)
 	if !containsHint(g, "Ctrl+G", "sig") {
 		t.Errorf("compose footer missing Ctrl+G sig:\n%v", g)
 	}
 }
 
 func TestComposeFooterOmitsSigWhenNoSigs(t *testing.T) {
-	g := composeFooterGroups(false, false)
+	g := composeFooterGroups(false, false, false)
 	if containsHint(g, "Ctrl+G", "sig") {
 		t.Errorf("compose footer included Ctrl+G sig with no sigs:\n%v", g)
 	}
 }
 
 func TestComposeFooterAddsFromHintsOnFocusFrom(t *testing.T) {
-	g := composeFooterGroups(true, true)
+	g := composeFooterGroups(true, true, false)
 	if !containsHint(g, "Space/←→", "identity") {
 		t.Errorf("focusFrom footer missing identity hint:\n%v", g)
+	}
+}
+
+func TestComposeFooterIncludesTidyHintWhenVisible(t *testing.T) {
+	g := composeFooterGroups(false, false, true)
+	if !containsHint(g, "Ctrl+T", "tidy") {
+		t.Errorf("compose footer missing Ctrl+T tidy:\n%v", g)
+	}
+}
+
+func TestComposeFooterOmitsTidyHintWhenInert(t *testing.T) {
+	g := composeFooterGroups(false, false, false)
+	if containsHint(g, "Ctrl+T", "tidy") {
+		t.Errorf("compose footer included Ctrl+T tidy when inert:\n%v", g)
 	}
 }
 

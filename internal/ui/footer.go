@@ -113,7 +113,7 @@ func contactsFooterGroups() [][]footerHint {
 	}
 }
 
-func composeFooterGroups(hasSig, isFocusFrom bool) [][]footerHint {
+func composeFooterGroups(hasSig, isFocusFrom, tidyVisible bool) [][]footerHint {
 	core := []footerHint{
 		hint("Ctrl+X", "send", 0),
 		hint("Ctrl+C", "cancel", 0),
@@ -121,6 +121,9 @@ func composeFooterGroups(hasSig, isFocusFrom bool) [][]footerHint {
 	}
 	if hasSig {
 		core = append(core, hint("Ctrl+G", "sig", 5))
+	}
+	if tidyVisible {
+		core = append(core, hint("Ctrl+T", "tidy", 6))
 	}
 	groups := [][]footerHint{core}
 	if isFocusFrom {
