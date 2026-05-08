@@ -32,6 +32,8 @@ type Editor interface {
 	Value() string
 	SetValue(s string)
 
+	SetStyles(s catkin.Styles)
+	SetTidyHighlights(src string, ranges []catkin.Range)
 	RegisterAnnotator(a catkin.Annotator)
 
 	WordCount() int
@@ -68,6 +70,12 @@ func (e *CatkinEditor) Focused() bool  { return e.inner.Focused() }
 
 func (e *CatkinEditor) Value() string     { return e.inner.Value() }
 func (e *CatkinEditor) SetValue(s string) { e.inner.SetValue(s) }
+
+func (e *CatkinEditor) SetStyles(s catkin.Styles) { e.inner.SetStyles(s) }
+
+func (e *CatkinEditor) SetTidyHighlights(src string, ranges []catkin.Range) {
+	e.inner.SetTidyHighlights(src, ranges)
+}
 
 func (e *CatkinEditor) RegisterAnnotator(a catkin.Annotator) {
 	e.inner.RegisterAnnotator(a)
