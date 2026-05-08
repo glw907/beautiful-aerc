@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/glw907/poplar/internal/contacts"
 )
 
 func openWithMigrations(path string) (*sql.DB, error) {
@@ -142,6 +144,98 @@ func TestMigrateV8_TablesExist(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestQueueContactPut_ReconcilesEmails(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+
+	mustExec(t, a.db, `INSERT INTO addressbooks(href, display_name, description, sync_token, ctag, supports_sync, last_synced_at) VALUES ('/b/', 'Default', '', '', '', 1, 0)`)
+	mustExec(t, a.db,
+		`INSERT INTO contacts(uid, addressbook_href, href, etag, vcard, rev, fn, family, given, org, title, note, last_synced_at)
+		 VALUES ('u1', '/b/', '/b/u1.vcf', '"e1"', ?, '', 'Ada', 'Lovelace', 'Ada', '', '', '', 0)`,
+		[]byte("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:u1\r\nFN:Ada\r\nN:Lovelace;Ada;;;\r\nEMAIL;PREF=1:old@x.example\r\nEND:VCARD\r\n"))
+	mustExec(t, a.db, `INSERT INTO contact_emails(contact_uid, address, label, pref) VALUES ('u1','old@x.example','',1)`)
+
+	// Seed a message and recipient row so we can verify the projection
+	// is not disturbed by QueueContactPut.
+	id := mustInsertMessage(t, a.db, "m10", 100, "new@x.example", "", "")
+	mustExec(t, a.db, `INSERT INTO message_recipients(message_uid, role, address, name, sent_at) VALUES (?, 'from', 'new@x.example', 'Ada', 100)`, id)
+	mustExec(t, a.db, `INSERT INTO message_recipients(message_uid, role, address, name, sent_at) VALUES (?, 'from', 'old@x.example', 'Ada', 100)`, id)
+
+	c := contacts.Contact{
+		Kind:   contacts.KindPerson,
+		Given:  "Ada",
+		Family: "Lovelace",
+		Name:   "Ada Lovelace",
+		Emails: []contacts.Email{{Address: "new@x.example"}},
+	}
+	body := []byte("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:u1\r\nEMAIL;PREF=1:new@x.example\r\nEND:VCARD\r\n")
+	if err := a.QueueContactPut(ctx, "/b/", "u1", "/b/u1.vcf", `"e1"`, c, body); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outbox row exists with the right kind.
+	var rowKind string
+	if err := a.db.QueryRow(`SELECT kind FROM outbox WHERE kind = ?`, string(KindContactPut)).Scan(&rowKind); err != nil {
+		t.Fatal(err)
+	}
+	if rowKind != string(KindContactPut) {
+		t.Errorf("kind=%q want contact-put", rowKind)
+	}
+
+	// contact_emails reconciled to the new address only.
+	rows, err := a.db.Query(`SELECT address FROM contact_emails WHERE contact_uid='u1'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var addrs []string
+	for rows.Next() {
+		var s string
+		_ = rows.Scan(&s)
+		addrs = append(addrs, s)
+	}
+	if len(addrs) != 1 || addrs[0] != "new@x.example" {
+		t.Errorf("contact_emails=%v want [new@x.example]", addrs)
+	}
+
+	// message_recipients untouched. reconcileRecipientsTx is a no-op.
+	var nrec int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM message_recipients WHERE message_uid=?`, id).Scan(&nrec); err != nil {
+		t.Fatal(err)
+	}
+	if nrec != 2 {
+		t.Errorf("message_recipients rows=%d want 2", nrec)
+	}
+}
+
+func TestQueueContactDelete_RemovesRowAndRecipientPivots(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+
+	mustExec(t, a.db, `INSERT INTO addressbooks(href, display_name, description, sync_token, ctag, supports_sync, last_synced_at) VALUES ('/b/', 'Default', '', '', '', 1, 0)`)
+	mustExec(t, a.db,
+		`INSERT INTO contacts(uid, addressbook_href, href, etag, vcard, rev, fn, family, given, org, title, note, last_synced_at)
+		 VALUES ('u1', '/b/', '/b/u1.vcf', '"e1"', x'', '', 'Ada', '', 'Ada', '', '', '', 0)`)
+	mustExec(t, a.db, `INSERT INTO contact_emails(contact_uid, address, label, pref) VALUES ('u1','a@x.example','',1)`)
+
+	if err := a.QueueContactDelete(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	_ = a.db.QueryRow(`SELECT COUNT(*) FROM contacts WHERE uid='u1'`).Scan(&n)
+	if n != 0 {
+		t.Errorf("contacts row not deleted")
+	}
+	_ = a.db.QueryRow(`SELECT COUNT(*) FROM contact_emails WHERE contact_uid='u1'`).Scan(&n)
+	if n != 0 {
+		t.Errorf("contact_emails not cascaded")
+	}
+	_ = a.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE kind=?`, string(KindContactDelete)).Scan(&n)
+	if n != 1 {
+		t.Errorf("outbox row missing for delete")
 	}
 }
 

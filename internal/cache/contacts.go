@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -234,6 +235,148 @@ func upsertContactTx(ctx context.Context, tx *sql.Tx, bookHref string, s contact
 			return err
 		}
 	}
+	return nil
+}
+
+// contactsFolderID returns the ID of the __contacts__ sentinel folder,
+// creating it inside tx if absent. Contact ops are not scoped to a mail
+// folder; this sentinel satisfies the outbox.folder NOT NULL constraint
+// without polluting the user-visible folder list.
+func contactsFolderID(ctx context.Context, tx *sql.Tx) (int64, error) {
+	const name = "__contacts__"
+	if _, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO folders(name, protocol_name) VALUES (?, '')`, name); err != nil {
+		return 0, fmt.Errorf("ensure contacts sentinel folder: %w", err)
+	}
+	var id int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM folders WHERE name = ?`, name).Scan(&id); err != nil {
+		return 0, fmt.Errorf("read contacts sentinel folder: %w", err)
+	}
+	return id, nil
+}
+
+// QueueContactPut writes vcardBytes to the cache and enqueues a CardDAV
+// PUT in one transaction. ifMatch is the etag for optimistic concurrency
+// (empty for new contacts). The caller assembles vcardBytes via
+// contacts.PatchVCard or contacts.BuildVCard.
+func (a *Account) QueueContactPut(
+	ctx context.Context,
+	bookHref string,
+	uid string,
+	href string,
+	ifMatch string,
+	c contacts.Contact,
+	vcardBytes []byte,
+) error {
+	args := ContactPutArgs{BookHref: bookHref, Href: href, IfMatch: ifMatch}
+	body, err := json.Marshal(args)
+	if err != nil {
+		return fmt.Errorf("encode args: %w", err)
+	}
+	now := time.Now()
+	err = a.tx(ctx, func(tx *sql.Tx) error {
+		oldEmails, err := loadEmailsTx(ctx, tx, uid)
+		if err != nil {
+			return err
+		}
+		stored := contacts.Stored{
+			Parsed: contacts.Parsed{
+				UID:     uid,
+				Rev:     now.UTC().Format(time.RFC3339),
+				Raw:     vcardBytes,
+				Contact: c,
+			},
+			Href: href,
+			ETag: ifMatch,
+		}
+		if err := upsertContactTx(ctx, tx, bookHref, stored, now.Unix()); err != nil {
+			return err
+		}
+		if err := reconcileRecipientsTx(ctx, tx, uid, oldEmails, c.Emails); err != nil {
+			return err
+		}
+		folderID, err := contactsFolderID(ctx, tx)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at)
+			VALUES (?, NULL, ?, ?, ?, ?, ?, 0, NULL)`,
+			folderID, string(KindContactPut), string(body), vcardBytes, now.UnixNano(), OpPending)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	a.signalDrainer()
+	return nil
+}
+
+// QueueContactDelete tombstones the local contact row and enqueues a
+// CardDAV DELETE in one transaction. The contact's href and etag are
+// read inside the same transaction so the outbox row carries a coherent
+// IfMatch guard.
+func (a *Account) QueueContactDelete(ctx context.Context, uid string) error {
+	now := time.Now()
+	err := a.tx(ctx, func(tx *sql.Tx) error {
+		var href, etag string
+		if err := tx.QueryRowContext(ctx,
+			`SELECT href, etag FROM contacts WHERE uid = ?`, uid).Scan(&href, &etag); err != nil {
+			return fmt.Errorf("lookup contact %s: %w", uid, err)
+		}
+		args := ContactDeleteArgs{Href: href, IfMatch: etag}
+		body, err := json.Marshal(args)
+		if err != nil {
+			return fmt.Errorf("encode args: %w", err)
+		}
+		// FK cascade drops contact_emails and contact_phones.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM contacts WHERE uid = ?`, uid); err != nil {
+			return err
+		}
+		folderID, err := contactsFolderID(ctx, tx)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at)
+			VALUES (?, NULL, ?, ?, NULL, ?, ?, 0, NULL)`,
+			folderID, string(KindContactDelete), string(body), now.UnixNano(), OpPending)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	a.signalDrainer()
+	return nil
+}
+
+// loadEmailsTx returns the stored emails for uid in pref order. Used
+// by reconcileRecipientsTx to diff old-vs-new addresses.
+func loadEmailsTx(ctx context.Context, tx *sql.Tx, uid string) ([]contacts.Email, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT address, label FROM contact_emails WHERE contact_uid = ? ORDER BY pref ASC`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []contacts.Email
+	for rows.Next() {
+		var e contacts.Email
+		if err := rows.Scan(&e.Address, &e.Label); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// reconcileRecipientsTx is a no-op stub: contact_emails is the only
+// address-keyed pivot, and upsertContactTx already replaces it.
+// message_recipients rows are keyed by (message_uid, role, address);
+// changing a contact's emails does not invalidate any historical row.
+// A future pass adding a contact_uid FK to message_recipients will
+// populate it here.
+func reconcileRecipientsTx(_ context.Context, _ *sql.Tx, _ string, _, _ []contacts.Email) error {
 	return nil
 }
 
