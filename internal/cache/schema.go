@@ -286,30 +286,45 @@ func backfillRecipients(tx *sql.Tx) error {
 		if err := rows.Scan(&id, &sentAt, &from, &to, &cc); err != nil {
 			return fmt.Errorf("backfill scan: %w", err)
 		}
-		writeRoleAddrs(insert, id, sentAt, "from", from.String)
-		writeRoleAddrs(insert, id, sentAt, "to", to.String)
-		writeRoleAddrs(insert, id, sentAt, "cc", cc.String)
+		if err := writeRoleAddrs(insert, id, sentAt, "from", from.String); err != nil {
+			return err
+		}
+		if err := writeRoleAddrs(insert, id, sentAt, "to", to.String); err != nil {
+			return err
+		}
+		if err := writeRoleAddrs(insert, id, sentAt, "cc", cc.String); err != nil {
+			return err
+		}
 	}
 	return rows.Err()
 }
 
-func writeRoleAddrs(stmt *sql.Stmt, msgID, sentAt int64, role, raw string) {
+func writeRoleAddrs(stmt *sql.Stmt, msgID, sentAt int64, role, raw string) error {
 	if raw == "" {
-		return
+		return nil
 	}
 	addrs, err := mail.ParseAddressList(raw)
 	if err != nil {
-		return // malformed legacy row; skip
+		return nil // malformed legacy row; skip
 	}
 	for _, a := range addrs {
-		_, _ = stmt.Exec(msgID, role, strings.ToLower(a.Address), a.Name, sentAt)
+		if _, err := stmt.Exec(msgID, role, strings.ToLower(a.Address), a.Name, sentAt); err != nil {
+			return fmt.Errorf("backfill insert: %w", err)
+		}
 	}
+	return nil
 }
 
 // applyMigrations brings db up to schemaVersion. Each step runs in
 // its own transaction so a partial failure leaves a known version
 // on disk.
 func applyMigrations(db *sql.DB) error {
+	return applyMigrationsTo(db, schemaVersion)
+}
+
+// applyMigrationsTo brings db up to target (target ≤ schemaVersion).
+// Tests use this to seed a database at an older version.
+func applyMigrationsTo(db *sql.DB, target int) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`); err != nil {
 		return fmt.Errorf("create schema_version: %w", err)
 	}
@@ -327,7 +342,7 @@ func applyMigrations(db *sql.DB) error {
 	if current > schemaVersion {
 		return fmt.Errorf("on-disk schema version %d is newer than this build (max %d) — newer poplar binary expected", current, schemaVersion)
 	}
-	for current < schemaVersion {
+	for current < target {
 		if current >= len(migrations) {
 			return fmt.Errorf("missing migration step v%d→v%d", current, current+1)
 		}
