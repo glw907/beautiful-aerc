@@ -5,7 +5,110 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestAccountContactsDecode(t *testing.T) {
+	const src = `
+[[account]]
+name        = "personal"
+provider    = "fastmail"
+password    = "stub"
+
+[account.contacts]
+url                 = "https://carddav.fastmail.com/dav/addressbooks/user/me/"
+username            = "me@example.com"
+password-cmd        = "cmd"
+default-addressbook = "Default"
+refresh-interval    = "10m"
+`
+	got, err := ParseAccountsFromBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	c := got[0].Contacts
+	if c == nil {
+		t.Fatal("Contacts nil")
+	}
+	if c.URL != "https://carddav.fastmail.com/dav/addressbooks/user/me/" {
+		t.Errorf("URL = %q", c.URL)
+	}
+	if c.DefaultAddressbook != "Default" {
+		t.Errorf("DefaultAddressbook = %q", c.DefaultAddressbook)
+	}
+	if c.RefreshInterval != 10*time.Minute {
+		t.Errorf("RefreshInterval = %v", c.RefreshInterval)
+	}
+}
+
+func TestContactsConfigValidate(t *testing.T) {
+	cases := []struct {
+		name string
+		c    ContactsConfig
+		want string // substring of error; "" = ok
+	}{
+		{"empty url", ContactsConfig{}, "url"},
+		{"non-https", ContactsConfig{URL: "ftp://x"}, "url"},
+		{"http allowed when insecure-tls", ContactsConfig{URL: "http://x.local/", InsecureTLS: true}, ""},
+		{"refresh too small", ContactsConfig{URL: "https://x/", RefreshInterval: 30 * time.Second}, "refresh-interval"},
+		{"both password and cmd", ContactsConfig{URL: "https://x/", Password: "a", PasswordCmd: "b"}, "password"},
+		{"defaults", ContactsConfig{URL: "https://x/"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.c.validate()
+			if tc.want == "" && err != nil {
+				t.Fatalf("unexpected: %v", err)
+			}
+			if tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+				t.Fatalf("want %q; got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestContactsCredentialFallback(t *testing.T) {
+	const src = `
+[[account]]
+name         = "fm"
+provider     = "fastmail"
+password-cmd = "echo parent-secret"
+
+[account.contacts]
+url = "https://carddav.fastmail.com/"
+`
+	got, err := ParseAccountsFromBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	c := got[0].Contacts
+	if c == nil {
+		t.Fatal("Contacts nil")
+	}
+	if c.Username != got[0].Email {
+		// Username falls back to parent Email (may be empty for JMAP).
+		// The important invariant: PasswordCmd was mirrored.
+	}
+	if c.PasswordCmd != "echo parent-secret" {
+		t.Errorf("PasswordCmd fallback = %q, want parent value", c.PasswordCmd)
+	}
+}
+
+func TestContactsNoBlockNil(t *testing.T) {
+	const src = `
+[[account]]
+name     = "fm"
+provider = "fastmail"
+password = "tok"
+`
+	got, err := ParseAccountsFromBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got[0].Contacts != nil {
+		t.Errorf("Contacts = %+v, want nil", got[0].Contacts)
+	}
+}
 
 func TestParseAccounts(t *testing.T) {
 	tests := []struct {

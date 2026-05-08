@@ -4,11 +4,13 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-message/mail"
@@ -41,6 +43,47 @@ func resolvePasswordCmd(password, cmd, errPrefix string) (string, error) {
 		return "", fmt.Errorf("%s: %v", errPrefix, err)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
+}
+
+// ContactsConfig configures CardDAV ingest for one account.
+// Accounts without a [account.contacts] block skip contact sync.
+type ContactsConfig struct {
+	URL                string        `toml:"url"`
+	Username           string        `toml:"username"`
+	Password           string        `toml:"password"`
+	PasswordCmd        string        `toml:"password-cmd"`
+	DefaultAddressbook string        `toml:"default-addressbook"`
+	RefreshInterval    time.Duration `toml:"refresh-interval"`
+	InsecureTLS        bool          `toml:"insecure-tls"`
+}
+
+func (c *ContactsConfig) validate() error {
+	if c == nil {
+		return nil
+	}
+	u, err := url.Parse(c.URL)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("contacts: url: not parseable")
+	}
+	switch u.Scheme {
+	case "https":
+		// fine
+	case "http":
+		if !c.InsecureTLS {
+			return fmt.Errorf("contacts: url: http requires insecure-tls = true")
+		}
+	default:
+		return fmt.Errorf("contacts: url: scheme must be https (or http with insecure-tls)")
+	}
+	if c.Password != "" && c.PasswordCmd != "" {
+		return fmt.Errorf("contacts: set password OR password-cmd, not both")
+	}
+	if c.RefreshInterval == 0 {
+		c.RefreshInterval = 15 * time.Minute
+	} else if c.RefreshInterval < time.Minute {
+		return fmt.Errorf("contacts: refresh-interval must be >= 1m")
+	}
+	return nil
 }
 
 // SMTPConfig is the per-account submission transport. Filled from
@@ -107,6 +150,10 @@ type AccountConfig struct {
 	// SMTP is the submission transport for IMAP-backed accounts. JMAP
 	// accounts ignore it because submission rides the JMAP session.
 	SMTP SMTPConfig
+
+	// Contacts is the CardDAV sync config. Nil when no
+	// [account.contacts] block is present.
+	Contacts *ContactsConfig
 }
 
 // ExpandHome rewrites a leading "~" to the user's home directory.
@@ -203,6 +250,7 @@ type accountEntry struct {
 	From           string            `toml:"from"`
 	Params         map[string]string `toml:"params"`
 	SMTP           smtpEntry         `toml:"smtp"`
+	Contacts       *ContactsConfig   `toml:"contacts"`
 }
 
 type smtpEntry struct {
@@ -390,7 +438,26 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		acct.From = addrs[0]
 	}
 
+	acct.Contacts = e.Contacts
+	acct.finalizeContacts()
+	if err := acct.Contacts.validate(); err != nil {
+		return nil, fmt.Errorf("account %q: %w", e.Name, err)
+	}
+
 	return acct, nil
+}
+
+func (a *AccountConfig) finalizeContacts() {
+	if a.Contacts == nil {
+		return
+	}
+	if a.Contacts.Username == "" {
+		a.Contacts.Username = a.Email
+	}
+	if a.Contacts.Password == "" && a.Contacts.PasswordCmd == "" {
+		a.Contacts.Password = a.Password
+		a.Contacts.PasswordCmd = a.PasswordCmd
+	}
 }
 
 // resolveEnv replaces a leading bare "$VAR" with os.Getenv("VAR").
