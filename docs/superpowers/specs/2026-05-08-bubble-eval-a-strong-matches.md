@@ -342,3 +342,145 @@ on top of the custom `Field` types, for a net LOC increase.
   does not preclude a bounded 9u adoption on a static wizard form;
   that decision is deferred to the 9u plan.
 - No other candidate is blocked by or dependent on this verdict.
+
+---
+
+## `evertras/bubble-table`
+
+**Does this make poplar better?** No, for either consumer. The hard
+blocker is rendering architecture: `bubble-table`'s `renderRowData`
+and `renderHeaders` both call `lipgloss.JoinHorizontal` to assemble
+column cells. That is banned under SPUA-A icon mode (ADR-0084); the
+SPUA-A compensation that `messagelist.renderRow` performs manually —
+`SpuaCount` × `(spuaCellWidth-1)` subtracted from the subject budget,
+then `FillRowToWidth` absorbing the slack — cannot be expressed through
+`bubble-table`'s column-width API. Every `JoinHorizontal` call inside
+the library is a miscount when `spuaCellWidth > 1`, so the blocker
+applies in all terminal configurations that trigger SPUA-A mode.
+
+Beyond the `JoinHorizontal` ban, each consumer has structural
+incompatibilities of its own.
+
+For `messagelist`: the threading surface is the bulk of the model.
+The depth-prefix walk (`├─`, `└─`, `│ `) is computed from a transient
+`*threadNode` tree built per bucket in `appendThreadRows`; fold state,
+visual-mode marks, `ActionTargets()` expansion, and SPUA-A flag-cell
+compensation are all owned by `messagelist.Model`. These cannot be
+delegated to `bubble-table` — the library's `Row` type carries a
+`RowData map[string]any` per row and has no slot for a thread-prefix
+string, a fold state bit, or a `tea.Cmd` inverse. Poplar would supply
+the threading prefix as the value for a "prefix" column key, but the
+library's `renderRowColumnData` renders it through a `limitStr` cell
+with `lipgloss.NewStyle()` inheritance — it loses the `MsgListThreadPrefix`
+style that must inherit the row background. The thread-prefix rendering
+is the entirety of what makes the messagelist look right; reducing it
+to a plain-string column breaks the visual model.
+
+For `contacts/List`: the fit looks better on the surface — three fixed
+columns (Name 22, Email 30, Phone 16), sort toggle, `bubbles/viewport`
+scroll. But poplar's `contacts.List` is already 137 LOC including
+`rebuildViewport`, `formatRow`, `sortContacts`, and the `SetSelectionLetter`
+letter-jump the sidebar drives. `bubble-table` adds ~600 LOC of
+infrastructure (frozen columns, pagination, filter input, horizontal
+scroll, multi-sort, selectable rows) that the contacts list will never
+use, and the `JoinHorizontal` ban still applies in the render path.
+The contacts list has no filtering requirement (the sidebar's T9
+groups drive navigation) and no pagination requirement (viewport
+scroll suffices). There is no surface where `bubble-table`'s extras
+turn into a reduction in owned code.
+
+**Feature parity:**
+
+*messagelist*: `bubble-table` covers horizontal scrolling,
+multi-column sort, per-row and per-cell styling via `RowStyleFuncInput`
+and `StyledCell`. What it cannot express: threading depth prefixes
+attached to a specific row, fold/unfold toggle, `ActionTargets()`
+expansion scope, SPUA-A icon compensation, or `FillRowToWidth`-based
+width equalization. The threading surface is not a peripheral feature;
+it is the reason the component exists.
+
+*contacts/List*: `bubble-table` covers multi-column layout, sort, and
+a cursor-highlight row. What it cannot express: `SetSelectionLetter`
+(letter-jump driven by the sidebar), `SortMode` tied to display
+content (`nameCol` switches between `Given + Family` and
+`Family, Given`), the `metaCol` (title · org) overflow column that
+fills the remaining width dynamically, and the `CursorRow` style that
+must be the caller's `AccentPrimary` rather than a highlight applied
+inside the library's column cell.
+
+**Customization seams:** `bubble-table` exposes
+`WithRowStyleFunc(RowStyleFunc)` and `StyledCell{StyleFunc}` as the
+two injection points for row- and cell-level styling. The
+`RowStyleFuncInput` carries `Index`, `Row`, and `IsHighlighted`. These
+seams cover zebra-striping and conditional row color; they do not cover
+per-column partial styles (thread prefix dim vs sender bright on the
+same row) or multi-style cells (prefix + subject as two adjacent styled
+spans within one column). Poplar's `renderRow` assembles eight distinct
+styled fragments per row; none of them map to one column in
+`bubble-table`'s model.
+
+**Theming integration:** `bubble-table` exposes a base `lipgloss.Style`
+and per-column `WithStyle`. The cursor highlight is `WithHighlightStyle`.
+Poplar's `Styles` struct could populate these fields from a
+`*theme.CompiledTheme`, but the `JoinHorizontal` calls in the render
+path undo any SPUA-A accounting the caller has done to the column
+widths. Theming is technically injectable; the SPUA-A miscount is in
+the renderer itself.
+
+**Maintenance signal:** v0.19.2, published 2025-09-06. 569 stars. Last
+repo push 2025-09-06; 21 open issues. Single primary maintainer. No
+activity in the eight months since v0.19.2; the library predates
+`charmbracelet/x/ansi` v1 and Bubble Tea v2, so there is uncertainty
+around Bubble Tea v2 compatibility. Not a blocker for current poplar
+(uses BT v1), but the stalled cadence is a signal.
+
+**Code delta estimate:** Adopting `bubble-table` for `contacts/List`
+would delete ~137 LOC from `list.go` and add a `go.mod` entry plus
+~600 LOC of library infrastructure per package tree. The
+`SetSelectionLetter`, `metaCol`, and `nameCol(sortMode)` logic would
+survive as pre-processing — none is delegatable to the library's
+`RowData` map. Net owned LOC reduction: approximately 40 LOC
+(cursor handling, viewport sync, scroll math). That is not a
+meaningful win. For `messagelist`, adoption would require rewriting the
+threading prefix logic as a plain-column render, dropping SPUA-A
+compensation, and forking `renderRowData` — a net LOC increase.
+
+**License:** MIT License, Copyright Evertras contributors.
+
+**Verdict:** **Keep + harvest** for both consumers.
+
+**Rationale (one line):** `bubble-table` calls `lipgloss.JoinHorizontal`
+in every row and header render (ADR-0084 ban), and neither consumer
+can map its domain model — threading depth-prefixes for `messagelist`,
+letter-jump + dynamic `metaCol` for `contacts/List` — onto
+`bubble-table`'s rectangular `RowData` shape.
+
+**Harvest targets:**
+
+- `bubble-table`'s `WithRowStyleFunc(RowStyleFuncInput)` pattern
+  is the idiomatic way to gate highlight style on `IsHighlighted`
+  without storing the cursor index in every row. Poplar's
+  `contacts/List.formatRow` already does this via an `i == l.cursor`
+  check; the naming convention is worth aligning (`CursorRow` →
+  `highlightStyle` if contacts styles are ever refactored).
+- The `StyledCell` value type (wrapping data + `StyleFunc` in one
+  `any` slot) is a readable pattern for flagging icon cells in
+  `messagelist`. Poplar uses a flat `renderFlagCell` function
+  instead — no structural change needed, but the conceptual shape
+  confirms the cell-level approach is idiomatic.
+- `bubble-table`'s `SortColumn{ColumnKey, Direction}` slice model
+  for multi-column sort is cleaner than a bespoke enum when more
+  than one sort axis exists. `contacts/List` has one axis today
+  (`SortFirstName`/`SortLastName`); if a secondary axis is added
+  post-1.0, this is the shape to follow.
+
+**Interacts with:**
+
+- The `JoinHorizontal` ban (ADR-0084) is the same blocker named in
+  the `bubbles/help` eval. No fork of `bubble-table` resolves the
+  ban without rewriting the core render path — that rewrite is
+  effectively a different library.
+- No other Eval A candidate depends on this verdict.
+- Pass 9v's scope does not include a `contacts/List` or
+  `messagelist` rewrite; this verdict blocks neither pass from
+  proceeding.
