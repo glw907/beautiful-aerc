@@ -24,13 +24,13 @@ type Client struct {
 // NewClient builds a CardDAV client for the given server URL with HTTP Basic
 // auth. insecureTLS skips certificate verification for self-hosted servers.
 func NewClient(serverURL, username, password string, insecureTLS bool) (*Client, error) {
-	var inner http.Client
+	base := http.DefaultClient
 	if insecureTLS {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user-opt-in for self-signed certs
-		inner.Transport = tr
+		base = &http.Client{Transport: tr}
 	}
-	hc := webdav.HTTPClientWithBasicAuth(&inner, username, password)
+	hc := webdav.HTTPClientWithBasicAuth(base, username, password)
 	cl, err := carddav.NewClient(hc, serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("carddav client: %w", err)
@@ -100,7 +100,6 @@ func (c *Client) CTAG(ctx context.Context, bookHref string) (string, error) {
 		return "", fmt.Errorf("ctag read response: %w", err)
 	}
 
-	// Walk the multistatus XML looking for CS:getctag chardata.
 	dec := xml.NewDecoder(bytes.NewReader(raw))
 	var inCTAG bool
 	for {
