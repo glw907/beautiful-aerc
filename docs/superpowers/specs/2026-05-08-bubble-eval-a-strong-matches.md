@@ -80,3 +80,71 @@ with no behavior gain and no cascade support.
 - No other Eval A candidates depend on this swap landing first.
 - No other candidates are simplified by adopting or skipping this one.
 - Not blocked by any candidate outside Eval A.
+
+---
+
+## `bubbles/help`
+
+**Does this make poplar better?** No. The two `Context` enum branches
+map cleanly onto two `KeyMap` implementations — the concept translates
+— but the structural layout does not. `FullHelpView` renders a flat
+key-column + desc-column per `[]key.Binding` group; poplar renders
+three named groups per row with `joinColumnsRow`, a custom `renderGotoGrid`
+for the six-cell Go To block, and a bottom hint line outside any group.
+That shape cannot be expressed through `[][]key.Binding` without encoding
+layout intent in grouping, making the KeyMap impls as bespoke as the
+current `accountGroups` slice. Additionally, `FullHelpView` calls
+`lipgloss.JoinHorizontal` internally — which poplar bans when
+`spuaCellWidth != 1` (ADR-0084). The renderer cannot be patched without
+forking. Finally, `bubbles/help` has no `wired bool` concept: disabled
+bindings are invisible (`kb.Enabled() == false` skips them), not
+dim-but-visible. The planned-binding affordance — show unwired keys
+dimmed to advertise future bindings — is a first-class poplar feature and
+would be lost.
+
+**Feature parity:** `KeyMap.ShortHelp()` / `FullHelp()` cover the
+conceptual shape. Width-aware truncation with ellipsis matches what the
+current `Box` does for the `tooNarrow` fallback. What is missing: the
+multi-row grouped grid layout, the `wired` dim affordance, the `ModalShell`-
+compatible box return (the library renders inline text, not a bordered
+box), and SPUA-safe column joining.
+
+**Customization seams:** `help.Styles` has `FullKey`, `FullDesc`,
+`FullSeparator`, `ShortKey`, `ShortDesc`, `ShortSeparator`, and `Ellipsis`
+— all `lipgloss.Style` fields. Poplar's palette maps onto them cleanly
+(`HelpKey` → `FullKey`, `Dim` → `FullDesc`, etc.). The seams exist; they
+just cannot recover the layout or `wired` semantics.
+
+**Theming integration:** Clean. All style fields are `lipgloss.Style`;
+`NewStyles(*theme.CompiledTheme)` can populate them in one assignment
+block. No color hardcoding in the render path; `New()` default colors can
+be overridden.
+
+**Maintenance signal:** `bubbles/help` ships inside `charmbracelet/bubbles`
+v1.0.0 — pinned in poplar's `go.mod`. Stable API; well-maintained. No
+maintenance risk.
+
+**Code delta estimate:** Replacing `helppopover` with `bubbles/help`
+would delete ~380 LOC (model.go + styles.go) but require reimplementing
+the grid layout either in `KeyMap.FullHelp()` (encoding layout in group
+ordering — fragile) or by calling `FullHelpView` as a sub-renderer and
+wrapping it in the existing `Box` frame. The `JoinHorizontal` blocker
+and `wired` loss mean adoption requires a fork of help.go (~200 LOC) on
+top of whatever layout scaffolding stays. Net delta is negative only if
+forking is counted as "free"; in practice the total owned code changes by
+less than ±50 LOC.
+
+**License:** MIT License, Copyright (c) 2020-2026 Charmbracelet, Inc.
+
+**Verdict:** **Keep + harvest**
+
+**Rationale (one line):** `bubbles/help` cannot render poplar's multi-
+column grid, uses `JoinHorizontal` (ADR-0084 banned), and drops the
+`wired` dim affordance — the hand-roll is the right shape; the `Styles`
+field names are useful terminology to mirror.
+
+**Interacts with:**
+- `wired` dim pattern is not affected by any other Eval A candidate.
+- `JoinHorizontal` ban (ADR-0084) applies equally to any candidate
+  whose render path calls it internally.
+- No other Eval A candidate depends on this evaluation's outcome.
