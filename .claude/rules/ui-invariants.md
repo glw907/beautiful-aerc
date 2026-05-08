@@ -188,6 +188,26 @@ file describes behavior, not the key tables.
   clear on first body mutation. Tidy never runs on send. The
   footer shows a gated `^T tidy` hint at rank 6 when
   `[ui.tidy] enabled` and the body is focused. ADR-0178.
+- `Ctrl+O` opens `compose.AttachPicker` — multi-select TUI file
+  browser overlay (`internal/ui/compose/attachpicker.go`) modeled
+  on `bubbles/filepicker` design vocabulary (vim h/l/g/G nav,
+  async readDir with id-guard, view-state stack on ascend),
+  reimplemented for multi-select. `Space` toggles, `a` accepts,
+  `Enter` on a file with empty selection is a single-attach
+  shortcut, `.` toggles hidden, `Esc` cancels. Picker emits
+  `AttachAcceptedMsg{Paths}` / `AttachCancelledMsg{}`; compose
+  appends deduped to `c.attachments`, bumps `localDirty`, kicks
+  autosave, remembers `attachLastDir`. Compose grows a
+  `focusAttach` enum slot between `focusSubject` and `focusBody`,
+  skipped in the Tab cycle when no attachments. Inside
+  `focusAttach`: `←/→` moves the chip cursor; `d`/`Backspace`/
+  `Delete` removes the selected chip; emptying collapses focus to
+  Subject. Chip row renders below Subject with humanized sizes,
+  hidden when empty; overflow shows `+N`. Footer hint `^O attach`
+  at rank 6. App overlays the picker on top of compose via
+  `uicore.PlaceOverlay`; compose's `SetSize` forwards into the
+  picker. Picker rides inside compose's input window — outside
+  the global modal cascade. ADR-0179.
 - Single-instance for Pass 9h. Drafts persistence is 9h.5;
   address autocomplete is 9.1; signatures + identities is 9.4.
   `ComposeTab`/`AccountTab` names are placeholders pending the

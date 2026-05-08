@@ -76,6 +76,11 @@ text-entry surfaces are exempt from the modifier-free rule.
 | `Esc`     | Toggle focus headers ↔ body |
 | `^X`      | Send |
 | `^C`      | Cancel (confirms if dirty) |
+| `^O`      | Open attach picker |
+| `Space`   | Toggle file selection (in attach picker) |
+| `a`       | Accept selection (in attach picker) |
+| `.`       | Toggle hidden files (in attach picker) |
+| `d` / `⌫` / `⌦` | Remove attachment (in `focusAttach`) |
 
 ## Folder Jump
 
