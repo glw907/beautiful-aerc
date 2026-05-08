@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/tidy"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/google/uuid"
 )
@@ -42,6 +43,13 @@ type Model struct {
 	identity   int // index into identities
 	signature  int // index into identities[identity].Signatures, or -1
 	err        string
+	info       string
+
+	tidyEnabled  bool
+	tidyAPIKey   string
+	tidyCfg      tidy.Config
+	tidyFn       func(input string, cfg tidy.Config, apiKey, apiURL string) (tidy.Result, error)
+	tidyInFlight bool
 
 	width   int
 	height  int
@@ -100,6 +108,7 @@ func newModel(styles Styles, self string, suggest SuggestFn) *Model {
 		suggest: NewDropdown(suggest).WithStyles(styles),
 	}
 	c.editor.SetStyles(styles.CatkinStyles())
+	c.tidyFn = tidy.Tidy
 	c.to.Focus()
 	c.focus = focusTo
 	return c
@@ -338,6 +347,9 @@ type CancelMsg struct {
 
 func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tidyResultMsg:
+		return c, c.applyTidyResult(msg)
+
 	case autosaveTickMsg:
 		if c.cache != nil && c.localDirty && time.Since(c.lastEditAt) >= autosaveDelay {
 			c.localDirty = false
@@ -387,6 +399,11 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			}
 		}
 		switch msg.Type {
+		case tea.KeyCtrlT:
+			if cmd := c.handleTidyKey(); cmd != nil {
+				return c, cmd
+			}
+			return c, nil
 		case tea.KeyCtrlX:
 			d, err := c.Draft()
 			if err != nil {
@@ -449,6 +466,7 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case focusSubject:
 		c.subject, cmd = c.subject.Update(msg)
 	case focusBody:
+		c.info = ""
 		c.editor, cmd = c.editor.Update(msg)
 	}
 
@@ -688,6 +706,13 @@ func (c *Model) Draft() (mailcompose.Draft, error) {
 
 func (c *Model) SetErr(msg string) {
 	c.err = msg
+}
+
+// SetTidy configures Claude Tidy. enabled=false makes Ctrl+T inert.
+func (c *Model) SetTidy(enabled bool, apiKey string, cfg tidy.Config) {
+	c.tidyEnabled = enabled
+	c.tidyAPIKey = apiKey
+	c.tidyCfg = cfg
 }
 
 func (c *Model) Err() string { return c.err }
