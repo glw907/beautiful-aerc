@@ -84,6 +84,12 @@
 
 ## Medium
 
+- [ ] **#41** Add CONTRIBUTING.md with Vale install line and `make check` workflow `#improvement` `#docs` *(2026-05-07)* — **scheduled: v1.0 prep**
+  Repo doesn't have a CONTRIBUTING.md yet. Doc-voice initiative (ADR-0174) introduced Vale as a build dep; contributors need to know to install it. Scope is bigger than just Vale: dev setup, branch policy, PR shape, issue templates, the `make check` gate (fmt-check + vet + vale + test), and the `simplify` review pattern for AI-authored changes. Brainstorm separately when v1.0 prep starts. Spec: `docs/superpowers/specs/2026-05-07-doc-voice-design.md`.
+
+- [ ] **#40** GitHub Actions workflow for make check (with Vale install) `#improvement` `#poplar` *(2026-05-07)* — **scheduled: v1.0 prep**
+  Repo isn't public yet and has no `.github/workflows/`. When the repo goes public, stand up CI: install Go toolchain, install Vale (`go install github.com/errata-ai/vale@latest`), run `make check` (fmt-check + vet + vale + test). Keep VALE_PATHS in the Makefile authoritative so CI mirrors local. Deferred from doc-voice initiative (Pass A/B); spec mentioned the CI install step. ADR-0174.
+
 - [ ] **#31** `has_attachments` hint on messages — gate `loadAttachmentsCmd` `#improvement` `#poplar` *(2026-05-04)*
   Pass 8.7 batches `loadAttachmentsCmd` on every viewer open. `cache.Account.Attachments` does not cache zero-length results, so attachment-free messages incur a backend round-trip per open. Plan: schema v6 adds `messages.has_attachments INTEGER NULL`. JMAP path is cheap — `Email/get` already returns `hasAttachment` per RFC 8621, syncer just adds one property. IMAP path needs a decision: (a) leave NULL on IMAP and keep unconditional fetch there, or (b) populate lazily on first `Attachments()` call. UI gates `loadAttachmentsCmd` when the column is `0`. Touches `internal/cache/schema.go`, `internal/mailjmap/sync.go`, `internal/cache/syncer.go`, `internal/mail/types.go` (MessageInfo wire field), `internal/ui/account_tab.go`. ADR-0138 noted the deferral.
 
