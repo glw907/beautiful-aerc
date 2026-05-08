@@ -7,7 +7,7 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// Styles holds the subset of UI styles the help popover needs.
+// Styles is the help popover's projection of internal/ui.Styles.
 type Styles struct {
 	HelpBoxBorder   lipgloss.Style
 	HelpTitle       lipgloss.Style
@@ -25,17 +25,9 @@ const (
 	Viewer
 )
 
-// cache holds the memoised Box output and the inputs that
-// determine when it must be rebuilt.
-//
-// Pre-beta escape hatch: Model is an immutable value type, so a
-// cache that lives in the value would be lost on every SetSize/return.
-// Rather than switching to pointer receivers (which would break the Elm
-// immutable-model contract), we heap-allocate one small cache struct at
-// construction time and access it through a pointer. The pointer itself
-// is copied with the value, so every generation of the popover shares
-// the same cache. A deliberate choice: they all render the same logical
-// state, and the dirty flag ensures stale renders are never served.
+// cache memoises the Box output. Heap-allocated so the pointer survives
+// the value-type model's copy-on-mutation contract; every generation of
+// the popover shares one cache. ADR-0130 covers the escape hatch.
 type cache struct {
 	dirty     bool
 	context   Context
@@ -44,17 +36,16 @@ type cache struct {
 	tooNarrow string
 }
 
-// Model is the modal help overlay. App owns key routing;
-// this model only renders.
+// Model is the modal help overlay. App owns key routing; the model
+// only renders.
 type Model struct {
 	styles  Styles
 	context Context
 	width   int
 	height  int
-	c       *cache // heap-allocated, shared across value copies
+	c       *cache
 }
 
-// New constructs a popover for the given context.
 func New(styles Styles, context Context) Model {
 	return Model{
 		styles:  styles,
@@ -63,31 +54,25 @@ func New(styles Styles, context Context) Model {
 	}
 }
 
-// SetSize updates the popover's box dimensions. App threads
-// WindowSizeMsg here, mirroring the other overlay surfaces.
 func (h Model) SetSize(width, height int) Model {
 	h.width = width
 	h.height = height
 	return h
 }
 
-// bindingRow is a single key/description entry in the popover.
-// Unwired rows render dim per the future-binding policy.
+// bindingRow is a single key/description entry. Unwired rows render dim
+// per the future-binding policy.
 type bindingRow struct {
 	key   string
 	desc  string
 	wired bool
 }
 
-// bindingGroup is a labeled cluster of bindingRow entries
-// (e.g., "Navigate", "Triage").
 type bindingGroup struct {
 	title string
 	rows  []bindingRow
 }
 
-// accountGroups is the binding map shown when the popover opens
-// from the account view. Order is the visual layout order.
 var accountGroups = []bindingGroup{
 	{
 		title: "Navigate",
@@ -152,8 +137,6 @@ var accountGroups = []bindingGroup{
 	},
 }
 
-// accountBottomHints is the trailing line under the groups in the
-// account context: "Enter open    Q outbox    ! conflicts    ? close".
 var accountBottomHints = []bindingRow{
 	{"Enter", "open", true},
 	{"Q", "outbox", true},
@@ -161,8 +144,6 @@ var accountBottomHints = []bindingRow{
 	{"?", "close", true},
 }
 
-// viewerGroups is the binding map shown when the popover opens
-// from the message viewer.
 var viewerGroups = []bindingGroup{
 	{
 		title: "Navigate",
@@ -193,8 +174,6 @@ var viewerGroups = []bindingGroup{
 	},
 }
 
-// viewerBottomHints is the trailing line in the viewer context:
-// "Tab link picker    q  close    ?  close".
 var viewerBottomHints = []bindingRow{
 	{"Tab", "link picker", true},
 	{"Q", "outbox", true},
@@ -203,15 +182,11 @@ var viewerBottomHints = []bindingRow{
 	{"?", "close", true},
 }
 
-// Box returns the popover box string sized from its content. The returned
-// string does NOT include full-screen padding. It is the raw box ready
-// for overlay compositing. The second return value is a "too narrow"
-// fallback string, non-empty when the box does not fit within
-// (width, height) and the caller should display it instead.
-//
-// The result is cached keyed on (context, width, height). A context or
-// dimension change counts as dirty even when the flag is clear;
-// NewHelpPopover sets dirty=true, so the first call always rebuilds.
+// Box returns the raw popover box ready for overlay compositing, with
+// no full-screen padding. The second return value is a "too narrow" fallback
+// the caller should display when the box does not fit. Result is cached
+// keyed on (context, width, height); New() sets dirty=true so the first
+// call always rebuilds.
 func (h Model) Box(width, height int) (box string, tooNarrow string) {
 	c := h.c
 	if !c.dirty && c.context == h.context && c.w == width && c.h == height {
@@ -232,8 +207,7 @@ func (h Model) Box(width, height int) (box string, tooNarrow string) {
 	}
 	inner := body + "\n\n" + renderHintLine(h.styles, bottomHints)
 
-	// Wrap inner in a rounded box, with top border drawn manually
-	// so the title can be embedded. Style is defined in styles.go.
+	// Top border is drawn manually so the title can be embedded.
 	b := h.styles.HelpBoxBorder.Render(inner)
 
 	boxWidth := lipgloss.Width(b)
@@ -261,16 +235,14 @@ func (h Model) Box(width, height int) (box string, tooNarrow string) {
 	return c.box, c.tooNarrow
 }
 
-// Position returns the top-left (x, y) cell coordinates at which the
-// popover box should be placed to appear centered on (width, height).
+// Position returns the top-left coordinates that center the box on (width, height).
 func (h Model) Position(box string, width, height int) (x, y int) {
 	return uicore.CenterOverlay(box, width, height)
 }
 
-// View renders the popover centered on a width × height area.
-// When the underlying account frame is available the caller should use
-// Box + Position + PlaceOverlay instead. View is retained as a fallback
-// for callers that need a standalone full-screen string (e.g. tests).
+// View renders the popover centered on a width × height area. Callers
+// that have the underlying frame should prefer Box + Position +
+// PlaceOverlay; View is the standalone fallback used by tests.
 func (h Model) View(width, height int) string {
 	box, tooNarrow := h.Box(width, height)
 	if tooNarrow != "" {
@@ -287,10 +259,8 @@ func (h Model) View(width, height int) string {
 	)
 }
 
-// renderAccountLayout builds the four-section layout for the
-// account context: three rows (Nav/Triage/Reply, then
-// Search/Select/Threads, then Go To grid). Bottom hint line is
-// added by View.
+// renderAccountLayout lays out three rows (Nav/Triage/Reply,
+// Search/Select/Threads, Go To grid). Box adds the bottom hint line.
 func renderAccountLayout(styles Styles, groups []bindingGroup) string {
 	row1 := joinColumnsRow(renderGap(),
 		renderGroup(styles, groups[0]),
@@ -306,8 +276,6 @@ func renderAccountLayout(styles Styles, groups []bindingGroup) string {
 	return strings.Join([]string{row1, "", row2, "", gotoBlock}, "\n")
 }
 
-// renderViewerLayout builds the single-row layout for the viewer
-// context: Nav/Triage/Reply side-by-side.
 func renderViewerLayout(styles Styles, groups []bindingGroup) string {
 	return joinColumnsRow(renderGap(),
 		renderGroup(styles, groups[0]),
@@ -316,8 +284,6 @@ func renderViewerLayout(styles Styles, groups []bindingGroup) string {
 	)
 }
 
-// renderGroup builds a single labeled column: heading on top,
-// then key/desc rows.
 func renderGroup(styles Styles, g bindingGroup) string {
 	lines := []string{styles.HelpGroupHeader.Render(g.title)}
 	for _, r := range g.rows {
@@ -326,11 +292,10 @@ func renderGroup(styles Styles, g bindingGroup) string {
 	return strings.Join(lines, "\n")
 }
 
-// joinColumnsRow concatenates pre-rendered multi-line columns
-// side-by-side, padding each column to its widest line and the
-// row to the tallest column. Gap is inserted between columns. Use
-// instead of lipgloss.JoinHorizontal so the result is correct
-// under both icon-mode cell widths (per ADR-0084).
+// joinColumnsRow joins pre-rendered multi-line columns side-by-side with
+// gap between them, padding to the widest line and the tallest column.
+// Replaces lipgloss.JoinHorizontal because that one mishandles SPUA cell
+// widths (ADR-0084).
 func joinColumnsRow(gap string, cols ...string) string {
 	if len(cols) == 0 {
 		return ""
@@ -368,8 +333,6 @@ func joinColumnsRow(gap string, cols ...string) string {
 	return strings.Join(rows, "\n")
 }
 
-// renderRow builds "<key>  <desc>" for a single row, padding the key
-// column to a fixed width.
 func renderRow(styles Styles, r bindingRow) string {
 	const keyWidth = 5
 	keyPadded := r.key
@@ -379,9 +342,8 @@ func renderRow(styles Styles, r bindingRow) string {
 	return renderKeyDesc(styles, keyPadded, r.desc, r.wired)
 }
 
-// renderKeyDesc applies the wired-vs-unwired styling to a key+desc
-// pair. Wired: bright-bold key, dim desc. Unwired: entire pair dim
-// (no bold). The contrast is the future-binding signal.
+// renderKeyDesc styles the key+desc pair. Wired entries get a bright-bold
+// key; unwired entries dim everything to signal a future binding.
 func renderKeyDesc(styles Styles, key, desc string, wired bool) string {
 	if wired {
 		return styles.HelpKey.Render(key) + "  " + styles.Dim.Render(desc)
@@ -391,11 +353,8 @@ func renderKeyDesc(styles Styles, key, desc string, wired bool) string {
 
 func renderGap() string { return "    " }
 
-// renderGotoGrid builds the Go To group as a 3×2 grid:
-// "I inbox    D drafts    S sent" / "A archive  X spam  T trash".
-// The group's heading is rendered above. Falls back to a flat
-// column if the row count drifts from 6. Defensive against
-// careless edits to the binding tables.
+// renderGotoGrid lays out the Go To group as a 3×2 grid. Falls back to
+// a flat column if the row count drifts from 6.
 func renderGotoGrid(styles Styles, g bindingGroup) string {
 	heading := styles.HelpGroupHeader.Render(g.title)
 	if len(g.rows) != 6 {
@@ -411,7 +370,6 @@ func renderGotoGrid(styles Styles, g bindingGroup) string {
 	return strings.Join([]string{heading, row1, row2}, "\n")
 }
 
-// renderHintLine builds the bottom hint line: "Enter  open    ?  close".
 func renderHintLine(styles Styles, hints []bindingRow) string {
 	parts := make([]string, 0, len(hints))
 	for _, h := range hints {

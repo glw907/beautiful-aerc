@@ -5,7 +5,6 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// NewStyles builds a Styles from a compiled theme.
 func NewStyles(t *theme.CompiledTheme) Styles {
 	return Styles{
 		HelpTitle: lipgloss.NewStyle().
