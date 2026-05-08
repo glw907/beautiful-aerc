@@ -3,12 +3,15 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/glw907/poplar/internal/contacts"
 )
+
+var _ contacts.Store = (*Account)(nil)
 
 const suggestQuery = `
 WITH scored AS (
@@ -73,7 +76,7 @@ SELECT c.uid, c.fn, c.family, c.given, c.org, c.title, c.note
 	err := a.db.QueryRowContext(ctx, q, address).Scan(
 		&uid, &c.Name, &c.Family, &c.Given, &c.Org, &c.Title, &c.Note,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return contacts.Contact{}, false
 	}
 	if err != nil {
