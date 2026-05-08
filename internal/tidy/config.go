@@ -230,6 +230,22 @@ func validateTimeFormat(v string) error {
 	return validateEnum("time_format", v, "uppercase", "lowercase", "periods", "ignore")
 }
 
+// Validate reports whether c's string-enum fields hold legal values.
+// Returns the first violation as an error matching the LoadConfig
+// error shape.
+func Validate(c Config) error {
+	if err := validateOxfordComma(c.Rules.OxfordComma); err != nil {
+		return err
+	}
+	if err := validateEllipsis(c.Style.Ellipsis); err != nil {
+		return err
+	}
+	if err := validateTimeFormat(c.Style.TimeFormat); err != nil {
+		return err
+	}
+	return nil
+}
+
 func setBool(dst *bool, key, val string) error {
 	b, err := strconv.ParseBool(val)
 	if err != nil {

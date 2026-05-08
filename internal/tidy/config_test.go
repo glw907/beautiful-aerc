@@ -336,6 +336,31 @@ func TestResolveAPIKey(t *testing.T) {
 	})
 }
 
+func TestValidate(t *testing.T) {
+	good := DefaultConfig()
+	if err := Validate(good); err != nil {
+		t.Fatalf("Validate(default) = %v, want nil", err)
+	}
+
+	bad := DefaultConfig()
+	bad.Rules.OxfordComma = "yes"
+	if err := Validate(bad); err == nil {
+		t.Errorf("Validate(bad oxford_comma) = nil, want error")
+	}
+
+	bad = DefaultConfig()
+	bad.Style.Ellipsis = "stars"
+	if err := Validate(bad); err == nil {
+		t.Errorf("Validate(bad ellipsis) = nil, want error")
+	}
+
+	bad = DefaultConfig()
+	bad.Style.TimeFormat = "weird"
+	if err := Validate(bad); err == nil {
+		t.Errorf("Validate(bad time_format) = nil, want error")
+	}
+}
+
 func TestConfigString(t *testing.T) {
 	cfg := DefaultConfig()
 	s := ConfigString(cfg)
