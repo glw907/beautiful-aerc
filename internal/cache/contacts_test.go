@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// openWithMigrations opens (or creates) a DB at path and runs all migrations.
 func openWithMigrations(path string) (*sql.DB, error) {
 	db, err := OpenDB(path)
 	if err != nil {
@@ -21,8 +20,6 @@ func openWithMigrations(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// openAtVersion opens (or creates) a DB at path and runs migrations
-// up to schema version n.
 func openAtVersion(path string, n int) (*sql.DB, error) {
 	db, err := OpenDB(path)
 	if err != nil {
@@ -35,7 +32,6 @@ func openAtVersion(path string, n int) (*sql.DB, error) {
 	return db, nil
 }
 
-// mustExec runs a SQL statement and fatals on error.
 func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := db.Exec(query, args...); err != nil {
@@ -43,7 +39,6 @@ func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 	}
 }
 
-// mustInsertMessage inserts a row into messages and returns its id.
 func mustInsertMessage(t *testing.T, db *sql.DB, protocolID string, sentAt int64, from, to, cc string) int64 {
 	t.Helper()
 	res, err := db.Exec(

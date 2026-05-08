@@ -53,18 +53,15 @@ func (c *Client) HomeSet(ctx context.Context) (string, error) {
 	return home, nil
 }
 
-// AddressBooks lists all collections under homeSet.
 func (c *Client) AddressBooks(ctx context.Context, homeSet string) ([]carddav.AddressBook, error) {
 	return c.cl.FindAddressBooks(ctx, homeSet)
 }
 
-// SyncQuery is a typed alias so callers don't import go-webdav directly.
-type SyncQuery = carddav.SyncQuery
+type (
+	SyncQuery    = carddav.SyncQuery
+	SyncResponse = carddav.SyncResponse
+)
 
-// SyncResponse is a typed alias so callers don't import go-webdav directly.
-type SyncResponse = carddav.SyncResponse
-
-// SyncCollection runs a sync-collection REPORT against bookHref.
 func (c *Client) SyncCollection(ctx context.Context, bookHref string, q *SyncQuery) (*SyncResponse, error) {
 	return c.cl.SyncCollection(ctx, bookHref, q)
 }
@@ -121,7 +118,6 @@ func (c *Client) CTAG(ctx context.Context, bookHref string) (string, error) {
 	return "", nil
 }
 
-// Multiget fetches the named hrefs as full vCards.
 func (c *Client) Multiget(ctx context.Context, bookHref string, hrefs []string) ([]carddav.AddressObject, error) {
 	return c.cl.MultiGetAddressBook(ctx, bookHref, &carddav.AddressBookMultiGet{Paths: hrefs})
 }

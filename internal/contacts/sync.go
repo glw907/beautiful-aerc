@@ -154,8 +154,7 @@ func syncFull(ctx context.Context, c *Client, s Store, state *BookState) error {
 }
 
 // materializeChangeset converts a SyncResponse into Stored rows for
-// adds/changes and a slice of removed hrefs. Objects in r.Updated already
-// carry inline Card data; any with an empty card fall back through Multiget.
+// adds/changes and a slice of removed hrefs.
 func materializeChangeset(ctx context.Context, c *Client, bookHref string, r *SyncResponse) ([]Stored, []string, error) {
 	var added []Stored
 	var missing []string
@@ -202,8 +201,7 @@ func parseObject(obj carddav.AddressObject) (Parsed, error) {
 	return ParseVCard(&buf)
 }
 
-// ClientConfig is the runtime input to NewClient, resolved from internal/config
-// at call time so the sync engine has no config dependency.
+// ClientConfig is the runtime input to NewClient.
 type ClientConfig struct {
 	URL         string
 	Username    string

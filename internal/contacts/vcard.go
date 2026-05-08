@@ -114,7 +114,6 @@ func collectPhones(card vcard.Card) []Phone {
 	return out
 }
 
-// Params.Types() normalizes to lowercase; no ToLower needed.
 func primaryLabel(p vcard.Params) string {
 	for _, t := range p.Types() {
 		switch t {

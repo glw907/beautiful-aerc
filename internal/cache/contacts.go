@@ -171,29 +171,23 @@ func (a *Account) UpsertBook(ctx context.Context, b contacts.BookState) error {
 // ApplyChangeset writes added/updated contacts and removes deleted ones
 // atomically. token and ctag are stored only on success.
 func (a *Account) ApplyChangeset(ctx context.Context, bookHref string, added []contacts.Stored, removed []string, token, ctag string) error {
-	tx, err := a.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	for _, href := range removed {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM contacts WHERE href = ?`, href); err != nil {
-			return err
+	return a.tx(ctx, func(tx *sql.Tx) error {
+		for _, href := range removed {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM contacts WHERE href = ?`, href); err != nil {
+				return err
+			}
 		}
-	}
-	now := time.Now().Unix()
-	for _, s := range added {
-		if err := upsertContactTx(ctx, tx, bookHref, s, now); err != nil {
-			return err
+		now := time.Now().Unix()
+		for _, s := range added {
+			if err := upsertContactTx(ctx, tx, bookHref, s, now); err != nil {
+				return err
+			}
 		}
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE addressbooks SET sync_token=?, ctag=? WHERE href=?`,
-		token, ctag, bookHref); err != nil {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE addressbooks SET sync_token=?, ctag=? WHERE href=?`,
+			token, ctag, bookHref)
 		return err
-	}
-	return tx.Commit()
+	})
 }
 
 func upsertContactTx(ctx context.Context, tx *sql.Tx, bookHref string, s contacts.Stored, now int64) error {
