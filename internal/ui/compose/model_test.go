@@ -483,6 +483,48 @@ func TestComposeSignatureCycle(t *testing.T) {
 	}
 }
 
+func newComposeForTest(t *testing.T) *Model {
+	t.Helper()
+	return newTestModel(t)
+}
+
+func TestCompose_TabSkipsAttachWhenEmpty(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	c.setFocus(focusSubject)
+	c.advanceFocus(+1)
+	if c.focus != focusBody {
+		t.Errorf("Tab from Subject with no attachments: focus = %d, want focusBody=%d", c.focus, focusBody)
+	}
+}
+
+func TestCompose_AttachAcceptedAppends(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a.pdf", "/tmp/b.pdf"}})
+	d := c.CurrentDraft()
+	if len(d.Attachments) != 2 {
+		t.Fatalf("attachments len = %d, want 2", len(d.Attachments))
+	}
+	if c.attachLastDir != "/tmp" {
+		t.Errorf("attachLastDir = %q, want /tmp", c.attachLastDir)
+	}
+	if !c.localDirty {
+		t.Error("expected localDirty after AttachAcceptedMsg")
+	}
+}
+
+func TestCompose_AttachAcceptedDedupes(t *testing.T) {
+	c := newComposeForTest(t)
+	c.SetSize(80, 24)
+	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a.pdf"}})
+	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a.pdf", "/tmp/b.pdf"}})
+	d := c.CurrentDraft()
+	if len(d.Attachments) != 2 {
+		t.Errorf("dedupe failed: got %v", d.Attachments)
+	}
+}
+
 func TestComposeFromRowRendersChip(t *testing.T) {
 	c := newTestModel(t)
 	c.SetSize(80, 24)

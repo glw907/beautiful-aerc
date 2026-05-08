@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/mail"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,6 +66,11 @@ type Model struct {
 	lastEditAt    time.Time
 
 	suggest Dropdown
+
+	attach        AttachPicker
+	attachments   []string
+	attachCursor  int
+	attachLastDir string
 }
 
 type autosaveTickMsg struct{}
@@ -79,6 +86,7 @@ const (
 	focusCc
 	focusBcc
 	focusSubject
+	focusAttach
 	focusBody
 	focusFrom
 )
@@ -109,6 +117,7 @@ func newModel(styles Styles, self string, suggest SuggestFn) *Model {
 	}
 	c.editor.SetStyles(styles.CatkinStyles())
 	c.tidyFn = tidy.Tidy
+	c.attach = NewAttachPicker(styles, uicore.SimpleIcons)
 	c.to.Focus()
 	c.focus = focusTo
 	return c
@@ -188,11 +197,12 @@ func (c *Model) updateDraftCmd() tea.Cmd {
 // validation; partial input is normal during editing.
 func (c *Model) currentDraft() mailcompose.Draft {
 	return mailcompose.Draft{
-		From:      c.activeFrom(),
-		Subject:   c.subject.Value(),
-		Body:      c.editor.Value(),
-		Identity:  c.identity,
-		Signature: c.signature,
+		From:        c.activeFrom(),
+		Subject:     c.subject.Value(),
+		Body:        c.editor.Value(),
+		Identity:    c.identity,
+		Signature:   c.signature,
+		Attachments: c.attachments,
 	}
 }
 
@@ -240,6 +250,7 @@ func (c *Model) SetSize(w, h int) {
 		bodyHeight = 1
 	}
 	c.editor.SetSize(w, bodyHeight)
+	c.attach = c.attach.SetSize(w, h)
 }
 
 // View enforces the size contract: every line is exactly c.width cells
@@ -347,6 +358,29 @@ type CancelMsg struct {
 
 func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case AttachAcceptedMsg:
+		existing := make(map[string]bool, len(c.attachments))
+		for _, p := range c.attachments {
+			existing[p] = true
+		}
+		for _, p := range msg.Paths {
+			if !existing[p] {
+				c.attachments = append(c.attachments, p)
+				existing[p] = true
+			}
+		}
+		if len(msg.Paths) > 0 {
+			c.attachLastDir = filepath.Dir(msg.Paths[0])
+		}
+		c.attach = c.attach.Close()
+		c.localDirty = true
+		c.lastEditAt = time.Now()
+		return c, c.scheduleAutosaveCmd()
+
+	case AttachCancelledMsg:
+		c.attach = c.attach.Close()
+		return c, nil
+
 	case tidyResultMsg:
 		return c, c.applyTidyResult(msg)
 
@@ -397,6 +431,26 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				c.suggest, _ = c.suggest.Update(msg)
 				return c, nil
 			}
+		}
+		if c.attach.IsOpen() {
+			var cmd tea.Cmd
+			c.attach, cmd = c.attach.Update(msg)
+			return c, cmd
+		}
+		if msg.Type == tea.KeyCtrlO {
+			start := c.attachLastDir
+			if start == "" {
+				if wd, err := os.Getwd(); err == nil {
+					start = wd
+				} else if home, err := os.UserHomeDir(); err == nil {
+					start = home
+				} else {
+					start = "/"
+				}
+			}
+			var cmd tea.Cmd
+			c.attach, cmd = c.attach.Open(start)
+			return c, cmd
 		}
 		switch msg.Type {
 		case tea.KeyCtrlT:
@@ -465,6 +519,26 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		c.bcc, cmd = c.bcc.Update(msg)
 	case focusSubject:
 		c.subject, cmd = c.subject.Update(msg)
+	case focusAttach:
+		if k, ok := msg.(tea.KeyMsg); ok {
+			switch k.Type {
+			case tea.KeyLeft:
+				if c.attachCursor > 0 {
+					c.attachCursor--
+				}
+			case tea.KeyRight:
+				if c.attachCursor < len(c.attachments)-1 {
+					c.attachCursor++
+				}
+			case tea.KeyBackspace, tea.KeyDelete:
+				return c, c.removeAttachAtCursor()
+			default:
+				if k.Type == tea.KeyRunes && len(k.Runes) == 1 && k.Runes[0] == 'd' {
+					return c, c.removeAttachAtCursor()
+				}
+			}
+		}
+		return c, nil
 	case focusBody:
 		c.info = ""
 		c.editor, cmd = c.editor.Update(msg)
@@ -566,7 +640,11 @@ func isEditMsg(msg tea.Msg) bool {
 
 func (c *Model) advanceFocus(delta int) {
 	const n = focusFrom + 1
-	c.setFocus((c.focus + delta + n) % n)
+	next := (c.focus + delta + n) % n
+	for next == focusAttach && len(c.attachments) == 0 {
+		next = (next + delta + n) % n
+	}
+	c.setFocus(next)
 }
 
 func (c *Model) setFocus(target int) {
@@ -697,14 +775,15 @@ func (c *Model) Draft() (mailcompose.Draft, error) {
 	}
 	c.err = ""
 	return mailcompose.Draft{
-		From:      c.activeFrom(),
-		To:        to,
-		Cc:        cc,
-		Bcc:       bcc,
-		Subject:   c.subject.Value(),
-		Body:      c.editor.Value(),
-		Identity:  c.identity,
-		Signature: c.signature,
+		From:        c.activeFrom(),
+		To:          to,
+		Cc:          cc,
+		Bcc:         bcc,
+		Subject:     c.subject.Value(),
+		Body:        c.editor.Value(),
+		Identity:    c.identity,
+		Signature:   c.signature,
+		Attachments: c.attachments,
 	}, nil
 }
 
@@ -761,6 +840,24 @@ func (c *Model) Seed(d mailcompose.Draft) {
 	c.bcc.SetValue(joinAddresses(d.Bcc))
 	c.subject.SetValue(d.Subject)
 	c.editor.SetValue(d.Body)
+	c.attachments = d.Attachments
+	c.attachCursor = 0
+}
+
+func (c *Model) removeAttachAtCursor() tea.Cmd {
+	if c.attachCursor < 0 || c.attachCursor >= len(c.attachments) {
+		return nil
+	}
+	c.attachments = append(c.attachments[:c.attachCursor], c.attachments[c.attachCursor+1:]...)
+	c.localDirty = true
+	c.lastEditAt = time.Now()
+	if len(c.attachments) == 0 {
+		c.attachCursor = 0
+		c.setFocus(focusSubject)
+	} else if c.attachCursor >= len(c.attachments) {
+		c.attachCursor = len(c.attachments) - 1
+	}
+	return c.scheduleAutosaveCmd()
 }
 
 func parseAddrField(raw, label string) ([]gomail.Address, error) {

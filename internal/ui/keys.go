@@ -50,6 +50,7 @@ type ComposeKeys struct {
 	NextField  key.Binding
 	PrevField  key.Binding
 	EscapeBody key.Binding
+	Attach     key.Binding
 }
 
 func NewComposeKeys() ComposeKeys {
@@ -59,5 +60,6 @@ func NewComposeKeys() ComposeKeys {
 		NextField:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("⇥", "next")),
 		PrevField:  key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("⇧⇥", "prev")),
 		EscapeBody: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "focus")),
+		Attach:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("^O", "attach")),
 	}
 }
