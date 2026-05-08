@@ -72,6 +72,7 @@ func TestContactsCredentialFallback(t *testing.T) {
 [[account]]
 name         = "fm"
 provider     = "fastmail"
+email        = "me@example.com"
 password-cmd = "echo parent-secret"
 
 [account.contacts]
@@ -85,9 +86,8 @@ url = "https://carddav.fastmail.com/"
 	if c == nil {
 		t.Fatal("Contacts nil")
 	}
-	if c.Username != got[0].Email {
-		// Username falls back to parent Email (may be empty for JMAP).
-		// The important invariant: PasswordCmd was mirrored.
+	if c.Username != "me@example.com" {
+		t.Errorf("Username fallback = %q, want parent email", c.Username)
 	}
 	if c.PasswordCmd != "echo parent-secret" {
 		t.Errorf("PasswordCmd fallback = %q, want parent value", c.PasswordCmd)

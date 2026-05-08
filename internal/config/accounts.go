@@ -67,7 +67,6 @@ func (c *ContactsConfig) validate() error {
 	}
 	switch u.Scheme {
 	case "https":
-		// fine
 	case "http":
 		if !c.InsecureTLS {
 			return fmt.Errorf("contacts: url: http requires insecure-tls = true")
