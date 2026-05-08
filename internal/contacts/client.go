@@ -5,12 +5,21 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/carddav"
+)
+
+// Sentinels routed on by the drainer's conflict matrix.
+var (
+	ErrAuth               = errors.New("contacts: auth")
+	ErrNotFound           = errors.New("contacts: not found")
+	ErrPreconditionFailed = errors.New("contacts: precondition failed")
 )
 
 // Client is poplar's CardDAV face. It wraps go-webdav so the rest
@@ -120,4 +129,86 @@ func (c *Client) CTAG(ctx context.Context, bookHref string) (string, error) {
 
 func (c *Client) Multiget(ctx context.Context, bookHref string, hrefs []string) ([]carddav.AddressObject, error) {
 	return c.cl.MultiGetAddressBook(ctx, bookHref, &carddav.AddressBookMultiGet{Paths: hrefs})
+}
+
+// PutAddressObject writes body to href with optional If-Match. Returns
+// the server's chosen href (may differ from input) and the new ETag.
+// Maps 401/403 → ErrAuth, 404 → ErrNotFound, 412 → ErrPreconditionFailed.
+func (c *Client) PutAddressObject(
+	ctx context.Context, href, ifMatch string, body []byte,
+) (newHref, newETag string, err error) {
+	req, err := c.newReq(ctx, "PUT", href, bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "text/vcard; charset=utf-8")
+	if ifMatch != "" {
+		req.Header.Set("If-Match", ifMatch)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("put %s: %w", href, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	if e := mapStatus(resp.StatusCode); e != nil {
+		return "", "", fmt.Errorf("put %s: %w", href, e)
+	}
+	if resp.StatusCode/100 != 2 {
+		return "", "", fmt.Errorf("put %s: status %d", href, resp.StatusCode)
+	}
+	newHref = href
+	if loc := resp.Header.Get("Location"); loc != "" {
+		newHref = loc
+	}
+	return newHref, resp.Header.Get("ETag"), nil
+}
+
+// DeleteAddressObject removes href with optional If-Match. Maps the
+// same status codes as PutAddressObject. Caller treats ErrNotFound as
+// idempotent success.
+func (c *Client) DeleteAddressObject(ctx context.Context, href, ifMatch string) error {
+	req, err := c.newReq(ctx, "DELETE", href, nil)
+	if err != nil {
+		return err
+	}
+	if ifMatch != "" {
+		req.Header.Set("If-Match", ifMatch)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete %s: %w", href, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	if e := mapStatus(resp.StatusCode); e != nil {
+		return fmt.Errorf("delete %s: %w", href, e)
+	}
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("delete %s: status %d", href, resp.StatusCode)
+	}
+	return nil
+}
+
+// newReq resolves href against the configured base URL and builds a
+// context-bound request.
+func (c *Client) newReq(ctx context.Context, method, href string, body io.Reader) (*http.Request, error) {
+	target := href
+	if u, err := url.Parse(href); err == nil && !u.IsAbs() {
+		base, _ := url.Parse(c.base)
+		target = base.ResolveReference(u).String()
+	}
+	return http.NewRequestWithContext(ctx, method, target, body)
+}
+
+func mapStatus(code int) error {
+	switch code {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return ErrAuth
+	case http.StatusNotFound:
+		return ErrNotFound
+	case http.StatusPreconditionFailed:
+		return ErrPreconditionFailed
+	}
+	return nil
 }
