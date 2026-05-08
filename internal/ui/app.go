@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/tidy"
 	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/contacts"
@@ -33,14 +34,6 @@ import (
 type pendingEmptyConfirm struct {
 	folder string
 	source string
-}
-
-// TidyFn rewrites the markdown body before MIME assembly. The default
-// (identityTidy) is a passthrough; Pass 9i will swap in Claude Tidy.
-type TidyFn func(ctx context.Context, body string) (string, error)
-
-func identityTidy(_ context.Context, body string) (string, error) {
-	return body, nil
 }
 
 // App is the root bubbletea model.
@@ -72,7 +65,10 @@ type App struct {
 	undoSeconds     int
 	now             func() time.Time // test seam, defaults to time.Now
 	opener          URLOpener        // test seam, defaults to xdgOpenURL
-	tidy            TidyFn           // test seam, defaults to identityTidy
+
+	tidyEnabled bool
+	tidyAPIKey  string
+	tidyCfg     tidy.Config
 
 	identities      []mailcompose.Identity
 	contactsCfg     *corecontacts.ClientConfig
@@ -96,12 +92,6 @@ type App struct {
 // WithOpener replaces the URL-opener seam.
 func (m App) WithOpener(opener URLOpener) App {
 	m.opener = opener
-	return m
-}
-
-// WithTidy replaces the body-tidy seam.
-func (m App) WithTidy(fn TidyFn) App {
-	m.tidy = fn
 	return m
 }
 
@@ -133,7 +123,9 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		undoSeconds:     uiCfg.UndoSeconds,
 		now:             time.Now,
 		opener:          xdgOpenURL,
-		tidy:            identityTidy,
+		tidyEnabled:     uiCfg.Tidy.Enabled,
+		tidyAPIKey:      tidy.ResolveAPIKey(uiCfg.Tidy.Config),
+		tidyCfg:         uiCfg.Tidy.Config,
 		identities:      uicompose.IdentitiesFromConfig(identities),
 		contactsStyles:  cStyles,
 		contactsSidebar: contacts.NewSidebar(cStyles, cFixtures),
@@ -650,9 +642,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			return m, nil
 		}
 		d := msg.Draft
-		tidy := m.tidy
 		acct := m.acct.Cache()
-		cmds := []tea.Cmd{composeSendCmd(acct, sent, tidy, d, m.identities)}
+		cmds := []tea.Cmd{composeSendCmd(acct, sent, d, m.identities)}
 		if m.compose != nil && m.compose.DraftID() != "" {
 			draftID := m.compose.DraftID()
 			prevUID := mail.UID(m.compose.PrevServerUID())
@@ -684,6 +675,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 		m.compose.SetSize(w, h)
 		m.compose.SetIdentities(m.identities)
+		m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
 
@@ -694,6 +686,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses)
 		c.SetSize(w, h)
 		c.SetIdentities(m.identities)
+		c.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
 		c.SetCache(m.acct.Cache())
 		c.SetDraftTarget(row.ServerFolder, string(row.ServerUID))
 		m.compose = c
@@ -808,6 +801,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 			m.compose.SetSize(w, h)
 			m.compose.SetIdentities(m.identities)
+			m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
 			m.compose.SetCache(m.acct.Cache())
 			draftsFolder := resolveDraftsFolder(m.acct.Cache())
 			m.compose.SetDraftTarget(draftsFolder, "")

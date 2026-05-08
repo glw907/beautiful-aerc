@@ -1330,27 +1330,6 @@ func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
 	}
 }
 
-func TestApp_TidyDefaultIsIdentity(t *testing.T) {
-	app := newTestApp(t)
-	out, err := app.tidy(context.Background(), "hello\n")
-	if err != nil {
-		t.Fatalf("tidy: %v", err)
-	}
-	if out != "hello\n" {
-		t.Fatalf("want identity passthrough, got %q", out)
-	}
-}
-
-func TestApp_WithTidy_Replaces(t *testing.T) {
-	app := newTestApp(t).WithTidy(func(_ context.Context, s string) (string, error) {
-		return s + " [tidied]", nil
-	})
-	out, _ := app.tidy(context.Background(), "x")
-	if out != "x [tidied]" {
-		t.Fatalf("want WithTidy override, got %q", out)
-	}
-}
-
 func TestApp_C_OpensCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

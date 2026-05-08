@@ -247,23 +247,17 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 	}
 }
 
-// composeSendCmd runs the tidy seam, assembles MIME, and queues the
-// outbox op via cache.Account.QueueOutbound. Emits uicompose.SentMsg on
-// success, ErrorMsg on any failure.
-func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compose.Draft, ids []compose.Identity) tea.Cmd {
+// composeSendCmd assembles MIME and queues the outbox op via
+// cache.Account.QueueOutbound. Emits uicompose.SentMsg on success,
+// ErrorMsg on any failure.
+func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids []compose.Identity) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
-		body, err := tidy(ctx, d.Body)
-		if err != nil {
-			return ErrorMsg{Op: "tidy body", Err: err}
-		}
-		d.Body = body
 		mime, err := compose.AssembleMIME(d, ids, time.Now())
 		if err != nil {
 			return ErrorMsg{Op: "assemble MIME", Err: err}
 		}
 		env := envelopeFromDraft(d)
-		if err := acct.QueueOutbound(ctx, sentFolder, env, mime); err != nil {
+		if err := acct.QueueOutbound(context.Background(), sentFolder, env, mime); err != nil {
 			return ErrorMsg{Op: "queue outbound", Err: err}
 		}
 		return uicompose.SentMsg{}
