@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 9m next — CardDAV ingest, swap fixture
-suggestions for real contacts cache.
+**Current pass:** Pass 9m.1 next — CardDAV write-back: form save
+round-trip via outbox, ETag round-trip, deletion UI.
 
 ## Passes
 
@@ -15,7 +15,8 @@ suggestions for real contacts cache.
 | 9k.3 | Comment sweep — UI core; T34 demoted to voice-lens (ADR-0173) | done |
 | 9k.4 | Comment sweep — UI subpackages + catkin | done |
 | 9l | Compose autocomplete dropdown — fixture-backed To/Cc/Bcc (ADR-0174) | done |
-| 9m | CardDAV ingest — swap fixtures for real contacts cache (#34) | pending |
+| 9m | CardDAV ingest — swap fixtures for real contacts cache (ADR-0175) | done |
+| 9m.1 | CardDAV write-back — form save round-trip via outbox | pending |
 | 9n | Email signatures + multiple identities (#32) | pending |
 | 9o | Claude Tidy implementation | pending |
 | 9p | Attachments-richer compose UI (#24) | pending |
@@ -28,32 +29,31 @@ suggestions for real contacts cache.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9m)
+## Next starter prompt (Pass 9m.1)
 
-> **Goal.** Swap `contacts.FixtureSuggestions` for a real
-> CardDAV-backed contacts cache feeding the compose autocomplete
-> seam (`SuggestFn`) and the `i`-popover lookup.
+> **Goal.** Round-trip the contact-edit Form: form save → cache
+> upsert → outbox PUT → CardDAV server. Round-trip the form
+> discard via the existing outbox DiscardOp.
 >
-> **Scope.** New CardDAV ingest path (`emersion/go-webdav` +
-> `emersion/go-vcard`), per-account contacts cache schema, sync
-> command, and the cache-backed `SuggestFn` + `LookupByEmail`
-> wired into App in place of the fixture pool. Reference issue
-> #34. The `compose.Dropdown` shape is fixed (ADR-0174) — only
-> the function pointer changes.
+> **Scope.** Extend `cache.OpKind` with `KindContactPut` and
+> `KindContactDelete`; outbox payload carries vCard bytes for
+> these kinds. Drainer dispatches via the CardDAV client added in
+> 9m. Form's "Save to" cycler now affects the destination address
+> book (uses `contacts.AddressBook` value type).
 >
-> **Settled.** ADR-0174 locks the dropdown contract; only the
-> `SuggestFn` pointer changes. Phone validation upgrade and vCard
-> ingest of saved-form contacts ride along.
+> **Settled.** Storage shape (vCard blob + projection columns) is
+> 9m's; no schema migration. Default-addressbook config pin
+> already implemented. Conflict matrix (auth/not-found/transient)
+> mirrors mail outbox semantics. Phone validation already in
+> place via `phonenumbers.Parse`.
 >
-> **Still open — brainstorm:** schema (separate `contacts.db` vs.
-> tables in the per-account cache); sync model (full pull vs.
-> CTAG/ETag incremental); ranking with real data (recency /
-> frequency, 7-row cap re-evaluated); save destination when
-> multiple address books exist.
+> **Still open — brainstorm:** vCard regeneration on edit (fully
+> rebuild from projection vs. patch the stored blob); ETag
+> round-trip across local edits; deletion UI in the Form.
 >
 > **Approach.** Brainstorm, write
-> `docs/superpowers/plans/YYYY-MM-DD-carddav-ingest.md`, implement.
-> Standard pass-end ritual via `poplar-pass`.
+> `docs/superpowers/plans/YYYY-MM-DD-carddav-writeback.md`,
+> implement. Standard pass-end ritual via `poplar-pass`.
 
 ## Queued
 

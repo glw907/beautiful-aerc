@@ -214,6 +214,15 @@ the ADR(s) that justify them.
   SMTP differs from IMAP. JMAP accounts ignore `[account.smtp]`
   (submission rides the JMAP session). Validation requires
   `smtp.host` for `provider = "imap"` after preset resolution.
+- `[account.contacts]` is an optional TOML sub-table for CardDAV
+  ingest (URL, username, password / password-cmd,
+  default-addressbook, refresh-interval, insecure-tls). Credentials
+  fall back to the parent `[[account]]` block when unset. URL must
+  be https (or http with insecure-tls = true); refresh-interval
+  ≥ 1m, default 15m. Password resolves via the shared
+  `resolvePasswordCmd` helper at constructor time; on failure the
+  account silently skips contact sync. Absent block → nil
+  `Contacts` pointer → no sync. ADR-0175.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
@@ -259,8 +268,10 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   is a value-type sub-model on `compose.Model` for To/Cc/Bcc
   autocomplete; the `SuggestFn func(prefix string) []contacts.Suggestion`
   seam threads through `compose.New` / `compose.Open` and is wired
-  to `contacts.FixtureSuggestions` in App. 9m swaps the function
-  pointer for the cache-backed query. The dropdown renders only
+  to `App.suggestAddresses` (which delegates to
+  `cache.Account.SuggestAddresses` — the recency-decayed query over
+  `message_recipients` joined to the carded pool, capped at 7 rows).
+  The dropdown renders only
   when focus is To/Cc/Bcc and the trailing fragment (text after
   the last comma, leading whitespace trimmed) has ≥ 2 chars and
   the seam returns rows. Up/Down wrap; Tab/Enter accept (rewrite
@@ -270,12 +281,19 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
 
 ### Address book
 
-- `internal/ui/contacts/` is the address-book UI surface: value
-  types (`Contact`/`Email`/`Phone`/`Suggestion`/`Kind`), fixture
-  pool + `LookupByEmail`, per-package `Styles`, pure
-  `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form`
-  sub-models. 9.1a/9.1b run on fixtures; 9.1c autocomplete; 9.2
-  swaps for CardDAV. `i` opens the popover via
+- `internal/contacts/` is the UI-free contacts surface: value
+  types (`Contact`/`Email`/`Phone`/`Suggestion`/`Kind`/`AddressBook`),
+  the CardDAV `Client` (wraps `emersion/go-webdav/carddav` for
+  discovery, multiget, sync-collection, CTAG via raw PROPFIND), the
+  vCard parser (`emersion/go-vcard`), and the `Sync` orchestrator
+  with its `Store` seam (`internal/cache` implements). `ClientConfig`
+  is the runtime input to `NewClient`. `internal/ui/contacts/` is
+  the address-book UI surface: per-package `Styles`, pure
+  `RenderDetailCard`, fixture pool kept for the Contacts-mode
+  browse list, and `Popover`/`Sidebar`/`List`/`Form` sub-models.
+  Compose autocomplete and the `i`-popover read from
+  `cache.Account.SuggestAddresses` / `LookupContact`; the fixture
+  pool is gone from those paths. `i` opens the popover via
   `parseSender`↔`content.ParseAddressList`; `C`/`M` toggle Contacts
   mode (Sidebar T9 groups `ABC`…`WXYZ` with `J/K` group + `a`–`z`
   letter + `┃` tick | List `bubbles/viewport`, `n`/`e` emit

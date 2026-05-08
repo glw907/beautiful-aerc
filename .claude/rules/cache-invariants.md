@@ -41,7 +41,25 @@ each fact back to its ADR(s).
   pointer at the server-side image, `server_folder`, `payload`
   BLOB holding the gob-encoded `compose.Draft`, `dirty`,
   `created_at`, `updated_at`, `last_pushed_at`) plus a partial
-  index `drafts_by_server_uid` on non-null `server_uid`.
+  index `drafts_by_server_uid` on non-null `server_uid`. v8 adds
+  the contacts cache: `addressbooks` (href PK + display_name +
+  sync_token + ctag + supports_sync + last_synced_at), `contacts`
+  (uid PK, vCard blob + projection columns, FK addressbook_href
+  ON DELETE CASCADE), `contact_emails` and `contact_phones`
+  (FK contact_uid ON DELETE CASCADE, label, pref order, NOCASE
+  index on email address), and `message_recipients` (message_uid,
+  role IN ('from','to','cc'), address, name, sent_at; PK
+  (message_uid, role, address); NOCASE+sent_at-DESC index for the
+  ranking query). Migration backfills `message_recipients` from
+  existing `messages` rows in the same transaction.
+- The contacts ingest path lives in `internal/contacts/` (Client
+  + Sync + Store seam); `cache.Account` implements `contacts.Store`
+  (`Books`/`UpsertBook`/`ApplyChangeset`) and adds
+  `SuggestAddresses(ctx, prefix)` (recency-decayed score over
+  `message_recipients` joined to the carded pool, LIMIT 7) and
+  `LookupContact(ctx, address)` (uid-keyed child rows). Per-message
+  `writeRecipientsTx` runs inside the upsert transaction in
+  `reads.go` so `message_recipients` stays current.
 - `mail.ChangeTracker` is the protocol-level change-detection
   sibling of `mail.Backend`; both v1 backends implement it. On a
   nil SyncToken both run an initial baseline pull. JMAP pages
