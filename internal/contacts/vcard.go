@@ -69,12 +69,11 @@ func mapContact(card vcard.Card) Contact {
 type sortedField struct {
 	value string
 	label string
-	pref  int // 1..100; math.MaxInt when unset (sorts last)
+	pref  int
 }
 
-// fieldsSorted pulls a multi-valued field, normalizes PREF
-// (4.0 numeric PREF=N, lower wins; 3.0 TYPE=PREF → 1), and
-// returns rows sorted ascending so the primary lands at index 0.
+// fieldsSorted returns fields sorted by PREF ascending. vCard 3.0
+// TYPE=PREF maps to PREF=1; missing PREF sorts last.
 func fieldsSorted(card vcard.Card, key string) []sortedField {
 	var out []sortedField
 	for _, f := range card[key] {
@@ -115,8 +114,7 @@ func collectPhones(card vcard.Card) []Phone {
 	return out
 }
 
-// primaryLabel picks the first recognizable type label from the
-// TYPE parameter. Params.Types() returns lowercase values.
+// Params.Types() normalizes to lowercase; no ToLower needed.
 func primaryLabel(p vcard.Params) string {
 	for _, t := range p.Types() {
 		switch t {
