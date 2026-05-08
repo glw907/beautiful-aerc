@@ -1,9 +1,11 @@
 package cache
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // openWithMigrations opens (or creates) a DB at path and runs all migrations.
@@ -31,6 +33,92 @@ func openAtVersion(path string, n int) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// mustExec runs a SQL statement and fatals on error.
+func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
+	t.Helper()
+	if _, err := db.Exec(query, args...); err != nil {
+		t.Fatalf("mustExec %q: %v", query, err)
+	}
+}
+
+// mustInsertMessage inserts a row into messages and returns its id.
+func mustInsertMessage(t *testing.T, db *sql.DB, protocolID string, sentAt int64, from, to, cc string) int64 {
+	t.Helper()
+	res, err := db.Exec(
+		`INSERT INTO messages(protocol_id, sent_at, from_addr, to_addr, cc_addr) VALUES (?, ?, ?, ?, ?)`,
+		protocolID, sentAt, from, to, cc,
+	)
+	if err != nil {
+		t.Fatalf("insert message %q: %v", protocolID, err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id: %v", err)
+	}
+	return id
+}
+
+func TestSuggestAddresses_RecencyDecay(t *testing.T) {
+	acct := openTestAccount(t)
+
+	now := time.Now().Unix()
+	d30 := now - 30*86400
+
+	id1 := mustInsertMessage(t, acct.db, "1", d30, "", "alice@x", "")
+	id2 := mustInsertMessage(t, acct.db, "2", d30, "", "alice@x", "")
+	id3 := mustInsertMessage(t, acct.db, "3", now, "", "bob@x", "")
+
+	mustExec(t, acct.db, `INSERT INTO message_recipients(message_uid, role, address, sent_at) VALUES (?, 'to', 'alice@x', ?)`, id1, d30)
+	mustExec(t, acct.db, `INSERT INTO message_recipients(message_uid, role, address, sent_at) VALUES (?, 'to', 'alice@x', ?)`, id2, d30)
+	mustExec(t, acct.db, `INSERT INTO message_recipients(message_uid, role, address, sent_at) VALUES (?, 'to', 'bob@x', ?)`, id3, now)
+
+	got, err := acct.SuggestAddresses(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) < 2 {
+		t.Fatalf("got %d suggestions; want ≥ 2", len(got))
+	}
+	if got[0].Email != "bob@x" {
+		t.Errorf("recency-weighted top = %q; want bob@x", got[0].Email)
+	}
+}
+
+func TestSuggestAddresses_PrefixFilter(t *testing.T) {
+	acct := openTestAccount(t)
+	now := time.Now().Unix()
+
+	id := mustInsertMessage(t, acct.db, "1", now, "", "alice@x", "")
+	mustExec(t, acct.db, `INSERT INTO message_recipients(message_uid, role, address, sent_at) VALUES (?, 'to', 'alice@x', ?)`, id, now)
+
+	got, _ := acct.SuggestAddresses(context.Background(), "ali")
+	if len(got) != 1 || got[0].Email != "alice@x" {
+		t.Errorf("prefix=ali → %+v", got)
+	}
+	got, _ = acct.SuggestAddresses(context.Background(), "zzz")
+	if len(got) != 0 {
+		t.Errorf("prefix=zzz → %+v", got)
+	}
+}
+
+func TestLookupContact_HitMiss(t *testing.T) {
+	acct := openTestAccount(t)
+	mustExec(t, acct.db, `INSERT INTO addressbooks(href, display_name) VALUES ('/b/', 'Default')`)
+	mustExec(t, acct.db,
+		`INSERT INTO contacts(uid, addressbook_href, href, etag, vcard, fn, last_synced_at) VALUES ('u1', '/b/', '/b/u1', 'e1', '', 'Alice', ?)`,
+		time.Now().Unix())
+	mustExec(t, acct.db, `INSERT INTO contact_emails(contact_uid, address) VALUES ('u1', 'alice@x')`)
+
+	c, ok := acct.LookupContact(context.Background(), "alice@x")
+	if !ok || c.Name != "Alice" {
+		t.Errorf("hit: ok=%v c=%+v", ok, c)
+	}
+	_, ok = acct.LookupContact(context.Background(), "nobody@x")
+	if ok {
+		t.Error("miss should return ok=false")
+	}
 }
 
 func TestMigrateV8_TablesExist(t *testing.T) {

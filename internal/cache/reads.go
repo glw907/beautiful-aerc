@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	gomail "net/mail"
 	"strings"
 	"time"
 
@@ -330,6 +331,9 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 					return err
 				}
 			}
+			if err := writeRecipientsTx(ctx, tx, id, &m); err != nil {
+				return fmt.Errorf("write recipients %s: %w", m.UID, err)
+			}
 			if folder != "" {
 				if _, err := tx.Exec(`INSERT OR IGNORE INTO message_mailboxes (message, folder) VALUES (?, ?)`, id, folderID); err != nil {
 					return fmt.Errorf("link message %s ↔ folder: %w", m.UID, err)
@@ -338,6 +342,38 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 		}
 		return nil
 	})
+}
+
+func writeRecipientsTx(ctx context.Context, tx *sql.Tx, msgID int64, m *mail.MessageInfo) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM message_recipients WHERE message_uid = ?`, msgID); err != nil {
+		return err
+	}
+	sentAt := m.SentAt.Unix()
+	for _, role := range []struct {
+		name string
+		raw  string
+	}{
+		{"from", m.From},
+		{"to", m.To},
+		{"cc", m.Cc},
+	} {
+		if role.raw == "" {
+			continue
+		}
+		addrs, err := gomail.ParseAddressList(role.raw)
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			_, err := tx.ExecContext(ctx,
+				`INSERT OR IGNORE INTO message_recipients(message_uid, role, address, name, sent_at) VALUES (?, ?, ?, ?, ?)`,
+				msgID, role.name, strings.ToLower(addr.Address), addr.Name, sentAt)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // sqlPlaceholders returns "?,?,...,?" with n question marks.
