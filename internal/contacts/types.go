@@ -16,11 +16,11 @@ const (
 // and are not part of this projection.
 type Contact struct {
 	Kind   Kind
-	Name   string
-	Family string
-	Given  string
-	Org    string
-	Title  string
+	Name   string // FN. For KindOrg this is the entire visible identity.
+	Family string // empty for KindOrg
+	Given  string // empty for KindOrg
+	Org    string // empty for KindOrg
+	Title  string // empty for KindOrg
 	Note   string
 	Emails []Email
 	Phones []Phone
@@ -30,21 +30,22 @@ type Contact struct {
 // primary; the form reorders the slice on change.
 type Email struct {
 	Address string
-	Label   string
+	Label   string // "work", "home", or "" for unlabeled
 }
 
 // Phone pairs a number with an optional label. Stored as the user
 // typed it; phonenumbers parsing only validates.
 type Phone struct {
 	E164  string
-	Label string
+	Label string // "mobile", "work", "home", "fax", or ""
 }
 
-// Suggestion is one row in the compose autocomplete dropdown.
+// Suggestion is one row in the compose autocomplete dropdown: one row
+// per (contact, email) pair, with the org annotation flattened in.
 type Suggestion struct {
-	Name  string
+	Name  string // person FN or org name
 	Email string
-	Org   string
+	Org   string // dim suffix. Empty when Kind == KindOrg or Org unset.
 	IsOrg bool
 }
 
