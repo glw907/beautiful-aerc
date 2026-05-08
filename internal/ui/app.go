@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
+	corecontacts "github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -72,6 +73,9 @@ type App struct {
 	opener          URLOpener        // test seam, defaults to xdgOpenURL
 	tidy            TidyFn           // test seam, defaults to identityTidy
 
+	contactsCfg     *corecontacts.ClientConfig
+	contactsRefresh time.Duration
+
 	theme              *theme.CompiledTheme
 	compose            *uicompose.Model
 	pendingComposeSave bool // Save? modal is open for a dirty compose
@@ -100,14 +104,14 @@ func (m App) WithTidy(fn TidyFn) App {
 
 // NewApp creates the root model. Folder loading runs in Init's Cmd chain,
 // not synchronously.
-func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) App {
+func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, contactsCfg *config.ContactsConfig) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
 
 	cStyles := contacts.NewStyles(t)
 	cFixtures := contacts.Fixtures()
-	return App{
+	app := App{
 		acct:            account.New(t, acct, uiCfg, icons),
 		icons:           icons,
 		styles:          styles,
@@ -131,12 +135,43 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		contactsSidebar: contacts.NewSidebar(cStyles, cFixtures),
 		contactsList:    contacts.NewList(cStyles, cFixtures, contacts.SortFirstName),
 	}
+	if contactsCfg != nil {
+		pw, err := contactsCfg.ResolvePassword()
+		if err == nil {
+			app.contactsCfg = &corecontacts.ClientConfig{
+				URL:         contactsCfg.URL,
+				Username:    contactsCfg.Username,
+				Password:    pw,
+				InsecureTLS: contactsCfg.InsecureTLS,
+			}
+			app.contactsRefresh = contactsCfg.RefreshInterval
+		}
+	}
+	return app
+}
+
+// suggestAddresses adapts cache.Account.SuggestAddresses to the SuggestFn
+// signature compose expects (synchronous, returns rows only). Errors degrade
+// silently; autocomplete is best-effort, not a blocking I/O surface.
+func (m *App) suggestAddresses(prefix string) []contacts.Suggestion {
+	out, err := m.acct.Cache().SuggestAddresses(context.Background(), prefix)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // Init kicks off the account tab's initial folder fetch and starts the
 // backend update pump.
 func (m App) Init() tea.Cmd {
-	return tea.Batch(m.acct.Init(), pumpUpdatesCmd(m.acct.Backend()))
+	cmds := []tea.Cmd{m.acct.Init(), pumpUpdatesCmd(m.acct.Backend())}
+	if m.contactsCfg != nil {
+		cmds = append(cmds,
+			syncContactsCmd(m.acct.Cache(), m.contactsCfg),
+			scheduleSyncCmd(m.contactsRefresh),
+		)
+	}
+	return tea.Batch(cmds...)
 }
 
 // deriveChromeFromAcct re-reads AccountTab state into the App-owned
@@ -244,7 +279,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case contacts.OpenPopoverMsg:
 		p := contacts.NewPopover(m.contactsStyles)
 		p.SetSize(m.width, m.height)
-		match, found := contacts.LookupByEmail(contacts.Fixtures(), msg.Email)
+		match, found := m.acct.Cache().LookupContact(context.Background(), msg.Email)
 		p.SetMatch(msg.DisplayName, msg.Email, match, found)
 		m.popover = &p
 		return m, nil
@@ -608,7 +643,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case uicompose.SeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), contacts.FixtureSuggestions)
+		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 		m.compose.SetSize(w, h)
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
@@ -617,7 +652,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Drafts-folder Enter: wire cache/target, then open compose.
 		w, h := m.rightPaneSize()
 		row := msg.row
-		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, contacts.FixtureSuggestions)
+		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses)
 		c.SetSize(w, h)
 		c.SetCache(m.acct.Cache())
 		c.SetDraftTarget(row.ServerFolder, string(row.ServerUID))
@@ -640,6 +675,18 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			Body:  "[y] Save and close   [n] Discard   [Esc] Keep editing",
 		})
 		m.pendingComposeSave = true
+		return m, nil
+
+	case contactsTickMsg:
+		if m.contactsCfg == nil {
+			return m, nil
+		}
+		return m, tea.Batch(
+			syncContactsCmd(m.acct.Cache(), m.contactsCfg),
+			scheduleSyncCmd(m.contactsRefresh),
+		)
+
+	case contactsSyncedMsg:
 		return m, nil
 
 	case tea.KeyMsg:
@@ -718,7 +765,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
-			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), contacts.FixtureSuggestions)
+			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 			m.compose.SetSize(w, h)
 			m.compose.SetCache(m.acct.Cache())
 			draftsFolder := resolveDraftsFolder(m.acct.Cache())

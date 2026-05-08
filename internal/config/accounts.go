@@ -103,6 +103,10 @@ func (s *SMTPConfig) ResolvePassword() (string, error) {
 	return resolvePasswordCmd(s.Password, s.PasswordCmd, "smtp password-cmd")
 }
 
+func (c *ContactsConfig) ResolvePassword() (string, error) {
+	return resolvePasswordCmd(c.Password, c.PasswordCmd, "contacts password-cmd")
+}
+
 // AccountConfig holds the configuration for a single email account.
 type AccountConfig struct {
 	Name           string

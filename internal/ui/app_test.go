@@ -47,7 +47,7 @@ func newLoadedApp(t *testing.T, width, height int) App {
 func newLoadedAppWithIcons(t *testing.T, width, height int, icons uicore.IconSet) App {
 	t.Helper()
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), icons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), icons, nil)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	drainApp(t, &app, app.Init())
 	return app
@@ -118,7 +118,7 @@ func TestApp(t *testing.T) {
 	backend := mail.NewMockBackend()
 
 	t.Run("quit on q", func(t *testing.T) {
-		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 		app.width = 80
 		app.height = 24
 		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -132,7 +132,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("quit on ctrl+c", func(t *testing.T) {
-		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 		app.width = 80
 		app.height = 24
 		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -142,7 +142,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("window size stored", func(t *testing.T) {
-		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 		app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		if app.width != 120 || app.height != 40 {
 			t.Errorf("size = %dx%d, want 120x40", app.width, app.height)
@@ -189,7 +189,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("content height (chrome subtracted)", func(t *testing.T) {
-		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 		app.width = 80
 		app.height = 24
 		if app.contentHeight() != 21 {
@@ -222,7 +222,7 @@ func TestApp(t *testing.T) {
 	})
 
 	t.Run("footer starts in account context", func(t *testing.T) {
-		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 		if app.footer.context != AccountContext {
 			t.Errorf("footer context = %d, want AccountContext", app.footer.context)
 		}
@@ -554,7 +554,7 @@ func TestApp_BannerShrinksContentByOneRow(t *testing.T) {
 
 func TestApp_InitialConnStateIsOffline(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	if got := app.statusBar.ConnectionState(); got != Offline {
 		t.Errorf("initial connState = %v, want Offline", got)
 	}
@@ -573,7 +573,7 @@ func TestApp_BackendUpdateConnState(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			backend := mail.NewMockBackend()
-			app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+			app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 			msg := backendUpdateMsg{update: mail.Update{
 				Type:      mail.UpdateConnState,
 				ConnState: tc.connState,
@@ -590,7 +590,7 @@ func TestApp_BackendUpdateClosedChannelGoesOffline(t *testing.T) {
 	// Simulate the closed-channel case: pumpUpdatesCmd delivers a
 	// backendUpdateMsg with ConnState=ConnOffline.
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	// Force to Connected first so we can confirm the transition.
 	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
 		Type:      mail.UpdateConnState,
@@ -614,7 +614,7 @@ func TestApp_BackendUpdateReArmspump(t *testing.T) {
 	// (the re-armed pump). We can't execute it without blocking, but
 	// we confirm the Cmd is present.
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	msg := backendUpdateMsg{update: mail.Update{
 		Type:      mail.UpdateConnState,
 		ConnState: mail.ConnConnected,
@@ -676,7 +676,7 @@ func TestApp_ToastLifecycle(t *testing.T) {
 
 	newApp := func() App {
 		backend := mail.NewMockBackend()
-		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 		app.now = func() time.Time { return frozen }
 		return app
 	}
@@ -1023,7 +1023,7 @@ func TestApp_ConfirmEscClosesWithoutEmit(t *testing.T) {
 
 func TestApp_OfflineBannerWithQueuedOps(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	app.lastOutboxDepth = cache.OutboxDepth{Pending: 2}
 
 	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
@@ -1040,7 +1040,7 @@ func TestApp_OfflineBannerWithQueuedOps(t *testing.T) {
 
 func TestApp_OfflineNoBannerWhenOutboxEmpty(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 
 	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
 		Type:      mail.UpdateConnState,
@@ -1056,7 +1056,7 @@ func TestApp_OfflineNoBannerWhenOutboxEmpty(t *testing.T) {
 
 func TestApp_ConnectedClearsOfflineHinted(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	app.offlineHinted = true
 
 	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
@@ -1136,7 +1136,7 @@ func TestApp_ConflictResolvedRefreshes(t *testing.T) {
 
 func TestApp_OfflineBannerLatchedOncePerOfflineEpisode(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	app.lastOutboxDepth = cache.OutboxDepth{Pending: 1}
 
 	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
@@ -1157,7 +1157,7 @@ func TestApp_OfflineBannerLatchedOncePerOfflineEpisode(t *testing.T) {
 
 func TestApp_OpenAttachPickerMsg_OpensOverlay(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	app2, _ := app.Update(reader.OpenAttachPickerMsg{
 		UID:   "u1",
 		Items: []mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}},
@@ -1169,7 +1169,7 @@ func TestApp_OpenAttachPickerMsg_OpensOverlay(t *testing.T) {
 
 func TestApp_SaveAttachmentMsg_DispatchesCmd(t *testing.T) {
 	backend := mail.NewMockBackend()
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	_, cmd := app.Update(reader.SaveAttachmentMsg{
 		UID: "u1",
 		Att: mail.Attachment{PartID: "2", Filename: "x.pdf", Size: 1},
@@ -1182,7 +1182,7 @@ func TestApp_SaveAttachmentMsg_DispatchesCmd(t *testing.T) {
 func newTestApp(t *testing.T) App {
 	t.Helper()
 	backend := mail.NewMockBackend()
-	return NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	return NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 }
 
 // newJMAPTestApp is like newTestApp but with IsJMAP() = true.
@@ -1190,7 +1190,7 @@ func newJMAPTestApp(t *testing.T) (App, *mail.MockBackend) {
 	t.Helper()
 	backend := mail.NewMockBackend()
 	backend.SetJMAP(true)
-	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil)
 	return app, backend
 }
 
@@ -1248,7 +1248,7 @@ func newTestAppWithoutSentFolder(t *testing.T) App {
 	t.Helper()
 	backend := &noSentBackend{blockingBackend: blockingBackend{release: make(chan struct{})}}
 	acct := newTestCache(t, backend)
-	return NewApp(theme.Nord, acct, config.DefaultUIConfig(), uicore.FancyIcons)
+	return NewApp(theme.Nord, acct, config.DefaultUIConfig(), uicore.FancyIcons, nil)
 }
 
 func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {

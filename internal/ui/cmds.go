@@ -16,6 +16,7 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/compose"
+	corecontacts "github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/mail"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/reader"
@@ -426,6 +427,25 @@ func openLocalDraftCmd(acct *cache.Account, draftID string) tea.Cmd {
 			draft: d,
 		}
 	}
+}
+
+type contactsSyncedMsg struct{}
+type contactsTickMsg struct{}
+
+// syncContactsCmd runs one CardDAV sync pass. Errors surface through the
+// standard ErrorMsg banner.
+func syncContactsCmd(acct *cache.Account, cfg *corecontacts.ClientConfig) tea.Cmd {
+	return func() tea.Msg {
+		if err := acct.SyncContacts(context.Background(), cfg); err != nil {
+			return ErrorMsg{Op: "sync contacts", Err: err}
+		}
+		return contactsSyncedMsg{}
+	}
+}
+
+// scheduleSyncCmd fires another sync after d elapses.
+func scheduleSyncCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return contactsTickMsg{} })
 }
 
 // resolveSentFolder picks the Sent folder for outbound mail from the
