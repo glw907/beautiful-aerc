@@ -23,3 +23,12 @@ type EnqueuePushDraftMsg struct {
 type DraftPersistedMsg struct {
 	DraftID string
 }
+
+// AttachAcceptedMsg fires when the user accepts a selection in
+// AttachPicker. Paths are absolute. Caller is responsible for
+// dedupe against the current Draft.Attachments.
+type AttachAcceptedMsg struct{ Paths []string }
+
+// AttachCancelledMsg fires when the user dismisses AttachPicker
+// without selecting.
+type AttachCancelledMsg struct{}
