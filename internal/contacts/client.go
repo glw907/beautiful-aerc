@@ -69,9 +69,9 @@ func (c *Client) SyncCollection(ctx context.Context, bookHref string, q *SyncQue
 	return c.cl.SyncCollection(ctx, bookHref, q)
 }
 
-// PropfindCTAG fetches the cs:getctag value for bookHref via a depth-0
+// CTAG fetches the cs:getctag value for bookHref via a depth-0
 // PROPFIND. Returns "" when the server does not advertise the property.
-func (c *Client) PropfindCTAG(ctx context.Context, bookHref string) (string, error) {
+func (c *Client) CTAG(ctx context.Context, bookHref string) (string, error) {
 	const ctagNS = "http://calendarserver.org/ns/"
 	body := `<?xml version="1.0" encoding="utf-8"?>` +
 		`<D:propfind xmlns:D="DAV:" xmlns:CS="http://calendarserver.org/ns/">` +
