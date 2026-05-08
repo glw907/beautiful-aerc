@@ -13,7 +13,7 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// Styles holds the subset of UI styles the move picker needs.
+// Styles is the move picker's projection of internal/ui.Styles.
 type Styles struct {
 	Dim    lipgloss.Style
 	Cursor lipgloss.Style
@@ -26,27 +26,19 @@ type OpenMsg struct {
 	Folders []mail.FolderEntry
 }
 
-// PickedMsg is emitted when the user selects a destination folder.
+// PickedMsg fires when the user selects a destination folder.
 type PickedMsg struct {
 	UIDs []mail.UID
 	Src  string
 	Dest string
 }
 
-// ClosedMsg is emitted when the picker is dismissed without a pick.
+// ClosedMsg fires when the picker is dismissed without a pick.
 type ClosedMsg struct{}
 
-// modelCache holds the memoised list-row slice and the inputs that
-// determine when it must be rebuilt.
-//
-// Pre-beta escape hatch: Model is an immutable value type, so a cache
-// that lives in the value would be lost on every With*/Open/Update return.
-// Rather than switching to pointer receivers (which would break the Elm
-// immutable-model contract), we heap-allocate one small cache struct at
-// construction time and access it through a pointer. The pointer itself is
-// copied with the value, so every generation of the picker shares the same
-// cache. A deliberate choice: they all render the same logical state, and
-// the dirty flag ensures stale renders are never served.
+// modelCache memoises the list-row slice. Heap-allocated so the pointer
+// survives the value-type model's copy-on-mutation contract; ADR-0130
+// covers the escape hatch.
 type modelCache struct {
 	dirty       bool
 	rows        []string
@@ -55,7 +47,7 @@ type modelCache struct {
 }
 
 // Model is the modal overlay launched by `m` from the account view.
-// App owns open state and overlay composition (mirrors LinkPicker, ADR-0087).
+// App owns open state and overlay composition (ADR-0087).
 type Model struct {
 	shell   uicore.ModalShell
 	uids    []mail.UID
@@ -67,7 +59,7 @@ type Model struct {
 	offset  int
 	styles  Styles
 	keys    modelKeys
-	cache   *modelCache // heap-allocated, shared across value copies
+	cache   *modelCache
 }
 
 type modelKeys struct {
@@ -76,12 +68,10 @@ type modelKeys struct {
 	Pick      key.Binding
 	Close     key.Binding
 	Backspace key.Binding
-	// Swallow consumes 'q' so the picker doesn't quit the app while
-	// open, consistent with the other overlay surfaces.
+	// Swallow consumes 'q' so the picker doesn't quit while open.
 	Swallow key.Binding
 }
 
-// New constructs a closed Model with the given styles.
 func New(styles Styles) Model {
 	return Model{
 		styles: styles,
@@ -97,10 +87,9 @@ func New(styles Styles) Model {
 	}
 }
 
-// IsOpen reports whether the overlay is visible.
 func (p Model) IsOpen() bool { return p.shell.IsOpen() }
 
-// Open snapshots the targets and folder list. Source folder is
+// Open snapshots the targets and folder list. The source folder is
 // excluded so the picker never offers a no-op move-to-self.
 func (p Model) Open(uids []mail.UID, src string, folders []mail.FolderEntry) Model {
 	p.shell = p.shell.WithOpen(true)
@@ -120,20 +109,18 @@ func (p Model) Open(uids []mail.UID, src string, folders []mail.FolderEntry) Mod
 	return p
 }
 
-// Close marks the overlay closed.
 func (p Model) Close() Model {
 	p.shell = p.shell.WithOpen(false)
 	return p
 }
 
-// SetSize updates the terminal dimensions.
 func (p Model) SetSize(width, height int) Model {
 	p.shell = p.shell.SetSize(width, height)
 	return p
 }
 
-// visibleRows is the list-row capacity at the given total box height.
-// Reserves rows for top + bottom border + filter line + preview lines + slack.
+// visibleRows is the list-row capacity at total height. The 7-row reserve
+// covers top + bottom border, the filter line, the preview rows, and slack.
 func visibleRows(height int) int {
 	rows := height - 7
 	if rows < 1 {
@@ -142,8 +129,7 @@ func visibleRows(height int) int {
 	return rows
 }
 
-// clampOffset adjusts p.offset so p.cursor lies within the visible window.
-// Called after every cursor move.
+// clampOffset adjusts p.offset so p.cursor lies inside the visible window.
 func (p Model) clampOffset() Model {
 	p.offset = uicore.ClampScrollOffset(p.cursor, visibleRows(p.shell.Height()), p.offset)
 	return p
@@ -166,7 +152,6 @@ func (p Model) recompute() Model {
 	return p
 }
 
-// Update handles key input for the overlay.
 func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !p.shell.IsOpen() {
 		return p, nil
@@ -234,7 +219,6 @@ const (
 	minWidth = 24
 )
 
-// View renders the overlay or returns "" when closed.
 func (p Model) View() string {
 	if !p.shell.IsOpen() {
 		return ""
@@ -242,7 +226,7 @@ func (p Model) View() string {
 	return p.Box(p.shell.Width(), p.shell.Height())
 }
 
-// Box renders the picker at the given dimensions regardless of open state.
+// Box renders the picker at the given dims regardless of open state.
 func (p Model) Box(w, h int) string {
 	boxW := maxWidth
 	if w-4 < boxW {
@@ -255,9 +239,8 @@ func (p Model) Box(w, h int) string {
 
 	maxListRows := visibleRows(h)
 
-	// Serve from cache when the rendered inputs are unchanged.
-	// Dimension change (contentW, maxListRows) counts as dirty even if the
-	// flag is clear. SetSize doesn't need to touch the flag.
+	// A dimension change counts as dirty even if the flag is clear, so
+	// SetSize doesn't need to touch it.
 	c := p.cache
 	if c.dirty || c.contentW != contentW || c.visibleRows != maxListRows {
 		allRows := p.buildListRows(contentW)
@@ -323,7 +306,6 @@ func (p Model) buildListRows(contentW int) []string {
 	return rows
 }
 
-// Position returns the top-left coordinates to center this overlay.
 func (p Model) Position(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
 }
