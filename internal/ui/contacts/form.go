@@ -139,7 +139,8 @@ func labelIndex(labels []string, want string) int {
 	return len(labels) - 1
 }
 
-func (f Form) FromPopover() bool { return f.fromPopover }
+func (f Form) FromPopover() bool   { return f.fromPopover }
+func (f Form) ExistingUID() string { return f.existingUID }
 
 // WithExistingUID marks the form as editing an existing contact.
 // Empty UID means "new contact" and disables the Delete key.

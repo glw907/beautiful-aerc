@@ -13,11 +13,13 @@ type EnterContactsModeMsg struct{}
 
 type ExitContactsModeMsg struct{}
 
-// OpenFormMsg asks App to open the contact edit form. FromPopover is set
-// when launched from the i-popover's 'n' binding; the caller dismisses
-// the popover before mounting the form.
+// OpenFormMsg asks App to open the contact edit form. UID is non-empty when
+// editing an existing contact; empty means new. FromPopover is set when
+// launched from the i-popover; the caller dismisses the popover before
+// mounting the form.
 type OpenFormMsg struct {
 	Initial     Contact
+	UID         string
 	FromPopover bool
 }
 

@@ -76,18 +76,19 @@ type App struct {
 	contactsCfg     *corecontacts.ClientConfig
 	contactsRefresh time.Duration
 
-	theme              *theme.CompiledTheme
-	compose            *uicompose.Model
-	pendingComposeSave bool // Save? modal is open for a dirty compose
-	popover            *contacts.Popover
-	contactsMode       bool
-	contactsSidebar    contacts.Sidebar
-	contactsList       contacts.List
-	contactsStyles     contacts.Styles
-	form               *contacts.Form
-	pendingFormDiscard bool
-	width              int
-	height             int
+	theme                *theme.CompiledTheme
+	compose              *uicompose.Model
+	pendingComposeSave   bool // Save? modal is open for a dirty compose
+	popover              *contacts.Popover
+	contactsMode         bool
+	contactsSidebar      contacts.Sidebar
+	contactsList         contacts.List
+	contactsStyles       contacts.Styles
+	form                 *contacts.Form
+	pendingFormDiscard   bool
+	pendingContactDelete string
+	width                int
+	height               int
 }
 
 // WithOpener replaces the URL-opener seam.
@@ -279,7 +280,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case contacts.OpenPopoverMsg:
 		p := contacts.NewPopover(m.contactsStyles)
 		p.SetSize(m.width, m.height)
-		match, found := m.acct.Cache().LookupContact(context.Background(), msg.Email)
+		match, _, found := m.acct.Cache().LookupContact(context.Background(), msg.Email)
 		p.SetMatch(msg.DisplayName, msg.Email, match, found)
 		m.popover = &p
 		return m, nil
@@ -294,15 +295,28 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if email := m.acct.AccountEmail(); email != "" {
 			saveTo = append(saveTo, email)
 		}
-		f := contacts.NewForm(m.contactsStyles, msg.Initial, msg.FromPopover, saveTo)
+		f := contacts.NewForm(m.contactsStyles, msg.Initial, msg.FromPopover, saveTo).
+			WithExistingUID(msg.UID)
 		w, h := m.formSize(msg.FromPopover)
 		f = f.SetSize(w, h)
 		m.form = &f
 		return m, nil
 
-	case contacts.ContactSaveMsg:
-		m.form = nil
+	case contacts.OpenContactDeleteConfirmMsg:
+		m.pendingContactDelete = msg.UID
+		m.confirm = m.confirm.Open(ConfirmRequest{
+			Title: "Delete contact?",
+			Body:  msg.DisplayName + " will be removed from this address book.",
+		})
 		return m, nil
+
+	case contacts.ContactSaveMsg:
+		uid := ""
+		if m.form != nil {
+			uid = m.form.ExistingUID()
+		}
+		m.form = nil
+		return m, queueContactPutCmd(m.acct.Cache(), uid, msg.Contact, msg.SaveTo)
 
 	case contacts.ContactCancelMsg:
 		if m.form == nil {
@@ -361,6 +375,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.pendingFormDiscard = false
 			m.form = nil
 			return m, nil
+		case m.pendingContactDelete != "":
+			uid := m.pendingContactDelete
+			m.pendingContactDelete = ""
+			m.form = nil
+			return m, queueContactDeleteCmd(m.acct.Cache(), uid)
 		case m.pendingComposeSave:
 			m.pendingComposeSave = false
 			if m.compose == nil {
@@ -390,6 +409,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			m.pendingFormDiscard = false
 			return m, nil
 		}
+		if m.pendingContactDelete != "" {
+			m.pendingContactDelete = ""
+			return m, nil
+		}
 		if m.pendingComposeSave {
 			m.pendingComposeSave = false
 			if m.compose != nil {
@@ -406,6 +429,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Esc on discard-changes keeps the form mounted.
 		if m.pendingFormDiscard {
 			m.pendingFormDiscard = false
+			m.confirm = m.confirm.Close()
+			return m, nil
+		}
+		// Esc on delete-contact keeps the form mounted.
+		if m.pendingContactDelete != "" {
+			m.pendingContactDelete = ""
 			m.confirm = m.confirm.Close()
 			return m, nil
 		}

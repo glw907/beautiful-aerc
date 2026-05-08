@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -466,4 +467,76 @@ func resolveSentFolder(acct *cache.Account) string {
 		}
 	}
 	return ""
+}
+
+// queueContactPutCmd patches (or builds) the vCard for contact, then enqueues
+// a CardDAV PUT through the cache outbox. uid="" means new contact.
+func queueContactPutCmd(c *cache.Account, uid string, contact corecontacts.Contact, saveTo string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		bookHref, err := resolveBookHref(ctx, c, saveTo)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "save contact", Err: err}
+		}
+		var (
+			vcardBytes []byte
+			href       string
+			ifMatch    string
+		)
+		if uid == "" {
+			uid = newContactUID()
+			vcardBytes, err = corecontacts.BuildVCard(contact, uid, time.Now())
+			if err != nil {
+				return uicore.ErrorMsg{Op: "save contact", Err: err}
+			}
+		} else {
+			var raw []byte
+			raw, ifMatch, href, err = c.LoadStoredVCard(ctx, uid)
+			if err != nil {
+				return uicore.ErrorMsg{Op: "save contact", Err: err}
+			}
+			vcardBytes, err = corecontacts.PatchVCard(raw, contact, time.Now())
+			if err != nil {
+				return uicore.ErrorMsg{Op: "save contact", Err: err}
+			}
+		}
+		if err := c.QueueContactPut(ctx, bookHref, uid, href, ifMatch, contact, vcardBytes); err != nil {
+			return uicore.ErrorMsg{Op: "save contact", Err: err}
+		}
+		return nil
+	}
+}
+
+// queueContactDeleteCmd queues a CardDAV DELETE for uid.
+func queueContactDeleteCmd(c *cache.Account, uid string) tea.Cmd {
+	return func() tea.Msg {
+		if err := c.QueueContactDelete(context.Background(), uid); err != nil {
+			return uicore.ErrorMsg{Op: "delete contact", Err: err}
+		}
+		return nil
+	}
+}
+
+// resolveBookHref maps the form's save-to string to a CardDAV book href.
+// The first cached book is the default for v1; multi-book selection is
+// post-1.0.
+func resolveBookHref(ctx context.Context, c *cache.Account, _ string) (string, error) {
+	books, err := c.Books(ctx)
+	if err != nil {
+		return "", err
+	}
+	for href := range books {
+		return href, nil
+	}
+	return "", errors.New("no address book configured")
+}
+
+// newContactUID returns a fresh RFC 4122 UUID v4.
+func newContactUID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

@@ -64,7 +64,7 @@ func (a *Account) SuggestAddresses(ctx context.Context, prefix string) ([]contac
 
 // LookupContact returns the cached contact for an email address.
 // ok=false means no match; the caller falls back to the name on the message.
-func (a *Account) LookupContact(ctx context.Context, address string) (contacts.Contact, bool) {
+func (a *Account) LookupContact(ctx context.Context, address string) (contacts.Contact, string, bool) {
 	const q = `
 SELECT c.uid, c.fn, c.family, c.given, c.org, c.title, c.note
   FROM contact_emails ce
@@ -78,17 +78,25 @@ SELECT c.uid, c.fn, c.family, c.given, c.org, c.title, c.note
 		&uid, &c.Name, &c.Family, &c.Given, &c.Org, &c.Title, &c.Note,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return contacts.Contact{}, false
+		return contacts.Contact{}, "", false
 	}
 	if err != nil {
-		return contacts.Contact{}, false
+		return contacts.Contact{}, "", false
 	}
 	if c.Family == "" && c.Given == "" && c.Org != "" {
 		c.Kind = contacts.KindOrg
 	}
 	c.Emails = a.loadEmails(ctx, uid)
 	c.Phones = a.loadPhones(ctx, uid)
-	return c, true
+	return c, uid, true
+}
+
+// LoadStoredVCard returns the raw vCard bytes, etag, and href for uid.
+func (a *Account) LoadStoredVCard(ctx context.Context, uid string) (raw []byte, etag, href string, err error) {
+	err = a.db.QueryRowContext(ctx,
+		`SELECT vcard, etag, href FROM contacts WHERE uid = ?`, uid,
+	).Scan(&raw, &etag, &href)
+	return
 }
 
 func (a *Account) loadEmails(ctx context.Context, uid string) []contacts.Email {

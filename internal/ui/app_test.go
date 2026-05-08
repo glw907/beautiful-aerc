@@ -17,6 +17,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
+	"github.com/glw907/poplar/internal/ui/contacts"
 	"github.com/glw907/poplar/internal/ui/movepicker"
 	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/sidebar"
@@ -1654,5 +1655,47 @@ func TestApp_EscOnDirtyJMAPComposeOpensSaveDraftModal(t *testing.T) {
 	}
 	if app.compose == nil {
 		t.Fatal("compose should remain open while confirm is pending")
+	}
+}
+
+func TestApp_OpenContactDeleteConfirmMsg_SetsState(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	app, _ = app.Update(contacts.OpenContactDeleteConfirmMsg{
+		UID:         "uid-123",
+		DisplayName: "Alice Example",
+	})
+
+	if app.pendingContactDelete != "uid-123" {
+		t.Errorf("pendingContactDelete = %q, want uid-123", app.pendingContactDelete)
+	}
+	if !app.confirm.IsOpen() {
+		t.Fatal("confirm modal should be open after OpenContactDeleteConfirmMsg")
+	}
+}
+
+func TestApp_ConfirmYes_ContactDelete_ClearsState(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	app, _ = app.Update(contacts.OpenContactDeleteConfirmMsg{
+		UID:         "uid-456",
+		DisplayName: "Bob Example",
+	})
+	if app.pendingContactDelete != "uid-456" {
+		t.Fatal("setup: pendingContactDelete not set")
+	}
+
+	app, cmd := app.Update(ConfirmModalYesMsg{})
+
+	if app.pendingContactDelete != "" {
+		t.Error("pendingContactDelete should be cleared after Yes")
+	}
+	if app.form != nil {
+		t.Error("form should be nil after Yes on delete confirm")
+	}
+	if cmd == nil {
+		t.Error("Yes on delete confirm should emit a Cmd")
 	}
 }

@@ -108,11 +108,11 @@ func TestLookupContact_HitMiss(t *testing.T) {
 		time.Now().Unix())
 	mustExec(t, acct.db, `INSERT INTO contact_emails(contact_uid, address) VALUES ('u1', 'alice@x')`)
 
-	c, ok := acct.LookupContact(context.Background(), "alice@x")
-	if !ok || c.Name != "Alice" {
-		t.Errorf("hit: ok=%v c=%+v", ok, c)
+	c, uid, ok := acct.LookupContact(context.Background(), "alice@x")
+	if !ok || c.Name != "Alice" || uid != "u1" {
+		t.Errorf("hit: ok=%v uid=%q c=%+v", ok, uid, c)
 	}
-	_, ok = acct.LookupContact(context.Background(), "nobody@x")
+	_, _, ok = acct.LookupContact(context.Background(), "nobody@x")
 	if ok {
 		t.Error("miss should return ok=false")
 	}
