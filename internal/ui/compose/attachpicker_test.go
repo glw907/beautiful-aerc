@@ -110,6 +110,40 @@ func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 	}
 }
 
+func has(es []attachEntry, name string) bool {
+	for _, e := range es {
+		if e.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func entryNames(es []attachEntry) []string {
+	out := make([]string, len(es))
+	for i, e := range es {
+		out[i] = e.name
+	}
+	return out
+}
+
+func TestAttachPicker_HiddenToggle(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "visible.txt", ".secret")
+	p := loadDir(t, newTestPicker(t), dir)
+	if has(p.entries, ".secret") {
+		t.Fatal("hidden should be excluded by default")
+	}
+	p, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(".")}))
+	if cmd == nil {
+		t.Fatal("toggle should re-issue readDirCmd")
+	}
+	p, _ = p.Update(cmd())
+	if !has(p.entries, ".secret") {
+		t.Errorf("after toggle: %v should include .secret", entryNames(p.entries))
+	}
+}
+
 func TestAttachPicker_DescendAndAscendRestoresCursor(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "a", "b", "child/", "child/inner.txt")

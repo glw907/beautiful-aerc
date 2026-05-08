@@ -209,6 +209,11 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 			return p, nil
 		case key.Matches(m, p.keys.Back):
 			return p.ascend()
+		case key.Matches(m, p.keys.ToggleHidden):
+			p.showHidden = !p.showHidden
+			p.id++
+			p.entries = nil
+			return p, readDirCmd(p.id, p.dir, p.showHidden)
 		}
 	}
 	return p, nil
