@@ -245,6 +245,7 @@ struct lives in `internal/ui/contacts/styles.go`.
 | `Selection` | — | `BgSelection` | Generic selection highlight (message list, etc.) |
 | `Dim` | `FgDim` | — | Placeholder text ("Message List" etc.) |
 | `ToastText` | `ColorSuccess` | — | Toast notifications |
+| `catkin.Styles.TidyChange` | `AccentPrimary` + `Underline(true)` | — | Compose body — character ranges changed by Claude Tidy |
 
 ## Guidelines
 
