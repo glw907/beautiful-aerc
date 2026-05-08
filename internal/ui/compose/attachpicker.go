@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -307,5 +309,89 @@ func (p AttachPicker) clampOffset() AttachPicker {
 	return p
 }
 
-// View is a no-op stub. Filled in by later tasks.
-func (p AttachPicker) View() string { return "" }
+const attachPickerMaxWidth = 70
+
+func (p AttachPicker) View() string {
+	if !p.shell.IsOpen() {
+		return ""
+	}
+	w := p.shell.Width()
+	boxW := attachPickerMaxWidth
+	if w-4 < boxW {
+		boxW = w - 4
+	}
+	if boxW < 32 {
+		boxW = 32
+	}
+	contentW := boxW - 2
+
+	rows := p.viewportRows()
+	bodyRows := make([]string, rows)
+	for i := 0; i < rows; i++ {
+		idx := p.offset + i
+		if idx >= len(p.entries) {
+			bodyRows[i] = uicore.PadOrTruncate("", contentW)
+			continue
+		}
+		bodyRows[i] = p.formatEntry(idx, contentW)
+	}
+	if len(p.entries) == 0 && p.err == "" {
+		bodyRows[0] = uicore.PadOrTruncate(p.styles.PickerDim.Render("(empty)"), contentW)
+	}
+
+	footerRows := []string{
+		p.formatHintRow(contentW),
+		p.formatPathRow(contentW),
+	}
+	return p.shell.Box("Attach files", bodyRows, footerRows, contentW)
+}
+
+func (p AttachPicker) formatEntry(idx, contentW int) string {
+	e := p.entries[idx]
+	mark := "  "
+	if p.selected[e.path] {
+		mark = "✓ "
+	}
+	icon := p.icons.Attachment
+	if e.isDir {
+		icon = p.icons.CustomFolder
+	}
+	size := ""
+	if !e.isDir {
+		size = humanize.Bytes(e.size)
+	}
+	body := fmt.Sprintf("%s%s %s", mark, icon, e.name)
+	rendered := uicore.DisplayPadOrTruncate(body, contentW-len(size)-1) + " " + p.styles.PickerDim.Render(size)
+	rendered = uicore.DisplayPadOrTruncate(rendered, contentW)
+	if idx == p.cursor {
+		return p.styles.PickerCursor.Render(rendered)
+	}
+	return rendered
+}
+
+func (p AttachPicker) formatHintRow(contentW int) string {
+	if p.err != "" {
+		return uicore.PadOrTruncate(p.styles.PickerError.Render(p.err), contentW)
+	}
+	n := selectedCount(p)
+	var hint string
+	if n == 0 {
+		hint = "j/k nav · l/Enter open · Space select · a accept · . hidden · Esc cancel"
+	} else {
+		hint = fmt.Sprintf("j/k nav · l/Enter open · Space toggle · a accept (%d) · Esc cancel", n)
+	}
+	return uicore.PadOrTruncate(p.styles.PickerDim.Render(hint), contentW)
+}
+
+func (p AttachPicker) formatPathRow(contentW int) string {
+	path := p.dir
+	if uicore.DisplayCells(path) > contentW {
+		// truncate from the left, prefix with "…/"
+		runes := []rune(path)
+		for uicore.DisplayCells("…/"+string(runes)) > contentW && len(runes) > 1 {
+			runes = runes[1:]
+		}
+		path = "…/" + string(runes)
+	}
+	return uicore.PadOrTruncate(p.styles.PickerDim.Render(path), contentW)
+}

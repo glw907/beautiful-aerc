@@ -99,7 +99,7 @@ func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 	p := newTestPicker(t)
 	p, _ = p.Open(dir)
 	staleID := p.id
-	// reopen — bumps id
+	// reopen bumps id
 	p, _ = p.Open(dir)
 	stale := readDirMsg{id: staleID, entries: []attachEntry{{name: "ghost", path: "/ghost"}}}
 	p, _ = p.Update(stale)
@@ -176,6 +176,41 @@ func TestAttachPicker_EscEmitsCancelled(t *testing.T) {
 	}
 }
 
+func TestAttachPicker_FooterHintsZeroSelected(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a.txt")
+	p := loadDir(t, newTestPicker(t), dir).SetSize(80, 20)
+	p.shell = p.shell.WithOpen(true)
+	out := p.View()
+	if out == "" {
+		t.Fatal("View should render when open")
+	}
+	if !strings.Contains(out, "j/k nav") || !strings.Contains(out, "a accept") {
+		t.Errorf("footer missing default hint, got:\n%s", out)
+	}
+}
+
+func TestAttachPicker_FooterHintsSelectedCount(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a.txt", "b.txt")
+	p := loadDir(t, newTestPicker(t), dir).SetSize(80, 20)
+	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(" ")}))
+	out := p.View()
+	if !strings.Contains(out, "a accept (1)") {
+		t.Errorf("footer missing count, got:\n%s", out)
+	}
+}
+
+func TestAttachPicker_FooterShowsPath(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a.txt")
+	p := loadDir(t, newTestPicker(t), dir).SetSize(80, 20)
+	out := p.View()
+	if !strings.Contains(out, filepath.Base(dir)) {
+		t.Errorf("footer should show current path basename, got:\n%s", out)
+	}
+}
+
 func has(es []attachEntry, name string) bool {
 	for _, e := range es {
 		if e.name == name {
@@ -230,7 +265,7 @@ func TestAttachPicker_DescendAndAscendRestoresCursor(t *testing.T) {
 		p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
 	}
 
-	// descend — Enter returns a readDirCmd
+	// descend: Enter returns a readDirCmd
 	p, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
 	if cmd == nil {
 		t.Fatal("descend should issue readDirCmd")
@@ -243,7 +278,7 @@ func TestAttachPicker_DescendAndAscendRestoresCursor(t *testing.T) {
 		t.Errorf("after descend cursor = %d, want 0", p.cursor)
 	}
 
-	// ascend — Backspace returns a readDirCmd
+	// ascend: Backspace returns a readDirCmd
 	p, cmd = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyBackspace}))
 	if cmd != nil {
 		p, _ = p.Update(cmd())
@@ -291,4 +326,3 @@ func TestAttachPicker_Nav(t *testing.T) {
 		t.Errorf("j at bottom: cursor = %d, want %d", p.cursor, len(p.entries)-1)
 	}
 }
-

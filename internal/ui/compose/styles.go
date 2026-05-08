@@ -16,6 +16,9 @@ type Styles struct {
 	DropdownOrg         lipgloss.Style
 	FromChip            lipgloss.Style
 	TidyChange          lipgloss.Style
+	PickerCursor        lipgloss.Style
+	PickerDim           lipgloss.Style
+	PickerError         lipgloss.Style
 }
 
 func NewStyles(t *theme.CompiledTheme) Styles {
@@ -28,6 +31,9 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		DropdownOrg:         lipgloss.NewStyle().Foreground(t.FgDim),
 		FromChip:            chip,
 		TidyChange:          lipgloss.NewStyle().Foreground(t.AccentPrimary).Underline(true),
+		PickerCursor:        lipgloss.NewStyle().Foreground(t.BgBase).Background(t.AccentPrimary),
+		PickerDim:           lipgloss.NewStyle().Foreground(t.FgDim),
+		PickerError:         lipgloss.NewStyle().Foreground(t.ColorError),
 	}
 }
 
