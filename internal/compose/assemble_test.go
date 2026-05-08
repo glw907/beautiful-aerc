@@ -18,7 +18,7 @@ func fixedClock() time.Time {
 }
 
 func TestAssembleMIMERequiresFrom(t *testing.T) {
-	if _, err := AssembleMIME(Draft{}, fixedClock()); err == nil {
+	if _, err := AssembleMIME(Draft{Signature: -1}, nil, fixedClock()); err == nil {
 		t.Fatal("AssembleMIME with empty From: want error, got nil")
 	}
 }
@@ -31,8 +31,9 @@ func TestAssembleMIMEHeadersAndAlternative(t *testing.T) {
 		Body:       "**hi** bob",
 		InReplyTo:  "abc123@example.org",
 		References: []string{"root@example.org", "abc123@example.org"},
+		Signature:  -1,
 	}
-	raw, err := AssembleMIME(d, fixedClock())
+	raw, err := AssembleMIME(d, nil, fixedClock())
 	if err != nil {
 		t.Fatalf("AssembleMIME: %v", err)
 	}
@@ -110,8 +111,9 @@ func TestAssembleMIMEWithAttachment(t *testing.T) {
 		Subject:     "with file",
 		Body:        "see attached",
 		Attachments: []string{path},
+		Signature:   -1,
 	}
-	raw, err := AssembleMIME(d, fixedClock())
+	raw, err := AssembleMIME(d, nil, fixedClock())
 	if err != nil {
 		t.Fatalf("AssembleMIME: %v", err)
 	}
@@ -145,6 +147,63 @@ func TestAssembleMIMEWithAttachment(t *testing.T) {
 	}
 	if !sawAttachment {
 		t.Error("no attachment part found")
+	}
+}
+
+func TestAssembleMIMEAppendsSignature(t *testing.T) {
+	now := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
+
+	idents := []Identity{
+		{
+			Name:  "Geoff",
+			Email: "geoff@907.life",
+			Signatures: []Signature{
+				{Name: "default", Text: "-- \nGeoff Wright"},
+			},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		sig       int
+		wantBody  string
+		wantNoSig bool
+	}{
+		{
+			name:     "sig included",
+			sig:      0,
+			wantBody: "Hello.\n\n-- \nGeoff Wright",
+		},
+		{
+			name:      "sig omitted (-1)",
+			sig:       -1,
+			wantBody:  "Hello.",
+			wantNoSig: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := Draft{
+				From:      gomail.Address{Name: "Geoff", Address: "geoff@907.life"},
+				To:        []gomail.Address{{Address: "x@y"}},
+				Subject:   "hi",
+				Body:      "Hello.",
+				Identity:  0,
+				Signature: tt.sig,
+			}
+			raw, err := AssembleMIME(d, idents, now)
+			if err != nil {
+				t.Fatalf("AssembleMIME: %v", err)
+			}
+			plain := strings.ReplaceAll(extractPlainBody(raw), "\r\n", "\n")
+			if !strings.Contains(plain, tt.wantBody) {
+				t.Errorf("text/plain missing %q; got:\n%s", tt.wantBody, plain)
+			}
+			if tt.wantNoSig && strings.Contains(plain, "-- ") {
+				t.Errorf("did not expect sig sentinel in plain body:\n%s", plain)
+			}
+		})
 	}
 }
 

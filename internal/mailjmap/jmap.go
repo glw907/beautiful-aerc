@@ -52,11 +52,12 @@ type Backend struct {
 	partBlobIDs map[mail.UID]map[string]string
 	states      map[string]string
 
-	bodies             *lru.Cache[string, []byte]
-	bodyGroup          singleflight.Group
-	downloadBlob       func(blobID string) ([]byte, error)
-	uploadBlob         func(data []byte) (blobID string, err error)
-	identityID         jmap.ID
+	bodies       *lru.Cache[string, []byte]
+	bodyGroup    singleflight.Group
+	downloadBlob func(blobID string) ([]byte, error)
+	uploadBlob   func(data []byte) (blobID string, err error)
+	// identityIDs caches Identity/get results by lowercased email.
+	identityIDs        map[string]jmap.ID
 	updates            chan mail.Update
 	runEventSourceFunc func(ctx context.Context) error // swappable for tests
 
@@ -79,6 +80,7 @@ func New(cfg config.AccountConfig) *Backend {
 		blobIDs:     make(map[mail.UID]string),
 		partBlobIDs: make(map[mail.UID]map[string]string),
 		states:      make(map[string]string),
+		identityIDs: make(map[string]jmap.ID),
 	}
 }
 
@@ -703,7 +705,7 @@ func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 		return errors.New("jmap: send: no Sent mailbox on account")
 	}
 
-	identityID, err := b.resolveIdentityID(accountID)
+	identityID, err := b.resolveIdentityID(accountID, env.From)
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
@@ -895,18 +897,17 @@ var jmapKeywords = map[mail.Flag]string{
 	mail.FlagForwarded: "$forwarded",
 }
 
-// resolveIdentityID returns the cached identityID, fetching via
-// Identity/get and matching on email address on first use.
-func (b *Backend) resolveIdentityID(accountID jmap.ID) (jmap.ID, error) {
+// resolveIdentityID returns the JMAP identity ID for the given email,
+// consulting the per-email cache first. On a miss it issues Identity/get
+// once and populates the cache for every identity the server returns, so
+// subsequent sends from any identity on this account skip the probe.
+func (b *Backend) resolveIdentityID(accountID jmap.ID, email string) (jmap.ID, error) {
+	key := strings.ToLower(email)
+
 	b.mu.Lock()
-	if b.identityID != "" {
-		id := b.identityID
+	if id, ok := b.identityIDs[key]; ok {
 		b.mu.Unlock()
 		return id, nil
-	}
-	want := b.cfg.Email
-	if b.cfg.From != nil && b.cfg.From.Address != "" {
-		want = b.cfg.From.Address
 	}
 	b.mu.Unlock()
 
@@ -924,26 +925,18 @@ func (b *Backend) resolveIdentityID(accountID jmap.ID) (jmap.ID, error) {
 		if !ok {
 			continue
 		}
-		var fallback jmap.ID
+		b.mu.Lock()
 		for _, id := range gr.List {
-			if fallback == "" {
-				fallback = id.ID
-			}
-			if strings.EqualFold(id.Email, want) {
-				b.mu.Lock()
-				b.identityID = id.ID
-				b.mu.Unlock()
-				return id.ID, nil
-			}
+			b.identityIDs[strings.ToLower(id.Email)] = id.ID
 		}
-		if fallback != "" {
-			b.mu.Lock()
-			b.identityID = fallback
-			b.mu.Unlock()
-			return fallback, nil
+		got, ok := b.identityIDs[key]
+		b.mu.Unlock()
+		if ok {
+			return got, nil
 		}
+		return "", fmt.Errorf("identity/get: no identity for %q", email)
 	}
-	return "", fmt.Errorf("identity/get: no identity for %q", want)
+	return "", fmt.Errorf("identity/get: empty response")
 }
 
 func checkImportCreated(resp *jmap.Response, callID string) error {

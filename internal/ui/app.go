@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/cache"
+	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
 	corecontacts "github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/content"
@@ -73,6 +74,7 @@ type App struct {
 	opener          URLOpener        // test seam, defaults to xdgOpenURL
 	tidy            TidyFn           // test seam, defaults to identityTidy
 
+	identities      []mailcompose.Identity
 	contactsCfg     *corecontacts.ClientConfig
 	contactsRefresh time.Duration
 
@@ -105,7 +107,7 @@ func (m App) WithTidy(fn TidyFn) App {
 
 // NewApp creates the root model. Folder loading runs in Init's Cmd chain,
 // not synchronously.
-func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, contactsCfg *config.ContactsConfig) App {
+func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, contactsCfg *config.ContactsConfig, identities []config.Identity) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
@@ -132,6 +134,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		now:             time.Now,
 		opener:          xdgOpenURL,
 		tidy:            identityTidy,
+		identities:      uicompose.IdentitiesFromConfig(identities),
 		contactsStyles:  cStyles,
 		contactsSidebar: contacts.NewSidebar(cStyles, cFixtures),
 		contactsList:    contacts.NewList(cStyles, cFixtures, contacts.SortFirstName),
@@ -399,7 +402,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			prevUID := mail.UID(m.compose.PrevServerUID())
 			m.compose = nil
 			if draftsFolder != "" {
-				return m, upsertAndPushDraftCmd(m.acct.Cache(), draftID, draftsFolder, d, prevUID)
+				return m, upsertAndPushDraftCmd(m.acct.Cache(), draftID, draftsFolder, d, prevUID, m.identities)
 			}
 			return m, nil
 		case m.pendingEmpty.folder != "":
@@ -649,7 +652,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		d := msg.Draft
 		tidy := m.tidy
 		acct := m.acct.Cache()
-		cmds := []tea.Cmd{composeSendCmd(acct, sent, tidy, d)}
+		cmds := []tea.Cmd{composeSendCmd(acct, sent, tidy, d, m.identities)}
 		if m.compose != nil && m.compose.DraftID() != "" {
 			draftID := m.compose.DraftID()
 			prevUID := mail.UID(m.compose.PrevServerUID())
@@ -680,6 +683,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		w, h := m.rightPaneSize()
 		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 		m.compose.SetSize(w, h)
+		m.compose.SetIdentities(m.identities)
 		m.compose.Seed(msg.Draft)
 		return m, m.compose.Init()
 
@@ -689,6 +693,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		row := msg.row
 		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses)
 		c.SetSize(w, h)
+		c.SetIdentities(m.identities)
 		c.SetCache(m.acct.Cache())
 		c.SetDraftTarget(row.ServerFolder, string(row.ServerUID))
 		m.compose = c
@@ -802,6 +807,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			w, h := m.rightPaneSize()
 			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 			m.compose.SetSize(w, h)
+			m.compose.SetIdentities(m.identities)
 			m.compose.SetCache(m.acct.Cache())
 			draftsFolder := resolveDraftsFolder(m.acct.Cache())
 			m.compose.SetDraftTarget(draftsFolder, "")
@@ -907,7 +913,12 @@ func (m App) renderFrame() string {
 	dividerCol := uicore.ComputeLayout(m.width).Sidebar
 	topLine := m.topLine.View(m.width, dividerCol)
 	status := m.statusBar.View(m.width, dividerCol)
-	foot := m.footer.View(m.width)
+	var foot string
+	if m.compose != nil {
+		foot = m.footer.ViewGroups(composeFooterGroups(m.compose.HasSignatures(), m.compose.IsFocusFrom()), m.width)
+	} else {
+		foot = m.footer.View(m.width)
+	}
 
 	parts := []string{topLine, content}
 	// Precedence: error banner wins, then toast, then the chrome row

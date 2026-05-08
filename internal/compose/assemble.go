@@ -17,18 +17,40 @@ import (
 	"github.com/glw907/poplar/internal/filter"
 )
 
+// Identity mirrors the compose-relevant slice of config.Identity so
+// internal/compose stays free of the config dependency.
+type Identity struct {
+	Name       string
+	Email      string
+	Signatures []Signature
+}
+
+type Signature struct {
+	Name string
+	Text string
+}
+
 // AssembleMIME renders d into an RFC 5322 message. The body is
 // multipart/alternative with text/plain (markdown verbatim) and
 // text/html (goldmark render). With attachments, the alternative
 // is wrapped in multipart/mixed and each attachment is a sibling
 // part. now stamps the Date header and Message-Id suffix.
-func AssembleMIME(d Draft, now time.Time) ([]byte, error) {
+// d.Signature == -1 means "no signature appended."
+func AssembleMIME(d Draft, identities []Identity, now time.Time) ([]byte, error) {
 	from := d.From
 	if from.Address == "" {
 		return nil, fmt.Errorf("compose: From address required")
 	}
 
-	htmlBody, err := filter.MarkdownToHTML([]byte(d.Body))
+	body := d.Body
+	if d.Signature >= 0 && d.Identity >= 0 && d.Identity < len(identities) {
+		ident := identities[d.Identity]
+		if d.Signature < len(ident.Signatures) {
+			body = body + "\n\n" + ident.Signatures[d.Signature].Text
+		}
+	}
+
+	htmlBody, err := filter.MarkdownToHTML([]byte(body))
 	if err != nil {
 		return nil, fmt.Errorf("compose: render html: %w", err)
 	}
@@ -67,7 +89,7 @@ func AssembleMIME(d Draft, now time.Time) ([]byte, error) {
 		return nil, fmt.Errorf("compose: create writer: %w", err)
 	}
 
-	if err := writeAlternative(mw, d.Body, htmlBody); err != nil {
+	if err := writeAlternative(mw, body, htmlBody); err != nil {
 		return nil, err
 	}
 	for _, path := range d.Attachments {

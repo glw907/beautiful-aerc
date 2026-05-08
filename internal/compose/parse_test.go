@@ -9,13 +9,14 @@ import (
 
 func TestRoundTrip_AssembleParse(t *testing.T) {
 	d := Draft{
-		From:    gomail.Address{Name: "Geoff", Address: "geoff@907.life"},
-		To:      []gomail.Address{{Address: "alice@example.com"}},
-		Cc:      []gomail.Address{{Address: "bob@example.com"}},
-		Subject: "test draft",
-		Body:    "hello\n\n> quoted\n",
+		From:      gomail.Address{Name: "Geoff", Address: "geoff@907.life"},
+		To:        []gomail.Address{{Address: "alice@example.com"}},
+		Cc:        []gomail.Address{{Address: "bob@example.com"}},
+		Subject:   "test draft",
+		Body:      "hello\n\n> quoted\n",
+		Signature: -1,
 	}
-	mime, err := AssembleMIME(d, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC))
+	mime, err := AssembleMIME(d, nil, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("AssembleMIME: %v", err)
 	}

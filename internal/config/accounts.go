@@ -107,6 +107,36 @@ func (c *ContactsConfig) ResolvePassword() (string, error) {
 	return resolvePasswordCmd(c.Password, c.PasswordCmd, "contacts password-cmd")
 }
 
+// Identity is one of an account's sending identities. Name is the
+// display name (rendered in From), Email is the address (must match
+// a server-side identity for JMAP submission), Signatures is the
+// ordered list the user cycles through in compose.
+type Identity struct {
+	Name       string
+	Email      string
+	Signatures []Signature
+}
+
+// Signature is one of an identity's named signatures. Text is the
+// resolved body (with RFC 3676 "-- \n" sentinel guaranteed). Name
+// labels it in the compose chip and footer.
+type Signature struct {
+	Name string
+	Text string
+}
+
+type identityEntry struct {
+	Name       string           `toml:"name"`
+	Email      string           `toml:"email"`
+	Signatures []signatureEntry `toml:"signature"`
+}
+
+type signatureEntry struct {
+	Name string `toml:"name"`
+	Text string `toml:"text"`
+	File string `toml:"file"`
+}
+
 // AccountConfig holds the configuration for a single email account.
 type AccountConfig struct {
 	Name           string
@@ -120,6 +150,11 @@ type AccountConfig struct {
 	// Identity
 	From   *mail.Address
 	CopyTo []string
+
+	// Identities is the ordered list of sending identities. Length is
+	// always >= 1: a missing [[account.identity]] block synthesizes one
+	// from the legacy top-level From.
+	Identities []Identity
 
 	// Password is the bearer token or password after env-var
 	// substitution. Use "$VAR_NAME" in config.toml to pull from env.
@@ -254,6 +289,7 @@ type accountEntry struct {
 	Params         map[string]string `toml:"params"`
 	SMTP           smtpEntry         `toml:"smtp"`
 	Contacts       *ContactsConfig   `toml:"contacts"`
+	Identities     []identityEntry   `toml:"identity"`
 }
 
 type smtpEntry struct {
@@ -441,6 +477,22 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		acct.From = addrs[0]
 	}
 
+	identities, err := decodeIdentities(e.Name, e.Identities)
+	if err != nil {
+		return nil, err
+	}
+	if len(identities) == 0 && acct.From != nil {
+		identities = []Identity{{
+			Name:  acct.From.Name,
+			Email: acct.From.Address,
+		}}
+	}
+	acct.Identities = identities
+	if len(acct.Identities) > 0 {
+		first := acct.Identities[0]
+		acct.From = &mail.Address{Name: first.Name, Address: first.Email}
+	}
+
 	acct.Contacts = e.Contacts
 	acct.finalizeContacts()
 	if err := acct.Contacts.validate(); err != nil {
@@ -502,4 +554,73 @@ func isShellName(s string) bool {
 		return false
 	}
 	return s != ""
+}
+
+func decodeIdentities(account string, entries []identityEntry) ([]Identity, error) {
+	var out []Identity
+	for _, ie := range entries {
+		if ie.Name == "" {
+			return nil, fmt.Errorf("account %q: identity: name is required", account)
+		}
+		if _, err := mail.ParseAddress(ie.Email); err != nil {
+			return nil, fmt.Errorf("account %q: identity %q: email: %w", account, ie.Name, err)
+		}
+		sigs, err := decodeSignatures(ie.Name, ie.Signatures)
+		if err != nil {
+			return nil, fmt.Errorf("account %q: %w", account, err)
+		}
+		out = append(out, Identity{
+			Name:       ie.Name,
+			Email:      ie.Email,
+			Signatures: sigs,
+		})
+	}
+	return out, nil
+}
+
+func decodeSignatures(identity string, entries []signatureEntry) ([]Signature, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	seen := make(map[string]bool, len(entries))
+	var out []Signature
+	for _, se := range entries {
+		if se.Name == "" {
+			return nil, fmt.Errorf("identity %q: signature: name is required", identity)
+		}
+		if seen[se.Name] {
+			return nil, fmt.Errorf("identity %q: duplicate signature name %q", identity, se.Name)
+		}
+		seen[se.Name] = true
+		if se.Text != "" && se.File != "" {
+			return nil, fmt.Errorf("identity %q: signature %q: text and file are mutually exclusive", identity, se.Name)
+		}
+		if se.Text == "" && se.File == "" {
+			return nil, fmt.Errorf("identity %q: signature %q: text or file is required", identity, se.Name)
+		}
+		text := se.Text
+		if se.File != "" {
+			path, err := ExpandHome(se.File)
+			if err != nil {
+				return nil, fmt.Errorf("identity %q: signature %q: file: %w", identity, se.Name, err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("identity %q: signature %q: file: %w", identity, se.Name, err)
+			}
+			text = string(data)
+		}
+		text = injectSentinel(text)
+		out = append(out, Signature{Name: se.Name, Text: text})
+	}
+	return out, nil
+}
+
+// injectSentinel prepends RFC 3676's "-- \n" if t doesn't already start
+// with it. Idempotent.
+func injectSentinel(t string) string {
+	if strings.HasPrefix(t, "-- \n") {
+		return t
+	}
+	return "-- \n" + t
 }

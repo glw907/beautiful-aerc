@@ -125,7 +125,7 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("start drainer: %v", err)
 	}
 
-	app := ui.NewApp(t, acct, uiCfg, iconSet, accts[0].Contacts)
+	app := ui.NewApp(t, acct, uiCfg, iconSet, accts[0].Contacts, accts[0].Identities)
 
 	p := tea.NewProgram(appModel{app: app}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

@@ -32,4 +32,16 @@ type Draft struct {
 	References []string
 
 	Attachments []string
+
+	// Identity is the index into the account's Identities slice chosen
+	// at compose time. The UI mirrors the selected identity into From;
+	// AssembleMIME reads From directly and uses Identity only to look
+	// up the signature.
+	Identity int
+
+	// Signature is the index into Identities[Identity].Signatures, or
+	// -1 for no signature. -1 is the legitimate state when the identity
+	// carries zero signatures, or when the user has cycled past the last
+	// one.
+	Signature int
 }

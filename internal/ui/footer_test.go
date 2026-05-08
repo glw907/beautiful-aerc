@@ -217,3 +217,35 @@ func TestFooterThreadsGroup(t *testing.T) {
 		}
 	})
 }
+
+func TestComposeFooterIncludesSigHint(t *testing.T) {
+	g := composeFooterGroups(true, false)
+	if !containsHint(g, "Ctrl+G", "sig") {
+		t.Errorf("compose footer missing Ctrl+G sig:\n%v", g)
+	}
+}
+
+func TestComposeFooterOmitsSigWhenNoSigs(t *testing.T) {
+	g := composeFooterGroups(false, false)
+	if containsHint(g, "Ctrl+G", "sig") {
+		t.Errorf("compose footer included Ctrl+G sig with no sigs:\n%v", g)
+	}
+}
+
+func TestComposeFooterAddsFromHintsOnFocusFrom(t *testing.T) {
+	g := composeFooterGroups(true, true)
+	if !containsHint(g, "Space/←→", "identity") {
+		t.Errorf("focusFrom footer missing identity hint:\n%v", g)
+	}
+}
+
+func containsHint(groups [][]footerHint, key, desc string) bool {
+	for _, g := range groups {
+		for _, h := range g {
+			if h.key == key && h.desc == desc {
+				return true
+			}
+		}
+	}
+	return false
+}

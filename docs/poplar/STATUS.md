@@ -1,7 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9n next — Email signatures + multiple
-identities (#32).
+**Current pass:** Pass 9o next — Claude Tidy implementation.
 
 ## Passes
 
@@ -17,7 +16,7 @@ identities (#32).
 | 9l | Compose autocomplete dropdown — fixture-backed To/Cc/Bcc (ADR-0174) | done |
 | 9m | CardDAV ingest — swap fixtures for real contacts cache (ADR-0175) | done |
 | 9m.1 | CardDAV write-back — form save round-trip via outbox (ADR-0176) | done |
-| 9n | Email signatures + multiple identities (#32) | pending |
+| 9n | Email signatures + multiple identities (ADR-0177) | done |
 | 9o | Claude Tidy implementation | pending |
 | 9p | Attachments-richer compose UI (#24) | pending |
 | 9q | Outbox delivery controls — undo + schedule send (#35) | pending |
@@ -29,31 +28,30 @@ identities (#32).
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9n)
+## Next starter prompt (Pass 9o)
 
-> **Goal.** Signatures + multiple identities (#32). Per-account
-> configurable signatures; per-identity selection in compose;
-> identity affects `From` header and the JMAP `Identity/get`
-> submission identity.
+> **Goal.** Claude Tidy implementation. Replace the identity
+> `TidyFn` seam in `internal/ui/app.go` with a Claude-API-backed
+> rewrite that runs before MIME assembly on send.
 >
-> **Scope.** `[account.identities]` TOML block (display name +
-> email + signature text or signature-file). Compose adds an
-> identity cycler and a signature toggle. JMAP `Send` uses the
-> selected identity's `IdentityID`; IMAP path threads the From
-> override into the assembled MIME. Signature is appended below
-> the user's body on send; the user-facing editor never sees it.
+> **Scope.** `internal/tidy/` already exists as the home for the
+> implementation. Wire it as the default `TidyFn` (replacing
+> `identityTidy`), gated by config so users can opt in. The body
+> goes through tidy → goldmark → MIME. Failure modes: tidy
+> errors surface inline as `c.err` and block the send (the user
+> can disable tidy and resend).
 >
-> **Settled.** One identity per `[[account]]` is default;
-> `[account.identities]` opt-in. Markdown signatures go through
-> the same goldmark pipeline as the body. Per-identity From at
-> compose time.
+> **Settled.** TidyFn is a function-pointer seam (ADR-0159).
+> Claude API access uses the existing `claude-api` skill / SDK
+> shape. Tidy runs on send, not on autosave or draft push.
 >
-> **Still open — brainstorm:** Signature delimiter (`-- \n` or
-> none); whether to render signatures in the reader (probably yes,
-> dimmed); identity selection UX (cycler vs picker).
+> **Still open — brainstorm:** Config gate (per-account opt-in
+> vs global); model selection (Haiku vs Sonnet); prompt shape
+> (rewrite vs suggest-and-confirm); error UX (inline banner vs
+> overlay); whether to dry-run with a diff preview before send.
 >
-> **Approach.** Brainstorm, write
-> `docs/superpowers/plans/YYYY-MM-DD-signatures-identities.md`,
+> **Approach.** Brainstorm the open questions, write
+> `docs/superpowers/plans/YYYY-MM-DD-claude-tidy.md`, then
 > implement. Standard pass-end ritual via `poplar-pass`.
 
 ## Queued

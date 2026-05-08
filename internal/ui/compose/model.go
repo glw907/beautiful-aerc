@@ -37,8 +37,11 @@ type Model struct {
 	subject textinput.Model
 	editor  mailcompose.Editor
 
-	focus int
-	err   string
+	focus      int
+	identities []mailcompose.Identity
+	identity   int // index into identities
+	signature  int // index into identities[identity].Signatures, or -1
+	err        string
 
 	width   int
 	height  int
@@ -69,6 +72,7 @@ const (
 	focusBcc
 	focusSubject
 	focusBody
+	focusFrom
 )
 
 // labelWidth fits "Subject:" (8 cells) plus a separating space.
@@ -174,10 +178,22 @@ func (c *Model) updateDraftCmd() tea.Cmd {
 // validation; partial input is normal during editing.
 func (c *Model) currentDraft() mailcompose.Draft {
 	return mailcompose.Draft{
-		From:    gomail.Address{Address: c.from},
-		Subject: c.subject.Value(),
-		Body:    c.editor.Value(),
+		From:      c.activeFrom(),
+		Subject:   c.subject.Value(),
+		Body:      c.editor.Value(),
+		Identity:  c.identity,
+		Signature: c.signature,
 	}
+}
+
+// activeFrom resolves the From address from the selected identity, or
+// falls back to c.from when no identities are configured.
+func (c *Model) activeFrom() gomail.Address {
+	if len(c.identities) == 0 {
+		return gomail.Address{Address: c.from}
+	}
+	id := c.identities[c.identity]
+	return gomail.Address{Name: id.Name, Address: id.Email}
 }
 
 func (c *Model) Init() tea.Cmd {
@@ -223,7 +239,7 @@ func (c *Model) View() string {
 		return ""
 	}
 	rows := make([]string, 0, c.height)
-	rows = append(rows, c.headerRow("From:", c.from))
+	rows = append(rows, c.headerRow("From:", c.fromValue()))
 	addrFields := []struct {
 		label string
 		view  string
@@ -335,9 +351,10 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			prevUID := c.prevServerUID
 			id := c.draftID
 			d := c.currentDraft()
+			ids := c.identities
 			return c, tea.Batch(
 				func() tea.Msg {
-					mime, err := mailcompose.AssembleMIME(d, time.Now())
+					mime, err := mailcompose.AssembleMIME(d, ids, time.Now())
 					if err != nil {
 						// Partial drafts can fail to assemble; the next tick retries.
 						return nil
@@ -384,6 +401,9 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case tea.KeyShiftTab:
 			c.advanceFocus(-1)
 			return c, nil
+		case tea.KeyCtrlG:
+			c.cycleSignature()
+			return c, nil
 		case tea.KeyEsc:
 			if c.focus == focusBody {
 				c.setFocus(focusSubject)
@@ -396,6 +416,29 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	switch c.focus {
+	case focusFrom:
+		if k, ok := msg.(tea.KeyMsg); ok {
+			switch k.Type {
+			case tea.KeySpace, tea.KeyRight:
+				c.cycleIdentity(+1)
+				return c, nil
+			case tea.KeyLeft:
+				c.cycleIdentity(-1)
+				return c, nil
+			case tea.KeyRunes:
+				switch string(k.Runes) {
+				case "l":
+					c.cycleIdentity(+1)
+					return c, nil
+				case "h":
+					c.cycleIdentity(-1)
+					return c, nil
+				case "g":
+					c.cycleSignature()
+					return c, nil
+				}
+			}
+		}
 	case focusTo:
 		c.to, cmd = c.to.Update(msg)
 	case focusCc:
@@ -503,8 +546,8 @@ func isEditMsg(msg tea.Msg) bool {
 }
 
 func (c *Model) advanceFocus(delta int) {
-	const fields = 5
-	c.setFocus(((c.focus + delta) + fields) % fields)
+	const n = focusFrom + 1
+	c.setFocus((c.focus + delta + n) % n)
 }
 
 func (c *Model) setFocus(target int) {
@@ -513,6 +556,7 @@ func (c *Model) setFocus(target int) {
 	c.bcc.Blur()
 	c.subject.Blur()
 	c.editor.Blur()
+	c.focus = target
 	switch target {
 	case focusTo:
 		_ = c.to.Focus()
@@ -522,11 +566,93 @@ func (c *Model) setFocus(target int) {
 		_ = c.bcc.Focus()
 	case focusSubject:
 		_ = c.subject.Focus()
-	case focusBody:
-		_ = c.editor.Focus()
+	case focusBody, focusFrom:
 	}
-	c.focus = target
 }
+
+// SetIdentities wires the per-message identity and signature state from
+// the parent. The slice must have length >= 1; callers synthesize one
+// from the legacy From address when no [[account.identity]] blocks exist.
+func (c *Model) SetIdentities(ids []mailcompose.Identity) {
+	c.identities = ids
+	c.identity = 0
+	if len(ids) > 0 && len(ids[0].Signatures) > 0 {
+		c.signature = 0
+	} else {
+		c.signature = -1
+	}
+}
+
+// fromValue renders the From: cell: identity address, optional sig chip, and
+// cycler glyph when focused.
+func (c *Model) fromValue() string {
+	if len(c.identities) == 0 {
+		return c.from
+	}
+	id := c.identities[c.identity]
+	addr := id.Name + " <" + id.Email + ">"
+	chip := ""
+	switch {
+	case len(id.Signatures) == 0:
+		// no chip
+	case c.signature < 0:
+		chip = c.styles.FromChip.Render(" · no sig")
+	case c.signature < len(id.Signatures):
+		chip = c.styles.FromChip.Render(" · sig: " + id.Signatures[c.signature].Name)
+	}
+	glyph := ""
+	if c.focus == focusFrom && (len(c.identities) > 1 || len(id.Signatures) > 0) {
+		glyph = c.styles.FromChip.Render(" ‹ ›")
+	}
+	return addr + chip + glyph
+}
+
+func (c *Model) cycleIdentity(d int) {
+	n := len(c.identities)
+	if n <= 1 {
+		return
+	}
+	c.identity = (c.identity + d + n) % n
+	if len(c.identities[c.identity].Signatures) > 0 {
+		c.signature = 0
+	} else {
+		c.signature = -1
+	}
+}
+
+func (c *Model) cycleSignature() {
+	if len(c.identities) == 0 {
+		return
+	}
+	sigs := c.identities[c.identity].Signatures
+	if len(sigs) == 0 {
+		return
+	}
+	switch {
+	case c.signature < 0:
+		c.signature = 0
+	case c.signature == len(sigs)-1:
+		c.signature = -1
+	default:
+		c.signature++
+	}
+}
+
+// HasSignatures reports whether the active identity has at least one signature.
+func (c *Model) HasSignatures() bool {
+	return len(c.identities) > 0 && len(c.identities[c.identity].Signatures) > 0
+}
+
+// IsFocusFrom reports whether the From field currently has focus.
+func (c *Model) IsFocusFrom() bool { return c.focus == focusFrom }
+
+func (c *Model) SetSignature(idx int) { c.signature = idx }
+
+func (c *Model) Focus() int { return c.focus }
+
+func (c *Model) Identity() int { return c.identity }
+
+func (c *Model) Signature() int { return c.signature }
 
 // Draft rebuilds a mailcompose.Draft from the current inputs. Address
 // parse errors are written to c.err and also returned.
@@ -548,12 +674,14 @@ func (c *Model) Draft() (mailcompose.Draft, error) {
 	}
 	c.err = ""
 	return mailcompose.Draft{
-		From:    gomail.Address{Address: c.from},
-		To:      to,
-		Cc:      cc,
-		Bcc:     bcc,
-		Subject: c.subject.Value(),
-		Body:    c.editor.Value(),
+		From:      c.activeFrom(),
+		To:        to,
+		Cc:        cc,
+		Bcc:       bcc,
+		Subject:   c.subject.Value(),
+		Body:      c.editor.Value(),
+		Identity:  c.identity,
+		Signature: c.signature,
 	}, nil
 }
 

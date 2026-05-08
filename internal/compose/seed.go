@@ -39,13 +39,15 @@ func SeedReplyAll(parent pmail.MessageInfo, body []byte, self gomail.Address) Dr
 // In-Reply-To and References stay empty.
 func SeedForward(parent pmail.MessageInfo, body []byte) Draft {
 	return Draft{
-		Subject: ensurePrefix(parent.Subject, "Fwd:"),
-		Body:    quoteAttribution(parent, body),
+		Subject:   ensurePrefix(parent.Subject, "Fwd:"),
+		Body:      quoteAttribution(parent, body),
+		Identity:  0,
+		Signature: 0,
 	}
 }
 
 func seedCommon(parent pmail.MessageInfo, body []byte) Draft {
-	d := Draft{}
+	d := Draft{Identity: 0, Signature: 0}
 	hdr, err := parseHeaders(body)
 	if err != nil {
 		return d

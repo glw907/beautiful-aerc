@@ -250,7 +250,7 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 // composeSendCmd runs the tidy seam, assembles MIME, and queues the
 // outbox op via cache.Account.QueueOutbound. Emits uicompose.SentMsg on
 // success, ErrorMsg on any failure.
-func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compose.Draft) tea.Cmd {
+func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compose.Draft, ids []compose.Identity) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		body, err := tidy(ctx, d.Body)
@@ -258,7 +258,7 @@ func composeSendCmd(acct *cache.Account, sentFolder string, tidy TidyFn, d compo
 			return ErrorMsg{Op: "tidy body", Err: err}
 		}
 		d.Body = body
-		mime, err := compose.AssembleMIME(d, time.Now())
+		mime, err := compose.AssembleMIME(d, ids, time.Now())
 		if err != nil {
 			return ErrorMsg{Op: "assemble MIME", Err: err}
 		}
@@ -333,7 +333,7 @@ func discardDraftCmd(acct *cache.Account, draftID, draftsFolder string, prevUID 
 
 // upsertAndPushDraftCmd persists draft payload and enqueues a server
 // push, used by the save-on-close path.
-func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d compose.Draft, prevUID mail.UID) tea.Cmd {
+func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d compose.Draft, prevUID mail.UID, ids []compose.Identity) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		payload, err := compose.EncodeDraft(d)
@@ -343,7 +343,7 @@ func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d 
 		if err := acct.CreateDraft(ctx, draftID, payload); err != nil {
 			return ErrorMsg{Op: "save draft", Err: err}
 		}
-		mime, err := compose.AssembleMIME(d, time.Now())
+		mime, err := compose.AssembleMIME(d, ids, time.Now())
 		if err != nil {
 			return ErrorMsg{Op: "assemble draft MIME", Err: err}
 		}

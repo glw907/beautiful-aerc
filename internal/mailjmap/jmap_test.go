@@ -996,6 +996,59 @@ func TestSend_NoSentMailboxFails(t *testing.T) {
 	}
 }
 
+func TestSendCachesIdentityIDByEmail(t *testing.T) {
+	folders := map[string]folderEntry{
+		"Sent": {id: "sent-mb", folder: mail.Folder{Name: "Sent", Role: "sent"}},
+	}
+	identityResp := &jmap.Invocation{
+		CallID: "0",
+		Args: &identity.GetResponse{
+			List: []*identity.Identity{
+				{ID: "id-1", Email: "alice@example.com"},
+				{ID: "id-2", Email: "bob@example.com"},
+			},
+		},
+	}
+	sendBatch := func() *jmap.Response {
+		return fakeResponse(
+			&jmap.Invocation{
+				CallID: "0",
+				Args:   &email.ImportResponse{Created: map[jmap.ID]*email.Email{"k1": {}}},
+			},
+			&jmap.Invocation{
+				CallID: "1",
+				Args:   &emailsubmission.SetResponse{Created: map[jmap.ID]*emailsubmission.EmailSubmission{"s1": {}}},
+			},
+		)
+	}
+	calls := 0
+	fake := &fakeClient{
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			calls++
+			// First call is the Identity/get probe. All subsequent calls are send batches.
+			if calls == 1 {
+				return fakeResponse(identityResp), nil
+			}
+			return sendBatch(), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", folders)
+	b.uploadBlob = func(_ []byte) (string, error) { return "blob-x", nil }
+
+	if err := b.Send(mail.Envelope{From: "alice@example.com", Rcpts: []string{"x@y"}}, []byte("Subject: hi\r\n\r\nbody")); err != nil {
+		t.Fatalf("first send: %v", err)
+	}
+	if err := b.Send(mail.Envelope{From: "bob@example.com", Rcpts: []string{"x@y"}}, []byte("Subject: hi\r\n\r\nbody")); err != nil {
+		t.Fatalf("second send: %v", err)
+	}
+
+	// One Identity/get probe on first miss populates both addresses.
+	// Second send hits the cache: 1 probe + 2 send batches = 3 round trips.
+	if calls != 3 {
+		t.Errorf("calls = %d, want 3 (1 identity probe + 2 sends)", calls)
+	}
+}
+
 func TestAppend_ImportsToFolder(t *testing.T) {
 	folders := map[string]folderEntry{
 		"Drafts": {id: "drafts-mb", folder: mail.Folder{Name: "Drafts", Role: "drafts"}},

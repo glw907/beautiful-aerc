@@ -90,9 +90,11 @@ the ADR(s) that justify them.
 - JMAP `Send` batches `Email/import` (into the Sent mailbox) and
   `EmailSubmission/set` in one request, using the JMAP `#k1`
   creation reference so submission and Sent placement are atomic.
-  `Identity/get` resolves the identity ID on first Send and caches
-  it on the Backend. `Append` is the same shape minus the
-  submission call.
+  `Identity/get` resolves identity IDs lazily and caches them on
+  `Backend.identityIDs map[string]jmap.ID` keyed by lowercased
+  email; one probe per cache miss populates the map for every
+  identity the server returns. `Append` is the same shape minus
+  the submission call.
 - IMAP `Send` runs SMTP `MAIL`/`RCPT`/`DATA`; `Append` runs IMAP
   APPEND on the cmd connection. Sent placement is a separate
   `Append` issued by the caller (the cache outbox).
@@ -186,34 +188,35 @@ the ADR(s) that justify them.
   independently. Path precedence: `--config` flag, `$POPLAR_CONFIG`,
   OS default, resolved by `config.Resolve`. The TOML key for the
   preset selector is `provider`.
-- First-run flow: when the default-or-env path is missing,
-  `config.Load` writes the self-documenting `config.Template()`
-  to disk and returns `ErrFirstRun`; the root command prints a
-  hint and exits 78 (EX_CONFIG). A legacy `accounts.toml` at the
-  same dir returns `ErrOldAccountsToml` with a rename hint.
-  `password-cmd` resolution is deferred to first `Connect` and
-  cached on the Backend (mu-guarded `password` field) so secret-
-  manager prompts surface near the action that needs them.
-  Validation errors carry `account "<name>" (provider = "<p>"): ...`
-  context; unknown providers get a Levenshtein "did you mean"
-  suggestion within edit distance 2.
-- `poplar config` subcommands: `init` (write template; refuses to
-  overwrite without `--force`), `init --force`, `check` (validate
-  + connect-test each account, sequentially — IMAP probe followed
-  by `mailimap.ProbeSMTP` for IMAP-backed accounts), `path` (print
-  resolved path), `discover-folders` (connect each account and
-  merge default folder ordering into `[ui.folders]`).
+- First-run flow: missing config writes `config.Template()` and
+  returns `ErrFirstRun`; root exits 78 (EX_CONFIG). Legacy
+  `accounts.toml` returns `ErrOldAccountsToml`. `password-cmd`
+  resolves on first `Connect` and caches on the Backend.
+  Validation errors carry `account "<name>" (provider = "<p>"):
+  ...` context; unknown providers get a Levenshtein suggestion.
+- `poplar config` subcommands: `init` (writes template, `--force`
+  to overwrite), `check` (validate + connect-test each account
+  sequentially — IMAP probe then `mailimap.ProbeSMTP`), `path`,
+  `discover-folders` (merge server folder ordering into
+  `[ui.folders]`).
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`.
-  Provider presets carry `SMTPHost`/`SMTPPort`/`SMTPStartTLS`/
-  `SMTPInsecureTLS` fields filling the canonical submission
-  endpoints (gmail/fastmail/yahoo/zoho on 465 implicit-TLS;
-  outlook/icloud on 587 STARTTLS; protonmail on the bridge's
-  loopback 1025 STARTTLS with `insecure-tls`). `SMTPConfig.Auth`/
-  `Password`/`PasswordCmd` default to mirroring the IMAP-side
-  credentials when unset; the explicit block overrides only when
-  SMTP differs from IMAP. JMAP accounts ignore `[account.smtp]`
-  (submission rides the JMAP session). Validation requires
-  `smtp.host` for `provider = "imap"` after preset resolution.
+  Presets fill canonical submission endpoints (465 implicit-TLS
+  for gmail/fastmail/yahoo/zoho; 587 STARTTLS for outlook/icloud;
+  protonmail bridge on loopback 1025 STARTTLS with `insecure-tls`).
+  `Auth`/`Password`/`PasswordCmd` default to mirroring IMAP-side
+  credentials. JMAP accounts ignore the block (submission rides
+  the JMAP session). Validation requires `smtp.host` for
+  `provider = "imap"` after preset resolution.
+- `[[account.identity]]` carries ordered
+  `[[account.identity.signature]]` sub-blocks.
+  `AccountConfig.Identities` is always length >= 1; the legacy
+  top-level `from` synthesizes one when blocks are absent. First-
+  in-order is the default and syncs back into `AccountConfig.From`.
+  Each signature sets exactly one of `text` or `file` (mutually
+  exclusive); `file` resolves at config-load. `Signature.Text`
+  always carries the RFC 3676 `"-- \n"` sentinel (prepended
+  idempotently). `Signature.Name` is unique within its identity.
+  ADR-0177.
 - `[account.contacts]` is an optional TOML sub-table for CardDAV
   ingest (URL, username, password / password-cmd,
   default-addressbook, refresh-interval, insecure-tls). Credentials

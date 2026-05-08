@@ -2,16 +2,20 @@ package compose
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/ui/contacts"
 )
+
+func stripANSI(s string) string { return ansi.Strip(s) }
 
 type fakeCache struct {
 	createCalls int
@@ -83,7 +87,7 @@ func TestModel_View_HasHeaderRows(t *testing.T) {
 
 func TestModel_TabCyclesFields(t *testing.T) {
 	c := newTestModel(t)
-	want := []int{focusCc, focusBcc, focusSubject, focusBody, focusTo}
+	want := []int{focusCc, focusBcc, focusSubject, focusBody, focusFrom, focusTo}
 	for i, w := range want {
 		c = sendKey(c, "tab")
 		if c.focus != w {
@@ -95,8 +99,8 @@ func TestModel_TabCyclesFields(t *testing.T) {
 func TestModel_ShiftTabCyclesBackward(t *testing.T) {
 	c := newTestModel(t)
 	c = sendKey(c, "shift+tab")
-	if c.focus != focusBody {
-		t.Fatalf("Shift+Tab from To should wrap to Body, got %d", c.focus)
+	if c.focus != focusFrom {
+		t.Fatalf("Shift+Tab from To should wrap to From, got %d", c.focus)
 	}
 }
 
@@ -374,5 +378,147 @@ func TestModel_OpenPreservesID(t *testing.T) {
 	}
 	if c.localDirty || c.pushDirty {
 		t.Fatalf("Open should not mark dirty: localDirty=%v pushDirty=%v", c.localDirty, c.pushDirty)
+	}
+}
+
+func TestComposeFocusOrderIncludesFrom(t *testing.T) {
+	c := newTestModel(t)
+	c.SetIdentities([]mailcompose.Identity{
+		{Name: "G", Email: "g@x", Signatures: []mailcompose.Signature{{Name: "s", Text: "-- \nG"}}},
+	})
+	c.SetSize(80, 24)
+
+	// Tab from initial focus (To) walks To→Cc→Bcc→Subject→Body→From→To.
+	got := []int{c.Focus()}
+	for i := 0; i < 6; i++ {
+		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+		got = append(got, c.Focus())
+	}
+	want := []int{focusTo, focusCc, focusBcc, focusSubject, focusBody, focusFrom, focusTo}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("focus order = %v, want %v", got, want)
+	}
+}
+
+func TestComposeIdentityCycle(t *testing.T) {
+	c := newTestModel(t)
+	c.SetSize(80, 24)
+	c.SetIdentities([]mailcompose.Identity{
+		{Name: "A", Email: "a@x", Signatures: []mailcompose.Signature{{Name: "s1", Text: "-- \n1"}}},
+		{Name: "B", Email: "b@x"}, // no sigs
+		{Name: "C", Email: "c@x", Signatures: []mailcompose.Signature{{Name: "s3", Text: "-- \n3"}}},
+	})
+	// Tab to focusFrom (last in cycle).
+	for c.Focus() != focusFrom {
+		c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+
+	// Space → next identity.
+	c.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if c.Identity() != 1 {
+		t.Errorf("after Space: identity = %d, want 1", c.Identity())
+	}
+	// B has no sigs → Signature must reset to -1.
+	if c.Signature() != -1 {
+		t.Errorf("after Space onto B: signature = %d, want -1", c.Signature())
+	}
+
+	// Space again → C; Signature resets to 0 (C has sigs).
+	c.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if c.Identity() != 2 || c.Signature() != 0 {
+		t.Errorf("after second Space: identity = %d, signature = %d, want 2, 0", c.Identity(), c.Signature())
+	}
+
+	// Wrap forward.
+	c.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if c.Identity() != 0 {
+		t.Errorf("after wrap: identity = %d, want 0", c.Identity())
+	}
+
+	// Left arrow → previous (wrap to 2).
+	c.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if c.Identity() != 2 {
+		t.Errorf("after Left wrap: identity = %d, want 2", c.Identity())
+	}
+}
+
+func TestComposeSignatureCycle(t *testing.T) {
+	c := newTestModel(t)
+	c.SetSize(80, 24)
+	c.SetIdentities([]mailcompose.Identity{
+		{Name: "A", Email: "a@x", Signatures: []mailcompose.Signature{
+			{Name: "s1", Text: "-- \n1"},
+			{Name: "s2", Text: "-- \n2"},
+		}},
+	})
+
+	// Navigate to Body (initial focus is To).
+	for c.Focus() != focusBody {
+		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+
+	// Ctrl+G in Body: 0 → 1 → -1 → 0.
+	steps := []struct{ want int }{{1}, {-1}, {0}}
+	for _, st := range steps {
+		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+		if c.Signature() != st.want {
+			t.Errorf("after Ctrl+G: signature = %d, want %d", c.Signature(), st.want)
+		}
+	}
+
+	// Tab to focusFrom; bare 'g' cycles.
+	for c.Focus() != focusFrom {
+		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if c.Signature() != 1 {
+		t.Errorf("after 'g' in focusFrom: signature = %d, want 1", c.Signature())
+	}
+
+	// Inert when identity has zero sigs.
+	c.SetIdentities([]mailcompose.Identity{{Name: "B", Email: "b@x"}})
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	if c.Signature() != -1 {
+		t.Errorf("expected signature stays -1, got %d", c.Signature())
+	}
+}
+
+func TestComposeFromRowRendersChip(t *testing.T) {
+	c := newTestModel(t)
+	c.SetSize(80, 24)
+	c.SetIdentities([]mailcompose.Identity{
+		{Name: "Geoff Wright", Email: "geoff@907.life",
+			Signatures: []mailcompose.Signature{
+				{Name: "default", Text: "-- \nG"},
+				{Name: "casual", Text: "-- \ng"},
+			}},
+	})
+
+	view := stripANSI(c.View())
+
+	if !strings.Contains(view, "Geoff Wright <geoff@907.life>") {
+		t.Errorf("From row missing identity:\n%s", view)
+	}
+	if !strings.Contains(view, "· sig: default") {
+		t.Errorf("From row missing chip:\n%s", view)
+	}
+
+	// Zero-signature identity → no chip.
+	c.SetIdentities([]mailcompose.Identity{
+		{Name: "G", Email: "g@x"},
+	})
+	view = stripANSI(c.View())
+	if strings.Contains(view, "· sig:") {
+		t.Errorf("expected no chip for zero-sig identity, got:\n%s", view)
+	}
+
+	// Signature == -1 → "no sig" chip when sigs exist.
+	c.SetIdentities([]mailcompose.Identity{
+		{Name: "G", Email: "g@x", Signatures: []mailcompose.Signature{{Name: "x", Text: "-- \nx"}}},
+	})
+	c.SetSignature(-1)
+	view = stripANSI(c.View())
+	if !strings.Contains(view, "· no sig") {
+		t.Errorf("expected '· no sig' chip, got:\n%s", view)
 	}
 }

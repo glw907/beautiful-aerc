@@ -113,6 +113,24 @@ func contactsFooterGroups() [][]footerHint {
 	}
 }
 
+func composeFooterGroups(hasSig, isFocusFrom bool) [][]footerHint {
+	core := []footerHint{
+		hint("Ctrl+X", "send", 0),
+		hint("Ctrl+C", "cancel", 0),
+		hint("Tab", "field", 4),
+	}
+	if hasSig {
+		core = append(core, hint("Ctrl+G", "sig", 5))
+	}
+	groups := [][]footerHint{core}
+	if isFocusFrom {
+		groups = append(groups, []footerHint{
+			hint("Space/←→", "identity", 6),
+		})
+	}
+	return groups
+}
+
 // Footer renders context-appropriate keybinding hints with group
 // separators.
 type Footer struct {
@@ -169,7 +187,15 @@ func (f Footer) View(width int) string {
 			groups = base
 		}
 	}
+	return f.renderGroups(groups, width)
+}
 
+// ViewGroups renders the footer using caller-supplied hint groups.
+func (f Footer) ViewGroups(groups [][]footerHint, width int) string {
+	return f.renderGroups(groups, width)
+}
+
+func (f Footer) renderGroups(groups [][]footerHint, width int) string {
 	visible := fitFooterHints(groups, width)
 
 	sep := " " + f.styles.FooterSep.Render("┊") + "  "

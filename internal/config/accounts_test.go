@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -585,6 +587,238 @@ password    = "tok"
 	}
 	if !a.GmailQuirks {
 		t.Errorf("GmailQuirks = false, want true")
+	}
+}
+
+func TestParseAccountsIdentitiesDecode(t *testing.T) {
+	tests := []struct {
+		name    string
+		toml    string
+		want    []Identity
+		wantErr string
+	}{
+		{
+			name: "two identities ordered, with mixed text and file signatures",
+			toml: `
+[[account]]
+name = "fastmail"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "Geoff Wright"
+email = "geoff@907.life"
+
+[[account.identity.signature]]
+name = "default"
+text = "Geoff Wright\nhttps://907.life"
+
+[[account.identity]]
+name = "Geoff @ ASC"
+email = "geoff.wright@aksailingclub.org"
+
+[[account.identity.signature]]
+name = "casual"
+text = "Geoff"
+`,
+			want: []Identity{
+				{
+					Name:  "Geoff Wright",
+					Email: "geoff@907.life",
+					Signatures: []Signature{
+						{Name: "default", Text: "-- \nGeoff Wright\nhttps://907.life"},
+					},
+				},
+				{
+					Name:  "Geoff @ ASC",
+					Email: "geoff.wright@aksailingclub.org",
+					Signatures: []Signature{
+						{Name: "casual", Text: "-- \nGeoff"},
+					},
+				},
+			},
+		},
+		{
+			name: "identity with zero signatures decodes",
+			toml: `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "g@x"
+`,
+			want: []Identity{{Name: "G", Email: "g@x"}},
+		},
+		{
+			name: "text and file mutually exclusive",
+			toml: `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "g@x"
+
+[[account.identity.signature]]
+name = "x"
+text = "y"
+file = "/tmp/z"
+`,
+			wantErr: `signature "x": text and file are mutually exclusive`,
+		},
+		{
+			name: "signature missing both text and file",
+			toml: `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "g@x"
+
+[[account.identity.signature]]
+name = "x"
+`,
+			wantErr: `signature "x": text or file is required`,
+		},
+		{
+			name: "duplicate signature name within identity",
+			toml: `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "g@x"
+
+[[account.identity.signature]]
+name = "dup"
+text = "a"
+
+[[account.identity.signature]]
+name = "dup"
+text = "b"
+`,
+			wantErr: `duplicate signature name "dup"`,
+		},
+		{
+			name: "preserves existing -- \\n sentinel",
+			toml: `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "g@x"
+
+[[account.identity.signature]]
+name = "x"
+text = "-- \nalready sentineled"
+`,
+			want: []Identity{{
+				Name:  "G",
+				Email: "g@x",
+				Signatures: []Signature{
+					{Name: "x", Text: "-- \nalready sentineled"},
+				},
+			}},
+		},
+		{
+			name: "invalid identity email",
+			toml: `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "not-an-address"
+`,
+			wantErr: `identity "G": email`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseAccountsFromBytes([]byte(tt.toml))
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("got nil error, want substring %q", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %q, want substring %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseAccountsFromBytes: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("got %d accounts, want 1", len(got))
+			}
+			if !reflect.DeepEqual(got[0].Identities, tt.want) {
+				t.Errorf("identities mismatch\ngot:  %#v\nwant: %#v", got[0].Identities, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseAccountsSignatureFile(t *testing.T) {
+	dir := t.TempDir()
+	sigPath := filepath.Join(dir, "sig.md")
+	if err := os.WriteFile(sigPath, []byte("Geoff\nhttps://907.life"), 0o600); err != nil {
+		t.Fatalf("write sig: %v", err)
+	}
+	toml := fmt.Sprintf(`
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+
+[[account.identity]]
+name = "G"
+email = "g@x"
+
+[[account.identity.signature]]
+name = "default"
+file = %q
+`, sigPath)
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("ParseAccountsFromBytes: %v", err)
+	}
+	want := "-- \nGeoff\nhttps://907.life"
+	if got[0].Identities[0].Signatures[0].Text != want {
+		t.Errorf("text = %q, want %q", got[0].Identities[0].Signatures[0].Text, want)
+	}
+}
+
+func TestParseAccountsLegacyFromSynthesis(t *testing.T) {
+	toml := `
+[[account]]
+name = "a"
+provider = "fastmail"
+password = "x"
+from = "Geoff <geoff@907.life>"
+`
+	got, err := ParseAccountsFromBytes([]byte(toml))
+	if err != nil {
+		t.Fatalf("ParseAccountsFromBytes: %v", err)
+	}
+	want := []Identity{{Name: "Geoff", Email: "geoff@907.life"}}
+	if !reflect.DeepEqual(got[0].Identities, want) {
+		t.Errorf("identities = %#v, want %#v", got[0].Identities, want)
 	}
 }
 
