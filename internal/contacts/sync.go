@@ -89,7 +89,14 @@ func syncOne(ctx context.Context, c *Client, s Store, state *BookState) error {
 func syncIncremental(ctx context.Context, c *Client, s Store, state *BookState) error {
 	resp, err := c.SyncCollection(ctx, state.Href, &SyncQuery{SyncToken: state.SyncToken})
 	if err != nil {
-		// Token rejection: fall back to full pull.
+		// go-webdav doesn't export its HTTP-error type, so we can't
+		// distinguish 412 token rejection from a network error. Treat
+		// ctx cancellation as terminal; everything else falls back to
+		// a full pull, which surfaces the underlying problem on retry
+		// if it wasn't really a token issue.
+		if ctx.Err() != nil {
+			return err
+		}
 		state.SyncToken = ""
 		return syncFull(ctx, c, s, state)
 	}
@@ -106,7 +113,10 @@ func syncIncremental(ctx context.Context, c *Client, s Store, state *BookState) 
 
 func syncCTAG(ctx context.Context, c *Client, s Store, state *BookState) error {
 	ctag, err := c.CTAG(ctx, state.Href)
-	if err == nil && ctag == state.CTAG && state.CTAG != "" {
+	if err != nil {
+		return fmt.Errorf("ctag: %w", err)
+	}
+	if ctag != "" && ctag == state.CTAG {
 		return nil
 	}
 	if err := syncFull(ctx, c, s, state); err != nil {
@@ -119,21 +129,17 @@ func syncCTAG(ctx context.Context, c *Client, s Store, state *BookState) error {
 }
 
 func syncFull(ctx context.Context, c *Client, s Store, state *BookState) error {
-	hrefs, etags, err := listAllResources(ctx, c, state.Href)
+	objs, err := c.cl.QueryAddressBook(ctx, state.Href, &carddav.AddressBookQuery{})
 	if err != nil {
-		return fmt.Errorf("list: %w", err)
-	}
-	objs, err := c.Multiget(ctx, state.Href, hrefs)
-	if err != nil {
-		return fmt.Errorf("multiget: %w", err)
+		return fmt.Errorf("query address book: %w", err)
 	}
 	added := make([]Stored, 0, len(objs))
-	for i, obj := range objs {
+	for _, obj := range objs {
 		p, err := parseObject(obj)
 		if err != nil || p.Skip {
 			continue
 		}
-		added = append(added, Stored{Parsed: p, Href: hrefs[i], ETag: etags[i]})
+		added = append(added, Stored{Parsed: p, Href: obj.Path, ETag: obj.ETag})
 	}
 	if err := s.ApplyChangeset(ctx, state.Href, added, nil, state.SyncToken, state.CTAG); err != nil {
 		return err
@@ -146,6 +152,7 @@ func syncFull(ctx context.Context, c *Client, s Store, state *BookState) error {
 	}
 	return nil
 }
+
 
 // materializeChangeset converts a SyncResponse into Stored rows for
 // adds/changes and a slice of removed hrefs. Objects in r.Updated already
@@ -186,22 +193,6 @@ func materializeChangeset(ctx context.Context, c *Client, bookHref string, r *Sy
 	}
 
 	return added, r.Deleted, nil
-}
-
-// listAllResources fetches every address object path and etag under
-// bookHref via an addressbook-query REPORT with no filter.
-func listAllResources(ctx context.Context, c *Client, bookHref string) ([]string, []string, error) {
-	objs, err := c.cl.QueryAddressBook(ctx, bookHref, &carddav.AddressBookQuery{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("query address book: %w", err)
-	}
-	hrefs := make([]string, len(objs))
-	etags := make([]string, len(objs))
-	for i, obj := range objs {
-		hrefs[i] = obj.Path
-		etags[i] = obj.ETag
-	}
-	return hrefs, etags, nil
 }
 
 func parseObject(obj carddav.AddressObject) (Parsed, error) {
