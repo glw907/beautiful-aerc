@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -75,6 +76,23 @@ func TestAttachPicker_OpenReadsDir(t *testing.T) {
 	}
 }
 
+func feedKeys(p AttachPicker, keys ...string) AttachPicker {
+	for _, k := range keys {
+		p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(k)}))
+	}
+	return p
+}
+
+func loadDir(t *testing.T, p AttachPicker, dir string) AttachPicker {
+	t.Helper()
+	p, cmd := p.Open(dir)
+	if cmd != nil {
+		p, _ = p.Update(cmd())
+	}
+	p = p.SetSize(60, 10)
+	return p
+}
+
 func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "a.txt")
@@ -89,6 +107,42 @@ func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 		if e.name == "ghost" {
 			t.Fatal("stale readDirMsg should have been dropped")
 		}
+	}
+}
+
+func TestAttachPicker_Nav(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a", "b", "c", "d", "e")
+	p := loadDir(t, newTestPicker(t), dir)
+
+	if p.cursor != 0 {
+		t.Fatalf("initial cursor = %d", p.cursor)
+	}
+	p = feedKeys(p, "j", "j")
+	if p.cursor != 2 {
+		t.Errorf("after jj: cursor = %d, want 2", p.cursor)
+	}
+	p = feedKeys(p, "k")
+	if p.cursor != 1 {
+		t.Errorf("after k: cursor = %d, want 1", p.cursor)
+	}
+	p = feedKeys(p, "G")
+	if p.cursor != len(p.entries)-1 {
+		t.Errorf("after G: cursor = %d, want %d", p.cursor, len(p.entries)-1)
+	}
+	p = feedKeys(p, "g")
+	if p.cursor != 0 {
+		t.Errorf("after g: cursor = %d, want 0", p.cursor)
+	}
+
+	// bounds
+	p = feedKeys(p, "k", "k")
+	if p.cursor != 0 {
+		t.Errorf("k at top: cursor = %d, want 0", p.cursor)
+	}
+	p = feedKeys(p, "G", "j")
+	if p.cursor != len(p.entries)-1 {
+		t.Errorf("j at bottom: cursor = %d, want %d", p.cursor, len(p.entries)-1)
 	}
 }
 

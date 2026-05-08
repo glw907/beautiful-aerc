@@ -163,8 +163,61 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 			p.cursor = 0
 		}
 		return p, nil
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(m, p.keys.Down):
+			if p.cursor < len(p.entries)-1 {
+				p.cursor++
+			}
+			return p.clampOffset(), nil
+		case key.Matches(m, p.keys.Up):
+			if p.cursor > 0 {
+				p.cursor--
+			}
+			return p.clampOffset(), nil
+		case key.Matches(m, p.keys.GoTop):
+			p.cursor, p.offset = 0, 0
+			return p, nil
+		case key.Matches(m, p.keys.GoBot):
+			if len(p.entries) > 0 {
+				p.cursor = len(p.entries) - 1
+			}
+			return p.clampOffset(), nil
+		case key.Matches(m, p.keys.PgDown):
+			step := p.viewportRows()
+			p.cursor += step
+			if p.cursor >= len(p.entries) {
+				p.cursor = len(p.entries) - 1
+			}
+			return p.clampOffset(), nil
+		case key.Matches(m, p.keys.PgUp):
+			step := p.viewportRows()
+			p.cursor -= step
+			if p.cursor < 0 {
+				p.cursor = 0
+			}
+			return p.clampOffset(), nil
+		}
 	}
 	return p, nil
+}
+
+// viewportRows is the body height available for entries inside the
+// ModalShell box. shell.Height() includes border + title + footer
+// rows; subtract a fixed budget of 5 (1 top border, 1 title, 1 sep,
+// 2 footer rows, 1 bottom border) conservatively.
+func (p AttachPicker) viewportRows() int {
+	h := p.shell.Height() - 5
+	if h < 1 {
+		return 1
+	}
+	return h
+}
+
+func (p AttachPicker) clampOffset() AttachPicker {
+	rows := p.viewportRows()
+	p.offset = uicore.ClampScrollOffset(p.cursor, rows, p.offset)
+	return p
 }
 
 // View is a no-op stub. Filled in by later tasks.
