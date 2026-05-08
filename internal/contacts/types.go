@@ -66,7 +66,7 @@ type AddressBook struct {
 // tests supply a fake. The cache drainer calls through it on ContactPut
 // and ContactDelete ops.
 type Writer interface {
-	PutAddressObject(ctx context.Context, bookHref, href, ifMatch string, obj carddav.AddressObject) (carddav.AddressObject, error)
+	PutAddressObject(ctx context.Context, href, ifMatch string, body []byte) (newHref, newETag string, err error)
 	DeleteAddressObject(ctx context.Context, href, ifMatch string) error
 	Multiget(ctx context.Context, bookHref string, hrefs []string) ([]carddav.AddressObject, error)
 }

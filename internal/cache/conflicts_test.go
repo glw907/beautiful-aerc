@@ -3,10 +3,13 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/emersion/go-webdav/carddav"
+	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -280,6 +283,128 @@ func TestRevertOptimisticTx_ContactKindsAreNoop(t *testing.T) {
 	}
 	if err := revertOptimisticTx(nil, 0, ContactDeleteArgs{}); err != nil {
 		t.Errorf("revertOptimisticTx(ContactDeleteArgs): %v", err)
+	}
+}
+
+// seedContact inserts a minimal addressbook + contact row so drainer
+// tests have a target for etag write-back assertions.
+func seedContact(t *testing.T, a *Account, uid, etag string) {
+	t.Helper()
+	mustExec(t, a.db, `INSERT OR IGNORE INTO addressbooks(href, display_name, description, sync_token, ctag, supports_sync, last_synced_at) VALUES ('/b/', 'Default', '', '', '', 1, 0)`)
+	mustExec(t, a.db, `INSERT INTO contacts(uid, addressbook_href, href, etag, vcard, rev, fn, family, given, org, title, note, last_synced_at) VALUES (?, '/b/', '/b/'||?||'.vcf', ?, x'', '', '', '', '', '', '', '', 0)`,
+		uid, uid, etag)
+}
+
+// contactsSentinelFolderID inserts the __contacts__ sentinel folder if absent
+// and returns its id. Used to satisfy the outbox.folder NOT NULL constraint
+// in drainer tests that seed outbox rows directly.
+func contactsSentinelFolderID(t *testing.T, a *Account) int64 {
+	t.Helper()
+	_, err := a.db.Exec(`INSERT OR IGNORE INTO folders(name, protocol_name) VALUES ('__contacts__', '')`)
+	if err != nil {
+		t.Fatalf("ensure contacts sentinel folder: %v", err)
+	}
+	var id int64
+	if err := a.db.QueryRow(`SELECT id FROM folders WHERE name = '__contacts__'`).Scan(&id); err != nil {
+		t.Fatalf("read contacts sentinel folder id: %v", err)
+	}
+	return id
+}
+
+type fakeContactsWriter struct {
+	putErr  error
+	delErr  error
+	puts    int
+	deletes int
+	newHref string
+	newETag string
+}
+
+func (f *fakeContactsWriter) PutAddressObject(_ context.Context, href, _ string, _ []byte) (string, string, error) {
+	f.puts++
+	if f.putErr != nil {
+		return "", "", f.putErr
+	}
+	if f.newHref != "" {
+		return f.newHref, f.newETag, nil
+	}
+	return href, f.newETag, nil
+}
+
+func (f *fakeContactsWriter) DeleteAddressObject(_ context.Context, _ string, _ string) error {
+	f.deletes++
+	return f.delErr
+}
+
+func (f *fakeContactsWriter) Multiget(_ context.Context, _ string, _ []string) ([]carddav.AddressObject, error) {
+	return nil, nil
+}
+
+func TestDrainer_ContactPut_Success(t *testing.T) {
+	a := openTestAccount(t)
+	w := &fakeContactsWriter{newETag: `"new"`}
+	a.ContactsWriter = w
+	ctx := context.Background()
+
+	seedContact(t, a, "u1", `"old"`)
+	folderID := contactsSentinelFolderID(t, a)
+	args, _ := json.Marshal(ContactPutArgs{BookHref: "/b/", Href: "/b/u1.vcf", IfMatch: `"old"`})
+	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (?, NULL, ?, ?, x'', 0, ?, 0, NULL)`,
+		folderID, string(KindContactPut), string(args), string(OpPending))
+
+	a.drainOnce(ctx, defaultDrainerConfig())
+
+	if w.puts != 1 {
+		t.Fatalf("puts=%d want 1", w.puts)
+	}
+	var status, etag string
+	a.db.QueryRow(`SELECT status FROM outbox`).Scan(&status)
+	a.db.QueryRow(`SELECT etag FROM contacts WHERE uid='u1'`).Scan(&etag)
+	if status != string(OpDone) {
+		t.Errorf("status=%q want done", status)
+	}
+	if etag != `"new"` {
+		t.Errorf("etag=%q want %q", etag, `"new"`)
+	}
+}
+
+func TestDrainer_ContactPut_PreconditionConflict(t *testing.T) {
+	a := openTestAccount(t)
+	w := &fakeContactsWriter{putErr: contacts.ErrPreconditionFailed}
+	a.ContactsWriter = w
+	ctx := context.Background()
+
+	seedContact(t, a, "u1", `"stale"`)
+	folderID := contactsSentinelFolderID(t, a)
+	args, _ := json.Marshal(ContactPutArgs{BookHref: "/b/", Href: "/b/u1.vcf", IfMatch: `"stale"`})
+	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (?, NULL, ?, ?, x'', 0, ?, 0, NULL)`,
+		folderID, string(KindContactPut), string(args), string(OpPending))
+
+	a.drainOnce(ctx, defaultDrainerConfig())
+
+	var status string
+	a.db.QueryRow(`SELECT status FROM outbox`).Scan(&status)
+	if status != string(OpConflict) {
+		t.Errorf("status=%q want conflict", status)
+	}
+}
+
+func TestDrainer_ContactDelete_NotFoundIsSuccess(t *testing.T) {
+	a := openTestAccount(t)
+	a.ContactsWriter = &fakeContactsWriter{delErr: contacts.ErrNotFound}
+	ctx := context.Background()
+
+	folderID := contactsSentinelFolderID(t, a)
+	args, _ := json.Marshal(ContactDeleteArgs{Href: "/b/u1.vcf", IfMatch: `"e"`})
+	mustExec(t, a.db, `INSERT INTO outbox(folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at) VALUES (?, NULL, ?, ?, NULL, 0, ?, 0, NULL)`,
+		folderID, string(KindContactDelete), string(args), string(OpPending))
+
+	a.drainOnce(ctx, defaultDrainerConfig())
+
+	var status string
+	a.db.QueryRow(`SELECT status FROM outbox`).Scan(&status)
+	if status != string(OpDone) {
+		t.Errorf("status=%q want done", status)
 	}
 }
 

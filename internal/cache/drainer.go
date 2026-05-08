@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/backoff"
+	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -126,6 +127,15 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 	case dispatchErr == nil:
 		_ = a.finalizeSuccess(ctx, row, args)
 		a.publish(row, OpDone, nil)
+	case errors.Is(dispatchErr, contacts.ErrAuth):
+		_ = a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0)
+		a.publish(row, OpConflict, dispatchErr)
+	case errors.Is(dispatchErr, contacts.ErrPreconditionFailed):
+		_ = a.finishOp(row.ID, OpConflict, encodeErr("precondition-failed", dispatchErr), 0)
+		a.publish(row, OpConflict, dispatchErr)
+	case errors.Is(dispatchErr, contacts.ErrNotFound):
+		_ = a.finalizeSuccess(ctx, row, args)
+		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, mail.ErrAuth):
 		_ = a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0)
 		a.publish(row, OpConflict, dispatchErr)
@@ -207,6 +217,21 @@ func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
 			return err
 		}
 		return a.MarkDraftPushed(context.Background(), v.DraftID, newUID, row.FolderName)
+	case ContactPutArgs:
+		if a.ContactsWriter == nil {
+			return errors.New("contacts writer not wired")
+		}
+		newHref, newETag, err := a.ContactsWriter.PutAddressObject(context.Background(), v.Href, v.IfMatch, row.Payload)
+		if err != nil {
+			return err
+		}
+		_, dbErr := a.db.Exec(`UPDATE contacts SET href = ?, etag = ? WHERE href = ?`, newHref, newETag, v.Href)
+		return dbErr
+	case ContactDeleteArgs:
+		if a.ContactsWriter == nil {
+			return errors.New("contacts writer not wired")
+		}
+		return a.ContactsWriter.DeleteAddressObject(context.Background(), v.Href, v.IfMatch)
 	}
 	return fmt.Errorf("dispatch: unknown args %T", args)
 }
