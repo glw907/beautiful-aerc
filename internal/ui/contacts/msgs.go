@@ -31,3 +31,15 @@ type ContactSaveMsg struct {
 // ContactCancelMsg fires when the user exits the form; Dirty is set when
 // there were unsaved changes.
 type ContactCancelMsg struct{ Dirty bool }
+
+// OpenContactDeleteConfirmMsg asks App to open the deletion confirm modal
+// for an existing contact. Form emits this; App handles the confirm
+// cascade and emits ContactDeleteMsg on Yes.
+type OpenContactDeleteConfirmMsg struct {
+	UID         string
+	DisplayName string
+}
+
+// ContactDeleteMsg fires after the user confirms deletion. App routes it
+// to cache.QueueContactDelete and dismisses the form.
+type ContactDeleteMsg struct{ UID string }

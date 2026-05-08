@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -45,6 +46,7 @@ type Form struct {
 	fromPopover bool
 	saveTo      []string
 	saveIdx     int
+	existingUID string
 
 	first   textinput.Model
 	last    textinput.Model
@@ -139,6 +141,13 @@ func labelIndex(labels []string, want string) int {
 
 func (f Form) FromPopover() bool { return f.fromPopover }
 
+// WithExistingUID marks the form as editing an existing contact.
+// Empty UID means "new contact" and disables the Delete key.
+func (f Form) WithExistingUID(uid string) Form {
+	f.existingUID = uid
+	return f
+}
+
 func (f Form) SetSize(w, h int) Form {
 	f.width = w
 	f.height = h
@@ -221,6 +230,14 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 	case tea.KeyShiftTab:
 		f = f.advanceFocus(-1)
 		return f, nil
+	}
+
+	if key.Matches(k, keys.D) && f.existingUID != "" && !f.focusedIsTextInput() {
+		uid := f.existingUID
+		name := f.currentContact().Name
+		return f, func() tea.Msg {
+			return OpenContactDeleteConfirmMsg{UID: uid, DisplayName: name}
+		}
 	}
 
 	w := f.focusedWidget()
@@ -519,6 +536,14 @@ func (f Form) focusedWidget() widget {
 		return list[0]
 	}
 	return list[f.focusIdx]
+}
+
+func (f Form) focusedIsTextInput() bool {
+	switch f.focusedWidget().kind {
+	case widFirst, widLast, widOrg, widTitle, widBizName, widEmailInput, widPhoneInput, widNote:
+		return true
+	}
+	return false
 }
 
 func (f Form) advanceFocus(delta int) Form {

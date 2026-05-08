@@ -240,6 +240,56 @@ func TestForm_PhoneValidation(t *testing.T) {
 	}
 }
 
+func TestForm_D_InertOnNewContact(t *testing.T) {
+	f := NewForm(newTestStyles(), Contact{Kind: KindPerson}, false, []string{"local"})
+	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	if cmd != nil {
+		if msg := cmd(); msg != nil {
+			if _, ok := msg.(OpenContactDeleteConfirmMsg); ok {
+				t.Fatal("D on new contact must not open delete confirm")
+			}
+		}
+	}
+}
+
+func TestForm_D_OpensConfirmOnExisting(t *testing.T) {
+	c := Contact{Kind: KindPerson, Given: "Ada", Name: "Ada"}
+	c.Emails = []Email{{Address: "ada@x.example"}}
+	f := NewForm(newTestStyles(), c, false, []string{"local"})
+	f = f.WithExistingUID("u-1")
+	// Default focusIdx lands on a text input (widFirst). Move to widKind (idx 0)
+	// so D is not swallowed by the text input.
+	fm, _ := f.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	f = fm
+	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	if cmd == nil {
+		t.Fatal("D on existing contact with non-input focus must emit OpenContactDeleteConfirmMsg")
+	}
+	msg := cmd()
+	open, ok := msg.(OpenContactDeleteConfirmMsg)
+	if !ok {
+		t.Fatalf("got %T want OpenContactDeleteConfirmMsg", msg)
+	}
+	if open.UID != "u-1" || open.DisplayName != "Ada" {
+		t.Errorf("got %+v", open)
+	}
+}
+
+func TestForm_D_InertWhenTypingInTextInput(t *testing.T) {
+	c := Contact{Kind: KindPerson, Given: "Ada", Name: "Ada"}
+	c.Emails = []Email{{Address: "ada@x.example"}}
+	f := NewForm(newTestStyles(), c, false, []string{"local"})
+	f = f.WithExistingUID("u-1")
+	// Default focus is widFirst (a text input). D must not open the confirm.
+	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	if cmd != nil {
+		msg := cmd()
+		if _, ok := msg.(OpenContactDeleteConfirmMsg); ok {
+			t.Fatal("D in text input must not open delete confirm")
+		}
+	}
+}
+
 func TestForm_ViewRendersHeaderAndFields(t *testing.T) {
 	f := newPersonForm(Contact{Emails: []Email{{Address: "a@b.c"}}})
 	f = f.SetSize(80, 24)
