@@ -1,6 +1,8 @@
 # Poplar Status
 
 **Current pass:** Pass 9q next — Outbox delivery controls (#35).
+Pass 9v (Bubble Eval A) closed — all five candidates Keep + harvest;
+no swaps authorized. See `docs/superpowers/specs/2026-05-08-bubble-eval-a-strong-matches.md`.
 
 ## Passes
 
@@ -19,6 +21,7 @@
 | 9n | Email signatures + multiple identities (ADR-0177) | done |
 | 9o | Claude Tidy — user-invoked Ctrl+T (ADR-0178) | done |
 | 9p | Attachments-richer compose UI (#24) (ADR-0179) | done |
+| 9v | Bubble Eval A (strong matches) — triage spec; no swaps | done |
 | 9q | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 9r–9t | List-Unsubscribe (#36), .ics viewer (#37), full-account search (#38) | pending |
 | 9u | First-run wizard (#27) + OAuth refresh + config template fix (#29) | pending |
