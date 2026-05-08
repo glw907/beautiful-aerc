@@ -3,9 +3,11 @@ package cache
 import (
 	"database/sql"
 	"fmt"
+	"net/mail"
+	"strings"
 )
 
-const schemaVersion = 7
+const schemaVersion = 8
 
 // migration applies one schema step inside a transaction. Index 0 is v0→v1.
 type migration func(*sql.Tx) error
@@ -18,6 +20,7 @@ var migrations = []migration{
 	migrateV5, // v4 → v5: attachments table (metadata + lazy bytes)
 	migrateV6, // v5 → v6: outbox.payload BLOB for Send/Append MIME bytes
 	migrateV7, // v6 → v7: drafts table (local-buffer + server_uid pointer)
+	migrateV8, // v7 → v8: contacts cache + recipient projection
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -194,6 +197,113 @@ func migrateV7(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// migrateV8 adds the contacts cache and the message_recipients projection
+// used by SuggestAddresses ranking. Backfills message_recipients from
+// existing messages rows in the same transaction.
+func migrateV8(tx *sql.Tx) error {
+	stmts := []string{
+		`CREATE TABLE addressbooks (
+			href           TEXT PRIMARY KEY,
+			display_name   TEXT NOT NULL,
+			description    TEXT NOT NULL DEFAULT '',
+			sync_token     TEXT NOT NULL DEFAULT '',
+			ctag           TEXT NOT NULL DEFAULT '',
+			supports_sync  INTEGER NOT NULL DEFAULT 0,
+			last_synced_at INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE contacts (
+			uid              TEXT PRIMARY KEY,
+			addressbook_href TEXT NOT NULL REFERENCES addressbooks(href) ON DELETE CASCADE,
+			href             TEXT NOT NULL UNIQUE,
+			etag             TEXT NOT NULL,
+			vcard            BLOB NOT NULL,
+			rev              TEXT NOT NULL DEFAULT '',
+			fn               TEXT NOT NULL,
+			family           TEXT NOT NULL DEFAULT '',
+			given            TEXT NOT NULL DEFAULT '',
+			org              TEXT NOT NULL DEFAULT '',
+			title            TEXT NOT NULL DEFAULT '',
+			note             TEXT NOT NULL DEFAULT '',
+			last_synced_at   INTEGER NOT NULL
+		)`,
+		`CREATE INDEX contacts_by_book ON contacts(addressbook_href)`,
+		`CREATE TABLE contact_emails (
+			contact_uid TEXT NOT NULL REFERENCES contacts(uid) ON DELETE CASCADE,
+			address     TEXT NOT NULL,
+			label       TEXT NOT NULL DEFAULT '',
+			pref        INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (contact_uid, address)
+		)`,
+		`CREATE INDEX contact_emails_by_addr ON contact_emails(address COLLATE NOCASE)`,
+		`CREATE TABLE contact_phones (
+			contact_uid TEXT NOT NULL REFERENCES contacts(uid) ON DELETE CASCADE,
+			number      TEXT NOT NULL,
+			label       TEXT NOT NULL DEFAULT '',
+			pref        INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (contact_uid, number)
+		)`,
+		`CREATE TABLE message_recipients (
+			message_uid INTEGER NOT NULL,
+			role        TEXT NOT NULL CHECK (role IN ('from','to','cc')),
+			address     TEXT NOT NULL,
+			name        TEXT NOT NULL DEFAULT '',
+			sent_at     INTEGER NOT NULL,
+			PRIMARY KEY (message_uid, role, address)
+		)`,
+		`CREATE INDEX message_recipients_by_addr_sent ON message_recipients(address COLLATE NOCASE, sent_at DESC)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("migrateV8: %w", err)
+		}
+	}
+	return backfillRecipients(tx)
+}
+
+// backfillRecipients populates message_recipients from existing messages
+// rows. Runs once in the v7→v8 migration; INSERT OR IGNORE makes it
+// safe on retry.
+func backfillRecipients(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT id, sent_at, from_addr, to_addr, cc_addr FROM messages`)
+	if err != nil {
+		return fmt.Errorf("backfill recipients: %w", err)
+	}
+	defer rows.Close()
+
+	insert, err := tx.Prepare(
+		`INSERT OR IGNORE INTO message_recipients(message_uid, role, address, name, sent_at) VALUES (?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("backfill prepare: %w", err)
+	}
+	defer insert.Close()
+
+	for rows.Next() {
+		var id, sentAt int64
+		var from, to, cc sql.NullString
+		if err := rows.Scan(&id, &sentAt, &from, &to, &cc); err != nil {
+			return fmt.Errorf("backfill scan: %w", err)
+		}
+		writeRoleAddrs(insert, id, sentAt, "from", from.String)
+		writeRoleAddrs(insert, id, sentAt, "to", to.String)
+		writeRoleAddrs(insert, id, sentAt, "cc", cc.String)
+	}
+	return rows.Err()
+}
+
+func writeRoleAddrs(stmt *sql.Stmt, msgID, sentAt int64, role, raw string) {
+	if raw == "" {
+		return
+	}
+	addrs, err := mail.ParseAddressList(raw)
+	if err != nil {
+		return // malformed legacy row; skip
+	}
+	for _, a := range addrs {
+		_, _ = stmt.Exec(msgID, role, strings.ToLower(a.Address), a.Name, sentAt)
+	}
 }
 
 // applyMigrations brings db up to schemaVersion. Each step runs in

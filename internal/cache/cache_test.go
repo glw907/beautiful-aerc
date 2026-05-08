@@ -414,8 +414,8 @@ func TestSchemaMigration_V7Drafts(t *testing.T) {
 	if err := a.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if version != 7 {
-		t.Errorf("schema version = %d, want 7", version)
+	if version != schemaVersion {
+		t.Errorf("schema version = %d, want %d", version, schemaVersion)
 	}
 
 	rows, err := a.db.Query(`PRAGMA table_info(drafts)`)
