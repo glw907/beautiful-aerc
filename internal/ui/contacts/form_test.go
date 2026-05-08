@@ -216,6 +216,30 @@ func TestForm_TabCyclesFocus(t *testing.T) {
 	}
 }
 
+func TestForm_PhoneValidation(t *testing.T) {
+	cases := []struct {
+		num     string
+		wantErr bool
+	}{
+		{"", false},
+		{"+12025551234", false},   // E.164 (Washington DC NPA, valid)
+		{"(202) 555-1234", false}, // parseable as US
+		{"not a phone", true},
+		{"123", true}, // too short
+	}
+	for _, tc := range cases {
+		t.Run(tc.num, func(t *testing.T) {
+			err := validatePhoneNumber(tc.num)
+			if tc.wantErr && err == nil {
+				t.Errorf("want error for %q", tc.num)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error for %q: %v", tc.num, err)
+			}
+		})
+	}
+}
+
 func TestForm_ViewRendersHeaderAndFields(t *testing.T) {
 	f := newPersonForm(Contact{Emails: []Email{{Address: "a@b.c"}}})
 	f = f.SetSize(80, 24)

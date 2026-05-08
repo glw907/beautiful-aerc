@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/ui/uicore"
+	"github.com/nyaruka/phonenumbers"
 )
 
 // Index 0 of each table is the default label.
@@ -348,6 +349,22 @@ func toggleKind(k Kind) Kind {
 	return KindPerson
 }
 
+const defaultPhoneRegion = "US"
+
+func validatePhoneNumber(s string) error {
+	if s == "" {
+		return nil
+	}
+	num, err := phonenumbers.Parse(s, defaultPhoneRegion)
+	if err != nil {
+		return fmt.Errorf("phone: %w", err)
+	}
+	if !phonenumbers.IsValidNumber(num) {
+		return fmt.Errorf("phone: not a valid number")
+	}
+	return nil
+}
+
 // Validate returns nil when the form passes the spec rules.
 func (f Form) Validate() error {
 	switch f.kind {
@@ -370,6 +387,11 @@ func (f Form) Validate() error {
 		}
 		if _, perr := mail.ParseAddress(v); perr != nil {
 			return fmt.Errorf("email row %d invalid: %v", i+1, perr)
+		}
+	}
+	for _, p := range f.phones {
+		if err := validatePhoneNumber(strings.TrimSpace(p.input.Value())); err != nil {
+			return err
 		}
 	}
 	if f.saveIdx < 0 || f.saveIdx >= len(f.saveTo) {
