@@ -11,19 +11,18 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// popoverMaxSuggestions caps the suggestion list. 5 matches the
-// OS-native context-menu convention (macOS, Firefox, Chrome) and
-// stays inside SymSpell's high-quality top-of-list ranking.
+// 5 matches the OS-native context-menu convention and stays inside
+// SymSpell's high-quality top-of-list ranking.
 const popoverMaxSuggestions = 5
 
-// popoverState is Catkin's misspelling-suggestion overlay. The
-// zero value is closed.
+// popoverState is the misspelling-suggestion overlay; the zero value
+// is closed.
 type popoverState struct {
 	open        bool
 	wordRange   Range
 	word        string
 	suggestions []string
-	cursor      int // selected suggestion index
+	cursor      int
 }
 
 var popoverKeys = struct {
@@ -31,8 +30,8 @@ var popoverKeys = struct {
 	Next, Prev, Apply key.Binding
 	Add, Ignore       key.Binding
 }{
-	// ";" opens the popover on a misspelling. Falls through to textarea when the
-	// cursor is not on a flagged word, so normal typing is unaffected.
+	// ";" opens the popover only when the cursor is on a flagged word;
+	// otherwise it falls through to the textarea so typing is unaffected.
 	Open:   key.NewBinding(key.WithKeys(";")),
 	Close:  key.NewBinding(key.WithKeys("esc")),
 	Next:   key.NewBinding(key.WithKeys("down", "ctrl+n")),
@@ -58,7 +57,7 @@ func (m Model) findMisspellingAt(byteOff int) *Annotation {
 	return nil
 }
 
-// openPopover seeds popoverState from an annotation and closes any
+// openPopover seeds the popover from an annotation and closes any
 // active find shelf.
 func (m Model) openPopover(a *Annotation) Model {
 	mp, ok := a.Payload.(MisspellingPayload)
@@ -83,9 +82,8 @@ func (m Model) closePopover() Model {
 	return m
 }
 
-// handlePopoverKey dispatches a KeyMsg while the popover is open.
-// Returns (handled, model). When handled is false, the caller falls
-// through to normal Update handling.
+// handlePopoverKey dispatches a KeyMsg while the popover is open. The
+// boolean is false when the key wasn't claimed and Update should run.
 func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model) {
 	switch {
 	case key.Matches(k, popoverKeys.Close):
@@ -107,7 +105,6 @@ func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model) {
 	case key.Matches(k, popoverKeys.Add):
 		return true, m.addCurrentWordToWordlist()
 	}
-	// Digit jump-and-apply.
 	if len(k.Runes) == 1 && k.Runes[0] >= '1' && k.Runes[0] <= '9' {
 		idx := int(k.Runes[0] - '1')
 		if idx < len(m.popover.suggestions) {
@@ -169,10 +166,9 @@ func (m Model) addCurrentWordToWordlist() Model {
 	return m
 }
 
-// appendUserWord appends word to path, creating it 0o600 if missing.
-// Errors are swallowed: the in-memory speller still picks up the word
-// for this session, and the popover key handler has no surface for
-// reporting an I/O failure.
+// appendUserWord appends word to path (creating 0o600 if absent). I/O
+// errors are swallowed; the in-memory speller already has the word for
+// this session and the popover has no error surface.
 func appendUserWord(path, word string) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -182,9 +178,8 @@ func appendUserWord(path, word string) {
 	fmt.Fprintf(f, "%s\n", word)
 }
 
-// width returns the popover's outer width including borders. Sized to
-// the longest content row, capped at 32 cols so the popover stays out
-// of the way of long lines.
+// width returns the popover's outer width sized to the longest row,
+// capped at 32 cols so it stays out of the way of long lines.
 func (p popoverState) width() int {
 	const maxWidth = 32
 	w := lipgloss.Width(`"` + p.word + `"`)
@@ -206,7 +201,7 @@ func (p popoverState) height() int {
 }
 
 // render returns the framed popover content. The width arg is unused;
-// the natural width() drives sizing.
+// width() drives sizing.
 func (p popoverState) render(_ int, st Styles) string {
 	innerW := p.width() - 2
 	header := lipgloss.NewStyle().Width(innerW).Render(`"` + p.word + `"`)
@@ -235,9 +230,8 @@ func (p popoverState) render(_ int, st Styles) string {
 	return frame.Render(body)
 }
 
-// position returns the (row, col) where the popover's top-left corner
-// should sit, given the cursor position in screen coordinates and the
-// viewport dimensions.
+// position returns the (row, col) for the popover's top-left given the
+// cursor position and viewport dims.
 func (p popoverState) position(cursorRow, cursorCol, viewportW, viewportH int) (int, int) {
 	row := cursorRow + 1
 	if row+p.height() > viewportH {
@@ -256,10 +250,9 @@ func (p popoverState) position(cursorRow, cursorCol, viewportW, viewportH int) (
 	return row, col
 }
 
-// overlay composites a popover onto rendered body, returning a new string
-// with the popover's rows replacing the corresponding horizontal slices.
-// Body lines shorter than col are right-padded with spaces so the popover
-// lands at its requested column rather than collapsing to col 0.
+// overlay composites pop onto body, replacing the horizontal slices
+// under the popover. Lines shorter than col are right-padded so the
+// popover lands at its requested column rather than collapsing to 0.
 func overlay(body, pop string, row, col int) string {
 	bodyLines := strings.Split(body, "\n")
 	popLines := strings.Split(pop, "\n")
@@ -302,8 +295,8 @@ func byteOffsetForRune(src string, runeOff int) int {
 	return len(src)
 }
 
-// maybeScheduleAnnotateAfterMutation issues an annotate-tick when the
-// model's srcGen advanced (apply/ignore both bump it). Returns the merged Cmd.
+// maybeScheduleAnnotateAfterMutation schedules an annotate-tick when
+// srcGen advanced (apply and ignore both bump it).
 func (m Model) maybeScheduleAnnotateAfterMutation(mm Model, cmd tea.Cmd) tea.Cmd {
 	if mm.srcGen != m.srcGen && len(mm.annotators) > 0 {
 		return tea.Batch(cmd, scheduleAnnotateCmd(mm.srcGen))

@@ -8,16 +8,15 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Render produces Catkin's view content: styled text plus a
-// cursor block, soft-wrapped at width and clipped to height.
-// Styling is a pure render-time overlay. The raw source is not
-// touched. The zero Styles value yields plain output.
+// Render produces Catkin's view: styled text plus a cursor block,
+// soft-wrapped at width and clipped to height. Styling is a pure
+// render-time overlay; the zero Styles value yields plain output.
 func Render(src string, width, height, top, cursor int, styles Styles, mode DisplayMode) string {
 	return RenderAnnotated(src, width, height, top, cursor, styles, mode, nil)
 }
 
 // RenderAnnotated overlays ann's decorations before the cursor block.
-// ann may be nil, in which case behavior matches Render.
+// ann may be nil to match Render.
 func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, mode DisplayMode, ann *AnnotationSet) string {
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
@@ -75,15 +74,10 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 	return strings.Join(visual, "\n")
 }
 
-// applyAnnotationsToLine splices annotation styles into the
-// already-styled line at column offsets derived from plain.
-//
-// cursorByteCol is the byte offset within plain of the cursor
-// insertion point on the cursor row, or -1 on non-cursor rows.
-// insertCursorBlock replaces (not inserts) the rune at the cursor,
-// so column math against plain matches styled directly. When an
-// annotation range encloses the cursor byte, the splice would
-// overwrite the cursor cell. Split it around the cursor instead.
+// applyAnnotationsToLine splices annotation styles into the styled line
+// at column offsets derived from plain. cursorByteCol is the byte offset
+// of the cursor on its row, or -1. Annotation ranges enclosing the
+// cursor split around it so the cursor cell survives the splice.
 func applyAnnotationsToLine(styled, plain string, lineOffset, cursorByteCol int, anns []Annotation) string {
 	if len(anns) == 0 {
 		return styled
@@ -121,8 +115,6 @@ func spliceAnnotationRange(out, plain string, startByte, endByte int, style lipg
 	return ansiSpliceAtCol(out, preCol, lipgloss.Width(target), style.Render(target))
 }
 
-// ansiSpliceAtCol replaces width display-cells at column col in an
-// ANSI-styled string with replacement.
 func ansiSpliceAtCol(styled string, col, width int, replacement string) string {
 	left := ansi.Truncate(styled, col, "")
 	rest := ansi.TruncateLeft(styled, col, "")
@@ -130,11 +122,9 @@ func ansiSpliceAtCol(styled string, col, width int, replacement string) string {
 	return left + replacement + right
 }
 
-// renderFences runs chroma over each fenced block whose
-// interior intersects [top, bottom) and maps the styled output
-// back to the source-line indexes inside the fence (marker
-// lines excluded). Blocks fully outside the viewport are
-// skipped, keeping per-render cost bounded by visible fences.
+// renderFences runs chroma over fenced blocks whose interior intersects
+// [top, bottom) and maps styled output back to source-line indexes
+// (marker lines excluded). Blocks outside the viewport are skipped.
 func renderFences(lines []string, ctxs []LineContext, st Styles, top, bottom int) map[int]string {
 	out := map[int]string{}
 	i := 0
@@ -167,10 +157,9 @@ func renderFences(lines []string, ctxs []LineContext, st Styles, top, bottom int
 	return out
 }
 
-// styleLine applies block-aware styling to one source line.
-// On the cursor row the chroma-pre-rendered fence output is
-// skipped: the rune-replaced source no longer matches the
-// pre-tokenised version.
+// styleLine applies block-aware styling to one source line. The cursor
+// row skips the pre-rendered chroma output because the rune-replaced
+// source no longer matches the pre-tokenised version.
 func styleLine(line string, ctx LineContext, st Styles, fenceLines map[int]string, idx int, isCursorRow bool) string {
 	switch ctx.Kind {
 	case BlockCodeFence:
@@ -191,8 +180,7 @@ func styleLine(line string, ctx LineContext, st Styles, fenceLines map[int]strin
 		}
 		pfx := strings.Repeat("#", level) + " "
 		if !strings.HasPrefix(line, pfx) {
-			// Cursor is on one of the # runes. Render whole line as
-			// the heading face and skip span tokenizing.
+			// Cursor lives on one of the # runes; skip span tokenizing.
 			return st.Heading[level-1].Render(line)
 		}
 		body := line[len(pfx):]
@@ -218,9 +206,8 @@ func styleLine(line string, ctx LineContext, st Styles, fenceLines map[int]strin
 	}
 }
 
-// styleListLine splits prefix (marker, optional task box,
-// trailing space) from body and styles each part. When the
-// cursor has mutated the prefix into a non-matching shape it
+// styleListLine splits prefix (marker, optional task box, trailing
+// space) from body and styles each part. A cursor-mutated prefix
 // falls back to whole-line tokenization.
 func styleListLine(line string, ctx LineContext, st Styles) string {
 	at := strings.Index(line, ctx.PostPrefix)
@@ -246,9 +233,8 @@ func styleListLine(line string, ctx LineContext, st Styles) string {
 	return st.ListMarker.Render(prefix) + renderSpans(tokenize(body), st)
 }
 
-// softWrap splits a (possibly styled) line into width-bounded
-// chunks. ANSI escape sequences pass through ansi.Hardwrap
-// without being broken.
+// softWrap splits a possibly-styled line into width-bounded chunks via
+// ansi.Hardwrap, which preserves ANSI escapes intact.
 func softWrap(line string, width int) []string {
 	if width <= 0 || lipgloss.Width(line) <= width {
 		return []string{line}
@@ -273,8 +259,8 @@ func offsetToRowCol(src string, off int) (row, col int) {
 	return row, col
 }
 
-// runeToByteOffset returns the byte offset of the col-th rune in
-// line, or len(line) if col exceeds the rune count.
+// runeToByteOffset returns the byte offset of the col-th rune (or
+// len(line) when col runs past the end).
 func runeToByteOffset(line string, col int) int {
 	n := 0
 	for i := range line {

@@ -16,21 +16,19 @@ import (
 //go:embed spellcheck/en_US.txt spellcheck/project.txt
 var spellcheckFS embed.FS
 
-// Speller is a lightweight in-memory spellchecker. Construct via
-// NewSpeller. A nil receiver makes Check return true, so callers
-// without a Speller degrade to no-op rather than spurious errors.
+// Speller is a lightweight in-memory spellchecker. A nil receiver makes
+// Check return true so callers without a Speller degrade to no-op.
 type Speller struct {
-	known map[string]uint32 // lowercased word -> frequency rank (lower = more frequent)
-	// SymSpell deletion-distance index, populated on first Suggest call.
-	// Speller.Suggest uses it. Check does not.
+	known map[string]uint32
+	// delIdx is the SymSpell deletion-distance index; Suggest builds it
+	// lazily under once. Check does not need it.
 	delIdx map[string][]string
 	once   sync.Once
 }
 
-// NewSpeller loads en_US + project from the embedded filesystem
-// and unions extra (user wordlist) on top. Extra entries take
-// precedence in case-folding and gain max-frequency rank so they
-// outrank similar dictionary words in suggestions.
+// NewSpeller loads en_US + project from the embedded filesystem and
+// unions extra (the user wordlist) on top at max-frequency rank so user
+// terms outrank similar dictionary words in suggestions.
 func NewSpeller(extra []string) (*Speller, error) {
 	en, err := spellcheckFS.Open("spellcheck/en_US.txt")
 	if err != nil {
@@ -45,8 +43,8 @@ func NewSpeller(extra []string) (*Speller, error) {
 	return newSpellerFromReader(en, proj, extra)
 }
 
-// newSpellerFromReader is the test-friendly constructor. A nil
-// project reader skips the project allowlist.
+// newSpellerFromReader is the test-friendly constructor; a nil project
+// reader skips the project allowlist.
 func newSpellerFromReader(en, project io.Reader, extra []string) (*Speller, error) {
 	known := make(map[string]uint32, 50000)
 	if err := loadInto(known, en, false); err != nil {
@@ -62,14 +60,13 @@ func newSpellerFromReader(en, project io.Reader, extra []string) (*Speller, erro
 		if w == "" || strings.HasPrefix(w, "#") {
 			continue
 		}
-		known[w] = 1 // max frequency for user terms
+		known[w] = 1
 	}
 	return &Speller{known: known}, nil
 }
 
-// loadInto reads one-word-per-line wordlists. Comments (#) and blank lines
-// are skipped. If maxFreq is true, every entry is inserted at rank 1
-// (project allowlist behavior).
+// loadInto reads one-word-per-line wordlists, skipping comments and blanks.
+// maxFreq inserts every entry at rank 1 (project allowlist behavior).
 func loadInto(dst map[string]uint32, r io.Reader, maxFreq bool) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 1<<16), 1<<20)
@@ -93,8 +90,7 @@ func loadInto(dst map[string]uint32, r io.Reader, maxFreq bool) error {
 	return sc.Err()
 }
 
-// Check reports whether word is in the dictionary. Comparison is
-// case-insensitive. Empty strings return false.
+// Check reports whether word is in the dictionary (case-insensitive).
 func (s *Speller) Check(word string) bool {
 	if s == nil {
 		return true
@@ -106,16 +102,12 @@ func (s *Speller) Check(word string) bool {
 	return ok
 }
 
-// maxEditDistance bounds the SymSpell delete-prefix expansion.
-// SymSpell with d=2 covers >95% of single-word typos in
-// English-language inline-spellcheck workloads while keeping the
-// index size modest (~10–20 MB resident for top-50k).
+// d=2 covers >95% of single-word English typos at a modest index size.
 const maxEditDistance = 2
 
-// buildIndex populates the SymSpell deletion index: each known word
-// generates the set of strings reachable by ≤ maxEditDistance
-// deletions, mapping back to the originator. Lookup deletes the
-// query the same way and verifies real distance against the bucket.
+// buildIndex generates, for each known word, the set of strings reachable
+// by ≤ maxEditDistance deletions. Lookup deletes the query the same way
+// and verifies real distance against the bucket.
 func (s *Speller) buildIndex() {
 	s.delIdx = make(map[string][]string, len(s.known)*4)
 	for w := range s.known {
@@ -125,9 +117,8 @@ func (s *Speller) buildIndex() {
 	}
 }
 
-// deletes returns the set of distinct strings produced by deleting
-// up to dist characters from w. The result includes w itself
-// (zero deletions).
+// deletes returns the set of distinct strings produced by deleting up
+// to dist characters from w (the result includes w itself).
 func deletes(w string, dist int) map[string]struct{} {
 	out := map[string]struct{}{w: {}}
 	if dist <= 0 || len(w) == 0 {
@@ -146,8 +137,8 @@ func deletes(w string, dist int) map[string]struct{} {
 	return out
 }
 
-// editDistance is plain Levenshtein, capped at limit. Returns
-// limit+1 if the true distance exceeds limit.
+// editDistance is plain Levenshtein capped at limit; the true distance
+// surfaces as limit+1 when it would exceed limit.
 func editDistance(a, b string, limit int) int {
 	la, lb := len(a), len(b)
 	if abs(la-lb) > limit {
@@ -186,8 +177,8 @@ func abs(x int) int {
 	return x
 }
 
-// Suggest returns up to n correction candidates for word, ordered
-// by (edit distance ascending, frequency rank ascending).
+// Suggest returns up to n corrections for word, ordered by edit
+// distance then frequency rank ascending.
 func (s *Speller) Suggest(word string, n int) []string {
 	if s == nil || word == "" || n <= 0 {
 		return nil
@@ -231,10 +222,8 @@ func (s *Speller) Suggest(word string, n int) []string {
 	return out
 }
 
-// LoadUserWordlist reads one-word-per-line entries from path.
-// Comments ('#') and blank lines are skipped. Whitespace is trimmed.
-// A missing file is not an error and returns (nil, nil). Casing is
-// preserved: the Speller lowercases at lookup time.
+// LoadUserWordlist reads one-word-per-line entries from path, skipping
+// comments and blanks. A missing file is not an error.
 func LoadUserWordlist(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -257,9 +246,8 @@ func LoadUserWordlist(path string) ([]string, error) {
 }
 
 // NewSpellcheckAnnotator wires speller into the Annotator interface.
-// styles.Squiggle is applied to each annotation so the renderer picks
-// up the host's decoration without a second lookup. Not safe for
-// concurrent use across goroutines.
+// styles.Squiggle is baked into each annotation so the renderer skips a
+// second lookup. Not safe for concurrent use.
 func NewSpellcheckAnnotator(speller *Speller, styles Styles) Annotator {
 	return &spellcheckAnnotator{
 		speller: speller,
@@ -271,7 +259,7 @@ func NewSpellcheckAnnotator(speller *Speller, styles Styles) Annotator {
 type spellcheckAnnotator struct {
 	speller *Speller
 	styles  Styles
-	ignored map[string]struct{} // session-only word additions
+	ignored map[string]struct{}
 }
 
 func (s *spellcheckAnnotator) Annotate(src string) []Annotation {
@@ -319,15 +307,14 @@ func (s *spellcheckAnnotator) Annotate(src string) []Annotation {
 	return out
 }
 
-// IgnoreInSession adds word to the in-memory ignore set. Subsequent
+// IgnoreInSession adds word to the in-memory ignore set; subsequent
 // Annotate calls treat it as known until the annotator is rebuilt.
-// Matching is case-insensitive.
 func (s *spellcheckAnnotator) IgnoreInSession(word string) {
 	s.ignored[strings.ToLower(word)] = struct{}{}
 }
 
-// isAllUpperShort reports whether word is all-uppercase and ≤4
-// runes. Skips common acronyms (HTTP, JMAP) without an allowlist.
+// isAllUpperShort reports whether word is all-upper and ≤4 runes. The
+// heuristic lets common acronyms (HTTP, JMAP) pass without an allowlist.
 func isAllUpperShort(word string) bool {
 	n := 0
 	for _, r := range word {
@@ -342,8 +329,8 @@ func isAllUpperShort(word string) bool {
 	return n > 0
 }
 
-// skipMask is a set of byte ranges the spellchecker must not flag
-// (fenced code blocks, inline code spans, link URLs).
+// skipMask is the set of byte ranges spellcheck must not flag: fenced
+// blocks, inline code spans, and link URLs.
 type skipMask struct {
 	ranges []Range
 }
@@ -357,14 +344,13 @@ func (m skipMask) covers(start, end int) bool {
 	return false
 }
 
-// buildSkipMask scans src for fenced blocks, inline code spans, and
-// link URLs and returns the union of their byte ranges.
+// buildSkipMask returns the union of byte ranges spellcheck must skip:
+// fenced blocks (marker + interior), inline code spans, and link URLs.
 func buildSkipMask(src string) skipMask {
 	var ranges []Range
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
 
-	// Mask whole-line fenced-block content (markers and interior).
 	off := 0
 	for i, l := range lines {
 		lineEnd := off + len(l)
@@ -374,12 +360,10 @@ func buildSkipMask(src string) skipMask {
 		off = lineEnd + 1
 	}
 
-	// Mask inline code spans and link URLs.
 	off = 0
 	for _, l := range lines {
 		lineOff := off
-		// after walks forward through l: each span is found by searching
-		// l[after:], then after advances past the match.
+		// after advances past each matched span as walkSpans visits l.
 		after := 0
 		walkSpans(l, func(kind spanKind, text string, sub []string) {
 			switch kind {
@@ -390,7 +374,7 @@ func buildSkipMask(src string) skipMask {
 					after += idx + len(text)
 				}
 			case spanLink:
-				// sub: [full, linkText, url]. Mask only the URL portion.
+				// sub = [full, linkText, url]; mask only the URL.
 				if len(sub) >= 3 {
 					urlPart := "(" + sub[2] + ")"
 					if idx := strings.Index(l[after:], urlPart); idx >= 0 {

@@ -18,7 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Model is Catkin's tea.Model. Construct with New.
+// Model is Catkin's tea.Model.
 type Model struct {
 	buf         Buffer
 	width       int
@@ -36,7 +36,6 @@ type Model struct {
 	userWordlistPath string
 }
 
-// New returns a Model with default settings.
 func New() Model {
 	m := Model{
 		buf: NewBuffer(textarea.New()),
@@ -45,8 +44,7 @@ func New() Model {
 	return m
 }
 
-// RegisterAnnotator appends an annotator. Annotators run in
-// registration order.
+// RegisterAnnotator appends an annotator; they run in registration order.
 func (m *Model) RegisterAnnotator(a Annotator) {
 	m.annotators = append(m.annotators, a)
 }
@@ -156,8 +154,6 @@ func (m Model) View() string {
 	return body + "\n" + m.find.renderFindFooter(m.width)
 }
 
-// popoverScreenPosition translates the misspelled word's anchor into screen
-// coordinates within the rendered viewport.
 func (m Model) popoverScreenPosition() (int, int) {
 	src := m.buf.Value()
 	startRow, startCol := offsetToRowCol(src, utf8.RuneCountInString(src[:m.popover.wordRange.Start]))
@@ -168,31 +164,27 @@ func (m Model) popoverScreenPosition() (int, int) {
 	return m.popover.position(screenRow, startCol, m.width, m.height-m.find.footerRows())
 }
 
-// Mode reports the active display mode.
 func (m Model) Mode() DisplayMode { return m.mode }
 
-// SetStyles replaces the render-time style table. The zero value
-// is no-op styles. Consumers map their theme onto Styles at the
-// boundary.
+// SetStyles replaces the render-time style table. The zero value is
+// no-op styles; consumers map their theme onto Styles at the boundary.
 func (m *Model) SetStyles(s Styles) { m.styles = s }
 
-// Value returns the raw markdown source.
 func (m Model) Value() string { return m.buf.Value() }
 
-// SetValue replaces the buffer with s and re-seeds the undo ring.
-// Programmatic loads are not user edits.
+// SetValue replaces the buffer and re-seeds the undo ring; programmatic
+// loads are not user edits.
 func (m *Model) SetValue(s string) {
 	m.buf.SetValue(s)
 	m.undo.seed(snap{s, m.buf.RuneOffset()})
 }
 
 // SetUserWordlistPath sets the file the popover's add-action appends to.
-// Empty path disables persistence. Add becomes a session-local addition only.
+// An empty path makes the add a session-local addition only.
 func (m *Model) SetUserWordlistPath(path string) {
 	m.userWordlistPath = path
 }
 
-// SetSize sets the editor's display dimensions.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.buf.SetWidth(w)
@@ -213,11 +205,8 @@ func (m *Model) SetWidth(w int) {
 	m.buf.SetRuneOffset(cur)
 }
 
-// Focus focuses the editor.
 func (m *Model) Focus() tea.Cmd { return m.buf.Focus() }
 
-// Blur blurs the editor.
 func (m *Model) Blur() { m.buf.Blur() }
 
-// Focused reports whether the editor has focus.
 func (m Model) Focused() bool { return m.buf.Focused() }

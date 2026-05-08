@@ -16,13 +16,9 @@ import (
 
 const chromaStyle = "monokai"
 
-// Styles is Catkin's render-time style table. The zero value is
-// no-op styles. Render produces output identical to plain mode.
-//
-// Catkin defines its own struct rather than borrowing a host
-// theme type so the package stays library-pure: a downstream
-// consumer (e.g., poplar's compose) maps its theme onto this
-// struct at the boundary.
+// Styles is Catkin's render-time style table. The zero value is no-op
+// so Render produces plain output. Catkin owns the struct so the package
+// stays library-pure; consumers map their theme onto it at the boundary.
 type Styles struct {
 	Heading         [6]lipgloss.Style
 	Quote           lipgloss.Style
@@ -38,9 +34,9 @@ type Styles struct {
 	TaskBox         lipgloss.Style
 	MatchHighlight  lipgloss.Style
 	Dim             lipgloss.Style
-	Squiggle        lipgloss.Style // misspelling underline decoration
-	Popover         lipgloss.Style // suggestion popover frame
-	PopoverSelected lipgloss.Style // highlighted suggestion row
+	Squiggle        lipgloss.Style
+	Popover         lipgloss.Style
+	PopoverSelected lipgloss.Style
 }
 
 type spanKind int
@@ -71,8 +67,8 @@ var (
 	linkRE        = regexp.MustCompile(`^\[([^\]\n]+)\]\(([^)\n]+)\)`)
 )
 
-// tokenize splits s into spans for inline-styling. The split is
-// lossless: concatenating span.text rebuilds s.
+// tokenize splits s into inline-styling spans. The split is lossless:
+// concatenating span.text rebuilds s.
 func tokenize(s string) []span {
 	var out []span
 	var plain strings.Builder
@@ -98,10 +94,9 @@ func tokenize(s string) []span {
 	return out
 }
 
-// walkSpans is the shared inline-span scanner used by tokenize
-// (rendering) and scanSpans (cursor matching). For each delim
-// match it calls fn with the span kind and the matched text;
-// untouched bytes are emitted one rune at a time as spanText.
+// walkSpans is the shared inline-span scanner. fn is called with the
+// span kind and matched text; untouched bytes emit one rune at a time
+// as spanText.
 func walkSpans(s string, fn func(kind spanKind, text string, submatch []string)) {
 	type pat struct {
 		re   *regexp.Regexp
@@ -162,17 +157,16 @@ func renderSpans(spans []span, st Styles) string {
 	return b.String()
 }
 
-// chromaResolved caches the (lexer, style, formatter) triple
-// for a given language tag. Registry lookups are pure and stable
-// for the process lifetime, so memoising avoids per-render map
-// walks inside chroma.
+// chromaResolved caches the (lexer, style, formatter) triple for a
+// given language tag, avoiding per-render map walks inside chroma.
 type chromaResolved struct {
 	lexer     chroma.Lexer
 	style     *chroma.Style
 	formatter chroma.Formatter
 }
 
-var chromaCache sync.Map // map[string]chromaResolved. "" key = unknown lang
+// chromaCache keys on the info string; the empty key marks unknown lang.
+var chromaCache sync.Map
 
 func resolveChroma(info string) chromaResolved {
 	if v, ok := chromaCache.Load(info); ok {
@@ -193,9 +187,8 @@ func resolveChroma(info string) chromaResolved {
 	return r
 }
 
-// highlightFence returns one styled string per source line in
-// body. On unknown lexer or any chroma error it applies
-// st.CodeBlock to each line as a fallback.
+// highlightFence returns one styled string per source line in body.
+// Unknown lexers and chroma errors fall back to st.CodeBlock per line.
 func highlightFence(info, body string, st Styles) []string {
 	rawLines := strings.Split(body, "\n")
 	fallback := func() []string {
