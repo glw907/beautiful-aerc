@@ -231,3 +231,114 @@ zero LOC reduction.
   remains the timer mechanism regardless of this verdict.
 - If poplar ever wanted animated notifications (post-1.0), this
   library or the pattern it uses could be revisited then.
+
+---
+
+## `charmbracelet/huh`
+
+**Does this make poplar better?** No, for two structural reasons.
+
+**Q1 — Sub-pane mount.** `huh.Form` implements the full `tea.Model`
+interface and accepts `WithWidth` / `WithHeight`, so it can run
+embedded inside a larger bubbletea application. However, the form
+renders its own chrome — field separators, group titles, a built-in
+`bubbles/help` footer — and drives its own viewport scroll
+internally. In Contacts mode, poplar mounts the form as a right-pane
+column (no modal chrome); the form must render as raw body rows so
+the Contacts-mode frame supplies the borders. `huh.Form.View()` has
+no "body-only" mode; chrome is always included and its layout math
+assumes the form owns its full render height. Stripping the chrome
+would require forking `form.go` and `group.go`, which are the core
+files. This alone pushes the verdict to Adopt-with-fork at minimum.
+
+**Q2 — Dynamic field set.** `huh.Group` accepts fields at
+construction via `NewGroup(fields ...Field)` and stores them in a
+selector that is never mutated after construction. There is no public
+method to add or remove fields at runtime. Poplar's contacts form is
+fundamentally dynamic: users add email rows with `+ add email`, remove
+them with `−`, and the focus list rebuilds via `focusList()` on every
+mutation. The `(input, cycler, ★, −)` quartet per row is not a value
+a `huh.Select` or `huh.Input` can express — the cycler and star are
+custom widgets with bespoke key handling (`isCyclerKey`, primary-
+rotation logic). Implementing this inside `huh`'s field interface
+means writing a custom `Field` implementation that owns all the
+dynamic behavior — at which point the huh frame provides no net
+value over poplar's current `Form` struct.
+
+The two blockers compound: the library cannot render in right-pane
+mode and cannot express dynamic row sets. Even if both were
+addressable by forking, the forked code would be larger than the
+current `form.go` (480 LOC), because `huh`'s generic field
+machinery — `selector`, `skip` callbacks, accessible-mode runners —
+is load-bearing infrastructure the fork must carry even when the
+dynamic-row fields bypass it.
+
+**Feature parity:** `huh` covers the static subset of poplar's form
+well: `Input` for text fields (First, Last, Org, Title), `Select`
+for the kind toggle (Person vs Business), `Confirm` for save
+destination. What it cannot express: dynamic row sets, the label
+cycler widget, the ★-rotates-to-primary affordance, the dual render
+mode (`fromPopover` modal vs right-pane column), and the `Dirty` bit
+tied to snapshot comparison (`sameContact`). These are all in the
+parts of `form.go` that carry actual product design.
+
+**Customization seams:** The `Styles` struct is well-factored
+(`lipgloss.Style` fields for `Focused`, `Blurred`, and per-element
+sub-structs). Poplar's `Styles.FieldFocus` / `FieldBlur` / `KindOn` /
+`KindOff` map naturally onto `huh.Styles`. The seams are present;
+they just cannot reach the dynamic-widget surface.
+
+**Theming integration:** Clean in principle. `huh`'s theme functions
+construct `lipgloss.Style` values from external color definitions;
+`theme.CompiledTheme` slots could populate the style fields in a
+single constructor. No color hardcoding in the render path. The
+`help.Styles` sub-struct matches the shape noted in the `bubbles/help`
+eval above. Integration is blocked by the structural issues above,
+not by theming.
+
+**Maintenance signal:** v2.0.3, March 2026. Charmbracelet first-party
+library; semver-stable with active release cadence (six releases in
+twelve months). Already in poplar's indirect dependency graph via
+`bubbles`. No maintenance risk.
+
+**Code delta estimate:** Adopting `huh` for the static fields only
+(treating dynamic rows as custom) removes approximately 120 LOC from
+`form.go` (the text-field row renderers, the focus-cycle traversal
+for text inputs) and adds huh's overhead for those same fields. The
+dynamic-row surface — 280+ LOC — remains untouched. Net delta is
+near zero for a surface where the hard-to-read code is the dynamic
+part, not the text-input wiring. A full replace (including forking
+for right-pane mode and writing custom `Field` impls for dynamic
+rows) would add a fork of `form.go` + `group.go` (~600 LOC upstream)
+on top of the custom `Field` types, for a net LOC increase.
+
+**License:** MIT License, Copyright (c) 2023-2026 Charmbracelet, Inc.
+
+**Verdict:** **Keep + harvest**
+
+**Rationale (one line):** `huh.Group` is static-only at construction
+(no runtime add/remove), and `huh.Form.View()` has no body-only mode
+— both blockers are structural, so the fork cost exceeds the hand-roll.
+
+**Harvest targets:**
+
+- The `(Focused, Blurred)` style pair naming in `huh.Styles` is a
+  cleaner vocabulary than poplar's current `(FieldFocus, FieldBlur)`;
+  worth renaming in `contacts/styles.go` for readability parity.
+- `huh`'s `WithWidth` propagation pattern (field calculates its own
+  input width by subtracting frame size from allocated width) is the
+  same pattern poplar's `inputWidth(contentW)` uses — no change
+  needed; the idiom is already correct.
+- The `WithInline` field option (renders title + input on one row) is
+  the exact shape poplar's `fieldRow` produces manually; no adoption
+  needed, just confirmation the approach is idiomatic.
+
+**Interacts with:**
+- This verdict does not affect Task 5 (`bubble-table`) or any other
+  Eval A candidate.
+- Pass 9u (first-run wizard) is the next planned form surface. The
+  wizard's field set is static (account name, provider, host, port,
+  credentials) — `huh` would fit 9u better than Contacts. This eval
+  does not preclude a bounded 9u adoption on a static wizard form;
+  that decision is deferred to the 9u plan.
+- No other candidate is blocked by or dependent on this verdict.
