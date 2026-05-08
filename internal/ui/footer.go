@@ -118,6 +118,7 @@ func composeFooterGroups(hasSig, isFocusFrom, tidyVisible bool) [][]footerHint {
 		hint("Ctrl+X", "send", 0),
 		hint("Ctrl+C", "cancel", 0),
 		hint("Tab", "field", 4),
+		hint("Ctrl+O", "attach", 6),
 	}
 	if hasSig {
 		core = append(core, hint("Ctrl+G", "sig", 5))

@@ -747,9 +747,10 @@ func (c *Model) HasSignatures() bool {
 // IsFocusFrom reports whether the From field currently has focus.
 func (c *Model) IsFocusFrom() bool { return c.focus == focusFrom }
 
-func (c *Model) IsFocusBody() bool { return c.focus == focusBody }
-
-func (c *Model) TidyEnabled() bool { return c.tidyEnabled }
+func (c *Model) IsFocusBody() bool        { return c.focus == focusBody }
+func (c *Model) TidyEnabled() bool        { return c.tidyEnabled }
+func (c *Model) AttachPickerIsOpen() bool { return c.attach.IsOpen() }
+func (c *Model) AttachPickerView() string { return c.attach.View() }
 
 func (c *Model) SetSignature(idx int) { c.signature = idx }
 

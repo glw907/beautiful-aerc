@@ -710,6 +710,14 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.pendingComposeSave = true
 		return m, nil
 
+	case uicompose.AttachAcceptedMsg, uicompose.AttachCancelledMsg:
+		if m.compose != nil {
+			var cmd tea.Cmd
+			m.compose, cmd = m.compose.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case contactsTickMsg:
 		if m.contactsCfg == nil {
 			return m, nil
@@ -986,6 +994,13 @@ func (m App) View() string {
 	if m.attachPicker.IsOpen() {
 		box := m.attachPicker.Box(m.width, m.height)
 		x, y := m.attachPicker.Position(box, m.width, m.height)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
+	}
+
+	if m.compose != nil && m.compose.AttachPickerIsOpen() {
+		box := m.compose.AttachPickerView()
+		x, y := uicore.CenterOverlay(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
 		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}

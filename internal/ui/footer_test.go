@@ -218,6 +218,13 @@ func TestFooterThreadsGroup(t *testing.T) {
 	})
 }
 
+func TestComposeFooterAlwaysIncludesAttachHint(t *testing.T) {
+	g := composeFooterGroups(false, false, false)
+	if !containsHint(g, "Ctrl+O", "attach") {
+		t.Errorf("compose footer missing Ctrl+O attach:\n%v", g)
+	}
+}
+
 func TestComposeFooterIncludesSigHint(t *testing.T) {
 	g := composeFooterGroups(true, false, false)
 	if !containsHint(g, "Ctrl+G", "sig") {
