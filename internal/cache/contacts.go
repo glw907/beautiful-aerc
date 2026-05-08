@@ -389,9 +389,14 @@ func reconcileRecipientsTx(_ context.Context, _ *sql.Tx, _ string, _, _ []contac
 }
 
 // SyncContacts runs one CardDAV sync pass. cfg==nil is a no-op (account has no contacts config).
+// When ContactsWriter is already a *contacts.Client (wired at startup), it is reused; otherwise a
+// new client is constructed from cfg.
 func (a *Account) SyncContacts(ctx context.Context, cfg *contacts.ClientConfig) error {
 	if cfg == nil {
 		return nil
+	}
+	if cl, ok := a.ContactsWriter.(*contacts.Client); ok {
+		return contacts.Sync(ctx, cl, a)
 	}
 	cl, err := contacts.NewClient(cfg.URL, cfg.Username, cfg.Password, cfg.InsecureTLS)
 	if err != nil {

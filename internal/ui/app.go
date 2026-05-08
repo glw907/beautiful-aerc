@@ -139,13 +139,20 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	if contactsCfg != nil {
 		pw, err := contactsCfg.ResolvePassword()
 		if err == nil {
-			app.contactsCfg = &corecontacts.ClientConfig{
+			cfg := &corecontacts.ClientConfig{
 				URL:         contactsCfg.URL,
 				Username:    contactsCfg.Username,
 				Password:    pw,
 				InsecureTLS: contactsCfg.InsecureTLS,
 			}
-			app.contactsRefresh = contactsCfg.RefreshInterval
+			cl, cerr := corecontacts.NewClient(cfg.URL, cfg.Username, cfg.Password, cfg.InsecureTLS)
+			if cerr != nil {
+				app.lastErr = ErrorMsg{Op: "contacts init", Err: cerr}
+			} else {
+				acct.ContactsWriter = cl
+				app.contactsCfg = cfg
+				app.contactsRefresh = contactsCfg.RefreshInterval
+			}
 		}
 	}
 	return app
