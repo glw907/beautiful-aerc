@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 9k.4 next — UI subpackages + catkin comment sweep.
+**Current pass:** Pass 9l next — compose autocomplete dropdown.
 
 ## Passes
 
@@ -12,7 +12,7 @@
 | 9k.1 | Comment sweep — mail wire + config; density-floor exemption (ADR-0170) | done |
 | 9k.2 | Comment sweep — cache + outbound chain | done |
 | 9k.3 | Comment sweep — UI core; T34 demoted to voice-lens (ADR-0173) | done |
-| 9k.4 | Comment sweep — UI subpackages + catkin | pending |
+| 9k.4 | Comment sweep — UI subpackages + catkin | done |
 | 9l | Compose autocomplete dropdown (To/Cc/Bcc) | pending |
 | 9m | CardDAV ingest — swap fixtures for real contacts cache (#34) | pending |
 | 9n | Email signatures + multiple identities (#32) | pending |
@@ -27,30 +27,31 @@
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9k.4)
+## Next starter prompt (Pass 9l)
 
-> **Goal.** Final slice of the comment voice sweep:
-> `internal/ui/sidebar/`, `internal/ui/compose/`,
-> `internal/ui/contacts/`, `internal/ui/movepicker/`,
-> `internal/ui/helppopover/`, `internal/catkin/` (~847 comments).
+> **Goal.** Compose autocomplete dropdown wired to fixtures: a
+> `compose.Dropdown` sub-model that anchors under the focused
+> To/Cc/Bcc textinput and rewrites the field on Tab/Enter.
 >
-> **Method.** Same shape as 9k.1–9k.3. §0(a)/(b)/(c) gate plus the
-> paraphrase test on every in-function comment, T39/T40 on every
-> godoc, no new comments, commit per-package with `make check`
-> green. T34 (semicolon clause-joiner) is voice-lens only per
-> ADR-0173 — default to a period, but a considered semicolon is
-> fine. Catkin loads its own invariants rule
-> (`.claude/rules/catkin-invariants.md`).
+> **Scope.** New `internal/ui/compose/suggest.go` +
+> `suggest_test.go`; splice into `internal/ui/compose/model.go`;
+> wire `App` to pass a `SuggestFn` defaulting to
+> `contacts.FixtureSuggestions`. Reference: archived plan
+> `docs/superpowers/archive/plans/2026-05-07-address-book-
+> mockups.md` Task 9.
 >
-> **Settled.** §0 + T38–T40 (0168), SPDX gone (0169), density-
-> floor exemption (0170), T34 voice-lens-only + voice rules apply
-> to all Claude-authored docs (0173).
+> **Settled.** Dropdown renders only when the focused field is
+> To/Cc/Bcc, prefix ≥ 2 chars, and `SuggestFn` returns a non-empty
+> slice. Up/Down cursor (wrap); Tab/Enter accepts and rewrites
+> textinput to `Name <email>, ` then clears; Esc dismisses. Splice
+> rows positionally below the focused field (no overlay math).
+> 9.2 swaps `FixtureSuggestions` for the cache-backed query.
 >
 > **Still open.** None — pure implementation pass.
 >
-> **Approach.** Write `docs/superpowers/plans/YYYY-MM-DD-comment-
-> sweep-ui-subpackages.md` with one task per package. Standard
-> pass-end ritual via `poplar-pass`.
+> **Approach.** Write `docs/superpowers/plans/YYYY-MM-DD-compose-
+> autocomplete.md`, then implement. Standard pass-end ritual via
+> `poplar-pass`.
 
 ## Queued
 
