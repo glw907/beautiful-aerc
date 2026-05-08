@@ -110,6 +110,72 @@ func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 	}
 }
 
+func TestAttachPicker_SelectAndAccept(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a.txt", "b.txt", "c.txt")
+	p := loadDir(t, newTestPicker(t), dir)
+
+	// toggle a and c
+	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(" ")}))
+	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
+	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
+	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(" ")}))
+
+	if c := selectedCount(p); c != 2 {
+		t.Fatalf("selected = %d, want 2", c)
+	}
+
+	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("a")}))
+	if cmd == nil {
+		t.Fatal("accept should emit cmd")
+	}
+	msg := cmd()
+	acc, ok := msg.(AttachAcceptedMsg)
+	if !ok {
+		t.Fatalf("expected AttachAcceptedMsg, got %T", msg)
+	}
+	if len(acc.Paths) != 2 {
+		t.Errorf("Paths len = %d, want 2 (%v)", len(acc.Paths), acc.Paths)
+	}
+}
+
+func TestAttachPicker_EnterOnFileShortcut(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "only.txt")
+	p := loadDir(t, newTestPicker(t), dir)
+	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+	if cmd == nil {
+		t.Fatal("Enter on file with empty selection should accept")
+	}
+	acc, ok := cmd().(AttachAcceptedMsg)
+	if !ok || len(acc.Paths) != 1 || !strings.HasSuffix(acc.Paths[0], "only.txt") {
+		t.Fatalf("got %#v", cmd())
+	}
+}
+
+func TestAttachPicker_AcceptZeroSelectedNoOp(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a.txt", "b.txt")
+	p := loadDir(t, newTestPicker(t), dir)
+	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("a")}))
+	if cmd != nil {
+		t.Fatal("accept with 0 selected should be no-op")
+	}
+}
+
+func TestAttachPicker_EscEmitsCancelled(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "a.txt")
+	p := loadDir(t, newTestPicker(t), dir)
+	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEsc}))
+	if cmd == nil {
+		t.Fatal("Esc should emit cmd")
+	}
+	if _, ok := cmd().(AttachCancelledMsg); !ok {
+		t.Fatalf("got %T, want AttachCancelledMsg", cmd())
+	}
+}
+
 func has(es []attachEntry, name string) bool {
 	for _, e := range es {
 		if e.name == name {

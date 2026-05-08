@@ -205,8 +205,30 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 			if e.isDir {
 				return p.descend(e.path)
 			}
-			// file handling added in Task 7
+			// Enter on file: shortcut single-attach when nothing is yet
+			// selected. Otherwise toggle this file into the running selection.
+			if selectedCount(p) == 0 {
+				return p, func() tea.Msg {
+					return AttachAcceptedMsg{Paths: []string{e.path}}
+				}
+			}
+			p.selected[e.path] = !p.selected[e.path]
 			return p, nil
+		case key.Matches(m, p.keys.Toggle):
+			if len(p.entries) == 0 || p.entries[p.cursor].isDir {
+				return p, nil
+			}
+			path := p.entries[p.cursor].path
+			p.selected[path] = !p.selected[path]
+			return p, nil
+		case key.Matches(m, p.keys.Accept):
+			paths := p.acceptedPaths()
+			if len(paths) == 0 {
+				return p, nil
+			}
+			return p, func() tea.Msg { return AttachAcceptedMsg{Paths: paths} }
+		case key.Matches(m, p.keys.Close):
+			return p, func() tea.Msg { return AttachCancelledMsg{} }
 		case key.Matches(m, p.keys.Back):
 			return p.ascend()
 		case key.Matches(m, p.keys.ToggleHidden):
@@ -217,6 +239,28 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 		}
 	}
 	return p, nil
+}
+
+// acceptedPaths returns selected paths in the entry order of the
+// current directory (stable, predictable).
+func (p AttachPicker) acceptedPaths() []string {
+	out := make([]string, 0, len(p.selected))
+	for _, e := range p.entries {
+		if p.selected[e.path] {
+			out = append(out, e.path)
+		}
+	}
+	return out
+}
+
+func selectedCount(p AttachPicker) int {
+	n := 0
+	for _, v := range p.selected {
+		if v {
+			n++
+		}
+	}
+	return n
 }
 
 func (p AttachPicker) descend(path string) (AttachPicker, tea.Cmd) {
