@@ -17,7 +17,7 @@ type SentMsg struct {
 	OpIDs        []int64
 	ScheduledFor time.Time  // zero = no hold (dispatch immediately)
 	DraftID      string     // links the persisted drafts row
-	Draft        mailcompose.Draft // in-memory copy for fast u-undo restore
+	Draft        mailcompose.Draft // in-memory copy for fast undo restore
 }
 
 // EnqueuePushDraftMsg asks App to queue a PushDraft outbox op. Compose
