@@ -28,35 +28,26 @@ Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
 > **Goal.** Harvest concrete diffs and design patterns from the
 > chrome-family bubbles into poplar's chrome surfaces.
 >
-> **Scope.** Three surfaces, all with eval verdicts in
+> **Scope.** Three surfaces against the Eval B verdicts in
 > `docs/superpowers/archive/specs/2026-05-08-bubble-reeval-and-eval-b.md`:
-> `internal/ui/helppopover/` (vs `bubbles/help`), the status-bar
-> assembly in `internal/ui/account/` (vs `knipferrc/teacup`), and
-> the toast / undo bar in `internal/ui/` (vs
-> `daltonsw/bubbleup`). Read each library's render path once,
-> walk the poplar surface, produce 0–2 concrete diffs per
-> surface plus pattern notes for the catalog.
+> `internal/ui/helppopover/` vs `bubbles/help`, the status-bar
+> assembly in `internal/ui/account/` vs `knipferrc/teacup`, and
+> the toast / undo bar in `internal/ui/` vs `daltonsw/bubbleup`.
+> Per surface: 0–2 concrete diffs + pattern notes.
 >
-> **Settled (do not re-brainstorm):** All three eval verdicts are
-> Keep + harvest. The 9x.1 pattern catalog at
-> `docs/poplar/research/2026-05-08-bubbles-list-patterns.md` is
-> the format reference — extend it (or fork a sibling chrome
-> doc) per the next planning call.
+> **Settled.** All three verdicts are Keep + harvest. Catalog
+> format = Pass 9x.1's research doc.
 >
-> **Still open — brainstorm these:** Whether the `bubbles/help`
-> KeyMap-driven ShortHelp/FullHelp shape can replace any part of
-> poplar's named-group binding tables. Whether teacup's segment
-> assembly is closer to the status-bar's drop-rank shape than the
-> hand-rolled join. Whether bubbleup's queue model offers anything
-> the toast cascade order doesn't already cover.
+> **Still open — brainstorm these:** Whether `bubbles/help`'s
+> KeyMap-driven ShortHelp/FullHelp shape replaces any of poplar's
+> named-group binding tables; whether teacup's segment assembly
+> fits the status-bar's drop-rank shape; whether bubbleup's queue
+> model adds anything the toast cascade order doesn't already
+> cover.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-harvest-chrome.md`, then
-> implement. Standard pass-end checklist applies; ADR only if
-> binding facts change.
->
-> **Catalog requirement.** Each harvest pass must end with a
-> "Top three ways their code is better than poplar's
-> equivalents" section in its research doc — see Pass 9x.1's
-> catalog for the format. Pass 9z consumes those top-three
-> lists across 9x.1–9x.3 as input.
+> **Approach.** Brainstorm, write plan at
+> `docs/superpowers/plans/YYYY-MM-DD-harvest-chrome.md`,
+> implement. Standard pass-end checklist; ADR only on binding-
+> fact change. Pass must end with a "top three ways their code
+> beats ours" section in the research doc — Pass 9z consumes
+> those lists across 9x.1–9x.3.
