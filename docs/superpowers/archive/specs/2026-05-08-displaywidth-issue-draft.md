@@ -5,6 +5,18 @@ The body below is the kernel that feeds either an issue or a PR
 description. The decision (per pass-end discussion 2026-05-08) is
 to go **PR-first**, matching the repo's observed pattern.
 
+## Pass 9w outcome (2026-05-08) — not filed
+
+This text was never sent. While preparing the PR, a maintainer
+comment on the unrelated PR #23 (2026-05-02) surfaced the
+maintainer's stated preference for *wrapping* the library rather
+than accepting an in-library override hook. See the companion
+spec's outcome section for full reasoning. Poplar pivoted to a
+vendored `internal/ansix/` shim, queued as Pass 9w.1. The body
+text below is preserved unchanged in case the upstream picture
+later shifts and the conversation reopens (most likely vehicle:
+an issue linking the maintainer's comment, not a PR).
+
 Strategy notes (not for posting):
 
 - File on `clipperhouse/displaywidth` first, not `charmbracelet/x/ansi`

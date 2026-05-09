@@ -4,6 +4,25 @@ Status: investigation report. Implementation deferred to a
 follow-up pass per user direction (investigate-only scope).
 Date: 2026-05-08.
 
+## Pass 9w outcome (2026-05-08)
+
+Upstream path closed. After implementing the
+`Options.Overrides` prototype on a local fork
+(`~/Projects/displaywidth/add-overrides`, branch parked, not
+pushed), we surveyed the maintainer's recent activity and found
+a comment on PR #23 dated 2026-05-02 stating: *"The external
+overrides, I can imagine the use case … But I don't love
+injecting into this library, I'd rather someone wrap this
+library instead."* Combined with zero external-contributor merges
+in the prior seven months (19 merged PRs, all by clipperhouse),
+the asymmetric play was to take the maintainer's stated
+preference at face value and wrap the library. The PR was never
+filed. The fork prototype (override hook + tests + fuzz +
+benchmarks + README section) remains preserved locally as a
+record of the design we considered. **The vendored
+`internal/ansix/` shim is queued as Pass 9w.1.** ADR-0180
+codifies the decision.
+
 Companion to ROADMAP.md `spua-width-upstream`. Supersedes the
 optimistic outcome path framed in that entry (one-line override
 of `runewidth.DefaultCondition.RuneWidth`), which the survey
