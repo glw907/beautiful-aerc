@@ -1,15 +1,14 @@
 # Poplar Status
 
-**Current pass:** Pass 9x.2 — chrome family harvest.
-Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
+**Current pass:** Pass 9x.3 — table/form family harvest.
+Features (10–14) resume after 9x.3 + 9y conclude.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 9x.1 | Scaffold through bubbles/list harvest (ADRs 0001–0181) | done |
-| 9x.2 | Harvest — chrome family (helppopover, statusbar, toast) | pending |
-| 9x.3 | Harvest — table/form family (form, list, overlay) | pending |
+| 1 – 9x.2 | Scaffold through chrome family harvest (ADRs 0001–0181) | done |
+| 9x.3 | Harvest — table/form family (form, list, messagelist) | pending |
 | 9y | Bubble consolidation — decide if any swap work remains | pending |
 | 9z | Adopt top-three findings from 9x.1–9x.3 + 9y catalogs | pending |
 | 10 | Outbox delivery controls — undo + schedule send (#35) | pending |
@@ -23,31 +22,34 @@ Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9x.2)
+## Next starter prompt (Pass 9x.3)
 
-> **Goal.** Harvest concrete diffs and design patterns from the
-> chrome-family bubbles into poplar's chrome surfaces.
+> **Goal.** Harvest design patterns from the table/form-family
+> bubbles into poplar's form and list surfaces.
 >
-> **Scope.** Three surfaces against the Eval B verdicts in
+> **Scope.** Two libraries × poplar consumers, per Eval B at
 > `docs/superpowers/archive/specs/2026-05-08-bubble-reeval-and-eval-b.md`:
-> `internal/ui/helppopover/` vs `bubbles/help`, the status-bar
-> assembly in `internal/ui/account/` vs `knipferrc/teacup`, and
-> the toast / undo bar in `internal/ui/` vs `daltonsw/bubbleup`.
-> Per surface: 0–2 concrete diffs + pattern notes.
+> `charmbracelet/huh` vs `internal/ui/contacts/form.go`, and
+> `evertras/bubble-table` vs `internal/ui/messagelist/` plus
+> `internal/ui/contacts/list.go`. Per surface: 0–2 concrete diffs
+> + pattern notes.
 >
-> **Settled.** All three verdicts are Keep + harvest. Catalog
-> format = Pass 9x.1's research doc.
+> **Settled.** Both Eval B verdicts are Keep + harvest (huh has
+> two unfixable blockers: chrome baked into Group.View and
+> frozen field slice; bubble-table conflicts with messagelist's
+> threading pipeline + responsive column math). Catalog format
+> = Pass 9x.1's research doc; subagent-driven shape from 9x.2
+> works (per-section subagent → synthesis subagent → ritual).
 >
-> **Still open — brainstorm these:** Whether `bubbles/help`'s
-> KeyMap-driven ShortHelp/FullHelp shape replaces any of poplar's
-> named-group binding tables; whether teacup's segment assembly
-> fits the status-bar's drop-rank shape; whether bubbleup's queue
-> model adds anything the toast cascade order doesn't already
-> cover.
+> **Still open — brainstorm these:** Whether huh's `WithTheme`
+> per-field blurred/focused style pairs reshape any of poplar's
+> `Styles` slot tables; whether bubble-table's `WithRowStyleFunc`
+> conditional-row pattern teaches messagelist or contacts/list
+> anything beyond what they already do.
 >
 > **Approach.** Brainstorm, write plan at
-> `docs/superpowers/plans/YYYY-MM-DD-harvest-chrome.md`,
+> `docs/superpowers/plans/YYYY-MM-DD-harvest-table-form.md`,
 > implement. Standard pass-end checklist; ADR only on binding-
-> fact change. Pass must end with a "top three ways their code
-> beats ours" section in the research doc — Pass 9z consumes
-> those lists across 9x.1–9x.3.
+> fact change. End with a "top three ways their code beats ours"
+> section in the research doc — Pass 9z consumes the lists
+> across 9x.1–9x.3.
