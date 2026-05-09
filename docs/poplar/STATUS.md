@@ -50,7 +50,16 @@ parked at `~/Projects/displaywidth/add-overrides`.
 - **#30** — `Sidebar.View` render cache (8.5c overlay pattern).
 - **Bubble re-eval (post-9w.1).** Revisit
   `docs/superpowers/archive/specs/2026-05-08-bubble-adoption-design.md`
-  and Pass 9v's Eval-A outcomes. ansix flips bubbles whose rejection
-  was poplar-side width math; bubbles that call `lipgloss.Width`
-  internally (`bubbles/help`, `bubble-table`, `glamour`) stay
-  rejected per ADR-0180.
+  and Pass 9v's Eval-A outcomes. Produce two lists: (a) bubbles ansix
+  alone unlocks (free win, swap), (b) bubbles still gated on
+  `lipgloss.Width` internal calls (`bubbles/help`, `bubble-table`,
+  `glamour`). For list (b), evaluate three paths: **fork** x/ansi
+  (smallest leaf) or lipgloss (clearer site) via go.mod `replace`
+  — unlocks fully but adds permanent rebase loop and contradicts
+  ADR-0002/0006/0010/0075's no-fork stance; **issue at
+  charmbracelet** linking lipgloss #666 / Ghostty #5588 / #8822 —
+  asks for shape input before sinking PR effort, more receptive
+  team than clipperhouse but issue #666 has sat unresolved >1y;
+  **accept gating** and stay with hand-rolled equivalents. Decide
+  once list (b) has names — abstract cost-benefit here is
+  premature.
