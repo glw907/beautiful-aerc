@@ -19,13 +19,14 @@ type folderEntry struct {
 
 // Model renders the folder list with groups, selection, and unread badges.
 type Model struct {
-	entries  []folderEntry
-	selected int
-	styles   Styles
-	icons    uicore.IconSet
-	layout   uicore.LayoutMode
-	width    int
-	height   int
+	entries     []folderEntry
+	selected    int
+	outboxCount int
+	styles      Styles
+	icons       uicore.IconSet
+	layout      uicore.LayoutMode
+	width       int
+	height      int
 }
 
 // New builds a Model from a pre-classified folder list. UIConfig drives
@@ -60,13 +61,56 @@ func (s *Model) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UICo
 	}
 }
 
+// SetOutboxCount sets the depth of the synthetic Outbox entry. When n > 0,
+// the entry renders at the top of the Disposal group; when 0, it is omitted.
+func (s *Model) SetOutboxCount(n int) {
+	if n < 0 {
+		n = 0
+	}
+	s.outboxCount = n
+}
+
+// effectiveEntries returns s.entries with the synthetic Outbox row injected
+// at the top of the Disposal group when outboxCount > 0. Pure, no mutation.
+func (s Model) effectiveEntries() []folderEntry {
+	if s.outboxCount == 0 {
+		return s.entries
+	}
+	out := make([]folderEntry, 0, len(s.entries)+1)
+	inserted := false
+	for _, e := range s.entries {
+		if !inserted && e.cf.Group == mail.GroupDisposal {
+			out = append(out, syntheticOutboxEntry(s.outboxCount, s.icons))
+			inserted = true
+		}
+		out = append(out, e)
+	}
+	if !inserted {
+		out = append(out, syntheticOutboxEntry(s.outboxCount, s.icons))
+	}
+	return out
+}
+
+func syntheticOutboxEntry(count int, icons uicore.IconSet) folderEntry {
+	return folderEntry{
+		cf: mail.ClassifiedFolder{
+			Folder:      mail.Folder{Name: "Outbox", Unseen: count},
+			Canonical:   "Outbox",
+			DisplayName: "Outbox",
+			Group:       mail.GroupDisposal,
+		},
+		icon: icons.Sent, // closest visual fit; a dedicated icon is post-1.0
+	}
+}
+
 func (s Model) Selected() int { return s.selected }
 
 // SelectedFolder returns the provider name of the currently selected folder.
 // Backends look up folders by provider name, not display name.
 func (s Model) SelectedFolder() string {
-	if s.selected < len(s.entries) {
-		return s.entries[s.selected].cf.Folder.Name
+	entries := s.effectiveEntries()
+	if s.selected < len(entries) {
+		return entries[s.selected].cf.Folder.Name
 	}
 	return ""
 }
@@ -74,15 +118,17 @@ func (s Model) SelectedFolder() string {
 // SelectedCanonical returns the canonical name (e.g. "Inbox", "Sent") of the
 // currently selected folder. Returns "" for custom folders.
 func (s Model) SelectedCanonical() string {
-	if s.selected < len(s.entries) {
-		return s.entries[s.selected].cf.Canonical
+	entries := s.effectiveEntries()
+	if s.selected < len(entries) {
+		return entries[s.selected].cf.Canonical
 	}
 	return ""
 }
 
 func (s Model) SelectedFolderInfo() (mail.Folder, bool) {
-	if s.selected < len(s.entries) {
-		return s.entries[s.selected].cf.Folder, true
+	entries := s.effectiveEntries()
+	if s.selected < len(entries) {
+		return entries[s.selected].cf.Folder, true
 	}
 	return mail.Folder{}, false
 }
@@ -91,7 +137,7 @@ func (s Model) SelectedFolderInfo() (mail.Folder, bool) {
 // given provider name (canonical name for canonicals, provider name for
 // custom). Returns "" if no matching folder is in the sidebar.
 func (s Model) ConfigKey(providerName string) string {
-	for _, e := range s.entries {
+	for _, e := range s.effectiveEntries() {
 		if e.cf.Folder.Name == providerName {
 			return e.cf.ConfigKey()
 		}
@@ -102,7 +148,7 @@ func (s Model) ConfigKey(providerName string) string {
 // FolderNameByCanonical returns the provider folder name whose canonical
 // matches target. Returns ("", false) when no folder matches.
 func (s Model) FolderNameByCanonical(target string) (string, bool) {
-	for _, e := range s.entries {
+	for _, e := range s.effectiveEntries() {
 		if e.cf.Canonical == target {
 			return e.cf.Folder.Name, true
 		}
@@ -111,7 +157,7 @@ func (s Model) FolderNameByCanonical(target string) (string, bool) {
 }
 
 func (s Model) FolderByProviderName(name string) (mail.Folder, bool) {
-	for _, e := range s.entries {
+	for _, e := range s.effectiveEntries() {
 		if e.cf.Folder.Name == name {
 			return e.cf.Folder, true
 		}
@@ -120,8 +166,9 @@ func (s Model) FolderByProviderName(name string) (mail.Folder, bool) {
 }
 
 func (s Model) OrderedFolders() []mail.FolderEntry {
-	out := make([]mail.FolderEntry, 0, len(s.entries))
-	for _, e := range s.entries {
+	entries := s.effectiveEntries()
+	out := make([]mail.FolderEntry, 0, len(entries))
+	for _, e := range entries {
 		display := e.cf.DisplayName
 		if display == "" {
 			display = e.cf.Canonical
@@ -141,7 +188,7 @@ func (s Model) OrderedFolders() []mail.FolderEntry {
 // SelectByCanonical moves the selection to the folder whose canonical name
 // matches target (e.g. "Inbox", "Drafts"). Returns true if found.
 func (s *Model) SelectByCanonical(target string) bool {
-	for i, e := range s.entries {
+	for i, e := range s.effectiveEntries() {
 		if e.cf.Canonical == target {
 			s.selected = i
 			return true
@@ -151,8 +198,9 @@ func (s *Model) SelectByCanonical(target string) bool {
 }
 
 func (s Model) SelectedIcon() string {
-	if s.selected < len(s.entries) {
-		return s.entries[s.selected].icon
+	entries := s.effectiveEntries()
+	if s.selected < len(entries) {
+		return entries[s.selected].icon
 	}
 	return ""
 }
@@ -176,7 +224,7 @@ func (s *Model) MoveUp() {
 }
 
 func (s *Model) MoveDown() {
-	if s.selected < len(s.entries)-1 {
+	if s.selected < len(s.effectiveEntries())-1 {
 		s.selected++
 	}
 }
@@ -184,13 +232,14 @@ func (s *Model) MoveDown() {
 func (s *Model) MoveToTop() { s.selected = 0 }
 
 func (s *Model) MoveToBottom() {
-	if len(s.entries) > 0 {
-		s.selected = len(s.entries) - 1
+	if n := len(s.effectiveEntries()); n > 0 {
+		s.selected = n - 1
 	}
 }
 
 func (s Model) View() string {
-	if len(s.entries) == 0 || s.width == 0 || s.height == 0 {
+	entries := s.effectiveEntries()
+	if len(entries) == 0 || s.width == 0 || s.height == 0 {
 		return ""
 	}
 
@@ -198,9 +247,9 @@ func (s Model) View() string {
 	selectedBg := s.styles.SidebarSelected
 
 	var lines []string
-	prevGroup := s.entries[0].cf.Group
+	prevGroup := entries[0].cf.Group
 
-	for i, entry := range s.entries {
+	for i, entry := range entries {
 		if i > 0 && entry.cf.Group != prevGroup {
 			lines = append(lines, s.renderBlankLine())
 		}

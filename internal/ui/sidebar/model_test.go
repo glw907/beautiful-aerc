@@ -456,3 +456,51 @@ func TestSidebarRenderRow_WithIcons(t *testing.T) {
 		}
 	}
 }
+
+// newTestModel builds a sidebar with Primary + Disposal folders for outbox tests.
+func newTestModel(t *testing.T) *sidebar.Model {
+	t.Helper()
+	classified := []mail.ClassifiedFolder{
+		{Folder: mail.Folder{Name: "Inbox"}, Canonical: "Inbox", DisplayName: "Inbox", Group: mail.GroupPrimary},
+		{Folder: mail.Folder{Name: "Trash"}, Canonical: "Trash", DisplayName: "Trash", Group: mail.GroupDisposal},
+	}
+	s := sidebar.New(sidebar.NewStyles(theme.OneDark), classified, config.DefaultUIConfig(), 30, 10, uicore.SimpleIcons)
+	s.SetLayout(uicore.LayoutMode{Sidebar: 30, Icons: false})
+	return &s
+}
+
+func TestSidebar_OutboxEntryHiddenWhenZero(t *testing.T) {
+	m := newTestModel(t)
+	m.SetOutboxCount(0)
+	if strings.Contains(stripANSI(m.View()), "Outbox") {
+		t.Errorf("View should omit Outbox when count is 0:\n%s", m.View())
+	}
+}
+
+func TestSidebar_OutboxEntryAppearsAboveTrash(t *testing.T) {
+	m := newTestModel(t)
+	m.SetOutboxCount(3)
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "Outbox") {
+		t.Fatalf("Outbox missing:\n%s", view)
+	}
+	if !strings.Contains(view, "3") {
+		t.Errorf("badge missing:\n%s", view)
+	}
+	idxOutbox := strings.Index(view, "Outbox")
+	idxTrash := strings.Index(view, "Trash")
+	if idxOutbox >= idxTrash {
+		t.Errorf("Outbox should render above Trash; got Outbox@%d Trash@%d", idxOutbox, idxTrash)
+	}
+}
+
+func TestSidebar_SelectByCanonicalOutbox(t *testing.T) {
+	m := newTestModel(t)
+	m.SetOutboxCount(2)
+	if !m.SelectByCanonical("Outbox") {
+		t.Fatal("SelectByCanonical(Outbox) returned false")
+	}
+	if m.SelectedCanonical() != "Outbox" {
+		t.Errorf("SelectedCanonical: got %q, want Outbox", m.SelectedCanonical())
+	}
+}
