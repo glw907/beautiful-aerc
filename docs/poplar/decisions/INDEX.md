@@ -24,6 +24,7 @@ when you need the full record.
 | Viewer prototype, footnote harvesting, optimistic mark-read, n/N nav, long-bare-URL footnoting | 0065, 0066, 0067, 0069, 0085, 0086 |
 | List-Unsubscribe (RFC 8058 one-click) | 0185 |
 | `.ics` invite viewer — display-only inline block (`internal/icalendar/` wraps `arran4/golang-ical`; first-VEVENT-only; aerc-aligned plain-text block; `[CANCELLED]` row on METHOD=CANCEL; FREQ+INTERVAL recurrence only; local-tz formatting; no RSVP / CalDAV / popover) | 0186 |
+| Background body sync — per-account `Backfiller` (newest-first SQL queue, 500ms tick, 2 MB batch, 5s idle gate on `tea.KeyMsg`, online/cap gates, throttle backoff via shared `internal/backoff.Exponential`); `[cache] max-size = 0` default (unlimited; partially supersedes 0122); status-bar `↓ N/M` segment with paused/warn substates and Spartan-tier glyph collapse; App `refreshBackfillSegment` with change-detection guard | 0187 |
 | Help popover modal, future-binding policy, overlay+dim, link picker | 0071 (superseded by 0082), 0072, 0082, 0087 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
 | Optimistic triage with toast/undo, ActionTargets, visual mode, move picker | 0089, 0090, 0091 |

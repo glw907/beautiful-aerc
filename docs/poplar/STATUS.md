@@ -1,8 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 13 — Background body sync + status
-indicator (substrate for #38). Pass 13.1 then delivers the
-search UI on top.
+**Current pass:** Pass 13.1 — Search (#38) on top of the body-sync
+substrate landed in Pass 13.
 
 ## Passes
 
@@ -13,7 +12,7 @@ search UI on top.
 | 10b | Schedule send + sidebar Outbox (#35 part 2; ADR-0184) | done |
 | 11 | List-Unsubscribe (#36; ADR-0185) | done |
 | 12 | `.ics` invite viewer (#37; ADR-0186) | done |
-| 13 | Background body sync + status indicator (substrate for #38) | pending |
+| 13 | Background body sync + status indicator (substrate for #38; ADR-0187) | done |
 | 13.1 | Search (#38) | pending |
 | 14 | First-run wizard (#27) + OAuth refresh + config template (#29) | pending |
 | 15 | Polish II — popover dim (#14) + items surfaced during 10–14 | pending |
@@ -22,34 +21,35 @@ search UI on top.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 13)
+## Next starter prompt (Pass 13.1)
 
-> **Goal.** Background body sync per account so search (Pass
-> 13.1) is snappy across the full mailbox, plus a status-bar
-> indicator showing sync progress.
+> **Goal.** Cross-folder search (#38) reading from the local
+> body cache that Pass 13's `Backfiller` populates.
 >
-> **Scope.** New `internal/cache/backfill.go` worker:
-> newest-first via `LEFT JOIN bodies WHERE bytes IS NULL ORDER
-> BY sent_at DESC`, batch ceiling (~2 MB) with timer-slack
-> between batches, idle-gated by a `lastActivity` timestamp
-> threaded from `tea.KeyMsg`. Honors server back-pressure
-> (`[THROTTLED]` / JMAP rate-limit) with exponential back-off
-> (cap 60s, mirroring the outbox drainer). `[cache] max-size =
-> 0` reinterpreted as unlimited (matrix-aligned default).
-> Status bar gains a sibling segment `↓ N/M` (dim) with
-> `paused` / `⚠` substates. Attachments stay lazy.
+> **Scope.** New SQLite FTS5 virtual table indexed off
+> `messages` + `bodies`, populated synchronously by `storeBody`
+> and (where applicable) by header upserts. Operator parser for
+> the search query (`from:`, `to:`, `subject:`, `has:attachment`,
+> bare terms = subject + body); the survey doc names the
+> matrix-aligned operator set. UI surface: extend the existing
+> sidebar search shelf to support `\` (cross-folder mode toggle)
+> and route hits to a synthetic results pane. The `↓ N/M`
+> backfill segment (already in chrome) covers progress feedback
+> while indexing is incomplete.
 >
-> **Settled.** Newest-first; implicit SQL queue (no watermark);
-> idle-burst throttle from Thunderbird `nsAutoSyncManager`;
-> status-bar sibling segment, not glyph overload; default
-> `max-size = 0`. Two-pass split — 13.1 carries FTS5 +
-> operator parser. See `docs/poplar/research/2026-05-09-*.md`.
+> **Settled (do not re-brainstorm):** SQLite FTS5 (no Bleve,
+> no external index); operator set per the matrix survey;
+> sidebar shelf as the entry point (no new top-level overlay);
+> backfill is the substrate (Pass 13.1 reads, doesn't write
+> the population worker). See `docs/poplar/research/2026-05-09-
+> mail-client-search-survey.md`.
 >
-> **Open — brainstorm:** exact `idleThreshold`; whether
-> `pumpUpdatesCmd` new-mail UIDs route through backfill or
-> fetch headers-only as today; back-off curve specifics; how
-> the segment renders in the Spartan tier (80–89 cells).
+> **Open — brainstorm:** FTS5 schema shape (separate virtual
+> table vs FTS-shadowed messages); index-update transaction
+> boundaries (inside `storeBody` tx vs trigger); throttle-state
+> wiring for the `↓ ⚠` warn substate left unwired in Pass 13;
+> results-pane keymap + sort.
 >
-> **Approach.** Brainstorm, write
-> `docs/superpowers/plans/2026-05-09-pass-13-backfill.md`,
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-pass-13-1-search.md`,
 > implement. Standard pass-end checklist applies.

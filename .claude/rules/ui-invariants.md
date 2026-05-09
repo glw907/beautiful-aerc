@@ -377,6 +377,21 @@ file describes behavior, not the key tables.
 - Status bar carries an outbox depth segment: `⇅N` (FgDim) when
   only in-flight ops; `⚠N` (ColorWarning, N = inflight + conflict)
   when any conflict; segment hidden when outbox is empty.
+- Status bar carries a backfill-progress segment between the
+  outbox depth chunk and the connection indicator: `↓ N/M` in
+  Full / Intermediate tiers (width >= 90), bare `↓` glyph in
+  Spartan (width < 90). Hidden when `total == 0` or `done >=
+  total`. Substates: `↓ paused` / `↓⏸` while offline or mid-
+  activity (driven by `m.statusBar.ConnectionState() !=
+  Connected`); `↓ ⚠` / `↓⚠` reserved for persistent throttle
+  (warn input wired through `SetBackfill(done, total, paused,
+  warn)` but always passed `false` in Pass 13 — Pass 13.1
+  surfaces real throttle state alongside search).
+  `App.refreshBackfillSegment()` queries `Cache().BackfillProgress`
+  on every `account.CacheEventMsg` and `backendUpdateMsg`,
+  short-circuiting when `(done, total, paused)` is unchanged so
+  the COUNT queries don't fire on every drainer event once the
+  segment is steady. ADR-0187.
 - Connection state Offline + non-empty outbox emits a one-shot
   ErrorMsg banner ("offline — queued ops will sync on
   reconnect"). Empty outbox stays silent. The drainer's behavior

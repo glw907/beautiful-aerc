@@ -1,6 +1,6 @@
 ---
 title: Cache II policy — lazy population, single max-size backstop
-status: accepted
+status: partially superseded by 0187
 date: 2026-05-03
 ---
 

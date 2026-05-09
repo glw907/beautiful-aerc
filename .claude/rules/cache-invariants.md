@@ -119,9 +119,28 @@ each fact back to its ADR(s).
   population: cache miss → backend fetch → store; cache hit →
   return stored bytes. `storeBody` runs a size backstop: when an
   insert would push total stored size over `cache.Config.MaxSize`
-  (default 2 GB from `[cache] max-size` in `config.toml`), it
-  evicts the oldest messages by `messages.sent_at` inline.
-  `Backend.FetchBody` returns `([]byte, error)` — no `io.Reader`.
+  (default 0 from `[cache] max-size` in `config.toml`; 0 disables
+  the cap), it evicts the oldest messages by `messages.sent_at`
+  inline. `Backend.FetchBody` returns `([]byte, error)` — no
+  `io.Reader`. ADRs 0122 (partially superseded by 0187), 0187.
+- `internal/cache/backfill.go` is the per-account body-cache
+  filler. One `Backfiller` per `*cache.Account`, started by `Open`
+  and stopped by canceling the context threaded into `Run`. Work
+  queue is implicit: `SELECT m.protocol_id FROM messages m LEFT
+  JOIN bodies b ON b.message = m.id WHERE b.bytes IS NULL ORDER
+  BY m.sent_at DESC LIMIT 1`. Each tick (500ms) checks gates,
+  drains a batch up to 2 MB, sleeps. Gates: `connOnline` (paused
+  on `Reconnecting` and `Offline`); `idle` (5s threshold on
+  `lastActivity` driven by `tea.KeyMsg`); `atCap` (90% of
+  `acct.maxSize`, skipped when `maxSize <= 0`). Server back-
+  pressure (IMAP `[THROTTLED]`, JMAP rate-limit, HTTP 429)
+  detected by substring on `err.Error()`; routes through
+  `internal/backoff.Exponential(throttleAttempts, 1s, 60s)`,
+  mirroring the outbox drainer's curve. `(*Account).
+  BackfillProgress()` returns `(done, total)` for the status-bar
+  segment. `(*Account).NotifyActivity()` /
+  `NotifyConnState(online bool)` are App→Backfiller signal
+  shims. ADR-0187.
 - `(*Account).Attachments(ctx, uid)` and `FetchAttachment(ctx, uid,
   partID)` mirror the body pattern. Metadata populates lazily on
   first `Attachments` call (zero-length results are not cached);
