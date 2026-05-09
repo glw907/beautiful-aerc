@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -47,37 +48,40 @@ type pendingReschedule struct {
 
 // App is the root bubbletea model.
 type App struct {
-	acct             account.Model
-	icons            uicore.IconSet
-	styles           Styles
-	topLine          TopLine
-	statusBar        StatusBar
-	footer           Footer
-	keys             GlobalKeys
-	viewerOpen       bool
-	helpOpen         bool
-	help             helppopover.Model
-	linkPicker       reader.LinkPicker
-	attachPicker     reader.AttachPicker
-	movePicker       movepicker.Model
-	downloadDir      string
-	confirm          ConfirmModal
-	pendingEmpty     pendingEmptyConfirm
-	outbox           OutboxOverlay
-	outboxOpen       bool
-	outboxView       *outbox.Model // non-nil while the Outbox folder is selected
-	outboxPrevFolder string        // canonical folder to restore on outbox close
-	reschedule       pendingReschedule
-	conflict         ConflictOverlay
-	conflictOpen     bool
-	lastOutboxDepth  cache.OutboxDepth
-	offlineHinted    bool
-	lastErr          ErrorMsg
-	toast            pendingAction
-	undoSeconds      int
-	undoSendWindow   time.Duration
-	now              func() time.Time // test seam, defaults to time.Now
-	opener           URLOpener        // test seam, defaults to xdgOpenURL
+	acct               account.Model
+	icons              uicore.IconSet
+	styles             Styles
+	topLine            TopLine
+	statusBar          StatusBar
+	footer             Footer
+	keys               GlobalKeys
+	viewerOpen         bool
+	helpOpen           bool
+	help               helppopover.Model
+	linkPicker         reader.LinkPicker
+	attachPicker       reader.AttachPicker
+	movePicker         movepicker.Model
+	downloadDir        string
+	confirm            ConfirmModal
+	pendingEmpty       pendingEmptyConfirm
+	outbox             OutboxOverlay
+	outboxOpen         bool
+	outboxView         *outbox.Model // non-nil while the Outbox folder is selected
+	outboxPrevFolder   string        // canonical folder to restore on outbox close
+	reschedule         pendingReschedule
+	conflict           ConflictOverlay
+	conflictOpen       bool
+	lastOutboxDepth    cache.OutboxDepth
+	offlineHinted      bool
+	lastErr            ErrorMsg
+	toast              pendingAction
+	pendingUnsub       *reader.OpenUnsubscribeConfirmMsg
+	lastNotice         string
+	lastNoticeDeadline time.Time
+	undoSeconds        int
+	undoSendWindow     time.Duration
+	now                func() time.Time // test seam, defaults to time.Now
+	opener             URLOpener        // test seam, defaults to xdgOpenURL
 
 	tidyEnabled bool
 	tidyAPIKey  string
@@ -383,6 +387,16 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case reader.OpenUnsubscribeConfirmMsg:
+		host := unsubscribeHost(msg.Unsub)
+		stash := msg
+		m.pendingUnsub = &stash
+		m.confirm = m.confirm.Open(ConfirmRequest{
+			Title: "Unsubscribe",
+			Body:  "Send unsubscribe request to " + host + "?",
+		})
+		return m, nil
+
 	case account.OpenConfirmEmptyMsg:
 		body := strconv.Itoa(msg.Total) + " messages will be permanently deleted."
 		m.pendingEmpty = pendingEmptyConfirm{folder: msg.Folder, source: msg.Source}
@@ -418,6 +432,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				return m, upsertAndPushDraftCmd(m.acct.Cache(), draftID, draftsFolder, d, prevUID, m.identities)
 			}
 			return m, nil
+		case m.pendingUnsub != nil:
+			pu := *m.pendingUnsub
+			m.pendingUnsub = nil
+			return m, m.dispatchUnsubscribe(pu.Unsub)
 		case m.pendingEmpty.folder != "":
 			folder, source := m.pendingEmpty.folder, m.pendingEmpty.source
 			m.pendingEmpty = pendingEmptyConfirm{}
@@ -428,6 +446,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case ConfirmModalNoMsg:
+		m.pendingUnsub = nil
 		if m.pendingFormDiscard {
 			m.pendingFormDiscard = false
 			return m, nil
@@ -463,6 +482,11 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Esc on save-draft keeps compose mounted.
 		if m.pendingComposeSave {
 			m.pendingComposeSave = false
+			m.confirm = m.confirm.Close()
+			return m, nil
+		}
+		if m.pendingUnsub != nil {
+			m.pendingUnsub = nil
 			m.confirm = m.confirm.Close()
 			return m, nil
 		}
@@ -532,11 +556,23 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case UnsubscribeDoneMsg:
+		m.lastNotice = "Unsubscribed from " + msg.Host
+		m.lastNoticeDeadline = time.Now().Add(5 * time.Second)
+		return m, clearNoticeAfter(5 * time.Second)
+
+	case noticeExpireMsg:
+		if !m.lastNoticeDeadline.IsZero() && !time.Now().Before(m.lastNoticeDeadline) {
+			m.lastNotice = ""
+			m.lastNoticeDeadline = time.Time{}
+		}
+		return m, nil
+
 	case ErrorMsg:
-		// An error clears any pending toast. The cache still holds the
-		// optimistic flip; the user must fire u to revert.
+		// An error clears any pending toast and any success notice.
 		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
+		m.lastNotice = ""
 		m.lastErr = msg
 		cmds := make([]tea.Cmd, 0, 2)
 		var rcmd tea.Cmd
@@ -1248,9 +1284,12 @@ func (m App) selectedMessage() (mail.MessageInfo, bool) {
 }
 
 // hasBannerRow reports whether the chrome row above the status bar is
-// occupied by an error banner or an active toast.
+// occupied by an error banner, a success notice, or an active toast.
 func (m App) hasBannerRow() bool {
-	return m.lastErr.Err != nil || !m.toast.IsZero()
+	if m.lastErr.Err != nil || !m.toast.IsZero() {
+		return true
+	}
+	return m.lastNotice != "" && !m.lastNoticeDeadline.IsZero() && time.Now().Before(m.lastNoticeDeadline)
 }
 
 // maybeResizeChild re-forwards a WindowSizeMsg to the child when the
@@ -1282,11 +1321,14 @@ func parseSender(from string) (displayName, email string) {
 }
 
 // chromeBannerRow renders the chrome row above the status bar. Error
-// banner wins, then send-undo countdown, then triage toast, else ""
-// collapses the row.
+// banner wins, then success notice, then send-undo countdown, then
+// triage toast, else "" collapses the row.
 func (m App) chromeBannerRow(width int) string {
 	if banner := renderErrorBanner(m.lastErr, width, m.styles); banner != "" {
 		return banner
+	}
+	if m.lastNotice != "" && !m.lastNoticeDeadline.IsZero() && time.Now().Before(m.lastNoticeDeadline) {
+		return m.styles.Toast.Render(uicore.TruncateToWidth(m.lastNotice, width))
 	}
 	if m.toast.op == opSendUndo {
 		remaining := time.Until(m.toast.deadline).Round(time.Second)
@@ -1300,6 +1342,53 @@ func (m App) chromeBannerRow(width int) string {
 		return renderToast(m.toast, width, m.styles)
 	}
 	return ""
+}
+
+// unsubscribeHost returns the user-visible host string for a confirm-modal
+// prompt. Picks from the action that will fire (one-click → mailto → http)
+// and falls back to a fixed label when every URL is malformed.
+func unsubscribeHost(u content.Unsubscribe) string {
+	switch {
+	case u.OneClick != "":
+		if p, err := url.Parse(u.OneClick); err == nil && p.Host != "" {
+			return p.Host
+		}
+	case u.Mailto != "":
+		if p, err := url.Parse(u.Mailto); err == nil && p.Opaque != "" {
+			at := strings.IndexByte(p.Opaque, '?')
+			if at < 0 {
+				return p.Opaque
+			}
+			return p.Opaque[:at]
+		}
+	case u.HTTP != "":
+		if p, err := url.Parse(u.HTTP); err == nil && p.Host != "" {
+			return p.Host
+		}
+	}
+	return "this list"
+}
+
+// dispatchUnsubscribe routes the confirmed unsubscribe to its action path:
+// one-click POST → mailto compose seed → plain http via URLOpener.
+// Precedence matches RFC 8058: https one-click is preferred, mailto is the
+// fallback, plain http is last.
+func (m App) dispatchUnsubscribe(u content.Unsubscribe) tea.Cmd {
+	switch {
+	case u.OneClick != "":
+		return unsubscribePostCmd(u.OneClick)
+	case u.Mailto != "":
+		d, err := mailcompose.SeedFromMailto(u.Mailto, m.acct.AccountEmail())
+		if err != nil {
+			return func() tea.Msg {
+				return ErrorMsg{Op: "unsubscribe (mailto)", Err: err}
+			}
+		}
+		return func() tea.Msg { return uicompose.SeededMsg{Draft: d} }
+	case u.HTTP != "":
+		return launchURLCmd(m.opener, u.HTTP)
+	}
+	return nil
 }
 
 // contactsColumnWidths returns (sidebarW, listW, detailW) for the
