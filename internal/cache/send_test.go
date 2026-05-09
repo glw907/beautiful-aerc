@@ -2,6 +2,8 @@ package cache
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -217,6 +219,32 @@ func TestDispatchAppend(t *testing.T) {
 	}
 	if string(got.MIME) != string(mime) {
 		t.Errorf("mime mismatch")
+	}
+}
+
+func TestDrainerSkipsRowsBeforeScheduledFor(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	future := time.Now().Add(500 * time.Millisecond).UnixNano()
+	if _, err := a.db.Exec(
+		`INSERT INTO outbox(folder, kind, args, payload, enqueued_at, status, attempts, scheduled_for) VALUES (NULL, ?, ?, x'', 0, ?, 0, ?)`,
+		KindSend, `{}`, OpPending, future,
+	); err != nil {
+		t.Fatalf("insert outbox row: %v", err)
+	}
+
+	row, err := a.nextOutboxRow(time.Now())
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("before scheduled_for: got row=%v err=%v, want ErrNoRows", row, err)
+	}
+
+	row, err = a.nextOutboxRow(time.Now().Add(time.Second))
+	if err != nil {
+		t.Fatalf("after scheduled_for: %v", err)
+	}
+	if row == nil {
+		t.Fatal("after scheduled_for: expected non-nil row")
 	}
 }
 

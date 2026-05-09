@@ -209,24 +209,27 @@ type outboxRow struct {
 	ArgsJSON   string
 	Attempts   int
 	Payload    []byte
+	DraftID    string // empty when not draft-linked
 }
 
 // nextOutboxRow returns the next eligible op or sql.ErrNoRows.
-// Eligibility = pending, or failed past its next_eligible_at window.
+// Eligibility = pending, or failed past its next_eligible_at window,
+// and scheduled_for has passed (or is unset).
 func (a *Account) nextOutboxRow(now time.Time) (*outboxRow, error) {
 	const q = `
         SELECT o.id, COALESCE(o.folder, 0), COALESCE(f.name, ''), o.message,
                COALESCE((SELECT m.protocol_id FROM messages m WHERE m.id = o.message), ''),
-               o.kind, o.args, o.attempts, o.payload
+               o.kind, o.args, o.attempts, o.payload, COALESCE(o.draft_id, '')
         FROM outbox o
         LEFT JOIN folders f ON f.id = o.folder
-        WHERE o.status = ?
-           OR (o.status = ? AND (o.next_eligible_at IS NULL OR o.next_eligible_at <= ?))
+        WHERE (o.status = ?
+               OR (o.status = ? AND (o.next_eligible_at IS NULL OR o.next_eligible_at <= ?)))
+          AND (o.scheduled_for IS NULL OR o.scheduled_for <= ?)
         ORDER BY o.id LIMIT 1`
 	var row outboxRow
-	err := a.db.QueryRow(q, OpPending, OpFailed, now.UnixNano()).Scan(
+	err := a.db.QueryRow(q, OpPending, OpFailed, now.UnixNano(), now.UnixNano()).Scan(
 		&row.ID, &row.FolderID, &row.FolderName, &row.MessageID,
-		&row.ProtocolID, &row.Kind, &row.ArgsJSON, &row.Attempts, &row.Payload)
+		&row.ProtocolID, &row.Kind, &row.ArgsJSON, &row.Attempts, &row.Payload, &row.DraftID)
 	if err != nil {
 		return nil, err
 	}
