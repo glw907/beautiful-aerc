@@ -5,12 +5,14 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// BodyLoadedMsg carries the parsed-block body. AccountTab drops mismatches
-// against the viewer's current UID (user closed and reopened on a
-// different UID before the Cmd resolved).
+// BodyLoadedMsg carries the parsed-block body and any List-Unsubscribe
+// headers harvested from the raw RFC 5322 envelope. AccountTab drops
+// mismatches against the viewer's current UID (user closed and reopened
+// on a different UID before the Cmd resolved).
 type BodyLoadedMsg struct {
 	UID    mail.UID
 	Blocks []content.Block
+	Unsub  content.Unsubscribe
 }
 
 // AttachmentsLoadedMsg carries metadata for the viewer's current UID.

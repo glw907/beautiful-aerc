@@ -1,9 +1,11 @@
 package account
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"io"
+	"net/textproto"
 	"strings"
 
 	// Register non-UTF8 charset decoders. Without this, MIME parts tagged
@@ -180,6 +182,7 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 				resultCh <- uicore.ErrorMsg{Op: "fetch body", Err: err}
 				return
 			}
+			unsub := parseUnsubscribeFromRaw(buf)
 			text := string(buf)
 			if isRFC822(buf) {
 				if mr, mrErr := gomail.CreateReader(bytes.NewReader(buf)); mrErr == nil {
@@ -221,7 +224,7 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 					}
 				}
 			}
-			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text)}
+			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text), Unsub: unsub}
 		}()
 		select {
 		case <-ctx.Done():
@@ -251,6 +254,21 @@ func isRFC822(b []byte) bool {
 		}
 	}
 	return true
+}
+
+// parseUnsubscribeFromRaw extracts the RFC 5322 header block from buf
+// and returns parsed List-Unsubscribe data. Non-RFC822 input (mock-
+// backend pre-cleaned markdown) parses to a zero Unsubscribe.
+func parseUnsubscribeFromRaw(buf []byte) content.Unsubscribe {
+	if !isRFC822(buf) {
+		return content.Unsubscribe{}
+	}
+	r := textproto.NewReader(bufio.NewReader(bytes.NewReader(buf)))
+	h, err := r.ReadMIMEHeader()
+	if err != nil {
+		return content.Unsubscribe{}
+	}
+	return content.ParseListUnsubscribe(h)
 }
 
 func markReadCmd(c *cache.Account, folder string, uid mail.UID) tea.Cmd {
