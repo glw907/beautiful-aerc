@@ -177,3 +177,77 @@ func TestOutboxConflicts_OrderByEnqueuedAtASC(t *testing.T) {
 		t.Errorf("order: got [%d,%d], want [%d,%d]", rs[0].ID, rs[1].ID, id2, id1)
 	}
 }
+
+// buildMIME returns a minimal RFC 5322 message with the given Subject header.
+func buildMIME(subject string) []byte {
+	return []byte("From: a@x\r\nTo: b@x\r\nSubject: " + subject + "\r\n\r\nbody")
+}
+
+// putTestDraft inserts a draft row and returns its draftID.
+func putTestDraft(t *testing.T, a *Account, draftID string) string {
+	t.Helper()
+	if err := a.CreateDraft(context.Background(), draftID, []byte("payload")); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	return draftID
+}
+
+func TestOutboxScheduled_OrdersByScheduledForAsc(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	later := time.Now().Add(2 * time.Hour).UnixNano()
+	earlier := time.Now().Add(1 * time.Hour).UnixNano()
+	if _, err := a.QueueSend(ctx, "Inbox", testEnvelope(), buildMIME("later"), later, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.QueueSend(ctx, "Inbox", testEnvelope(), buildMIME("earlier"), earlier, ""); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := a.OutboxScheduled(ctx)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+	if rows[0].Subject != "earlier" || rows[1].Subject != "later" {
+		t.Errorf("order: got %q,%q want earlier,later", rows[0].Subject, rows[1].Subject)
+	}
+}
+
+func TestOutboxScheduled_HydratesDraftViaJoin(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	draftID := putTestDraft(t, a, "draft-1")
+	when := time.Now().Add(1 * time.Hour).UnixNano()
+	if _, err := a.QueueSend(ctx, "Inbox", testEnvelope(), buildMIME("subj"), when, draftID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := a.OutboxScheduled(ctx)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Draft == nil {
+		t.Fatalf("draft not hydrated: %+v", rows)
+	}
+	if rows[0].Draft.DraftID != draftID {
+		t.Errorf("draft id: got %q, want %q", rows[0].Draft.DraftID, draftID)
+	}
+}
+
+func TestOutboxScheduled_DecodesSubjectFromMIME(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	mime := []byte("From: a@x\r\nTo: b@x\r\nSubject: hello there\r\n\r\nbody")
+	if _, err := a.QueueSend(ctx, "Inbox", testEnvelope(), mime,
+		time.Now().Add(1*time.Hour).UnixNano(), ""); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := a.OutboxScheduled(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Subject != "hello there" {
+		t.Errorf("subject: got %q, want %q", rows[0].Subject, "hello there")
+	}
+}
