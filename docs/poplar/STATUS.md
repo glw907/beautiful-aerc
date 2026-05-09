@@ -49,9 +49,13 @@ parked at `~/Projects/displaywidth/add-overrides`.
   `archive/specs/2026-05-08-bubble-adoption-design.md` + Pass 9v.
   Produce two lists: (a) bubbles ansix alone unlocks (swap),
   (b) bubbles still gated on `lipgloss.Width` internal calls
-  (`bubbles/help`, `bubble-table`, `glamour`). For list (b), choose
-  among: **fork** x/ansi or lipgloss via go.mod `replace` (unlocks
-  fully but permanent rebase + contradicts ADR-0002/0075's no-fork
-  stance); **issue** at charmbracelet linking lipgloss #666 +
-  Ghostty #5588/#8822 (asks for shape input first; #666 has sat
-  >1y); **accept** gating. Decide once list (b) has names.
+  (`bubbles/help`, `bubble-table`, `glamour`). Upstream path is
+  effectively closed: charmbracelet/x/ansi PR #606 (2025-10-31)
+  shows ayman + clipperhouse coordinate on the width layer; an
+  issue/PR at charmbracelet routes through clipperhouse, who has
+  already declined the override-hook shape (PR #23 comment
+  2026-05-02). For list (b) the real binary is **fork** x/ansi or
+  lipgloss via go.mod `replace` (unlocks fully; permanent rebase;
+  contradicts ADR-0002/0075's no-fork stance) vs. **accept** the
+  gating (keep manual row joins + hand-rolled equivalents). Decide
+  once list (b) has names and the keep-vs-fork delta is concrete.
