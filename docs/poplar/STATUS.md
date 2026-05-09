@@ -1,15 +1,15 @@
 # Poplar Status
 
-**Current pass:** Pass 9y — bubble consolidation verdict.
-Pass 9z (adoption) follows; features (10–14) resume after.
+**Current pass:** Pass 9z — adopt surviving harvest items. Features
+(Pass 10–14) resume after.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
 | 1 – 9x.3 | Scaffold through table/form harvest (ADRs 0001–0181) | done |
-| 9y | Bubble consolidation — final keep/swap verdict across all surveyed bubbles | pending |
-| 9z | Adopt top-three findings from 9x.1–9x.3 + 9y catalogs | pending |
+| 9y | Bubble consolidation verdict — nine libraries Keep; ADR-0182 closes the eval roadmap | done |
+| 9z | Adopt surviving harvest items from the consolidated catalogs | pending |
 | 10 | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 11 | List-Unsubscribe (#36) | pending |
 | 12 | `.ics` viewer (#37) | pending |
@@ -21,40 +21,32 @@ Pass 9z (adoption) follows; features (10–14) resume after.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9y)
+## Next starter prompt (Pass 9z)
 
-> **Goal.** Read the 9x.1–9x.3 harvest catalogs together with Eval A
-> and Eval B, then issue the final keep/swap verdict per bubble.
+> **Goal.** Adopt the surviving harvest items from the bubble-eval
+> roadmap. Pass 9y closed the roadmap; operational reference is
+> `docs/poplar/research/2026-05-08-bubble-consolidation-verdict.md`
+> and ADR-0182.
 >
-> **Scope.** Six libraries surveyed across three passes:
-> `bubbles/list` + `bubbles/textinput` + `bubbles/textarea`
-> (9x.1 list family); `bubbles/help` + `mistakenelf/teacup` +
-> `daltonsw/bubbleup` (9x.2 chrome family); `charmbracelet/huh` +
-> `evertras/bubble-table` (9x.3 table/form). Inputs:
-> `docs/poplar/research/2026-05-08-bubbles-list-patterns.md`,
-> `docs/poplar/research/2026-05-08-chrome-family-patterns.md`,
-> `docs/poplar/research/2026-05-08-table-form-patterns.md`,
-> Eval A at `docs/superpowers/archive/specs/2026-04-30-bubble-eval.md`,
-> Eval B at
-> `docs/superpowers/archive/specs/2026-05-08-bubble-reeval-and-eval-b.md`.
+> **Scope.** Two carry-forward items across the three harvest
+> catalogs: (1) `bubbles/help` `shouldAddItem` progressive-
+> truncation loop (9x.2 §3) — port if helppopover needs progressive
+> truncation today, else document the defer; (2) per-state combined-
+> state style naming (9x.1 §3) — re-check the sidebar decline still
+> holds. Plus any adjacent cleanups the harvest catalogs flagged but
+> didn't land.
 >
-> **Settled (do not re-brainstorm):** Eval A and Eval B both produced
-> Keep + harvest on every library. Three catalogs landed without
-> diffs (9x.1 had one small adoption; 9x.2 zero structural; 9x.3
-> zero structural plus a dead-field cleanup). The harvest itself
-> is complete.
+> **Settled (do not re-brainstorm):** Every Keep stands. ADR-0182
+> requires a named flip condition from the verdict doc to revisit
+> any surveyed library. Pass 14 may still adopt `huh` for the
+> wizard — that's a Pass 14 decision.
 >
-> **Still open — brainstorm these:** Whether the verdict reads
-> differently when all three catalogs are on the table at once.
-> Specifically: is there a swap candidate where the cumulative
-> "did not survive" list now exceeds the "kept" surface area enough
-> to flip the verdict? If yes, which? If no, what's the one-line
-> argument for each Keep that future-poplar can lean on?
+> **Still open — brainstorm these:** Whether item 1 is live this
+> pass or stays deferred; whether the catalogs surfaced adjacent
+> cleanups worth landing now.
 >
 > **Approach.** Brainstorm, write a plan at
-> `docs/superpowers/plans/YYYY-MM-DD-bubble-consolidation.md`,
-> implement. Most likely shape: one ADR confirming Keep across
-> all six bubbles with the consolidated rationale, plus a brief
-> verdict doc at `docs/poplar/research/`. ADR only if a binding
-> fact moves; the consolidated rationale lives in the verdict
-> doc otherwise. Standard pass-end checklist.
+> `docs/superpowers/plans/YYYY-MM-DD-bubble-adoption.md`, implement.
+> If the only durable adoption is item 1 and it's not live, the
+> pass is documentation + housekeeping — that's a legitimate
+> outcome; don't manufacture work. Standard pass-end checklist.
