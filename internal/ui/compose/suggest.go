@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/ui/contacts"
 )
@@ -13,6 +14,18 @@ type SuggestFn func(prefix string) []contacts.Suggestion
 
 const minPrefix = 2
 
+type dropdownKeys struct {
+	Up   key.Binding
+	Down key.Binding
+}
+
+func defaultDropdownKeys() dropdownKeys {
+	return dropdownKeys{
+		Up:   key.NewBinding(key.WithKeys("up")),
+		Down: key.NewBinding(key.WithKeys("down")),
+	}
+}
+
 // Dropdown owns the result set and cursor; compose.Model owns the
 // field-rewrite path.
 type Dropdown struct {
@@ -20,10 +33,11 @@ type Dropdown struct {
 	rows   []contacts.Suggestion
 	cursor int
 	styles Styles
+	keys   dropdownKeys
 }
 
 func NewDropdown(fn SuggestFn) Dropdown {
-	return Dropdown{fn: fn}
+	return Dropdown{fn: fn, keys: defaultDropdownKeys()}
 }
 
 func (d Dropdown) WithStyles(s Styles) Dropdown {
@@ -64,10 +78,10 @@ func (d Dropdown) Update(msg tea.Msg) (Dropdown, tea.Cmd) {
 	if !ok || len(d.rows) == 0 {
 		return d, nil
 	}
-	switch k.Type {
-	case tea.KeyDown:
+	switch {
+	case key.Matches(k, d.keys.Down):
 		d.cursor = (d.cursor + 1) % len(d.rows)
-	case tea.KeyUp:
+	case key.Matches(k, d.keys.Up):
 		d.cursor = (d.cursor - 1 + len(d.rows)) % len(d.rows)
 	}
 	return d, nil

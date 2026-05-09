@@ -1,14 +1,13 @@
 # Poplar Status
 
-**Current pass:** Pass 9x.1 — bubbles/list family harvest.
-Features (10–14) resume after 9x.1–9x.3 + 9y conclude.
+**Current pass:** Pass 9x.2 — chrome family harvest.
+Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 9w.2 | Scaffold through bubble re-eval (ADRs 0001–0181) | done |
-| 9x.1 | Harvest — bubbles/list family (pickers, sidebar, dropdown) | pending |
+| 1 – 9x.1 | Scaffold through bubbles/list harvest (ADRs 0001–0181) | done |
 | 9x.2 | Harvest — chrome family (helppopover, statusbar, toast) | pending |
 | 9x.3 | Harvest — table/form family (form, list, overlay) | pending |
 | 9y | Bubble consolidation — decide if any swap work remains | pending |
@@ -23,38 +22,34 @@ Features (10–14) resume after 9x.1–9x.3 + 9y conclude.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9x.1)
+## Next starter prompt (Pass 9x.2)
 
-> **Goal.** Harvest concrete diffs from `bubbles/list`'s design
-> into poplar's five list-shaped surfaces. Vibes get a one-line
-> note; only diffs land.
+> **Goal.** Harvest concrete diffs and design patterns from the
+> chrome-family bubbles into poplar's chrome surfaces.
 >
-> **Scope.** Five surfaces, all paired with `bubbles/list` in the
-> archived eval
-> (`docs/superpowers/archive/specs/2026-05-08-bubble-reeval-and-eval-b.md`):
-> `internal/ui/movepicker`, `internal/ui/reader/linkpicker.go`,
-> `internal/ui/reader/attachpicker.go`, `internal/ui/sidebar/`,
-> `internal/ui/compose/dropdown.go`. Read `bubbles/list` source
-> (`list.go`, `defaultitem.go`, `keys.go`) once; visit each
-> surface; produce 0–2 concrete diffs per surface. Reserve the
-> final task for cross-cutting patterns the per-surface work
-> made obvious.
+> **Scope.** Three surfaces, all with eval verdicts in
+> `docs/superpowers/archive/specs/2026-05-08-bubble-reeval-and-eval-b.md`:
+> `internal/ui/helppopover/` (vs `bubbles/help`), the status-bar
+> assembly in `internal/ui/account/` (vs `knipferrc/teacup`), and
+> the toast / undo bar in `internal/ui/` (vs
+> `daltonsw/bubbleup`). Read each library's render path once,
+> walk the poplar surface, produce 0–2 concrete diffs per
+> surface plus pattern notes for the catalog.
 >
-> **Settled:** All five verdicts are Keep + harvest. The
-> delegate pattern + `list.Styles` struct shape are the named
-> candidates. `JoinHorizontal` does not appear in the library's
-> render path (Task 7 finding); width math is not the harvest.
+> **Settled (do not re-brainstorm):** All three eval verdicts are
+> Keep + harvest. The 9x.1 pattern catalog at
+> `docs/poplar/research/2026-05-08-bubbles-list-patterns.md` is
+> the format reference — extend it (or fork a sibling chrome
+> doc) per the next planning call.
 >
-> **Still open — brainstorm these:** Whether the `ItemDelegate`
-> shape simplifies any current row renderer, or just adds an
-> indirection layer. Whether `list.Styles` field shape is worth
-> mirroring in any subpackage's `Styles` constructor. Whether
-> any picker's filter / cursor / scroll machinery has obvious
-> overlap with the library's that the eval missed.
+> **Still open — brainstorm these:** Whether the `bubbles/help`
+> KeyMap-driven ShortHelp/FullHelp shape can replace any part of
+> poplar's named-group binding tables. Whether teacup's segment
+> assembly is closer to the status-bar's drop-rank shape than the
+> hand-rolled join. Whether bubbleup's queue model offers anything
+> the toast cascade order doesn't already cover.
 >
 > **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-harvest-bubbles-list.md`,
-> then execute. Per-surface task: read library + read surface,
-> propose diff(s) or write a one-line skip note in the pass
-> commit. Standard pass-end checklist applies; no ADR if no
+> at `docs/superpowers/plans/YYYY-MM-DD-harvest-chrome.md`, then
+> implement. Standard pass-end checklist applies; ADR only if
 > binding facts change.

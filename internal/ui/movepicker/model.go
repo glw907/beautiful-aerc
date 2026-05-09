@@ -17,6 +17,9 @@ import (
 type Styles struct {
 	Dim    lipgloss.Style
 	Cursor lipgloss.Style
+	// Match underlines runes that match the active filter substring.
+	// Underline-only so it composes with the row's base foreground.
+	Match lipgloss.Style
 }
 
 // OpenMsg asks App to open the move-to-folder picker.
@@ -285,6 +288,12 @@ func (p Model) buildListRows(contentW int) []string {
 	if len(p.matches) == 0 && p.filter != "" {
 		return []string{"  no folders match \"" + uicore.TruncateToWidth(p.filter, contentW-22) + "\""}
 	}
+	const markerW = 2
+	displayW := contentW - markerW
+	if displayW < 1 {
+		displayW = 1
+	}
+	needleLower := strings.ToLower(p.filter)
 	rows := make([]string, 0, len(p.matches)+2)
 	prevGroup := mail.Group(-1)
 	for i, idx := range p.matches {
@@ -293,17 +302,53 @@ func (p Model) buildListRows(contentW int) []string {
 			rows = append(rows, "")
 		}
 		prevGroup = entry.Group
+		isCursor := i == p.cursor
 		marker := "  "
-		if i == p.cursor {
+		if isCursor {
 			marker = "> "
 		}
-		row := marker + entry.Display
-		if i == p.cursor {
-			row = p.styles.Cursor.Render(uicore.PadOrTruncate(row, contentW))
+		plain := uicore.TruncateToWidth(entry.Display, displayW)
+		pad := ""
+		if w := lipgloss.Width(plain); w < displayW {
+			pad = strings.Repeat(" ", displayW-w)
+		}
+		if !isCursor && needleLower != "" {
+			if runes := matchRunes(plain, needleLower); len(runes) > 0 {
+				plain = lipgloss.StyleRunes(plain, runes, p.styles.Match, lipgloss.NewStyle())
+			}
+		}
+		row := marker + plain + pad
+		if isCursor {
+			row = p.styles.Cursor.Render(row)
 		}
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// matchRunes returns the rune indices of the first substring match.
+// needleLower must already be lowercased by the caller.
+func matchRunes(haystack, needleLower string) []int {
+	if needleLower == "" {
+		return nil
+	}
+	lo := strings.Index(strings.ToLower(haystack), needleLower)
+	if lo < 0 {
+		return nil
+	}
+	hi := lo + len(needleLower)
+	var out []int
+	runeIdx := 0
+	for byteOff := range haystack {
+		if byteOff >= hi {
+			break
+		}
+		if byteOff >= lo {
+			out = append(out, runeIdx)
+		}
+		runeIdx++
+	}
+	return out
 }
 
 func (p Model) Position(box string, totalW, totalH int) (int, int) {

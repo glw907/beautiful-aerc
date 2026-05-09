@@ -242,6 +242,32 @@ func TestMovePicker_FilterEmptyMatchHint(t *testing.T) {
 	}
 }
 
+func TestMatchRunes(t *testing.T) {
+	tests := []struct {
+		name, hay, needle string
+		want              []int
+	}{
+		{"empty needle", "Receipts", "", nil},
+		{"no match", "Inbox", "xyz", nil},
+		{"prefix", "Receipts", "rec", []int{0, 1, 2}},
+		{"middle", "Receipts/2026", "ipt", []int{4, 5, 6}},
+		{"case insensitive", "Inbox", "in", []int{0, 1}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := matchRunes(tc.hay, tc.needle)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d (got %v, want %v)", len(got), len(tc.want), got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("[%d] = %d, want %d", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestMovePicker_FilterHintRowShown(t *testing.T) {
 	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
 	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
