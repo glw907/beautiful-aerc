@@ -196,6 +196,34 @@ func (a *Account) Events() <-chan CacheEvent { return a.events }
 // handling has lost ground. Re-read the cache instead.
 func (a *Account) DroppedEvents() uint64 { return a.droppedEvents.Load() }
 
+// BackfillProgress returns (done, total): bodies cached vs total
+// known messages. The status-bar segment polls this on every cache
+// event.
+func (a *Account) BackfillProgress() (done, total int, err error) {
+	if err = a.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&total); err != nil {
+		return 0, 0, err
+	}
+	if err = a.db.QueryRow(`SELECT COUNT(*) FROM bodies WHERE bytes IS NOT NULL`).Scan(&done); err != nil {
+		return 0, 0, err
+	}
+	return done, total, nil
+}
+
+// NotifyActivity forwards a user-input event to the backfill worker.
+func (a *Account) NotifyActivity() {
+	if a.backfiller != nil {
+		a.backfiller.NotifyActivity()
+	}
+}
+
+// NotifyConnState forwards a connection-state change to the backfill
+// worker.
+func (a *Account) NotifyConnState(online bool) {
+	if a.backfiller != nil {
+		a.backfiller.NotifyConnState(online)
+	}
+}
+
 // Close stops background goroutines and closes the database.
 func (a *Account) Close() error {
 	if a.backfillStop != nil {
