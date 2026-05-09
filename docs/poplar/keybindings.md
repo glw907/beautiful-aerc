@@ -158,12 +158,16 @@ a hidden row.
 | `1`–`9` | Open the Nth harvested link via `xdg-open` | V |
 | `Tab` | Link picker (when ≥1 URL harvested; inert otherwise) | V |
 | `@` | Attachment picker (when ≥1 attachment; inert otherwise) | V |
+| `U` | Unsubscribe (when List-Unsubscribe header present) | V |
 | `q`, `Esc` | Close viewer, return to list | V |
 | `n` / `N` | Next / previous visible message (skips folded rows) | V |
 
 Opening a message marks it read optimistically: the seen flag flips
 locally before the backend `MarkRead` Cmd resolves, so returning to
 the list shows the dimmed (read) styling immediately.
+
+`U unsub` is conditional — it appears at drop rank 6 only when the
+current message carries `List-Unsubscribe` (RFC 2369) headers.
 
 ### Attachment picker
 

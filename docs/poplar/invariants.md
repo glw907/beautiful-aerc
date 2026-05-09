@@ -294,40 +294,38 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   with its `Store` seam (`internal/cache` implements). `ClientConfig`
   is the runtime input to `NewClient`. `internal/ui/contacts/` is
   the address-book UI surface: per-package `Styles`, pure
-  `RenderDetailCard`, fixture pool kept for the Contacts-mode
-  browse list, and `Popover`/`Sidebar`/`List`/`Form` sub-models.
+  `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form` sub-models.
   Compose autocomplete and the `i`-popover read from
-  `cache.Account.SuggestAddresses` / `LookupContact`; the fixture
-  pool is gone from those paths. `i` opens the popover via
-  `parseSender`↔`content.ParseAddressList`; `C`/`M` toggle Contacts
-  mode (Sidebar T9 groups `ABC`…`WXYZ` with `J/K` group + `a`–`z`
-  letter + `┃` tick | List `bubbles/viewport`, `n`/`e` emit
-  `OpenFormMsg`, `D` opens delete-confirm | RenderDetailCard). Sidebar
-  fixed at 14; sidebar/list rows pad to `contentH` so a tall Form
-  doesn't collapse the body. Overlay cascade tail: confirm >
-  conflict > outbox > help > linkpicker > attachpicker > movepicker
-  > form > popover.
+  `cache.Account.SuggestAddresses` / `LookupContact`. `i` opens the
+  popover via `parseSender`↔`content.ParseAddressList`; `C`/`M`
+  toggle Contacts mode (T9 sidebar + List + Form). Overlay cascade:
+  confirm > conflict > outbox > help > linkpicker > attachpicker >
+  movepicker > form > popover.
 - `contacts.Form` is the contact edit sub-model — one value type,
-  two render contexts. `fromPopover=true` renders as a ModalShell
-  box; `fromPopover=false` renders body+footer without chrome so
-  the Contacts-mode frame supplies borders. One `focusIdx` cycles
-  via Tab/Shift+Tab over kind toggle (Space/←/→ flips), name
-  fields, `(input, cycler, ★, −)` quartets per email/phone row,
-  add buttons, note, save destination; ★ on row > 0 rotates to
-  primary; − removes (disabled at one email). Dirty is
-  `currentContact() != initial`. `Ctrl+S` validates (Person:
-  First or Last; Business: Name; ≥1 email via
-  `net/mail.ParseAddress`) and emits `ContactSaveMsg`; `Esc`
-  emits `ContactCancelMsg{Dirty}`. `D` (gated on `existingUID
-  != ""` and non-text-input focus) emits
-  `OpenContactDeleteConfirmMsg`. App owns `form` +
-  `pendingFormDiscard` + `pendingContactDelete`; Yes-confirm
-  cascade orders form-discard > contact-delete > compose-save >
-  empty-folder. Save: `queueContactPutCmd` → `PatchVCard` (existing)
-  or `BuildVCard` (new, `uuid.NewString()`) → `QueueContactPut`.
-  Delete: `queueContactDeleteCmd` → `QueueContactDelete`.
-  Multi-book destination is post-1.0; cmd uses
-  `Account.DefaultBookHref`. ADR-0176.
+  two render contexts (`fromPopover` flag). Tab/Shift+Tab cycles
+  kind toggle, name fields, email/phone quartets, add buttons,
+  note, save destination. `Ctrl+S` validates and emits
+  `ContactSaveMsg`; `Esc` emits `ContactCancelMsg{Dirty}`; `D`
+  (gated on existing UID + non-text-input focus) emits
+  `OpenContactDeleteConfirmMsg`. App owns confirm cascade: form-
+  discard > contact-delete > compose-save > empty-folder. Save
+  routes through `PatchVCard` (existing) or `BuildVCard` (new).
+  Multi-book destination is post-1.0. ADR-0176.
+
+### Viewer
+
+- Viewer harvests `List-Unsubscribe` (RFC 2369) and
+  `List-Unsubscribe-Post` (RFC 8058) headers at body-fetch time
+  via `content.ParseListUnsubscribe`. The parsed
+  `content.Unsubscribe` rides on `reader.BodyLoadedMsg.Unsub` and
+  is exposed via `reader.Model.Unsubscribe()`. `U` opens a
+  `ConfirmModal`; on Yes the App routes by precedence: https
+  one-click POST (`unsubscribePostCmd`, 10s timeout, 2xx success)
+  > mailto into compose (`compose.SeedFromMailto`) > plain http
+  via `URLOpener`. No client-side memory of prior unsubscribes.
+  Success surfaces as `App.lastNotice` ("Unsubscribed from
+  <host>") in the chrome banner row tier between error and
+  triage toast (5s auto-clear). ADR-0185.
 
 ## Mail model
 

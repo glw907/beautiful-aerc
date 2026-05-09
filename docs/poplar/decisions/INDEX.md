@@ -22,6 +22,7 @@ when you need the full record.
 | Per-screen prototype passes | 0022 (superseded by 0070), 0070 |
 | Sidebar search shelf, filter-and-hide, thread-level | 0064 |
 | Viewer prototype, footnote harvesting, optimistic mark-read, n/N nav, long-bare-URL footnoting | 0065, 0066, 0067, 0069, 0085, 0086 |
+| List-Unsubscribe (RFC 8058 one-click) | 0185 |
 | Help popover modal, future-binding policy, overlay+dim, link picker | 0071 (superseded by 0082), 0072, 0082, 0087 |
 | Error banner, ErrorMsg, shared spinner | 0073, 0074 |
 | Optimistic triage with toast/undo, ActionTargets, visual mode, move picker | 0089, 0090, 0091 |
