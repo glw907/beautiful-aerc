@@ -47,10 +47,3 @@ type ScheduleAcceptedMsg struct{ When time.Time }
 
 // ScheduleCancelledMsg is emitted when the user dismisses the picker.
 type ScheduleCancelledMsg struct{}
-
-// OpenScheduleMsg requests the App open the picker pre-filled. Used by
-// the outbox view's "s reschedule" action.
-type OpenScheduleMsg struct {
-	OpID    int64
-	Initial string // formatted "2006-01-02 15:04"
-}

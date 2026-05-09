@@ -273,9 +273,9 @@ func decodeRowMeta(kind OpKind, argsJSON, payload []byte) (to []string, subject 
 // MIME payload. Folded continuation lines are joined automatically
 // by net/textproto.
 func extractSubject(payload []byte) string {
-	const cap = 4096
-	if len(payload) > cap {
-		payload = payload[:cap]
+	const headerCap = 4096
+	if len(payload) > headerCap {
+		payload = payload[:headerCap]
 	}
 	br := bufio.NewReader(bytes.NewReader(payload))
 	tp := textproto.NewReader(br)

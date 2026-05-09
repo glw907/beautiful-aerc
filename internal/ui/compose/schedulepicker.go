@@ -6,15 +6,12 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// SchedulePicker is the modal sub-model for picking a send time. It
-// owns three preset rows plus a Custom row that, on Enter, expands a
-// textinput with a free-form parser.
+// SchedulePicker picks a send time: three presets plus a free-form Custom row.
 type SchedulePicker struct {
 	now        time.Time
 	cursor     int // 0..3 (3 = Custom)
@@ -49,9 +46,9 @@ func NewSchedulePicker(t *theme.CompiledTheme, now time.Time, initial string) Sc
 
 func (p SchedulePicker) presets() []presetRow {
 	return []presetRow{
-		{"Tomorrow morning", "8:00 AM", atHM(p.now.AddDate(0, 0, 1), 8, 0)},
-		{"Tomorrow afternoon", "1:00 PM", atHM(p.now.AddDate(0, 0, 1), 13, 0)},
-		{"Monday morning", "8:00 AM", nextMonday8(p.now)},
+		{"Tomorrow morning", "8:00 AM", mailcompose.AtHM(p.now.AddDate(0, 0, 1), 8, 0)},
+		{"Tomorrow afternoon", "1:00 PM", mailcompose.AtHM(p.now.AddDate(0, 0, 1), 13, 0)},
+		{"Monday morning", "8:00 AM", mailcompose.AtHM(mailcompose.NextWeekday(p.now, time.Monday, false), 8, 0)},
 	}
 }
 
@@ -61,31 +58,16 @@ type presetRow struct {
 	when  time.Time
 }
 
-// nextMonday8 returns the upcoming Monday at 08:00, advancing one
-// week if today is Monday (matches Gmail).
-func nextMonday8(now time.Time) time.Time {
-	delta := (int(time.Monday) - int(now.Weekday()) + 7) % 7
-	if delta == 0 {
-		delta = 7
-	}
-	d := now.AddDate(0, 0, delta)
-	return atHM(d, 8, 0)
-}
-
-func atHM(t time.Time, h, m int) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), h, m, 0, 0, t.Location())
-}
-
 func (p SchedulePicker) Init() tea.Cmd { return nil }
 
-func (p *SchedulePicker) MoveUp() {
+func (p *SchedulePicker) moveUp() {
 	if p.cursor > 0 {
 		p.cursor--
 		p.customOpen = false
 	}
 }
 
-func (p *SchedulePicker) MoveDown() {
+func (p *SchedulePicker) moveDown() {
 	if p.cursor < 3 {
 		p.cursor++
 		if p.cursor != 3 {
@@ -120,9 +102,9 @@ func (p SchedulePicker) Update(msg tea.Msg) (SchedulePicker, tea.Cmd) {
 
 	switch {
 	case km.Type == tea.KeyUp || (km.Type == tea.KeyRunes && len(km.Runes) == 1 && km.Runes[0] == 'k'):
-		p.MoveUp()
+		p.moveUp()
 	case km.Type == tea.KeyDown || (km.Type == tea.KeyRunes && len(km.Runes) == 1 && km.Runes[0] == 'j'):
-		p.MoveDown()
+		p.moveDown()
 	case km.Type == tea.KeyEsc:
 		return p, func() tea.Msg { return ScheduleCancelledMsg{} }
 	case km.Type == tea.KeyEnter:
@@ -137,7 +119,6 @@ func (p SchedulePicker) Update(msg tea.Msg) (SchedulePicker, tea.Cmd) {
 	return p, nil
 }
 
-// SetSize propagates the terminal dimensions into the picker.
 func (p *SchedulePicker) SetSize(w, h int) {
 	p.width = w
 	p.height = h
@@ -151,7 +132,7 @@ func (p SchedulePicker) View() string {
 		if i == p.cursor {
 			marker = "▶ "
 		}
-		b.WriteString(marker + padLabel(r.label, 22) + r.time + "\n")
+		b.WriteString(marker + uicore.PadOrTruncate(r.label, 22) + r.time + "\n")
 	}
 	customMarker := "  "
 	if p.cursor == 3 {
@@ -169,11 +150,4 @@ func (p SchedulePicker) View() string {
 	contentW := 44
 	shell := uicore.ModalShell{}
 	return shell.Box("Schedule send", body, footer, contentW)
-}
-
-func padLabel(s string, w int) string {
-	if lipgloss.Width(s) >= w {
-		return s
-	}
-	return s + strings.Repeat(" ", w-lipgloss.Width(s))
 }

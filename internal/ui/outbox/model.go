@@ -9,6 +9,7 @@ import (
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 // Model is a read-only view over scheduled outbox rows.
@@ -26,7 +27,6 @@ func New(t *theme.CompiledTheme) Model {
 	return Model{styles: NewStyles(t), now: time.Now()}
 }
 
-// SetSize updates the render dimensions.
 func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
@@ -59,39 +59,39 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	if len(m.rows) == 0 {
-		if km.Type == tea.KeyEsc {
-			return m, func() tea.Msg { return CloseMsg{} }
-		}
-		if km.Type == tea.KeyRunes && len(km.Runes) == 1 && km.Runes[0] == 'q' {
-			return m, func() tea.Msg { return CloseMsg{} }
-		}
-		return m, nil
-	}
 	switch {
 	case km.Type == tea.KeyEsc:
 		return m, func() tea.Msg { return CloseMsg{} }
 	case km.Type == tea.KeyRunes && len(km.Runes) == 1:
 		switch km.Runes[0] {
+		case 'q':
+			return m, func() tea.Msg { return CloseMsg{} }
 		case 'j':
-			if m.cursor < len(m.rows)-1 {
+			if len(m.rows) > 0 && m.cursor < len(m.rows)-1 {
 				m.cursor++
 			}
 		case 'k':
-			if m.cursor > 0 {
+			if len(m.rows) > 0 && m.cursor > 0 {
 				m.cursor--
 			}
-		case 'q':
-			return m, func() tea.Msg { return CloseMsg{} }
 		case 'c':
+			if len(m.rows) == 0 {
+				return m, nil
+			}
 			id := m.rows[m.cursor].ID
 			return m, func() tea.Msg { return CancelMsg{OpID: id} }
 		case 's':
+			if len(m.rows) == 0 {
+				return m, nil
+			}
 			r := m.rows[m.cursor]
 			return m, func() tea.Msg {
 				return RescheduleMsg{OpID: r.ID, Initial: r.ScheduledFor.Format("2006-01-02 15:04")}
 			}
 		case 'e':
+			if len(m.rows) == 0 {
+				return m, nil
+			}
 			r := m.rows[m.cursor]
 			if r.Draft == nil {
 				return m, nil
@@ -115,9 +115,9 @@ func (m Model) View() string {
 		if i == m.cursor {
 			marker = "> "
 		}
-		row := fmt.Sprintf("%s%-18s  %-22s  %-30s  %s",
+		row := fmt.Sprintf("%s%s  %-22s  %-30s  %s",
 			marker,
-			formatWhen(r.ScheduledFor, m.now),
+			uicore.PadOrTruncate(formatWhen(r.ScheduledFor, m.now), 18),
 			ansix.TruncateEllipsis(firstAddr(r.To), 22),
 			ansix.TruncateEllipsis(r.Subject, 30),
 			r.Status,

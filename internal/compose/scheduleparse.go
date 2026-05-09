@@ -1,4 +1,3 @@
-// internal/compose/scheduleparse.go
 package compose
 
 import (
@@ -63,7 +62,6 @@ var weekdays = map[string]time.Weekday{
 }
 
 func parseKeyword(s string, now time.Time) (time.Time, bool) {
-	// Split off optional trailing time clause.
 	day, timePart := splitTimeTail(s)
 
 	hh, mm, hasTime := parseTimeOnly(timePart)
@@ -76,26 +74,24 @@ func parseKeyword(s string, now time.Time) (time.Time, bool) {
 	switch {
 	case day == "tomorrow":
 		t := now.AddDate(0, 0, 1)
-		return atHM(t, pick(hh, defH, hasTime), pick(mm, defM, hasTime)), true
+		return AtHM(t, pick(hh, defH, hasTime), pick(mm, defM, hasTime)), true
 	case day == "tonight":
-		t := atHM(now, 21, 0)
+		t := AtHM(now, 21, 0)
 		if t.Before(now) {
 			t = t.AddDate(0, 0, 1)
 		}
 		return t, true
 	}
 
-	// "next <weekday>" → following occurrence (always +1 week from
-	// the next upcoming).
 	if rest, ok := strings.CutPrefix(day, "next "); ok {
 		if wd, ok := weekdays[rest]; ok {
-			t := nextWeekday(now, wd, true)
-			return atHM(t, pick(hh, defH, hasTime), pick(mm, defM, hasTime)), true
+			t := NextWeekday(now, wd, true)
+			return AtHM(t, pick(hh, defH, hasTime), pick(mm, defM, hasTime)), true
 		}
 	}
 	if wd, ok := weekdays[day]; ok {
-		t := nextWeekday(now, wd, false)
-		return atHM(t, pick(hh, defH, hasTime), pick(mm, defM, hasTime)), true
+		t := NextWeekday(now, wd, false)
+		return AtHM(t, pick(hh, defH, hasTime), pick(mm, defM, hasTime)), true
 	}
 
 	return time.Time{}, false
@@ -130,7 +126,7 @@ func parseTimeOnly(s string) (hh, mm int, ok bool) {
 	return 0, 0, false
 }
 
-func atHM(t time.Time, h, m int) time.Time {
+func AtHM(t time.Time, h, m int) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), h, m, 0, 0, t.Location())
 }
 
@@ -141,9 +137,9 @@ func pick(v, def int, has bool) int {
 	return def
 }
 
-// nextWeekday returns the next date at midnight whose weekday matches wd.
+// NextWeekday returns the next date at midnight whose weekday matches wd.
 // If skipThisWeek, advances by another 7 days.
-func nextWeekday(now time.Time, wd time.Weekday, skipThisWeek bool) time.Time {
+func NextWeekday(now time.Time, wd time.Weekday, skipThisWeek bool) time.Time {
 	delta := (int(wd) - int(now.Weekday()) + 7) % 7
 	if delta == 0 {
 		delta = 7
@@ -155,8 +151,8 @@ func nextWeekday(now time.Time, wd time.Weekday, skipThisWeek bool) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-// dateLayouts is tried in order. Layouts without a year (no "2006")
-// get year defaulting + past-rolling applied after parse.
+// dateLayouts: layouts without a year (no "2006") default to now.Year()
+// and roll forward one year when the result is in the past.
 var dateLayouts = []struct {
 	layout  string
 	hasYear bool
@@ -221,7 +217,7 @@ func parseTimeAlone(s string, now time.Time) (time.Time, bool) {
 	if !ok {
 		return time.Time{}, false
 	}
-	t := atHM(now, hh, mm)
+	t := AtHM(now, hh, mm)
 	if t.Before(now) {
 		t = t.AddDate(0, 0, 1)
 	}

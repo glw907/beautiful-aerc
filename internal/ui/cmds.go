@@ -277,11 +277,8 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 
 // composeSendCmd assembles MIME, persists a drafts row, and queues the
 // outbox op via cache.Account.QueueOutbound. Emits uicompose.SentMsg on
-// success, ErrorMsg on any failure.
-//
-// userScheduled takes priority over the undo window: a non-zero value means
-// the user explicitly chose a dispatch time (schedule-send), so the window
-// delay is skipped.
+// success, ErrorMsg on any failure. userScheduled overrides the undo window
+// when non-zero (schedule-send path).
 func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids []compose.Identity, undoWindow time.Duration, userScheduled time.Time) tea.Cmd {
 	return func() tea.Msg {
 		mime, err := compose.AssembleMIME(d, ids, time.Now())

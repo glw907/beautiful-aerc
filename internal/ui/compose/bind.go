@@ -6,8 +6,7 @@ import (
 	"github.com/glw907/poplar/internal/config"
 )
 
-// Schedule is the compose key for the schedule-send picker. ADR-0076 exempts
-// text-entry surfaces from the modifier-free rule.
+// Schedule binds Ctrl+L in compose. ADR-0076 permits modifier keys in text-entry surfaces.
 var Schedule = key.NewBinding(
 	key.WithKeys("ctrl+l"),
 	key.WithHelp("^L", "schedule send"),

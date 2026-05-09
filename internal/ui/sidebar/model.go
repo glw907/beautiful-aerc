@@ -94,9 +94,9 @@ func (s Model) effectiveEntries() []folderEntry {
 func syntheticOutboxEntry(count int, icons uicore.IconSet) folderEntry {
 	return folderEntry{
 		cf: mail.ClassifiedFolder{
-			Folder:      mail.Folder{Name: "Outbox", Unseen: count},
-			Canonical:   "Outbox",
-			DisplayName: "Outbox",
+			Folder:      mail.Folder{Name: mail.CanonicalOutbox, Unseen: count},
+			Canonical:   mail.CanonicalOutbox,
+			DisplayName: mail.CanonicalOutbox,
 			Group:       mail.GroupDisposal,
 		},
 		icon: icons.Sent, // closest visual fit; a dedicated icon is post-1.0

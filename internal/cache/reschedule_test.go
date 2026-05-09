@@ -27,7 +27,7 @@ func TestRescheduleOp_UpdatesPendingRow(t *testing.T) {
 	}
 }
 
-func TestRescheduleOp_RejectsRowAboutToDispatch(t *testing.T) {
+func TestRescheduleOp_RowAboutToDispatch(t *testing.T) {
 	a := openTestAccount(t)
 	ctx := context.Background()
 	past := time.Now().Add(-1 * time.Second).UnixNano()
@@ -41,7 +41,7 @@ func TestRescheduleOp_RejectsRowAboutToDispatch(t *testing.T) {
 	}
 }
 
-func TestRescheduleOp_RejectsAdvancedRow(t *testing.T) {
+func TestRescheduleOp_AdvancedRow(t *testing.T) {
 	a := openTestAccount(t)
 	ctx := context.Background()
 	id, err := a.QueueSend(ctx, "Inbox", testEnvelope(), []byte("MIME"),

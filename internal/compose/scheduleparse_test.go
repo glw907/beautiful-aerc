@@ -1,4 +1,3 @@
-// internal/compose/scheduleparse_test.go
 package compose
 
 import (

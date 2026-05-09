@@ -76,7 +76,6 @@ type Model struct {
 	attachLastDir string
 
 	schedulePicker *SchedulePicker
-	scheduledFor   time.Time // zero = send immediately
 }
 
 type autosaveTickMsg struct{}
@@ -371,23 +370,15 @@ type CancelMsg struct {
 func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ScheduleAcceptedMsg:
-		c.scheduledFor = msg.When
 		c.schedulePicker = nil
 		d, err := c.Draft()
 		if err != nil {
 			return c, nil
 		}
-		when := msg.When
-		return c, func() tea.Msg { return SendMsg{Draft: d, ScheduledFor: when} }
+		return c, func() tea.Msg { return SendMsg{Draft: d, ScheduledFor: msg.When} }
 
 	case ScheduleCancelledMsg:
 		c.schedulePicker = nil
-		return c, nil
-
-	case OpenScheduleMsg:
-		p := NewSchedulePicker(c.theme, time.Now(), msg.Initial)
-		p.SetSize(c.width, c.height)
-		c.schedulePicker = &p
 		return c, nil
 
 	case AttachAcceptedMsg:

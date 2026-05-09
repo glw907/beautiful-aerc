@@ -178,12 +178,10 @@ func TestOutboxConflicts_OrderByEnqueuedAtASC(t *testing.T) {
 	}
 }
 
-// buildMIME returns a minimal RFC 5322 message with the given Subject header.
 func buildMIME(subject string) []byte {
 	return []byte("From: a@x\r\nTo: b@x\r\nSubject: " + subject + "\r\n\r\nbody")
 }
 
-// putTestDraft inserts a draft row and returns its draftID.
 func putTestDraft(t *testing.T, a *Account, draftID string) string {
 	t.Helper()
 	if err := a.CreateDraft(context.Background(), draftID, []byte("payload")); err != nil {

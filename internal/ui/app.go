@@ -38,40 +38,46 @@ type pendingEmptyConfirm struct {
 	source string
 }
 
+// pendingReschedule holds the App-owned schedule picker and the op it
+// targets. Zero value means no reschedule is in progress.
+type pendingReschedule struct {
+	picker *uicompose.SchedulePicker
+	opID   int64
+}
+
 // App is the root bubbletea model.
 type App struct {
-	acct                  account.Model
-	icons                 uicore.IconSet
-	styles                Styles
-	topLine               TopLine
-	statusBar             StatusBar
-	footer                Footer
-	keys                  GlobalKeys
-	viewerOpen            bool
-	helpOpen              bool
-	help                  helppopover.Model
-	linkPicker            reader.LinkPicker
-	attachPicker          reader.AttachPicker
-	movePicker            movepicker.Model
-	downloadDir           string
-	confirm               ConfirmModal
-	pendingEmpty          pendingEmptyConfirm
-	outbox                OutboxOverlay
-	outboxOpen            bool
-	outboxView            *outbox.Model             // non-nil while the Outbox folder is selected
-	outboxPrevFolder      string                    // canonical folder to restore on outbox close
-	outboxSchedulePicker  *uicompose.SchedulePicker // App-owned picker for reschedule path
-	pendingRescheduleOpID int64                     // set while outboxSchedulePicker is open
-	conflict              ConflictOverlay
-	conflictOpen          bool
-	lastOutboxDepth       cache.OutboxDepth
-	offlineHinted         bool
-	lastErr               ErrorMsg
-	toast                 pendingAction
-	undoSeconds           int
-	undoSendWindow        time.Duration
-	now                   func() time.Time // test seam, defaults to time.Now
-	opener                URLOpener        // test seam, defaults to xdgOpenURL
+	acct             account.Model
+	icons            uicore.IconSet
+	styles           Styles
+	topLine          TopLine
+	statusBar        StatusBar
+	footer           Footer
+	keys             GlobalKeys
+	viewerOpen       bool
+	helpOpen         bool
+	help             helppopover.Model
+	linkPicker       reader.LinkPicker
+	attachPicker     reader.AttachPicker
+	movePicker       movepicker.Model
+	downloadDir      string
+	confirm          ConfirmModal
+	pendingEmpty     pendingEmptyConfirm
+	outbox           OutboxOverlay
+	outboxOpen       bool
+	outboxView       *outbox.Model // non-nil while the Outbox folder is selected
+	outboxPrevFolder string        // canonical folder to restore on outbox close
+	reschedule       pendingReschedule
+	conflict         ConflictOverlay
+	conflictOpen     bool
+	lastOutboxDepth  cache.OutboxDepth
+	offlineHinted    bool
+	lastErr          ErrorMsg
+	toast            pendingAction
+	undoSeconds      int
+	undoSendWindow   time.Duration
+	now              func() time.Time // test seam, defaults to time.Now
+	opener           URLOpener        // test seam, defaults to xdgOpenURL
 
 	tidyEnabled bool
 	tidyAPIKey  string
@@ -243,8 +249,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			w, h := m.rightPaneSize()
 			m.outboxView.SetSize(w, h)
 		}
-		if m.outboxSchedulePicker != nil {
-			m.outboxSchedulePicker.SetSize(m.width, m.height)
+		if m.reschedule.picker != nil {
+			m.reschedule.picker.SetSize(m.width, m.height)
 		}
 		if m.contactsMode {
 			m.contactsSidebar, m.contactsList = m.sizedContactsChildren()
@@ -545,7 +551,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case account.FolderLoadedMsg:
-		if msg.Name == "Outbox" {
+		if msg.Name == mail.CanonicalOutbox {
 			if m.outboxView == nil {
 				m.outboxPrevFolder = m.acct.CurrentFolderName()
 				ob := outbox.New(m.theme)
@@ -652,11 +658,15 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, loadOutboxConflictsCmd(m.acct.Cache())
 
 	case outboxDepthMsg:
+		prev := m.lastOutboxDepth
 		m.lastOutboxDepth = msg.depth
 		inflight := msg.depth.Pending + msg.depth.Executing + msg.depth.Failed
 		m.statusBar = m.statusBar.SetOutboxDepth(inflight, msg.depth.Conflict)
 		total := msg.depth.Pending + msg.depth.Executing + msg.depth.Failed + msg.depth.Conflict
-		m.acct.SetOutboxCount(total)
+		prevTotal := prev.Pending + prev.Executing + prev.Failed + prev.Conflict
+		if total != prevTotal {
+			m.acct.SetOutboxCount(total)
+		}
 		return m, nil
 
 	case outboxSummaryMsg:
@@ -701,7 +711,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Outbox was the first selection), fall back to Inbox.
 		prev := m.outboxPrevFolder
 		if prev == "" {
-			prev = "Inbox"
+			prev = mail.CanonicalInbox
 		}
 		m.outboxPrevFolder = ""
 		acct, cmd := m.acct.Update(account.JumpFolderMsg{Canonical: prev})
@@ -715,8 +725,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case outbox.RescheduleMsg:
 		p := uicompose.NewSchedulePicker(m.theme, m.now(), msg.Initial)
 		p.SetSize(m.width, m.height)
-		m.outboxSchedulePicker = &p
-		m.pendingRescheduleOpID = msg.OpID
+		m.reschedule = pendingReschedule{picker: &p, opID: msg.OpID}
 		return m, nil
 
 	case outbox.EditAsDraftMsg:
@@ -726,12 +735,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, editAsDraftCmd(m.acct.Cache(), msg.OpID, msg.Draft)
 
 	case uicompose.ScheduleAcceptedMsg:
-		if m.outboxSchedulePicker != nil {
-			opID := m.pendingRescheduleOpID
-			when := msg.When
-			m.outboxSchedulePicker = nil
-			m.pendingRescheduleOpID = 0
-			return m, rescheduleOpCmd(m.acct.Cache(), opID, when)
+		if m.reschedule.picker != nil {
+			opID := m.reschedule.opID
+			m.reschedule = pendingReschedule{}
+			return m, rescheduleOpCmd(m.acct.Cache(), opID, msg.When)
 		}
 		if m.compose != nil {
 			var cmd tea.Cmd
@@ -741,9 +748,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case uicompose.ScheduleCancelledMsg:
-		if m.outboxSchedulePicker != nil {
-			m.outboxSchedulePicker = nil
-			m.pendingRescheduleOpID = 0
+		if m.reschedule.picker != nil {
+			m.reschedule = pendingReschedule{}
 			return m, nil
 		}
 		if m.compose != nil {
@@ -896,9 +902,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			return m, cmd
 		}
-		if m.outboxSchedulePicker != nil {
-			p, cmd := m.outboxSchedulePicker.Update(msg)
-			m.outboxSchedulePicker = &p
+		if m.reschedule.picker != nil {
+			p, cmd := m.reschedule.picker.Update(msg)
+			m.reschedule.picker = &p
 			return m, cmd
 		}
 		if m.outboxView != nil {
@@ -1174,8 +1180,8 @@ func (m App) View() string {
 		return uicore.PlaceOverlay(x, y, box, dimmed)
 	}
 
-	if m.outboxSchedulePicker != nil {
-		box := m.outboxSchedulePicker.View()
+	if m.reschedule.picker != nil {
+		box := m.reschedule.picker.View()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
 		return uicore.PlaceOverlay(x, y, box, dimmed)

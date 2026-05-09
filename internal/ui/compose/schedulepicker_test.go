@@ -12,7 +12,7 @@ import (
 func TestSchedulePicker_PresetCommitsTime(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.Local) // Sat
 	p := NewSchedulePicker(theme.OneDark, now, "")
-	p.MoveDown() // tomorrow afternoon
+	p.moveDown() // tomorrow afternoon
 	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("preset Enter: cmd nil")
@@ -31,7 +31,7 @@ func TestSchedulePicker_CustomExpandsAndParses(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.Local)
 	p := NewSchedulePicker(theme.OneDark, now, "")
 	for i := 0; i < 3; i++ {
-		p.MoveDown()
+		p.moveDown()
 	}
 	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyEnter}) // expand
 	if !p.customOpen {
@@ -58,7 +58,7 @@ func TestSchedulePicker_CustomShowsParseError(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.Local)
 	p := NewSchedulePicker(theme.OneDark, now, "")
 	for i := 0; i < 3; i++ {
-		p.MoveDown()
+		p.moveDown()
 	}
 	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	for _, r := range "garbage" {

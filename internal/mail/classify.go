@@ -2,6 +2,12 @@ package mail
 
 import "strings"
 
+// Canonical folder names used by Pass 10b's synthetic Outbox and Inbox fallback.
+const (
+	CanonicalInbox  = "Inbox"
+	CanonicalOutbox = "Outbox"
+)
+
 // Group is the visual grouping a classified folder falls into.
 type Group int
 
