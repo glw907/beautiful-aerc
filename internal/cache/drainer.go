@@ -160,11 +160,10 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 // row swap for Move, message-row delete for Destroy, flag sync for
 // Flag.
 func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpArgs) error {
+	if !row.MessageID.Valid {
+		return a.finishOpDoneAndDeleteDraft(ctx, row.ID, row.DraftID)
+	}
 	return a.tx(ctx, func(tx *sql.Tx) error {
-		if !row.MessageID.Valid {
-			_, err := tx.Exec(`UPDATE outbox SET status = ?, error = '' WHERE id = ?`, OpDone, row.ID)
-			return err
-		}
 		switch v := args.(type) {
 		case MoveArgs:
 			if _, err := tx.Exec(`DELETE FROM message_mailboxes WHERE message = ? AND folder = ?`,

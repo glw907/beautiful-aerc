@@ -258,6 +258,24 @@ func (a *Account) finishOp(opID int64, status OpStatus, errPayload string, nextE
 	return err
 }
 
+// finishOpDoneAndDeleteDraft marks a Send/Append row OpDone and
+// deletes the linked draft in one transaction. An empty draftID
+// skips the draft delete; the op is still finalized.
+func (a *Account) finishOpDoneAndDeleteDraft(ctx context.Context, opID int64, draftID string) error {
+	return a.tx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(
+			`UPDATE outbox SET status = ?, error = '', next_eligible_at = NULL WHERE id = ?`,
+			OpDone, opID); err != nil {
+			return err
+		}
+		if draftID == "" {
+			return nil
+		}
+		_, err := tx.Exec(`DELETE FROM drafts WHERE draft_id = ?`, draftID)
+		return err
+	})
+}
+
 // ErrNotConflict is returned by RetryOp/DiscardOp when the row is
 // not in conflict. Treat as benign and refresh.
 var ErrNotConflict = errors.New("cache: op is not in conflict state")

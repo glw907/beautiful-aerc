@@ -13,14 +13,14 @@ const schemaVersion = 10
 type migration func(*sql.Tx) error
 
 var migrations = []migration{
-	migrateV1, // v0 → v1: full Cache I schema (spec §A.3)
-	migrateV2, // v1 → v2: next_eligible_at on outbox
-	migrateV3, // v2 → v3: backend-reported exists/unseen on folders
-	migrateV4, // v3 → v4: drop last_accessed + bodies_lru
-	migrateV5, // v4 → v5: attachments table (metadata + lazy bytes)
-	migrateV6, // v5 → v6: outbox.payload BLOB for Send/Append MIME bytes
-	migrateV7, // v6 → v7: drafts table (local-buffer + server_uid pointer)
-	migrateV8, // v7 → v8: contacts cache + recipient projection
+	migrateV1,  // v0 → v1: full Cache I schema (spec §A.3)
+	migrateV2,  // v1 → v2: next_eligible_at on outbox
+	migrateV3,  // v2 → v3: backend-reported exists/unseen on folders
+	migrateV4,  // v3 → v4: drop last_accessed + bodies_lru
+	migrateV5,  // v4 → v5: attachments table (metadata + lazy bytes)
+	migrateV6,  // v5 → v6: outbox.payload BLOB for Send/Append MIME bytes
+	migrateV7,  // v6 → v7: drafts table (local-buffer + server_uid pointer)
+	migrateV8,  // v7 → v8: contacts cache + recipient projection
 	migrateV9,  // v8 → v9: outbox.folder nullable (contact ops have no folder scope)
 	migrateV10, // v9 → v10: outbox.scheduled_for + outbox.draft_id FK
 }
@@ -360,10 +360,10 @@ func migrateV9(tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV10 adds outbox.scheduled_for (user intent — undo or
-// schedule) and outbox.draft_id (FK to drafts for compose-restore
-// on undo). The pickup index gains scheduled_for as the leading
-// column so the drainer's gate is index-resolved.
+// migrateV10 adds outbox.scheduled_for (undo/schedule window) and
+// outbox.draft_id (FK to drafts for compose-restore on undo). The
+// pickup index gains scheduled_for as the leading column so the
+// drainer's gate is index-resolved.
 func migrateV10(tx *sql.Tx) error {
 	stmts := []string{
 		`ALTER TABLE outbox ADD COLUMN scheduled_for INTEGER`,

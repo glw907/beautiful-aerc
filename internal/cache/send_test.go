@@ -248,6 +248,102 @@ func TestDrainerSkipsRowsBeforeScheduledFor(t *testing.T) {
 	}
 }
 
+func TestDrainerDeletesLinkedDraftOnSuccess(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+
+	if err := a.CreateDraft(ctx, "draft-abc", []byte("payload")); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+
+	mustExec(t, a.db,
+		`INSERT INTO outbox(folder, kind, args, payload, enqueued_at, status, attempts, draft_id) VALUES (NULL, ?, ?, x'00', 0, ?, 0, ?)`,
+		KindSend, `{}`, OpExecuting, "draft-abc")
+	var opID int64
+	if err := a.db.QueryRow(`SELECT id FROM outbox WHERE draft_id = ?`, "draft-abc").Scan(&opID); err != nil {
+		t.Fatalf("scan opID: %v", err)
+	}
+
+	if err := a.finishOpDoneAndDeleteDraft(ctx, opID, "draft-abc"); err != nil {
+		t.Fatalf("finishOpDoneAndDeleteDraft: %v", err)
+	}
+
+	if _, err := a.LoadDraft(ctx, "draft-abc"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("draft not deleted; got err=%v", err)
+	}
+
+	var status OpStatus
+	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
+		t.Fatalf("scan status: %v", err)
+	}
+	if status != OpDone {
+		t.Errorf("status = %v, want %v", status, OpDone)
+	}
+}
+
+func TestDrainerDeletesLinkedDraft_EmptyDraftID(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+
+	mustExec(t, a.db,
+		`INSERT INTO outbox(folder, kind, args, payload, enqueued_at, status, attempts) VALUES (NULL, ?, ?, x'00', 0, ?, 0)`,
+		KindSend, `{}`, OpExecuting)
+	var opID int64
+	if err := a.db.QueryRow(`SELECT id FROM outbox ORDER BY id DESC LIMIT 1`).Scan(&opID); err != nil {
+		t.Fatalf("scan opID: %v", err)
+	}
+
+	if err := a.finishOpDoneAndDeleteDraft(ctx, opID, ""); err != nil {
+		t.Fatalf("finishOpDoneAndDeleteDraft: %v", err)
+	}
+
+	var status OpStatus
+	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
+		t.Fatalf("scan status: %v", err)
+	}
+	if status != OpDone {
+		t.Errorf("status = %v, want %v", status, OpDone)
+	}
+}
+
+func TestDrainerDeletesLinkedDraft_DrainPath(t *testing.T) {
+	a := openTestAccount(t)
+	ctx := context.Background()
+	fb := a.Backend.(*fakeBackend)
+
+	if err := a.CreateDraft(ctx, "draft-xyz", []byte("draft-payload")); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+
+	// Insert a Send row referencing the draft. The Inbox folder exists after SyncFolders.
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}}
+	mime := []byte("hi\r\n")
+	opID, err := a.QueueSend(ctx, "Inbox", env, mime)
+	if err != nil {
+		t.Fatalf("QueueSend: %v", err)
+	}
+	// Back-fill draft_id on the row (simulates Task 5 wiring).
+	mustExec(t, a.db, `UPDATE outbox SET draft_id = ? WHERE id = ?`, "draft-xyz", opID)
+
+	a.drainOnce(ctx, defaultDrainerConfig())
+
+	if len(fb.sends) != 1 {
+		t.Fatalf("backend Send calls = %d, want 1", len(fb.sends))
+	}
+
+	if _, err := a.LoadDraft(ctx, "draft-xyz"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("draft not deleted after drain; got err=%v", err)
+	}
+
+	var status OpStatus
+	if err := a.db.QueryRow(`SELECT status FROM outbox WHERE id = ?`, opID).Scan(&status); err != nil {
+		t.Fatalf("scan status: %v", err)
+	}
+	if status != OpDone {
+		t.Errorf("status = %v, want %v", status, OpDone)
+	}
+}
+
 func TestSendSucceedsAppendConflicts(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
