@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -145,5 +146,52 @@ func TestBackfiller_RespectsActivityGate(t *testing.T) {
 	a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&n)
 	if n != 0 {
 		t.Errorf("active gate failed: bodies = %d, want 0", n)
+	}
+}
+
+func TestBackfiller_PausesWhenOffline(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	a.Backend = &fakeBackendWithBody{body: []byte("b")}
+	seedMessage(t, a, mail.UID("u-1"), time.Now())
+
+	bf := newBackfiller(a)
+	bf.rate = 5 * time.Millisecond
+	bf.idleThreshold = 0
+	bf.NotifyConnState(false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	bf.Run(ctx)
+
+	var n int
+	a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&n)
+	if n != 0 {
+		t.Errorf("offline gate failed: bodies = %d, want 0", n)
+	}
+}
+
+func TestBackfiller_BailsAtCap(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	a.maxSize = 100
+	a.Backend = &fakeBackendWithBody{body: bytes.Repeat([]byte("x"), 95)}
+
+	for i := 0; i < 3; i++ {
+		seedMessage(t, a, mail.UID(fmt.Sprintf("u-%d", i)), time.Now().Add(-time.Duration(i)*time.Hour))
+	}
+
+	bf := newBackfiller(a)
+	bf.rate = 5 * time.Millisecond
+	bf.idleThreshold = 0
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	bf.Run(ctx)
+
+	var stored int
+	a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&stored)
+	if stored != 1 {
+		t.Errorf("at-cap bail: stored=%d, want 1 (further fetches should bail)", stored)
 	}
 }

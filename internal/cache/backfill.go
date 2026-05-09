@@ -79,6 +79,25 @@ func (b *Backfiller) NotifyActivity() {
 	b.lastActivity.Store(time.Now().UnixNano())
 }
 
+// NotifyConnState flips the online flag. Backfill suspends when false.
+func (b *Backfiller) NotifyConnState(online bool) {
+	b.connOnline.Store(online)
+}
+
+// atCap returns true once the body cache has crossed 90% of the
+// configured cap. Zero-or-negative maxSize disables the cap.
+func (b *Backfiller) atCap(ctx context.Context) bool {
+	if b.acct.maxSize <= 0 {
+		return false
+	}
+	var total int64
+	if err := b.acct.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(LENGTH(bytes)), 0) FROM bodies`).Scan(&total); err != nil {
+		return false
+	}
+	return total >= (b.acct.maxSize*9)/10
+}
+
 func (b *Backfiller) idle() bool {
 	if b.idleThreshold == 0 {
 		return true
@@ -112,7 +131,7 @@ func (b *Backfiller) Run(ctx context.Context) {
 func (b *Backfiller) runBatch(ctx context.Context) {
 	var bytesFetched int64
 	for bytesFetched < b.maxBatchBytes {
-		if !b.idle() || !b.connOnline.Load() {
+		if !b.idle() || !b.connOnline.Load() || b.atCap(ctx) {
 			return
 		}
 		uid, ok, err := b.acct.nextUnfetchedUID(ctx)
