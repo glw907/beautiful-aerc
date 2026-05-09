@@ -83,31 +83,21 @@ func accountFooterGroups() [][]footerHint {
 // viewerFooterGroups returns the viewer footer hint groups. Reply drops
 // before triage because triage is more essential in the viewer. The
 // viewer/app group is always kept.
-func viewerFooterGroups() [][]footerHint {
-	return [][]footerHint{
-		triageHints,
-		replyHints,
-		{
-			hint("Tab", "links", 0),
-			hint("q", "close", 0),
-			hint("?", "help", 0),
-		},
-	}
+var viewerNavHints = []footerHint{
+	hint("Tab", "links", 0),
+	hint("q", "close", 0),
+	hint("?", "help", 0),
 }
 
-// viewerFooterGroupsWithUnsub is viewerFooterGroups with "U unsub" injected
-// into the reply group. Used when the current message has an actionable
-// List-Unsubscribe header.
+func viewerFooterGroups() [][]footerHint {
+	return [][]footerHint{triageHints, replyHints, viewerNavHints}
+}
+
 func viewerFooterGroupsWithUnsub() [][]footerHint {
-	replyWithUnsub := append(slices.Clone(replyHints), hint("U", "unsub", 6))
 	return [][]footerHint{
 		triageHints,
-		replyWithUnsub,
-		{
-			hint("Tab", "links", 0),
-			hint("q", "close", 0),
-			hint("?", "help", 0),
-		},
+		append(slices.Clone(replyHints), hint("U", "unsub", 6)),
+		viewerNavHints,
 	}
 }
 

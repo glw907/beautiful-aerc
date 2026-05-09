@@ -1371,10 +1371,9 @@ func unsubscribeHost(u content.Unsubscribe) string {
 	return "this list"
 }
 
-// dispatchUnsubscribe routes the confirmed unsubscribe to its action path:
-// one-click POST → mailto compose seed → plain http via URLOpener.
-// Precedence matches RFC 8058: https one-click is preferred, mailto is the
-// fallback, plain http is last.
+// dispatchUnsubscribe routes a confirmed unsubscribe by RFC 8058
+// precedence: one-click POST > mailto compose seed > plain http via
+// URLOpener.
 func (m App) dispatchUnsubscribe(u content.Unsubscribe) tea.Cmd {
 	switch {
 	case u.OneClick != "":

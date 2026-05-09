@@ -24,7 +24,6 @@ type Unsubscribe struct {
 	HTTP string
 }
 
-// Available reports whether any actionable form is set.
 func (u Unsubscribe) Available() bool {
 	return u.OneClick != "" || u.Mailto != "" || u.HTTP != ""
 }
@@ -37,8 +36,7 @@ func ParseListUnsubscribe(h textproto.MIMEHeader) Unsubscribe {
 		return Unsubscribe{}
 	}
 
-	var mailto, httpURL string
-	httpsURLs := make([]string, 0, 2)
+	var mailto, httpURL, firstHTTPS string
 	for _, entry := range splitListUnsubscribe(raw) {
 		switch {
 		case strings.HasPrefix(entry, "mailto:"):
@@ -46,7 +44,9 @@ func ParseListUnsubscribe(h textproto.MIMEHeader) Unsubscribe {
 				mailto = entry
 			}
 		case strings.HasPrefix(entry, "https://"):
-			httpsURLs = append(httpsURLs, entry)
+			if firstHTTPS == "" {
+				firstHTTPS = entry
+			}
 			if httpURL == "" {
 				httpURL = entry
 			}
@@ -59,8 +59,8 @@ func ParseListUnsubscribe(h textproto.MIMEHeader) Unsubscribe {
 
 	u := Unsubscribe{Mailto: mailto, HTTP: httpURL}
 
-	if len(httpsURLs) > 0 && hasOneClickPost(h.Get("List-Unsubscribe-Post")) {
-		u.OneClick = httpsURLs[0]
+	if firstHTTPS != "" && hasOneClickPost(h.Get("List-Unsubscribe-Post")) {
+		u.OneClick = firstHTTPS
 		// Promotion consumes the URL from HTTP so callers don't double-route.
 		if u.HTTP == u.OneClick {
 			u.HTTP = ""

@@ -35,6 +35,10 @@ type ErrorMsg = uicore.ErrorMsg
 // inject a stub via App.WithOpener.
 type URLOpener func(string) error
 
+// httpClient is the shared client for one-click unsubscribe POSTs.
+// Timeout is intentionally zero; every call sets a context deadline.
+var httpClient = &http.Client{}
+
 // launchURLCmd opens url via opener. xdg-open detaches and its exit
 // status is unreliable, so errors are intentionally dropped.
 func launchURLCmd(opener URLOpener, url string) tea.Cmd {
@@ -44,18 +48,15 @@ func launchURLCmd(opener URLOpener, url string) tea.Cmd {
 	}
 }
 
-// UnsubscribeDoneMsg fires when the one-click POST resolves.
-// Successful runs (2xx) carry an empty Err and a Host string the
-// notice consumer renders. Failures surface as ErrorMsg before
-// reaching this msg type.
+// UnsubscribeDoneMsg fires on a successful (2xx) one-click POST.
+// Failures surface as ErrorMsg and never reach this type.
 type UnsubscribeDoneMsg struct {
 	Host string
 }
 
-// unsubscribePostCmd issues an RFC 8058 one-click POST to url with
-// body "List-Unsubscribe=One-Click" and a 10-second timeout. 2xx →
-// UnsubscribeDoneMsg{Host: <url-host>}. Anything else (non-2xx,
-// network, TLS, timeout) → ErrorMsg{Op: "unsubscribe"}.
+// unsubscribePostCmd issues an RFC 8058 one-click POST with body
+// "List-Unsubscribe=One-Click" and a 10-second context deadline.
+// 2xx → UnsubscribeDoneMsg; anything else → ErrorMsg.
 func unsubscribePostCmd(rawURL string) tea.Cmd {
 	return func() tea.Msg {
 		u, err := url.Parse(rawURL)
@@ -70,8 +71,7 @@ func unsubscribePostCmd(rawURL string) tea.Cmd {
 			return ErrorMsg{Op: "unsubscribe", Err: err}
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			return ErrorMsg{Op: "unsubscribe", Err: err}
 		}
@@ -675,12 +675,11 @@ func queueContactDeleteCmd(c *cache.Account, uid string) tea.Cmd {
 	}
 }
 
-// noticeExpireMsg fires when a transient notice times out.
-type noticeExpireMsg struct{ deadline time.Time }
+// noticeExpireMsg fires when a transient notice's window elapses.
+// The handler still gates on m.lastNoticeDeadline so a stale tick
+// from a superseded notice can't clear a fresh one.
+type noticeExpireMsg struct{}
 
-// clearNoticeAfter schedules a noticeExpireMsg after d.
 func clearNoticeAfter(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(t time.Time) tea.Msg {
-		return noticeExpireMsg{deadline: t}
-	})
+	return tea.Tick(d, func(time.Time) tea.Msg { return noticeExpireMsg{} })
 }

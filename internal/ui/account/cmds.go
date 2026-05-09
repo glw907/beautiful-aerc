@@ -256,9 +256,9 @@ func isRFC822(b []byte) bool {
 	return true
 }
 
-// parseUnsubscribeFromRaw extracts the RFC 5322 header block from buf
-// and returns parsed List-Unsubscribe data. Non-RFC822 input (mock-
-// backend pre-cleaned markdown) parses to a zero Unsubscribe.
+// parseUnsubscribeFromRaw reads the RFC 5322 header block from buf
+// and returns parsed List-Unsubscribe data. Non-RFC822 input returns
+// a zero Unsubscribe.
 func parseUnsubscribeFromRaw(buf []byte) content.Unsubscribe {
 	if !isRFC822(buf) {
 		return content.Unsubscribe{}
