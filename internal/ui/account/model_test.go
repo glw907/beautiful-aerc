@@ -1040,7 +1040,7 @@ func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 	}
 	startUID := tab.viewer.CurrentUID()
 	// Transition to ready by calling SetBody.
-	tab.viewer = tab.viewer.SetBody(nil, content.Unsubscribe{})
+	tab.viewer = tab.viewer.SetBody(nil, content.Unsubscribe{}, nil)
 	if tab.viewer.Phase() != reader.PhaseReady {
 		t.Fatal("viewer must be ready after SetBody")
 	}
@@ -1078,7 +1078,7 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open")
 	}
-	tab.viewer = tab.viewer.SetBody(nil, content.Unsubscribe{})
+	tab.viewer = tab.viewer.SetBody(nil, content.Unsubscribe{}, nil)
 	lastUID := tab.viewer.CurrentUID()
 
 	// n at the last row should be inert.

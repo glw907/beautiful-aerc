@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
+	"github.com/glw907/poplar/internal/icalendar"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -39,7 +40,7 @@ func TestViewerOpenTransitionsToLoading(t *testing.T) {
 func TestViewerBodyLoadedSetsReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
 	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello world"}}}}
-	v = v.SetBody(blocks, content.Unsubscribe{})
+	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
 	if v.Phase() != PhaseReady {
 		t.Errorf("phase = %v, want ready", v.Phase())
 	}
@@ -76,7 +77,7 @@ func TestViewerCloseFromLoading(t *testing.T) {
 
 func TestViewerCloseFromReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
-	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}, content.Unsubscribe{})
+	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}, content.Unsubscribe{}, nil)
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if v.IsOpen() {
 		t.Error("q must close viewer from ready phase")
@@ -88,7 +89,7 @@ func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 	long := strings.Repeat("alpha bravo charlie ", 40)
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
-	}, content.Unsubscribe{})
+	}, content.Unsubscribe{}, nil)
 	if v.ScrollPct() != 0 {
 		t.Errorf("initial scroll pct = %d, want 0", v.ScrollPct())
 	}
@@ -103,7 +104,7 @@ func TestViewerNumericLaunchesURL(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://example.com/one"},
-	}}}, content.Unsubscribe{})
+	}}}, content.Unsubscribe{}, nil)
 	if len(v.Links()) != 1 {
 		t.Fatalf("expected 1 harvested link, got %d", len(v.Links()))
 	}
@@ -128,7 +129,7 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://only.example"},
-	}}}, content.Unsubscribe{})
+	}}}, content.Unsubscribe{}, nil)
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
 	if cmd != nil {
 		if msg, ok := cmd().(LaunchURLMsg); ok {
@@ -147,7 +148,7 @@ func TestViewerTabEmitsOpenLinkPickerMsg(t *testing.T) {
 		content.Paragraph{Spans: []content.Span{
 			content.Link{Text: "click", URL: "https://a.com"},
 		}},
-	}, content.Unsubscribe{})
+	}, content.Unsubscribe{}, nil)
 
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if cmd == nil {
@@ -167,7 +168,7 @@ func TestViewerTabNoLinksInert(t *testing.T) {
 	v = v.Open(mail.MessageInfo{UID: "uid-1"})
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "no links"}}},
-	}, content.Unsubscribe{})
+	}, content.Unsubscribe{}, nil)
 
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
 
@@ -204,7 +205,7 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 	})
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello, padding world."}}},
-	}, content.Unsubscribe{})
+	}, content.Unsubscribe{}, nil)
 
 	out := v.View()
 	lines := strings.Split(out, "\n")
@@ -222,7 +223,7 @@ func TestViewer_ChipRow_Hidden_WhenEmpty(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(80, 24)
 	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
-	v = v.SetBody(nil, content.Unsubscribe{})
+	v = v.SetBody(nil, content.Unsubscribe{}, nil)
 	v = v.SetAttachments(nil)
 	out := v.View()
 	if strings.Contains(out, "§") || strings.Contains(out, "\U000F0184") {
@@ -234,7 +235,7 @@ func TestViewer_ChipRow_Visible(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
-	v = v.SetBody(nil, content.Unsubscribe{})
+	v = v.SetBody(nil, content.Unsubscribe{}, nil)
 	v = v.SetAttachments([]mail.Attachment{
 		{PartID: "2", Filename: "report.pdf", Size: 2400},
 	})
@@ -251,7 +252,7 @@ func TestViewer_AtKey_Inert_WhenEmpty(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1"})
-	v = v.SetBody(nil, content.Unsubscribe{})
+	v = v.SetBody(nil, content.Unsubscribe{}, nil)
 	v = v.SetAttachments(nil)
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
 	if cmd != nil {
@@ -263,7 +264,7 @@ func TestViewer_AtKey_OpensPicker(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1"})
-	v = v.SetBody(nil, content.Unsubscribe{})
+	v = v.SetBody(nil, content.Unsubscribe{}, nil)
 	v = v.SetAttachments([]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}})
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
 	if cmd == nil {
@@ -276,5 +277,54 @@ func TestViewer_AtKey_OpensPicker(t *testing.T) {
 	}
 	if len(open.Items) != 1 || open.UID != "u1" {
 		t.Errorf("unexpected payload: %+v", open)
+	}
+}
+
+func TestViewer_InviteBlock_AppearsInView(t *testing.T) {
+	v := newTestViewer().SetSize(80, 30).Open(mail.MessageInfo{UID: "1", Subject: "Meeting"})
+	inv := &icalendar.Invite{Summary: "Quarterly sync"}
+	v = v.SetBody(nil, content.Unsubscribe{}, inv)
+	out := v.View()
+	if !strings.Contains(out, "Quarterly sync") {
+		t.Errorf("invite block missing Summary in View output: %q", out)
+	}
+}
+
+func TestViewer_InviteBlock_BodyHeightAccountsForInvite(t *testing.T) {
+	const w, h = 80, 30
+	v := newTestViewer().SetSize(w, h).Open(mail.MessageInfo{UID: "1", Subject: "Meeting"})
+
+	// Baseline: no invite.
+	v0 := v.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}},
+	}, content.Unsubscribe{}, nil)
+	baseHeight := v0.inviteHeight
+
+	// With invite.
+	inv := &icalendar.Invite{Summary: "Sync"}
+	v1 := v.SetBody([]content.Block{
+		content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}},
+	}, content.Unsubscribe{}, inv)
+
+	if v1.inviteHeight == 0 {
+		t.Fatal("expected non-zero inviteHeight when invite is set")
+	}
+	if v1.inviteHeight <= baseHeight {
+		t.Errorf("invite height should exceed baseline: got %d vs %d", v1.inviteHeight, baseHeight)
+	}
+}
+
+func TestViewer_InviteAccessor(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
+	if v.Invite() != nil {
+		t.Error("Invite() should be nil before SetBody")
+	}
+	inv := &icalendar.Invite{Summary: "Check"}
+	v = v.SetBody(nil, content.Unsubscribe{}, inv)
+	if v.Invite() == nil {
+		t.Error("Invite() should be non-nil after SetBody with invite")
+	}
+	if v.Invite().Summary != "Check" {
+		t.Errorf("Invite().Summary = %q, want Check", v.Invite().Summary)
 	}
 }

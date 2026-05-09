@@ -43,6 +43,7 @@ type IconSet struct {
 	FlagAnswered string
 	FlagUnread   string
 	Attachment   string
+	Calendar     string
 }
 
 // SimpleIcons is the Unicode-Narrow iconography used when no Nerd Font is
@@ -62,6 +63,7 @@ var SimpleIcons = IconSet{
 	FlagAnswered: "↩", // U+21A9
 	FlagUnread:   "●", // U+25CF
 	Attachment:   "§", // U+00A7
+	Calendar:     "i", // ASCII
 }
 
 // FancyIcons is the Nerd Font SPUA-A iconography used when a Nerd Font
@@ -81,4 +83,5 @@ var FancyIcons = IconSet{
 	FlagAnswered: "\U000F045A", // nf-md-send
 	FlagUnread:   "\U000F01EE", // nf-md-mailbox
 	Attachment:   "\U000F0184", // nf-md-paperclip
+	Calendar:     "\U000F0E68", // nf-md-calendar_check
 }

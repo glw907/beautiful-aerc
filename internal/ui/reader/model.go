@@ -12,6 +12,7 @@ import (
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/humanize"
+	"github.com/glw907/poplar/internal/icalendar"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -70,6 +71,9 @@ type Model struct {
 	attachments  []mail.Attachment
 	chipRow      string
 	chipHeight   int
+	invite       *icalendar.Invite
+	inviteRow    string
+	inviteHeight int
 	unsub        content.Unsubscribe
 	icons        uicore.IconSet
 	panel        string // headers rendered through ViewerHeader at v.width
@@ -121,6 +125,9 @@ func (v Model) Open(msg mail.MessageInfo) Model {
 	v.attachments = nil
 	v.chipRow = ""
 	v.chipHeight = 0
+	v.invite = nil
+	v.inviteRow = ""
+	v.inviteHeight = 0
 	v.panel = ""
 	v.unsub = content.Unsubscribe{}
 	return v
@@ -132,12 +139,13 @@ func (v Model) Close() Model {
 	return v
 }
 
-// SetBody installs parsed blocks plus the harvested List-Unsubscribe
-// data and transitions to ready. Callers must drop BodyLoadedMsg
+// SetBody installs parsed blocks, unsubscribe data, and invite (nil when
+// absent), then transitions to ready. Callers must drop BodyLoadedMsg
 // with a UID mismatch before invoking.
-func (v Model) SetBody(blocks []content.Block, unsub content.Unsubscribe) Model {
+func (v Model) SetBody(blocks []content.Block, unsub content.Unsubscribe, invite *icalendar.Invite) Model {
 	v.blocks = blocks
 	v.unsub = unsub
+	v.invite = invite
 	v.phase = PhaseReady
 	v.layout()
 	return v
@@ -147,6 +155,10 @@ func (v Model) SetBody(blocks []content.Block, unsub content.Unsubscribe) Model 
 // current message. Zero when the viewer is closed or the message
 // has no List-Unsubscribe headers.
 func (v Model) Unsubscribe() content.Unsubscribe { return v.unsub }
+
+// Invite returns the parsed calendar invite for the current message,
+// or nil when absent.
+func (v Model) Invite() *icalendar.Invite { return v.invite }
 
 // SetSize updates dimensions and re-runs layout when the viewer is ready.
 func (v Model) SetSize(width, height int) Model {
@@ -284,7 +296,7 @@ func (v Model) View() string {
 	// before re-padding, otherwise FillRowToWidth sees full width and
 	// skips, leaving the right edge unstyled.
 	leftPad := bg.Render(" ")
-	bodyHeight := max(0, v.height-lipgloss.Height(v.panel)-v.chipHeight)
+	bodyHeight := max(0, v.height-lipgloss.Height(v.panel)-v.inviteHeight-v.chipHeight)
 	bodyLines := strings.Split(v.viewport.View(), "\n")
 	if len(bodyLines) > bodyHeight {
 		bodyLines = bodyLines[:bodyHeight]
@@ -299,6 +311,9 @@ func (v Model) View() string {
 		}
 	}
 	parts := []string{v.panel}
+	if v.inviteRow != "" {
+		parts = append(parts, v.inviteRow)
+	}
 	if v.chipRow != "" {
 		parts = append(parts, v.chipRow)
 	}
@@ -386,9 +401,10 @@ func (v *Model) layout() {
 	headerStr := content.RenderHeaders(hdrs, v.theme, contentWidth)
 	v.panel = v.styles.ViewerHeader.Width(v.width).Render(headerStr)
 	v.chipRow, v.chipHeight = v.renderChipRow(v.width)
+	v.inviteRow, v.inviteHeight = renderInviteBlock(v.invite, v.icons, v.styles, v.width)
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
-	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.chipHeight)
+	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.inviteHeight-v.chipHeight)
 	vp := viewport.New(contentWidth, bodyHeight)
 	// Modifier-free viewport bindings. g/G are handled by the wrapper.
 	vp.KeyMap = viewport.KeyMap{
