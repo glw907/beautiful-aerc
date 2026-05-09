@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +41,48 @@ func launchURLCmd(opener URLOpener, url string) tea.Cmd {
 	return func() tea.Msg {
 		_ = opener(url)
 		return nil
+	}
+}
+
+// UnsubscribeDoneMsg fires when the one-click POST resolves.
+// Successful runs (2xx) carry an empty Err and a Host string the
+// notice consumer renders. Failures surface as ErrorMsg before
+// reaching this msg type.
+type UnsubscribeDoneMsg struct {
+	Host string
+}
+
+// unsubscribePostCmd issues an RFC 8058 one-click POST to url with
+// body "List-Unsubscribe=One-Click" and a 10-second timeout. 2xx →
+// UnsubscribeDoneMsg{Host: <url-host>}. Anything else (non-2xx,
+// network, TLS, timeout) → ErrorMsg{Op: "unsubscribe"}.
+func unsubscribePostCmd(rawURL string) tea.Cmd {
+	return func() tea.Msg {
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			return ErrorMsg{Op: "unsubscribe", Err: err}
+		}
+		body := strings.NewReader("List-Unsubscribe=One-Click")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, body)
+		if err != nil {
+			return ErrorMsg{Op: "unsubscribe", Err: err}
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return ErrorMsg{Op: "unsubscribe", Err: err}
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return ErrorMsg{
+				Op:  "unsubscribe",
+				Err: fmt.Errorf("server returned %s", resp.Status),
+			}
+		}
+		return UnsubscribeDoneMsg{Host: u.Host}
 	}
 }
 
@@ -629,4 +673,14 @@ func queueContactDeleteCmd(c *cache.Account, uid string) tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// noticeExpireMsg fires when a transient notice times out.
+type noticeExpireMsg struct{ deadline time.Time }
+
+// clearNoticeAfter schedules a noticeExpireMsg after d.
+func clearNoticeAfter(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg {
+		return noticeExpireMsg{deadline: t}
+	})
 }

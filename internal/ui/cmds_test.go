@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,4 +52,47 @@ func TestResolveSaveTarget_Fresh(t *testing.T) {
 	if got != filepath.Join(dir, "fresh.bin") {
 		t.Errorf("got %q", got)
 	}
+}
+
+func TestUnsubscribePostCmd(t *testing.T) {
+	t.Run("2xx success", func(t *testing.T) {
+		var got string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			got = string(body)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		msg := unsubscribePostCmd(srv.URL)()
+		done, ok := msg.(UnsubscribeDoneMsg)
+		if !ok {
+			t.Fatalf("got %T, want UnsubscribeDoneMsg", msg)
+		}
+		if got != "List-Unsubscribe=One-Click" {
+			t.Errorf("body = %q, want %q", got, "List-Unsubscribe=One-Click")
+		}
+		if done.Host == "" {
+			t.Error("Host empty")
+		}
+	})
+
+	t.Run("non-2xx surfaces ErrorMsg", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		msg := unsubscribePostCmd(srv.URL)()
+		if _, ok := msg.(ErrorMsg); !ok {
+			t.Fatalf("got %T, want ErrorMsg", msg)
+		}
+	})
+
+	t.Run("network failure surfaces ErrorMsg", func(t *testing.T) {
+		msg := unsubscribePostCmd("http://127.0.0.1:1")()
+		if _, ok := msg.(ErrorMsg); !ok {
+			t.Fatalf("got %T, want ErrorMsg", msg)
+		}
+	})
 }
