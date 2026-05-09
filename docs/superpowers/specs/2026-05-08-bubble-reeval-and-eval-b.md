@@ -1,8 +1,8 @@
-# Bubble Re-eval (post-ansix) + Eval B — Design
+# Bubble Re-eval (post-ansix) + Eval B — Results
 
-A single triage pass that revisits Eval A's verdicts under ansix
-and runs Eval B on its four candidates. Output feeds Pass 9z's
-consolidation roadmap.
+A single triage pass that revisited Eval A's verdicts under ansix
+and ran Eval B on four additional candidates. Output feeds Pass
+9x's lesson harvests and any future swap passes.
 
 ## Context
 
@@ -10,24 +10,22 @@ Pass 9w.1 extracted `internal/ansix/` (ADR-0181) as the
 icon-aware width primitive over `charmbracelet/x/ansi`. Eval A
 ran pre-ansix; several "Keep + harvest" verdicts cited the
 `lipgloss.JoinHorizontal` ban (ADR-0084) or `lipgloss.Width`
-miscount under SPUA-A icon mode. ansix changes the seam shape on
-poplar's side. It does not change the seam inside upstream
-libraries. Some Eval A verdicts may flip; some won't.
+miscount under SPUA-A icon mode. ansix changed the seam shape on
+poplar's side. It did not change the seam inside upstream
+libraries. No Eval A verdicts flipped — every blocker survived
+the re-eval.
 
 Eval B was scoped in the original adoption design
-(`2026-05-08-bubble-adoption-design.md`) but never executed. The
-post-ansix re-eval is the right moment to land it — same context
-load, same rubric, same output shape.
+(`2026-05-08-bubble-adoption-design.md`) but had not been
+executed. Pass 9w.2 landed it alongside the re-eval — same
+context load, same rubric, same output shape.
 
 ## Output
 
-One spec at
-`docs/superpowers/specs/2026-05-08-bubble-reeval-and-eval-b.md`
-(this document evolves into the eval result during execution).
-No ADR. Eval A's existing spec
-(`2026-05-08-bubble-eval-a-strong-matches.md`) stays as the
-pre-ansix baseline; the new spec supersedes its verdicts only
-where ansix flips them.
+This spec is the eval result for Pass 9w.2. No ADR. Eval A's
+existing spec (`2026-05-08-bubble-eval-a-strong-matches.md`)
+stays as the pre-ansix baseline; no verdicts were superseded
+because no blocker flipped under ansix.
 
 ## Candidate set
 
@@ -136,45 +134,87 @@ fork-vs-accept section's subject.
 
 ## Fork-vs-accept call
 
-A closing section names every **(b)** candidate — bubbles whose
-render path calls `lipgloss.Width` internally, where ansix in
-poplar's call sites doesn't help because the library does its
-own width math. From the queued STATUS entry these are at least
-`bubbles/help`, `bubble-table`, and `glamour` (the third is
-speculative — not currently a consumer; included only if the
-fork would unlock its future use).
+### The (b) list
 
-The decision is binary:
+Bubbles whose render path calls `lipgloss.Width` or
+`lipgloss.JoinHorizontal` internally, where ansix at poplar's
+call sites cannot help because the library does its own width math:
 
-- **Fork** — `go.mod replace` for either `charmbracelet/x/ansi`
-  or `charmbracelet/lipgloss`, swapping `ansi.StringWidth` /
-  `lipgloss.Width` for an ansix-equivalent. Permanent rebase
-  cost. Explicitly supersedes ADR-0002 and ADR-0075. Unlocks
-  every gated bubble.
-- **Accept** — these bubbles stay hand-rolled. The fork cost
-  exceeds the adoption value.
+- **`bubbles/help`** — `FullHelpView` calls `lipgloss.JoinHorizontal`
+  twice (column assembly) and `lipgloss.Width` once per column
+  inside the library's own render path.
+- **`evertras/bubble-table`** — `renderRowData` calls
+  `lipgloss.JoinHorizontal` (row.go:243) and `lipgloss.Width`
+  three times across view.go and row.go.
+- **`glamour`** (speculative) — not currently a poplar consumer;
+  its render path uses lipgloss width math throughout. Named only
+  because a fork would unlock its future use.
 
-Decision factors to weight:
+### The fork option
 
-- **Breadth of bubbles unlocked** by the fork. If only one
-  candidate flips to Adopt under fork, the math favors accept.
-- **Upstream PR path.** Memory note
-  `reference_displaywidth_contribution_patterns.md` records
-  PR-first, Copilot-reviewed contribution culture for
-  `clipperhouse/displaywidth`. If x/ansi or lipgloss accepts
-  a configurable width hook upstream, the fork becomes
-  temporary instead of permanent. Worth checking before
-  defaulting to accept.
-- **Maintenance burden** of the rebase. x/ansi cadence is
-  weekly; lipgloss is monthly. Both are charmbracelet-owned
-  with stable APIs.
-- **What "accept" forecloses.** Any future bubble whose render
-  path uses `lipgloss.Width` internally is ineligible by
-  default. Worth naming the cost concretely.
+A `go.mod replace` directive pointing `charmbracelet/x/ansi` or
+`charmbracelet/lipgloss` at a patched fork that routes
+`ansi.StringWidth` / `lipgloss.Width` through an ansix-equivalent
+hook. This would reach inside the libraries' own render paths,
+dissolving the (b) blockers.
 
-The verdict is one of two strings, with a paragraph of
-rationale and any conditional follow-ups (e.g., "accept
-unless upstream PR lands by Pass 9z").
+Costs: permanent rebase against x/ansi's weekly cadence and
+lipgloss's monthly cadence. An explicit supersession of ADR-0002
+and ADR-0075, which established the direct-on-libraries stance.
+No upstream PR path exists at this date (see below), making the
+rebase indefinite rather than transitional.
+
+What it unlocks: `FullHelpView`'s column-join becomes width-safe;
+`renderRowData`'s join becomes width-safe. For both, the width
+blocker dissolves — but both have additional non-width blockers
+(named-group grid vs flat columns for `bubbles/help`; threading
+pipeline and letter-jump nav for `bubble-table`) that the fork
+does not close. Adoption verdicts would soften to
+"Adopt-with-fork for narrow uses" at best, not "Adopt."
+`glamour` would become usable as a future consumer.
+
+### The accept option
+
+The two real (b)-list candidates stay hand-rolled. `bubbles/help`
+keeps its Keep + harvest verdict (named-group grid is the
+remaining blocker regardless of width). `bubble-table` keeps its
+Keep + harvest verdict (threading pipeline and letter-jump nav
+are the remaining blockers). `glamour` remains out of scope until
+poplar needs a renderer with that profile.
+
+What accept forecloses: any future bubble whose render path uses
+`lipgloss.Width` internally is ineligible under the current
+library posture. New candidates would face the same (b) test.
+The cost is concrete and bounded — it is exactly the two
+current candidates plus the `glamour` speculative case, and
+neither real candidate would be fully unblocked by the fork anyway.
+
+### Upstream PR finding
+
+GitHub search (2026-05-08) found no open issue or PR proposing a
+configurable width hook in `charmbracelet/x` or
+`charmbracelet/lipgloss`. The closest open issues are a general
+`lipgloss.Width` accuracy report (#666, v2 only, not a hook
+proposal) and a mosaic rendering width issue (#705, unrelated
+subsystem). No upstream width-hook path is in flight at the
+cutoff date.
+
+### Decision
+
+**Accept**
+
+The fork cost exceeds the adoption value by a wide margin. Two
+real candidates gate on internal `lipgloss.Width` / `JoinHorizontal`
+calls, but both carry additional non-width blockers that the fork
+does not close — the verdicts would remain "Adopt-with-fork for
+narrow uses," not full adoptions. Maintaining a permanent rebase
+against x/ansi's weekly cadence and lipgloss's monthly cadence
+in exchange for softening (not resolving) two Keep + harvest
+verdicts is not the right trade. No upstream hook proposal is in
+flight, so the rebase would be indefinite. ADR-0002 and ADR-0075's
+direct-on-libraries posture stands. If a width-hook issue or PR
+lands upstream in a future pass, the (b) list is named here and
+the cost/benefit recalculation is straightforward.
 
 ## Task budget
 
