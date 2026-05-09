@@ -257,7 +257,7 @@ func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids
 			return ErrorMsg{Op: "assemble MIME", Err: err}
 		}
 		env := envelopeFromDraft(d)
-		if err := acct.QueueOutbound(context.Background(), sentFolder, env, mime); err != nil {
+		if _, err := acct.QueueOutbound(context.Background(), sentFolder, env, mime, 0, ""); err != nil {
 			return ErrorMsg{Op: "queue outbound", Err: err}
 		}
 		return uicompose.SentMsg{}

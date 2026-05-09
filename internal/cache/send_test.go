@@ -56,7 +56,7 @@ func TestQueueOutbound_JMAP_OneOp(t *testing.T) {
 	a := openTestAccountWith(t, be)
 
 	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
-	if err := a.QueueOutbound(context.Background(), "Sent", env, []byte("MIME bytes")); err != nil {
+	if _, err := a.QueueOutbound(context.Background(), "Sent", env, []byte("MIME bytes"), 0, ""); err != nil {
 		t.Fatalf("QueueOutbound: %v", err)
 	}
 	kinds := outboxKinds(t, a)
@@ -75,7 +75,7 @@ func TestQueueOutbound_IMAP_TwoOps(t *testing.T) {
 	a := openTestAccountWith(t, be)
 
 	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
-	if err := a.QueueOutbound(context.Background(), "Sent", env, []byte("MIME bytes")); err != nil {
+	if _, err := a.QueueOutbound(context.Background(), "Sent", env, []byte("MIME bytes"), 0, ""); err != nil {
 		t.Fatalf("QueueOutbound: %v", err)
 	}
 	kinds := outboxKinds(t, a)
@@ -97,7 +97,7 @@ func TestQueueSendRoundTrip(t *testing.T) {
 	}
 	mime := []byte("From: geoff@907.life\r\n\r\nhello\r\n")
 
-	opID, err := a.QueueSend(context.Background(), "Inbox", env, mime)
+	opID, err := a.QueueSend(context.Background(), "Inbox", env, mime, 0, "")
 	if err != nil {
 		t.Fatalf("QueueSend: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestQueueAppendRoundTrip(t *testing.T) {
 	defer a.Close()
 
 	mime := []byte("From: geoff@907.life\r\nSubject: test\r\n\r\nbody\r\n")
-	opID, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime)
+	opID, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime, 0, "")
 	if err != nil {
 		t.Fatalf("QueueAppend: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestDispatchSend(t *testing.T) {
 
 	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}}
 	mime := []byte("hi\r\n")
-	if _, err := a.QueueSend(context.Background(), "Inbox", env, mime); err != nil {
+	if _, err := a.QueueSend(context.Background(), "Inbox", env, mime, 0, ""); err != nil {
 		t.Fatalf("QueueSend: %v", err)
 	}
 
@@ -201,7 +201,7 @@ func TestDispatchAppend(t *testing.T) {
 	fb := a.Backend.(*fakeBackend)
 
 	mime := []byte("body\r\n")
-	if _, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime); err != nil {
+	if _, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime, 0, ""); err != nil {
 		t.Fatalf("QueueAppend: %v", err)
 	}
 
@@ -318,7 +318,7 @@ func TestDrainerDeletesLinkedDraft_DrainPath(t *testing.T) {
 	// Insert a Send row referencing the draft. The Inbox folder exists after SyncFolders.
 	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}}
 	mime := []byte("hi\r\n")
-	opID, err := a.QueueSend(ctx, "Inbox", env, mime)
+	opID, err := a.QueueSend(ctx, "Inbox", env, mime, 0, "")
 	if err != nil {
 		t.Fatalf("QueueSend: %v", err)
 	}
@@ -352,11 +352,11 @@ func TestSendSucceedsAppendConflicts(t *testing.T) {
 	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}}
 	mime := []byte("hello\r\n")
 
-	sendID, err := a.QueueSend(context.Background(), "Inbox", env, mime)
+	sendID, err := a.QueueSend(context.Background(), "Inbox", env, mime, 0, "")
 	if err != nil {
 		t.Fatalf("QueueSend: %v", err)
 	}
-	appendID, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime)
+	appendID, err := a.QueueAppend(context.Background(), "Inbox", mail.FlagSeen, mime, 0, "")
 	if err != nil {
 		t.Fatalf("QueueAppend: %v", err)
 	}

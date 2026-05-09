@@ -108,8 +108,9 @@ func (a *Account) QueueOp(ctx context.Context, folder string, msgUID mail.UID, a
 }
 
 // insertFolderOp inserts a folder-scoped outbox row carrying a MIME
-// payload. These ops have no message-row state to mirror.
-func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs, payload []byte) (int64, error) {
+// payload. scheduledFor is a unix-nanos hold (0 = dispatch immediately).
+// draftID links the row to a drafts row ("" = no link).
+func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs, payload []byte, scheduledFor int64, draftID string) (int64, error) {
 	if args == nil {
 		return 0, fmt.Errorf("queue: nil args")
 	}
@@ -127,10 +128,11 @@ func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs
 	var opID int64
 	err = a.tx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.Exec(`
-            INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at)
-            VALUES (?, NULL, ?, ?, ?, ?, ?, 0, NULL)`,
+            INSERT INTO outbox (folder, message, kind, args, payload, enqueued_at, status, attempts, next_eligible_at, scheduled_for, draft_id)
+            VALUES (?, NULL, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
 			folderID, string(args.opKind()), string(body), payload,
-			time.Now().UnixNano(), OpPending)
+			time.Now().UnixNano(), OpPending,
+			nullableInt64(scheduledFor), nullableString(draftID))
 		if err != nil {
 			return fmt.Errorf("insert outbox: %w", err)
 		}
@@ -148,36 +150,56 @@ func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs
 	return opID, nil
 }
 
-// QueueSend enqueues a Send op. sentFolder is informational on JMAP
-// and reused as the Append target on IMAP follow-up.
-func (a *Account) QueueSend(ctx context.Context, sentFolder string, env mail.Envelope, mime []byte) (int64, error) {
-	return a.insertFolderOp(ctx, sentFolder, SendArgs{Envelope: env}, mime)
+func nullableInt64(v int64) any {
+	if v == 0 {
+		return nil
+	}
+	return v
+}
+
+func nullableString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// QueueSend enqueues a Send op carrying mime. sentFolder is informational
+// on JMAP and reused as the Append target on IMAP follow-up. scheduledFor
+// is a unix-nanos hold (0 = dispatch immediately). draftID links the row
+// to a drafts row ("" = no link).
+func (a *Account) QueueSend(ctx context.Context, sentFolder string, env mail.Envelope, mime []byte, scheduledFor int64, draftID string) (int64, error) {
+	return a.insertFolderOp(ctx, sentFolder, SendArgs{Envelope: env}, mime, scheduledFor, draftID)
 }
 
 // QueueAppend enqueues an Append op writing mime to folder with flag.
-func (a *Account) QueueAppend(ctx context.Context, folder string, flag mail.Flag, mime []byte) (int64, error) {
-	return a.insertFolderOp(ctx, folder, AppendArgs{Flag: flag}, mime)
+func (a *Account) QueueAppend(ctx context.Context, folder string, flag mail.Flag, mime []byte, scheduledFor int64, draftID string) (int64, error) {
+	return a.insertFolderOp(ctx, folder, AppendArgs{Flag: flag}, mime, scheduledFor, draftID)
 }
 
 // QueuePushDraft enqueues a PushDraft op. A non-empty prevUID makes
 // the backend destroy the prior server image in the same op.
 func (a *Account) QueuePushDraft(ctx context.Context, draftID, folder string, mime []byte, prevUID mail.UID) (int64, error) {
 	return a.insertFolderOp(ctx, folder,
-		PushDraftArgs{DraftID: draftID, PrevServerUID: prevUID}, mime)
+		PushDraftArgs{DraftID: draftID, PrevServerUID: prevUID}, mime, 0, "")
 }
 
-// QueueOutbound enqueues outbound mail through the outbox. JMAP
-// places the Sent copy atomically inside Send. IMAP queues a
-// separate Append for the Sent copy.
-func (a *Account) QueueOutbound(ctx context.Context, sentFolder string, env mail.Envelope, mime []byte) error {
-	if _, err := a.QueueSend(ctx, sentFolder, env, mime); err != nil {
-		return err
+// QueueOutbound enqueues outbound mail through the outbox. Returns op IDs
+// in dispatch order: [send] on JMAP, [send, append] on IMAP. scheduledFor
+// and draftID apply to every row in the group.
+func (a *Account) QueueOutbound(ctx context.Context, sentFolder string, env mail.Envelope, mime []byte, scheduledFor int64, draftID string) ([]int64, error) {
+	sendID, err := a.QueueSend(ctx, sentFolder, env, mime, scheduledFor, draftID)
+	if err != nil {
+		return nil, err
 	}
 	if a.Backend.IsJMAP() {
-		return nil
+		return []int64{sendID}, nil
 	}
-	_, err := a.QueueAppend(ctx, sentFolder, mail.FlagSeen, mime)
-	return err
+	appendID, err := a.QueueAppend(ctx, sentFolder, mail.FlagSeen, mime, scheduledFor, draftID)
+	if err != nil {
+		return []int64{sendID}, err
+	}
+	return []int64{sendID, appendID}, nil
 }
 
 // applyOptimisticTx writes the UI hint for one op against one message

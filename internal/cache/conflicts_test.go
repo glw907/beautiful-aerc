@@ -397,7 +397,7 @@ func TestDiscardConflictedSend(t *testing.T) {
 	fb.sendErr = mail.ErrAuth
 	opID, err := a.QueueSend(context.Background(), "Inbox",
 		mail.Envelope{From: "geoff@907.life", Rcpts: []string{"a@example.com"}},
-		[]byte("body\r\n"))
+		[]byte("body\r\n"), 0, "")
 	if err != nil {
 		t.Fatalf("QueueSend: %v", err)
 	}
