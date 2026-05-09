@@ -209,6 +209,32 @@ match this norm. Worth re-checking other sub-models for stragglers.
 
 ---
 
+## Top three ways `bubbles/list` is better than poplar's equivalents
+
+Distilled from the patterns above. These are the picks that
+informed Pass 9z's adoption work.
+
+1. **Layered styling via `Inline(true).Inherit(other)`** (pattern §2).
+   The library composes selected + filter-match into a uniform
+   per-rune paint without partial coloring. Poplar's first-cut
+   highlight dodges the SGR-composition problem by skipping the
+   cursor row; the library teaches the cleaner solution.
+
+2. **Per-state styles named by combined state** (pattern §3).
+   `DefaultItemStyles` declares `NormalTitle / SelectedTitle /
+   DimmedTitle / NormalDesc / SelectedDesc / DimmedDesc` — named
+   by combined state, not by attribute. Sidebar's runtime
+   composition via `ApplyBg` works but obscures the state
+   matrix; named slots make it explicit.
+
+3. **Filter-match as a first-class API surface** (pattern §1).
+   The library exposes `MatchesForItem(idx) []int` as a public
+   delegate input, *naming* the rune-highlight pattern in the API
+   surface. Poplar's movepicker had a substring filter for months
+   without rune highlight — not because the feature was hard, but
+   because nothing named the pattern. Naming patterns explicitly
+   in the API invites their use.
+
 ## What did NOT survive the harvest
 
 - **Paginator math.** The library's `paginator.Model` integration

@@ -11,7 +11,7 @@ Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
 | 9x.2 | Harvest — chrome family (helppopover, statusbar, toast) | pending |
 | 9x.3 | Harvest — table/form family (form, list, overlay) | pending |
 | 9y | Bubble consolidation — decide if any swap work remains | pending |
-| 9z | Adopt pattern findings from 9x.1–9x.3 catalogs | pending |
+| 9z | Adopt top-three findings from 9x.1–9x.3 + 9y catalogs | pending |
 | 10 | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 11 | List-Unsubscribe (#36) | pending |
 | 12 | `.ics` viewer (#37) | pending |
@@ -54,3 +54,9 @@ Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
 > at `docs/superpowers/plans/YYYY-MM-DD-harvest-chrome.md`, then
 > implement. Standard pass-end checklist applies; ADR only if
 > binding facts change.
+>
+> **Catalog requirement.** Each harvest pass must end with a
+> "Top three ways their code is better than poplar's
+> equivalents" section in its research doc — see Pass 9x.1's
+> catalog for the format. Pass 9z consumes those top-three
+> lists across 9x.1–9x.3 as input.
