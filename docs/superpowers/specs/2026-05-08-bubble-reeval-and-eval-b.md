@@ -323,3 +323,25 @@ qualifies.
 **Rationale (one line):** Both blockers survive ansix — internal `JoinHorizontal` in `FullHelpView` is unreachable from poplar's call sites, and the `wired` dim affordance has no upstream analogue — leaving poplar's hand-rolled layout as the only shape that fits the grid + hint contract.
 
 **Interacts with:** Fork-vs-accept (Task 11). `bubbles/help` is a (b)-list candidate — its blocker is the library's internal `lipgloss.Width` + `JoinHorizontal`, not poplar's own width math. It belongs on the fork-vs-accept list alongside `bubble-table`. If the fork option is accepted, `FullHelpView`'s column layout becomes width-safe, but the named-group-grid contract gap remains; the verdict would likely soften to "Adopt-with-fork for hint bar only, keep grid hand-rolled."
+
+## `daltonsw/bubbleup`
+
+**Does this make poplar better?** No. Bubbleup is a category-styled animated notification overlay (Info/Warn/Error/Debug, color lerp from black to a target hue over ~6 ticks at 100 ms). Poplar's toast is a different thing: a triage-confirmation bar that carries an `op` enum, an affected message count, an optional destination name, and an inverse `tea.Cmd` (the undo action). The two primitives do not share a domain. ansix is irrelevant here — bubbleup's color lerp uses `go-colorful.BlendLab` and `lipgloss.Width` only for its own dynamic-width clamp; there is no SPUA gating and no call site poplar could fix with `ansix.Width`. The domain gap is the entire verdict.
+
+**Feature parity:** Bubbleup renders a rounded-border floating overlay at six configurable positions (Top/Bottom × Left/Center/Right) with a fixed or dynamic width, dismissible via `Esc`. Poplar's toast renders as a plain one-row bar inlined into App's chrome-banner slot (shared with the error banner); it has no border, no position enum, no animation, and no dismiss key — it expires on a `tea.Tick` deadline and clears on any folder change or error. The overlay approach would break the existing chrome-banner contract and require a complete rearchitecture of `chromeBannerRow`.
+
+**Customization seams:** `AlertDefinition{Key, ForeColor, Prefix, Style}` registers new alert types. `WithPosition`, `WithMinWidth`, `WithUnicodePrefix`, `WithAllowEscToClose` are functional-options-style mutators. No seam for a countdown timer, no seam for an undo action, no seam for op-keyed verb text. The customization surface covers visual style, not payload.
+
+**Theming integration:** Bubbleup owns its color pipeline: hex strings via `go-colorful` parsed at `RegisterNewAlertType` time, blended on every tick. Colors are not `lipgloss.AdaptiveColor` values and do not reference poplar's palette. Wiring into `theme.CompiledTheme` would require replacing the lerp target and background with palette slots and rebuilding the interpolation per tick — there is no injection seam for this.
+
+**Maintenance signal:** 41 stars, 3 forks, created 2024-10-01, last pushed 2026-05-01. MIT license. Active but small; the `go.mod` still pins `charmbracelet/bubbletea v1.1.1` and `lipgloss v0.13.0` while poplar tracks the current release line. There are deprecated constants in `alert.go` (`InfoUniPrefix`, `WarningUniPrefix`, etc.), suggesting the API is still settling.
+
+**Code delta estimate:** Adoption would require replacing `pendingAction` + `renderToast` + the `toastExpireMsg` tick with bubbleup's `AlertModel`, inventing a new `AlertDefinition` for each triage op, mapping the op-verb-count-dest tuple into a flat string before passing to `NewAlertCmd`, and rearchitecting `chromeBannerRow` to overlay rather than inline. The current `toast.go` is 128 lines and handles exactly the domain; bubbleup would add ~300 LOC of animation machinery in exchange for eliminating it while making the feature harder to extend.
+
+**License:** MIT (`go.dalton.dog/bubbleup`). Clear.
+
+**Verdict:** Keep + harvest
+
+**Rationale (one line):** Domain mismatch — bubbleup is a category-styled animated notification overlay, not a triage-state bar with undo payload; ansix does not touch the gap, and nothing in the library's render or theming model maps onto `pendingAction`.
+
+**Interacts with:** None. Toast is a leaf feature in `internal/ui/toast.go` with no dependencies on other evaluated libraries. The `position` vocabulary bubbleup introduces (Top/Bottom × Left/Center/Right) is conceptually reusable for any future floating overlay, but no current overlay in poplar's cascade requires positional semantics beyond the fixed `centerOverlay` placement.
