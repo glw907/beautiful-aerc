@@ -1330,7 +1330,6 @@ func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
 	out, cmd := app.Update(uicompose.SentMsg{
 		OpIDs:        []int64{1},
 		ScheduledFor: scheduled,
-		DraftID:      "d1",
 	})
 	app = out
 	if app.toast.op != opSendUndo {
@@ -1704,7 +1703,6 @@ func TestAppArmsSendUndoOnSentMsg(t *testing.T) {
 	app, _ = app.Update(uicompose.SentMsg{
 		OpIDs:        []int64{42},
 		ScheduledFor: scheduled,
-		DraftID:      "draft-test",
 	})
 
 	if app.toast.op != opSendUndo {
@@ -1712,9 +1710,6 @@ func TestAppArmsSendUndoOnSentMsg(t *testing.T) {
 	}
 	if got := app.toast.sendOpIDs; len(got) != 1 || got[0] != 42 {
 		t.Errorf("sendOpIDs = %v, want [42]", got)
-	}
-	if app.toast.sendDraftID != "draft-test" {
-		t.Errorf("sendDraftID = %q, want draft-test", app.toast.sendDraftID)
 	}
 	if !app.toast.deadline.Equal(scheduled) {
 		t.Errorf("deadline = %v, want %v", app.toast.deadline, scheduled)
@@ -1729,7 +1724,6 @@ func TestAppDoesNotArmWhenWindowZero(t *testing.T) {
 	app, _ = app.Update(uicompose.SentMsg{
 		OpIDs:        []int64{42},
 		ScheduledFor: time.Time{},
-		DraftID:      "draft-test",
 	})
 
 	if !app.toast.IsZero() {
@@ -1748,7 +1742,6 @@ func TestAppUndoSendCancelsAndRestores(t *testing.T) {
 	app, _ = app.Update(uicompose.SentMsg{
 		OpIDs:        []int64{42},
 		ScheduledFor: frozen.Add(10 * time.Second),
-		DraftID:      "draft-test",
 		Draft:        d,
 	})
 	if app.toast.op != opSendUndo {

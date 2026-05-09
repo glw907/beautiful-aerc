@@ -670,11 +670,10 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		deadline := msg.ScheduledFor
 		m.toast = pendingAction{
-			op:          opSendUndo,
-			deadline:    deadline,
-			sendOpIDs:   msg.OpIDs,
-			sendDraftID: msg.DraftID,
-			sendDraft:   msg.Draft,
+			op:        opSendUndo,
+			deadline:  deadline,
+			sendOpIDs: msg.OpIDs,
+			sendDraft: msg.Draft,
 		}
 		cmds := []tea.Cmd{
 			tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {

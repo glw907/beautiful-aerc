@@ -44,9 +44,8 @@ type pendingAction struct {
 	deadline time.Time // moment at which the toast expires
 
 	// populated only when op == opSendUndo
-	sendOpIDs   []int64
-	sendDraftID string
-	sendDraft   mailcompose.Draft
+	sendOpIDs []int64
+	sendDraft mailcompose.Draft
 }
 
 // IsZero reports whether p represents no active toast. Every active

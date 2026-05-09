@@ -15,8 +15,7 @@ type SeededMsg struct {
 // state from these fields when ScheduledFor is in the future.
 type SentMsg struct {
 	OpIDs        []int64
-	ScheduledFor time.Time  // zero = no hold (dispatch immediately)
-	DraftID      string     // links the persisted drafts row
+	ScheduledFor time.Time         // zero = no hold (dispatch immediately)
 	Draft        mailcompose.Draft // in-memory copy for fast undo restore
 }
 

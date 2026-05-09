@@ -306,7 +306,6 @@ func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids
 		return uicompose.SentMsg{
 			OpIDs:        opIDs,
 			ScheduledFor: scheduledFor,
-			DraftID:      draftID,
 			Draft:        d,
 		}
 	}
