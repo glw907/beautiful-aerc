@@ -123,6 +123,7 @@ func composeFooterGroups(hasSig, isFocusFrom, tidyVisible bool) [][]footerHint {
 	if hasSig {
 		core = append(core, hint("Ctrl+G", "sig", 5))
 	}
+	core = append(core, hint("Ctrl+L", "later", 6))
 	if tidyVisible {
 		core = append(core, hint("Ctrl+T", "tidy", 6))
 	}

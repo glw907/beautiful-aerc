@@ -55,6 +55,19 @@ list when an op needs user intervention.
 overlay is open. The modal cascade short-circuits keys before
 delegating to AccountTab, so no conflict.
 
+## Outbox view
+
+Active when the synthetic Outbox entry is selected in the sidebar
+(visible only when the queue is non-empty).
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Cursor |
+| `c` | Cancel scheduled send |
+| `s` | Reschedule (opens picker pre-filled) |
+| `e` | Edit as draft (cancels + opens compose) |
+| `Esc` / `q` | Return to previous folder |
+
 ## Reply & Compose
 
 | Key | Action | Context |
@@ -81,6 +94,7 @@ text-entry surfaces are exempt from the modifier-free rule.
 | `a`       | Accept selection (in attach picker) |
 | `.`       | Toggle hidden files (in attach picker) |
 | `d` / `⌫` / `⌦` | Remove attachment (in `focusAttach`) |
+| `^L`      | Schedule send (opens picker) |
 
 ## Folder Jump
 
