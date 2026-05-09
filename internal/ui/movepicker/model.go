@@ -312,9 +312,13 @@ func (p Model) buildListRows(contentW int) []string {
 		if w := lipgloss.Width(plain); w < displayW {
 			pad = strings.Repeat(" ", displayW-w)
 		}
-		if !isCursor && needleLower != "" {
+		if needleLower != "" {
 			if runes := matchRunes(plain, needleLower); len(runes) > 0 {
-				plain = lipgloss.StyleRunes(plain, runes, p.styles.Match, lipgloss.NewStyle())
+				var base lipgloss.Style
+				if isCursor {
+					base = p.styles.Cursor.Inline(true)
+				}
+				plain = lipgloss.StyleRunes(plain, runes, base.Inherit(p.styles.Match), base)
 			}
 		}
 		row := marker + plain + pad

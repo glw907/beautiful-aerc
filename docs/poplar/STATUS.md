@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 9z — adopt surviving harvest items. Features
-(Pass 10–14) resume after.
+**Current pass:** Pass 10 — outbox delivery controls (undo + schedule
+send, #35). Bubble-eval roadmap fully closed.
 
 ## Passes
 
@@ -9,7 +9,7 @@
 |------|------|--------|
 | 1 – 9x.3 | Scaffold through table/form harvest (ADRs 0001–0181) | done |
 | 9y | Bubble consolidation verdict — nine libraries Keep; ADR-0182 closes the eval roadmap | done |
-| 9z | Adopt surviving harvest items from the consolidated catalogs | pending |
+| 9z | Bubble adoption — both carry-forward items deferred under named flip conditions; no-op outcome | done |
 | 10 | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 11 | List-Unsubscribe (#36) | pending |
 | 12 | `.ics` viewer (#37) | pending |
@@ -21,32 +21,32 @@
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9z)
+## Next starter prompt (Pass 10)
 
-> **Goal.** Adopt the surviving harvest items from the bubble-eval
-> roadmap. Pass 9y closed the roadmap; operational reference is
-> `docs/poplar/research/2026-05-08-bubble-consolidation-verdict.md`
-> and ADR-0182.
+> **Goal.** Outbox delivery controls — undo-send window and
+> schedule-send (BACKLOG.md #35). First feature pass after the
+> harvest cycle.
 >
-> **Scope.** Two carry-forward items across the three harvest
-> catalogs: (1) `bubbles/help` `shouldAddItem` progressive-
-> truncation loop (9x.2 §3) — port if helppopover needs progressive
-> truncation today, else document the defer; (2) per-state combined-
-> state style naming (9x.1 §3) — re-check the sidebar decline still
-> holds. Plus any adjacent cleanups the harvest catalogs flagged but
-> didn't land.
+> **Scope.** Wire user-controllable delay between `QueueSend` and
+> dispatch (the undo window) and absolute-time scheduling for
+> "send later." Cache outbox already carries the rows; this is a
+> drainer + UI surface pass. Out of scope: server-side scheduling
+> (JMAP `EmailSubmission/set { onSend }` and IMAP equivalents are
+> a v1.1 question).
 >
-> **Settled (do not re-brainstorm):** Every Keep stands. ADR-0182
-> requires a named flip condition from the verdict doc to revisit
-> any surveyed library. Pass 14 may still adopt `huh` for the
-> wizard — that's a Pass 14 decision.
+> **Settled (do not re-brainstorm):** Outbox state machine and
+> schema v6 payload-bearing rows (invariants — Send + Append).
+> Toast + undo affordance vocabulary (ADRs 0089–0091). The drainer
+> is the dispatch authority; UI signals via `tea.Cmd`.
 >
-> **Still open — brainstorm these:** Whether item 1 is live this
-> pass or stays deferred; whether the catalogs surfaced adjacent
-> cleanups worth landing now.
+> **Still open — brainstorm these:** Default undo window length
+> and configurability; UX for an in-flight schedule (status bar
+> indicator? sidebar Outbox folder count?); cancel-scheduled vs
+> reschedule semantics; whether undo and schedule share a single
+> "delay until" field on the row or split into two states.
 >
-> **Approach.** Brainstorm, write a plan at
-> `docs/superpowers/plans/YYYY-MM-DD-bubble-adoption.md`, implement.
-> If the only durable adoption is item 1 and it's not live, the
-> pass is documentation + housekeeping — that's a legitimate
-> outcome; don't manufacture work. Standard pass-end checklist.
+> **Approach.** Brainstorm the open questions, survey the major
+> clients (TB, Apple Mail, Gmail) for prior art, write a plan at
+> `docs/superpowers/plans/YYYY-MM-DD-outbox-delivery-controls.md`,
+> then implement. Pass-size budget applies — split if scope
+> exceeds 12 tasks. Standard pass-end checklist.
