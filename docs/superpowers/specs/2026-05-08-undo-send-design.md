@@ -42,10 +42,12 @@ here; the user-facing `e` action lives in 10b).
   user's text on undo and gives 10b's edit-as-draft a join-query
   implementation with no MIME→Draft parser anywhere in the codebase.
 
-- **Visibility is status-bar only in 10a.** The active undo window is
-  short enough that one chrome surface is enough: a countdown
-  (`Sending in 8s — u to undo`) on the status bar. The sidebar Outbox
-  virtual folder is a 10b concern.
+- **Visibility reuses the existing chrome banner row.** Triage already
+  has a `pendingAction` + `tea.Tick` + `u` undo + chrome banner
+  toast pattern. Send-undo is the same shape with a longer default
+  window and a per-second countdown render. One row above the status
+  bar shows `Sending in 8s — u undo`. The sidebar Outbox virtual
+  folder is a 10b concern.
 
 - **Undo window default 10s, configurable via `[ui] undo-send-window`.**
   Range 0..5m. Zero disables the hold (immediate dispatch, no `u`
@@ -69,7 +71,8 @@ CREATE INDEX outbox_pickup ON outbox(scheduled_for, next_eligible_at, id)
     WHERE status IN ('pending', 'failed');
 ```
 
-`scheduled_for` is Unix seconds. `draft_id` mirrors the `drafts`
+`scheduled_for` is Unix nanoseconds, matching `next_eligible_at`,
+`enqueued_at`, and `last_attempt` on the same table. `draft_id` mirrors the `drafts`
 table's TEXT primary key. `ON DELETE SET NULL` so a manual draft
 delete never breaks an in-flight outbox row.
 
@@ -79,62 +82,61 @@ Drainer success path adds one delete:
 `DELETE FROM drafts WHERE draft_id = ?` (no-op when `draft_id` is
 NULL). Both run inside the existing op-completion transaction.
 
-`QueueSend` signature changes:
+`QueueOutbound` signature changes:
 
 ```go
-func (a *Account) QueueSend(
+func (a *Account) QueueOutbound(
     ctx context.Context,
     sentFolder string,
     env mail.Envelope,
     mime []byte,
     scheduledFor time.Time,
     draftID string,  // empty string = no linked draft
-) (int64, error)
+) ([]int64, error)
 ```
 
-Zero-value `scheduledFor` means "no hold" — drainer picks up
-immediately. Empty `draftID` skips the FK. Existing call sites
-(tests, contacts, append paths) pass zero/empty.
+Returns the one (JMAP) or two (IMAP Send + Append-to-Sent) op IDs.
+The same `scheduled_for` and `draft_id` apply to every row in the
+group. Zero-value `scheduledFor` means "no hold" — drainer picks up
+immediately. Empty `draftID` skips the FK. Existing test call sites
+of `QueueSend`/`QueueAppend` pass zero/empty.
 
-`QueueAppend` is unchanged — Append paths don't carry a user-facing
-draft, and the v1 IMAP "second op for Sent placement" enqueue still
-fires sequentially after Send.
+`CancelOps(ctx, opIDs []int64)` atomically deletes all rows if all
+are `OpPending`; returns `ErrNotPending` if any has advanced. The `u`
+binding passes the slice from `QueueOutbound`.
 
 ### UI (`internal/ui`)
 
-`StatusBar` gains:
+The existing `App.pendingAction` is extended to hold a send-undo
+state. The chrome banner row above the status bar already renders
+toasts; the same code path renders the per-second countdown:
 
 ```go
-SetUndoCountdown(remaining time.Duration, opID int64) StatusBar
-ClearUndoCountdown() StatusBar
+type pendingAction struct {
+    op       string         // existing; "" when none
+    inverse  tea.Cmd        // existing; triage compensating op
+    expires  time.Time      // existing; tea.Tick fires expiry
+
+    // 10a additions:
+    sendOpIDs   []int64        // non-nil iff op == "send-undo"
+    sendDraftID string          // linked Draft for compose-restore
+}
 ```
 
-App tracks `armedOpID int64` (zero = no countdown) on its model. On
-`compose.SentMsg`, the App reads the row's `scheduled_for`, sets
-`armedOpID`, and starts a 1Hz `tea.Tick` loop. Each tick recomputes
-`remaining = scheduled_for - now`; on transition to `<= 0` or on a
-`CacheEvent` showing the row left `pending`, the App calls
-`ClearUndoCountdown()` and zeroes `armedOpID`. Multi-row case (rare in
-10a since only undo windows produce countdowns and the user can't
-queue two sends simultaneously): the App arms on the row with the
-smallest `scheduled_for`; if a second send queues during the first
-window, the first row's countdown completes before the second arms.
+When `op == "send-undo"`, the toast renders `Sending in Ns — u undo`
+and a 1Hz `tea.Tick` re-renders each second. Triage's existing
+single-shot expiry tick still fires for the natural-window case.
+The `u` binding's existing handler routes by `op`: triage runs
+`inverse`; send-undo calls `cache.CancelOps(ctx, sendOpIDs)` and
+opens compose seeded from `cache.LoadDraft(sendDraftID)`. On expiry
+or `CacheEvent` showing any row in `sendOpIDs` left `pending`,
+`pendingAction` clears.
+
+Single in-flight send-undo at a time. Compose closes on Send and
+can't open again until the App is idle, so the user can't queue a
+second send while one is held. (Pass 9h compose lifecycle invariant.)
 Long undo windows (`60s < undo_window <= 5m`) display the same
-per-second countdown — the 60s chip threshold is reserved for 10b's
-schedule rows.
-
-Global `u` keybinding (only registered while a countdown is active
-and the App isn't in compose / a modal):
-
-```go
-key.NewBinding(
-    key.WithKeys("u"),
-    key.WithHelp("u", "undo send"),
-)
-```
-
-`u` calls `cache.DiscardOp(armedOpID)` then opens compose seeded from
-the linked Draft via the existing draft-restore path.
+per-second countdown.
 
 ### Config (`internal/config`)
 
@@ -145,44 +147,46 @@ when the key is absent.
 
 ### Compose
 
-On Send (existing `Ctrl+S` path):
+On Send (existing `Ctrl+X` path in `composeSendCmd`):
 
-1. Persist current Draft to `drafts` table (already implemented in
-   Pass 9h's drafts persistence — reuse `cache.PutDraft`).
+1. Persist current Draft to `drafts` table via `cache.CreateDraft`
+   (one row per send; the draft_id is generated here — distinct from
+   any pre-existing 9h draft buffer).
 2. Compute `scheduledFor = time.Now().Add(undoWindow)`.
-3. Call `QueueSend(ctx, sentFolder, env, mime, scheduledFor, draftID)`.
-4. Emit `compose.SentMsg{OpID, ScheduledFor, DraftID}`.
+3. Call `QueueOutbound(ctx, sentFolder, env, mime, scheduledFor, draftID)`.
+4. Emit `compose.SentMsg{OpIDs []int64, ScheduledFor time.Time, DraftID string}`.
 
-App handles `SentMsg` by closing compose and arming the status-bar
-countdown. On `u`, App calls `cache.DiscardOp(opID)` and reopens
-compose from the linked Draft.
+App handles `SentMsg` by closing compose and arming `pendingAction`
+(`op = "send-undo"`, `sendOpIDs`, `sendDraftID`, `expires =
+ScheduledFor`). On `u`, App calls `cache.CancelOps(opIDs)` and
+reopens compose seeded from `cache.LoadDraft(draftID)`.
 
 When `undo-send-window = 0`, step 2 sets `scheduledFor = time.Time{}`
-(zero value), drainer dispatches immediately, no countdown arms, no
-`u` binding registers. Draft persistence still runs so a crash
-between Send and dispatch doesn't lose the text; drainer's success
-path deletes the Draft.
+(zero value), `SentMsg.OpIDs` is still populated, but the App skips
+arming since `expires <= now`. Draft persistence still runs so a
+crash between Send and dispatch doesn't lose the text; drainer's
+success path deletes the Draft.
 
 ## Data flow
 
 ### Send → undo → restore
 
 ```
-Compose Ctrl+S
-  ├─ cache.PutDraft(draft) → draft_id
-  ├─ cache.QueueSend(..., scheduledFor=now+10s, draftID)
-  │    └─ INSERT outbox row (status=pending, scheduled_for=t, draft_id)
-  └─ App closes compose, arms countdown
+Compose Ctrl+X
+  ├─ cache.CreateDraft(draft_id, payload)
+  ├─ cache.QueueOutbound(..., scheduledFor=now+10s, draftID)
+  │    └─ INSERT 1-2 outbox rows (status=pending, scheduled_for=t, draft_id)
+  └─ App closes compose, arms pendingAction (op="send-undo")
 
 Drainer wakes, gate not satisfied → sleeps until t
 
 App ticks 1Hz → StatusBar.SetUndoCountdown(remaining, opID)
 
 User presses u  (within window)
-  ├─ cache.CancelOp(opID) → DELETE outbox row
+  ├─ cache.CancelOps(opIDs) → DELETE outbox rows
   ├─ Draft row remains (FK ON DELETE SET NULL would have handled
-  │   the inverse; here the outbox row goes away cleanly)
-  └─ App opens compose seeded from cache.GetDraft(draftID)
+  │   the inverse; here the outbox rows go away cleanly)
+  └─ App opens compose seeded from cache.LoadDraft(draftID)
 ```
 
 ### Send → no undo → dispatch
@@ -221,18 +225,19 @@ the user's intended send time on the row.
   `pending` after restart. Drainer evaluates the gate; if `now >=
   scheduled_for`, dispatches immediately. Effectively "the undo
   window is over" — matches Gmail's behavior on tab close.
-- **Discard semantics for pending rows.** `DiscardOp` today rejects
+- **Cancel semantics for pending rows.** `DiscardOp` today rejects
   non-conflict rows with `ErrNotConflict`. The undo path needs to
-  cancel a `pending` row, which doesn't fit. We add `(*Account).
-  CancelOp(ctx, opID)` — accepts only `OpPending`, deletes the row
-  in one tx, signals the drainer. Rejects `OpExecuting`/`OpDone` with
-  a typed `ErrNotPending`; `OpConflict` rows still flow through
-  `DiscardOp` (the conflict overlay's path). Status-bar `u` binding
-  un-arms when the row transitions to `executing` (via CacheEvent).
-  Race: the user presses `u` in the same tick the drainer claims;
-  `CancelOp` returns `ErrNotPending`, App shows a transient toast
-  ("Sent — couldn't undo"). Acceptable; the window is the contract,
-  not a guarantee.
+  cancel `pending` rows, which doesn't fit. We add `(*Account).
+  CancelOps(ctx, opIDs []int64) error` — accepts only when *all*
+  named rows are `OpPending`, deletes them in one tx, signals the
+  drainer. Returns `ErrNotPending` if any row has advanced;
+  `OpConflict` rows still flow through `DiscardOp`. The chrome
+  banner clears when `pendingAction` expires or when a `CacheEvent`
+  reports a `sendOpIDs` row left pending. Race: the user presses `u`
+  in the same tick the drainer claims one of the rows; `CancelOps`
+  returns `ErrNotPending`, App emits a transient `ErrorMsg{Op: "undo
+  send", Err: ...}`. Acceptable; the window is the contract, not a
+  guarantee.
 - **`undo-send-window` out of range.** `config.LoadUI` returns a
   validation error at startup with the offending value, same shape
   as other UI validation errors.
@@ -248,7 +253,7 @@ the user's intended send time on the row.
   - pickup gate respects `scheduled_for` (row not picked before t).
   - `QueueSend` with `scheduledFor`/`draftID` round-trips.
   - drainer success deletes the linked draft row in the same tx.
-  - `DiscardOp` on a row with `draft_id` leaves the draft row.
+  - `CancelOps` on rows with `draft_id` leaves the draft row.
   - co-existence of `scheduled_for` and `next_eligible_at`.
 - **Drainer test**: row with `scheduled_for = now + 100ms` is not
   picked up before that time, is after.
