@@ -11,6 +11,7 @@ Features (10–14) resume after 9x.2–9x.3 + 9y conclude.
 | 9x.2 | Harvest — chrome family (helppopover, statusbar, toast) | pending |
 | 9x.3 | Harvest — table/form family (form, list, overlay) | pending |
 | 9y | Bubble consolidation — decide if any swap work remains | pending |
+| 9z | Adopt pattern findings from 9x.1–9x.3 catalogs | pending |
 | 10 | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 11 | List-Unsubscribe (#36) | pending |
 | 12 | `.ics` viewer (#37) | pending |
