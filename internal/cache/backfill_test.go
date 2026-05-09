@@ -3,6 +3,7 @@ package cache
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -193,5 +194,44 @@ func TestBackfiller_BailsAtCap(t *testing.T) {
 	a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&stored)
 	if stored != 1 {
 		t.Errorf("at-cap bail: stored=%d, want 1 (further fetches should bail)", stored)
+	}
+}
+
+func TestIsThrottleErr(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"throttled", errors.New("[THROTTLED] too many requests"), true},
+		{"429", errors.New("HTTP 429: rate limited"), true},
+		{"random", errors.New("connection refused"), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isThrottleErr(c.err); got != c.want {
+				t.Errorf("isThrottleErr(%v) = %v, want %v", c.err, got, c.want)
+			}
+		})
+	}
+}
+
+func TestBackoffCurve(t *testing.T) {
+	cases := []struct {
+		attempts int
+		want     time.Duration
+	}{
+		{0, time.Second},
+		{1, 2 * time.Second},
+		{2, 4 * time.Second},
+		{6, 60 * time.Second},
+		{20, 60 * time.Second},
+	}
+	for _, c := range cases {
+		got := backfillBackoff(c.attempts)
+		if got != c.want {
+			t.Errorf("backfillBackoff(%d) = %v, want %v", c.attempts, got, c.want)
+		}
 	}
 }

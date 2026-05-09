@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -41,8 +42,9 @@ type Backfiller struct {
 	idleThreshold time.Duration
 	maxBatchBytes int64
 
-	lastActivity atomic.Int64 // unix nanos
-	connOnline   atomic.Bool
+	lastActivity     atomic.Int64 // unix nanos
+	connOnline       atomic.Bool
+	throttleAttempts int
 }
 
 func newBackfiller(a *Account) *Backfiller {
@@ -140,11 +142,46 @@ func (b *Backfiller) runBatch(ctx context.Context) {
 		}
 		body, err := b.acct.Backend.FetchBody(uid)
 		if err != nil {
+			if isThrottleErr(err) {
+				b.throttleAttempts++
+				select {
+				case <-ctx.Done():
+				case <-time.After(backfillBackoff(b.throttleAttempts)):
+				}
+				return
+			}
+			b.throttleAttempts = 0
 			return
 		}
+		b.throttleAttempts = 0
 		if err := b.acct.storeBody(ctx, uid, body); err != nil {
 			return
 		}
 		bytesFetched += int64(len(body))
 	}
+}
+
+// isThrottleErr matches IMAP [THROTTLED], JMAP rate-limit, and HTTP
+// 429 responses. The underlying libraries surface these as opaque
+// error strings without typed sentinels at this layer.
+func isThrottleErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "THROTTLED") ||
+		strings.Contains(s, "rate limited") ||
+		strings.Contains(s, "rateLimit") ||
+		strings.Contains(s, "429")
+}
+
+// backfillBackoff returns the sleep for the Nth consecutive throttle
+// response. 1s, 2s, 4s, ..., capped at 60s. Mirrors the outbox
+// drainer's curve.
+func backfillBackoff(attempts int) time.Duration {
+	d := time.Second << attempts
+	if d > 60*time.Second || d <= 0 {
+		return 60 * time.Second
+	}
+	return d
 }
