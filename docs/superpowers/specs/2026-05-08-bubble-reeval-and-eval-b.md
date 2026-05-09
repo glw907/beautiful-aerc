@@ -301,3 +301,25 @@ with no downstream dependency on other evaluated bubbles. The
 mirroring in any future overlay whose placement becomes semantic
 rather than fixed-coordinate; nothing in the current cascade
 qualifies.
+
+## `bubbles/help`
+
+**Does this make poplar better?** No. The two blockers that drove the original "Keep + harvest" verdict are both structural — ansix does not touch either. `FullHelpView` calls `lipgloss.JoinHorizontal` twice (building each column, then joining all columns) and `lipgloss.Width` once per column inside the library's own render path. ansix sits at poplar's call sites; it cannot correct measurements the library makes on its own strings. The ADR-0084 ban stays in force. Beyond the width blocker, the library has no concept of a "wired" row: `bubbles/help` suppresses rows by disabling a `key.Binding`, but poplar's popover renders unwired rows dim throughout — a positive affordance advertising planned bindings that has no analogue in the upstream model. Both gaps would require a fork to close.
+
+**Feature parity:** `bubbles/help.Model` renders two modes — `ShortHelpView` (one line, truncated to width) and `FullHelpView` (flat columns, one `[]key.Binding` slice per column). Poplar's popover renders three named groups per row in a two-row grid, then a standalone Go To grid in a 3×2 tile, then a bottom hint line outside any group. `KeyMap` (`ShortHelp() []key.Binding`, `FullHelp() [][]key.Binding`) provides no named group titles. The layout contract is fundamentally different: a list of columns vs a named-group grid with a hint line. Mapping poplar's `bindingGroup` slices onto `[][]key.Binding` would produce an un-named column layout and lose the bottom hint row entirely.
+
+**Customization seams:** `Styles` exposes six fields (`ShortKey`, `ShortDesc`, `ShortSeparator`, `FullKey`, `FullDesc`, `FullSeparator`, `Ellipsis`). These can be injected. No hook for per-row conditional dimming; no title rendering seam. Key bindings are `key.Binding` values via the `KeyMap` interface — compatible with the existing `key.Binding` declarations in `helppopover`, though poplar's `bindingRow` carries `wired bool` alongside the key string, not a `key.Binding`.
+
+**Theming integration:** Full style injection via the `Styles` struct, same pattern as other Charm bubbles. Usable as-is with a `NewStyles(*theme.CompiledTheme)` constructor, for the styles it exposes.
+
+**Maintenance signal:** v1.0.0 shipped 2026-02-10; v2.0.0 shipped 2026-02-24; v2.1.0 shipped 2026-03-26 — three releases in twelve months, active cadence. Poplar pins v1.0.0. The v2 line exists but the upgrade is not required; v1 is stable and the help API is unlikely to break.
+
+**Code delta estimate:** `helppopover/model.go` is 380 LOC; `helppopover/styles.go` is 25 LOC. Adopting `bubbles/help` would not replace most of that: the `Box` + `Position` + cache machinery, the `bindingGroup` table, `joinColumnsRow`, `renderGotoGrid`, and the bottom hint line are all poplar-domain logic with no upstream analogue. The net replacement is effectively zero — any integration would wrap `bubbles/help.ShortHelpView` in the hint bar only, a use case poplar does not currently have.
+
+**License:** MIT (charmbracelet/bubbles). Clear.
+
+**Verdict:** Keep + harvest
+
+**Rationale (one line):** Both blockers survive ansix — internal `JoinHorizontal` in `FullHelpView` is unreachable from poplar's call sites, and the `wired` dim affordance has no upstream analogue — leaving poplar's hand-rolled layout as the only shape that fits the grid + hint contract.
+
+**Interacts with:** Fork-vs-accept (Task 11). `bubbles/help` is a (b)-list candidate — its blocker is the library's internal `lipgloss.Width` + `JoinHorizontal`, not poplar's own width math. It belongs on the fork-vs-accept list alongside `bubble-table`. If the fork option is accepted, `FullHelpView`'s column layout becomes width-safe, but the named-group-grid contract gap remains; the verdict would likely soften to "Adopt-with-fork for hint bar only, keep grid hand-rolled."
