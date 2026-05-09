@@ -652,7 +652,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		d := msg.Draft
 		acct := m.acct.Cache()
-		cmds := []tea.Cmd{composeSendCmd(acct, sent, d, m.identities, m.undoSendWindow)}
+		cmds := []tea.Cmd{composeSendCmd(acct, sent, d, m.identities, m.undoSendWindow, msg.ScheduledFor)}
 		if m.compose != nil && m.compose.DraftID() != "" {
 			draftID := m.compose.DraftID()
 			prevUID := mail.UID(m.compose.PrevServerUID())
@@ -690,7 +690,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case uicompose.SeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 		m.compose.SetSize(w, h)
 		m.compose.SetIdentities(m.identities)
 		m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -699,7 +699,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case RestoreFromDraftMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 		m.compose.SetSize(w, h)
 		m.compose.SetIdentities(m.identities)
 		m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -710,7 +710,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Drafts-folder Enter: wire cache/target, then open compose.
 		w, h := m.rightPaneSize()
 		row := msg.row
-		c := uicompose.Open(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses)
+		c := uicompose.Open(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses)
 		c.SetSize(w, h)
 		c.SetIdentities(m.identities)
 		c.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -833,7 +833,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
-			m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+			m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 			m.compose.SetSize(w, h)
 			m.compose.SetIdentities(m.identities)
 			m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -1038,6 +1038,13 @@ func (m App) View() string {
 
 	if m.compose != nil && m.compose.AttachPickerIsOpen() {
 		box := m.compose.AttachPickerView()
+		x, y := uicore.CenterOverlay(box, m.width, m.height)
+		dimmed := uicore.DimANSI(frame)
+		return uicore.PlaceOverlay(x, y, box, dimmed)
+	}
+
+	if m.compose != nil && m.compose.SchedulePickerIsOpen() {
+		box := m.compose.SchedulePickerView()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
 		return uicore.PlaceOverlay(x, y, box, dimmed)

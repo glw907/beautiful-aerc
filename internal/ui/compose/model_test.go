@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/contacts"
 )
 
@@ -41,7 +42,7 @@ func (f *fakeCache) LoadDraft(_ context.Context, _ string) ([]byte, error) {
 
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
-	c := New(Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life", nil)
+	c := New(theme.OneDark, Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life", nil)
 	c.SetSize(80, 24)
 	return c
 }
@@ -296,7 +297,7 @@ func TestModel_AcceptsSuggestionWithTab(t *testing.T) {
 	suggest := staticSuggest([]contacts.Suggestion{
 		{Name: "Alice Adams", Email: "alice@example.com"},
 	})
-	c := New(Styles{}, "geoff@907.life", suggest)
+	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
 	c.SetSize(80, 24)
 	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("al")})
 	if c.suggest.Empty() {
@@ -326,7 +327,7 @@ func TestModel_DropdownPrefixUsesTrailingFragment(t *testing.T) {
 	suggest := staticSuggest([]contacts.Suggestion{
 		{Name: "Bob", Email: "bob@example.com"},
 	})
-	c := New(Styles{}, "geoff@907.life", suggest)
+	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
 	c.SetSize(80, 24)
 	c.to.SetValue("Alice <alice@example.com>, ")
 	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("bo")})
@@ -345,7 +346,7 @@ func TestModel_View_WidthHonoredWhileDropdownOpen(t *testing.T) {
 		{Name: "Alice Adams", Email: "alice@example.com", Org: "Acme"},
 		{Name: "Alex Brown", Email: "alex@example.com"},
 	})
-	c := New(Styles{}, "geoff@907.life", suggest)
+	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
 	c.SetSize(80, 24)
 	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("al")})
 	if c.suggest.Empty() {
@@ -369,7 +370,7 @@ func TestModel_DraftIDIsSet(t *testing.T) {
 func TestModel_OpenPreservesID(t *testing.T) {
 	styles := Styles{ErrorBanner: lipgloss.NewStyle()}
 	d := mailcompose.Draft{Subject: "saved", Body: "body text"}
-	c := Open(styles, "geoff@907.life", "fixed-id", d, nil)
+	c := Open(theme.OneDark, styles, "geoff@907.life", "fixed-id", d, nil)
 	if c.DraftID() != "fixed-id" {
 		t.Fatalf("Open draftID = %q, want fixed-id", c.DraftID())
 	}

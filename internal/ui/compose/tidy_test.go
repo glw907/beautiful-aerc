@@ -10,7 +10,7 @@ import (
 
 func newTestComposeModel() *Model {
 	st := NewStyles(theme.OneDark)
-	return New(st, "test@example.com", func(string) []contacts.Suggestion { return nil })
+	return New(theme.OneDark, st, "test@example.com", func(string) []contacts.Suggestion { return nil })
 }
 
 func TestHandleTidyKey_Disabled(t *testing.T) {

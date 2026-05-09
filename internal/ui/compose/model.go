@@ -15,6 +15,7 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/humanize"
+	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/tidy"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/google/uuid"
@@ -32,6 +33,7 @@ type CacheStore interface {
 // tea.Msg values that App translates into cache ops.
 type Model struct {
 	styles Styles
+	theme  *theme.CompiledTheme
 
 	from string
 
@@ -72,6 +74,9 @@ type Model struct {
 	attachments   []string
 	attachCursor  int
 	attachLastDir string
+
+	schedulePicker *SchedulePicker
+	scheduledFor   time.Time // zero = send immediately
 }
 
 type autosaveTickMsg struct{}
@@ -99,7 +104,7 @@ const labelWidth = 9
 // adds one more when set.
 const chromeRows = 6
 
-func newModel(styles Styles, self string, suggest SuggestFn) *Model {
+func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest SuggestFn) *Model {
 	mk := func() textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
@@ -108,6 +113,7 @@ func newModel(styles Styles, self string, suggest SuggestFn) *Model {
 	}
 	c := &Model{
 		styles:  styles,
+		theme:   t,
 		from:    self,
 		to:      mk(),
 		cc:      mk(),
@@ -124,16 +130,16 @@ func newModel(styles Styles, self string, suggest SuggestFn) *Model {
 	return c
 }
 
-func New(styles Styles, self string, suggest SuggestFn) *Model {
-	c := newModel(styles, self, suggest)
+func New(t *theme.CompiledTheme, styles Styles, self string, suggest SuggestFn) *Model {
+	c := newModel(t, styles, self, suggest)
 	c.draftID = uuid.NewString()
 	return c
 }
 
 // Open returns a Model wired to an existing draftID, pre-seeded with d.
 // Both dirty flags start clear because the cache and server images match.
-func Open(styles Styles, self string, draftID string, d mailcompose.Draft, suggest SuggestFn) *Model {
-	c := newModel(styles, self, suggest)
+func Open(t *theme.CompiledTheme, styles Styles, self string, draftID string, d mailcompose.Draft, suggest SuggestFn) *Model {
+	c := newModel(t, styles, self, suggest)
 	c.draftID = draftID
 	c.Seed(d)
 	return c
@@ -348,10 +354,12 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// SendMsg fires on Ctrl+X with a valid draft. App assembles MIME and
-// queues the outbox op.
+// SendMsg fires on Ctrl+X or after a ScheduleAcceptedMsg. ScheduledFor
+// is zero for immediate send, or the user-chosen dispatch time.
+// App assembles MIME and queues the outbox op.
 type SendMsg struct {
-	Draft mailcompose.Draft
+	Draft        mailcompose.Draft
+	ScheduledFor time.Time // zero = send immediately
 }
 
 // CancelMsg fires on Ctrl+C. App opens a discard ConfirmModal when
@@ -362,6 +370,26 @@ type CancelMsg struct {
 
 func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case ScheduleAcceptedMsg:
+		c.scheduledFor = msg.When
+		c.schedulePicker = nil
+		d, err := c.Draft()
+		if err != nil {
+			return c, nil
+		}
+		when := msg.When
+		return c, func() tea.Msg { return SendMsg{Draft: d, ScheduledFor: when} }
+
+	case ScheduleCancelledMsg:
+		c.schedulePicker = nil
+		return c, nil
+
+	case OpenScheduleMsg:
+		p := NewSchedulePicker(c.theme, time.Now(), msg.Initial)
+		p.SetSize(c.width, c.height)
+		c.schedulePicker = &p
+		return c, nil
+
 	case AttachAcceptedMsg:
 		existing := make(map[string]bool, len(c.attachments))
 		for _, p := range c.attachments {
@@ -436,6 +464,12 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				return c, nil
 			}
 		}
+		if c.schedulePicker != nil {
+			m, cmd := c.schedulePicker.Update(msg)
+			p := m.(SchedulePicker)
+			c.schedulePicker = &p
+			return c, cmd
+		}
 		if c.attach.IsOpen() {
 			var cmd tea.Cmd
 			c.attach, cmd = c.attach.Update(msg)
@@ -468,6 +502,11 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				return c, nil
 			}
 			return c, func() tea.Msg { return SendMsg{Draft: d} }
+		case tea.KeyCtrlL:
+			p := NewSchedulePicker(c.theme, time.Now(), "")
+			p.SetSize(c.width, c.height)
+			c.schedulePicker = &p
+			return c, nil
 		case tea.KeyCtrlC:
 			dirty := c.IsDirty()
 			return c, func() tea.Msg { return CancelMsg{Dirty: dirty} }
@@ -747,10 +786,17 @@ func (c *Model) HasSignatures() bool {
 // IsFocusFrom reports whether the From field currently has focus.
 func (c *Model) IsFocusFrom() bool { return c.focus == focusFrom }
 
-func (c *Model) IsFocusBody() bool        { return c.focus == focusBody }
-func (c *Model) TidyEnabled() bool        { return c.tidyEnabled }
-func (c *Model) AttachPickerIsOpen() bool { return c.attach.IsOpen() }
-func (c *Model) AttachPickerView() string { return c.attach.View() }
+func (c *Model) IsFocusBody() bool          { return c.focus == focusBody }
+func (c *Model) TidyEnabled() bool          { return c.tidyEnabled }
+func (c *Model) AttachPickerIsOpen() bool   { return c.attach.IsOpen() }
+func (c *Model) AttachPickerView() string   { return c.attach.View() }
+func (c *Model) SchedulePickerIsOpen() bool { return c.schedulePicker != nil }
+func (c *Model) SchedulePickerView() string {
+	if c.schedulePicker == nil {
+		return ""
+	}
+	return c.schedulePicker.View()
+}
 
 func (c *Model) SetSignature(idx int) { c.signature = idx }
 

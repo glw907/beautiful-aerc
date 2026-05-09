@@ -1,8 +1,16 @@
 package compose
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
+)
+
+// Schedule is the compose key for the schedule-send picker. ADR-0076 exempts
+// text-entry surfaces from the modifier-free rule.
+var Schedule = key.NewBinding(
+	key.WithKeys("ctrl+l"),
+	key.WithHelp("^L", "schedule send"),
 )
 
 // IdentitiesFromConfig converts a config identity slice into the compose
