@@ -463,3 +463,25 @@ qualifies.
 **Rationale (one line):** The three-group separator structure is not expressible via the delegate model without a sentinel-item workaround, the chrome budget is zero, and no meaningful code is removed — the delegate pattern itself is the only harvest, already mirrored in the picker eval (Task 7).
 
 **Interacts with:** Tasks 7 and 8 (same library, different consumers). The picker and dropdown evals reached Keep verdicts for different reasons (chrome conflict with ModalShell; chromeless-splice contract); the sidebar adds a third: structural group separators not addressable via the delegate. None of the three verdicts depends on the others.
+
+## knipferrc/teacup statusbar
+
+**Does this make poplar better?** No. `teacup/statusbar` is a four-column component with per-column color injection. Poplar's status bar is a domain-specific composite with six distinct segments (fill rule, ┴ junction at sidebar divider, count/scroll-pct toggle, outbox depth with glyph-encoding, connection state with shape+color for colorblind accessibility, and the `─╯` terminal). None of these map to teacup's four-column model without contorting the caller.
+
+**Feature parity:** teacup renders four named text slots (FirstColumn … FourthColumn) with independent `ColorConfig` pairs. It hardcodes `muesli/reflow/truncate` for the first and second columns at a fixed 30-char cap on the first. Poplar's status bar has no fixed truncation limit — the fill rule consumes the remainder. The `View(width, dividerCol)` signature lets the App place the ┴ junction precisely at the sidebar edge; teacup's `Update` sets size but there is no divider-column concept.
+
+**Customization seams:** `SetContent(first, second, third, fourth string)` and `SetColors(...)` are the only injection points. The segment logic in poplar (`renderOutboxSegment`, the shape+text connection indicator, `buildFill`) is domain behavior, not formatting — no string passed to `SetContent` covers the conditional glyph selection (`⇅` vs `⚠`) or the colorblind shape encoding (●/◐/○). Mapping poplar's state onto four slots would push domain logic into the caller and produce a component thinner than the hand-roll.
+
+**Theming integration:** `ColorConfig{Foreground, Background lipgloss.AdaptiveColor}` is compatible with lipgloss. Not a blocker, but the gain is zero — the existing `Styles.StatusConnected` / `StatusOffline` / `StatusReconnect` already carry the per-segment styles as `lipgloss.Style` values in `internal/ui/styles.go`.
+
+**Maintenance signal:** The module moved from `knipferrc/teacup` to `mistakenelf/teacup` (a rename, not a fork). 267 stars, last pushed March 2024, two open issues, not archived. Low activity but not dead. The module's `go.mod` targets `bubbletea v0.24.2` and `lipgloss v0.7.1`; poplar is on current releases. A dependency upgrade would follow, not a blocker.
+
+**Code delta estimate:** `status_bar.go` is 175 LOC. Teacup's `statusbar.go` is 120 LOC. Adopting it gains nothing: the domain segments (`renderOutboxSegment`, `buildFill`, `ConnectionState` type, `StatusMode` toggle) account for roughly 100 LOC and have no teacup analogue. The only candidate for replacement is the final assembly join — currently a string concatenation — which teacup would replace with `lipgloss.JoinHorizontal`. That join is forbidden under ADR-0084 when `spuaCellWidth != 1`; poplar's approach of pre-measuring each segment with `lipgloss.Width` and filling the remainder via `buildFill` is the correct SPUA-safe pattern. Net: no reduction, an added constraint violation.
+
+**License:** MIT (`mistakenelf/teacup`). Clear.
+
+**Verdict:** Keep
+
+**Rationale (one line):** The four-slot model cannot express the domain segments (glyph-conditional outbox, shape+color connection encoding, ┴ junction, fill rule), and the assembly join teacup would supply is the pattern ADR-0084 forbids.
+
+**Interacts with:** ADR-0084 (SPUA-safe join invariant). The `lipgloss.JoinHorizontal` call in teacup's `View()` is the same pattern ruled out for SPUA-bearing content. This verdict is independent of all other evaluated libraries.
