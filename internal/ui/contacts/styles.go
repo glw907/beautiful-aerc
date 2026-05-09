@@ -17,7 +17,6 @@ type Styles struct {
 	GroupLabel lipgloss.Style // T9 group letter tick (e.g. "A"). AccentPrimary.
 	GroupCount lipgloss.Style // contact count per group. FgDim.
 	LetterTick lipgloss.Style // per-letter cursor tick within a T9 group. AccentPrimary.
-	Border     lipgloss.Style // form input border (blur state). FgDim.
 	FieldFocus lipgloss.Style // form field border (focus state). AccentPrimary.
 	FieldBlur  lipgloss.Style // form field border (blur state). FgDim.
 	KindOn     lipgloss.Style // kind toggle selected state. AccentPrimary bold.
@@ -37,7 +36,6 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		GroupLabel: lipgloss.NewStyle().Foreground(t.AccentPrimary),
 		GroupCount: lipgloss.NewStyle().Foreground(t.FgDim),
 		LetterTick: lipgloss.NewStyle().Foreground(t.AccentPrimary),
-		Border:     lipgloss.NewStyle().Foreground(t.FgDim),
 		FieldFocus: lipgloss.NewStyle().Foreground(t.AccentPrimary),
 		FieldBlur:  lipgloss.NewStyle().Foreground(t.FgDim),
 		KindOn:     lipgloss.NewStyle().Foreground(t.AccentPrimary).Bold(true),
