@@ -247,20 +247,40 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 	}
 }
 
-// composeSendCmd assembles MIME and queues the outbox op via
-// cache.Account.QueueOutbound. Emits uicompose.SentMsg on success,
-// ErrorMsg on any failure.
-func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids []compose.Identity) tea.Cmd {
+// composeSendCmd assembles MIME, persists a drafts row, and queues the
+// outbox op via cache.Account.QueueOutbound. Emits uicompose.SentMsg on
+// success, ErrorMsg on any failure.
+func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids []compose.Identity, undoWindow time.Duration) tea.Cmd {
 	return func() tea.Msg {
 		mime, err := compose.AssembleMIME(d, ids, time.Now())
 		if err != nil {
 			return ErrorMsg{Op: "assemble MIME", Err: err}
 		}
-		env := envelopeFromDraft(d)
-		if _, err := acct.QueueOutbound(context.Background(), sentFolder, env, mime, 0, ""); err != nil {
+
+		draftID := uuid.NewString()
+		if err := acct.CreateDraft(context.Background(), draftID, mime); err != nil {
+			return ErrorMsg{Op: "persist draft", Err: err}
+		}
+
+		var scheduledFor time.Time
+		var scheduledNanos int64
+		if undoWindow > 0 {
+			scheduledFor = time.Now().Add(undoWindow)
+			scheduledNanos = scheduledFor.UnixNano()
+		}
+
+		opIDs, err := acct.QueueOutbound(context.Background(), sentFolder, envelopeFromDraft(d), mime, scheduledNanos, draftID)
+		if err != nil {
+			_ = acct.DeleteDraft(context.Background(), draftID)
 			return ErrorMsg{Op: "queue outbound", Err: err}
 		}
-		return uicompose.SentMsg{}
+
+		return uicompose.SentMsg{
+			OpIDs:        opIDs,
+			ScheduledFor: scheduledFor,
+			DraftID:      draftID,
+			Draft:        d,
+		}
 	}
 }
 

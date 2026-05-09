@@ -62,8 +62,9 @@ type App struct {
 	offlineHinted   bool
 	lastErr         ErrorMsg
 	toast           pendingAction
-	undoSeconds     int
-	now             func() time.Time // test seam, defaults to time.Now
+	undoSeconds    int
+	undoSendWindow time.Duration
+	now            func() time.Time // test seam, defaults to time.Now
 	opener          URLOpener        // test seam, defaults to xdgOpenURL
 
 	tidyEnabled bool
@@ -120,7 +121,8 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		confirm:         NewConfirmModal(styles),
 		outbox:          NewOutboxOverlay(styles),
 		conflict:        NewConflictOverlay(styles),
-		undoSeconds:     uiCfg.UndoSeconds,
+		undoSeconds:    uiCfg.UndoSeconds,
+		undoSendWindow: uiCfg.UndoSendWindow,
 		now:             time.Now,
 		opener:          xdgOpenURL,
 		tidyEnabled:     uiCfg.Tidy.Enabled,
@@ -643,7 +645,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		}
 		d := msg.Draft
 		acct := m.acct.Cache()
-		cmds := []tea.Cmd{composeSendCmd(acct, sent, d, m.identities)}
+		cmds := []tea.Cmd{composeSendCmd(acct, sent, d, m.identities, m.undoSendWindow)}
 		if m.compose != nil && m.compose.DraftID() != "" {
 			draftID := m.compose.DraftID()
 			prevUID := mail.UID(m.compose.PrevServerUID())
