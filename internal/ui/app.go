@@ -639,6 +639,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			m.statusBar = m.statusBar.SetConnectionState(cs)
 			m.acct.NotifyConnState(cs == Connected)
+			done, total, _ := m.acct.Cache().BackfillProgress()
+			m.statusBar = m.statusBar.SetBackfill(done, total, cs != Connected, false)
 		}
 		// Non-ConnState Update types delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
@@ -661,7 +663,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m.acct = acct
 		cmds = append(cmds, fcmd)
 		done, total, _ := m.acct.Cache().BackfillProgress()
-		m.statusBar = m.statusBar.SetBackfill(done, total, false, false)
+		paused := m.statusBar.ConnectionState() != Connected
+		m.statusBar = m.statusBar.SetBackfill(done, total, paused, false)
 		return m, tea.Batch(cmds...)
 
 	case outboxScheduledMsg:

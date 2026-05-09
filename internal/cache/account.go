@@ -203,7 +203,7 @@ func (a *Account) BackfillProgress() (done, total int, err error) {
 	if err = a.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&total); err != nil {
 		return 0, 0, err
 	}
-	if err = a.db.QueryRow(`SELECT COUNT(*) FROM bodies WHERE bytes IS NOT NULL`).Scan(&done); err != nil {
+	if err = a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&done); err != nil {
 		return 0, 0, err
 	}
 	return done, total, nil
