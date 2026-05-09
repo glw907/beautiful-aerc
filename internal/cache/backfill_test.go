@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -96,5 +97,53 @@ func TestBackfiller_OneShot(t *testing.T) {
 	}
 	if string(got) != "hello" {
 		t.Errorf("body = %q, want %q", got, "hello")
+	}
+}
+
+func TestBackfiller_RunFillsThenIdles(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	a.Backend = &fakeBackendWithBody{body: []byte("body")}
+
+	for i := 0; i < 3; i++ {
+		seedMessage(t, a, mail.UID(fmt.Sprintf("u-%d", i)), time.Now().Add(-time.Duration(i)*time.Hour))
+	}
+
+	bf := newBackfiller(a)
+	bf.rate = 5 * time.Millisecond
+	bf.idleThreshold = 0
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	bf.Run(ctx)
+
+	var n int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&n); err != nil {
+		t.Fatalf("count bodies: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("bodies stored = %d, want 3", n)
+	}
+}
+
+func TestBackfiller_RespectsActivityGate(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+	a.Backend = &fakeBackendWithBody{body: []byte("body")}
+	seedMessage(t, a, mail.UID("u-1"), time.Now())
+
+	bf := newBackfiller(a)
+	bf.rate = 5 * time.Millisecond
+	bf.idleThreshold = 100 * time.Millisecond
+	bf.NotifyActivity()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	bf.Run(ctx)
+
+	var n int
+	a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&n)
+	if n != 0 {
+		t.Errorf("active gate failed: bodies = %d, want 0", n)
 	}
 }

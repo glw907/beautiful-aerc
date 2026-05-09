@@ -73,8 +73,59 @@ func (b *Backfiller) fetchOne(ctx context.Context) error {
 	return b.acct.storeBody(ctx, uid, body)
 }
 
-// Run drives the backfill loop until ctx is canceled.
-// TODO(backfill): Task 4 replaces this stub with the rate-limited fetch loop.
+// NotifyActivity records a user-input event. Run suspends fetches
+// until idleThreshold has elapsed since the last call.
+func (b *Backfiller) NotifyActivity() {
+	b.lastActivity.Store(time.Now().UnixNano())
+}
+
+func (b *Backfiller) idle() bool {
+	if b.idleThreshold == 0 {
+		return true
+	}
+	last := b.lastActivity.Load()
+	if last == 0 {
+		return true
+	}
+	return time.Since(time.Unix(0, last)) >= b.idleThreshold
+}
+
+// Run drives the backfill loop until ctx is canceled. Each tick
+// checks gates (idle, connection), then fetches up to maxBatchBytes
+// worth of bodies before sleeping rate.
 func (b *Backfiller) Run(ctx context.Context) {
-	<-ctx.Done()
+	t := time.NewTicker(b.rate)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if !b.connOnline.Load() || !b.idle() {
+			continue
+		}
+		b.runBatch(ctx)
+	}
+}
+
+func (b *Backfiller) runBatch(ctx context.Context) {
+	var bytesFetched int64
+	for bytesFetched < b.maxBatchBytes {
+		if !b.idle() || !b.connOnline.Load() {
+			return
+		}
+		uid, ok, err := b.acct.nextUnfetchedUID(ctx)
+		if err != nil || !ok {
+			return
+		}
+		body, err := b.acct.Backend.FetchBody(uid)
+		if err != nil {
+			return
+		}
+		if err := b.acct.storeBody(ctx, uid, body); err != nil {
+			return
+		}
+		bytesFetched += int64(len(body))
+	}
 }
