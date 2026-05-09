@@ -7,16 +7,16 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/mail"
-	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func init() {
 	// Fixture expectations were written with uicore.FancyIcons (SPUA-A
-	// glyphs). spuaCellWidth must be 2 so uicore.DisplayCells measures
+	// glyphs). spuaCellWidth must be 2 so ansix.Width measures
 	// them correctly in tests run independently of the App-level init.
-	uicore.SetSPUACellWidth(2)
+	ansix.SetSPUACellWidth(2)
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)

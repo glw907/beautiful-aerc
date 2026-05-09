@@ -1,8 +1,8 @@
-package uicore
+package ansix
 
 import "testing"
 
-func TestDisplayCells(t *testing.T) {
+func TestWidth(t *testing.T) {
 	// SPUA-A test glyph: U+F01EE.
 	const glyph = "\U000F01EE"
 
@@ -25,16 +25,16 @@ func TestDisplayCells(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			SetSPUACellWidth(tt.cellWidth)
-			defer SetSPUACellWidth(1) // restore default for other tests
-			got := DisplayCells(tt.in)
+			defer SetSPUACellWidth(1)
+			got := Width(tt.in)
 			if got != tt.want {
-				t.Errorf("DisplayCells(%q) @ w=%d = %d, want %d", tt.in, tt.cellWidth, got, tt.want)
+				t.Errorf("Width(%q) @ w=%d = %d, want %d", tt.in, tt.cellWidth, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestDisplayTruncateEllipsis(t *testing.T) {
+func TestTruncateEllipsis(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -51,14 +51,14 @@ func TestDisplayTruncateEllipsis(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := DisplayTruncateEllipsis(tc.in, tc.n)
+			got := TruncateEllipsis(tc.in, tc.n)
 			if got != tc.want {
-				t.Errorf("DisplayTruncateEllipsis(%q, %d) = %q, want %q",
+				t.Errorf("TruncateEllipsis(%q, %d) = %q, want %q",
 					tc.in, tc.n, got, tc.want)
 			}
-			if DisplayCells(got) > tc.n && tc.n > 0 {
-				t.Errorf("DisplayTruncateEllipsis(%q, %d): result %q has %d cells, exceeds budget %d",
-					tc.in, tc.n, got, DisplayCells(got), tc.n)
+			if Width(got) > tc.n && tc.n > 0 {
+				t.Errorf("TruncateEllipsis(%q, %d): result %q has %d cells, exceeds budget %d",
+					tc.in, tc.n, got, Width(got), tc.n)
 			}
 		})
 	}
@@ -69,7 +69,7 @@ func TestSetSPUACellWidthRejectsBadValue(t *testing.T) {
 		if r := recover(); r == nil {
 			t.Errorf("SetSPUACellWidth(3) should panic")
 		}
-		SetSPUACellWidth(1) // restore
+		SetSPUACellWidth(1)
 	}()
 	SetSPUACellWidth(3)
 }

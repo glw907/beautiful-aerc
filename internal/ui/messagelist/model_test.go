@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -142,20 +143,20 @@ func TestMessageList(t *testing.T) {
 		const w = 90
 		ml := New(styles, msgs, w, 12, uicore.FancyIcons)
 		for _, line := range strings.Split(ml.View(), "\n") {
-			if got := uicore.DisplayCells(line); got != w {
+			if got := ansix.Width(line); got != w {
 				t.Errorf("row width = %d, want %d: %q", got, w, stripANSI(line))
 			}
 		}
 	})
 
-	t.Run("read and unread rows have identical uicore.DisplayCells width at multiple widths", func(t *testing.T) {
+	t.Run("read and unread rows have identical ansix.Width width at multiple widths", func(t *testing.T) {
 		// SPUA-A flag glyphs (unread/flagged/answered) render as 2 terminal
-		// cells. uicore.DisplayCells is the authoritative counter. Both read and unread
+		// cells. ansix.Width is the authoritative counter. Both read and unread
 		// rows must reach exactly w display cells so the right border lands at
 		// a fixed column regardless of flag state.
 		//
 		// Parameterized across three icon/width modes to lock in the invariant
-		// that uicore.DisplayCells(row) == terminal width regardless of uicore.SetSPUACellWidth.
+		// that ansix.Width(row) == terminal width regardless of ansix.SetSPUACellWidth.
 		for _, mode := range []struct {
 			name    string
 			width   int
@@ -166,8 +167,8 @@ func TestMessageList(t *testing.T) {
 			{"fancy_w2", 2, uicore.FancyIcons},
 		} {
 			t.Run(mode.name, func(t *testing.T) {
-				uicore.SetSPUACellWidth(mode.width)
-				defer uicore.SetSPUACellWidth(2) // restore the package init() default
+				ansix.SetSPUACellWidth(mode.width)
+				defer ansix.SetSPUACellWidth(2) // restore the package init() default
 
 				for _, w := range []int{80, 100, 120, 160} {
 					readMsg := mail.MessageInfo{
@@ -183,13 +184,13 @@ func TestMessageList(t *testing.T) {
 					if len(lines) < 2 {
 						t.Fatalf("mode=%s w=%d: expected at least 2 rows, got %d", mode.name, w, len(lines))
 					}
-					readW := uicore.DisplayCells(lines[0])
-					unreadW := uicore.DisplayCells(lines[1])
+					readW := ansix.Width(lines[0])
+					unreadW := ansix.Width(lines[1])
 					if readW != w {
-						t.Errorf("mode=%s w=%d: read row uicore.DisplayCells=%d, want %d", mode.name, w, readW, w)
+						t.Errorf("mode=%s w=%d: read row ansix.Width=%d, want %d", mode.name, w, readW, w)
 					}
 					if unreadW != w {
-						t.Errorf("mode=%s w=%d: unread row uicore.DisplayCells=%d, want %d", mode.name, w, unreadW, w)
+						t.Errorf("mode=%s w=%d: unread row ansix.Width=%d, want %d", mode.name, w, unreadW, w)
 					}
 				}
 			})
@@ -300,16 +301,16 @@ func TestRenderFlagCell(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uicore.SetSPUACellWidth(tt.spuaWidth)
-			defer uicore.SetSPUACellWidth(2)
+			ansix.SetSPUACellWidth(tt.spuaWidth)
+			defer ansix.SetSPUACellWidth(2)
 
 			ml := New(styles, nil, 90, 10, tt.iconSet)
 			msg := mail.MessageInfo{Flags: tt.flags}
 			bg := styles.MsgListBg
 			rendered := ml.renderFlagCell(msg, tt.isUnread, bg)
-			got := uicore.DisplayCells(rendered)
+			got := ansix.Width(rendered)
 			if got != mlFlagWidth {
-				t.Errorf("uicore.DisplayCells(renderFlagCell(%s)) = %d, want %d (rendered=%q)",
+				t.Errorf("ansix.Width(renderFlagCell(%s)) = %d, want %d (rendered=%q)",
 					tt.name, got, mlFlagWidth, stripANSI(rendered))
 			}
 		})
@@ -1166,8 +1167,8 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 	line := stripANSI(strings.Split(ml.View(), "\n")[0])
 	runes := []rune(line)
 
-	if got := uicore.DisplayCells(strings.Split(ml.View(), "\n")[0]); got != w {
-		t.Fatalf("row uicore.DisplayCells = %d, want %d: %q", got, w, line)
+	if got := ansix.Width(strings.Split(ml.View(), "\n")[0]); got != w {
+		t.Fatalf("row ansix.Width = %d, want %d: %q", got, w, line)
 	}
 
 	// Sender block ends at rune index 28 (0-indexed):

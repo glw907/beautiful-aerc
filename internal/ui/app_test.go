@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
@@ -26,8 +27,8 @@ import (
 
 func init() {
 	// Fixture expectations were written with uicore.FancyIcons (SPUA-A glyphs).
-	// spuaCellWidth must be 2 so uicore.DisplayCells measures them correctly.
-	uicore.SetSPUACellWidth(2)
+	// spuaCellWidth must be 2 so ansix.Width measures them correctly.
+	ansix.SetSPUACellWidth(2)
 }
 
 // stripANSI removes ANSI escape sequences to get plain text for positional checks.
@@ -630,11 +631,11 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 	// The right border │ must land at the same terminal column for every
 	// content row, regardless of whether the row contains SPUA-A Nerd Font
 	// glyphs (sidebar folder icons, message flag icons). App.View uses
-	// uicore.DisplayCells (not lipgloss.Width) so each row is padded correctly
+	// ansix.Width (not lipgloss.Width) so each row is padded correctly
 	// before the border is appended.
 	//
 	// Parameterized across three icon/width modes to lock in the invariant
-	// that uicore.DisplayCells(row) == terminal width regardless of uicore.SetSPUACellWidth.
+	// that ansix.Width(row) == terminal width regardless of ansix.SetSPUACellWidth.
 	for _, mode := range []struct {
 		name    string
 		width   int
@@ -645,8 +646,8 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 		{"fancy_w2", 2, uicore.FancyIcons},
 	} {
 		t.Run(mode.name, func(t *testing.T) {
-			uicore.SetSPUACellWidth(mode.width)
-			defer uicore.SetSPUACellWidth(2) // restore the package init() default
+			ansix.SetSPUACellWidth(mode.width)
+			defer ansix.SetSPUACellWidth(2) // restore the package init() default
 
 			borderRune := '│'
 			for _, w := range []int{80, 100, 120, 160} {
@@ -661,9 +662,9 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 					if !strings.ContainsRune(plain, borderRune) {
 						continue
 					}
-					dw := uicore.DisplayCells(line)
+					dw := ansix.Width(line)
 					if dw != w {
-						t.Errorf("mode=%s w=%d line %d: uicore.DisplayCells=%d, want %d: %q",
+						t.Errorf("mode=%s w=%d line %d: ansix.Width=%d, want %d: %q",
 							mode.name, w, lineIdx, dw, w, plain)
 					}
 				}

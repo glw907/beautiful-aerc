@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -361,8 +362,8 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 		size = humanize.Bytes(e.size)
 	}
 	body := fmt.Sprintf("%s%s %s", mark, icon, e.name)
-	rendered := uicore.DisplayPadOrTruncate(body, contentW-len(size)-1) + " " + p.styles.PickerDim.Render(size)
-	rendered = uicore.DisplayPadOrTruncate(rendered, contentW)
+	rendered := ansix.PadOrTruncate(body, contentW-len(size)-1) + " " + p.styles.PickerDim.Render(size)
+	rendered = ansix.PadOrTruncate(rendered, contentW)
 	if idx == p.cursor {
 		return p.styles.PickerCursor.Render(rendered)
 	}
@@ -385,10 +386,10 @@ func (p AttachPicker) formatHintRow(contentW int) string {
 
 func (p AttachPicker) formatPathRow(contentW int) string {
 	path := p.dir
-	if uicore.DisplayCells(path) > contentW {
+	if ansix.Width(path) > contentW {
 		// truncate from the left, prefix with "…/"
 		runes := []rune(path)
-		for uicore.DisplayCells("…/"+string(runes)) > contentW && len(runes) > 1 {
+		for ansix.Width("…/"+string(runes)) > contentW && len(runes) > 1 {
 			runes = runes[1:]
 		}
 		path = "…/" + string(runes)

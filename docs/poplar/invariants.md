@@ -124,10 +124,10 @@ the ADR(s) that justify them.
 - Idiomatic bubbletea is the default. UI uses `bubbles` components
   as primary analogues; deviations are ADR'd. `View()` self-enforces
   size via `clipPane`; renderers honor `width` via wordwrap +
-  hardwrap; width math uses `uicore.DisplayCells(s, uicore.SPUACellWidth())`
-  for icon-bearing strings and `lipgloss.Width` for icon-free strings
-  (never `len()`); truncation of icon-bearing strings goes through
-  `uicore.DisplayTruncate` / `uicore.DisplayTruncateEllipsis`.
+  hardwrap; SPUA-aware width math lives in `internal/ansix/` (a thin
+  layer over `charmbracelet/x/ansi`): `ansix.Width` for icon-bearing
+  strings, `lipgloss.Width` otherwise (never `len()`); truncation via
+  `ansix.Truncate` / `ansix.TruncateEllipsis`. ADR-0181.
   `lipgloss.JoinHorizontal`/`JoinVertical` are
   forbidden when `spuaCellWidth != 1`; use row-by-row `strings.Join`
   with pre-padded children (kept under both modes — see ADR-0084).
@@ -141,8 +141,8 @@ the ADR(s) that justify them.
   chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
   `DimANSI`, render primitives (`PadOrTruncate`, `TruncateToWidth`,
-  `DisplayCells`, `DisplayTruncate`, `CenterOverlay`, `ApplyBg`,
-  `FillRowToWidth`, …), and the `LayoutMode` / `IconSet` /
+  `CenterOverlay`, `ApplyBg`, `FillRowToWidth`, …), and the
+  `LayoutMode` / `IconSet` /
   `SearchMode` enums plus the `SimpleIcons`/`FancyIcons` tables.
   Each subpackage exposes a single `Model` + `New(...)` (sub-models
   like `sidebar.Column`, `sidebar.Search`, `reader.LinkPicker`,
@@ -241,7 +241,7 @@ the ADR(s) that justify them.
 
 - Icon mode is resolved once at startup. `cmd/poplar/root.go` calls
   `term.HasNerdFont`, `term.MeasureSPUACells`, and `term.Resolve` to
-  produce `(IconMode, spuaCellWidth)`. `uicore.SetSPUACellWidth` is
+  produce `(IconMode, spuaCellWidth)`; `ansix.SetSPUACellWidth` is
   called before `tea.NewProgram`. The resolved `uicore.IconSet` is
   threaded into `ui.NewApp`. No runtime mode toggling.
 - `internal/ui/uicore/layout.go` is the only place icon literals live.

@@ -4,109 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/glw907/poplar/internal/ansix"
 )
-
-// Nerd Font icons live in Supplementary Private Use Area-A. Their rendered
-// cell width is terminal+font+symbol_map dependent, so spuaCellWidth is
-// resolved once at startup from term.MeasureSPUACells. See ADR-0084.
-const (
-	SpuaAStart = 0xF0000
-	SpuaAEnd   = 0xFFFFD
-)
-
-var spuaCellWidth = 1
-
-// SetSPUACellWidth records the per-glyph cell width measured at startup.
-// Must be 1 or 2.
-func SetSPUACellWidth(w int) {
-	if w != 1 && w != 2 {
-		panic("uicore: SetSPUACellWidth requires 1 or 2")
-	}
-	spuaCellWidth = w
-}
-
-func SPUACellWidth() int { return spuaCellWidth }
-
-// DisplayCells returns the terminal display width of s, accounting for the
-// runtime-resolved SPUA-A cell width.
-func DisplayCells(s string) int {
-	w := lipgloss.Width(s)
-	if spuaCellWidth == 1 {
-		return w
-	}
-	return w + (spuaCellWidth-1)*SpuaCount(s)
-}
-
-// SpuaCount counts SPUA-A runes in s. SPUA-A codepoints are 4-byte UTF-8,
-// so plain ASCII strings (no high-bit byte) cannot contain one and are
-// fast-pathed with a byte scan.
-func SpuaCount(s string) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= 0x80 {
-			return spuaCountSlow(s)
-		}
-	}
-	return 0
-}
-
-func spuaCountSlow(s string) int {
-	n := 0
-	for _, r := range s {
-		if r >= SpuaAStart && r <= SpuaAEnd {
-			n++
-		}
-	}
-	return n
-}
-
-// DisplayTruncateEllipsis truncates s to fit n cells with '…' as the final
-// cell when truncation occurred. n==1 returns the bare '…' so callers get a
-// single-cell sentinel even when the budget is too tight for any payload.
-func DisplayTruncateEllipsis(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if DisplayCells(s) <= n {
-		return s
-	}
-	if n == 1 {
-		return "…"
-	}
-	return DisplayTruncate(s, n-1) + "…"
-}
-
-// DisplayTruncate truncates the ANSI string s to at most n display cells.
-// ansi.Truncate uses runewidth and undercounts SPUA-A by (spuaCellWidth-1)
-// per glyph. This wrapper steps the runewidth limit down until the result
-// fits, bounded by (spuaCellWidth-1)*SpuaCount(s) iterations.
-func DisplayTruncate(s string, n int) string {
-	limit := n
-	for {
-		t := ansi.Truncate(s, limit, "")
-		if DisplayCells(t) <= n {
-			return t
-		}
-		limit--
-		if limit < 0 {
-			return ""
-		}
-	}
-}
-
-// DisplayPadOrTruncate pads or truncates s to exactly n display cells. Use
-// for icon-bearing strings. PadOrTruncate measures with lipgloss.Width and
-// undercounts SPUA-A glyphs.
-func DisplayPadOrTruncate(s string, n int) string {
-	w := DisplayCells(s)
-	if w == n {
-		return s
-	}
-	if w < n {
-		return s + strings.Repeat(" ", n-w)
-	}
-	return DisplayTruncate(s, n)
-}
 
 // ApplyBg layers the background of bgStyle onto base so a foreground style
 // can pick up the row's background without clobbering already-rendered ANSI
@@ -122,12 +21,12 @@ func ApplyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
 // width display cells. Short rows are right-padded with bgStyle so the row
 // background extends to the panel edge. Over-wide rows are truncated.
 func FillRowToWidth(row string, width int, bgStyle lipgloss.Style) string {
-	rw := DisplayCells(row)
+	rw := ansix.Width(row)
 	if rw < width {
 		return row + bgStyle.Render(strings.Repeat(" ", width-rw))
 	}
 	if rw > width {
-		return DisplayTruncate(row, width)
+		return ansix.Truncate(row, width)
 	}
 	return row
 }

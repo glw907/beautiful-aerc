@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -188,7 +189,7 @@ func (p AttachPicker) formatRow(row, maxIndexDigits, contentW int) string {
 		name = "attachment"
 	}
 	size := humanize.Bytes(int64(att.Size))
-	body := uicore.DisplayPadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
+	body := ansix.PadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
 		idxPad, p.icons.Attachment, row+1, name, size), contentW)
 	if row == p.cursor {
 		return p.styles.Cursor.Render(body)

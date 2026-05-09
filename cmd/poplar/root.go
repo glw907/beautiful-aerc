@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -105,7 +106,7 @@ func runRoot(f rootFlags) error {
 	if mode == term.IconModeFancy {
 		iconSet = uicore.FancyIcons
 	}
-	uicore.SetSPUACellWidth(cellWidth)
+	ansix.SetSPUACellWidth(cellWidth)
 
 	cacheCfg, err := config.LoadCache(configPath)
 	if err != nil {

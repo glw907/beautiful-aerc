@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -242,9 +243,9 @@ func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) str
 	var leadCells int
 	if s.layout.Icons {
 		icon = uicore.ApplyBg(textStyle, bgStyle).Render(entry.icon)
-		leadCells = uicore.DisplayCells(indicator) + 1 + uicore.DisplayCells(icon) + 2
+		leadCells = ansix.Width(indicator) + 1 + ansix.Width(icon) + 2
 	} else {
-		leadCells = uicore.DisplayCells(indicator) + 1
+		leadCells = ansix.Width(indicator) + 1
 	}
 
 	var countStr string
@@ -263,7 +264,7 @@ func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) str
 	if labelBudget < 1 {
 		labelBudget = 1
 	}
-	displayName := uicore.DisplayTruncateEllipsis(entry.cf.DisplayName, labelBudget)
+	displayName := ansix.TruncateEllipsis(entry.cf.DisplayName, labelBudget)
 	name := uicore.ApplyBg(textStyle, bgStyle).Render(displayName)
 
 	var leftContent string
@@ -272,7 +273,7 @@ func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) str
 	} else {
 		leftContent = indicator + bgStyle.Render(" ") + name
 	}
-	leftWidth := uicore.DisplayCells(leftContent)
+	leftWidth := ansix.Width(leftContent)
 
 	gap := max(1, s.width-leftWidth-countWidth-rightMargin)
 

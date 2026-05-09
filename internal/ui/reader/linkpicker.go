@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -203,8 +204,8 @@ func (p LinkPicker) formatRow(row, maxIndexDigits, urlW, contentW int) string {
 	idxStr := strconv.Itoa(row + 1)
 	pad := strings.Repeat(" ", maxIndexDigits-len(idxStr))
 	url := p.links[row]
-	if uicore.DisplayCells(url) > urlW {
-		url = uicore.DisplayTruncate(url, urlW)
+	if ansix.Width(url) > urlW {
+		url = ansix.Truncate(url, urlW)
 	}
 	body := uicore.PadOrTruncate(fmt.Sprintf("%s[%d] %s", pad, row+1, url), contentW)
 	if row == p.cursor {
@@ -226,8 +227,8 @@ func (p LinkPicker) previewLines(width int) []string {
 		return wrapped
 	}
 	row2 := wrapped[1]
-	if uicore.DisplayCells(row2) >= width {
-		row2 = uicore.DisplayTruncate(row2, width-1) + "…"
+	if ansix.Width(row2) >= width {
+		row2 = ansix.Truncate(row2, width-1) + "…"
 	} else {
 		row2 += "…"
 	}

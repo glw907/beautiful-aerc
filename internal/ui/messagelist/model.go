@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/mattn/go-runewidth"
@@ -834,8 +835,8 @@ func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 	// (spuaCellWidth-1) per glyph. Subtract the undercount from the subject
 	// budget so the assembled row measures exactly m.width.
 	flagAdjust := 0
-	if uicore.SPUACellWidth() > 1 && m.layout.FlagColumn {
-		flagAdjust = uicore.SpuaCount(flag) * (uicore.SPUACellWidth() - 1)
+	if ansix.SPUACellWidth() > 1 && m.layout.FlagColumn {
+		flagAdjust = ansix.SpuaCount(flag) * (ansix.SPUACellWidth() - 1)
 	}
 	subjectWidth := max(1, m.width-fixed-m.layout.Sender-m.layout.Date-flagAdjust)
 	prefixCells := lipgloss.Width(row.prefix)
@@ -891,7 +892,7 @@ func (m Model) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgl
 	rendered := uicore.ApplyBg(iconStyle, bgStyle).Render(glyph)
 	// Fancy-mode SPUA-A glyphs are already 2 cells, so the loop is a no-op.
 	// Simple-mode narrow glyphs add one trailing space.
-	for uicore.DisplayCells(rendered) < mlFlagWidth {
+	for ansix.Width(rendered) < mlFlagWidth {
 		rendered += bgStyle.Render(" ")
 	}
 	return rendered

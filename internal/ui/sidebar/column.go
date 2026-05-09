@@ -3,6 +3,7 @@ package sidebar
 import (
 	"strings"
 
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -64,7 +65,7 @@ func (c Column) View() string {
 	}
 	sw := c.width
 
-	acctName := uicore.DisplayTruncateEllipsis(c.accountEmail, sw-1)
+	acctName := ansix.TruncateEllipsis(c.accountEmail, sw-1)
 	acctLine := c.styles.SidebarAccount.Width(sw).Render(" " + acctName)
 	blank := c.styles.SidebarBg.Width(sw).Render("")
 

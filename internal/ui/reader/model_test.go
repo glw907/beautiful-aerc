@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -211,7 +212,7 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		if got := uicore.DisplayCells(line); got != w {
+		if got := ansix.Width(line); got != w {
 			t.Errorf("line %d width = %d, want %d: %q", i, got, w, line)
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -121,7 +122,7 @@ func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 				t.Errorf("View() returned %d lines, want %d", len(lines), tc.h)
 			}
 			for i, line := range lines {
-				if w := uicore.DisplayCells(line); w != tc.w {
+				if w := ansix.Width(line); w != tc.w {
 					t.Errorf("line %d: width %d, want %d (line=%q)", i, w, tc.w, line)
 				}
 			}

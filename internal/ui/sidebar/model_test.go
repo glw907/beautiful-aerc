@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -109,7 +110,7 @@ func TestSidebar(t *testing.T) {
 		view := sb.View()
 		lines := strings.Split(view, "\n")
 		for i, line := range lines {
-			w := uicore.DisplayCells(line)
+			w := ansix.Width(line)
 			if w != 30 {
 				t.Errorf("line %d width = %d, want 30: %q",
 					i, w, stripANSI(line))
@@ -400,9 +401,9 @@ func TestSidebarRenderRow_PreservesRightMargin(t *testing.T) {
 				continue
 			}
 			plain := ansi.Strip(line)
-			if uicore.DisplayCells(plain) != w {
+			if ansix.Width(plain) != w {
 				t.Errorf("width=%d row %d: cells=%d, want %d (%q)",
-					w, i, uicore.DisplayCells(plain), w, plain)
+					w, i, ansix.Width(plain), w, plain)
 			}
 			runes := []rune(plain)
 			if len(runes) == 0 {

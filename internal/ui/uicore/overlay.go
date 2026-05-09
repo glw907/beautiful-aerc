@@ -6,7 +6,7 @@
 // Cell-width measurements use ansi.StringWidth, which strips escape
 // sequences before measuring and so matches the Truncate/TruncateLeft
 // semantics. Overlay content is icon-free. Callers that pass icon-bearing
-// strings should pre-measure with DisplayCells (iconwidth.go).
+// strings should pre-measure with ansix.Width.
 package uicore
 
 import (

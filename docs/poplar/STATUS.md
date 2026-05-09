@@ -1,16 +1,14 @@
 # Poplar Status
 
-**Current pass:** Pass 9w.1 next — build `internal/ansix/` SPUA-aware
-width adapter, migrate `uicore` helpers + 16 callsites. ADR-0180
-closed the upstream displaywidth override-hook path; fork prototype
-parked at `~/Projects/displaywidth/add-overrides`.
+**Current pass:** Pass 9q next — outbox delivery controls (undo
++ schedule send, #35). Pass 9w.1 shipped `internal/ansix/`; the
+JoinHorizontal ban from ADR-0084 stands.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 9w | Scaffold through displaywidth investigation (ADRs 0001–0180) | done |
-| 9w.1 | Build `internal/ansix/` shim; migrate uicore + 16 callsites | pending |
+| 1 – 9w.1 | Scaffold through ansix shim (ADRs 0001–0181) | done |
 | 9q | Outbox delivery controls — undo + schedule send (#35) | pending |
 | 9r–9t | List-Unsubscribe (#36), .ics viewer (#37), search (#38) | pending |
 | 9u | First-run wizard (#27) + OAuth refresh + config template (#29) | pending |
@@ -20,39 +18,42 @@ parked at `~/Projects/displaywidth/add-overrides`.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 9w.1)
+## Next starter prompt (Pass 9q)
 
-> **Goal.** Build `internal/ansix/` — a vendored ANSI/SPUA-aware
-> width-math layer over `charmbracelet/x/ansi` — and migrate
-> `uicore`'s SPUA helpers + 16 callsites onto it.
+> **Goal.** Land outbox delivery controls — undo-send window and
+> schedule-send — per BACKLOG #35.
 >
-> **Scope.** New package `internal/ansix/` exporting `Width`,
-> `Truncate`, `TruncateEllipsis`, `PadOrTruncate`, `SPUACellWidth`,
-> `SetSPUACellWidth`, `SpuaCount`. `uicore.FillRowToWidth` and
-> `uicore.ApplyBg` stay in `uicore` but route through `ansix`. The
-> JoinHorizontal ban + manual row joins stay — the shim doesn't
-> unlock them. New ADR codifies the package boundary; links ADR-0180.
+> **Scope.** Compose `Ctrl+X` enqueues with a configurable hold
+> window (default 5s, off via `[ui] undo_send_seconds = 0`); a
+> status-bar segment exposes the active hold; `u` while held
+> cancels and reopens the draft. Schedule-send adds a picker
+> (presets + absolute) emitting an `outbox.deliver_at` row that
+> the drainer respects. Reuse the existing optimistic outbox
+> (cache schema v6) — no new tables.
 >
-> **Settled.** SPUA-A range `[0xF0000, 0xFFFFD]`. Cell-width default
-> `1`; `SetSPUACellWidth` validates `1 || 2`. Test scaffold from
-> `uicore/iconwidth_test.go`.
+> **Settled.** Send path stays through `AssembleMIME` +
+> `cache.Account.QueueOutbound` (ADR-0160). Undo cancels the
+> outbox row (`DiscardOp`); schedule-send extends `outbox.args`
+> with `deliver_at`.
 >
-> **Still open.** None. Pure implementation.
+> **Still open — brainstorm these:** UX for the schedule picker
+> (presets list, custom absolute input, time-zone display);
+> status-bar segment shape under the existing `⇅N`/`⚠N` rules;
+> what happens when an undo fires after the message has already
+> dispatched (race vs. user expectation).
 >
-> **Approach.** Package + tests; callsite sweep; `make check` +
-> `/simplify`; standard pass-end ritual.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-outbox-delivery.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Queued
 
 - **#30** — `Sidebar.View` render cache (8.5c overlay pattern).
 - **Bubble re-eval (post-9w.1).** Revisit
-  `archive/specs/2026-05-08-bubble-adoption-design.md` + Pass 9v.
-  Produce two lists: (a) bubbles ansix alone unlocks (swap),
-  (b) bubbles gated on `lipgloss.Width` internal calls
-  (`bubbles/help`, `bubble-table`, `glamour`). Upstream path closed:
-  x/ansi PR #606 (2025-10-31) shows ayman + clipperhouse coordinate
-  the width layer; clipperhouse declined the hook shape on PR #23
-  (2026-05-02). For list (b) the binary is **fork** x/ansi or
-  lipgloss via go.mod `replace` (unlocks fully; permanent rebase;
-  contradicts ADR-0002/0075) vs. **accept** the gating. Decide once
-  list (b) has names.
+  `archive/specs/2026-05-08-bubble-adoption-design.md`. Two lists:
+  (a) bubbles `ansix` alone unlocks (swap), (b) bubbles gated on
+  `lipgloss.Width` internal calls (`bubbles/help`, `bubble-table`,
+  `glamour`). For (b) the binary is **fork** x/ansi or lipgloss
+  via `replace` (unlocks fully; permanent rebase; contradicts
+  ADR-0002/0075) vs. **accept** the gating. Decide once (b) has
+  names.

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
@@ -328,14 +329,14 @@ func (v Model) renderChipRow(width int) (string, int) {
 	var lines []string
 	var cur string
 	for _, c := range chips {
-		if uicore.DisplayCells(c) > width {
-			c = uicore.DisplayTruncate(c, width)
+		if ansix.Width(c) > width {
+			c = ansix.Truncate(c, width)
 		}
 		if cur == "" {
 			cur = c
 			continue
 		}
-		if uicore.DisplayCells(cur)+2+uicore.DisplayCells(c) > width {
+		if ansix.Width(cur)+2+ansix.Width(c) > width {
 			lines = append(lines, cur)
 			cur = c
 			continue
