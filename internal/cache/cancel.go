@@ -11,10 +11,10 @@ import (
 // already left OpPending. No row is deleted on this error.
 var ErrNotPending = errors.New("cache: at least one op is not pending")
 
-// CancelOps deletes the named outbox rows iff every one is in OpPending.
-// Used by the undo-send window to revoke a not-yet-dispatched outbound.
-// Linked draft rows are not touched: the caller relies on the draft
-// staying available for compose-restore. Empty input is a no-op.
+// CancelOps atomically deletes the named outbox rows, or returns
+// ErrNotPending if any row is not in OpPending. Linked drafts are
+// not touched: the caller relies on the draft staying available
+// for compose-restore. Empty input is a no-op.
 func (a *Account) CancelOps(ctx context.Context, opIDs []int64) error {
 	if len(opIDs) == 0 {
 		return nil
@@ -59,8 +59,7 @@ func (a *Account) CancelOps(ctx context.Context, opIDs []int64) error {
 		return err
 	}
 	if seen != len(opIDs) {
-		// Some IDs were not found; treat as not-pending so the caller
-		// knows the op set is no longer fully under its control.
+		// missing rows: the window has closed; treat as not-pending.
 		return ErrNotPending
 	}
 
