@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/reader"
@@ -1039,7 +1040,7 @@ func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 	}
 	startUID := tab.viewer.CurrentUID()
 	// Transition to ready by calling SetBody.
-	tab.viewer = tab.viewer.SetBody(nil)
+	tab.viewer = tab.viewer.SetBody(nil, content.Unsubscribe{})
 	if tab.viewer.Phase() != reader.PhaseReady {
 		t.Fatal("viewer must be ready after SetBody")
 	}
@@ -1077,7 +1078,7 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open")
 	}
-	tab.viewer = tab.viewer.SetBody(nil)
+	tab.viewer = tab.viewer.SetBody(nil, content.Unsubscribe{})
 	lastUID := tab.viewer.CurrentUID()
 
 	// n at the last row should be inert.

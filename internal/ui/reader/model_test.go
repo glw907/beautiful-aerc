@@ -39,7 +39,7 @@ func TestViewerOpenTransitionsToLoading(t *testing.T) {
 func TestViewerBodyLoadedSetsReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
 	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello world"}}}}
-	v = v.SetBody(blocks)
+	v = v.SetBody(blocks, content.Unsubscribe{})
 	if v.Phase() != PhaseReady {
 		t.Errorf("phase = %v, want ready", v.Phase())
 	}
@@ -76,7 +76,7 @@ func TestViewerCloseFromLoading(t *testing.T) {
 
 func TestViewerCloseFromReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
-	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}})
+	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}, content.Unsubscribe{})
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if v.IsOpen() {
 		t.Error("q must close viewer from ready phase")
@@ -88,7 +88,7 @@ func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 	long := strings.Repeat("alpha bravo charlie ", 40)
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
-	})
+	}, content.Unsubscribe{})
 	if v.ScrollPct() != 0 {
 		t.Errorf("initial scroll pct = %d, want 0", v.ScrollPct())
 	}
@@ -103,7 +103,7 @@ func TestViewerNumericLaunchesURL(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://example.com/one"},
-	}}})
+	}}}, content.Unsubscribe{})
 	if len(v.Links()) != 1 {
 		t.Fatalf("expected 1 harvested link, got %d", len(v.Links()))
 	}
@@ -128,7 +128,7 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://only.example"},
-	}}})
+	}}}, content.Unsubscribe{})
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
 	if cmd != nil {
 		if msg, ok := cmd().(LaunchURLMsg); ok {
@@ -147,7 +147,7 @@ func TestViewerTabEmitsOpenLinkPickerMsg(t *testing.T) {
 		content.Paragraph{Spans: []content.Span{
 			content.Link{Text: "click", URL: "https://a.com"},
 		}},
-	})
+	}, content.Unsubscribe{})
 
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if cmd == nil {
@@ -167,7 +167,7 @@ func TestViewerTabNoLinksInert(t *testing.T) {
 	v = v.Open(mail.MessageInfo{UID: "uid-1"})
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "no links"}}},
-	})
+	}, content.Unsubscribe{})
 
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
 
@@ -204,7 +204,7 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 	})
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello, padding world."}}},
-	})
+	}, content.Unsubscribe{})
 
 	out := v.View()
 	lines := strings.Split(out, "\n")
@@ -222,7 +222,7 @@ func TestViewer_ChipRow_Hidden_WhenEmpty(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(80, 24)
 	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
-	v = v.SetBody(nil)
+	v = v.SetBody(nil, content.Unsubscribe{})
 	v = v.SetAttachments(nil)
 	out := v.View()
 	if strings.Contains(out, "§") || strings.Contains(out, "\U000F0184") {
@@ -234,7 +234,7 @@ func TestViewer_ChipRow_Visible(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
-	v = v.SetBody(nil)
+	v = v.SetBody(nil, content.Unsubscribe{})
 	v = v.SetAttachments([]mail.Attachment{
 		{PartID: "2", Filename: "report.pdf", Size: 2400},
 	})
@@ -251,7 +251,7 @@ func TestViewer_AtKey_Inert_WhenEmpty(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1"})
-	v = v.SetBody(nil)
+	v = v.SetBody(nil, content.Unsubscribe{})
 	v = v.SetAttachments(nil)
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
 	if cmd != nil {
@@ -263,7 +263,7 @@ func TestViewer_AtKey_OpensPicker(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1"})
-	v = v.SetBody(nil)
+	v = v.SetBody(nil, content.Unsubscribe{})
 	v = v.SetAttachments([]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}})
 	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
 	if cmd == nil {

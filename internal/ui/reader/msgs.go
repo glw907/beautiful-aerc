@@ -62,3 +62,10 @@ type SaveAttachmentMsg struct {
 	UID mail.UID
 	Att mail.Attachment
 }
+
+// OpenUnsubscribeConfirmMsg asks App to open ConfirmModal for the
+// list-unsubscribe action on the viewer's current message.
+type OpenUnsubscribeConfirmMsg struct {
+	UID   mail.UID
+	Unsub content.Unsubscribe
+}

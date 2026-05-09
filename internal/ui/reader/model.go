@@ -36,6 +36,7 @@ type viewerKeys struct {
 	OpenAttachPicker key.Binding
 	BodyTop          key.Binding
 	BodyBottom       key.Binding
+	Unsubscribe      key.Binding
 	Links            [9]key.Binding
 }
 
@@ -46,6 +47,7 @@ func newViewerKeys() viewerKeys {
 		OpenAttachPicker: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "attachments")),
 		BodyTop:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top of body")),
 		BodyBottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of body")),
+		Unsubscribe:      key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "unsubscribe")),
 	}
 	for i := range vk.Links {
 		d := string(rune('1' + i))
@@ -68,6 +70,7 @@ type Model struct {
 	attachments  []mail.Attachment
 	chipRow      string
 	chipHeight   int
+	unsub        content.Unsubscribe
 	icons        uicore.IconSet
 	panel        string // headers rendered through ViewerHeader at v.width
 	viewport     viewport.Model
@@ -119,6 +122,7 @@ func (v Model) Open(msg mail.MessageInfo) Model {
 	v.chipRow = ""
 	v.chipHeight = 0
 	v.panel = ""
+	v.unsub = content.Unsubscribe{}
 	return v
 }
 
@@ -128,14 +132,21 @@ func (v Model) Close() Model {
 	return v
 }
 
-// SetBody installs parsed blocks and transitions to ready. Callers must
-// drop BodyLoadedMsg with a UID mismatch before invoking.
-func (v Model) SetBody(blocks []content.Block) Model {
+// SetBody installs parsed blocks plus the harvested List-Unsubscribe
+// data and transitions to ready. Callers must drop BodyLoadedMsg
+// with a UID mismatch before invoking.
+func (v Model) SetBody(blocks []content.Block, unsub content.Unsubscribe) Model {
 	v.blocks = blocks
+	v.unsub = unsub
 	v.phase = PhaseReady
 	v.layout()
 	return v
 }
+
+// Unsubscribe returns the harvested List-Unsubscribe data for the
+// current message. Zero when the viewer is closed or the message
+// has no List-Unsubscribe headers.
+func (v Model) Unsubscribe() content.Unsubscribe { return v.unsub }
 
 // SetSize updates dimensions and re-runs layout when the viewer is ready.
 func (v Model) SetSize(width, height int) Model {
@@ -213,6 +224,13 @@ func (v Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		links := append([]string(nil), v.links...)
 		return v, func() tea.Msg { return OpenLinkPickerMsg{Links: links} }
+	case key.Matches(msg, v.keys.Unsubscribe):
+		if !v.unsub.Available() {
+			return v, nil
+		}
+		uid := v.msg.UID
+		unsub := v.unsub
+		return v, func() tea.Msg { return OpenUnsubscribeConfirmMsg{UID: uid, Unsub: unsub} }
 	}
 	for i, b := range v.keys.Links {
 		if key.Matches(msg, b) {
