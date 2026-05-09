@@ -73,6 +73,34 @@ type toastExpireMsg struct {
 // inverse Cmd.
 type undoRequestedMsg struct{}
 
+// undoCountdownTickMsg is the 1Hz nudge that causes App to re-render
+// the send-undo countdown banner.
+type undoCountdownTickMsg struct{}
+
+func undoCountdownTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return undoCountdownTickMsg{} })
+}
+
+// RestoreFromDraftMsg fires after undo-send has cancelled the outbound.
+// App reopens compose seeded from the in-memory Draft.
+type RestoreFromDraftMsg struct {
+	Draft compose.Draft
+}
+
+// undoSendCmd cancels the queued outbox ops and, on success, emits
+// RestoreFromDraftMsg so App reopens compose with the original Draft.
+func undoSendCmd(acct *cache.Account, opIDs []int64, draft compose.Draft) tea.Cmd {
+	return func() tea.Msg {
+		if err := acct.CancelOps(context.Background(), opIDs); err != nil {
+			if errors.Is(err, cache.ErrNotPending) {
+				return ErrorMsg{Op: "undo send", Err: errors.New("already sent")}
+			}
+			return ErrorMsg{Op: "undo send", Err: err}
+		}
+		return RestoreFromDraftMsg{Draft: draft}
+	}
+}
+
 // outboxDepthMsg refreshes the App's status-bar segment.
 type outboxDepthMsg struct{ depth cache.OutboxDepth }
 

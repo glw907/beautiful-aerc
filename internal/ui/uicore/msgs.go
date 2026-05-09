@@ -24,4 +24,5 @@ const (
 	TriageEmpty          TriageOp = "empty"
 	TriageSaveAttachment TriageOp = "save-attachment"
 	TriageSending        TriageOp = "sending"
+	TriageSendUndo       TriageOp = "send-undo"
 )

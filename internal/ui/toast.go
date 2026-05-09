@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -26,18 +27,26 @@ const (
 	opEmpty          = uicore.TriageEmpty
 	opSaveAttachment = uicore.TriageSaveAttachment
 	opSending        = uicore.TriageSending
+	opSendUndo       = uicore.TriageSendUndo
 )
 
-// pendingAction is App's state for an in-flight optimistic triage. The
-// zero value means no toast is active. Local roll-back lives entirely
-// in the cache layer (inverse queues a compensating QueueOp); App
-// keeps only what the toast renders plus the undo Cmd to fire on `u`.
+// pendingAction is App's state for an in-flight optimistic triage or a
+// queued send. The zero value means no toast is active.
+//
+// For triage ops, inverse is the compensating Cmd; local roll-back lives
+// in the cache layer. For opSendUndo, inverse is nil; cancellation goes
+// through CancelOps using the sendOpIDs slice.
 type pendingAction struct {
 	op       triageOp
 	n        int       // affected message count
 	dest     string    // destination folder name, non-empty for opMove
-	inverse  tea.Cmd   // the undo Cmd, nil for unrecoverable ops
-	deadline time.Time // monotonic moment at which the toast expires
+	inverse  tea.Cmd   // the undo Cmd, nil for unrecoverable or send-undo ops
+	deadline time.Time // moment at which the toast expires
+
+	// populated only when op == opSendUndo
+	sendOpIDs   []int64
+	sendDraftID string
+	sendDraft   mailcompose.Draft
 }
 
 // IsZero reports whether p represents no active toast. Every active

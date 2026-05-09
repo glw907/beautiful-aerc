@@ -1317,17 +1317,30 @@ func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
 	app := newTestApp(t)
 	app.now = func() time.Time { return frozen }
 
-	out, cmd := app.Update(uicompose.SentMsg{})
+	// Zero ScheduledFor means no hold window; drainer is immediately eligible.
+	// No toast should appear.
+	out, _ := app.Update(uicompose.SentMsg{})
 	app = out
-	if app.toast.op != opSending {
-		t.Fatalf("toast.op = %q, want %q", app.toast.op, opSending)
+	if !app.toast.IsZero() {
+		t.Fatalf("SentMsg with zero ScheduledFor should not arm a toast; got op=%q", app.toast.op)
 	}
-	want := frozen.Add(2 * time.Second)
-	if !app.toast.deadline.Equal(want) {
-		t.Errorf("toast.deadline = %v, want %v", app.toast.deadline, want)
+
+	// Non-zero ScheduledFor arms the send-undo banner.
+	scheduled := frozen.Add(10 * time.Second)
+	out, cmd := app.Update(uicompose.SentMsg{
+		OpIDs:        []int64{1},
+		ScheduledFor: scheduled,
+		DraftID:      "d1",
+	})
+	app = out
+	if app.toast.op != opSendUndo {
+		t.Fatalf("toast.op = %q, want %q", app.toast.op, opSendUndo)
+	}
+	if !app.toast.deadline.Equal(scheduled) {
+		t.Errorf("toast.deadline = %v, want %v", app.toast.deadline, scheduled)
 	}
 	if cmd == nil {
-		t.Error("uicompose.SentMsg should return a Tick Cmd for toast expiry")
+		t.Error("SentMsg with future ScheduledFor should return Cmd for tick/expiry")
 	}
 }
 
@@ -1677,5 +1690,76 @@ func TestApp_ConfirmYes_ContactDelete_ClearsState(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("Yes on delete confirm should emit a Cmd")
+	}
+}
+
+func TestAppArmsSendUndoOnSentMsg(t *testing.T) {
+	frozen := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil, nil)
+	app.now = func() time.Time { return frozen }
+	app.undoSendWindow = 10 * time.Second
+
+	scheduled := frozen.Add(10 * time.Second)
+	app, _ = app.Update(uicompose.SentMsg{
+		OpIDs:        []int64{42},
+		ScheduledFor: scheduled,
+		DraftID:      "draft-test",
+	})
+
+	if app.toast.op != opSendUndo {
+		t.Errorf("op = %q, want %q", app.toast.op, opSendUndo)
+	}
+	if got := app.toast.sendOpIDs; len(got) != 1 || got[0] != 42 {
+		t.Errorf("sendOpIDs = %v, want [42]", got)
+	}
+	if app.toast.sendDraftID != "draft-test" {
+		t.Errorf("sendDraftID = %q, want draft-test", app.toast.sendDraftID)
+	}
+	if !app.toast.deadline.Equal(scheduled) {
+		t.Errorf("deadline = %v, want %v", app.toast.deadline, scheduled)
+	}
+}
+
+func TestAppDoesNotArmWhenWindowZero(t *testing.T) {
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil, nil)
+	app.undoSendWindow = 0
+
+	app, _ = app.Update(uicompose.SentMsg{
+		OpIDs:        []int64{42},
+		ScheduledFor: time.Time{},
+		DraftID:      "draft-test",
+	})
+
+	if !app.toast.IsZero() {
+		t.Errorf("pending should remain zero with window=0; got %+v", app.toast)
+	}
+}
+
+func TestAppUndoSendCancelsAndRestores(t *testing.T) {
+	frozen := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	backend := mail.NewMockBackend()
+	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil, nil)
+	app.now = func() time.Time { return frozen }
+	app.undoSendWindow = 10 * time.Second
+
+	d := compose.Draft{Subject: "test"}
+	app, _ = app.Update(uicompose.SentMsg{
+		OpIDs:        []int64{42},
+		ScheduledFor: frozen.Add(10 * time.Second),
+		DraftID:      "draft-test",
+		Draft:        d,
+	})
+	if app.toast.op != opSendUndo {
+		t.Fatalf("setup: op = %q, want send-undo", app.toast.op)
+	}
+
+	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd == nil {
+		t.Fatal("expected a Cmd from u")
+	}
+	if !app.toast.IsZero() {
+		t.Errorf("pending not cleared: %+v", app.toast)
 	}
 }

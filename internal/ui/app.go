@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -62,9 +63,9 @@ type App struct {
 	offlineHinted   bool
 	lastErr         ErrorMsg
 	toast           pendingAction
-	undoSeconds    int
-	undoSendWindow time.Duration
-	now            func() time.Time // test seam, defaults to time.Now
+	undoSeconds     int
+	undoSendWindow  time.Duration
+	now             func() time.Time // test seam, defaults to time.Now
 	opener          URLOpener        // test seam, defaults to xdgOpenURL
 
 	tidyEnabled bool
@@ -121,8 +122,8 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		confirm:         NewConfirmModal(styles),
 		outbox:          NewOutboxOverlay(styles),
 		conflict:        NewConflictOverlay(styles),
-		undoSeconds:    uiCfg.UndoSeconds,
-		undoSendWindow: uiCfg.UndoSendWindow,
+		undoSeconds:     uiCfg.UndoSeconds,
+		undoSendWindow:  uiCfg.UndoSendWindow,
 		now:             time.Now,
 		opener:          xdgOpenURL,
 		tidyEnabled:     uiCfg.Tidy.Enabled,
@@ -489,6 +490,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		m, rcmd := m.maybeResizeChild(hadBanner)
 		return m, rcmd
 
+	case undoCountdownTickMsg:
+		if m.toast.op != opSendUndo || m.now().After(m.toast.deadline) {
+			return m, nil
+		}
+		return m, undoCountdownTickCmd()
+
 	case undoRequestedMsg:
 		if m.toast.IsZero() {
 			return m, nil
@@ -657,14 +664,24 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case uicompose.SentMsg:
 		hadBanner := m.hasBannerRow()
-		deadline := m.now().Add(2 * time.Second)
-		m.toast = pendingAction{
-			op:       opSending,
-			deadline: deadline,
+		if msg.ScheduledFor.IsZero() || !msg.ScheduledFor.After(m.now()) {
+			// No hold window: drainer is already eligible. No banner.
+			return m, nil
 		}
-		cmds := []tea.Cmd{tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
-			return toastExpireMsg{deadline: deadline}
-		})}
+		deadline := msg.ScheduledFor
+		m.toast = pendingAction{
+			op:          opSendUndo,
+			deadline:    deadline,
+			sendOpIDs:   msg.OpIDs,
+			sendDraftID: msg.DraftID,
+			sendDraft:   msg.Draft,
+		}
+		cmds := []tea.Cmd{
+			tea.Tick(time.Until(deadline), func(time.Time) tea.Msg {
+				return toastExpireMsg{deadline: deadline}
+			}),
+			undoCountdownTickCmd(),
+		}
 		var rcmd tea.Cmd
 		m, rcmd = m.maybeResizeChild(hadBanner)
 		if rcmd != nil {
@@ -673,6 +690,15 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case uicompose.SeededMsg:
+		w, h := m.rightPaneSize()
+		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+		m.compose.SetSize(w, h)
+		m.compose.SetIdentities(m.identities)
+		m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
+		m.compose.Seed(msg.Draft)
+		return m, m.compose.Init()
+
+	case RestoreFromDraftMsg:
 		w, h := m.rightPaneSize()
 		m.compose = uicompose.New(uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
 		m.compose.SetSize(w, h)
@@ -831,7 +857,18 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		case key.Matches(msg, m.keys.Undo):
 			// Undo is only live while a toast is active. Otherwise 'u'
 			// falls through to AccountTab so other consumers can claim it.
-			if !m.toast.IsZero() {
+			switch m.toast.op {
+			case opNone:
+				// no-op, fall through
+			case opSendUndo:
+				opIDs := m.toast.sendOpIDs
+				draft := m.toast.sendDraft
+				hadBanner := m.hasBannerRow()
+				m.toast = pendingAction{}
+				var rcmd tea.Cmd
+				m, rcmd = m.maybeResizeChild(hadBanner)
+				return m, tea.Batch(rcmd, undoSendCmd(m.acct.Cache(), opIDs, draft))
+			default:
 				return m, func() tea.Msg { return undoRequestedMsg{} }
 			}
 		case key.Matches(msg, m.keys.Quit):
@@ -1102,11 +1139,19 @@ func parseSender(from string) (displayName, email string) {
 }
 
 // chromeBannerRow renders the chrome row above the status bar. Error
-// banner wins, otherwise the toast renders, otherwise "" collapses the
-// row.
+// banner wins, then send-undo countdown, then triage toast, else ""
+// collapses the row.
 func (m App) chromeBannerRow(width int) string {
 	if banner := renderErrorBanner(m.lastErr, width, m.styles); banner != "" {
 		return banner
+	}
+	if m.toast.op == opSendUndo {
+		remaining := time.Until(m.toast.deadline).Round(time.Second)
+		if remaining < 0 {
+			remaining = 0
+		}
+		text := fmt.Sprintf("Sending in %ds — u undo", int(remaining.Seconds()))
+		return m.styles.Toast.Render(uicore.TruncateToWidth(text, width))
 	}
 	if !m.toast.IsZero() {
 		return renderToast(m.toast, width, m.styles)
