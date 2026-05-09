@@ -367,3 +367,25 @@ qualifies.
 **Rationale (one line):** Both blockers are architectural — no body-only render mode and fields fixed at group construction — and ansix does not touch either; the blurred/focused `lipgloss.Style` pair pattern is the one thing worth mirroring in poplar's own `NewStyles` constructors.
 
 **Interacts with:** None for the adoption question. The `fromPopover` dual-render pattern and the `focusList()` dynamic-rebuild are pre-1.0 architectural choices poplar owns; no other evaluated bubble depends on them. The Pass 14 first-run wizard is a separate question: a static, sequential form with fixed fields is exactly huh's strength, and the wizard shape may fit `NewGroup(fields...)` without triggering either blocker. That evaluation belongs in Pass 14's planning, not here.
+
+## `evertras/bubble-table`
+
+**Does this make poplar better?** No. The core render path calls `lipgloss.JoinHorizontal(lipgloss.Bottom, columnStrings...)` in `renderRowData` (row.go:243) and `lipgloss.Width` three times across `view.go` and `row.go`. ansix corrects width at poplar's call sites; library-internal calls are unreachable from those sites. The ADR-0084 ban therefore survives the re-eval. Neither poplar consumer — `messagelist` or `contacts/list` — maps cleanly onto the table model anyway, for reasons unrelated to width. This is a (b)-list entry for Task 11 (fork-vs-accept).
+
+**Feature parity:** `bubble-table` provides a scrollable, filterable, sortable table with column definitions, `RowData map[string]any` per row, `WithRowStyleFunc` for conditional row styles, `StyledCell` for per-cell style overrides, horizontal scrolling, multi-select, and pagination. `messagelist` is not a table: it owns a thread-grouping pipeline, box-drawing prefix computation, fold state, and visual-mode selection semantics. None of those are `bubble-table` features — they live in `appendThreadRows`, the `displayRow` builder, and the keyboard handler. `contacts/list` (137 LOC) is a `bubbles/viewport`-backed list with four fixed columns rendered by `formatRow`; `SetSelectionLetter` does letter-jump navigation without cursor arithmetic that the library exposes. The library's column-width model (fixed-width columns set at construction) conflicts with `messagelist`'s responsive column math derived from `ComputeLayout`.
+
+**Customization seams:** `WithRowStyleFunc(RowStyleFuncInput → lipgloss.Style)` and `StyledCell{Data, Style/StyleFunc}` are strong per-row and per-cell injection points. `WithBaseStyle` lets callers push a background. These seams are real, but they don't reach the SPUA compensation path: `mlFlagWidth = 2` pads the flag cell in `messagelist` specifically because SPUA-A icon glyphs expand to two terminal cells under Nerd Font mode. `renderRowColumnData` uses `lipgloss.Width(cellStr)` for its own column-width accounting, so the flag pad would double-count.
+
+**Theming integration:** No `CompiledTheme`-aware path exists. All styles arrive via `WithRowStyleFunc`/`StyledCell`/`WithBaseStyle` as raw `lipgloss.Style` values, compatible with the per-subpackage `NewStyles(*theme.CompiledTheme)` pattern poplar uses. Integration is mechanical but not zero-effort — every style passed in must be wired to the theme constructor.
+
+**Maintenance signal:** 569 stars, 35 forks, 21 open issues, not archived. Latest release v0.19.2 on 2025-09-06; five commits in the week before that release (global metadata for style/filter funcs, `Row` in `StyleFuncInput`, filter improvements). Active development cadence. MIT license, no API breakage risk at the current Go 1.x line.
+
+**Code delta estimate:** `contacts/list.go` is 267 LOC; replacing `formatRow` + `rebuildViewport` with a `bubble-table.Model` would not reduce that — `SetSelectionLetter`, `syncViewport`, `sortContacts`, and the `metaCol`/`nameCol` projection helpers are domain logic with no library analogue. `messagelist/model.go` is the larger consumer; the threading pipeline and fold state machinery are not table concerns. Adoption would add a dependency and a workaround layer (pre-padded cells to route around `JoinHorizontal`) while eliminating no material code.
+
+**License:** MIT (evertras/bubble-table). Clear.
+
+**Verdict:** Keep + harvest; (b)-list for Task 11
+
+**Rationale (one line):** `JoinHorizontal` in `renderRowData` is unreachable from ansix call sites, and neither consumer fits the fixed-column table model — `messagelist` needs the threading pipeline and `contacts/list` needs letter-jump nav — so adoption saves no code and adds a width-safety workaround.
+
+**Interacts with:** Fork-vs-accept (Task 11). `bubble-table` joins `bubbles/help` on the (b) list — its blocker is internal `JoinHorizontal` in the library's core render path, not poplar's own width math. If the fork option is accepted and the fix lands in lipgloss or x/ansi, the width blocker dissolves, but the consumer-fit gap (threading pipeline, letter-jump nav) remains, and the verdict would still be Keep + harvest.
