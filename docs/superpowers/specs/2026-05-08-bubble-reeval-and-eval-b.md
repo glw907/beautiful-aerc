@@ -234,3 +234,70 @@ folder groups, search shelf composition). The eval may end
 Invoke `writing-plans` to produce the plan doc for Pass 9w.2.
 The plan turns the 11 tasks into concrete steps and feeds into
 pass execution per the poplar-pass starter prompt.
+
+## `rmhubbert/bubbletea-overlay`
+
+**Does this make poplar better?** No. The library's `Composite`
+function is the same algorithm as poplar's `PlaceOverlay` — both
+derive from the Superfile `overplace.go` origin and both reach
+for `charmbracelet/x/ansi` for cell-width measurement. Post-ansix,
+the seam question is whether ansix unlocks something here it
+couldn't before. It doesn't. The prior "Keep + harvest" verdict
+rested on structural grounds, not width-math grounds: `Composite`
+handles exactly two layers; the nine-level `if IsOpen()` chain in
+`App.View` is the cascade, and no two-layer compositor touches it.
+ansix is irrelevant to that gap. Adopting the library would add a
+dependency, replace ~50 LOC with ~50 equivalent LOC, and change
+nothing about App behavior.
+
+**Feature parity:** `Composite(fg, bg, xPos, yPos, xOff, yOff)`
+covers the same cell-compositing operation as `PlaceOverlay(x, y,
+fg, bg)` with a different argument order and an added `Position`
+enum (Top/Right/Bottom/Left/Center). The library's `Model` wraps
+two `Viewable` values and calls `Composite` in `View()`; `Update`
+is a no-op pass-through. It does not implement cascade ordering,
+mutual-exclusion logic, or `DimANSI` dimming — all of which stay
+in `App` regardless. There is no feature gap in the library; the
+coverage is exactly coextensive with the hand-rolled compositor.
+
+**Customization seams:** `Composite` works on pre-rendered ANSI
+strings, the same as `PlaceOverlay`. No style injection, no border
+hooks, no theme parameters. `Model.Foreground` and
+`Model.Background` accept any `Viewable`, so domain state would
+thread naturally — but that is true of `PlaceOverlay` too, via
+direct argument passing.
+
+**Theming integration:** None. The library owns no colors and
+applies no styles. Theming is entirely the caller's responsibility
+in both implementations.
+
+**Maintenance signal:** Last commit 2026-04-20 (dependabot bump of
+`charmbracelet/x/ansi` to 0.11.7). Release cadence: v0.6.7
+(2026-04-20), v0.6.6 (2026-03-18), v0.6.5 (2026-02-09), v0.6.4
+(2026-01-19) — roughly one release per six weeks over the past
+twelve months. Actively maintained against current Charm versions.
+The README notes that bubbletea v2 users should prefer built-in
+compositing; poplar is on v1, so no compatibility concern.
+
+**Code delta estimate:** `overlay.go` is 76 LOC; `modal_shell.go`
+is 66 LOC — 142 total in the uicore overlay surface. `PlaceOverlay`
+accounts for roughly 50 of those. Replacing it with `overlay.Composite`
+removes ~50 LOC, adds one `go.mod` entry, and leaves `DimANSI`,
+`ModalShell`, and the entire `App.View` cascade untouched. Net delta:
+roughly neutral on LOC, negative on dependency count.
+
+**License:** MIT License, Copyright (c) 2024 Hubby. Clear.
+
+**Verdict:** Keep + harvest
+
+**Rationale (one line):** The library is the same algorithm poplar
+already owns; ansix changes nothing about the structural blocker
+(two-layer compositor vs nine-level cascade), and the adoption
+delta is a new dependency for zero behavior change.
+
+**Interacts with:** None. The overlay compositor is a leaf utility
+with no downstream dependency on other evaluated bubbles. The
+`Position` enum vocabulary (Top/Center/Bottom/Left/Right) is worth
+mirroring in any future overlay whose placement becomes semantic
+rather than fixed-coordinate; nothing in the current cascade
+qualifies.
