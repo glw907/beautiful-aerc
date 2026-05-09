@@ -261,6 +261,10 @@ password-cmd = "op read op://Personal/Fastmail/credential"
 # undo_seconds = 6
 #     Triage toast/undo window. Range 2-30.
 #
+# undo-send-window = "10s"
+#     Hold before queued mail is dispatched; shows an undo banner.
+#     "0s" disables the hold (immediate dispatch). Range 0s-5m.
+#
 # trash_retention_days = 0
 #     Auto-empty messages older than N days from Trash on first
 #     load each session. 0 disables. Range 0-365.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/glw907/poplar/internal/tidy"
@@ -24,6 +25,10 @@ type UIConfig struct {
 
 	// UndoSeconds clamps to [2, 30] at parse. Default 6.
 	UndoSeconds int
+
+	// UndoSendWindow is the hold duration before queued mail is dispatched.
+	// Range [0, 5m]. Zero disables the hold (immediate dispatch). Default 10s.
+	UndoSendWindow time.Duration
 
 	// TrashRetentionDays and SpamRetentionDays drive per-session
 	// retention sweeps. 0 disables. Each clamps to [0, 365].
@@ -72,12 +77,13 @@ type FolderConfig struct {
 // section.
 func DefaultUIConfig() UIConfig {
 	return UIConfig{
-		Threading:   true,
-		Folders:     map[string]FolderConfig{},
-		Icons:       "auto",
-		UndoSeconds: 6,
-		DownloadDir: defaultDownloadDir(),
-		Tidy:        TidyConfig{Enabled: false, Config: tidy.DefaultConfig()},
+		Threading:      true,
+		Folders:        map[string]FolderConfig{},
+		Icons:          "auto",
+		UndoSeconds:    6,
+		UndoSendWindow: 10 * time.Second,
+		DownloadDir:    defaultDownloadDir(),
+		Tidy:           TidyConfig{Enabled: false, Config: tidy.DefaultConfig()},
 	}
 }
 
@@ -88,6 +94,7 @@ type rawUI struct {
 	Folders            map[string]rawFolderCfg `toml:"folders"`
 	Icons              string                  `toml:"icons"`
 	UndoSeconds        *int                    `toml:"undo_seconds"`
+	UndoSendWindow     *string                 `toml:"undo-send-window"`
 	TrashRetentionDays *int                    `toml:"trash_retention_days"`
 	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
 	DownloadDir        string                  `toml:"download_dir"`
@@ -171,6 +178,17 @@ func LoadUI(path string) (UIConfig, error) {
 			v = 30
 		}
 		out.UndoSeconds = v
+	}
+
+	if raw.UI.UndoSendWindow != nil {
+		d, err := time.ParseDuration(*raw.UI.UndoSendWindow)
+		if err != nil {
+			return UIConfig{}, fmt.Errorf("ui.undo-send-window: %v", err)
+		}
+		if d < 0 || d > 5*time.Minute {
+			return UIConfig{}, fmt.Errorf("ui.undo-send-window: %v out of range [0s, 5m]", d)
+		}
+		out.UndoSendWindow = d
 	}
 
 	if raw.UI.TrashRetentionDays != nil {

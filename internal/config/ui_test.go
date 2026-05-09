@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadUI(t *testing.T) {
@@ -265,6 +266,58 @@ trash_retention_days = %d
 		if cfg.TrashRetentionDays != tc.want {
 			t.Errorf("TrashRetentionDays for %d = %d, want %d", tc.in, cfg.TrashRetentionDays, tc.want)
 		}
+	}
+}
+
+func TestUIConfigUndoSendWindowDefault(t *testing.T) {
+	path := writeTempUI(t, ``)
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cfg.UndoSendWindow != 10*time.Second {
+		t.Errorf("default = %v, want 10s", cfg.UndoSendWindow)
+	}
+}
+
+func TestUIConfigUndoSendWindowExplicit(t *testing.T) {
+	path := writeTempUI(t, `[ui]
+undo-send-window = "30s"
+`)
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cfg.UndoSendWindow != 30*time.Second {
+		t.Errorf("got %v, want 30s", cfg.UndoSendWindow)
+	}
+}
+
+func TestUIConfigUndoSendWindowZero(t *testing.T) {
+	path := writeTempUI(t, `[ui]
+undo-send-window = "0s"
+`)
+	cfg, err := LoadUI(path)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cfg.UndoSendWindow != 0 {
+		t.Errorf("got %v, want 0", cfg.UndoSendWindow)
+	}
+}
+
+func TestUIConfigUndoSendWindowOutOfRange(t *testing.T) {
+	path10m := writeTempUI(t, `[ui]
+undo-send-window = "10m"
+`)
+	if _, err := LoadUI(path10m); err == nil {
+		t.Errorf("10m should fail validation")
+	}
+	pathNeg := writeTempUI(t, `[ui]
+undo-send-window = "-5s"
+`)
+	if _, err := LoadUI(pathNeg); err == nil {
+		t.Errorf("negative should fail validation")
 	}
 }
 
