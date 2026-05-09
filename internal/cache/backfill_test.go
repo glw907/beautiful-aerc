@@ -89,8 +89,12 @@ func TestBackfiller_OneShot(t *testing.T) {
 	a.Backend = &fakeBackendWithBody{body: []byte("hello")}
 
 	bf := newBackfiller(a)
-	if err := bf.fetchOne(context.Background()); err != nil {
+	n, err := bf.fetchOne(context.Background())
+	if err != nil {
 		t.Fatalf("fetchOne: %v", err)
+	}
+	if n != 5 {
+		t.Errorf("fetchOne returned n=%d, want 5", n)
 	}
 
 	got, ok, err := a.lookupBody(context.Background(), uid)
@@ -214,24 +218,5 @@ func TestIsThrottleErr(t *testing.T) {
 				t.Errorf("isThrottleErr(%v) = %v, want %v", c.err, got, c.want)
 			}
 		})
-	}
-}
-
-func TestBackoffCurve(t *testing.T) {
-	cases := []struct {
-		attempts int
-		want     time.Duration
-	}{
-		{0, time.Second},
-		{1, 2 * time.Second},
-		{2, 4 * time.Second},
-		{6, 60 * time.Second},
-		{20, 60 * time.Second},
-	}
-	for _, c := range cases {
-		got := backfillBackoff(c.attempts)
-		if got != c.want {
-			t.Errorf("backfillBackoff(%d) = %v, want %v", c.attempts, got, c.want)
-		}
 	}
 }

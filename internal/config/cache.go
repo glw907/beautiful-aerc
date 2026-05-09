@@ -13,15 +13,16 @@ import (
 // [cache] table. LoadCache substitutes defaults when the table is
 // absent. Body and attachment caps are tracked separately so a flood
 // of attachments cannot push out cached bodies and vice-versa.
-// MaxSize defaults to 0 (unlimited); MaxAttachmentSize defaults to 2 GB.
+// MaxAttachmentSize defaults to 2 GB.
 type CacheConfig struct {
+	// MaxSize caps the body cache in bytes; zero disables the cap.
 	MaxSize           int64
 	MaxAttachmentSize int64
 }
 
 func defaultCache() CacheConfig {
 	return CacheConfig{
-		MaxSize:           0, // 0 = unlimited; users opt in via [cache] max-size
+		MaxSize:           0,
 		MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
 	}
 }

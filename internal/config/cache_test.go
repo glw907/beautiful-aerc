@@ -39,7 +39,7 @@ func TestParseSize(t *testing.T) {
 func TestDefaultCacheMaxSizeUnlimited(t *testing.T) {
 	c := defaultCache()
 	if c.MaxSize != 0 {
-		t.Errorf("defaultCache().MaxSize = %d, want 0 (unlimited per Pass 13)", c.MaxSize)
+		t.Errorf("defaultCache().MaxSize = %d, want 0 (unlimited)", c.MaxSize)
 	}
 }
 

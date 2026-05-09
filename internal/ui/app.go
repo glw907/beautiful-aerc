@@ -91,6 +91,10 @@ type App struct {
 	contactsCfg     *corecontacts.ClientConfig
 	contactsRefresh time.Duration
 
+	lastBackfillDone   int
+	lastBackfillTotal  int
+	lastBackfillPaused bool
+
 	theme                *theme.CompiledTheme
 	compose              *uicompose.Model
 	pendingComposeSave   bool // Save? modal is open for a dirty compose
@@ -214,6 +218,19 @@ func (m App) deriveChromeFromAcct() App {
 		m.statusBar = m.statusBar.SetMode(StatusAccount)
 	}
 	m.footer = m.footer.SetCounter(m.acct.WindowCounter())
+	return m
+}
+
+func (m App) refreshBackfillSegment() App {
+	done, total, _ := m.acct.Cache().BackfillProgress()
+	paused := m.statusBar.ConnectionState() != Connected
+	if done == m.lastBackfillDone && total == m.lastBackfillTotal && paused == m.lastBackfillPaused {
+		return m
+	}
+	m.lastBackfillDone = done
+	m.lastBackfillTotal = total
+	m.lastBackfillPaused = paused
+	m.statusBar = m.statusBar.SetBackfill(done, total, paused, false)
 	return m
 }
 
@@ -639,8 +656,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			}
 			m.statusBar = m.statusBar.SetConnectionState(cs)
 			m.acct.NotifyConnState(cs == Connected)
-			done, total, _ := m.acct.Cache().BackfillProgress()
-			m.statusBar = m.statusBar.SetBackfill(done, total, cs != Connected, false)
+			m = m.refreshBackfillSegment()
 		}
 		// Non-ConnState Update types delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
@@ -662,9 +678,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		acct, fcmd := m.acct.Update(msg)
 		m.acct = acct
 		cmds = append(cmds, fcmd)
-		done, total, _ := m.acct.Cache().BackfillProgress()
-		paused := m.statusBar.ConnectionState() != Connected
-		m.statusBar = m.statusBar.SetBackfill(done, total, paused, false)
+		m = m.refreshBackfillSegment()
 		return m, tea.Batch(cmds...)
 
 	case outboxScheduledMsg:

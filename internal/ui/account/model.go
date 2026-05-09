@@ -90,15 +90,11 @@ func (m Model) Backend() mail.Backend { return m.acct.Backend }
 func (m Model) Cache() *cache.Account { return m.acct }
 
 func (m Model) NotifyActivity() {
-	if m.acct != nil {
-		m.acct.NotifyActivity()
-	}
+	m.acct.NotifyActivity()
 }
 
 func (m Model) NotifyConnState(online bool) {
-	if m.acct != nil {
-		m.acct.NotifyConnState(online)
-	}
+	m.acct.NotifyConnState(online)
 }
 
 func (m Model) AccountEmail() string { return m.acct.AccountEmail() }

@@ -8,13 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"
 )
 
 // nextUnfetchedUID returns the newest message UID without a stored
-// body, or ok=false when every cached message has bytes. The query
-// is the implicit work queue for the backfill worker: sent_at DESC
-// puts new mail at the top, eviction restores rows naturally.
+// body. ok is false when every cached message has bytes. The query
+// is the implicit work queue for the backfill worker.
 func (a *Account) nextUnfetchedUID(ctx context.Context) (mail.UID, bool, error) {
 	var pid string
 	err := a.db.QueryRowContext(ctx, `
@@ -34,8 +34,8 @@ func (a *Account) nextUnfetchedUID(ctx context.Context) (mail.UID, bool, error) 
 	return mail.UID(pid), true, nil
 }
 
-// Backfiller is the per-account body-cache filler. Lifecycle: built
-// in Account.Open, started by Run, stopped by canceling Run's ctx.
+// Backfiller fills the body cache in the background. Open creates
+// it, Run drives the loop, and canceling Run's context stops it.
 type Backfiller struct {
 	acct          *Account
 	rate          time.Duration
@@ -58,30 +58,33 @@ func newBackfiller(a *Account) *Backfiller {
 	return bf
 }
 
-// fetchOne fetches the next eligible body, or returns nil when the
-// cache is caught up. Errors propagate; the run loop classifies them.
-func (b *Backfiller) fetchOne(ctx context.Context) error {
+// fetchOne fetches the next eligible body. Returns 0 when caught up.
+// Errors propagate; the run loop classifies them.
+func (b *Backfiller) fetchOne(ctx context.Context) (int, error) {
 	uid, ok, err := b.acct.nextUnfetchedUID(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !ok {
-		return nil
+		return 0, nil
 	}
 	body, err := b.acct.Backend.FetchBody(uid)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return b.acct.storeBody(ctx, uid, body)
+	if err := b.acct.storeBody(ctx, uid, body); err != nil {
+		return 0, err
+	}
+	return len(body), nil
 }
 
-// NotifyActivity records a user-input event. Run suspends fetches
-// until idleThreshold has elapsed since the last call.
+// NotifyActivity suspends backfill until idleThreshold elapses since
+// the last call.
 func (b *Backfiller) NotifyActivity() {
 	b.lastActivity.Store(time.Now().UnixNano())
 }
 
-// NotifyConnState flips the online flag. Backfill suspends when false.
+// NotifyConnState suspends backfill while online is false.
 func (b *Backfiller) NotifyConnState(online bool) {
 	b.connOnline.Store(online)
 }
@@ -111,9 +114,7 @@ func (b *Backfiller) idle() bool {
 	return time.Since(time.Unix(0, last)) >= b.idleThreshold
 }
 
-// Run drives the backfill loop until ctx is canceled. Each tick
-// checks gates (idle, connection), then fetches up to maxBatchBytes
-// worth of bodies before sleeping rate.
+// Run drives the backfill loop until ctx is canceled.
 func (b *Backfiller) Run(ctx context.Context) {
 	t := time.NewTicker(b.rate)
 	defer t.Stop()
@@ -136,34 +137,30 @@ func (b *Backfiller) runBatch(ctx context.Context) {
 		if !b.idle() || !b.connOnline.Load() || b.atCap(ctx) {
 			return
 		}
-		uid, ok, err := b.acct.nextUnfetchedUID(ctx)
-		if err != nil || !ok {
-			return
-		}
-		body, err := b.acct.Backend.FetchBody(uid)
+		n, err := b.fetchOne(ctx)
 		if err != nil {
 			if isThrottleErr(err) {
 				b.throttleAttempts++
 				select {
 				case <-ctx.Done():
-				case <-time.After(backfillBackoff(b.throttleAttempts)):
+				case <-time.After(backoff.Exponential(b.throttleAttempts, time.Second, 60*time.Second)):
 				}
 				return
 			}
 			b.throttleAttempts = 0
 			return
 		}
-		b.throttleAttempts = 0
-		if err := b.acct.storeBody(ctx, uid, body); err != nil {
-			return
+		if n == 0 {
+			return // caught up
 		}
-		bytesFetched += int64(len(body))
+		b.throttleAttempts = 0
+		bytesFetched += int64(n)
 	}
 }
 
-// isThrottleErr matches IMAP [THROTTLED], JMAP rate-limit, and HTTP
-// 429 responses. The underlying libraries surface these as opaque
-// error strings without typed sentinels at this layer.
+// isThrottleErr reports whether err is a backend rate-limit signal.
+// Upstream libraries surface these as opaque strings, so substring
+// matching is the only option at this layer.
 func isThrottleErr(err error) bool {
 	if err == nil {
 		return false
@@ -173,15 +170,4 @@ func isThrottleErr(err error) bool {
 		strings.Contains(s, "rate limited") ||
 		strings.Contains(s, "rateLimit") ||
 		strings.Contains(s, "429")
-}
-
-// backfillBackoff returns the sleep for the Nth consecutive throttle
-// response. 1s, 2s, 4s, ..., capped at 60s. Mirrors the outbox
-// drainer's curve.
-func backfillBackoff(attempts int) time.Duration {
-	d := time.Second << attempts
-	if d > 60*time.Second || d <= 0 {
-		return 60 * time.Second
-	}
-	return d
 }

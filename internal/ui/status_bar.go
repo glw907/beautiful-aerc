@@ -80,8 +80,8 @@ func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
 	return sb
 }
 
-// SetBackfill updates the backfill progress segment. The segment is
-// hidden when total == 0 or done >= total.
+// SetBackfill updates the progress counters. The segment hides when
+// total is zero or done has reached total.
 func (sb StatusBar) SetBackfill(done, total int, paused, warn bool) StatusBar {
 	sb.backfillDone = done
 	sb.backfillTotal = total
@@ -173,9 +173,8 @@ func (sb StatusBar) View(width, dividerCol int) string {
 	return fillPart + countsPart + outboxPart + backfillPart + connIconPart + connTextPart + endPart
 }
 
-// renderBackfillSegment formats the ↓ N/M progress segment. width is
-// the full status-bar width so the function can collapse to glyph-only
-// in the Spartan tier. Returns "" when hidden.
+// renderBackfillSegment formats the backfill progress glyph. The
+// full bar width collapses to a bare glyph below 90 columns.
 func (sb StatusBar) renderBackfillSegment(width int) string {
 	if sb.backfillTotal == 0 || sb.backfillDone >= sb.backfillTotal {
 		return ""

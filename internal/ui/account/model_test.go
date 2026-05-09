@@ -1323,10 +1323,3 @@ func TestModel_AttachmentsLoadedMsg_StaleUIDDropped(t *testing.T) {
 		t.Errorf("expected 1 attachment, got %d", len(got))
 	}
 }
-
-func TestModel_NotifyActivityForwards(t *testing.T) {
-	var m Model
-	m.NotifyActivity()
-	m.NotifyConnState(true)
-	m.NotifyConnState(false)
-}
