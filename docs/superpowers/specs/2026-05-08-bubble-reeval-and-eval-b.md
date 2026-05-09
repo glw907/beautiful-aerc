@@ -389,3 +389,31 @@ qualifies.
 **Rationale (one line):** `JoinHorizontal` in `renderRowData` is unreachable from ansix call sites, and neither consumer fits the fixed-column table model — `messagelist` needs the threading pipeline and `contacts/list` needs letter-jump nav — so adoption saves no code and adds a width-safety workaround.
 
 **Interacts with:** Fork-vs-accept (Task 11). `bubble-table` joins `bubbles/help` on the (b) list — its blocker is internal `JoinHorizontal` in the library's core render path, not poplar's own width math. If the fork option is accepted and the fix lands in lipgloss or x/ansi, the width blocker dissolves, but the consumer-fit gap (threading pipeline, letter-jump nav) remains, and the verdict would still be Keep + harvest.
+
+## bubbles/list × pickers (movepicker / linkpicker / attachpicker)
+
+**Does this make poplar better?** No. The library's chrome — title bar, filter input, status bar, paginator, help footer — is built into `View()` and stacked with `JoinVertical`; all of it ships whether callers want it or not. Suppression flags (`SetShowTitle(false)`, `SetShowFilter(false)`, `SetShowPagination(false)`, `SetShowStatusBar(false)`, `SetShowHelp(false)`) exist but leave layout residue and fight `ModalShell`'s border-plus-footer contract. Critically, `JoinHorizontal` does not appear in the list or defaultitem render paths — the row delegate writes to an `io.Writer` and the library uses `JoinVertical` to stack sections — so there is no (b)-list entry here. The width concern is irrelevant; the chrome entanglement is the real blocker.
+
+**movepicker.** The closest fit. `bubbles/list` is a scrollable, filterable list of typed items — exactly the folder-selection shape. But movepicker owns its filter inline (printable rune → `p.filter` → `recompute()`), renders rows via `buildListRows` → `ModalShell.Box`, and clamps scroll with `uicore.ClampScrollOffset`. Replacing that with a `list.Model` would mean delegating filter keystrokes to the library, losing the per-rune `recompute()` path, and fighting `ModalShell.Box` for border ownership. The custom delegate pattern does map onto `buildListRows` shape, but the net delta is negative: more code surface, less control over the modal frame.
+
+**linkpicker.** Poor fit. The list is 1–9 URLs with digit quick-launch, a two-row URL preview below the fold, and a tight `linkPickerMaxWidth = 70` cap. `bubbles/list`'s paginator and status bar consume vertical space that linkpicker reclaims for the preview rows. The digit bindings (`1`–`9` → `LaunchURLMsg`) are not a `list.Model` concept — they require custom key handling that bypasses the delegate entirely. Adoption would add a paginator that activates only when links overflow 9 (the practical ceiling of quick-launch) and remove the two-row full-URL preview that makes the picker usable on long URLs. Net: worse.
+
+**attachpicker.** Poor fit for the same structural reasons as linkpicker. `formatRow` renders icon + `[N] filename (size)` using `ansix.PadOrTruncate` for SPUA-safe width; the custom delegate pattern would reproduce that exactly since `DefaultDelegate` renders a title + optional description with `ansi.Truncate` (not ansix-aware). The open-vs-save split (`o`/`s`/`Enter`/digit) is also delegate-external. No gain from the library's fuzzy filter (attachment lists are short and named; substring movepicker-style filter would be dead weight).
+
+**Feature parity:** `bubbles/list` provides fuzzy filtering, pagination, multi-style selection, delegate-driven row rendering, and built-in help. Movepicker uses a subset (scroll, filter, cursor highlight); linkpicker and attachpicker use a smaller subset still (scroll, cursor highlight, digit dispatch). The library's added features — fuzzy rank ordering, paginator dots, status bar item count — are either duplicated by movepicker's own title line or irrelevant to the other two.
+
+**Customization seams:** `SetDelegate(ItemDelegate)` replaces row rendering entirely. Style injection via `list.Styles` (title, filter prompt, selected item, dimmed item, pagination) provides broad control. Neither seam reaches `ModalShell.Box` border compositing or `uicore.PadOrTruncate` row padding, which poplar controls directly. Seams are real but don't eliminate the chrome-conflict problem.
+
+**Theming integration:** Mechanical — all styles arrive as raw `lipgloss.Style` values and can be wired to `NewStyles(*theme.CompiledTheme)`. Not zero-effort given the per-style-slot mapping, but not a blocker.
+
+**Maintenance signal:** `bubbles/list` ships with the main charmbracelet/bubbles module (v0.21.x active, v1.0.0 stable). Well-maintained, MIT. Not a concern.
+
+**Code delta estimate:** Adopting `bubbles/list` for movepicker would add the library dep (already in go.mod), replace ~150 LOC of `buildListRows`/`clampOffset`/`recompute` with a delegate + a thinner Update handler, but require wrapper glue for `ModalShell` border, filter routing, and chrome suppression. Net change is roughly neutral in size, negative in clarity. Linkpicker (252 LOC) and attachpicker (203 LOC) see no reduction — their digit dispatch, URL preview, and SPUA-safe row format are not delegate addressable.
+
+**License:** MIT (charmbracelet/bubbles). Clear.
+
+**Verdict:** Keep + harvest
+
+**Rationale (one line):** The library's title/filter/paginator/status chrome is structurally incompatible with `ModalShell.Box` ownership, no `JoinHorizontal` blocker exists, and no picker sees a meaningful LOC reduction — the harvest is the delegate pattern itself, already mirrored in movepicker's `buildListRows` shape.
+
+**Interacts with:** Task 9 (bubbles/list × sidebar), which evaluates the same library against a non-modal, non-overlay consumer. The pickers' verdict does not carry over — sidebar has no `ModalShell` conflict and a different chrome budget.
