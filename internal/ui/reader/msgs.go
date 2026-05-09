@@ -2,6 +2,7 @@ package reader
 
 import (
 	"github.com/glw907/poplar/internal/content"
+	"github.com/glw907/poplar/internal/icalendar"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -13,6 +14,7 @@ type BodyLoadedMsg struct {
 	UID    mail.UID
 	Blocks []content.Block
 	Unsub  content.Unsubscribe
+	Invite *icalendar.Invite // nil when absent
 }
 
 // AttachmentsLoadedMsg carries metadata for the viewer's current UID.

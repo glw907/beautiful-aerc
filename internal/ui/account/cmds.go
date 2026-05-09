@@ -18,6 +18,7 @@ import (
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/filter"
+	"github.com/glw907/poplar/internal/icalendar"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -170,6 +171,68 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 	}
 }
 
+// walkBody parses buf as an RFC 5322 message and extracts display text,
+// list-unsubscribe data, and the first calendar invite part (if present).
+// Non-RFC822 input is returned as-is with a zero Unsubscribe and nil Invite.
+func walkBody(buf []byte) (text string, unsub content.Unsubscribe, invite *icalendar.Invite) {
+	unsub = parseUnsubscribeFromRaw(buf)
+	text = string(buf)
+	if !isRFC822(buf) {
+		return text, unsub, nil
+	}
+	mr, err := gomail.CreateReader(bytes.NewReader(buf))
+	if err != nil {
+		return text, unsub, nil
+	}
+	var plain, html string
+	var calBytes []byte
+	for {
+		p, perr := mr.NextPart()
+		if perr != nil {
+			break
+		}
+		ih, ok := p.Header.(*gomail.InlineHeader)
+		if !ok {
+			io.Copy(io.Discard, p.Body)
+			continue
+		}
+		ct, _, _ := ih.ContentType()
+		body, rerr := io.ReadAll(p.Body)
+		if rerr != nil {
+			continue
+		}
+		switch ct {
+		case "text/plain":
+			if plain == "" {
+				plain = string(body)
+			}
+		case "text/html":
+			if html == "" {
+				html = string(body)
+			}
+		case "text/calendar", "application/ics":
+			if calBytes == nil {
+				calBytes = body
+			}
+		}
+	}
+	mr.Close()
+	switch {
+	case plain != "":
+		text = filter.CleanPlain(plain)
+	case html != "":
+		text = filter.CleanHTML(html)
+	default:
+		text = ""
+	}
+	if calBytes != nil {
+		if inv, ierr := icalendar.ParseInvite(calBytes); ierr == nil {
+			invite = &inv
+		}
+	}
+	return text, unsub, invite
+}
+
 // loadBodyCmd fetches a message body via the cache and parses it into
 // blocks. If ctx is cancelled before FetchBody returns, the cmd returns
 // nil and the result is dropped (the backend round-trip still completes).
@@ -182,49 +245,8 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 				resultCh <- uicore.ErrorMsg{Op: "fetch body", Err: err}
 				return
 			}
-			unsub := parseUnsubscribeFromRaw(buf)
-			text := string(buf)
-			if isRFC822(buf) {
-				if mr, mrErr := gomail.CreateReader(bytes.NewReader(buf)); mrErr == nil {
-					var plain, html string
-					for {
-						p, err := mr.NextPart()
-						if err != nil {
-							break
-						}
-						ih, ok := p.Header.(*gomail.InlineHeader)
-						if !ok {
-							io.Copy(io.Discard, p.Body)
-							continue
-						}
-						ct, _, _ := ih.ContentType()
-						body, rerr := io.ReadAll(p.Body)
-						if rerr != nil {
-							continue
-						}
-						switch ct {
-						case "text/plain":
-							if plain == "" {
-								plain = string(body)
-							}
-						case "text/html":
-							if html == "" {
-								html = string(body)
-							}
-						}
-					}
-					mr.Close()
-					switch {
-					case plain != "":
-						text = filter.CleanPlain(plain)
-					case html != "":
-						text = filter.CleanHTML(html)
-					default:
-						text = ""
-					}
-				}
-			}
-			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text), Unsub: unsub}
+			text, unsub, invite := walkBody(buf)
+			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text), Unsub: unsub, Invite: invite}
 		}()
 		select {
 		case <-ctx.Done():
