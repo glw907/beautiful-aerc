@@ -484,3 +484,13 @@ contacts/list computes content height the same way — `ComputeLayout` applied t
 share. Adding them as "consumers" of a `ListBodyRows` helper would be a
 false unification — the subtraction constant differs and the layout path
 differs.
+
+---
+
+## ADR
+
+No ADR landed for Pass 9x.3. The harvest produced zero structural diffs
+across all three surfaces; the only inline change was the adjacent-
+cleanup removal of the dead `contacts.Styles.Border` field, which is an
+internal field on a per-package style struct and carries no binding-fact
+effect. The pass commit message carries the rationale.
