@@ -38,6 +38,11 @@ type StatusBar struct {
 	// when both counts are zero.
 	outboxInflight int // pending + executing + failed
 	outboxConflict int // conflict only
+	// Backfill segment between outbox and connection indicator.
+	backfillDone   int
+	backfillTotal  int
+	backfillPaused bool
+	backfillWarn   bool
 }
 
 func NewStatusBar(styles Styles) StatusBar {
@@ -72,6 +77,16 @@ func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
 	}
 	sb.outboxInflight = inflight
 	sb.outboxConflict = conflict
+	return sb
+}
+
+// SetBackfill updates the backfill progress segment. The segment is
+// hidden when total == 0 or done >= total.
+func (sb StatusBar) SetBackfill(done, total int, paused, warn bool) StatusBar {
+	sb.backfillDone = done
+	sb.backfillTotal = total
+	sb.backfillPaused = paused
+	sb.backfillWarn = warn
 	return sb
 }
 
@@ -144,16 +159,45 @@ func (sb StatusBar) View(width, dividerCol int) string {
 	// and forced a corrective re-render.
 	countsPart := sb.styles.StatusBar.Render(" " + counts + " · ")
 	outboxPart := sb.renderOutboxSegment()
+	backfillPart := sb.renderBackfillSegment(width)
 	connIconPart := connStyle.Render(connIcon)
 	connTextPart := sb.styles.StatusBar.Render(" " + connText + " ")
 	endPart := sb.styles.TopLine.Render("─╯")
 	rightWidth := lipgloss.Width(countsPart) + lipgloss.Width(outboxPart) +
+		lipgloss.Width(backfillPart) +
 		lipgloss.Width(connIconPart) + lipgloss.Width(connTextPart) +
 		lipgloss.Width(endPart)
 
 	fillWidth := max(0, width-rightWidth)
 	fillPart := sb.styles.TopLine.Render(buildFill(fillWidth, dividerCol))
-	return fillPart + countsPart + outboxPart + connIconPart + connTextPart + endPart
+	return fillPart + countsPart + outboxPart + backfillPart + connIconPart + connTextPart + endPart
+}
+
+// renderBackfillSegment formats the ↓ N/M progress segment. width is
+// the full status-bar width so the function can collapse to glyph-only
+// in the Spartan tier. Returns "" when hidden.
+func (sb StatusBar) renderBackfillSegment(width int) string {
+	if sb.backfillTotal == 0 || sb.backfillDone >= sb.backfillTotal {
+		return ""
+	}
+	spartan := width < 90
+	switch {
+	case sb.backfillWarn:
+		if spartan {
+			return sb.styles.StatusOffline.Render("↓⚠") + sb.styles.StatusBar.Render(" · ")
+		}
+		return sb.styles.StatusOffline.Render("↓ ⚠") + sb.styles.StatusBar.Render(" · ")
+	case sb.backfillPaused:
+		if spartan {
+			return sb.styles.StatusBar.Render("↓⏸ · ")
+		}
+		return sb.styles.StatusBar.Render("↓ paused · ")
+	default:
+		if spartan {
+			return sb.styles.StatusBar.Render("↓ · ")
+		}
+		return sb.styles.StatusBar.Render(fmt.Sprintf("↓ %d/%d · ", sb.backfillDone, sb.backfillTotal))
+	}
 }
 
 // renderOutboxSegment formats the outbox depth indicator, returning ""

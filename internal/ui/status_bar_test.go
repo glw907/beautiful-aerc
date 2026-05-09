@@ -148,3 +148,40 @@ func TestStatusBar_OutboxConflictWinsOverPending(t *testing.T) {
 		t.Errorf("⇅ still present alongside ⚠ in %q", out)
 	}
 }
+
+func TestStatusBar_BackfillSegment(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	cases := []struct {
+		name     string
+		width    int
+		done     int
+		total    int
+		paused   bool
+		warn     bool
+		contains string // empty = segment must be absent
+	}{
+		{"hidden when caught up", 120, 100, 100, false, false, ""},
+		{"hidden when no messages", 120, 0, 0, false, false, ""},
+		{"full active", 120, 18, 33, false, false, "↓ 18/33"},
+		{"glyph-only Spartan", 80, 18, 33, false, false, "↓"},
+		{"full paused", 120, 18, 33, true, false, "↓ paused"},
+		{"glyph paused Spartan", 80, 18, 33, true, false, "↓⏸"},
+		{"full warn", 120, 18, 33, false, true, "↓ ⚠"},
+		{"glyph warn Spartan", 80, 18, 33, false, true, "↓⚠"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sb := NewStatusBar(styles).SetBackfill(c.done, c.total, c.paused, c.warn)
+			out := stripANSI(sb.View(c.width, c.width-1))
+			if c.contains == "" {
+				if strings.Contains(out, "↓") {
+					t.Errorf("expected no backfill segment; got %q", out)
+				}
+				return
+			}
+			if !strings.Contains(out, c.contains) {
+				t.Errorf("View width=%d: missing %q in %q", c.width, c.contains, out)
+			}
+		})
+	}
+}

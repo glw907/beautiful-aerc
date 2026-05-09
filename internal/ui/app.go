@@ -660,6 +660,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		acct, fcmd := m.acct.Update(msg)
 		m.acct = acct
 		cmds = append(cmds, fcmd)
+		done, total, _ := m.acct.Cache().BackfillProgress()
+		m.statusBar = m.statusBar.SetBackfill(done, total, false, false)
 		return m, tea.Batch(cmds...)
 
 	case outboxScheduledMsg:
