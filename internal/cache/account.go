@@ -37,9 +37,11 @@ type Account struct {
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
 
-	drainSignal chan struct{}
-	stop        chan struct{}
-	wg          sync.WaitGroup
+	drainSignal  chan struct{}
+	stop         chan struct{}
+	wg           sync.WaitGroup
+	backfiller   *Backfiller
+	backfillStop context.CancelFunc
 }
 
 // OpStatus is the lifecycle state of an outbox row.
@@ -82,7 +84,7 @@ type CacheEvent struct {
 
 // Config sets the cache size backstops. Zero values disable.
 type Config struct {
-	// MaxSize caps the body-cache in bytes. Default 2GB from [cache] in config.toml.
+	// MaxSize caps the body-cache in bytes. Zero (the new default) disables the cap; configurable via [cache] max-size in config.toml.
 	MaxSize int64
 	// MaxAttachmentSize caps attachment bytes, tracked separately from MaxSize.
 	MaxAttachmentSize int64
@@ -158,6 +160,10 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		drainSignal:       make(chan struct{}, 1),
 		stop:              make(chan struct{}),
 	}
+	a.backfiller = newBackfiller(a)
+	bfCtx, cancel := context.WithCancel(context.Background())
+	a.backfillStop = cancel
+	go a.backfiller.Run(bfCtx)
 	return a, nil
 }
 
@@ -192,6 +198,9 @@ func (a *Account) DroppedEvents() uint64 { return a.droppedEvents.Load() }
 
 // Close stops background goroutines and closes the database.
 func (a *Account) Close() error {
+	if a.backfillStop != nil {
+		a.backfillStop()
+	}
 	select {
 	case <-a.stop:
 	default:

@@ -76,3 +76,25 @@ func TestNextUnfetchedUID_AllCached(t *testing.T) {
 		t.Errorf("nextUnfetchedUID with all bodies cached: ok=true, want false")
 	}
 }
+
+func TestBackfiller_OneShot(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	uid := mail.UID("u-1")
+	seedMessage(t, a, uid, time.Now())
+	a.Backend = &fakeBackendWithBody{body: []byte("hello")}
+
+	bf := newBackfiller(a)
+	if err := bf.fetchOne(context.Background()); err != nil {
+		t.Fatalf("fetchOne: %v", err)
+	}
+
+	got, ok, err := a.lookupBody(context.Background(), uid)
+	if err != nil || !ok {
+		t.Fatalf("lookupBody: ok=%v err=%v", ok, err)
+	}
+	if string(got) != "hello" {
+		t.Errorf("body = %q, want %q", got, "hello")
+	}
+}
