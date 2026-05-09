@@ -179,6 +179,10 @@ from the body, and a final blank row on `BgBase` closes the pane.
 | `SubjectTitle` (theme) | `FgBright` bold | — | Subject rendered on the first row of the panel |
 | `HeaderValue` (theme) | `FgBase` | — | Address name and scalar value in the metadata block |
 | `HeaderDim` (theme) | `FgDim` | — | Uppercase `FROM`/`TO`/`CC`/`BCC`/`DATE` labels and `<email>` brackets in the metadata block; also the panel's bottom border |
+| `InviteIcon` | `AccentPrimary` | `BgBase` | Calendar glyph (`📅` / `[i]`) prefixing the invite Summary row |
+| `InviteSummary` | `FgBright` bold | `BgBase` | Summary text on the invite block's leading row |
+| `InviteField` | `FgBase` | `BgBase` | Indented detail rows (When / Where / Organizer / N attendees / Repeats) |
+| `InviteCancelled` | `ColorWarning` bold | `BgBase` | `[CANCELLED]` row above Summary on `METHOD=CANCEL` invites |
 
 Background composition: the header panel is rendered by lipgloss
 with `Width()` set, so each panel row arrives pre-filled to the

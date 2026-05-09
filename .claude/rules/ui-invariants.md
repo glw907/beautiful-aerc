@@ -103,13 +103,20 @@ file describes behavior, not the key tables.
   a rule; inline link text gets ` [^N]` glued to its last word with
   U+00A0. Short bare URLs (`Text == URL`, ≤30 cells) render inline
   without a marker.
-- Chip row sits between header panel and body. Hidden when
-  `len(attachments) == 0`. Layout owned by `Viewer.layout`; body
-  height = `v.height - panel - chipHeight`. Chip row populates from
+- Invite block + chip row sit between header panel and body, in
+  that order, both optional. Layout owned by `Viewer.layout`; body
+  height = `v.height - panel - inviteHeight - chipHeight`. Chip
+  row hidden when `len(attachments) == 0`; populated from
   `attachmentsLoadedMsg` batched in the same Cmd as `bodyLoadedMsg`
   on viewer open. `@` opens the App-owned `AttachPicker` overlay
   (`o`/Enter/digit open via `xdg-open` on a tempfile; `s` saves to
-  `[ui] download_dir`; `Esc`/`q`/`@` close).
+  `[ui] download_dir`; `Esc`/`q`/`@` close). Invite block hidden
+  when no `text/calendar`/`application/ics` part is present;
+  `reader.BodyLoadedMsg.Invite` carries the parsed first VEVENT.
+  Display only — no RSVP, no CalDAV, no popover. Method=CANCEL
+  prepends a `[CANCELLED]` row in `ColorWarning`. Recurrence
+  humanizes only `FREQ`+`INTERVAL`; anything fancier drops the
+  Repeats row. Library: `arran4/golang-ical`. ADR-0186.
 
 ### Triage, undo, error banner
 

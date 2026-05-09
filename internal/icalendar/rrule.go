@@ -42,7 +42,6 @@ func humanizeRRULE(raw string) string {
 	return "Every " + strconv.Itoa(interval) + " " + unit[1]
 }
 
-// freqUnit maps FREQ value → [singular label, plural label].
 var freqUnit = map[string][2]string{
 	"DAILY":   {"day", "days"},
 	"WEEKLY":  {"week", "weeks"},

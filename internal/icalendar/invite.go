@@ -13,6 +13,15 @@ import (
 // ErrNoEvent is returned when the input contains no VEVENT component.
 var ErrNoEvent = errors.New("icalendar: no VEVENT in part")
 
+// Canonical METHOD values from RFC 5546. Invite.Method holds the uppercased
+// value as parsed; callers compare against these constants.
+const (
+	MethodRequest = "REQUEST"
+	MethodPublish = "PUBLISH"
+	MethodCancel  = "CANCEL"
+	MethodReply   = "REPLY"
+)
+
 // Invite holds the display-relevant fields extracted from the first VEVENT
 // in an iCalendar document.
 type Invite struct {
@@ -60,8 +69,8 @@ func ParseInvite(b []byte) (Invite, error) {
 	}
 
 	inv.Organizer = organizerName(ev)
-	inv.Start, _ = parseEventTime(ev, ical.ComponentPropertyDtStart)
-	inv.End, _ = parseEventTime(ev, ical.ComponentPropertyDtEnd)
+	inv.Start, _ = startTime(ev)
+	inv.End, _ = endTime(ev)
 
 	if p := ev.GetProperty(ical.ComponentPropertyRrule); p != nil {
 		inv.Recurrence = humanizeRRULE(p.Value)
@@ -94,17 +103,16 @@ func organizerName(ev *ical.VEvent) string {
 	return addr
 }
 
-func parseEventTime(ev *ical.VEvent, prop ical.ComponentProperty) (time.Time, error) {
-	// Try datetime first, then all-day date.
-	t, err := ev.GetStartAt()
-	if prop == ical.ComponentPropertyDtEnd {
-		t, err = ev.GetEndAt()
-	}
-	if err == nil {
+func startTime(ev *ical.VEvent) (time.Time, error) {
+	if t, err := ev.GetStartAt(); err == nil {
 		return t, nil
 	}
-	if prop == ical.ComponentPropertyDtStart {
-		return ev.GetAllDayStartAt()
+	return ev.GetAllDayStartAt()
+}
+
+func endTime(ev *ical.VEvent) (time.Time, error) {
+	if t, err := ev.GetEndAt(); err == nil {
+		return t, nil
 	}
 	return ev.GetAllDayEndAt()
 }

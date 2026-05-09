@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 12 — `.ics` viewer (#37). Pass 11
-landed List-Unsubscribe; #36 closed.
+**Current pass:** Pass 13 — Search (#38). Pass 12 landed the
+`.ics` invite viewer; #37 closed.
 
 ## Passes
 
@@ -10,8 +10,8 @@ landed List-Unsubscribe; #36 closed.
 | 1 – 9z | Scaffold through bubble adoption (ADRs 0001–0182) | done |
 | 10a | Outbox delivery controls — undo send (#35 part 1; ADR-0183) | done |
 | 10b | Schedule send + sidebar Outbox (#35 part 2; ADR-0184) | done |
-| 11 | List-Unsubscribe (#36) | done |
-| 12 | `.ics` viewer (#37) | pending |
+| 11 | List-Unsubscribe (#36; ADR-0185) | done |
+| 12 | `.ics` invite viewer (#37; ADR-0186) | done |
 | 13 | Search (#38) | pending |
 | 14 | First-run wizard (#27) + OAuth refresh + config template (#29) | pending |
 | 15 | Polish II — popover dim (#14) + items surfaced during 10–14 | pending |
@@ -20,36 +20,30 @@ landed List-Unsubscribe; #36 closed.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 12)
+## Next starter prompt (Pass 13)
 
-> **Goal.** `.ics` calendar invite viewer (BACKLOG #37) — detect
-> `text/calendar` / `application/ics` parts in incoming messages,
-> parse them, and render a chip + popover in the viewer. Display
-> only; no RSVP or CalDAV integration in scope.
+> **Goal.** Full-account / cross-folder search (BACKLOG #38).
+> Operator string typed at the existing `/` shelf, parsed to
+> typed `FilterCondition`, dispatched via `mail.Backend.Search`,
+> rendered as a virtual folder in the sidebar.
 >
-> **Scope.** New `internal/icalendar/` package wrapping
-> `github.com/arran4/golang-ical` (MIT). Parse the first
-> `VEVENT` from the part bytes; expose a `ParseInvite` function
-> returning a value type with summary, start/end times, location,
-> organizer, and attendee count. Wire into the body-fetch Cmd
-> alongside attachments; result rides on `reader.BodyLoadedMsg`.
-> Viewer chip row gains an invite chip (extend the attachment
-> chip pattern from ADR-0138). `Enter` on the chip opens an
-> overlay (`InvitePopover`) with the full event detail. No key
-> binding beyond `Enter` to open and `Esc`/`q` to close; overlay
-> follows the existing modal cascade.
+> **Scope.** Restore `Search` on `mail.Backend` (removed in
+> Pass 8.5 / ADR-0125) with typed filter shape; impl against
+> JMAP `Email/query` and IMAP `SEARCH`. Operator grammar:
+> `from:`, `to:`, `subject:`, `is:unread`, `has:attachment`,
+> `before:`, `after:`, plus bare subject/body match. Results
+> render through the existing message-list surface; cache last
+> N result sets.
 >
-> **Settled (do not re-brainstorm):** Display only — no RSVP,
-> no CalDAV write. Library choice: `arran4/golang-ical`.
-> `internal/icalendar/` is the new domain package. The chip
-> extends the existing chip row (ADR-0138 pattern). Overlay
-> uses `ModalShell`.
+> **Settled.** Fastmail/Gmail operator surface (typed parser).
+> Virtual-folder rendering reuses message-list. Pass 13 is
+> display + dispatch; ranking is post-1.0.
 >
-> **Still open — brainstorm these:** How to handle multi-event
-> `.ics` files (show first, or list?); time formatting (local
-> tz vs UTC?); what to show when parsing fails (hide chip or
-> show error chip?); chip label text.
+> **Open — brainstorm:** parser location
+> (`internal/search/` vs `internal/content/`); shelf input
+> mode; result-set lifetime; IMAP fallback when `SEARCH`
+> exceeds cache window; cross-virtual-folder `n`/`N`.
 >
-> **Approach.** Brainstorm the open questions, write a plan at
-> `docs/superpowers/plans/YYYY-MM-DD-ics-viewer.md`, then
-> implement. Standard pass-end checklist (~8 tasks).
+> **Approach.** Brainstorm, plan + spec under
+> `docs/superpowers/`, implement. Watch pass size — split
+> 13a (backend) / 13b (UI) if tasks > 12.

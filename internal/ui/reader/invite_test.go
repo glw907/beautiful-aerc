@@ -101,7 +101,6 @@ func TestRenderInviteBlock_CrossDay(t *testing.T) {
 	end := time.Date(2026, 5, 15, 2, 0, 0, 0, time.UTC)
 	inv := &icalendar.Invite{Summary: "Overnight", Start: start, End: end}
 	s, _ := renderInviteBlock(inv, testInviteIcons(), testInviteStyles(), 80)
-	// Cross-day: both sides should contain a date.
 	parts := strings.Split(s, " – ")
 	if len(parts) < 2 {
 		t.Fatalf("cross-day: expected ' – ' separator in When row: %q", s)

@@ -12,8 +12,6 @@ import (
 
 // renderInviteBlock formats inv into a fixed-width block placed between the
 // viewer header panel and the chip row. Returns ("", 0) for nil or zero width.
-// Each row is padded to width via FillRowToWidth; rows exceeding width truncate
-// with an ellipsis. The block is at most 7 rows tall.
 func renderInviteBlock(inv *icalendar.Invite, icons uicore.IconSet, st Styles, width int) (string, int) {
 	if inv == nil || width < 1 {
 		return "", 0
@@ -22,52 +20,46 @@ func renderInviteBlock(inv *icalendar.Invite, icons uicore.IconSet, st Styles, w
 	bg := st.ViewerBg
 	var rows []string
 
-	if strings.EqualFold(inv.Method, "CANCEL") {
-		row := st.InviteCancelled.Render("[CANCELLED]")
-		rows = append(rows, uicore.FillRowToWidth(row, width, bg))
+	if inv.Method == icalendar.MethodCancel {
+		rows = append(rows, st.InviteCancelled.Render("[CANCELLED]"))
 	}
 
 	iconStr := st.InviteIcon.Render(icons.Calendar)
-	iconW := ansix.Width(iconStr)
-	summaryBudget := max(0, width-iconW-2)
-	summary := inv.Summary
-	if ansix.Width(summary) > summaryBudget {
-		summary = ansix.TruncateEllipsis(summary, summaryBudget)
-	}
-	summaryRow := iconStr + "  " + st.InviteSummary.Render(summary)
-	rows = append(rows, uicore.FillRowToWidth(summaryRow, width, bg))
+	summaryBudget := max(0, width-ansix.Width(iconStr)-2)
+	rows = append(rows, iconStr+"  "+st.InviteSummary.Render(truncate(inv.Summary, summaryBudget)))
 
-	when := formatWhen(inv.Start, inv.End)
-	whenRow := st.InviteField.Render("    When: " + when)
-	rows = append(rows, uicore.FillRowToWidth(whenRow, width, bg))
-
+	rows = append(rows, st.InviteField.Render("    When: "+formatWhen(inv.Start, inv.End)))
 	if inv.Location != "" {
-		row := st.InviteField.Render("    Where: " + inv.Location)
-		rows = append(rows, uicore.FillRowToWidth(row, width, bg))
+		rows = append(rows, st.InviteField.Render("    Where: "+inv.Location))
 	}
 	if inv.Organizer != "" {
-		row := st.InviteField.Render("    Organizer: " + inv.Organizer)
-		rows = append(rows, uicore.FillRowToWidth(row, width, bg))
+		rows = append(rows, st.InviteField.Render("    Organizer: "+inv.Organizer))
 	}
 	if inv.AttendeeCount > 0 {
-		label := fmt.Sprintf("    %d attendees", inv.AttendeeCount)
+		noun := "attendees"
 		if inv.AttendeeCount == 1 {
-			label = "    1 attendee"
+			noun = "attendee"
 		}
-		rows = append(rows, uicore.FillRowToWidth(st.InviteField.Render(label), width, bg))
+		rows = append(rows, st.InviteField.Render(fmt.Sprintf("    %d %s", inv.AttendeeCount, noun)))
 	}
 	if inv.Recurrence != "" {
-		row := st.InviteField.Render("    Repeats: " + inv.Recurrence)
-		rows = append(rows, uicore.FillRowToWidth(row, width, bg))
+		rows = append(rows, st.InviteField.Render("    Repeats: "+inv.Recurrence))
 	}
 
 	for i, r := range rows {
 		if ansix.Width(r) > width {
-			rows[i] = ansix.TruncateEllipsis(r, width)
+			r = ansix.TruncateEllipsis(r, width)
 		}
+		rows[i] = uicore.FillRowToWidth(r, width, bg)
 	}
-
 	return strings.Join(rows, "\n"), len(rows)
+}
+
+func truncate(s string, w int) string {
+	if ansix.Width(s) <= w {
+		return s
+	}
+	return ansix.TruncateEllipsis(s, w)
 }
 
 func formatWhen(start, end time.Time) string {

@@ -199,6 +199,23 @@ to the message list — no tab switching.
 - Footnotes: outbound links rendered `[N]: <url>` below a rule;
   inline link text gets ` [^N]` glued via U+00A0. See invariants
   (Viewer) for the full rule.
+- Invite block: when the message carries a `text/calendar` /
+  `application/ics` part, an inline block sits between the header
+  panel and the chip row. Display only — no RSVP. `[CANCELLED]`
+  prepended on `METHOD=CANCEL`.
+
+```
+│  ────────────────────────────────────────────────────────────                │
+│                                                                              │
+│  📅  Q2 launch sync                                                          │
+│      When:       Wed 2026-05-14, 3:00 PM – 4:00 PM                           │
+│      Where:      Zoom (https://example.zoom.us/j/123)                        │
+│      Organizer:  Alice Johnson                                               │
+│      4 attendees                                                             │
+│      Repeats:    Every week                                                  │
+│                                                                              │
+│  § 1. invite.ics (2.1 KB)                                                    │
+```
 
 ---
 
