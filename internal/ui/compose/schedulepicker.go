@@ -94,7 +94,7 @@ func (p *SchedulePicker) MoveDown() {
 	}
 }
 
-func (p SchedulePicker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (p SchedulePicker) Update(msg tea.Msg) (SchedulePicker, tea.Cmd) {
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return p, nil

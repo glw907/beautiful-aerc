@@ -465,8 +465,7 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			}
 		}
 		if c.schedulePicker != nil {
-			m, cmd := c.schedulePicker.Update(msg)
-			p := m.(SchedulePicker)
+			p, cmd := c.schedulePicker.Update(msg)
 			c.schedulePicker = &p
 			return c, cmd
 		}

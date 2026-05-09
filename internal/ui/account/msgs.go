@@ -72,3 +72,8 @@ type EmptyFolderConfirmedMsg struct {
 	Folder string
 	Source string
 }
+
+// JumpFolderMsg asks the account model to select the named canonical folder
+// and fire the load Cmd, exactly like J/K navigation. Used by App to restore
+// the previous folder after leaving the outbox view.
+type JumpFolderMsg struct{ Canonical string }

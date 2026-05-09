@@ -520,6 +520,69 @@ func resolveSentFolder(acct *cache.Account) string {
 	return ""
 }
 
+// outboxScheduledMsg carries the result of OutboxScheduled for the outbox view.
+type outboxScheduledMsg struct {
+	rows []cache.OutboxRow
+	err  error
+}
+
+func loadOutboxScheduledCmd(c *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		rows, err := c.OutboxScheduled(ctx)
+		return outboxScheduledMsg{rows: rows, err: err}
+	}
+}
+
+// outboxCancelledMsg reports the result of CancelOps from the outbox view.
+type outboxCancelledMsg struct {
+	err error
+}
+
+func cancelOutboxOpCmd(c *cache.Account, opID int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := c.CancelOps(ctx, []int64{opID})
+		return outboxCancelledMsg{err: err}
+	}
+}
+
+// rescheduleOpMsg reports the result of RescheduleOp.
+type rescheduleOpMsg struct {
+	err error
+}
+
+func rescheduleOpCmd(c *cache.Account, opID int64, when time.Time) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := c.RescheduleOp(ctx, opID, when.UnixNano())
+		return rescheduleOpMsg{err: err}
+	}
+}
+
+// editAsDraftCmd cancels the outbox op and opens compose seeded from the
+// linked draft. The draft payload must be non-nil; callers gate on that.
+func editAsDraftCmd(c *cache.Account, opID int64, draft *cache.DraftRow) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		// Cancel the outbound op first. ErrNotPending means it already
+		// dispatched; treat as a no-op so the user at least gets compose open
+		// with the stale draft text.
+		if err := c.CancelOps(ctx, []int64{opID}); err != nil && !errors.Is(err, cache.ErrNotPending) {
+			return ErrorMsg{Op: "cancel op", Err: err}
+		}
+		d, err := compose.DecodeDraft(draft.Payload)
+		if err != nil {
+			return ErrorMsg{Op: "decode draft", Err: err}
+		}
+		return RestoreFromDraftMsg{Draft: d}
+	}
+}
+
 // queueContactPutCmd patches (or builds) the vCard for contact and enqueues
 // a CardDAV PUT through the cache outbox. uid=="" means new contact.
 // Multi-book selection is post-1.0; uses the default book.

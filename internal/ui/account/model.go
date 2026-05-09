@@ -140,6 +140,9 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 		cmds = append(cmds, c)
 		return m, tea.Batch(cmds...)
 
+	case JumpFolderMsg:
+		return m.jumpToFolder(msg.Canonical)
+
 	case sidebar.ClearSearchMsg:
 		m = m.clearSearchIfActive()
 		return m, nil
@@ -636,6 +639,13 @@ func (m Model) ViewerScrollPct() int {
 
 func (m Model) SearchState() sidebar.SearchState {
 	return m.sidebarColumn.SidebarSearch().State()
+}
+
+// SetOutboxCount propagates n into the sidebar's synthetic Outbox entry.
+func (m *Model) SetOutboxCount(n int) {
+	sb := m.sidebarColumn.Sidebar()
+	sb.SetOutboxCount(n)
+	m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 }
 
 // dispatchTriage runs an optimistic triage action through the cache.
