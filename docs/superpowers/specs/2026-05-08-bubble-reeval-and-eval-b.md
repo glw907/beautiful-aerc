@@ -97,6 +97,43 @@ Per-candidate prose: 300–400 words for Eval A revisits and
 single-library Eval B candidates; up to 600 for the
 list-vs-bubblelister compare.
 
+## ansix capability summary
+
+`internal/ansix/` exports seven symbols. `SetSPUACellWidth(w int)`
+records the per-glyph cell count measured at startup (1 or 2);
+`SPUACellWidth()` reads it back. `Width(s string) int` is the
+primary measurement primitive: it calls `lipgloss.Width` then adds
+`(spuaCellWidth-1) * SpuaCount(s)` to correct for the extra cells
+SPUA-A glyphs occupy when `spuaCellWidth == 2`. `SpuaCount(s int)`
+counts SPUA-A runes with a fast ASCII-bail path. `Truncate(s string,
+n int) string` is the SPUA-aware analogue of `ansi.Truncate`:
+because `ansi.Truncate` uses runewidth internally and undercounts
+SPUA-A glyphs by `(spuaCellWidth-1)` cells each, `Truncate`
+iteratively tightens the runewidth budget until `Width(result) <= n`.
+`TruncateEllipsis(s, n)` delegates to `Truncate` with a one-cell
+ellipsis reserve; a one-cell budget returns bare `"…"`.
+`PadOrTruncate(s, n)` fits a string to exactly n cells, padding with
+spaces or truncating without an ellipsis. These replace the former
+`uicore.Display*` family (ADR-0181) and are the active width layer
+across sixteen call sites in `account`, `compose`, `messagelist`,
+`reader`, `sidebar`, and their tests.
+
+**The seam.** ansix sits at poplar's call sites. It corrects width
+math in code poplar owns. It cannot reach inside upstream libraries:
+when `lipgloss.JoinHorizontal` or a bubbles render function calls
+`lipgloss.Width` on its own strings, those measurements bypass
+ansix entirely. The ADR-0084 ban on `JoinHorizontal` under
+`spuaCellWidth != 1` remains in force for exactly this reason.
+
+**Implication for the re-eval.** A prior "Keep + harvest" verdict
+that cited poplar's own width-math as the blocker may flip to
+Adopt under ansix — poplar can now pass correctly-measured
+strings into the library. A verdict that cited the library's
+*internal* width calls (its own `lipgloss.Width` inside its render
+path) is unaffected. ansix does not help there; only a fork of
+`charmbracelet/x/ansi` or `lipgloss` would. That binary is the
+fork-vs-accept section's subject.
+
 ## Fork-vs-accept call
 
 A closing section names every **(b)** candidate — bubbles whose
