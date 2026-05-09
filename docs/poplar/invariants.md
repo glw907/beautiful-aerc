@@ -100,29 +100,29 @@ the ADR(s) that justify them.
   `Append` issued by the caller (the cache outbox).
   SASL: plain (default), login, xoauth2.
 - Cache outbox dispatches Send and Append. Schema v6 adds
-  `outbox.payload BLOB` carrying assembled MIME bytes, locked in
-  at queue time (no reassembly on dispatch).
-  `(*Account).QueueOutbound(ctx, sentFolder, env, mime, scheduledFor, draftID) ([]int64, error)`
-  is the compose-side entry point and returns op IDs in dispatch
-  order: `[send]` on JMAP, `[send, append]` on IMAP. `scheduledFor`
-  (unix nanos) holds dispatch — zero means immediate; positive
-  arms the undo window. `draftID` links the row(s) to a `drafts`
-  row (FK `ON DELETE SET NULL`); the drainer deletes that draft
-  inside the OpDone transaction on Send/Append success.
-  `(*Account).QueueSend` and `(*Account).QueueAppend` carry the
-  same trailing parameters; `SendArgs{Envelope}` / `AppendArgs{Flag}`
-  carry the metadata in `outbox.args`. The drainer's `dispatch(args,
-  row)` routes to `Backend.Send`/`Append` using `row.FolderName` /
-  `row.Payload`. `revertOptimisticTx` no-ops on Send/Append, so
-  `DiscardOp` works on conflicted rows. Partial failure surfaces
-  through the standard outbox visibility.
-  `(*Account).CancelOps(ctx, opIDs)` atomically deletes pending
-  rows or returns `ErrNotPending` if any has already advanced;
-  used by the App's `u` undo binding inside the
+  `outbox.payload BLOB` carrying assembled MIME bytes, locked
+  at queue time. `QueueOutbound(ctx, sentFolder, env, mime,
+  scheduledFor, draftID) ([]int64, error)` returns op IDs in
+  dispatch order: `[send]` on JMAP, `[send, append]` on IMAP.
+  `scheduledFor` (unix nanos): zero = immediate, positive arms
+  the undo window. `draftID` links rows to a `drafts` row (FK
+  `ON DELETE SET NULL`); the drainer deletes that draft in the
+  OpDone tx on success. `QueueSend`/`QueueAppend` carry the
+  same trailing parameters; `SendArgs{Envelope}` /
+  `AppendArgs{Flag}` ride in `outbox.args`. The drainer's
+  `dispatch(args, row)` routes to `Backend.Send`/`Append` via
+  `row.FolderName`/`row.Payload`. `revertOptimisticTx` no-ops
+  on Send/Append. `CancelOps(opIDs)` atomically deletes pending
+  rows or returns `ErrNotPending`; used by the App's `u` inside
   `[ui] undo-send-window` (default 10s, range `[0, 5m]`; zero
-  disables the hold). Linked drafts rows are not touched on
-  cancel — the caller relies on the in-memory Draft on
-  `pendingAction` for compose-restore. ADR-0183.
+  disables) and by the Outbox view's `c`. Linked drafts rows
+  are not touched on cancel. `RescheduleOp(opID,
+  newScheduledFor)` updates `scheduled_for` iff `OpPending` and
+  `scheduled_for > now`, else `ErrNotPending`.
+  `OutboxScheduled()` returns `[]OutboxRow` (pending or failed)
+  joined left to `folders` and `drafts` via `draft_id`, ordered
+  `scheduled_for ASC, id ASC` with NULL last; Subject from first
+  4 KB of payload via `net/textproto`. ADRs 0183, 0184.
 
 ### Elm architecture & idiomatic bubbletea
 

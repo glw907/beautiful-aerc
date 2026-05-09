@@ -28,6 +28,15 @@ file describes behavior, not the key tables.
   Disposal, Custom. Separated by blank lines. No group headers.
   Groups are permanent — user config only ranks folders within
   their group.
+- `Sidebar.SetOutboxCount(n)` injects a synthetic
+  `mail.CanonicalOutbox` entry at the top of the Disposal group
+  when `n > 0` (hidden when zero), reusing `Folder.Unseen` for
+  the count badge. Render-time injection in `effectiveEntries`;
+  no mutation to `s.entries`. Selection routes the right pane
+  to `internal/ui/outbox` instead of the message list. App
+  refreshes the count from `Account.OutboxDepth` on every
+  `account.CacheEventMsg`, guarded against unchanged totals.
+  ADR-0184.
 - Nested folder names (containing `/`) render flat. The `/` in the
   display name is the only affordance. No tree, no expand/collapse.
 - Sidebar width, sender column, date column, flag column, and
@@ -208,6 +217,19 @@ file describes behavior, not the key tables.
   `uicore.PlaceOverlay`; compose's `SetSize` forwards into the
   picker. Picker rides inside compose's input window — outside
   the global modal cascade. ADR-0179.
+- `Ctrl+L` in compose opens `SchedulePicker` — three preset rows
+  (Tomorrow morning / afternoon, Monday morning) plus a "Custom…"
+  row that expands a `bubbles/textinput` parsed by pure
+  `compose.ParseSchedule(s, now)`. Accept emits
+  `ScheduleAcceptedMsg{When}`; `m.scheduledFor` threads through
+  `composeSendCmd` into `QueueOutbound` and bypasses the
+  ADR-0183 undo-send window. Picker overlays on top of compose
+  via `uicore.PlaceOverlay`, sized through compose's input
+  window like AttachPicker. Outbox-side reschedule reuses the
+  same picker but under App ownership
+  (`pendingReschedule{picker, opID}`) so accepts route to
+  `cache.RescheduleOp` instead of dispatchSend. Footer hint
+  `^L later` at rank 6. ADRs 0076 (modifier exemption), 0184.
 - Single-instance for Pass 9h. Drafts persistence is 9h.5;
   address autocomplete is 9.1; signatures + identities is 9.4.
   `ComposeTab`/`AccountTab` names are placeholders pending the
