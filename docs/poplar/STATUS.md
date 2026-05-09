@@ -1,8 +1,7 @@
 # Poplar Status
 
 **Current pass:** Pass 9x.1 — bubbles/list family harvest.
-Feature passes (10–14) resume after the harvest sub-passes
-(9x.1–9x.3) conclude and 9y decides what's left.
+Features (10–14) resume after 9x.1–9x.3 + 9y conclude.
 
 ## Passes
 
