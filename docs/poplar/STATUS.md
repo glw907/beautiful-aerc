@@ -1,16 +1,15 @@
 # Poplar Status
 
-**Current pass:** Pass 10 — outbox delivery controls (undo + schedule
-send, #35). Bubble-eval roadmap fully closed.
+**Current pass:** Pass 10b — schedule send + outbox sidebar (#35
+completion). Pass 10a delivered the undo-send headline.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 9x.3 | Scaffold through table/form harvest (ADRs 0001–0181) | done |
-| 9y | Bubble consolidation verdict — nine libraries Keep; ADR-0182 closes the eval roadmap | done |
-| 9z | Bubble adoption — both carry-forward items deferred under named flip conditions; no-op outcome | done |
-| 10 | Outbox delivery controls — undo + schedule send (#35) | pending |
+| 1 – 9z | Scaffold through bubble adoption (ADRs 0001–0182) | done |
+| 10a | Outbox delivery controls — undo send (#35 part 1; ADR-0183) | done |
+| 10b | Schedule send + sidebar Outbox (#35 part 2) | pending |
 | 11 | List-Unsubscribe (#36) | pending |
 | 12 | `.ics` viewer (#37) | pending |
 | 13 | Search (#38) | pending |
@@ -21,32 +20,29 @@ send, #35). Bubble-eval roadmap fully closed.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 10)
+## Next starter prompt (Pass 10b)
 
-> **Goal.** Outbox delivery controls — undo-send window and
-> schedule-send (BACKLOG.md #35). First feature pass after the
-> harvest cycle.
+> **Goal.** Schedule send + outbox sidebar — completes BACKLOG #35.
+> Builds on the `scheduled_for` foundation landed in 10a.
 >
-> **Scope.** Wire user-controllable delay between `QueueSend` and
-> dispatch (the undo window) and absolute-time scheduling for
-> "send later." Cache outbox already carries the rows; this is a
-> drainer + UI surface pass. Out of scope: server-side scheduling
-> (JMAP `EmailSubmission/set { onSend }` and IMAP equivalents are
-> a v1.1 question).
+> **Scope.** Add `cache.RescheduleOp` and `cache.OutboxScheduled`
+> reads. Add a synthetic Outbox virtual folder above Trash in the
+> sidebar (visible only when the queue is non-empty). New
+> `internal/ui/outbox` subpackage with a list view and
+> cancel/reschedule/edit-as-draft keys. Compose schedule picker
+> modal (presets + custom dateparse). Edit-as-draft is a join
+> query against `drafts` — no MIME parser.
 >
-> **Settled (do not re-brainstorm):** Outbox state machine and
-> schema v6 payload-bearing rows (invariants — Send + Append).
-> Toast + undo affordance vocabulary (ADRs 0089–0091). The drainer
-> is the dispatch authority; UI signals via `tea.Cmd`.
+> **Settled (do not re-brainstorm):** Schema v10's two-column
+> design (10a). Reuse `pendingAction` + chrome banner only for
+> short-window undo; long schedules render in the sidebar Outbox
+> count. Picker is presets + custom (Gmail/Fastmail-shape).
 >
-> **Still open — brainstorm these:** Default undo window length
-> and configurability; UX for an in-flight schedule (status bar
-> indicator? sidebar Outbox folder count?); cancel-scheduled vs
-> reschedule semantics; whether undo and schedule share a single
-> "delay until" field on the row or split into two states.
+> **Still open — brainstorm these:** Compose key for schedule
+> (`s` is taken; pick from free letters); preset list calibration;
+> dateparse vendoring; sidebar virtual-folder seam in
+> `sidebar.Model`.
 >
-> **Approach.** Brainstorm the open questions, survey the major
-> clients (TB, Apple Mail, Gmail) for prior art, write a plan at
-> `docs/superpowers/plans/YYYY-MM-DD-outbox-delivery-controls.md`,
-> then implement. Pass-size budget applies — split if scope
-> exceeds 12 tasks. Standard pass-end checklist.
+> **Approach.** Brainstorm the open questions, write a plan at
+> `docs/superpowers/plans/YYYY-MM-DD-schedule-send.md`, then
+> implement. Standard pass-end checklist.

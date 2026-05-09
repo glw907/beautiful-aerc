@@ -54,7 +54,15 @@ each fact back to its ADR(s).
   existing `messages` rows in the same transaction. v9 drops
   `NOT NULL` from `outbox.folder` so contact ops (folderless) sit
   alongside mail ops in the same outbox; the drainer's pickup
-  query `LEFT JOIN`s `folders` rather than inner-joins.
+  query `LEFT JOIN`s `folders` rather than inner-joins. v10 adds
+  `outbox.scheduled_for` (unix nanos, user-intent dispatch hold)
+  and `outbox.draft_id TEXT REFERENCES drafts(draft_id) ON DELETE
+  SET NULL`. The drainer pickup gate becomes `now >=
+  COALESCE(scheduled_for, 0) AND now >= COALESCE(next_eligible_at,
+  0)`; `outbox_pickup` is rebuilt with `scheduled_for` as the
+  leading column. Send/Append's OpDone transition runs in one tx
+  with `DELETE FROM drafts WHERE draft_id = ?` when draft_id is
+  set.
 - The contacts ingest path lives in `internal/contacts/` (Client
   + Sync + Store seam); `cache.Account` implements `contacts.Store`
   (`Books`/`UpsertBook`/`ApplyChangeset`) and adds
@@ -130,16 +138,24 @@ each fact back to its ADR(s).
   forward write entry for Move/Flag/Destroy. `OpArgs` is a sealed
   sum (`MoveArgs`, `FlagArgs`, `DestroyArgs`,
   `SendArgs{Envelope}`, `AppendArgs{Flag}`).
-  `(*Account).QueueSend(ctx, sentFolder, env, mime)` and
-  `(*Account).QueueAppend(ctx, folder, flag, mime)` are the
-  payload-bearing entry points for outbound mail; both insert a
-  folder-scoped row with the assembled MIME bytes in
-  `outbox.payload` and skip optimistic UI (no message-row state
-  to mirror). Inside one transaction: resolve folder → row id,
-  insert outbox row with `status='pending'` and
-  `next_eligible_at=NULL`, apply optimistic `ui_flags`/`ui_hide`
-  to the message row (Move/Flag/Destroy only), commit, signal
-  drainer. After the drainer marks a row `conflict`,
+  `(*Account).QueueSend(ctx, sentFolder, env, mime, scheduledFor,
+  draftID)` and `(*Account).QueueAppend(ctx, folder, flag, mime,
+  scheduledFor, draftID)` are the payload-bearing entry points for
+  outbound mail; both insert a folder-scoped row with the assembled
+  MIME bytes in `outbox.payload`, optional `scheduled_for` /
+  `draft_id`, and skip optimistic UI (no message-row state to
+  mirror). `(*Account).QueueOutbound(...)` returns op IDs in
+  dispatch order: `[send]` on JMAP, `[send, append]` on IMAP.
+  Inside one transaction: resolve folder → row id, insert outbox
+  row with `status='pending'` and `next_eligible_at=NULL`, apply
+  optimistic `ui_flags`/`ui_hide` to the message row (Move/Flag/
+  Destroy only), commit, signal drainer.
+  `(*Account).CancelOps(ctx, opIDs)` deletes named outbox rows
+  iff every one is `OpPending`; atomic across the slice. Returns
+  `ErrNotPending` if any row has advanced. Used by the App's `u`
+  undo-send binding inside the `[ui] undo-send-window`. Linked
+  drafts rows are not touched on cancel — caller relies on the
+  in-memory Draft for compose-restore. After the drainer marks a row `conflict`,
   `(*Account).RetryOp(ctx, opID)` and
   `(*Account).DiscardOp(ctx, opID)` are the user-initiated
   resolution primitives. Retry resets `attempts = 0` and signals

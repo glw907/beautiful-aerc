@@ -102,16 +102,27 @@ the ADR(s) that justify them.
 - Cache outbox dispatches Send and Append. Schema v6 adds
   `outbox.payload BLOB` carrying assembled MIME bytes, locked in
   at queue time (no reassembly on dispatch).
-  `(*Account).QueueSend(ctx, sentFolder, env, mime)` and
-  `(*Account).QueueAppend(ctx, folder, flag, mime)` are the
-  payload-bearing entry points; `SendArgs{Envelope}` /
-  `AppendArgs{Flag}` carry the metadata in `outbox.args`. The
-  drainer's `dispatch(args, row)` routes to `Backend.Send`/`Append`
-  using `row.FolderName` / `row.Payload`. `revertOptimisticTx`
-  no-ops on Send/Append, so `DiscardOp` works on conflicted rows.
-  IMAP enqueues two ops (Send then Append-to-Sent); JMAP enqueues
-  one Send (server lands the Sent copy atomically). Partial
-  failure surfaces through the standard outbox visibility.
+  `(*Account).QueueOutbound(ctx, sentFolder, env, mime, scheduledFor, draftID) ([]int64, error)`
+  is the compose-side entry point and returns op IDs in dispatch
+  order: `[send]` on JMAP, `[send, append]` on IMAP. `scheduledFor`
+  (unix nanos) holds dispatch — zero means immediate; positive
+  arms the undo window. `draftID` links the row(s) to a `drafts`
+  row (FK `ON DELETE SET NULL`); the drainer deletes that draft
+  inside the OpDone transaction on Send/Append success.
+  `(*Account).QueueSend` and `(*Account).QueueAppend` carry the
+  same trailing parameters; `SendArgs{Envelope}` / `AppendArgs{Flag}`
+  carry the metadata in `outbox.args`. The drainer's `dispatch(args,
+  row)` routes to `Backend.Send`/`Append` using `row.FolderName` /
+  `row.Payload`. `revertOptimisticTx` no-ops on Send/Append, so
+  `DiscardOp` works on conflicted rows. Partial failure surfaces
+  through the standard outbox visibility.
+  `(*Account).CancelOps(ctx, opIDs)` atomically deletes pending
+  rows or returns `ErrNotPending` if any has already advanced;
+  used by the App's `u` undo binding inside the
+  `[ui] undo-send-window` (default 10s, range `[0, 5m]`; zero
+  disables the hold). Linked drafts rows are not touched on
+  cancel — the caller relies on the in-memory Draft on
+  `pendingAction` for compose-restore. ADR-0183.
 
 ### Elm architecture & idiomatic bubbletea
 
@@ -142,28 +153,23 @@ the ADR(s) that justify them.
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
   `DimANSI`, render primitives (`PadOrTruncate`, `TruncateToWidth`,
   `CenterOverlay`, `ApplyBg`, `FillRowToWidth`, …), and the
-  `LayoutMode` / `IconSet` /
-  `SearchMode` enums plus the `SimpleIcons`/`FancyIcons` tables.
-  Each subpackage exposes a single `Model` + `New(...)` (sub-models
-  like `sidebar.Column`, `sidebar.Search`, `reader.LinkPicker`,
-  `reader.AttachPicker` are exported alongside). Per-subpackage
-  `Styles` lives in that subpackage's `styles.go` with a
-  `NewStyles(*theme.CompiledTheme)` constructor. Those `styles.go`
-  files are the only places outside `internal/ui/styles.go` and
+  `LayoutMode`/`IconSet`/`SearchMode` enums plus the
+  `SimpleIcons`/`FancyIcons` tables. Each subpackage exposes one
+  `Model` + `New(...)` (sub-models like `sidebar.Column`,
+  `reader.LinkPicker` exported alongside). Per-subpackage `Styles`
+  lives in that subpackage's `styles.go` with a
+  `NewStyles(*theme.CompiledTheme)` constructor; those files are
+  the only places outside `internal/ui/styles.go` and
   `internal/theme/palette.go` permitted to call
-  `lipgloss.NewStyle()`. Msg types live in the package that
-  produces them: subpackage-private msgs are unexported and never
-  cross the boundary; cross-boundary msgs are exported in
-  `<subpkg>/msgs.go` and qualified at the call site
-  (`account.TriageStartedMsg`, `account.CacheEventMsg`,
-  `account.OpenConfirmEmptyMsg`, `account.EmptyFolderConfirmedMsg`,
-  `account.FolderLoadedMsg`, `reader.BodyLoadedMsg`,
-  `sidebar.ClearSearchMsg`). Reader/compose cmds emitting
-  `uicore.ErrorMsg` and orchestrating the App `URLOpener` seam
-  live in `internal/ui/cmds.go`, accepting seams as
-  function-typed parameters. `internal/ui/compose` shadows the
-  `internal/compose` domain package: App-side imports use `uicompose`,
-  and inside `internal/ui/compose/` the domain package is aliased
+  `lipgloss.NewStyle()`. Cross-boundary msgs are exported in
+  `<subpkg>/msgs.go` and qualified at the call site (e.g.
+  `account.TriageStartedMsg`, `reader.BodyLoadedMsg`); subpackage-
+  private msgs are unexported and never cross the boundary.
+  Reader/compose cmds emitting `uicore.ErrorMsg` and orchestrating
+  the App `URLOpener` seam live in `internal/ui/cmds.go`.
+  `internal/ui/compose` shadows the `internal/compose` domain
+  package: App-side imports use `uicompose`, and inside
+  `internal/ui/compose/` the domain package is aliased
   `mailcompose`. ADRs 0161, 0162, 0163.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
   tree. `account.Model` holds the cache handle (backend reachable via
@@ -269,18 +275,14 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   parser. `internal/filter` exposes `MarkdownBody`/`MarkdownToHTML` as the shared goldmark entries (Linkify + Table).
 - `internal/ui/compose/` owns the live compose surface. `Dropdown`
   is a value-type sub-model on `compose.Model` for To/Cc/Bcc
-  autocomplete; the `SuggestFn func(prefix string) []contacts.Suggestion`
-  seam threads through `compose.New` / `compose.Open` and is wired
-  to `App.suggestAddresses` (which delegates to
-  `cache.Account.SuggestAddresses` — the recency-decayed query over
-  `message_recipients` joined to the carded pool, capped at 7 rows).
-  The dropdown renders only
-  when focus is To/Cc/Bcc and the trailing fragment (text after
-  the last comma, leading whitespace trimmed) has ≥ 2 chars and
-  the seam returns rows. Up/Down wrap; Tab/Enter accept (rewrite
-  the trailing fragment as `Name <email>, ` and clear); Esc
-  dismisses. Splices positionally below the focused-header row.
-  ADR-0174.
+  autocomplete; the `SuggestFn func(prefix) []contacts.Suggestion`
+  seam threads through `compose.New`/`Open` and is wired to
+  `App.suggestAddresses` → `cache.Account.SuggestAddresses` (the
+  recency-decayed query over `message_recipients` joined to the
+  carded pool, LIMIT 7). Renders only on To/Cc/Bcc focus when
+  the trailing fragment is ≥ 2 chars; Up/Down wrap; Tab/Enter
+  rewrite the fragment as `Name <email>, `; Esc dismisses;
+  splices below the focused-header row. ADR-0174.
 
 ### Address book
 
@@ -308,26 +310,24 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
 - `contacts.Form` is the contact edit sub-model — one value type,
   two render contexts. `fromPopover=true` renders as a ModalShell
   box; `fromPopover=false` renders body+footer without chrome so
-  the Contacts-mode frame supplies borders. Focus is one `focusIdx`
-  against `focusList()` (kind toggle, name fields per kind,
-  `(input, cycler, ★, −)` quartets per email/phone row, add buttons,
-  note, save destination); Tab/Shift+Tab cycle; Space/← /→ flips
-  kind; ★ on row > 0 rotates to primary; − removes (disabled at one
-  email). Dirty is `currentContact() != initial` (initial =
-  post-construction snapshot). `Ctrl+S` validates (Person: First or
-  Last; Business: Name; ≥1 email via `net/mail.ParseAddress`;
-  saveIdx in range) and emits `ContactSaveMsg{Contact, SaveTo}`;
-  `Esc` emits `ContactCancelMsg{Dirty}`. `D` (gated on
-  `existingUID != ""` and on focus not being a text input)
-  emits `OpenContactDeleteConfirmMsg{UID, DisplayName}`. App owns
-  `form` + `pendingFormDiscard` + `pendingContactDelete`;
-  Yes-confirm cascade orders form-discard before contact-delete
-  before compose-save before empty-folder. Save: `queueContactPutCmd`
-  → `PatchVCard` (existing) or `BuildVCard` (new, `uuid.NewString()`)
-  → `QueueContactPut`. Delete: confirm-Yes → `queueContactDeleteCmd`
-  → `QueueContactDelete`. Multi-book destination is post-1.0; the
-  cmd uses `Account.DefaultBookHref` and ignores
-  `ContactSaveMsg.SaveTo`. ADR-0176.
+  the Contacts-mode frame supplies borders. One `focusIdx` cycles
+  via Tab/Shift+Tab over kind toggle (Space/←/→ flips), name
+  fields, `(input, cycler, ★, −)` quartets per email/phone row,
+  add buttons, note, save destination; ★ on row > 0 rotates to
+  primary; − removes (disabled at one email). Dirty is
+  `currentContact() != initial`. `Ctrl+S` validates (Person:
+  First or Last; Business: Name; ≥1 email via
+  `net/mail.ParseAddress`) and emits `ContactSaveMsg`; `Esc`
+  emits `ContactCancelMsg{Dirty}`. `D` (gated on `existingUID
+  != ""` and non-text-input focus) emits
+  `OpenContactDeleteConfirmMsg`. App owns `form` +
+  `pendingFormDiscard` + `pendingContactDelete`; Yes-confirm
+  cascade orders form-discard > contact-delete > compose-save >
+  empty-folder. Save: `queueContactPutCmd` → `PatchVCard` (existing)
+  or `BuildVCard` (new, `uuid.NewString()`) → `QueueContactPut`.
+  Delete: `queueContactDeleteCmd` → `QueueContactDelete`.
+  Multi-book destination is post-1.0; cmd uses
+  `Account.DefaultBookHref`. ADR-0176.
 
 ## Mail model
 
