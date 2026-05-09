@@ -40,3 +40,17 @@ type AttachAcceptedMsg struct{ Paths []string }
 // AttachCancelledMsg fires when the user dismisses AttachPicker
 // without selecting.
 type AttachCancelledMsg struct{}
+
+// ScheduleAcceptedMsg is emitted when the user picks a schedule preset
+// or commits a parsed custom time.
+type ScheduleAcceptedMsg struct{ When time.Time }
+
+// ScheduleCancelledMsg is emitted when the user dismisses the picker.
+type ScheduleCancelledMsg struct{}
+
+// OpenScheduleMsg requests the App open the picker pre-filled. Used by
+// the outbox view's "s reschedule" action.
+type OpenScheduleMsg struct {
+	OpID    int64
+	Initial string // formatted "2006-01-02 15:04"
+}
