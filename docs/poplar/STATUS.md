@@ -29,21 +29,18 @@ parked at `~/Projects/displaywidth/add-overrides`.
 > **Scope.** New package `internal/ansix/` exporting `Width`,
 > `Truncate`, `TruncateEllipsis`, `PadOrTruncate`, `SPUACellWidth`,
 > `SetSPUACellWidth`, `SpuaCount`. `uicore.FillRowToWidth` and
-> `uicore.ApplyBg` stay in `uicore` (lipgloss-styling concerns) but
-> route through `ansix` internally. The JoinHorizontal ban + manual
-> row joins in `AccountTab.View` / `App.renderFrame` *stay* — the
-> shim doesn't unlock them (an upstream lipgloss change would).
-> New ADR codifies the package boundary and links ADR-0180.
+> `uicore.ApplyBg` stay in `uicore` but route through `ansix`. The
+> JoinHorizontal ban + manual row joins stay — the shim doesn't
+> unlock them. New ADR codifies the package boundary; links ADR-0180.
 >
-> **Settled.** Package name `internal/ansix`. API drops to `Width`,
-> `Truncate`, etc. SPUA-A range `[0xF0000, 0xFFFFD]`. Cell-width
-> default `1`; `SetSPUACellWidth` validates `1 || 2` and panics
-> otherwise. Test scaffold copied from `uicore/iconwidth_test.go`.
+> **Settled.** SPUA-A range `[0xF0000, 0xFFFFD]`. Cell-width default
+> `1`; `SetSPUACellWidth` validates `1 || 2`. Test scaffold from
+> `uicore/iconwidth_test.go`.
 >
 > **Still open.** None. Pure implementation.
 >
-> **Approach.** Package + tests; callsite sweep in one go;
-> `make check` + `/simplify`; standard pass-end ritual.
+> **Approach.** Package + tests; callsite sweep; `make check` +
+> `/simplify`; standard pass-end ritual.
 
 ## Queued
 
