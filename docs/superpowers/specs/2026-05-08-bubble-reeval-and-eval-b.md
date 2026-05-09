@@ -441,3 +441,25 @@ qualifies.
 **Rationale (one line):** The Dropdown's chromeless inline-splice contract (≤7 rows, bare string output, value-type sub-model) has no match in either library — bubbles/list brings unwanted chrome, bubblelister brings an incompatible dependency tree — and the 96-LOC hand-roll already covers the surface exactly.
 
 **Interacts with:** None. The Dropdown is a leaf value type inside `internal/ui/compose/`; it has no dependency on other evaluated libraries and its verdict does not affect any other candidate.
+
+## bubbles/list × sidebar folder column
+
+**Does this make poplar better?** No. The sidebar's three-group structure (Primary / Disposal / Custom), blank-line separators between groups, and SPUA-aware row rendering are all hand-rolled for principled reasons. `bubbles/list` models a flat, uniform list of items via a delegate; it has no concept of named-group separators as structural elements. The blank lines that divide the three groups are not items — they are emitted conditionally in `View()` when `entry.cf.Group != prevGroup`. There is no delegate hook for inter-item separators, so the group structure would have to move into the item data itself and leak into the delegate. That is not simplification; it is indirection.
+
+**Feature parity:** `bubbles/list` provides scroll, cursor highlight, fuzzy filter, pagination, status bar, and help footer. The sidebar uses scroll (height-capped `lines[:s.height]`) and cursor highlight. Nothing else. Filter is sidebar-external (`SidebarSearch` shelf in `SidebarColumn`); pagination does not apply (folder lists are short); the title, status bar, and help footer are all chrome the sidebar explicitly has no room for. The `bubbles/list` chrome would conflict with `SidebarColumn.View()`'s column-width contract, which emits a fixed-width column consumed row-by-row by `AccountTab` under the SPUA-A-safe join invariant (ADR-0084).
+
+**Customization seams:** `SetDelegate(ItemDelegate)` replaces row rendering. The delegate could reproduce `renderRow` — indicator column, optional icon, SPUA-aware label truncation via `ansix.TruncateEllipsis`, unread badge — but the group separator blank lines are outside the delegate. They would need a sentinel item type with a custom renderer, adding a type switch the delegate has to carry. The unread badge right-alignment (`FillRowToWidth`) is also non-trivial inside a delegate writing to `io.Writer` without knowing the rendered width of what precedes it.
+
+**Theming integration:** Style injection via `list.Styles` accepts `lipgloss.Style` values; compatible with `NewStyles(*theme.CompiledTheme)`. Not a blocker, but not a gain over the existing `Styles` struct in `sidebar/styles.go`.
+
+**Maintenance signal:** Ships with `charmbracelet/bubbles` (v0.21.x / v1.0.0 stable). Not a concern.
+
+**Code delta estimate:** `sidebar/model.go` is 378 LOC. Adopting `bubbles/list` would not reduce that: `buildEntries`, `sortEntries`, `rankOf`, `iconFrom`, and all the accessor methods are domain logic with no library analogue. `renderRow` (61 LOC) is the only candidate for replacement via a delegate — but the delegate shape adds a sentinel-item type and io.Writer-based rendering, gaining nothing over the current string-return form. Net: neutral-to-negative LOC, weaker control over the row-by-row join contract.
+
+**License:** MIT (charmbracelet/bubbles). Clear.
+
+**Verdict:** Keep + harvest
+
+**Rationale (one line):** The three-group separator structure is not expressible via the delegate model without a sentinel-item workaround, the chrome budget is zero, and no meaningful code is removed — the delegate pattern itself is the only harvest, already mirrored in the picker eval (Task 7).
+
+**Interacts with:** Tasks 7 and 8 (same library, different consumers). The picker and dropdown evals reached Keep verdicts for different reasons (chrome conflict with ModalShell; chromeless-splice contract); the sidebar adds a third: structural group separators not addressable via the delegate. None of the three verdicts depends on the others.
