@@ -10,10 +10,10 @@ import (
 )
 
 // CacheConfig holds tunables for the local cache, decoded from the
-// [cache] table. LoadCache substitutes 2GB defaults when the table is
+// [cache] table. LoadCache substitutes defaults when the table is
 // absent. Body and attachment caps are tracked separately so a flood
-// of attachments cannot push out cached bodies and vice-versa. 0
-// disables a cap.
+// of attachments cannot push out cached bodies and vice-versa.
+// MaxSize defaults to 0 (unlimited); MaxAttachmentSize defaults to 2 GB.
 type CacheConfig struct {
 	MaxSize           int64
 	MaxAttachmentSize int64
@@ -21,7 +21,7 @@ type CacheConfig struct {
 
 func defaultCache() CacheConfig {
 	return CacheConfig{
-		MaxSize:           2 * 1024 * 1024 * 1024,
+		MaxSize:           0, // 0 = unlimited; users opt in via [cache] max-size
 		MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
 	}
 }

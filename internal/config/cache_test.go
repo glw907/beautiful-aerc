@@ -36,6 +36,13 @@ func TestParseSize(t *testing.T) {
 	}
 }
 
+func TestDefaultCacheMaxSizeUnlimited(t *testing.T) {
+	c := defaultCache()
+	if c.MaxSize != 0 {
+		t.Errorf("defaultCache().MaxSize = %d, want 0 (unlimited per Pass 13)", c.MaxSize)
+	}
+}
+
 func TestLoadCache(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -47,7 +54,7 @@ func TestLoadCache(t *testing.T) {
 			name: "default when missing",
 			toml: ``,
 			want: CacheConfig{
-				MaxSize:           2 * 1024 * 1024 * 1024,
+				MaxSize:           0,
 				MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
 			},
 		},
@@ -86,7 +93,7 @@ func TestLoadCache(t *testing.T) {
 			name: "default attachment cap when section absent",
 			toml: ``,
 			want: CacheConfig{
-				MaxSize:           2 * 1024 * 1024 * 1024,
+				MaxSize:           0,
 				MaxAttachmentSize: 2 * 1024 * 1024 * 1024,
 			},
 		},

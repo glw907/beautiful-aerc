@@ -282,8 +282,7 @@ password-cmd = "op read op://Personal/Fastmail/credential"
 # indefinitely; bodies populate when you open a message.
 
 # [cache]
-# max-size = "2GB"
-#     Body-cache size cap. When a new body would push total over
-#     the cap, oldest-by-sent-date bodies are evicted to fit. Set
-#     to "0" to disable the cap. Suffixes: KB, MB, GB, TB
-#     (1024-based).
+# max-size = "0"
+#     Body-cache size cap. "0" (the default) is unlimited; set to
+#     a value like "5GB" to evict oldest-by-sent-date bodies when
+#     total exceeds the cap. Suffixes: KB, MB, GB, TB (1024-based).
