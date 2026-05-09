@@ -638,6 +638,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 				}
 			}
 			m.statusBar = m.statusBar.SetConnectionState(cs)
+			m.acct.NotifyConnState(cs == Connected)
 		}
 		// Non-ConnState Update types delegate to AccountTab in a later pass.
 		return m, tea.Batch(cmds...)
@@ -911,6 +912,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		m.acct.NotifyActivity()
 		if m.helpOpen {
 			if key.Matches(msg, m.keys.CloseHelp) {
 				m.helpOpen = false
