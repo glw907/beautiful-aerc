@@ -417,3 +417,27 @@ qualifies.
 **Rationale (one line):** The library's title/filter/paginator/status chrome is structurally incompatible with `ModalShell.Box` ownership, no `JoinHorizontal` blocker exists, and no picker sees a meaningful LOC reduction — the harvest is the delegate pattern itself, already mirrored in movepicker's `buildListRows` shape.
 
 **Interacts with:** Task 9 (bubbles/list × sidebar), which evaluates the same library against a non-modal, non-overlay consumer. The pickers' verdict does not carry over — sidebar has no `ModalShell` conflict and a different chrome budget.
+
+## `bubbles/list` vs `treilik/bubblelister` for compose.Dropdown
+
+**Does this make poplar better?** No on both counts. The dropdown's surface is a chromeless inline autocomplete strip: ≤7 rows, value-type sub-model, positionally spliced below the focused header row by `dropdownRows()`. Neither library fits that shape. `treilik/bubblelister` is incompatible at the dependency level and dead upstream. `bubbles/list` brings chrome that the inline splice explicitly cannot accommodate. The hand-rolled `Dropdown` (96 LOC) is already the right size and shape for this surface; there is nothing to replace.
+
+**Feature parity:** Poplar's `Dropdown` provides six operations: `NewDropdown(SuggestFn)`, `WithStyles`, `SetPrefix` (re-runs the seam and resets the cursor), `Empty`, `Selected`, `Clear`, and `Update` (Up/Down wrapping cursor motion). `View()` emits bare `\n`-joined rows — no border, no title, no pagination. `bubbles/list` provides all of that plus filtering, pagination, status bar, help footer, and delegate-pattern row rendering. Every added feature is dead weight here: the dropdown's backing data is already filtered by `SuggestFn`, the cap is 7 rows per ADR-0174 (pagination never triggers), and no chrome can survive the inline splice without corrupting `dropdownRows()`'s pad-to-width contract. `treilik/bubblelister` provides a heavier cursor model (`MoveCursor(int)` on a pointer receiver), configurable `Wrap`, `PrefixGen`/`SuffixGen` interfaces, a sort pipeline, and `EqualsFunc` for cursor-preserve on reset — none of which apply to a transient ≤7-row suggestion list that rebuilds from scratch on every keystroke.
+
+**Customization seams:** `bubbles/list` injects style via `list.Styles` and row rendering via `SetDelegate(ItemDelegate)`. The delegate's `Render` writes to an `io.Writer` — a different shape from `Dropdown.View()`'s string return, requiring an adapter. `bubblelister` styles rows via `termenv.Style` fields (`LineStyle`, `CurrentStyle`) — `termenv.Style`, not `lipgloss.Style`, so the existing `NewStyles(*theme.CompiledTheme)` constructor produces incompatible values. Wrapping contacts.Suggestion into `fmt.Stringer` for bubblelister's `AddItems` variadic also requires a shim type. Poplar's `Dropdown.WithStyles(Styles)` has no analogous ceremony.
+
+**Theming integration:** `bubbles/list` accepts `lipgloss.Style` throughout; compatible with `NewStyles(*theme.CompiledTheme)` in principle, but the style-slot mapping for title/filter/paginator/status has no poplar-side counterparts since none of those sections render. `bubblelister` uses `termenv.Style` for `LineStyle` and `CurrentStyle` — orthogonal to the lipgloss palette. Neither adds value over `Dropdown.styles.DropdownRow` / `DropdownRowSelected` / `DropdownOrg`, which are already wired in `compose/styles.go`.
+
+**Maintenance signal:** `bubbles/list` ships with `charmbracelet/bubbles` (v0.21.x active, v1.0.0 stable). Not a concern. `treilik/bubblelister` v0.2.0 was last pushed 2023-04-29 — three years dormant. It pins `charmbracelet/bubbletea v0.19.3`, a pre-v1 release that is incompatible with poplar's `bubbletea v1.x` major. Importing it would require a `go.mod replace` or a fork to update the dependency; neither is warranted for a 96-LOC replacement target.
+
+**Code delta estimate:** `suggest.go` is 96 LOC covering the full `Dropdown` surface. Replacing it with `bubbles/list` would eliminate ~60 LOC of `SetPrefix`/`Empty`/`Selected`/`Clear`/`Update`/`View`, then add a delegate adapter, chrome-suppression calls, style-slot wiring, and a `dropdownRows` shim to convert the library's `View()` string back into the row-slice shape the compose frame expects. Net: more code, more surface area, no behavior change. `bubblelister` would require a `fmt.Stringer` wrapper type, a `termenv`-to-lipgloss color bridge for two style slots, and a `go.mod replace` for the incompatible bubbletea dependency. Starting cost before a single row renders: higher than the entire current implementation.
+
+**License:** `charmbracelet/bubbles` — MIT. `treilik/bubblelister` — MIT. Neither is a blocker; the licenses are not the issue.
+
+**Verdict:** Keep (hand-rolled Dropdown wins)
+
+`treilik/bubblelister` is eliminated outright: incompatible bubbletea major, dead upstream, `termenv` style model.
+
+**Rationale (one line):** The Dropdown's chromeless inline-splice contract (≤7 rows, bare string output, value-type sub-model) has no match in either library — bubbles/list brings unwanted chrome, bubblelister brings an incompatible dependency tree — and the 96-LOC hand-roll already covers the surface exactly.
+
+**Interacts with:** None. The Dropdown is a leaf value type inside `internal/ui/compose/`; it has no dependency on other evaluated libraries and its verdict does not affect any other candidate.
