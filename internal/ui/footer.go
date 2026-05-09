@@ -95,6 +95,22 @@ func viewerFooterGroups() [][]footerHint {
 	}
 }
 
+// viewerFooterGroupsWithUnsub is viewerFooterGroups with "U unsub" injected
+// into the reply group. Used when the current message has an actionable
+// List-Unsubscribe header.
+func viewerFooterGroupsWithUnsub() [][]footerHint {
+	replyWithUnsub := append(slices.Clone(replyHints), hint("U", "unsub", 6))
+	return [][]footerHint{
+		triageHints,
+		replyWithUnsub,
+		{
+			hint("Tab", "links", 0),
+			hint("q", "close", 0),
+			hint("?", "help", 0),
+		},
+	}
+}
+
 func contactsFooterGroups() [][]footerHint {
 	return [][]footerHint{
 		{

@@ -1123,6 +1123,8 @@ func (m App) renderFrame() string {
 	if m.compose != nil {
 		tidyVisible := m.compose.TidyEnabled() && m.compose.IsFocusBody()
 		foot = m.footer.ViewGroups(composeFooterGroups(m.compose.HasSignatures(), m.compose.IsFocusFrom(), tidyVisible), m.width)
+	} else if m.viewerOpen && m.acct.Viewer().Unsubscribe().Available() {
+		foot = m.footer.ViewGroups(viewerFooterGroupsWithUnsub(), m.width)
 	} else {
 		foot = m.footer.View(m.width)
 	}
