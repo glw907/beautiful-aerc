@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -16,12 +17,15 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui"
 	"github.com/glw907/poplar/internal/ui/uicore"
+	uiwiz "github.com/glw907/poplar/internal/ui/wizard"
 	"github.com/spf13/cobra"
 )
 
 type rootFlags struct {
-	config string
-	theme  string
+	config   string
+	theme    string
+	noWizard bool
+	repair   string
 }
 
 func newRootCmd() *cobra.Command {
@@ -39,6 +43,10 @@ func newRootCmd() *cobra.Command {
 		"path to config file (default: $POPLAR_CONFIG or ~/.config/poplar/config.toml)")
 	cmd.Flags().StringVarP(&f.theme, "theme", "t", theme.DefaultThemeName,
 		"color theme ("+strings.Join(theme.ThemeNames(), ", ")+")")
+	cmd.Flags().BoolVar(&f.noWizard, "no-wizard", false,
+		"don't auto-launch the first-run wizard; exit 78 instead")
+	cmd.Flags().StringVar(&f.repair, "repair", "",
+		"repair the named account interactively")
 	return cmd
 }
 
@@ -65,22 +73,49 @@ func runRoot(f rootFlags) error {
 			f.theme, strings.Join(theme.ThemeNames(), ", "))
 	}
 
+	if f.repair != "" {
+		return runRepair(f)
+	}
+
 	accts, configPath, err := config.Load(f.config)
 	if errors.Is(err, config.ErrFirstRun) {
-		fmt.Fprintln(os.Stderr, err.Error())
-		fmt.Fprintln(os.Stderr, "Edit the file and run poplar again.")
-		os.Exit(78)
+		if f.noWizard || os.Getenv("POPLAR_NO_WIZARD") != "" {
+			fmt.Fprintln(os.Stderr, err.Error())
+			fmt.Fprintln(os.Stderr, "Edit the file and run poplar again.")
+			os.Exit(78)
+		}
+		// ErrFirstRun wrote a template; clear it so the wizard's confirm
+		// step (which refuses to overwrite a non-empty file) can write
+		// the user's choices instead.
+		_ = os.Remove(configPath)
+		if err := runWizardAutoLaunch(t, configPath); err != nil {
+			return err
+		}
+		accts, configPath, err = config.Load(f.config)
+		if err != nil {
+			return fmt.Errorf("post-wizard config load: %v", err)
+		}
 	}
 	if errors.Is(err, config.ErrOldAccountsToml) {
 		fmt.Fprintln(os.Stderr, "poplar: "+err.Error())
 		fmt.Fprintln(os.Stderr, "  poplar 1.0 reads config.toml; rename your accounts.toml file.")
 		os.Exit(78)
 	}
+	var ce *config.ConfigError
+	if errors.As(err, &ce) {
+		fmt.Fprintln(os.Stderr, "poplar:", ce.Error())
+		if ce.Account != "" {
+			fmt.Fprintf(os.Stderr,
+				"Run `poplar --repair=%s` to fix this account interactively.\n", ce.Account)
+		}
+		fmt.Fprintln(os.Stderr, "Or edit the file by hand and rerun poplar.")
+		os.Exit(78)
+	}
 	if err != nil {
 		return fmt.Errorf("load accounts: %v", err)
 	}
 	if len(accts) == 0 {
-		return fmt.Errorf("no accounts configured; see ~/.config/poplar/config.toml")
+		return fmt.Errorf("no accounts configured; see %s", configPath)
 	}
 	backend, err := openBackend(accts[0])
 	if err != nil {
@@ -133,4 +168,102 @@ func runRoot(f rootFlags) error {
 		return err
 	}
 	return nil
+}
+
+// runWizardAutoLaunch runs the first-run wizard with the default
+// section registry. The wizard writes the final config itself.
+func runWizardAutoLaunch(t *theme.CompiledTheme, configPath string) error {
+	model := uiwiz.NewModel(t)
+	if _, err := tea.NewProgram(model).Run(); err != nil {
+		return fmt.Errorf("wizard: %v", err)
+	}
+	if _, err := os.Stat(configPath); err != nil {
+		return fmt.Errorf("wizard exited without writing %s", configPath)
+	}
+	return nil
+}
+
+// runRepair launches the wizard's account section pre-populated from
+// the named account, then splices the result back into the existing
+// config and atomically rewrites it.
+func runRepair(f rootFlags) error {
+	t := theme.Themes[strings.ToLower(f.theme)]
+	if t == nil {
+		t = theme.OneDark
+	}
+
+	accts, configPath, err := config.Load(f.config)
+	// A ConfigError on load is exactly the case --repair exists to fix:
+	// re-collect the broken account's fields.
+	var ce *config.ConfigError
+	if err != nil && !errors.As(err, &ce) {
+		return err
+	}
+	idx := -1
+	for i, a := range accts {
+		if a.Name == f.repair {
+			idx = i
+			break
+		}
+	}
+	var seed config.AccountConfig
+	if idx >= 0 {
+		seed = accts[idx]
+	} else if ce != nil && ce.Account == f.repair {
+		seed = config.AccountConfig{Name: f.repair}
+	} else {
+		return fmt.Errorf("account %q not found in %s", f.repair, configPath)
+	}
+
+	model := uiwiz.NewModel(t).WithRepair(f.repair, seed)
+	res, err := tea.NewProgram(model).Run()
+	if err != nil {
+		return fmt.Errorf("repair: %v", err)
+	}
+	final, ok := res.(uiwiz.Model)
+	if !ok || final.RepairResult == nil {
+		// User cancelled.
+		return nil
+	}
+	if idx >= 0 {
+		accts[idx] = *final.RepairResult
+	} else {
+		accts = append(accts, *final.RepairResult)
+	}
+	uiCfg, _ := config.LoadUI(configPath)
+	cacheCfg, _ := config.LoadCache(configPath)
+	body := config.Render(accts, uiCfg, cacheCfg)
+	if err := writeConfigAtomic(configPath, body); err != nil {
+		return fmt.Errorf("write %s: %v", configPath, err)
+	}
+	fmt.Fprintf(os.Stderr, "repaired %s in %s\n", f.repair, configPath)
+	return nil
+}
+
+func writeConfigAtomic(path string, body []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".config.toml.*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }

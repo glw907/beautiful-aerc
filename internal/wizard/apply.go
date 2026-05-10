@@ -76,3 +76,33 @@ func Apply(m Model) (config.AccountConfig, error) {
 
 	return cfg, nil
 }
+
+// FromAccount reverses Apply: it seeds a Model from an existing
+// AccountConfig so --repair can drop the user back into the wizard's
+// account section with the broken block's known-good fields filled
+// in. Credentials never round-trip; repair re-collects them.
+func FromAccount(cfg config.AccountConfig) Model {
+	m := Model{
+		Email:        cfg.Email,
+		AccountLabel: cfg.Name,
+	}
+	if len(cfg.Identities) > 0 {
+		m.IdentityName = cfg.Identities[0].Name
+	}
+	switch {
+	case cfg.Preset != "":
+		m.Preset = cfg.Preset
+	case cfg.Backend == "imap":
+		m.Preset = "imap"
+		m.Host = cfg.Host
+		if cfg.Port > 0 {
+			m.Port = strconv.Itoa(cfg.Port)
+		}
+		m.InsecureTLS = cfg.InsecureTLS
+	case cfg.Backend == "jmap":
+		m.Preset = "jmap"
+		m.SessionURL = cfg.Source
+		m.InsecureTLS = cfg.InsecureTLS
+	}
+	return m
+}

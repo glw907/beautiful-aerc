@@ -187,23 +187,24 @@ the ADR(s) that justify them.
   independently. Path precedence: `--config` flag, `$POPLAR_CONFIG`,
   OS default, resolved by `config.Resolve`. The TOML key for the
   preset selector is `provider`.
-- First-run flow: missing config returns `ErrFirstRun` and root
-  exits 78 (`config init` writes the template; first-run wizard
-  auto-launch lands in 14c). Legacy `accounts.toml` returns
-  `ErrOldAccountsToml`. `password-cmd` resolves on first `Connect`
-  and caches on the Backend. `AccountConfig.Name` defaults to
-  `Email`. `AccountConfig.Preset` records the chosen preset key
-  (e.g. `"fastmail"`) so `config.Render` round-trips it as
-  `provider = "fastmail"`; the writer prefers `Preset` over
-  `Backend` when both are set. Typed
-  `*config.ConfigError{Path, Line, Account, Field, Message,
-  Suggest}` (sentinel `ErrConfigInvalid`) covers the four user-
-  facing validators: unknown provider, missing host, missing
+- First-run flow: missing config returns `ErrFirstRun`; root
+  removes the freshly-written template and auto-launches the
+  wizard. `--no-wizard` / `POPLAR_NO_WIZARD=1` opts out to exit-78.
+  `--repair=<name>` seeds the wizard's account section via
+  `wizard.FromAccount`, bypasses its single-account write path,
+  and splices `RepairResult` back through `config.Render` + atomic
+  rename. Legacy `accounts.toml` returns `ErrOldAccountsToml`
+  (exit-78). `password-cmd` resolves on first `Connect` and caches
+  on the Backend. `AccountConfig.Name` defaults to `Email`.
+  `AccountConfig.Preset` records the preset key so `config.Render`
+  round-trips `provider = "fastmail"`; the writer prefers `Preset`
+  over `Backend`. Typed `*config.ConfigError{Path, Line, Account,
+  Field, Message, Suggest}` (sentinel `ErrConfigInvalid`) covers
+  the four validators: unknown provider, missing host, missing
   source, missing smtp.host.
-- `config.Provider` carries `CredentialStrategy`
-  (`StrategyAppPassword`/`APIToken`/`OAuth`/`PlainIMAP`/`PlainJMAP`)
-  and `HelpURL` per preset; both populate for every entry in
-  `Providers`.
+- `config.Provider` carries `CredentialStrategy` (AppPassword/
+  APIToken/OAuth/PlainIMAP/PlainJMAP) and `HelpURL` per preset;
+  both populate for every entry in `Providers`.
 - `config.Render(accts, ui, cache) []byte` emits canonical TOML.
   Round-trips through `Load*` are semantic, not byte-for-byte:
   comments aren't preserved, default-valued fields elided.

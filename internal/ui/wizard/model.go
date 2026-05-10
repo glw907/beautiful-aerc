@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/theme"
 	wizdomain "github.com/glw907/poplar/internal/wizard"
 )
@@ -33,6 +34,14 @@ type Model struct {
 	sections []section
 	active   int
 	finished bool
+
+	// Repair, when set, swaps the confirm step's write semantics:
+	// the wizard refuses to write a fresh config (single-account
+	// only) and instead leaves the assembled AccountConfig in
+	// RepairResult for the caller to splice into the existing file.
+	Repair       bool
+	RepairName   string
+	RepairResult *config.AccountConfig
 }
 
 // section is one wizard step's UI. Sections are ordinary string-View
@@ -78,6 +87,21 @@ func (m Model) WithSections(names []string) Model {
 	m.sections = filtered
 	m.active = 0
 	return m
+}
+
+// WithRepair pre-populates the wizard from an existing AccountConfig
+// and restricts the run to the account section. Credentials are not
+// reverse-applied; the user re-enters them. Identity, label, preset,
+// and self-hosted host/port carry across so the broken block is
+// faster to fix than reauthoring from scratch.
+func (m Model) WithRepair(name string, cfg config.AccountConfig) Model {
+	m.Repair = true
+	m.RepairName = name
+	m.State = wizdomain.FromAccount(cfg)
+	// Rebind sections so the account form binds to the pre-populated
+	// State (sections capture the parent pointer at construction).
+	m.sections = defaultSections(&m)
+	return m.WithSections([]string{"account"})
 }
 
 func (m Model) Init() tea.Cmd {

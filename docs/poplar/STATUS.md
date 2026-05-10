@@ -1,10 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 14c — first-run integration. Auto-launch the
-wizard when `config.Load` returns `ErrFirstRun`; format
-`config.ConfigError` in `runRoot` and point users at
-`poplar --repair=<account>`. New flags: `--repair=<name>`,
-`--no-wizard`, `POPLAR_NO_WIZARD=1`.
+**Current pass:** Pass 14.1 — OAuth refresh (#42). Replace the
+14b OAuth strategy stub (`echo TODO-pass-14.1-oauth`) with a real
+refresh-token flow for Gmail and Outlook, and a keyring backend
+for token persistence.
 
 ## Passes
 
@@ -22,36 +21,40 @@ wizard when `config.Load` returns `ErrFirstRun`; format
 | 13.2b | `charm.land/v2` reframes — paste; chrome + cursor absorbed by 13.2a (ADR-0189b) | done |
 | 14a | Probe + config substrate (#27 part 1, #29; ADR-0190) | done |
 | 14b | Wizard domain + huh UI (#27 part 2; ADR-0191) — `internal/wizard/`, `internal/ui/wizard/`, account + theme + confirm sections, `config init --interactive` subcommand | done |
-| 14c | First-run integration (#27 part 3) — `runRoot` auto-launch, `--repair=<name>`, `--no-wizard` / `POPLAR_NO_WIZARD=1` | in progress |
-| 14.1 | OAuth refresh (#42, deferred from 14) | pending |
+| 14c | First-run integration (#27 part 3; ADR-0192) — `runRoot` auto-launch, `--repair=<name>`, `--no-wizard` / `POPLAR_NO_WIZARD=1` | done |
+| 14.1 | OAuth refresh (#42, deferred from 14) | in progress |
 | 15 | Polish II — popover dim (#14) + items surfaced during 10–14 | pending |
 | 16 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 14c)
+## Next starter prompt (Pass 14.1)
 
-> **Goal.** Wire 14b's wizard into `runRoot` so a missing config
-> auto-launches the wizard (with opt-out) and a malformed config
-> surfaces a typed `ConfigError` plus a `--repair=<name>` hint.
+> **Goal.** Replace the 14b OAuth strategy stub with a real
+> refresh-token flow for Gmail and Outlook so those presets can
+> finish the wizard end-to-end and the resulting `password-cmd`
+> survives token rotation.
 >
-> **Scope.** Task 13's first-run + repair subset from the master
-> plan `docs/superpowers/archive/plans/2026-05-09-pass-14-firstrun.md`.
-> No new wizard sections; this pass is pure integration glue.
+> **Scope.** The Gmail + Outlook XOAUTH2 path in `mailimap` plus
+> the wizard's `StrategyOAuth` credentials form. Keyring storage
+> for refresh tokens. CLI surface for re-auth (likely a sibling
+> of `--repair`). No new wizard sections beyond the OAuth
+> credentials step.
 >
-> **Settled (do not re-brainstorm):** opt-out is `--no-wizard` /
-> `POPLAR_NO_WIZARD=1` (matches the master plan); `--repair=<name>`
-> calls `Model.WithSections([]string{"account"})` plus a new
-> `Model.WithRepair(name)` that pre-populates state from the
-> existing account; `ConfigError` formatter prints
-> `poplar: <msg>\nRun \`poplar --repair=<acct>\` to fix this account
-> interactively.\nOr edit the file by hand and rerun poplar.`
+> **Settled (do not re-brainstorm):** OAuth lands in its own pass
+> (14.1) per the 8–12 task budget; deferred from 14a/b/c. Gmail
+> uses installed-app PKCE; Outlook uses MSAL device-code or
+> installed-app PKCE — pick one in the brainstorm. Refresh tokens
+> persist via the system keyring (`zalando/go-keyring` or similar
+> Charm-adjacent lib; survey first).
 >
-> **Still open — brainstorm these:** None pre-coded — the master
-> plan task is fully specced.
+> **Still open — brainstorm these:** keyring library choice;
+> Outlook auth shape (PKCE vs device-code); the wizard's OAuth
+> UX (browser-launch transcript vs paste-the-code); re-auth CLI
+> entry point shape; where the access-token cache lives (Backend
+> vs cache vs keyring); offline-token expiry behavior.
 >
-> **Approach.** Read the master plan §Task 13 (steps 13.3–13.4) and
-> §Task 14 (live tmux smoke). Standard pass-end checklist applies.
-> ADR-0192 records the runRoot integration shape if it deviates from
-> the master plan.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-oauth-refresh.md`, then
+> implement. Standard pass-end checklist applies.

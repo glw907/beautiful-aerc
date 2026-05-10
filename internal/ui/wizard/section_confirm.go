@@ -48,6 +48,16 @@ func (s *confirmSection) Update(msg tea.Msg) (section, tea.Cmd) {
 	if !s.confirm {
 		return s, func() tea.Msg { return CancelMsg{} }
 	}
+	if s.parent.Repair {
+		cfg, err := wizdomain.Apply(s.parent.State)
+		if err != nil {
+			s.err = err
+			return s, nil
+		}
+		s.parent.RepairResult = &cfg
+		s.written = "(repair: caller will splice and write)"
+		return s, func() tea.Msg { return FinishMsg{} }
+	}
 	path, err := writeConfig(s.parent.State)
 	if err != nil {
 		s.err = err
