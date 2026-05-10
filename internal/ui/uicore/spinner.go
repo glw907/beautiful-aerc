@@ -1,8 +1,8 @@
 package uicore
 
 import (
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 

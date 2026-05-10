@@ -1,6 +1,6 @@
 package contacts
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // keys are the bindings active inside contacts surfaces.
 var keys = struct {

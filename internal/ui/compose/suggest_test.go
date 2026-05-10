@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ui/contacts"
 )
 
@@ -51,16 +51,16 @@ func TestDropdown_UpDownWraps(t *testing.T) {
 	if got, _ := d.Selected(); got.Name != "A" {
 		t.Fatalf("initial selection = %q, want A", got.Name)
 	}
-	d, _ = d.Update(tea.KeyMsg{Type: tea.KeyDown})
-	d, _ = d.Update(tea.KeyMsg{Type: tea.KeyDown})
+	d, _ = d.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	d, _ = d.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if got, _ := d.Selected(); got.Name != "C" {
 		t.Fatalf("after 2 Down, selection = %q, want C", got.Name)
 	}
-	d, _ = d.Update(tea.KeyMsg{Type: tea.KeyDown})
+	d, _ = d.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if got, _ := d.Selected(); got.Name != "A" {
 		t.Fatalf("Down at end should wrap to A, got %q", got.Name)
 	}
-	d, _ = d.Update(tea.KeyMsg{Type: tea.KeyUp})
+	d, _ = d.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if got, _ := d.Selected(); got.Name != "C" {
 		t.Fatalf("Up at top should wrap to C, got %q", got.Name)
 	}

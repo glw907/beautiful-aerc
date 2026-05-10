@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/content"
@@ -136,11 +136,11 @@ func TestModel(t *testing.T) {
 
 	t.Run("J/K navigates sidebar", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 20)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'J', Text: "J"})
 		if tab.sidebarColumn.Sidebar().SelectedFolder() != "Drafts" {
 			t.Errorf("after J, selected = %q, want Drafts", tab.sidebarColumn.Sidebar().SelectedFolder())
 		}
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'K', Text: "K"})
 		if tab.sidebarColumn.Sidebar().SelectedFolder() != "Inbox" {
 			t.Errorf("after K, selected = %q, want Inbox", tab.sidebarColumn.Sidebar().SelectedFolder())
 		}
@@ -148,7 +148,7 @@ func TestModel(t *testing.T) {
 
 	t.Run("title tracks selected folder", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 20)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'J', Text: "J"})
 		if tab.Title() != "Drafts" {
 			t.Errorf("Title() = %q, want Drafts", tab.Title())
 		}
@@ -156,11 +156,11 @@ func TestModel(t *testing.T) {
 
 	t.Run("j/k navigates the message list", func(t *testing.T) {
 		tab := newLoadedTab(t, 120, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'j', Text: "j"})
 		if tab.msglist.Selected() != 1 {
 			t.Errorf("after j, msglist.Selected() = %d, want 1", tab.msglist.Selected())
 		}
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'k', Text: "k"})
 		if tab.msglist.Selected() != 0 {
 			t.Errorf("after k, msglist.Selected() = %d, want 0", tab.msglist.Selected())
 		}
@@ -168,7 +168,7 @@ func TestModel(t *testing.T) {
 
 	t.Run("G jumps message list to bottom", func(t *testing.T) {
 		tab := newLoadedTab(t, 120, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'G', Text: "G"})
 		want := tab.msglist.Count() - 1
 		if tab.msglist.Selected() != want {
 			t.Errorf("after G, msglist.Selected() = %d, want %d",
@@ -178,8 +178,8 @@ func TestModel(t *testing.T) {
 
 	t.Run("g jumps message list to top", func(t *testing.T) {
 		tab := newLoadedTab(t, 120, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'G', Text: "G"})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'g', Text: "g"})
 		if tab.msglist.Selected() != 0 {
 			t.Errorf("after g, msglist.Selected() = %d, want 0", tab.msglist.Selected())
 		}
@@ -306,15 +306,15 @@ func TestModelFoldKeys(t *testing.T) {
 	}
 
 	t.Run("F folds all threads", func(t *testing.T) {
-		tab2, _ := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+		tab2, _ := tab.updateTab(tea.KeyPressMsg{Code: 'F', Text: "F"})
 		if got := tab2.msglist.VisibleCount(); got != 11 {
 			t.Errorf("after F, visible = %d, want 11", got)
 		}
 	})
 
 	t.Run("U unfolds all threads after F", func(t *testing.T) {
-		tab2, _ := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
-		tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
+		tab2, _ := tab.updateTab(tea.KeyPressMsg{Code: 'F', Text: "F"})
+		tab2, _ = tab2.updateTab(tea.KeyPressMsg{Code: 'U', Text: "U"})
 		if got := tab2.msglist.VisibleCount(); got != 14 {
 			t.Errorf("after F then U, visible = %d, want 14", got)
 		}
@@ -335,9 +335,9 @@ func TestModelFoldKeys(t *testing.T) {
 		}
 		tab2 := tabS
 		for i := 0; i < t1Idx; i++ {
-			tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+			tab2, _ = tab2.updateTab(tea.KeyPressMsg{Code: 'j', Text: "j"})
 		}
-		tab2, _ = tab2.updateTab(tea.KeyMsg{Type: tea.KeySpace})
+		tab2, _ = tab2.updateTab(tea.KeyPressMsg{Code: tea.KeySpace})
 		if got := tab2.msglist.VisibleCount(); got != 11 {
 			t.Errorf("after Space on T1 root, visible = %d, want 11", got)
 		}
@@ -346,7 +346,7 @@ func TestModelFoldKeys(t *testing.T) {
 
 func TestModel_JDispatchesFolderLoad(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
-	_, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+	_, cmd := tab.updateTab(tea.KeyPressMsg{Code: 'J', Text: "J"})
 	if cmd == nil {
 		t.Fatal("expected J to dispatch a Cmd")
 	}
@@ -423,7 +423,7 @@ func TestModelSearchShelf(t *testing.T) {
 func TestModelSearchActivation(t *testing.T) {
 	t.Run("/ in Idle activates search", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchTyping {
 			t.Errorf("state after / = %v, want SearchTyping", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -432,7 +432,7 @@ func TestModelSearchActivation(t *testing.T) {
 	t.Run("/ in Idle does not start filtering yet (empty query)", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		rowCountBefore := len(tab.msglist.Rows())
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		if got := len(tab.msglist.Rows()); got != rowCountBefore {
 			t.Errorf("row count after / = %d, want %d (no filter yet)", got, rowCountBefore)
 		}
@@ -442,12 +442,12 @@ func TestModelSearchActivation(t *testing.T) {
 func TestModelSearchFilter(t *testing.T) {
 	t.Run("typing during search filters the message list", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		rowsBefore := len(tab.msglist.Rows())
 
 		for _, r := range []rune{'a', 'l', 'i'} {
 			var cmd tea.Cmd
-			tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: r, Text: string(r)})
 			drainSearch(t, &tab, cmd)
 		}
 
@@ -478,11 +478,11 @@ func TestModelSearchFilter(t *testing.T) {
 func TestModelSearchCommitClear(t *testing.T) {
 	t.Run("Enter in Typing transitions shelf to Active", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
 			t.Errorf("state after Enter = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -490,12 +490,12 @@ func TestModelSearchCommitClear(t *testing.T) {
 
 	t.Run("Enter keeps the filter live (query preserved)", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
 		filteredRows := len(tab.msglist.Rows())
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if got := len(tab.msglist.Rows()); got != filteredRows {
 			t.Errorf("row count after Enter = %d, want %d (filter preserved)", got, filteredRows)
 		}
@@ -504,11 +504,11 @@ func TestModelSearchCommitClear(t *testing.T) {
 	t.Run("Esc in Typing clears the filter and returns to Idle", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		rowsBefore := len(tab.msglist.Rows())
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEsc})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEsc})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 			t.Errorf("state after Esc = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -520,12 +520,12 @@ func TestModelSearchCommitClear(t *testing.T) {
 	t.Run("Esc in Active clears the filter", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		rowsBefore := len(tab.msglist.Rows())
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEsc})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEsc})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 			t.Errorf("state after Esc in Active = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -538,15 +538,15 @@ func TestModelSearchCommitClear(t *testing.T) {
 func TestModelSearchFolderJump(t *testing.T) {
 	t.Run("J during Active clears the search", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
 			t.Fatalf("setup: state = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'J', Text: "J"})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 			t.Errorf("state after J = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -554,12 +554,12 @@ func TestModelSearchFolderJump(t *testing.T) {
 
 	t.Run("K during Active clears the search", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'K', Text: "K"})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 			t.Errorf("state after K = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -569,12 +569,12 @@ func TestModelSearchFolderJump(t *testing.T) {
 func TestModelSearchFoldNoOp(t *testing.T) {
 	t.Run("Space during Active does not crash and does not exit search", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: ' ', Text: " "})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
 			t.Errorf("state after Space = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -582,12 +582,12 @@ func TestModelSearchFoldNoOp(t *testing.T) {
 
 	t.Run("F during Active does not crash", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 		var cmd tea.Cmd
-		tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		drainSearch(t, &tab, cmd)
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-		tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
+		tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'F', Text: "F"})
 		if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
 			t.Errorf("state after F = %v, want SearchActive", tab.sidebarColumn.SidebarSearch().State())
 		}
@@ -601,7 +601,7 @@ func TestModel_EnterOpensViewer(t *testing.T) {
 	if tab.viewer.IsOpen() {
 		t.Fatal("viewer should start closed")
 	}
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("Enter must open the viewer")
 	}
@@ -624,7 +624,7 @@ func TestModel_EnterMarksRead(t *testing.T) {
 	if first.Flags&mail.FlagSeen != 0 {
 		t.Fatalf("test fixture broke: UID %s should be unread", first.UID)
 	}
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	// Drain the mark-read Cmd (queueOpsCmd refresh) so the cache flip
 	// surfaces in msglist.source.
 	drain(t, &tab, cmd)
@@ -639,7 +639,7 @@ func TestModel_EnterEmptyFolderNoOp(t *testing.T) {
 	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tab, _ = tab.updateTab(FolderLoadedMsg{Name: "Inbox", Msgs: nil, Total: 0})
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if tab.viewer.IsOpen() {
 		t.Error("Enter on empty folder must not open viewer")
 	}
@@ -650,12 +650,12 @@ func TestModel_EnterEmptyFolderNoOp(t *testing.T) {
 
 func TestModel_SearchKeysInertWhileViewerOpen(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer should be open")
 	}
 	// `/` while viewer open should not activate the search shelf.
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
 	if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 		t.Errorf("/ while viewer open activated search; state = %v", tab.sidebarColumn.SidebarSearch().State())
 	}
@@ -664,8 +664,8 @@ func TestModel_SearchKeysInertWhileViewerOpen(t *testing.T) {
 func TestModel_FolderJumpInertWhileViewerOpen(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 	startFolder := tab.Title()
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'J', Text: "J"})
 	if tab.Title() != startFolder {
 		t.Errorf("J while viewer open changed folder to %q (was %q)", tab.Title(), startFolder)
 	}
@@ -686,7 +686,7 @@ func TestModel_FolderJumpKeys(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.key+" jumps to "+tc.canonical, func(t *testing.T) {
-			tab2, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.key)})
+			tab2, cmd := tab.updateTab(tea.KeyPressMsg{Code: rune(tc.key[0]), Text: tc.key})
 			sb := tab2.sidebarColumn.Sidebar()
 			got := sb.SelectedCanonical()
 			if got != tc.canonical {
@@ -708,7 +708,7 @@ func TestModel_FolderJumpUnknownFolderNoOp(t *testing.T) {
 		{Name: "Inbox", Role: "inbox"},
 	})})
 	startFolder := tab.Title()
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	if tab.Title() != startFolder {
 		t.Errorf("D with no Drafts folder changed Title to %q (was %q)", tab.Title(), startFolder)
 	}
@@ -720,15 +720,15 @@ func TestModel_FolderJumpUnknownFolderNoOp(t *testing.T) {
 func TestModel_FolderJumpClearsSearch(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: '/', Text: "/"})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	drainSearch(t, &tab, cmd)
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchActive {
 		t.Fatalf("expected SearchActive after Enter; got %v", tab.sidebarColumn.SidebarSearch().State())
 	}
 
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	if tab.sidebarColumn.SidebarSearch().State() != sidebar.SearchIdle {
 		t.Errorf("after D folder jump, search state = %v, want SearchIdle", tab.sidebarColumn.SidebarSearch().State())
 	}
@@ -736,7 +736,7 @@ func TestModel_FolderJumpClearsSearch(t *testing.T) {
 
 func TestModel_StaleBodyLoadedDropped(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	openUID := tab.viewer.CurrentUID()
 	// Deliver a body for a UID we never opened. Must be ignored.
 	tab, _ = tab.updateTab(reader.BodyLoadedMsg{UID: mail.UID("nonsense"), Blocks: nil})
@@ -747,11 +747,11 @@ func TestModel_StaleBodyLoadedDropped(t *testing.T) {
 
 func TestModel_QClosesViewer(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer should be open")
 	}
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if tab.viewer.IsOpen() {
 		t.Error("q must close viewer")
 	}
@@ -891,7 +891,7 @@ func TestModel_MaybeLoadMore_NearBottom(t *testing.T) {
 	drain(t, &tab, cmd)
 
 	// Move cursor to bottom to trigger load-more.
-	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	if cmd == nil {
 		t.Fatal("G near bottom with more pages available must emit a load-more Cmd")
 	}
@@ -911,10 +911,10 @@ func TestModel_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
 	drain(t, &tab, cmd)
 
 	// Move to bottom. Sets loadMoreInFlight.
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'G', Text: "G"})
 
 	// A second navigation while in-flight must NOT re-dispatch.
-	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if cmd != nil {
 		t.Errorf("second near-bottom nav while in-flight must not emit a Cmd, got %T", cmd)
 	}
@@ -930,7 +930,7 @@ func TestModel_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
 	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	drain(t, &tab, cmd)
 
-	tab, cmd = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	tab, cmd = tab.updateTab(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	if cmd != nil {
 		t.Errorf("at bottom with loaded == total, must not emit a Cmd; got %T", cmd)
 	}
@@ -1034,7 +1034,7 @@ func TestModel_WindowCounter(t *testing.T) {
 func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 	// Open viewer on initial selection (UID "1", row 0).
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open after Enter")
 	}
@@ -1045,7 +1045,7 @@ func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 		t.Fatal("viewer must be ready after SetBody")
 	}
 	// Send n. Must advance to row 1.
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	newUID := tab.viewer.CurrentUID()
 	if newUID == startUID {
 		t.Errorf("n did not advance viewer; UID still %q", startUID)
@@ -1071,10 +1071,10 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 	}
 
 	// Jump to last row before opening viewer.
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: 'G', Text: "G"})
 
 	// Open viewer on last message.
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open")
 	}
@@ -1082,7 +1082,7 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 	lastUID := tab.viewer.CurrentUID()
 
 	// n at the last row should be inert.
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	if tab.viewer.CurrentUID() != lastUID {
 		t.Errorf("n at boundary changed viewer UID from %q to %q", lastUID, tab.viewer.CurrentUID())
 	}
@@ -1094,7 +1094,7 @@ func TestViewerNAtBoundaryInert(t *testing.T) {
 func TestViewerNDuringLoadInert(t *testing.T) {
 	tab := newLoadedTab(t, 120, 30)
 	// Open viewer. Stays in loading phase (no SetBody call).
-	tab, _ = tab.updateTab(tea.KeyMsg{Type: tea.KeyEnter})
+	tab, _ = tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !tab.viewer.IsOpen() {
 		t.Fatal("viewer must be open")
 	}
@@ -1104,7 +1104,7 @@ func TestViewerNDuringLoadInert(t *testing.T) {
 	loadingUID := tab.viewer.CurrentUID()
 
 	// n while loading must be inert.
-	tab, cmd := tab.updateTab(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	if tab.viewer.CurrentUID() != loadingUID {
 		t.Errorf("n during load changed UID from %q to %q", loadingUID, tab.viewer.CurrentUID())
 	}
@@ -1154,7 +1154,7 @@ func TestModelView_HonorsAssignedWidth(t *testing.T) {
 		m := newLoadedTab(t, w, h)
 		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 		// Open viewer. Stays in loading phase (no SetBody call).
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if !m.viewer.IsOpen() {
 			t.Fatal("viewer should be open")
 		}
@@ -1199,7 +1199,7 @@ func TestModel_NextMessage_WalksFilteredRows(t *testing.T) {
 	tab, _ = tab.updateTab(reader.BodyLoadedMsg{UID: "1", Blocks: nil})
 
 	// Press n. Cursor should advance to UID 3, skipping the hidden UID 2.
-	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	tab, _ = tab.handleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
 
 	got, ok := tab.msglist.SelectedMessage()
 	if !ok {
@@ -1267,7 +1267,7 @@ func TestModel_ViewerClose_CancelsInflightFetch(t *testing.T) {
 	tab.bodyFetchCancel = cancel
 
 	// Press q. Closes the viewer.
-	tab, _ = tab.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tab, _ = tab.handleKey(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
 	if tab.viewer.IsOpen() {
 		t.Fatal("q should have closed the viewer")

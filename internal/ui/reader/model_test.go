@@ -1,10 +1,11 @@
 package reader
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/icalendar"
@@ -12,6 +13,10 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 func newTestViewer() Model {
 	return New(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", uicore.SimpleIcons)
@@ -44,7 +49,7 @@ func TestViewerBodyLoadedSetsReady(t *testing.T) {
 	if v.Phase() != PhaseReady {
 		t.Errorf("phase = %v, want ready", v.Phase())
 	}
-	out := v.View()
+	out := stripANSI(v.View())
 	if !strings.Contains(out, "Hello world") {
 		t.Errorf("ready view missing body: %q", out)
 	}
@@ -69,7 +74,7 @@ func TestViewerStaleBodyLoadedIgnored(t *testing.T) {
 
 func TestViewerCloseFromLoading(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	v, _ = v.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if v.IsOpen() {
 		t.Error("esc must close viewer")
 	}
@@ -78,7 +83,7 @@ func TestViewerCloseFromLoading(t *testing.T) {
 func TestViewerCloseFromReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}, content.Unsubscribe{}, nil)
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	v, _ = v.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if v.IsOpen() {
 		t.Error("q must close viewer from ready phase")
 	}
@@ -94,7 +99,7 @@ func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 		t.Errorf("initial scroll pct = %d, want 0", v.ScrollPct())
 	}
 	// Press G to jump to bottom. Scroll % should change to 100.
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	v, _ = v.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	if pct := v.ScrollPct(); pct != 100 {
 		t.Errorf("after G scroll pct = %d, want 100", pct)
 	}
@@ -108,7 +113,7 @@ func TestViewerNumericLaunchesURL(t *testing.T) {
 	if len(v.Links()) != 1 {
 		t.Fatalf("expected 1 harvested link, got %d", len(v.Links()))
 	}
-	v, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	v, cmd := v.Update(tea.KeyPressMsg{Code: '1', Text: "1"})
 	if cmd == nil {
 		t.Fatal("numeric key must produce a launch cmd")
 	}
@@ -130,7 +135,7 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://only.example"},
 	}}}, content.Unsubscribe{}, nil)
-	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
+	_, cmd := v.Update(tea.KeyPressMsg{Code: '5', Text: "5"})
 	if cmd != nil {
 		if msg, ok := cmd().(LaunchURLMsg); ok {
 			got = msg.URL
@@ -150,7 +155,7 @@ func TestViewerTabEmitsOpenLinkPickerMsg(t *testing.T) {
 		}},
 	}, content.Unsubscribe{}, nil)
 
-	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_, cmd := v.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if cmd == nil {
 		t.Fatal("expected Cmd from Tab when links are harvested")
 	}
@@ -170,7 +175,7 @@ func TestViewerTabNoLinksInert(t *testing.T) {
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "no links"}}},
 	}, content.Unsubscribe{}, nil)
 
-	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_, cmd := v.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 
 	if cmd != nil {
 		t.Fatalf("expected no Cmd when zero links, got %v", cmd)
@@ -186,7 +191,7 @@ func TestViewerClosedViewIsEmpty(t *testing.T) {
 
 func TestViewerHandleKey_CloseViaQ_UsesKeyMatches(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", From: "Alice"})
-	v, _ = v.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	v, _ = v.handleKey(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if v.IsOpen() {
 		t.Fatal("viewer should close on q")
 	}
@@ -254,7 +259,7 @@ func TestViewer_AtKey_Inert_WhenEmpty(t *testing.T) {
 	v = v.Open(mail.MessageInfo{UID: "u1"})
 	v = v.SetBody(nil, content.Unsubscribe{}, nil)
 	v = v.SetAttachments(nil)
-	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	_, cmd := v.Update(tea.KeyPressMsg{Code: '@', Text: "@"})
 	if cmd != nil {
 		t.Errorf("expected no Cmd when no attachments; got one")
 	}
@@ -266,7 +271,7 @@ func TestViewer_AtKey_OpensPicker(t *testing.T) {
 	v = v.Open(mail.MessageInfo{UID: "u1"})
 	v = v.SetBody(nil, content.Unsubscribe{}, nil)
 	v = v.SetAttachments([]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}})
-	_, cmd := v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	_, cmd := v.Update(tea.KeyPressMsg{Code: '@', Text: "@"})
 	if cmd == nil {
 		t.Fatal("expected OpenAttachPickerMsg Cmd")
 	}

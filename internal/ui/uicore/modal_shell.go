@@ -3,7 +3,7 @@ package uicore
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ModalShell holds the shared lifecycle state (open flag and dimensions)

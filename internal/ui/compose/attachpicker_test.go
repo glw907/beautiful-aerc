@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -78,7 +78,7 @@ func TestAttachPicker_OpenReadsDir(t *testing.T) {
 
 func feedKeys(p AttachPicker, keys ...string) AttachPicker {
 	for _, k := range keys {
-		p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(k)}))
+		p, _ = p.Update(tea.KeyPressMsg{Code: rune(k[0]), Text: k})
 	}
 	return p
 }
@@ -116,16 +116,16 @@ func TestAttachPicker_SelectAndAccept(t *testing.T) {
 	p := loadDir(t, newTestPicker(t), dir)
 
 	// toggle a and c
-	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(" ")}))
-	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
-	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
-	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(" ")}))
+	p, _ = p.Update(tea.KeyPressMsg{Code: ' ', Text: " "})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: ' ', Text: " "})
 
 	if c := selectedCount(p); c != 2 {
 		t.Fatalf("selected = %d, want 2", c)
 	}
 
-	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("a")}))
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	if cmd == nil {
 		t.Fatal("accept should emit cmd")
 	}
@@ -143,7 +143,7 @@ func TestAttachPicker_EnterOnFileShortcut(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "only.txt")
 	p := loadDir(t, newTestPicker(t), dir)
-	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter on file with empty selection should accept")
 	}
@@ -157,7 +157,7 @@ func TestAttachPicker_AcceptZeroSelectedNoOp(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "a.txt", "b.txt")
 	p := loadDir(t, newTestPicker(t), dir)
-	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("a")}))
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	if cmd != nil {
 		t.Fatal("accept with 0 selected should be no-op")
 	}
@@ -167,7 +167,7 @@ func TestAttachPicker_EscEmitsCancelled(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "a.txt")
 	p := loadDir(t, newTestPicker(t), dir)
-	_, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEsc}))
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("Esc should emit cmd")
 	}
@@ -194,7 +194,7 @@ func TestAttachPicker_FooterHintsSelectedCount(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, "a.txt", "b.txt")
 	p := loadDir(t, newTestPicker(t), dir).SetSize(80, 20)
-	p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(" ")}))
+	p, _ = p.Update(tea.KeyPressMsg{Code: ' ', Text: " "})
 	out := p.View()
 	if !strings.Contains(out, "a accept (1)") {
 		t.Errorf("footer missing count, got:\n%s", out)
@@ -235,7 +235,7 @@ func TestAttachPicker_HiddenToggle(t *testing.T) {
 	if has(p.entries, ".secret") {
 		t.Fatal("hidden should be excluded by default")
 	}
-	p, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(".")}))
+	p, cmd := p.Update(tea.KeyPressMsg{Code: '.', Text: "."})
 	if cmd == nil {
 		t.Fatal("toggle should re-issue readDirCmd")
 	}
@@ -262,11 +262,11 @@ func TestAttachPicker_DescendAndAscendRestoresCursor(t *testing.T) {
 		t.Fatal("child not in entries")
 	}
 	for p.cursor < idx {
-		p, _ = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("j")}))
+		p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	}
 
 	// descend: Enter returns a readDirCmd
-	p, cmd := p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+	p, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("descend should issue readDirCmd")
 	}
@@ -279,7 +279,7 @@ func TestAttachPicker_DescendAndAscendRestoresCursor(t *testing.T) {
 	}
 
 	// ascend: Backspace returns a readDirCmd
-	p, cmd = p.Update(tea.KeyMsg(tea.Key{Type: tea.KeyBackspace}))
+	p, cmd = p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if cmd != nil {
 		p, _ = p.Update(cmd())
 	}

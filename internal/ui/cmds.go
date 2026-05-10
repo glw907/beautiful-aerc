@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/compose"

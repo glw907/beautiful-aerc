@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -80,7 +80,7 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 	if !p.shell.IsOpen() {
 		return p, nil
 	}
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
 	}

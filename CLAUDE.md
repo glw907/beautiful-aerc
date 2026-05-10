@@ -33,7 +33,12 @@ The project moves through three phases with different rules
   for genuinely time-gated follow-ups (soak windows, metric
   checks, recurring sweeps).
 - Migrations and breaking changes are first-class — explain in
-  the commit message and ADR; don't engineer around them.
+  the commit message and ADR; don't engineer around them. **The
+  finished tree reads as if poplar were written natively on the
+  new dependency, not patched over.** No v1 idioms in v2 syntax,
+  no stubs awaiting a sibling task, no cross-task TODOs, no
+  commented-out legacy. When two tasks touch a file, the earlier
+  deletes; the later writes the v2-native replacement.
 - The only sacred thing is data on disk the user can't easily
   regenerate (mail caches, OAuth refresh tokens).
 - **Anti-pattern when triaging review findings:** never skip with
@@ -135,18 +140,15 @@ binding facts that are not universal.
   responsive behavior to new UI components. Load before
   planning any new responsive surface.
 - `docs/poplar/research/2026-04-26-bubbletea-norms.md` and
-  `docs/poplar/research/2026-04-26-reference-apps.md` — the
-  authority-of-last-resort for bubbletea conventions. If the
-  conventions doc and the source code (or a reference app) appear
-  to disagree, the research docs cite the primary source — they
-  win. Load when chasing a conflict, not on every UI pass.
+  `docs/poplar/research/2026-04-26-reference-apps.md` —
+  authority-of-last-resort for bubbletea conventions; cite primary
+  source. Load only when chasing a conflict.
 - `docs/poplar/wireframes.md` — reference wireframes for every screen.
 - `docs/poplar/keybindings.md` — authoritative key map.
 - `docs/poplar/STATUS.md` — current pass + next starter prompt.
-- `docs/poplar/decisions/` — ADR archive. Load a specific ADR when
-  you need the rationale behind an invariant; load
-  `docs/poplar/decisions/INDEX.md` when you need the themed map
-  from binding facts to ADR numbers.
+- `docs/poplar/decisions/` — ADR archive. Load a specific ADR for
+  invariant rationale; load `docs/poplar/decisions/INDEX.md` for
+  the themed map from binding facts to ADR numbers.
 
 ## Development workflow
 

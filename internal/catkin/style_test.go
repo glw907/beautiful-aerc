@@ -4,13 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
-
-func init() {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-}
 
 func TestTokenizeBoldItalicCodeLink(t *testing.T) {
 	cases := []struct {

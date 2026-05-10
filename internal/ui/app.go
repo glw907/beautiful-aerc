@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/cache"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
@@ -933,7 +933,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	case contactsSyncedMsg:
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		m.acct.NotifyActivity()
 		if m.helpOpen {
 			if key.Matches(msg, m.keys.CloseHelp) {
@@ -1006,7 +1006,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 			return m.updateContactsKey(msg)
 		}
 		// In the Drafts folder, Enter opens compose instead of the viewer.
-		if msg.Type == tea.KeyEnter && !m.viewerOpen {
+		if msg.Code == tea.KeyEnter && !m.viewerOpen {
 			if info, ok := m.acct.SelectedMessage(); ok {
 				draftsFolder := resolveDraftsFolder(m.acct.Cache())
 				if draftsFolder != "" && m.acct.CurrentFolderName() == draftsFolder {
@@ -1167,13 +1167,41 @@ func (m App) renderFrame() string {
 	return strings.Join(parts, "\n")
 }
 
+// windowTitle returns the terminal title for the current state.
+func (m App) windowTitle() string {
+	name := m.acct.Cache().Name()
+	if name == "" {
+		return "poplar"
+	}
+	return "poplar — " + name
+}
+
+// view builds a tea.View from content, applying the AltScreen and WindowTitle
+// chrome that every frame must carry.
+func (m App) view(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.WindowTitle = m.windowTitle()
+	return v
+}
+
+// viewWithCursor is like view but also sets the cursor.
+func (m App) viewWithCursor(content string, cur *tea.Cursor) tea.View {
+	v := m.view(content)
+	v.Cursor = cur
+	return v
+}
+
 // View composes the full-screen layout. When the help popover is open the
 // underlying account frame is rendered, dimmed via DimANSI, and then the
 // popover box is composited over it via PlaceOverlay so the underlying
 // context remains visible but recedes visually.
-func (m App) View() string {
+func (m App) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return ""
+		v := tea.NewView("")
+		v.AltScreen = true
+		v.WindowTitle = m.windowTitle()
+		return v
 	}
 
 	frame := m.renderFrame()
@@ -1187,90 +1215,150 @@ func (m App) View() string {
 			if x < 0 {
 				x = 0
 			}
-			return uicore.PlaceOverlay(x, y, tooNarrow, dimmed)
+			return m.view(uicore.PlaceOverlay(x, y, tooNarrow, dimmed))
 		}
 		x, y := m.help.Position(box, m.width, m.height)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
 	if m.confirm.IsOpen() {
 		box := m.confirm.Box(m.width, m.height)
 		x, y := m.confirm.Position(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
 	if m.conflictOpen {
 		body := m.conflict.View()
 		x, y := uicore.CenterOverlay(body, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, body, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, body, dimmed))
 	}
 
 	if m.outboxOpen {
 		body := m.outbox.View()
 		x, y := uicore.CenterOverlay(body, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, body, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, body, dimmed))
 	}
 
 	if m.linkPicker.IsOpen() {
 		box := m.linkPicker.Box(m.width, m.height)
 		x, y := m.linkPicker.Position(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
 	if m.attachPicker.IsOpen() {
 		box := m.attachPicker.Box(m.width, m.height)
 		x, y := m.attachPicker.Position(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
 	if m.compose != nil && m.compose.AttachPickerIsOpen() {
 		box := m.compose.AttachPickerView()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
 	if m.compose != nil && m.compose.SchedulePickerIsOpen() {
 		box := m.compose.SchedulePickerView()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		var cur *tea.Cursor
+		if pc := m.compose.SchedulePickerCursor(); pc != nil {
+			c := *pc
+			c.Position.X += x
+			c.Position.Y += y
+			cur = &c
+		}
+		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, dimmed), cur)
 	}
 
 	if m.reschedule.picker != nil {
 		box := m.reschedule.picker.View()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		var cur *tea.Cursor
+		if pc := m.reschedule.picker.Cursor(); pc != nil {
+			c := *pc
+			c.Position.X += x
+			c.Position.Y += y
+			cur = &c
+		}
+		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, dimmed), cur)
 	}
 
 	if m.movePicker.IsOpen() {
 		box := m.movePicker.Box(m.width, m.height)
 		x, y := m.movePicker.Position(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
 	if m.form != nil && m.form.FromPopover() {
 		box := m.form.Box(m.width, m.height)
 		x, y := m.form.Position(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		var cur *tea.Cursor
+		if fc := m.form.Cursor(); fc != nil {
+			c := *fc
+			// x+1 for "│" left border; y+1 for "┌─title─┐" top border row.
+			c.Position.X += x + 1
+			c.Position.Y += y + 1
+			cur = &c
+		}
+		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, dimmed), cur)
 	}
 
 	if m.popover != nil {
 		box := m.popover.Box(m.width, m.height)
 		x, y := m.popover.Position(box, m.width, m.height)
 		dimmed := uicore.DimANSI(frame)
-		return uicore.PlaceOverlay(x, y, box, dimmed)
+		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
 	}
 
-	return frame
+	// No overlay open. Pull cursor from the focused surface.
+	cur := m.frameCursor()
+	return m.viewWithCursor(frame, cur)
+}
+
+// frameCursor computes the global cursor position for the non-overlay frame.
+// Checks compose first (text inputs in the compose panel), then the contacts
+// form in right-pane mode, then the sidebar search shelf.
+func (m App) frameCursor() *tea.Cursor {
+	sidebarW := uicore.ComputeLayout(m.width).Sidebar
+	// Compose occupies the right pane; origin = (sidebarW+1, 1).
+	if m.compose != nil {
+		if cc := m.compose.Cursor(); cc != nil {
+			c := *cc
+			c.Position.X += sidebarW + 1
+			c.Position.Y += 1 // topLine occupies row 0
+			return &c
+		}
+	}
+	// Contacts form in non-popover (right-pane) mode.
+	if m.form != nil && !m.form.FromPopover() {
+		if fc := m.form.Cursor(); fc != nil {
+			c := *fc
+			c.Position.X += sidebarW + 1
+			c.Position.Y += 1
+			return &c
+		}
+	}
+	// Sidebar search shelf.
+	search := m.acct.SidebarColumnValue().SidebarSearch()
+	if sc := search.Cursor(); sc != nil {
+		c := *sc
+		// Search X is already in sidebar-column-local coords (sidebar starts at X=0).
+		// Search Y is shelf-local (Y=1 for the prompt row); shelf top in the
+		// global frame = 1 (topLine) + contentHeight - ShelfRows.
+		c.Position.Y += 1 + m.contentHeight() - sidebar.ShelfRows
+		return &c
+	}
+	return nil
 }
 
 func (m App) IsLinkPickerOpen() bool { return m.linkPicker.IsOpen() }
@@ -1458,7 +1546,7 @@ func (m App) contactsBodyHeight() int {
 
 // updateContactsKey handles a key press in contacts mode. M returns to
 // mail, q quits, j/k/J/K and a–z route to sidebar/list.
-func (m App) updateContactsKey(msg tea.KeyMsg) (App, tea.Cmd) {
+func (m App) updateContactsKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 	if key.Matches(msg, m.keys.MailMode) {
 		return m, func() tea.Msg { return contacts.ExitContactsModeMsg{} }
 	}

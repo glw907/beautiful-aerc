@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	gomail "github.com/emersion/go-message/mail"
+	"github.com/glw907/poplar/internal/ansix"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/theme"
@@ -108,6 +109,7 @@ func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest Sugges
 		ti := textinput.New()
 		ti.Prompt = ""
 		ti.Placeholder = ""
+		ti.SetVirtualCursor(false)
 		return ti
 	}
 	c := &Model{
@@ -243,10 +245,10 @@ func (c *Model) SetSize(w, h int) {
 	if inputW < 1 {
 		inputW = 1
 	}
-	c.to.Width = inputW
-	c.cc.Width = inputW
-	c.bcc.Width = inputW
-	c.subject.Width = inputW
+	c.to.SetWidth(inputW)
+	c.cc.SetWidth(inputW)
+	c.bcc.SetWidth(inputW)
+	c.subject.SetWidth(inputW)
 
 	bodyHeight := h - chromeRows
 	if c.err != "" {
@@ -339,18 +341,7 @@ func (c *Model) padRow(s string) string {
 }
 
 func truncate(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	cells := 0
-	for i, r := range s {
-		w := lipgloss.Width(string(r))
-		if cells+w > n {
-			return s[:i]
-		}
-		cells += w
-	}
-	return s
+	return ansix.Truncate(s, n)
 }
 
 // SendMsg fires on Ctrl+X or after a ScheduleAcceptedMsg. ScheduledFor
@@ -441,9 +432,9 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		return c, c.scheduleServerPushCmd()
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if c.dropdownActive() {
-			switch msg.Type {
+			switch msg.Code {
 			case tea.KeyTab, tea.KeyEnter:
 				c.acceptSuggestion()
 				return c, nil
@@ -465,7 +456,7 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			c.attach, cmd = c.attach.Update(msg)
 			return c, cmd
 		}
-		if msg.Type == tea.KeyCtrlO {
+		if msg.Mod&tea.ModCtrl != 0 && msg.Code == 'o' {
 			start := c.attachLastDir
 			if start == "" {
 				if wd, err := os.Getwd(); err == nil {
@@ -480,36 +471,36 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			c.attach, cmd = c.attach.Open(start)
 			return c, cmd
 		}
-		switch msg.Type {
-		case tea.KeyCtrlT:
+		switch {
+		case msg.Mod&tea.ModCtrl != 0 && msg.Code == 't':
 			if cmd := c.handleTidyKey(); cmd != nil {
 				return c, cmd
 			}
 			return c, nil
-		case tea.KeyCtrlX:
+		case msg.Mod&tea.ModCtrl != 0 && msg.Code == 'x':
 			d, err := c.Draft()
 			if err != nil {
 				return c, nil
 			}
 			return c, func() tea.Msg { return SendMsg{Draft: d} }
-		case tea.KeyCtrlL:
+		case msg.Mod&tea.ModCtrl != 0 && msg.Code == 'l':
 			p := NewSchedulePicker(c.theme, time.Now(), "")
 			p.SetSize(c.width, c.height)
 			c.schedulePicker = &p
 			return c, nil
-		case tea.KeyCtrlC:
+		case msg.Mod&tea.ModCtrl != 0 && msg.Code == 'c':
 			dirty := c.IsDirty()
 			return c, func() tea.Msg { return CancelMsg{Dirty: dirty} }
-		case tea.KeyTab:
-			c.advanceFocus(+1)
-			return c, nil
-		case tea.KeyShiftTab:
+		case msg.Code == tea.KeyTab && msg.Mod&tea.ModShift != 0:
 			c.advanceFocus(-1)
 			return c, nil
-		case tea.KeyCtrlG:
+		case msg.Code == tea.KeyTab:
+			c.advanceFocus(+1)
+			return c, nil
+		case msg.Mod&tea.ModCtrl != 0 && msg.Code == 'g':
 			c.cycleSignature()
 			return c, nil
-		case tea.KeyEsc:
+		case msg.Code == tea.KeyEsc:
 			if c.focus == focusBody {
 				c.setFocus(focusSubject)
 			} else {
@@ -522,26 +513,23 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch c.focus {
 	case focusFrom:
-		if k, ok := msg.(tea.KeyMsg); ok {
-			switch k.Type {
+		if k, ok := msg.(tea.KeyPressMsg); ok {
+			switch k.Code {
 			case tea.KeySpace, tea.KeyRight:
 				c.cycleIdentity(+1)
 				return c, nil
 			case tea.KeyLeft:
 				c.cycleIdentity(-1)
 				return c, nil
-			case tea.KeyRunes:
-				switch string(k.Runes) {
-				case "l":
-					c.cycleIdentity(+1)
-					return c, nil
-				case "h":
-					c.cycleIdentity(-1)
-					return c, nil
-				case "g":
-					c.cycleSignature()
-					return c, nil
-				}
+			case 'l':
+				c.cycleIdentity(+1)
+				return c, nil
+			case 'h':
+				c.cycleIdentity(-1)
+				return c, nil
+			case 'g':
+				c.cycleSignature()
+				return c, nil
 			}
 		}
 	case focusTo:
@@ -553,8 +541,8 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case focusSubject:
 		c.subject, cmd = c.subject.Update(msg)
 	case focusAttach:
-		if k, ok := msg.(tea.KeyMsg); ok {
-			switch k.Type {
+		if k, ok := msg.(tea.KeyPressMsg); ok {
+			switch k.Code {
 			case tea.KeyLeft:
 				if c.attachCursor > 0 {
 					c.attachCursor--
@@ -565,10 +553,8 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				}
 			case tea.KeyBackspace, tea.KeyDelete:
 				return c, c.removeAttachAtCursor()
-			default:
-				if k.Type == tea.KeyRunes && len(k.Runes) == 1 && k.Runes[0] == 'd' {
-					return c, c.removeAttachAtCursor()
-				}
+			case 'd':
+				return c, c.removeAttachAtCursor()
 			}
 		}
 		return c, nil
@@ -583,7 +569,7 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		c.lastEditAt = time.Now()
 	}
 
-	if _, isKey := msg.(tea.KeyMsg); isKey {
+	if _, isKey := msg.(tea.KeyPressMsg); isKey {
 		c.refreshSuggest()
 	}
 	return c, cmd
@@ -660,12 +646,15 @@ func (c *Model) acceptSuggestion() {
 // isEditMsg reports whether msg should mark the draft dirty. Navigation
 // and control messages (Tab, Esc, Ctrl chords) are excluded.
 func isEditMsg(msg tea.Msg) bool {
-	k, ok := msg.(tea.KeyMsg)
+	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return false
 	}
-	switch k.Type {
-	case tea.KeyRunes, tea.KeySpace, tea.KeyEnter, tea.KeyBackspace, tea.KeyDelete:
+	if len(k.Text) > 0 {
+		return true
+	}
+	switch k.Code {
+	case tea.KeySpace, tea.KeyEnter, tea.KeyBackspace, tea.KeyDelete:
 		return true
 	}
 	return false
@@ -773,6 +762,41 @@ func (c *Model) HasSignatures() bool {
 	return len(c.identities) > 0 && len(c.identities[c.identity].Signatures) > 0
 }
 
+// Cursor returns the terminal cursor for the currently focused text input in
+// local compose-panel coordinates (origin = compose panel top-left). Returns
+// nil when the body (catkin) is focused (catkin uses a virtual block cursor
+// baked into its rendered output) or when the compose model is zero-sized.
+func (c *Model) Cursor() *tea.Cursor {
+	if c.width == 0 || c.height == 0 {
+		return nil
+	}
+	// Rows in View(): From=0, To=1, Cc=2, Bcc=3, Subject=4.
+	var (
+		input *textinput.Model
+		row   int
+	)
+	switch c.focus {
+	case focusTo:
+		input, row = &c.to, 1
+	case focusCc:
+		input, row = &c.cc, 2
+	case focusBcc:
+		input, row = &c.bcc, 3
+	case focusSubject:
+		input, row = &c.subject, 4
+	default:
+		// From row or body (catkin): no real cursor available.
+		return nil
+	}
+	cur := input.Cursor()
+	if cur == nil {
+		return nil
+	}
+	cur.Position.X += labelWidth
+	cur.Position.Y = row
+	return cur
+}
+
 // IsFocusFrom reports whether the From field currently has focus.
 func (c *Model) IsFocusFrom() bool { return c.focus == focusFrom }
 
@@ -786,6 +810,16 @@ func (c *Model) SchedulePickerView() string {
 		return ""
 	}
 	return c.schedulePicker.View()
+}
+
+// SchedulePickerCursor returns the terminal cursor for the schedule picker's
+// custom-time input in box-local coordinates, or nil when the picker is
+// closed or the custom row is not active. The App adds the overlay origin.
+func (c *Model) SchedulePickerCursor() *tea.Cursor {
+	if c.schedulePicker == nil {
+		return nil
+	}
+	return c.schedulePicker.Cursor()
 }
 
 func (c *Model) SetSignature(idx int) { c.signature = idx }

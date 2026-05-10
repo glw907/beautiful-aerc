@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -23,17 +23,17 @@ func TestForm_KindToggleFlipsLayout(t *testing.T) {
 	}
 	// Focus the kind toggle (index 0) and press Right.
 	f.focusIdx = 0
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyRight})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	if f.kind != KindOrg {
 		t.Fatalf("after Right kind = %v, want KindOrg", f.kind)
 	}
 	// Press Left to flip back.
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	if f.kind != KindPerson {
 		t.Fatalf("after Left kind = %v, want KindPerson", f.kind)
 	}
 	// Space also toggles.
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	f, _ = f.Update(tea.KeyPressMsg{Code: ' ', Text: " "})
 	if f.kind != KindOrg {
 		t.Fatalf("after Space kind = %v, want KindOrg", f.kind)
 	}
@@ -43,7 +43,7 @@ func TestForm_AddEmailAppendsRow(t *testing.T) {
 	f := newPersonForm(Contact{Emails: []Email{{Address: "a@b.c"}}})
 	before := len(f.emails)
 	f.focusIdx = f.addEmailIdx()
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if len(f.emails) != before+1 {
 		t.Fatalf("emails after add = %d, want %d", len(f.emails), before+1)
 	}
@@ -55,7 +55,7 @@ func TestForm_RemoveEmailRow(t *testing.T) {
 	}})
 	// Focus the − button on row 1.
 	f.focusIdx = f.emailRowMinusIdx(1)
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if len(f.emails) != 1 {
 		t.Fatalf("emails after remove = %d, want 1", len(f.emails))
 	}
@@ -67,7 +67,7 @@ func TestForm_RemoveEmailRow(t *testing.T) {
 func TestForm_RemoveDisabledOnSoleEmail(t *testing.T) {
 	f := newPersonForm(Contact{Emails: []Email{{Address: "a@b.c"}}})
 	f.focusIdx = f.emailRowMinusIdx(0)
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if len(f.emails) != 1 {
 		t.Fatalf("sole email row was removed; got %d rows", len(f.emails))
 	}
@@ -80,7 +80,7 @@ func TestForm_PromotePrimary(t *testing.T) {
 	}})
 	// Press the ★ on row 1 to promote.
 	f.focusIdx = f.emailRowStarIdx(1)
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := f.emails[0].input.Value(); got != "second@x.com" {
 		t.Fatalf("after promote primary = %q, want second@x.com", got)
 	}
@@ -95,7 +95,7 @@ func TestForm_StarOnRowZeroNoOp(t *testing.T) {
 		{Address: "d@e.f"},
 	}})
 	f.focusIdx = f.emailRowStarIdx(0)
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := f.emails[0].input.Value(); got != "a@b.c" {
 		t.Fatalf("row 0 star reorder mutated; row 0 = %q", got)
 	}
@@ -144,7 +144,7 @@ func TestForm_CtrlSEmitsSaveOnSuccess(t *testing.T) {
 	f := newPersonForm(Contact{})
 	f.first.SetValue("Alice")
 	f.emails[0].input.SetValue("alice@example.com")
-	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	_, cmd := f.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 's'})
 	if cmd == nil {
 		t.Fatal("Ctrl+S returned nil cmd; want ContactSaveMsg")
 	}
@@ -164,7 +164,7 @@ func TestForm_CtrlSEmitsSaveOnSuccess(t *testing.T) {
 func TestForm_CtrlSStaysOpenOnValidationError(t *testing.T) {
 	f := newPersonForm(Contact{})
 	f.emails[0].input.SetValue("alice@example.com")
-	next, cmd := f.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	next, cmd := f.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 's'})
 	if cmd != nil {
 		// Some Cmds may fire (e.g., refocus). Make sure no save msg.
 		if msg := cmd(); msg != nil {
@@ -182,7 +182,7 @@ func TestForm_EscEmitsCancelDirtyTracking(t *testing.T) {
 	initial := Contact{Emails: []Email{{Address: "a@b.c"}}, Given: "Alice"}
 	f := newPersonForm(initial)
 	// Pristine: cancel reports Dirty=false.
-	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := f.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("Esc produced nil cmd")
 	}
@@ -196,7 +196,7 @@ func TestForm_EscEmitsCancelDirtyTracking(t *testing.T) {
 
 	// Modify a field so dirty becomes true.
 	f.first.SetValue("Bob")
-	_, cmd = f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd = f.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	c2 := cmd().(ContactCancelMsg)
 	if !c2.Dirty {
 		t.Fatal("modified form reported Dirty=false")
@@ -206,11 +206,11 @@ func TestForm_EscEmitsCancelDirtyTracking(t *testing.T) {
 func TestForm_TabCyclesFocus(t *testing.T) {
 	f := newPersonForm(Contact{Emails: []Email{{Address: "a@b.c"}}})
 	start := f.focusIdx
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyTab})
+	f, _ = f.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if f.focusIdx == start {
 		t.Fatal("Tab did not advance focus")
 	}
-	f, _ = f.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	f, _ = f.Update(tea.KeyPressMsg{Mod: tea.ModShift, Code: tea.KeyTab})
 	if f.focusIdx != start {
 		t.Fatalf("ShiftTab landed at %d, want %d", f.focusIdx, start)
 	}
@@ -242,7 +242,7 @@ func TestForm_PhoneValidation(t *testing.T) {
 
 func TestForm_D_InertOnNewContact(t *testing.T) {
 	f := NewForm(newTestStyles(), Contact{Kind: KindPerson}, false, []string{"local"})
-	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	_, cmd := f.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	if cmd != nil {
 		if msg := cmd(); msg != nil {
 			if _, ok := msg.(OpenContactDeleteConfirmMsg); ok {
@@ -259,9 +259,9 @@ func TestForm_D_OpensConfirmOnExisting(t *testing.T) {
 	f = f.WithExistingUID("u-1")
 	// Default focusIdx lands on a text input (widFirst). Move to widKind (idx 0)
 	// so D is not swallowed by the text input.
-	fm, _ := f.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	fm, _ := f.Update(tea.KeyPressMsg{Mod: tea.ModShift, Code: tea.KeyTab})
 	f = fm
-	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	_, cmd := f.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	if cmd == nil {
 		t.Fatal("D on existing contact with non-input focus must emit OpenContactDeleteConfirmMsg")
 	}
@@ -281,7 +281,7 @@ func TestForm_D_InertWhenTypingInTextInput(t *testing.T) {
 	f := NewForm(newTestStyles(), c, false, []string{"local"})
 	f = f.WithExistingUID("u-1")
 	// Default focus is widFirst (a text input). D must not open the confirm.
-	_, cmd := f.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	_, cmd := f.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	if cmd != nil {
 		msg := cmd()
 		if _, ok := msg.(OpenContactDeleteConfirmMsg); ok {

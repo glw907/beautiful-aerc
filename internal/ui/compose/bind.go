@@ -1,7 +1,7 @@
 package compose
 
 import (
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/key"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
 )

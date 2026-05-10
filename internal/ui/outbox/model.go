@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/theme"
@@ -55,15 +55,15 @@ func (m *Model) SetRows(rows []cache.OutboxRow) {
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
 	}
 	switch {
-	case km.Type == tea.KeyEsc:
+	case km.Code == tea.KeyEsc:
 		return m, func() tea.Msg { return CloseMsg{} }
-	case km.Type == tea.KeyRunes && len(km.Runes) == 1:
-		switch km.Runes[0] {
+	case len(km.Text) == 1:
+		switch km.Code {
 		case 'q':
 			return m, func() tea.Msg { return CloseMsg{} }
 		case 'j':

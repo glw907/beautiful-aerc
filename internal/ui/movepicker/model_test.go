@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -50,9 +50,9 @@ func TestMovePicker_OpenSetsState(t *testing.T) {
 
 func TestMovePicker_FilterNarrows(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if p.filter != "rec" {
 		t.Errorf("filter = %q, want %q", p.filter, "rec")
 	}
@@ -68,7 +68,7 @@ func TestMovePicker_FilterNarrows(t *testing.T) {
 
 func TestMovePicker_FilterCaseInsensitive(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'I', Text: "I"})
 	if len(p.matches) == 0 {
 		t.Fatal("expected matches for 'I' (Inbox, Receipts), got 0")
 	}
@@ -76,9 +76,9 @@ func TestMovePicker_FilterCaseInsensitive(t *testing.T) {
 
 func TestMovePicker_BackspaceWidens(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if p.filter != "r" {
 		t.Errorf("filter = %q, want %q", p.filter, "r")
 	}
@@ -86,7 +86,7 @@ func TestMovePicker_BackspaceWidens(t *testing.T) {
 
 func TestMovePicker_BackspaceEmptyNoOp(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if p.filter != "" {
 		t.Errorf("filter = %q, want empty", p.filter)
 	}
@@ -95,12 +95,12 @@ func TestMovePicker_BackspaceEmptyNoOp(t *testing.T) {
 func TestMovePicker_CursorClampsOnFilter(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
 	for i := 0; i < 5; i++ {
-		p, _ = p.Update(tea.KeyMsg{Type: tea.KeyDown})
+		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	if p.cursor != 5 {
 		t.Fatalf("cursor = %d, want 5 (precondition)", p.cursor)
 	}
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	if p.cursor != 0 {
 		t.Errorf("cursor = %d, want 0 after filter change", p.cursor)
 	}
@@ -108,12 +108,12 @@ func TestMovePicker_CursorClampsOnFilter(t *testing.T) {
 
 func TestMovePicker_NavigationBounds(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyUp})
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if p.cursor != 0 {
 		t.Errorf("up at top: cursor = %d, want 0", p.cursor)
 	}
 	for i := 0; i < 100; i++ {
-		p, _ = p.Update(tea.KeyMsg{Type: tea.KeyDown})
+		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	if p.cursor != len(p.matches)-1 {
 		t.Errorf("down past bottom: cursor = %d, want %d", p.cursor, len(p.matches)-1)
@@ -124,7 +124,7 @@ func TestMovePicker_EnterEmitsPickedMsg(t *testing.T) {
 	// INBOX excluded. p.all = [Drafts, Sent, Archive, Trash, Receipts/2026, Receipts/2025]
 	// cursor=0 is Drafts. No Down needed.
 	p := newTestPicker().Open([]mail.UID{"42"}, "INBOX", sampleFolders())
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter returned nil cmd")
 	}
@@ -159,12 +159,12 @@ func TestMovePicker_EnterEmitsPickedMsg(t *testing.T) {
 func TestMovePicker_EnterInertOnEmpty(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
 	for _, r := range "zzzzz" {
-		p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		p, _ = p.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	if len(p.matches) != 0 {
 		t.Fatalf("matches = %d, want 0 (precondition)", len(p.matches))
 	}
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil {
 		t.Errorf("Enter on empty matches returned non-nil cmd")
 	}
@@ -172,7 +172,7 @@ func TestMovePicker_EnterInertOnEmpty(t *testing.T) {
 
 func TestMovePicker_EscClosesNoOp(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("Esc returned nil cmd")
 	}
@@ -194,7 +194,7 @@ func TestMovePicker_EscClosesNoOp(t *testing.T) {
 func TestMovePicker_QSwallowed(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
 	beforeFilter := p.filter
-	p2, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	p2, cmd := p.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
 		t.Errorf("q produced cmd, want nil (swallowed)")
 	}
@@ -234,7 +234,7 @@ func TestMovePicker_RendersGroupSeparators(t *testing.T) {
 func TestMovePicker_FilterEmptyMatchHint(t *testing.T) {
 	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
 	for _, r := range "zzzzz" {
-		p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		p, _ = p.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	box := p.Box(80, 24)
 	if !strings.Contains(box, "no folders match") {
@@ -270,7 +270,7 @@ func TestMatchRunes(t *testing.T) {
 
 func TestMovePicker_FilterHintRowShown(t *testing.T) {
 	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	box := p.Box(80, 24)
 	if !strings.Contains(box, "filter: r") {
 		t.Errorf("box missing filter hint, got:\n%s", box)

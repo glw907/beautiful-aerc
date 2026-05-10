@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -71,7 +71,7 @@ func (o OutboxOverlay) SetSize(w, h int) OutboxOverlay {
 }
 
 func (o OutboxOverlay) Update(msg tea.Msg) (OutboxOverlay, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return o, nil
 	}

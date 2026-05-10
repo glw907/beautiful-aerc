@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func newModelWithMisspelling(t *testing.T) (Model, Range) {
@@ -27,7 +27,7 @@ func newModelWithMisspelling(t *testing.T) (Model, Range) {
 func TestPopoverOpensOnRange(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(r.Start) // cursor on misspelling
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if !m.popover.open {
 		t.Errorf("; on misspelling should open popover")
 	}
@@ -39,8 +39,8 @@ func TestPopoverOpensOnRange(t *testing.T) {
 func TestPopoverCloseOnEsc(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(r.Start)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if m.popover.open {
 		t.Errorf("Esc should close popover")
 	}
@@ -49,8 +49,8 @@ func TestPopoverCloseOnEsc(t *testing.T) {
 func TestPopoverApplyReplacesRange(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(r.Start)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // apply first suggestion
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // apply first suggestion
 	if got := m.buf.Value(); got != "the tradeoff is real" {
 		t.Errorf("after apply: %q, want \"the tradeoff is real\"", got)
 	}
@@ -62,7 +62,7 @@ func TestPopoverApplyReplacesRange(t *testing.T) {
 func TestPopoverDoesNotOpenOffRange(t *testing.T) {
 	m, _ := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(0) // cursor on "the", not on misspelling
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if m.popover.open {
 		t.Errorf("; off a misspelling should not open popover")
 	}
@@ -71,11 +71,11 @@ func TestPopoverDoesNotOpenOffRange(t *testing.T) {
 func TestPopoverDigitJumpApply(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(r.Start)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if len(m.popover.suggestions) < 1 {
 		t.Skipf("no suggestions; cannot exercise digit jump")
 	}
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: '1', Text: "1"})
 	if m.popover.open {
 		t.Errorf("digit jump should close popover")
 	}
@@ -88,8 +88,8 @@ func TestPopoverAddToWordlist(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.SetUserWordlistPath(listPath)
 	m.buf.SetRuneOffset(r.Start)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
+	m, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 
 	got, err := os.ReadFile(listPath)
 	if err != nil {
@@ -225,7 +225,7 @@ func modelWithPopoverOpen(t *testing.T, value, word string) Model {
 	}
 	m.buf.SetRuneOffset(off)
 	m.Focus()
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if !m.popover.open {
 		t.Fatalf("popover did not open on %q", word)
 	}
@@ -278,14 +278,14 @@ func TestPopoverClosesOnCursorLeave(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
 	m.buf.SetRuneOffset(r.Start)
 	m.Focus()
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{';'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if !m.popover.open {
 		t.Fatalf("setup: popover should be open")
 	}
 	// Move cursor outside the misspelling range with arrow-right
 	// repeated past the word's end.
 	for i := 0; i < 20; i++ {
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 		if !m.popover.open {
 			break
 		}

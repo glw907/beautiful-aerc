@@ -3,7 +3,7 @@ package catkin
 import (
 	"unicode"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // nextWordBoundary returns the rune offset of the start of the next
@@ -45,8 +45,8 @@ func isWordRune(r rune) bool {
 // handleWordNav intercepts Ctrl+Left/Right/Backspace/Delete.
 // Returns (handled, updated buffer, cmd). Caller passes through to
 // the buffer's normal Update when handled is false.
-func handleWordNav(b Buffer, msg tea.KeyMsg) (bool, Buffer, tea.Cmd) {
-	if msg.Alt {
+func handleWordNav(b Buffer, msg tea.KeyPressMsg) (bool, Buffer, tea.Cmd) {
+	if msg.Mod&tea.ModAlt != 0 {
 		return false, b, nil
 	}
 	switch msg.String() {

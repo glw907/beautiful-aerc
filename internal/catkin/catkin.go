@@ -13,9 +13,9 @@ package catkin
 import (
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Model is Catkin's tea.Model.
@@ -79,7 +79,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if k, ok := msg.(tea.KeyMsg); ok {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
 		if m.popover.open {
 			if handled, mm := m.handlePopoverKey(k); handled {
 				return mm, m.maybeScheduleAnnotateAfterMutation(mm, nil)
@@ -116,8 +116,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return applyScrollOff(m), nil
 		}
-		for _, h := range []func(Buffer, tea.KeyMsg) (bool, Buffer, tea.Cmd){
-			handleCommand, handleWordNav, handleAutoPair, handlePaste,
+		for _, h := range []func(Buffer, tea.KeyPressMsg) (bool, Buffer, tea.Cmd){
+			handleCommand, handleWordNav, handleAutoPair,
 		} {
 			if handled, b, cmd := h(m.buf, k); handled {
 				return m.afterEdit(b, cmd)

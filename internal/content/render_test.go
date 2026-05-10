@@ -4,14 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
-	"github.com/muesli/termenv"
 )
-
-func init() {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-}
 
 func TestRenderBodyParagraph(t *testing.T) {
 	blocks := []Block{

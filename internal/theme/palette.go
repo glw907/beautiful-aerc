@@ -1,6 +1,10 @@
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Palette holds the 16 semantic hex color values for a theme.
 type Palette struct {
@@ -28,11 +32,11 @@ type CompiledTheme struct {
 	// Name is the display name of the theme.
 	Name string
 
-	// Palette colors as lipgloss values
-	BgBase, BgElevated, BgSelection, BgSubtle, BgBorder lipgloss.Color
-	FgBase, FgBright, FgDim                             lipgloss.Color
-	AccentPrimary, AccentSecondary, AccentTertiary      lipgloss.Color
-	ColorError, ColorWarning, ColorSuccess              lipgloss.Color
+	// Palette colors as concrete color.Color values.
+	BgBase, BgElevated, BgSelection, BgSubtle, BgBorder color.Color
+	FgBase, FgBright, FgDim                             color.Color
+	AccentPrimary, AccentSecondary, AccentTertiary      color.Color
+	ColorError, ColorWarning, ColorSuccess              color.Color
 
 	// Composed styles for content rendering
 	HeaderKey      lipgloss.Style

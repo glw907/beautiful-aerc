@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -164,9 +164,9 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	t.Run("printable rune during typing appends to query", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+		s, _ = s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+		s, _ = s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+		s, _ = s.Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
 		if s.Query() != "pro" {
 			t.Errorf("Query() = %q, want 'pro'", s.Query())
 		}
@@ -175,7 +175,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	t.Run("Update: SearchUpdatedMsg", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
-		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		_, cmd := s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		if cmd == nil {
 			t.Fatal("Update should return a Cmd emitting SearchUpdatedMsg")
 		}
@@ -199,7 +199,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 		s.Activate()
 		s.input.SetValue("proj")
 		var cmd tea.Cmd
-		s, cmd = s.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		s, cmd = s.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 		if s.Query() != "pro" {
 			t.Errorf("Query() after backspace = %q, want 'pro'", s.Query())
 		}
@@ -214,7 +214,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 func TestSidebarSearchScopeToggle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	backslash := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'\\'}}
+	backslash := tea.KeyPressMsg{Code: '\\', Text: "\\"}
 
 	t.Run("backslash: cycle [folder] → [all folders]", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
@@ -291,7 +291,7 @@ func TestSidebarSearchEmptyQuerySuppressesCount(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.SetResultCount(5)
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		s, _ = s.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		lines := strings.Split(stripANSISearch(s.View()), "\n")
 		if len(lines) != 3 {
 			t.Fatalf("view has %d rows, want 3", len(lines))

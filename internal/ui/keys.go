@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // GlobalKeys are handled by the root App model. Quit and ForceQuit are
 // split because q is context-sensitive (closes the viewer, clears an

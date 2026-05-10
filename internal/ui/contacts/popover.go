@@ -3,8 +3,8 @@ package contacts
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -45,7 +45,7 @@ func (p *Popover) SetSize(w, h int) {
 }
 
 func (p Popover) Update(msg tea.Msg) (Popover, tea.Cmd) {
-	k, ok := msg.(tea.KeyMsg)
+	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
 	}

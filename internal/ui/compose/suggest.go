@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ui/contacts"
 )
 
@@ -74,7 +74,7 @@ func (d Dropdown) Clear() Dropdown {
 
 // Update handles Up/Down cursor motion.
 func (d Dropdown) Update(msg tea.Msg) (Dropdown, tea.Cmd) {
-	k, ok := msg.(tea.KeyMsg)
+	k, ok := msg.(tea.KeyPressMsg)
 	if !ok || len(d.rows) == 0 {
 		return d, nil
 	}

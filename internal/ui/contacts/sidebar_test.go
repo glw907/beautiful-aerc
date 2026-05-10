@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -21,7 +21,7 @@ func TestSidebar_GroupOrderAndCounts(t *testing.T) {
 
 func TestSidebar_LetterMicroHighlight(t *testing.T) {
 	s := NewSidebar(NewStyles(theme.OneDark), Fixtures())
-	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	s, _ = s.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
 	if s.activeGroup != 0 {
 		t.Errorf("expected ABC group active, got %d", s.activeGroup)
 	}
@@ -32,7 +32,7 @@ func TestSidebar_LetterMicroHighlight(t *testing.T) {
 
 func TestSidebar_WalkGroups(t *testing.T) {
 	s := NewSidebar(NewStyles(theme.OneDark), Fixtures())
-	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+	s, _ = s.Update(tea.KeyPressMsg{Code: 'J', Text: "J"})
 	if s.activeGroup != 1 {
 		t.Errorf("J should advance to DEF group")
 	}

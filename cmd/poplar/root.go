@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
@@ -56,7 +56,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m appModel) View() string { return m.app.View() }
+func (m appModel) View() tea.View { return m.app.View() }
 
 func runRoot(f rootFlags) error {
 	t, ok := theme.Themes[strings.ToLower(f.theme)]
@@ -128,7 +128,7 @@ func runRoot(f rootFlags) error {
 
 	app := ui.NewApp(t, acct, uiCfg, iconSet, accts[0].Contacts, accts[0].Identities)
 
-	p := tea.NewProgram(appModel{app: app}, tea.WithAltScreen())
+	p := tea.NewProgram(appModel{app: app})
 	if _, err := p.Run(); err != nil {
 		return err
 	}

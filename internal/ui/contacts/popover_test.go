@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -48,7 +48,7 @@ func TestPopover_EscClose(t *testing.T) {
 	p := newTestPopover(t)
 	p.SetMatch("Alice Chen", "alice@example.com", Fixtures()[0], true)
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("Esc returned nil cmd")
 	}
@@ -62,7 +62,7 @@ func TestPopover_IClose(t *testing.T) {
 	p := newTestPopover(t)
 	p.SetMatch("Alice Chen", "alice@example.com", Fixtures()[0], true)
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
 	if cmd == nil {
 		t.Fatal("i returned nil cmd")
 	}
@@ -78,7 +78,7 @@ func TestPopover_NOpenForm_NoMatch(t *testing.T) {
 	email := "new@example.com"
 	p.SetMatch(displayName, email, Contact{}, false)
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	if cmd == nil {
 		t.Fatal("n returned nil cmd")
 	}
@@ -103,7 +103,7 @@ func TestPopover_NInertOnMatch(t *testing.T) {
 	p := newTestPopover(t)
 	p.SetMatch("Alice Chen", "alice@example.com", Fixtures()[0], true)
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	if cmd != nil {
 		msg := cmd()
 		if _, isForm := msg.(OpenFormMsg); isForm {

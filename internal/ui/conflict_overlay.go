@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -98,7 +98,7 @@ func (c ConflictOverlay) SetSize(w, h int) ConflictOverlay {
 }
 
 func (c ConflictOverlay) Update(msg tea.Msg) (ConflictOverlay, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return c, nil
 	}

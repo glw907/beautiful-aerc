@@ -3,7 +3,7 @@ package catkin
 import (
 	"testing"
 
-	"github.com/charmbracelet/bubbles/textarea"
+	"charm.land/bubbles/v2/textarea"
 )
 
 func TestBufferRuneOffsetRoundTrip(t *testing.T) {

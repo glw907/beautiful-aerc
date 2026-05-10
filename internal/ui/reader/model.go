@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/humanize"
@@ -209,7 +209,7 @@ func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return v, c
 		}
 		return v, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return v.handleKey(m)
 	}
 	return v, nil
@@ -218,7 +218,7 @@ func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // handleKey runs the viewer's key dispatch. q/esc closes, 1-9 launch
 // links, Tab emits OpenLinkPickerMsg. Everything else falls through to
 // the viewport's modifier-free keymap (j/k/space/b/g/G).
-func (v Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+func (v Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, v.keys.Close):
 		v = v.Close()
@@ -405,12 +405,12 @@ func (v *Model) layout() {
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.inviteHeight-v.chipHeight)
-	vp := viewport.New(contentWidth, bodyHeight)
+	vp := viewport.New(viewport.WithWidth(contentWidth), viewport.WithHeight(bodyHeight))
 	// Modifier-free viewport bindings. g/G are handled by the wrapper.
 	vp.KeyMap = viewport.KeyMap{
 		Up:       key.NewBinding(key.WithKeys("k", "up")),
 		Down:     key.NewBinding(key.WithKeys("j", "down")),
-		PageDown: key.NewBinding(key.WithKeys(" ")),
+		PageDown: key.NewBinding(key.WithKeys("space")),
 		PageUp:   key.NewBinding(key.WithKeys("b")),
 	}
 	vp.SetContent(body)

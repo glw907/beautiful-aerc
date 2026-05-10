@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -41,7 +41,7 @@ func TestModel_CancelEmitsMsg(t *testing.T) {
 	m.SetRows([]cache.OutboxRow{
 		{ID: 7, Kind: cache.KindSend, Subject: "x", ScheduledFor: time.Now().Add(time.Hour)},
 	})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if cmd == nil {
 		t.Fatal("nil cmd")
 	}
@@ -59,7 +59,7 @@ func TestModel_ReschedulePrefilledFromRow(t *testing.T) {
 	m.SetSize(80, 20)
 	when := time.Date(2026, 6, 1, 9, 0, 0, 0, time.Local)
 	m.SetRows([]cache.OutboxRow{{ID: 9, ScheduledFor: when}})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	got, ok := cmd().(RescheduleMsg)
 	if !ok {
 		t.Fatalf("got %T, want RescheduleMsg", cmd())
@@ -77,7 +77,7 @@ func TestModel_EditAsDraftEmitsMsg(t *testing.T) {
 	m.SetSize(80, 20)
 	d := &cache.DraftRow{DraftID: "d1"}
 	m.SetRows([]cache.OutboxRow{{ID: 4, Draft: d}})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	got, ok := cmd().(EditAsDraftMsg)
 	if !ok {
 		t.Fatalf("got %T, want EditAsDraftMsg", cmd())
@@ -91,7 +91,7 @@ func TestModel_EditAsDraftWithoutDraftIsInert(t *testing.T) {
 	m := New(theme.OneDark)
 	m.SetSize(80, 20)
 	m.SetRows([]cache.OutboxRow{{ID: 4, Draft: nil}})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	if cmd == nil {
 		return
 	}

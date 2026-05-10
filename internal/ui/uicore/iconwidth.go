@@ -3,7 +3,7 @@ package uicore
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/ansix"
 )
 
@@ -11,7 +11,7 @@ import (
 // can pick up the row's background without clobbering already-rendered ANSI
 // segments.
 func ApplyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
-	if bg, ok := bgStyle.GetBackground().(lipgloss.Color); ok {
+	if bg := bgStyle.GetBackground(); bg != (lipgloss.NoColor{}) {
 		return base.Background(bg)
 	}
 	return base

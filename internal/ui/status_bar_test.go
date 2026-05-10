@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -127,7 +127,7 @@ func TestStatusBar_OutboxPendingRendersArrows(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	sb := NewStatusBar(styles)
 	sb = sb.SetCounts(10, 2).SetOutboxDepth(3, 0)
-	out := sb.View(80, 30)
+	out := stripANSI(sb.View(80, 30))
 	if !strings.Contains(out, "⇅3") {
 		t.Errorf("missing ⇅3 in %q", out)
 	}
@@ -140,7 +140,7 @@ func TestStatusBar_OutboxConflictWinsOverPending(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	sb := NewStatusBar(styles)
 	sb = sb.SetCounts(10, 2).SetOutboxDepth(3, 1)
-	out := sb.View(80, 30)
+	out := stripANSI(sb.View(80, 30))
 	if !strings.Contains(out, "⚠4") {
 		t.Errorf("missing ⚠4 in %q", out)
 	}

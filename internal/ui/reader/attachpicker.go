@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
@@ -79,7 +79,7 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 	if !p.shell.IsOpen() {
 		return p, nil
 	}
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
 	}

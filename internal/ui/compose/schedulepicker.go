@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -29,6 +29,7 @@ func NewSchedulePicker(t *theme.CompiledTheme, now time.Time, initial string) Sc
 	in := textinput.New()
 	in.Prompt = "  "
 	in.Placeholder = "tomorrow 3pm"
+	in.SetVirtualCursor(false)
 	in.SetValue(initial)
 	in.CharLimit = 64
 	p := SchedulePicker{
@@ -77,13 +78,13 @@ func (p *SchedulePicker) moveDown() {
 }
 
 func (p SchedulePicker) Update(msg tea.Msg) (SchedulePicker, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
 	}
 
 	if p.customOpen {
-		switch km.Type {
+		switch km.Code {
 		case tea.KeyEnter:
 			when, err := mailcompose.ParseSchedule(p.input.Value(), p.now)
 			if err != nil {
@@ -101,17 +102,17 @@ func (p SchedulePicker) Update(msg tea.Msg) (SchedulePicker, tea.Cmd) {
 	}
 
 	switch {
-	case km.Type == tea.KeyUp || (km.Type == tea.KeyRunes && len(km.Runes) == 1 && km.Runes[0] == 'k'):
+	case km.Code == tea.KeyUp || km.Code == 'k':
 		p.moveUp()
-	case km.Type == tea.KeyDown || (km.Type == tea.KeyRunes && len(km.Runes) == 1 && km.Runes[0] == 'j'):
+	case km.Code == tea.KeyDown || km.Code == 'j':
 		p.moveDown()
-	case km.Type == tea.KeyEsc:
+	case km.Code == tea.KeyEsc:
 		return p, func() tea.Msg { return ScheduleCancelledMsg{} }
-	case km.Type == tea.KeyEnter:
+	case km.Code == tea.KeyEnter:
 		if p.cursor == 3 {
 			p.customOpen = true
 			p.input.Focus()
-			return p, textinput.Blink
+			return p, nil
 		}
 		when := p.presets()[p.cursor].when
 		return p, func() tea.Msg { return ScheduleAcceptedMsg{When: when} }
@@ -119,10 +120,38 @@ func (p SchedulePicker) Update(msg tea.Msg) (SchedulePicker, tea.Cmd) {
 	return p, nil
 }
 
+// Cursor returns the terminal cursor for the custom-time textinput in
+// box-local coordinates (relative to the Box top-left corner returned by
+// View). Returns nil when the custom row is not open.
+//
+// Box layout when customOpen:
+//
+//	row 0: ┌─ title ─┐
+//	row 1: │preset 0│
+//	row 2: │preset 1│
+//	row 3: │preset 2│
+//	row 4: │Custom…│
+//	row 5: │textinput│
+//
+// The App adds the overlay origin (x, y) to produce global coordinates.
+func (p SchedulePicker) Cursor() *tea.Cursor {
+	if !p.customOpen {
+		return nil
+	}
+	cur := p.input.Cursor()
+	if cur == nil {
+		return nil
+	}
+	// Row 5 in the box; left border "│" occupies column 0.
+	cur.Position.X += 1 // shift past the "│" left border
+	cur.Position.Y = 5
+	return cur
+}
+
 func (p *SchedulePicker) SetSize(w, h int) {
 	p.width = w
 	p.height = h
-	p.input.Width = w - 8
+	p.input.SetWidth(w - 8)
 }
 
 func (p SchedulePicker) View() string {

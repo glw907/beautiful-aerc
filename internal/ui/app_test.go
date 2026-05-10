@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/compose"
@@ -123,7 +123,7 @@ func TestApp(t *testing.T) {
 		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil, nil)
 		app.width = 80
 		app.height = 24
-		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		_, cmd := app.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 		if cmd == nil {
 			t.Fatal("expected quit command")
 		}
@@ -137,7 +137,7 @@ func TestApp(t *testing.T) {
 		app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, nil, nil)
 		app.width = 80
 		app.height = 24
-		_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		_, cmd := app.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'c'})
 		if cmd == nil {
 			t.Fatal("expected quit command")
 		}
@@ -153,7 +153,7 @@ func TestApp(t *testing.T) {
 
 	t.Run("view has top line with ╮", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 24)
-		view := app.View()
+		view := app.View().Content
 		plain := stripANSI(view)
 		lines := strings.Split(plain, "\n")
 		if len(lines) < 1 {
@@ -167,7 +167,7 @@ func TestApp(t *testing.T) {
 
 	t.Run("view has status bar with ╯", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 24)
-		view := app.View()
+		view := app.View().Content
 		plain := stripANSI(view)
 		found := false
 		for _, line := range strings.Split(plain, "\n") {
@@ -183,7 +183,7 @@ func TestApp(t *testing.T) {
 
 	t.Run("no tab bar", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 24)
-		view := app.View()
+		view := app.View().Content
 		plain := stripANSI(view)
 		if strings.Contains(plain, "╭") {
 			t.Error("should not contain ╭ (tab bar removed)")
@@ -201,7 +201,7 @@ func TestApp(t *testing.T) {
 
 	t.Run("sidebar composite", func(t *testing.T) {
 		app := newLoadedApp(t, 80, 20)
-		view := app.View()
+		view := app.View().Content
 		plain := stripANSI(view)
 		lines := strings.Split(plain, "\n")
 
@@ -236,10 +236,10 @@ func TestApp(t *testing.T) {
 		// Each J dispatches a load. Drain the chain.
 		for range 4 {
 			var cmd tea.Cmd
-			app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+			app, cmd = app.Update(tea.KeyPressMsg{Code: 'J', Text: "J"})
 			drainApp(t, &app, cmd)
 		}
-		view := app.View()
+		view := app.View().Content
 		plain := stripANSI(view)
 		// Spam has 12 unseen
 		if !strings.Contains(plain, "12 unread") {
@@ -253,17 +253,17 @@ func TestAppQuitStolenDuringSearch(t *testing.T) {
 		app := newLoadedApp(t, 80, 30)
 
 		// Activate search and type a character, commit, then press q.
-		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-		app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		app, _ = app.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+		app, cmd := app.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		if cmd != nil {
 			drainApp(t, &app, cmd)
 		}
-		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		app, _ = app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if app.acct.SidebarColumnValue().SidebarSearch().State() != sidebar.SearchActive {
 			t.Fatalf("setup: state = %v, want SearchActive", app.acct.SidebarColumnValue().SidebarSearch().State())
 		}
 
-		_, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		_, cmd = app.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 		if cmd != nil {
 			msg := cmd()
 			if _, isQuit := msg.(tea.QuitMsg); isQuit {
@@ -280,7 +280,7 @@ func TestApp_ViewerOpenedSwitchesFooterContext(t *testing.T) {
 	}
 	// Open the viewer by pressing Enter. deriveChromeFromAcct reads the
 	// new viewer state after delegation and updates footer + statusBar.
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	drainApp(t, &app, cmd)
 	if !app.viewerOpen {
 		t.Fatal("viewerOpen should be true after Enter")
@@ -296,12 +296,12 @@ func TestApp_ViewerOpenedSwitchesFooterContext(t *testing.T) {
 func TestApp_ViewerClosedRestoresFooterContext(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
 	// Open via Enter, then close via q.
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	drainApp(t, &app, cmd)
 	if !app.viewerOpen {
 		t.Fatal("setup: viewerOpen should be true after Enter")
 	}
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if app.footer.context != AccountContext {
 		t.Errorf("footer context = %v, want AccountContext", app.footer.context)
 	}
@@ -313,7 +313,7 @@ func TestApp_ViewerClosedRestoresFooterContext(t *testing.T) {
 func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
 	// Open the viewer and give it a body long enough to scroll.
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	drainApp(t, &app, cmd)
 	if !app.viewerOpen {
 		t.Fatal("viewerOpen should be true after Enter")
@@ -324,7 +324,7 @@ func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
 	}, content.Unsubscribe{}, nil))
 	// Press G. deriveChromeFromAcct reads ViewerScrollPct after delegation.
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	if app.statusBar.scrollPct != 100 {
 		t.Errorf("statusBar scrollPct = %d, want 100 after G", app.statusBar.scrollPct)
 	}
@@ -340,17 +340,17 @@ func TestApp_HelpOpenAndCloseWithQuestionMark(t *testing.T) {
 		t.Fatal("setup: helpOpen should be false initially")
 	}
 
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !app.helpOpen {
 		t.Fatal("after ?: helpOpen should be true")
 	}
 
-	view := stripANSI(app.View())
+	view := stripANSI(app.View().Content)
 	if !strings.Contains(view, "Message List") {
 		t.Errorf("popover view missing 'Message List' title:\n%s", view)
 	}
 
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if app.helpOpen {
 		t.Error("after second ?: helpOpen should be false")
 	}
@@ -358,11 +358,11 @@ func TestApp_HelpOpenAndCloseWithQuestionMark(t *testing.T) {
 
 func TestApp_HelpDismissedByEsc(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !app.helpOpen {
 		t.Fatal("setup: ? did not open help")
 	}
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app, _ = app.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if app.helpOpen {
 		t.Error("Esc should close help")
 	}
@@ -373,7 +373,7 @@ func TestApp_HelpStealsKeys(t *testing.T) {
 	startMsgSelected := app.acct.MsgList().Selected()
 	startFolderSelected := app.acct.SidebarColumnValue().Sidebar().Selected()
 
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !app.helpOpen {
 		t.Fatal("setup: ? did not open help")
 	}
@@ -381,7 +381,7 @@ func TestApp_HelpStealsKeys(t *testing.T) {
 	// Send a battery of keys that would normally do something.
 	stealKeys := []rune{'j', 'J', 'd', 'r', '/'}
 	for _, k := range stealKeys {
-		app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{k}})
+		app, _ = app.Update(tea.KeyPressMsg{Code: k, Text: string(k)})
 	}
 
 	if app.acct.MsgList().Selected() != startMsgSelected {
@@ -403,12 +403,12 @@ func TestApp_HelpStealsKeys(t *testing.T) {
 
 func TestApp_HelpQuitSwallowed(t *testing.T) {
 	app := newLoadedApp(t, 80, 24)
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !app.helpOpen {
 		t.Fatal("setup: ? did not open help")
 	}
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := app.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
 		msg := cmd()
 		if _, isQuit := msg.(tea.QuitMsg); isQuit {
@@ -424,24 +424,24 @@ func TestApp_HelpContextSwitchesWithViewer(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
 
 	// Open help in account context. Title is "Message List".
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	view := stripANSI(app.View())
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	view := stripANSI(app.View().Content)
 	if !strings.Contains(view, "Message List") {
 		t.Errorf("account-context help should title 'Message List':\n%s", view)
 	}
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}) // close
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"}) // close
 
 	// Open the viewer via Enter. deriveChromeFromAcct sets viewerOpen.
 	var cmd tea.Cmd
-	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app, cmd = app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	drainApp(t, &app, cmd)
 	if !app.viewerOpen {
 		t.Fatal("setup: viewer did not open after Enter")
 	}
 
 	// Open help. The title should now be "Message Viewer".
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	view = stripANSI(app.View())
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	view = stripANSI(app.View().Content)
 	if !strings.Contains(view, "Message Viewer") {
 		t.Errorf("viewer-context help should title 'Message Viewer':\n%s", view)
 	}
@@ -463,7 +463,7 @@ func TestApp_BannerRendersAboveStatus(t *testing.T) {
 	app := newLoadedApp(t, 100, 30)
 	app, _ = app.Update(ErrorMsg{Op: "fetch body", Err: errors.New("EOF")})
 
-	view := stripANSI(app.View())
+	view := stripANSI(app.View().Content)
 	if !strings.Contains(view, "⚠") {
 		t.Error("View missing warning glyph")
 	}
@@ -480,7 +480,7 @@ func TestApp_BannerLastWriteWins(t *testing.T) {
 	if app.lastErr.Op != "second" {
 		t.Errorf("Op: got %q, want %q (last-write-wins)", app.lastErr.Op, "second")
 	}
-	view := stripANSI(app.View())
+	view := stripANSI(app.View().Content)
 	if strings.Contains(view, "first") {
 		t.Errorf("View still contains the first error after replacement: %q", view)
 	}
@@ -497,9 +497,9 @@ func TestApp_PopoverOverlaysErrorBanner(t *testing.T) {
 	// View.
 	app := newLoadedApp(t, 100, 30)
 	app, _ = app.Update(ErrorMsg{Op: "fetch body", Err: errors.New("EOF")})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 
-	view := stripANSI(app.View())
+	view := stripANSI(app.View().Content)
 	// Popover must be present.
 	if !strings.Contains(view, "Message List") {
 		t.Errorf("popover missing from view with error banner open: %q", view)
@@ -517,12 +517,12 @@ func TestApp_PopoverOverlaysErrorBanner(t *testing.T) {
 //     confirming the background frame was passed through DimANSI.
 func TestApp_HelpOverlayDimsBg(t *testing.T) {
 	app := newLoadedApp(t, 120, 40)
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !app.helpOpen {
 		t.Fatal("setup: ? did not open help")
 	}
 
-	raw := app.View()
+	raw := app.View().Content
 	plain := stripANSI(raw)
 
 	// Popover box must appear.
@@ -544,10 +544,10 @@ func TestApp_HelpOverlayDimsBg(t *testing.T) {
 
 func TestApp_BannerShrinksContentByOneRow(t *testing.T) {
 	app := newLoadedApp(t, 100, 30)
-	without := strings.Count(app.View(), "\n")
+	without := strings.Count(app.View().Content, "\n")
 
 	app, _ = app.Update(ErrorMsg{Op: "x", Err: errors.New("y")})
-	with := strings.Count(app.View(), "\n")
+	with := strings.Count(app.View().Content, "\n")
 
 	if with != without {
 		t.Errorf("total view height changed: without=%d, with=%d", without, with)
@@ -652,7 +652,7 @@ func TestApp_RightBorderAlignment(t *testing.T) {
 			borderRune := '│'
 			for _, w := range []int{80, 100, 120, 160} {
 				app := newLoadedAppWithIcons(t, w, 30, mode.iconSet)
-				view := app.View()
+				view := app.View().Content
 				lines := strings.Split(view, "\n")
 				for lineIdx, line := range lines {
 					if line == "" {
@@ -829,7 +829,7 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 	})
 
 	// Open viewer on a message with one link.
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	drainApp(t, &app, cmd)
 	if !app.viewerOpen {
 		t.Fatal("expected viewer open after Enter")
@@ -844,7 +844,7 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 	}, content.Unsubscribe{}, nil))
 
 	// Tab → viewer sets pendingLinkPicker → AccountTab relays → App opens picker via deriveChromeFromAcct.
-	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app, cmd = app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	drainApp(t, &app, cmd)
 	if !app.IsLinkPickerOpen() {
 		t.Fatal("expected picker open after Tab")
@@ -852,7 +852,7 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 
 	// Enter → picker emits LaunchURLMsg + LinkPickerClosedMsg → App
 	// fires launchURLCmd (which calls openURL hook) and closes picker.
-	app, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app, cmd = app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	drainApp(t, &app, cmd)
 
 	if captured != "https://example.com" {
@@ -890,7 +890,7 @@ func TestApp_FolderJumpInertWhilePickerOpen(t *testing.T) {
 	folders := []mail.FolderEntry{{Display: "Archive", Provider: "Archive", Group: mail.GroupDisposal}}
 	app, _ = app.Update(movepicker.OpenMsg{UIDs: []mail.UID{"1"}, Src: "INBOX", Folders: folders})
 	beforeFolder := app.acct.CurrentFolderName()
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'I', Text: "I"})
 	if got := app.acct.CurrentFolderName(); got != beforeFolder {
 		t.Errorf("folder changed to %q while picker open; want %q (key should be swallowed)", got, beforeFolder)
 	}
@@ -953,7 +953,7 @@ func TestApp_OpensConfirmModalOnEmptyMsg(t *testing.T) {
 	if !app.IsConfirmOpen() {
 		t.Fatal("confirm should be open after account.OpenConfirmEmptyMsg")
 	}
-	plain := stripANSI(app.View())
+	plain := stripANSI(app.View().Content)
 	if !strings.Contains(plain, "Empty Trash") {
 		t.Errorf("View should contain 'Empty Trash'; got %q", plain)
 	}
@@ -969,7 +969,7 @@ func TestApp_ConfirmYesEmitsConfirmedMsgAndCloses(t *testing.T) {
 		t.Fatal("setup: confirm should be open")
 	}
 
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	yesMsgs := drainBatch(cmd)
 
 	// Confirm.Update emits ConfirmModalYesMsg + ConfirmModalClosedMsg.
@@ -997,7 +997,7 @@ func TestApp_ConfirmEscClosesWithoutEmit(t *testing.T) {
 		t.Fatal("setup: confirm should be open")
 	}
 
-	app2, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	app2, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	msgs := drainBatch(cmd)
 
 	// Must emit ConfirmModalClosedMsg.
@@ -1072,7 +1072,7 @@ func TestApp_ConnectedClearsOfflineHinted(t *testing.T) {
 
 func TestApp_QOpensOutboxOverlay(t *testing.T) {
 	app := newLoadedApp(t, 120, 40)
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: 'Q', Text: "Q"})
 	if !app.outboxOpen {
 		t.Errorf("Q did not set outboxOpen")
 	}
@@ -1083,7 +1083,7 @@ func TestApp_QOpensOutboxOverlay(t *testing.T) {
 
 func TestApp_BangOpensConflictOverlay(t *testing.T) {
 	app := newLoadedApp(t, 120, 40)
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
 	if !app.conflictOpen {
 		t.Errorf("! did not set conflictOpen")
 	}
@@ -1094,11 +1094,11 @@ func TestApp_BangOpensConflictOverlay(t *testing.T) {
 
 func TestApp_QToBangTransition(t *testing.T) {
 	app := newLoadedApp(t, 120, 40)
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'Q', Text: "Q"})
 	if !app.outboxOpen {
 		t.Fatalf("setup: Q did not open outbox")
 	}
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
 	if app.outboxOpen {
 		t.Errorf("outbox stayed open after !")
 	}
@@ -1256,7 +1256,7 @@ func newTestAppWithoutSentFolder(t *testing.T) App {
 func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open")
 	}
@@ -1290,7 +1290,7 @@ func TestApp_ComposeSend_QueuesOutboundAndClosesCompose(t *testing.T) {
 func TestApp_ComposeSend_NoSentFolder_SurfacesError(t *testing.T) {
 	app := newTestAppWithoutSentFolder(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open")
 	}
@@ -1346,7 +1346,7 @@ func TestApp_ComposeSentMsg_SetsToast(t *testing.T) {
 func TestApp_C_OpensCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("c should open compose")
 	}
@@ -1358,8 +1358,8 @@ func TestApp_C_OpensCompose(t *testing.T) {
 func TestApp_View_RendersComposeWhenOpen(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	v := stripANSI(app.View())
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	v := stripANSI(app.View().Content)
 	if !strings.Contains(v, "From:") || !strings.Contains(v, "Subject:") {
 		t.Fatalf("View should include compose headers when compose:\n%s", v)
 	}
@@ -1368,7 +1368,7 @@ func TestApp_View_RendersComposeWhenOpen(t *testing.T) {
 func TestApp_ComposeSendMsg_ClosesCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
@@ -1384,7 +1384,7 @@ func TestApp_ComposeSendMsg_ClosesCompose(t *testing.T) {
 func TestApp_ComposeCancelMsg_ClosesCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
@@ -1403,14 +1403,14 @@ func TestApp_ComposeCancelMsg_ClosesCompose(t *testing.T) {
 func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
 	// While compose is open, keys route to compose.Model. j should not move
 	// the message list cursor.
 	beforeSelected := app.acct.MsgList().Selected()
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if app.acct.MsgList().Selected() != beforeSelected {
 		t.Error("j should be consumed by compose.Model when compose is open, not msglist")
 	}
@@ -1419,7 +1419,7 @@ func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
 func TestApp_WindowSizeSetsComposeSize(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should not be nil")
 	}
@@ -1440,7 +1440,7 @@ func TestApp_R_OpensReplySeededCompose(t *testing.T) {
 		t.Fatal("setup: no selected message in loaded app")
 	}
 
-	out, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	out, cmd := app.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	app = out
 	if cmd == nil {
 		t.Fatal("r should return a Cmd to fetch parent body and seed compose")
@@ -1463,7 +1463,7 @@ func TestApp_R_OpensReplySeededCompose(t *testing.T) {
 func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
@@ -1485,7 +1485,7 @@ func TestApp_CtrlC_DirtyOpensConfirm(t *testing.T) {
 func TestApp_CtrlC_EmptyClosesImmediately(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
@@ -1503,7 +1503,7 @@ func TestApp_CtrlC_EmptyClosesImmediately(t *testing.T) {
 func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
@@ -1530,7 +1530,7 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 func TestApp_ConfirmModalNo_DiscardsCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
@@ -1555,7 +1555,7 @@ func TestApp_ConfirmModalNo_DiscardsCompose(t *testing.T) {
 func TestApp_FreshComposeAllocatesDraftID(t *testing.T) {
 	app, _ := newJMAPTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("compose should be open after c")
 	}
@@ -1591,7 +1591,7 @@ func TestApp_DraftsEnterLooksUpLocalRow(t *testing.T) {
 
 	// Navigate to Drafts via D key, then inject a synthetic FolderLoadedMsg
 	// so the message list is populated without relying on async cache sync.
-	app, jumpCmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	app, jumpCmd := app.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	drainApp(t, &app, jumpCmd)
 
 	if app.acct.CurrentFolderName() != "Drafts" {
@@ -1612,7 +1612,7 @@ func TestApp_DraftsEnterLooksUpLocalRow(t *testing.T) {
 	}
 
 	// Press Enter: should return openDraftFromServerUIDCmd.
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter in Drafts should return a cmd")
 	}
@@ -1632,7 +1632,7 @@ func TestApp_DraftsEnterLooksUpLocalRow(t *testing.T) {
 func TestApp_EscOnDirtyJMAPComposeOpensSaveDraftModal(t *testing.T) {
 	app, _ := newJMAPTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	if app.compose == nil {
 		t.Fatal("setup: compose should be open after c")
 	}
@@ -1748,7 +1748,7 @@ func TestAppUndoSendCancelsAndRestores(t *testing.T) {
 		t.Fatalf("setup: op = %q, want send-undo", app.toast.op)
 	}
 
-	app, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	app, cmd := app.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	if cmd == nil {
 		t.Fatal("expected a Cmd from u")
 	}

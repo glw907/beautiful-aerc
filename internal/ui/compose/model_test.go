@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	gomail "github.com/emersion/go-message/mail"
 	mailcompose "github.com/glw907/poplar/internal/compose"
@@ -47,18 +47,23 @@ func newTestModel(t *testing.T) *Model {
 	return c
 }
 
-func keyMsgFromString(s string) tea.KeyMsg {
+func keyMsgFromString(s string) tea.KeyPressMsg {
 	switch s {
 	case "tab":
-		return tea.KeyMsg{Type: tea.KeyTab}
+		return tea.KeyPressMsg{Code: tea.KeyTab}
 	case "shift+tab":
-		return tea.KeyMsg{Type: tea.KeyShiftTab}
+		return tea.KeyPressMsg{Mod: tea.ModShift, Code: tea.KeyTab}
 	case "esc":
-		return tea.KeyMsg{Type: tea.KeyEsc}
+		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	}
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+	rs := []rune(s)
+	if len(rs) == 1 {
+		return tea.KeyPressMsg{Code: rs[0], Text: s}
+	}
+	// multi-rune: callers should use a loop; this handles the common single-char case
+	return tea.KeyPressMsg{Code: rs[0], Text: s}
 }
 
 func sendKey(c *Model, k string) *Model {
@@ -198,7 +203,7 @@ func TestModel_CtrlXEmitsSendMsg(t *testing.T) {
 	c.subject.SetValue("hi")
 	c.editor.SetValue("body")
 
-	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	_, cmd := c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'x'})
 	if cmd == nil {
 		t.Fatal("Ctrl+X should return a Cmd that emits SendMsg")
 	}
@@ -216,7 +221,7 @@ func TestModel_CtrlCEmitsCancelMsg(t *testing.T) {
 	c := newTestModel(t)
 	c.editor.SetValue("dirty")
 
-	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'c'})
 	if cmd == nil {
 		t.Fatal("Ctrl+C should return a Cmd")
 	}
@@ -233,7 +238,7 @@ func TestModel_CtrlCEmitsCancelMsg(t *testing.T) {
 func TestModel_CtrlXBadAddressInlinesError(t *testing.T) {
 	c := newTestModel(t)
 	c.to.SetValue("not an address")
-	_, cmd := c.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	_, cmd := c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'x'})
 	if cmd != nil {
 		t.Fatalf("Ctrl+X with bad address should not emit send")
 	}
@@ -299,11 +304,12 @@ func TestModel_AcceptsSuggestionWithTab(t *testing.T) {
 	})
 	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
 	c.SetSize(80, 24)
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("al")})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if c.suggest.Empty() {
 		t.Fatalf("dropdown should populate after typing 'al'")
 	}
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if !c.suggest.Empty() {
 		t.Fatalf("Tab should clear the dropdown after accept")
 	}
@@ -317,7 +323,7 @@ func TestModel_AcceptsSuggestionWithTab(t *testing.T) {
 
 func TestModel_TabAdvancesFocusWhenDropdownEmpty(t *testing.T) {
 	c := newTestModel(t)
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+	c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if c.focus != focusCc {
 		t.Fatalf("Tab should advance focus when dropdown is empty; focus=%d", c.focus)
 	}
@@ -330,11 +336,12 @@ func TestModel_DropdownPrefixUsesTrailingFragment(t *testing.T) {
 	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
 	c.SetSize(80, 24)
 	c.to.SetValue("Alice <alice@example.com>, ")
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("bo")})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
 	if c.suggest.Empty() {
 		t.Fatalf("dropdown should populate from trailing 'bo' fragment")
 	}
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	want := "Alice <alice@example.com>, Bob <bob@example.com>, "
 	if got := c.to.Value(); got != want {
 		t.Fatalf("To value after accept = %q, want %q", got, want)
@@ -348,7 +355,8 @@ func TestModel_View_WidthHonoredWhileDropdownOpen(t *testing.T) {
 	})
 	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
 	c.SetSize(80, 24)
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("al")})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if c.suggest.Empty() {
 		t.Fatalf("precondition: dropdown should populate")
 	}
@@ -392,7 +400,7 @@ func TestComposeFocusOrderIncludesFrom(t *testing.T) {
 	// Tab from initial focus (To) walks To→Cc→Bcc→Subject→Body→From→To.
 	got := []int{c.Focus()}
 	for i := 0; i < 6; i++ {
-		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+		c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 		got = append(got, c.Focus())
 	}
 	want := []int{focusTo, focusCc, focusBcc, focusSubject, focusBody, focusFrom, focusTo}
@@ -411,11 +419,11 @@ func TestComposeIdentityCycle(t *testing.T) {
 	})
 	// Tab to focusFrom (last in cycle).
 	for c.Focus() != focusFrom {
-		c.Update(tea.KeyMsg{Type: tea.KeyTab})
+		c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	}
 
 	// Space → next identity.
-	c.Update(tea.KeyMsg{Type: tea.KeySpace})
+	c.Update(tea.KeyPressMsg{Code: tea.KeySpace})
 	if c.Identity() != 1 {
 		t.Errorf("after Space: identity = %d, want 1", c.Identity())
 	}
@@ -425,19 +433,19 @@ func TestComposeIdentityCycle(t *testing.T) {
 	}
 
 	// Space again → C; Signature resets to 0 (C has sigs).
-	c.Update(tea.KeyMsg{Type: tea.KeySpace})
+	c.Update(tea.KeyPressMsg{Code: tea.KeySpace})
 	if c.Identity() != 2 || c.Signature() != 0 {
 		t.Errorf("after second Space: identity = %d, signature = %d, want 2, 0", c.Identity(), c.Signature())
 	}
 
 	// Wrap forward.
-	c.Update(tea.KeyMsg{Type: tea.KeySpace})
+	c.Update(tea.KeyPressMsg{Code: tea.KeySpace})
 	if c.Identity() != 0 {
 		t.Errorf("after wrap: identity = %d, want 0", c.Identity())
 	}
 
 	// Left arrow → previous (wrap to 2).
-	c.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	c.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	if c.Identity() != 2 {
 		t.Errorf("after Left wrap: identity = %d, want 2", c.Identity())
 	}
@@ -455,13 +463,13 @@ func TestComposeSignatureCycle(t *testing.T) {
 
 	// Navigate to Body (initial focus is To).
 	for c.Focus() != focusBody {
-		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+		c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	}
 
 	// Ctrl+G in Body: 0 → 1 → -1 → 0.
 	steps := []struct{ want int }{{1}, {-1}, {0}}
 	for _, st := range steps {
-		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+		c, _ = c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'g'})
 		if c.Signature() != st.want {
 			t.Errorf("after Ctrl+G: signature = %d, want %d", c.Signature(), st.want)
 		}
@@ -469,16 +477,16 @@ func TestComposeSignatureCycle(t *testing.T) {
 
 	// Tab to focusFrom; bare 'g' cycles.
 	for c.Focus() != focusFrom {
-		c, _ = c.Update(tea.KeyMsg{Type: tea.KeyTab})
+		c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	}
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	if c.Signature() != 1 {
 		t.Errorf("after 'g' in focusFrom: signature = %d, want 1", c.Signature())
 	}
 
 	// Inert when identity has zero sigs.
 	c.SetIdentities([]mailcompose.Identity{{Name: "B", Email: "b@x"}})
-	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	c, _ = c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'g'})
 	if c.Signature() != -1 {
 		t.Errorf("expected signature stays -1, got %d", c.Signature())
 	}
@@ -531,7 +539,7 @@ func TestCompose_FocusAttachRemoveCollapsesEmpty(t *testing.T) {
 	c.SetSize(80, 24)
 	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a.pdf"}})
 	c.setFocus(focusAttach)
-	_, _ = c.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("d")}))
+	_, _ = c.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	if d := c.CurrentDraft(); len(d.Attachments) != 0 {
 		t.Fatalf("attachments not removed: %v", d.Attachments)
 	}
@@ -545,8 +553,8 @@ func TestCompose_FocusAttachArrowsAndDeleteMid(t *testing.T) {
 	c.SetSize(80, 24)
 	_, _ = c.Update(AttachAcceptedMsg{Paths: []string{"/tmp/a", "/tmp/b", "/tmp/c"}})
 	c.setFocus(focusAttach)
-	_, _ = c.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRight}))
-	_, _ = c.Update(tea.KeyMsg(tea.Key{Type: tea.KeyBackspace}))
+	_, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	_, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	d := c.CurrentDraft()
 	if len(d.Attachments) != 2 || d.Attachments[1] != "/tmp/c" {
 		t.Errorf("after middle delete: %v", d.Attachments)

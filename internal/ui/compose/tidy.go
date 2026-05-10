@@ -3,7 +3,7 @@ package compose
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/catkin"
 	"github.com/glw907/poplar/internal/tidy"

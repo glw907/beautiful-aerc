@@ -3,14 +3,8 @@ package theme
 import (
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
-
-func init() {
-	// Force color output in tests (no tty detected).
-	lipgloss.SetColorProfile(termenv.TrueColor)
-}
 
 func TestNewCompiledTheme(t *testing.T) {
 	th := NewCompiledTheme("Test", nordPalette)

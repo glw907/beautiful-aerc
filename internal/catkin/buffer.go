@@ -4,8 +4,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/textarea"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Buffer wraps a bubbles/textarea.Model. Catkin uses textarea for
@@ -82,5 +82,5 @@ func (b *Buffer) SetRuneOffset(off int) {
 	for b.ta.Line() > row {
 		b.ta.CursorUp()
 	}
-	b.ta.SetCursor(col)
+	b.ta.SetCursorColumn(col)
 }

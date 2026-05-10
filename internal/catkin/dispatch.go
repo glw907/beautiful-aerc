@@ -1,10 +1,10 @@
 package catkin
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // handleCommand intercepts the Catkin command vocabulary:
 // Enter, Tab, Shift+Tab, Ctrl+B/I/K/L/Q, and Ctrl+Space.
-func handleCommand(b Buffer, msg tea.KeyMsg) (handled bool, _ Buffer, _ tea.Cmd) {
+func handleCommand(b Buffer, msg tea.KeyPressMsg) (handled bool, _ Buffer, _ tea.Cmd) {
 	src := b.Value()
 	cur := b.RuneOffset()
 	var newSrc string

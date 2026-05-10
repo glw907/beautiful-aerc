@@ -3,7 +3,7 @@ package uicore
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // PadOrTruncate pads s with spaces or truncates it to exactly width display cells.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 type findMode int
@@ -74,7 +74,7 @@ func findAll(src, query string, caseInsensitive bool) []int {
 	return out
 }
 
-func (m Model) handleFind(k tea.KeyMsg) (Model, tea.Cmd) {
+func (m Model) handleFind(k tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch k.String() {
 	case "esc":
 		m.find = findState{}
@@ -111,7 +111,7 @@ func (m Model) handleFind(k tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	if k.Type == tea.KeyBackspace {
+	if k.Code == tea.KeyBackspace {
 		if m.find.inputFocus == 1 {
 			m.find.replacement = trimLastRune(m.find.replacement)
 		} else {
@@ -122,8 +122,8 @@ func (m Model) handleFind(k tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if k.Type == tea.KeyRunes && len(k.Runes) > 0 {
-		s := string(k.Runes)
+	if len(k.Text) > 0 {
+		s := k.Text
 		if m.find.inputFocus == 1 {
 			m.find.replacement += s
 		} else {

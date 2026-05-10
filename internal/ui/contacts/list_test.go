@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // smallFixture returns a short, predictable contact list for tests
@@ -38,7 +38,7 @@ func TestList_CursorJK(t *testing.T) {
 	}
 
 	// j advances
-	j := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	j := tea.KeyPressMsg{Code: 'j', Text: "j"}
 	l, _ = l.Update(j)
 	if l.cursor != 1 {
 		t.Errorf("after j: cursor = %d, want 1", l.cursor)
@@ -51,7 +51,7 @@ func TestList_CursorJK(t *testing.T) {
 	}
 
 	// k retreats
-	k := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
+	k := tea.KeyPressMsg{Code: 'k', Text: "k"}
 	l, _ = l.Update(k)
 	if l.cursor != 1 {
 		t.Errorf("after k: cursor = %d, want 1", l.cursor)
@@ -64,14 +64,14 @@ func TestList_CursorClamped(t *testing.T) {
 	l = l.SetSize(80, 20)
 
 	// k at top is a no-op
-	k := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
+	k := tea.KeyPressMsg{Code: 'k', Text: "k"}
 	l, _ = l.Update(k)
 	if l.cursor != 0 {
 		t.Errorf("k at top: cursor = %d, want 0", l.cursor)
 	}
 
 	// advance to last row
-	j := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	j := tea.KeyPressMsg{Code: 'j', Text: "j"}
 	for i := 0; i < len(contacts)-1; i++ {
 		l, _ = l.Update(j)
 	}
@@ -91,7 +91,7 @@ func TestList_NEmitsOpenFormMsgZero(t *testing.T) {
 	l := NewList(Styles{}, smallFixture(), SortFirstName)
 	l = l.SetSize(80, 20)
 
-	n := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	n := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	_, cmd := l.Update(n)
 	if cmd == nil {
 		t.Fatal("n: want a non-nil tea.Cmd")
@@ -116,10 +116,10 @@ func TestList_EEmitsOpenFormMsgCursor(t *testing.T) {
 	l = l.SetSize(80, 20)
 
 	// advance to index 1
-	j := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	j := tea.KeyPressMsg{Code: 'j', Text: "j"}
 	l, _ = l.Update(j)
 
-	e := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	e := tea.KeyPressMsg{Code: 'e', Text: "e"}
 	_, cmd := l.Update(e)
 	if cmd == nil {
 		t.Fatal("e: want a non-nil tea.Cmd")
@@ -142,7 +142,7 @@ func TestList_DIsInert(t *testing.T) {
 	l := NewList(Styles{}, smallFixture(), SortFirstName)
 	l = l.SetSize(80, 20)
 
-	D := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}}
+	D := tea.KeyPressMsg{Code: 'D', Text: "D"}
 	l2, cmd := l.Update(D)
 	if cmd != nil {
 		t.Error("D: expected nil cmd (inert)")

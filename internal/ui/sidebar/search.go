@@ -4,10 +4,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -54,6 +55,7 @@ func NewSearch(styles Styles, width int, icons uicore.IconSet) Search {
 	ti := textinput.New()
 	ti.Prompt = "/"
 	ti.CharLimit = 0
+	ti.SetVirtualCursor(false)
 	return Search{
 		input:  ti,
 		scope:  uicore.ScopeFolder,
@@ -76,7 +78,7 @@ func (s *Search) SetSize(width int) {
 	// Sized for the widest rendered states (Typing/Active): "  " indent (2)
 	// + icon (2) + gap (1). Idle state has a couple cells of harmless slack.
 	const promptOverhead = 5
-	s.input.Width = max(1, width-promptOverhead)
+	s.input.SetWidth(max(1, width-promptOverhead))
 }
 
 // Activate moves the shelf to Typing and focuses the input; calling from Active preserves the query.
@@ -114,7 +116,7 @@ func (s Search) Update(msg tea.Msg) (Search, tea.Cmd) {
 		return s, nil
 	}
 
-	if k, ok := msg.(tea.KeyMsg); ok && key.Matches(k, searchToggleScope) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, searchToggleScope) {
 		if s.scope == uicore.ScopeFolder {
 			s.scope = uicore.ScopeAll
 		} else {
@@ -138,6 +140,31 @@ func (s Search) Update(msg tea.Msg) (Search, tea.Cmd) {
 	return s, func() tea.Msg {
 		return SearchUpdatedMsg{Query: query, Scope: scope}
 	}
+}
+
+// Cursor returns the terminal cursor for the search input in shelf-local
+// coordinates (origin = first row of the 3-row Search shelf). Returns nil
+// when the shelf is not in SearchTyping state; the input is unfocused in
+// SearchIdle and SearchActive.
+//
+// The App applies the global offset: shelf top = 1 (topLine) + contentHeight
+// - ShelfRows, so global Y = Cursor().Y + 1 + contentHeight - ShelfRows.
+// Global X = Cursor().X (the sidebar column starts at X=0).
+func (s Search) Cursor() *tea.Cursor {
+	if s.state != SearchTyping {
+		return nil
+	}
+	cur := s.input.Cursor()
+	if cur == nil {
+		return nil
+	}
+	// Prompt row is row 1 in the 3-row shelf (row 0 is blank, row 2 is info).
+	// Rendered as: "  " (2) + icon (iconW) + " " (1) + input.View().
+	// textinput.Cursor().X already includes the "/" prompt width.
+	iconW := ansix.Width(s.icons.Search)
+	cur.Position.X += 2 + iconW + 1
+	cur.Position.Y = 1
+	return cur
 }
 
 func (s Search) View() string {

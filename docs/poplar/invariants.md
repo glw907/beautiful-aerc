@@ -21,22 +21,19 @@ the ADR(s) that justify them.
 - Poplar is a single-binary bubbletea terminal email client built
   from one Go module: `cmd/poplar`.
 - Repository organization: `cmd/poplar/` (CLI wiring only),
-  `internal/ui/` (App + App-owned chrome; bubbles-shaped subpackages
-  `account`, `compose`, `helppopover`, `messagelist`, `movepicker`,
-  `reader`, `sidebar`, plus `uicore` for shared chrome. ADRs 0161,
-  0163),
-  `internal/mail/` (`Backend`
-  interface + classifier; `mail.FolderEntry` is the display
-  projection threaded through sidebar/movepicker),
-  `internal/mailjmap/` (Fastmail via
-  `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/` (generic
-  IMAP via `emersion/go-imap` v2; two physical connections per
-  Backend — command + idle), `internal/mailauth/` (vendored XOAUTH2
-  SASL snippet), `internal/config/` (`AccountConfig`,
+  `internal/ui/` (App + bubbles-shaped subpackages `account`,
+  `compose`, `helppopover`, `messagelist`, `movepicker`, `reader`,
+  `sidebar`, plus `uicore`; ADRs 0161, 0163), `internal/mail/`
+  (`Backend` interface + classifier; `mail.FolderEntry` display
+  projection threads through sidebar/movepicker), `internal/mailjmap/`
+  (Fastmail via `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/`
+  (generic IMAP via `emersion/go-imap` v2; two physical connections
+  per Backend — command + idle), `internal/mailauth/` (vendored
+  XOAUTH2 SASL snippet), `internal/config/` (`AccountConfig`,
   `UIConfig`, `LoadUI`, `Provider` registry), `internal/theme/`
-  (compiled lipgloss themes), `internal/term/` (capability
-  detection: `HasNerdFont`, `MeasureSPUACells`). `internal/filter/`,
-  `internal/content/`, `internal/tidy/` await their consumers.
+  (compiled lipgloss themes), `internal/term/` (`HasNerdFont`,
+  `MeasureSPUACells`). `internal/filter/`, `internal/content/`,
+  `internal/tidy/` await their consumers.
 - Mail backends call upstream libraries directly. No aerc fork. The
   library family is emersion (`go-imap` v2, `go-message`, `go-smtp`,
   `go-sasl`, `go-webdav`, `go-vcard`) plus `rockorager/go-jmap`.
@@ -126,6 +123,13 @@ the ADR(s) that justify them.
 
 ### Elm architecture & idiomatic bubbletea
 
+- UI runtime is `charm.land/{bubbletea,lipgloss,bubbles}/v2`
+  (ADR-0189a). `tea.KeyPressMsg.Code`/`Text`/`Mod` canonical;
+  paste is `tea.PasteMsg`. `AdaptiveColor` removed; palette +
+  Styles take concrete `color.Color` (`lipgloss.Color(s)` is a
+  function). Declarative chrome and cursor hoist defer to 13.2b;
+  `App.View()` returns `tea.NewView(s)` and `tea.WithAltScreen()`
+  rides `tea.NewProgram` until then.
 - `internal/ui/` follows the Elm architecture — invoke the
   `elm-conventions` skill before touching any file there. State in
   tea.Model structs; mutations only in Update; I/O only in tea.Cmd;
@@ -376,25 +380,21 @@ scope toggle, results-mode messagelist, throttle warn) lives in
 ## Build & verification
 
 - Makefile targets: `build`, `test`, `vet`, `fmt-check`, `lint`,
-  `install`, `check`, `clean`. `make check` runs fmt-check (`gofmt
-  -l .`), vet, voice, and test as the commit gate. The voice step
-  is `scripts/voice-check.sh`, a grep-tier scan for AI-tells T4,
-  T10, T14, T16, T27, T28, T33, T35, T39, T40. T34 (semicolon
-  clause-joiner) is voice-lens only as of ADR-0173. Semantic tells
-  stay with the `/simplify` voice lens. The voice rules apply to
-  all Claude-authored docs (skills, ADRs, plan docs, the catalogue
-  itself), not only Go source. `make install` writes to `~/.local/bin/`.
+  `install`, `check`, `clean`. `make check` is the commit gate
+  (fmt-check, vet, voice, test). The voice step is
+  `scripts/voice-check.sh`, a grep-tier scan for tells T4, T10,
+  T14, T16, T27, T28, T33, T35, T39, T40 (T34 voice-lens only,
+  ADR-0173). Voice rules apply to all Claude-authored docs, not
+  only Go source. `make install` writes to `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
   `docs/poplar/styling.md` before any color/style change. Pass-end
   ritual lives in `poplar-pass`.
-- Live UI verification uses tmux (`.claude/docs/tmux-testing.md`).
-  80×24 is the polish bar; UI passes capture 80×24 and 120×40.
+- Live UI verification uses tmux (`.claude/docs/tmux-testing.md`); 80×24 is the polish bar, UI passes capture 80×24 and 120×40.
 
 ## Decisions
 
-ADRs live in `docs/poplar/decisions/`. The themed index that maps
-binding facts to their justifying ADRs is in
-`docs/poplar/decisions/INDEX.md` — load it when you need to chase
-rationale, not on every turn.
+ADRs live in `docs/poplar/decisions/`. Load
+`docs/poplar/decisions/INDEX.md` for the themed map from binding
+facts to ADR numbers; load specific ADRs for full rationale.

@@ -6,10 +6,10 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/nyaruka/phonenumbers"
 )
@@ -70,6 +70,7 @@ func NewForm(s Styles, initial Contact, fromPopover bool, saveTo []string) Form 
 	mk := func(value string) textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
+		ti.SetVirtualCursor(false)
 		ti.SetValue(value)
 		return ti
 	}
@@ -94,6 +95,7 @@ func NewForm(s Styles, initial Contact, fromPopover bool, saveTo []string) Form 
 
 	note := textarea.New()
 	note.Prompt = ""
+	note.SetVirtualCursor(false)
 	note.SetValue(initial.Note)
 	note.SetHeight(noteRows)
 	note.ShowLineNumbers = false
@@ -156,16 +158,16 @@ func (f Form) SetSize(w, h int) Form {
 	cw := f.contentW()
 	inputW := f.inputWidth(cw)
 	for i := range f.emails {
-		f.emails[i].input.Width = inputW
+		f.emails[i].input.SetWidth(inputW)
 	}
 	for i := range f.phones {
-		f.phones[i].input.Width = inputW
+		f.phones[i].input.SetWidth(inputW)
 	}
-	f.first.Width = inputW
-	f.last.Width = inputW
-	f.org.Width = inputW
-	f.title.Width = inputW
-	f.bizName.Width = inputW
+	f.first.SetWidth(inputW)
+	f.last.SetWidth(inputW)
+	f.org.SetWidth(inputW)
+	f.title.SetWidth(inputW)
+	f.bizName.SetWidth(inputW)
 	f.note.SetWidth(inputW)
 	return f
 }
@@ -204,13 +206,13 @@ func (f Form) inputWidth(contentW int) int {
 }
 
 func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
-	k, ok := msg.(tea.KeyMsg)
+	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return f, nil
 	}
 
-	switch k.Type {
-	case tea.KeyCtrlS:
+	switch {
+	case k.Mod&tea.ModCtrl != 0 && k.Code == 's':
 		if err := f.Validate(); err != nil {
 			f.err = err.Error()
 			return f, nil
@@ -222,14 +224,14 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 			dest = f.saveTo[f.saveIdx]
 		}
 		return f, func() tea.Msg { return ContactSaveMsg{Contact: c, SaveTo: dest} }
-	case tea.KeyEsc:
+	case k.Code == tea.KeyEsc:
 		dirty := f.dirty()
 		return f, func() tea.Msg { return ContactCancelMsg{Dirty: dirty} }
-	case tea.KeyTab:
-		f = f.advanceFocus(+1)
-		return f, nil
-	case tea.KeyShiftTab:
+	case k.Code == tea.KeyTab && k.Mod&tea.ModShift != 0:
 		f = f.advanceFocus(-1)
+		return f, nil
+	case k.Code == tea.KeyTab:
+		f = f.advanceFocus(+1)
 		return f, nil
 	}
 
@@ -244,15 +246,13 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 	w := f.focusedWidget()
 	switch w.kind {
 	case widKind:
-		switch k.Type {
+		switch k.Code {
 		case tea.KeyLeft, tea.KeyRight:
 			f.kind = toggleKind(f.kind)
 			f = f.applyFocus()
-		case tea.KeyRunes:
-			if len(k.Runes) == 1 && k.Runes[0] == ' ' {
-				f.kind = toggleKind(f.kind)
-				f = f.applyFocus()
-			}
+		case ' ':
+			f.kind = toggleKind(f.kind)
+			f = f.applyFocus()
 		}
 		return f, nil
 	case widEmailCycler:
@@ -261,7 +261,7 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 		}
 		return f, nil
 	case widEmailStar:
-		if k.Type == tea.KeyEnter && w.row > 0 {
+		if k.Code == tea.KeyEnter && w.row > 0 {
 			row := f.emails[w.row]
 			f.emails = append(f.emails[:w.row], f.emails[w.row+1:]...)
 			f.emails = append([]emailRow{row}, f.emails...)
@@ -269,16 +269,17 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 		}
 		return f, nil
 	case widEmailMinus:
-		if k.Type == tea.KeyEnter && len(f.emails) > 1 {
+		if k.Code == tea.KeyEnter && len(f.emails) > 1 {
 			f.emails = append(f.emails[:w.row], f.emails[w.row+1:]...)
 			f = f.applyFocus()
 		}
 		return f, nil
 	case widAddEmail:
-		if k.Type == tea.KeyEnter {
+		if k.Code == tea.KeyEnter {
 			ti := textinput.New()
 			ti.Prompt = ""
-			ti.Width = f.inputWidth(f.contentW())
+			ti.SetVirtualCursor(false)
+			ti.SetWidth(f.inputWidth(f.contentW()))
 			f.emails = append(f.emails, emailRow{input: ti, label: 0})
 			f = f.applyFocus()
 		}
@@ -289,7 +290,7 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 		}
 		return f, nil
 	case widPhoneStar:
-		if k.Type == tea.KeyEnter && w.row > 0 {
+		if k.Code == tea.KeyEnter && w.row > 0 {
 			row := f.phones[w.row]
 			f.phones = append(f.phones[:w.row], f.phones[w.row+1:]...)
 			f.phones = append([]phoneRow{row}, f.phones...)
@@ -297,22 +298,23 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 		}
 		return f, nil
 	case widPhoneMinus:
-		if k.Type == tea.KeyEnter {
+		if k.Code == tea.KeyEnter {
 			f.phones = append(f.phones[:w.row], f.phones[w.row+1:]...)
 			f = f.applyFocus()
 		}
 		return f, nil
 	case widAddPhone:
-		if k.Type == tea.KeyEnter {
+		if k.Code == tea.KeyEnter {
 			ti := textinput.New()
 			ti.Prompt = ""
-			ti.Width = f.inputWidth(f.contentW())
+			ti.SetVirtualCursor(false)
+			ti.SetWidth(f.inputWidth(f.contentW()))
 			f.phones = append(f.phones, phoneRow{input: ti, label: 0})
 			f = f.applyFocus()
 		}
 		return f, nil
 	case widSaveTo:
-		switch k.Type {
+		switch k.Code {
 		case tea.KeyLeft:
 			if f.saveIdx > 0 {
 				f.saveIdx--
@@ -321,11 +323,9 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 			if f.saveIdx < len(f.saveTo)-1 {
 				f.saveIdx++
 			}
-		case tea.KeyRunes:
-			if len(k.Runes) == 1 && k.Runes[0] == ' ' {
-				if len(f.saveTo) > 0 {
-					f.saveIdx = (f.saveIdx + 1) % len(f.saveTo)
-				}
+		case ' ':
+			if len(f.saveTo) > 0 {
+				f.saveIdx = (f.saveIdx + 1) % len(f.saveTo)
 			}
 		}
 		return f, nil
@@ -353,11 +353,11 @@ func (f Form) Update(msg tea.Msg) (Form, tea.Cmd) {
 	return f, cmd
 }
 
-func isCyclerKey(k tea.KeyMsg) bool {
-	if k.Type == tea.KeyLeft || k.Type == tea.KeyRight || k.Type == tea.KeyEnter {
+func isCyclerKey(k tea.KeyPressMsg) bool {
+	if k.Code == tea.KeyLeft || k.Code == tea.KeyRight || k.Code == tea.KeyEnter {
 		return true
 	}
-	return k.Type == tea.KeyRunes && len(k.Runes) == 1 && k.Runes[0] == ' '
+	return k.Code == ' '
 }
 
 func toggleKind(k Kind) Kind {
@@ -658,6 +658,100 @@ func (f Form) View() string {
 	rows = append(rows, uicore.PadOrTruncate("", cw))
 	rows = append(rows, f.footerRows(cw)...)
 	return strings.Join(rows, "\n")
+}
+
+// Cursor returns the terminal cursor for the currently focused text input in
+// local body-content coordinates (origin = first row of bodyRows). Returns
+// nil when a non-text widget (kind toggle, cyclers, buttons) has focus, or
+// when the form is zero-sized.
+//
+// The App applies the correct global offset:
+//   - fromPopover: add the overlay origin (x, y) plus 1 for the box border.
+//   - not fromPopover: add (sidebarWidth+1, 1) for the right-pane origin.
+func (f Form) Cursor() *tea.Cursor {
+	if f.width == 0 || f.height == 0 {
+		return nil
+	}
+	w := f.focusedWidget()
+	// Only text inputs and the textarea expose a real cursor.
+	var cur *tea.Cursor
+	const inputXOffset = labelCol + 2 // prefix(8) + " "(1) + "["(1)
+	switch w.kind {
+	case widFirst:
+		cur = f.first.Cursor()
+	case widLast:
+		cur = f.last.Cursor()
+	case widOrg:
+		cur = f.org.Cursor()
+	case widTitle:
+		cur = f.title.Cursor()
+	case widBizName:
+		cur = f.bizName.Cursor()
+	case widEmailInput:
+		cur = f.emails[w.row].input.Cursor()
+	case widPhoneInput:
+		cur = f.phones[w.row].input.Cursor()
+	case widNote:
+		cur = f.note.Cursor()
+		if cur != nil {
+			// Note uses labelCol+1 offset (no "[" bracket).
+			cur.Position.X += labelCol + 1
+			cur.Position.Y += f.noteBodyRow()
+		}
+		return cur
+	default:
+		return nil
+	}
+	if cur == nil {
+		return nil
+	}
+	cur.Position.X += inputXOffset
+	cur.Position.Y = f.fieldBodyRow(w)
+	return cur
+}
+
+// noteBodyRow returns the body-row index where the note textarea begins.
+func (f Form) noteBodyRow() int {
+	// blank(0) + kindRow(1) + blank(2) = 3 rows before name fields.
+	nameCount := 4 // Person default: first, last, org, title
+	if f.kind == KindOrg {
+		nameCount = 1 // bizName only
+	}
+	// blank after name block = 1 row.
+	emailStart := 3 + nameCount + 1
+	// blank after addEmail = 1 row.
+	phoneStart := emailStart + len(f.emails) + 2
+	// blank after addPhone = 1 row.
+	return phoneStart + len(f.phones) + 2
+}
+
+// fieldBodyRow returns the body-row index for a textinput widget.
+func (f Form) fieldBodyRow(w widget) int {
+	// blank(0) + kindRow(1) + blank(2) = 3 rows before name fields.
+	nameCount := 4
+	if f.kind == KindOrg {
+		nameCount = 1
+	}
+	emailStart := 3 + nameCount + 1
+	phoneStart := emailStart + len(f.emails) + 2
+
+	switch w.kind {
+	case widFirst:
+		return 3
+	case widLast:
+		return 4
+	case widOrg:
+		return 5
+	case widTitle:
+		return 6
+	case widBizName:
+		return 3
+	case widEmailInput:
+		return emailStart + w.row
+	case widPhoneInput:
+		return phoneStart + w.row
+	}
+	return 0
 }
 
 func (f Form) bodyRows(cw int) []string {

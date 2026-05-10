@@ -8,7 +8,7 @@
 package compose
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/catkin"
 )

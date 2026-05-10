@@ -5,9 +5,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // t9Groups are the eight phone-keypad letter groups in fixed order.
@@ -68,7 +68,7 @@ func (s Sidebar) SetSize(w, h int) Sidebar {
 }
 
 func (s Sidebar) Update(msg tea.Msg) (Sidebar, tea.Cmd) {
-	k, ok := msg.(tea.KeyMsg)
+	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return s, nil
 	}
@@ -84,8 +84,8 @@ func (s Sidebar) Update(msg tea.Msg) (Sidebar, tea.Cmd) {
 		}
 		s.activeLetter = 0
 	default:
-		if len(k.Runes) == 1 {
-			r := k.Runes[0]
+		if len(k.Text) == 1 {
+			r := k.Code
 			if r >= 'a' && r <= 'z' {
 				up := unicode.ToUpper(r)
 				s.activeLetter = up

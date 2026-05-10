@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -279,7 +279,7 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 		// Tick belongs to the viewer's spinner or is a stale generation;
 		// the viewer's ID guard rejects stale ticks. Fall through.
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 
@@ -297,7 +297,7 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 // open every key routes there first. Otherwise J/K/G move the sidebar (and
 // fire a folder-load Cmd), j/k move the message list. During active
 // search, printable keys flow through SidebarSearch instead.
-func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	if m.viewer.IsOpen() {
 		delta := 0
 		switch {

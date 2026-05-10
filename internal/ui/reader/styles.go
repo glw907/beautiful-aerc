@@ -1,7 +1,7 @@
 package reader
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 

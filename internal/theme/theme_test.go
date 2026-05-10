@@ -1,13 +1,18 @@
 package theme
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"charm.land/lipgloss/v2"
+)
 
 func TestNordPaletteValues(t *testing.T) {
-	if got := string(Nord.BgBase); got != "#2e3440" {
-		t.Errorf("Nord.BgBase = %q, want %q", got, "#2e3440")
+	if Nord.BgBase != lipgloss.Color("#2e3440") {
+		t.Errorf("Nord.BgBase = %v, want #2e3440", Nord.BgBase)
 	}
-	if got := string(Nord.AccentPrimary); got != "#81a1c1" {
-		t.Errorf("Nord.AccentPrimary = %q, want %q", got, "#81a1c1")
+	if Nord.AccentPrimary != lipgloss.Color("#81a1c1") {
+		t.Errorf("Nord.AccentPrimary = %v, want #81a1c1", Nord.AccentPrimary)
 	}
 }
 
@@ -50,8 +55,8 @@ func TestThemeRegistryComplete(t *testing.T) {
 	// Verify all themes have distinct bg_base (no copy-paste errors).
 	seen := map[string]string{}
 	for name, th := range Themes {
-		bg := string(th.BgBase)
-		if bg == "" {
+		bg := fmt.Sprintf("%v", th.BgBase)
+		if bg == "" || bg == "<nil>" {
 			t.Errorf("theme %q has empty bg_base", name)
 		}
 		if other, ok := seen[bg]; ok {

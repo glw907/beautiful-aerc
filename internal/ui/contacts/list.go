@@ -5,9 +5,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -61,7 +61,7 @@ func NewList(s Styles, all []Contact, sortMode SortMode) List {
 		styles:   s,
 		all:      sorted,
 		sortMode: sortMode,
-		vp:       viewport.New(0, 0),
+		vp:       viewport.New(),
 	}
 	return l
 }
@@ -89,14 +89,14 @@ func (l List) SetSelectionLetter(letter rune) List {
 
 func (l List) SetSize(w, h int) List {
 	l.width, l.height = w, h
-	l.vp.Width = w
-	l.vp.Height = h
+	l.vp.SetWidth(w)
+	l.vp.SetHeight(h)
 	l.rebuildViewport()
 	return l
 }
 
 func (l List) Update(msg tea.Msg) (List, tea.Cmd) {
-	k, ok := msg.(tea.KeyMsg)
+	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return l, nil
 	}
@@ -184,7 +184,7 @@ func (l *List) syncViewport() {
 	if l.height <= 0 {
 		return
 	}
-	top := l.vp.YOffset
+	top := l.vp.YOffset()
 	bottom := top + l.height - 1
 	if l.cursor < top {
 		l.vp.SetYOffset(l.cursor)

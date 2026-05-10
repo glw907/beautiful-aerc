@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -67,7 +67,7 @@ func TestConfirmModal_YesEmitsYesAndCloses(t *testing.T) {
 	m = m.Open(testReq())
 	m = m.SetSize(80, 24)
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	msgs := drainBatch(cmd)
 
 	if !containsMsgType(msgs, ConfirmModalYesMsg{}) {
@@ -79,9 +79,9 @@ func TestConfirmModal_YesEmitsYesAndCloses(t *testing.T) {
 }
 
 func TestConfirmModal_NoAndEscClose(t *testing.T) {
-	for _, key := range []tea.KeyMsg{
-		{Type: tea.KeyRunes, Runes: []rune("n")},
-		{Type: tea.KeyEscape},
+	for _, key := range []tea.KeyPressMsg{
+		{Code: 'n', Text: "n"},
+		{Code: tea.KeyEscape},
 	} {
 		m := newTestConfirmModal()
 		m = m.Open(testReq())
@@ -100,7 +100,7 @@ func TestConfirmModal_NoAndEscClose(t *testing.T) {
 func TestConfirmModal_QSwallowed(t *testing.T) {
 	m := newTestConfirmModal()
 	m = m.Open(testReq())
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
 		t.Errorf("q should be swallowed (nil cmd), got %v", cmd)
 	}

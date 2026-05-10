@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -65,7 +65,7 @@ func defaultAttachPickerKeys() attachPickerKeys {
 		GoBot:        key.NewBinding(key.WithKeys("G", "end")),
 		Open:         key.NewBinding(key.WithKeys("l", "right", "enter")),
 		Back:         key.NewBinding(key.WithKeys("h", "left", "backspace")),
-		Toggle:       key.NewBinding(key.WithKeys(" ")),
+		Toggle:       key.NewBinding(key.WithKeys("space")),
 		Accept:       key.NewBinding(key.WithKeys("a")),
 		ToggleHidden: key.NewBinding(key.WithKeys(".")),
 		Close:        key.NewBinding(key.WithKeys("esc")),
@@ -166,7 +166,7 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 			p.cursor = 0
 		}
 		return p, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(m, p.keys.Down):
 			if p.cursor < len(p.entries)-1 {

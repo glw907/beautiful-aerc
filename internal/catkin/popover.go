@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // 5 matches the OS-native context-menu convention and stays inside
@@ -84,7 +84,7 @@ func (m Model) closePopover() Model {
 
 // handlePopoverKey dispatches a KeyMsg while the popover is open. The
 // boolean is false when the key wasn't claimed and Update should run.
-func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model) {
+func (m Model) handlePopoverKey(k tea.KeyPressMsg) (bool, Model) {
 	switch {
 	case key.Matches(k, popoverKeys.Close):
 		return true, m.closePopover()
@@ -105,8 +105,8 @@ func (m Model) handlePopoverKey(k tea.KeyMsg) (bool, Model) {
 	case key.Matches(k, popoverKeys.Add):
 		return true, m.addCurrentWordToWordlist()
 	}
-	if len(k.Runes) == 1 && k.Runes[0] >= '1' && k.Runes[0] <= '9' {
-		idx := int(k.Runes[0] - '1')
+	if k.Code >= '1' && k.Code <= '9' && len(k.Text) == 1 {
+		idx := int(k.Code - '1')
 		if idx < len(m.popover.suggestions) {
 			m.popover.cursor = idx
 			return true, m.applySelectedSuggestion()

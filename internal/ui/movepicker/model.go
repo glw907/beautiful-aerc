@@ -6,9 +6,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -159,7 +159,7 @@ func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !p.shell.IsOpen() {
 		return p, nil
 	}
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
 	}
@@ -206,11 +206,11 @@ func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return p, nil
 }
 
-func singlePrintableRune(k tea.KeyMsg) (rune, bool) {
-	if len(k.Runes) != 1 {
+func singlePrintableRune(k tea.KeyPressMsg) (rune, bool) {
+	if len(k.Text) != 1 {
 		return 0, false
 	}
-	r := k.Runes[0]
+	r := k.Code
 	if !unicode.IsPrint(r) {
 		return 0, false
 	}

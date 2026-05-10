@@ -3,7 +3,7 @@ package catkin
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // pairCloser maps the open delimiter of an auto-pair to its closer.
@@ -17,14 +17,11 @@ var pairCloser = map[rune]rune{
 // handleAutoPair intercepts pair-trigger inserts and the
 // backspace that deletes an empty pair. Pairing is suppressed
 // inside code blocks and inline code spans.
-func handleAutoPair(b Buffer, k tea.KeyMsg) (handled bool, _ Buffer, _ tea.Cmd) {
-	if k.Paste {
-		return false, b, nil
-	}
+func handleAutoPair(b Buffer, k tea.KeyPressMsg) (handled bool, _ Buffer, _ tea.Cmd) {
 	src := b.Value()
 	cur := b.RuneOffset()
 
-	if k.Type == tea.KeyBackspace {
+	if k.Code == tea.KeyBackspace {
 		newSrc, newCur, ok := tryPairDelete(src, cur)
 		if !ok {
 			return false, b, nil
@@ -34,10 +31,10 @@ func handleAutoPair(b Buffer, k tea.KeyMsg) (handled bool, _ Buffer, _ tea.Cmd) 
 		return true, b, nil
 	}
 
-	if k.Type != tea.KeyRunes || len(k.Runes) != 1 {
+	if len(k.Text) != 1 {
 		return false, b, nil
 	}
-	r := k.Runes[0]
+	r := k.Code
 	if _, isPair := pairCloser[r]; !isPair {
 		return false, b, nil
 	}

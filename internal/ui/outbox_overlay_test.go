@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -58,7 +58,7 @@ func TestOutboxOverlay_RendersGroups(t *testing.T) {
 
 func TestOutboxOverlay_QSwallowed(t *testing.T) {
 	o := newTestOutboxOverlay().SetSize(120, 40).Open(nil)
-	o2, cmd := o.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	o2, cmd := o.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if !o2.IsOpen() {
 		t.Errorf("q should be swallowed (overlay stays open)")
 	}
@@ -69,12 +69,12 @@ func TestOutboxOverlay_QSwallowed(t *testing.T) {
 
 func TestOutboxOverlay_EscClosesAndCapitalQ(t *testing.T) {
 	o := newTestOutboxOverlay().SetSize(120, 40).Open(nil)
-	o2, _ := o.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	o2, _ := o.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if o2.IsOpen() {
 		t.Errorf("esc did not close")
 	}
 	o3 := newTestOutboxOverlay().SetSize(120, 40).Open(nil)
-	o3, _ = o3.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	o3, _ = o3.Update(tea.KeyPressMsg{Code: 'Q', Text: "Q"})
 	if o3.IsOpen() {
 		t.Errorf("Q did not close")
 	}
@@ -82,7 +82,7 @@ func TestOutboxOverlay_EscClosesAndCapitalQ(t *testing.T) {
 
 func TestOutboxOverlay_BangEmitsTransition(t *testing.T) {
 	o := newTestOutboxOverlay().SetSize(120, 40).Open(nil)
-	o2, cmd := o.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	o2, cmd := o.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
 	if o2.IsOpen() {
 		t.Errorf("! should close outbox overlay")
 	}

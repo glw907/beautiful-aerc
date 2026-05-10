@@ -1,6 +1,6 @@
 package account
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // Keys spans message-list motion, sidebar motion, folder jumps, the
 // search shelf, fold control, and the n/N advance keys consumed while
@@ -53,7 +53,7 @@ func NewKeys() Keys {
 		MsgListBottom: key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of list")),
 		MsgListDown:   key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
 		MsgListUp:     key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
-		ToggleFold:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "fold")),
+		ToggleFold:    key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "fold")),
 		ToggleFoldAll: key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "fold all")),
 		NextMessage:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next message")),
 		PrevMessage:   key.NewBinding(key.WithKeys("N"), key.WithHelp("N", "prev message")),

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -24,7 +24,7 @@ func TestAttachPicker_OpenClose(t *testing.T) {
 	if !p.IsOpen() {
 		t.Fatal("Open should set open")
 	}
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("Esc should emit close cmd")
 	}
@@ -36,7 +36,7 @@ func TestAttachPicker_OpenClose(t *testing.T) {
 func TestAttachPicker_OpenAction(t *testing.T) {
 	p := newTestAttachPicker(t).Open("u1",
 		[]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 10}})
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter should emit a Cmd")
 	}
@@ -48,7 +48,7 @@ func TestAttachPicker_OpenAction(t *testing.T) {
 func TestAttachPicker_SaveAction(t *testing.T) {
 	p := newTestAttachPicker(t).Open("u1",
 		[]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 10}})
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	if cmd == nil {
 		t.Fatal("s should emit a Cmd")
 	}
@@ -59,7 +59,7 @@ func TestAttachPicker_DigitOpensIndex(t *testing.T) {
 		{PartID: "1", Filename: "a", Size: 1},
 		{PartID: "2", Filename: "b", Size: 2},
 	})
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
 	if cmd == nil {
 		t.Fatal("digit should emit a Cmd")
 	}

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -31,15 +31,15 @@ func TestLinkPickerCursorBounds(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com", "https://b.com"})
 
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	if p.Cursor() != 0 {
 		t.Fatalf("k from row 0: cursor = %d, want 0", p.Cursor())
 	}
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if p.Cursor() != 1 {
 		t.Fatalf("j from row 0: cursor = %d, want 1", p.Cursor())
 	}
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if p.Cursor() != 1 {
 		t.Fatalf("j from last row: cursor = %d, want 1", p.Cursor())
 	}
@@ -48,9 +48,9 @@ func TestLinkPickerCursorBounds(t *testing.T) {
 func TestLinkPickerEnterEmitsLaunchAndClose(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com", "https://b.com"})
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	got := collectMsgs(cmd)
 	if !containsLaunchURL(got, "https://b.com") {
@@ -65,7 +65,7 @@ func TestLinkPickerNumericLaunchInRange(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com", "https://b.com", "https://c.com"})
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
 
 	got := collectMsgs(cmd)
 	if !containsLaunchURL(got, "https://b.com") {
@@ -77,7 +77,7 @@ func TestLinkPickerNumericOutOfRangeInert(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com"})
 
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: '5', Text: "5"})
 
 	if cmd != nil {
 		t.Fatalf("out-of-range numeric should be inert, got cmd=%v", cmd)
@@ -87,7 +87,7 @@ func TestLinkPickerNumericOutOfRangeInert(t *testing.T) {
 func TestLinkPickerEscCloses(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com"})
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got := collectMsgs(cmd)
 	if !containsClosed(got) {
 		t.Fatalf("expected LinkPickerClosedMsg from Esc, got %v", got)
@@ -97,7 +97,7 @@ func TestLinkPickerEscCloses(t *testing.T) {
 func TestLinkPickerTabCloses(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com"})
-	_, cmd := p.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	got := collectMsgs(cmd)
 	if !containsClosed(got) {
 		t.Fatalf("expected LinkPickerClosedMsg from Tab, got %v", got)
@@ -107,7 +107,7 @@ func TestLinkPickerTabCloses(t *testing.T) {
 func TestLinkPickerQSwallowed(t *testing.T) {
 	p := newTestLinkPicker(t)
 	p = p.Open([]string{"https://a.com"})
-	p2, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	p2, cmd := p.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
 		t.Fatalf("q should be swallowed, got cmd=%v", cmd)
 	}
@@ -190,7 +190,7 @@ func TestLinkPickerPreviewShowsFullURL(t *testing.T) {
 	long := "https://example.com/some/very/long/path/that/wraps?query=value"
 	p := newTestLinkPicker(t)
 	p = p.SetSize(80, 24).Open([]string{"https://a.com", long})
-	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	out := p.View()
 	if !strings.Contains(out, "example.com/some/very/long") {
 		t.Fatalf("preview should expose full URL prefix, got:\n%s", out)
