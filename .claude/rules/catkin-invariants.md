@@ -16,9 +16,13 @@ ADR(s).
 ## Catkin
 
 - Catkin (`internal/catkin/`) is poplar's markdown-first
-  bubbletea editor, library-pure (`bubbletea`, `bubbles`,
-  `lipgloss`, `muesli/reflow`, `charmbracelet/x/ansi`,
-  `alecthomas/chroma/v2`). Wraps `bubbles/textarea` as
+  bubbletea editor, library-pure on the charm.land/v2 substrate
+  (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`,
+  `charm.land/lipgloss/v2`, `charmbracelet/x/ansi`,
+  `alecthomas/chroma/v2`). The reflow primitives are the
+  vendored algorithm from `muesli/reflow` — provenance-noted in
+  `catkin.go` and `uicore/overlay.go`, not a module dep. Wraps
+  `bubbles/textarea` as
   buffer/cursor but owns `View()`. Pure `Classify` + `Reflow`
   (non-whitespace rune count for cursor remap); word nav
   intercepts before textarea; 3-row scroll-off. Live styling

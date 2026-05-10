@@ -2,7 +2,6 @@ package uicore
 
 import (
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -12,6 +11,6 @@ import (
 func NewSpinner(t *theme.CompiledTheme) spinner.Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(t.FgDim)
+	sp.Style = spinnerStyle(t)
 	return sp
 }

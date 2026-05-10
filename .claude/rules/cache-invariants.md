@@ -169,12 +169,23 @@ each fact back to its ADR(s).
   row with `status='pending'` and `next_eligible_at=NULL`, apply
   optimistic `ui_flags`/`ui_hide` to the message row (Move/Flag/
   Destroy only), commit, signal drainer.
-  `(*Account).CancelOps(ctx, opIDs)` deletes named outbox rows
+- `(*Account).CancelOps(ctx, opIDs)` deletes named outbox rows
   iff every one is `OpPending`; atomic across the slice. Returns
   `ErrNotPending` if any row has advanced. Used by the App's `u`
-  undo-send binding inside the `[ui] undo-send-window`. Linked
-  drafts rows are not touched on cancel — caller relies on the
-  in-memory Draft for compose-restore. After the drainer marks a row `conflict`,
+  undo-send binding inside the `[ui] undo-send-window` (default
+  10s, range `[0, 5m]`; zero disables) and by the Outbox view's
+  `c`. Linked drafts rows are not touched on cancel — caller
+  relies on the in-memory Draft for compose-restore.
+- `(*Account).RescheduleOp(opID, newScheduledFor)` updates
+  `scheduled_for` iff `OpPending` and `scheduled_for > now`, else
+  `ErrNotPending`. `(*Account).OutboxScheduled()` returns
+  `[]OutboxRow` (pending or failed) joined left to `folders` and
+  `drafts` via `draft_id`, ordered `scheduled_for ASC, id ASC`
+  with NULL last; Subject derived from the first 4 KB of payload
+  via `net/textproto`. The drainer's `dispatch(args, row)` routes
+  Send/Append to `Backend.Send`/`Append` via `row.FolderName` /
+  `row.Payload`; `revertOptimisticTx` no-ops on both kinds.
+- After the drainer marks a row `conflict`,
   `(*Account).RetryOp(ctx, opID)` and
   `(*Account).DiscardOp(ctx, opID)` are the user-initiated
   resolution primitives. Retry resets `attempts = 0` and signals
@@ -211,6 +222,6 @@ each fact back to its ADR(s).
   and reconcile via a full cache re-read.
 - `internal/backoff.Exponential(attempts, initial, max)` is the
   shared exponential-backoff helper used by the cache drainer,
-  the JMAP push loop, and the IMAP idle reconnect loop. Returns
-  `initial` on attempt ≤ 1; doubles each subsequent attempt;
-  caps at `max`.
+  the JMAP push loop, the IMAP idle reconnect loop, and the
+  body backfiller's throttle path. Returns `initial` on attempt
+  ≤ 1; doubles each subsequent attempt; caps at `max`.

@@ -40,40 +40,45 @@ file describes behavior, not the key tables.
 - Nested folder names (containing `/`) render flat. The `/` in the
   display name is the only affordance. No tree, no expand/collapse.
 - Sidebar width, sender column, date column, flag column, and
-  sidebar icons are all derived from `ComputeLayout(termWidth)`
-  in `internal/ui/layout.go`. Three tiers: Spartan (W=80–89,
-  sidebar=14, no flags, no date, no icons), Intermediate
-  (W=90–107, flags + 3- or 5-cell date, no icons), Full
-  (W=108+, all chrome on). Sidebar floor 14 fits "Archive";
-  ceiling 30. Sender slope 0.125 hits coverage cliffs at
-  22/28/32 cells. The 14-cell ISO date is removed. ADR-0109.
-- The left-hand column composite (account header rows / `Sidebar` /
-  spacer padding / `SidebarSearch` shelf) lives in
-  `SidebarColumn` (`internal/ui/sidebar_column.go`). `AccountTab`
-  holds one `SidebarColumn` field; reads go through
-  `Sidebar()` / `SidebarSearch()` accessors and writes through
-  `WithSidebar` / `WithSidebarSearch`. `SidebarColumn.View()`
-  emits the column content *without* the right-edge `│` divider
-  — `AccountTab` still owns the row-by-row join with the right
-  pane to preserve the SPUA-A-safe assembly invariant
-  (ADR-0084). `SidebarColumn` does not propagate `SetSize` to
-  its children; `AccountTab.WindowSizeMsg` calls
-  `SetLayout`/`SetSize` on the children directly. ADR-0129.
+  sidebar icons are all derived from `uicore.ComputeLayout(
+  termWidth)`. Three tiers: Spartan (W=80–89, sidebar=14, no
+  flags, no date, no icons), Intermediate (W=90–107, flags + 3-
+  or 5-cell date, no icons), Full (W=108+, all chrome on).
+  Sidebar floor 14 fits "Archive"; ceiling 30. Sender slope
+  0.125 hits coverage cliffs at 22/28/32 cells. The 14-cell ISO
+  date is removed. ADR-0109.
+- The left-hand column composite (account header rows /
+  `sidebar.Model` / spacer padding / `sidebar.Search` shelf)
+  lives in `sidebar.Column` (`internal/ui/sidebar/column.go`).
+  `account.Model` holds one `sidebar.Column` field; reads go
+  through `Sidebar()` / `SidebarSearch()` accessors and writes
+  through `WithSidebar` / `WithSidebarSearch`.
+  `sidebar.Column.View()` emits the column content *without*
+  the right-edge `│` divider — `account.Model` still owns the
+  row-by-row join with the right pane to preserve the SPUA-A-
+  safe assembly invariant (ADR-0084). `sidebar.Column` does not
+  propagate `SetSize` to its children; `account.Model`'s
+  `WindowSizeMsg` handler calls `SetLayout` / `SetSize` on the
+  children directly. ADR-0129.
 
 ### Message list
 
-- `MessageList` owns thread grouping + fold state. Holds `source
-  []MessageInfo` plus derived `rows []displayRow` rebuilt by a
-  group→sort→flatten pipeline. A transient `*threadNode` tree is
-  built per bucket in `appendThreadRows` to compute box-drawing
-  prefixes, then discarded — the renderer never sees the tree.
-- Date column: `formatRelativeDate(t, now)` in
-  `internal/ui/date_format.go`. Same calendar day → 12-hour time
-  (`10:23 AM`); other day → `Mon 2006-01-02`; zero → empty. All in
-  `now`'s location. `MessageList` snapshots `now` at construction
-  and on `SetMessages`; `rebuild` precomputes
-  `displayRow.dateText` so the render path is I/O-free.
-- `MessageList.ActionTargets()` is the source of truth for triage
+- `messagelist.Model` owns thread grouping + fold state. Holds
+  `source []MessageInfo` plus derived `rows []displayRow` rebuilt
+  by a group→sort→flatten pipeline. A transient `*threadNode`
+  tree is built per bucket in `appendThreadRows` to compute box-
+  drawing prefixes, then discarded — the renderer never sees the
+  tree.
+- Date column: `displayDate(msg, now, width)` in
+  `internal/ui/messagelist/model.go`. `width=3` selects
+  `formatRelativeDateCompact` (`now`/`5m`/`1h`/`1d`/`1w`/`Jan`/
+  `'24`); `width=5` selects `formatRelativeDateShort` (same day →
+  `3:41p`, other day → `MM-DD`); `width=0` hides; zero `SentAt`
+  falls back to the wire `Date` string. All in `now`'s location.
+  `messagelist.Model` snapshots `now` at construction and on
+  `SetMessages`; `rebuild` precomputes `displayRow.dateText` so
+  the render path is I/O-free.
+- `messagelist.Model.ActionTargets()` is the source of truth for triage
   scope: if anything is marked, return marks in source order
   (mode-agnostic); otherwise cursor row, with WYSIWYG expansion to
   all thread UIDs on a folded thread root. `visualMode` controls
@@ -84,19 +89,21 @@ file describes behavior, not the key tables.
 
 ### Viewer
 
-- `Viewer` is an `AccountTab` child with no backend reference. Body
-  fetch + mark-read Cmds are built at `AccountTab`; `bodyLoadedMsg`
-  carries parsed blocks back. Stale events are dropped by comparing
-  `viewer.CurrentUID()`. Phases: closed → loading (spinner) → ready
-  (headers + body in `bubbles/viewport`) → closed. While open every
-  key routes there first; search keys + folder jumps are inert.
+- `reader.Model` is an `account.Model` child with no backend
+  reference. Body fetch + mark-read Cmds are built in
+  `account.Model`; `reader.BodyLoadedMsg` carries parsed blocks
+  back. Stale events are dropped by comparing
+  `reader.Model.CurrentUID()`. Phases: closed → loading
+  (spinner) → ready (headers + body in `bubbles/viewport`) →
+  closed. While open every key routes there first; search keys +
+  folder jumps are inert.
 - Mark-read on viewer open is optimistic via the cache:
   `markReadCmd` queues `FlagArgs{FlagSeen, true}` through
   `cache.Account.QueueOp`, which transactionally flips `ui_flags`
   and inserts the outbox row. The follow-up `folderLoadedMsg`
-  refresh re-reads the now-flipped state into `MessageList` via
-  `RefreshSource` (cursor preserved). Failures surface via
-  `ErrorMsg` into the App-owned banner.
+  refresh re-reads the now-flipped state into `messagelist.Model`
+  via `RefreshSource` (cursor preserved). Failures surface via
+  `uicore.ErrorMsg` into the App-owned banner.
 - Body content rendering caps at `maxBodyWidth = 72` cells; headers
   wrap at the panel width (uncapped). Outbound links are harvested
   by `content.RenderBodyWithFootnotes` into `[N]: <url>` rows below
@@ -104,11 +111,12 @@ file describes behavior, not the key tables.
   U+00A0. Short bare URLs (`Text == URL`, ≤30 cells) render inline
   without a marker.
 - Invite block + chip row sit between header panel and body, in
-  that order, both optional. Layout owned by `Viewer.layout`; body
-  height = `v.height - panel - inviteHeight - chipHeight`. Chip
-  row hidden when `len(attachments) == 0`; populated from
-  `attachmentsLoadedMsg` batched in the same Cmd as `bodyLoadedMsg`
-  on viewer open. `@` opens the App-owned `AttachPicker` overlay
+  that order, both optional. Layout owned by `reader.Model.layout()`;
+  body height = `v.height - panel - inviteHeight - chipHeight`.
+  Chip row hidden when `len(attachments) == 0`; populated from
+  `reader.AttachmentsLoadedMsg` batched in the same Cmd as
+  `reader.BodyLoadedMsg` on viewer open. `@` opens the App-owned
+  `reader.AttachPicker` overlay
   (`o`/Enter/digit open via `xdg-open` on a tempfile; `s` saves to
   `[ui] download_dir`; `Esc`/`q`/`@` close). Invite block hidden
   when no `text/calendar`/`application/ics` part is present;
@@ -121,22 +129,23 @@ file describes behavior, not the key tables.
 ### Triage, undo, error banner
 
 - Triage actions (delete/archive/star/read/move) are optimistic
-  through the cache. `AccountTab.dispatchTriage` (or
+  through the cache. `account.Model.dispatchTriage` (or
   `dispatchMoveFromPicker`) calls `queueOpsCmd` which queues the
   op via `cache.QueueOp` (transactional optimistic flip on
   `ui_flags` / `ui_hide`) and immediately re-reads the folder via
   `cache.QueryFolder`. The result `folderLoadedMsg` updates the
-  msglist via `RefreshSource` (cursor preserved). `triageStartedMsg`
-  carries the inverse Cmd — a compensating `cache.QueueOp` that
-  reverses the action. `App` owns `pendingAction` and schedules a
-  `tea.Tick` for `[ui] undo_seconds` (default 6, clamped `[2, 30]`).
-  `u` fires the saved inverse Cmd; there is no separate local
-  roll-back since cache state is the only state. A folder change
-  commits the toast (cache state stands). An `ErrorMsg` clears the
-  toast — the user's responsibility to fire the inverse manually if
-  a forward op already flipped state. The chrome row above the
-  status bar is shared with the error banner; error wins, then
-  toast, else the row collapses (`App.chromeBannerRow`).
+  msglist via `RefreshSource` (cursor preserved).
+  `account.TriageStartedMsg` carries the inverse Cmd — a
+  compensating `cache.QueueOp` that reverses the action. `App`
+  owns `pendingAction` and schedules a `tea.Tick` for `[ui]
+  undo_seconds` (default 6, clamped `[2, 30]`). `u` fires the
+  saved inverse Cmd; there is no separate local roll-back since
+  cache state is the only state. A folder change commits the
+  toast (cache state stands). A `uicore.ErrorMsg` clears the
+  toast — the user's responsibility to fire the inverse manually
+  if a forward op already flipped state. The chrome row above
+  the status bar is shared with the error banner; error wins,
+  then toast, else the row collapses (`App.chromeBannerRow`).
   `pendingAction.IsZero()` checks `op == ""`. "Delete" is a Move
   to the canonical Trash folder (no `mail.Backend.Delete` exists);
   the inverse moves it back to the source folder.
@@ -158,45 +167,47 @@ file describes behavior, not the key tables.
   `cache.QueryFolder` in 1000-unit batches → `enqueueDestroys`
   fan-out. Toast renders `Emptied <Folder> (<N>)` and suppresses
   `[u undo]` (toast keys off `op == opEmpty`).
-- `ErrorMsg{Op, Err}` is the canonical Cmd error type. Every
-  fallible `tea.Cmd` returns it with a short verb-phrase `Op`
-  ("mark read", "fetch body", "purge expired"). `App` owns
+- `uicore.ErrorMsg{Op, Err}` is the canonical Cmd error type.
+  Every fallible `tea.Cmd` returns it with a short verb-phrase
+  `Op` ("mark read", "fetch body", "purge expired"). `App` owns
   `lastErr` (last-write-wins). Banner is one foreground-only row
   above the status bar (`⚠ <Op>: <Err>`), truncated with `…`;
   account region shrinks one cell when shown so view height is
   unchanged. No key steal, dismiss, severity, queue. Part of the
   dimmed underlay while overlays are open.
-- Spinner placeholders go through `NewSpinner(t)` (Dot, `FgDim`) in
-  `internal/ui/styles.go`; shared across viewer/folder/send.
+- Spinner placeholders go through `uicore.NewSpinner(t)` (Dot,
+  `FgDim`); shared across viewer/folder/send.
 
 ### Compose
 
-- `ComposeTab` (`internal/ui/compose_tab.go`) is the App-owned
-  inline compose surface. While `App.compose != nil`, App routes
-  keys into ComposeTab and renders its `View()` in place of
-  AccountTab's right pane via `AccountTab.RenderWithRightPane` —
-  sidebar and chrome stay drawn, no overlay, no
-  `tea.ExecProcess`. Five focusable fields: To/Cc/Bcc/Subject as
-  `bubbles/textinput`, body as `compose.Editor` (CatkinEditor in
-  v1; v1.1 will add a neovim adapter behind the same interface).
+- `compose.Model` (`internal/ui/compose/model.go`, imported as
+  `uicompose` from App-side) is the App-owned inline compose
+  surface. While `App.compose != nil`, App routes keys into it
+  and renders its `View()` in place of `account.Model`'s right
+  pane via `account.Model.RenderWithRightPane` — sidebar and
+  chrome stay drawn, no overlay, no `tea.ExecProcess`. Five
+  focusable fields: To/Cc/Bcc/Subject as `bubbles/textinput`,
+  body as `mailcompose.Editor` (CatkinEditor in v1; v1.1 will
+  add a neovim adapter behind the same interface).
 - Focus model. `Tab` / `Shift+Tab` cycles To→Cc→Bcc→Subject→Body
   and wraps. `Esc` is a focus toggle only (Body→Subject; any
   header→Body) and never closes compose. `Ctrl+X` sends — emits
-  `ComposeSendMsg` with the assembled draft. `Ctrl+C` cancels —
-  emits `ComposeCancelMsg{Dirty}`; App opens `ConfirmModal` when
-  Dirty, closes immediately otherwise. Per ADR-0076 text-entry
-  surfaces are exempt from the modifier-free rule, so these
-  chords coexist with Catkin's `Ctrl+B/I/K/L/Q/Space`.
-- App owns the lifecycle: `compose *ComposeTab` (nil when closed)
-  + `(tidyEnabled, tidyAPIKey, tidyCfg)` resolved once at
-  construction from `[ui.tidy]` and `tidy.ResolveAPIKey`, threaded
-  into every new `compose.Model` via `SetTidy`. `c` opens fresh;
-  `r`/`R`/`f` open via `composeSeedCmd` after fetching the parent
-  body. The send path calls `compose.AssembleMIME`, then
-  `cache.Account.QueueOutbound` (one op JMAP, two ops IMAP per
-  ADR-0160). Sent folder resolves via the cached classified-
-  folder list (`cf.Canonical == "Sent"`) with case-fold "Sent"
-  name fallback; missing surfaces inline as `c.err`.
+  `uicompose.SendMsg` with the assembled draft. `Ctrl+C` cancels
+  — emits `uicompose.CancelMsg{Dirty}`; App opens `ConfirmModal`
+  when Dirty, closes immediately otherwise. Per ADR-0076 text-
+  entry surfaces are exempt from the modifier-free rule, so
+  these chords coexist with Catkin's `Ctrl+B/I/K/L/Q/Space`.
+- App owns the lifecycle: `compose *uicompose.Model` (nil when
+  closed) + `(tidyEnabled, tidyAPIKey, tidyCfg)` resolved once
+  at construction from `[ui.tidy]` and `tidy.ResolveAPIKey`,
+  threaded into every new compose model via `SetTidy`. `c`
+  opens fresh; `r`/`R`/`f` open via `composeSeedCmd` after
+  fetching the parent body. The send path calls
+  `mailcompose.AssembleMIME`, then `cache.Account.QueueOutbound`
+  (one op JMAP, two ops IMAP per ADR-0160). Sent folder
+  resolves via the cached classified-folder list
+  (`cf.Canonical == "Sent"`) with case-fold "Sent" name
+  fallback; missing surfaces inline as `c.err`.
 - `Ctrl+T` in the body runs `tidy.Tidy` in a `tea.Cmd`; on
   return compose replaces the catkin buffer and feeds
   character-range diffs to a `tidyAnnotator` painted in
@@ -204,15 +215,17 @@ file describes behavior, not the key tables.
   clear on first body mutation. Tidy never runs on send. The
   footer shows a gated `^T tidy` hint at rank 6 when
   `[ui.tidy] enabled` and the body is focused. ADR-0178.
-- `Ctrl+O` opens `compose.AttachPicker` — multi-select TUI file
-  browser overlay (`internal/ui/compose/attachpicker.go`) modeled
+- `Ctrl+O` opens `uicompose.AttachPicker` — multi-select TUI
+  file browser overlay (`internal/ui/compose/attachpicker.go`)
+  modeled
   on `bubbles/filepicker` design vocabulary (vim h/l/g/G nav,
   async readDir with id-guard, view-state stack on ascend),
   reimplemented for multi-select. `Space` toggles, `a` accepts,
   `Enter` on a file with empty selection is a single-attach
   shortcut, `.` toggles hidden, `Esc` cancels. Picker emits
-  `AttachAcceptedMsg{Paths}` / `AttachCancelledMsg{}`; compose
-  appends deduped to `c.attachments`, bumps `localDirty`, kicks
+  `uicompose.AttachAcceptedMsg{Paths}` /
+  `uicompose.AttachCancelledMsg{}`; compose appends deduped to
+  `c.attachments`, bumps `localDirty`, kicks
   autosave, remembers `attachLastDir`. Compose grows a
   `focusAttach` enum slot between `focusSubject` and `focusBody`,
   skipped in the Tab cycle when no attachments. Inside
@@ -224,24 +237,19 @@ file describes behavior, not the key tables.
   `uicore.PlaceOverlay`; compose's `SetSize` forwards into the
   picker. Picker rides inside compose's input window — outside
   the global modal cascade. ADR-0179.
-- `Ctrl+L` in compose opens `SchedulePicker` — three preset rows
-  (Tomorrow morning / afternoon, Monday morning) plus a "Custom…"
-  row that expands a `bubbles/textinput` parsed by pure
-  `compose.ParseSchedule(s, now)`. Accept emits
-  `ScheduleAcceptedMsg{When}`; `m.scheduledFor` threads through
-  `composeSendCmd` into `QueueOutbound` and bypasses the
-  ADR-0183 undo-send window. Picker overlays on top of compose
-  via `uicore.PlaceOverlay`, sized through compose's input
-  window like AttachPicker. Outbox-side reschedule reuses the
-  same picker but under App ownership
+- `Ctrl+L` in compose opens `uicompose.SchedulePicker` — three
+  preset rows (Tomorrow morning / afternoon, Monday morning)
+  plus a "Custom…" row that expands a `bubbles/textinput`
+  parsed by pure `uicompose.ParseSchedule(s, now)`. Accept
+  emits `uicompose.ScheduleAcceptedMsg{When}`; `m.scheduledFor`
+  threads through `composeSendCmd` into `QueueOutbound` and
+  bypasses the ADR-0183 undo-send window. Picker overlays on
+  top of compose via `uicore.PlaceOverlay`, sized through
+  compose's input window like AttachPicker. Outbox-side
+  reschedule reuses the same picker but under App ownership
   (`pendingReschedule{picker, opID}`) so accepts route to
   `cache.RescheduleOp` instead of dispatchSend. Footer hint
   `^L later` at rank 6. ADRs 0076 (modifier exemption), 0184.
-- Single-instance for Pass 9h. Drafts persistence is 9h.5;
-  address autocomplete is 9.1; signatures + identities is 9.4.
-  `ComposeTab`/`AccountTab` names are placeholders pending the
-  Pass 9h.1 organizational sweep.
-
 ## UX
 
 ### Keybinding philosophy
@@ -270,44 +278,49 @@ file describes behavior, not the key tables.
 ### Overlays
 
 - App owns modal overlays via the same compose pattern: render
-  underlying frame, dim via `DimANSI`, composite via `PlaceOverlay`
-  (vendored from superfile, MIT) at the centered top-left from
-  `centerOverlay`. While an overlay is open, `App.Update`
-  short-circuits keys into it. Seven overlays exist: help popover
-  (`App` owns `helpOpen` + `help HelpPopover`; `viewerOpen` selects
-  `HelpAccount` vs `HelpViewer` context), link picker
-  (viewer-context-only), attachment picker (`@` from viewer;
-  `o`/`s`/`Enter`/digit/`Esc`), move picker (`m` from account
-  view), confirm modal (`ConfirmModal` — generic destructive-action
-  prompt, used by manual empty), outbox overlay (`Q` — read-only
-  grouped summary), and conflict overlay (`!` — per-row retry /
-  discard via `cache.RetryOp` / `DiscardOp`). Confirm is topmost —
-  its key-route and overlay-render branches run before the others.
-  Cascade order: confirm > conflict > outbox > help > link picker
-  > attach picker > move picker. The Box-rendering overlays
-  (`ConfirmModal`, `LinkPicker`, `AttachPicker`, `MovePicker`,
-  `OutboxOverlay`, `ConflictOverlay`)
-  share frame chrome via a named-field embedded `shell ModalShell`
-  (`internal/ui/modal_shell.go`); per-overlay `View()` builds
-  `bodyRows` + `footerRows` pre-padded to `contentW` cells and
-  calls `m.shell.Box(title, bodyRows, footerRows, contentW)`.
-  `HelpPopover` uses `lipgloss.Style` with a rounded border and is
-  *not* a ModalShell consumer. `MovePicker`, `HelpPopover`, and
-  `ConflictOverlay` cache their per-frame render via a heap-
-  allocated `*<T>Cache` pointer + dirty flag (the only Elm-
-  immutable-model escape hatch in the tree, scoped to view-stable
-  overlays — see ADR-0130). `OutboxOverlay` does not — its content
-  churns every cache event while the queue drains.
+  underlying frame, dim via `uicore.DimANSI`, composite via
+  `uicore.PlaceOverlay` (vendored from superfile, MIT) at the
+  centered top-left from `uicore.CenterOverlay`. While an
+  overlay is open, `App.Update` short-circuits keys into it.
+  Seven overlays exist: help popover (`App` owns `helpOpen` +
+  `help helppopover.Model`; `viewerOpen` selects `HelpAccount`
+  vs `HelpViewer` context), link picker (viewer-context-only,
+  `reader.LinkPicker`), attachment picker (`reader.AttachPicker`,
+  `@` from viewer; `o`/`s`/`Enter`/digit/`Esc`), move picker
+  (`movepicker.Model`, `m` from account view), confirm modal
+  (`ConfirmModal` — generic destructive-action prompt, used by
+  manual empty), outbox overlay (`OutboxOverlay`, `Q` — read-only
+  grouped summary), and conflict overlay (`ConflictOverlay`,
+  `!` — per-row retry / discard via `cache.RetryOp` /
+  `DiscardOp`). Confirm is topmost — its key-route and overlay-
+  render branches run before the others. Cascade order: confirm
+  > conflict > outbox > help > link picker > attach picker >
+  move picker. The Box-rendering overlays (`ConfirmModal`,
+  `reader.LinkPicker`, `reader.AttachPicker`, `movepicker.Model`,
+  `OutboxOverlay`, `ConflictOverlay`) share frame chrome via a
+  named-field embedded `shell uicore.ModalShell`
+  (`internal/ui/uicore/modal_shell.go`); per-overlay `View()`
+  builds `bodyRows` + `footerRows` pre-padded to `contentW`
+  cells and calls `m.shell.Box(title, bodyRows, footerRows,
+  contentW)`. `helppopover.Model` uses `lipgloss.Style` with a
+  rounded border and is
+  *not* a ModalShell consumer. `movepicker.Model`,
+  `helppopover.Model`, and `ConflictOverlay` cache their per-
+  frame render via a heap-allocated `*<T>Cache` pointer + dirty
+  flag (the only Elm-immutable-model escape hatch in the tree,
+  scoped to view-stable overlays — see ADR-0130).
+  `OutboxOverlay` does not — its content churns every cache
+  event while the queue drains.
 - Help popover advertises the full planned keybinding vocabulary,
   not just currently-wired keys. Each row in the binding tables
   carries a `wired bool` flag. Wired rows: bright-bold key + dim
   desc. Unwired rows: dim throughout. Group headings stay bright.
   Later passes flip wired flags as bindings come online.
 - Viewer link launch: `1`–`9` opens the Nth harvested URL via
-  `xdg-open` (fire-and-forget). `Tab` opens `LinkPicker` when ≥1
-  URL is harvested (inert otherwise). Picker is App-owned,
-  viewer-context-only: `j/k` cursor, `Enter`/`1`–`9` launch+close,
-  `Esc`/`Tab` close, `q` swallowed.
+  `xdg-open` (fire-and-forget). `Tab` opens `reader.LinkPicker`
+  when ≥1 URL is harvested (inert otherwise). Picker is App-
+  owned, viewer-context-only: `j/k` cursor, `Enter`/`1`–`9`
+  launch+close, `Esc`/`Tab` close, `q` swallowed.
 - Bare URL footnoting: `Link{Text: url, URL: url}` with
   `lipgloss.Width > 30` cells harvests into the footnote list with
   `trimURL(url) + nbsp + [^N]` inline. Short bare URLs pass
@@ -383,10 +396,8 @@ file describes behavior, not the key tables.
   Spartan (width < 90). Hidden when `total == 0` or `done >=
   total`. Substates: `↓ paused` / `↓⏸` while offline or mid-
   activity (driven by `m.statusBar.ConnectionState() !=
-  Connected`); `↓ ⚠` / `↓⚠` reserved for persistent throttle
-  (warn input wired through `SetBackfill(done, total, paused,
-  warn)` but always passed `false` in Pass 13 — Pass 13.1
-  surfaces real throttle state alongside search).
+  Connected`); `↓ ⚠` / `↓⚠` for persistent throttle, sourced
+  from `Cache().BackfillProgress`'s `warn` return.
   `App.refreshBackfillSegment()` queries `Cache().BackfillProgress`
   on every `account.CacheEventMsg` and `backendUpdateMsg`,
   short-circuiting when `(done, total, paused)` is unchanged so

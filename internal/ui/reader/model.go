@@ -89,9 +89,7 @@ type Model struct {
 // New constructs an empty (closed) viewer. accountEmail populates the
 // rendered "To" header.
 func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Model {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(t.FgDim)
+	sp := uicore.NewSpinner(t)
 	return Model{
 		styles:       styles,
 		theme:        t,

@@ -32,8 +32,11 @@ the ADR(s) that justify them.
   XOAUTH2 SASL snippet), `internal/config/` (`AccountConfig`,
   `UIConfig`, `LoadUI`, `Provider` registry), `internal/theme/`
   (compiled lipgloss themes), `internal/term/` (`HasNerdFont`,
-  `MeasureSPUACells`). `internal/filter/`, `internal/content/`,
-  `internal/tidy/` await their consumers.
+  `MeasureSPUACells`), `internal/filter/` (markdown→HTML for
+  compose, body rendering for the reader), `internal/content/`
+  (address-list parsing, MIME plaintext extraction, body+footnote
+  rendering, `List-Unsubscribe` parsing), `internal/tidy/`
+  (Ctrl+T compose rewrite, ADR-0178).
 - Mail backends call upstream libraries directly. No aerc fork. The
   library family is emersion (`go-imap` v2, `go-message`, `go-smtp`,
   `go-sasl`, `go-webdav`, `go-vcard`) plus `rockorager/go-jmap`.
@@ -96,30 +99,15 @@ the ADR(s) that justify them.
   APPEND on the cmd connection. Sent placement is a separate
   `Append` issued by the caller (the cache outbox).
   SASL: plain (default), login, xoauth2.
-- Cache outbox dispatches Send and Append. Schema v6 adds
-  `outbox.payload BLOB` carrying assembled MIME bytes, locked
-  at queue time. `QueueOutbound(ctx, sentFolder, env, mime,
-  scheduledFor, draftID) ([]int64, error)` returns op IDs in
-  dispatch order: `[send]` on JMAP, `[send, append]` on IMAP.
-  `scheduledFor` (unix nanos): zero = immediate, positive arms
-  the undo window. `draftID` links rows to a `drafts` row (FK
-  `ON DELETE SET NULL`); the drainer deletes that draft in the
-  OpDone tx on success. `QueueSend`/`QueueAppend` carry the
-  same trailing parameters; `SendArgs{Envelope}` /
-  `AppendArgs{Flag}` ride in `outbox.args`. The drainer's
-  `dispatch(args, row)` routes to `Backend.Send`/`Append` via
-  `row.FolderName`/`row.Payload`. `revertOptimisticTx` no-ops
-  on Send/Append. `CancelOps(opIDs)` atomically deletes pending
-  rows or returns `ErrNotPending`; used by the App's `u` inside
-  `[ui] undo-send-window` (default 10s, range `[0, 5m]`; zero
-  disables) and by the Outbox view's `c`. Linked drafts rows
-  are not touched on cancel. `RescheduleOp(opID,
-  newScheduledFor)` updates `scheduled_for` iff `OpPending` and
-  `scheduled_for > now`, else `ErrNotPending`.
-  `OutboxScheduled()` returns `[]OutboxRow` (pending or failed)
-  joined left to `folders` and `drafts` via `draft_id`, ordered
-  `scheduled_for ASC, id ASC` with NULL last; Subject from first
-  4 KB of payload via `net/textproto`. ADRs 0183, 0184.
+- Cache outbox dispatches Send and Append. Schema v6 carries
+  assembled MIME bytes in `outbox.payload`; v10 adds
+  `scheduled_for` (undo-send / send-later) and `draft_id` FK
+  (`ON DELETE SET NULL`; drainer deletes the linked draft in the
+  OpDone tx on success). `SendArgs{Envelope}` / `AppendArgs{Flag}`
+  ride in `outbox.args`. `QueueOutbound` returns op IDs in
+  dispatch order — `[send]` on JMAP, `[send, append]` on IMAP. See
+  `.claude/rules/cache-invariants.md` for queue / cancel /
+  reschedule mechanics. ADRs 0183, 0184.
 
 ### Elm architecture & idiomatic bubbletea
 
@@ -241,9 +229,11 @@ the ADR(s) that justify them.
   through the `Styles` struct from `theme.CompiledTheme`.
   `lipgloss.NewStyle()` is permitted only in
   `internal/theme/palette.go`, `internal/ui/styles.go`, and
-  per-subpackage `styles.go` files (each subpackage's `Styles` is
-  a narrow projection of `internal/ui.Styles` constructed by
-  `NewStyles(*theme.CompiledTheme)`). Hex literals only in `themes.go`.
+  per-subpackage `styles.go` files (each bubbles-shaped
+  subpackage projects a narrow `Styles` from `internal/ui.Styles`
+  via `NewStyles(*theme.CompiledTheme)`; `uicore/styles.go` holds
+  its own chrome-primitive styles, since uicore does not project
+  a `Styles` struct). Hex literals only in `themes.go`.
   The semantic map from palette slots to UI surfaces lives in
   `docs/poplar/styling.md`; update it before changing any color.
 

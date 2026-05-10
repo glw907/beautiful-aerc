@@ -8,65 +8,46 @@ not "better mutt."
 
 ## Release stance
 
-The project moves through three phases with different rules
-(ADR-0105). Check `STATUS.md` to see which phase is active.
+Three phases (ADR-0105). `STATUS.md` shows the active phase. Full
+rules for beta-soak and post-1.0 live in
+`docs/poplar/release-stance.md` — load when entering those phases.
 
-**Pre-beta** (now → Pass 10): **clean code outweighs stability.**
+**Pre-beta** (active through `v0.9.0` cut): **clean code outweighs
+stability.**
 
 - Refactor and rename freely. No compat shims, no "churn cost"
   framing, no dead fields preserved "in case Pass N needs them" —
   strip them; the next pass re-adds with its consumer.
 - When you notice a small adjacent issue while finishing other
-  work — a bug, an awkward API, dead code, duplicated logic, a
-  named type that no longer fits — **fix it inline** as part of
-  the current pass. Do **not** offer to log it, do **not** offer
-  to /schedule it, do **not** ask permission, do **not** add it
-  to the backlog. The only valid reasons to defer are: (a) the
-  fix needs research that would derail the current pass, or
-  (b) the fix touches a file the current pass deliberately
-  shouldn't touch for review-scope reasons. "It's not in the
-  plan" is not a reason. "It's adjacent but unrelated" is not a
-  reason — adjacency is the whole point. (Distinction vs
-  `/simplify`: that reviews code *you just wrote*; this rule
-  covers pre-existing ugliness you ran into while passing
-  through. Both flow into the current pass.) Reserve /schedule
-  for genuinely time-gated follow-ups (soak windows, metric
-  checks, recurring sweeps).
+  work — a bug, awkward API, dead code, duplicated logic, a named
+  type that no longer fits — **fix it inline** as part of the
+  current pass. Don't offer to log it, /schedule it, or add it to
+  the backlog. The only valid defer reasons are: (a) the fix
+  needs research that would derail the current pass, or (b) the
+  fix touches a file the current pass shouldn't touch for review-
+  scope reasons. "It's not in the plan" / "adjacent but unrelated"
+  are not reasons — adjacency is the whole point. (Distinct from
+  `/simplify`, which reviews code you just wrote.) Reserve
+  /schedule for genuinely time-gated follow-ups.
 - Migrations and breaking changes are first-class — explain in
   the commit message and ADR; don't engineer around them. **The
   finished tree reads as if poplar were written natively on the
-  new dependency, not patched over.** No v1 idioms in v2 syntax,
-  no stubs awaiting a sibling task, no cross-task TODOs, no
-  commented-out legacy. When two tasks touch a file, the earlier
-  deletes; the later writes the v2-native replacement.
+  new dependency.** No v1 idioms in v2 syntax, no stubs awaiting
+  a sibling task, no cross-task TODOs, no commented-out legacy.
+  When two tasks touch a file, the earlier deletes; the later
+  writes the v2-native replacement.
 - The only sacred thing is data on disk the user can't easily
   regenerate (mail caches, OAuth refresh tokens).
-- **Anti-pattern when triaging review findings:** never skip with
-  framings like "cross-package," "schema change," "non-trivial
-  refactor," "would require interface change," "churn cost,"
-  "out of scope." Every one of those describes work this pre-beta
-  posture explicitly endorses, so they cannot be used as defer
-  rationales. Schema work in particular is *welcomed* now (v1.0
-  freeze is the trigger to land schema improvements, not the
-  reason to defer them). The only valid skip rationales are:
-  (a) **speculative future consumer** — the finding adds a
-  field/type/hook with no current call site and no immediate
-  need; (b) **upstream-blocked** — requires a third-party change
-  the project doesn't control or vendor; (c) **premature
-  optimization without measurement** (efficiency findings only,
-  bounded current shape). Anything else: apply it.
-
-**Beta soak** (Pass 11 ships `v0.9.0` → `v1.0.0`): **stability first.**
-
-- Master accepts bug fixes only. No new features on master.
-- On-disk data formats frozen. Schema versions + automatic
-  lossless migrations across beta releases.
-- Refactors that don't touch user-visible behavior are OK if
-  small, reviewable, and tested.
-- New features queue on the `1.1` branch.
-
-**Post-1.0** (`v1.0.0` ships): standard SemVer. `v1.x.y`
-backwards-compatible; breaking changes wait for `v2.0.0`.
+- **Triaging review findings:** never skip with framings like
+  "cross-package," "schema change," "non-trivial refactor,"
+  "would require interface change," "churn cost," or "out of
+  scope" — pre-beta endorses all of these. Schema work is
+  *welcomed* now (v1.0 freeze is the trigger to land schema
+  improvements). Valid skip rationales: (a) **speculative future
+  consumer** (no current call site, no immediate need);
+  (b) **upstream-blocked** (third-party change not controlled);
+  (c) **premature optimization without measurement** (efficiency
+  findings only). Anything else: apply it.
 
 ## Conventions
 
@@ -128,6 +109,8 @@ binding facts that are not universal.
 
 ## On-demand reading
 
+- `docs/poplar/release-stance.md` — beta-soak and post-1.0 phase
+  rules. Load when entering those phases.
 - `docs/poplar/system-map.md` — package layout, data flow, hook and
   skill inventory. Load when you need to find where something lives.
 - `docs/poplar/styling.md` — palette-to-surface map. **Load before
@@ -162,20 +145,15 @@ covers both starting a pass (read STATUS, read invariants, read
 plan, execute) and ending one (the consolidation ritual).
 
 **Pass size budget.** A pass should fit in roughly **8–12 tasks**
-and one ADR (or two tightly-coupled ADRs). When planning, if the
-task list grows past 12 or the ADR splits into two unrelated
-subsystems, **split the pass before coding** — the second
-subsystem becomes its own pass with its own plan, even when both
-are part of the same nominal feature. Symptoms of an oversized
-pass that already started: per-task review fatigue, plan
+and one ADR (or two tightly-coupled ADRs). If the task list grows
+past 12 or the ADR splits into two unrelated subsystems, **split
+the pass before coding** — the second subsystem becomes its own
+pass. Mid-pass symptoms of oversize: per-task review fatigue, plan
 deviations the controller waves through, integration bugs that
 only surface at consolidation, ADR-writing that asks "what was
-this pass even about?" When you notice these, split inline:
-land what's done, queue the rest as `<n>.1` / `<n>.2` follow-up
-passes in STATUS, and stop. Pass 9d (Catkin annotations + 14
-tasks + two subsystems in one ADR) is the canonical too-large
-example; its post-hoc 9d.1–9d.4 audits exist *because* the pass
-ran long. Avoid that shape.
+this pass even about?" When you notice these, split inline: land
+what's done, queue the rest as `<n>.1` / `<n>.2` follow-ups in
+STATUS, and stop.
 
 ## Build
 
