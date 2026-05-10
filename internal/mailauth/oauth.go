@@ -19,7 +19,7 @@ type Config struct {
 	AuthURL      string
 	TokenURL     string
 	Scopes       []string
-	// RedirectPortRange is reserved for the loopback PKCE server (Task 5).
+	// RedirectPortRange bounds the loopback port the consent server listens on.
 	RedirectPortRange [2]int
 }
 

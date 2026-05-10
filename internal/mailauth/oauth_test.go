@@ -128,8 +128,8 @@ func TestTokenRefreshesNearExpiry(t *testing.T) {
 func TestTokenSurfacesAuthErrorOnInvalidGrant(t *testing.T) {
 	fs := newFakeTokenServer(t)
 	fs.respond = func(w http.ResponseWriter) {
-		w.WriteHeader(http.StatusBadRequest)
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 			"error":             "invalid_grant",
 			"error_description": "token revoked",
