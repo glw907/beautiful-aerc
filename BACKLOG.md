@@ -4,6 +4,9 @@
 
 ## High
 
+- [ ] **#42** IMAP XOAUTH2 internal token refresh `#improvement` `#poplar` `#v1` *(2026-05-10)* — **pre-beta refactor**
+  Invariants note "no internal refresh until Pass 9.6"; `internal/mailimap/auth.go` resolves the access token from `password-cmd` once at Connect and never refreshes. Shipping v1.0 with token expiry as a known cliff is a correctness gap, not polish — Gmail/Outlook XOAUTH2 tokens expire on the order of an hour, so any long-lived poplar session will hit `AUTHENTICATIONFAILED` mid-IDLE with no recovery path. Scope: refresh hook alongside the `password-cmd` resolver; `mail.ErrAuth` from cmd or idle goroutines triggers a re-resolve and retry; SMTP cached client drops on auth failure so the next send picks up the fresh token. Touches `internal/mailimap/auth.go`, `internal/mailimap/imap.go` (idle reconnect path), and the `password-cmd` contract docs in `docs/poplar/invariants.md`.
+
 - [x] ~~**#39** Discard path leaves the local drafts row behind~~ `#bug` `#poplar` `#compose` *(2026-05-06)* (closed 2026-05-06)
   Resolved in Pass 9h.6: root cause was the in-flight autosave Cmd's `UpsertDraft` racing `DeleteDraft` and re-inserting the row after `m.compose` was nilled. Fix split `cache.UpsertDraft` into `CreateDraft` (Init, insert-or-update) and `UpdateDraft` (autosave, UPDATE-only — 0 rows = no-op). After DeleteDraft, the in-flight Update is a benign 0-row no-op rather than resurrecting the row. ADR-0165.
 
@@ -83,6 +86,12 @@
   Email browsing within neovim (folder list, message list, viewer as buffers), telescope pickers, compose integration, poplar command passthrough. Requires IPC/RPC interface in poplar. Design when core client is stable.
 
 ## Medium
+
+- [ ] **#44** Resolve `internal/compose` vs `internal/ui/compose` package-name collision `#improvement` `#poplar` *(2026-05-10)* — **pre-beta refactor**
+  ADR-0163 worked around the collision by aliasing imports as `uicompose` (App-side) and `mailcompose` (inside `internal/ui/compose/`); the alias dance is a tell that the layout is wrong. Pre-beta is when renames are cheap. Likely shape: rename the domain package (`internal/compose/` → `internal/mailcompose/` or `internal/mail/outbound/`) so both sides import naturally and the aliases disappear. Touches every importer of either package plus the relevant lines in `docs/poplar/invariants.md` (Architecture > Compose) and ADR-0163.
+
+- [ ] **#43** Drop `mail.MessageInfo.Date string` legacy fallback `#improvement` `#poplar` *(2026-05-10)* — **pre-beta refactor**
+  `SentAt time.Time` is authoritative for sorts and date-column rendering; `Date` is only used as a wire-string fallback when fixtures predate `SentAt` (`lessMessage` falls back to lex-compare on `Date` when `SentAt` is zero on both operands; `displayDate` falls back to the wire `Date` for zero `SentAt`). Pre-beta is the time to delete the field, regenerate stale fixtures, and remove the fallback branches. Touches `internal/mail/types.go`, `internal/ui/messagelist/model.go`, `internal/cache/syncer.go`, fixtures under `internal/ui/messagelist/testdata/`, and the wire-shape paragraph in `docs/poplar/invariants.md`.
 
 - [ ] **#41** Add CONTRIBUTING.md with Vale install line and `make check` workflow `#improvement` `#docs` *(2026-05-07)* — **scheduled: v1.0 prep**
   Repo doesn't have a CONTRIBUTING.md yet. Doc-voice initiative (ADR-0174) introduced Vale as a build dep; contributors need to know to install it. Scope is bigger than just Vale: dev setup, branch policy, PR shape, issue templates, the `make check` gate (fmt-check + vet + vale + test), and the `simplify` review pattern for AI-authored changes. Brainstorm separately when v1.0 prep starts. Spec: `docs/superpowers/specs/2026-05-07-doc-voice-design.md`.
