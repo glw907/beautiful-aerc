@@ -20,6 +20,7 @@ type Styles struct {
 	ProbeStepPending lipgloss.Style
 	Help             lipgloss.Style
 	Body             lipgloss.Style
+	OAuthPane        lipgloss.Style
 }
 
 func NewStyles(t *theme.CompiledTheme) Styles {
@@ -34,5 +35,6 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		ProbeStepPending: lipgloss.NewStyle().Foreground(t.FgDim),
 		Help:             lipgloss.NewStyle().Foreground(t.FgDim),
 		Body:             lipgloss.NewStyle().Foreground(t.FgBase),
+		OAuthPane:        lipgloss.NewStyle().PaddingLeft(2),
 	}
 }

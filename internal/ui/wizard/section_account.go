@@ -210,8 +210,8 @@ func (s *accountSection) View() string {
 func providerOptions() []huh.Option[string] {
 	return []huh.Option[string]{
 		huh.NewOption("Fastmail              JMAP, paste an API token", "fastmail"),
-		huh.NewOption("Gmail                 OAuth (Pass 14.1)", "gmail"),
-		huh.NewOption("Outlook / Microsoft   OAuth (Pass 14.1)", "outlook"),
+		huh.NewOption("Gmail                 OAuth, app approval required", "gmail"),
+		huh.NewOption("Outlook / Microsoft   OAuth, app approval required", "outlook"),
 		huh.NewOption("iCloud                IMAP, app password", "icloud"),
 		huh.NewOption("Yahoo                 IMAP, app password", "yahoo"),
 		huh.NewOption("Zoho                  IMAP, app password", "zoho"),

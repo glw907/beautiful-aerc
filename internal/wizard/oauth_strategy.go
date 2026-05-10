@@ -22,7 +22,7 @@ type oauthStrategy struct {
 
 // NewOAuthStrategy returns a credential strategy that runs the PKCE
 // authorization flow through cli and returns an OAuth-shaped AccountConfig.
-func NewOAuthStrategy(cli Authorizer, preset, email, cid, secret string) *oauthStrategy {
+func NewOAuthStrategy(cli Authorizer, cid, secret string) *oauthStrategy {
 	return &oauthStrategy{cli: cli, cid: cid, secret: secret}
 }
 

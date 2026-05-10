@@ -19,7 +19,7 @@ func (f *fakeOAuthClient) Backend() mailauth.Backend           { return mailauth
 
 func TestOAuthStrategyApplySuccess(t *testing.T) {
 	cli := &fakeOAuthClient{outcome: nil}
-	s := wizard.NewOAuthStrategy(cli, "gmail", "user@gmail.com", "client-id", "client-secret")
+	s := wizard.NewOAuthStrategy(cli, "client-id", "client-secret")
 	cfg, err := s.Apply(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestOAuthStrategyApplySuccess(t *testing.T) {
 
 func TestOAuthStrategyApplyConsentTimeout(t *testing.T) {
 	cli := &fakeOAuthClient{outcome: mailauth.ErrConsentTimeout}
-	s := wizard.NewOAuthStrategy(cli, "gmail", "u@x", "id", "sec")
+	s := wizard.NewOAuthStrategy(cli, "id", "sec")
 	if _, err := s.Apply(context.Background()); !errors.Is(err, mailauth.ErrConsentTimeout) {
 		t.Fatalf("want ErrConsentTimeout, got %v", err)
 	}

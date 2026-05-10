@@ -11,7 +11,6 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
@@ -171,7 +170,7 @@ func (s *oauthSection) runAuthorize() tea.Cmd {
 		}
 
 		cli := mailauth.NewClient(cfg, store, slug, backend)
-		strategy := wizdomain.NewOAuthStrategy(cli, preset, email, cid, secret)
+		strategy := wizdomain.NewOAuthStrategy(cli, cid, secret)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -193,17 +192,15 @@ func (s *oauthSection) View() string {
 			b.WriteString(st.ProbeStepFail.Render("OAuth failed: " + s.authErr))
 			b.WriteString("\n\n")
 			b.WriteString(st.Help.Render("[r] retry   [s] cancel"))
-			return lipgloss.NewStyle().PaddingLeft(2).Render(b.String())
+			return st.OAuthPane.Render(b.String())
 		}
-		return lipgloss.NewStyle().PaddingLeft(2).Render(
+		return st.OAuthPane.Render(
 			s.spinner.View() + "  " + st.Help.Render("Waiting for browser consent…"),
 		)
 	}
 	return ""
 }
 
-// oauthFallbackDir returns the XDG-aware directory for age-encrypted
-// token files, creating it if absent.
 func oauthFallbackDir() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
