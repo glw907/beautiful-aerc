@@ -1,5 +1,14 @@
 package config
 
+// OAuthDefaults holds the OAuth 2.0 authorization and token endpoint
+// URLs for a built-in provider preset. Scopes is the recommended
+// minimal set; callers may append provider-specific additions.
+type OAuthDefaults struct {
+	AuthURL  string
+	TokenURL string
+	Scopes   []string
+}
+
 // CredentialStrategy names how a provider expects callers to obtain
 // the credential: an app-specific password, an API token, an OAuth
 // flow, or hand-entered IMAP/JMAP creds for self-hosted servers.
@@ -41,6 +50,16 @@ type Provider struct {
 	// HelpURL points at the provider's app-password or token-management
 	// page. Empty when no canonical URL exists.
 	HelpURL string
+
+	// OAuth carries the provider's OIDC/OAuth 2.0 endpoint defaults.
+	// Nil for non-OAuth presets. When non-nil, accounts using this
+	// preset must supply an [account.oauth] block.
+	OAuth *OAuthDefaults
+
+	// OAuthRequiresSecret reports whether the provider's OAuth app
+	// registration must include a client secret. Public-client flows
+	// (PKCE-only) leave this false.
+	OAuthRequiresSecret bool
 }
 
 // Providers maps preset name to Provider. Adding a new well-known
@@ -91,6 +110,12 @@ var Providers = map[string]Provider{
 		SMTPStartTLS:       true,
 		CredentialStrategy: StrategyOAuth,
 		HelpURL:            "https://account.microsoft.com/security",
+		OAuth: &OAuthDefaults{
+			AuthURL:  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			Scopes:   []string{"https://outlook.office.com/IMAP.AccessAsUser.All", "https://outlook.office.com/SMTP.Send", "offline_access"},
+		},
+		OAuthRequiresSecret: true,
 	},
 	"mailbox-org": {
 		Backend:            "imap",
@@ -137,6 +162,12 @@ var Providers = map[string]Provider{
 		SMTPPort:           465,
 		CredentialStrategy: StrategyOAuth,
 		HelpURL:            "https://myaccount.google.com/apppasswords",
+		OAuth: &OAuthDefaults{
+			AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+			TokenURL: "https://oauth2.googleapis.com/token",
+			Scopes:   []string{"https://mail.google.com/"},
+		},
+		OAuthRequiresSecret: true,
 	},
 	"protonmail": {
 		Backend:            "imap",

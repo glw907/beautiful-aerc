@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -593,6 +594,10 @@ name        = "g"
 provider    = "gmail"
 email       = "me@example.com"
 password    = "tok"
+
+  [account.oauth]
+  client-id     = "id"
+  client-secret = "sec"
 `
 	accts, err := ParseAccountsFromBytes([]byte(cfg))
 	if err != nil {
@@ -842,6 +847,54 @@ from = "Geoff <geoff@907.life>"
 	want := []Identity{{Name: "Geoff", Email: "geoff@907.life"}}
 	if !reflect.DeepEqual(got[0].Identities, want) {
 		t.Errorf("identities = %#v, want %#v", got[0].Identities, want)
+	}
+}
+
+func TestLoadOAuthAccount(t *testing.T) {
+	const src = `
+[[account]]
+name = "Work"
+provider = "gmail"
+email = "u@gmail.com"
+auth = "xoauth2"
+oauth-store = "keyring"
+
+  [account.oauth]
+  client-id = "id"
+  client-secret = "sec"
+  scopes = ["https://mail.google.com/"]
+`
+	got, err := ParseAccountsFromBytes([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := got[0]
+	if a.OAuth == nil || a.OAuth.ClientID != "id" {
+		t.Fatalf("OAuth: %+v", a.OAuth)
+	}
+	if a.OAuthStore != "keyring" {
+		t.Fatalf("OAuthStore: %q", a.OAuthStore)
+	}
+	if a.OAuth.AuthURL == "" || a.OAuth.TokenURL == "" {
+		t.Fatalf("preset URLs not filled: %+v", a.OAuth)
+	}
+}
+
+func TestValidateOAuthMissingClientID(t *testing.T) {
+	const src = `
+[[account]]
+name = "Work"
+provider = "gmail"
+email = "u@gmail.com"
+auth = "xoauth2"
+
+  [account.oauth]
+  client-secret = "sec"
+`
+	_, err := ParseAccountsFromBytes([]byte(src))
+	var cerr *ConfigError
+	if !errors.As(err, &cerr) || cerr.Field != "oauth.client-id" {
+		t.Fatalf("want ConfigError on oauth.client-id, got %v", err)
 	}
 }
 

@@ -135,6 +135,33 @@ func TestRender_CacheBlockEmittedWhenSet(t *testing.T) {
 	}
 }
 
+func TestRenderOAuthAccount(t *testing.T) {
+	acct := AccountConfig{
+		Name:    "Work",
+		Preset:  "gmail",
+		Backend: "imap",
+		Email:   "u@gmail.com",
+		Auth:    "xoauth2",
+		OAuth: &OAuthConfig{
+			ClientID:     "id",
+			ClientSecret: "sec",
+			Scopes:       []string{"s"},
+		},
+		OAuthStore: "keyring",
+	}
+	out := string(Render([]AccountConfig{acct}, DefaultUIConfig(), defaultCache()))
+	for _, want := range []string{
+		`provider = "gmail"`,
+		`oauth-store = "keyring"`,
+		`[account.oauth]`,
+		`client-id = "id"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderFolderSubsections_Empty(t *testing.T) {
 	got := RenderFolderSubsections(nil, nil)
 	if got != "" {

@@ -137,6 +137,16 @@ type signatureEntry struct {
 	File string `toml:"file"`
 }
 
+// OAuthConfig carries the OAuth 2.0 client registration for one account.
+// Endpoint URLs may be omitted when the provider preset supplies them.
+type OAuthConfig struct {
+	ClientID     string   `toml:"client-id"`
+	ClientSecret string   `toml:"client-secret"`
+	AuthURL      string   `toml:"auth-url,omitempty"`
+	TokenURL     string   `toml:"token-url,omitempty"`
+	Scopes       []string `toml:"scopes,omitempty"`
+}
+
 // AccountConfig holds the configuration for a single email account.
 type AccountConfig struct {
 	Name string
@@ -197,6 +207,15 @@ type AccountConfig struct {
 	// Contacts is the CardDAV sync config. Nil when no
 	// [account.contacts] block is present.
 	Contacts *ContactsConfig
+
+	// OAuth carries the OAuth 2.0 client registration. Nil for
+	// non-OAuth accounts. Endpoint URLs fill from the provider preset
+	// when absent from the TOML block.
+	OAuth *OAuthConfig
+
+	// OAuthStore names the token-store backend ("keyring", "age-file").
+	// Written by the wizard; empty means unset.
+	OAuthStore string
 }
 
 // ExpandHome rewrites a leading "~" to the user's home directory.
@@ -295,6 +314,8 @@ type accountEntry struct {
 	SMTP           smtpEntry         `toml:"smtp"`
 	Contacts       *ContactsConfig   `toml:"contacts"`
 	Identities     []identityEntry   `toml:"identity"`
+	OAuth          *OAuthConfig      `toml:"oauth"`
+	OAuthStore     string            `toml:"oauth-store"`
 }
 
 type smtpEntry struct {
@@ -402,6 +423,41 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
+	if p, ok := Providers[e.Provider]; ok && p.OAuth != nil {
+		if e.OAuth == nil {
+			return nil, &ConfigError{
+				Account: e.Name,
+				Field:   "oauth",
+				Message: "OAuth provider requires [account.oauth] block",
+				Suggest: `add an [account.oauth] block with client-id and client-secret`,
+			}
+		}
+		if e.OAuth.AuthURL == "" {
+			e.OAuth.AuthURL = p.OAuth.AuthURL
+		}
+		if e.OAuth.TokenURL == "" {
+			e.OAuth.TokenURL = p.OAuth.TokenURL
+		}
+		if len(e.OAuth.Scopes) == 0 {
+			e.OAuth.Scopes = p.OAuth.Scopes
+		}
+		if p.OAuthRequiresSecret && e.OAuth.ClientSecret == "" {
+			return nil, &ConfigError{
+				Account: e.Name,
+				Field:   "oauth.client-secret",
+				Message: "client-secret required for this provider",
+			}
+		}
+	}
+
+	if e.OAuth != nil && e.OAuth.ClientID == "" {
+		return nil, &ConfigError{
+			Account: e.Name,
+			Field:   "oauth.client-id",
+			Message: "client-id required",
+		}
+	}
+
 	password, err := resolveEnv(e.Password)
 	if err != nil {
 		return nil, fmt.Errorf("account %q (provider = %q) password: %w", e.Name, e.Provider, err)
@@ -495,6 +551,8 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		FoldersExclude: e.FoldersExclude,
 		Params:         e.Params,
 		SMTP:           smtp,
+		OAuth:          e.OAuth,
+		OAuthStore:     e.OAuthStore,
 	}
 
 	if e.CopyTo != "" {

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -184,11 +185,32 @@ func writeAccount(b *strings.Builder, a AccountConfig) {
 	case a.Password != "":
 		writeKV(b, "password", a.Password)
 	}
+	if a.OAuthStore != "" {
+		writeKV(b, "oauth-store", a.OAuthStore)
+	}
 
-	// [account.smtp] precedes [[account.identity]] blocks. A bare
-	// [section] header after array-of-tables entries would otherwise
-	// be parsed as a sub-table of the last array element instead of
-	// the parent.
+	// [account.oauth] and [account.smtp] precede [[account.identity]]
+	// blocks. A bare [section] header after array-of-tables entries
+	// would be parsed as a sub-table of the last array element instead
+	// of the parent.
+	if a.OAuth != nil {
+		b.WriteString("\n[account.oauth]\n")
+		writeKV(b, "client-id", a.OAuth.ClientID)
+		writeKV(b, "client-secret", a.OAuth.ClientSecret)
+		// Elide endpoint URLs and scopes when they match the preset
+		// defaults so round-trips stay clean.
+		presetOAuth := oauthPresetsFor(a.Preset)
+		if a.OAuth.AuthURL != "" && (presetOAuth == nil || a.OAuth.AuthURL != presetOAuth.AuthURL) {
+			writeKV(b, "auth-url", a.OAuth.AuthURL)
+		}
+		if a.OAuth.TokenURL != "" && (presetOAuth == nil || a.OAuth.TokenURL != presetOAuth.TokenURL) {
+			writeKV(b, "token-url", a.OAuth.TokenURL)
+		}
+		if len(a.OAuth.Scopes) > 0 && (presetOAuth == nil || !slices.Equal(a.OAuth.Scopes, presetOAuth.Scopes)) {
+			writeKVStringSlice(b, "scopes", a.OAuth.Scopes)
+		}
+	}
+
 	if a.SMTP != (SMTPConfig{}) {
 		b.WriteString("\n[account.smtp]\n")
 		s := a.SMTP
@@ -302,6 +324,25 @@ func formatSize(n int64) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+func oauthPresetsFor(preset string) *OAuthDefaults {
+	if p, ok := Providers[preset]; ok {
+		return p.OAuth
+	}
+	return nil
+}
+
+func writeKVStringSlice(b *strings.Builder, k string, vals []string) {
+	b.WriteString(k)
+	b.WriteString(" = [")
+	for i, v := range vals {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(quoted(v))
+	}
+	b.WriteString("]\n")
 }
 
 func writeKV(b *strings.Builder, k, v string) {
