@@ -1,8 +1,10 @@
 package reader
 
 import (
+	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 type Styles struct {
@@ -14,6 +16,7 @@ type Styles struct {
 	InviteSummary   lipgloss.Style
 	InviteField     lipgloss.Style
 	InviteCancelled lipgloss.Style
+	List            list.Styles
 }
 
 func NewStyles(t *theme.CompiledTheme) Styles {
@@ -33,5 +36,6 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 		InviteSummary:   lipgloss.NewStyle().Foreground(t.FgBright).Bold(true).Background(t.BgBase),
 		InviteField:     lipgloss.NewStyle().Foreground(t.FgBase).Background(t.BgBase),
 		InviteCancelled: lipgloss.NewStyle().Foreground(t.ColorWarning).Bold(true).Background(t.BgBase),
+		List:            uicore.NewListStyles(t),
 	}
 }

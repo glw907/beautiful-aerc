@@ -154,19 +154,21 @@ func containsClosed(msgs []tea.Msg) bool {
 	return false
 }
 
-func TestLinkPickerRowFormatLeadingSpacePad(t *testing.T) {
-	links := make([]string, 12)
+func TestLinkPickerRowFormatFixed(t *testing.T) {
+	// Picker uses fixed "[N] " prefix (4 chars); no dynamic padding needed since
+	// the digit-key surface caps at 9 items.
+	links := make([]string, 9)
 	for i := range links {
 		links[i] = "https://a.com"
 	}
 	p := newTestLinkPicker(t)
 	p = p.SetSize(80, 24).Open(links)
 	out := p.View()
-	if !strings.Contains(out, " [1]") {
-		t.Fatalf("expected ' [1]' (leading-space pad) in output, got:\n%s", out)
+	if !strings.Contains(out, "[1]") {
+		t.Fatalf("expected '[1]' in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, "[12]") {
-		t.Fatalf("expected '[12]' in output, got:\n%s", out)
+	if strings.Contains(out, " [1]") {
+		t.Fatalf("expected no leading-space pad in fixed-format picker, got:\n%s", out)
 	}
 }
 
@@ -194,5 +196,37 @@ func TestLinkPickerPreviewShowsFullURL(t *testing.T) {
 	out := p.View()
 	if !strings.Contains(out, "example.com/some/very/long") {
 		t.Fatalf("preview should expose full URL prefix, got:\n%s", out)
+	}
+}
+
+func TestLinkPicker_listModel_cursorAdvances(t *testing.T) {
+	p := NewLinkPicker(NewStyles(theme.Nord)).Open([]string{"https://a", "https://b", "https://c"})
+	p = p.SetSize(60, 12)
+
+	if got := p.Cursor(); got != 0 {
+		t.Fatalf("initial cursor = %d, want 0", got)
+	}
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j'})
+	if got := p.Cursor(); got != 1 {
+		t.Fatalf("cursor after j = %d, want 1", got)
+	}
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'k'})
+	if got := p.Cursor(); got != 0 {
+		t.Fatalf("cursor after k = %d, want 0", got)
+	}
+}
+
+func TestLinkPicker_listModel_enterLaunchesCursor(t *testing.T) {
+	p := NewLinkPicker(NewStyles(theme.Nord)).Open([]string{"https://a", "https://b"})
+	p = p.SetSize(60, 12)
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j'})
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on cursor produced no Cmd")
+	}
+	msgs := collectMsgs(cmd)
+	if !containsLaunchURL(msgs, "https://b") {
+		t.Fatalf("LaunchURLMsg.URL mismatch; got msgs %v", msgs)
 	}
 }

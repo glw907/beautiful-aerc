@@ -140,6 +140,17 @@ func (p AttachPicker) saveCursor() tea.Cmd {
 
 const attachPickerMaxWidth = 70
 
+func visibleLinkRows(total, height int) int {
+	maxRows := height - 7
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	if total < maxRows {
+		return total
+	}
+	return maxRows
+}
+
 func (p AttachPicker) clampOffset() AttachPicker {
 	p.offset = uicore.ClampScrollOffset(p.cursor, visibleLinkRows(len(p.items), p.shell.Height()), p.offset)
 	return p
