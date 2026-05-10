@@ -13,7 +13,9 @@ import (
 // Indirection so tests can substitute fakes without dialing real
 // servers.
 var (
-	imapProbeFn = mailimap.Probe
+	imapProbeFn = func(ctx context.Context, cfg config.AccountConfig) mail.ProbeResult {
+		return mailimap.Probe(ctx, cfg, nil)
+	}
 	jmapProbeFn = mailjmap.Probe
 	smtpProbeFn = mailimap.ProbeSMTP
 )

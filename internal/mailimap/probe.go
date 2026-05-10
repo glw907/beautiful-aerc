@@ -12,15 +12,31 @@ import (
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailauth"
 )
 
 // Probe runs a connect-test against an IMAP account and returns a
-// step-by-step transcript. On the first failure remaining steps are
-// dropped and Err is set. SMTP probing is separate (ProbeSMTP);
+// step-by-step transcript. When oauthCli is non-nil an oauth-token step
+// runs first; failure there stops the transcript. On any failure remaining
+// steps are dropped and Err is set. SMTP probing is separate (ProbeSMTP);
 // callers run both.
-func Probe(ctx context.Context, cfg config.AccountConfig) mail.ProbeResult {
+func Probe(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) mail.ProbeResult {
+	var r mail.ProbeResult
+	if oauthCli != nil {
+		step := mail.ProbeStep{Label: "oauth-token"}
+		if _, err := oauthCli.Token(ctx); err != nil {
+			step.Status = mail.ProbeFail
+			step.Detail = err.Error()
+			r.Steps = append(r.Steps, step)
+			r.Err = err
+			return r
+		}
+		step.Status = mail.ProbeOK
+		r.Steps = append(r.Steps, step)
+	}
+
 	cli, steps, err := probeDial(cfg)
-	r := mail.ProbeResult{Steps: steps}
+	r.Steps = append(r.Steps, steps...)
 	if err != nil {
 		r.Err = err
 		return r

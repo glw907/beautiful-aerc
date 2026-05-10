@@ -7,7 +7,16 @@ import (
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailauth"
 )
+
+// memStore is a no-op TokenStore that always returns ("", nil) from Get,
+// simulating a store with no token written.
+type memStore struct{}
+
+func (m *memStore) Set(_, _ string) error        { return nil }
+func (m *memStore) Get(_ string) (string, error) { return "", nil }
+func (m *memStore) Delete(_ string) error        { return nil }
 
 func withProbeDial(t *testing.T, fn probeDialFn) {
 	t.Helper()
@@ -26,6 +35,33 @@ func okDial(cli imapClient) probeDialFn {
 	}
 }
 
+func TestProbeOAuthTokenStepFirst(t *testing.T) {
+	store := &memStore{}
+	cli := mailauth.NewClient(mailauth.Config{TokenURL: "http://example.invalid/token"}, store, "a", mailauth.BackendKeyring)
+	cfg := config.AccountConfig{Host: "h", Port: 993, Email: "u@x"}
+	r := Probe(context.Background(), cfg, cli)
+	if len(r.Steps) == 0 || r.Steps[0].Label != "oauth-token" {
+		t.Fatalf("first step label: %+v", r.Steps)
+	}
+	if !errors.Is(r.Err, mail.ErrAuth) {
+		t.Fatalf("err: %v", r.Err)
+	}
+}
+
+func TestProbeNoOAuthStepWhenNoClient(t *testing.T) {
+	withProbeDial(t, func(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, error) {
+		return nil, []mail.ProbeStep{{Label: "Connecting", Status: mail.ProbeFail, Detail: "refused"}},
+			errors.New("dial: refused")
+	})
+	cfg := config.AccountConfig{Host: "h", Port: 993, Email: "u@x", Password: "p"}
+	r := Probe(context.Background(), cfg, nil)
+	for _, s := range r.Steps {
+		if s.Label == "oauth-token" {
+			t.Fatalf("unexpected oauth-token step: %+v", r.Steps)
+		}
+	}
+}
+
 func TestProbe_HappyPath(t *testing.T) {
 	cli := newFakeClient()
 	cli.caps["UIDPLUS"] = true
@@ -34,7 +70,7 @@ func TestProbe_HappyPath(t *testing.T) {
 
 	r := Probe(context.Background(), config.AccountConfig{
 		Name: "t", Backend: "imap", Email: "u@x", Host: "imap.example", Port: 993,
-	})
+	}, nil)
 
 	wantLabels := []string{"Connecting", "TLS handshake", "AUTHENTICATE", "CAPABILITY (UIDPLUS)", "STATUS INBOX"}
 	if len(r.Steps) != len(wantLabels) {
@@ -66,7 +102,7 @@ func TestProbe_DialFailureStopsTranscript(t *testing.T) {
 		}, errors.New("dial: i/o timeout")
 	})
 
-	r := Probe(context.Background(), config.AccountConfig{Host: "x", Port: 993})
+	r := Probe(context.Background(), config.AccountConfig{Host: "x", Port: 993}, nil)
 	if len(r.Steps) != 1 {
 		t.Fatalf("len(Steps) = %d, want 1 (%+v)", len(r.Steps), r.Steps)
 	}
@@ -82,7 +118,7 @@ func TestProbe_MissingUIDPLUSFails(t *testing.T) {
 	cli := newFakeClient() // caps map empty
 	withProbeDial(t, okDial(cli))
 
-	r := Probe(context.Background(), config.AccountConfig{Host: "x", Port: 993})
+	r := Probe(context.Background(), config.AccountConfig{Host: "x", Port: 993}, nil)
 	if len(r.Steps) != 4 {
 		t.Fatalf("len(Steps) = %d, want 4 (%+v)", len(r.Steps), r.Steps)
 	}

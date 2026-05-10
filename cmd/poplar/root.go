@@ -26,6 +26,7 @@ type rootFlags struct {
 	theme    string
 	noWizard bool
 	repair   string
+	reauth   string
 }
 
 func newRootCmd() *cobra.Command {
@@ -47,6 +48,8 @@ func newRootCmd() *cobra.Command {
 		"don't auto-launch the first-run wizard; exit 78 instead")
 	cmd.Flags().StringVar(&f.repair, "repair", "",
 		"repair the named account interactively")
+	cmd.Flags().StringVar(&f.reauth, "reauth", "",
+		"re-run OAuth consent for the named account and store the new refresh token")
 	return cmd
 }
 
@@ -73,8 +76,14 @@ func runRoot(f rootFlags) error {
 			f.theme, strings.Join(theme.ThemeNames(), ", "))
 	}
 
+	if f.repair != "" && f.reauth != "" {
+		return fmt.Errorf("--repair and --reauth are mutually exclusive")
+	}
 	if f.repair != "" {
 		return runRepair(f)
+	}
+	if f.reauth != "" {
+		return runReauth(f)
 	}
 
 	accts, configPath, err := config.Load(f.config)
