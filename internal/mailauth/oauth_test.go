@@ -1,12 +1,15 @@
 package mailauth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/glw907/poplar/internal/mail"
 )
@@ -174,6 +177,97 @@ func TestTokenWithoutStoredRefreshErrAuth(t *testing.T) {
 	}
 	if got := fs.requests.Load(); got != 0 {
 		t.Errorf("expected 0 network hits, got %d", got)
+	}
+}
+
+// simulateConsent parses redirect_uri and state from authURL, then sends the
+// authorization code to the redirect URI in a goroutine.
+func simulateConsent(authURL, code, stateOverride string) {
+	go func() {
+		u, err := url.Parse(authURL)
+		if err != nil {
+			return
+		}
+		q := u.Query()
+		redirect := q.Get("redirect_uri")
+		state := q.Get("state")
+		if stateOverride != "" {
+			state = stateOverride
+		}
+		target := redirect + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(state)
+		http.Get(target) //nolint:errcheck,noctx
+	}()
+}
+
+func TestAuthorizeHappyPath(t *testing.T) {
+	fs := newFakeTokenServer(t)
+	store := newMemStore()
+
+	cfg := Config{
+		ClientID:          "cid",
+		AuthURL:           "http://example.com/auth",
+		TokenURL:          fs.srv.URL + "/token",
+		Scopes:            []string{"email"},
+		RedirectPortRange: [2]int{0, 0},
+	}
+	c := NewClient(cfg, store, "a")
+	SetOpenBrowser(c, func(authURL string) error {
+		simulateConsent(authURL, "ok", "")
+		return nil
+	})
+
+	if err := c.Authorize(context.Background()); err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	got, err := store.Get("a")
+	if err != nil {
+		t.Fatalf("store.Get: %v", err)
+	}
+	if got == "" {
+		t.Error("expected refresh token in store, got empty")
+	}
+}
+
+func TestAuthorizeStateMismatchRejected(t *testing.T) {
+	fs := newFakeTokenServer(t)
+	store := newMemStore()
+
+	cfg := Config{
+		ClientID:          "cid",
+		AuthURL:           "http://example.com/auth",
+		TokenURL:          fs.srv.URL + "/token",
+		RedirectPortRange: [2]int{0, 0},
+	}
+	c := NewClient(cfg, store, "a")
+	SetOpenBrowser(c, func(authURL string) error {
+		simulateConsent(authURL, "ok", "wrong")
+		return nil
+	})
+
+	err := c.Authorize(context.Background())
+	if !errors.Is(err, ErrStateMismatch) {
+		t.Errorf("expected ErrStateMismatch, got: %v", err)
+	}
+}
+
+func TestAuthorizeTimeout(t *testing.T) {
+	fs := newFakeTokenServer(t)
+	_ = fs
+	store := newMemStore()
+
+	cfg := Config{
+		ClientID:          "cid",
+		AuthURL:           "http://example.com/auth",
+		TokenURL:          "http://unused/token",
+		RedirectPortRange: [2]int{0, 0},
+	}
+	c := NewClient(cfg, store, "a")
+	SetOpenBrowser(c, func(string) error { return nil }) // no-op
+	SetConsentTimeout(c, 50*time.Millisecond)
+
+	err := c.Authorize(context.Background())
+	if !errors.Is(err, ErrConsentTimeout) {
+		t.Errorf("expected ErrConsentTimeout, got: %v", err)
 	}
 }
 
