@@ -1,7 +1,7 @@
-// Package mailauth — TokenStore is the OAuth refresh-token persistence seam.
-// Implementations: KeyringStore (system keyring via zalando/go-keyring) and
-// AgeFileStore (per-account age-encrypted file). OpenStore probes the keyring
-// and picks the working backend.
+// Package mailauth persists and retrieves OAuth refresh tokens. Two
+// implementations are provided: KeyringStore (system keyring via
+// zalando/go-keyring) and AgeFileStore (per-account age-encrypted file).
+// OpenStore probes the keyring and picks the working backend.
 package mailauth
 
 import "errors"
