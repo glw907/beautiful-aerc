@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mailimap"
+	"github.com/glw907/poplar/internal/theme"
+	uiwizard "github.com/glw907/poplar/internal/ui/wizard"
 	"github.com/spf13/cobra"
 )
 
@@ -25,16 +30,23 @@ func configFlagPath(cmd *cobra.Command) string {
 }
 
 func newConfigInitTemplateCmd() *cobra.Command {
-	var force bool
+	var (
+		force       bool
+		interactive bool
+		sections    string
+	)
 	cmd := &cobra.Command{
 		Use:          "init",
-		Short:        "Write a fresh self-documenting config template",
+		Short:        "Write a fresh config (template by default; --interactive runs the wizard)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagPath := configFlagPath(cmd)
 			path, err := config.Resolve(flagPath)
 			if err != nil {
 				return err
+			}
+			if interactive {
+				return runWizard(cmd, path, sections)
 			}
 			if !force {
 				if _, statErr := os.Stat(path); statErr == nil {
@@ -52,7 +64,28 @@ func newConfigInitTemplateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing config file")
+	cmd.Flags().BoolVar(&interactive, "interactive", false, "run the interactive setup wizard")
+	cmd.Flags().StringVar(&sections, "section", "", "comma-separated section names to run (account,theme,confirm)")
 	return cmd
+}
+
+func runWizard(cmd *cobra.Command, path, sections string) error {
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("%s already exists; remove it before running the wizard", path)
+	}
+	model := uiwizard.NewModel(theme.OneDark)
+	if sections != "" {
+		model = model.WithSections(strings.Split(sections, ","))
+	}
+	prog := tea.NewProgram(model,
+		tea.WithContext(cmd.Context()),
+		tea.WithInput(cmd.InOrStdin()),
+		tea.WithOutput(cmd.OutOrStdout()),
+	)
+	if _, err := prog.Run(); err != nil {
+		return fmt.Errorf("wizard: %w", err)
+	}
+	return nil
 }
 
 func newConfigPathCmd() *cobra.Command {

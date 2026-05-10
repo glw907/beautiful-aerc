@@ -1,5 +1,26 @@
 package mail
 
+import (
+	"net"
+	"strings"
+)
+
+// IsSelfHosted reports whether host looks like a self-hosted endpoint
+// where a self-signed TLS cert is plausible: RFC 1918 / IPv6 ULA,
+// loopback, or a `.local` mDNS name. Used by both the connect-error
+// hint in mailimap and the wizard's conditional "skip TLS verify"
+// prompt.
+func IsSelfHosted(host string) bool {
+	if strings.HasSuffix(host, ".local") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate()
+}
+
 // ProbeStatus is the outcome of one probe step.
 type ProbeStatus int
 

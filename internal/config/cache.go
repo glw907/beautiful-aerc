@@ -20,6 +20,13 @@ type CacheConfig struct {
 	MaxAttachmentSize int64
 }
 
+// DefaultCacheConfig returns the cache caps applied when no [cache]
+// table is present: body cache uncapped, attachment cache capped at
+// 2 GB.
+func DefaultCacheConfig() CacheConfig {
+	return defaultCache()
+}
+
 func defaultCache() CacheConfig {
 	return CacheConfig{
 		MaxSize:           0,

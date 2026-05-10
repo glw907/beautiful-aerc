@@ -153,7 +153,10 @@ func Render(accts []AccountConfig, ui UIConfig, cache CacheConfig) []byte {
 func writeAccount(b *strings.Builder, a AccountConfig) {
 	b.WriteString("[[account]]\n")
 	writeKV(b, "name", a.Name)
-	if a.Backend != "" {
+	switch {
+	case a.Preset != "":
+		writeKV(b, "provider", a.Preset)
+	case a.Backend != "":
 		writeKV(b, "provider", a.Backend)
 	}
 	writeKV(b, "email", a.Email)

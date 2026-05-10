@@ -36,7 +36,9 @@ the ADR(s) that justify them.
   compose, body rendering for the reader), `internal/content/`
   (address-list parsing, MIME plaintext extraction, body+footnote
   rendering, `List-Unsubscribe` parsing), `internal/tidy/`
-  (Ctrl+T compose rewrite, ADR-0178).
+  (Ctrl+T compose rewrite, ADR-0178), `internal/wizard/` +
+  `internal/ui/wizard/` (first-run setup wizard split into UI-free
+  domain + bubbletea/huh surface, ADR-0191).
 - Mail backends call upstream libraries directly. No aerc fork. The
   library family is emersion (`go-imap` v2, `go-message`, `go-smtp`,
   `go-sasl`, `go-webdav`, `go-vcard`) plus `rockorager/go-jmap`.
@@ -82,23 +84,17 @@ the ADR(s) that justify them.
 ### Send + Append
 
 - `mail.Backend.Send(env Envelope, mime []byte) error` and
-  `Append(folder string, mime []byte, flags Flag) error` are the
-  outbound primitives. `Envelope = { From, Rcpts }` is the
-  RFC 5321 envelope; mime is pre-assembled by
-  `compose.AssembleMIME`. `internal/mail/` does not import
-  `internal/compose/`; bytes flow one way through the stack.
-- JMAP `Send` batches `Email/import` (into the Sent mailbox) and
-  `EmailSubmission/set` in one request, using the JMAP `#k1`
-  creation reference so submission and Sent placement are atomic.
-  `Identity/get` resolves identity IDs lazily and caches them on
-  `Backend.identityIDs map[string]jmap.ID` keyed by lowercased
-  email; one probe per cache miss populates the map for every
-  identity the server returns. `Append` is the same shape minus
-  the submission call.
+  `Append(folder, mime, flags) error` are the outbound primitives;
+  `Envelope = { From, Rcpts }` is RFC 5321. `compose.AssembleMIME`
+  pre-assembles `mime`; `internal/mail/` does not import compose.
+- JMAP `Send` batches `Email/import` + `EmailSubmission/set` in one
+  request via the `#k1` creation reference (atomic submission +
+  Sent placement). `Identity/get` is lazy and cached on
+  `Backend.identityIDs` keyed by lowercased email. JMAP `Append`
+  drops the submission call.
 - IMAP `Send` runs SMTP `MAIL`/`RCPT`/`DATA`; `Append` runs IMAP
   APPEND on the cmd connection. Sent placement is a separate
-  `Append` issued by the caller (the cache outbox).
-  SASL: plain (default), login, xoauth2.
+  caller-issued `Append`. SASL: plain (default), login, xoauth2.
 - Cache outbox dispatches Send and Append. Schema v6 carries
   assembled MIME bytes in `outbox.payload`; v10 adds
   `scheduled_for` (undo-send / send-later) and `draft_id` FK
@@ -141,9 +137,10 @@ the ADR(s) that justify them.
   Keys declared as `key.Binding`, dispatched via `key.Matches`;
   `WindowSizeMsg` handlers both `SetSize` children and forward the
   msg. Full contract in `docs/poplar/bubbletea-conventions.md`.
-- `internal/ui/` is the App parent plus seven bubbles-shaped
+- `internal/ui/` is the App parent plus eight bubbles-shaped
   subpackages (`account`, `compose`, `helppopover`, `messagelist`,
-  `movepicker`, `reader`, `sidebar`) and the `uicore` sibling.
+  `movepicker`, `reader`, `sidebar`, `wizard`) and the `uicore`
+  sibling.
   Subpackages cannot import the parent. `uicore` holds shared
   chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
@@ -190,17 +187,19 @@ the ADR(s) that justify them.
   independently. Path precedence: `--config` flag, `$POPLAR_CONFIG`,
   OS default, resolved by `config.Resolve`. The TOML key for the
   preset selector is `provider`.
-- First-run flow: missing config writes `config.Template()` and
-  returns `ErrFirstRun`; root exits 78 (EX_CONFIG). Legacy
-  `accounts.toml` returns `ErrOldAccountsToml`. `password-cmd`
-  resolves on first `Connect` and caches on the Backend.
-  `AccountConfig.Name` defaults to `Email` when omitted; both
-  blank fails as `ConfigError{Field: "name"}`. Typed
+- First-run flow: missing config returns `ErrFirstRun` and root
+  exits 78 (`config init` writes the template; first-run wizard
+  auto-launch lands in 14c). Legacy `accounts.toml` returns
+  `ErrOldAccountsToml`. `password-cmd` resolves on first `Connect`
+  and caches on the Backend. `AccountConfig.Name` defaults to
+  `Email`. `AccountConfig.Preset` records the chosen preset key
+  (e.g. `"fastmail"`) so `config.Render` round-trips it as
+  `provider = "fastmail"`; the writer prefers `Preset` over
+  `Backend` when both are set. Typed
   `*config.ConfigError{Path, Line, Account, Field, Message,
   Suggest}` (sentinel `ErrConfigInvalid`) covers the four user-
   facing validators: unknown provider, missing host, missing
-  source, missing smtp.host. Identity/signature validators stay
-  on bare `fmt.Errorf` until a consumer reads Field/Suggest.
+  source, missing smtp.host.
 - `config.Provider` carries `CredentialStrategy`
   (`StrategyAppPassword`/`APIToken`/`OAuth`/`PlainIMAP`/`PlainJMAP`)
   and `HelpURL` per preset; both populate for every entry in
@@ -211,21 +210,25 @@ the ADR(s) that justify them.
   `[account.smtp]` precedes `[[account.identity]]` in the output
   (TOML quirk: a bare `[section]` after array-of-tables rebinds
   to the last array element). `[ui] theme` not yet rendered.
-- `poplar config` subcommands: `init` (writes template, `--force`
-  to overwrite), `check` (validate + connect-test each account
-  sequentially — IMAP probe then `mailimap.ProbeSMTP`), `path`,
-  `discover-folders` (merge server folder ordering into
-  `[ui.folders]`).
-- `mail.ProbeResult{Steps []ProbeStep, Err error}`
-  (`internal/mail/probe.go`) is the shared connect-test transcript.
-  `mailimap.Probe` records 5 steps (Connecting, TLS handshake,
-  AUTHENTICATE, CAPABILITY (UIDPLUS), STATUS INBOX);
-  `mailjmap.Probe` records 3 (Resolving session URL,
-  Authenticate, mailbox/get — the rockorager/go-jmap library
-  bundles TLS + bearer + Session/get into one call). First
-  failure sets `Err` and stops. Test seams: package vars
-  `probeDial`, `probeAuth`. `mailimap.layerTLS` is the shared
-  TLS-layering helper for both `dial()` and the probe.
+- `poplar config` subcommands: `init` (`--force` to overwrite;
+  `--interactive` runs the wizard, `--section=name1,name2` filters
+  the registry), `check` (validate + connect-test sequentially via
+  the IMAP probe + `mailimap.ProbeSMTP`), `path`, `discover-folders`.
+- `mail.ProbeResult{Steps, Err}` (`internal/mail/probe.go`) is the
+  shared connect-test transcript; `mailimap.Probe` records 5 steps,
+  `mailjmap.Probe` 3 (go-jmap bundles TLS + bearer + Session/get).
+  First failure sets `Err` and stops. Test seams `probeDial` /
+  `probeAuth`; `mailimap.layerTLS` is the shared TLS helper.
+  `mail.IsSelfHosted(host)` reports RFC 1918 / IPv6 ULA / loopback
+  / `.local`; the wizard's "skip TLS verify" prompts route through it.
+- `wizard.Probe(ctx, cfg)` dispatches on `cfg.Backend` to
+  `mailimap.Probe` (appending the SMTP probe) or `mailjmap.Probe`;
+  test seams `imap/jmap/smtpProbeFn`. `wizard.SelectStrategy(preset)`
+  returns a `config.CredentialStrategy` (`"imap"`/`"jmap"` → plain).
+  `wizard.Apply(Model)` returns a ready-to-render
+  `config.AccountConfig`. `internal/ui/wizard/` is the bubbletea +
+  huh surface; `defaultSections` registry composes `account` /
+  `theme` / `confirm`. ADR-0191.
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`.
   Presets fill canonical submission endpoints (465 implicit-TLS
   for gmail/fastmail/yahoo/zoho; 587 STARTTLS for outlook/icloud;
@@ -298,20 +301,16 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
 ### Address book
 
 - `internal/contacts/` is the UI-free contacts surface: value
-  types (`Contact`/`Email`/`Phone`/`Suggestion`/`Kind`/`AddressBook`),
-  the CardDAV `Client` (wraps `emersion/go-webdav/carddav` for
-  discovery, multiget, sync-collection, CTAG via raw PROPFIND), the
-  vCard parser (`emersion/go-vcard`), and the `Sync` orchestrator
-  with its `Store` seam (`internal/cache` implements). `ClientConfig`
-  is the runtime input to `NewClient`. `internal/ui/contacts/` is
-  the address-book UI surface: per-package `Styles`, pure
-  `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form` sub-models.
-  Compose autocomplete and the `i`-popover read from
-  `cache.Account.SuggestAddresses` / `LookupContact`. `i` opens the
-  popover via `parseSender`↔`content.ParseAddressList`; `C`/`M`
-  toggle Contacts mode (T9 sidebar + List + Form). Overlay cascade:
-  confirm > conflict > outbox > help > linkpicker > attachpicker >
-  movepicker > form > popover.
+  types, CardDAV `Client` (wraps `emersion/go-webdav/carddav` for
+  discovery, multiget, sync-collection, CTAG), `emersion/go-vcard`
+  parser, `Sync` orchestrator + `Store` seam (`internal/cache`
+  implements). `internal/ui/contacts/` adds per-package `Styles`,
+  pure `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form`
+  sub-models. Compose autocomplete + `i`-popover read from
+  `cache.Account.SuggestAddresses` / `LookupContact`; `C`/`M`
+  toggle Contacts mode. Overlay cascade: confirm > conflict >
+  outbox > help > linkpicker > attachpicker > movepicker > form >
+  popover.
 - `contacts.Form` is the contact edit sub-model. App-owned
   confirm cascade: form-discard > contact-delete > compose-save
   > empty-folder. Save routes through `PatchVCard` (existing)

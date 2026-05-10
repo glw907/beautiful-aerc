@@ -139,7 +139,12 @@ type signatureEntry struct {
 
 // AccountConfig holds the configuration for a single email account.
 type AccountConfig struct {
-	Name           string
+	Name string
+	// Preset is the provider preset key used in TOML ("fastmail",
+	// "yahoo", …). Empty when the user wrote "imap" / "jmap" directly.
+	// Renderers prefer Preset over Backend so the round-tripped TOML
+	// keeps the preset's host/SMTP defaults wired on next load.
+	Preset         string
 	Display        string
 	Backend        string
 	Source         string
@@ -466,8 +471,14 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
+	preset := ""
+	if _, ok := Providers[e.Provider]; ok {
+		preset = e.Provider
+	}
+
 	acct := &AccountConfig{
 		Name:           e.Name,
+		Preset:         preset,
 		Display:        e.Display,
 		Backend:        backend,
 		Source:         source,
