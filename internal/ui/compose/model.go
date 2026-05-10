@@ -15,6 +15,7 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/ansix"
 	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/tidy"
@@ -432,6 +433,9 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		return c, c.scheduleServerPushCmd()
 
+	case tea.PasteMsg:
+		return c.handlePaste(msg.Content)
+
 	case tea.KeyPressMsg:
 		if c.dropdownActive() {
 			switch msg.Code {
@@ -630,17 +634,65 @@ func (c *Model) acceptSuggestion() {
 	if ti == nil {
 		return
 	}
+	c.commitAddrField(ti, fmt.Sprintf("%s <%s>, ", sel.Name, sel.Email))
+}
+
+// commitAddrField replaces the trailing in-progress fragment of ti's
+// value with rendered (already comma-terminated), clears the
+// suggestion dropdown, and stamps the draft as edited.
+func (c *Model) commitAddrField(ti *textinput.Model, rendered string) {
 	prefix := ""
 	if i := strings.LastIndex(ti.Value(), ","); i >= 0 {
 		prefix = ti.Value()[:i+1] + " "
 	}
-	rendered := fmt.Sprintf("%s <%s>, ", sel.Name, sel.Email)
 	ti.SetValue(prefix + rendered)
 	ti.CursorEnd()
 	c.suggest = c.suggest.Clear()
+	c.markEdited()
+}
+
+func (c *Model) markEdited() {
 	c.localDirty = true
 	c.pushDirty = true
 	c.lastEditAt = time.Now()
+}
+
+func (c *Model) handlePaste(payload string) (*Model, tea.Cmd) {
+	if payload == "" {
+		return c, nil
+	}
+	switch c.focus {
+	case focusTo, focusCc, focusBcc:
+		addrs := content.ParseAddressList(payload)
+		if len(addrs) == 0 {
+			return c, nil
+		}
+		ti := c.focusedAddrField()
+		if ti == nil {
+			return c, nil
+		}
+		var b strings.Builder
+		for _, a := range addrs {
+			if a.Name != "" {
+				fmt.Fprintf(&b, "%s <%s>, ", a.Name, a.Email)
+			} else {
+				fmt.Fprintf(&b, "%s, ", a.Email)
+			}
+		}
+		c.commitAddrField(ti, b.String())
+		return c, nil
+	case focusSubject:
+		var cmd tea.Cmd
+		c.subject, cmd = c.subject.Update(tea.PasteMsg{Content: payload})
+		c.markEdited()
+		return c, cmd
+	case focusBody:
+		var cmd tea.Cmd
+		c.editor, cmd = c.editor.Update(tea.PasteMsg{Content: payload})
+		c.markEdited()
+		return c, cmd
+	}
+	return c, nil
 }
 
 // isEditMsg reports whether msg should mark the draft dirty. Navigation

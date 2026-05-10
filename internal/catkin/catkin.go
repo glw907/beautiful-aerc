@@ -18,6 +18,15 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+func pasteInto(buf Buffer, runes []rune, cur int, payload string) (Buffer, int) {
+	payloadRunes := []rune(payload)
+	newVal := string(runes[:cur]) + payload + string(runes[cur:])
+	buf.SetValue(newVal)
+	newCur := cur + len(payloadRunes)
+	buf.SetRuneOffset(newCur)
+	return buf, newCur
+}
+
 // Model is Catkin's tea.Model.
 type Model struct {
 	buf         Buffer
@@ -78,6 +87,34 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.annotations = tm.set
 		}
 		return m, nil
+	}
+	if tm, ok := msg.(tea.PasteMsg); ok {
+		payload := tm.Content
+		if payload == "" {
+			return m, nil
+		}
+		runes := []rune(m.buf.Value())
+		cur := m.buf.RuneOffset()
+		var b Buffer
+		if start, end, ok := urlWrapTarget(runes, cur, payload); ok {
+			word := string(runes[start:end])
+			replacement := "[" + word + "](" + payload + ")"
+			newVal := string(runes[:start]) + replacement + string(runes[end:])
+			b = m.buf
+			b.SetValue(newVal)
+			b.SetRuneOffset(start + utf8.RuneCountInString(replacement))
+		} else {
+			b, _ = pasteInto(m.buf, runes, cur, payload)
+		}
+		m.buf = b
+		m.undo.push(snap{b.Value(), b.RuneOffset()})
+		var cmd tea.Cmd
+		if len(m.annotators) > 0 {
+			m.srcGen++
+			cmd = scheduleAnnotateCmd(m.srcGen)
+		}
+		m = m.closePopoverIfCursorLeftRange()
+		return applyScrollOff(m), cmd
 	}
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		if m.popover.open {

@@ -16,22 +16,14 @@ modules, or pinned-tag GitHub permalinks). When this doc and the
 sources disagree, the sources win — file an ADR documenting the
 deviation, or fix this doc.
 
-**13.2a/13.2b note.** Pass 13.2a landed the v2 substrate
-(imports, KeyPressMsg, AdaptiveColor removal, bubbles
-field→method drift). It also delivered the declarative chrome
-half of the reframes ahead of plan: `cmd/poplar/root.go` no
-longer passes `tea.WithAltScreen()` to `tea.NewProgram`, and
-`App.View()` sets `v.AltScreen` declaratively on the returned
-`tea.View`. Per-input `cursor.Model` instances are removed and
-every textinput/textarea calls `SetVirtualCursor(false)`.
-Pass 13.2b's remaining scope: **App-level cursor pull** (cursored
-subpackages expose `Cursor() *tea.Cursor`; `App.View()` walks the
-focus chain and assigns to `v.Cursor` — currently `v.Cursor`
-stays nil) and **`tea.PasteMsg` arms** in compose (address-field
-chip emission, subject insert, body delegation) plus a new catkin
-PasteMsg handler with bundle-as-one-Undo + URL-paste wrapping.
-ADR-0189a records the substrate; ADR-0189b will record the
-remaining cursor + paste reframes.
+**v2 baseline.** Pass 13.2 (split 13.2a + 13.2b) landed the
+charm.land/v2 substrate, declarative chrome, App-level cursor
+hoist via `Cursor() *tea.Cursor` accessors + `App.frameCursor()`,
+`SetVirtualCursor(false)` on every textinput/textarea, and
+`tea.PasteMsg` arms in compose (address-field atomic chip
+emission, subject/body delegation) and catkin (one-undo paste +
+URL-wrap). ADR-0189a records the substrate; ADR-0189b records the
+paste work and the realized chrome/cursor seam.
 
 ## Purpose and scope
 

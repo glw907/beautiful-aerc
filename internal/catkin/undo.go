@@ -48,6 +48,27 @@ func (r *undoRing) record(s snap) {
 	r.idx = len(r.snaps) - 1
 }
 
+// push is record without coalescing. The caller guarantees the edit
+// deserves its own undo step regardless of surrounding text. Pastes
+// are the canonical use.
+func (r *undoRing) push(s snap) {
+	if len(r.snaps) == 0 {
+		r.seed(s)
+		return
+	}
+	r.snaps = r.snaps[:r.idx+1]
+	top := r.snaps[r.idx]
+	if top.val == s.val {
+		r.snaps[r.idx] = s
+		return
+	}
+	r.snaps = append(r.snaps, s)
+	if len(r.snaps) > undoCap {
+		r.snaps = r.snaps[len(r.snaps)-undoCap:]
+	}
+	r.idx = len(r.snaps) - 1
+}
+
 func (r *undoRing) undo() (snap, bool) {
 	if r.idx <= 0 {
 		return snap{}, false

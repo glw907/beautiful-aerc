@@ -112,12 +112,22 @@ the ADR(s) that justify them.
 ### Elm architecture & idiomatic bubbletea
 
 - UI runtime is `charm.land/{bubbletea,lipgloss,bubbles}/v2`
-  (ADR-0189a). `tea.KeyPressMsg.Code`/`Text`/`Mod` canonical;
-  paste is `tea.PasteMsg`. `AdaptiveColor` removed; palette +
-  Styles take concrete `color.Color` (`lipgloss.Color(s)` is a
-  function). Declarative chrome and cursor hoist defer to 13.2b;
-  `App.View()` returns `tea.NewView(s)` and `tea.WithAltScreen()`
-  rides `tea.NewProgram` until then.
+  (ADRs 0189a, 0189b). `tea.KeyPressMsg.Code`/`Text`/`Mod`
+  canonical; `AdaptiveColor` removed; palette + Styles take
+  concrete `color.Color` (`lipgloss.Color(s)` is a function).
+  Chrome is declarative: `App.View()` returns a `tea.View` with
+  `v.AltScreen` and `v.WindowTitle` set every frame;
+  `tea.NewProgram` carries no chrome options. Cursor is hoisted:
+  cursored subpackages (compose, contacts.Form, sidebar search)
+  expose `Cursor() *tea.Cursor`; `App.frameCursor()` walks the
+  focus chain into `v.Cursor`; every textinput/textarea calls
+  `SetVirtualCursor(false)`. Compose's `tea.PasteMsg` arm routes
+  by focus — address fields atomic-emit chips via
+  `content.ParseAddressList`, subject + body delegate. Catkin's
+  arm splices payload in one buffer mutation, records a single
+  undo entry via `undoRing.push`, and wraps the cursor word as
+  `[word](url)` when payload is a whitespace-free
+  `http://`/`https://`/`mailto:` token.
 - `internal/ui/` follows the Elm architecture — invoke the
   `elm-conventions` skill before touching any file there. State in
   tea.Model structs; mutations only in Update; I/O only in tea.Cmd;

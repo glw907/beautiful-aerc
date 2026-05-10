@@ -622,3 +622,97 @@ func TestComposeFromRowRendersChip(t *testing.T) {
 		t.Errorf("expected '· no sig' chip, got:\n%s", view)
 	}
 }
+
+func sendPaste(c *Model, payload string) *Model {
+	next, _ := c.Update(tea.PasteMsg{Content: payload})
+	return next
+}
+
+func TestHandlePaste_ToEmptyMultipleAddresses(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusTo
+	c = sendPaste(c, "Alice <alice@example.com>, bob@example.com")
+	got := c.to.Value()
+	want := "Alice <alice@example.com>, bob@example.com, "
+	if got != want {
+		t.Errorf("to value = %q, want %q", got, want)
+	}
+}
+
+func TestHandlePaste_ToEmptySingleBareEmail(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusTo
+	c = sendPaste(c, "alice@example.com")
+	got := c.to.Value()
+	want := "alice@example.com, "
+	if got != want {
+		t.Errorf("to value = %q, want %q", got, want)
+	}
+}
+
+func TestHandlePaste_CcWithExistingAndFragment(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusCc
+	c.cc.SetValue("Carol <carol@x.com>, da")
+	c = sendPaste(c, "dave@x.com")
+	got := c.cc.Value()
+	want := "Carol <carol@x.com>, dave@x.com, "
+	if got != want {
+		t.Errorf("cc value = %q, want %q", got, want)
+	}
+}
+
+func TestHandlePaste_EmptyPayloadNoOp(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusTo
+	c.to.SetValue("alice@example.com, ")
+	before := c.to.Value()
+	c = sendPaste(c, "")
+	if c.to.Value() != before {
+		t.Errorf("empty paste changed to field: %q", c.to.Value())
+	}
+}
+
+func TestHandlePaste_SubjectForwards(t *testing.T) {
+	c := newTestModel(t)
+	c.setFocus(focusSubject)
+	c = sendPaste(c, "hello world")
+	if !strings.Contains(c.subject.Value(), "hello world") {
+		t.Errorf("subject value = %q, want to contain %q", c.subject.Value(), "hello world")
+	}
+}
+
+func TestHandlePaste_BodyForwards(t *testing.T) {
+	c := newTestModel(t)
+	c.setFocus(focusBody)
+	c = sendPaste(c, "pasted body text")
+	if !strings.Contains(c.editor.Value(), "pasted body text") {
+		t.Errorf("body value = %q, want to contain %q", c.editor.Value(), "pasted body text")
+	}
+}
+
+func TestHandlePaste_FromNoOp(t *testing.T) {
+	c := newTestModel(t)
+	c.focus = focusFrom
+	before := c.to.Value()
+	c = sendPaste(c, "anything@example.com")
+	if c.to.Value() != before {
+		t.Errorf("paste into From changed to field unexpectedly")
+	}
+}
+
+func TestHandlePaste_ClearsSuggestDropdown(t *testing.T) {
+	rows := []contacts.Suggestion{
+		{Name: "Alice", Email: "alice@example.com"},
+	}
+	c := newTestModel(t)
+	c.suggest = NewDropdown(staticSuggest(rows)).SetPrefix("al")
+	c.focus = focusTo
+	if c.suggest.Empty() {
+		t.Fatal("precondition: dropdown should be non-empty before paste")
+	}
+	c = sendPaste(c, "dave@example.com")
+	if !c.suggest.Empty() {
+		t.Error("suggest dropdown should be cleared after paste into address field")
+	}
+}
