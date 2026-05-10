@@ -74,6 +74,48 @@ func TestAgeFileStoreDelete(t *testing.T) {
 	}
 }
 
+func TestKeyringStoreRoundTripIfAvailable(t *testing.T) {
+	s := NewKeyringStore()
+	if err := s.Set("keyring-test-acct", "tok"); err != nil {
+		if err == ErrKeyringUnavailable {
+			t.Skip("system keyring unavailable")
+		}
+		t.Fatalf("Set: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Delete("keyring-test-acct") })
+
+	got, err := s.Get("keyring-test-acct")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != "tok" {
+		t.Errorf("Get = %q, want %q", got, "tok")
+	}
+	if err := s.Delete("keyring-test-acct"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+}
+
+func TestOpenStorePrefersKeyring(t *testing.T) {
+	store, _, err := OpenStore("probe-acct", t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	if err := store.Set("probe-acct", "val"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Delete("probe-acct") })
+
+	got, err := store.Get("probe-acct")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != "val" {
+		t.Errorf("Get = %q, want %q", got, "val")
+	}
+	_ = store.Delete("probe-acct")
+}
+
 func TestAgeFileStoreAtomicWrite(t *testing.T) {
 	dir := t.TempDir()
 	s := NewAgeFileStore(dir)
