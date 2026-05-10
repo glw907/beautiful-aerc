@@ -76,3 +76,46 @@ func TestAttachPicker_RenderContainsFilename(t *testing.T) {
 		t.Errorf("View missing size: %s", out)
 	}
 }
+
+func TestAttachPicker_listModel_cursorAdvances(t *testing.T) {
+	st := NewStyles(theme.Nord)
+	icons := uicore.SimpleIcons
+	atts := []mail.Attachment{
+		{Filename: "a.pdf", Size: 1234},
+		{Filename: "b.png", Size: 5678},
+	}
+	p := NewAttachPicker(st, icons).Open("u1", atts)
+	p = p.SetSize(60, 12)
+
+	if got := p.Cursor(); got != 0 {
+		t.Fatalf("initial cursor = %d, want 0", got)
+	}
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j'})
+	if got := p.Cursor(); got != 1 {
+		t.Fatalf("cursor after j = %d, want 1", got)
+	}
+}
+
+func TestAttachPicker_listModel_enterOpensCursor(t *testing.T) {
+	st := NewStyles(theme.Nord)
+	icons := uicore.SimpleIcons
+	atts := []mail.Attachment{
+		{Filename: "a.pdf", Size: 1234},
+		{Filename: "b.png", Size: 5678},
+	}
+	p := NewAttachPicker(st, icons).Open("u7", atts)
+	p = p.SetSize(60, 12)
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j'})
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	msgs := collectMsgs(cmd)
+	var got OpenAttachmentMsg
+	for _, m := range msgs {
+		if open, ok := m.(OpenAttachmentMsg); ok {
+			got = open
+		}
+	}
+	if got.Att.Filename != "b.png" || got.UID != mail.UID("u7") {
+		t.Fatalf("OpenAttachmentMsg = %+v, want UID=u7 Filename=b.png", got)
+	}
+}

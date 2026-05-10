@@ -2,10 +2,11 @@ package reader
 
 import (
 	"fmt"
-	"strconv"
+	"io"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/humanize"
@@ -13,23 +14,17 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// AttachPicker is the modal overlay launched by `@` in the viewer.
-// Single-column list of attachment metadata. Cursor + Enter (open),
-// `o` (open), `s` (save), 1-9 (open Nth), Esc/q/@ close.
 type AttachPicker struct {
 	shell  uicore.ModalShell
+	list   list.Model
 	uid    mail.UID
 	items  []mail.Attachment
-	cursor int
-	offset int
 	styles Styles
 	icons  uicore.IconSet
 	keys   attachPickerKeys
 }
 
 type attachPickerKeys struct {
-	Up     key.Binding
-	Down   key.Binding
 	Enter  key.Binding
 	Open   key.Binding
 	Save   key.Binding
@@ -37,10 +32,14 @@ type attachPickerKeys struct {
 	Digits [9]key.Binding
 }
 
+type attachItem struct {
+	att mail.Attachment
+}
+
+func (i attachItem) FilterValue() string { return i.att.Filename }
+
 func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
 	keys := attachPickerKeys{
-		Up:    key.NewBinding(key.WithKeys("k", "up")),
-		Down:  key.NewBinding(key.WithKeys("j", "down")),
 		Enter: key.NewBinding(key.WithKeys("enter")),
 		Open:  key.NewBinding(key.WithKeys("o")),
 		Save:  key.NewBinding(key.WithKeys("s")),
@@ -50,18 +49,32 @@ func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
 		d := string(rune('1' + i))
 		keys.Digits[i] = key.NewBinding(key.WithKeys(d))
 	}
-	return AttachPicker{styles: styles, icons: icons, keys: keys}
+
+	l := list.New(nil, attachItemDelegate{styles: styles, icons: icons}, 0, 0)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowPagination(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(false)
+	l.Styles = styles.List
+	l.DisableQuitKeybindings()
+
+	return AttachPicker{styles: styles, icons: icons, keys: keys, list: l}
 }
 
 func (p AttachPicker) IsOpen() bool { return p.shell.IsOpen() }
-func (p AttachPicker) Cursor() int  { return p.cursor }
+func (p AttachPicker) Cursor() int  { return p.list.Index() }
 
 func (p AttachPicker) Open(uid mail.UID, items []mail.Attachment) AttachPicker {
 	p.shell = p.shell.WithOpen(true)
 	p.uid = uid
 	p.items = items
-	p.cursor = 0
-	p.offset = 0
+	listItems := make([]list.Item, len(items))
+	for i, a := range items {
+		listItems[i] = attachItem{att: a}
+	}
+	p.list.SetItems(listItems)
+	p.list.ResetSelected()
 	return p
 }
 
@@ -72,6 +85,8 @@ func (p AttachPicker) Close() AttachPicker {
 
 func (p AttachPicker) SetSize(width, height int) AttachPicker {
 	p.shell = p.shell.SetSize(width, height)
+	contentW, listH := attachPickerListSize(width, height)
+	p.list.SetSize(contentW, listH)
 	return p
 }
 
@@ -84,20 +99,10 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 		return p, nil
 	}
 	switch {
-	case key.Matches(keyMsg, p.keys.Down):
-		if p.cursor < len(p.items)-1 {
-			p.cursor++
-		}
-		return p.clampOffset(), nil
-	case key.Matches(keyMsg, p.keys.Up):
-		if p.cursor > 0 {
-			p.cursor--
-		}
-		return p.clampOffset(), nil
 	case key.Matches(keyMsg, p.keys.Enter), key.Matches(keyMsg, p.keys.Open):
-		return p, p.openCursor()
+		return p, p.openIndex(p.list.Index())
 	case key.Matches(keyMsg, p.keys.Save):
-		return p, p.saveCursor()
+		return p, p.saveIndex(p.list.Index())
 	case key.Matches(keyMsg, p.keys.Close):
 		return p, func() tea.Msg { return AttachPickerClosedMsg{} }
 	}
@@ -109,17 +114,15 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 			return p, nil
 		}
 	}
-	return p, nil
-}
-
-func (p AttachPicker) openCursor() tea.Cmd {
-	if p.cursor >= len(p.items) {
-		return nil
-	}
-	return p.openIndex(p.cursor)
+	var cmd tea.Cmd
+	p.list, cmd = p.list.Update(msg)
+	return p, cmd
 }
 
 func (p AttachPicker) openIndex(i int) tea.Cmd {
+	if i < 0 || i >= len(p.items) {
+		return nil
+	}
 	uid, att := p.uid, p.items[i]
 	return tea.Batch(
 		func() tea.Msg { return OpenAttachmentMsg{UID: uid, Att: att} },
@@ -127,11 +130,11 @@ func (p AttachPicker) openIndex(i int) tea.Cmd {
 	)
 }
 
-func (p AttachPicker) saveCursor() tea.Cmd {
-	if p.cursor >= len(p.items) {
+func (p AttachPicker) saveIndex(i int) tea.Cmd {
+	if i < 0 || i >= len(p.items) {
 		return nil
 	}
-	uid, att := p.uid, p.items[p.cursor]
+	uid, att := p.uid, p.items[i]
 	return tea.Batch(
 		func() tea.Msg { return SaveAttachmentMsg{UID: uid, Att: att} },
 		func() tea.Msg { return AttachPickerClosedMsg{} },
@@ -140,20 +143,20 @@ func (p AttachPicker) saveCursor() tea.Cmd {
 
 const attachPickerMaxWidth = 70
 
-func visibleLinkRows(total, height int) int {
-	maxRows := height - 7
-	if maxRows < 1 {
-		maxRows = 1
+func attachPickerListSize(boxW, boxH int) (contentW, listH int) {
+	bw := attachPickerMaxWidth
+	if boxW-4 < bw {
+		bw = boxW - 4
 	}
-	if total < maxRows {
-		return total
+	if bw < 24 {
+		bw = 24
 	}
-	return maxRows
-}
-
-func (p AttachPicker) clampOffset() AttachPicker {
-	p.offset = uicore.ClampScrollOffset(p.cursor, visibleLinkRows(len(p.items), p.shell.Height()), p.offset)
-	return p
+	contentW = bw - 2
+	listH = boxH - 5
+	if listH < 1 {
+		listH = 1
+	}
+	return contentW, listH
 }
 
 func (p AttachPicker) View() string {
@@ -164,48 +167,44 @@ func (p AttachPicker) View() string {
 }
 
 func (p AttachPicker) Box(w, h int) string {
-	boxW := attachPickerMaxWidth
-	if w-4 < boxW {
-		boxW = w - 4
+	contentW, _ := attachPickerListSize(w, h)
+	listView := p.list.View()
+	bodyRows := strings.Split(listView, "\n")
+	for i, row := range bodyRows {
+		bodyRows[i] = uicore.PadOrTruncate(row, contentW)
 	}
-	if boxW < 24 {
-		boxW = 24
-	}
-	contentW := boxW - 2
-	maxIndexDigits := len(strconv.Itoa(max(1, len(p.items))))
-	visibleRows := visibleLinkRows(len(p.items), h)
-
-	bodyRows := make([]string, visibleRows)
-	for i := 0; i < visibleRows; i++ {
-		row := p.offset + i
-		if row >= len(p.items) {
-			bodyRows[i] = uicore.PadOrTruncate("", contentW)
-			continue
-		}
-		bodyRows[i] = p.formatRow(row, maxIndexDigits, contentW)
-	}
-
 	footer := uicore.PadOrTruncate("Enter/o open  s save  Esc close", contentW)
-	footerRows := []string{footer}
-
-	return p.shell.Box("Attachments", bodyRows, footerRows, contentW)
+	return p.shell.Box("Attachments", bodyRows, []string{footer}, contentW)
 }
 
-func (p AttachPicker) formatRow(row, maxIndexDigits, contentW int) string {
-	att := p.items[row]
-	idxStr := strconv.Itoa(row + 1)
-	idxPad := strings.Repeat(" ", maxIndexDigits-len(idxStr))
+type attachItemDelegate struct {
+	styles Styles
+	icons  uicore.IconSet
+}
+
+func (d attachItemDelegate) Height() int                             { return 1 }
+func (d attachItemDelegate) Spacing() int                            { return 0 }
+func (d attachItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+
+func (d attachItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	ai, ok := item.(attachItem)
+	if !ok {
+		return
+	}
+	att := ai.att
+	contentW := m.Width()
 	name := att.Filename
 	if name == "" {
 		name = "attachment"
 	}
 	size := humanize.Bytes(int64(att.Size))
-	body := ansix.PadOrTruncate(fmt.Sprintf("%s%s[%d] %s (%s)",
-		idxPad, p.icons.Attachment, row+1, name, size), contentW)
-	if row == p.cursor {
-		return p.styles.Cursor.Render(body)
+	body := ansix.PadOrTruncate(
+		fmt.Sprintf("%s[%d] %s (%s)", d.icons.Attachment, index+1, name, size),
+		contentW)
+	if index == m.Index() {
+		body = d.styles.Cursor.Render(body)
 	}
-	return body
+	fmt.Fprint(w, body)
 }
 
 func (p AttachPicker) Position(box string, totalW, totalH int) (int, int) {
