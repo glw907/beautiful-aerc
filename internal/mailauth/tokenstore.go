@@ -4,8 +4,6 @@
 // OpenStore probes the keyring and picks the working backend.
 package mailauth
 
-import "errors"
-
 // Backend names the token-store implementation in use.
 type Backend string
 
@@ -14,12 +12,9 @@ const (
 	BackendAgeFile Backend = "age-file"
 )
 
-// ErrNotStored is returned by Get when no token exists for the account.
-var ErrNotStored = errors.New("mailauth: token not stored")
-
 // TokenStore persists and retrieves OAuth refresh tokens.
 type TokenStore interface {
 	Set(account, refresh string) error
-	Get(account string) (string, error) // returns "", ErrNotStored when missing
+	Get(account string) (string, error) // returns ("", nil) when no token is stored
 	Delete(account string) error
 }

@@ -146,13 +146,14 @@ func atomicWrite(dir, name string, data []byte) error {
 		os.Remove(tmpPath)
 		return fmt.Errorf("mailauth: write temp file: %w", err)
 	}
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("mailauth: chmod temp file: %w", err)
+	}
 	if err := f.Close(); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("mailauth: close temp file: %w", err)
-	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("mailauth: chmod temp file: %w", err)
 	}
 	if err := os.Rename(tmpPath, filepath.Join(dir, name)); err != nil {
 		os.Remove(tmpPath)
