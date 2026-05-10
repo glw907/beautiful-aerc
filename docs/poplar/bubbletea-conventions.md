@@ -18,14 +18,20 @@ deviation, or fix this doc.
 
 **13.2a/13.2b note.** Pass 13.2a landed the v2 substrate
 (imports, KeyPressMsg, AdaptiveColor removal, bubbles
-field→method drift). The "Declarative chrome (v2)" and "Cursor
-hoist (v2)" sections below describe the v2-native end state that
-Pass 13.2b will deliver. Until 13.2b ships, `App.View()` returns
-`tea.NewView(s)` with no chrome / cursor fields populated,
-`tea.WithAltScreen()` still rides the `tea.NewProgram` call, and
-per-input `cursor.Model` instances still tick. Plan reframes
-against the target state in this doc; ADR-0189a records the
-transitional substrate. ADR-0189b will record the reframes.
+field→method drift). It also delivered the declarative chrome
+half of the reframes ahead of plan: `cmd/poplar/root.go` no
+longer passes `tea.WithAltScreen()` to `tea.NewProgram`, and
+`App.View()` sets `v.AltScreen` declaratively on the returned
+`tea.View`. Per-input `cursor.Model` instances are removed and
+every textinput/textarea calls `SetVirtualCursor(false)`.
+Pass 13.2b's remaining scope: **App-level cursor pull** (cursored
+subpackages expose `Cursor() *tea.Cursor`; `App.View()` walks the
+focus chain and assigns to `v.Cursor` — currently `v.Cursor`
+stays nil) and **`tea.PasteMsg` arms** in compose (address-field
+chip emission, subject insert, body delegation) plus a new catkin
+PasteMsg handler with bundle-as-one-Undo + URL-paste wrapping.
+ADR-0189a records the substrate; ADR-0189b will record the
+remaining cursor + paste reframes.
 
 ## Purpose and scope
 
