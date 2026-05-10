@@ -166,7 +166,14 @@ exit-78 path). Opt-outs via `--no-wizard` and
       email domain).
 3. **Theme section** (non-required, gated on `Confirm`) —
    `huh.Select` over compiled themes; live-preview the chosen theme
-   on the next render so the user sees it before confirming.
+   on the next render so the user sees it before confirming. The
+   wizard starts in `one-dark` (poplar's invariant default); picking
+   a different theme propagates the new `theme.CompiledTheme` through
+   the huh.Theme adapter so subsequent steps (confirm, done) render
+   in the chosen palette. If the user takes the default or declines
+   the section gate, `config.toml` omits `[ui]` `theme` and the
+   default kicks in via `config.LoadUI`'s zero-value — minimal file
+   for users who took defaults.
 4. **Stub sections** (hidden via `Hide()=true` until their backing
    feature ships): contacts, signatures, tidy. No-op for Pass 14.
 5. **Confirm + write** (`huh.Note` showing the assembled
@@ -247,6 +254,193 @@ Probe failure (80×24):
 │  [r] retry   [e] edit credentials   [s] save and quit          │
 └────────────────────────────────────────────────────────────────┘
 ```
+
+Probe success (sister to the failure wireframe; auto-advances 800ms):
+
+```
+┌─ poplar setup ──────────────────────── step 5 of 8 — probe ─┐
+│                                                             │
+│  Testing connection to imap.fastmail.com:993                │
+│                                                             │
+│  Connecting…                                  ✓             │
+│  TLS handshake…                               ✓             │
+│  AUTHENTICATE PLAIN…                          ✓             │
+│  CAPABILITY (UIDPLUS)…                        ✓             │
+│  STATUS INBOX…                                ✓ 1,247 msgs  │
+│                                                             │
+│              Connected. Continuing…                         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+JMAP probe — same screen layout, JMAP-specific transcript:
+
+```
+┌─ poplar setup ──────────────────────── step 5 of 8 — probe ─┐
+│                                                             │
+│  Testing JMAP connection                                    │
+│                                                             │
+│  Resolving session URL…                       ✓             │
+│  TLS handshake…                               ✓             │
+│  Bearer authentication…                       ✓             │
+│  Session/get…                                 ✓             │
+│  Account/get…                                 ✓ 3 mailboxes │
+│                                                             │
+│              Connected. Continuing…                         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+`wizard.Probe` dispatches on `cfg.Provider`: IMAP family produces the
+IMAP transcript, JMAP family the JMAP transcript. Both feed the same
+generic `ProbeStep { Label, Status, Detail }` shape, so the screen
+layout is identical and only the strings differ.
+
+Credentials — app-password variant (most providers):
+
+```
+┌─ poplar setup ───────────────────────── step 4 of 8 — credentials ┐
+│                                                                   │
+│  Fastmail uses app-specific passwords for IMAP, not your main     │
+│  account password. Generate one at:                               │
+│                                                                   │
+│      https://app.fastmail.com/settings/security/tokens            │
+│                                                                   │
+│  Open in browser?      ( ) yes    (•) no, I have one              │
+│                                                                   │
+│  App password:        [••••••••••••••••••••              ]        │
+│                                                                   │
+│  ↑/↓ navigate   tab next field   enter confirm                    │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Credentials — API-token variant (Fastmail JMAP):
+
+```
+┌─ poplar setup ───────────────────────── step 4 of 8 — credentials ┐
+│                                                                   │
+│  Fastmail uses a personal API token for JMAP. Generate one at:    │
+│                                                                   │
+│      https://app.fastmail.com/settings/security/tokens            │
+│                                                                   │
+│  Tokens don't expire unless you revoke them, so this is a         │
+│  one-time setup.                                                  │
+│                                                                   │
+│  API token:           [••••••••••••••••••••••••••••••    ]        │
+│                                                                   │
+│  tab next field   enter confirm                                   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+API-token differs from app-password by dropping the
+"open in browser?" prompt (the token-management page is the only
+place to get the token; the prompt is redundant) and by explaining
+no-expiry to set expectations.
+
+Credentials — plain-IMAP variant (self-hosted):
+
+```
+┌─ poplar setup ───────────────────────── step 4 of 8 — credentials ┐
+│                                                                   │
+│  Self-hosted IMAP server                                          │
+│                                                                   │
+│  Host:           [mail.example.com                       ]        │
+│  Port:           [993        ]                                    │
+│  Username:       [user@example.com                       ]        │
+│  Password:       [••••••••••••••••                       ]        │
+│                                                                   │
+│  Skip TLS verify?  ( ) yes — only for self-signed certs           │
+│                    (•) no                                         │
+│                                                                   │
+│  tab next field   enter confirm   esc back                        │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+The `Skip TLS verify?` confirm is gated on `Host` parsing to RFC1918
+/ `.local` / `127.x` — for hosted providers the question stays
+hidden.
+
+Credentials — plain-JMAP variant (self-hosted):
+
+```
+┌─ poplar setup ───────────────────────── step 4 of 8 — credentials ┐
+│                                                                   │
+│  Self-hosted JMAP server                                          │
+│                                                                   │
+│  Session URL:    [https://jmap.example.com/.well-known/jmap     ] │
+│  Username:       [user@example.com                              ] │
+│  Token:          [••••••••••••••••                              ] │
+│                                                                   │
+│  Skip TLS verify?  ( ) yes — only for self-signed certs           │
+│                    (•) no                                         │
+│                                                                   │
+│  tab next field   enter confirm   esc back                        │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Differs from plain-IMAP by replacing `Host` + `Port` with a single
+`Session URL` (the JMAP discovery endpoint), and using `Token`
+instead of `Password` since most JMAP servers expect bearer tokens.
+Stalwart and a few others accept passwords on the same field — the
+same TOML key flows through, only the prompt label changes.
+
+Theme picker with live preview (Section 8 only — every other step
+is a single-pane form):
+
+```
+┌─ poplar setup ─────────────────────────────── step 8 — theme ────────┐
+│                                                                      │
+│  Choose a color theme — preview updates as you scroll                │
+│                                                                      │
+│  ┌─ themes ────────────┐  ┌─ preview ──────────────────────────┐     │
+│  │   one-dark          │  │  ▎ Inbox                    ▎      │     │
+│  │ > gruvbox           │  │  ▎ ──────                   ▎ Re:  │     │
+│  │   nord              │  │  ▎ • Geoff Wright    11:47  ▎ The  │     │
+│  │   dracula           │  │  ▎   Re: poplar setup...    ▎ wiza │     │
+│  │   solarized-dark    │  │  ▎   Hannah W.        9:14  ▎ Yes! │     │
+│  │   solarized-light   │  │  ▎   weekend plans          ▎      │     │
+│  │   monokai           │  │  ▎ • Sarah K.        Tue    ▎      │     │
+│  │   tokyonight        │  │  ▎   build status: green    ▎      │     │
+│  │   catppuccin-mocha  │  │  ▎                          ▎      │     │
+│  │   ...               │  │  ▎ q quit  / search  c new  ▎      │     │
+│  └─────────────────────┘  └────────────────────────────────────┘     │
+│                                                                      │
+│  ↑/↓ navigate   enter confirm                                        │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+The preview is a static fake email view rendered with the candidate
+theme so the palette change reads at a glance.
+
+Confirm + write:
+
+```
+┌─ poplar setup ─────────────────────────── step 9 — confirm ────────┐
+│                                                                    │
+│  Ready to write ~/.config/poplar/config.toml                       │
+│                                                                    │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  [[account]]                                               │    │
+│  │  name         = "Fastmail"                                 │    │
+│  │  provider     = "fastmail"                                 │    │
+│  │  email        = "geoff@907.life"                           │    │
+│  │  password-cmd = "op read op://Personal/Fastmail/credential"│    │
+│  │                                                            │    │
+│  │  [ui]                                                      │    │
+│  │  theme = "gruvbox"                                         │    │
+│  └────────────────────────────────────────────────────────────┘    │
+│                                                                    │
+│  Write file and start poplar?    ( ) yes, but show me the diff     │
+│                                  (•) yes, just write               │
+│                                  ( ) no, cancel and quit           │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+The boxed TOML preview lets the user verify the assembled config
+before commit. Email and identity steps (single inputs with no
+visible decisions) are not wireframed — `huh.NewInput` defaults
+render those without surprise.
 
 ## Error handling
 
