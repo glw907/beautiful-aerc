@@ -271,6 +271,34 @@ func TestAuthorizeTimeout(t *testing.T) {
 	}
 }
 
+func TestForceRefreshDropsCache(t *testing.T) {
+	fs := newFakeTokenServer(t)
+	store := newMemStore()
+	store.m["test-account"] = "refresh-1"
+
+	cfg := Config{
+		ClientID: "id",
+		TokenURL: fs.srv.URL + "/token",
+	}
+	c := newTestClient(cfg, store)
+
+	if _, err := c.Token(t.Context()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	fs.requests.Store(0)
+
+	tok, err := c.ForceRefresh(t.Context())
+	if err != nil {
+		t.Fatalf("ForceRefresh: %v", err)
+	}
+	if tok == "" {
+		t.Fatal("expected non-empty token from ForceRefresh")
+	}
+	if got := fs.requests.Load(); got != 1 {
+		t.Fatalf("requests after ForceRefresh: %d, want 1", got)
+	}
+}
+
 // isErrAuth unwraps the error chain looking for mail.ErrAuth.
 func isErrAuth(err error) bool {
 	return errors.Is(err, mail.ErrAuth)

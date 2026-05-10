@@ -16,11 +16,13 @@ import (
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailauth"
 )
 
 // Backend is one IMAP account.
 type Backend struct {
-	cfg config.AccountConfig
+	cfg   config.AccountConfig
+	oauth *mailauth.Client // non-nil for xoauth2 accounts using mailauth
 
 	mu       sync.Mutex
 	cmd      imapClient // command connection, nil before Connect
@@ -48,6 +50,12 @@ func New(cfg config.AccountConfig) *Backend {
 	return &Backend{cfg: cfg}
 }
 
+// NewWithOAuth returns a Backend that obtains XOAUTH2 access tokens via c
+// rather than running password-cmd on every dial. c must be non-nil.
+func NewWithOAuth(cfg config.AccountConfig, c *mailauth.Client) *Backend {
+	return &Backend{cfg: cfg, oauth: c}
+}
+
 func (b *Backend) AccountName() string {
 	if b.cfg.Display != "" {
 		return b.cfg.Display
@@ -72,20 +80,15 @@ func (b *Backend) Updates() <-chan mail.Update { return b.updates }
 
 const updatesBuffer = 64
 
-// Connect resolves the password, dials both connections, authenticates,
-// negotiates capabilities, and starts the idle goroutine. UIDPLUS is
-// required. Tests bypass by setting b.cmd / b.idle directly and
-// calling finishConnect.
+// Connect dials both connections, authenticates, negotiates capabilities,
+// and starts the idle goroutine. UIDPLUS is required. Tests bypass by
+// setting b.cmd / b.idle directly and calling finishConnect.
 func (b *Backend) Connect(ctx context.Context) error {
-	pw, err := b.resolvedPassword()
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	cmd, err := dial(b.cfg, pw, "command")
+	cmd, err := dial(ctx, b, "command")
 	if err != nil {
 		return fmt.Errorf("connect cmd: %w", err)
 	}
-	idle, err := dial(b.cfg, pw, "idle")
+	idle, err := dial(ctx, b, "idle")
 	if err != nil {
 		_ = cmd.Logout()
 		return fmt.Errorf("connect idle: %w", err)

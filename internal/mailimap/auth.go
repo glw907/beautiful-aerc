@@ -1,6 +1,7 @@
 package mailimap
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -25,9 +26,12 @@ const (
 )
 
 // dial opens one IMAP connection for role ("command" or "idle"),
-// applies keepalives, performs TLS or STARTTLS, then authenticates
-// with pw (resolved cleartext password or bearer token).
-func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) {
+// applies keepalives, performs TLS or STARTTLS, then authenticates.
+// When b.oauth is set and auth = xoauth2, it fetches the access token
+// via mailauth.Client.Token and retries once with ForceRefresh on
+// mail.ErrAuth (stale-token recovery).
+func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
+	cfg := b.cfg
 	if cfg.Host == "" {
 		return nil, errors.New("imap: host is required")
 	}
@@ -46,8 +50,6 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 	// Pre-allocate the realClient so its dispatch method can be wired
 	// into the UnilateralDataHandler before the imapclient.Client is
 	// constructed. The c field is set once the client is ready.
-	// Pre-allocate so dispatch can wire into UnilateralDataHandler
-	// before c is set.
 	rc := &realClient{}
 
 	opts := &imapclient.Options{
@@ -87,13 +89,40 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 		return nil, fmt.Errorf("tls handshake %s (%s): %w", addr, role, err)
 	}
 
-	if err := authenticate(cli, cfg, pw); err != nil {
+	pw, err := resolveXOAUTH2Token(ctx, b)
+	if err != nil {
 		_ = cli.Logout().Wait()
 		return nil, fmt.Errorf("authenticate (%s): %w", role, err)
+	}
+	if authErr := authenticate(cli, cfg, pw); authErr != nil {
+		if errors.Is(authErr, mail.ErrAuth) && b.oauth != nil {
+			// Stale cached token: force a refresh and try once more.
+			fresh, rerr := b.oauth.ForceRefresh(ctx)
+			if rerr != nil {
+				_ = cli.Logout().Wait()
+				return nil, fmt.Errorf("authenticate (%s): %w", role, rerr)
+			}
+			if retryErr := authenticate(cli, cfg, fresh); retryErr != nil {
+				_ = cli.Logout().Wait()
+				return nil, fmt.Errorf("authenticate (%s): %w", role, retryErr)
+			}
+		} else {
+			_ = cli.Logout().Wait()
+			return nil, fmt.Errorf("authenticate (%s): %w", role, authErr)
+		}
 	}
 
 	rc.c = cli
 	return rc, nil
+}
+
+// resolveXOAUTH2Token returns an access token via b.oauth when set, or
+// falls back to the resolved plaintext password for non-OAuth accounts.
+func resolveXOAUTH2Token(ctx context.Context, b *Backend) (string, error) {
+	if b.oauth != nil {
+		return b.oauth.Token(ctx)
+	}
+	return b.resolvedPassword()
 }
 
 // layerTLS wraps raw with implicit TLS or upgrades it via STARTTLS,

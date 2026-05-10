@@ -2,6 +2,7 @@ package mailimap
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -23,19 +24,23 @@ type smtpClient interface {
 	Close() error
 }
 
-var smtpDial = realSMTPDial
+var smtpDial = func(b *Backend) (smtpClient, error) {
+	return realSMTPDial(context.Background(), b)
+}
 
 // ProbeSMTP dials, authenticates, and closes. `poplar config check`
 // uses it to validate submission credentials alongside IMAP.
 func ProbeSMTP(cfg config.AccountConfig) error {
-	cli, err := smtpDial(cfg)
+	b := New(cfg)
+	cli, err := smtpDial(b)
 	if err != nil {
 		return err
 	}
 	return cli.Close()
 }
 
-func realSMTPDial(cfg config.AccountConfig) (smtpClient, error) {
+func realSMTPDial(ctx context.Context, b *Backend) (smtpClient, error) {
+	cfg := b.cfg
 	smtp := cfg.SMTP
 	if smtp.Host == "" {
 		return nil, errors.New("smtp: host is required")
@@ -72,7 +77,7 @@ func realSMTPDial(cfg config.AccountConfig) (smtpClient, error) {
 		cli = gosmtp.NewClient(tlsConn)
 	}
 
-	if err := smtpAuth(cli, smtp, cfg.Email); err != nil {
+	if err := smtpAuth(ctx, cli, b); err != nil {
 		_ = cli.Close()
 		return nil, fmt.Errorf("smtp authenticate: %w", err)
 	}
@@ -87,28 +92,50 @@ func (a *smtpClientAdapter) SendMail(from string, to []string, body []byte) erro
 
 func (a *smtpClientAdapter) Close() error { return a.c.Close() }
 
-func smtpAuth(cli *gosmtp.Client, cfg config.SMTPConfig, email string) error {
-	pw, err := cfg.ResolvePassword()
-	if err != nil {
-		return err
-	}
-	mech := cfg.Auth
+// smtpAuth authenticates cli using the mechanism from b.cfg.SMTP. For
+// xoauth2 accounts, the access token comes from b.oauth when set;
+// otherwise from cfg.SMTP.ResolvePassword. Non-xoauth2 mechanisms
+// always resolve via cfg.SMTP.ResolvePassword.
+func smtpAuth(ctx context.Context, cli *gosmtp.Client, b *Backend) error {
+	cfg := b.cfg
+	smtp := cfg.SMTP
+	mech := smtp.Auth
 	if mech == "" {
 		mech = "plain"
 	}
-	switch mech {
-	case "plain":
-		return cli.Auth(sasl.NewPlainClient("", email, pw))
-	case "login":
-		return cli.Auth(sasl.NewLoginClient(email, pw))
-	case "xoauth2":
+
+	if mech == "xoauth2" {
+		pw, err := resolveXOAUTH2SMTPToken(ctx, b)
+		if err != nil {
+			return err
+		}
 		if pw == "" {
 			return errors.New("xoauth2: access token required")
 		}
-		return cli.Auth(mailauth.NewXoauth2Client(email, pw))
+		return cli.Auth(mailauth.NewXoauth2Client(cfg.Email, pw))
+	}
+
+	pw, err := smtp.ResolvePassword()
+	if err != nil {
+		return err
+	}
+	switch mech {
+	case "plain":
+		return cli.Auth(sasl.NewPlainClient("", cfg.Email, pw))
+	case "login":
+		return cli.Auth(sasl.NewLoginClient(cfg.Email, pw))
 	default:
 		return fmt.Errorf("unsupported smtp auth mechanism %q", mech)
 	}
+}
+
+// resolveXOAUTH2SMTPToken returns an access token via b.oauth when set,
+// or falls back to the SMTP config's resolved password for non-OAuth accounts.
+func resolveXOAUTH2SMTPToken(ctx context.Context, b *Backend) (string, error) {
+	if b.oauth != nil {
+		return b.oauth.Token(ctx)
+	}
+	return b.cfg.SMTP.ResolvePassword()
 }
 
 // Send transmits mime via SMTP. The client is dialed lazily and
@@ -176,10 +203,9 @@ func (b *Backend) smtpClientLocked() (smtpClient, error) {
 		b.mu.Unlock()
 		return c, nil
 	}
-	cfg := b.cfg
 	b.mu.Unlock()
 
-	cli, err := smtpDial(cfg)
+	cli, err := smtpDial(b)
 	if err != nil {
 		return nil, err
 	}

@@ -35,7 +35,7 @@ func TestSend_LazyDial(t *testing.T) {
 	dials := atomic.Int32{}
 	fake := &fakeSMTP{}
 	prev := smtpDial
-	smtpDial = func(_ config.AccountConfig) (smtpClient, error) {
+	smtpDial = func(_ *Backend) (smtpClient, error) {
 		dials.Add(1)
 		return fake, nil
 	}
@@ -59,7 +59,7 @@ func TestSend_LazyDial(t *testing.T) {
 func TestSend_DropsClientOnError(t *testing.T) {
 	dials := atomic.Int32{}
 	prev := smtpDial
-	smtpDial = func(_ config.AccountConfig) (smtpClient, error) {
+	smtpDial = func(_ *Backend) (smtpClient, error) {
 		dials.Add(1)
 		return &fakeSMTP{sendErr: errors.New("boom")}, nil
 	}

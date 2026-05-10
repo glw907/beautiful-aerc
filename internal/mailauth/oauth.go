@@ -186,6 +186,17 @@ func generateState() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// ForceRefresh drops the cached access token and fetches a new one.
+// Used by callers that just saw an upstream auth failure to distinguish
+// a stale-cache miss from a truly bad refresh token.
+func (c *Client) ForceRefresh(ctx context.Context) (string, error) {
+	c.mu.Lock()
+	c.cachedTok = ""
+	c.expires = time.Time{}
+	c.mu.Unlock()
+	return c.Token(ctx)
+}
+
 // Token returns a valid access token, refreshing from the stored refresh token
 // when the cached token is absent or within 5 minutes of expiry.
 func (c *Client) Token(ctx context.Context) (string, error) {
