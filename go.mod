@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.3
+	filippo.io/age v1.3.1
 	git.sr.ht/~rockorager/go-jmap v0.5.3
 	github.com/BurntSushi/toml v1.6.0
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
@@ -27,7 +28,6 @@ require (
 	github.com/nyaruka/phonenumbers v1.7.2
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.7.13
-	filippo.io/age v1.3.1
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/net v0.47.0
 	golang.org/x/oauth2 v0.36.0
@@ -64,6 +64,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/crypto v0.45.0 // indirect
