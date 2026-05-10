@@ -36,6 +36,7 @@ when you need the full record.
 | Responsive sidebar; 80×24 polish bar | 0096 (superseded by 0109), 0097, 0109 |
 | Release model — pre-beta / beta soak / post-1.0 | 0105 |
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
+| OAuth refresh for Gmail/Outlook IMAP — loopback PKCE + keyring/age-file token store; BYO client; `--reauth=<name>` | 0193 |
 | Local cache architecture — per-account SQLite, typed Op sum + drainer, drain-first sync, outbox state machine, UIDVALIDITY re-key, IMAP scan-and-diff | 0110–0118, 0120–0124 |
 | Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |
 | Cache cutover + II policy — UI reads/writes via cache.Account; mail.Backend shrunk; MessageList Apply* removed; lazy body population with single max-size backstop, no LRU; FetchBody returns []byte; poplar cache CLI | 0121, 0122, 0123, 0124 |

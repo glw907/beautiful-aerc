@@ -29,7 +29,8 @@ the ADR(s) that justify them.
   (Fastmail via `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/`
   (generic IMAP via `emersion/go-imap` v2; two physical connections
   per Backend — command + idle), `internal/mailauth/` (vendored
-  XOAUTH2 SASL snippet), `internal/config/` (`AccountConfig`,
+  XOAUTH2 SASL snippet; OAuth subsystem: loopback PKCE `Authorize`,
+  cached `Token` + refresh-on-expiry, `TokenStore` keyring/age-file), `internal/config/` (`AccountConfig`,
   `UIConfig`, `LoadUI`, `Provider` registry), `internal/theme/`
   (compiled lipgloss themes), `internal/term/` (`HasNerdFont`,
   `MeasureSPUACells`), `internal/filter/` (markdown→HTML for
@@ -71,9 +72,8 @@ the ADR(s) that justify them.
   matching ADR-0092 semantics with no risk of expunging unrelated
   pre-marked messages. Gmail accounts (`GmailQuirks = true`) assert
   `X-GM-EXT-1` at Connect and route `Destroy` through `SELECT
-  [Gmail]/Trash` first so EXPUNGE truly deletes; XOAUTH2 access
-  tokens come from `password-cmd` with no internal refresh until
-  Pass 9.6. SMTP is a third connection dialed lazily on first
+  [Gmail]/Trash` first so EXPUNGE truly deletes; XOAUTH2 tokens
+  come from `mailauth.Token(ctx)`. SMTP is a third connection dialed lazily on first
   `Send` via `emersion/go-smtp`; the cached client is dropped on
   any send error so the next call redials. `Append(folder, mime,
   flags)` runs `APPEND` on the cmd connection. `mailimap.ProbeSMTP`
@@ -190,27 +190,21 @@ the ADR(s) that justify them.
 - First-run flow: missing config returns `ErrFirstRun`; root
   removes the freshly-written template and auto-launches the
   wizard. `--no-wizard` / `POPLAR_NO_WIZARD=1` opts out to exit-78.
-  `--repair=<name>` seeds the wizard's account section via
-  `wizard.FromAccount`, bypasses its single-account write path,
-  and splices `RepairResult` back through `config.Render` + atomic
-  rename. Legacy `accounts.toml` returns `ErrOldAccountsToml`
-  (exit-78). `password-cmd` resolves on first `Connect` and caches
-  on the Backend. `AccountConfig.Name` defaults to `Email`.
-  `AccountConfig.Preset` records the preset key so `config.Render`
-  round-trips `provider = "fastmail"`; the writer prefers `Preset`
-  over `Backend`. Typed `*config.ConfigError{Path, Line, Account,
-  Field, Message, Suggest}` (sentinel `ErrConfigInvalid`) covers
-  the four validators: unknown provider, missing host, missing
-  source, missing smtp.host.
-- `config.Provider` carries `CredentialStrategy` (AppPassword/
-  APIToken/OAuth/PlainIMAP/PlainJMAP) and `HelpURL` per preset;
-  both populate for every entry in `Providers`.
+  `--repair=<name>` seeds the wizard via `wizard.FromAccount` and
+  splices `RepairResult` through `config.Render` + atomic rename.
+  `--reauth=<name>` re-runs the OAuth consent flow for a named account.
+  Legacy `accounts.toml` returns `ErrOldAccountsToml` (exit-78).
+  `password-cmd` resolves on first `Connect` and caches on the Backend.
+  `AccountConfig.Name` defaults to `Email`; `AccountConfig.Preset`
+  round-trips the preset key (`config.Render` prefers it over `Backend`).
+  `*config.ConfigError{…}` (sentinel `ErrConfigInvalid`) covers four
+  validators: unknown provider, missing host, missing source, missing smtp.host.
+- `config.Provider` carries `CredentialStrategy` and `HelpURL` per preset.
 - `config.Render(accts, ui, cache) []byte` emits canonical TOML.
-  Round-trips through `Load*` are semantic, not byte-for-byte:
-  comments aren't preserved, default-valued fields elided.
-  `[account.smtp]` precedes `[[account.identity]]` in the output
-  (TOML quirk: a bare `[section]` after array-of-tables rebinds
-  to the last array element). `[ui] theme` not yet rendered.
+  Round-trips through `Load*` are semantic: comments not preserved,
+  default-valued fields elided. `[account.smtp]` precedes
+  `[[account.identity]]` (TOML array-of-tables rebind quirk).
+  `[ui] theme` not yet rendered.
 - `poplar config` subcommands: `init` (`--force` to overwrite;
   `--interactive` runs the wizard, `--section=name1,name2` filters
   the registry), `check` (validate + connect-test sequentially via
@@ -226,8 +220,7 @@ the ADR(s) that justify them.
   `mailimap.Probe` (appending the SMTP probe) or `mailjmap.Probe`;
   test seams `imap/jmap/smtpProbeFn`. `wizard.SelectStrategy(preset)`
   returns a `config.CredentialStrategy` (`"imap"`/`"jmap"` → plain).
-  `wizard.Apply(Model)` returns a ready-to-render
-  `config.AccountConfig`. `internal/ui/wizard/` is the bubbletea +
+  `wizard.Apply(Model)` returns a ready-to-render `config.AccountConfig`. `internal/ui/wizard/` is the bubbletea +
   huh surface; `defaultSections` registry composes `account` /
   `theme` / `confirm`. ADR-0191.
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`.
@@ -245,6 +238,13 @@ the ADR(s) that justify them.
   sets exactly one of `text`/`file`; `Signature.Text` carries
   the RFC 3676 `"-- \n"` sentinel; `Signature.Name` is unique
   within its identity. ADR-0177.
+- `[account.oauth]` carries `client-id`, `client-secret`, optional
+  `auth-url`/`token-url`/`scopes` for `gmail`/`outlook` xoauth2
+  accounts (preset defaults fill missing fields). `oauth-store`
+  (`"keyring"`/`"age-file"`) is written by the wizard on first
+  `Authorize`. `mailauth.Token(ctx)` resolves credentials when
+  `[account.oauth]` is present; parallel to `password`/`password-cmd`.
+  ADR-0193.
 - `[account.contacts]` is the optional CardDAV-ingest sub-table
   (URL, credentials, default-addressbook, refresh-interval,
   insecure-tls); credentials fall back to the parent
