@@ -76,10 +76,22 @@ verifiable from the diff or from a tmux capture:
 - [ ] Keys declared as `key.Binding`; dispatched with
       `key.Matches`. New keys included in the help vocabulary
       per ADR-0072.
-- [ ] No deprecated API usage (`HighPerformanceRendering`,
-      `tea.Sequentially`, package-level `spinner.Tick`,
-      `*Model.NewModel`, `EnterAltScreen`/`EnableMouse*` in
-      `Init`).
+- [ ] No v1-only API usage (see bubbletea-conventions.md §8 for
+      the full deprecated list). Common offenders:
+      `HighPerformanceRendering`, `tea.Sequentially`,
+      `spinner.Tick()` (package-level), `*Model.NewModel`,
+      `tea.WithAltScreen()` Program option,
+      `tea.EnterAltScreen`/`HideCursor` Cmds,
+      `lipgloss.AdaptiveColor`, `cursor.Model` per input,
+      `viewport.New(w, h)` positional, `tea.KeyMsg{...}` literal,
+      `m.Width = n` field assignment on textinput/textarea/
+      viewport/help.
+- [ ] `App.View()` returns `tea.View` with declarative chrome
+      (AltScreen, MouseMode, ReportFocus, WindowTitle) — not via
+      Program options or Cmds.
+- [ ] Cursored children expose `Cursor() *tea.Cursor`; App pulls
+      the focused child's cursor into `tea.View.Cursor`.
+      `VirtualCursor=false` on inputs.
 
 Any deviation introduced this pass must be named in the ADR
 written in step 2 with explicit rationale. "We deviated because X"

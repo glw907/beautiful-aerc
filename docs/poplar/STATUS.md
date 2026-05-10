@@ -14,6 +14,7 @@ lipgloss,bubbles}/v2`. Substrate for Pass 14's huh dependency.
 | 12 | `.ics` invite viewer (#37; ADR-0186) | done |
 | 13 | Background body sync + status indicator (substrate for #38; ADR-0187) | done |
 | 13.1 | Search (#38; ADR-0188) | done |
+| 13.1.5 | Claude infrastructure v2 prep (skills, conventions, pass ritual) | done |
 | 13.2 | Migrate to `charm.land/v2` stack (substrate for #27 huh integration) | pending |
 | 14 | First-run wizard (#27) + config template (#29) | pending (blocked on 13.2) |
 | 14.1 | OAuth refresh (deferred from 14) | pending |

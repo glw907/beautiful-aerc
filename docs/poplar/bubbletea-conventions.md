@@ -37,10 +37,28 @@ itself flags. **Use the concrete-type return.**
 
 ### View signature
 
-`func (m Model) View() string`. Components that depend on
-external state (like `bubbles/help`, which takes a `KeyMap`
-arg — `help/help.go:104`) deviate explicitly via the signature.
-For poplar's purposes, no `View` mutates state — see §6.
+Two-tier contract:
+
+- **Non-cursored children** return `string`:
+  `func (m Model) View() string`. The string honors the size
+  contract (§2). Most poplar subpackages live here: `sidebar`,
+  `account`, `messagelist` (outside search-input mode), `reader`,
+  `helppopover`, `movepicker`, `outbox`, plus all overlays.
+
+- **Cursored children + the App root** return `tea.View`:
+  `func (m Model) View() tea.View`. The `tea.View` carries the
+  size-contracted content string in `Content` and a populated
+  `*tea.Cursor` in `Cursor` while focused (nil otherwise).
+  Cursored subpackages: `compose`, `contacts.Form`, and the
+  search-mode input inside `messagelist`. The App root returns
+  `tea.View` because it pulls the focused child's cursor up and
+  declares chrome (§6).
+
+Use `tea.NewView(s)` as the sugar for wrapping a string when the
+component is cursored but not currently focused. Components that
+depend on external state (like `bubbles/help`, which takes a
+`KeyMap` arg — `help/help.go:104`) deviate explicitly via the
+signature. No `View` mutates state — see §6.
 
 ### Init for composability
 
@@ -115,6 +133,13 @@ Width+Height pad; MaxWidth+MaxHeight truncate; unsetting the outer
 style's size after applying it inside avoids double-counting.
 Poplar's `internal/ui` should keep its `clipPane` helper
 implementing this exact pattern.
+
+In v2, viewport's positional constructor is gone:
+`viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))` is
+the option-bearing replacement. Field assignment on textinput,
+textarea, viewport, and help (`m.Width = n`) is replaced by
+methods (`m.SetWidth(n)`/`m.SetHeight(n)`) — the exported field is
+gone.
 
 ### Style.Width vs Style.MaxWidth
 
@@ -249,6 +274,23 @@ State mutates only in `Update`. Never in `View`. Never inside a
 data races and stale state). When a Cmd needs values from the
 model, capture them by value at construction time.
 
+### Paste handling (v2)
+
+v2 splits bracketed paste off `KeyMsg` into dedicated message
+types: `tea.PasteMsg` (the full payload as a single message),
+`tea.PasteStartMsg`, and `tea.PasteEndMsg`. Components that accept
+text entry must add a `PasteMsg` arm to their `Update` so a paste
+arrives as one atomic event rather than a stream of synthetic
+keystrokes.
+
+The canonical poplar example is compose's address fields. A pasted
+comma-separated list parses through `content.ParseAddressList` and
+emits N completed `Name <email>, ` chips atomically; the
+autocomplete dropdown stays quiet because no per-rune key cycle
+runs. Subject paste replaces the selection or inserts. Body paste
+bundles into one Catkin Undo unit so a single `u` reverses the
+whole paste.
+
 ### Error messages
 
 Poplar's canonical error message is
@@ -259,28 +301,92 @@ error UI.
 
 ## 6. Program setup
 
-### tea.NewProgram options
+### tea.NewProgram options (v2)
 
-Poplar uses (cmd/poplar/root.go):
+In v2, chrome configuration moves off `tea.NewProgram` and onto
+the `tea.View` returned by the App's `View()` method. The Program
+is for environment-level concerns only.
 
-- `WithAltScreen()` — fullscreen altbuffer at startup. **Never**
-  use `tea.EnterAltScreen()` in `Init()`: norms §7 — "Because
-  commands run asynchronously, this command should not be used in
-  your model's Init function." The `WithAltScreen()` constructor
-  option is the right place.
-- `WithMouseCellMotion()` if mouse interaction is wanted (poplar
-  is keyboard-only in v1).
+Poplar's `cmd/poplar/root.go` constructs:
+
+```go
+p := tea.NewProgram(rootModel,
+    tea.WithColorProfile(profile),
+    // input/output streams, env, initial size if needed
+)
+```
+
+Chrome — alt-screen, mouse mode, focus reporting, window title —
+is **not** set here. There is no `tea.WithAltScreen()`,
+`tea.WithMouseCellMotion()`, or `tea.WithReportFocus()` Program
+option in v2.
 
 `WithFPS` defaults to 60 (max 120) — norms §6. Poplar leaves the
 default.
+
+### Declarative chrome (v2)
+
+Chrome is computed every frame from App state and returned on the
+`tea.View` from `App.View()`:
+
+```go
+func (m App) View() tea.View {
+    v := tea.NewView(m.render())
+    v.AltScreen = true
+    v.MouseMode = tea.MouseCellMotion
+    v.ReportFocus = true
+    if name := m.activeAccountName(); name != "" {
+        v.WindowTitle = "poplar — " + name
+    } else {
+        v.WindowTitle = "poplar"
+    }
+    return v
+}
+```
+
+This makes `App.View()` the single source of truth for chrome.
+Per-screen overrides become one-line conditionals — a future
+`--print` mode that suppresses alt-screen sets `v.AltScreen =
+false` for the print path. **Imperative chrome Cmds**
+(`tea.EnterAltScreen`, `tea.ExitAltScreen`, `tea.HideCursor`,
+`tea.ShowCursor`, etc.) are removed in v2. There is nothing to
+"send" — the next frame's `tea.View` *is* the chrome state.
+
+### Cursor hoist (v2)
+
+Each cursored subpackage (compose, contacts.Form, search-mode
+messagelist input) exposes `Cursor() *tea.Cursor`, returning
+populated when focused and `nil` otherwise. The App's `View()`
+walks the focus chain and assigns the active cursor to
+`v.Cursor`:
+
+```go
+func (m App) View() tea.View {
+    v := tea.NewView(m.render())
+    v.AltScreen = true
+    switch {
+    case m.compose != nil:
+        v.Cursor = m.compose.Cursor()
+    case m.contactForm != nil:
+        v.Cursor = m.contactForm.Cursor()
+    case m.searchActive:
+        v.Cursor = m.account.SearchInput().Cursor()
+    }
+    return v
+}
+```
+
+`textinput.VirtualCursor` and `textarea.VirtualCursor` are set to
+`false` app-wide so the input never paints a cursor rune into its
+output string. One blink ticker lives at the App level; per-input
+`cursor.Model` instances are gone.
 
 ### Spinner pattern
 
 Spinners need their owner to:
 1. Construct via `spinner.New(spinner.WithSpinner(spinner.Dot))`.
 2. Return `m.spinner.Tick` from `Init` or from the Update branch
-   that starts the spinner (not `EnterAltScreen`-equivalent
-   restrictions; spinner ticks are allowed in Init).
+   that starts the spinner.
 3. Forward `spinner.TickMsg` into `m.spinner.Update` in the
    parent's Update; the spinner's ID/tag mechanism (norms §1)
    ensures only its own ticks are processed.
@@ -368,9 +474,24 @@ contains the receipt.
 - **`tea.ExecProcess` for in-app surfaces.** Compose, picker,
   inline editors render in-pane. ExecProcess is for genuine
   shell-out (e.g., embedded `nvim`). (ADR-0033.)
-- **`EnterAltScreen()` in `Init()`.** Use `tea.WithAltScreen()`
-  on `NewProgram` instead. Same warning applies to
-  `EnableMouseCellMotion`/`EnableMouseAllMotion`. (norms §7.)
+- **Imperative chrome via `tea.Cmd`.** v2 removes
+  `tea.EnterAltScreen`, `tea.ExitAltScreen`, `tea.HideCursor`,
+  `tea.ShowCursor`, and the mouse/focus-reporting Cmds. Set fields
+  on the `tea.View` returned by `App.View()` instead — see §6.
+- **`compat.AdaptiveColor` shim usage.** Poplar themes are
+  compiled mono-mode (One Dark dark; Solarized Light light; …).
+  The `compat` shim is a migration aid for apps that genuinely
+  need runtime light/dark; we don't. Resolve theme colors to
+  concrete `color.Color` at compile time.
+- **Per-input `cursor.Model`.** v2 hoists cursor to the App via
+  `tea.View.Cursor`. Cursored children expose `Cursor()
+  *tea.Cursor`; the App pulls it up. Set `VirtualCursor=false`
+  on every textinput/textarea so the input never paints a cursor
+  rune into its string.
+- **`atotto/clipboard` for clipboard access.** v2 ships
+  `tea.SetClipboard` / `tea.ReadClipboard` Cmds that work over
+  SSH via OSC 52. Use them instead of the third-party clipboard
+  shim.
 - **`tea.Cmd` for intra-model messaging.** Use direct `Update`
   delegation. (`tea.go:62-64`.)
 - **Re-firing `Init()` from inside `Update()`.** Soft-serve does
@@ -387,9 +508,27 @@ contains the receipt.
 - **String switch on `msg.String()` for actionable keys.** Hides
   bindings from `bubbles/help` and prevents rebinding. Use
   `key.Matches`. (ref-apps §8 avoid #4.)
-- **Using deprecated APIs.** `viewport.HighPerformanceRendering`,
-  `tea.Sequentially`, `spinner.Tick()` (package-level no-arg form),
-  `*Model.NewModel` constructors. (norms §7.)
+- **Using v1-only APIs.** Removed or renamed in v2:
+  `viewport.HighPerformanceRendering` (gone);
+  `tea.Sequentially` (renamed `tea.Sequence`);
+  `spinner.Tick()` package-level no-arg form (use `m.Tick`);
+  `*Model.NewModel` constructors (use `New(...)`);
+  `tea.WithAltScreen()` and other chrome Program options (set
+  on `tea.View` instead);
+  `tea.EnterAltScreen` / `tea.HideCursor` / mouse / focus-report
+  Cmds (declarative on `tea.View`);
+  `lipgloss.AdaptiveColor` (use concrete `lipgloss.Color()` with
+  compile-time-resolved theme; avoid the `compat.AdaptiveColor`
+  shim);
+  `cursor.Model` per textinput/textarea (replaced by `tea.Cursor`
+  hoist; set `VirtualCursor=false`);
+  `viewport.New(w, h)` positional constructor (use
+  `viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))`);
+  `tea.KeyMsg{...}` struct literal (`KeyMsg` is now an interface;
+  use `tea.KeyPressMsg{...}`);
+  exported `Width`/`Height` field assignment on
+  textinput/textarea/viewport/help (use `SetWidth(n)` /
+  `SetHeight(n)` methods).
 
 ## 9. Planning checklist
 
@@ -412,6 +551,13 @@ Before writing any UI code, the plan or spec answers:
       on failure?
 - [ ] If keys: declared as `key.Binding`, dispatched with
       `key.Matches`?
+- [ ] If the new component holds a focusable cursor, does it
+      expose `Cursor() *tea.Cursor`? Is `VirtualCursor=false` on
+      its textinput/textarea so the input doesn't paint its own?
+- [ ] If the pass adds chrome behavior (alt-screen, mouse mode,
+      window title, focus reporting), is it set declaratively on
+      the App's `tea.View` rather than via Program options or
+      Cmds?
 
 Deviations from a bubbles analogue are explicit. "We need a
 custom list because X" is fine; "we just wrote a custom thing"
@@ -447,9 +593,25 @@ verifiable from the diff or from a tmux capture.
 - [ ] Keys declared as `key.Binding`; dispatched with
       `key.Matches`. New keys, if any, included in the help
       vocabulary per ADR-0072.
-- [ ] No deprecated API usage (`HighPerformanceRendering`,
-      `tea.Sequentially`, package-level `spinner.Tick`,
-      `*Model.NewModel`).
+- [ ] No v1-only API usage (see §8 for the full list). Common
+      offenders: `HighPerformanceRendering`, `tea.Sequentially`,
+      package-level `spinner.Tick`, `*Model.NewModel`,
+      `tea.WithAltScreen()` Program option,
+      `tea.EnterAltScreen`/`HideCursor` Cmds,
+      `lipgloss.AdaptiveColor`, `cursor.Model` per input,
+      `viewport.New(w, h)` positional, `tea.KeyMsg{...}` literal,
+      `m.Width = n` field assignment on textinput / textarea /
+      viewport / help.
+- [ ] Cursored subpackages return `tea.View` with `Cursor`
+      populated when focused; non-cursored return `string`.
+- [ ] `App.View()` returns `tea.View` with declarative chrome
+      fields (`AltScreen`, `MouseMode`, `ReportFocus`,
+      `WindowTitle`) computed from App state.
+- [ ] No imperative chrome Cmds (`tea.EnterAltScreen`,
+      `tea.HideCursor`, mouse/focus-reporting). Removed in v2 —
+      set on `tea.View` instead.
+- [ ] No `lipgloss.AdaptiveColor` (or `compat.AdaptiveColor`).
+      Themes resolve to concrete `color.Color` at compile time.
 
 Any deviation introduced this pass is named in an ADR with
 explicit rationale. Silent deviation is not acceptable.

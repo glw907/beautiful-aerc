@@ -3,6 +3,17 @@
 **Date:** 2026-04-26
 **Surveyor:** Claude Sonnet 4.6
 
+> **Note (2026-05-09):** Researched against bubbletea v1.3.10,
+> lipgloss v1.1.x, bubbles v1.0.0. Pass 13.2 migrates poplar to
+> `charm.land/{bubbletea,lipgloss,bubbles}/v2`; some upstream APIs
+> cited below have been renamed, restructured, or removed in v2.
+> The patterns this research grounds (size contract, JoinHorizontal
+> trust, key.Binding declarations, Cmd-isolated I/O, etc.) all
+> hold under v2 — only specific API names changed.
+> `docs/poplar/bubbletea-conventions.md` supersedes for any
+> conflict; load this doc only when the conventions doc is silent
+> and primary sources are needed.
+
 ## Apps and versions
 
 | App | Tag / Commit | Role |
