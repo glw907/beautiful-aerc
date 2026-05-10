@@ -21,11 +21,28 @@ func TestBackfillProgress(t *testing.T) {
 			msgID, []byte("b"), time.Now().UnixNano())
 	}
 
-	done, total, err := a.BackfillProgress()
+	done, total, warn, err := a.BackfillProgress()
 	if err != nil {
 		t.Fatalf("BackfillProgress: %v", err)
 	}
 	if done != 2 || total != 5 {
 		t.Errorf("BackfillProgress = (%d, %d), want (2, 5)", done, total)
+	}
+	if warn {
+		t.Errorf("warn = true on a fresh account; expected false")
+	}
+}
+
+func TestBackfillProgressWarnReflectsThrottle(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	a.backfiller.throttling.Store(true)
+	_, _, warn, err := a.BackfillProgress()
+	if err != nil {
+		t.Fatalf("BackfillProgress: %v", err)
+	}
+	if !warn {
+		t.Errorf("warn = false while throttling; expected true")
 	}
 }

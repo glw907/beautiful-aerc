@@ -248,9 +248,25 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 		return m, tea.Batch(toast, refreshFolderCmd(m.acct, src))
 
 	case sidebar.SearchUpdatedMsg:
-		m.msglist.SetFilter(msg.Query, msg.Mode)
+		if msg.Scope == uicore.ScopeAll {
+			return m, runSearchCmd(m.acct, msg.Query)
+		}
+		m.msglist.SetFilter(msg.Query)
 		ss := m.sidebarColumn.SidebarSearch()
 		ss.SetResultCount(m.msglist.FilterResultCount())
+		m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
+		return m, nil
+
+	case searchResultsMsg:
+		msgs := make([]mail.MessageInfo, 0, len(msg.Hits))
+		origins := make(map[mail.UID]string, len(msg.Hits))
+		for _, h := range msg.Hits {
+			msgs = append(msgs, h.MessageInfo)
+			origins[h.UID] = h.Folder
+		}
+		m.msglist.SetSearchResults(msgs, origins)
+		ss := m.sidebarColumn.SidebarSearch()
+		ss.SetResultCount(len(msg.Hits))
 		m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
 		return m, nil
 
@@ -480,6 +496,9 @@ func (m Model) clearSearchIfActive() Model {
 	}
 	ss.Clear()
 	m.sidebarColumn = m.sidebarColumn.WithSidebarSearch(ss)
+	if m.msglist.ResultsMode() {
+		m.msglist.ClearSearchResults()
+	}
 	m.msglist.ClearFilter()
 	return m
 }

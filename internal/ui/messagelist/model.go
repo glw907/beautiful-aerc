@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/search"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/mattn/go-runewidth"
 )
@@ -73,10 +74,11 @@ type displayRow struct {
 	depth        uint8 // 0 = root, derived during prefix computation
 }
 
-// The zero searchFilter (empty query, SearchModeName) means no filter.
+// searchFilter holds the parsed query plus its raw form for the
+// "is filter active?" predicate. Zero value means no filter.
 type searchFilter struct {
-	query string
-	mode  uicore.SearchMode
+	raw   string
+	query search.Query
 }
 
 // Model renders the message list panel: flags, sender, subject, date.
@@ -106,6 +108,15 @@ type Model struct {
 	filterResults   int
 	visualMode      bool
 	marked          map[mail.UID]struct{}
+
+	// resultsMode replaces the in-folder list with a flat cross-folder
+	// search result set. Threading is suppressed and each row carries
+	// its origin folder via originByUID for the [Folder] sender prefix.
+	resultsMode  bool
+	originByUID  map[mail.UID]string
+	preResults   []mail.MessageInfo
+	preThreaded  bool
+	preCursorUID mail.UID
 }
 
 // New constructs a Model. layout defaults to (Sender=22, Date=5,
@@ -161,7 +172,7 @@ func (m *Model) rebuild() {
 		}
 	}
 	buckets = m.filterBuckets(buckets)
-	if m.filter.query != "" {
+	if m.filter.raw != "" {
 		m.filterResults = len(buckets)
 	} else {
 		m.filterResults = 0
@@ -190,7 +201,7 @@ func (m *Model) rebuild() {
 	for _, bucket := range buckets {
 		rows = appendThreadRows(rows, bucket)
 	}
-	if m.filter.query == "" {
+	if m.filter.raw == "" {
 		applyFoldState(rows, m.folded)
 	}
 	for i := range rows {
@@ -223,14 +234,13 @@ func bucketByThreadID(msgs []mail.MessageInfo) [][]mail.MessageInfo {
 // filterBuckets keeps any bucket containing at least one matching message.
 // Thread-level predicate per ADR-0064.
 func (m *Model) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo {
-	if m.filter.query == "" {
+	if m.filter.raw == "" {
 		return buckets
 	}
-	q := strings.ToLower(m.filter.query)
 	out := buckets[:0]
 	for _, bucket := range buckets {
 		for _, msg := range bucket {
-			if m.matchMessage(msg, q) {
+			if matchMessageQuery(msg, m.filter.query) {
 				out = append(out, bucket)
 				break
 			}
@@ -239,23 +249,66 @@ func (m *Model) filterBuckets(buckets [][]mail.MessageInfo) [][]mail.MessageInfo
 	return out
 }
 
-// matchMessage tests one message against a pre-lowercased query. [name]
-// matches subject + sender. [all] additionally matches the rendered date
-// text the user sees in the date column, not the wire RFC2822 string.
-func (m *Model) matchMessage(msg mail.MessageInfo, lowerQuery string) bool {
-	if strings.Contains(strings.ToLower(msg.Subject), lowerQuery) {
-		return true
-	}
-	if strings.Contains(strings.ToLower(msg.From), lowerQuery) {
-		return true
-	}
-	if m.filter.mode == uicore.SearchModeAll {
-		dateText := displayDate(msg, m.now, m.layout.Date)
-		if strings.Contains(strings.ToLower(dateText), lowerQuery) {
-			return true
+// matchMessageQuery tests one message against a parsed search.Query
+// whose terms have already been lowercased by the caller (see
+// SetFilter). Bare terms match subject + from + to + cc; field-scoped
+// operators constrain the matching field. HasAttachment + In are
+// no-ops folder-locally; the cache search path covers them.
+func matchMessageQuery(msg mail.MessageInfo, q search.Query) bool {
+	for _, t := range q.Terms {
+		if !(containsFold(msg.Subject, t) ||
+			containsFold(msg.From, t) ||
+			containsFold(msg.To, t) ||
+			containsFold(msg.Cc, t)) {
+			return false
 		}
 	}
-	return false
+	for _, t := range q.From {
+		if !containsFold(msg.From, t) {
+			return false
+		}
+	}
+	for _, t := range q.To {
+		if !containsFold(msg.To, t) {
+			return false
+		}
+	}
+	for _, t := range q.Cc {
+		if !containsFold(msg.Cc, t) {
+			return false
+		}
+	}
+	for _, t := range q.Subject {
+		if !containsFold(msg.Subject, t) {
+			return false
+		}
+	}
+	return true
+}
+
+func containsFold(haystack, lowerNeedle string) bool {
+	return strings.Contains(strings.ToLower(haystack), lowerNeedle)
+}
+
+// lowerQueryTerms returns q with every term lowercased so the
+// per-message match loop avoids re-lowercasing on each row.
+func lowerQueryTerms(q search.Query) search.Query {
+	lower := func(xs []string) []string {
+		if len(xs) == 0 {
+			return xs
+		}
+		out := make([]string, len(xs))
+		for i, s := range xs {
+			out[i] = strings.ToLower(s)
+		}
+		return out
+	}
+	q.Terms = lower(q.Terms)
+	q.From = lower(q.From)
+	q.To = lower(q.To)
+	q.Cc = lower(q.Cc)
+	q.Subject = lower(q.Subject)
+	return q
 }
 
 // pickRoot returns the index of the thread root: the message with empty
@@ -420,15 +473,84 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 	}
 }
 
-// SetFilter applies a search filter and rebuilds rows. The first
-// unfiltered→filtered transition snapshots the cursor row so ClearFilter
-// can restore it. Later keystrokes leave the snapshot alone.
-func (m *Model) SetFilter(q string, mode uicore.SearchMode) {
+// senderWithOrigin returns the sender display text. In results mode
+// it prepends `[Folder] ` matching the Geary/Gmail/Fastmail
+// muted-tag-then-sender convention.
+func (m Model) senderWithOrigin(msg mail.MessageInfo) string {
+	if !m.resultsMode {
+		return msg.From
+	}
+	folder := m.originByUID[msg.UID]
+	if folder == "" {
+		return msg.From
+	}
+	return "[" + folder + "] " + msg.From
+}
+
+// SetSearchResults switches the model into cross-folder results mode.
+// originByUID maps each result's UID to its origin folder name; that
+// powers the `[Folder] ` sender prefix in the renderer. Threading is
+// suppressed for the results pane: cross-folder threads aren't
+// meaningful since a single thread can span multiple folders.
+// ClearSearchResults returns to the prior in-folder source.
+func (m *Model) SetSearchResults(msgs []mail.MessageInfo, originByUID map[mail.UID]string) {
+	if !m.resultsMode {
+		m.preResults = m.source
+		m.preThreaded = m.threaded
+		if m.selected < len(m.rows) {
+			m.preCursorUID = m.rows[m.selected].msg.UID
+		}
+	}
+	m.resultsMode = true
+	m.originByUID = originByUID
+	m.threaded = false
+	m.source = msgs
+	m.now = time.Now()
+	m.rebuild()
+	m.selected = 0
+	m.clampOffset()
+}
+
+// ClearSearchResults restores the pre-search source and threading
+// flag. Cursor lands on the previously selected UID when it survives;
+// otherwise it falls back to row 0.
+func (m *Model) ClearSearchResults() {
+	if !m.resultsMode {
+		return
+	}
+	m.resultsMode = false
+	m.originByUID = nil
+	m.source = m.preResults
+	m.threaded = m.preThreaded
+	m.preResults = nil
+	m.now = time.Now()
+	m.rebuild()
+	m.selected = 0
+	for i, r := range m.rows {
+		if r.msg.UID == m.preCursorUID {
+			m.selected = i
+			break
+		}
+	}
+	m.clampOffset()
+}
+
+// ResultsMode reports whether the model is currently displaying a
+// cross-folder search result set.
+func (m Model) ResultsMode() bool { return m.resultsMode }
+
+// SetFilter applies a search filter and rebuilds rows. The query is
+// parsed by internal/search so operators (`from:`, `subject:`) work
+// in folder-local mode too. Bare terms match subject + from + to +
+// cc. The first unfiltered→filtered transition snapshots the cursor
+// row so ClearFilter can restore it. Later keystrokes leave the
+// snapshot alone.
+func (m *Model) SetFilter(q string) {
 	if !m.savedByFilter && q != "" {
 		m.preSearchCursor = m.selected
 		m.savedByFilter = true
 	}
-	m.filter = searchFilter{query: q, mode: mode}
+	m.filter = searchFilter{raw: q, query: lowerQueryTerms(search.Parse(q))}
 	m.rebuild()
 	m.clampOffset()
 }
@@ -812,7 +934,7 @@ func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
 		subjectStyle = m.styles.MsgListUnreadSubject
 	}
 
-	senderText := padRight(truncateCells(msg.From, m.layout.Sender), m.layout.Sender)
+	senderText := padRight(truncateCells(m.senderWithOrigin(msg), m.layout.Sender), m.layout.Sender)
 	sender := uicore.ApplyBg(senderStyle, bgStyle).Render(senderText)
 
 	var date string
@@ -906,7 +1028,7 @@ func (m Model) renderBlankLine() string {
 // messages" for an empty source, "No matches" when a filter is active.
 func (m Model) renderEmpty() string {
 	label := "No messages"
-	if m.filter.query != "" {
+	if m.filter.raw != "" {
 		label = "No matches"
 	}
 	labelLine := m.styles.MsgListBg.Width(m.width).

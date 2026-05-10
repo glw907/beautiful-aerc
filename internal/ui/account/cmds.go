@@ -17,9 +17,9 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/content"
-	"github.com/glw907/poplar/internal/filter"
 	"github.com/glw907/poplar/internal/icalendar"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/search"
 	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -159,6 +159,17 @@ func destroyCmd(c *cache.Account, folder string, uids []mail.UID) tea.Cmd {
 	}
 }
 
+// runSearchCmd dispatches a cross-folder cache.Search.
+func runSearchCmd(c *cache.Account, q string) tea.Cmd {
+	return func() tea.Msg {
+		hits, err := c.Search(context.Background(), search.Parse(q), cache.SearchScope{}, 200)
+		if err != nil {
+			return uicore.ErrorMsg{Op: "search", Err: err}
+		}
+		return searchResultsMsg{Hits: hits}
+	}
+}
+
 // pumpCacheCmd waits for one CacheEvent. Account's Update re-dispatches
 // after each event so the pump stays alive across the program lifetime.
 func pumpCacheCmd(c *cache.Account) tea.Cmd {
@@ -176,16 +187,14 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 // Non-RFC822 input is returned as-is with a zero Unsubscribe and nil Invite.
 func walkBody(buf []byte) (text string, unsub content.Unsubscribe, invite *icalendar.Invite) {
 	unsub = parseUnsubscribeFromRaw(buf)
-	text = string(buf)
-	if !isRFC822(buf) {
+	text, _ = content.ExtractPlainText(buf)
+	if !content.IsRFC822Frame(buf) {
 		return text, unsub, nil
 	}
 	mr, err := gomail.CreateReader(bytes.NewReader(buf))
 	if err != nil {
 		return text, unsub, nil
 	}
-	var plain, html string
-	var calBytes []byte
 	for {
 		p, perr := mr.NextPart()
 		if perr != nil {
@@ -201,35 +210,14 @@ func walkBody(buf []byte) (text string, unsub content.Unsubscribe, invite *icale
 		if rerr != nil {
 			continue
 		}
-		switch ct {
-		case "text/plain":
-			if plain == "" {
-				plain = string(body)
+		if ct == "text/calendar" || ct == "application/ics" {
+			if inv, ierr := icalendar.ParseInvite(body); ierr == nil {
+				invite = &inv
 			}
-		case "text/html":
-			if html == "" {
-				html = string(body)
-			}
-		case "text/calendar", "application/ics":
-			if calBytes == nil {
-				calBytes = body
-			}
+			break
 		}
 	}
 	mr.Close()
-	switch {
-	case plain != "":
-		text = filter.CleanPlain(plain)
-	case html != "":
-		text = filter.CleanHTML(html)
-	default:
-		text = ""
-	}
-	if calBytes != nil {
-		if inv, ierr := icalendar.ParseInvite(calBytes); ierr == nil {
-			invite = &inv
-		}
-	}
 	return text, unsub, invite
 }
 
@@ -257,32 +245,11 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 	}
 }
 
-// isRFC822 sniffs buf for a header line ("Field-Name: value" before the
-// first newline). Non-RFC822 input (mock-backend pre-cleaned markdown)
-// is forwarded unchanged.
-func isRFC822(b []byte) bool {
-	s := string(b)
-	if i := strings.IndexByte(s, '\n'); i > 0 {
-		s = s[:i]
-	}
-	colon := strings.IndexByte(s, ':')
-	if colon <= 0 || colon > 78 {
-		return false
-	}
-	for _, r := range s[:colon] {
-		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') ||
-			(r >= '0' && r <= '9') || r == '-' || r == '_') {
-			return false
-		}
-	}
-	return true
-}
-
 // parseUnsubscribeFromRaw reads the RFC 5322 header block from buf
 // and returns parsed List-Unsubscribe data. Non-RFC822 input returns
 // a zero Unsubscribe.
 func parseUnsubscribeFromRaw(buf []byte) content.Unsubscribe {
-	if !isRFC822(buf) {
+	if !content.IsRFC822Frame(buf) {
 		return content.Unsubscribe{}
 	}
 	r := textproto.NewReader(bufio.NewReader(bytes.NewReader(buf)))

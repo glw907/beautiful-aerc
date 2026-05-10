@@ -49,10 +49,10 @@ func TestSidebarSearchIdle(t *testing.T) {
 		}
 	})
 
-	t.Run("idle Mode is uicore.SearchModeName", func(t *testing.T) {
+	t.Run("idle Mode is uicore.ScopeFolder", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
-		if s.Mode() != uicore.SearchModeName {
-			t.Errorf("Mode() = %v, want uicore.SearchModeName", s.Mode())
+		if s.Scope() != uicore.ScopeFolder {
+			t.Errorf("Mode() = %v, want uicore.ScopeFolder", s.Scope())
 		}
 	})
 }
@@ -90,10 +90,10 @@ func TestSidebarSearchActivate(t *testing.T) {
 	t.Run("Clear: mode reset", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
-		s.mode = uicore.SearchModeAll
+		s.scope = uicore.ScopeAll
 		s.Clear()
-		if s.Mode() != uicore.SearchModeName {
-			t.Errorf("Mode() after Clear = %v, want uicore.SearchModeName", s.Mode())
+		if s.Scope() != uicore.ScopeFolder {
+			t.Errorf("Mode() after Clear = %v, want uicore.ScopeFolder", s.Scope())
 		}
 	})
 
@@ -110,13 +110,13 @@ func TestSidebarSearchActivate(t *testing.T) {
 		}
 	})
 
-	t.Run("typing state with query renders [name] mode badge", func(t *testing.T) {
+	t.Run("typing state with query renders [folder] scope badge", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("x")
 		plain := stripANSISearch(s.View())
-		if !strings.Contains(plain, "[name]") {
-			t.Errorf("typing view missing [name] badge: %q", plain)
+		if !strings.Contains(plain, "[folder]") {
+			t.Errorf("typing view missing [folder] badge: %q", plain)
 		}
 	})
 }
@@ -189,8 +189,8 @@ func TestSidebarSearchUpdate(t *testing.T) {
 		if upd.Query != "p" {
 			t.Errorf("SearchUpdatedMsg.Query = %q, want 'p'", upd.Query)
 		}
-		if upd.Mode != uicore.SearchModeName {
-			t.Errorf("SearchUpdatedMsg.Mode = %v, want uicore.SearchModeName", upd.Mode)
+		if upd.Scope != uicore.ScopeFolder {
+			t.Errorf("SearchUpdatedMsg.Mode = %v, want uicore.ScopeFolder", upd.Scope)
 		}
 	})
 
@@ -211,54 +211,56 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	})
 }
 
-func TestSidebarSearchModeCycle(t *testing.T) {
+func TestSidebarSearchScopeToggle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	t.Run("Tab: cycle [name] → [all]", func(t *testing.T) {
+	backslash := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'\\'}}
+
+	t.Run("backslash: cycle [folder] → [all folders]", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
-		if s.Mode() != uicore.SearchModeAll {
-			t.Errorf("after first Tab: Mode = %v, want uicore.SearchModeAll", s.Mode())
+		s, _ = s.Update(backslash)
+		if s.Scope() != uicore.ScopeAll {
+			t.Errorf("after first \\: Scope = %v, want uicore.ScopeAll", s.Scope())
 		}
 
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
-		if s.Mode() != uicore.SearchModeName {
-			t.Errorf("after second Tab: Mode = %v, want uicore.SearchModeName", s.Mode())
+		s, _ = s.Update(backslash)
+		if s.Scope() != uicore.ScopeFolder {
+			t.Errorf("after second \\: Scope = %v, want uicore.ScopeFolder", s.Scope())
 		}
 	})
 
-	t.Run("Tab cycle emits SearchUpdatedMsg with new mode", func(t *testing.T) {
+	t.Run("backslash emits SearchUpdatedMsg with new scope", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("proj")
 
-		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyTab})
+		_, cmd := s.Update(backslash)
 		if cmd == nil {
-			t.Fatal("Tab should emit a Cmd")
+			t.Fatal("\\ should emit a Cmd")
 		}
 		msg := cmd()
 		upd, ok := unwrapSearchUpdated(msg)
 		if !ok {
 			t.Fatalf("Cmd returned %T, want SearchUpdatedMsg", msg)
 		}
-		if upd.Mode != uicore.SearchModeAll {
-			t.Errorf("SearchUpdatedMsg.Mode = %v, want uicore.SearchModeAll", upd.Mode)
+		if upd.Scope != uicore.ScopeAll {
+			t.Errorf("SearchUpdatedMsg.Scope = %v, want uicore.ScopeAll", upd.Scope)
 		}
 		if upd.Query != "proj" {
 			t.Errorf("SearchUpdatedMsg.Query = %q, want 'proj'", upd.Query)
 		}
 	})
 
-	t.Run("view shows [all] after Tab with non-empty query", func(t *testing.T) {
+	t.Run("view shows [all folders] after backslash with non-empty query", func(t *testing.T) {
 		s := NewSearch(styles, 30, uicore.FancyIcons)
 		s.Activate()
 		s.input.SetValue("x")
-		s, _ = s.Update(tea.KeyMsg{Type: tea.KeyTab})
+		s, _ = s.Update(backslash)
 		plain := stripANSISearch(s.View())
-		if !strings.Contains(plain, "[all]") {
-			t.Errorf("view missing [all] badge after Tab: %q", plain)
+		if !strings.Contains(plain, "[all folders]") {
+			t.Errorf("view missing [all folders] badge after \\: %q", plain)
 		}
 	})
 }

@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 13.1 — Search (#38) on top of the body-sync
-substrate landed in Pass 13.
+**Current pass:** Pass 14 — First-run wizard (#27) + OAuth refresh
++ config template (#29).
 
 ## Passes
 
@@ -13,7 +13,7 @@ substrate landed in Pass 13.
 | 11 | List-Unsubscribe (#36; ADR-0185) | done |
 | 12 | `.ics` invite viewer (#37; ADR-0186) | done |
 | 13 | Background body sync + status indicator (substrate for #38; ADR-0187) | done |
-| 13.1 | Search (#38) | pending |
+| 13.1 | Search (#38; ADR-0188) | done |
 | 14 | First-run wizard (#27) + OAuth refresh + config template (#29) | pending |
 | 15 | Polish II — popover dim (#14) + items surfaced during 10–14 | pending |
 | 16 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
@@ -21,35 +21,32 @@ substrate landed in Pass 13.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 13.1)
+## Next starter prompt (Pass 14)
 
-> **Goal.** Cross-folder search (#38) reading from the local
-> body cache that Pass 13's `Backfiller` populates.
+> **Goal.** First-run UX: an interactive wizard that builds
+> `~/.config/poplar/config.toml` for new users (#27), wired to
+> the existing provider preset registry. Pair with OAuth
+> refresh-token handling (#29) so Gmail/Outlook XOAUTH2 accounts
+> stay connected past the first access-token expiry.
 >
-> **Scope.** New SQLite FTS5 virtual table indexed off
-> `messages` + `bodies`, populated synchronously by `storeBody`
-> and (where applicable) by header upserts. Operator parser for
-> the search query (`from:`, `to:`, `subject:`, `has:attachment`,
-> bare terms = subject + body); the survey doc names the
-> matrix-aligned operator set. UI surface: extend the existing
-> sidebar search shelf to support `\` (cross-folder mode toggle)
-> and route hits to a synthetic results pane. The `↓ N/M`
-> backfill segment (already in chrome) covers progress feedback
-> while indexing is incomplete.
+> **Scope.** New `poplar config init --interactive` (or first-run
+> auto-launch when no config exists) walks: provider pick →
+> credentials → IMAP/JMAP probe → identity setup → write file.
+> OAuth refresh: shared `internal/mailauth` helper that exchanges
+> a refresh token for a fresh access token before each Connect,
+> persisted via `password-cmd` integration. Config template
+> rewrite (#29) folds the new fields into the canonical example.
 >
-> **Settled (do not re-brainstorm):** SQLite FTS5 (no Bleve,
-> no external index); operator set per the matrix survey;
-> sidebar shelf as the entry point (no new top-level overlay);
-> backfill is the substrate (Pass 13.1 reads, doesn't write
-> the population worker). See `docs/poplar/research/2026-05-09-
-> mail-client-search-survey.md`.
+> **Settled (do not re-brainstorm):** Wizard runs in bubbletea
+> (no separate CLI prompt loop); reuses the existing provider
+> preset machinery in `internal/config/`; OAuth lives at the
+> auth layer per ADR-0098, not the backends.
 >
-> **Open — brainstorm:** FTS5 schema shape (separate virtual
-> table vs FTS-shadowed messages); index-update transaction
-> boundaries (inside `storeBody` tx vs trigger); throttle-state
-> wiring for the `↓ ⚠` warn substate left unwired in Pass 13;
-> results-pane keymap + sort.
+> **Open — brainstorm:** Wizard flow shape (single screen vs
+> stepped); OAuth refresh storage format (extend `password-cmd`
+> protocol vs new keyring path); how the wizard handles probe
+> failures (retry inline vs save-and-quit).
 >
 > **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-pass-13-1-search.md`,
+> at `docs/superpowers/plans/YYYY-MM-DD-pass-14-firstrun.md`,
 > implement. Standard pass-end checklist applies.

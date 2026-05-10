@@ -196,16 +196,17 @@ func (a *Account) Events() <-chan CacheEvent { return a.events }
 // handling has lost ground. Re-read the cache instead.
 func (a *Account) DroppedEvents() uint64 { return a.droppedEvents.Load() }
 
-// BackfillProgress returns the count of cached bodies and the total
-// message count.
-func (a *Account) BackfillProgress() (done, total int, err error) {
+// BackfillProgress returns the count of cached bodies, the total
+// message count, and whether the backfiller is currently in throttle
+// backoff. The warn flag drives the status-bar `↓ ⚠` substate.
+func (a *Account) BackfillProgress() (done, total int, warn bool, err error) {
 	if err = a.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&total); err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
 	if err = a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&done); err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
-	return done, total, nil
+	return done, total, a.backfiller.Throttling(), nil
 }
 
 // NotifyActivity signals recent user input, pausing backfill until

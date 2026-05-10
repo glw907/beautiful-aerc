@@ -274,15 +274,11 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   address type; `content.ParseAddressList` is the shared list
   parser. `internal/filter` exposes `MarkdownBody`/`MarkdownToHTML` as the shared goldmark entries (Linkify + Table).
 - `internal/ui/compose/` owns the live compose surface. `Dropdown`
-  is a value-type sub-model on `compose.Model` for To/Cc/Bcc
-  autocomplete; the `SuggestFn func(prefix) []contacts.Suggestion`
-  seam threads through `compose.New`/`Open` and is wired to
-  `App.suggestAddresses` → `cache.Account.SuggestAddresses` (the
-  recency-decayed query over `message_recipients` joined to the
-  carded pool, LIMIT 7). Renders only on To/Cc/Bcc focus when
-  the trailing fragment is ≥ 2 chars; Up/Down wrap; Tab/Enter
-  rewrite the fragment as `Name <email>, `; Esc dismisses;
-  splices below the focused-header row. ADR-0174.
+  is a value-type To/Cc/Bcc autocomplete sub-model on
+  `compose.Model`; `SuggestFn` threads from `App.suggestAddresses`
+  → `cache.Account.SuggestAddresses` (recency-decayed,
+  LIMIT 7). Renders on focus when the trailing fragment is ≥ 2
+  chars; Tab/Enter rewrites as `Name <email>, `. ADR-0174.
 
 ### Address book
 
@@ -370,6 +366,12 @@ The cache layer (per-account SQLite, schema versions, drainer,
 outbox state machine, body + attachment storage) lives in
 `.claude/rules/cache-invariants.md`. Auto-loaded when editing
 `internal/cache/`, `cmd/poplar/cache*.go`, or planning passes.
+
+## Search
+
+Search layer (FTS5 schema v11, parser, cache `Search`, sidebar
+scope toggle, results-mode messagelist, throttle warn) lives in
+`.claude/rules/search-invariants.md`. ADR-0188.
 
 ## Build & verification
 

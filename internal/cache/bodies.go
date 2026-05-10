@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -28,8 +29,11 @@ func (a *Account) lookupBody(ctx context.Context, uid mail.UID) ([]byte, bool, e
 }
 
 // storeBody upserts a body row. The header row must already exist.
-// Evicts oldest-by-sent-date when maxSize > 0.
+// Evicts oldest-by-sent-date when maxSize > 0. MIME→plaintext
+// extraction runs before the transaction so the write lock doesn't
+// hold across goldmark / charset decoding for large bodies.
 func (a *Account) storeBody(ctx context.Context, uid mail.UID, body []byte) error {
+	indexedText, _ := content.ExtractPlainText(body)
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		newSize := int64(len(body))
 		if a.maxSize > 0 {
@@ -59,6 +63,13 @@ func (a *Account) storeBody(ctx context.Context, uid mail.UID, body []byte) erro
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			return fmt.Errorf("store body %s: unknown message uid", uid)
+		}
+		var msgID int64
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM messages WHERE protocol_id = ?`, string(uid)).Scan(&msgID); err != nil {
+			return fmt.Errorf("store body %s: lookup id: %w", uid, err)
+		}
+		if err := writeFTSBodyTx(ctx, tx, msgID, indexedText); err != nil {
+			return fmt.Errorf("store body %s: fts: %w", uid, err)
 		}
 		return nil
 	})

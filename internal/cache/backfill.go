@@ -44,6 +44,7 @@ type Backfiller struct {
 
 	lastActivity     atomic.Int64 // unix nanos
 	connOnline       atomic.Bool
+	throttling       atomic.Bool
 	throttleAttempts int
 }
 
@@ -83,6 +84,11 @@ func (b *Backfiller) fetchOne(ctx context.Context) (int, error) {
 func (b *Backfiller) NotifyActivity() {
 	b.lastActivity.Store(time.Now().UnixNano())
 }
+
+// Throttling reports whether the backfiller is currently sleeping in
+// throttle backoff. Read from the App goroutine for the status-bar
+// warn substate.
+func (b *Backfiller) Throttling() bool { return b.throttling.Load() }
 
 // NotifyConnState suspends backfill while online is false.
 func (b *Backfiller) NotifyConnState(online bool) {
@@ -141,18 +147,21 @@ func (b *Backfiller) runBatch(ctx context.Context) {
 		if err != nil {
 			if isThrottleErr(err) {
 				b.throttleAttempts++
+				b.throttling.Store(true)
 				select {
 				case <-ctx.Done():
 				case <-time.After(backoff.Exponential(b.throttleAttempts, time.Second, 60*time.Second)):
 				}
 				return
 			}
+			b.throttling.Store(false)
 			b.throttleAttempts = 0
 			return
 		}
 		if n == 0 {
 			return // caught up
 		}
+		b.throttling.Store(false)
 		b.throttleAttempts = 0
 		bytesFetched += int64(n)
 	}

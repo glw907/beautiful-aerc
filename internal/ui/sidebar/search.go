@@ -11,8 +11,10 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
-// searchCycleMode binds Tab to the [name]↔[all] mode toggle while typing.
-var searchCycleMode = key.NewBinding(key.WithKeys("tab"))
+// searchToggleScope binds `\` to the folder ↔ all-folders scope toggle
+// while typing. Replaces the Pass 13's `[name]/[all]` Tab toggle —
+// operators (`from:`, `subject:`, …) cover the field-selection axis.
+var searchToggleScope = key.NewBinding(key.WithKeys("\\"))
 
 // SearchState is the lifecycle state of the sidebar search UI.
 type SearchState int
@@ -26,10 +28,10 @@ const (
 	SearchActive
 )
 
-// SearchUpdatedMsg carries query and mode up to AccountTab on every Typing change.
+// SearchUpdatedMsg carries query and scope up to AccountTab on every Typing change.
 type SearchUpdatedMsg struct {
 	Query string
-	Mode  uicore.SearchMode
+	Scope uicore.SearchScope
 }
 
 // Search is the 3-row shelf pinned to the bottom of the sidebar column.
@@ -37,7 +39,7 @@ type SearchUpdatedMsg struct {
 // transitions come from direct method calls.
 type Search struct {
 	input   textinput.Model
-	mode    uicore.SearchMode
+	scope   uicore.SearchScope
 	state   SearchState
 	results int
 	styles  Styles
@@ -54,7 +56,7 @@ func NewSearch(styles Styles, width int, icons uicore.IconSet) Search {
 	ti.CharLimit = 0
 	return Search{
 		input:  ti,
-		mode:   uicore.SearchModeName,
+		scope:  uicore.ScopeFolder,
 		state:  SearchIdle,
 		styles: styles,
 		icons:  icons,
@@ -62,10 +64,10 @@ func NewSearch(styles Styles, width int, icons uicore.IconSet) Search {
 	}
 }
 
-func (s Search) State() SearchState      { return s.state }
-func (s Search) Query() string           { return s.input.Value() }
-func (s Search) Mode() uicore.SearchMode { return s.mode }
-func (s Search) ResultCount() int        { return s.results }
+func (s Search) State() SearchState        { return s.state }
+func (s Search) Query() string             { return s.input.Value() }
+func (s Search) Scope() uicore.SearchScope { return s.scope }
+func (s Search) ResultCount() int          { return s.results }
 
 // SetSize sets the width and clamps the textinput so View() never
 // overflows the column. Height is fixed at ShelfRows.
@@ -88,7 +90,7 @@ func (s *Search) Clear() {
 	s.state = SearchIdle
 	s.input.Reset()
 	s.input.Blur()
-	s.mode = uicore.SearchModeName
+	s.scope = uicore.ScopeFolder
 	s.results = 0
 }
 
@@ -104,7 +106,7 @@ func (s *Search) SetResultCount(n int) {
 }
 
 // Update routes a Msg through the textinput while in Typing state and
-// emits SearchUpdatedMsg on query or mode change. The textinput's
+// emits SearchUpdatedMsg on query or scope change. The textinput's
 // blink-ticker Cmd is dropped; a blinking cursor isn't wanted here and
 // draining it synchronously adds 500ms per keystroke in tests.
 func (s Search) Update(msg tea.Msg) (Search, tea.Cmd) {
@@ -112,16 +114,16 @@ func (s Search) Update(msg tea.Msg) (Search, tea.Cmd) {
 		return s, nil
 	}
 
-	if k, ok := msg.(tea.KeyMsg); ok && key.Matches(k, searchCycleMode) {
-		if s.mode == uicore.SearchModeName {
-			s.mode = uicore.SearchModeAll
+	if k, ok := msg.(tea.KeyMsg); ok && key.Matches(k, searchToggleScope) {
+		if s.scope == uicore.ScopeFolder {
+			s.scope = uicore.ScopeAll
 		} else {
-			s.mode = uicore.SearchModeName
+			s.scope = uicore.ScopeFolder
 		}
 		query := s.input.Value()
-		mode := s.mode
+		scope := s.scope
 		return s, func() tea.Msg {
-			return SearchUpdatedMsg{Query: query, Mode: mode}
+			return SearchUpdatedMsg{Query: query, Scope: scope}
 		}
 	}
 
@@ -132,9 +134,9 @@ func (s Search) Update(msg tea.Msg) (Search, tea.Cmd) {
 		return s, nil
 	}
 	query := cur
-	mode := s.mode
+	scope := s.scope
 	return s, func() tea.Msg {
-		return SearchUpdatedMsg{Query: query, Mode: mode}
+		return SearchUpdatedMsg{Query: query, Scope: scope}
 	}
 }
 
@@ -180,17 +182,17 @@ func (s Search) renderPromptRow() string {
 	return uicore.FillRowToWidth(content, s.width, s.styles.SidebarBg)
 }
 
-// renderInfoRow draws the mode badge and result count. Blank when idle
+// renderInfoRow draws the scope badge and result count. Blank when idle
 // or query is empty.
 func (s Search) renderInfoRow() string {
 	if s.state == SearchIdle || s.Query() == "" {
 		return s.renderBlankRow()
 	}
-	modeLabel := "[name]"
-	if s.mode == uicore.SearchModeAll {
-		modeLabel = "[all]"
+	scopeLabel := "[folder]"
+	if s.scope == uicore.ScopeAll {
+		scopeLabel = "[all folders]"
 	}
-	mode := uicore.ApplyBg(s.styles.SearchModeBadge, s.styles.SidebarBg).Render(modeLabel)
+	scopeBadge := uicore.ApplyBg(s.styles.SearchModeBadge, s.styles.SidebarBg).Render(scopeLabel)
 
 	var countText string
 	var countStyled string
@@ -204,9 +206,9 @@ func (s Search) renderInfoRow() string {
 
 	indent := s.styles.SidebarBg.Render("  ")
 	margin := s.styles.SidebarBg.Render(" ")
-	contentCells := 2 + lipgloss.Width(modeLabel) + lipgloss.Width(countText) + 1
+	contentCells := 2 + lipgloss.Width(scopeLabel) + lipgloss.Width(countText) + 1
 	gap := max(1, s.width-contentCells)
-	content := indent + mode + s.styles.SidebarBg.Render(strings.Repeat(" ", gap)) + countStyled + margin
+	content := indent + scopeBadge + s.styles.SidebarBg.Render(strings.Repeat(" ", gap)) + countStyled + margin
 	return uicore.FillRowToWidth(content, s.width, s.styles.SidebarBg)
 }
 

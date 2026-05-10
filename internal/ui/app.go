@@ -94,6 +94,7 @@ type App struct {
 	lastBackfillDone   int
 	lastBackfillTotal  int
 	lastBackfillPaused bool
+	lastBackfillWarn   bool
 
 	theme                *theme.CompiledTheme
 	compose              *uicompose.Model
@@ -222,15 +223,17 @@ func (m App) deriveChromeFromAcct() App {
 }
 
 func (m App) refreshBackfillSegment() App {
-	done, total, _ := m.acct.Cache().BackfillProgress()
+	done, total, warn, _ := m.acct.Cache().BackfillProgress()
 	paused := m.statusBar.ConnectionState() != Connected
-	if done == m.lastBackfillDone && total == m.lastBackfillTotal && paused == m.lastBackfillPaused {
+	if done == m.lastBackfillDone && total == m.lastBackfillTotal &&
+		paused == m.lastBackfillPaused && warn == m.lastBackfillWarn {
 		return m
 	}
 	m.lastBackfillDone = done
 	m.lastBackfillTotal = total
 	m.lastBackfillPaused = paused
-	m.statusBar = m.statusBar.SetBackfill(done, total, paused, false)
+	m.lastBackfillWarn = warn
+	m.statusBar = m.statusBar.SetBackfill(done, total, paused, warn)
 	return m
 }
 

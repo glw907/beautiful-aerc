@@ -767,7 +767,7 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("empty query keeps all rows", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("", uicore.SearchModeName)
+		ml.SetFilter("")
 		if got := len(ml.rows); got != 3 {
 			t.Errorf("len(rows) after empty filter = %d, want 3", got)
 		}
@@ -775,7 +775,7 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("substring match on subject", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		if got := len(ml.rows); got != 1 {
 			t.Errorf("len(rows) = %d, want 1", got)
 		}
@@ -786,7 +786,7 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("substring match on sender", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("bob", uicore.SearchModeName)
+		ml.SetFilter("bob")
 		if got := len(ml.rows); got != 1 {
 			t.Errorf("len(rows) = %d, want 1", got)
 		}
@@ -797,7 +797,7 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("case-insensitive", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("ALICE", uicore.SearchModeName)
+		ml.SetFilter("ALICE")
 		if got := len(ml.rows); got != 1 {
 			t.Errorf("len(rows) = %d, want 1", got)
 		}
@@ -805,7 +805,7 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("no matches returns empty rows", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("zzz-nothing", uicore.SearchModeName)
+		ml.SetFilter("zzz-nothing")
 		if got := len(ml.rows); got != 0 {
 			t.Errorf("len(rows) = %d, want 0", got)
 		}
@@ -813,50 +813,29 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("ClearFilter restores all rows", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		ml.ClearFilter()
 		if got := len(ml.rows); got != 3 {
 			t.Errorf("len(rows) after clear = %d, want 3", got)
 		}
 	})
 
-	t.Run("[name] mode does not match date", func(t *testing.T) {
+	t.Run("date text is not a filter target", func(t *testing.T) {
+		// The pre-13.1 [name]/[all] mode toggle is retired — operators
+		// (`from:`, `subject:`) replace it. Bare terms match
+		// subject + from + to + cc, never the rendered date column.
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("Apr 10", uicore.SearchModeName)
+		ml.SetFilter("Apr 10")
 		if got := len(ml.rows); got != 0 {
-			t.Errorf("len(rows) for Apr 10 under [name] = %d, want 0", got)
+			t.Errorf("date text leaked into filter: len(rows) = %d, want 0", got)
 		}
 	})
 
-	t.Run("[all] mode matches date", func(t *testing.T) {
+	t.Run("from: operator scopes to sender", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("Apr 10", uicore.SearchModeAll)
-		if got := len(ml.rows); got != 1 {
-			t.Errorf("len(rows) for Apr 10 under [all] = %d, want 1", got)
-		}
-		if ml.rows[0].msg.UID != "1" {
-			t.Errorf("matched row = %q, want 1", ml.rows[0].msg.UID)
-		}
-	})
-
-	t.Run("[all] mode also matches subject and sender", func(t *testing.T) {
-		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("project", uicore.SearchModeAll)
-		if got := len(ml.rows); got != 1 {
-			t.Errorf("len(rows) for project under [all] = %d, want 1", got)
-		}
-	})
-
-	t.Run("[all] and [name] differ on date-only queries", func(t *testing.T) {
-		mlName := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		mlAll := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		mlName.SetFilter("Apr 09", uicore.SearchModeName)
-		mlAll.SetFilter("Apr 09", uicore.SearchModeAll)
-		if len(mlName.rows) != 0 {
-			t.Errorf("[name] matched date: len(rows) = %d, want 0", len(mlName.rows))
-		}
-		if len(mlAll.rows) != 1 {
-			t.Errorf("[all] missed date: len(rows) = %d, want 1", len(mlAll.rows))
+		ml.SetFilter("from:alice")
+		if got := len(ml.rows); got == 0 {
+			t.Errorf("from:alice matched no rows; want at least 1")
 		}
 	})
 
@@ -867,7 +846,7 @@ func TestMessageListFilter(t *testing.T) {
 		if ml.selected != 2 {
 			t.Fatalf("setup: selected = %d, want 2", ml.selected)
 		}
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		if ml.preSearchCursor != 2 {
 			t.Errorf("preSearchCursor = %d, want 2", ml.preSearchCursor)
 		}
@@ -877,9 +856,9 @@ func TestMessageListFilter(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.MoveDown()
 		ml.MoveDown()
-		ml.SetFilter("p", uicore.SearchModeName)
-		ml.SetFilter("pr", uicore.SearchModeName)
-		ml.SetFilter("pro", uicore.SearchModeName)
+		ml.SetFilter("p")
+		ml.SetFilter("pr")
+		ml.SetFilter("pro")
 		if ml.preSearchCursor != 2 {
 			t.Errorf("preSearchCursor after more typing = %d, want 2", ml.preSearchCursor)
 		}
@@ -889,7 +868,7 @@ func TestMessageListFilter(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.MoveDown()
 		ml.MoveDown()
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		ml.ClearFilter()
 		if ml.selected != 2 {
 			t.Errorf("selected after clear = %d, want 2", ml.selected)
@@ -900,7 +879,7 @@ func TestMessageListFilter(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.MoveDown()
 		ml.MoveDown()
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		ml.SetMessages(msgs[:1])
 		ml.ClearFilter()
 		if ml.selected != 0 {
@@ -910,10 +889,10 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("re-activating search after clear starts fresh save", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		ml.ClearFilter()
 		ml.MoveDown()
-		ml.SetFilter("weekend", uicore.SearchModeName)
+		ml.SetFilter("weekend")
 		if ml.preSearchCursor != 1 {
 			t.Errorf("preSearchCursor on re-activate = %d, want 1", ml.preSearchCursor)
 		}
@@ -943,7 +922,7 @@ func TestMessageListFilterFoldShadow(t *testing.T) {
 			t.Fatalf("setup: visible rows = %d, want 2", visibleBefore)
 		}
 
-		ml.SetFilter("server", uicore.SearchModeName)
+		ml.SetFilter("server")
 		visibleAfter := 0
 		for _, r := range ml.rows {
 			if !r.hidden {
@@ -958,7 +937,7 @@ func TestMessageListFilterFoldShadow(t *testing.T) {
 	t.Run("clear filter restores saved fold state", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.ToggleFoldAll()
-		ml.SetFilter("server", uicore.SearchModeName)
+		ml.SetFilter("server")
 		ml.ClearFilter()
 
 		var rootRow displayRow
@@ -994,7 +973,7 @@ func TestMessageListFilterResultCount(t *testing.T) {
 
 	t.Run("count is thread count, not message count", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("project", uicore.SearchModeName)
+		ml.SetFilter("project")
 		if got := ml.FilterResultCount(); got != 3 {
 			t.Errorf("FilterResultCount = %d, want 3 (2 singletons + 1 thread)", got)
 		}
@@ -1002,7 +981,7 @@ func TestMessageListFilterResultCount(t *testing.T) {
 
 	t.Run("zero when no matches", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("zzz-nothing", uicore.SearchModeName)
+		ml.SetFilter("zzz-nothing")
 		if got := ml.FilterResultCount(); got != 0 {
 			t.Errorf("FilterResultCount = %d, want 0", got)
 		}
@@ -1125,7 +1104,7 @@ func TestMessageListPlaceholder(t *testing.T) {
 			{UID: "1", ThreadID: "1", Subject: "Hello", From: "Alice", Date: "Apr 10"},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.SetFilter("nothing-here-zzz", uicore.SearchModeName)
+		ml.SetFilter("nothing-here-zzz")
 		plain := stripANSI(ml.View())
 		if !strings.Contains(plain, "No matches") {
 			t.Error("filter with no matches should render 'No matches'")

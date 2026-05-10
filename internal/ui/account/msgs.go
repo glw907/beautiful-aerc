@@ -77,3 +77,10 @@ type EmptyFolderConfirmedMsg struct {
 // and fire the load Cmd, exactly like J/K navigation. Used by App to restore
 // the previous folder after leaving the outbox view.
 type JumpFolderMsg struct{ Canonical string }
+
+// searchResultsMsg carries cross-folder search hits back to AccountTab.
+// AccountTab drops them into the messagelist via SetSearchResults; the
+// origin folder rides on each hit.
+type searchResultsMsg struct {
+	Hits []cache.SearchHit
+}

@@ -334,6 +334,9 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 			if err := writeRecipientsTx(ctx, tx, id, &m); err != nil {
 				return fmt.Errorf("write recipients %s: %w", m.UID, err)
 			}
+			if err := writeFTSHeadersTx(ctx, tx, id, &m); err != nil {
+				return fmt.Errorf("write fts headers %s: %w", m.UID, err)
+			}
 			if folder != "" {
 				if _, err := tx.Exec(`INSERT OR IGNORE INTO message_mailboxes (message, folder) VALUES (?, ?)`, id, folderID); err != nil {
 					return fmt.Errorf("link message %s ↔ folder: %w", m.UID, err)

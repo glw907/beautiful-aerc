@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const schemaVersion = 10
+const schemaVersion = 11
 
 // migration applies one schema step inside a transaction. Index 0 is v0→v1.
 type migration func(*sql.Tx) error
@@ -23,6 +23,7 @@ var migrations = []migration{
 	migrateV8,  // v7 → v8: contacts cache + recipient projection
 	migrateV9,  // v8 → v9: outbox.folder nullable (contact ops have no folder scope)
 	migrateV10, // v9 → v10: outbox.scheduled_for + outbox.draft_id FK
+	migrateV11, // v10 → v11: messages_fts FTS5 virtual table for search
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -374,6 +375,34 @@ func migrateV10(tx *sql.Tx) error {
 	for _, s := range stmts {
 		if _, err := tx.Exec(s); err != nil {
 			return fmt.Errorf("migrateV10: %v", err)
+		}
+	}
+	return nil
+}
+
+// migrateV11 adds the messages_fts FTS5 virtual table for cross-folder
+// search. The cache layer owns all writes from Go; SQLite triggers
+// can't extract plain text from MIME bytes, which is what feeds the
+// body column. Header columns backfill from existing messages rows
+// in the same transaction; bodies populate later as storeBody runs
+// and the Backfiller catches up.
+func migrateV11(tx *sql.Tx) error {
+	stmts := []string{
+		`CREATE VIRTUAL TABLE messages_fts USING fts5(
+            subject, from_addr, to_addr, cc_addr, body
+        )`,
+		`INSERT INTO messages_fts(rowid, subject, from_addr, to_addr, cc_addr, body)
+            SELECT id,
+                   COALESCE(subject, ''),
+                   COALESCE(from_addr, ''),
+                   COALESCE(to_addr, ''),
+                   COALESCE(cc_addr, ''),
+                   ''
+              FROM messages`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("install messages_fts: %v", err)
 		}
 	}
 	return nil

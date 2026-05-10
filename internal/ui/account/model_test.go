@@ -459,7 +459,7 @@ func TestModelSearchFilter(t *testing.T) {
 	t.Run("SearchUpdatedMsg directly sets the filter", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
 		rowsBefore := len(tab.msglist.Rows())
-		tab, _ = tab.updateTab(sidebar.SearchUpdatedMsg{Query: "alice", Mode: uicore.SearchModeName})
+		tab, _ = tab.updateTab(sidebar.SearchUpdatedMsg{Query: "alice", Scope: uicore.ScopeFolder})
 		if got := len(tab.msglist.Rows()); got >= rowsBefore {
 			t.Errorf("row count after SearchUpdatedMsg = %d, want < %d", got, rowsBefore)
 		}
@@ -467,7 +467,7 @@ func TestModelSearchFilter(t *testing.T) {
 
 	t.Run("SearchUpdatedMsg feeds the count back to SidebarSearch", func(t *testing.T) {
 		tab := newLoadedTab(t, 80, 30)
-		tab, _ = tab.updateTab(sidebar.SearchUpdatedMsg{Query: "alice", Mode: uicore.SearchModeName})
+		tab, _ = tab.updateTab(sidebar.SearchUpdatedMsg{Query: "alice", Scope: uicore.ScopeFolder})
 		if tab.sidebarColumn.SidebarSearch().ResultCount() != tab.msglist.FilterResultCount() {
 			t.Errorf("sidebarSearch.ResultCount = %d, want %d (mirrors FilterResultCount)",
 				tab.sidebarColumn.SidebarSearch().ResultCount(), tab.msglist.FilterResultCount())
@@ -1190,7 +1190,7 @@ func TestModel_NextMessage_WalksFilteredRows(t *testing.T) {
 	tab.msglist.SetMessages(msgs)
 
 	// Commit a filter that hides UID 2.
-	tab.msglist.SetFilter("alpha", uicore.SearchModeName)
+	tab.msglist.SetFilter("alpha")
 
 	// Open UID 1 in the viewer.
 	tab, _ = tab.openMessage(msgs[0])

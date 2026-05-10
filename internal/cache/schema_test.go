@@ -61,3 +61,31 @@ func TestMigrateV10AddsScheduledForAndDraftID(t *testing.T) {
 		t.Errorf("outbox_pickup index columns = %v, want %v", got, want)
 	}
 }
+
+func TestMigrateV11AddsMessagesFTS(t *testing.T) {
+	a := openTestAccount(t)
+	defer a.Close()
+
+	// Seed a messages row before exercising FTS so the backfill path
+	// is also covered by re-applying migrateV11 idempotently below.
+	if _, err := a.db.Exec(`INSERT INTO messages
+        (protocol_id, subject, from_addr, to_addr, cc_addr, sent_at, flags)
+        VALUES ('u1', 'Hello world', 'alice@example.com', 'bob@example.com', '', 0, 0)`); err != nil {
+		t.Fatalf("seed message: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO messages_fts(rowid, subject, from_addr, to_addr, cc_addr, body)
+        SELECT id, subject, from_addr, to_addr, cc_addr, '' FROM messages WHERE protocol_id = 'u1'`); err != nil {
+		t.Fatalf("seed fts row: %v", err)
+	}
+
+	var rowid int64
+	if err := a.db.QueryRow(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'subject:Hello'`).Scan(&rowid); err != nil {
+		t.Fatalf("MATCH subject: %v", err)
+	}
+	if rowid == 0 {
+		t.Errorf("MATCH subject:Hello returned rowid 0")
+	}
+	if err := a.db.QueryRow(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'from_addr:alice'`).Scan(&rowid); err != nil {
+		t.Fatalf("MATCH from_addr: %v", err)
+	}
+}

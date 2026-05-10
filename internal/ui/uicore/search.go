@@ -1,11 +1,12 @@
 package uicore
 
-// SearchMode selects which fields the message filter matches against.
-type SearchMode int
+// SearchScope picks the breadth of the sidebar search shelf:
+// current folder only, or every folder the account knows about.
+type SearchScope int
 
 const (
-	// SearchModeName matches subject + sender. Default.
-	SearchModeName SearchMode = iota
-	// SearchModeAll matches subject + sender + date text.
-	SearchModeAll
+	// ScopeFolder filters the active folder in place.
+	ScopeFolder SearchScope = iota
+	// ScopeAll searches every folder via the FTS5 index.
+	ScopeAll
 )
