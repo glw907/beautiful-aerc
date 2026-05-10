@@ -4,6 +4,25 @@
 
 ## Active
 
+### Bubbletea v2 alignment + showcase positioning `v2-showcase`
+Migrate poplar to charm.land/{bubbletea,lipgloss,bubbles}/v2 and
+position it as a standout reference implementation by v0.9.0. The
+user's framing: *infinite slack, position poplar as a standout
+example of what's possible with bubbletea v2.*
+
+22 passes from 13.2 through v0.9.0 covering substrate migration,
+internal idiom alignment, UX completion, showcase features (inline
+images, kitty keyboard text-entry parity, inline mode subcommands),
+rendering polish, compatibility audit, and a Charm reference-apps
+submission. Structural-first sequencing so showcase features land on
+v2-idiomatic foundation rather than retrofit onto legacy primitives.
+
+Detailed pass-by-pass plan: `docs/poplar/v2-roadmap.md`.
+
+Related:
+- Pass 13.1.5 plan: `docs/superpowers/plans/2026-05-09-pass-13-1-5-claude-infra-v2-prep.md`
+- Pass 13.2 spec: `docs/superpowers/specs/2026-05-09-pass-13-2-charm-v2-design.md`
+
 ### SPUA-aware width measurement for bubbletea `spua-width-upstream`
 Collapse ADR-0084's architectural cost — `displayCells`, `displayTruncate`,
 `padToVisibleWidth`, the `lipgloss.JoinHorizontal` ban on icon-bearing
