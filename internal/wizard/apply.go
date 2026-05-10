@@ -61,8 +61,15 @@ func Apply(m Model) (config.AccountConfig, error) {
 		case config.StrategyAPIToken:
 			cfg.Password = m.Token
 		case config.StrategyOAuth:
-			// TODO(Pass 14.1): OAuth + keyring flow.
-			cfg.PasswordCmd = "echo TODO-pass-14.1-oauth"
+			if !m.OAuthDone {
+				return config.AccountConfig{}, fmt.Errorf("oauth consent not completed for %q", m.Preset)
+			}
+			cfg.Auth = "xoauth2"
+			cfg.OAuth = &config.OAuthConfig{
+				ClientID:     m.OAuthCID,
+				ClientSecret: m.OAuthSecret,
+			}
+			cfg.OAuthStore = m.OAuthStore
 		default:
 			return config.AccountConfig{}, fmt.Errorf("provider %q has no credential strategy", m.Preset)
 		}

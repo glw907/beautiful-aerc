@@ -64,7 +64,7 @@ func newFakeTokenServer(t *testing.T) *fakeServer {
 }
 
 func newTestClient(cfg Config, store TokenStore) *Client {
-	return NewClient(cfg, store, "test-account")
+	return NewClient(cfg, store, "test-account", BackendKeyring)
 }
 
 func TestTokenReturnsCachedWhenFresh(t *testing.T) {
@@ -210,7 +210,7 @@ func TestAuthorizeHappyPath(t *testing.T) {
 		Scopes:            []string{"email"},
 		RedirectPortRange: [2]int{0, 0},
 	}
-	c := NewClient(cfg, store, "a")
+	c := NewClient(cfg, store, "a", BackendKeyring)
 	SetOpenBrowser(c, func(authURL string) error {
 		simulateConsent(authURL, "ok", "")
 		return nil
@@ -238,7 +238,7 @@ func TestAuthorizeStateMismatchRejected(t *testing.T) {
 		TokenURL:          fs.srv.URL + "/token",
 		RedirectPortRange: [2]int{0, 0},
 	}
-	c := NewClient(cfg, store, "a")
+	c := NewClient(cfg, store, "a", BackendKeyring)
 	SetOpenBrowser(c, func(authURL string) error {
 		simulateConsent(authURL, "ok", "wrong")
 		return nil
@@ -261,7 +261,7 @@ func TestAuthorizeTimeout(t *testing.T) {
 		TokenURL:          "http://unused/token",
 		RedirectPortRange: [2]int{0, 0},
 	}
-	c := NewClient(cfg, store, "a")
+	c := NewClient(cfg, store, "a", BackendKeyring)
 	SetOpenBrowser(c, func(string) error { return nil }) // no-op
 	SetConsentTimeout(c, 50*time.Millisecond)
 

@@ -32,10 +32,11 @@ const (
 // binds directly to the parent Model.State fields; advance happens
 // when huh reports StateCompleted.
 type accountSection struct {
-	parent *Model
-	stage  accountStage
-	form   *huh.Form
-	probe  *probeScreen
+	parent   *Model
+	stage    accountStage
+	form     *huh.Form
+	probe    *probeScreen
+	oauthSub *oauthSection
 }
 
 func newAccountSection(parent *Model) *accountSection {
@@ -71,6 +72,12 @@ func (s *accountSection) buildForm() {
 			s.form = errorForm(err.Error())
 			return
 		}
+		if strategy == config.StrategyOAuth {
+			s.oauthSub = newOAuthSection(s.parent)
+			s.form = nil
+			return
+		}
+		s.oauthSub = nil
 		s.form = credentialsForm(strategy, state, s.parent.Theme)
 
 	case stageProbe:
@@ -108,6 +115,9 @@ func (s *accountSection) Init() tea.Cmd {
 	if s.probe != nil {
 		return s.probe.Init()
 	}
+	if s.oauthSub != nil {
+		return s.oauthSub.Init()
+	}
 	return nil
 }
 
@@ -115,8 +125,31 @@ func (s *accountSection) Update(msg tea.Msg) (section, tea.Cmd) {
 	if _, ok := msg.(BackMsg); ok {
 		s.stage = stageCredentials
 		s.probe = nil
+		s.oauthSub = nil
 		s.buildForm()
-		return s, s.form.Init()
+		if s.form != nil {
+			return s, s.form.Init()
+		}
+		if s.oauthSub != nil {
+			return s, s.oauthSub.Init()
+		}
+		return s, nil
+	}
+
+	if s.oauthSub != nil {
+		updated, cmd := s.oauthSub.Update(msg)
+		if os, ok := updated.(*oauthSection); ok {
+			s.oauthSub = os
+		}
+		if _, ok := msg.(oauthAdvanceMsg); ok {
+			s.oauthSub = nil
+			s.advance()
+			if s.stage == stageDone {
+				return s, tea.Batch(cmd, func() tea.Msg { return AdvanceMsg{} })
+			}
+			return s, tea.Batch(cmd, s.Init())
+		}
+		return s, cmd
 	}
 
 	if s.probe != nil {
@@ -164,6 +197,9 @@ func (s *accountSection) View() string {
 	}
 	if s.probe != nil {
 		return s.probe.View()
+	}
+	if s.oauthSub != nil {
+		return s.oauthSub.View()
 	}
 	if s.form == nil {
 		return ""
@@ -234,13 +270,6 @@ func credentialsForm(strategy config.CredentialStrategy, state *wizdomain.Model,
 			"API token",
 			&state.Token,
 		)
-
-	case config.StrategyOAuth:
-		return huh.NewForm(huh.NewGroup(
-			huh.NewNote().
-				Title("OAuth (placeholder)").
-				Description("Pass 14.1 wires the OAuth flow. The wizard writes a placeholder password-cmd you can edit by hand."),
-		)).WithTheme(HuhTheme(t))
 
 	case config.StrategyPlainIMAP:
 		if state.Port == "" {

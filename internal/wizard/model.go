@@ -33,4 +33,10 @@ type Model struct {
 
 	// Probe outcome (set by the UI's probe screen).
 	Probe mail.ProbeResult
+
+	// OAuthDone is set by the OAuth sub-screen after a successful Authorize flow.
+	OAuthDone   bool
+	OAuthStore  string
+	OAuthCID    string
+	OAuthSecret string
 }

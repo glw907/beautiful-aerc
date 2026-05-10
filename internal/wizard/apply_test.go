@@ -71,3 +71,37 @@ func TestApplyPortInvalid(t *testing.T) {
 		t.Fatal("expected port parse error")
 	}
 }
+
+func TestApplyOAuthDone(t *testing.T) {
+	m := Model{
+		Preset:      "gmail",
+		Email:       "user@gmail.com",
+		OAuthDone:   true,
+		OAuthStore:  "keyring",
+		OAuthCID:    "my-client-id",
+		OAuthSecret: "my-client-secret",
+	}
+	cfg, err := Apply(m)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if cfg.Auth != "xoauth2" {
+		t.Errorf("Auth = %q, want xoauth2", cfg.Auth)
+	}
+	if cfg.PasswordCmd != "" {
+		t.Errorf("PasswordCmd = %q, want empty", cfg.PasswordCmd)
+	}
+	if cfg.OAuth == nil || cfg.OAuth.ClientID != "my-client-id" {
+		t.Errorf("OAuth = %+v", cfg.OAuth)
+	}
+	if cfg.OAuthStore != "keyring" {
+		t.Errorf("OAuthStore = %q", cfg.OAuthStore)
+	}
+}
+
+func TestApplyOAuthNotDoneErrors(t *testing.T) {
+	m := Model{Preset: "gmail", Email: "user@gmail.com"}
+	if _, err := Apply(m); err == nil {
+		t.Fatal("expected error when OAuthDone is false")
+	}
+}

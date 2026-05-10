@@ -38,9 +38,10 @@ var (
 // Client obtains and refreshes access tokens via a stored refresh token.
 // It is safe for concurrent use.
 type Client struct {
-	cfg   Config
-	store TokenStore
-	slug  string
+	cfg     Config
+	store   TokenStore
+	slug    string
+	backend Backend
 
 	openBrowser    func(string) error
 	consentTimeout time.Duration
@@ -51,15 +52,20 @@ type Client struct {
 }
 
 // NewClient returns a Client backed by store, keyed on slug.
-func NewClient(cfg Config, store TokenStore, slug string) *Client {
+// backend records which token-store implementation is in use so
+// callers can persist the choice in config.
+func NewClient(cfg Config, store TokenStore, slug string, backend Backend) *Client {
 	return &Client{
 		cfg:            cfg,
 		store:          store,
 		slug:           slug,
+		backend:        backend,
 		openBrowser:    platformOpen,
 		consentTimeout: 2 * time.Minute,
 	}
 }
+
+func (c *Client) Backend() Backend { return c.backend }
 
 // SetOpenBrowser replaces the browser-launch function for testing.
 func SetOpenBrowser(c *Client, fn func(string) error) { c.openBrowser = fn }
