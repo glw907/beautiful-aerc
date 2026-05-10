@@ -116,18 +116,12 @@ the ADR(s) that justify them.
   canonical; `AdaptiveColor` removed; palette + Styles take
   concrete `color.Color` (`lipgloss.Color(s)` is a function).
   Chrome is declarative: `App.View()` returns a `tea.View` with
-  `v.AltScreen` and `v.WindowTitle` set every frame;
-  `tea.NewProgram` carries no chrome options. Cursor is hoisted:
-  cursored subpackages (compose, contacts.Form, sidebar search)
-  expose `Cursor() *tea.Cursor`; `App.frameCursor()` walks the
-  focus chain into `v.Cursor`; every textinput/textarea calls
-  `SetVirtualCursor(false)`. Compose's `tea.PasteMsg` arm routes
-  by focus — address fields atomic-emit chips via
-  `content.ParseAddressList`, subject + body delegate. Catkin's
-  arm splices payload in one buffer mutation, records a single
-  undo entry via `undoRing.push`, and wraps the cursor word as
-  `[word](url)` when payload is a whitespace-free
-  `http://`/`https://`/`mailto:` token.
+  `v.AltScreen` and `v.WindowTitle` set every frame; cursor is
+  hoisted via `Cursor() *tea.Cursor` accessors and
+  `App.frameCursor()`; `SetVirtualCursor(false)` on every
+  textinput/textarea. Paste handling routes by focus: address
+  fields atomic-emit chips, Catkin splices and wraps URL tokens
+  as markdown links — see ADR-0189b for the full paste contract.
 - `internal/ui/` follows the Elm architecture — invoke the
   `elm-conventions` skill before touching any file there. State in
   tea.Model structs; mutations only in Update; I/O only in tea.Cmd;
@@ -200,13 +194,38 @@ the ADR(s) that justify them.
   returns `ErrFirstRun`; root exits 78 (EX_CONFIG). Legacy
   `accounts.toml` returns `ErrOldAccountsToml`. `password-cmd`
   resolves on first `Connect` and caches on the Backend.
-  Validation errors carry `account "<name>" (provider = "<p>"):
-  ...` context; unknown providers get a Levenshtein suggestion.
+  `AccountConfig.Name` defaults to `Email` when omitted; both
+  blank fails as `ConfigError{Field: "name"}`. Typed
+  `*config.ConfigError{Path, Line, Account, Field, Message,
+  Suggest}` (sentinel `ErrConfigInvalid`) covers the four user-
+  facing validators: unknown provider, missing host, missing
+  source, missing smtp.host. Identity/signature validators stay
+  on bare `fmt.Errorf` until a consumer reads Field/Suggest.
+- `config.Provider` carries `CredentialStrategy`
+  (`StrategyAppPassword`/`APIToken`/`OAuth`/`PlainIMAP`/`PlainJMAP`)
+  and `HelpURL` per preset; both populate for every entry in
+  `Providers`.
+- `config.Render(accts, ui, cache) []byte` emits canonical TOML.
+  Round-trips through `Load*` are semantic, not byte-for-byte:
+  comments aren't preserved, default-valued fields elided.
+  `[account.smtp]` precedes `[[account.identity]]` in the output
+  (TOML quirk: a bare `[section]` after array-of-tables rebinds
+  to the last array element). `[ui] theme` not yet rendered.
 - `poplar config` subcommands: `init` (writes template, `--force`
   to overwrite), `check` (validate + connect-test each account
   sequentially — IMAP probe then `mailimap.ProbeSMTP`), `path`,
   `discover-folders` (merge server folder ordering into
   `[ui.folders]`).
+- `mail.ProbeResult{Steps []ProbeStep, Err error}`
+  (`internal/mail/probe.go`) is the shared connect-test transcript.
+  `mailimap.Probe` records 5 steps (Connecting, TLS handshake,
+  AUTHENTICATE, CAPABILITY (UIDPLUS), STATUS INBOX);
+  `mailjmap.Probe` records 3 (Resolving session URL,
+  Authenticate, mailbox/get — the rockorager/go-jmap library
+  bundles TLS + bearer + Session/get into one call). First
+  failure sets `Err` and stops. Test seams: package vars
+  `probeDial`, `probeAuth`. `mailimap.layerTLS` is the shared
+  TLS-layering helper for both `dial()` and the probe.
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`.
   Presets fill canonical submission endpoints (465 implicit-TLS
   for gmail/fastmail/yahoo/zoho; 587 STARTTLS for outlook/icloud;
@@ -217,23 +236,15 @@ the ADR(s) that justify them.
   `provider = "imap"` after preset resolution.
 - `[[account.identity]]` carries ordered
   `[[account.identity.signature]]` sub-blocks.
-  `AccountConfig.Identities` is always length >= 1; the legacy
-  top-level `from` synthesizes one when blocks are absent. First-
-  in-order is the default and syncs back into `AccountConfig.From`.
-  Each signature sets exactly one of `text` or `file` (mutually
-  exclusive); `file` resolves at config-load. `Signature.Text`
-  always carries the RFC 3676 `"-- \n"` sentinel (prepended
-  idempotently). `Signature.Name` is unique within its identity.
-  ADR-0177.
-- `[account.contacts]` is an optional TOML sub-table for CardDAV
-  ingest (URL, username, password / password-cmd,
-  default-addressbook, refresh-interval, insecure-tls). Credentials
-  fall back to the parent `[[account]]` block when unset. URL must
-  be https (or http with insecure-tls = true); refresh-interval
-  ≥ 1m, default 15m. Password resolves via the shared
-  `resolvePasswordCmd` helper at constructor time; on failure the
-  account silently skips contact sync. Absent block → nil
-  `Contacts` pointer → no sync. ADR-0175.
+  `AccountConfig.Identities` is length >= 1; legacy top-level
+  `from` synthesizes one when blocks are absent. Each signature
+  sets exactly one of `text`/`file`; `Signature.Text` carries
+  the RFC 3676 `"-- \n"` sentinel; `Signature.Name` is unique
+  within its identity. ADR-0177.
+- `[account.contacts]` is the optional CardDAV-ingest sub-table
+  (URL, credentials, default-addressbook, refresh-interval,
+  insecure-tls); credentials fall back to the parent
+  `[[account]]` block. Absent block disables sync. ADR-0175.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through the `Styles` struct from `theme.CompiledTheme`.
@@ -301,31 +312,20 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   toggle Contacts mode (T9 sidebar + List + Form). Overlay cascade:
   confirm > conflict > outbox > help > linkpicker > attachpicker >
   movepicker > form > popover.
-- `contacts.Form` is the contact edit sub-model — one value type,
-  two render contexts (`fromPopover` flag). Tab/Shift+Tab cycles
-  kind toggle, name fields, email/phone quartets, add buttons,
-  note, save destination. `Ctrl+S` validates and emits
-  `ContactSaveMsg`; `Esc` emits `ContactCancelMsg{Dirty}`; `D`
-  (gated on existing UID + non-text-input focus) emits
-  `OpenContactDeleteConfirmMsg`. App owns confirm cascade: form-
-  discard > contact-delete > compose-save > empty-folder. Save
-  routes through `PatchVCard` (existing) or `BuildVCard` (new).
-  Multi-book destination is post-1.0. ADR-0176.
+- `contacts.Form` is the contact edit sub-model. App-owned
+  confirm cascade: form-discard > contact-delete > compose-save
+  > empty-folder. Save routes through `PatchVCard` (existing)
+  or `BuildVCard` (new); multi-book destination is post-1.0.
+  ADR-0176.
 
 ### Viewer
 
-- Viewer harvests `List-Unsubscribe` (RFC 2369) and
-  `List-Unsubscribe-Post` (RFC 8058) headers at body-fetch time
-  via `content.ParseListUnsubscribe`. The parsed
-  `content.Unsubscribe` rides on `reader.BodyLoadedMsg.Unsub` and
-  is exposed via `reader.Model.Unsubscribe()`. `U` opens a
-  `ConfirmModal`; on Yes the App routes by precedence: https
-  one-click POST (`unsubscribePostCmd`, 10s timeout, 2xx success)
-  > mailto into compose (`compose.SeedFromMailto`) > plain http
-  via `URLOpener`. No client-side memory of prior unsubscribes.
-  Success surfaces as `App.lastNotice` ("Unsubscribed from
-  <host>") in the chrome banner row tier between error and
-  triage toast (5s auto-clear). ADR-0185.
+- Viewer harvests `List-Unsubscribe` / `-Post` headers at
+  body-fetch time via `content.ParseListUnsubscribe`; the parsed
+  `content.Unsubscribe` rides on `reader.BodyLoadedMsg.Unsub`.
+  `U` confirms; routes by precedence https one-click POST >
+  mailto into compose > plain http. Success notice surfaces in
+  the chrome banner row (5s auto-clear). ADR-0185.
 
 ## Mail model
 

@@ -72,6 +72,37 @@ func TestProviders_Gmail(t *testing.T) {
 	}
 }
 
+func TestProviders_CredentialStrategyAndHelpURLPopulated(t *testing.T) {
+	for name, p := range Providers {
+		if p.CredentialStrategy == "" {
+			t.Errorf("Providers[%q].CredentialStrategy is empty", name)
+		}
+		if p.HelpURL == "" {
+			t.Errorf("Providers[%q].HelpURL is empty", name)
+		}
+	}
+}
+
+func TestProviders_CredentialStrategySpotCheck(t *testing.T) {
+	tests := []struct {
+		preset string
+		want   CredentialStrategy
+	}{
+		{"fastmail", StrategyAPIToken},
+		{"gmail", StrategyOAuth},
+		{"outlook", StrategyOAuth},
+		{"yahoo", StrategyAppPassword},
+		{"protonmail", StrategyAppPassword},
+	}
+	for _, tc := range tests {
+		t.Run(tc.preset, func(t *testing.T) {
+			if got := Providers[tc.preset].CredentialStrategy; got != tc.want {
+				t.Errorf("CredentialStrategy = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestProviderRegistryLookup(t *testing.T) {
 	tests := []struct {
 		name     string

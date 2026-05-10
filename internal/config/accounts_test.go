@@ -151,9 +151,9 @@ port = 465
 			wantN: 2,
 		},
 		{
-			name:    "missing name",
+			name:    "missing name and email",
 			toml:    "[[account]]\nprovider = \"jmap\"\nsource = \"jmap://x@y\"\n",
-			wantErr: "account 0: name is required",
+			wantErr: "name is required when email is also blank",
 		},
 		{
 			name:    "empty file",
@@ -186,6 +186,29 @@ port = 465
 				t.Fatalf("expected %d accounts, got %d", tt.wantN, len(accounts))
 			}
 		})
+	}
+}
+
+func TestParseAccounts_NameDefaultsToEmail(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	src := `[[account]]
+provider = "fastmail"
+email    = "you@example.com"
+password = "x"
+`
+	if err := os.WriteFile(path, []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := ParseAccounts(path)
+	if err != nil {
+		t.Fatalf("ParseAccounts: %v", err)
+	}
+	if len(accounts) != 1 {
+		t.Fatalf("len(accounts) = %d, want 1", len(accounts))
+	}
+	if accounts[0].Name != "you@example.com" {
+		t.Errorf("Name = %q, want %q (defaulted from email)", accounts[0].Name, "you@example.com")
 	}
 }
 

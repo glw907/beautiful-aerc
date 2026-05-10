@@ -78,22 +78,13 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 		},
 	}
 
-	var cli *imapclient.Client
-	if cfg.StartTLS {
-		cli, err = imapclient.NewStartTLS(raw, opts)
-		if err != nil {
+	cli, err := layerTLS(raw, cfg, tlsCfg, opts)
+	if err != nil {
+		_ = raw.Close()
+		if cfg.StartTLS {
 			return nil, fmt.Errorf("starttls %s (%s): %w", addr, role, err)
 		}
-	} else {
-		tlsConn := tls.Client(raw, tlsCfg)
-		if err := tlsConn.Handshake(); err != nil {
-			_ = raw.Close()
-			if !cfg.InsecureTLS && looksSelfHosted(cfg.Host) {
-				return nil, fmt.Errorf("tls handshake %s (%s): %w (set insecure-tls = true if self-signed)", addr, role, err)
-			}
-			return nil, fmt.Errorf("tls handshake %s (%s): %w", addr, role, err)
-		}
-		cli = imapclient.New(tlsConn, opts)
+		return nil, fmt.Errorf("tls handshake %s (%s): %w", addr, role, err)
 	}
 
 	if err := authenticate(cli, cfg, pw); err != nil {
@@ -103,6 +94,23 @@ func dial(cfg config.AccountConfig, pw string, role string) (imapClient, error) 
 
 	rc.c = cli
 	return rc, nil
+}
+
+// layerTLS wraps raw with implicit TLS or upgrades it via STARTTLS,
+// returning the imapclient ready for SASL exchange. Used by both the
+// live dial path and the wizard probe.
+func layerTLS(raw net.Conn, cfg config.AccountConfig, tlsCfg *tls.Config, opts *imapclient.Options) (*imapclient.Client, error) {
+	if cfg.StartTLS {
+		return imapclient.NewStartTLS(raw, opts)
+	}
+	tlsConn := tls.Client(raw, tlsCfg)
+	if err := tlsConn.Handshake(); err != nil {
+		if !cfg.InsecureTLS && looksSelfHosted(cfg.Host) {
+			return nil, fmt.Errorf("%w (set insecure-tls = true if self-signed)", err)
+		}
+		return nil, err
+	}
+	return imapclient.New(tlsConn, opts), nil
 }
 
 // dialRawTCP opens a TCP connection with dial timeout and keepalive

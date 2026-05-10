@@ -1,11 +1,139 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glw907/poplar/internal/mail"
 )
+
+func TestRender_MinimalImapAccount(t *testing.T) {
+	got := Render([]AccountConfig{{
+		Name:        "Personal",
+		Backend:     "imap",
+		Email:       "user@example.com",
+		Host:        "imap.example.com",
+		Port:        993,
+		PasswordCmd: "op read op://Personal/Mail/credential",
+	}}, DefaultUIConfig(), defaultCache())
+
+	want := `[[account]]
+name = "Personal"
+provider = "imap"
+email = "user@example.com"
+host = "imap.example.com"
+port = 993
+password-cmd = "op read op://Personal/Mail/credential"
+`
+	if string(got) != want {
+		t.Errorf("Render() mismatch.\n--got--\n%s\n--want--\n%s", got, want)
+	}
+}
+
+func TestRender_RoundTripsViaParseAccounts(t *testing.T) {
+	in := []AccountConfig{{
+		Name:        "Fastmail",
+		Backend:     "jmap",
+		Email:       "you@fastmail.com",
+		Source:      "https://api.fastmail.com/jmap/session",
+		PasswordCmd: "echo token",
+	}}
+
+	rendered := Render(in, DefaultUIConfig(), defaultCache())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, rendered, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := ParseAccounts(path)
+	if err != nil {
+		t.Fatalf("ParseAccounts: %v\n--rendered--\n%s", err, rendered)
+	}
+	if len(out) != 1 {
+		t.Fatalf("len(accounts) = %d, want 1", len(out))
+	}
+	got := out[0]
+	if got.Name != in[0].Name || got.Email != in[0].Email ||
+		got.Source != in[0].Source || got.PasswordCmd != in[0].PasswordCmd {
+		t.Errorf("round-trip mismatch:\nin  = %+v\nout = %+v", in[0], got)
+	}
+}
+
+func TestRender_SMTPBeforeIdentitiesRoundTrips(t *testing.T) {
+	in := []AccountConfig{{
+		Name:    "Personal",
+		Backend: "imap",
+		Email:   "u@example.com",
+		Host:    "imap.example.com",
+		Port:    993,
+		SMTP: SMTPConfig{
+			Host: "smtp.example.com",
+			Port: 465,
+		},
+		Identities: []Identity{{
+			Name:  "Personal",
+			Email: "u@example.com",
+		}},
+		PasswordCmd: "echo x",
+	}}
+	rendered := Render(in, DefaultUIConfig(), defaultCache())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, rendered, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := ParseAccounts(path)
+	if err != nil {
+		t.Fatalf("ParseAccounts: %v\n--rendered--\n%s", err, rendered)
+	}
+	if got := out[0].SMTP.Host; got != "smtp.example.com" {
+		t.Errorf("SMTP.Host = %q, want smtp.example.com (round-trip lost SMTP block)", got)
+	}
+	if len(out[0].Identities) != 1 {
+		t.Fatalf("Identities len = %d, want 1", len(out[0].Identities))
+	}
+	if got := out[0].Identities[0].Email; got != "u@example.com" {
+		t.Errorf("Identities[0].Email = %q, want u@example.com", got)
+	}
+}
+
+func TestRender_UIBlockOmittedAtDefaults(t *testing.T) {
+	got := Render([]AccountConfig{{Name: "x", Backend: "imap", Email: "x@x"}}, DefaultUIConfig(), defaultCache())
+	if strings.Contains(string(got), "[ui]") {
+		t.Errorf("Render() emitted [ui] block at defaults:\n%s", got)
+	}
+	if strings.Contains(string(got), "[cache]") {
+		t.Errorf("Render() emitted [cache] block at defaults:\n%s", got)
+	}
+}
+
+func TestRender_UIBlockEmittedWhenNonDefault(t *testing.T) {
+	ui := DefaultUIConfig()
+	ui.UndoSeconds = 12
+	ui.UndoSendWindow = 30 * time.Second
+
+	got := string(Render([]AccountConfig{{Name: "x", Backend: "imap", Email: "x@x"}}, ui, defaultCache()))
+	for _, want := range []string{"[ui]", "undo_seconds = 12", `undo-send-window = "30s"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Render() missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestRender_CacheBlockEmittedWhenSet(t *testing.T) {
+	c := CacheConfig{MaxSize: 512 * 1024 * 1024, MaxAttachmentSize: 4 * 1024 * 1024 * 1024}
+	got := string(Render([]AccountConfig{{Name: "x", Backend: "imap", Email: "x@x"}}, DefaultUIConfig(), c))
+	for _, want := range []string{"[cache]", `max-size = "512MB"`, `max-attachment-size = "4GB"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Render() missing %q in:\n%s", want, got)
+		}
+	}
+}
 
 func TestRenderFolderSubsections_Empty(t *testing.T) {
 	got := RenderFolderSubsections(nil, nil)

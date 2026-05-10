@@ -81,9 +81,8 @@ const templateBody = `# poplar — terminal email client
 # OAuth providers
 #
 #   gmail and outlook authenticate with a short-lived access
-#   token (XOAUTH2), not a password. Until poplar's first-run
-#   wizard ships, set ` + "`password-cmd`" + ` to a command that prints a
-#   fresh access token to stdout. Examples:
+#   token (XOAUTH2), not a password. Set ` + "`password-cmd`" + ` to a
+#   command that prints a fresh access token to stdout. Examples:
 #
 #       oauth2l fetch --type=oauth2 --output_format=bare \
 #           --credentials=$HOME/.config/poplar/gmail-client.json \
@@ -180,7 +179,8 @@ password-cmd = "op read op://Personal/Fastmail/credential"
 # ────────────────────────────────────────
 #
 #   name = "<email>"
-#       Display name in the sidebar account header.
+#       Display name in the sidebar account header. Optional;
+#       defaults to ` + "`email`" + ` when omitted.
 #
 #   port = 993
 #       IMAP fallback only. Preset providers fill this in.

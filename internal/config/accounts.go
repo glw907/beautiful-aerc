@@ -336,7 +336,15 @@ func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {
 
 func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if e.Name == "" {
-		return nil, fmt.Errorf("account %d: name is required", index)
+		if e.Email == "" {
+			return nil, &ConfigError{
+				Account: fmt.Sprintf("[%d]", index),
+				Field:   "name",
+				Message: "name is required when email is also blank",
+				Suggest: `set "name" or "email" on the [[account]] block`,
+			}
+		}
+		e.Name = e.Email
 	}
 
 	backend := e.Provider
@@ -399,23 +407,35 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	// "mock" short-circuits to mail.NewMockBackend in cmd/poplar/backend.go.
 	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
 		if _, ok := Providers[e.Provider]; !ok {
-			hint := ""
+			suggest := fmt.Sprintf("known providers: %s", knownProvidersList())
 			if s := suggestProvider(e.Provider); s != "" {
-				hint = fmt.Sprintf("; did you mean %q?", s)
+				suggest = fmt.Sprintf(`did you mean "%s"? known: %s`, s, knownProvidersList())
 			}
-			return nil, fmt.Errorf("account %q: unknown provider %q%s (known: %s)",
-				e.Name, e.Provider, hint, knownProvidersList())
+			return nil, &ConfigError{
+				Account: e.Name,
+				Field:   "provider",
+				Message: fmt.Sprintf("unknown provider %q", e.Provider),
+				Suggest: suggest,
+			}
 		}
 	}
 
 	if backend == "imap" && host == "" {
-		return nil, fmt.Errorf("account %q (provider = %q): host is required for imap accounts",
-			e.Name, e.Provider)
+		return nil, &ConfigError{
+			Account: e.Name,
+			Field:   "host",
+			Message: fmt.Sprintf("host is required for imap accounts (provider = %q)", e.Provider),
+			Suggest: `set "host" on the [[account]] block, or pick a hosted preset like "fastmail"`,
+		}
 	}
 
 	if backend == "jmap" && source == "" {
-		return nil, fmt.Errorf("account %q (provider = %q): source URL is required for jmap accounts",
-			e.Name, e.Provider)
+		return nil, &ConfigError{
+			Account: e.Name,
+			Field:   "source",
+			Message: fmt.Sprintf("source URL is required for jmap accounts (provider = %q)", e.Provider),
+			Suggest: `set "source" to the JMAP session URL, or pick the "fastmail" preset`,
+		}
 	}
 
 	smtpPassword, err := resolveEnv(smtp.Password)
@@ -438,8 +458,12 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	}
 
 	if backend == "imap" && smtp.Host == "" {
-		return nil, fmt.Errorf("account %q (provider = %q): smtp.host is required for imap accounts (set [account.smtp].host)",
-			e.Name, e.Provider)
+		return nil, &ConfigError{
+			Account: e.Name,
+			Field:   "smtp.host",
+			Message: fmt.Sprintf("smtp.host is required for imap accounts (provider = %q)", e.Provider),
+			Suggest: `set "host" on the [account.smtp] block, or pick a hosted preset that fills it in`,
+		}
 	}
 
 	acct := &AccountConfig{
