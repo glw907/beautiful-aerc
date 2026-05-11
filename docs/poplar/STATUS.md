@@ -1,10 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 16d — `log/slog` adoption + logging-convention
-ADR. Last of four modernization passes (16a infra ✓, 16b sweep ✓,
-16c `iter.Seq` ✓, 16d `log/slog`) before the bubbles-adoption
-remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
-17c help audit). Polish II (18) and v0.9.0 prep (19) follow.
+**Current pass:** Pass 17a — Sidebar folder hierarchy on bubbles/v2
+tree component. First of the bubbles-adoption remainder (17a sidebar
+tree, 17b messagelist on `bubbles/v2/list`, 17c help audit) after
+the 16-series modernization locked modern-Go conventions.
 
 ## Passes
 
@@ -29,8 +28,8 @@ remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
 | 16a | Claude infra: modern-Go defaults (skill bump + simplify Agent 3 + `modern-go-check.sh`; ADR-0196) | done |
 | 16b | Mechanical Go modernization sweep — `slices.SortFunc`, `slices.Sort`, `for range N`, `sync.OnceValue`, `slices.Chunk`, `slices.Sorted+maps.Keys`; ~60 sites, no ADR | done |
 | 16c | `iter.Seq` for `catkin/style.go` `walkSpans` + 3 callers; no ADR | done |
-| **16d** | **`log/slog` adoption + logging-convention ADR (mailjmap push-loop, error transcript shape)** | **pending — next** |
-| 17a | Sidebar folder hierarchy on a v2 tree component (plan + spec already on disk; ADR-0197) | pending |
+| 16d | `log/slog` adoption + logging-convention ADR (ADR-0197) | done |
+| **17a** | **Sidebar folder hierarchy on a v2 tree component (plan + spec on disk; ADR-0197)** | **pending — next** |
 | 17b | `messagelist` on `bubbles/v2/list` (custom item renderer; absorbs BACKLOG #46 `iter.Seq2`; ADR if it survives) | pending |
 | 17c | `bubbles/v2/help` audit + ADRs for bubbles deviations that survive 15a/17a/17b (`helppopover`, `schedulepicker`) | pending |
 | 18 | Polish II — popover dim (#14) + items surfaced during 10–17c | pending |
@@ -39,42 +38,40 @@ remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 16d)
+## Next starter prompt (Pass 17a)
 
-> **Goal.** Adopt `log/slog` for poplar's diagnostic logging.
-> Land a logging-convention ADR that binds where slog is used,
-> which handler/format, and which sites stay on stderr.
+> **Goal.** Render Custom folders whose names contain `/` as a real
+> tree in the sidebar — expand/collapse via `→`/`←`, collapsed
+> parents sum descendant unread, Spartan tier caps indent at depth 1.
+> Also adds `sidebar.KeyMap` + `Update`, retiring the imperative
+> `MoveUp`/`MoveDown`/`MoveToTop`/`MoveToBottom` mutators (BACKLOG
+> #45 item 4).
 >
-> **Scope.** `internal/mailjmap/push.go` push-loop transcript
-> (currently `fmt.Fprintf(os.Stderr, ...)`), `internal/mailimap`
-> reconnect/idle transcript, error-transcript shape across
-> backend probes. `cmd/poplar/` user-facing startup errors stay
-> on stderr (not slog). Test seam for capturing log output in
-> backend tests.
+> **Scope.** `internal/ui/sidebar/` (new `tree.go`, `model.go`,
+> `styles.go`); `internal/ui/account/model.go` (route sidebar keys
+> through Update); `internal/ui/uicore/layout.go` (confirm Spartan
+> depth signal); `internal/theme/palette.go` + `internal/ui/styles.go`
+> (wire `SidebarTreeRule`); `docs/poplar/styling.md`; ADR-0197
+> (sidebar tree decision). Plan:
+> `docs/superpowers/plans/2026-05-10-sidebar-tree.md`. Spec:
+> `docs/superpowers/specs/2026-05-10-sidebar-tree-design.md`.
 >
-> **Settled (do not re-brainstorm):** Use stdlib `log/slog` only,
-> no third-party logger. Default handler is `slog.NewTextHandler`
-> on stderr at `slog.LevelInfo`; `POPLAR_LOG=debug` raises to
-> `LevelDebug`. Per-component logger via `slog.With("component",
-> "mailjmap")` etc.
+> **Settled (do not re-brainstorm):** Hand-rolled tree on the
+> existing `renderRow` — transient `*node` map built from
+> `folderEntry`s during view, DFS-walked, yields `[]rowMeta`, then
+> discarded (mirrors `messagelist.appendThreadRows`). No new
+> library. Expand state in `map[string]bool` keyed by provider
+> folder name; pruned at `SetFolders`. `→` expand, `←` collapse;
+> Spartan caps `maxDepth = 1`. Primary and Disposal groups stay
+> flat. All decisions in the spec are settled — no open questions.
 >
-> **Still open — brainstorm these:**
-> - Where does the root logger live and how does it thread into
->   backends (App-owned vs. package-global vs. context-carried)?
-> - Test-time capture: `slog.SetDefault` swap in `TestMain`, or
->   per-test `slog.New(slog.NewTextHandler(&buf, ...))` threaded
->   through a logger seam on `Backend`?
-> - Migration scope: convert *all* `fmt.Fprintf(os.Stderr, ...)`
->   in `internal/` this pass, or only the loop-shaped log sites
->   from the 16a audit appendix?
->
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/2026-05-1X-slog-adoption.md`, then
-> implement. ADR for the logging convention. Standard pass-end
-> ritual; `MODERN_GO_STRICT=1 ./scripts/modern-go-check.sh` stays
-> at exit 0; `make check` green.
+> **Approach.** Read the plan and spec, then use
+> `superpowers:subagent-driven-development` (recommended) or
+> `superpowers:executing-plans` to implement task by task.
+> Standard pass-end ritual; `make check` green before commit.
 
 ## Notes for the 16-series (modernization)
 
 ADR-0196 binds the convention; 16b–d apply it. Audit appendix
-in the archived 16a plan has the full file:line list.
+in the archived 16a plan has the full file:line list. Pass 16d
+landed ADR-0197 (slog adoption).

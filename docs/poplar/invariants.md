@@ -272,9 +272,7 @@ the ADR(s) that justify them.
 
 ### Catkin
 
-Auto-loaded via `.claude/rules/catkin-invariants.md` when
-editing `internal/catkin/` or planning passes. ADRs 0144–0147,
-0149, 0150, 0152.
+Auto-loaded via `.claude/rules/catkin-invariants.md` when editing `internal/catkin/` or planning passes. ADRs 0144–0147, 0149, 0150, 0152.
 
 ### Compose
 
@@ -308,20 +306,17 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   toggle Contacts mode. Overlay cascade: confirm > conflict >
   outbox > help > linkpicker > attachpicker > movepicker > form >
   popover.
-- `contacts.Form` is the contact edit sub-model. App-owned
-  confirm cascade: form-discard > contact-delete > compose-save
-  > empty-folder. Save routes through `PatchVCard` (existing)
-  or `BuildVCard` (new); multi-book destination is post-1.0.
-  ADR-0176.
+- `contacts.Form` is the contact edit sub-model. Confirm cascade:
+  form-discard > contact-delete > compose-save > empty-folder.
+  Save via `PatchVCard` (existing) or `BuildVCard` (new); multi-book
+  destination is post-1.0. ADR-0176.
 
 ### Viewer
 
-- Viewer harvests `List-Unsubscribe` / `-Post` headers at
-  body-fetch time via `content.ParseListUnsubscribe`; the parsed
-  `content.Unsubscribe` rides on `reader.BodyLoadedMsg.Unsub`.
-  `U` confirms; routes by precedence https one-click POST >
-  mailto into compose > plain http. Success notice surfaces in
-  the chrome banner row (5s auto-clear). ADR-0185.
+Viewer harvests `List-Unsubscribe` / `-Post` at body-fetch time via
+`content.ParseListUnsubscribe`; `content.Unsubscribe` rides on
+`reader.BodyLoadedMsg.Unsub`. `U` confirms; routes https one-click
+POST > mailto > plain http. Banner row confirms success (5s). ADR-0185.
 
 ## Mail model
 
@@ -330,15 +325,12 @@ editing `internal/catkin/` or planning passes. ADRs 0144–0147,
   `Folder.Role` → alias table → `Custom`. Provider folder names are
   normalized to canonical display names (Inbox, Sent, Trash, …)
   regardless of JMAP/IMAP naming.
-- `mail.MessageInfo` carries `ThreadID` and `InReplyTo` on the wire.
-  Depth is not a wire field — the UI derives it during the prefix
-  walk. A non-threaded message is a thread of size 1 with
-  `ThreadID == UID` and `InReplyTo == ""`.
-- `mail.MessageInfo` carries `Date string` + `SentAt time.Time`.
-  `SentAt` is authoritative for sorts + date-column rendering;
-  `Date` is a legacy display fallback for fixtures predating
-  `SentAt`. `lessMessage` falls back to `Date` lex only when
-  `SentAt` is zero on both operands.
+- `mail.MessageInfo` carries `ThreadID`, `InReplyTo`, `Date string`,
+  and `SentAt time.Time`. Depth is not a wire field — derived during
+  the prefix walk. A non-threaded message is a thread of size 1 with
+  `ThreadID == UID` and `InReplyTo == ""`. `SentAt` is authoritative
+  for sorts + date-column rendering; `Date` is a legacy display
+  fallback (`lessMessage` uses it only when both `SentAt` are zero).
 - `mail.Backend.Destroy(uids)` is the irreversible permanent-delete
   primitive (no inverse). Empty input is a no-op. JMAP impl issues
   `Email/set { destroy }` and treats `notFound` as success
@@ -369,29 +361,37 @@ outbox state machine, body + attachment storage) lives in
 
 ## Search
 
-Search layer (FTS5 schema v11, parser, cache `Search`, sidebar
-scope toggle, results-mode messagelist, throttle warn) lives in
-`.claude/rules/search-invariants.md`. ADR-0188.
+Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, results-mode messagelist, throttle warn) lives in `.claude/rules/search-invariants.md`. ADR-0188.
+
+## Logging
+
+`log/slog` is the diagnostic logging path for `internal/`. CLI/UX
+strings in `cmd/poplar/` stay on `os.Stderr` — those are not log
+events. `cmd/poplar/main.go` installs the root handler via
+`installLogger` before cobra runs: `slog.NewTextHandler`,
+`LevelInfo` default, `POPLAR_LOG=debug` for `LevelDebug`. TTY
+stdout → `$XDG_STATE_HOME/poplar/poplar.log` (append, created on
+demand); non-TTY → `os.Stderr`; open failure silent. Backend
+constructors (`mailjmap.New`, `mailimap.New`, `cache.Open`) accept
+`WithLogger(*slog.Logger)`; default is `slog.Default().With(
+"component", "<pkg>")`. `WithLogger` is the test seam;
+`slog.SetDefault` is not swapped in any test. ADR-0197.
 
 ## Build & verification
 
 - Makefile targets: `build`, `test`, `vet`, `fmt-check`, `lint`,
   `install`, `check`, `clean`. `make check` is the commit gate
   (fmt-check, vet, voice, modern-go-check, test).
-  `scripts/voice-check.sh` is the grep-tier scan for tells T4,
-  T10, T14, T16, T27, T28, T33, T35, T39, T40 (T34 voice-lens
-  only, ADR-0173). `scripts/modern-go-check.sh` (ADR-0196) scans
-  pre-1.21 idioms (sort.Slice(Stable), sort.Strings/Ints/Float64s,
-  three-clause `for i := 0; i < N`, package-scope `sync.Once`);
-  soft-warn through the 16-series, `MODERN_GO_STRICT=1` flips
-  hard-fail. Voice rules apply to all Claude-authored docs.
-  `make install` writes to `~/.local/bin/`.
+  `scripts/voice-check.sh` scans T4, T10, T14, T16, T27, T28,
+  T33, T35, T39, T40 (T34 voice-lens only; ADR-0173).
+  `scripts/modern-go-check.sh` (ADR-0196) scans pre-1.21 idioms;
+  `MODERN_GO_STRICT=1` flips hard-fail. Voice rules apply to all
+  Claude-authored docs. `make install` → `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
-- Skills: invoke `go-conventions` before any Go file,
-  `elm-conventions` before any `internal/ui/` file, update
-  `docs/poplar/styling.md` before any color/style change. Pass-end
-  ritual lives in `poplar-pass`.
-- Live UI verification uses tmux (`.claude/docs/tmux-testing.md`); 80×24 is the polish bar, UI passes capture 80×24 and 120×40.
+- Skills: `go-conventions` before any Go file; `elm-conventions`
+  before `internal/ui/`; `docs/poplar/styling.md` before any color
+  change. Pass-end ritual: `poplar-pass`.
+- Live UI verification uses tmux (`.claude/docs/tmux-testing.md`); 80×24 polish bar, UI passes capture 80×24 and 120×40.
 
 ## Decisions
 
