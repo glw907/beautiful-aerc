@@ -141,7 +141,7 @@ func reflowGroup(ctx []LineContext, width int) []string {
 
 func buildPrefix(c LineContext) string {
 	var sb strings.Builder
-	for d := 0; d < c.QuoteDepth; d++ {
+	for range c.QuoteDepth {
 		sb.WriteString("> ")
 	}
 	if c.ListMarker != "" {

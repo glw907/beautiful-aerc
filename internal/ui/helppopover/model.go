@@ -316,7 +316,7 @@ func joinColumnsRow(gap string, cols ...string) string {
 		}
 	}
 	rows := make([]string, height)
-	for r := 0; r < height; r++ {
+	for r := range height {
 		var b strings.Builder
 		for i, lines := range splits {
 			var line string

@@ -12,30 +12,21 @@ import (
 	"github.com/adrg/sysfont"
 )
 
-var (
-	hasNerdFontOnce   sync.Once
-	hasNerdFontResult bool
-)
-
 // HasNerdFont reports whether a Nerd Font is installed. On Linux it
 // uses fc-list because sysfont misses fonts under
 // ~/.local/share/fonts, falling back to sysfont when fc-list is
 // unavailable. The result is cached.
-func HasNerdFont() bool {
-	hasNerdFontOnce.Do(func() {
-		if families, ok := fcListFamilies(); ok {
-			hasNerdFontResult = hasNerdFontIn(families)
-			return
-		}
-		fonts := sysfont.NewFinder(nil).List()
-		families := make([]string, 0, len(fonts))
-		for _, f := range fonts {
-			families = append(families, f.Family)
-		}
-		hasNerdFontResult = hasNerdFontIn(families)
-	})
-	return hasNerdFontResult
-}
+var HasNerdFont = sync.OnceValue(func() bool {
+	if families, ok := fcListFamilies(); ok {
+		return hasNerdFontIn(families)
+	}
+	fonts := sysfont.NewFinder(nil).List()
+	families := make([]string, 0, len(fonts))
+	for _, f := range fonts {
+		families = append(families, f.Family)
+	}
+	return hasNerdFontIn(families)
+})
 
 // fcListFamilies shells out to fc-list with a 2-second deadline so a
 // hung fontconfig cannot stall startup.

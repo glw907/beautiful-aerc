@@ -111,7 +111,8 @@ func walkSpans(s string, fn func(kind spanKind, text string, submatch []string))
 		{singleStarRE, spanItalic},
 		{singleUnderRE, spanItalic},
 	}
-	for i := 0; i < len(s); {
+	i := 0
+	for i < len(s) {
 		rest := s[i:]
 		matched := false
 		for _, p := range pats {

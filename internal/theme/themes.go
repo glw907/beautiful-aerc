@@ -1,6 +1,9 @@
 package theme
 
-import "sort"
+import (
+	"maps"
+	"slices"
+)
 
 // DefaultThemeName is the CLI name of the default theme.
 const DefaultThemeName = "one-dark"
@@ -300,10 +303,5 @@ var Themes = map[string]*CompiledTheme{
 
 // ThemeNames returns the keys of Themes, sorted.
 func ThemeNames() []string {
-	names := make([]string, 0, len(Themes))
-	for name := range Themes {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(Themes))
 }

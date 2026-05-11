@@ -1,7 +1,8 @@
 package catkin
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -39,8 +40,8 @@ func runAnnotators(annotators []Annotator, src string) []Annotation {
 	for _, a := range annotators {
 		out = append(out, a.Annotate(src)...)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Range.Start < out[j].Range.Start
+	slices.SortStableFunc(out, func(a, b Annotation) int {
+		return cmp.Compare(a.Range.Start, b.Range.Start)
 	})
 	return out
 }

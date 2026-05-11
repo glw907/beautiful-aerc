@@ -1,7 +1,8 @@
 package sidebar
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -380,13 +381,11 @@ func buildEntries(classified []mail.ClassifiedFolder, uiCfg config.UIConfig, ico
 const nonCanonicalDefaultRank = 1000
 
 func sortEntries(entries []folderEntry, uiCfg config.UIConfig) {
-	sort.SliceStable(entries, func(i, j int) bool {
-		ri := rankOf(entries[i].cf, uiCfg)
-		rj := rankOf(entries[j].cf, uiCfg)
-		if ri != rj {
-			return ri < rj
-		}
-		return entries[i].cf.DisplayName < entries[j].cf.DisplayName
+	slices.SortStableFunc(entries, func(a, b folderEntry) int {
+		return cmp.Or(
+			cmp.Compare(rankOf(a.cf, uiCfg), rankOf(b.cf, uiCfg)),
+			cmp.Compare(a.cf.DisplayName, b.cf.DisplayName),
+		)
 	})
 }
 

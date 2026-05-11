@@ -323,15 +323,17 @@ func parseSpans(input string) []Span {
 	for len(remaining) > 0 {
 		boldIdx := strings.Index(remaining, "**")
 		italicIdx := -1
-		for i := 0; i < len(remaining); i++ {
+		i := 0
+		for i < len(remaining) {
 			if remaining[i] == '*' {
 				if i+1 < len(remaining) && remaining[i+1] == '*' {
-					i++
+					i += 2
 					continue
 				}
 				italicIdx = i
 				break
 			}
+			i++
 		}
 		codeIdx := strings.Index(remaining, "`")
 		linkIdx := strings.Index(remaining, "[")

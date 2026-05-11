@@ -3,7 +3,7 @@ package compose
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,7 +70,7 @@ func TestAttachPicker_OpenReadsDir(t *testing.T) {
 	for i, e := range p.entries {
 		names[i] = e.name
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	want := []string{"alpha.txt", "beta.txt", "sub"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Errorf("entries = %v, want %v (hidden excluded)", names, want)

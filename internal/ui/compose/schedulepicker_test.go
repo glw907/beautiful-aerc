@@ -30,7 +30,7 @@ func TestSchedulePicker_PresetCommitsTime(t *testing.T) {
 func TestSchedulePicker_CustomExpandsAndParses(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.Local)
 	p := NewSchedulePicker(theme.OneDark, now, "")
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		p.moveDown()
 	}
 	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // expand
@@ -57,7 +57,7 @@ func TestSchedulePicker_CustomExpandsAndParses(t *testing.T) {
 func TestSchedulePicker_CustomShowsParseError(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.Local)
 	p := NewSchedulePicker(theme.OneDark, now, "")
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		p.moveDown()
 	}
 	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})

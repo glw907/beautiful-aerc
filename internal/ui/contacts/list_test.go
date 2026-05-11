@@ -72,7 +72,7 @@ func TestList_CursorClamped(t *testing.T) {
 
 	// advance to last row
 	j := tea.KeyPressMsg{Code: 'j', Text: "j"}
-	for i := 0; i < len(contacts)-1; i++ {
+	for range len(contacts) - 1 {
 		l, _ = l.Update(j)
 	}
 	last := len(contacts) - 1

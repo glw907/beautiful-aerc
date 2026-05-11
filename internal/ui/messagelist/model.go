@@ -1,8 +1,9 @@
 package messagelist
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -187,11 +188,11 @@ func (m *Model) rebuild() {
 	for i, b := range buckets {
 		pairs[i] = bucketSort{bucket: b, latest: latestActivity(b)}
 	}
-	sort.SliceStable(pairs, func(i, j int) bool {
+	slices.SortStableFunc(pairs, func(a, b bucketSort) int {
 		if m.sort == SortDateAsc {
-			return lessMessage(pairs[i].latest, pairs[j].latest)
+			return compareMessage(a.latest, b.latest)
 		}
-		return lessMessage(pairs[j].latest, pairs[i].latest)
+		return compareMessage(b.latest, a.latest)
 	})
 	for i, p := range pairs {
 		buckets[i] = p.bucket
@@ -321,7 +322,7 @@ func pickRoot(bucket []mail.MessageInfo) int {
 	}
 	earliest := 0
 	for i, m := range bucket {
-		if lessMessage(m, bucket[earliest]) {
+		if compareMessage(m, bucket[earliest]) < 0 {
 			earliest = i
 		}
 	}
@@ -334,27 +335,28 @@ func pickRoot(bucket []mail.MessageInfo) int {
 func latestActivity(bucket []mail.MessageInfo) mail.MessageInfo {
 	var latest mail.MessageInfo
 	for _, m := range bucket {
-		if lessMessage(latest, m) {
+		if compareMessage(latest, m) < 0 {
 			latest = m
 		}
 	}
 	return latest
 }
 
-// lessMessage reports whether a is older than b. SentAt is authoritative
-// when both carry a non-zero value. The Date-string fallback exists for
-// legacy fixtures predating SentAt. Mixed cases sort the zero-SentAt side
-// as older (arbitrary but deterministic).
-func lessMessage(a, b mail.MessageInfo) bool {
+// compareMessage orders messages oldest-first. The Date-string fallback
+// and zero-SentAt tie-break exist for legacy fixtures predating SentAt.
+func compareMessage(a, b mail.MessageInfo) int {
 	aZero := a.SentAt.IsZero()
 	bZero := b.SentAt.IsZero()
 	if !aZero && !bZero {
-		return a.SentAt.Before(b.SentAt)
+		return a.SentAt.Compare(b.SentAt)
 	}
 	if aZero && bZero {
-		return a.Date < b.Date
+		return cmp.Compare(a.Date, b.Date)
 	}
-	return aZero
+	if aZero {
+		return -1
+	}
+	return 1
 }
 
 // threadNode is a transient tree node used only during prefix computation
@@ -396,8 +398,8 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 
 	var sortChildren func(n *threadNode)
 	sortChildren = func(n *threadNode) {
-		sort.SliceStable(n.children, func(i, j int) bool {
-			return lessMessage(n.children[i].msg, n.children[j].msg)
+		slices.SortStableFunc(n.children, func(a, b *threadNode) int {
+			return compareMessage(a.msg, b.msg)
 		})
 		for _, c := range n.children {
 			sortChildren(c)
@@ -456,7 +458,7 @@ func buildPrefix(ancestorLastFlags []bool, isLast bool) string {
 // prefix becomes "[N] " (N = threadSize) and every row down to the next
 // root is marked hidden.
 func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
-	for i := 0; i < len(rows); i++ {
+	for i := range len(rows) {
 		if !rows[i].isThreadRoot {
 			continue
 		}
@@ -841,7 +843,7 @@ func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
 }
 
 func (m *Model) MoveToTop() {
-	for i := 0; i < len(m.rows); i++ {
+	for i := range len(m.rows) {
 		if !m.rows[i].hidden {
 			m.selected = i
 			m.offset = 0

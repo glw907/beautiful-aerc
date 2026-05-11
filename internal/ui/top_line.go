@@ -25,7 +25,7 @@ func (tl TopLine) View(width, dividerCol int) string {
 	}
 
 	var buf strings.Builder
-	for i := 0; i < fillWidth; i++ {
+	for i := range fillWidth {
 		if dividerCol > 0 && i == dividerCol {
 			buf.WriteRune('┬')
 		} else {

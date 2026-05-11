@@ -136,7 +136,7 @@ func (p LinkPicker) Box(w, h int) string {
 
 	previewLines := p.previewLines(contentW)
 	footerRows := make([]string, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		line := ""
 		if i < len(previewLines) {
 			line = previewLines[i]

@@ -2,11 +2,12 @@ package catkin
 
 import (
 	"bufio"
+	"cmp"
 	"embed"
 	"errors"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"unicode"
@@ -20,10 +21,10 @@ var spellcheckFS embed.FS
 // Check return true so callers without a Speller degrade to no-op.
 type Speller struct {
 	known map[string]uint32
-	// delIdx is the SymSpell deletion-distance index; Suggest builds it
-	// lazily under once. Check does not need it.
-	delIdx map[string][]string
-	once   sync.Once
+	// delIdx is the SymSpell deletion-distance index built lazily by
+	// ensureIndex on the first Suggest call. Check does not need it.
+	delIdx      map[string][]string
+	ensureIndex func()
 }
 
 // NewSpeller loads en_US + project from the embedded filesystem and
@@ -62,7 +63,9 @@ func newSpellerFromReader(en, project io.Reader, extra []string) (*Speller, erro
 		}
 		known[w] = 1
 	}
-	return &Speller{known: known}, nil
+	s := &Speller{known: known}
+	s.ensureIndex = sync.OnceFunc(s.buildIndex)
+	return s, nil
 }
 
 // loadInto reads one-word-per-line wordlists, skipping comments and blanks.
@@ -124,7 +127,7 @@ func deletes(w string, dist int) map[string]struct{} {
 	if dist <= 0 || len(w) == 0 {
 		return out
 	}
-	for i := 0; i < len(w); i++ {
+	for i := range len(w) {
 		shorter := w[:i] + w[i+1:]
 		if _, seen := out[shorter]; seen {
 			continue
@@ -146,7 +149,7 @@ func editDistance(a, b string, limit int) int {
 	}
 	prev := make([]int, lb+1)
 	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
+	for j := range lb + 1 {
 		prev[j] = j
 	}
 	for i := 1; i <= la; i++ {
@@ -183,7 +186,7 @@ func (s *Speller) Suggest(word string, n int) []string {
 	if s == nil || word == "" || n <= 0 {
 		return nil
 	}
-	s.once.Do(s.buildIndex)
+	s.ensureIndex()
 	w := strings.ToLower(word)
 
 	type cand struct {
@@ -206,11 +209,8 @@ func (s *Speller) Suggest(word string, n int) []string {
 			cands = append(cands, cand{word: candidate, dist: ed, rank: s.known[candidate]})
 		}
 	}
-	sort.SliceStable(cands, func(i, j int) bool {
-		if cands[i].dist != cands[j].dist {
-			return cands[i].dist < cands[j].dist
-		}
-		return cands[i].rank < cands[j].rank
+	slices.SortStableFunc(cands, func(a, b cand) int {
+		return cmp.Or(cmp.Compare(a.dist, b.dist), cmp.Compare(a.rank, b.rank))
 	})
 	if len(cands) > n {
 		cands = cands[:n]

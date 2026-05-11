@@ -1,10 +1,11 @@
 package compose
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -157,11 +158,14 @@ func readDirCmd(id int, dir string, showHidden bool) tea.Cmd {
 			}
 			out = append(out, ent)
 		}
-		sort.SliceStable(out, func(i, j int) bool {
-			if out[i].isDir != out[j].isDir {
-				return out[i].isDir
+		slices.SortStableFunc(out, func(a, b attachEntry) int {
+			if a.isDir != b.isDir {
+				if a.isDir {
+					return -1
+				}
+				return 1
 			}
-			return strings.ToLower(out[i].name) < strings.ToLower(out[j].name)
+			return cmp.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
 		})
 		return readDirMsg{id: id, entries: out}
 	}
@@ -348,7 +352,7 @@ func (p AttachPicker) View() string {
 
 	rows := p.viewportRows()
 	bodyRows := make([]string, rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		idx := p.offset + i
 		if idx >= len(p.entries) {
 			bodyRows[i] = uicore.PadOrTruncate("", contentW)

@@ -399,7 +399,7 @@ func TestComposeFocusOrderIncludesFrom(t *testing.T) {
 
 	// Tab from initial focus (To) walks To→Cc→Bcc→Subject→Body→From→To.
 	got := []int{c.Focus()}
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 		got = append(got, c.Focus())
 	}

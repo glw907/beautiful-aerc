@@ -86,7 +86,7 @@ func TestMovePicker_BackspaceEmptyNoOp(t *testing.T) {
 func TestMovePicker_CursorClampsOnFilter(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
 	p = p.SetSize(60, 16)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	// After navigating down, filtering should reset cursor to 0.
@@ -103,7 +103,7 @@ func TestMovePicker_NavigationBounds(t *testing.T) {
 	if got := p.list.Index(); got != 0 {
 		t.Errorf("up at top: cursor = %d, want 0", got)
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	if got, want := p.list.Index(), p.MatchCount()-1; got != want {
@@ -302,7 +302,7 @@ func BenchmarkMovePickerView(b *testing.B) {
 	p = p.Open(nil, "", sampleFolders())
 	p = p.SetSize(80, 24)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = p.Box(80, 24)
 	}
 }

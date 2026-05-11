@@ -11,10 +11,10 @@ func TestBackfillProgress(t *testing.T) {
 	a := openTestAccount(t)
 	defer a.Close()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		seedMessage(t, a, mail.UID(string(rune('a'+i))), time.Now())
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		var msgID int64
 		a.db.QueryRow(`SELECT id FROM messages WHERE protocol_id = ?`, string(rune('a'+i))).Scan(&msgID)
 		a.db.Exec(`INSERT INTO bodies (message, bytes, fetched_at) VALUES (?, ?, ?)`,

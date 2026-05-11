@@ -40,7 +40,7 @@ func (b Buffer) RuneOffset() int {
 	value := b.ta.Value()
 	lines := strings.Split(value, "\n")
 	off := 0
-	for i := 0; i < row && i < len(lines); i++ {
+	for i := range min(row, len(lines)) {
 		off += utf8.RuneCountInString(lines[i]) + 1
 	}
 	li := b.ta.LineInfo()

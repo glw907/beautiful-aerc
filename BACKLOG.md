@@ -89,6 +89,9 @@
 
 ## Medium
 
+- [ ] **#47** Consolidate Levenshtein implementations `#improvement` `#poplar` *(2026-05-10)*
+  Two two-row-DP Levenshtein implementations coexist: `internal/config/accounts.go::levenshtein` (provider-name typo hints) and `internal/catkin/spellcheck.go::editDistance` (SymSpell candidate verification, with a maxDist short-circuit). Pass 16b's modernization sweep modernized both in place but left the duplication. Right shape is a shared helper — likely `internal/strdist/` or fold it into a more general text-utility package. Decide the package boundary first (catkin is markdown-editor scoped, config is provider preset; neither imports the other); pre-beta is when this is cheap.
+
 - [ ] **#46** Refactor `messagelist.appendThreadRows` to `iter.Seq2`-style walk `#improvement` `#poplar` *(2026-05-10)*
   Current `appendThreadRows` builds a transient `*threadNode` tree per bucket and threads box-drawing prefixes through a manual buffer. Go 1.26 supports stable range-over-func; modeling the walk after `Digital-Shane/treeview`'s `NodeInfo{Node, Depth, IsLast}` (yielded via `iter.Seq2[NodeInfo, error]`) would replace the buffer with a clean DFS iterator and make `AllVisible`/`AllExpanded` variants composable. Post-15b cleanup (sidebar tree adopts the same shape first, gets validated there); pre-beta safe. Touches `internal/ui/messagelist/model.go` only.
 

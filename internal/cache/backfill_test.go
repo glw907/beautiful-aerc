@@ -111,7 +111,7 @@ func TestBackfiller_RunFillsThenIdles(t *testing.T) {
 	defer a.Close()
 	a.Backend = &fakeBackendWithBody{body: []byte("body")}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		seedMessage(t, a, mail.UID(fmt.Sprintf("u-%d", i)), time.Now().Add(-time.Duration(i)*time.Hour))
 	}
 
@@ -182,7 +182,7 @@ func TestBackfiller_BailsAtCap(t *testing.T) {
 	a.maxSize = 100
 	a.Backend = &fakeBackendWithBody{body: bytes.Repeat([]byte("x"), 95)}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		seedMessage(t, a, mail.UID(fmt.Sprintf("u-%d", i)), time.Now().Add(-time.Duration(i)*time.Hour))
 	}
 

@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 16b — Mechanical Go modernization sweep.
-Second of four modernization passes (16a infra ✓, 16b sweep,
+**Current pass:** Pass 16c — `iter.Seq` for `catkin/style.go` `walkSpans`.
+Third of four modernization passes (16a infra ✓, 16b sweep ✓,
 16c `iter.Seq`, 16d `log/slog`) before the bubbles-adoption
 remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
 17c help audit). Polish II (18) and v0.9.0 prep (19) follow.
@@ -27,8 +27,8 @@ remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
 | 15a | `bubbles/v2/list` adoption — `movepicker`, `reader/linkpicker`, `reader/attachpicker` (ADR-0194) | done |
 | 15a.5 | `compose/attachpicker` filepicker-lessons — symlink + atomic id + size column; ADR-0195 names the deviation | done |
 | 16a | Claude infra: modern-Go defaults (skill bump + simplify Agent 3 + `modern-go-check.sh`; ADR-0196) | done |
-| **16b** | **Mechanical Go modernization sweep — `slices.SortFunc`, `slices.Sort`, `for range N`, `sync.OnceValue`, `maps.Keys`; ~60 sites, no ADR** | **pending — next** |
-| 16c | `iter.Seq` for `catkin/style.go` `walkSpans` + 3 callers; no ADR | pending |
+| 16b | Mechanical Go modernization sweep — `slices.SortFunc`, `slices.Sort`, `for range N`, `sync.OnceValue`, `slices.Chunk`, `slices.Sorted+maps.Keys`; ~60 sites, no ADR | done |
+| **16c** | **`iter.Seq` for `catkin/style.go` `walkSpans` + 3 callers; no ADR** | **pending — next** |
 | 16d | `log/slog` adoption + logging-convention ADR (mailjmap push-loop, error transcript shape) | pending |
 | 17a | Sidebar folder hierarchy on a v2 tree component (plan + spec already on disk; ADR-0197) | pending |
 | 17b | `messagelist` on `bubbles/v2/list` (custom item renderer; absorbs BACKLOG #46 `iter.Seq2`; ADR if it survives) | pending |
@@ -39,44 +39,35 @@ remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 16b)
+## Next starter prompt (Pass 16c)
 
-> **Goal.** Apply the mechanical modern-stdlib rewrites the
-> 16a audit surfaced: `sort.SliceStable` / `sort.Slice` →
-> `slices.SortStableFunc` / `slices.SortFunc` with `cmp.Or`;
-> `sort.Strings`/`Ints` → `slices.Sort`; `for i := 0; i < N;
-> i++` (unused `i`) → `for range N`; `sync.Once` + package var
-> → `sync.OnceValue`/`OnceFunc`; manual map-key-collect+sort
-> → `maps.Keys` + `slices.Sorted`. ~60 sites across ~20 files.
-> No new ADR — ADR-0196 already binds the convention.
+> **Goal.** Convert `internal/catkin/style.go::walkSpans` from
+> a push-callback iterator to a Go 1.23 `iter.Seq` push iterator,
+> updating its three call sites. Closure-captured sentinel
+> bools (`after`, `found`) collapse into loop-local state with
+> real `break`.
 >
-> **Scope.** Production + test files. Drive the working set
-> from `./scripts/modern-go-check.sh` (M1–M4) plus the 16a plan
-> appendix (production-only file:line list). Strict mode locally
-> to verify: `MODERN_GO_STRICT=1 ./scripts/modern-go-check.sh`
-> should exit 0 at the end of the pass; flip the soft-warn gate
-> off in `scripts/modern-go-check.sh` only at the end of 16d
-> (after `iter.Seq` + `slog` land).
+> **Scope.** `internal/catkin/style.go` (the iterator + the
+> self-call), `internal/catkin/spellcheck.go:368` (closure
+> captures `after`), `internal/catkin/match.go:39` (closure
+> captures `found`). No other passes touch these files.
 >
-> **Settled (do not re-brainstorm):** Multi-key sorts use
-> `cmp.Or(cmp.Compare(...), cmp.Compare(...))`. Leftover
-> `x := x` loop shadows get deleted as found (1.22+).
-> `internal/term/font.go` collapses two package vars +
-> `HasNerdFont()` to one `var HasNerdFont = sync.OnceValue(...)`.
-> `internal/catkin/spellcheck.go` struct-field `once sync.Once`
-> + `delIdx` becomes `OnceFunc(buildIndex)`. M3 false positives
-> (loops that read `i`) get left alone — flag-only.
+> **Settled (do not re-brainstorm):** `walkSpans` becomes
+> `func spans(s string) iter.Seq[...]`. Yield type is a struct
+> carrying the kind + text + optional submatch slice (Go does not
+> have `iter.Seq3`; bundle the three into one yielded value).
+> Call sites become `for span := range spans(s) { ... }`.
 >
-> **Out of scope:** `iter.Seq` (16c), `slog` (16d), any
-> renaming or signature changes beyond the modernization itself.
-> BACKLOG #46 (`messagelist` `iter.Seq2`) stays deferred to 17b.
+> **Out of scope:** BACKLOG #46 (`messagelist.appendThreadRows`
+> to `iter.Seq2`) — that stays deferred to 17b. `slog`
+> adoption — that is 16d.
 >
-> **Approach.** Brainstorm not needed — the plan is mechanical.
-> Write `docs/superpowers/plans/2026-05-1X-go-modernization-sweep.md`
-> grouping the ~60 hits by file and applying them in dependency
-> order. Standard pass-end ritual via `poplar-pass`. Pass ships
-> green: `make check` + `MODERN_GO_STRICT=1 make modern-go-check`
-> both exit 0 by the end.
+> **Approach.** Brainstorm not needed (single iterator, three
+> consumers, well-defined transformation). Write
+> `docs/superpowers/plans/2026-05-1X-iter-seq-walkspans.md`.
+> Standard pass-end ritual via `poplar-pass`. Strict
+> `MODERN_GO_STRICT=1 ./scripts/modern-go-check.sh` stays at
+> exit 0; `make check` green.
 
 ## Notes for the 16-series (modernization)
 

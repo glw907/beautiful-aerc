@@ -144,7 +144,7 @@ func (w *footnoteWalker) markerLabel(url string) string {
 	n := w.markerFor(url)
 	w.hasMarker[n-1] = true
 	m := 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if w.hasMarker[i] {
 			m++
 		}

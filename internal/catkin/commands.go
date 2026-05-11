@@ -32,7 +32,7 @@ func splitAtCursor(src string, cur int) ([]string, loc) {
 // corresponding to the (line, col) position.
 func joinAt(lines []string, p loc) (string, int) {
 	off := 0
-	for i := 0; i < p.line && i < len(lines); i++ {
+	for i := range min(p.line, len(lines)) {
 		off += utf8.RuneCountInString(lines[i]) + 1
 	}
 	if p.line < len(lines) {
@@ -58,7 +58,7 @@ func linePrefix(line string, ctx LineContext) string {
 		return ""
 	}
 	bytes := 0
-	for i := 0; i < prefixRunes; i++ {
+	for range prefixRunes {
 		_, size := utf8.DecodeRuneInString(line[bytes:])
 		if size == 0 {
 			break

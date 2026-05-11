@@ -1,7 +1,8 @@
 package contacts
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 )
 
@@ -322,11 +323,8 @@ func FixtureSuggestions(prefix string) []Suggestion {
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Name != out[j].Name {
-			return out[i].Name < out[j].Name
-		}
-		return out[i].Email < out[j].Email
+	slices.SortFunc(out, func(a, b Suggestion) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Email, b.Email))
 	})
 
 	if len(out) > 7 {

@@ -149,7 +149,7 @@ func TestSidebar(t *testing.T) {
 
 	t.Run("j at bottom stays at last", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			sb.MoveDown()
 		}
 		last := len(folders) - 1

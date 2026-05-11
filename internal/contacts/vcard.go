@@ -2,10 +2,11 @@ package contacts
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"io"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/emersion/go-vcard"
@@ -90,8 +91,8 @@ func fieldsSorted(card vcard.Card, key string) []sortedField {
 		s.label = primaryLabel(f.Params)
 		out = append(out, s)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].pref < out[j].pref
+	slices.SortStableFunc(out, func(a, b sortedField) int {
+		return cmp.Compare(a.pref, b.pref)
 	})
 	return out
 }

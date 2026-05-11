@@ -334,7 +334,7 @@ func TestModelFoldKeys(t *testing.T) {
 			t.Fatal("T1 root not found in displayRows")
 		}
 		tab2 := tabS
-		for i := 0; i < t1Idx; i++ {
+		for range t1Idx {
 			tab2, _ = tab2.updateTab(tea.KeyPressMsg{Code: 'j', Text: "j"})
 		}
 		tab2, _ = tab2.updateTab(tea.KeyPressMsg{Code: tea.KeySpace})

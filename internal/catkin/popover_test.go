@@ -250,7 +250,7 @@ func TestPopoverRendersAtRightShiftedColumn(t *testing.T) {
 
 func TestPopoverFlipsAboveAtBottomEdge(t *testing.T) {
 	var ls []string
-	for i := 0; i < 22; i++ {
+	for range 22 {
 		ls = append(ls, "the quick brown fox")
 	}
 	ls = append(ls, "the tradeof here")
@@ -284,7 +284,7 @@ func TestPopoverClosesOnCursorLeave(t *testing.T) {
 	}
 	// Move cursor outside the misspelling range with arrow-right
 	// repeated past the word's end.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 		if !m.popover.open {
 			break

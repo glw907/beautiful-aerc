@@ -4,11 +4,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -272,7 +273,7 @@ func levenshtein(a, b string) int {
 	}
 	prev := make([]int, lb+1)
 	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
+	for j := range lb + 1 {
 		prev[j] = j
 	}
 	for i := 1; i <= la; i++ {
@@ -627,11 +628,7 @@ func resolveEnv(s string) (string, error) {
 }
 
 func knownProvidersList() string {
-	names := make([]string, 0, len(Providers))
-	for k := range Providers {
-		names = append(names, k)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(Providers))
 	names = append(names, "imap", "jmap")
 	return strings.Join(names, ", ")
 }

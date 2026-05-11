@@ -31,7 +31,7 @@ func checkGolden(t *testing.T, name, got string) {
 	if got != want {
 		gotLines := strings.Split(got, "\n")
 		wantLines := strings.Split(want, "\n")
-		for i := 0; i < len(gotLines) && i < len(wantLines); i++ {
+		for i := range min(len(gotLines), len(wantLines)) {
 			if gotLines[i] != wantLines[i] {
 				t.Fatalf("golden %s mismatch at line %d:\n  got  %q\n  want %q",
 					name, i+1, gotLines[i], wantLines[i])

@@ -152,7 +152,7 @@ func TestRenderHeadersSkipsEmpty(t *testing.T) {
 
 func TestRenderHeadersAddressWrap(t *testing.T) {
 	var addrs []Address
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		addrs = append(addrs, Address{
 			Name:  "Recipient Name",
 			Email: "recipient@example.com",

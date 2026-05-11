@@ -1,7 +1,8 @@
 package contacts
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -215,8 +216,8 @@ func firstSortLetterMode(c Contact, mode SortMode) rune {
 }
 
 func sortContacts(cs []Contact, mode SortMode) {
-	sort.SliceStable(cs, func(i, j int) bool {
-		return sortKey(cs[i], mode) < sortKey(cs[j], mode)
+	slices.SortStableFunc(cs, func(a, b Contact) int {
+		return cmp.Compare(sortKey(a, mode), sortKey(b, mode))
 	})
 }
 

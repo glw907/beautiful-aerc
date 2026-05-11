@@ -1,9 +1,10 @@
 package mailimap
 
 import (
+	"cmp"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,9 +35,7 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 		return nil, total, fmt.Errorf("search all %q: %w", name, err)
 	}
 
-	sort.Slice(all, func(i, j int) bool {
-		return uidGreater(all[i], all[j])
-	})
+	slices.SortFunc(all, uidCompareDesc)
 
 	if offset >= len(all) {
 		return nil, total, nil
@@ -48,12 +47,12 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 	return all[offset:end], total, nil
 }
 
-// uidGreater compares IMAP UIDs as unsigned 32-bit decimals. Used as
-// the newest-first proxy when SORT is unavailable.
-func uidGreater(a, b mail.UID) bool {
+// uidCompareDesc orders IMAP UIDs newest-first by their unsigned
+// 32-bit decimal value.
+func uidCompareDesc(a, b mail.UID) int {
 	ai, _ := strconv.ParseUint(string(a), 10, 32)
 	bi, _ := strconv.ParseUint(string(b), 10, 32)
-	return ai > bi
+	return cmp.Compare(bi, ai)
 }
 
 // fetchItems uses BODY.PEEK[...] so reading headers does not set \Seen.

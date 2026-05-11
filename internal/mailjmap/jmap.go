@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -438,12 +439,8 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 	b.mu.Unlock()
 
 	out := make([]mail.MessageInfo, 0, len(uids))
-	for start := 0; start < len(uids); start += headerFetchChunk {
-		end := start + headerFetchChunk
-		if end > len(uids) {
-			end = len(uids)
-		}
-		batch, err := b.fetchHeadersChunk(accountID, uids[start:end])
+	for chunk := range slices.Chunk(uids, headerFetchChunk) {
+		batch, err := b.fetchHeadersChunk(accountID, chunk)
 		if err != nil {
 			return nil, err
 		}

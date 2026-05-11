@@ -45,7 +45,7 @@ func Width(s string) int {
 
 // SpuaCount reports the number of SPUA-A runes in s.
 func SpuaCount(s string) int {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] >= 0x80 {
 			return spuaCountSlow(s)
 		}

@@ -112,7 +112,7 @@ func (sb StatusBar) SetScrollPct(pct int) StatusBar {
 func buildFill(width, dividerCol int) string {
 	var buf strings.Builder
 	buf.Grow(width * 3) // UTF-8 box-drawing chars are 3 bytes
-	for i := 0; i < width; i++ {
+	for i := range width {
 		if dividerCol > 0 && i == dividerCol {
 			buf.WriteRune('┴')
 		} else {

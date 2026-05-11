@@ -16,7 +16,7 @@ func newTestConflictOverlay() ConflictOverlay {
 
 func makeConflictRows(n int) []cache.ConflictRow {
 	out := make([]cache.ConflictRow, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] = cache.ConflictRow{
 			ID:           int64(100 + i),
 			Kind:         cache.KindFlag,

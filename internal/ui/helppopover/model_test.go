@@ -241,7 +241,7 @@ func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
 	styles := NewStyles(theme.Nord)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		h := New(styles, Account)
 		_, _ = h.Box(120, 40)
 	}
@@ -256,7 +256,7 @@ func BenchmarkHelpPopoverBox_Warm(b *testing.B) {
 	_, _ = h.Box(120, 40) // warm the cache
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = h.Box(120, 40)
 	}
 }
@@ -269,7 +269,7 @@ func BenchmarkHelpPopoverView(b *testing.B) {
 	h := New(styles, Account).SetSize(120, 40)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = h.View(120, 40)
 	}
 }

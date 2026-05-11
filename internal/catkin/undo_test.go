@@ -47,7 +47,7 @@ func TestUndoRing_UndoRedo(t *testing.T) {
 func TestUndoRing_Cap(t *testing.T) {
 	var r undoRing
 	r.seed(snap{"", 0})
-	for i := 0; i < undoCap*2; i++ {
+	for i := range undoCap * 2 {
 		r.record(snap{string(rune('a'+i%26)) + " ", i})
 	}
 	if len(r.snaps) > undoCap {
