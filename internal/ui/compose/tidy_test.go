@@ -59,7 +59,7 @@ func TestHandleTidyKey_InFlight(t *testing.T) {
 
 func TestUpdate_TidyResult_Corrected(t *testing.T) {
 	m := newTestComposeModel()
-	m.editor.SetValue("teh quick brown")
+	m.editor = m.editor.WithValue("teh quick brown")
 	m.tidyInFlight = true
 	msg := tidyResultMsg{
 		oldBody: "teh quick brown",
@@ -83,7 +83,7 @@ func TestUpdate_TidyResult_Corrected(t *testing.T) {
 
 func TestUpdate_TidyResult_NoChanges(t *testing.T) {
 	m := newTestComposeModel()
-	m.editor.SetValue("perfect text")
+	m.editor = m.editor.WithValue("perfect text")
 	m.tidyInFlight = true
 	msg := tidyResultMsg{
 		oldBody: "perfect text",
@@ -104,7 +104,7 @@ func TestUpdate_TidyResult_NoChanges(t *testing.T) {
 
 func TestUpdate_TidyResult_Error(t *testing.T) {
 	m := newTestComposeModel()
-	m.editor.SetValue("anything")
+	m.editor = m.editor.WithValue("anything")
 	m.tidyInFlight = true
 	msg := tidyResultMsg{
 		oldBody: "anything",

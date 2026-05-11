@@ -114,7 +114,7 @@ func TestModel_ShiftTabCyclesBackward(t *testing.T) {
 func TestModel_EscFromBodyReturnsToSubject(t *testing.T) {
 	c := newTestModel(t)
 	c.focus = focusBody
-	c.editor.Focus()
+	c.editor, _ = c.editor.WithFocus()
 	c.to.Blur()
 	c = sendKey(c, "esc")
 	if c.focus != focusSubject {
@@ -140,7 +140,7 @@ func TestModel_DraftReflectsInputs(t *testing.T) {
 	c.to.SetValue("alice@example.com, bob@example.com")
 	c.cc.SetValue("c@example.com")
 	c.subject.SetValue("hi")
-	c.editor.SetValue("hello world")
+	c.editor = c.editor.WithValue("hello world")
 
 	d, err := c.Draft()
 	if err != nil {
@@ -173,7 +173,7 @@ func TestModel_IsDirty(t *testing.T) {
 	if c.IsDirty() {
 		t.Fatalf("fresh compose should not be dirty")
 	}
-	c.editor.SetValue("hi")
+	c.editor = c.editor.WithValue("hi")
 	if !c.IsDirty() {
 		t.Fatalf("body content should mark dirty")
 	}
@@ -202,7 +202,7 @@ func TestModel_CtrlXEmitsSendMsg(t *testing.T) {
 	c := newTestModel(t)
 	c.to.SetValue("alice@example.com")
 	c.subject.SetValue("hi")
-	c.editor.SetValue("body")
+	c.editor = c.editor.WithValue("body")
 
 	_, cmd := c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'x'})
 	if cmd == nil {
@@ -220,7 +220,7 @@ func TestModel_CtrlXEmitsSendMsg(t *testing.T) {
 
 func TestModel_CtrlCEmitsCancelMsg(t *testing.T) {
 	c := newTestModel(t)
-	c.editor.SetValue("dirty")
+	c.editor = c.editor.WithValue("dirty")
 
 	_, cmd := c.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'c'})
 	if cmd == nil {
