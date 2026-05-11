@@ -414,24 +414,13 @@ func appendThreadRows(rows []displayRow, bucket []mail.MessageInfo) []displayRow
 		depth:        0,
 	})
 
-	// Build the prefix from the trail of "is-last-sibling" flags at each
-	// ancestor level.
-	var walk func(node *threadNode, ancestorLastFlags []bool)
-	walk = func(node *threadNode, ancestorLastFlags []bool) {
-		for i, child := range node.children {
-			isLast := i == len(node.children)-1
-			rows = append(rows, displayRow{
-				msg:          child.msg,
-				isThreadRoot: false,
-				threadSize:   0,
-				depth:        uint8(len(ancestorLastFlags) + 1),
-				prefix:       buildPrefix(ancestorLastFlags, isLast),
-			})
-			walk(child, append(ancestorLastFlags, isLast))
-		}
+	for node, step := range walkThread(root) {
+		rows = append(rows, displayRow{
+			msg:    node.msg,
+			depth:  step.depth,
+			prefix: buildPrefix(step.ancestorLastFlags, step.isLast),
+		})
 	}
-	walk(root, nil)
-
 	return rows
 }
 
