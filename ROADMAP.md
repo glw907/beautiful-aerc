@@ -4,6 +4,43 @@
 
 ## Active
 
+### Catkin Elm conformance (all-value path) `catkin-all-value`
+`catkin.Model` (and `catkin.Buffer` underneath) ship with mixed
+receivers: `Update`/`View`/`Value`/`Focused` are value receivers
+(the Elm contract), but `SetStyles`/`SetSize`/`SetWidth`/`SetValue`/
+`SetTidyHighlights`/`RegisterAnnotator`/`Focus`/`Blur`/`recordSnap`
+mutate the receiver in place. The same instance is simultaneously
+immutable-by-Update and mutable-by-setter. This violates
+`elm-conventions` ("state in models, mutations only in Update, I/O
+only in tea.Cmd, children signal parents via Msg types") at the
+most-touched editor surface in the app, and the violation is
+load-bearing — the 17-method `mailcompose.Editor` interface +
+`CatkinEditor` adapter exists specifically to babysit the
+straddle (compose holds a stable pointer that re-syncs the
+value-Update result back into a field after every `Update`).
+
+Convert every pointer-mutator on `catkin.Model` (and `catkin.Buffer`)
+into a Msg type handled in `Update`. `SetStylesMsg`, `SetSizeMsg`,
+`SetValueMsg`, `SetTidyHighlightsMsg`, `RegisterAnnotatorMsg`,
+`FocusMsg`/`BlurMsg`, `SetUserWordlistPathMsg`. All-value
+throughout. Bubbles/v2/textarea is the upstream contagion vector
+— wrap it in a value-typed adapter inside catkin rather than
+inheriting its mutation shape.
+
+Knock-on cleanups: `mailcompose.Editor` + `CatkinEditor` collapse
+(this subsumes item 1 of `overengineering-cleanup` — once catkin
+is pure-value, compose holds `catkin.Model` directly and the
+wrapper disappears). `compose.Model` and `wizard/section_signature`
+become straight Elm children. Test fakes simplify — no more
+stable-pointer dance.
+
+This is the deepest structural fix on the roadmap; sequence it
+before any further compose feature work so new code lands on
+the conformant shape. ADR-sized — the Msg vocabulary and the
+upstream-textarea-adapter shape are the load-bearing decisions.
+
+Related: (none yet — file with `/log-issue` as passes are scoped)
+
 ### AI-overengineering cleanup `overengineering-cleanup`
 Three patterns the codebase explicitly forbids in `CLAUDE.md` /
 `go-conventions` but ships anyway. All three are pre-beta-cheap to
@@ -13,8 +50,11 @@ fix; all three keep paying review tax until they go.
    single-impl interface with zero-line pass-throughs to `catkin.Model`,
    justified by a speculative v1.1 neovim adapter (ADR-0033). Pre-beta
    the rule is "strip the seam, the next consumer re-adds it with
-   itself." Compose holds `*catkin.Model` directly; v1.1 introduces
-   the seam alongside the second implementation.
+   itself." Compose holds `catkin.Model` directly; v1.1 introduces
+   the seam alongside the second implementation. **Subsumed by
+   `catkin-all-value`** — the wrapper exists to babysit catkin's
+   mixed receivers; once catkin is pure-value, the wrapper falls
+   out for free. Land that project first.
 
 2. **Collapse the triplicate `WithLogger` functional-options pattern.**
    `mailjmap.Option` / `mailimap.Option` / `cache.Option` each declare a
