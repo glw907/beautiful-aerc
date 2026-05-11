@@ -2,9 +2,9 @@ package messagelist
 
 import "charm.land/bubbles/v2/key"
 
-// KeyMap collects the bindings messagelist.Update dispatches on.
-// Only navigation keys live here — fold, visual-mode, and triage
-// bindings need account-level guards and stay in account.keys.
+// KeyMap collects the navigation bindings messagelist.Update dispatches on.
+// Fold, visual-mode, and triage bindings stay in account.keys; they need
+// account-level guards before reaching the message list.
 type KeyMap struct {
 	Down   key.Binding
 	Up     key.Binding
