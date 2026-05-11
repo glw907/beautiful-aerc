@@ -127,7 +127,7 @@ func (m Model) applySelectedSuggestion() Model {
 	prefixRunes := utf8.RuneCountInString(src[:r.Start])
 	replRunes := utf8.RuneCountInString(repl)
 	m.buf = m.buf.WithValue(newSrc).WithRuneOffset(prefixRunes + replRunes)
-	m.recordSnap()
+	m.undo.record(snap{m.buf.Value(), m.buf.RuneOffset()})
 	m = m.closePopover()
 	if len(m.annotators) > 0 {
 		m.srcGen++

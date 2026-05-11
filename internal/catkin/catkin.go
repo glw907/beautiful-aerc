@@ -55,20 +55,23 @@ func New() Model {
 	return m
 }
 
-// RegisterAnnotator appends an annotator; they run in registration order.
-func (m *Model) RegisterAnnotator(a Annotator) {
+// WithAnnotator returns a Model with a appended to the annotator
+// list. Mount-time configuration: call before the tea loop sees the
+// model. Annotators run in registration order.
+func (m Model) WithAnnotator(a Annotator) Model {
 	m.annotators = append(m.annotators, a)
+	return m
 }
 
-// SetTidyHighlights configures the post-Tidy character-range highlights.
+// WithTidyHighlights configures the post-Tidy character-range highlights.
 // The annotator returns annotations only while the buffer matches src.
 // Any subsequent buffer mutation invalidates the match and clears the
 // highlights on the next annotate tick.
-func (m *Model) SetTidyHighlights(src string, ranges []Range) {
-	if m.tidyA == nil {
-		return
+func (m Model) WithTidyHighlights(src string, ranges []Range) Model {
+	if m.tidyA != nil {
+		m.tidyA.Set(src, ranges)
 	}
-	m.tidyA.Set(src, ranges)
+	return m
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -162,7 +165,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m Model) afterEdit(b Buffer, cmd tea.Cmd) (Model, tea.Cmd) {
 	prev := m.buf.Value()
 	m.buf = b
-	m.recordSnap()
+	m.undo.record(snap{m.buf.Value(), m.buf.RuneOffset()})
 	if m.buf.Value() != prev && len(m.annotators) > 0 {
 		m.srcGen++
 		cmd = tea.Batch(cmd, scheduleAnnotateCmd(m.srcGen))
@@ -180,10 +183,6 @@ func (m Model) closePopoverIfCursorLeftRange() Model {
 		return m.closePopover()
 	}
 	return m
-}
-
-func (m *Model) recordSnap() {
-	m.undo.record(snap{m.buf.Value(), m.buf.RuneOffset()})
 }
 
 func (m Model) View() string {
@@ -212,39 +211,44 @@ func (m Model) popoverScreenPosition() (int, int) {
 
 func (m Model) Mode() DisplayMode { return m.mode }
 
-// SetStyles replaces the render-time style table. The zero value is
+// WithStyles replaces the render-time style table. The zero value is
 // no-op styles; consumers map their theme onto Styles at the boundary.
-func (m *Model) SetStyles(s Styles) {
+func (m Model) WithStyles(s Styles) Model {
 	m.styles = s
 	if m.tidyA != nil {
 		m.tidyA.SetStyle(s.TidyChange)
 	}
+	return m
 }
 
 func (m Model) Value() string { return m.buf.Value() }
 
-// SetValue replaces the buffer and re-seeds the undo ring; programmatic
+// WithValue replaces the buffer and re-seeds the undo ring; programmatic
 // loads are not user edits.
-func (m *Model) SetValue(s string) {
+func (m Model) WithValue(s string) Model {
 	m.buf = m.buf.WithValue(s)
 	m.undo.seed(snap{s, m.buf.RuneOffset()})
+	return m
 }
 
-// SetUserWordlistPath sets the file the popover's add-action appends to.
+// WithUserWordlistPath sets the file the popover's add-action appends to.
 // An empty path makes the add a session-local addition only.
-func (m *Model) SetUserWordlistPath(path string) {
+func (m Model) WithUserWordlistPath(path string) Model {
 	m.userWordlistPath = path
+	return m
 }
 
-func (m *Model) SetSize(w, h int) {
+// WithSize sets the viewport dimensions.
+func (m Model) WithSize(w, h int) Model {
 	m.width, m.height = w, h
 	m.buf = m.buf.WithWidth(w).WithHeight(h)
+	return m
 }
 
-// SetWidth sets the body wrap width and re-runs reflow.
-func (m *Model) SetWidth(w int) {
+// WithWidth sets the body wrap width and re-runs reflow.
+func (m Model) WithWidth(w int) Model {
 	if w == m.width {
-		return
+		return m
 	}
 	m.width = w
 	m.buf = m.buf.WithWidth(w)
@@ -252,14 +256,18 @@ func (m *Model) SetWidth(w int) {
 	cur := m.buf.RuneOffset()
 	src, cur = Reflow(src, w, cur)
 	m.buf = m.buf.WithValue(src).WithRuneOffset(cur)
+	return m
 }
 
-func (m *Model) Focus() tea.Cmd {
+func (m Model) WithFocus() (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.buf, cmd = m.buf.WithFocus()
-	return cmd
+	return m, cmd
 }
 
-func (m *Model) Blur() { m.buf = m.buf.WithBlur() }
+func (m Model) WithBlur() Model {
+	m.buf = m.buf.WithBlur()
+	return m
+}
 
 func (m Model) Focused() bool { return m.buf.Focused() }

@@ -165,7 +165,7 @@ func (m Model) replaceCurrent() Model {
 	rep := m.find.replacement
 	out := string(srcRunes[:at]) + rep + string(srcRunes[at+qLen:])
 	m.buf = m.buf.WithValue(out)
-	m.recordSnap()
+	m.undo.record(snap{m.buf.Value(), m.buf.RuneOffset()})
 	caret := at + utf8.RuneCountInString(rep)
 	m.buf = m.buf.WithRuneOffset(caret)
 	m.find.recomputeMatches(out, caret)
@@ -189,7 +189,7 @@ func (m Model) replaceAll() Model {
 	out = append(out, srcRunes[prev:]...)
 	final := string(out)
 	m.buf = m.buf.WithValue(final)
-	m.recordSnap()
+	m.undo.record(snap{m.buf.Value(), m.buf.RuneOffset()})
 	caret := len(out)
 	if last := m.find.matches[len(m.find.matches)-1]; last >= 0 {
 		caret = last + len(rep)
