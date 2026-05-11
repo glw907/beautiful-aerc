@@ -2,6 +2,7 @@ package catkin
 
 import (
 	"bytes"
+	"iter"
 	"regexp"
 	"strings"
 	"sync"
@@ -68,6 +69,12 @@ var (
 	linkRE        = regexp.MustCompile(`^\[([^\]\n]+)\]\(([^)\n]+)\)`)
 )
 
+type spanYield struct {
+	kind              spanKind
+	text              string
+	linkText, linkURL string // populated only for spanLink
+}
+
 // tokenize splits s into inline-styling spans. The split is lossless:
 // concatenating span.text rebuilds s.
 func tokenize(s string) []span {
@@ -79,26 +86,26 @@ func tokenize(s string) []span {
 			plain.Reset()
 		}
 	}
-	walkSpans(s, func(kind spanKind, text string, sub []string) {
-		if kind == spanText {
-			plain.WriteString(text)
-			return
+	for sp := range spans(s) {
+		if sp.kind == spanText {
+			plain.WriteString(sp.text)
+			continue
 		}
 		flush()
-		sp := span{kind: kind, text: text}
-		if kind == spanLink && len(sub) >= 3 {
-			sp.linkText, sp.linkURL = sub[1], sub[2]
-		}
-		out = append(out, sp)
-	})
+		out = append(out, span{
+			kind:     sp.kind,
+			text:     sp.text,
+			linkText: sp.linkText,
+			linkURL:  sp.linkURL,
+		})
+	}
 	flush()
 	return out
 }
 
-// walkSpans is the shared inline-span scanner. fn is called with the
-// span kind and matched text; untouched bytes emit one rune at a time
-// as spanText.
-func walkSpans(s string, fn func(kind spanKind, text string, submatch []string)) {
+// spans scans s for inline-styling spans. Untouched bytes yield one
+// rune at a time as spanText.
+func spans(s string) iter.Seq[spanYield] {
 	type pat struct {
 		re   *regexp.Regexp
 		kind spanKind
@@ -111,29 +118,37 @@ func walkSpans(s string, fn func(kind spanKind, text string, submatch []string))
 		{singleStarRE, spanItalic},
 		{singleUnderRE, spanItalic},
 	}
-	i := 0
-	for i < len(s) {
-		rest := s[i:]
-		matched := false
-		for _, p := range pats {
-			if m := p.re.FindString(rest); m != "" {
-				fn(p.kind, m, nil)
-				i += len(m)
-				matched = true
-				break
+	return func(yield func(spanYield) bool) {
+		i := 0
+		for i < len(s) {
+			rest := s[i:]
+			matched := false
+			for _, p := range pats {
+				if m := p.re.FindString(rest); m != "" {
+					if !yield(spanYield{kind: p.kind, text: m}) {
+						return
+					}
+					i += len(m)
+					matched = true
+					break
+				}
 			}
+			if matched {
+				continue
+			}
+			if m := linkRE.FindStringSubmatch(rest); m != nil {
+				if !yield(spanYield{kind: spanLink, text: m[0], linkText: m[1], linkURL: m[2]}) {
+					return
+				}
+				i += len(m[0])
+				continue
+			}
+			_, size := utf8.DecodeRuneInString(rest)
+			if !yield(spanYield{kind: spanText, text: rest[:size]}) {
+				return
+			}
+			i += size
 		}
-		if matched {
-			continue
-		}
-		if m := linkRE.FindStringSubmatch(rest); m != nil {
-			fn(spanLink, m[0], m)
-			i += len(m[0])
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(rest)
-		fn(spanText, rest[:size], nil)
-		i += size
 	}
 }
 

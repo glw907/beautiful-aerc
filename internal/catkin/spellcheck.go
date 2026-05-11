@@ -363,30 +363,28 @@ func buildSkipMask(src string) skipMask {
 	off = 0
 	for _, l := range lines {
 		lineOff := off
-		// after advances past each matched span as walkSpans visits l.
+		// after advances past each matched span as spans visits l.
 		after := 0
-		walkSpans(l, func(kind spanKind, text string, sub []string) {
-			switch kind {
+		for sp := range spans(l) {
+			switch sp.kind {
 			case spanCode:
-				if idx := strings.Index(l[after:], text); idx >= 0 {
+				if idx := strings.Index(l[after:], sp.text); idx >= 0 {
 					start := lineOff + after + idx
-					ranges = append(ranges, Range{Start: start, End: start + len(text)})
-					after += idx + len(text)
+					ranges = append(ranges, Range{Start: start, End: start + len(sp.text)})
+					after += idx + len(sp.text)
 				}
 			case spanLink:
-				// sub = [full, linkText, url]; mask only the URL.
-				if len(sub) >= 3 {
-					urlPart := "(" + sub[2] + ")"
-					if idx := strings.Index(l[after:], urlPart); idx >= 0 {
-						start := lineOff + after + idx
-						ranges = append(ranges, Range{Start: start, End: start + len(urlPart)})
-					}
-					if idx := strings.Index(l[after:], text); idx >= 0 {
-						after += idx + len(text)
-					}
+				// Mask only the URL parenthetical, not the link text.
+				urlPart := "(" + sp.linkURL + ")"
+				if idx := strings.Index(l[after:], urlPart); idx >= 0 {
+					start := lineOff + after + idx
+					ranges = append(ranges, Range{Start: start, End: start + len(urlPart)})
+				}
+				if idx := strings.Index(l[after:], sp.text); idx >= 0 {
+					after += idx + len(sp.text)
 				}
 			}
-		})
+		}
 		off = lineOff + len(l) + 1
 	}
 

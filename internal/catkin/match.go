@@ -30,15 +30,15 @@ type spanPos struct {
 	delim       int // delim length in runes (1 or 2)
 }
 
-// scanSpans walks line in tokenize order and records the rune
+// scanSpans walks line in spans order and records the rune
 // positions of the open / close delimiters of each inline span:
 // `…`, **…**, __…__, *…*, _…_, [text](url) (open=[, close=]).
 func scanSpans(line string) []spanPos {
 	var out []spanPos
 	pos := 0
-	walkSpans(line, func(kind spanKind, text string, sub []string) {
-		n := utf8.RuneCountInString(text)
-		switch kind {
+	for sp := range spans(line) {
+		n := utf8.RuneCountInString(sp.text)
+		switch sp.kind {
 		case spanCode, spanItalic:
 			out = append(out, spanPos{pos, pos + n - 1, 1})
 		case spanBold:
@@ -46,11 +46,11 @@ func scanSpans(line string) []spanPos {
 		case spanBoldItalic:
 			out = append(out, spanPos{pos, pos + n - 3, 3})
 		case spanLink:
-			textLen := utf8.RuneCountInString(sub[1])
+			textLen := utf8.RuneCountInString(sp.linkText)
 			out = append(out, spanPos{pos, pos + textLen + 1, 1})
 		}
 		pos += n
-	})
+	}
 	return out
 }
 
