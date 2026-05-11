@@ -346,6 +346,13 @@ func TestAttachPicker_SymlinkClassification(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "nonexistent"), filepath.Join(root, "broken")); err != nil {
 		t.Fatal(err)
 	}
+	// symlink pointing at a regular file
+	if err := os.WriteFile(filepath.Join(root, "realfile.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "realfile.txt"), filepath.Join(root, "linkfile")); err != nil {
+		t.Fatal(err)
+	}
 
 	p := newTestPicker(t)
 	p, cmd := p.Open(root)
@@ -376,6 +383,20 @@ func TestAttachPicker_SymlinkClassification(t *testing.T) {
 	}
 	if broken.target != "" {
 		t.Errorf("broken symlink: target = %q, want empty", broken.target)
+	}
+
+	linkfile, ok := byName["linkfile"]
+	if !ok {
+		t.Fatal("linkfile not in entries")
+	}
+	if linkfile.isDir {
+		t.Errorf("linkfile: isDir = true, want false")
+	}
+	if linkfile.target == "" {
+		t.Errorf("linkfile: target is empty, want resolved path")
+	}
+	if linkfile.size <= 0 {
+		t.Errorf("linkfile: size = %d, want > 0", linkfile.size)
 	}
 }
 

@@ -386,10 +386,10 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 	if !e.isDir {
 		size = humanize.Bytes(e.size)
 	}
+	bodyW := contentW - attachSizeWidth - 1
 	body := fmt.Sprintf("%s%s %s", mark, icon, e.name)
 	if e.target != "" {
 		// Reserve space: body + " → " + target must not exceed bodyW.
-		bodyW := contentW - attachSizeWidth - 1
 		arrow := " → " + e.target
 		if ansix.Width(body+arrow) > bodyW {
 			maxTarget := bodyW - ansix.Width(body) - 3 // 3 for " → "
@@ -401,7 +401,6 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 		}
 		body += arrow
 	}
-	bodyW := contentW - attachSizeWidth - 1
 	sizeCol := p.styles.PickerDim.Width(attachSizeWidth).Align(lipgloss.Right).Render(size)
 	rendered := ansix.PadOrTruncate(body, bodyW) + " " + sizeCol
 	if idx == p.cursor {
