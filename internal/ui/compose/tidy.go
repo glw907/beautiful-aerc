@@ -52,9 +52,7 @@ func (c *Model) applyTidyResult(msg tidyResultMsg) tea.Cmd {
 
 	switch msg.res.Status {
 	case tidytext.StatusCorrected:
-		c.editor.SetValue(msg.res.Text)
-		ranges := byteRangesToCatkin(tidytext.DiffRanges(msg.oldBody, msg.res.Text))
-		c.editor.SetTidyHighlights(msg.res.Text, ranges)
+		c.editor = c.editor.WithValue(msg.res.Text).WithTidyHighlights(msg.res.Text, byteRangesToCatkin(tidytext.DiffRanges(msg.oldBody, msg.res.Text)))
 		c.info = msg.res.Message
 		c.err = ""
 	case tidytext.StatusNoChanges:

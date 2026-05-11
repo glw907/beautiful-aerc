@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/ansix"
+	"github.com/glw907/poplar/internal/catkin"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
@@ -43,7 +44,7 @@ type Model struct {
 	cc      textinput.Model
 	bcc     textinput.Model
 	subject textinput.Model
-	editor  mailcompose.Editor
+	editor  catkin.Model
 
 	focus      int
 	identities []mailcompose.Identity
@@ -122,10 +123,9 @@ func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest Sugges
 		cc:       mk(),
 		bcc:      mk(),
 		subject:  mk(),
-		editor:   mailcompose.NewCatkinEditor(),
-		suggest:  NewDropdown(suggest).WithStyles(styles),
+		editor:  catkin.New().WithStyles(styles.CatkinStyles()),
+		suggest: NewDropdown(suggest).WithStyles(styles),
 	}
-	c.editor.SetStyles(styles.CatkinStyles())
 	c.tidyFn = tidytext.Tidy
 	c.attach = NewAttachPicker(styles, uicore.SimpleIcons, m)
 	c.to.Focus()
@@ -259,7 +259,7 @@ func (c *Model) SetSize(w, h int) {
 	if bodyHeight < 1 {
 		bodyHeight = 1
 	}
-	c.editor.SetSize(w, bodyHeight)
+	c.editor = c.editor.WithSize(w, bodyHeight)
 	c.attach = c.attach.SetSize(w, h)
 }
 
@@ -723,7 +723,7 @@ func (c *Model) setFocus(target int) {
 	c.cc.Blur()
 	c.bcc.Blur()
 	c.subject.Blur()
-	c.editor.Blur()
+	c.editor = c.editor.WithBlur()
 	c.focus = target
 	switch target {
 	case focusTo:
@@ -735,7 +735,7 @@ func (c *Model) setFocus(target int) {
 	case focusSubject:
 		_ = c.subject.Focus()
 	case focusBody:
-		_ = c.editor.Focus()
+		c.editor, _ = c.editor.WithFocus()
 	case focusFrom:
 	}
 }
@@ -932,7 +932,7 @@ func (c *Model) SetSubject(s string) { c.subject.SetValue(s) }
 
 func (c *Model) SubjectValue() string { return c.subject.Value() }
 
-func (c *Model) SetBody(s string) { c.editor.SetValue(s) }
+func (c *Model) SetBody(s string) { c.editor = c.editor.WithValue(s) }
 
 func (c *Model) IsDirty() bool {
 	return c.to.Value() != "" || c.cc.Value() != "" || c.bcc.Value() != "" ||
@@ -965,7 +965,7 @@ func (c *Model) Seed(d mailcompose.Draft) {
 	c.cc.SetValue(joinAddresses(d.Cc))
 	c.bcc.SetValue(joinAddresses(d.Bcc))
 	c.subject.SetValue(d.Subject)
-	c.editor.SetValue(d.Body)
+	c.editor = c.editor.WithValue(d.Body)
 	c.attachments = d.Attachments
 	c.attachCursor = 0
 }
