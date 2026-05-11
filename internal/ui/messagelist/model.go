@@ -559,7 +559,6 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 	}
 }
 
-
 // SetSearchResults switches the model into cross-folder results mode.
 // originByUID maps each result's UID to its origin folder name; that
 // powers the `[Folder] ` sender prefix in the renderer. Threading is
@@ -843,12 +842,6 @@ func (m Model) cursorUID() mail.UID {
 	return ""
 }
 
-// snapToUID positions the list cursor on the visible row whose UID
-// matches uid; falls through to snapToUIDInList semantics.
-func (m *Model) snapToUID(uid mail.UID) {
-	m.snapToUIDInList(uid)
-}
-
 // IsNearBottom reports whether the cursor is within k visible rows
 // of the last visible row, used to trigger lazy-load before the
 // user runs out of messages.
@@ -880,7 +873,6 @@ func (m *Model) RefreshSource(msgs []mail.MessageInfo) {
 	m.snapToUIDInList(uid)
 }
 
-
 // MoveCursor shifts by delta visible rows and returns the resulting
 // UID plus whether the cursor moved. Boundaries are inert: calling
 // at the first or last visible row returns ("", false). Programmatic
@@ -907,7 +899,6 @@ func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
 	return m.cursorUID(), true
 }
 
-
 // View renders the visible window. Empty list shows the centered
 // placeholder; otherwise the embedded list.Model handles cursor +
 // viewport and the rowDelegate paints each row.
@@ -928,7 +919,6 @@ func (m Model) View() string {
 	}
 	return strings.Join(lines, "\n")
 }
-
 
 func (m Model) renderEmpty() string {
 	label := "No messages"
