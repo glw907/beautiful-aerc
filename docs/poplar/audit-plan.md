@@ -8,6 +8,11 @@ The soak-entry rule: enter beta soak when a full audit cycle returns
 no findings. Version number, calendar date, and "feels ready" are
 not the rule.
 
+Phase B splits into B.1 (Elm + bubbletea v2 conformance) and B.2
+(general structural integrity). The Elm/bubbletea surface is big
+enough that compressing it into one focus item underweights it
+and risks fatigue-driven skimming. Other phases stay single.
+
 ## Why phased
 
 Auditing everything continuously costs more attention than it
@@ -48,39 +53,106 @@ miss a callsite during mechanical folds?
   checks between internal callers that the no-defensive-checks
   rule also forbids.
 
-## Phase B — structural integrity
+## Phase B.1 — Elm + bubbletea v2 conformance
 
-**Trigger.** Passes 27–29 ship.
+**Trigger.** Passes 27–29 ship. Catkin is all-value; the
+`Editor` wrapper is gone; `app.go` is decomposed.
 
-**Question.** Did the refactors leave anything half-migrated, or
-recreate the problem they removed in a new shape?
+**Question.** Does the UI tree conform to the project's Elm and
+bubbletea-v2 contracts after the structural changes?
+
+The canonical surface for both contracts is split across three
+files: the `elm-conventions` skill (Elm architecture rules);
+`docs/poplar/bubbletea-conventions.md` (idiomatic bubbletea —
+size contract, View self-guard, wordwrap composition, planning
++ review checklists); `.claude/rules/ui-invariants.md` (the
+component + UX binding facts). The audit pulls from those —
+this file lists what to walk against them, not what the
+contracts say.
 
 **Focuses.**
 
-- Elm-conformance walk. Every `Model` in `internal/ui/`,
+- Receiver discipline. Every `Model` in `internal/ui/`,
   `internal/catkin/`, and `internal/ui/wizard/` has value
-  receivers on `Init`/`Update`/`View`, and either value receivers
-  throughout or mutations gated behind Msgs handled in `Update`.
-  Mixed receivers anywhere is the same straddle catkin had.
+  receivers on `Init`/`Update`/`View`, plus either value
+  receivers throughout or every state mutation gated behind a
+  Msg handled in `Update`. Mixed receivers anywhere is the
+  same straddle catkin had pre-27.
+- Cmd-as-only-IO. Every I/O call site (cache reads, backend
+  RPCs, file open, subprocess, timer arming) sits inside a
+  `tea.Cmd` returned from `Update` or `Init`, not inline in
+  `Update`'s body and not inside `View`.
+- Msg vocabulary discipline. Children signal parents via
+  exported `Msg` types in `<subpkg>/msgs.go`. No state mirror
+  back-channels (a child `Msg` that copies the child's state
+  back to the parent for the parent to re-render). Parents
+  read children via accessor methods after delegation.
+- Size contract. `View()` is self-guarded via `clipPane` /
+  equivalent — never trusts the caller's width. `SetSize`
+  propagates via `WindowSizeMsg` through every subtree.
+  `bubbles/v2/list` consumers honor the list's own size
+  contract (size set before items are populated).
+- `JoinHorizontal` ban under SPUA-A. The ADR-0084 ban on
+  `lipgloss.JoinHorizontal` for icon-bearing rows when
+  `spuaCellWidth != 1` is still honored — grep for new
+  `JoinHorizontal` calls introduced post-Pass 17 and verify
+  each is row-by-row `strings.Join` of pre-padded children.
+- Cursor hoisting. Every cursor-bearing leaf exposes its
+  cursor via a `Cursor() *tea.Cursor` accessor; the parent
+  composes them in `App.frameCursor()`. No call to
+  `SetVirtualCursor(true)` survives — every textinput /
+  textarea must call `SetVirtualCursor(false)` at
+  construction.
+- Paste routing. The paste contract in ADR-0189b: address
+  fields atomic-emit chips; catkin splices and wraps URL
+  tokens as markdown links. Verify no new paste handler
+  short-circuits this.
+- `bubbles/v2/<pkg>` analogue preference. Any new UI surface
+  added in Batch 2 prefers a `bubbles/v2` analogue
+  (`list`/`tree`/`textinput`/`textarea`/`filepicker`/`help`)
+  unless a deviation ADR is current. New deviations without
+  ADRs are findings.
+- Deviation ADRs current. ADR-0200 (help), 0201 (helppopover
+  border), 0194 (list styles), 0195 (filepicker), 0199 (list
+  delegate) describe live deviations from upstream `bubbles/v2`.
+  Walk each: does the deviation still match what the code does?
+  Outdated deviation ADRs are Phase Final invariant-rot
+  findings if they survive here.
+
+## Phase B.2 — general structural integrity
+
+**Trigger.** Phase B.1 returns empty.
+
+**Question.** Does the post-refactor structure hold up on
+non-Elm dimensions — file size, interface design, package
+layering?
+
+**Focuses.**
+
 - `App.go` decomposition regression. The 874-line `Update` is
-  now several `update<Screen>` methods. Verify the dispatch is
-  exhaustive, no method exceeds roughly 150 lines (otherwise the
-  god object moved rather than dissolved), and no method calls
-  back into a sibling `update<Screen>`. Back-channel coupling
-  between screen controllers is worse than the original god
-  switch.
+  now several `update<Screen>` methods. Dispatch is exhaustive
+  (every key/msg still routed). No method exceeds roughly 150
+  lines (otherwise the god object moved rather than dissolved).
+  No method calls back into a sibling `update<Screen>`. Back-
+  channel coupling between screen controllers is worse than
+  the original god switch.
+- File-size budget. After the `app.go` peel, no file in
+  `internal/ui/` exceeds ~600 lines. Where one does, name the
+  reason; it should be a `Model` whose state genuinely
+  requires that surface (e.g. `messagelist`).
 - Interface count. With `Editor` deleted, count interfaces in
-  `internal/`. If the count rose, name the new ones and the seam
-  each represents. New single-impl interfaces without a named
-  test fake or DI seam are the same anti-pattern the codebase
-  already documents.
-- Package-boundary leaks. After the `app.go` split, verify no
-  imports from `account`/`compose`/`reader`/etc. point back at
-  `internal/ui` directly. Subpackages cannot import the parent.
+  `internal/`. If the count rose, name the new ones and the
+  seam each represents. New single-impl interfaces without a
+  named test fake or DI seam are the same anti-pattern the
+  codebase already documents.
+- Package-boundary leaks. After the `app.go` split, no imports
+  from `account` / `compose` / `reader` / `messagelist` /
+  `sidebar` / `wizard` point back at `internal/ui` directly.
+  Subpackages cannot import the parent.
 
 ## Phase C — feature surface
 
-**Trigger.** Passes 31–34 ship, or whatever subset lands.
+**Trigger.** Passes 32–35 ship, or whatever subset lands.
 
 **Question.** Did feature work introduce behavioral hazards in
 code paths whose failure modes the project has not yet seen?

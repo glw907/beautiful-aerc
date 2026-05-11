@@ -41,13 +41,14 @@ queue a remediation sub-pass before the next phase runs. The
 | 27 | Catkin Elm conformance (all-value path) | gated |
 | 28 | Compose `Editor` wrapper deletion (subsumes overengineering-cleanup item 1) | gated |
 | 29 | `app.go` decomposition — split 874-line `App.Update` | gated |
-| 30 | **Audit B** — structural integrity (`audit-plan.md` §Phase B) | gate |
-| 31 | v2 declarative View fields — ProgressBar + ReportFocus + KeyboardEnhancements | gated |
-| 32 | Mouse support (reader + attachments + scroll) | gated |
-| 33 | Mouse support (sidebar + cross-pane) — optional split from 32 | gated |
-| 34 | Native OAuth for Gmail / Outlook IMAP (#42, BYO client ID) | gated |
-| 35 | **Audit C** — feature surface (`audit-plan.md` §Phase C) | gate |
-| 36 | **Audit Final** — comprehensive pre-soak (`audit-plan.md` §Phase Final) | gate |
+| 30 | **Audit B.1** — Elm + bubbletea v2 conformance (`audit-plan.md` §Phase B.1) | gate |
+| 31 | **Audit B.2** — general structural integrity (`audit-plan.md` §Phase B.2) | gate |
+| 32 | v2 declarative View fields — ProgressBar + ReportFocus + KeyboardEnhancements | gated |
+| 33 | Mouse support (reader + attachments + scroll) | gated |
+| 34 | Mouse support (sidebar + cross-pane) — optional split from 33 | gated |
+| 35 | Native OAuth for Gmail / Outlook IMAP (#42, BYO client ID) | gated |
+| 36 | **Audit C** — feature surface (`audit-plan.md` §Phase C) | gate |
+| 37 | **Audit Final** — comprehensive pre-soak (`audit-plan.md` §Phase Final) | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
@@ -131,17 +132,23 @@ allows.
 `app_update.go` / `app_view.go` / `app_chrome.go` so no single
 file exceeds ~600 lines.
 
-**Pass 30 — Audit B: structural integrity.** `audit-plan.md`
-§Phase B. Elm-conformance walk, decomposition regression check,
-interface count, package-boundary leak scan.
+**Pass 30 — Audit B.1: Elm + bubbletea v2 conformance.**
+`audit-plan.md` §Phase B.1. Receiver discipline, Cmd-as-only-IO,
+Msg vocabulary, size contract, `JoinHorizontal` ban under
+SPUA-A, cursor hoisting, paste routing, `bubbles/v2` analogue
+preference, deviation-ADR currency.
 
-### Batch 3 — feature work (Passes 31–34)
+**Pass 31 — Audit B.2: general structural integrity.**
+`audit-plan.md` §Phase B.2. `App.go` decomposition regression,
+file-size budget, interface count, package-boundary leaks.
+
+### Batch 3 — feature work (Passes 32–35)
 
 New feature surface. Sequenced after structure is clean so each
 addition lands on a conformant base. Gated by Audit C, then
 Audit Final, before soak.
 
-**Pass 31 — v2 declarative View fields.** Wire `v.ProgressBar`
+**Pass 32 — v2 declarative View fields.** Wire `v.ProgressBar`
 (OSC 9;4 for sync, outbox drain, attachment downloads),
 `v.ReportFocus` + `FocusMsg`/`BlurMsg` (pause JMAP push / IMAP
 IDLE refresh on blur, kick refresh on focus, suppress bell),
@@ -149,35 +156,35 @@ and `v.KeyboardEnhancements` (Kitty keyboard protocol; lands
 after Pass 27 so catkin's chord-disambiguation surface is
 conformant; unlocks `IsRepeat` for j/k acceleration).
 
-**Pass 32 — Mouse support (reader + attachments + scroll).**
+**Pass 33 — Mouse support (reader + attachments + scroll).**
 Wire `v.MouseMode = MouseModeCellMotion` + `v.OnMouse` hit-test
 for link clicks in the reader, attachment row clicks, wheel-
 scroll in messagelist and reader. `[ui] mouse = "on" | "off"`,
 default on.
 
-**Pass 33 — Mouse support (sidebar + cross-pane).** Sidebar
+**Pass 34 — Mouse support (sidebar + cross-pane).** Sidebar
 folder selection on click, click-to-focus between panes,
-contacts list/detail interaction. Splits from Pass 32 only if
+contacts list/detail interaction. Splits from Pass 33 only if
 planning shows >12 tasks.
 
-**Pass 34 — Native OAuth (Gmail + Outlook IMAP, BYO client
+**Pass 35 — Native OAuth (Gmail + Outlook IMAP, BYO client
 ID).** The biggest feature still queued. BYO client-ID consent
 flow in `internal/mailauth/`; refresh-token storage in
 keyring/age-file; proactive refresh before access-token expiry.
 Wizard provider picker (Pass 14) already routes `gmail` /
 `outlook` rows here.
 
-**Pass 35 — Audit C: feature surface.** `audit-plan.md` §Phase
+**Pass 36 — Audit C: feature surface.** `audit-plan.md` §Phase
 C. OAuth refresh path against the #53 lens, mouse hit-test
 surface integrity, `v.ReportFocus` resume path, `v.ProgressBar`
 lifecycle.
 
-**Pass 36 — Audit Final: comprehensive pre-soak.**
+**Pass 37 — Audit Final: comprehensive pre-soak.**
 `audit-plan.md` §Phase Final. Phase A/B/C lenses plus test-
 infrastructure quality, security and credential handling, voice
 and documentation rot.
 
-Enter **beta soak** when Pass 36 returns empty. Tag **`v1.0.0`**
+Enter **beta soak** when Pass 37 returns empty. Tag **`v1.0.0`**
 after soak settles.
 
 Full project descriptions in `ROADMAP.md`; audit methodology in
