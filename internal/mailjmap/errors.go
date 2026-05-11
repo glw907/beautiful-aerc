@@ -26,24 +26,10 @@ func classifyErr(err error) error {
 	if errors.As(err, &re) {
 		switch re.Status {
 		case 401, 403:
-			return errJoin(err, mail.ErrAuth)
+			return mail.WrapSentinel(err, mail.ErrAuth)
 		case 404:
-			return errJoin(err, mail.ErrNotFound)
+			return mail.WrapSentinel(err, mail.ErrNotFound)
 		}
 	}
 	return err
-}
-
-// errJoin keeps the original message in Error() while letting
-// errors.Is match the sentinel.
-func errJoin(orig, sentinel error) error { return joined{orig: orig, sentinel: sentinel} }
-
-type joined struct {
-	orig     error
-	sentinel error
-}
-
-func (j joined) Error() string { return j.orig.Error() }
-func (j joined) Unwrap() []error {
-	return []error{j.orig, j.sentinel}
 }

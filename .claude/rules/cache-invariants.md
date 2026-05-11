@@ -161,11 +161,16 @@ sources or the `poplar cache` CLI. The decision index in
   MIME bytes in `outbox.payload`, optional `scheduled_for` /
   `draft_id`, and skip optimistic UI (no message-row state to
   mirror). `(*Account).QueueOutbound(...)` returns op IDs in
-  dispatch order: `[send]` on JMAP, `[send, append]` on IMAP.
-  Inside one transaction: resolve folder → row id, insert outbox
-  row with `status='pending'` and `next_eligible_at=NULL`, apply
-  optimistic `ui_flags`/`ui_hide` to the message row (Move/Flag/
-  Destroy only), commit, signal drainer.
+  dispatch order: `[send]` on JMAP, `[send, append]` on IMAP. On
+  IMAP, the drainer's pickup query (`nextOutboxRow`) holds a
+  draft-linked `KindAppend` row ineligible until its sibling
+  `KindSend` (same `draft_id`) reaches `OpDone`; the gate also
+  closes when the sibling is absent so a stranded Append never
+  fires (ADR-0208). Inside one transaction: resolve folder → row
+  id, insert outbox row with `status='pending'` and
+  `next_eligible_at=NULL`, apply optimistic `ui_flags`/`ui_hide`
+  to the message row (Move/Flag/Destroy only), commit, signal
+  drainer.
 - `(*Account).CancelOps(ctx, opIDs)` deletes named outbox rows
   iff every one is `OpPending`; atomic across the slice. Returns
   `ErrNotPending` if any row has advanced. Used by the App's `u`
@@ -189,7 +194,10 @@ sources or the `poplar cache` CLI. The decision index in
   the drainer. Discard reverts the optimistic flip via
   `revertOptimisticTx` (mirror of `applyOptimisticTx`; no-op for
   Send/Append) and deletes the outbox row in one transaction.
-  Both reject non-conflict rows with `ErrNotConflict`.
+  Discarding a draft-linked `KindSend` also cascades the delete
+  to any sibling `KindAppend` rows for the same `draft_id` (the
+  gate above would otherwise strand them; ADR-0208). Both reject
+  non-conflict rows with `ErrNotConflict`.
 - Cache exposes three read queries for the outbox-visibility
   surfaces: `OutboxSummary` (grouped by kind/folder/status, where
   folder is the destination for Move ops via `json_extract` and

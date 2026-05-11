@@ -15,25 +15,36 @@ func (b *Backend) Move(uids []mail.UID, dest string) error {
 	if len(uids) == 0 {
 		return nil
 	}
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return fmt.Errorf("move: %w", err)
+	}
 	b.mu.Lock()
-	cmd := b.cmd
 	hasMove := b.caps.MOVE
 	b.mu.Unlock()
 
 	if hasMove {
 		if err := cmd.Move(uids, dest); err != nil {
-			return fmt.Errorf("uid move: %w", classifyErr(err))
+			wrapped := classifyErr(err)
+			b.maybeDropOnConn(cmd, wrapped)
+			return fmt.Errorf("uid move: %w", wrapped)
 		}
 		return nil
 	}
 	if err := cmd.Copy(uids, dest); err != nil {
-		return fmt.Errorf("move %s: copy: %w", dest, classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("move %s: copy: %w", dest, wrapped)
 	}
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
-		return fmt.Errorf("move %s: mark source deleted: %w", dest, classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("move %s: mark source deleted: %w", dest, wrapped)
 	}
 	if err := cmd.UIDExpunge(uids); err != nil {
-		return fmt.Errorf("move %s: expunge source: %w", dest, classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("move %s: expunge source: %w", dest, wrapped)
 	}
 	return nil
 }
@@ -73,8 +84,11 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return fmt.Errorf("destroy: %w", err)
+	}
 	b.mu.Lock()
-	cmd := b.cmd
 	gmail := b.cfg.GmailQuirks
 	b.mu.Unlock()
 
@@ -84,15 +98,21 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 			return fmt.Errorf("destroy: %w", classifyErr(err))
 		}
 		if _, err := cmd.Select(trash, false); err != nil {
-			return fmt.Errorf("select trash: %w", classifyErr(err))
+			wrapped := classifyErr(err)
+			b.maybeDropOnConn(cmd, wrapped)
+			return fmt.Errorf("select trash: %w", wrapped)
 		}
 	}
 
 	if err := cmd.Store(uids, "+FLAGS.SILENT", []string{"\\Deleted"}); err != nil {
-		return fmt.Errorf("destroy: mark deleted: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("destroy: mark deleted: %w", wrapped)
 	}
 	if err := cmd.UIDExpunge(uids); err != nil {
-		return fmt.Errorf("destroy: expunge: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("destroy: expunge: %w", wrapped)
 	}
 	return nil
 }
@@ -107,16 +127,19 @@ func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
 	if len(flags) == 0 {
 		return nil
 	}
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return fmt.Errorf("flag: %w", err)
+	}
 
 	item := "+FLAGS.SILENT"
 	if !set {
 		item = "-FLAGS.SILENT"
 	}
 	if err := cmd.Store(uids, item, flags); err != nil {
-		return fmt.Errorf("store flags: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("store flags: %w", wrapped)
 	}
 	return nil
 }

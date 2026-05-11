@@ -40,6 +40,9 @@ type fakeClient struct {
 	searchFn func(mail.SearchCriteria) ([]mail.UID, error)
 	// fetchFn, when non-nil, overrides the default Fetch stub.
 	fetchFn func(uids []mail.UID, items []string, resultFn func(mail.UID, map[string]any)) error
+	// storeFn, when non-nil, overrides the default Store stub. Lets
+	// tests inject errors for the redial path.
+	storeFn func(uids []mail.UID, item string, value any) error
 }
 
 func newFakeClient() *fakeClient {
@@ -109,6 +112,9 @@ func (f *fakeClient) FetchBodyPart(uid mail.UID, section string) ([]byte, error)
 
 func (f *fakeClient) Store(uids []mail.UID, item string, value any) error {
 	f.storeCalls = append(f.storeCalls, [3]any{uids, item, value})
+	if f.storeFn != nil {
+		return f.storeFn(uids, item, value)
+	}
 	return nil
 }
 

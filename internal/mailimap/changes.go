@@ -26,12 +26,15 @@ func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncTok
 	if err := b.OpenFolder(folder); err != nil {
 		return mail.ChangeSet{}, since, fmt.Errorf("select %s: %w", folder, err)
 	}
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return mail.ChangeSet{}, since, fmt.Errorf("changes %s: %w", folder, err)
+	}
 	all, err := cmd.Search(mail.SearchCriteria{})
 	if err != nil {
-		return mail.ChangeSet{}, since, fmt.Errorf("uid search: %w", err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return mail.ChangeSet{}, since, fmt.Errorf("uid search: %w", wrapped)
 	}
 	prevMax := decodeIMAPToken(since)
 	var added []mail.UID

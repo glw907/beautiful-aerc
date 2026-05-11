@@ -26,6 +26,13 @@ func idleBackend(t *testing.T, cmd, idle *fakeClient) *Backend {
 	b.switchCh = make(chan string, 1)
 	b.idleDone = make(chan struct{})
 	b.current = "INBOX"
+	// Redial returns the same fakes so tests can drive reconnect.
+	b.dialFn = func(_ context.Context, role string) (imapClient, error) {
+		if role == "idle" {
+			return idle, nil
+		}
+		return cmd, nil
+	}
 	return b
 }
 

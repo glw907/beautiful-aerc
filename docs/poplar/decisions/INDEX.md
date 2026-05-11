@@ -42,7 +42,8 @@ when you need the full record.
 | Gmail preset, X-GM-EXT-1 assertion, Destroy routing, XOAUTH2 via password-cmd | 0106, 0107, 0108 |
 | OAuth refresh for Gmail/Outlook IMAP — loopback PKCE + keyring/age-file token store; BYO client; `--reauth=<name>` | 0193 |
 | Local cache architecture — per-account SQLite, typed Op sum + drainer, drain-first sync, outbox state machine, UIDVALIDITY re-key, IMAP scan-and-diff | 0110–0118, 0120–0124 |
-| Backend error sentinels (mail.ErrAuth, mail.ErrNotFound) — typed at the protocol→cache boundary; drainer routes via errors.Is | 0119 |
+| Backend error sentinels (mail.ErrAuth, mail.ErrNotFound, mail.ErrConnection) — typed at the protocol→cache boundary, attached via `mail.WrapSentinel`; drainer routes via errors.Is | 0119, 0208 |
+| IMAP connection-dead recovery + outbox Append gate — `mail.ErrConnection` for cmd/idle redial (`b.dialFn` seam, `cmdClient`/`dialIdle`, `maybeDropOnConn`, idleLoop redial loop); `nextOutboxRow` NOT-EXISTS gate holds draft-linked Append until sibling Send hits OpDone; DiscardOp cascades to sibling Append | 0208 |
 | Cache cutover + II policy — UI reads/writes via cache.Account; mail.Backend shrunk; MessageList Apply* removed; lazy body population with single max-size backstop, no LRU; FetchBody returns []byte; poplar cache CLI | 0121, 0122, 0123, 0124 |
 | Pass 8.5 audits — overengineering trim (Backend/config/AccountConfig/cache.Cache/theme cleanup); Elm conformance (URLOpener seam, ConfirmModalYesMsg, OpenLinkPickerMsg, typed triageOp, key.Bindings, AccountTab.now); UI structural (`ModalShell`, `SidebarColumn`, `*<T>Cache` view-stable escape hatch); content/filter sealed-sum markers | 0125–0131 |
 | Cache III — outbox visibility (Q/! overlays, RetryOp/DiscardOp + revert mirror, status-bar outbox depth segment, offline UI hint) | 0132, 0133, 0134 |

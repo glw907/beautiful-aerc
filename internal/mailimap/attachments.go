@@ -11,13 +11,16 @@ import (
 // tree. Top-level text/plain and text/html parts are dropped because
 // they are the displayable body.
 func (b *Backend) Attachments(uid mail.UID) ([]mail.Attachment, error) {
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return nil, fmt.Errorf("attachments %s: %w", uid, err)
+	}
 
 	bs, err := cmd.FetchBodyStructure(uid)
 	if err != nil {
-		return nil, fmt.Errorf("attachments %s: %w", uid, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, fmt.Errorf("attachments %s: %w", uid, wrapped)
 	}
 	return walkBodyStructure(bs), nil
 }
@@ -64,13 +67,16 @@ func walkPart(bs BodyStructure, isTopLevel bool) []mail.Attachment {
 // decoded bytes. The go-imap adapter handles base64 and
 // quoted-printable transfer encoding.
 func (b *Backend) FetchAttachment(uid mail.UID, partID string) ([]byte, error) {
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return nil, fmt.Errorf("fetch attachment %s/%s: %w", uid, partID, err)
+	}
 
 	body, err := cmd.FetchBodyPart(uid, partID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch attachment %s/%s: %w", uid, partID, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, fmt.Errorf("fetch attachment %s/%s: %w", uid, partID, wrapped)
 	}
 	return body, nil
 }

@@ -57,17 +57,20 @@ the ADR(s) that justify them.
 - IMAP backend invariants: UIDPLUS required at Connect; MOVE /
   SPECIAL-USE / IDLE negotiated with fallbacks (COPY+STORE+EXPUNGE,
   alias classification, 30s STATUS-poll). IDLE refreshes every 9 min
-  (RFC 2177 29-min cap), reconnects via exponential backoff
-  mirroring `mailjmap.pushLoop`, emits `mail.Update` on the shared
-  channel. `Destroy` issues `UID STORE +FLAGS.SILENT (\Deleted)` +
-  `UID EXPUNGE <uids>` (ADR-0092 semantics, no collateral expunge).
-  Gmail (`GmailQuirks = true`) asserts `X-GM-EXT-1` and routes
-  `Destroy` through `SELECT [Gmail]/Trash` first; XOAUTH2 tokens
-  from `mailauth.Token(ctx)`. SMTP is a third connection dialed
-  lazily on first `Send` via `emersion/go-smtp`; cached client
-  dropped on send error. `Append` runs `APPEND` on the cmd
-  connection. `mailimap.ProbeSMTP` is the `poplar config check`
-  surface. `dialRawTCP` (in `auth.go`) is the shared TCP helper.
+  (RFC 2177 29-min cap), emits `mail.Update` on the shared channel.
+  Both connections are drop-and-redial on `mail.ErrConnection`:
+  `idleLoop` calls `b.dialIdle` on session error with exponential
+  backoff; cmd-path actions reach `b.cmd` through `b.cmdClient()`
+  (lazy redial via `b.dialFn` on `b.connCtx`). `Destroy` issues
+  `UID STORE +FLAGS.SILENT (\Deleted)` + `UID EXPUNGE <uids>`
+  (ADR-0092 semantics, no collateral expunge). Gmail
+  (`GmailQuirks = true`) asserts `X-GM-EXT-1` and routes `Destroy`
+  through `SELECT [Gmail]/Trash` first; XOAUTH2 tokens from
+  `mailauth.Token(ctx)`. SMTP is a third connection dialed lazily
+  on first `Send` via `emersion/go-smtp`; cached client dropped on
+  send error. `Append` runs `APPEND` on the cmd connection.
+  `mailimap.ProbeSMTP` is the `poplar config check` surface.
+  `dialRawTCP` (in `auth.go`) is the shared TCP helper. ADR-0208.
 
 ### Send + Append
 
@@ -333,15 +336,16 @@ POST > mailto > plain http. Banner row confirms success (5s). ADR-0185.
   (idempotent). IMAP impl issues `UID STORE +FLAGS.SILENT (\Deleted)`
   then `UID EXPUNGE <uids>`, scoped by UIDPLUS so unrelated
   pre-marked messages are unaffected.
-- `mail.ErrAuth` and `mail.ErrNotFound` are typed sentinels each
-  backend wraps onto its native error shape via package-local
-  `classifyErr`. JMAP uses `errors.As(*jmap.RequestError)` and
-  routes 401/403 → `ErrAuth`, 404 → `ErrNotFound`. IMAP uses
-  `errors.As(*imap.Error)` and routes
-  `AUTHENTICATIONFAILED`/`AUTHORIZATIONFAILED`/`PRIVACYREQUIRED` →
-  `ErrAuth`, `NONEXISTENT` → `ErrNotFound`. The cache drainer's
-  conflict matrix routes via `errors.Is` against these sentinels
-  (no substring matching).
+- `mail.ErrAuth`, `mail.ErrNotFound`, `mail.ErrConnection` are
+  the typed sentinels; backends attach via `mail.WrapSentinel`
+  inside package-local `classifyErr`. JMAP routes
+  `*jmap.RequestError` 401/403 → `ErrAuth`, 404 → `ErrNotFound`.
+  IMAP routes `*imap.Error` `AUTHENTICATIONFAILED` /
+  `AUTHORIZATIONFAILED` / `PRIVACYREQUIRED` → `ErrAuth`,
+  `NONEXISTENT` → `ErrNotFound`, and `io.EOF` / `net.ErrClosed`
+  / `*net.OpError` / `net.Error.Timeout()` → `ErrConnection`.
+  The cache drainer's conflict matrix routes via `errors.Is`
+  against these sentinels.
 
 Attachment wire shape and the picker/viewer surface live in
 `.claude/rules/attachments-invariants.md` (auto-loaded on

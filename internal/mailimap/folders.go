@@ -11,14 +11,19 @@ import (
 // LIST otherwise. Role comes from RFC 6154 attributes. mail.Classify
 // handles name-based fallback at the UI layer.
 func (b *Backend) ListFolders() ([]mail.Folder, error) {
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return nil, fmt.Errorf("list: %w", err)
+	}
 	b.mu.Lock()
-	cmd := b.cmd
 	useSpecial := b.caps.SpecialUse
 	b.mu.Unlock()
 
 	entries, err := cmd.List("", "*", useSpecial)
 	if err != nil {
-		return nil, fmt.Errorf("list: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, fmt.Errorf("list: %w", wrapped)
 	}
 
 	// Exists/Unseen stay zero; OpenFolder returns fresh counts.
@@ -52,13 +57,18 @@ func roleFromAttrs(attrs []string) string {
 // OpenFolder selects on the command connection and signals the idle
 // goroutine to re-IDLE on the new folder.
 func (b *Backend) OpenFolder(name string) error {
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return fmt.Errorf("open %q: %w", name, err)
+	}
 	b.mu.Lock()
-	cmd := b.cmd
 	switchCh := b.switchCh
 	b.mu.Unlock()
 
 	if _, err := cmd.Select(name, false); err != nil {
-		return fmt.Errorf("select %q: %w", name, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("select %q: %w", name, wrapped)
 	}
 
 	b.mu.Lock()

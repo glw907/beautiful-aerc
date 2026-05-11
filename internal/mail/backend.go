@@ -16,6 +16,27 @@ var ErrAuth = errors.New("mail: authentication failed")
 // drainer treats it as idempotent success.
 var ErrNotFound = errors.New("mail: not found")
 
+// ErrConnection signals the underlying TCP connection died mid-call.
+// IMAP backends drop the cached client and lazily redial on next use;
+// the cache drainer treats it as a transient failure.
+var ErrConnection = errors.New("mail: connection lost")
+
+// WrapSentinel returns err joined with sentinel so errors.Is(out,
+// sentinel) is true while err.Error() reads as the original. Backends
+// use it to attach ErrAuth / ErrNotFound / ErrConnection without
+// shadowing the underlying transport error string.
+func WrapSentinel(err, sentinel error) error {
+	return joinedSentinel{orig: err, sentinel: sentinel}
+}
+
+type joinedSentinel struct {
+	orig     error
+	sentinel error
+}
+
+func (j joinedSentinel) Error() string   { return j.orig.Error() }
+func (j joinedSentinel) Unwrap() []error { return []error{j.orig, j.sentinel} }
+
 // ErrUnsupported signals the backend does not implement the operation.
 // Callers gate on capability (e.g. IsJMAP) before queuing. Not routed
 // through the drainer conflict matrix.

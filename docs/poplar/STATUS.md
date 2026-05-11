@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 24 — IMAP robustness (queued, ready to
-start). Pre-beta cadence continues; path to soak in §Next steps.
+**Current pass:** Pass 25 — Small-refactor sweep (queued, ready
+to start). Pre-beta cadence continues; path to soak in §Next steps.
 
 **Beta soak deferred** (2026-05-11 decision). `v0.9.0` is tagged
 as a milestone but does not gate the rules — pre-beta operational
@@ -36,7 +36,7 @@ queue a remediation sub-pass before the next phase runs. The
 | 21 | Beta-soak bug fix — restore compose body Focus() (ADR-0206); compose hero screenshot; Nerd Font in VHS tapes | done |
 | 22 | Wizard signature step — catkin editor between identity and label, multi-line TOML render, sentinel round-trip | done |
 | 23 | First-launch safety — #49 ResolvePreset, #29 template defaults pinned, #51 MockBackend dev-gate (ADR-0207) | done |
-| 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate | queued |
+| 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate (ADR-0208) | done |
 | 25 | Small-refactor sweep — #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
 | 26 | **Audit A** — bug-fix completeness (`audit-plan.md` §Phase A) | gate |
 | 27 | Catkin Elm conformance (all-value path) | gated |
@@ -178,29 +178,32 @@ after soak settles.
 Full project descriptions in `ROADMAP.md`; audit methodology in
 `docs/poplar/audit-plan.md`.
 
-### Next starter prompt (Pass 24)
+### Next starter prompt (Pass 25)
 
-> **Goal.** Fix the two IMAP-side outbound / connection bugs
-> that are soak-blocking under normal long-running operation.
+> **Goal.** Mechanical net-deletion sweep with no user-visible
+> behavior change. Closes the small-refactor backlog ahead of
+> Audit A.
 >
-> **Scope.** `internal/mailimap/` (idleLoop, cmd-path actions),
-> `internal/mail/` (new `ErrConnection` sentinel + classifyErr
-> wiring), `internal/cache/ops.go` (NOT EXISTS gate in
-> `nextOutboxRow`). Reference: BACKLOG #52, #53.
+> **Scope.** `internal/ansix/` (drop `spuaCellWidth` package
+> global; introduce a `Measurer` value threaded from
+> `cmd/poplar/root.go` into the UI tree, #50). `internal/mailjmap/`,
+> `internal/mailimap/`, `internal/cache/` (collapse the triplicate
+> `WithLogger` functional-options to plain `*slog.Logger` args;
+> amend ADR-0197). `internal/backoff/` and `internal/humanize/`
+> (fold each into their primary callers; drop the defensive
+> `<= 0` clamps).
 >
-> **Settled (do not re-brainstorm):** Mirror the SMTP drop-and-
-> redial pattern in the same backend (`smtp.go:141-153`).
-> No schema change for #52 (the `draft_id` FK is already in v10).
+> **Settled (do not re-brainstorm):** All three changes are
+> net-deletion shapes. `Measurer` carries `SPUACellWidth` as the
+> single mutable field, accessed through methods. `WithLogger`
+> options collapse because every constructor already takes a
+> config struct.
 >
-> **Still open — brainstorm these:** None — both fixes have a
-> concrete shape in the BACKLOG entries.
+> **Still open — brainstorm these:** None.
 >
 > **Approach.** Write a plan doc at
-> `docs/superpowers/plans/2026-MM-DD-imap-robustness.md`, then
-> implement. Add a regression test driving the failing-Send /
-> sibling-Append ordering (#52) and an idle-disconnect simulation
-> against a mock IMAP server (#53). Standard pass-end checklist
-> applies.
+> `docs/superpowers/plans/2026-MM-DD-small-refactor.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)
 

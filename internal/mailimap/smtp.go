@@ -157,11 +157,14 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 	if folder == "" {
 		return errors.New("append: empty folder")
 	}
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return fmt.Errorf("append: %w", err)
+	}
 	if _, err := cmd.Append(folder, mime, imapFlagsFor(flags)); err != nil {
-		return fmt.Errorf("append: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return fmt.Errorf("append: %w", wrapped)
 	}
 	return nil
 }
@@ -173,13 +176,16 @@ func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.
 	if folder == "" {
 		return "", errors.New("push-draft: empty folder")
 	}
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return "", fmt.Errorf("push-draft: %w", err)
+	}
 
 	newUID, err := cmd.Append(folder, mime, []string{"\\Draft"})
 	if err != nil {
-		return "", fmt.Errorf("push-draft: append: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return "", fmt.Errorf("push-draft: append: %w", wrapped)
 	}
 	if prevUID == "" {
 		return newUID, nil

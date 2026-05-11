@@ -15,10 +15,9 @@ const (
 	reconnectMax         = 30 * time.Second
 )
 
-// idleLoop runs until ctx is cancelled, selecting the current folder
-// on the idle connection, running IDLE (or the poll fallback),
-// honoring folder-switch signals from OpenFolder, and reconnecting
-// with exponential backoff on failure.
+// idleLoop runs until ctx is cancelled, redialing on session error
+// with exponential backoff. Clean refresh returns reuse the existing
+// handle.
 func (b *Backend) idleLoop(ctx context.Context) {
 	defer close(b.idleDone)
 
@@ -27,23 +26,41 @@ func (b *Backend) idleLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		b.mu.Lock()
+		haveIdle := b.idle != nil
+		b.mu.Unlock()
+		if !haveIdle {
+			if err := b.dialIdle(ctx); err != nil {
+				attempts++
+				delay := backoff.Exponential(attempts, reconnectInitial, reconnectMax)
+				b.log.Warn("imap idle redial failed", "attempt", attempts, "delay", delay, "err", err)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(delay):
+				}
+				continue
+			}
+		}
 		err := b.runIdleSession(ctx)
 		if ctx.Err() != nil {
 			return
 		}
-		if err != nil {
-			b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
-			attempts++
-			delay := backoff.Exponential(attempts, reconnectInitial, reconnectMax)
-			b.log.Warn("imap idle lost, reconnecting", "attempt", attempts, "delay", delay, "err", err)
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(delay):
-			}
+		if err == nil {
+			attempts = 0
 			continue
 		}
-		attempts = 0
+		b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
+		attempts++
+		delay := backoff.Exponential(attempts, reconnectInitial, reconnectMax)
+		b.log.Warn("imap idle session ended, will redial",
+			"attempt", attempts, "delay", delay, "err", err)
+		b.dropIdle()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
 	}
 }
 

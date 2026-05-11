@@ -16,13 +16,16 @@ import (
 // returned UIDs newest-first (highest UID), and slices by offset and
 // limit.
 func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, error) {
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return nil, 0, fmt.Errorf("query %q: %w", name, err)
+	}
 
 	folder, err := cmd.Select(name, true)
 	if err != nil {
-		return nil, 0, fmt.Errorf("select %q: %w", name, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, 0, fmt.Errorf("select %q: %w", name, wrapped)
 	}
 	total := folder.Exists
 
@@ -32,7 +35,9 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 
 	all, err := cmd.Search(mail.SearchCriteria{})
 	if err != nil {
-		return nil, total, fmt.Errorf("search all %q: %w", name, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, total, fmt.Errorf("search all %q: %w", name, wrapped)
 	}
 
 	slices.SortFunc(all, uidCompareDesc)
@@ -70,16 +75,19 @@ func (b *Backend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, error) {
 		return nil, nil
 	}
 
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return nil, fmt.Errorf("fetch headers: %w", err)
+	}
 
 	var results []mail.MessageInfo
-	err := cmd.Fetch(uids, fetchItems, func(uid mail.UID, items map[string]any) {
+	err = cmd.Fetch(uids, fetchItems, func(uid mail.UID, items map[string]any) {
 		results = append(results, infoFromFetch(uid, items))
 	})
 	if err != nil {
-		return nil, fmt.Errorf("fetch headers: %w", classifyErr(err))
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, fmt.Errorf("fetch headers: %w", wrapped)
 	}
 	return results, nil
 }
@@ -135,18 +143,23 @@ func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 
 // FetchBody returns the raw RFC 822 body for uid.
 func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
-	b.mu.Lock()
-	cmd := b.cmd
-	b.mu.Unlock()
+	cmd, err := b.cmdClient()
+	if err != nil {
+		return nil, fmt.Errorf("fetch body %s: %w", uid, err)
+	}
 
 	rc, err := cmd.FetchBody(uid)
 	if err != nil {
-		return nil, fmt.Errorf("fetch body %s: %w", uid, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, fmt.Errorf("fetch body %s: %w", uid, wrapped)
 	}
 	defer rc.Close()
 	buf, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("fetch body %s: read: %w", uid, err)
+		wrapped := classifyErr(err)
+		b.maybeDropOnConn(cmd, wrapped)
+		return nil, fmt.Errorf("fetch body %s: read: %w", uid, wrapped)
 	}
 	return buf, nil
 }

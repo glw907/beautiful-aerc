@@ -2,6 +2,8 @@ package mailimap
 
 import (
 	"errors"
+	"io"
+	"net"
 
 	"github.com/emersion/go-imap/v2"
 
@@ -9,11 +11,15 @@ import (
 )
 
 // classifyErr wraps an IMAP transport error with the poplar-internal
-// sentinels (mail.ErrAuth, mail.ErrNotFound) so the cache drainer
-// can route on errors.Is. Pass-through for unrecognized shapes.
+// sentinels (mail.ErrAuth, mail.ErrNotFound, mail.ErrConnection) so
+// the cache drainer can route on errors.Is. Pass-through for
+// unrecognized shapes.
 func classifyErr(err error) error {
 	if err == nil {
 		return nil
+	}
+	if isConnectionDead(err) {
+		return mail.WrapSentinel(err, mail.ErrConnection)
 	}
 	var ie *imap.Error
 	if errors.As(err, &ie) {
@@ -21,21 +27,28 @@ func classifyErr(err error) error {
 		case imap.ResponseCodeAuthenticationFailed,
 			imap.ResponseCodeAuthorizationFailed,
 			imap.ResponseCodePrivacyRequired:
-			return wrapAuth(err)
+			return mail.WrapSentinel(err, mail.ErrAuth)
 		case imap.ResponseCodeNonExistent:
-			return wrapNotFound(err)
+			return mail.WrapSentinel(err, mail.ErrNotFound)
 		}
 	}
 	return err
 }
 
-func wrapAuth(err error) error     { return joined{orig: err, sentinel: mail.ErrAuth} }
-func wrapNotFound(err error) error { return joined{orig: err, sentinel: mail.ErrNotFound} }
-
-type joined struct {
-	orig     error
-	sentinel error
+// isConnectionDead reports whether err comes from the underlying TCP
+// connection being closed or having timed out. Mirrors the filters in
+// imapclient.Client.Close.
+func isConnectionDead(err error) bool {
+	if errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrClosedPipe) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	var oe *net.OpError
+	return errors.As(err, &oe)
 }
-
-func (j joined) Error() string   { return j.orig.Error() }
-func (j joined) Unwrap() []error { return []error{j.orig, j.sentinel} }

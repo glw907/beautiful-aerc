@@ -237,6 +237,12 @@ type outboxRow struct {
 // nextOutboxRow returns the next eligible op or sql.ErrNoRows.
 // Eligibility = pending, or failed past its next_eligible_at window,
 // and scheduled_for has passed (or is unset).
+//
+// Draft-linked Append rows are held until their sibling Send (same
+// draft_id) reaches OpDone. Without the gate, a failed Send leaves
+// the sibling Append free to dispatch, putting an unsent message in
+// Sent. The gate also closes when the sibling Send row is absent
+// (e.g. discarded), so a stranded Append never fires on its own.
 func (a *Account) nextOutboxRow(now time.Time) (*outboxRow, error) {
 	const q = `
         SELECT o.id, COALESCE(o.folder, 0), COALESCE(f.name, ''), o.message,
@@ -247,9 +253,22 @@ func (a *Account) nextOutboxRow(now time.Time) (*outboxRow, error) {
         WHERE (o.status = ?
                OR (o.status = ? AND (o.next_eligible_at IS NULL OR o.next_eligible_at <= ?)))
           AND (o.scheduled_for IS NULL OR o.scheduled_for <= ?)
+          AND NOT (
+              o.kind = ?
+              AND o.draft_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM outbox s
+                  WHERE s.draft_id = o.draft_id
+                    AND s.kind = ?
+                    AND s.status = ?
+              )
+          )
         ORDER BY o.id LIMIT 1`
 	var row outboxRow
-	err := a.db.QueryRow(q, OpPending, OpFailed, now.UnixNano(), now.UnixNano()).Scan(
+	err := a.db.QueryRow(q,
+		OpPending, OpFailed, now.UnixNano(), now.UnixNano(),
+		KindAppend, KindSend, OpDone,
+	).Scan(
 		&row.ID, &row.FolderID, &row.FolderName, &row.MessageID,
 		&row.ProtocolID, &row.Kind, &row.ArgsJSON, &row.Attempts, &row.Payload, &row.DraftID)
 	if err != nil {
@@ -355,13 +374,19 @@ func (a *Account) RetryOp(ctx context.Context, opID int64) error {
 
 // DiscardOp reverts the optimistic UI flip and deletes the outbox
 // row in one transaction. Returns ErrNotConflict if not in conflict.
+//
+// Discarding a draft-linked Send also deletes any sibling Append
+// rows for the same draft. The Append gate in nextOutboxRow requires
+// a Send sibling at status=done, so a Send vanishing without a Done
+// transition would otherwise strand the Append forever.
 func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
 	return a.tx(ctx, func(tx *sql.Tx) error {
 		var status, kind, argsJSON string
 		var msgID sql.NullInt64
+		var draftID sql.NullString
 		err := tx.QueryRow(
-			`SELECT status, kind, args, message FROM outbox WHERE id = ?`, opID).
-			Scan(&status, &kind, &argsJSON, &msgID)
+			`SELECT status, kind, args, message, draft_id FROM outbox WHERE id = ?`, opID).
+			Scan(&status, &kind, &argsJSON, &msgID, &draftID)
 		if err != nil {
 			return fmt.Errorf("discard: read row: %w", err)
 		}
@@ -379,6 +404,14 @@ func (a *Account) DiscardOp(ctx context.Context, opID int64) error {
 		}
 		if _, err := tx.Exec(`DELETE FROM outbox WHERE id = ?`, opID); err != nil {
 			return fmt.Errorf("discard: delete: %w", err)
+		}
+		if OpKind(kind) == KindSend && draftID.Valid && draftID.String != "" {
+			if _, err := tx.Exec(
+				`DELETE FROM outbox WHERE kind = ? AND draft_id = ?`,
+				KindAppend, draftID.String,
+			); err != nil {
+				return fmt.Errorf("discard: cascade append: %w", err)
+			}
 		}
 		return nil
 	})

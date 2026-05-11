@@ -45,6 +45,15 @@ type Backend struct {
 	idleCancel context.CancelFunc
 	idleDone   chan struct{}
 	switchCh   chan string
+
+	// connCtx is the parent context for redials. Set in Connect,
+	// cancelled in Disconnect.
+	connCtx    context.Context
+	connCancel context.CancelFunc
+
+	// dialFn opens a fresh IMAP connection for the given role.
+	// Defaults to dial(ctx, b, role); tests swap in a fake.
+	dialFn func(ctx context.Context, role string) (imapClient, error)
 }
 
 type capSet struct {
@@ -59,6 +68,7 @@ func New(cfg config.AccountConfig, opts ...Option) *Backend {
 		cfg: cfg,
 		log: slog.Default().With("component", "mailimap"),
 	}
+	b.dialFn = func(ctx context.Context, role string) (imapClient, error) { return dial(ctx, b, role) }
 	for _, o := range opts {
 		o(b)
 	}
@@ -73,6 +83,7 @@ func NewWithOAuth(cfg config.AccountConfig, c *mailauth.Client, opts ...Option) 
 		log:   slog.Default().With("component", "mailimap"),
 		oauth: c,
 	}
+	b.dialFn = func(ctx context.Context, role string) (imapClient, error) { return dial(ctx, b, role) }
 	for _, o := range opts {
 		o(b)
 	}
@@ -107,11 +118,11 @@ const updatesBuffer = 64
 // and starts the idle goroutine. UIDPLUS is required. Tests bypass by
 // setting b.cmd / b.idle directly and calling finishConnect.
 func (b *Backend) Connect(ctx context.Context) error {
-	cmd, err := dial(ctx, b, "command")
+	cmd, err := b.dialFn(ctx, "command")
 	if err != nil {
 		return fmt.Errorf("connect cmd: %w", err)
 	}
-	idle, err := dial(ctx, b, "idle")
+	idle, err := b.dialFn(ctx, "idle")
 	if err != nil {
 		_ = cmd.Logout()
 		return fmt.Errorf("connect idle: %w", err)
@@ -146,12 +157,16 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 
 	updates := make(chan mail.Update, updatesBuffer)
 
+	connCtx, connCancel := context.WithCancel(ctx)
+	idleCtx, idleCancel := context.WithCancel(connCtx)
+
 	b.mu.Lock()
 	b.caps = cs
 	b.updates = updates
 	b.switchCh = make(chan string, 1)
-	idleCtx, cancel := context.WithCancel(ctx)
-	b.idleCancel = cancel
+	b.connCtx = connCtx
+	b.connCancel = connCancel
+	b.idleCancel = idleCancel
 	b.idleDone = make(chan struct{})
 	b.mu.Unlock()
 
@@ -164,7 +179,8 @@ func (b *Backend) finishConnect(ctx context.Context) error {
 // connections. Returns the first non-nil error.
 func (b *Backend) Disconnect() error {
 	b.mu.Lock()
-	cancel := b.idleCancel
+	idleCancel := b.idleCancel
+	connCancel := b.connCancel
 	done := b.idleDone
 	cmd := b.cmd
 	idle := b.idle
@@ -172,11 +188,14 @@ func (b *Backend) Disconnect() error {
 	b.smtp = nil
 	b.mu.Unlock()
 
-	if cancel != nil {
-		cancel()
+	if idleCancel != nil {
+		idleCancel()
 	}
 	if done != nil {
 		<-done
+	}
+	if connCancel != nil {
+		connCancel()
 	}
 
 	var firstErr error
