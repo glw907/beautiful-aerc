@@ -23,6 +23,10 @@ type LayoutMode struct {
 
 	// Icons shrinks the sidebar lead from 8 (fancy) to 2 cells when false.
 	Icons bool
+
+	// Spartan is true when termWidth < 90. The sidebar caps tree depth at 1
+	// in this tier (ADR-0197).
+	Spartan bool
 }
 
 // IconSet is the per-mode iconography vocabulary. Add a field here when a

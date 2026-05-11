@@ -183,8 +183,10 @@ func (s Model) visibleRows() []rowMeta {
 	if s.outboxCount > 0 {
 		disposal = append([]folderEntry{syntheticOutboxEntry(s.outboxCount, s.icons)}, disposal...)
 	}
-	// Task 6 wires s.layout.Spartan to set maxDepth = 1 for the Spartan tier.
 	maxDepth := 0
+	if s.layout.Spartan {
+		maxDepth = 1
+	}
 	customRows := walkCustom(custom, s.expanded, maxDepth)
 
 	out := make([]rowMeta, 0, len(primary)+len(disposal)+len(customRows))

@@ -25,6 +25,7 @@ func ComputeLayout(termWidth int) LayoutMode {
 		Date:       date,
 		FlagColumn: termWidth >= 90,
 		Icons:      sidebar >= 20,
+		Spartan:    termWidth < 90,
 	}
 }
 
