@@ -40,7 +40,7 @@ the ADR(s) that justify them.
   (Ctrl+T compose rewrite, ADR-0178), `internal/wizard/` +
   `internal/ui/wizard/` (first-run setup wizard split into UI-free
   domain + bubbletea/huh surface, ADR-0191).
-- Mail backends call upstream libraries directly. No aerc fork. The
+- Mail backends call upstream libraries directly. The
   library family is emersion (`go-imap` v2, `go-message`, `go-smtp`,
   `go-sasl`, `go-webdav`, `go-vcard`) plus `rockorager/go-jmap`.
   Vendored snippets are MIT helpers (XOAUTH2 against `go-sasl`,

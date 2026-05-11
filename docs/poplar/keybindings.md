@@ -9,7 +9,6 @@ Contexts: **A** = account view (sidebar + message list, one pane),
 
 The account view is one pane. No focus cycling — every key is
 always live. `j/k` navigates messages, `J/K` navigates folders.
-This matches aerc's convention.
 
 ## Navigation
 
