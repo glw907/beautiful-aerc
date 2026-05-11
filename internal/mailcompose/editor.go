@@ -61,24 +61,28 @@ func (e *CatkinEditor) Update(msg tea.Msg) (Editor, tea.Cmd) {
 
 func (e *CatkinEditor) View() string { return e.inner.View() }
 
-func (e *CatkinEditor) SetSize(w, h int) { e.inner.SetSize(w, h) }
-func (e *CatkinEditor) SetWidth(w int)   { e.inner.SetWidth(w) }
+func (e *CatkinEditor) SetSize(w, h int) { e.inner = e.inner.WithSize(w, h) }
+func (e *CatkinEditor) SetWidth(w int)   { e.inner = e.inner.WithWidth(w) }
 
-func (e *CatkinEditor) Focus() tea.Cmd { return e.inner.Focus() }
-func (e *CatkinEditor) Blur()          { e.inner.Blur() }
-func (e *CatkinEditor) Focused() bool  { return e.inner.Focused() }
+func (e *CatkinEditor) Focus() tea.Cmd {
+	var cmd tea.Cmd
+	e.inner, cmd = e.inner.WithFocus()
+	return cmd
+}
+func (e *CatkinEditor) Blur()         { e.inner = e.inner.WithBlur() }
+func (e *CatkinEditor) Focused() bool { return e.inner.Focused() }
 
 func (e *CatkinEditor) Value() string     { return e.inner.Value() }
-func (e *CatkinEditor) SetValue(s string) { e.inner.SetValue(s) }
+func (e *CatkinEditor) SetValue(s string) { e.inner = e.inner.WithValue(s) }
 
-func (e *CatkinEditor) SetStyles(s catkin.Styles) { e.inner.SetStyles(s) }
+func (e *CatkinEditor) SetStyles(s catkin.Styles) { e.inner = e.inner.WithStyles(s) }
 
 func (e *CatkinEditor) SetTidyHighlights(src string, ranges []catkin.Range) {
-	e.inner.SetTidyHighlights(src, ranges)
+	e.inner = e.inner.WithTidyHighlights(src, ranges)
 }
 
 func (e *CatkinEditor) RegisterAnnotator(a catkin.Annotator) {
-	e.inner.RegisterAnnotator(a)
+	e.inner = e.inner.WithAnnotator(a)
 }
 
 func (e *CatkinEditor) WordCount() int { return e.inner.WordCount() }
