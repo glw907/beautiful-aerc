@@ -4,6 +4,20 @@
 
 ## Active
 
+### Mouse support throughout `mouse-support`
+Wire `v.MouseMode` + `v.OnMouse` across the UI. Scope: link clicking
+in the reader (linkpicker becomes optional, not the only path),
+attachment row clicks to open / save, wheel-scroll in messagelist
+and reader, sidebar folder selection, and click-to-focus between
+panes. Not a vim-replacement — keyboard remains primary; mouse is
+additive for the surfaces where pointing genuinely beats a picker.
+`OnMouse` is the v2 hit-test seam: each subpackage's `View()`
+declares its clickable regions, bubbletea routes the click.
+Aerc and Thunderbird both ship mouse on by default; a UI config
+toggle defaults to on with an opt-out for keyboard purists.
+
+Related: (none yet — file with `/log-issue` as passes are scoped)
+
 ### Bubbletea v2 declarative View fields `v2-view-fields`
 Wire three `tea.View` fields poplar already has access to but doesn't
 set: `ProgressBar` (OSC 9;4 terminal-native progress for sync, outbox
