@@ -26,8 +26,7 @@ func handleAutoPair(b Buffer, k tea.KeyPressMsg) (handled bool, _ Buffer, _ tea.
 		if !ok {
 			return false, b, nil
 		}
-		b.SetValue(newSrc)
-		b.SetRuneOffset(newCur)
+		b = b.WithValue(newSrc).WithRuneOffset(newCur)
 		return true, b, nil
 	}
 
@@ -42,8 +41,7 @@ func handleAutoPair(b Buffer, k tea.KeyPressMsg) (handled bool, _ Buffer, _ tea.
 		return false, b, nil
 	}
 	newSrc, newCur := applyAutoPair(src, cur, r)
-	b.SetValue(newSrc)
-	b.SetRuneOffset(newCur)
+	b = b.WithValue(newSrc).WithRuneOffset(newCur)
 	return true, b, nil
 }
 

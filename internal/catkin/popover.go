@@ -124,10 +124,9 @@ func (m Model) applySelectedSuggestion() Model {
 	src := m.buf.Value()
 	r := m.popover.wordRange
 	newSrc := src[:r.Start] + repl + src[r.End:]
-	m.buf.SetValue(newSrc)
 	prefixRunes := utf8.RuneCountInString(src[:r.Start])
 	replRunes := utf8.RuneCountInString(repl)
-	m.buf.SetRuneOffset(prefixRunes + replRunes)
+	m.buf = m.buf.WithValue(newSrc).WithRuneOffset(prefixRunes + replRunes)
 	m.recordSnap()
 	m = m.closePopover()
 	if len(m.annotators) > 0 {

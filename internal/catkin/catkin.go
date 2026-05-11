@@ -21,10 +21,8 @@ import (
 func pasteInto(buf Buffer, runes []rune, cur int, payload string) (Buffer, int) {
 	payloadRunes := []rune(payload)
 	newVal := string(runes[:cur]) + payload + string(runes[cur:])
-	buf.SetValue(newVal)
 	newCur := cur + len(payloadRunes)
-	buf.SetRuneOffset(newCur)
-	return buf, newCur
+	return buf.WithValue(newVal).WithRuneOffset(newCur), newCur
 }
 
 // Model is Catkin's tea.Model.
@@ -100,9 +98,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			word := string(runes[start:end])
 			replacement := "[" + word + "](" + payload + ")"
 			newVal := string(runes[:start]) + replacement + string(runes[end:])
-			b = m.buf
-			b.SetValue(newVal)
-			b.SetRuneOffset(start + utf8.RuneCountInString(replacement))
+			b = m.buf.WithValue(newVal).WithRuneOffset(start + utf8.RuneCountInString(replacement))
 		} else {
 			b, _ = pasteInto(m.buf, runes, cur, payload)
 		}
@@ -142,14 +138,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return applyScrollOff(m), nil
 		case "ctrl+z":
 			if s, ok := m.undo.undo(); ok {
-				m.buf.SetValue(s.val)
-				m.buf.SetRuneOffset(s.cur)
+				m.buf = m.buf.WithValue(s.val).WithRuneOffset(s.cur)
 			}
 			return applyScrollOff(m), nil
 		case "ctrl+y":
 			if s, ok := m.undo.redo(); ok {
-				m.buf.SetValue(s.val)
-				m.buf.SetRuneOffset(s.cur)
+				m.buf = m.buf.WithValue(s.val).WithRuneOffset(s.cur)
 			}
 			return applyScrollOff(m), nil
 		}
@@ -232,7 +226,7 @@ func (m Model) Value() string { return m.buf.Value() }
 // SetValue replaces the buffer and re-seeds the undo ring; programmatic
 // loads are not user edits.
 func (m *Model) SetValue(s string) {
-	m.buf.SetValue(s)
+	m.buf = m.buf.WithValue(s)
 	m.undo.seed(snap{s, m.buf.RuneOffset()})
 }
 
@@ -244,8 +238,7 @@ func (m *Model) SetUserWordlistPath(path string) {
 
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
-	m.buf.SetWidth(w)
-	m.buf.SetHeight(h)
+	m.buf = m.buf.WithWidth(w).WithHeight(h)
 }
 
 // SetWidth sets the body wrap width and re-runs reflow.
@@ -254,16 +247,19 @@ func (m *Model) SetWidth(w int) {
 		return
 	}
 	m.width = w
-	m.buf.SetWidth(w)
+	m.buf = m.buf.WithWidth(w)
 	src := m.buf.Value()
 	cur := m.buf.RuneOffset()
 	src, cur = Reflow(src, w, cur)
-	m.buf.SetValue(src)
-	m.buf.SetRuneOffset(cur)
+	m.buf = m.buf.WithValue(src).WithRuneOffset(cur)
 }
 
-func (m *Model) Focus() tea.Cmd { return m.buf.Focus() }
+func (m *Model) Focus() tea.Cmd {
+	var cmd tea.Cmd
+	m.buf, cmd = m.buf.WithFocus()
+	return cmd
+}
 
-func (m *Model) Blur() { m.buf.Blur() }
+func (m *Model) Blur() { m.buf = m.buf.WithBlur() }
 
 func (m Model) Focused() bool { return m.buf.Focused() }

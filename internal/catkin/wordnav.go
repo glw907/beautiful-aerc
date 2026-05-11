@@ -52,25 +52,23 @@ func handleWordNav(b Buffer, msg tea.KeyPressMsg) (bool, Buffer, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+right":
 		next := nextWordBoundary(b.Value(), b.RuneOffset())
-		b.SetRuneOffset(next)
+		b = b.WithRuneOffset(next)
 		return true, b, nil
 	case "ctrl+left":
 		prev := prevWordBoundary(b.Value(), b.RuneOffset())
-		b.SetRuneOffset(prev)
+		b = b.WithRuneOffset(prev)
 		return true, b, nil
 	case "ctrl+backspace":
 		off := b.RuneOffset()
 		prev := prevWordBoundary(b.Value(), off)
 		runes := []rune(b.Value())
-		b.SetValue(string(runes[:prev]) + string(runes[off:]))
-		b.SetRuneOffset(prev)
+		b = b.WithValue(string(runes[:prev]) + string(runes[off:])).WithRuneOffset(prev)
 		return true, b, nil
 	case "ctrl+delete":
 		off := b.RuneOffset()
 		next := nextWordBoundary(b.Value(), off)
 		runes := []rune(b.Value())
-		b.SetValue(string(runes[:off]) + string(runes[next:]))
-		b.SetRuneOffset(off)
+		b = b.WithValue(string(runes[:off]) + string(runes[next:])).WithRuneOffset(off)
 		return true, b, nil
 	}
 	return false, b, nil

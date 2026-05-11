@@ -150,7 +150,7 @@ func (m Model) jumpToCurrent() Model {
 	if len(m.find.matches) == 0 {
 		return m
 	}
-	m.buf.SetRuneOffset(m.find.matches[m.find.cursor])
+	m.buf = m.buf.WithRuneOffset(m.find.matches[m.find.cursor])
 	return applyScrollOff(m)
 }
 
@@ -164,10 +164,10 @@ func (m Model) replaceCurrent() Model {
 	qLen := utf8.RuneCountInString(m.find.query)
 	rep := m.find.replacement
 	out := string(srcRunes[:at]) + rep + string(srcRunes[at+qLen:])
-	m.buf.SetValue(out)
+	m.buf = m.buf.WithValue(out)
 	m.recordSnap()
 	caret := at + utf8.RuneCountInString(rep)
-	m.buf.SetRuneOffset(caret)
+	m.buf = m.buf.WithRuneOffset(caret)
 	m.find.recomputeMatches(out, caret)
 	return applyScrollOff(m)
 }
@@ -188,13 +188,13 @@ func (m Model) replaceAll() Model {
 	}
 	out = append(out, srcRunes[prev:]...)
 	final := string(out)
-	m.buf.SetValue(final)
+	m.buf = m.buf.WithValue(final)
 	m.recordSnap()
 	caret := len(out)
 	if last := m.find.matches[len(m.find.matches)-1]; last >= 0 {
 		caret = last + len(rep)
 	}
-	m.buf.SetRuneOffset(caret)
+	m.buf = m.buf.WithRuneOffset(caret)
 	m.find.recomputeMatches(final, caret)
 	return applyScrollOff(m)
 }

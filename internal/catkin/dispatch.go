@@ -40,7 +40,6 @@ func handleCommand(b Buffer, msg tea.KeyPressMsg) (handled bool, _ Buffer, _ tea
 		return false, b, nil
 	}
 
-	b.SetValue(newSrc)
-	b.SetRuneOffset(newCur)
+	b = b.WithValue(newSrc).WithRuneOffset(newCur)
 	return true, b, nil
 }
