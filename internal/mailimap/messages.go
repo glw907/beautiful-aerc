@@ -107,9 +107,6 @@ func infoFromFetch(uid mail.UID, items map[string]any) mail.MessageInfo {
 	if v, ok := items["bcc"]; ok {
 		info.Bcc, _ = v.(string)
 	}
-	if v, ok := items["date"]; ok {
-		info.Date, _ = v.(string)
-	}
 	if v, ok := items["sentAt"]; ok {
 		if t, ok := v.(time.Time); ok {
 			info.SentAt = t

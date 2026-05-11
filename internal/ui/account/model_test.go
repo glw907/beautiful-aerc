@@ -260,7 +260,7 @@ func TestModel_headersAppliedSeedsMsglist(t *testing.T) {
 	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	msgs := []mail.MessageInfo{
-		{UID: "1", Subject: "hello", From: "a", Date: "now"},
+		{UID: "1", Subject: "hello", From: "a", SentAt: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)},
 	}
 	tab, _ = tab.updateTab(FolderLoadedMsg{Name: "Inbox", Msgs: msgs, Total: len(msgs)})
 	if tab.msglist.Count() != 1 {
@@ -283,8 +283,8 @@ func TestModel_PerFolderThreadingOverride(t *testing.T) {
 	tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 
 	msgs := []mail.MessageInfo{
-		{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "a", Date: "Apr 5", Flags: mail.FlagSeen},
-		{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "re: a", Date: "Apr 6", Flags: mail.FlagSeen},
+		{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "a", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "re: a", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 	}
 	tab, _ = tab.updateTab(FolderLoadedMsg{Name: "Inbox", Msgs: msgs, Total: len(msgs)})
 

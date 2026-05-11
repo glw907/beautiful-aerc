@@ -11,10 +11,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
-	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
@@ -1336,7 +1336,7 @@ func TestApp_C_OpensCompose(t *testing.T) {
 		t.Fatal("c should open compose")
 	}
 	if app.compose == nil {
-		t.Fatal("c should construct compose.Model")
+		t.Fatal("c should construct mailcompose.Model")
 	}
 }
 
@@ -1392,12 +1392,12 @@ func TestApp_ComposeKeyStolenWhenOpen(t *testing.T) {
 	if app.compose == nil {
 		t.Fatal("setup: compose should be true")
 	}
-	// While compose is open, keys route to compose.Model. j should not move
+	// While compose is open, keys route to mailcompose.Model. j should not move
 	// the message list cursor.
 	beforeSelected := app.acct.MsgList().Selected()
 	app, _ = app.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if app.acct.MsgList().Selected() != beforeSelected {
-		t.Error("j should be consumed by compose.Model when compose is open, not msglist")
+		t.Error("j should be consumed by mailcompose.Model when compose is open, not msglist")
 	}
 }
 
@@ -1414,7 +1414,7 @@ func TestApp_WindowSizeSetsComposeSize(t *testing.T) {
 	}
 	// After resize compose should render non-empty content.
 	if app.compose.View() == "" {
-		t.Error("compose.View() is empty after resize, want non-empty")
+		t.Error("mailcompose.View() is empty after resize, want non-empty")
 	}
 }
 
@@ -1511,7 +1511,7 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	}
 }
 
-// Pressing n on the Save? modal discards the draft and closes compose.
+// Pressing n on the Save? modal discards the draft and closes mailcompose.
 func TestApp_ConfirmModalNo_DiscardsCompose(t *testing.T) {
 	app := newTestApp(t)
 	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -1561,8 +1561,8 @@ func TestApp_DraftsEnterLooksUpLocalRow(t *testing.T) {
 	acct := app.acct.Cache()
 
 	// Seed a local draft tied to server UID "1" (first UID MockBackend returns).
-	d := compose.Draft{Subject: "draft subject", Body: "draft body"}
-	payload, err := compose.EncodeDraft(d)
+	d := mailcompose.Draft{Subject: "draft subject", Body: "draft body"}
+	payload, err := mailcompose.EncodeDraft(d)
 	if err != nil {
 		t.Fatalf("EncodeDraft: %v", err)
 	}
@@ -1723,7 +1723,7 @@ func TestAppUndoSendCancelsAndRestores(t *testing.T) {
 	app.now = func() time.Time { return frozen }
 	app.undoSendWindow = 10 * time.Second
 
-	d := compose.Draft{Subject: "test"}
+	d := mailcompose.Draft{Subject: "test"}
 	app, _ = app.Update(uicompose.SentMsg{
 		OpIDs:        []int64{42},
 		ScheduledFor: frozen.Add(10 * time.Second),

@@ -1,4 +1,4 @@
-package compose
+package mailcompose
 
 import gomail "github.com/emersion/go-message/mail"
 

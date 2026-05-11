@@ -1,4 +1,4 @@
-package tidy
+package tidytext
 
 // ByteRange is a half-open byte span [Start, End) in newText where
 // the rune sequence diverges from oldText. Ranges are sorted by Start

@@ -173,11 +173,11 @@ func TestMessageList(t *testing.T) {
 				for _, w := range []int{80, 100, 120, 160} {
 					readMsg := mail.MessageInfo{
 						UID: "r", ThreadID: "r", From: "Alice", Subject: "Hello",
-						Date: "Mon 2026-04-26", Flags: mail.FlagSeen,
+						SentAt: time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen,
 					}
 					unreadMsg := mail.MessageInfo{
 						UID: "u", ThreadID: "u", From: "Bob", Subject: "World",
-						Date: "Mon 2026-04-26", Flags: 0,
+						SentAt: time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC), Flags: 0,
 					}
 					ml := New(styles, []mail.MessageInfo{readMsg, unreadMsg}, w, 5, mode.iconSet)
 					lines := strings.Split(ml.View(), "\n")
@@ -229,12 +229,12 @@ func TestMessageList(t *testing.T) {
 		if len(lines) == 0 {
 			t.Fatal("empty view")
 		}
-		// Default layout: Date=5. The fixture's 23-char date
-		// "2026-04-12 10:23:47 UTC" is truncated to 5 cells ("2026…").
-		// Verify the date appears at the tail of the row (right-aligned).
+		// Default layout: Date=5. formatRelativeDateShort renders
+		// the first fixture's 2026-04-12 sentAt as MM-DD ("04-12")
+		// against the test's frozen-now baseline.
 		first := strings.TrimRight(lines[0], " ")
-		if !strings.HasSuffix(first, "…") || !strings.Contains(first, "2026") {
-			t.Errorf("expected first row to end with truncated date, got tail: %q", first)
+		if !strings.HasSuffix(first, "04-12") {
+			t.Errorf("expected first row to end with 04-12, got tail: %q", first)
 		}
 	})
 
@@ -265,7 +265,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("long sender truncated with ellipsis", func(t *testing.T) {
 		long := []mail.MessageInfo{
-			{UID: "x", From: strings.Repeat("VeryLongName", 5), Subject: "subject", Date: "today"},
+			{UID: "x", From: strings.Repeat("VeryLongName", 5), Subject: "subject", SentAt: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)},
 		}
 		ml := New(styles, long, 90, 5, uicore.FancyIcons)
 		plain := stripANSI(ml.View())
@@ -319,16 +319,16 @@ func TestRenderFlagCell(t *testing.T) {
 
 func mockMessages() []mail.MessageInfo {
 	return []mail.MessageInfo{
-		{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", Date: "2026-04-12 10:23:47 UTC", Flags: 0},
-		{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", Date: "2026-04-12 09:45", Flags: 0},
-		{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", Date: "2026-04-12 09:12", Flags: 0},
-		{UID: "4", ThreadID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", Date: "2026-04-11", Flags: mail.FlagSeen},
-		{UID: "5", ThreadID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", Date: "2026-04-10", Flags: mail.FlagSeen | mail.FlagFlagged},
-		{UID: "6", ThreadID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", Date: "2026-04-09", Flags: mail.FlagSeen | mail.FlagAnswered},
-		{UID: "7", ThreadID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", Date: "2026-04-08", Flags: mail.FlagSeen},
-		{UID: "8", ThreadID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", Date: "2026-04-07", Flags: mail.FlagSeen},
-		{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", Date: "2026-04-06", Flags: mail.FlagSeen},
-		{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", Date: "2026-04-05", Flags: mail.FlagSeen | mail.FlagFlagged},
+		{UID: "1", ThreadID: "1", Subject: "Re: Project update for Q2 launch", From: "Alice Johnson", SentAt: time.Date(2026, 4, 12, 10, 23, 47, 0, time.UTC), Flags: 0},
+		{UID: "2", ThreadID: "2", Subject: "Quick question about the API", From: "Bob Smith", SentAt: time.Date(2026, 4, 12, 9, 45, 0, 0, time.UTC), Flags: 0},
+		{UID: "3", ThreadID: "3", Subject: "Lunch tomorrow?", From: "Carol White", SentAt: time.Date(2026, 4, 12, 9, 12, 0, 0, time.UTC), Flags: 0},
+		{UID: "4", ThreadID: "4", Subject: "Meeting notes from yesterday", From: "David Chen", SentAt: time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "5", ThreadID: "5", Subject: "Invoice #2847 attached", From: "Billing Dept", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen | mail.FlagFlagged},
+		{UID: "6", ThreadID: "6", Subject: "Re: Weekend hiking trip", From: "Emma Wilson", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen | mail.FlagAnswered},
+		{UID: "7", ThreadID: "7", Subject: "Your subscription renewal", From: "Acme Cloud", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "8", ThreadID: "8", Subject: "Code review: auth refactor PR #42", From: "GitHub", SentAt: time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "9", ThreadID: "9", Subject: "New comment on your post", From: "Dev Community", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "10", ThreadID: "10", Subject: "Flight confirmation: SFO → SEA", From: "Alaska Airlines", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen | mail.FlagFlagged},
 	}
 }
 
@@ -337,9 +337,9 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("groups by ThreadID with explicit root", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "1", ThreadID: "1", From: "A", Date: "Apr 1", Flags: mail.FlagSeen},
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "Apr 5", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "Apr 6", Flags: mail.FlagSeen},
+			{UID: "1", ThreadID: "1", From: "A", SentAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if got, want := len(ml.rows), 3; got != want {
@@ -372,9 +372,9 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("children sort chronologically ascending within a thread", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "Apr 1", Flags: mail.FlagSeen},
-			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "Late", Date: "Apr 3", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Early", Date: "Apr 2", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "Late", SentAt: time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Early", SentAt: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if got, want := len(ml.rows), 3; got != want {
@@ -390,22 +390,23 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("thread latest-activity computed correctly", func(t *testing.T) {
 		bucket := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", Date: "Apr 1"},
-			{UID: "11", ThreadID: "T1", Date: "Apr 5"},
-			{UID: "12", ThreadID: "T1", Date: "Apr 3"},
+			{UID: "10", ThreadID: "T1", SentAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+			{UID: "11", ThreadID: "T1", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)},
+			{UID: "12", ThreadID: "T1", SentAt: time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC)},
 		}
-		if got, want := latestActivity(bucket).Date, "Apr 5"; got != want {
-			t.Errorf("latestActivity = %q, want %q", got, want)
+		want := time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)
+		if got := latestActivity(bucket).SentAt; !got.Equal(want) {
+			t.Errorf("latestActivity = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("threads sorted by latest activity descending by default", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
 			// Older thread first in input.
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Old", Date: "Apr 1", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "OldReply", Date: "Apr 2", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Old", SentAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "OldReply", SentAt: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 			// Newer thread second in input.
-			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "New", Date: "Apr 5", Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "New", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if ml.rows[0].msg.UID != "20" {
@@ -421,8 +422,8 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("threads sorted ascending when SortDateAsc", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "New", Date: "Apr 5", Flags: mail.FlagSeen},
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Old", Date: "Apr 1", Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "New", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Old", SentAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.SetSort(SortDateAsc)
@@ -433,9 +434,9 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("SetThreaded(false) flattens thread tree", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "Other", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "Other", SentAt: time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.SetThreaded(false)
@@ -457,8 +458,8 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("synthetic root when no message has empty InReplyTo", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "999", From: "First", Date: "Apr 5", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "999", From: "Second", Date: "Apr 6", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "999", From: "First", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "999", From: "Second", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if got, want := len(ml.rows), 2; got != want {
@@ -478,8 +479,8 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("ToggleFold collapses thread under cursor", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if got, want := visibleRowCount(ml), 2; got != want {
@@ -496,8 +497,8 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("ToggleFold from child row folds the thread root", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml, _ = ml.Update(keyPress("j")) // cursor on UID 11 (child)
@@ -512,11 +513,11 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("ToggleFoldAll flips between folded and unfolded", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "RootA", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "RootB", Date: "2026-04-06 10:00", Flags: mail.FlagSeen},
-			{UID: "21", ThreadID: "T2", InReplyTo: "20", From: "ReplyB", Date: "2026-04-06 11:00", Flags: mail.FlagSeen},
-			{UID: "30", ThreadID: "T3", InReplyTo: "", From: "Solo", Date: "2026-04-07 10:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "RootA", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "RootB", SentAt: time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "21", ThreadID: "T2", InReplyTo: "20", From: "ReplyB", SentAt: time.Date(2026, 4, 6, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "30", ThreadID: "T3", InReplyTo: "", From: "Solo", SentAt: time.Date(2026, 4, 7, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if got, want := visibleRowCount(ml), 5; got != want {
@@ -534,10 +535,10 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("ToggleFoldAll from mixed state folds everything first", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "RootA", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "RootB", Date: "2026-04-06 10:00", Flags: mail.FlagSeen},
-			{UID: "21", ThreadID: "T2", InReplyTo: "20", From: "ReplyB", Date: "2026-04-06 11:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "RootA", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "RootB", SentAt: time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "21", ThreadID: "T2", InReplyTo: "20", From: "ReplyB", SentAt: time.Date(2026, 4, 6, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		// Fold only T1 so the list is in a mixed state.
@@ -554,8 +555,8 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("SetMessages resets fold state", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.ToggleFold()
@@ -572,10 +573,10 @@ func TestMessageListThreading(t *testing.T) {
 		//   │  └─ Deep (UID 12)
 		//   └─ Reply B (UID 13)
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "12", ThreadID: "T1", InReplyTo: "11", From: "Deep", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
-			{UID: "13", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", Date: "2026-04-05 13:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "11", From: "Deep", SentAt: time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "13", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", SentAt: time.Date(2026, 4, 5, 13, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		if got, want := len(ml.rows), 4; got != want {
@@ -606,9 +607,9 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("renders box-drawing prefix in subject column", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Root subject", From: "Root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root subject", From: "ReplyA", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "12", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root subject", From: "ReplyB", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Root subject", From: "Root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root subject", From: "ReplyA", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root subject", From: "ReplyB", SentAt: time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 100, 20, uicore.FancyIcons)
 		plain := stripANSI(ml.View())
@@ -622,9 +623,9 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("renders [N] badge on collapsed thread root", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Root", From: "R", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root", From: "A", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "12", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root", From: "B", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Root", From: "R", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root", From: "A", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Root", From: "B", SentAt: time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 100, 20, uicore.FancyIcons)
 		ml.ToggleFold()
@@ -636,10 +637,10 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("MoveDown skips hidden rows", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "1", ThreadID: "1", From: "Above", Subject: "above", Date: "2026-04-10", Flags: mail.FlagSeen},
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "thread", Date: "2026-04-09", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "thread", Date: "2026-04-09 11:00", Flags: mail.FlagSeen},
-			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", Date: "2026-04-08", Flags: mail.FlagSeen},
+			{UID: "1", ThreadID: "1", From: "Above", Subject: "above", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "thread", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "thread", SentAt: time.Date(2026, 4, 9, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		// Default sort puts these in date-desc order: Above, Root, Reply, Below.
@@ -655,10 +656,10 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("MoveUp skips hidden rows", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "1", ThreadID: "1", From: "Above", Subject: "above", Date: "2026-04-10", Flags: mail.FlagSeen},
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "thread", Date: "2026-04-09", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "thread", Date: "2026-04-09 11:00", Flags: mail.FlagSeen},
-			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", Date: "2026-04-08", Flags: mail.FlagSeen},
+			{UID: "1", ThreadID: "1", From: "Above", Subject: "above", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "thread", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Subject: "thread", SentAt: time.Date(2026, 4, 9, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml, _ = ml.Update(keyPress("j")) // cursor on Root (visible index 1)
@@ -672,8 +673,8 @@ func TestMessageListThreading(t *testing.T) {
 
 	t.Run("MoveToBottom lands on last visible row", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Date: "2026-04-09", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-09 11:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", SentAt: time.Date(2026, 4, 9, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.ToggleFold() // fold T1, child at index 1 hidden
@@ -795,9 +796,9 @@ func TestMessageListFilter(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	msgs := []mail.MessageInfo{
-		{UID: "1", ThreadID: "1", Subject: "Project update", From: "Alice", Date: "Apr 10"},
-		{UID: "2", ThreadID: "2", Subject: "Weekend plans", From: "Bob", Date: "Apr 09"},
-		{UID: "3", ThreadID: "3", Subject: "Invoice #2847", From: "Billing", Date: "Apr 08"},
+		{UID: "1", ThreadID: "1", Subject: "Project update", From: "Alice", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)},
+		{UID: "2", ThreadID: "2", Subject: "Weekend plans", From: "Bob", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC)},
+		{UID: "3", ThreadID: "3", Subject: "Invoice #2847", From: "Billing", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC)},
 	}
 
 	t.Run("empty query keeps all rows", func(t *testing.T) {
@@ -938,10 +939,10 @@ func TestMessageListFilterFoldShadow(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	msgs := []mail.MessageInfo{
-		{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Server migration", From: "Eve", Date: "Apr 05"},
-		{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Server migration", From: "Grace", Date: "Apr 06"},
-		{UID: "12", ThreadID: "T1", InReplyTo: "11", Subject: "Re: Server migration", From: "Frank", Date: "Apr 07"},
-		{UID: "20", ThreadID: "T2", InReplyTo: "", Subject: "Lunch", From: "Carol", Date: "Apr 08"},
+		{UID: "10", ThreadID: "T1", InReplyTo: "", Subject: "Server migration", From: "Eve", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)},
+		{UID: "11", ThreadID: "T1", InReplyTo: "10", Subject: "Re: Server migration", From: "Grace", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC)},
+		{UID: "12", ThreadID: "T1", InReplyTo: "11", Subject: "Re: Server migration", From: "Frank", SentAt: time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)},
+		{UID: "20", ThreadID: "T2", InReplyTo: "", Subject: "Lunch", From: "Carol", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC)},
 	}
 
 	t.Run("filter expands folded thread when any message matches", func(t *testing.T) {
@@ -998,12 +999,12 @@ func TestMessageListFilterResultCount(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	msgs := []mail.MessageInfo{
-		{UID: "1", ThreadID: "1", Subject: "Project alpha", From: "Alice", Date: "Apr 10"},
-		{UID: "2", ThreadID: "2", Subject: "Project beta", From: "Bob", Date: "Apr 09"},
-		{UID: "3", ThreadID: "3", Subject: "Weekend", From: "Carol", Date: "Apr 08"},
-		{UID: "10", ThreadID: "T4", InReplyTo: "", Subject: "Project gamma", From: "Dave", Date: "Apr 05"},
-		{UID: "11", ThreadID: "T4", InReplyTo: "10", Subject: "Re: Project gamma", From: "Eve", Date: "Apr 06"},
-		{UID: "12", ThreadID: "T4", InReplyTo: "11", Subject: "Re: Project gamma", From: "Frank", Date: "Apr 07"},
+		{UID: "1", ThreadID: "1", Subject: "Project alpha", From: "Alice", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)},
+		{UID: "2", ThreadID: "2", Subject: "Project beta", From: "Bob", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC)},
+		{UID: "3", ThreadID: "3", Subject: "Weekend", From: "Carol", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC)},
+		{UID: "10", ThreadID: "T4", InReplyTo: "", Subject: "Project gamma", From: "Dave", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)},
+		{UID: "11", ThreadID: "T4", InReplyTo: "10", Subject: "Re: Project gamma", From: "Eve", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC)},
+		{UID: "12", ThreadID: "T4", InReplyTo: "11", Subject: "Re: Project gamma", From: "Frank", SentAt: time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)},
 	}
 
 	t.Run("count is thread count, not message count", func(t *testing.T) {
@@ -1034,15 +1035,15 @@ func TestMessageList_AppendMessages_PreservesCursor(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	initial := []mail.MessageInfo{
-		{UID: "1", ThreadID: "1", Subject: "First", From: "Alice", Date: "Apr 10", Flags: mail.FlagSeen},
-		{UID: "2", ThreadID: "2", Subject: "Second", From: "Bob", Date: "Apr 09", Flags: mail.FlagSeen},
-		{UID: "3", ThreadID: "3", Subject: "Third", From: "Carol", Date: "Apr 08", Flags: mail.FlagSeen},
-		{UID: "4", ThreadID: "4", Subject: "Fourth", From: "Dave", Date: "Apr 07", Flags: mail.FlagSeen},
-		{UID: "5", ThreadID: "5", Subject: "Fifth", From: "Eve", Date: "Apr 06", Flags: mail.FlagSeen},
+		{UID: "1", ThreadID: "1", Subject: "First", From: "Alice", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "2", ThreadID: "2", Subject: "Second", From: "Bob", SentAt: time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "3", ThreadID: "3", Subject: "Third", From: "Carol", SentAt: time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "4", ThreadID: "4", Subject: "Fourth", From: "Dave", SentAt: time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "5", ThreadID: "5", Subject: "Fifth", From: "Eve", SentAt: time.Date(2026, 4, 6, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 	}
 	extra := []mail.MessageInfo{
-		{UID: "6", ThreadID: "6", Subject: "Sixth", From: "Frank", Date: "Apr 05", Flags: mail.FlagSeen},
-		{UID: "7", ThreadID: "7", Subject: "Seventh", From: "Grace", Date: "Apr 04", Flags: mail.FlagSeen},
+		{UID: "6", ThreadID: "6", Subject: "Sixth", From: "Frank", SentAt: time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "7", ThreadID: "7", Subject: "Seventh", From: "Grace", SentAt: time.Date(2026, 4, 4, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 	}
 
 	ml := New(styles, initial, 90, 20, uicore.FancyIcons)
@@ -1075,7 +1076,7 @@ func TestMessageList_IsNearBottom(t *testing.T) {
 				ThreadID: mail.UID(fmt.Sprintf("%d", i+1)),
 				Subject:  fmt.Sprintf("Message %d", i+1),
 				From:     "Sender",
-				Date:     fmt.Sprintf("2026-04-%02d", (i%28)+1),
+				SentAt:   time.Date(2026, 4, (i%28)+1, 0, 0, 0, 0, time.UTC),
 				Flags:    mail.FlagSeen,
 			}
 		}
@@ -1136,7 +1137,7 @@ func TestMessageListPlaceholder(t *testing.T) {
 
 	t.Run("filter with no matches shows No matches", func(t *testing.T) {
 		msgs := []mail.MessageInfo{
-			{UID: "1", ThreadID: "1", Subject: "Hello", From: "Alice", Date: "Apr 10"},
+			{UID: "1", ThreadID: "1", Subject: "Hello", From: "Alice", SentAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.SetFilter("nothing-here-zzz")
@@ -1172,10 +1173,10 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 	msg := mail.MessageInfo{
 		UID:      "1",
 		ThreadID: "1",
-		From:     "Alice Johnson", // 13 chars, padded to 22
-		Subject:  "Hello world",   // short, padded to fill subject budget
-		Date:     "04-27",         // 5 chars, fits date column exactly
-		Flags:    mail.FlagSeen,   // read, no flag glyph
+		From:     "Alice Johnson",                              // 13 chars, padded to 22
+		Subject:  "Hello world",                                // short, padded to fill subject budget
+		SentAt:   time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC), // 5 chars, fits date column exactly
+		Flags:    mail.FlagSeen,                                // read, no flag glyph
 	}
 	ml := New(styles, []mail.MessageInfo{msg}, w, 3, uicore.FancyIcons)
 	line := stripANSI(strings.Split(ml.View(), "\n")[0])
@@ -1208,9 +1209,9 @@ func TestMessageList_ColumnGaps(t *testing.T) {
 func TestMessageListMoveCursor(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	msgs := []mail.MessageInfo{
-		{UID: "uid-1", ThreadID: "uid-1", From: "Alice", Subject: "First", Date: "2026-04-26", Flags: mail.FlagSeen},
-		{UID: "uid-2", ThreadID: "uid-2", From: "Bob", Subject: "Second", Date: "2026-04-25", Flags: mail.FlagSeen},
-		{UID: "uid-3", ThreadID: "uid-3", From: "Carol", Subject: "Third", Date: "2026-04-24", Flags: mail.FlagSeen},
+		{UID: "uid-1", ThreadID: "uid-1", From: "Alice", Subject: "First", SentAt: time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "uid-2", ThreadID: "uid-2", From: "Bob", Subject: "Second", SentAt: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+		{UID: "uid-3", ThreadID: "uid-3", From: "Carol", Subject: "Third", SentAt: time.Date(2026, 4, 24, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 	}
 	m := New(styles, msgs, 90, 20, uicore.FancyIcons)
 
@@ -1245,10 +1246,10 @@ func TestMessageList_VisualModeAndTargets(t *testing.T) {
 	// Plus a standalone "20" in T2.
 	threadMsgs := func() []mail.MessageInfo {
 		return []mail.MessageInfo{
-			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "root", Date: "2026-04-05 10:00", Flags: mail.FlagSeen},
-			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Subject: "re: root", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
-			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", Subject: "re: root 2", Date: "2026-04-05 12:00", Flags: mail.FlagSeen},
-			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "Solo", Subject: "solo", Date: "2026-04-06 10:00", Flags: mail.FlagSeen},
+			{UID: "10", ThreadID: "T1", InReplyTo: "", From: "Root", Subject: "root", SentAt: time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "ReplyA", Subject: "re: root", SentAt: time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "12", ThreadID: "T1", InReplyTo: "10", From: "ReplyB", Subject: "re: root 2", SentAt: time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "20", ThreadID: "T2", InReplyTo: "", From: "Solo", Subject: "solo", SentAt: time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 	}
 
@@ -1392,10 +1393,10 @@ func TestMessageList_RefreshSource(t *testing.T) {
 
 	flatMsgs := func() []mail.MessageInfo {
 		return []mail.MessageInfo{
-			{UID: "a", ThreadID: "a", From: "Alice", Subject: "oldest", Date: "2026-04-01", Flags: mail.FlagSeen},
-			{UID: "b", ThreadID: "b", From: "Bob", Subject: "second", Date: "2026-04-02", Flags: mail.FlagSeen},
-			{UID: "c", ThreadID: "c", From: "Carol", Subject: "third", Date: "2026-04-03", Flags: mail.FlagSeen},
-			{UID: "d", ThreadID: "d", From: "Dave", Subject: "newest", Date: "2026-04-04", Flags: mail.FlagSeen},
+			{UID: "a", ThreadID: "a", From: "Alice", Subject: "oldest", SentAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "b", ThreadID: "b", From: "Bob", Subject: "second", SentAt: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "c", ThreadID: "c", From: "Carol", Subject: "third", SentAt: time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
+			{UID: "d", ThreadID: "d", From: "Dave", Subject: "newest", SentAt: time.Date(2026, 4, 4, 0, 0, 0, 0, time.UTC), Flags: mail.FlagSeen},
 		}
 	}
 

@@ -6,20 +6,20 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/catkin"
-	"github.com/glw907/poplar/internal/tidy"
+	"github.com/glw907/poplar/internal/tidytext"
 )
 
-// tidyResultMsg lands when tidy.Tidy returns. oldBody is the body
+// tidyResultMsg lands when tidytext.Tidy returns. oldBody is the body
 // captured at request time so the diff is computed against the
 // pre-tidy text regardless of any buffer mutation in flight.
 type tidyResultMsg struct {
 	oldBody string
-	res     tidy.Result
+	res     tidytext.Result
 	err     error
 }
 
 // handleTidyKey runs when Ctrl+T fires. Returns the cmd that runs
-// tidy.Tidy or nil when invocation is inert. Sets c.err for the
+// tidytext.Tidy or nil when invocation is inert. Sets c.err for the
 // missing-API-key case so the user sees why nothing happened.
 func (c *Model) handleTidyKey() tea.Cmd {
 	if !c.tidyEnabled || c.focus != focusBody || c.tidyInFlight {
@@ -51,16 +51,16 @@ func (c *Model) applyTidyResult(msg tidyResultMsg) tea.Cmd {
 	}
 
 	switch msg.res.Status {
-	case tidy.StatusCorrected:
+	case tidytext.StatusCorrected:
 		c.editor.SetValue(msg.res.Text)
-		ranges := byteRangesToCatkin(tidy.DiffRanges(msg.oldBody, msg.res.Text))
+		ranges := byteRangesToCatkin(tidytext.DiffRanges(msg.oldBody, msg.res.Text))
 		c.editor.SetTidyHighlights(msg.res.Text, ranges)
 		c.info = msg.res.Message
 		c.err = ""
-	case tidy.StatusNoChanges:
+	case tidytext.StatusNoChanges:
 		c.info = msg.res.Message
 		c.err = ""
-	case tidy.StatusNoAuthorText, tidy.StatusError:
+	case tidytext.StatusNoAuthorText, tidytext.StatusError:
 		c.err = msg.res.Message
 		c.info = ""
 	default:
@@ -69,7 +69,7 @@ func (c *Model) applyTidyResult(msg tidyResultMsg) tea.Cmd {
 	return nil
 }
 
-func byteRangesToCatkin(in []tidy.ByteRange) []catkin.Range {
+func byteRangesToCatkin(in []tidytext.ByteRange) []catkin.Range {
 	if len(in) == 0 {
 		return nil
 	}

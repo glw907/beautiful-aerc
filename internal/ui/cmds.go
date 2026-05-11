@@ -17,9 +17,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/cache"
-	"github.com/glw907/poplar/internal/compose"
 	corecontacts "github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailcompose"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/reader"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -128,12 +128,12 @@ func undoCountdownTickCmd() tea.Cmd {
 // RestoreFromDraftMsg fires after undo-send has cancelled the outbound.
 // App reopens compose seeded from the in-memory Draft.
 type RestoreFromDraftMsg struct {
-	Draft compose.Draft
+	Draft mailcompose.Draft
 }
 
 // undoSendCmd cancels the queued outbox ops and, on success, emits
 // RestoreFromDraftMsg so App reopens compose with the original Draft.
-func undoSendCmd(acct *cache.Account, opIDs []int64, draft compose.Draft) tea.Cmd {
+func undoSendCmd(acct *cache.Account, opIDs []int64, draft mailcompose.Draft) tea.Cmd {
 	return func() tea.Msg {
 		if err := acct.CancelOps(context.Background(), opIDs); err != nil {
 			if errors.Is(err, cache.ErrNotPending) {
@@ -170,7 +170,7 @@ type conflictResolvedMsg struct {
 // decoded so the App handler is decode-free.
 type openDraftMsg struct {
 	row   cache.DraftRow
-	draft compose.Draft
+	draft mailcompose.Draft
 }
 
 func refreshOutboxDepthCmd(c *cache.Account) tea.Cmd {
@@ -298,21 +298,21 @@ func saveAttachmentCmd(c *cache.Account, dir string, uid mail.UID, att mail.Atta
 }
 
 // composeSeedCmd fetches the parent body and builds a Draft via the
-// matching compose.Seed* function, emitting uicompose.SeededMsg.
+// matching mailcompose.Seed* function, emitting uicompose.SeededMsg.
 func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, kind uicompose.SeedKind) tea.Cmd {
 	return func() tea.Msg {
 		body, err := acct.FetchBody(parent.UID)
 		if err != nil {
 			return ErrorMsg{Op: "fetch parent body", Err: err}
 		}
-		var d compose.Draft
+		var d mailcompose.Draft
 		switch kind {
 		case uicompose.SeedReply:
-			d = compose.SeedReply(parent, body)
+			d = mailcompose.SeedReply(parent, body)
 		case uicompose.SeedReplyAll:
-			d = compose.SeedReplyAll(parent, body, gomail.Address{Address: self})
+			d = mailcompose.SeedReplyAll(parent, body, gomail.Address{Address: self})
 		default:
-			d = compose.SeedForward(parent, body)
+			d = mailcompose.SeedForward(parent, body)
 		}
 		d.From = gomail.Address{Address: self}
 		return uicompose.SeededMsg{Draft: d}
@@ -323,9 +323,9 @@ func composeSeedCmd(acct *cache.Account, parent mail.MessageInfo, self string, k
 // outbox op via cache.Account.QueueOutbound. Emits uicompose.SentMsg on
 // success, ErrorMsg on any failure. userScheduled overrides the undo window
 // when non-zero (schedule-send path).
-func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids []compose.Identity, undoWindow time.Duration, userScheduled time.Time) tea.Cmd {
+func composeSendCmd(acct *cache.Account, sentFolder string, d mailcompose.Draft, ids []mailcompose.Identity, undoWindow time.Duration, userScheduled time.Time) tea.Cmd {
 	return func() tea.Msg {
-		mime, err := compose.AssembleMIME(d, ids, time.Now())
+		mime, err := mailcompose.AssembleMIME(d, ids, time.Now())
 		if err != nil {
 			return ErrorMsg{Op: "assemble MIME", Err: err}
 		}
@@ -362,7 +362,7 @@ func composeSendCmd(acct *cache.Account, sentFolder string, d compose.Draft, ids
 	}
 }
 
-func envelopeFromDraft(d compose.Draft) mail.Envelope {
+func envelopeFromDraft(d mailcompose.Draft) mail.Envelope {
 	env := mail.Envelope{From: d.From.Address}
 	for _, a := range d.To {
 		env.Rcpts = append(env.Rcpts, a.Address)
@@ -425,17 +425,17 @@ func discardDraftCmd(acct *cache.Account, draftID, draftsFolder string, prevUID 
 
 // upsertAndPushDraftCmd persists draft payload and enqueues a server
 // push, used by the save-on-close path.
-func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d compose.Draft, prevUID mail.UID, ids []compose.Identity) tea.Cmd {
+func upsertAndPushDraftCmd(acct *cache.Account, draftID, draftsFolder string, d mailcompose.Draft, prevUID mail.UID, ids []mailcompose.Identity) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		payload, err := compose.EncodeDraft(d)
+		payload, err := mailcompose.EncodeDraft(d)
 		if err != nil {
 			return ErrorMsg{Op: "encode draft", Err: err}
 		}
 		if err := acct.CreateDraft(ctx, draftID, payload); err != nil {
 			return ErrorMsg{Op: "save draft", Err: err}
 		}
-		mime, err := compose.AssembleMIME(d, ids, time.Now())
+		mime, err := mailcompose.AssembleMIME(d, ids, time.Now())
 		if err != nil {
 			return ErrorMsg{Op: "assemble draft MIME", Err: err}
 		}
@@ -455,7 +455,7 @@ func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder s
 		ctx := context.Background()
 		row, err := acct.LookupDraftByServerUID(ctx, uid)
 		if err == nil {
-			d, derr := compose.DecodeDraft(row.Payload)
+			d, derr := mailcompose.DecodeDraft(row.Payload)
 			if derr != nil {
 				return uicore.ErrorMsg{Op: "decode draft", Err: derr}
 			}
@@ -469,11 +469,11 @@ func openDraftFromServerUIDCmd(acct *cache.Account, uid mail.UID, draftsFolder s
 		if err != nil {
 			return uicore.ErrorMsg{Op: "fetch draft body", Err: err}
 		}
-		d, err := compose.ParseDraftMIME(raw)
+		d, err := mailcompose.ParseDraftMIME(raw)
 		if err != nil {
 			return uicore.ErrorMsg{Op: "parse draft", Err: err}
 		}
-		payload, err := compose.EncodeDraft(d)
+		payload, err := mailcompose.EncodeDraft(d)
 		if err != nil {
 			return uicore.ErrorMsg{Op: "encode draft", Err: err}
 		}
@@ -503,7 +503,7 @@ func draftLocalID(uid mail.UID) (string, bool) {
 }
 
 // openLocalDraftCmd loads a locally-stored draft by draftID and emits
-// openDraftMsg so the App handler can mount compose.
+// openDraftMsg so the App handler can mount mailcompose.
 func openLocalDraftCmd(acct *cache.Account, draftID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -511,7 +511,7 @@ func openLocalDraftCmd(acct *cache.Account, draftID string) tea.Cmd {
 		if err != nil {
 			return uicore.ErrorMsg{Op: "load draft", Err: err}
 		}
-		d, err := compose.DecodeDraft(payload)
+		d, err := mailcompose.DecodeDraft(payload)
 		if err != nil {
 			return uicore.ErrorMsg{Op: "decode draft", Err: err}
 		}
@@ -616,7 +616,7 @@ func editAsDraftCmd(c *cache.Account, opID int64, draft *cache.DraftRow) tea.Cmd
 		if err := c.CancelOps(ctx, []int64{opID}); err != nil && !errors.Is(err, cache.ErrNotPending) {
 			return ErrorMsg{Op: "cancel op", Err: err}
 		}
-		d, err := compose.DecodeDraft(draft.Payload)
+		d, err := mailcompose.DecodeDraft(draft.Payload)
 		if err != nil {
 			return ErrorMsg{Op: "decode draft", Err: err}
 		}

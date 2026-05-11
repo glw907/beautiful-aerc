@@ -2,8 +2,8 @@ package compose
 
 import (
 	"charm.land/bubbles/v2/key"
-	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mailcompose"
 )
 
 // Schedule binds Ctrl+L in compose. ADR-0076 permits modifier keys in text-entry surfaces.

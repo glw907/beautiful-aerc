@@ -1,4 +1,4 @@
-package tidy
+package tidytext
 
 import (
 	"encoding/json"

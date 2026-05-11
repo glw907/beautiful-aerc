@@ -1,7 +1,6 @@
 package messagelist
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -437,21 +436,8 @@ func latestActivity(bucket []mail.MessageInfo) mail.MessageInfo {
 	return latest
 }
 
-// compareMessage orders messages oldest-first. The Date-string fallback
-// and zero-SentAt tie-break exist for legacy fixtures predating SentAt.
 func compareMessage(a, b mail.MessageInfo) int {
-	aZero := a.SentAt.IsZero()
-	bZero := b.SentAt.IsZero()
-	if !aZero && !bZero {
-		return a.SentAt.Compare(b.SentAt)
-	}
-	if aZero && bZero {
-		return cmp.Compare(a.Date, b.Date)
-	}
-	if aZero {
-		return -1
-	}
-	return 1
+	return a.SentAt.Compare(b.SentAt)
 }
 
 // threadNode is a transient tree node used only during prefix computation
@@ -1063,15 +1049,11 @@ func displayDate(msg mail.MessageInfo, now time.Time, width int) string {
 	if width == 0 {
 		return ""
 	}
-	t := msg.SentAt
-	if t.IsZero() {
-		return msg.Date
-	}
 	switch width {
 	case 3:
-		return formatRelativeDateCompact(t, now)
+		return formatRelativeDateCompact(msg.SentAt, now)
 	default:
-		return formatRelativeDateShort(t, now)
+		return formatRelativeDateShort(msg.SentAt, now)
 	}
 }
 

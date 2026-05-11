@@ -1,4 +1,4 @@
-package compose
+package mailcompose
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 )
 
 // Identity mirrors the compose-relevant slice of config.Identity so
-// internal/compose stays free of the config dependency.
+// internal/mailcompose stays free of the config dependency.
 type Identity struct {
 	Name       string
 	Email      string

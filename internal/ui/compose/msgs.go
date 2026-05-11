@@ -3,7 +3,7 @@ package compose
 import (
 	"time"
 
-	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/mailcompose"
 )
 
 // SeededMsg carries a pre-filled Draft from r/R/f.

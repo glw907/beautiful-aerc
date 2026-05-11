@@ -13,13 +13,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/cache"
-	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/config"
 	corecontacts "github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
-	"github.com/glw907/poplar/internal/tidy"
+	"github.com/glw907/poplar/internal/tidytext"
 	"github.com/glw907/poplar/internal/ui/account"
 	uicompose "github.com/glw907/poplar/internal/ui/compose"
 	"github.com/glw907/poplar/internal/ui/contacts"
@@ -85,7 +85,7 @@ type App struct {
 
 	tidyEnabled bool
 	tidyAPIKey  string
-	tidyCfg     tidy.Config
+	tidyCfg     tidytext.Config
 
 	identities      []mailcompose.Identity
 	contactsCfg     *corecontacts.ClientConfig
@@ -146,9 +146,9 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		undoSendWindow:  uiCfg.UndoSendWindow,
 		now:             time.Now,
 		opener:          xdgOpenURL,
-		tidyEnabled:     uiCfg.Tidy.Enabled,
-		tidyAPIKey:      tidy.ResolveAPIKey(uiCfg.Tidy.Config),
-		tidyCfg:         uiCfg.Tidy.Config,
+		tidyEnabled:     uiCfg.Tidytext.Enabled,
+		tidyAPIKey:      tidytext.ResolveAPIKey(uiCfg.Tidytext.Config),
+		tidyCfg:         uiCfg.Tidytext.Config,
 		identities:      uicompose.IdentitiesFromConfig(identities),
 		contactsStyles:  cStyles,
 		contactsSidebar: contacts.NewSidebar(cStyles, cFixtures),

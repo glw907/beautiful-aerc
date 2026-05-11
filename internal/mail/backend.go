@@ -105,12 +105,9 @@ type MessageInfo struct {
 	From    string
 	// To, Cc, Bcc are flat display strings ("Name1, Name2, ...") shaped
 	// like From. The viewer renders each as a header row when non-empty.
-	To  string
-	Cc  string
-	Bcc string
-	// SentAt is authoritative for sorting. Date is a pre-rendered
-	// fallback used only when SentAt is zero (legacy fixtures).
-	Date   string
+	To     string
+	Cc     string
+	Bcc    string
 	SentAt time.Time
 	Flags  Flag
 	Size   uint32

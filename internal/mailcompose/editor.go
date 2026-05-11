@@ -5,7 +5,7 @@
 // The package is UI-free. compose.Model (internal/ui/compose/) wires Editor into
 // the tea tree. The cache outbox carries the assembled bytes. The
 // mail backends ship them.
-package compose
+package mailcompose
 
 import (
 	tea "charm.land/bubbletea/v2"

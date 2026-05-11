@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/glw907/poplar/internal/tidy"
+	"github.com/glw907/poplar/internal/tidytext"
 )
 
 // UIConfig holds the [ui] table values.
@@ -39,14 +39,14 @@ type UIConfig struct {
 	// $XDG_DOWNLOAD_DIR, $HOME/Downloads.
 	DownloadDir string
 
-	Tidy TidyConfig
+	Tidytext TidytextConfig
 }
 
-// TidyConfig carries the [ui.tidy] block. Enabled gates the Ctrl+T
+// TidytextConfig carries the [ui.tidytext] block. Enabled gates the Ctrl+T
 // binding; Config is the package-native settings struct.
-type TidyConfig struct {
+type TidytextConfig struct {
 	Enabled bool
-	Config  tidy.Config
+	Config  tidytext.Config
 }
 
 // FolderConfig holds the overrides from one [ui.folders.<name>]
@@ -83,7 +83,7 @@ func DefaultUIConfig() UIConfig {
 		UndoSeconds:    6,
 		UndoSendWindow: 10 * time.Second,
 		DownloadDir:    defaultDownloadDir(),
-		Tidy:           TidyConfig{Enabled: false, Config: tidy.DefaultConfig()},
+		Tidytext:       TidytextConfig{Enabled: false, Config: tidytext.DefaultConfig()},
 	}
 }
 
@@ -98,7 +98,7 @@ type rawUI struct {
 	TrashRetentionDays *int                    `toml:"trash_retention_days"`
 	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
 	DownloadDir        string                  `toml:"download_dir"`
-	Tidy               *rawTidy                `toml:"tidy"`
+	Tidy               *rawTidy                `toml:"tidytext"`
 }
 
 type rawTidy struct {
@@ -207,7 +207,7 @@ func LoadUI(path string) (UIConfig, error) {
 	}
 
 	if raw.UI.Tidy != nil {
-		tcfg := tidy.DefaultConfig()
+		tcfg := tidytext.DefaultConfig()
 		if r := raw.UI.Tidy.API; r != nil {
 			if r.Model != nil {
 				tcfg.API.Model = *r.Model
@@ -256,12 +256,12 @@ func LoadUI(path string) (UIConfig, error) {
 				tcfg.Style.CustomInstructions = r.CustomInstructions
 			}
 		}
-		if err := tidy.Validate(tcfg); err != nil {
-			return UIConfig{}, fmt.Errorf("ui.tidy: %w", err)
+		if err := tidytext.Validate(tcfg); err != nil {
+			return UIConfig{}, fmt.Errorf("ui.tidytext: %w", err)
 		}
-		out.Tidy.Config = tcfg
+		out.Tidytext.Config = tcfg
 		if raw.UI.Tidy.Enabled != nil {
-			out.Tidy.Enabled = *raw.UI.Tidy.Enabled
+			out.Tidytext.Enabled = *raw.UI.Tidy.Enabled
 		}
 	}
 

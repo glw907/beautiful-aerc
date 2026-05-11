@@ -445,14 +445,10 @@ func namesAsAddresses(s string) []content.Address {
 	return out
 }
 
-// viewerDateString returns the Date-row string. msg.Date wins when
-// populated, otherwise SentAt is formatted as an unambiguous timestamp
-// ("Mon, Jan 2 2006 3:04 PM"). Returns "" so the row is omitted when
-// neither is set.
+// viewerDateString formats SentAt as the Date header row
+// ("Mon, Jan 2 2006 3:04 PM"). Returns "" when SentAt is unset so
+// the row collapses.
 func viewerDateString(msg mail.MessageInfo) string {
-	if msg.Date != "" {
-		return msg.Date
-	}
 	if msg.SentAt.IsZero() {
 		return ""
 	}

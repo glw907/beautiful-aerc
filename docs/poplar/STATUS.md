@@ -1,9 +1,8 @@
 # Poplar Status
 
-**Current pass:** Pass 19 — pre-beta refactor sweep. Bundles #46
-iter.Seq2 walk, #43 drop legacy `Date string`, #44 compose package
-collision, #47 Levenshtein consolidation, and #12 tidy → tidytext
-rename. Must land before the v0.9.0 freeze (now Pass 20).
+**Current pass:** Pass 19.1 — pre-beta refactor (mechanical
+cluster). Lands #46 (iter.Seq2 walk consumer) and #47 (strdist
+Levenshtein consolidation).
 
 ## Passes
 
@@ -14,56 +13,36 @@ rename. Must land before the v0.9.0 freeze (now Pass 20).
 | 17b | `messagelist` on `bubbles/v2/list` (ADR-0199) | done |
 | 17c | `bubbles/v2/help` audit + bubbles-deviation ADRs (0200, 0201) | done |
 | 18 | Polish II — retire underlay dim, footer ellipsis, helppopover zero-arg View, KeyMap exports, sidebar render cache (ADR-0202) | done |
-| **19** | **pre-beta refactor — #46, #43, #44, #47, #12** | **pending — next** |
+| 19 | pre-beta refactor (outbound) — drop MessageInfo.Date string, compose→mailcompose, tidy→tidytext + CLI strip (ADR-0203) | done |
+| **19.1** | **pre-beta refactor (mechanical) — #46, #47** | **pending — next** |
 | 20 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 19)
+## Next starter prompt (Pass 19.1)
 
-> **Goal.** Pre-beta refactor sweep. Land the five
-> "pre-beta refactor" backlog items before v0.9.0 freeze.
+> **Goal.** Land the mechanical-cleanup pre-beta refactors.
+> One ADR.
 >
-> **Scope.** Five items, each bounded:
-> - **#46** — `messagelist.appendThreadRows` → `iter.Seq2` walk
->   modeled after `Digital-Shane/treeview`'s
->   `NodeInfo{Node, Depth, IsLast}`. Touches
->   `internal/ui/messagelist/model.go` only.
-> - **#43** — drop `mail.MessageInfo.Date string`; regenerate
->   stale fixtures; remove the `lessMessage` / `displayDate`
->   fallback branches. Touches `internal/mail/types.go`,
->   `internal/ui/messagelist/model.go`,
->   `internal/cache/syncer.go`, the messagelist testdata, and
->   the wire-shape paragraph in `docs/poplar/invariants.md`.
-> - **#44** — rename `internal/compose/` → `internal/mailcompose/`
->   (or `internal/mail/outbound/`); drop the `uicompose` /
->   `mailcompose` alias dance from `internal/ui/compose/` and
->   the App side. Touches every importer + Architecture section
->   + ADR-0163.
+> **Scope.**
+> - **#46** — refactor `messagelist.appendThreadRows` to
+>   consume the existing `walkThread` `iter.Seq2` iterator
+>   (`internal/ui/messagelist/walk.go`) instead of its bespoke
+>   recursion. Touches `internal/ui/messagelist/model.go` only.
 > - **#47** — consolidate the two Levenshtein implementations
 >   (`internal/config/accounts.go`, `internal/catkin/spellcheck.go`)
->   into a shared helper. Decide the package boundary first
->   (likely `internal/strdist/`).
-> - **#12** — rename `internal/tidy/` → `internal/tidytext/` and
->   drop the CLI machinery (`LoadConfig`, `ApplyRuleOverrides`,
->   `ConfigString`). Rename `[ui.tidy]` config section to
->   `[ui.tidytext]`. Touches every importer + ADR-0178 +
->   invariants Architecture > Compose.
+>   into `internal/strdist/`. Decide whether one shared signature
+>   covers both call sites or whether they need narrower variants.
 >
-> **Settled (do not re-brainstorm):** All five are in scope per
-> the pre-beta refactor mandate (CLAUDE.md). All must land
-> before v0.9.0. Splits across multiple passes if the slate is
-> too large; the pass-size budget is 8–12 tasks.
+> **Settled (do not re-brainstorm):** Both items are bounded;
+> #47 lands the new package at `internal/strdist/`.
 >
-> **Still open — brainstorm these:** Pass split (one pass vs.
-> two — count the touched importers and judge the integration
-> risk); #44 target package name (`mailcompose` vs.
-> `mail/outbound`).
+> **Still open — brainstorm these:** None.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-pre-beta-refactor.md`,
-> then implement. Standard pass-end checklist applies.
+> **Approach.** Pure implementation pass. Plan doc at
+> `docs/superpowers/plans/2026-05-11-pre-beta-mechanical.md`.
+> Standard pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)
 

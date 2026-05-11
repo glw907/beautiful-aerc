@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailcompose"
 )
 
 // ListFolders returns folder rows with classification and per-folder
@@ -77,7 +77,7 @@ func (a *Account) QueryFolder(folder string, offset, limit int) ([]mail.MessageI
 	}
 	rows, err := a.db.Query(`
         SELECT m.protocol_id, m.subject, m.from_addr, m.to_addr, m.cc_addr,
-               m.bcc_addr, m.date_str, COALESCE(m.sent_at, 0), m.ui_flags,
+               m.bcc_addr, COALESCE(m.sent_at, 0), m.ui_flags,
                COALESCE(m.size, 0), m.thread_id, m.in_reply_to
         FROM message_mailboxes mm
         JOIN messages m ON m.id = mm.message
@@ -138,7 +138,7 @@ func (a *Account) draftsAsMessageInfo(ctx context.Context) ([]mail.MessageInfo, 
 		if r.ServerUID != "" {
 			continue
 		}
-		d, err := compose.DecodeDraft(r.Payload)
+		d, err := mailcompose.DecodeDraft(r.Payload)
 		if err != nil {
 			continue
 		}
@@ -160,28 +160,38 @@ func (a *Account) draftsAsMessageInfo(ctx context.Context) ([]mail.MessageInfo, 
 	return out, nil
 }
 
-// scanMessageInfo decodes one row of the 12-column SELECT shared by
-// QueryFolder and FetchHeaders: protocol_id, subject, from, to, cc,
-// bcc, date, sent_at, ui_flags, size, thread_id, in_reply_to.
+// messageInfoCols is the 11-pointer scan target for the canonical
+// message-row column order. Callers that join additional columns
+// append them after cols() then materialize the message via mi().
+type messageInfoCols struct {
+	pid, subj, from, to, cc, bcc, thread, irt string
+	sentNS                                    int64
+	flags                                     uint32
+	size                                      int64
+}
+
+func (c *messageInfoCols) cols() []any {
+	return []any{&c.pid, &c.subj, &c.from, &c.to, &c.cc, &c.bcc, &c.sentNS, &c.flags, &c.size, &c.thread, &c.irt}
+}
+
+func (c *messageInfoCols) mi() mail.MessageInfo {
+	mi := mail.MessageInfo{
+		UID: mail.UID(c.pid), Subject: c.subj, From: c.from, To: c.to, Cc: c.cc, Bcc: c.bcc,
+		Flags: mail.Flag(c.flags), Size: uint32(c.size),
+		ThreadID: mail.UID(c.thread), InReplyTo: mail.UID(c.irt),
+	}
+	if c.sentNS > 0 {
+		mi.SentAt = time.Unix(0, c.sentNS)
+	}
+	return mi
+}
+
 func scanMessageInfo(rows *sql.Rows) (mail.MessageInfo, error) {
-	var (
-		pid, subj, from, to, cc, bcc, date, thread, irt string
-		sentNS                                          int64
-		flags                                           uint32
-		size                                            int64
-	)
-	if err := rows.Scan(&pid, &subj, &from, &to, &cc, &bcc, &date, &sentNS, &flags, &size, &thread, &irt); err != nil {
+	var c messageInfoCols
+	if err := rows.Scan(c.cols()...); err != nil {
 		return mail.MessageInfo{}, err
 	}
-	mi := mail.MessageInfo{
-		UID: mail.UID(pid), Subject: subj, From: from, To: to, Cc: cc, Bcc: bcc,
-		Date: date, Flags: mail.Flag(flags), Size: uint32(size),
-		ThreadID: mail.UID(thread), InReplyTo: mail.UID(irt),
-	}
-	if sentNS > 0 {
-		mi.SentAt = time.Unix(0, sentNS)
-	}
-	return mi, nil
+	return c.mi(), nil
 }
 
 // FetchHeaders returns cached headers for uids. Misses fetch from
@@ -193,7 +203,7 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 	}
 	known := make(map[mail.UID]mail.MessageInfo, len(uids))
 	placeholders, args := uidsPlaceholders(uids)
-	q := `SELECT protocol_id, subject, from_addr, to_addr, cc_addr, bcc_addr, date_str,
+	q := `SELECT protocol_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
               COALESCE(sent_at, 0), ui_flags, COALESCE(size, 0), thread_id, in_reply_to
           FROM messages WHERE protocol_id IN (` + placeholders + `) AND ui_hide = 0`
 	rows, err := a.db.QueryContext(ctx, q, args...)
@@ -294,8 +304,8 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 			res, err := tx.Exec(`
                 INSERT INTO messages
                   (protocol_id, thread_id, in_reply_to, subject, from_addr, to_addr, cc_addr, bcc_addr,
-                   date_str, sent_at, flags, size, ui_flags, ui_hide)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                   sent_at, flags, size, ui_flags, ui_hide)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 ON CONFLICT(protocol_id) DO UPDATE SET
                   thread_id   = excluded.thread_id,
                   in_reply_to = excluded.in_reply_to,
@@ -304,7 +314,6 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
                   to_addr     = excluded.to_addr,
                   cc_addr     = excluded.cc_addr,
                   bcc_addr    = excluded.bcc_addr,
-                  date_str    = excluded.date_str,
                   sent_at     = excluded.sent_at,
                   size        = excluded.size,
                   flags       = CASE
@@ -318,7 +327,7 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
                                   ELSE excluded.flags
                                 END
             `, string(m.UID), string(m.ThreadID), string(m.InReplyTo), m.Subject, m.From,
-				m.To, m.Cc, m.Bcc, m.Date, sentNS, uint32(m.Flags), int64(m.Size), uint32(m.Flags))
+				m.To, m.Cc, m.Bcc, sentNS, uint32(m.Flags), int64(m.Size), uint32(m.Flags))
 			if err != nil {
 				return fmt.Errorf("upsert message %s: %w", m.UID, err)
 			}

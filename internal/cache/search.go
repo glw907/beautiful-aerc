@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/search"
@@ -41,7 +40,7 @@ func (a *Account) Search(ctx context.Context, q search.Query, scope SearchScope,
 	args := []any{matchExpr}
 	sb.WriteString(`
         SELECT m.protocol_id, m.subject, m.from_addr, m.to_addr, m.cc_addr,
-               m.bcc_addr, m.date_str, COALESCE(m.sent_at, 0), m.ui_flags,
+               m.bcc_addr, COALESCE(m.sent_at, 0), m.ui_flags,
                COALESCE(m.size, 0), m.thread_id, m.in_reply_to,
                COALESCE(f.name, '')
         FROM messages_fts fts
@@ -74,32 +73,19 @@ func (a *Account) Search(ctx context.Context, q search.Query, scope SearchScope,
 	seen := map[mail.UID]struct{}{}
 	for rows.Next() {
 		var (
-			pid, subj, from, to, cc, bcc, date, thread, irt, folder string
-			sentNS                                                  int64
-			flags                                                   uint32
-			size                                                    int64
+			c      messageInfoCols
+			folder string
 		)
-		if err := rows.Scan(&pid, &subj, &from, &to, &cc, &bcc, &date, &sentNS, &flags, &size, &thread, &irt, &folder); err != nil {
+		if err := rows.Scan(append(c.cols(), &folder)...); err != nil {
 			return nil, fmt.Errorf("search scan: %w", err)
 		}
-		uid := mail.UID(pid)
+		mi := c.mi()
 		// LEFT JOIN admits rows without a mailbox link. Dedup on UID.
-		if _, dup := seen[uid]; dup {
+		if _, dup := seen[mi.UID]; dup {
 			continue
 		}
-		seen[uid] = struct{}{}
-		hit := SearchHit{
-			MessageInfo: mail.MessageInfo{
-				UID: uid, Subject: subj, From: from, To: to, Cc: cc, Bcc: bcc,
-				Date: date, Flags: mail.Flag(flags), Size: uint32(size),
-				ThreadID: mail.UID(thread), InReplyTo: mail.UID(irt),
-			},
-			Folder: folder,
-		}
-		if sentNS != 0 {
-			hit.MessageInfo.SentAt = time.Unix(0, sentNS)
-		}
-		out = append(out, hit)
+		seen[mi.UID] = struct{}{}
+		out = append(out, SearchHit{MessageInfo: mi, Folder: folder})
 	}
 	return out, rows.Err()
 }

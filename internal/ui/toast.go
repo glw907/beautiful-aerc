@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 

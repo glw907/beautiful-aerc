@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const schemaVersion = 11
+const schemaVersion = 12
 
 // migration applies one schema step inside a transaction. Index 0 is v0→v1.
 type migration func(*sql.Tx) error
@@ -24,6 +24,7 @@ var migrations = []migration{
 	migrateV9,  // v8 → v9: outbox.folder nullable (contact ops have no folder scope)
 	migrateV10, // v9 → v10: outbox.scheduled_for + outbox.draft_id FK
 	migrateV11, // v10 → v11: messages_fts FTS5 virtual table for search
+	migrateV12, // v11 → v12: drop messages.date_str (sent_at is authoritative)
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -404,6 +405,16 @@ func migrateV11(tx *sql.Tx) error {
 		if _, err := tx.Exec(s); err != nil {
 			return fmt.Errorf("install messages_fts: %v", err)
 		}
+	}
+	return nil
+}
+
+// migrateV12 drops messages.date_str. SentAt has been authoritative
+// since Pass 8.5; the legacy string column was a fallback for fixtures
+// without parsed dates. Pre-beta cleanup retires the field everywhere.
+func migrateV12(tx *sql.Tx) error {
+	if _, err := tx.Exec(`ALTER TABLE messages DROP COLUMN date_str`); err != nil {
+		return fmt.Errorf("drop messages.date_str: %w", err)
 	}
 	return nil
 }

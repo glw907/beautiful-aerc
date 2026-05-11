@@ -5,7 +5,7 @@ import (
 
 	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/theme"
-	"github.com/glw907/poplar/internal/tidy"
+	"github.com/glw907/poplar/internal/tidytext"
 )
 
 func newTestComposeModel() *Model {
@@ -62,8 +62,8 @@ func TestUpdate_TidyResult_Corrected(t *testing.T) {
 	m.tidyInFlight = true
 	msg := tidyResultMsg{
 		oldBody: "teh quick brown",
-		res: tidy.Result{
-			Status:  tidy.StatusCorrected,
+		res: tidytext.Result{
+			Status:  tidytext.StatusCorrected,
 			Text:    "the quick brown",
 			Message: "tidytext: 1 corrections applied",
 		},
@@ -86,8 +86,8 @@ func TestUpdate_TidyResult_NoChanges(t *testing.T) {
 	m.tidyInFlight = true
 	msg := tidyResultMsg{
 		oldBody: "perfect text",
-		res: tidy.Result{
-			Status:  tidy.StatusNoChanges,
+		res: tidytext.Result{
+			Status:  tidytext.StatusNoChanges,
 			Text:    "perfect text",
 			Message: "tidytext: no changes needed",
 		},
@@ -107,8 +107,8 @@ func TestUpdate_TidyResult_Error(t *testing.T) {
 	m.tidyInFlight = true
 	msg := tidyResultMsg{
 		oldBody: "anything",
-		res: tidy.Result{
-			Status:  tidy.StatusError,
+		res: tidytext.Result{
+			Status:  tidytext.StatusError,
 			Text:    "anything",
 			Message: "tidytext: API error (500): boom, text unchanged",
 		},

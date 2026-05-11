@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailcompose"
 )
 
 func mustEnsureFolder(t *testing.T, a *Account, name string) {
@@ -230,7 +230,7 @@ func TestQueryFolder_DraftsLocalOnly(t *testing.T) {
 		t.Fatalf("set drafts role: %v", err)
 	}
 
-	payload, err := compose.EncodeDraft(compose.Draft{Subject: "local-only"})
+	payload, err := mailcompose.EncodeDraft(mailcompose.Draft{Subject: "local-only"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestQueryFolder_DraftsPushedExcluded(t *testing.T) {
 		t.Fatalf("set drafts role: %v", err)
 	}
 
-	payload, err := compose.EncodeDraft(compose.Draft{Subject: "pushed"})
+	payload, err := mailcompose.EncodeDraft(mailcompose.Draft{Subject: "pushed"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}

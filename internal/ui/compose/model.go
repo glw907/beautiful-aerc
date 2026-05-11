@@ -14,11 +14,11 @@ import (
 	"charm.land/lipgloss/v2"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/ansix"
-	mailcompose "github.com/glw907/poplar/internal/compose"
 	"github.com/glw907/poplar/internal/content"
 	"github.com/glw907/poplar/internal/humanize"
+	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
-	"github.com/glw907/poplar/internal/tidy"
+	"github.com/glw907/poplar/internal/tidytext"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	"github.com/google/uuid"
 )
@@ -54,8 +54,8 @@ type Model struct {
 
 	tidyEnabled  bool
 	tidyAPIKey   string
-	tidyCfg      tidy.Config
-	tidyFn       func(input string, cfg tidy.Config, apiKey, apiURL string) (tidy.Result, error)
+	tidyCfg      tidytext.Config
+	tidyFn       func(input string, cfg tidytext.Config, apiKey, apiURL string) (tidytext.Result, error)
 	tidyInFlight bool
 
 	width   int
@@ -125,7 +125,7 @@ func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest Sugges
 		suggest: NewDropdown(suggest).WithStyles(styles),
 	}
 	c.editor.SetStyles(styles.CatkinStyles())
-	c.tidyFn = tidy.Tidy
+	c.tidyFn = tidytext.Tidy
 	c.attach = NewAttachPicker(styles, uicore.SimpleIcons)
 	c.to.Focus()
 	c.focus = focusTo
@@ -919,7 +919,7 @@ func (c *Model) SetErr(msg string) {
 }
 
 // SetTidy configures Claude Tidy. enabled=false makes Ctrl+T inert.
-func (c *Model) SetTidy(enabled bool, apiKey string, cfg tidy.Config) {
+func (c *Model) SetTidy(enabled bool, apiKey string, cfg tidytext.Config) {
 	c.tidyEnabled = enabled
 	c.tidyAPIKey = apiKey
 	c.tidyCfg = cfg

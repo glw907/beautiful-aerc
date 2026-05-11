@@ -36,7 +36,7 @@ the ADR(s) that justify them.
   `MeasureSPUACells`), `internal/filter/` (markdown→HTML for
   compose, body rendering for the reader), `internal/content/`
   (address-list parsing, MIME plaintext extraction, body+footnote
-  rendering, `List-Unsubscribe` parsing), `internal/tidy/`
+  rendering, `List-Unsubscribe` parsing), `internal/tidytext/`
   (Ctrl+T compose rewrite, ADR-0178), `internal/wizard/` +
   `internal/ui/wizard/` (first-run setup wizard split into UI-free
   domain + bubbletea/huh surface, ADR-0191).
@@ -156,10 +156,10 @@ the ADR(s) that justify them.
   private msgs are unexported and never cross the boundary.
   Reader/compose cmds emitting `uicore.ErrorMsg` and orchestrating
   the App `URLOpener` seam live in `internal/ui/cmds.go`.
-  `internal/ui/compose` shadows the `internal/compose` domain
-  package: App-side imports use `uicompose`, and inside
-  `internal/ui/compose/` the domain package is aliased
-  `mailcompose`. ADRs 0161, 0162, 0163.
+  `internal/ui/compose` is the UI surface; `internal/mailcompose`
+  is the domain package. App-side imports use `uicompose` for the
+  UI surface and bare `mailcompose` for the domain. ADRs 0161,
+  0162, 0163, 0203.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
   tree. `account.Model` holds the cache handle (backend reachable via
   `account.Model.Backend()` for `pumpUpdatesCmd`); reads come from
@@ -276,7 +276,7 @@ Auto-loaded via `.claude/rules/catkin-invariants.md` when editing `internal/catk
 
 ### Compose
 
-- `internal/compose/` is the UI-free outbound-mail surface: the
+- `internal/mailcompose/` is the UI-free outbound-mail surface: the
   `Editor` seam (CatkinEditor wraps `catkin.Model`; v1.1 will add a
   neovim adapter), the `Draft` value type, pure
   `AssembleMIME(d, now)` (multipart/alternative text+html via
@@ -325,12 +325,12 @@ POST > mailto > plain http. Banner row confirms success (5s). ADR-0185.
   `Folder.Role` → alias table → `Custom`. Provider folder names are
   normalized to canonical display names (Inbox, Sent, Trash, …)
   regardless of JMAP/IMAP naming.
-- `mail.MessageInfo` carries `ThreadID`, `InReplyTo`, `Date string`,
-  and `SentAt time.Time`. Depth is not a wire field — derived during
-  the prefix walk. A non-threaded message is a thread of size 1 with
-  `ThreadID == UID` and `InReplyTo == ""`. `SentAt` is authoritative
-  for sorts + date-column rendering; `Date` is a legacy display
-  fallback (`lessMessage` uses it only when both `SentAt` are zero).
+- `mail.MessageInfo` carries `ThreadID`, `InReplyTo`, and
+  `SentAt time.Time`. Depth is derived during the prefix walk, not
+  wired. A non-threaded message is a thread of size 1 with
+  `ThreadID == UID` and `InReplyTo == ""`. `SentAt` is the sole
+  date carrier; renderers fall back to "" when zero. Cache schema
+  v12 dropped the legacy `messages.date_str` column. ADR-0203.
 - `mail.Backend.Destroy(uids)` is the irreversible permanent-delete
   primitive (no inverse). Empty input is a no-op. JMAP impl issues
   `Email/set { destroy }` and treats `notFound` as success

@@ -223,7 +223,7 @@ file describes behavior, not the key tables.
   these chords coexist with Catkin's `Ctrl+B/I/K/L/Q/Space`.
 - App owns the lifecycle: `compose *uicompose.Model` (nil when
   closed) + `(tidyEnabled, tidyAPIKey, tidyCfg)` resolved once
-  at construction from `[ui.tidy]` and `tidy.ResolveAPIKey`,
+  at construction from `[ui.tidytext]` and `tidytext.ResolveAPIKey`,
   threaded into every new compose model via `SetTidy`. `c`
   opens fresh; `r`/`R`/`f` open via `composeSeedCmd` after
   fetching the parent body. The send path calls
@@ -232,13 +232,13 @@ file describes behavior, not the key tables.
   resolves via the cached classified-folder list
   (`cf.Canonical == "Sent"`) with case-fold "Sent" name
   fallback; missing surfaces inline as `c.err`.
-- `Ctrl+T` in the body runs `tidy.Tidy` in a `tea.Cmd`; on
+- `Ctrl+T` in the body runs `tidytext.Tidy` in a `tea.Cmd`; on
   return compose replaces the catkin buffer and feeds
   character-range diffs to a `tidyAnnotator` painted in
   `Styles.TidyChange` (`AccentPrimary` underline). Highlights
   clear on first body mutation. Tidy never runs on send. The
   footer shows a gated `^T tidy` hint at rank 6 when
-  `[ui.tidy] enabled` and the body is focused. ADR-0178.
+  `[ui.tidytext] enabled` and the body is focused. ADR-0178.
 - `Ctrl+O` opens `uicompose.AttachPicker` — multi-select TUI
   file browser overlay (`internal/ui/compose/attachpicker.go`).
   This file is a deliberate deviation from the `bubbles/v2/filepicker`

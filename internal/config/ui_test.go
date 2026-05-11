@@ -380,13 +380,13 @@ func TestLoadUI_TidyDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadUI: %v", err)
 	}
-	if cfg.Tidy.Enabled {
+	if cfg.Tidytext.Enabled {
 		t.Errorf("Tidy.Enabled default = true, want false")
 	}
-	if cfg.Tidy.Config.API.Model == "" {
+	if cfg.Tidytext.Config.API.Model == "" {
 		t.Errorf("Tidy.Config.API.Model default empty, want package default")
 	}
-	if !cfg.Tidy.Config.Rules.Spelling {
+	if !cfg.Tidytext.Config.Rules.Spelling {
 		t.Errorf("Tidy.Config.Rules.Spelling default = false, want true")
 	}
 }
@@ -395,18 +395,18 @@ func TestLoadUI_TidyPopulated(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	body := `
-[ui.tidy]
+[ui.tidytext]
 enabled = true
 
-[ui.tidy.api]
+[ui.tidytext.api]
 model   = "claude-sonnet-4-6"
 api_key = "sk-test"
 
-[ui.tidy.rules]
+[ui.tidytext.rules]
 spelling     = false
 oxford_comma = "insert"
 
-[ui.tidy.style]
+[ui.tidytext.style]
 ellipsis = "dots"
 `
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
@@ -416,23 +416,23 @@ ellipsis = "dots"
 	if err != nil {
 		t.Fatalf("LoadUI: %v", err)
 	}
-	if !cfg.Tidy.Enabled {
+	if !cfg.Tidytext.Enabled {
 		t.Errorf("Tidy.Enabled = false, want true")
 	}
-	if cfg.Tidy.Config.API.Model != "claude-sonnet-4-6" {
-		t.Errorf("API.Model = %q, want claude-sonnet-4-6", cfg.Tidy.Config.API.Model)
+	if cfg.Tidytext.Config.API.Model != "claude-sonnet-4-6" {
+		t.Errorf("API.Model = %q, want claude-sonnet-4-6", cfg.Tidytext.Config.API.Model)
 	}
-	if cfg.Tidy.Config.API.APIKey != "sk-test" {
-		t.Errorf("API.APIKey = %q, want sk-test", cfg.Tidy.Config.API.APIKey)
+	if cfg.Tidytext.Config.API.APIKey != "sk-test" {
+		t.Errorf("API.APIKey = %q, want sk-test", cfg.Tidytext.Config.API.APIKey)
 	}
-	if cfg.Tidy.Config.Rules.Spelling {
+	if cfg.Tidytext.Config.Rules.Spelling {
 		t.Errorf("Rules.Spelling = true, want false")
 	}
-	if cfg.Tidy.Config.Rules.OxfordComma != "insert" {
-		t.Errorf("OxfordComma = %q, want insert", cfg.Tidy.Config.Rules.OxfordComma)
+	if cfg.Tidytext.Config.Rules.OxfordComma != "insert" {
+		t.Errorf("OxfordComma = %q, want insert", cfg.Tidytext.Config.Rules.OxfordComma)
 	}
-	if cfg.Tidy.Config.Style.Ellipsis != "dots" {
-		t.Errorf("Ellipsis = %q, want dots", cfg.Tidy.Config.Style.Ellipsis)
+	if cfg.Tidytext.Config.Style.Ellipsis != "dots" {
+		t.Errorf("Ellipsis = %q, want dots", cfg.Tidytext.Config.Style.Ellipsis)
 	}
 }
 
@@ -440,7 +440,7 @@ func TestLoadUI_TidyBadEnum(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	body := `
-[ui.tidy.rules]
+[ui.tidytext.rules]
 oxford_comma = "yes"
 `
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {

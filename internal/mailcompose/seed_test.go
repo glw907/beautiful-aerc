@@ -1,8 +1,9 @@
-package compose
+package mailcompose
 
 import (
 	"strings"
 	"testing"
+	"time"
 
 	gomail "github.com/emersion/go-message/mail"
 
@@ -64,7 +65,7 @@ func TestSeedReplyFields(t *testing.T) {
 		UID:     pmail.UID("42"),
 		Subject: "Project update",
 		From:    "Alice <alice@example.com>",
-		Date:    "Mon, 04 May 2026 12:00:00 +0000",
+		SentAt:  time.Date(2026, time.May, 4, 12, 0, 0, 0, time.UTC),
 	}
 	d := SeedReply(parent, []byte(replyFixture))
 
@@ -81,7 +82,7 @@ func TestSeedReplyFields(t *testing.T) {
 	if !equalSlice(d.References, wantRefs) {
 		t.Errorf("References = %v, want %v", d.References, wantRefs)
 	}
-	if !strings.Contains(d.Body, "On Mon, 04 May 2026 12:00:00 +0000, Alice <alice@example.com> wrote:") {
+	if !strings.Contains(d.Body, "On Mon, May 4 2026 at 12:00 PM, Alice <alice@example.com> wrote:") {
 		t.Errorf("body missing attribution: %q", d.Body)
 	}
 	if !strings.Contains(d.Body, "> Hi Bob,") {
@@ -119,7 +120,7 @@ func TestSeedForwardEmptyThreadHeaders(t *testing.T) {
 	parent := pmail.MessageInfo{
 		Subject: "Project update",
 		From:    "Alice <alice@example.com>",
-		Date:    "Mon, 04 May 2026 12:00:00 +0000",
+		SentAt:  time.Date(2026, time.May, 4, 12, 0, 0, 0, time.UTC),
 	}
 	d := SeedForward(parent, []byte(replyFixture))
 	if d.Subject != "Fwd: Project update" {

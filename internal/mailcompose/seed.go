@@ -1,4 +1,4 @@
-package compose
+package mailcompose
 
 import (
 	"bytes"
@@ -69,7 +69,12 @@ func seedCommon(parent pmail.MessageInfo, body []byte) Draft {
 func quoteAttribution(parent pmail.MessageInfo, body []byte) string {
 	plain := extractPlainBody(body)
 	quoted := quoteLines(plain)
-	attribution := "On " + parent.Date + ", " + parent.From + " wrote:"
+	var attribution string
+	if parent.SentAt.IsZero() {
+		attribution = parent.From + " wrote:"
+	} else {
+		attribution = "On " + parent.SentAt.Format("Mon, Jan 2 2006 at 3:04 PM") + ", " + parent.From + " wrote:"
+	}
 	return "\n\n" + attribution + "\n" + quoted
 }
 

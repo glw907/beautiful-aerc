@@ -236,7 +236,6 @@ func fetchBufToMap(buf *imapclient.FetchMessageBuffer) map[string]any {
 		m["to"] = formatAddresses(env.To)
 		m["cc"] = formatAddresses(env.Cc)
 		m["bcc"] = formatAddresses(env.Bcc)
-		m["date"] = env.Date.Format("Mon, 02 Jan 2006 15:04:05 -0700")
 		m["sentAt"] = env.Date
 		if len(env.InReplyTo) > 0 {
 			m["in-reply-to"] = env.InReplyTo[0]

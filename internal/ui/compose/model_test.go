@@ -11,7 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	gomail "github.com/emersion/go-message/mail"
-	mailcompose "github.com/glw907/poplar/internal/compose"
+	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/contacts"
 )
