@@ -1,8 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 17b — `messagelist` on `bubbles/v2/list` with
-custom item renderer. Second of the bubbles-adoption remainder after
-the 16-series modernization locked modern-Go conventions.
+**Current pass:** Pass 17c — `bubbles/v2/help` audit + ADRs for
+bubbles deviations that survived 15a/17a/17b. Third of the
+bubbles-adoption remainder; closes the migration arc before
+Polish II.
 
 ## Passes
 
@@ -10,46 +11,44 @@ the 16-series modernization locked modern-Go conventions.
 |------|------|--------|
 | 1 – 16d | Scaffold through slog adoption (ADRs 0001–0197) | done |
 | 17a | Sidebar folder hierarchy on a v2 tree component (ADR-0198) | done |
-| **17b** | **`messagelist` on `bubbles/v2/list` (custom item renderer; absorbs BACKLOG #46 `iter.Seq2`)** | **pending — next** |
-| 17c | `bubbles/v2/help` audit + ADRs for bubbles deviations that survive 15a/17a/17b | pending |
+| 17b | `messagelist` on `bubbles/v2/list` with custom item delegate; iter.Seq2 thread walk (ADR-0199) | done |
+| **17c** | **`bubbles/v2/help` audit + bubbles-deviation ADRs** | **pending — next** |
 | 18 | Polish II — popover dim (#14) + items surfaced during 10–17c | pending |
 | 19 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 17b)
+## Next starter prompt (Pass 17c)
 
-> **Goal.** Migrate `messagelist` to `bubbles/v2/list` with a
-> custom item renderer for the thread-prefix walk. Second of the
-> bubbles-adoption remainder (15a, 15a.5 done; 17a done; **17b** /
-> 17c queued) before Polish II and the v0.9.0 freeze. The 16
-> series locked modern-Go conventions before this pass, so the
-> `iter.Seq2` walk lands as native shape, not a follow-up.
+> **Goal.** Audit poplar's help-popover wiring against
+> `bubbles/v2/help`, adopt where it composes, and ADR every
+> deviation that survives. Closes the bubbles-adoption arc
+> (15a/17a/17b done; 17c is the wrap).
 >
-> **Scope.** `internal/ui/messagelist/` — `Model`, `displayRow`,
-> `appendThreadRows`. Replace the imperative `MoveUp`/`MoveDown`/
-> `MoveCursor` with `Update` + exported `KeyMap` (#45 item 2).
-> Replace `appendThreadRows`'s manual prefix buffer with an
-> `iter.Seq2`-style `(Node, Depth, IsLast)` walk (#46). Thread
-> fold state, visual mode, and `ActionTargets` semantics all
-> stay.
+> **Scope.** `internal/ui/helppopover/`, the help-vocabulary
+> table that backs it, and the now-duplicate `account.keys.MsgList*`
+> bindings (deduplicate against `messagelist.KeyMap` per ADR-0199).
+> Audit `bubbles/v2/help.Model` against the wireframe at
+> `docs/poplar/wireframes.md` and confirm or write deviation ADRs
+> for: (a) "advertise unwired bindings dimmed" (custom rendering
+> per ADR-0072), (b) any binding-source composition `bubbles/v2/help`
+> doesn't natively support.
 >
-> **Settled (do not re-brainstorm):** `bubbles/v2/list` is the
-> target dep (same family as 15a). The thread-row data model
-> (group → sort → flatten → display) stays. Visual mode
-> (`v` / `Space` / `Esc`) routing stays.
+> **Settled (do not re-brainstorm):** ADR-0072's wired/unwired
+> distinction stays. `messagelist.KeyMap` and `sidebar.KeyMap` are
+> the canonical binding sources for those panels; `account.keys`
+> remains the canonical source for cross-panel actions.
 >
-> **Still open — brainstorm these:** how to interleave date /
-> sender / subject columns with `bubbles/v2/list`'s item
-> delegate (custom delegate vs. pre-rendered string per row);
-> whether `list.Filter` replaces the search shelf or stays
-> sidebar-owned; whether fold state lives on the list's items
-> or stays on `Model`.
+> **Still open — brainstorm these:** how `bubbles/v2/help` composes
+> (or doesn't) multiple `key.KeyMap` sources; whether the
+> account.keys.MsgList* deduplication ships in 17c or as a follow-up;
+> whether the help-popover's rounded-border deviation (ModalShell
+> non-consumer) gets an ADR or stays implicit.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-messagelist-list.md`,
-> then implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-help-bubbles-audit.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)
 
