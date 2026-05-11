@@ -9,12 +9,12 @@ import (
 )
 
 // Apply converts wizard state into a config.AccountConfig ready for
-// rendering + writing. It does not touch disk. the orchestrator does
+// rendering + writing. It does not touch disk; the orchestrator does
 // that after the user accepts the confirm screen.
 //
-// Identity defaults to one entry built from Email + IdentityName when
-// IdentityName is set; ADR-0177 requires len(Identities) >= 1, so a
-// missing display name falls through to the bare-email identity.
+// An identity block is synthesized when IdentityName or Signature is
+// set. When both are empty Identities is left nil and the config
+// decoder fills in a bare-email identity at load time (ADR-0177).
 func Apply(m Model) (config.AccountConfig, error) {
 	preset, ok := config.Providers[m.Preset]
 	plain := m.Preset == "imap" || m.Preset == "jmap"
