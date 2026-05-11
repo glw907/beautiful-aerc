@@ -173,7 +173,7 @@ type linkItemDelegate struct {
 	styles Styles
 }
 
-func (d linkItemDelegate) Height() int                              { return 1 }
+func (d linkItemDelegate) Height() int                             { return 1 }
 func (d linkItemDelegate) Spacing() int                            { return 0 }
 func (d linkItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 

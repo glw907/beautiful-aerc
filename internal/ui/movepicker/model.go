@@ -1,26 +1,19 @@
 package movepicker
 
 import (
-	"strconv"
+	"fmt"
+	"io"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
-
-// Styles is the move picker's projection of internal/ui.Styles.
-type Styles struct {
-	Dim    lipgloss.Style
-	Cursor lipgloss.Style
-	// Match underlines runes that match the active filter substring.
-	// Underline-only so it composes with the row's base foreground.
-	Match lipgloss.Style
-}
 
 // OpenMsg asks App to open the move-to-folder picker.
 type OpenMsg struct {
@@ -39,53 +32,57 @@ type PickedMsg struct {
 // ClosedMsg fires when the picker is dismissed without a pick.
 type ClosedMsg struct{}
 
-// modelCache memoises the list-row slice. Heap-allocated so the pointer
-// survives the value-type model's copy-on-mutation contract; ADR-0130
-// covers the escape hatch.
-type modelCache struct {
-	dirty       bool
-	rows        []string
-	contentW    int
-	visibleRows int
-}
-
 // Model is the modal overlay launched by `m` from the account view.
-// App owns open state and overlay composition (ADR-0087).
 type Model struct {
-	shell   uicore.ModalShell
-	uids    []mail.UID
-	src     string
-	all     []mail.FolderEntry
-	filter  string
-	matches []int
-	cursor  int
-	offset  int
-	styles  Styles
-	keys    modelKeys
-	cache   *modelCache
+	shell  uicore.ModalShell
+	list   list.Model
+	uids   []mail.UID
+	src    string
+	all    []mail.FolderEntry
+	styles Styles
+	keys   modelKeys
 }
 
 type modelKeys struct {
-	Up        key.Binding
-	Down      key.Binding
-	Pick      key.Binding
-	Close     key.Binding
-	Backspace key.Binding
-	// Swallow consumes 'q' so the picker doesn't quit while open.
-	Swallow key.Binding
+	CursorUp   key.Binding
+	CursorDown key.Binding
+	Pick       key.Binding
+	Close      key.Binding
+	Swallow    key.Binding
+}
+
+type folderItem struct {
+	entry mail.FolderEntry
+}
+
+func (i folderItem) FilterValue() string {
+	if i.entry.Display != "" {
+		return i.entry.Display
+	}
+	return i.entry.Provider
 }
 
 func New(styles Styles) Model {
+	l := list.New(nil, folderItemDelegate{styles: styles}, 0, 0)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowPagination(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(true)
+	l.Styles = styles.List
+	l.DisableQuitKeybindings()
+	l.KeyMap.CursorUp = key.NewBinding(key.WithKeys("up", "k"))
+	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("down", "j"))
+
 	return Model{
 		styles: styles,
-		cache:  &modelCache{dirty: true},
+		list:   l,
 		keys: modelKeys{
-			Up:        key.NewBinding(key.WithKeys("up")),
-			Down:      key.NewBinding(key.WithKeys("down")),
-			Pick:      key.NewBinding(key.WithKeys("enter")),
-			Close:     key.NewBinding(key.WithKeys("esc")),
-			Backspace: key.NewBinding(key.WithKeys("backspace")),
-			Swallow:   key.NewBinding(key.WithKeys("q")),
+			CursorUp:   key.NewBinding(key.WithKeys("up", "k")),
+			CursorDown: key.NewBinding(key.WithKeys("down", "j")),
+			Pick:       key.NewBinding(key.WithKeys("enter")),
+			Close:      key.NewBinding(key.WithKeys("esc")),
+			Swallow:    key.NewBinding(key.WithKeys("q")),
 		},
 	}
 }
@@ -105,10 +102,16 @@ func (p Model) Open(uids []mail.UID, src string, folders []mail.FolderEntry) Mod
 		}
 		p.all = append(p.all, f)
 	}
-	p.filter = ""
-	p.cursor = 0
-	p.offset = 0
-	p = p.recompute()
+	items := make([]list.Item, len(p.all))
+	for i, f := range p.all {
+		items[i] = folderItem{entry: f}
+	}
+	p.list.SetItems(items)
+	// SetFilterText("") synchronously populates filteredItems (all items, no
+	// matches), then sets filterState=FilterApplied. We follow with
+	// SetFilterState(Filtering) to enter the always-on input mode.
+	p.list.SetFilterText("")
+	p.list.SetFilterState(list.Filtering)
 	return p
 }
 
@@ -119,41 +122,14 @@ func (p Model) Close() Model {
 
 func (p Model) SetSize(width, height int) Model {
 	p.shell = p.shell.SetSize(width, height)
+	contentW, listH := movepickerListSize(width, height)
+	p.list.SetSize(contentW, listH)
 	return p
 }
 
-// visibleRows is the list-row capacity at total height. The 7-row reserve
-// covers top + bottom border, the filter line, the preview rows, and slack.
-func visibleRows(height int) int {
-	rows := height - 7
-	if rows < 1 {
-		rows = 1
-	}
-	return rows
-}
-
-// clampOffset adjusts p.offset so p.cursor lies inside the visible window.
-func (p Model) clampOffset() Model {
-	p.offset = uicore.ClampScrollOffset(p.cursor, visibleRows(p.shell.Height()), p.offset)
-	return p
-}
-
-func (p Model) recompute() Model {
-	p.matches = p.matches[:0]
-	if cap(p.matches) < len(p.all) {
-		p.matches = make([]int, 0, len(p.all))
-	}
-	needle := strings.ToLower(p.filter)
-	for i, f := range p.all {
-		if needle == "" || strings.Contains(strings.ToLower(f.Display), needle) {
-			p.matches = append(p.matches, i)
-		}
-	}
-	p.cursor = 0
-	p.offset = 0
-	p.cache.dirty = true
-	return p
-}
+func (p Model) Len() int        { return len(p.all) }
+func (p Model) Filter() string  { return p.list.FilterValue() }
+func (p Model) MatchCount() int { return len(p.list.VisibleItems()) }
 
 func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !p.shell.IsOpen() {
@@ -164,63 +140,66 @@ func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return p, nil
 	}
 	switch {
-	case key.Matches(keyMsg, p.keys.Down):
-		if p.cursor < len(p.matches)-1 {
-			p.cursor++
-			p.cache.dirty = true
-		}
-		return p.clampOffset(), nil
-	case key.Matches(keyMsg, p.keys.Up):
-		if p.cursor > 0 {
-			p.cursor--
-			p.cache.dirty = true
-		}
-		return p.clampOffset(), nil
-	case key.Matches(keyMsg, p.keys.Pick):
-		if p.cursor < 0 || p.cursor >= len(p.matches) {
-			return p, nil
-		}
-		dest := p.all[p.matches[p.cursor]].Provider
-		picked := PickedMsg{UIDs: p.uids, Src: p.src, Dest: dest}
-		return p, tea.Batch(
-			func() tea.Msg { return picked },
-			func() tea.Msg { return ClosedMsg{} },
-		)
+	case key.Matches(keyMsg, p.keys.Swallow):
+		return p, nil
 	case key.Matches(keyMsg, p.keys.Close):
 		return p, func() tea.Msg { return ClosedMsg{} }
-	case key.Matches(keyMsg, p.keys.Backspace):
-		if p.filter == "" {
+	case key.Matches(keyMsg, p.keys.Pick):
+		item, ok := p.list.SelectedItem().(folderItem)
+		if !ok {
 			return p, nil
 		}
-		_, size := utf8.DecodeLastRuneInString(p.filter)
-		p.filter = p.filter[:len(p.filter)-size]
-		return p.recompute(), nil
-	}
-	if key.Matches(keyMsg, p.keys.Swallow) {
+		dest := item.entry.Provider
+		if dest == "" {
+			dest = item.entry.Display
+		}
+		uids, src := p.uids, p.src
+		return p, tea.Batch(
+			func() tea.Msg { return PickedMsg{UIDs: uids, Src: src, Dest: dest} },
+			func() tea.Msg { return ClosedMsg{} },
+		)
+	case key.Matches(keyMsg, p.keys.CursorUp):
+		p.list.CursorUp()
+		return p, nil
+	case key.Matches(keyMsg, p.keys.CursorDown):
+		p.list.CursorDown()
 		return p, nil
 	}
-	if r, ok := singlePrintableRune(keyMsg); ok {
-		p.filter += string(r)
-		return p.recompute(), nil
+	prevFilter := p.list.FilterValue()
+	var cmd tea.Cmd
+	p.list, cmd = p.list.Update(msg)
+	if p.list.FilterValue() != prevFilter {
+		// The list emits filterItems as an async cmd, but we run always-on
+		// filter mode and need VisibleItems() to reflect the new text
+		// synchronously (no tea loop to deliver FilterMatchesMsg). Drive the
+		// apply inline, then restore Filtering state so text input stays open.
+		p.list.SetFilterText(p.list.FilterValue())
+		p.list.SetFilterState(list.Filtering)
+		p.list.GoToStart()
 	}
-	return p, nil
-}
-
-func singlePrintableRune(k tea.KeyPressMsg) (rune, bool) {
-	if len(k.Text) != 1 {
-		return 0, false
-	}
-	r := k.Code
-	if !unicode.IsPrint(r) {
-		return 0, false
-	}
-	return r, true
+	return p, cmd
 }
 
 const (
-	maxWidth = 50
-	minWidth = 24
+	movepickerMaxWidth = 50
+	movepickerMinWidth = 24
 )
+
+func movepickerListSize(boxW, boxH int) (contentW, listH int) {
+	bw := movepickerMaxWidth
+	if boxW-4 < bw {
+		bw = boxW - 4
+	}
+	if bw < movepickerMinWidth {
+		bw = movepickerMinWidth
+	}
+	contentW = bw - 2
+	listH = boxH - 7
+	if listH < 1 {
+		listH = 1
+	}
+	return contentW, listH
+}
 
 func (p Model) View() string {
 	if !p.shell.IsOpen() {
@@ -231,130 +210,65 @@ func (p Model) View() string {
 
 // Box renders the picker at the given dims regardless of open state.
 func (p Model) Box(w, h int) string {
-	boxW := maxWidth
-	if w-4 < boxW {
-		boxW = w - 4
-	}
-	if boxW < minWidth {
-		boxW = minWidth
-	}
-	contentW := boxW - 2
-
-	maxListRows := visibleRows(h)
-
-	// A dimension change counts as dirty even if the flag is clear, so
-	// SetSize doesn't need to touch it.
-	c := p.cache
-	if c.dirty || c.contentW != contentW || c.visibleRows != maxListRows {
-		allRows := p.buildListRows(contentW)
-		start, end := p.offset, p.offset+maxListRows
-		if end > len(allRows) {
-			end = len(allRows)
-		}
-		if start > end {
-			start = end
-		}
-		visible := allRows[start:end]
-
-		built := make([]string, maxListRows)
-		for i := 0; i < maxListRows; i++ {
-			line := ""
-			if i < len(visible) {
-				line = visible[i]
-			}
-			built[i] = uicore.PadOrTruncate(line, contentW)
-		}
-		c.rows = built
-		c.contentW = contentW
-		c.visibleRows = maxListRows
-		c.dirty = false
-	}
-	bodyRows := c.rows
-
-	hint := ""
-	if p.filter != "" {
-		hint = "filter: " + p.filter
+	contentW, _ := movepickerListSize(w, h)
+	listView := p.list.View()
+	bodyRows := strings.Split(listView, "\n")
+	for i, row := range bodyRows {
+		bodyRows[i] = uicore.PadOrTruncate(row, contentW)
 	}
 	footerRows := []string{
-		p.styles.Dim.Render(uicore.PadOrTruncate(hint, contentW)),
 		p.styles.Dim.Render(uicore.PadOrTruncate("↑↓ select · enter pick · esc cancel", contentW)),
 	}
-
-	title := "Move to (" + strconv.Itoa(len(p.matches)) + ")"
+	title := fmt.Sprintf("Move to (%d)", p.MatchCount())
 	return p.shell.Box(title, bodyRows, footerRows, contentW)
-}
-
-func (p Model) buildListRows(contentW int) []string {
-	if len(p.matches) == 0 && p.filter != "" {
-		return []string{"  no folders match \"" + uicore.TruncateToWidth(p.filter, contentW-22) + "\""}
-	}
-	const markerW = 2
-	displayW := contentW - markerW
-	if displayW < 1 {
-		displayW = 1
-	}
-	needleLower := strings.ToLower(p.filter)
-	rows := make([]string, 0, len(p.matches)+2)
-	prevGroup := mail.Group(-1)
-	for i, idx := range p.matches {
-		entry := p.all[idx]
-		if p.filter == "" && i > 0 && entry.Group != prevGroup {
-			rows = append(rows, "")
-		}
-		prevGroup = entry.Group
-		isCursor := i == p.cursor
-		marker := "  "
-		if isCursor {
-			marker = "> "
-		}
-		plain := uicore.TruncateToWidth(entry.Display, displayW)
-		pad := ""
-		if w := lipgloss.Width(plain); w < displayW {
-			pad = strings.Repeat(" ", displayW-w)
-		}
-		if needleLower != "" {
-			if runes := matchRunes(plain, needleLower); len(runes) > 0 {
-				var base lipgloss.Style
-				if isCursor {
-					base = p.styles.Cursor.Inline(true)
-				}
-				plain = lipgloss.StyleRunes(plain, runes, base.Inherit(p.styles.Match), base)
-			}
-		}
-		row := marker + plain + pad
-		if isCursor {
-			row = p.styles.Cursor.Render(row)
-		}
-		rows = append(rows, row)
-	}
-	return rows
-}
-
-// matchRunes returns the rune indices of the first substring match.
-// needleLower must already be lowercased by the caller.
-func matchRunes(haystack, needleLower string) []int {
-	if needleLower == "" {
-		return nil
-	}
-	lo := strings.Index(strings.ToLower(haystack), needleLower)
-	if lo < 0 {
-		return nil
-	}
-	hi := lo + len(needleLower)
-	var out []int
-	runeIdx := 0
-	for byteOff := range haystack {
-		if byteOff >= hi {
-			break
-		}
-		if byteOff >= lo {
-			out = append(out, runeIdx)
-		}
-		runeIdx++
-	}
-	return out
 }
 
 func (p Model) Position(box string, totalW, totalH int) (int, int) {
 	return uicore.CenterOverlay(box, totalW, totalH)
+}
+
+type folderItemDelegate struct {
+	styles Styles
+}
+
+func (d folderItemDelegate) Height() int                             { return 1 }
+func (d folderItemDelegate) Spacing() int                            { return 0 }
+func (d folderItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+
+func (d folderItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	fi, ok := item.(folderItem)
+	if !ok {
+		return
+	}
+	display := fi.entry.Display
+	if display == "" {
+		display = fi.entry.Provider
+	}
+	contentW := m.Width()
+	matches := m.MatchesForItem(index)
+	body := renderWithMatches(display, matches, d.styles.Match)
+	body = ansix.PadOrTruncate(body, contentW)
+	if index == m.Index() {
+		body = d.styles.Cursor.Render(body)
+	}
+	fmt.Fprint(w, body)
+}
+
+func renderWithMatches(s string, matches []int, matchStyle lipgloss.Style) string {
+	if len(matches) == 0 {
+		return s
+	}
+	mset := make(map[int]bool, len(matches))
+	for _, i := range matches {
+		mset[i] = true
+	}
+	var b strings.Builder
+	for i, r := range s {
+		if mset[i] {
+			b.WriteString(matchStyle.Render(string(r)))
+		} else {
+			b.WriteString(string(r))
+		}
+	}
+	return b.String()
 }

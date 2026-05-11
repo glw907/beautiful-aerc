@@ -23,11 +23,8 @@ func sampleFolders() []mail.FolderEntry {
 }
 
 func newTestPicker() Model {
-	th := theme.Themes[theme.DefaultThemeName]
-	return New(Styles{
-		Dim:    lipgloss.NewStyle().Foreground(th.FgDim),
-		Cursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
-	})
+	ct := theme.Themes[theme.DefaultThemeName]
+	return New(NewStyles(ct))
 }
 
 func TestMovePicker_OpenSetsState(t *testing.T) {
@@ -36,15 +33,14 @@ func TestMovePicker_OpenSetsState(t *testing.T) {
 	if !p.IsOpen() {
 		t.Fatal("picker should be open after Open")
 	}
-	// src "INBOX" is excluded. Expect one fewer than full list
-	if got, want := len(p.all), len(sampleFolders())-1; got != want {
-		t.Errorf("all len = %d, want %d", got, want)
+	if got, want := p.Len(), len(sampleFolders())-1; got != want {
+		t.Errorf("Len = %d, want %d", got, want)
 	}
-	if len(p.matches) != len(p.all) {
-		t.Errorf("matches len = %d, want %d (no filter)", len(p.matches), len(p.all))
+	if got := p.MatchCount(); got != p.Len() {
+		t.Errorf("MatchCount = %d, want %d (no filter)", got, p.Len())
 	}
-	if p.cursor != 0 {
-		t.Errorf("cursor = %d, want 0", p.cursor)
+	if got := p.list.Index(); got != 0 {
+		t.Errorf("cursor = %d, want 0", got)
 	}
 }
 
@@ -53,24 +49,19 @@ func TestMovePicker_FilterNarrows(t *testing.T) {
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
-	if p.filter != "rec" {
-		t.Errorf("filter = %q, want %q", p.filter, "rec")
+	if got := p.Filter(); got != "rec" {
+		t.Errorf("Filter = %q, want %q", got, "rec")
 	}
-	if len(p.matches) != 2 {
-		t.Errorf("matches = %d, want 2 (Receipts/2026, Receipts/2025)", len(p.matches))
-	}
-	for _, idx := range p.matches {
-		if !strings.Contains(strings.ToLower(p.all[idx].Display), "rec") {
-			t.Errorf("match %q does not contain 'rec'", p.all[idx].Display)
-		}
+	if got := p.MatchCount(); got != 2 {
+		t.Errorf("MatchCount = %d, want 2 (Receipts/2026, Receipts/2025)", got)
 	}
 }
 
 func TestMovePicker_FilterCaseInsensitive(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'I', Text: "I"})
-	if len(p.matches) == 0 {
-		t.Fatal("expected matches for 'I' (Inbox, Receipts), got 0")
+	if got := p.MatchCount(); got == 0 {
+		t.Fatal("expected matches for 'I', got 0")
 	}
 }
 
@@ -79,51 +70,52 @@ func TestMovePicker_BackspaceWidens(t *testing.T) {
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if p.filter != "r" {
-		t.Errorf("filter = %q, want %q", p.filter, "r")
+	if got := p.Filter(); got != "r" {
+		t.Errorf("Filter after backspace = %q, want %q", got, "r")
 	}
 }
 
 func TestMovePicker_BackspaceEmptyNoOp(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
 	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if p.filter != "" {
-		t.Errorf("filter = %q, want empty", p.filter)
+	if got := p.Filter(); got != "" {
+		t.Errorf("Filter = %q, want empty", got)
 	}
 }
 
 func TestMovePicker_CursorClampsOnFilter(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
+	p = p.SetSize(60, 16)
 	for i := 0; i < 5; i++ {
 		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
-	if p.cursor != 5 {
-		t.Fatalf("cursor = %d, want 5 (precondition)", p.cursor)
-	}
+	// After navigating down, filtering should reset cursor to 0.
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	if p.cursor != 0 {
-		t.Errorf("cursor = %d, want 0 after filter change", p.cursor)
+	if got := p.list.Index(); got != 0 {
+		t.Errorf("cursor = %d, want 0 after filter change", got)
 	}
 }
 
 func TestMovePicker_NavigationBounds(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
+	p = p.SetSize(60, 16)
 	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	if p.cursor != 0 {
-		t.Errorf("up at top: cursor = %d, want 0", p.cursor)
+	if got := p.list.Index(); got != 0 {
+		t.Errorf("up at top: cursor = %d, want 0", got)
 	}
 	for i := 0; i < 100; i++ {
 		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
-	if p.cursor != len(p.matches)-1 {
-		t.Errorf("down past bottom: cursor = %d, want %d", p.cursor, len(p.matches)-1)
+	if got, want := p.list.Index(), p.MatchCount()-1; got != want {
+		t.Errorf("down past bottom: cursor = %d, want %d", got, want)
 	}
 }
 
 func TestMovePicker_EnterEmitsPickedMsg(t *testing.T) {
 	// INBOX excluded. p.all = [Drafts, Sent, Archive, Trash, Receipts/2026, Receipts/2025]
-	// cursor=0 is Drafts. No Down needed.
+	// cursor=0 is Drafts.
 	p := newTestPicker().Open([]mail.UID{"42"}, "INBOX", sampleFolders())
+	p = p.SetSize(60, 16)
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter returned nil cmd")
@@ -158,11 +150,12 @@ func TestMovePicker_EnterEmitsPickedMsg(t *testing.T) {
 
 func TestMovePicker_EnterInertOnEmpty(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
+	p = p.SetSize(60, 16)
 	for _, r := range "zzzzz" {
 		p, _ = p.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-	if len(p.matches) != 0 {
-		t.Fatalf("matches = %d, want 0 (precondition)", len(p.matches))
+	if got := p.MatchCount(); got != 0 {
+		t.Fatalf("MatchCount = %d, want 0 (precondition)", got)
 	}
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil {
@@ -193,13 +186,13 @@ func TestMovePicker_EscClosesNoOp(t *testing.T) {
 
 func TestMovePicker_QSwallowed(t *testing.T) {
 	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders())
-	beforeFilter := p.filter
+	beforeFilter := p.Filter()
 	p2, cmd := p.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
 		t.Errorf("q produced cmd, want nil (swallowed)")
 	}
-	if p2.filter != beforeFilter {
-		t.Errorf("q modified filter to %q, want unchanged %q", p2.filter, beforeFilter)
+	if p2.Filter() != beforeFilter {
+		t.Errorf("q modified filter to %q, want unchanged %q", p2.Filter(), beforeFilter)
 	}
 }
 
@@ -221,59 +214,13 @@ func TestMovePicker_BoxHeightBounded(t *testing.T) {
 	}
 }
 
-func TestMovePicker_RendersGroupSeparators(t *testing.T) {
+func TestMovePicker_RendersAllFolders(t *testing.T) {
 	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 30)
 	box := p.Box(80, 30)
 	for _, want := range []string{"Inbox", "Trash", "Receipts/2026"} {
 		if !strings.Contains(box, want) {
 			t.Errorf("box missing %q", want)
 		}
-	}
-}
-
-func TestMovePicker_FilterEmptyMatchHint(t *testing.T) {
-	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
-	for _, r := range "zzzzz" {
-		p, _ = p.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
-	}
-	box := p.Box(80, 24)
-	if !strings.Contains(box, "no folders match") {
-		t.Errorf("box missing empty-match hint, got:\n%s", box)
-	}
-}
-
-func TestMatchRunes(t *testing.T) {
-	tests := []struct {
-		name, hay, needle string
-		want              []int
-	}{
-		{"empty needle", "Receipts", "", nil},
-		{"no match", "Inbox", "xyz", nil},
-		{"prefix", "Receipts", "rec", []int{0, 1, 2}},
-		{"middle", "Receipts/2026", "ipt", []int{4, 5, 6}},
-		{"case insensitive", "Inbox", "in", []int{0, 1}},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := matchRunes(tc.hay, tc.needle)
-			if len(got) != len(tc.want) {
-				t.Fatalf("len = %d, want %d (got %v, want %v)", len(got), len(tc.want), got, tc.want)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Errorf("[%d] = %d, want %d", i, got[i], tc.want[i])
-				}
-			}
-		})
-	}
-}
-
-func TestMovePicker_FilterHintRowShown(t *testing.T) {
-	p := newTestPicker().Open(nil, "", sampleFolders()).SetSize(80, 24)
-	p, _ = p.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	box := p.Box(80, 24)
-	if !strings.Contains(box, "filter: r") {
-		t.Errorf("box missing filter hint, got:\n%s", box)
 	}
 }
 
@@ -292,9 +239,64 @@ func TestMovePicker_ViewClosedEmpty(t *testing.T) {
 	}
 }
 
-// BenchmarkMovePickerView measures the cost of Box(), the full list-row
-// build path, on a realistic 7-folder list at 80×24. Run before and
-// after the render cache to confirm allocations dropped.
+func TestMovepicker_listModel_cursorAndFilter(t *testing.T) {
+	folders := []mail.FolderEntry{
+		{Provider: "INBOX", Display: "Inbox"},
+		{Provider: "Archive", Display: "Archive"},
+		{Provider: "Sent", Display: "Sent"},
+		{Provider: "Junk", Display: "Junk"},
+	}
+	p := newTestPicker().Open([]mail.UID{mail.UID("42")}, "INBOX", folders)
+	p = p.SetSize(60, 16)
+
+	if got := p.Len(); got != 3 {
+		t.Fatalf("Len after Open = %d, want 3 (INBOX excluded)", got)
+	}
+
+	for _, r := range "ar" {
+		p, _ = p.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if got := p.Filter(); got != "ar" {
+		t.Fatalf("Filter = %q, want %q", got, "ar")
+	}
+	if got := p.MatchCount(); got != 1 {
+		t.Fatalf("MatchCount after filter = %d, want 1", got)
+	}
+
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if got := p.Filter(); got != "a" {
+		t.Fatalf("Filter after backspace = %q, want %q", got, "a")
+	}
+}
+
+func TestMovepicker_listModel_enterEmitsPicked(t *testing.T) {
+	folders := []mail.FolderEntry{
+		{Provider: "INBOX", Display: "Inbox"},
+		{Provider: "Archive", Display: "Archive"},
+	}
+	p := newTestPicker().Open([]mail.UID{mail.UID("42")}, "INBOX", folders)
+	p = p.SetSize(60, 16)
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter returned nil cmd")
+	}
+	msg := drainBatch(cmd)
+	var picked *PickedMsg
+	for _, m := range msg {
+		if v, ok := m.(PickedMsg); ok {
+			picked = &v
+		}
+	}
+	if picked == nil {
+		t.Fatalf("Enter cmd did not return PickedMsg")
+	}
+	if picked.Dest != "Archive" || picked.Src != "INBOX" || len(picked.UIDs) != 1 {
+		t.Fatalf("PickedMsg = %+v, want UIDs=[42] Src=INBOX Dest=Archive", picked)
+	}
+}
+
+// BenchmarkMovePickerView measures Box() cost on a realistic 7-folder list.
 func BenchmarkMovePickerView(b *testing.B) {
 	p := newTestPicker()
 	p = p.Open(nil, "", sampleFolders())

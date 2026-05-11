@@ -21,7 +21,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/helppopover"
@@ -159,11 +158,8 @@ func goldenMovePickerFolders() []mail.FolderEntry {
 }
 
 func goldenNewMovePicker() movepicker.Model {
-	th := theme.Themes[theme.DefaultThemeName]
-	return movepicker.New(movepicker.Styles{
-		Dim:    lipgloss.NewStyle().Foreground(th.FgDim),
-		Cursor: lipgloss.NewStyle().Foreground(th.AccentPrimary),
-	})
+	ct := theme.Themes[theme.DefaultThemeName]
+	return movepicker.New(movepicker.NewStyles(ct))
 }
 
 // TestGolden_MovePicker captures the rendered move picker with
