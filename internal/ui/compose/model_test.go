@@ -409,6 +409,25 @@ func TestComposeFocusOrderIncludesFrom(t *testing.T) {
 	}
 }
 
+// Pass 9n collapsed focusBody and focusFrom into one empty switch
+// arm, dropping editor.Focus(). Without it, Tab or Esc into the
+// body left catkin blurred and every keystroke fell on the floor.
+func TestComposeFocusBodyAcceptsKeystrokes(t *testing.T) {
+	c := newTestModel(t)
+	c.SetSize(80, 24)
+
+	for c.Focus() != focusBody {
+		c, _ = c.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	}
+	if !c.editor.Focused() {
+		t.Fatalf("editor not Focused after Tab into focusBody")
+	}
+	c, _ = c.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if got := c.editor.Value(); got != "x" {
+		t.Fatalf("body did not accept keystroke: editor.Value() = %q, want %q", got, "x")
+	}
+}
+
 func TestComposeIdentityCycle(t *testing.T) {
 	c := newTestModel(t)
 	c.SetSize(80, 24)

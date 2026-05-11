@@ -19,20 +19,20 @@ pass.
 | 19 | pre-beta refactor (outbound) — drop MessageInfo.Date string, compose→mailcompose, tidy→tidytext + CLI strip (ADR-0203) | done |
 | 19.1 | pre-beta refactor (mechanical) — #46 reconciled, #47 strdist consolidation (ADR-0204) | done |
 | 20 | v0.9.0 prep — README, docs sweep, hero screenshot, tag (ADR-0205) | done |
+| 21 | Beta-soak bug fix — restore compose body Focus() (ADR-0206); compose hero screenshot; Nerd Font in VHS tapes | done |
 | Beta soak | Bug-fix releases on `v0.9.x`; data formats frozen; features queue on `1.1` | **active** |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); native OAuth (#42); other post-beta | post-beta |
 
 ## Next steps
 
-First post-tag work is bug-fix-only on the `v0.9.x` line. Pick up
-the next pass with `release-stance.md` open — soak rules differ
-from pre-beta (no schema work, no breaking renames). Candidates:
+Pass 21 closed the first soak bug (compose body wasn't accepting
+keystrokes after Tab/Esc into it) and shipped the deferred compose
+hero shot. Next candidates remain bug-fix-only on `v0.9.x`:
 
-- Compose hero screenshot (deferred from Pass 20 — needs a
-  hand-driven capture; tape skeleton at
-  `scripts/screenshots/compose.tape`).
-- BACKLOG bug entries flagged with `#bug` / `#poplar`.
+- BACKLOG bug entries flagged with `#bug` / `#poplar` (e.g. #29
+  config-template placeholder — re-verify; the reported "name is
+  required" path is already covered by the email→name default).
 - `CONTRIBUTING.md` + CI workflow (#41, #40) — v1.0 prep.
 
 ## Notes for the 16-series (modernization)

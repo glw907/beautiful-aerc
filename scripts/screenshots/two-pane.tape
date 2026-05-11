@@ -1,6 +1,7 @@
 Output docs/assets/two-pane.png
 
 Set Shell "bash"
+Set FontFamily "JetBrainsMonoNL Nerd Font"
 Set FontSize 13
 Set Width 1440
 Set Height 900

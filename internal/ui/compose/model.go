@@ -737,7 +737,9 @@ func (c *Model) setFocus(target int) {
 		_ = c.bcc.Focus()
 	case focusSubject:
 		_ = c.subject.Focus()
-	case focusBody, focusFrom:
+	case focusBody:
+		_ = c.editor.Focus()
+	case focusFrom:
 	}
 }
 

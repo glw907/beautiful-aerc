@@ -8,6 +8,10 @@
   <img src="docs/assets/two-pane.png" alt="poplar two-pane view — sidebar, message list, and a markdown-rendered reader" width="90%" />
 </p>
 
+<p align="center">
+  <img src="docs/assets/compose.png" alt="poplar compose view — addressed draft with markdown body" width="90%" />
+</p>
+
 ## Status
 
 poplar is in **beta soak**. Data formats are frozen at `v0.9.0`;
