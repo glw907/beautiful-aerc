@@ -23,8 +23,8 @@ pass.
 | 22 | Wizard signature step — catkin editor between identity and label, multi-line TOML render, sentinel round-trip | done |
 | Beta soak | Bug-fix releases on `v0.9.x`; data formats frozen; features queue on `1.1` | **active** |
 | v1.0.0 | Tag when soak settles | pending |
-| 23 | Config-decoder bugfix duo — #49 wizard preset, #29 name default | queued |
-| 24 | Small-refactor sweep — #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
+| 23 | First-launch safety — #49 wizard preset, #29 name default, #51 MockBackend | queued |
+| 24 | Outbox safety + small-refactor sweep — #52 IMAP send/append gate, #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
 | 1.1 | catkin-all-value → Editor wrapper deletion → app-decomposition → v2-view-fields → mouse-support → native OAuth (#42); plus neovim companion (#6), raw RFC822 (#21) | post-beta |
 
 ## Next steps
@@ -33,16 +33,25 @@ Soak is bug-fixes only on master; small reviewable refactors OK;
 new features queue on `1.1`. Two soak passes are queued before
 v1.0.0 tag:
 
-**Pass 23 — Config-decoder bugfix duo.** Fix **#49** (wizard probe
-runs against unresolved preset; dies on "session URL is empty"
-for every hosted preset — first-run is unusable until this lands)
-and **#29** (config-template `name` defaults). Both converge on
-the same decoder surface: extract `config.ResolvePreset(*AccountConfig)`
-and call from both the decoder and `wizard.Apply`'s default
-branch; drop the empty-name check and default `Name` to `Email`.
+**Pass 23 — First-launch safety.** Three first-launch / config
+hazards converging on `internal/config/accounts.go`:
+- **#49** wizard probe runs against unresolved preset (dies on
+  "session URL is empty" for every hosted preset; first-run
+  unusable). Fix: extract `config.ResolvePreset(*AccountConfig)`,
+  call from both the decoder and `wizard.Apply`.
+- **#29** config-template `name` defaults to email (drop the
+  `name == ""` validator check; default `Name` to `Email`).
+- **#51** `MockBackend` ships in production and silently swallows
+  `Send`. Fix: `//go:build dev` tag on `mail.NewMockBackend`
+  registration in `cmd/poplar/backend.go`; reject `provider = ""`
+  and `provider = "mock"` in the production validator.
 
-**Pass 24 — Small-refactor sweep.** Soak-safe deletions with no
-user-visible behavior change:
+**Pass 24 — Outbox safety + small-refactor sweep.** Soak-safe
+fixes and deletions with no user-visible behavior change:
+- **#52** IMAP outbox `Append` can dispatch while sibling `Send`
+  is failed (never-sent message lands in Sent). Gate
+  `nextOutboxRow` with a `NOT EXISTS` subquery on the `draft_id`-
+  linked sibling. No schema change.
 - **#50** ansix `Measurer` (drop the `spuaCellWidth` package global)
 - Collapse triplicate `WithLogger` functional-options in
   `mailjmap` / `mailimap` / `cache` to plain `*slog.Logger` args
