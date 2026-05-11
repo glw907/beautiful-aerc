@@ -15,6 +15,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-message/mail"
+
+	"github.com/glw907/poplar/internal/strdist"
 )
 
 // ResolvePassword returns the cleartext password. Inline Password
@@ -248,46 +250,13 @@ func suggestProvider(s string) string {
 	bestName := ""
 	bestDist := 3
 	for _, c := range candidates {
-		d := levenshtein(s, c)
+		d := strdist.Levenshtein(s, c, 2)
 		if d < bestDist {
 			bestDist = d
 			bestName = c
 		}
 	}
-	if bestDist > 2 {
-		return ""
-	}
 	return bestName
-}
-
-func levenshtein(a, b string) int {
-	if a == b {
-		return 0
-	}
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := range lb + 1 {
-		prev[j] = j
-	}
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			curr[j] = min(curr[j-1]+1, prev[j]+1, prev[j-1]+cost)
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
 }
 
 type configFile struct {

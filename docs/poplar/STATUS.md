@@ -1,8 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 19.1 — pre-beta refactor (mechanical
-cluster). Lands #46 (iter.Seq2 walk consumer) and #47 (strdist
-Levenshtein consolidation).
+**Current pass:** Pass 20 — v0.9.0 prep (feature freeze, docs
+sweep, README, tag).
 
 ## Passes
 
@@ -14,35 +13,42 @@ Levenshtein consolidation).
 | 17c | `bubbles/v2/help` audit + bubbles-deviation ADRs (0200, 0201) | done |
 | 18 | Polish II — retire underlay dim, footer ellipsis, helppopover zero-arg View, KeyMap exports, sidebar render cache (ADR-0202) | done |
 | 19 | pre-beta refactor (outbound) — drop MessageInfo.Date string, compose→mailcompose, tidy→tidytext + CLI strip (ADR-0203) | done |
-| **19.1** | **pre-beta refactor (mechanical) — #46, #47** | **pending — next** |
-| 20 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
+| 19.1 | pre-beta refactor (mechanical) — #46 reconciled, #47 strdist consolidation (ADR-0204) | done |
+| **20** | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | **pending — next** |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 19.1)
+## Next starter prompt (Pass 20)
 
-> **Goal.** Land the mechanical-cleanup pre-beta refactors.
-> One ADR.
+> **Goal.** Cut `v0.9.0`. Feature freeze, docs sweep, README,
+> tag.
 >
 > **Scope.**
-> - **#46** — refactor `messagelist.appendThreadRows` to
->   consume the existing `walkThread` `iter.Seq2` iterator
->   (`internal/ui/messagelist/walk.go`) instead of its bespoke
->   recursion. Touches `internal/ui/messagelist/model.go` only.
-> - **#47** — consolidate the two Levenshtein implementations
->   (`internal/config/accounts.go`, `internal/catkin/spellcheck.go`)
->   into `internal/strdist/`. Decide whether one shared signature
->   covers both call sites or whether they need narrower variants.
+> - Audit `BACKLOG.md` High/Medium for any remaining pre-beta
+>   refactors that should land before freeze (the "showcase
+>   before freeze" initiative carved off the bubbles-adoption
+>   work in passes 15.x/17.x; #44 `mailcompose` rename is the
+>   one remaining named entry).
+> - Sweep `docs/poplar/` for stale references (e.g. dropped
+>   `Date` field, renamed packages, retired Pass numbers).
+> - Write the v1 README (target audience: developer evaluating
+>   poplar from the GitHub landing page).
+> - Tag `v0.9.0` from master. Beta soak begins on tag; data
+>   formats freeze.
 >
-> **Settled (do not re-brainstorm):** Both items are bounded;
-> #47 lands the new package at `internal/strdist/`.
+> **Settled (do not re-brainstorm):** Release model is fixed
+> (ADR-0105). Tag from master, no release branch.
 >
-> **Still open — brainstorm these:** None.
+> **Still open — brainstorm these:**
+> - Final pre-beta refactor scope (apply #44 in this pass or
+>   defer to a 19.2-style mechanical pass first?).
+> - README scope and shape — feature tour vs. quickstart vs.
+>   architecture overview.
 >
-> **Approach.** Pure implementation pass. Plan doc at
-> `docs/superpowers/plans/2026-05-11-pre-beta-mechanical.md`.
-> Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-v0.9.0-prep.md`, then
+> implement. Standard pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)
 

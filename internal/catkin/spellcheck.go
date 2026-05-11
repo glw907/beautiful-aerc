@@ -12,6 +12,8 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/glw907/poplar/internal/strdist"
 )
 
 //go:embed spellcheck/en_US.txt spellcheck/project.txt
@@ -140,46 +142,6 @@ func deletes(w string, dist int) map[string]struct{} {
 	return out
 }
 
-// editDistance is plain Levenshtein capped at limit; the true distance
-// surfaces as limit+1 when it would exceed limit.
-func editDistance(a, b string, limit int) int {
-	la, lb := len(a), len(b)
-	if abs(la-lb) > limit {
-		return limit + 1
-	}
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := range lb + 1 {
-		prev[j] = j
-	}
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		rowMin := curr[0]
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			curr[j] = min(curr[j-1]+1, min(prev[j]+1, prev[j-1]+cost))
-			if curr[j] < rowMin {
-				rowMin = curr[j]
-			}
-		}
-		if rowMin > limit {
-			return limit + 1
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 // Suggest returns up to n corrections for word, ordered by edit
 // distance then frequency rank ascending.
 func (s *Speller) Suggest(word string, n int) []string {
@@ -202,7 +164,7 @@ func (s *Speller) Suggest(word string, n int) []string {
 				continue
 			}
 			seen[candidate] = struct{}{}
-			ed := editDistance(w, candidate, maxEditDistance)
+			ed := strdist.Levenshtein(w, candidate, maxEditDistance)
 			if ed > maxEditDistance {
 				continue
 			}
