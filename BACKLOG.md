@@ -4,6 +4,35 @@
 
 ## High
 
+- [ ] **#58** Defensive-clamp cleanup sweep across `internal/cache/` + `internal/ui/status_bar.go` `#cleanup` `#poplar` `#cache` `#ui` *(2026-05-11, Audit A)*
+  Surfaced by Pass 26 (Audit A focus #3). Seven internal-to-internal nil-checks and arithmetic clamps that the no-defensive-checks rule forbids:
+  - `cache/syncer.go:72,115`, `cache/drainer.go:130`, `cache/reads.go:262`, `cache/attachments.go:26,116` — `a.Backend == nil` guards (Backend is wired by `Open`'s contract; nil is unreachable from cmd/poplar).
+  - `cache/syncer.go:17` — `ChangeTracker == nil` guard (same class).
+  - `cache/ops.go:65,114` — `args == nil` guards on a sealed-sum `OpArgs` interface.
+  - `cache/reads.go:393` — `sqlPlaceholders` `n <= 0` early return (callers already gate on `len == 0`).
+  - `cache/search.go:34` — `limit <= 0 → 200` clamp (move the default to the call site).
+  - `ui/status_bar.go:72,75` — `SetOutboxDepth` clamps `< 0 → 0` on values that come from SQL counts.
+  - `ui/status_bar.go:100,104` — `SetScrollPct` clamps `< 0`/`> 100` on a value already bounded by arithmetic.
+  `cache/drainer.go:231,241` (`ContactsWriter == nil`) keeps its guard with a doc comment — the field is legitimately optional. Fold into Pass 28 or 29's adjacent cache/UI work; most of the diff is single-line deletions.
+
+- [ ] **#57** Config validator completeness — strict TOML + enum/empty checks `#bug` `#poplar` `#config` *(2026-05-11, Audit A)*
+  Surfaced by Pass 26 (Audit A focus #2). Six gaps in `internal/config/`; the first is the root cause of the rest:
+  - **F2.0 (root)** — All four `toml.Unmarshal` sites (`accounts.go:366`, `ui.go:155`, `cache.go:57`, `writer.go:111`) use BurntSushi/toml in permissive mode. Unknown keys are silently dropped (`passwrd = "tok"` leaves password empty with no error). Switch to `(*toml.Decoder).DisallowUnknownFields()` (v1.3+) or equivalent and surface unknown keys via `ConfigError` with a Levenshtein-based `Suggest` using the existing `internal/strdist` helper.
+  - **F2.1** — `oauth-store` accepts arbitrary strings; only `"keyring"` and `"age-file"` are meaningful (`accounts.go:544`).
+  - **F2.2** — `auth` / `smtp.auth` accept arbitrary strings; valid set is `plain`/`login`/`cram-md5`/`xoauth2`/`bearer` (`accounts.go:421`).
+  - **F2.3** — `contacts.url` empty surfaces as `"url: not parseable"` instead of `"url: required"` (`accounts.go:67-69`).
+  - **F2.4** — `port = 0` silently accepted for bare `provider = "imap"` (`accounts.go:493-500`); surfaces as runtime dial error rather than config error.
+  - **F2.5** — Contacts credentials missing after parent-account fallback surfaces as a CardDAV 401, not a config error (`accounts.go:586-597` / `:63-89`).
+
+- [ ] **#56** mailimap `Destroy` (Gmail branch) leaves `b.current` stale after `Select(trash)` `#bug` `#poplar` `#mail` *(2026-05-11, Audit A)*
+  Surfaced by Pass 26 (Audit A focus #1). `mailimap/actions.go:95-105` issues `cmd.Select(trash, false)` for Gmail Destroy but doesn't update `b.current`. Window: between the internal Select and the next explicit `OpenFolder`, any cmd-path action that triggers a redial will re-Select the *pre-Destroy* folder and address the wrong mailbox. Two-line fix — update `b.current` after the Select succeeds, or re-Select the pre-Destroy folder before returning.
+
+- [ ] **#55** mailjmap holds `b.mu` across HTTP round-trip in `refreshFoldersLocked` `#bug` `#poplar` `#mail` *(2026-05-11, Audit A)*
+  Surfaced by Pass 26 (Audit A focus #1). `mailjmap/jmap.go:316-324` calls `fetchFolders` → `b.client.Do(req)` with `b.mu` held. Every reader, `emit`, and the push loop's `handleStateChange` stall for the network round-trip. Asymmetric with the IMAP-side redial refactor (which kept dial paths lock-free). Fix: take a local copy of `b.client`/`b.session` under the lock, release, do the network call, re-acquire to write results — same pattern `resolvedPassword` already uses.
+
+- [ ] **#54** mailjmap `classifyErr` lacks a network-error branch `#bug` `#poplar` `#mail` *(2026-05-11, Audit A)*
+  Surfaced by Pass 26 (Audit A focus #1). `mailjmap/errors.go:21-35` handles `*jmap.RequestError` 401/403/404 but has no branch for plain `net.Error` / `*url.Error` / `io.EOF` wrappers from `go-jmap`'s HTTP transport. JMAP transport drops never wrap as `mail.ErrConnection`; the `pumpUpdatesCmd` reconnect lens stays dark for JMAP (only the push loop's `ConnReconnecting` emit covers it). No data loss (drainer's `default` arm correctly retries with backoff) but the sentinel parity with mailimap is broken. Add `net.Error`/`*url.Error`/`io.EOF` shapes to `classifyErr`, mirroring `mailimap.classifyErr`.
+
 - [x] ~~**#53** IMAP IDLE "reconnect" doesn't redial; spins on a dead handle~~ `#bug` `#poplar` `#mail` *(2026-05-11)* (closed 2026-05-11)
   Resolved by Pass 24 (ADR-0208). `mailimap.classifyErr` routes connection-dead errors (`io.EOF`, `io.ErrClosedPipe`, `net.ErrClosed`, `*net.OpError`, `net.Error.Timeout()`) onto a new `mail.ErrConnection` sentinel via the shared `mail.WrapSentinel` helper. `idleLoop` drops the dead handle and dials a fresh one via `b.dialIdle(ctx)` on session error; every cmd-path action reaches `b.cmd` through `b.cmdClient()` (lazy redial + re-Select of `b.current`), and `maybeDropOnConn` clears the cache on `ErrConnection`. A per-instance `b.dialFn` seam lets tests drive the redial path against fakes.
 

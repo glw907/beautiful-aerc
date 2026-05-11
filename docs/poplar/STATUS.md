@@ -1,7 +1,8 @@
 # Poplar Status
 
-**Current pass:** Pass 26 — Audit A (next-up). Pass 25 closed
-the small-refactor sweep (ADR-0209); pre-beta cadence continues.
+**Current pass:** Pass 27 — Catkin Elm conformance (next-up). Pass
+26 closed Audit A (ADR-0210) with 11 non-blocking findings (#54–#58)
+and 0 blocking; pre-beta cadence continues.
 
 **Beta soak deferred** (2026-05-11 decision). `v0.9.0` is tagged
 as a milestone but does not gate the rules — pre-beta operational
@@ -38,8 +39,8 @@ queue a remediation sub-pass before the next phase runs. The
 | 23 | First-launch safety — #49 ResolvePreset, #29 template defaults pinned, #51 MockBackend dev-gate (ADR-0207) | done |
 | 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate (ADR-0208) | done |
 | 25 | Small-refactor sweep — ansix Measurer, plain-logger args, backoff/humanize fold (ADR-0209) | done |
-| 26 | **Audit A** — bug-fix completeness (`audit-plan.md` §Phase A) | next |
-| 27 | Catkin Elm conformance (all-value path) | gated |
+| 26 | Audit A — bug-fix completeness, 11 non-blocking findings (ADR-0210) | done |
+| 27 | **Catkin Elm conformance (all-value path)** | next |
 | 28 | Compose `Editor` wrapper deletion (subsumes overengineering-cleanup item 1) | gated |
 | 29 | `app.go` decomposition — split 874-line `App.Update` | gated |
 | 30 | **Audit B.1** — Elm + bubbletea v2 conformance (`audit-plan.md` §Phase B.1) | gate |
@@ -89,10 +90,15 @@ behavior change:
 - Fold `internal/backoff/` + `internal/humanize/` into their
   primary callers; drop the defensive `<= 0` clamps
 
-**Pass 26 — Audit A: bug-fix completeness.** `audit-plan.md`
-§Phase A. Mail-infra regression sweep, config-validator
-completeness walk, defensive-clamp grep. Blocking findings → a
-`25.1`-style remediation pass before Batch 2 starts.
+**Pass 26 — Audit A: bug-fix completeness.** Done 2026-05-11
+(ADR-0210). Three-lens sweep (mail-infra regression, config-
+validator completeness, defensive-clamp grep) returned **11 non-
+blocking findings, 0 blocking** — Batch 2 proceeds without a
+remediation pass. Findings file as BACKLOG **#54** (mailjmap
+network-error sentinel gap), **#55** (mailjmap `b.mu` across
+HTTP round-trip), **#56** (mailimap Gmail-Destroy stale
+`b.current`), **#57** (config-validator gaps incl. non-strict
+TOML), **#58** (defensive-clamp cleanup sweep).
 
 ### Batch 2 — structural refactor (Passes 27–29)
 
@@ -178,32 +184,38 @@ after soak settles.
 Full project descriptions in `ROADMAP.md`; audit methodology in
 `docs/poplar/audit-plan.md`.
 
-### Next starter prompt (Pass 26)
+### Next starter prompt (Pass 27)
 
-> **Goal.** Audit A — bug-fix completeness sweep per
-> `docs/poplar/audit-plan.md` §Phase A. First gate on the path to
-> beta soak.
+> **Goal.** Convert `internal/catkin/` to the Elm all-value path —
+> every pointer-mutator on `catkin.Model` and `catkin.Buffer`
+> becomes a Msg handled in `Update`. First Batch 2 structural
+> pass; closes the catkin all-value straddle logged from the
+> 2026-05-11 audit.
 >
-> **Scope.** Mail-infra regression sweep (post Passes 23/24/25),
-> config-validator completeness walk, defensive-clamp grep
-> across `internal/`, dispatcher-vs-redial coverage check. No
-> code changes in this pass except remediation; blocking
-> findings queue a `26.1`-style sub-pass before Batch 2 begins.
-> Read-only audit work touches `internal/mail/`, `internal/mailimap/`,
-> `internal/mailjmap/`, `internal/cache/`, `internal/config/`,
-> and the wizard's probe path.
+> **Scope.** Wrap `bubbles/v2/textarea` in a value-typed adapter
+> inside catkin so upstream's pointer-receiver contagion stops at
+> the package boundary. Migrate `compose.Model` and
+> `internal/ui/wizard/section_signature.go` to send config Msgs
+> instead of calling mutators. Pass 28 (delete the `Editor`
+> wrapper) is sequenced after but may fold in if review-size
+> allows. Touches `internal/catkin/`, `internal/ui/compose/`,
+> `internal/ui/wizard/`.
 >
-> **Settled (do not re-brainstorm):** Audit methodology is fixed
-> in `audit-plan.md` §Phase A. Findings format: per-finding
-> remediation pass number + one-line summary in STATUS.md.
+> **Settled (do not re-brainstorm):** All-value path is the
+> direction (CLAUDE.md `elm-conventions`); the textarea wrapper is
+> the seam. `mailcompose.Editor` deletion (Pass 28) stays
+> downstream unless naturally folded.
 >
-> **Still open — brainstorm these:** None — this is a structured
-> audit, not a design pass.
+> **Still open — brainstorm these:** Whether the `bubbles/v2/
+> textarea` adapter exposes Msgs directly or a thin value-typed
+> facade; how compose's autosave Cmds reach the catkin state
+> without holding a pointer. Brainstorm at plan time.
 >
-> **Approach.** Read `docs/poplar/audit-plan.md` §Phase A, run
-> the four lenses end-to-end, write findings into a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-audit-a.md`. Standard
-> pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-catkin-elm.md`, then
+> implement. Standard pass-end checklist applies; UI work requires
+> reading `docs/poplar/bubbletea-conventions.md` and the §10
+> review checklist at pass-end.
 
 ## Notes for the 16-series (modernization)
 
