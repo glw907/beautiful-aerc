@@ -1,6 +1,10 @@
 package wizard
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/glw907/poplar/internal/config"
+)
 
 func TestApplyFastmailJMAP(t *testing.T) {
 	m := Model{
@@ -178,5 +182,24 @@ func TestApplyEmptySignatureWithIdentityNameProducesNoSignatures(t *testing.T) {
 	id := cfg.Identities[0]
 	if len(id.Signatures) != 0 {
 		t.Errorf("Signatures = %+v, want none", id.Signatures)
+	}
+}
+
+func TestFromAccountSignature(t *testing.T) {
+	cfg := config.AccountConfig{
+		Email:  "geoff@907.life",
+		Preset: "fastmail",
+		Identities: []config.Identity{{
+			Name:  "Geoff Wright",
+			Email: "geoff@907.life",
+			Signatures: []config.Signature{{
+				Name: "default",
+				Text: "-- \nGeoff Wright\ngeoff@907.life",
+			}},
+		}},
+	}
+	got := FromAccount(cfg)
+	if got.Signature != "Geoff Wright\ngeoff@907.life" {
+		t.Errorf("Signature = %q, want sentinel-stripped body", got.Signature)
 	}
 }

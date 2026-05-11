@@ -3,6 +3,7 @@ package wizard
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/glw907/poplar/internal/config"
 )
@@ -99,6 +100,9 @@ func FromAccount(cfg config.AccountConfig) Model {
 	}
 	if len(cfg.Identities) > 0 {
 		m.IdentityName = cfg.Identities[0].Name
+		if sigs := cfg.Identities[0].Signatures; len(sigs) > 0 {
+			m.Signature = strings.TrimPrefix(sigs[0].Text, "-- \n")
+		}
 	}
 	switch {
 	case cfg.Preset != "":
