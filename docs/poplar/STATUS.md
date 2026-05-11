@@ -24,7 +24,8 @@ pass.
 | Beta soak | Bug-fix releases on `v0.9.x`; data formats frozen; features queue on `1.1` | **active** |
 | v1.0.0 | Tag when soak settles | pending |
 | 23 | First-launch safety — #49 wizard preset, #29 name default, #51 MockBackend | queued |
-| 24 | Outbox safety + small-refactor sweep — #52 IMAP send/append gate, #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
+| 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate | queued |
+| 25 | Small-refactor sweep — #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
 | 1.1 | catkin-all-value → Editor wrapper deletion → app-decomposition → v2-view-fields → mouse-support → native OAuth (#42); plus neovim companion (#6), raw RFC822 (#21) | post-beta |
 
 ## Next steps
@@ -46,12 +47,24 @@ hazards converging on `internal/config/accounts.go`:
   registration in `cmd/poplar/backend.go`; reject `provider = ""`
   and `provider = "mock"` in the production validator.
 
-**Pass 24 — Outbox safety + small-refactor sweep.** Soak-safe
-fixes and deletions with no user-visible behavior change:
+**Pass 24 — IMAP robustness.** Two related outbox/connection bugs;
+both soak-blocking for IMAP users:
+- **#53** IMAP IDLE "reconnect" doesn't redial — `idleLoop` retries
+  against the same `b.idle` pointer set once in `Connect`. When
+  the TCP connection actually dies (laptop sleep/wake, NAT reap,
+  server housekeeping), poplar shows `Reconnecting…` indefinitely
+  with no recovery. The `cmd` connection has the same defect for
+  every Move/Flag/Destroy action. Fix: introduce `mail.ErrConnection`
+  sentinel; on connection-dead, drop `b.idle` / `b.cmd` and dial
+  fresh before retry. Mirrors the same backend's SMTP drop-and-
+  redial pattern (`smtp.go:141-153`).
 - **#52** IMAP outbox `Append` can dispatch while sibling `Send`
   is failed (never-sent message lands in Sent). Gate
   `nextOutboxRow` with a `NOT EXISTS` subquery on the `draft_id`-
   linked sibling. No schema change.
+
+**Pass 25 — Small-refactor sweep.** Soak-safe deletions with no
+user-visible behavior change:
 - **#50** ansix `Measurer` (drop the `spuaCellWidth` package global)
 - Collapse triplicate `WithLogger` functional-options in
   `mailjmap` / `mailimap` / `cache` to plain `*slog.Logger` args
