@@ -135,8 +135,7 @@ the ADR(s) that justify them.
 - `internal/ui/` is the App parent plus eight bubbles-shaped
   subpackages (`account`, `compose`, `helppopover`, `messagelist`,
   `movepicker`, `reader`, `sidebar`, `wizard`) and the `uicore`
-  sibling.
-  Subpackages cannot import the parent. `uicore` holds shared
+  sibling. Subpackages cannot import the parent. `uicore` holds shared
   chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
   render primitives (`PadOrTruncate`, `TruncateToWidth`,
@@ -153,14 +152,16 @@ the ADR(s) that justify them.
   `internal/theme/palette.go` permitted to call
   `lipgloss.NewStyle()`. Cross-boundary msgs are exported in
   `<subpkg>/msgs.go` and qualified at the call site (e.g.
-  `account.TriageStartedMsg`, `reader.BodyLoadedMsg`); subpackage-
-  private msgs are unexported and never cross the boundary.
+  `account.TriageStartedMsg`); subpackage-private msgs stay unexported.
   Reader/compose cmds emitting `uicore.ErrorMsg` and orchestrating
   the App `URLOpener` seam live in `internal/ui/cmds.go`.
   `internal/ui/compose` is the UI surface; `internal/mailcompose`
-  is the domain package. App-side imports use `uicompose` for the
-  UI surface and bare `mailcompose` for the domain. ADRs 0161,
-  0162, 0163, 0203.
+  is the domain. App-side imports use `uicompose` for the UI,
+  bare `mailcompose` for the domain. `App` is split across
+  `app.go` (model + dispatcher), `app_view.go`, `app_keys.go`, and
+  per-domain `app_{chrome,outbox,compose,modals,contacts}.go`; each
+  domain owns `updateXMsg(msg) (App, tea.Cmd, claimed bool)` reached
+  via the chain in `App.Update`. ADRs 0161–0163, 0203, 0214.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
   tree. `account.Model` holds the cache handle (backend reachable via
   `account.Model.Backend()` for `pumpUpdatesCmd`); reads come from

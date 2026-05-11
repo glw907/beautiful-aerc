@@ -1,11 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 28 — Compose Editor wrapper deletion.
-Pass 27 landed the Catkin all-value path (ADR-0212): Model and
-Buffer are value types with With* setters; textarea sealed inside
-Buffer; CatkinEditor shim keeps compose untouched until Pass 28.
+**Current pass:** Pass 30 — Audit B.1 (Elm + bubbletea v2
+conformance). Pass 29 landed the `App.Update` decomposition
+(ADR-0214): per-domain `app_{chrome,outbox,compose,modals,
+contacts}.go`, chrome runs first in the dispatcher chain,
+`armToast` + `openNewCompose` unify duplicated call sites.
 **Beta soak deferred.** Pre-beta rules apply; soak entry gated
-on a full audit cycle returning no findings (`docs/poplar/audit-plan.md`).
+on a full audit cycle returning no findings.
 
 ## Passes
 
@@ -13,8 +14,8 @@ on a full audit cycle returning no findings (`docs/poplar/audit-plan.md`).
 |------|------|--------|
 | 1 – 26.1 | Scaffold through Audit A remediation (ADRs 0001–0211) | done |
 | 27 | Catkin Elm conformance — all-value path (ADR-0212) | done |
-| 28 | **Compose Editor wrapper deletion** | done |
-| 29 | `app.go` decomposition — split 874-line `App.Update` | gated |
+| 28 | Compose Editor wrapper deletion (ADR-0213) | done |
+| 29 | `App.Update` decomposition (ADR-0214) | done |
 | 30 | **Audit B.1** — Elm + bubbletea v2 conformance | gate |
 | 31 | **Audit B.2** — general structural integrity | gate |
 | 32 | v2 declarative View fields — ProgressBar + ReportFocus + KeyboardEnhancements | gated |
@@ -27,29 +28,31 @@ on a full audit cycle returning no findings (`docs/poplar/audit-plan.md`).
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 29)
+### Next starter prompt (Pass 30)
 
-> **Goal.** Decompose `internal/ui/app.go` so no single file
-> exceeds ~600 lines and `App.Update` is split into per-screen
-> controllers.
+> **Goal.** Audit B.1 — Elm architecture + bubbletea v2 conformance
+> across `internal/ui/`. Find divergences, report findings; fix
+> only the no-judgment-call ones inline.
 >
-> **Scope.** Split the 874-line `App.Update` into
-> `updateAccount`, `updateContacts`, `updateCompose`,
-> `updateModals`, `updateOutbox`, `updateWizard`. Peel the file
-> into `app_update.go` / `app_view.go` / `app_chrome.go`. No
-> behavior change. Touches `internal/ui/`.
+> **Scope.** Walk every `internal/ui/**/*.go` Update / View /
+> Cmd against the Elm rules in `elm-conventions` and the v2 idioms
+> in `docs/poplar/bubbletea-conventions.md` §10. Flag: state
+> mutation in View or Cmd closures, blocking I/O outside Cmds,
+> `len()` used as width on icon-bearing strings, parent-side
+> clipping, callback / parent-pointer back-channels, missing
+> `WindowSizeMsg` forwarding, raw `tea.KeyMsg` literals, v1-only
+> API leaks, manual chrome setup that should be declarative on
+> `tea.View`.
 >
-> **Settled (do not re-brainstorm):** Per-screen controllers is
-> the direction. File-size cap is the "no single file > ~600
-> lines" budget per `STATUS.md`'s pass-size note.
+> **Settled (do not re-brainstorm):** Audit-only pass. Findings
+> classified as P0 (apply inline), P1 (BACKLOG), P2 (note in ADR
+> only).
 >
-> **Still open — brainstorm these:** Exact controller boundaries
-> for cross-screen messages (modals over compose, popovers over
-> account); how `App.Update` dispatches to controllers when the
-> active screen owns the keystroke vs. a modal intercepts.
+> **Still open — brainstorm these:** None. Pure implementation
+> pass following `docs/poplar/audit-plan.md`.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-app-decomposition.md`,
-> then implement. Standard pass-end checklist applies; UI work
-> requires reading `docs/poplar/bubbletea-conventions.md` and
-> the §10 review checklist at pass-end.
+> **Approach.** Write a findings doc at
+> `docs/superpowers/plans/2026-05-12-audit-b1.md`, classify, apply
+> P0s, file P1s in BACKLOG. Standard pass-end checklist applies;
+> UI work requires reading `docs/poplar/bubbletea-conventions.md`
+> and the §10 review checklist at pass-end.
