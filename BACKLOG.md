@@ -89,6 +89,9 @@
 
 ## Medium
 
+- [ ] **#48** Adopt `bubbles/v2/help` `shouldAddItem` ellipsis truncation for the command footer `#improvement` `#poplar` *(2026-05-11)*
+  Today `App.commandFooter` drops rank-prioritized hints when the terminal narrows, with no visual signal that hints were dropped — users see different footers at different widths without a cue that more exists. `bubbles/v2/help.go::shouldAddItem` (lines 234-244) is the carry-forward candidate flagged in ADR-0182: when the next item would overflow, check whether `…` fits in the remaining cells and emit it before stopping. Lift the algorithm (not the package — adoption blocked by ADR-0200/0201 deviations) into the footer's drop loop. Keep the rank-based drop order; the ellipsis only signals that the drop happened. Touches `internal/ui/app.go::commandFooter` and probably grows a small helper in `uicore` shared with any future hint-rendering surface. Pass 17c audit confirmed this is the only piece of `bubbles/v2/help` worth adopting; the popover stays bespoke.
+
 - [ ] **#47** Consolidate Levenshtein implementations `#improvement` `#poplar` *(2026-05-10)*
   Two two-row-DP Levenshtein implementations coexist: `internal/config/accounts.go::levenshtein` (provider-name typo hints) and `internal/catkin/spellcheck.go::editDistance` (SymSpell candidate verification, with a maxDist short-circuit). Pass 16b's modernization sweep modernized both in place but left the duplication. Right shape is a shared helper — likely `internal/strdist/` or fold it into a more general text-utility package. Decide the package boundary first (catkin is markdown-editor scoped, config is provider preset; neither imports the other); pre-beta is when this is cheap.
 
