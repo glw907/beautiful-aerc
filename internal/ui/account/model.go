@@ -404,14 +404,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.jumpToFolder("Spam")
 	case key.Matches(msg, m.keys.JumpTrash):
 		return m.jumpToFolder("Trash")
-	case key.Matches(msg, m.keys.MsgListBottom):
-		m.msglist.MoveToBottom()
-	case key.Matches(msg, m.keys.MsgListTop):
-		m.msglist.MoveToTop()
-	case key.Matches(msg, m.keys.MsgListDown):
-		m.msglist.MoveDown()
-	case key.Matches(msg, m.keys.MsgListUp):
-		m.msglist.MoveUp()
+	case key.Matches(msg, m.keys.MsgListBottom),
+		key.Matches(msg, m.keys.MsgListTop),
+		key.Matches(msg, m.keys.MsgListDown),
+		key.Matches(msg, m.keys.MsgListUp):
+		m.msglist, _ = m.msglist.Update(msg)
 	case key.Matches(msg, m.keys.ToggleFold):
 		// In visual-select mode Space toggles the cursor row's mark
 		// instead of folding the thread; fold behavior is inert during
