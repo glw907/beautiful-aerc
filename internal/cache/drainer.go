@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/glw907/poplar/internal/backoff"
@@ -95,7 +94,7 @@ func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
 			return
 		}
 		if err != nil {
-			fmt.Fprintln(stderrLog(), "cache: drainer pickup error:", err)
+			a.log.Error("drainer pickup error", "err", err)
 			return
 		}
 		a.executeOne(ctx, row, cfg)
@@ -107,7 +106,7 @@ func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
 // failed→retry.
 func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerConfig) {
 	if err := a.markExecuting(row.ID); err != nil {
-		fmt.Fprintln(stderrLog(), "cache: mark executing:", err)
+		a.log.Error("mark executing", "err", err)
 		return
 	}
 	args, err := decodeArgs(row.Kind, row.ArgsJSON)
@@ -321,5 +320,3 @@ func encodeErr(kind string, err error) string {
 	return string(b)
 }
 
-// stderrLog returns the writer for diagnostic logs. Tests reassign it.
-var stderrLog = func() interface{ Write(p []byte) (int, error) } { return os.Stderr }
