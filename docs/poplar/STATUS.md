@@ -1,9 +1,8 @@
 # Poplar Status
 
-**Current pass:** Pass 17c — `bubbles/v2/help` audit + ADRs for
-bubbles deviations that survived 15a/17a/17b. Third of the
-bubbles-adoption remainder; closes the migration arc before
-Polish II.
+**Current pass:** Pass 18 — Polish II. Closes the popover-dim
+backlog (#14) and the items surfaced during 10–17c. The bubbles-
+adoption arc closed in 17c (ADRs 0198, 0199, 0200, 0201).
 
 ## Passes
 
@@ -12,42 +11,39 @@ Polish II.
 | 1 – 16d | Scaffold through slog adoption (ADRs 0001–0197) | done |
 | 17a | Sidebar folder hierarchy on a v2 tree component (ADR-0198) | done |
 | 17b | `messagelist` on `bubbles/v2/list` with custom item delegate; iter.Seq2 thread walk (ADR-0199) | done |
-| **17c** | **`bubbles/v2/help` audit + bubbles-deviation ADRs** | **pending — next** |
-| 18 | Polish II — popover dim (#14) + items surfaced during 10–17c | pending |
+| 17c | `bubbles/v2/help` audit + bubbles-deviation ADRs (0200, 0201); `account.keys.MsgList*` dedup | done |
+| **18** | **Polish II — popover dim (#14) + items surfaced during 10–17c** | **pending — next** |
 | 19 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 17c)
+## Next starter prompt (Pass 18)
 
-> **Goal.** Audit poplar's help-popover wiring against
-> `bubbles/v2/help`, adopt where it composes, and ADR every
-> deviation that survives. Closes the bubbles-adoption arc
-> (15a/17a/17b done; 17c is the wrap).
+> **Goal.** Polish II. Close issue #14 (popover dim) and sweep
+> the small adjacent items surfaced during the 10–17c arc.
 >
-> **Scope.** `internal/ui/helppopover/`, the help-vocabulary
-> table that backs it, and the now-duplicate `account.keys.MsgList*`
-> bindings (deduplicate against `messagelist.KeyMap` per ADR-0199).
-> Audit `bubbles/v2/help.Model` against the wireframe at
-> `docs/poplar/wireframes.md` and confirm or write deviation ADRs
-> for: (a) "advertise unwired bindings dimmed" (custom rendering
-> per ADR-0072), (b) any binding-source composition `bubbles/v2/help`
-> doesn't natively support.
+> **Scope.** `internal/ui/` polish only. Issue #14 — the dim
+> underlay behind modal overlays should respect ADR-0072's
+> wired/unwired vocabulary so the dim doesn't wash out the
+> help popover's already-dim unwired rows. Plus whatever else
+> appears in BACKLOG.md tagged "polish" that touches the
+> overlay cascade, the chrome banner row, or the status bar.
 >
-> **Settled (do not re-brainstorm):** ADR-0072's wired/unwired
-> distinction stays. `messagelist.KeyMap` and `sidebar.KeyMap` are
-> the canonical binding sources for those panels; `account.keys`
-> remains the canonical source for cross-panel actions.
+> **Settled (do not re-brainstorm):** Overlay cascade order
+> (confirm > conflict > outbox > help > linkpicker >
+> attachpicker > movepicker > form > popover) stays. ModalShell
+> family stays at six consumers + the help popover deviation
+> (ADR-0201). `uicore.DimANSI` is the dimming primitive.
 >
-> **Still open — brainstorm these:** how `bubbles/v2/help` composes
-> (or doesn't) multiple `key.KeyMap` sources; whether the
-> account.keys.MsgList* deduplication ships in 17c or as a follow-up;
-> whether the help-popover's rounded-border deviation (ModalShell
-> non-consumer) gets an ADR or stays implicit.
+> **Still open — brainstorm these:** the exact BACKLOG.md
+> selection for this pass (read backlog first; size to the
+> 8–12 task budget); whether #14 wants a contrast-tier ADR or
+> can ride on the existing dim invariant.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-help-bubbles-audit.md`, then
+> **Approach.** Read BACKLOG.md, brainstorm the open questions,
+> write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-polish-ii.md`, then
 > implement. Standard pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)

@@ -352,6 +352,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	mlKeys := m.msglist.KeyMap()
 	switch {
 	case key.Matches(msg, m.keys.OpenSearch):
 		ss := m.sidebarColumn.SidebarSearch()
@@ -404,10 +405,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.jumpToFolder("Spam")
 	case key.Matches(msg, m.keys.JumpTrash):
 		return m.jumpToFolder("Trash")
-	case key.Matches(msg, m.keys.MsgListBottom),
-		key.Matches(msg, m.keys.MsgListTop),
-		key.Matches(msg, m.keys.MsgListDown),
-		key.Matches(msg, m.keys.MsgListUp):
+	case key.Matches(msg, mlKeys.Down),
+		key.Matches(msg, mlKeys.Up),
+		key.Matches(msg, mlKeys.Top),
+		key.Matches(msg, mlKeys.Bottom):
 		m.msglist, _ = m.msglist.Update(msg)
 	case key.Matches(msg, m.keys.ToggleFold):
 		// In visual-select mode Space toggles the cursor row's mark

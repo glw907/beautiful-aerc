@@ -2,9 +2,10 @@ package account
 
 import "charm.land/bubbles/v2/key"
 
-// Keys spans message-list motion, sidebar motion, folder jumps, the
-// search shelf, fold control, and the n/N advance keys consumed while
-// the viewer is open.
+// Keys spans sidebar motion, folder jumps, the search shelf, fold
+// control, triage, and the n/N advance keys consumed while the viewer
+// is open. Message-list cursor motion lives on messagelist.KeyMap
+// (ADR-0199); account.Model forwards nav keys via m.msglist.KeyMap().
 type Keys struct {
 	OpenSearch      key.Binding
 	ClearSearch     key.Binding
@@ -20,10 +21,6 @@ type Keys struct {
 	JumpArchive     key.Binding
 	JumpSpam        key.Binding
 	JumpTrash       key.Binding
-	MsgListTop      key.Binding
-	MsgListBottom   key.Binding
-	MsgListDown     key.Binding
-	MsgListUp       key.Binding
 	ToggleFold      key.Binding
 	ToggleFoldAll   key.Binding
 	NextMessage     key.Binding
@@ -53,10 +50,6 @@ func NewKeys() Keys {
 		JumpArchive:     key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "archive")),
 		JumpSpam:        key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "spam")),
 		JumpTrash:       key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "trash")),
-		MsgListTop:      key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top of list")),
-		MsgListBottom:   key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom of list")),
-		MsgListDown:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
-		MsgListUp:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
 		ToggleFold:      key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "fold")),
 		ToggleFoldAll:   key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "fold all")),
 		NextMessage:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next message")),

@@ -333,8 +333,11 @@ file describes behavior, not the key tables.
   builds `bodyRows` + `footerRows` pre-padded to `contentW`
   cells and calls `m.shell.Box(title, bodyRows, footerRows,
   contentW)`. `helppopover.Model` uses `lipgloss.Style` with a
-  rounded border and is
-  *not* a ModalShell consumer. `movepicker.Model`,
+  rounded border + embedded-title top edge and is *not* a
+  ModalShell consumer (ADR-0201); the popover does not adopt
+  `bubbles/v2/help` (ADR-0200 — six concrete deviations covering
+  ADR-0072 wired/unwired dimming and the ADR-0084 JoinHorizontal
+  ban among them). `movepicker.Model`,
   `helppopover.Model`, and `ConflictOverlay` cache their per-
   frame render via a heap-allocated `*<T>Cache` pointer + dirty
   flag (the only Elm-immutable-model escape hatch in the tree,
