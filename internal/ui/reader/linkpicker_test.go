@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/theme"
 )
 
 func newTestLinkPicker(t *testing.T) LinkPicker {
 	t.Helper()
-	p := NewLinkPicker(NewStyles(theme.Nord))
+	p := NewLinkPicker(NewStyles(theme.Nord), ansix.NewMeasurer(1))
 	p = p.SetSize(80, 24)
 	return p
 }
@@ -200,7 +201,7 @@ func TestLinkPickerPreviewShowsFullURL(t *testing.T) {
 }
 
 func TestLinkPicker_listModel_cursorAdvances(t *testing.T) {
-	p := NewLinkPicker(NewStyles(theme.Nord)).Open([]string{"https://a", "https://b", "https://c"})
+	p := NewLinkPicker(NewStyles(theme.Nord), ansix.NewMeasurer(1)).Open([]string{"https://a", "https://b", "https://c"})
 	p = p.SetSize(60, 12)
 
 	if got := p.Cursor(); got != 0 {
@@ -217,7 +218,7 @@ func TestLinkPicker_listModel_cursorAdvances(t *testing.T) {
 }
 
 func TestLinkPicker_listModel_enterLaunchesCursor(t *testing.T) {
-	p := NewLinkPicker(NewStyles(theme.Nord)).Open([]string{"https://a", "https://b"})
+	p := NewLinkPicker(NewStyles(theme.Nord), ansix.NewMeasurer(1)).Open([]string{"https://a", "https://b"})
 	p = p.SetSize(60, 12)
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'j'})
 

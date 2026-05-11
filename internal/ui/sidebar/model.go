@@ -60,6 +60,7 @@ type Model struct {
 	keys        KeyMap
 	styles      Styles
 	icons       uicore.IconSet
+	measurer    ansix.Measurer
 	layout      uicore.LayoutMode
 	width       int
 	height      int
@@ -68,7 +69,7 @@ type Model struct {
 
 // New builds a Model from a pre-classified folder list. UIConfig drives
 // ordering, hiding, and labelling; hidden folders are dropped before indexing.
-func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons uicore.IconSet) Model {
+func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfig, width, height int, icons uicore.IconSet, m ansix.Measurer) Model {
 	return Model{
 		entries:  buildEntries(classified, uiCfg, icons),
 		selected: 0,
@@ -76,6 +77,7 @@ func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfi
 		keys:     DefaultKeyMap(),
 		styles:   styles,
 		icons:    icons,
+		measurer: m,
 		width:    width,
 		height:   height,
 		cache:    &renderCache{dirty: true},
@@ -502,16 +504,16 @@ func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
 	var treePrefixCells int
 	if treePrefix != "" {
 		treePrefixRendered = uicore.ApplyBg(s.styles.SidebarTreeRule, bgStyle).Render(treePrefix)
-		treePrefixCells = ansix.Width(treePrefixRendered)
+		treePrefixCells = s.measurer.Width(treePrefixRendered)
 	}
 
 	var icon string
 	var leadCells int
 	if s.layout.Icons {
 		icon = uicore.ApplyBg(textStyle, bgStyle).Render(entry.icon)
-		leadCells = ansix.Width(indicator) + 1 + treePrefixCells + ansix.Width(icon) + 2
+		leadCells = s.measurer.Width(indicator) + 1 + treePrefixCells + s.measurer.Width(icon) + 2
 	} else {
-		leadCells = ansix.Width(indicator) + 1 + treePrefixCells
+		leadCells = s.measurer.Width(indicator) + 1 + treePrefixCells
 	}
 
 	var countStr string
@@ -530,7 +532,7 @@ func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
 	if labelBudget < 1 {
 		labelBudget = 1
 	}
-	displayName := ansix.TruncateEllipsis(entry.cf.DisplayName, labelBudget)
+	displayName := s.measurer.TruncateEllipsis(entry.cf.DisplayName, labelBudget)
 	name := uicore.ApplyBg(textStyle, bgStyle).Render(displayName)
 
 	var leftContent string
@@ -539,7 +541,7 @@ func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
 	} else {
 		leftContent = indicator + bgStyle.Render(" ") + treePrefixRendered + name
 	}
-	leftWidth := ansix.Width(leftContent)
+	leftWidth := s.measurer.Width(leftContent)
 
 	gap := max(1, s.width-leftWidth-countWidth-rightMargin)
 
@@ -548,7 +550,7 @@ func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
 		countStr +
 		bgStyle.Render(strings.Repeat(" ", rightMargin))
 
-	return uicore.FillRowToWidth(row, s.width, bgStyle)
+	return uicore.FillRowToWidth(s.measurer, row, s.width, bgStyle)
 }
 
 func (s Model) renderBlankLine() string {

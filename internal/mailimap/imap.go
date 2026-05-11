@@ -20,12 +20,6 @@ import (
 	"github.com/glw907/poplar/internal/mailauth"
 )
 
-// Option configures a Backend at construction time.
-type Option func(*Backend)
-
-// WithLogger sets the structured logger for the backend.
-func WithLogger(l *slog.Logger) Option { return func(b *Backend) { b.log = l } }
-
 // Backend is one IMAP account.
 type Backend struct {
 	cfg   config.AccountConfig
@@ -63,30 +57,25 @@ type capSet struct {
 	SpecialUse bool
 }
 
-func New(cfg config.AccountConfig, opts ...Option) *Backend {
-	b := &Backend{
-		cfg: cfg,
-		log: slog.Default().With("component", "mailimap"),
+// New constructs an unconnected Backend. A nil logger defaults to
+// slog.Default() tagged with the package name.
+func New(cfg config.AccountConfig, log *slog.Logger) *Backend {
+	if log == nil {
+		log = slog.Default().With("component", "mailimap")
 	}
+	b := &Backend{cfg: cfg, log: log}
 	b.dialFn = func(ctx context.Context, role string) (imapClient, error) { return dial(ctx, b, role) }
-	for _, o := range opts {
-		o(b)
-	}
 	return b
 }
 
 // NewWithOAuth returns a Backend that obtains XOAUTH2 access tokens via c
 // rather than running password-cmd on every dial. c must be non-nil.
-func NewWithOAuth(cfg config.AccountConfig, c *mailauth.Client, opts ...Option) *Backend {
-	b := &Backend{
-		cfg:   cfg,
-		log:   slog.Default().With("component", "mailimap"),
-		oauth: c,
+func NewWithOAuth(cfg config.AccountConfig, c *mailauth.Client, log *slog.Logger) *Backend {
+	if log == nil {
+		log = slog.Default().With("component", "mailimap")
 	}
+	b := &Backend{cfg: cfg, log: log, oauth: c}
 	b.dialFn = func(ctx context.Context, role string) (imapClient, error) { return dial(ctx, b, role) }
-	for _, o := range opts {
-		o(b)
-	}
 	return b
 }
 

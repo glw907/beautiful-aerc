@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -24,7 +25,7 @@ func sampleFolders() []mail.FolderEntry {
 
 func newTestPicker() Model {
 	ct := theme.Themes[theme.DefaultThemeName]
-	return New(NewStyles(ct))
+	return New(NewStyles(ct), ansix.NewMeasurer(1))
 }
 
 func TestMovePicker_OpenSetsState(t *testing.T) {

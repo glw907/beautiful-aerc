@@ -6,12 +6,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/theme"
 )
 
 func TestModel_RendersEmptyState(t *testing.T) {
-	m := New(theme.OneDark)
+	m := New(theme.OneDark, ansix.NewMeasurer(1))
 	m.SetSize(80, 20)
 	if !strings.Contains(m.View(), "Outbox is empty") {
 		t.Errorf("empty state missing:\n%s", m.View())
@@ -19,7 +20,7 @@ func TestModel_RendersEmptyState(t *testing.T) {
 }
 
 func TestModel_RendersRows(t *testing.T) {
-	m := New(theme.OneDark)
+	m := New(theme.OneDark, ansix.NewMeasurer(1))
 	m.SetSize(80, 20)
 	when := time.Now().Add(2 * time.Hour)
 	m.SetRows([]cache.OutboxRow{{
@@ -36,7 +37,7 @@ func TestModel_RendersRows(t *testing.T) {
 }
 
 func TestModel_CancelEmitsMsg(t *testing.T) {
-	m := New(theme.OneDark)
+	m := New(theme.OneDark, ansix.NewMeasurer(1))
 	m.SetSize(80, 20)
 	m.SetRows([]cache.OutboxRow{
 		{ID: 7, Kind: cache.KindSend, Subject: "x", ScheduledFor: time.Now().Add(time.Hour)},
@@ -55,7 +56,7 @@ func TestModel_CancelEmitsMsg(t *testing.T) {
 }
 
 func TestModel_ReschedulePrefilledFromRow(t *testing.T) {
-	m := New(theme.OneDark)
+	m := New(theme.OneDark, ansix.NewMeasurer(1))
 	m.SetSize(80, 20)
 	when := time.Date(2026, 6, 1, 9, 0, 0, 0, time.Local)
 	m.SetRows([]cache.OutboxRow{{ID: 9, ScheduledFor: when}})
@@ -73,7 +74,7 @@ func TestModel_ReschedulePrefilledFromRow(t *testing.T) {
 }
 
 func TestModel_EditAsDraftEmitsMsg(t *testing.T) {
-	m := New(theme.OneDark)
+	m := New(theme.OneDark, ansix.NewMeasurer(1))
 	m.SetSize(80, 20)
 	d := &cache.DraftRow{DraftID: "d1"}
 	m.SetRows([]cache.OutboxRow{{ID: 4, Draft: d}})
@@ -88,7 +89,7 @@ func TestModel_EditAsDraftEmitsMsg(t *testing.T) {
 }
 
 func TestModel_EditAsDraftWithoutDraftIsInert(t *testing.T) {
-	m := New(theme.OneDark)
+	m := New(theme.OneDark, ansix.NewMeasurer(1))
 	m.SetSize(80, 20)
 	m.SetRows([]cache.OutboxRow{{ID: 4, Draft: nil}})
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})

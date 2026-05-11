@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -16,7 +17,7 @@ import (
 func newTestPicker(t *testing.T) AttachPicker {
 	t.Helper()
 	styles := NewStyles(theme.OneDark)
-	return NewAttachPicker(styles, uicore.SimpleIcons)
+	return NewAttachPicker(styles, uicore.SimpleIcons, ansix.NewMeasurer(1))
 }
 
 func TestAttachPicker_StartsClosed(t *testing.T) {

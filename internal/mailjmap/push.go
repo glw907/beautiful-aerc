@@ -12,7 +12,6 @@ import (
 	"git.sr.ht/~rockorager/go-jmap/mail/email"
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
 
-	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -20,6 +19,19 @@ const (
 	pushBackoffInitial = 1 * time.Second
 	pushBackoffMax     = 30 * time.Second
 )
+
+// expBackoff returns initial * 2^(attempts-1) capped at max.
+// attempts <= 1 returns initial.
+func expBackoff(attempts int, initial, max time.Duration) time.Duration {
+	if attempts <= 1 {
+		return initial
+	}
+	d := initial << (attempts - 1)
+	if d > max {
+		return max
+	}
+	return d
+}
 
 // pushLoop runs until ctx is cancelled, backing off exponentially and
 // emitting ConnReconnecting between runEventSourceFunc returns.
@@ -40,7 +52,7 @@ func (b *Backend) pushLoop(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(backoff.Exponential(attempts, pushBackoffInitial, pushBackoffMax)):
+			case <-time.After(expBackoff(attempts, pushBackoffInitial, pushBackoffMax)):
 			}
 			continue
 		}

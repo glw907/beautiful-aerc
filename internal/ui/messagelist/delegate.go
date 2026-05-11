@@ -25,6 +25,7 @@ type rowDelegate struct {
 	styles      Styles
 	layout      uicore.LayoutMode
 	icons       uicore.IconSet
+	measurer    ansix.Measurer
 	now         time.Time
 	width       int
 	resultsMode bool
@@ -90,8 +91,8 @@ func (d *rowDelegate) renderRow(row displayRow, isSelected bool) string {
 	}
 
 	flagAdjust := 0
-	if ansix.SPUACellWidth() > 1 && d.layout.FlagColumn {
-		flagAdjust = ansix.SpuaCount(flag) * (ansix.SPUACellWidth() - 1)
+	if d.measurer.CellWidth() > 1 && d.layout.FlagColumn {
+		flagAdjust = ansix.SpuaCount(flag) * (d.measurer.CellWidth() - 1)
 	}
 	subjectWidth := max(1, d.width-fixed-d.layout.Sender-d.layout.Date-flagAdjust)
 	prefixCells := lipgloss.Width(row.prefix)
@@ -116,7 +117,7 @@ func (d *rowDelegate) renderRow(row displayRow, isSelected bool) string {
 	}
 	rowStr += sp1
 
-	return uicore.FillRowToWidth(rowStr, d.width, bgStyle)
+	return uicore.FillRowToWidth(d.measurer, rowStr, d.width, bgStyle)
 }
 
 func (d *rowDelegate) senderWithOrigin(msg mail.MessageInfo) string {
@@ -153,7 +154,7 @@ func (d *rowDelegate) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyl
 		return bgStyle.Render("  ")
 	}
 	rendered := uicore.ApplyBg(iconStyle, bgStyle).Render(glyph)
-	for ansix.Width(rendered) < mlFlagWidth {
+	for d.measurer.Width(rendered) < mlFlagWidth {
 		rendered += bgStyle.Render(" ")
 	}
 	return rendered

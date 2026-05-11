@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -14,6 +13,19 @@ const (
 	reconnectInitial     = 1 * time.Second
 	reconnectMax         = 30 * time.Second
 )
+
+// expBackoff returns initial * 2^(attempts-1) capped at max.
+// attempts <= 1 returns initial.
+func expBackoff(attempts int, initial, max time.Duration) time.Duration {
+	if attempts <= 1 {
+		return initial
+	}
+	d := initial << (attempts - 1)
+	if d > max {
+		return max
+	}
+	return d
+}
 
 // idleLoop runs until ctx is cancelled, redialing on session error
 // with exponential backoff. Clean refresh returns reuse the existing
@@ -32,7 +44,7 @@ func (b *Backend) idleLoop(ctx context.Context) {
 		if !haveIdle {
 			if err := b.dialIdle(ctx); err != nil {
 				attempts++
-				delay := backoff.Exponential(attempts, reconnectInitial, reconnectMax)
+				delay := expBackoff(attempts, reconnectInitial, reconnectMax)
 				b.log.Warn("imap idle redial failed", "attempt", attempts, "delay", delay, "err", err)
 				select {
 				case <-ctx.Done():
@@ -52,7 +64,7 @@ func (b *Backend) idleLoop(ctx context.Context) {
 		}
 		b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
 		attempts++
-		delay := backoff.Exponential(attempts, reconnectInitial, reconnectMax)
+		delay := expBackoff(attempts, reconnectInitial, reconnectMax)
 		b.log.Warn("imap idle session ended, will redial",
 			"attempt", attempts, "delay", delay, "err", err)
 		b.dropIdle()

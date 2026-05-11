@@ -24,9 +24,8 @@ func TestWidth(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SetSPUACellWidth(tt.cellWidth)
-			defer SetSPUACellWidth(1)
-			got := Width(tt.in)
+			m := NewMeasurer(tt.cellWidth)
+			got := m.Width(tt.in)
 			if got != tt.want {
 				t.Errorf("Width(%q) @ w=%d = %d, want %d", tt.in, tt.cellWidth, got, tt.want)
 			}
@@ -49,27 +48,27 @@ func TestTruncateEllipsis(t *testing.T) {
 		{"zero budget", "hello", 0, ""},
 		{"one-cell budget non-empty", "hello", 1, "…"},
 	}
+	m := NewMeasurer(1)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := TruncateEllipsis(tc.in, tc.n)
+			got := m.TruncateEllipsis(tc.in, tc.n)
 			if got != tc.want {
 				t.Errorf("TruncateEllipsis(%q, %d) = %q, want %q",
 					tc.in, tc.n, got, tc.want)
 			}
-			if Width(got) > tc.n && tc.n > 0 {
+			if m.Width(got) > tc.n && tc.n > 0 {
 				t.Errorf("TruncateEllipsis(%q, %d): result %q has %d cells, exceeds budget %d",
-					tc.in, tc.n, got, Width(got), tc.n)
+					tc.in, tc.n, got, m.Width(got), tc.n)
 			}
 		})
 	}
 }
 
-func TestSetSPUACellWidthRejectsBadValue(t *testing.T) {
+func TestNewMeasurerRejectsBadValue(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Errorf("SetSPUACellWidth(3) should panic")
+			t.Errorf("NewMeasurer(3) should panic")
 		}
-		SetSPUACellWidth(1)
 	}()
-	SetSPUACellWidth(3)
+	NewMeasurer(3)
 }

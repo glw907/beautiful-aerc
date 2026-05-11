@@ -118,13 +118,17 @@ the ADR(s) that justify them.
 - Idiomatic bubbletea is the default. UI uses `bubbles` components
   as primary analogues; deviations are ADR'd. `View()` self-enforces
   size via `clipPane`; renderers honor `width` via wordwrap +
-  hardwrap; SPUA-aware width math lives in `internal/ansix/` (a thin
-  layer over `charmbracelet/x/ansi`): `ansix.Width` for icon-bearing
-  strings, `lipgloss.Width` otherwise (never `len()`); truncation via
-  `ansix.Truncate` / `ansix.TruncateEllipsis`. ADR-0181.
-  `lipgloss.JoinHorizontal`/`JoinVertical` are
-  forbidden when `spuaCellWidth != 1`; use row-by-row `strings.Join`
-  with pre-padded children (kept under both modes — see ADR-0084).
+  hardwrap. SPUA-aware width math lives in `internal/ansix/`:
+  `ansix.Measurer` is a value type carrying the resolved cell
+  width, constructed once in `cmd/poplar/root.go` via
+  `ansix.NewMeasurer(cellWidth)` and threaded through `ui.NewApp`
+  into every subpackage Model. Use `m.Width` / `m.Truncate` /
+  `m.TruncateEllipsis` for icon-bearing strings, `lipgloss.Width`
+  otherwise (never `len()`). `ansix.SpuaCount` is a free function.
+  `uicore.FillRowToWidth` takes a Measurer. ADRs 0181, 0209.
+  `lipgloss.JoinHorizontal`/`JoinVertical` are forbidden when
+  cellWidth != 1; use row-by-row `strings.Join` with pre-padded
+  children (kept under both modes — see ADR-0084).
   Keys declared as `key.Binding`, dispatched via `key.Matches`;
   `WindowSizeMsg` handlers both `SetSize` children and forward the
   msg. Full contract in `docs/poplar/bubbletea-conventions.md`.
@@ -259,15 +263,13 @@ the ADR(s) that justify them.
 
 ### Icon mode
 
-- Icon mode is resolved once at startup. `cmd/poplar/root.go` calls
-  `term.HasNerdFont`, `term.MeasureSPUACells`, and `term.Resolve` to
-  produce `(IconMode, spuaCellWidth)`; `ansix.SetSPUACellWidth` is
-  called before `tea.NewProgram`. The resolved `uicore.IconSet` is
-  threaded into `ui.NewApp`. No runtime mode toggling.
-- `internal/ui/uicore/layout.go` is the only place icon literals live.
-  `uicore.SimpleIcons` runes are East Asian Width Na/N
-  (`lipgloss.Width == 1`). `uicore.FancyIcons` runes are in
-  `[U+F0000, U+FFFFD]`. Both class invariants are unit-tested.
+- Icon mode is resolved once at startup. `cmd/poplar/root.go` runs
+  `term.HasNerdFont` + `term.MeasureSPUACells` + `term.Resolve` for
+  `(IconMode, cellWidth)`; the resulting `uicore.IconSet` and
+  `ansix.NewMeasurer(cellWidth)` thread into `ui.NewApp`. No runtime
+  toggling. Icon literals live only in `internal/ui/uicore/layout.go`:
+  `SimpleIcons` runes are EAW Na/N (`lipgloss.Width == 1`),
+  `FancyIcons` runes are in `[U+F0000, U+FFFFD]`. Unit-tested.
 
 ### Catkin
 
@@ -366,16 +368,14 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 ## Logging
 
 `log/slog` is the diagnostic logging path for `internal/`. CLI/UX
-strings in `cmd/poplar/` stay on `os.Stderr` — those are not log
-events. `cmd/poplar/main.go` installs the root handler via
-`installLogger` before cobra runs: `slog.NewTextHandler`,
-`LevelInfo` default, `POPLAR_LOG=debug` for `LevelDebug`. TTY
-stdout → `$XDG_STATE_HOME/poplar/poplar.log` (append, created on
-demand); non-TTY → `os.Stderr`; open failure silent. Backend
-constructors (`mailjmap.New`, `mailimap.New`, `cache.Open`) accept
-`WithLogger(*slog.Logger)`; default is `slog.Default().With(
-"component", "<pkg>")`. `WithLogger` is the test seam;
-`slog.SetDefault` is not swapped in any test. ADR-0197.
+strings in `cmd/poplar/` stay on `os.Stderr`. `cmd/poplar/main.go`
+installs the root handler via `installLogger` before cobra runs:
+`slog.NewTextHandler`, `LevelInfo` default, `POPLAR_LOG=debug` for
+`LevelDebug`. TTY stdout → `$XDG_STATE_HOME/poplar/poplar.log`
+(append, on demand); non-TTY → `os.Stderr`; open failure silent.
+Backend constructors (`mailjmap.New`, `mailimap.New`, `cache.Open`)
+take a trailing `*slog.Logger` arg; nil falls back to
+`slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
 
 ## Build & verification
 

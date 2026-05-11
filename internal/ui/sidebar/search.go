@@ -39,30 +39,32 @@ type SearchUpdatedMsg struct {
 // It signals AccountTab via SearchUpdatedMsg while Typing; state
 // transitions come from direct method calls.
 type Search struct {
-	input   textinput.Model
-	scope   uicore.SearchScope
-	state   SearchState
-	results int
-	styles  Styles
-	icons   uicore.IconSet
-	width   int
+	input    textinput.Model
+	scope    uicore.SearchScope
+	state    SearchState
+	results  int
+	styles   Styles
+	icons    uicore.IconSet
+	measurer ansix.Measurer
+	width    int
 }
 
 // NewSearch constructs an idle search shelf. The textinput uses "/" as its
 // prompt so the rendered view is "/query▏" without the shelf having to
 // stitch a prefix in front.
-func NewSearch(styles Styles, width int, icons uicore.IconSet) Search {
+func NewSearch(styles Styles, width int, icons uicore.IconSet, m ansix.Measurer) Search {
 	ti := textinput.New()
 	ti.Prompt = "/"
 	ti.CharLimit = 0
 	ti.SetVirtualCursor(false)
 	return Search{
-		input:  ti,
-		scope:  uicore.ScopeFolder,
-		state:  SearchIdle,
-		styles: styles,
-		icons:  icons,
-		width:  width,
+		input:    ti,
+		scope:    uicore.ScopeFolder,
+		state:    SearchIdle,
+		styles:   styles,
+		icons:    icons,
+		measurer: m,
+		width:    width,
 	}
 }
 
@@ -161,7 +163,7 @@ func (s Search) Cursor() *tea.Cursor {
 	// Prompt row is row 1 in the 3-row shelf (row 0 is blank, row 2 is info).
 	// Rendered as: "  " (2) + icon (iconW) + " " (1) + input.View().
 	// textinput.Cursor().X already includes the "/" prompt width.
-	iconW := ansix.Width(s.icons.Search)
+	iconW := s.measurer.Width(s.icons.Search)
 	cur.Position.X += 2 + iconW + 1
 	cur.Position.Y = 1
 	return cur
@@ -188,7 +190,7 @@ func (s Search) renderPromptRow() string {
 	if s.state == SearchIdle {
 		hint := uicore.ApplyBg(s.styles.SearchHint, s.styles.SidebarBg).Render(" / to search")
 		content := s.styles.SidebarBg.Render("  ") + hint
-		return uicore.FillRowToWidth(content, s.width, s.styles.SidebarBg)
+		return uicore.FillRowToWidth(s.measurer, content, s.width, s.styles.SidebarBg)
 	}
 
 	iconStyle := s.styles.SearchIcon
@@ -206,7 +208,7 @@ func (s Search) renderPromptRow() string {
 	}
 
 	content := s.styles.SidebarBg.Render("  ") + icon + s.styles.SidebarBg.Render(" ") + prompt
-	return uicore.FillRowToWidth(content, s.width, s.styles.SidebarBg)
+	return uicore.FillRowToWidth(s.measurer, content, s.width, s.styles.SidebarBg)
 }
 
 // renderInfoRow draws the scope badge and result count. Blank when idle
@@ -236,7 +238,7 @@ func (s Search) renderInfoRow() string {
 	contentCells := 2 + lipgloss.Width(scopeLabel) + lipgloss.Width(countText) + 1
 	gap := max(1, s.width-contentCells)
 	content := indent + scopeBadge + s.styles.SidebarBg.Render(strings.Repeat(" ", gap)) + countStyled + margin
-	return uicore.FillRowToWidth(content, s.width, s.styles.SidebarBg)
+	return uicore.FillRowToWidth(s.measurer, content, s.width, s.styles.SidebarBg)
 }
 
 func formatResultCount(n int) string {

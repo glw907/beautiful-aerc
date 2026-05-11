@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -33,6 +34,7 @@ type folderPage struct {
 type Model struct {
 	styles        Styles
 	icons         uicore.IconSet
+	measurer      ansix.Measurer
 	acct          *cache.Account
 	uiCfg         config.UIConfig
 	sidebarColumn sidebar.Column
@@ -60,25 +62,26 @@ func (m Model) WithNow(now func() time.Time) Model {
 
 // New builds an empty account Model. Init's returned Cmd fetches the
 // initial folder list asynchronously.
-func New(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) Model {
+func New(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, m ansix.Measurer) Model {
 	sidebarStyles := sidebar.NewStyles(t)
 	sidebarKM := sidebar.DefaultKeyMap()
 	sidebarKM.Down = key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next folder"))
 	sidebarKM.Up = key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev folder"))
-	sb := sidebar.New(sidebarStyles, nil, uiCfg, 30, 1, icons)
+	sb := sidebar.New(sidebarStyles, nil, uiCfg, 30, 1, icons, m)
 	sb.SetKeyMap(sidebarKM)
 	return Model{
-		styles: NewStyles(t),
-		icons:  icons,
-		acct:   acct,
-		uiCfg:  uiCfg,
-		sidebarColumn: sidebar.NewColumn(sidebarStyles, icons,
+		styles:   NewStyles(t),
+		icons:    icons,
+		measurer: m,
+		acct:     acct,
+		uiCfg:    uiCfg,
+		sidebarColumn: sidebar.NewColumn(sidebarStyles, icons, m,
 			sb,
-			sidebar.NewSearch(sidebarStyles, 30, icons),
+			sidebar.NewSearch(sidebarStyles, 30, icons, m),
 			acct.AccountEmail(),
 		),
-		msglist: messagelist.New(messagelist.NewStyles(t), nil, 1, 1, icons),
-		viewer:  reader.New(reader.NewStyles(t), t, acct.AccountEmail(), icons),
+		msglist: messagelist.New(messagelist.NewStyles(t), nil, 1, 1, icons, m),
+		viewer:  reader.New(reader.NewStyles(t), t, acct.AccountEmail(), icons, m),
 		keys:    NewKeys(),
 		pages:   make(map[string]*folderPage),
 		swept:   make(map[string]bool),

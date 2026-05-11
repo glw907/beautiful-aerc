@@ -20,13 +20,13 @@ func ApplyBg(base, bgStyle lipgloss.Style) lipgloss.Style {
 // FillRowToWidth fits a fully-rendered row of ANSI segments to exactly
 // width display cells. Short rows are right-padded with bgStyle so the row
 // background extends to the panel edge. Over-wide rows are truncated.
-func FillRowToWidth(row string, width int, bgStyle lipgloss.Style) string {
-	rw := ansix.Width(row)
+func FillRowToWidth(m ansix.Measurer, row string, width int, bgStyle lipgloss.Style) string {
+	rw := m.Width(row)
 	if rw < width {
 		return row + bgStyle.Render(strings.Repeat(" ", width-rw))
 	}
 	if rw > width {
-		return ansix.Truncate(row, width)
+		return m.Truncate(row, width)
 	}
 	return row
 }

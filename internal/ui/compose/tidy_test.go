@@ -3,6 +3,7 @@ package compose
 import (
 	"testing"
 
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/tidytext"
@@ -10,7 +11,7 @@ import (
 
 func newTestComposeModel() *Model {
 	st := NewStyles(theme.OneDark)
-	return New(theme.OneDark, st, "test@example.com", func(string) []contacts.Suggestion { return nil })
+	return New(theme.OneDark, st, "test@example.com", func(string) []contacts.Suggestion { return nil }, ansix.NewMeasurer(1))
 }
 
 func TestHandleTidyKey_Disabled(t *testing.T) {

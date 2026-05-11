@@ -14,11 +14,12 @@ import (
 )
 
 type LinkPicker struct {
-	shell  uicore.ModalShell
-	list   list.Model
-	links  []string
-	styles Styles
-	keys   LinkPickerKeyMap
+	shell    uicore.ModalShell
+	list     list.Model
+	links    []string
+	styles   Styles
+	measurer ansix.Measurer
+	keys     LinkPickerKeyMap
 }
 
 type LinkPickerKeyMap struct {
@@ -33,7 +34,7 @@ type linkItem struct {
 
 func (i linkItem) FilterValue() string { return i.url }
 
-func NewLinkPicker(styles Styles) LinkPicker {
+func NewLinkPicker(styles Styles, m ansix.Measurer) LinkPicker {
 	keys := LinkPickerKeyMap{
 		Enter: key.NewBinding(key.WithKeys("enter")),
 		Close: key.NewBinding(key.WithKeys("esc", "tab")),
@@ -43,7 +44,7 @@ func NewLinkPicker(styles Styles) LinkPicker {
 		keys.Digits[i] = key.NewBinding(key.WithKeys(d))
 	}
 
-	l := list.New(nil, linkItemDelegate{styles: styles}, 0, 0)
+	l := list.New(nil, linkItemDelegate{styles: styles, measurer: m}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
@@ -52,7 +53,7 @@ func NewLinkPicker(styles Styles) LinkPicker {
 	l.Styles = styles.List
 	l.DisableQuitKeybindings()
 
-	return LinkPicker{styles: styles, keys: keys, list: l}
+	return LinkPicker{styles: styles, measurer: m, keys: keys, list: l}
 }
 
 func (p LinkPicker) IsOpen() bool { return p.shell.IsOpen() }
@@ -150,7 +151,8 @@ func (p LinkPicker) Box(w, h int) string {
 const linkPickerInlineCap = 50
 
 type linkItemDelegate struct {
-	styles Styles
+	styles   Styles
+	measurer ansix.Measurer
 }
 
 func (d linkItemDelegate) Height() int                             { return 1 }
@@ -170,8 +172,8 @@ func (d linkItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	if urlW > linkPickerInlineCap {
 		urlW = linkPickerInlineCap
 	}
-	if ansix.Width(url) > urlW {
-		url = ansix.Truncate(url, urlW)
+	if d.measurer.Width(url) > urlW {
+		url = d.measurer.Truncate(url, urlW)
 	}
 	body := uicore.PadOrTruncate(fmt.Sprintf("[%d] %s", index+1, url), contentW)
 	if index == m.Index() {
@@ -191,8 +193,8 @@ func (p LinkPicker) previewLines(width int) []string {
 		return wrapped
 	}
 	row2 := wrapped[1]
-	if ansix.Width(row2) >= width {
-		row2 = ansix.Truncate(row2, width-1) + "…"
+	if p.measurer.Width(row2) >= width {
+		row2 = p.measurer.Truncate(row2, width-1) + "…"
 	} else {
 		row2 += "…"
 	}

@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/search"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -102,6 +103,7 @@ type Model struct {
 	threaded bool
 	styles   Styles
 	icons    uicore.IconSet
+	measurer ansix.Measurer
 	layout   uicore.LayoutMode
 	width    int
 	height   int
@@ -128,13 +130,14 @@ type Model struct {
 // New constructs a Model. layout defaults to (Sender=22, Date=5,
 // FlagColumn=true) so tests that bypass WindowSizeMsg get sensible
 // output before any SetLayout call.
-func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore.IconSet) Model {
+func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore.IconSet, meas ansix.Measurer) Model {
 	delegate := &rowDelegate{
-		styles: styles,
-		layout: uicore.LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
-		icons:  icons,
-		now:    time.Now(),
-		width:  width,
+		styles:   styles,
+		layout:   uicore.LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
+		icons:    icons,
+		measurer: meas,
+		now:      time.Now(),
+		width:    width,
 	}
 	ls := list.New(nil, delegate, width, height)
 	ls.SetShowTitle(false)
@@ -153,6 +156,7 @@ func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore
 	m := Model{
 		styles:   styles,
 		icons:    icons,
+		measurer: meas,
 		layout:   delegate.layout,
 		width:    width,
 		height:   height,
@@ -905,7 +909,7 @@ func (m Model) View() string {
 	// Normalize every line to exactly m.width ansix cells so the right panel
 	// edge is consistent regardless of flag glyph or icon mode.
 	for i, line := range lines {
-		lines[i] = uicore.FillRowToWidth(line, m.width, m.styles.MsgListBg)
+		lines[i] = uicore.FillRowToWidth(m.measurer, line, m.width, m.styles.MsgListBg)
 	}
 	for len(lines) < m.height {
 		lines = append(lines, m.styles.MsgListBg.Width(m.width).Render(""))

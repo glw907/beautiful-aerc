@@ -35,7 +35,7 @@ func openAttachAccount(t *testing.T, be *attachBackend) *Account {
 	t.Helper()
 	be.fakeBackend.folders = []mail.Folder{{Name: "INBOX", Role: "inbox"}}
 	ct := &fakeChangeTracker{}
-	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxAttachmentSize: 1 << 30})
+	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxAttachmentSize: 1 << 30}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestFetchAttachment_EvictBySize(t *testing.T) {
 	}
 	be.fakeBackend.folders = []mail.Folder{{Name: "INBOX", Role: "inbox"}}
 	ct := &fakeChangeTracker{}
-	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxAttachmentSize: 150})
+	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxAttachmentSize: 150}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

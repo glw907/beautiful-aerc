@@ -12,7 +12,7 @@ import (
 
 // renderInviteBlock formats inv into a fixed-width block placed between the
 // viewer header panel and the chip row. Returns ("", 0) for nil or zero width.
-func renderInviteBlock(inv *icalendar.Invite, icons uicore.IconSet, st Styles, width int) (string, int) {
+func renderInviteBlock(m ansix.Measurer, inv *icalendar.Invite, icons uicore.IconSet, st Styles, width int) (string, int) {
 	if inv == nil || width < 1 {
 		return "", 0
 	}
@@ -25,8 +25,8 @@ func renderInviteBlock(inv *icalendar.Invite, icons uicore.IconSet, st Styles, w
 	}
 
 	iconStr := st.InviteIcon.Render(icons.Calendar)
-	summaryBudget := max(0, width-ansix.Width(iconStr)-2)
-	rows = append(rows, iconStr+"  "+st.InviteSummary.Render(truncate(inv.Summary, summaryBudget)))
+	summaryBudget := max(0, width-m.Width(iconStr)-2)
+	rows = append(rows, iconStr+"  "+st.InviteSummary.Render(truncate(m, inv.Summary, summaryBudget)))
 
 	rows = append(rows, st.InviteField.Render("    When: "+formatWhen(inv.Start, inv.End)))
 	if inv.Location != "" {
@@ -47,19 +47,19 @@ func renderInviteBlock(inv *icalendar.Invite, icons uicore.IconSet, st Styles, w
 	}
 
 	for i, r := range rows {
-		if ansix.Width(r) > width {
-			r = ansix.TruncateEllipsis(r, width)
+		if m.Width(r) > width {
+			r = m.TruncateEllipsis(r, width)
 		}
-		rows[i] = uicore.FillRowToWidth(r, width, bg)
+		rows[i] = uicore.FillRowToWidth(m, r, width, bg)
 	}
 	return strings.Join(rows, "\n"), len(rows)
 }
 
-func truncate(s string, w int) string {
-	if ansix.Width(s) <= w {
+func truncate(m ansix.Measurer, s string, w int) string {
+	if m.Width(s) <= w {
 		return s
 	}
-	return ansix.TruncateEllipsis(s, w)
+	return m.TruncateEllipsis(s, w)
 }
 
 func formatWhen(start, end time.Time) string {

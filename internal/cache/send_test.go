@@ -19,7 +19,7 @@ func (j *jmapFakeBackend) IsJMAP() bool { return true }
 func openTestAccountWith(t *testing.T, be mail.Backend) *Account {
 	t.Helper()
 	ct := &fakeChangeTracker{}
-	a, err := Open("Test Account", be, ct, t.TempDir(), Config{})
+	a, err := Open("Test Account", be, ct, t.TempDir(), Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

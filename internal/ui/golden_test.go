@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/helppopover"
@@ -135,7 +136,7 @@ func TestGolden_LinkPicker(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			p := reader.NewLinkPicker(reader.NewStyles(theme.Nord))
+			p := reader.NewLinkPicker(reader.NewStyles(theme.Nord), ansix.NewMeasurer(2))
 			p = p.SetSize(tc.w, tc.h)
 			p = p.Open(links)
 			box := p.Box(tc.w, tc.h)
@@ -159,7 +160,7 @@ func goldenMovePickerFolders() []mail.FolderEntry {
 
 func goldenNewMovePicker() movepicker.Model {
 	ct := theme.Themes[theme.DefaultThemeName]
-	return movepicker.New(movepicker.NewStyles(ct))
+	return movepicker.New(movepicker.NewStyles(ct), ansix.NewMeasurer(2))
 }
 
 // TestGolden_MovePicker captures the rendered move picker with

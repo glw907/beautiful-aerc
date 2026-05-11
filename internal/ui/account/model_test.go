@@ -24,7 +24,7 @@ import (
 func newLoadedTab(t *testing.T, width, height int) Model {
 	t.Helper()
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: width, Height: height})
 	// Init returns a Batch (loadFoldersCmd + pumpCacheCmd). Drain it so
 	// foldersLoadedMsg → FolderLoadedMsg both flow into the tab.
@@ -213,7 +213,7 @@ func TestModel(t *testing.T) {
 
 func TestModelInit_ReturnsFoldersCmd(t *testing.T) {
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	// Init returns a Batch (loadFoldersCmd + pumpCacheCmd). Look for
 	// foldersLoadedMsg among the batched results.
 	msg := runCmd(tab.Init())
@@ -238,7 +238,7 @@ func TestModelInit_ReturnsFoldersCmd(t *testing.T) {
 
 func TestModel_foldersLoadedSeedsSidebar(t *testing.T) {
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	folders, _ := backend.ListFolders()
 	tab, cmd := tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
 	if len(tab.sidebarColumn.Sidebar().OrderedFolders()) == 0 {
@@ -257,7 +257,7 @@ func TestModel_foldersLoadedSeedsSidebar(t *testing.T) {
 
 func TestModel_headersAppliedSeedsMsglist(t *testing.T) {
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	msgs := []mail.MessageInfo{
 		{UID: "1", Subject: "hello", From: "a", SentAt: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)},
@@ -277,7 +277,7 @@ func TestModel_PerFolderThreadingOverride(t *testing.T) {
 		ThreadingSet: true,
 	}
 
-	tab := New(theme.Nord, newTestCache(t, backend), uiCfg, uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), uiCfg, uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	folders, _ := backend.ListFolders()
 	tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
@@ -636,7 +636,7 @@ func TestModel_EnterMarksRead(t *testing.T) {
 
 func TestModel_EnterEmptyFolderNoOp(t *testing.T) {
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tab, _ = tab.updateTab(FolderLoadedMsg{Name: "Inbox", Msgs: nil, Total: 0})
 	tab, cmd := tab.updateTab(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -702,7 +702,7 @@ func TestModel_FolderJumpKeys(t *testing.T) {
 
 func TestModel_FolderJumpUnknownFolderNoOp(t *testing.T) {
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify([]mail.Folder{
 		{Name: "Inbox", Role: "inbox"},
@@ -857,7 +857,7 @@ func TestModel_PaginationInitialLoad(t *testing.T) {
 	if err := acct.SyncFolder(context.Background(), "Inbox"); err != nil {
 		t.Fatalf("SyncFolder: %v", err)
 	}
-	tab := New(theme.Nord, acct, config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, acct, config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
@@ -883,7 +883,7 @@ func TestModel_MaybeLoadMore_NearBottom(t *testing.T) {
 	if err := acct.SyncFolder(context.Background(), "Inbox"); err != nil {
 		t.Fatalf("SyncFolder: %v", err)
 	}
-	tab := New(theme.Nord, acct, config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, acct, config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
@@ -903,7 +903,7 @@ func TestModel_MaybeLoadMore_NearBottom(t *testing.T) {
 
 func TestModel_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
 	backend := newPagingFakeBackend(600)
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
@@ -923,7 +923,7 @@ func TestModel_MaybeLoadMore_InFlightNoDuplicate(t *testing.T) {
 func TestModel_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
 	// 14 messages (the mock count). loaded == total from the start.
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	folders, _ := backend.ListFolders()
@@ -940,7 +940,7 @@ func TestModel_MaybeLoadMore_LoadedEqualsTotal(t *testing.T) {
 func TestModel_LoadingSpinner(t *testing.T) {
 	t.Run("loading: pre-headers", func(t *testing.T) {
 		backend := mail.NewMockBackend()
-		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
 		// foldersLoadedMsg calls selectionChangedCmds which sets loading=true.
@@ -952,7 +952,7 @@ func TestModel_LoadingSpinner(t *testing.T) {
 
 	t.Run("loading: post-headers", func(t *testing.T) {
 		backend := mail.NewMockBackend()
-		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
 		tab, _ = tab.updateTab(foldersLoadedMsg{classified: mail.Classify(folders)})
@@ -967,7 +967,7 @@ func TestModel_LoadingSpinner(t *testing.T) {
 
 	t.Run("loading placeholder", func(t *testing.T) {
 		backend := mail.NewMockBackend()
-		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 		tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 		folders, _ := backend.ListFolders()
 		// After foldersLoadedMsg, loading=true and msglist is still empty.
@@ -990,7 +990,7 @@ func TestModel_LoadingSpinner(t *testing.T) {
 func TestModel_WindowCounter(t *testing.T) {
 	t.Run("returns empty when no page loaded", func(t *testing.T) {
 		backend := mail.NewMockBackend()
-		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 		got := tab.WindowCounter()
 		if got != "" {
 			t.Errorf("WindowCounter() = %q, want empty", got)
@@ -1058,7 +1058,7 @@ func TestViewerNAdvancesCursorAndFetchesBody(t *testing.T) {
 func TestViewerNAtBoundaryInert(t *testing.T) {
 	// Use a minimal 3-message fixture so we can predict the boundary.
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	msgs := []mail.MessageInfo{
 		{UID: "A", ThreadID: "A", From: "alice", Subject: "first", Flags: mail.FlagSeen},
@@ -1119,7 +1119,7 @@ func TestViewerNDuringLoadInert(t *testing.T) {
 func assertAllLinesWidth(t *testing.T, view string, w int) {
 	t.Helper()
 	for i, line := range strings.Split(view, "\n") {
-		if got := ansix.Width(line); got != w {
+		if got := ansix.NewMeasurer(2).Width(line); got != w {
 			t.Errorf("line %d: width %d, want %d (line=%q)", i, got, w, line)
 		}
 	}
@@ -1141,7 +1141,7 @@ func TestModelView_HonorsAssignedWidth(t *testing.T) {
 
 	t.Run("loading state", func(t *testing.T) {
 		backend := mail.NewMockBackend()
-		m := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+		m := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 		m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 		// Trigger loading state by delivering foldersLoadedMsg without
 		// following up with headersApplied. msglist stays empty.
@@ -1215,7 +1215,7 @@ func TestModel_NextMessage_WalksFilteredRows(t *testing.T) {
 // prior in-flight fetch has been cancelled before the new one starts.
 func TestModel_OpenMessage_CancelsPriorFetch(t *testing.T) {
 	backend := mail.NewMockBackend()
-	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons)
+	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tab.msglist.SetMessages([]mail.MessageInfo{
 		{UID: "1", From: "a@example.com", Subject: "first"},

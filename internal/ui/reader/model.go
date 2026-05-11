@@ -11,7 +11,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
-	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/icalendar"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
@@ -76,6 +75,7 @@ type Model struct {
 	inviteHeight int
 	unsub        content.Unsubscribe
 	icons        uicore.IconSet
+	measurer     ansix.Measurer
 	panel        string // headers rendered through ViewerHeader at v.width
 	viewport     viewport.Model
 	spinner      spinner.Model
@@ -88,13 +88,14 @@ type Model struct {
 
 // New constructs an empty (closed) viewer. accountEmail populates the
 // rendered "To" header.
-func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet) Model {
+func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicore.IconSet, m ansix.Measurer) Model {
 	sp := uicore.NewSpinner(t)
 	return Model{
 		styles:       styles,
 		theme:        t,
 		accountEmail: accountEmail,
 		icons:        icons,
+		measurer:     m,
 		spinner:      sp,
 		keys:         DefaultKeyMap(),
 	}
@@ -283,7 +284,7 @@ func (v Model) View() string {
 			lipgloss.Center, lipgloss.Center,
 			v.styles.Dim.Render(text),
 		)
-		return clipPaneBg(placed, v.width, v.height, bg)
+		return clipPaneBg(v.measurer, placed, v.width, v.height, bg)
 	}
 
 	// Body is two stacked rects: BgElevated panel (FgDim BorderBottom drawn
@@ -300,7 +301,7 @@ func (v Model) View() string {
 		bodyLines = bodyLines[:bodyHeight]
 	}
 	for i, l := range bodyLines {
-		bodyLines[i] = uicore.FillRowToWidth(leftPad+strings.TrimRight(l, " "), v.width, bg)
+		bodyLines[i] = uicore.FillRowToWidth(v.measurer, leftPad+strings.TrimRight(l, " "), v.width, bg)
 	}
 	if len(bodyLines) < bodyHeight {
 		blank := bg.Render(strings.Repeat(" ", v.width))
@@ -323,7 +324,7 @@ func (v Model) View() string {
 // to width with bgStyle and filling missing rows with a bg-styled blank.
 // Surface-baked theme styles already carry the pane's bg, so per-line
 // right-padding is sufficient and no SGR rewriting is needed.
-func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
+func clipPaneBg(m ansix.Measurer, s string, width, height int, bg lipgloss.Style) string {
 	if width < 1 || height < 1 {
 		return ""
 	}
@@ -332,7 +333,7 @@ func clipPaneBg(s string, width, height int, bg lipgloss.Style) string {
 		lines = lines[:height]
 	}
 	for i, line := range lines {
-		lines[i] = uicore.FillRowToWidth(line, width, bg)
+		lines[i] = uicore.FillRowToWidth(m, line, width, bg)
 	}
 	blank := bg.Render(strings.Repeat(" ", width))
 	for len(lines) < height {
@@ -355,19 +356,19 @@ func (v Model) renderChipRow(width int) (string, int) {
 		if name == "" {
 			name = "attachment"
 		}
-		chips[i] = fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanize.Bytes(int64(a.Size)))
+		chips[i] = fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanBytes(int64(a.Size)))
 	}
 	var lines []string
 	var cur string
 	for _, c := range chips {
-		if ansix.Width(c) > width {
-			c = ansix.Truncate(c, width)
+		if v.measurer.Width(c) > width {
+			c = v.measurer.Truncate(c, width)
 		}
 		if cur == "" {
 			cur = c
 			continue
 		}
-		if ansix.Width(cur)+2+ansix.Width(c) > width {
+		if v.measurer.Width(cur)+2+v.measurer.Width(c) > width {
 			lines = append(lines, cur)
 			cur = c
 			continue
@@ -378,7 +379,7 @@ func (v Model) renderChipRow(width int) (string, int) {
 		lines = append(lines, cur)
 	}
 	for i, l := range lines {
-		lines[i] = uicore.FillRowToWidth(l, width, bg)
+		lines[i] = uicore.FillRowToWidth(v.measurer, l, width, bg)
 	}
 	return strings.Join(lines, "\n"), len(lines)
 }
@@ -399,7 +400,7 @@ func (v *Model) layout() {
 	headerStr := content.RenderHeaders(hdrs, v.theme, contentWidth)
 	v.panel = v.styles.ViewerHeader.Width(v.width).Render(headerStr)
 	v.chipRow, v.chipHeight = v.renderChipRow(v.width)
-	v.inviteRow, v.inviteHeight = renderInviteBlock(v.invite, v.icons, v.styles, v.width)
+	v.inviteRow, v.inviteHeight = renderInviteBlock(v.measurer, v.invite, v.icons, v.styles, v.width)
 	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.inviteHeight-v.chipHeight)

@@ -1,7 +1,7 @@
 # Poplar Status
 
-**Current pass:** Pass 25 — Small-refactor sweep (queued, ready
-to start). Pre-beta cadence continues; path to soak in §Next steps.
+**Current pass:** Pass 26 — Audit A (next-up). Pass 25 closed
+the small-refactor sweep (ADR-0209); pre-beta cadence continues.
 
 **Beta soak deferred** (2026-05-11 decision). `v0.9.0` is tagged
 as a milestone but does not gate the rules — pre-beta operational
@@ -37,8 +37,8 @@ queue a remediation sub-pass before the next phase runs. The
 | 22 | Wizard signature step — catkin editor between identity and label, multi-line TOML render, sentinel round-trip | done |
 | 23 | First-launch safety — #49 ResolvePreset, #29 template defaults pinned, #51 MockBackend dev-gate (ADR-0207) | done |
 | 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate (ADR-0208) | done |
-| 25 | Small-refactor sweep — #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
-| 26 | **Audit A** — bug-fix completeness (`audit-plan.md` §Phase A) | gate |
+| 25 | Small-refactor sweep — ansix Measurer, plain-logger args, backoff/humanize fold (ADR-0209) | done |
+| 26 | **Audit A** — bug-fix completeness (`audit-plan.md` §Phase A) | next |
 | 27 | Catkin Elm conformance (all-value path) | gated |
 | 28 | Compose `Editor` wrapper deletion (subsumes overengineering-cleanup item 1) | gated |
 | 29 | `app.go` decomposition — split 874-line `App.Update` | gated |
@@ -178,32 +178,32 @@ after soak settles.
 Full project descriptions in `ROADMAP.md`; audit methodology in
 `docs/poplar/audit-plan.md`.
 
-### Next starter prompt (Pass 25)
+### Next starter prompt (Pass 26)
 
-> **Goal.** Mechanical net-deletion sweep with no user-visible
-> behavior change. Closes the small-refactor backlog ahead of
-> Audit A.
+> **Goal.** Audit A — bug-fix completeness sweep per
+> `docs/poplar/audit-plan.md` §Phase A. First gate on the path to
+> beta soak.
 >
-> **Scope.** `internal/ansix/` (drop `spuaCellWidth` package
-> global; introduce a `Measurer` value threaded from
-> `cmd/poplar/root.go` into the UI tree, #50). `internal/mailjmap/`,
-> `internal/mailimap/`, `internal/cache/` (collapse the triplicate
-> `WithLogger` functional-options to plain `*slog.Logger` args;
-> amend ADR-0197). `internal/backoff/` and `internal/humanize/`
-> (fold each into their primary callers; drop the defensive
-> `<= 0` clamps).
+> **Scope.** Mail-infra regression sweep (post Passes 23/24/25),
+> config-validator completeness walk, defensive-clamp grep
+> across `internal/`, dispatcher-vs-redial coverage check. No
+> code changes in this pass except remediation; blocking
+> findings queue a `26.1`-style sub-pass before Batch 2 begins.
+> Read-only audit work touches `internal/mail/`, `internal/mailimap/`,
+> `internal/mailjmap/`, `internal/cache/`, `internal/config/`,
+> and the wizard's probe path.
 >
-> **Settled (do not re-brainstorm):** All three changes are
-> net-deletion shapes. `Measurer` carries `SPUACellWidth` as the
-> single mutable field, accessed through methods. `WithLogger`
-> options collapse because every constructor already takes a
-> config struct.
+> **Settled (do not re-brainstorm):** Audit methodology is fixed
+> in `audit-plan.md` §Phase A. Findings format: per-finding
+> remediation pass number + one-line summary in STATUS.md.
 >
-> **Still open — brainstorm these:** None.
+> **Still open — brainstorm these:** None — this is a structured
+> audit, not a design pass.
 >
-> **Approach.** Write a plan doc at
-> `docs/superpowers/plans/2026-MM-DD-small-refactor.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Read `docs/poplar/audit-plan.md` §Phase A, run
+> the four lenses end-to-end, write findings into a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-audit-a.md`. Standard
+> pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)
 

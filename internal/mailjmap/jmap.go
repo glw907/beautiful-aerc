@@ -36,12 +36,6 @@ type jmapClient interface {
 	Do(req *jmap.Request) (*jmap.Response, error)
 }
 
-// Option configures a Backend at construction time.
-type Option func(*Backend)
-
-// WithLogger sets the structured logger for the backend.
-func WithLogger(l *slog.Logger) Option { return func(b *Backend) { b.log = l } }
-
 // Backend is one JMAP account. Construct with New, drive lifecycle
 // with Connect/Disconnect.
 type Backend struct {
@@ -81,27 +75,28 @@ type folderEntry struct {
 // New constructs an unconnected Backend. cfg.Source is the JMAP
 // session URL (e.g. https://api.fastmail.com/jmap/session) and
 // cfg.Password supplies the bearer token after env-var substitution.
-func New(cfg config.AccountConfig, opts ...Option) *Backend {
-	b := &Backend{
+// A nil logger defaults to slog.Default() tagged with the package
+// name.
+func New(cfg config.AccountConfig, log *slog.Logger) *Backend {
+	if log == nil {
+		log = slog.Default().With("component", "mailjmap")
+	}
+	return &Backend{
 		cfg:         cfg,
-		log:         slog.Default().With("component", "mailjmap"),
+		log:         log,
 		folders:     make(map[string]folderEntry),
 		blobIDs:     make(map[mail.UID]string),
 		partBlobIDs: make(map[mail.UID]map[string]string),
 		states:      make(map[string]string),
 		identityIDs: make(map[string]jmap.ID),
 	}
-	for _, o := range opts {
-		o(b)
-	}
-	return b
 }
 
 // NewWithClient bypasses the network handshake for tests. The caller
 // must assign b.session directly when the method under test reads
 // PrimaryAccounts.
 func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
-	b := New(cfg)
+	b := New(cfg, nil)
 	b.client = c
 	b.runEventSourceFunc = b.runEventSource
 	cache, _ := lru.New[string, []byte](bodyCacheSize)

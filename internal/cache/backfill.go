@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -150,7 +149,7 @@ func (b *Backfiller) runBatch(ctx context.Context) {
 				b.throttling.Store(true)
 				select {
 				case <-ctx.Done():
-				case <-time.After(backoff.Exponential(b.throttleAttempts, time.Second, 60*time.Second)):
+				case <-time.After(expBackoff(b.throttleAttempts, time.Second, 60*time.Second)):
 				}
 				return
 			}

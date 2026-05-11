@@ -115,7 +115,7 @@ func openTestAccount(t *testing.T) *Account {
 		folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}},
 	}
 	ct := &fakeChangeTracker{}
-	a, err := Open("Test Account", be, ct, t.TempDir(), Config{})
+	a, err := Open("Test Account", be, ct, t.TempDir(), Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestQueueOp_Move_HidesSource(t *testing.T) {
 
 func TestDrainer_FlagSuccess(t *testing.T) {
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
-	a, err := Open("drain", be, &fakeChangeTracker{}, t.TempDir(), Config{})
+	a, err := Open("drain", be, &fakeChangeTracker{}, t.TempDir(), Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestDrainer_ConflictOnAuthError(t *testing.T) {
 		folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}},
 		err:     fmt.Errorf("401 Unauthorized: %w", mail.ErrAuth),
 	}
-	a, _ := Open("auth", be, &fakeChangeTracker{}, t.TempDir(), Config{})
+	a, _ := Open("auth", be, &fakeChangeTracker{}, t.TempDir(), Config{}, nil)
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1"}})
@@ -254,7 +254,7 @@ func TestDrainer_ConflictOnAuthError(t *testing.T) {
 
 func TestRecoverExecuting_Idempotent(t *testing.T) {
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
-	a, _ := Open("rec", be, &fakeChangeTracker{}, t.TempDir(), Config{})
+	a, _ := Open("rec", be, &fakeChangeTracker{}, t.TempDir(), Config{}, nil)
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1"}})
@@ -273,7 +273,7 @@ func TestRecoverExecuting_Idempotent(t *testing.T) {
 
 func TestRecoverExecuting_Send(t *testing.T) {
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
-	a, _ := Open("rec-send", be, &fakeChangeTracker{}, t.TempDir(), Config{})
+	a, _ := Open("rec-send", be, &fakeChangeTracker{}, t.TempDir(), Config{}, nil)
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	// Insert a synthetic send op directly (cache I doesn't queue
@@ -297,7 +297,7 @@ func TestRecoverExecuting_Send(t *testing.T) {
 func TestSyncFolder_ReAnchor(t *testing.T) {
 	ct := &fakeChangeTracker{err: mail.ErrCannotCalculateChanges}
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
-	a, _ := Open("reanchor", be, ct, t.TempDir(), Config{})
+	a, _ := Open("reanchor", be, ct, t.TempDir(), Config{}, nil)
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1"}})
@@ -329,7 +329,7 @@ func TestCoordinationInvariant_PendingOp(t *testing.T) {
 		headers: []mail.MessageInfo{{UID: "1", Flags: 0}},
 	}
 	ct := &fakeChangeTracker{deltas: []mail.ChangeSet{{Modified: []mail.UID{"1"}}}}
-	a, _ := Open("coord", be, ct, t.TempDir(), Config{})
+	a, _ := Open("coord", be, ct, t.TempDir(), Config{}, nil)
 	defer a.Close()
 	a.SyncFolders(context.Background())
 	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1", Flags: 0}})
@@ -357,7 +357,7 @@ func TestMigrateV4_DropsLastAccessedAndIndex(t *testing.T) {
 	//   - the bodies_lru index is gone
 	//   - body bytes are intact
 	dir := t.TempDir()
-	a, err := Open("test", &fakeBackend{}, &fakeChangeTracker{}, dir, Config{})
+	a, err := Open("test", &fakeBackend{}, &fakeChangeTracker{}, dir, Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -472,7 +472,7 @@ func TestSlugify(t *testing.T) {
 func TestOpenThreadsAttachmentMax(t *testing.T) {
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
 	ct := &fakeChangeTracker{}
-	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxSize: 100, MaxAttachmentSize: 200})
+	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxSize: 100, MaxAttachmentSize: 200}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	corecontacts "github.com/glw907/poplar/internal/contacts"
@@ -50,6 +51,7 @@ type pendingReschedule struct {
 type App struct {
 	acct               account.Model
 	icons              uicore.IconSet
+	measurer           ansix.Measurer
 	styles             Styles
 	topLine            TopLine
 	statusBar          StatusBar
@@ -119,7 +121,7 @@ func (m App) WithOpener(opener URLOpener) App {
 
 // NewApp creates the root model. Folder loading runs in Init's Cmd chain,
 // not synchronously.
-func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, contactsCfg *config.ContactsConfig, identities []config.Identity) App {
+func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, m ansix.Measurer, contactsCfg *config.ContactsConfig, identities []config.Identity) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
@@ -127,17 +129,18 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	cStyles := contacts.NewStyles(t)
 	cFixtures := contacts.Fixtures()
 	app := App{
-		acct:            account.New(t, acct, uiCfg, icons),
+		acct:            account.New(t, acct, uiCfg, icons, m),
 		icons:           icons,
+		measurer:        m,
 		styles:          styles,
 		theme:           t,
 		topLine:         NewTopLine(styles),
 		statusBar:       sb,
 		footer:          NewFooter(styles),
 		keys:            NewGlobalKeys(),
-		linkPicker:      reader.NewLinkPicker(reader.NewStyles(t)),
-		attachPicker:    reader.NewAttachPicker(reader.NewStyles(t), icons),
-		movePicker:      movepicker.New(movepicker.NewStyles(t)),
+		linkPicker:      reader.NewLinkPicker(reader.NewStyles(t), m),
+		attachPicker:    reader.NewAttachPicker(reader.NewStyles(t), icons, m),
+		movePicker:      movepicker.New(movepicker.NewStyles(t), m),
 		downloadDir:     uiCfg.DownloadDir,
 		confirm:         NewConfirmModal(styles),
 		outbox:          NewOutboxOverlay(styles),
@@ -610,7 +613,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		if msg.Name == mail.CanonicalOutbox {
 			if m.outboxView == nil {
 				m.outboxPrevFolder = m.acct.CurrentFolderName()
-				ob := outbox.New(m.theme)
+				ob := outbox.New(m.theme, m.measurer)
 				w, h := m.rightPaneSize()
 				ob.SetSize(w, h)
 				m.outboxView = &ob
@@ -866,7 +869,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case uicompose.SeededMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses, m.measurer)
 		m.compose.SetSize(w, h)
 		m.compose.SetIdentities(m.identities)
 		m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -875,7 +878,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 
 	case RestoreFromDraftMsg:
 		w, h := m.rightPaneSize()
-		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses, m.measurer)
 		m.compose.SetSize(w, h)
 		m.compose.SetIdentities(m.identities)
 		m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -886,7 +889,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		// Drafts-folder Enter: wire cache/target, then open compose.
 		w, h := m.rightPaneSize()
 		row := msg.row
-		c := uicompose.Open(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses)
+		c := uicompose.Open(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), row.DraftID, msg.draft, m.suggestAddresses, m.measurer)
 		c.SetSize(w, h)
 		c.SetIdentities(m.identities)
 		c.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)
@@ -1020,7 +1023,7 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Compose):
 			w, h := m.rightPaneSize()
-			m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses)
+			m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses, m.measurer)
 			m.compose.SetSize(w, h)
 			m.compose.SetIdentities(m.identities)
 			m.compose.SetTidy(m.tidyEnabled, m.tidyAPIKey, m.tidyCfg)

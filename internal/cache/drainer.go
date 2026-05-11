@@ -8,10 +8,22 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/glw907/poplar/internal/backoff"
 	"github.com/glw907/poplar/internal/contacts"
 	"github.com/glw907/poplar/internal/mail"
 )
+
+// expBackoff returns initial * 2^(attempts-1) capped at max.
+// attempts <= 1 returns initial.
+func expBackoff(attempts int, initial, max time.Duration) time.Duration {
+	if attempts <= 1 {
+		return initial
+	}
+	d := initial << (attempts - 1)
+	if d > max {
+		return max
+	}
+	return d
+}
 
 // drainerConfig governs backoff and retry caps.
 type drainerConfig struct {
@@ -150,7 +162,7 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 			a.publish(row, OpConflict, dispatchErr)
 			return
 		}
-		nextAt := time.Now().Add(backoff.Exponential(row.Attempts+1, cfg.BackoffMin, cfg.BackoffMax)).UnixNano()
+		nextAt := time.Now().Add(expBackoff(row.Attempts+1, cfg.BackoffMin, cfg.BackoffMax)).UnixNano()
 		_ = a.finishOp(row.ID, OpFailed, encodeErr("transient", dispatchErr), nextAt)
 	}
 }

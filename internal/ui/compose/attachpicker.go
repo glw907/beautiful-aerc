@@ -13,9 +13,30 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/ansix"
-	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
+
+// humanBytes formats n as a 1-decimal 1024-based size string.
+func humanBytes(n int64) string {
+	if n < 1024 {
+		return fmt.Sprintf("%d B", n)
+	}
+	const k = 1024.0
+	v := float64(n) / k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f KB", v)
+	}
+	v /= k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f MB", v)
+	}
+	v /= k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f GB", v)
+	}
+	v /= k
+	return fmt.Sprintf("%.1f TB", v)
+}
 
 var nextAttachID atomic.Int64
 
@@ -38,6 +59,7 @@ type AttachPicker struct {
 	err        string
 	styles     Styles
 	icons      uicore.IconSet
+	measurer   ansix.Measurer
 	keys       AttachPickerKeyMap
 }
 
@@ -82,8 +104,9 @@ func DefaultAttachPickerKeyMap() AttachPickerKeyMap {
 
 // NewAttachPicker returns a closed picker. Open(dir) bumps the id
 // and returns the readDir cmd that populates entries.
-func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
+func NewAttachPicker(styles Styles, icons uicore.IconSet, m ansix.Measurer) AttachPicker {
 	return AttachPicker{
+		measurer: m,
 		styles:   styles,
 		icons:    icons,
 		keys:     DefaultAttachPickerKeyMap(),
@@ -385,16 +408,16 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 	}
 	size := ""
 	if !e.isDir {
-		size = humanize.Bytes(e.size)
+		size = humanBytes(e.size)
 	}
 	bodyW := contentW - attachSizeWidth - 1
 	body := fmt.Sprintf("%s%s %s", mark, icon, e.name)
 	if e.target != "" {
 		arrow := " → " + e.target
-		if ansix.Width(body+arrow) > bodyW {
-			maxTarget := bodyW - ansix.Width(body) - 3 // 3 for " → "
+		if p.measurer.Width(body+arrow) > bodyW {
+			maxTarget := bodyW - p.measurer.Width(body) - 3 // 3 for " → "
 			if maxTarget > 0 {
-				arrow = " → " + ansix.Truncate(e.target, maxTarget)
+				arrow = " → " + p.measurer.Truncate(e.target, maxTarget)
 			} else {
 				arrow = ""
 			}
@@ -402,7 +425,7 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 		body += arrow
 	}
 	sizeCol := p.styles.PickerDim.Width(attachSizeWidth).Align(lipgloss.Right).Render(size)
-	rendered := ansix.PadOrTruncate(body, bodyW) + " " + sizeCol
+	rendered := p.measurer.PadOrTruncate(body, bodyW) + " " + sizeCol
 	if idx == p.cursor {
 		return p.styles.PickerCursor.Render(rendered)
 	}
@@ -425,10 +448,10 @@ func (p AttachPicker) formatHintRow(contentW int) string {
 
 func (p AttachPicker) formatPathRow(contentW int) string {
 	path := p.dir
-	if ansix.Width(path) > contentW {
+	if p.measurer.Width(path) > contentW {
 		// truncate from the left, prefix with "…/"
 		runes := []rune(path)
-		for ansix.Width("…/"+string(runes)) > contentW && len(runes) > 1 {
+		for p.measurer.Width("…/"+string(runes)) > contentW && len(runes) > 1 {
 			runes = runes[1:]
 		}
 		path = "…/" + string(runes)

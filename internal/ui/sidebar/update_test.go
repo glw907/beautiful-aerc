@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -14,7 +15,7 @@ func TestUpdate_ExpandCollapseOnParentRow(t *testing.T) {
 		{Folder: mail.Folder{Name: "Lists/golang"}, DisplayName: "Lists/golang", Group: mail.GroupCustom},
 		{Folder: mail.Folder{Name: "Lists/rust"}, DisplayName: "Lists/rust", Group: mail.GroupCustom},
 	}
-	m := New(Styles{}, classified, config.UIConfig{}, 30, 10, uicore.SimpleIcons)
+	m := New(Styles{}, classified, config.UIConfig{}, 30, 10, uicore.SimpleIcons, ansix.NewMeasurer(1))
 	// Cursor on the synthesized "Lists" parent (only visible Custom row).
 	if got := m.SelectedFolder(); got != "Lists" {
 		t.Fatalf("want cursor on Lists (synthesized), got %q", got)
@@ -38,7 +39,7 @@ func TestUpdate_MovementRoutedThroughKeyMap(t *testing.T) {
 		{Folder: mail.Folder{Name: "Inbox"}, Canonical: "Inbox", DisplayName: "Inbox", Group: mail.GroupPrimary},
 		{Folder: mail.Folder{Name: "Sent"}, Canonical: "Sent", DisplayName: "Sent", Group: mail.GroupPrimary},
 	}
-	m := New(Styles{}, classified, config.UIConfig{}, 30, 10, uicore.SimpleIcons)
+	m := New(Styles{}, classified, config.UIConfig{}, 30, 10, uicore.SimpleIcons, ansix.NewMeasurer(1))
 	km := DefaultKeyMap()
 	m.SetKeyMap(km)
 

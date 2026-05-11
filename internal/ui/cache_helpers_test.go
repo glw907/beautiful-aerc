@@ -68,7 +68,7 @@ func drainBatch(cmd tea.Cmd) []tea.Msg {
 // construction.
 func newTestCache(t *testing.T, backend mail.Backend) *cache.Account {
 	t.Helper()
-	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir(), cache.Config{})
+	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir(), cache.Config{}, nil)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}

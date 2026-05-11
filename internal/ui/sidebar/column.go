@@ -20,16 +20,18 @@ const ShelfRows = 3
 type Column struct {
 	styles        Styles
 	icons         uicore.IconSet
+	measurer      ansix.Measurer
 	model         Model
 	search        Search
 	accountEmail  string
 	width, height int
 }
 
-func NewColumn(styles Styles, icons uicore.IconSet, model Model, search Search, accountEmail string) Column {
+func NewColumn(styles Styles, icons uicore.IconSet, m ansix.Measurer, model Model, search Search, accountEmail string) Column {
 	return Column{
 		styles:       styles,
 		icons:        icons,
+		measurer:     m,
 		model:        model,
 		search:       search,
 		accountEmail: accountEmail,
@@ -65,7 +67,7 @@ func (c Column) View() string {
 	}
 	sw := c.width
 
-	acctName := ansix.TruncateEllipsis(c.accountEmail, sw-1)
+	acctName := c.measurer.TruncateEllipsis(c.accountEmail, sw-1)
 	acctLine := c.styles.SidebarAccount.Width(sw).Render(" " + acctName)
 	blank := c.styles.SidebarBg.Width(sw).Render("")
 

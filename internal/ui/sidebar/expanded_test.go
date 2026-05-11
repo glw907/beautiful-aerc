@@ -3,6 +3,7 @@ package sidebar
 import (
 	"testing"
 
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -37,7 +38,7 @@ func TestView_SpartanCapsDepthAtOne(t *testing.T) {
 	classified := []mail.ClassifiedFolder{
 		{Folder: mail.Folder{Name: "a/b/c/leaf"}, DisplayName: "a/b/c/leaf", Group: mail.GroupCustom},
 	}
-	m := New(Styles{}, classified, config.UIConfig{}, 14, 10, uicore.SimpleIcons)
+	m := New(Styles{}, classified, config.UIConfig{}, 14, 10, uicore.SimpleIcons, ansix.NewMeasurer(1))
 	m.SetLayout(uicore.LayoutMode{Spartan: true})
 	m.ToggleExpanded("a")
 	rows := m.visibleRows()

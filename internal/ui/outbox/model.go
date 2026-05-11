@@ -14,17 +14,18 @@ import (
 
 // Model is a read-only view over scheduled outbox rows.
 type Model struct {
-	rows   []cache.OutboxRow
-	cursor int
-	now    time.Time
-	width  int
-	height int
-	styles Styles
+	rows     []cache.OutboxRow
+	cursor   int
+	now      time.Time
+	width    int
+	height   int
+	styles   Styles
+	measurer ansix.Measurer
 }
 
 // New builds the outbox view bound to the given theme.
-func New(t *theme.CompiledTheme) Model {
-	return Model{styles: NewStyles(t), now: time.Now()}
+func New(t *theme.CompiledTheme, m ansix.Measurer) Model {
+	return Model{styles: NewStyles(t), measurer: m, now: time.Now()}
 }
 
 func (m *Model) SetSize(w, h int) {
@@ -118,8 +119,8 @@ func (m Model) View() string {
 		row := fmt.Sprintf("%s%s  %-22s  %-30s  %s",
 			marker,
 			uicore.PadOrTruncate(formatWhen(r.ScheduledFor, m.now), 18),
-			ansix.TruncateEllipsis(firstAddr(r.To), 22),
-			ansix.TruncateEllipsis(r.Subject, 30),
+			m.measurer.TruncateEllipsis(firstAddr(r.To), 22),
+			m.measurer.TruncateEllipsis(r.Subject, 30),
 			r.Status,
 		)
 		b.WriteString(row + "\n")

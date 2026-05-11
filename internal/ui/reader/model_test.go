@@ -19,7 +19,7 @@ var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 func newTestViewer() Model {
-	return New(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", uicore.SimpleIcons)
+	return New(NewStyles(theme.Nord), theme.Nord, "geoff@907.life", uicore.SimpleIcons, ansix.NewMeasurer(1))
 }
 
 func TestViewerOpenTransitionsToLoading(t *testing.T) {
@@ -218,7 +218,7 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		if got := ansix.Width(line); got != w {
+		if got := ansix.NewMeasurer(1).Width(line); got != w {
 			t.Errorf("line %d width = %d, want %d: %q", i, got, w, line)
 		}
 	}

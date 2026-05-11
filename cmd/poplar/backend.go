@@ -21,16 +21,16 @@ func openBackend(acct config.AccountConfig) (mail.Backend, error) {
 	case "mock":
 		return openMockBackend(acct)
 	case "jmap":
-		return mailjmap.New(acct), nil
+		return mailjmap.New(acct, nil), nil
 	case "imap":
 		if acct.OAuth != nil {
 			c, err := buildOAuthClient(acct)
 			if err != nil {
 				return nil, fmt.Errorf("oauth client for %q: %w", acct.Name, err)
 			}
-			return mailimap.NewWithOAuth(acct, c), nil
+			return mailimap.NewWithOAuth(acct, c, nil), nil
 		}
-		return mailimap.New(acct), nil
+		return mailimap.New(acct, nil), nil
 	default:
 		return nil, fmt.Errorf("unknown backend %q for account %q", acct.Backend, acct.Name)
 	}

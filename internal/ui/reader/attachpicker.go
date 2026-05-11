@@ -8,19 +8,41 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ansix"
-	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
+// humanBytes formats n as a 1-decimal 1024-based size string.
+func humanBytes(n int64) string {
+	if n < 1024 {
+		return fmt.Sprintf("%d B", n)
+	}
+	const k = 1024.0
+	v := float64(n) / k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f KB", v)
+	}
+	v /= k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f MB", v)
+	}
+	v /= k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f GB", v)
+	}
+	v /= k
+	return fmt.Sprintf("%.1f TB", v)
+}
+
 type AttachPicker struct {
-	shell  uicore.ModalShell
-	list   list.Model
-	uid    mail.UID
-	items  []mail.Attachment
-	styles Styles
-	icons  uicore.IconSet
-	keys   AttachPickerKeyMap
+	shell    uicore.ModalShell
+	list     list.Model
+	uid      mail.UID
+	items    []mail.Attachment
+	styles   Styles
+	icons    uicore.IconSet
+	measurer ansix.Measurer
+	keys     AttachPickerKeyMap
 }
 
 type AttachPickerKeyMap struct {
@@ -37,7 +59,7 @@ type attachItem struct {
 
 func (i attachItem) FilterValue() string { return i.att.Filename }
 
-func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
+func NewAttachPicker(styles Styles, icons uicore.IconSet, m ansix.Measurer) AttachPicker {
 	keys := AttachPickerKeyMap{
 		Enter: key.NewBinding(key.WithKeys("enter")),
 		Open:  key.NewBinding(key.WithKeys("o")),
@@ -49,7 +71,7 @@ func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
 		keys.Digits[i] = key.NewBinding(key.WithKeys(d))
 	}
 
-	l := list.New(nil, attachItemDelegate{styles: styles, icons: icons}, 0, 0)
+	l := list.New(nil, attachItemDelegate{styles: styles, icons: icons, measurer: m}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
@@ -58,7 +80,7 @@ func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
 	l.Styles = styles.List
 	l.DisableQuitKeybindings()
 
-	return AttachPicker{styles: styles, icons: icons, keys: keys, list: l}
+	return AttachPicker{styles: styles, icons: icons, measurer: m, keys: keys, list: l}
 }
 
 func (p AttachPicker) IsOpen() bool { return p.shell.IsOpen() }
@@ -157,8 +179,9 @@ func (p AttachPicker) Box(w, h int) string {
 }
 
 type attachItemDelegate struct {
-	styles Styles
-	icons  uicore.IconSet
+	styles   Styles
+	icons    uicore.IconSet
+	measurer ansix.Measurer
 }
 
 func (d attachItemDelegate) Height() int                             { return 1 }
@@ -176,8 +199,8 @@ func (d attachItemDelegate) Render(w io.Writer, m list.Model, index int, item li
 	if name == "" {
 		name = "attachment"
 	}
-	size := humanize.Bytes(int64(att.Size))
-	body := ansix.PadOrTruncate(
+	size := humanBytes(int64(att.Size))
+	body := d.measurer.PadOrTruncate(
 		fmt.Sprintf("%s[%d] %s (%s)", d.icons.Attachment, index+1, name, size),
 		contentW)
 	if index == m.Index() {

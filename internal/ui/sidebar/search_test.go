@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -20,7 +21,7 @@ func TestSidebarSearchIdle(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("idle: hint row", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		plain := stripANSISearch(s.View())
 		if !strings.Contains(plain, "/ to search") {
 			t.Errorf("idle view missing hint: %q", plain)
@@ -28,14 +29,14 @@ func TestSidebarSearchIdle(t *testing.T) {
 	})
 
 	t.Run("idle: state", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		if s.State() != SearchIdle {
 			t.Errorf("State() = %v, want SearchIdle", s.State())
 		}
 	})
 
 	t.Run("idle renders exactly 3 rows", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		lines := strings.Split(s.View(), "\n")
 		if len(lines) != 3 {
 			t.Errorf("idle view rows = %d, want 3", len(lines))
@@ -43,14 +44,14 @@ func TestSidebarSearchIdle(t *testing.T) {
 	})
 
 	t.Run("idle Query is empty", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		if s.Query() != "" {
 			t.Errorf("Query() = %q, want empty", s.Query())
 		}
 	})
 
 	t.Run("idle Mode is uicore.ScopeFolder", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		if s.Scope() != uicore.ScopeFolder {
 			t.Errorf("Mode() = %v, want uicore.ScopeFolder", s.Scope())
 		}
@@ -61,7 +62,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("Activate: Idle → Typing", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		if s.State() != SearchTyping {
 			t.Errorf("State() = %v, want SearchTyping", s.State())
@@ -72,7 +73,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("Clear returns to Idle and resets query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("hello")
 		s.Clear()
@@ -88,7 +89,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("Clear: mode reset", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.scope = uicore.ScopeAll
 		s.Clear()
@@ -98,7 +99,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("typing state renders icon + slash + query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("proj")
 		plain := stripANSISearch(s.View())
@@ -111,7 +112,7 @@ func TestSidebarSearchActivate(t *testing.T) {
 	})
 
 	t.Run("typing state with query renders [folder] scope badge", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("x")
 		plain := stripANSISearch(s.View())
@@ -125,7 +126,7 @@ func TestSidebarSearchCommit(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("Commit transitions Typing → Active", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("hello")
 		s.Commit()
@@ -141,7 +142,7 @@ func TestSidebarSearchCommit(t *testing.T) {
 	})
 
 	t.Run("re-Activate from Active preserves query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("hello")
 		s.Commit()
@@ -162,7 +163,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("printable rune during typing appends to query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s, _ = s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		s, _ = s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
@@ -173,7 +174,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	})
 
 	t.Run("Update: SearchUpdatedMsg", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		_, cmd := s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		if cmd == nil {
@@ -195,7 +196,7 @@ func TestSidebarSearchUpdate(t *testing.T) {
 	})
 
 	t.Run("Backspace during typing emits SearchUpdatedMsg with shorter query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("proj")
 		var cmd tea.Cmd
@@ -217,7 +218,7 @@ func TestSidebarSearchScopeToggle(t *testing.T) {
 	backslash := tea.KeyPressMsg{Code: '\\', Text: "\\"}
 
 	t.Run("backslash: cycle [folder] → [all folders]", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 
 		s, _ = s.Update(backslash)
@@ -232,7 +233,7 @@ func TestSidebarSearchScopeToggle(t *testing.T) {
 	})
 
 	t.Run("backslash emits SearchUpdatedMsg with new scope", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("proj")
 
@@ -254,7 +255,7 @@ func TestSidebarSearchScopeToggle(t *testing.T) {
 	})
 
 	t.Run("view shows [all folders] after backslash with non-empty query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("x")
 		s, _ = s.Update(backslash)
@@ -269,7 +270,7 @@ func TestSidebarSearchEmptyQuerySuppressesCount(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("info row has no count text when query is empty after Activate", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		lines := strings.Split(stripANSISearch(s.View()), "\n")
 		if len(lines) != 3 {
@@ -288,7 +289,7 @@ func TestSidebarSearchEmptyQuerySuppressesCount(t *testing.T) {
 	})
 
 	t.Run("count appears after typing one character", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.SetResultCount(5)
 		s, _ = s.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
@@ -307,7 +308,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
 	t.Run("SetResultCount stores the value", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("proj")
 		s.SetResultCount(3)
@@ -318,7 +319,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 	})
 
 	t.Run("zero results, non-empty query", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("asdf")
 		s.SetResultCount(0)
@@ -329,7 +330,7 @@ func TestSidebarSearchResultCount(t *testing.T) {
 	})
 
 	t.Run("singular '1 result' for count 1", func(t *testing.T) {
-		s := NewSearch(styles, 30, uicore.FancyIcons)
+		s := NewSearch(styles, 30, uicore.FancyIcons, ansix.NewMeasurer(1))
 		s.Activate()
 		s.input.SetValue("proj")
 		s.SetResultCount(1)

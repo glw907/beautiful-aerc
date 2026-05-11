@@ -1,6 +1,6 @@
 ---
 title: log/slog adoption — diagnostic logging convention
-status: accepted
+status: accepted (amended by 0209 — WithLogger collapsed to plain *slog.Logger arg)
 date: 2026-05-10
 ---
 

@@ -15,7 +15,6 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/content"
-	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/tidytext"
@@ -34,8 +33,9 @@ type CacheStore interface {
 // Model is the inline compose surface. Send and discard surface as
 // tea.Msg values that App translates into cache ops.
 type Model struct {
-	styles Styles
-	theme  *theme.CompiledTheme
+	styles   Styles
+	theme    *theme.CompiledTheme
+	measurer ansix.Measurer
 
 	from string
 
@@ -105,7 +105,7 @@ const labelWidth = 9
 // adds one more when set.
 const chromeRows = 6
 
-func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest SuggestFn) *Model {
+func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest SuggestFn, m ansix.Measurer) *Model {
 	mk := func() textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = ""
@@ -114,34 +114,35 @@ func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest Sugges
 		return ti
 	}
 	c := &Model{
-		styles:  styles,
-		theme:   t,
-		from:    self,
-		to:      mk(),
-		cc:      mk(),
-		bcc:     mk(),
-		subject: mk(),
-		editor:  mailcompose.NewCatkinEditor(),
-		suggest: NewDropdown(suggest).WithStyles(styles),
+		styles:   styles,
+		theme:    t,
+		measurer: m,
+		from:     self,
+		to:       mk(),
+		cc:       mk(),
+		bcc:      mk(),
+		subject:  mk(),
+		editor:   mailcompose.NewCatkinEditor(),
+		suggest:  NewDropdown(suggest).WithStyles(styles),
 	}
 	c.editor.SetStyles(styles.CatkinStyles())
 	c.tidyFn = tidytext.Tidy
-	c.attach = NewAttachPicker(styles, uicore.SimpleIcons)
+	c.attach = NewAttachPicker(styles, uicore.SimpleIcons, m)
 	c.to.Focus()
 	c.focus = focusTo
 	return c
 }
 
-func New(t *theme.CompiledTheme, styles Styles, self string, suggest SuggestFn) *Model {
-	c := newModel(t, styles, self, suggest)
+func New(t *theme.CompiledTheme, styles Styles, self string, suggest SuggestFn, m ansix.Measurer) *Model {
+	c := newModel(t, styles, self, suggest, m)
 	c.draftID = uuid.NewString()
 	return c
 }
 
 // Open returns a Model wired to an existing draftID, pre-seeded with d.
 // Both dirty flags start clear because the cache and server images match.
-func Open(t *theme.CompiledTheme, styles Styles, self string, draftID string, d mailcompose.Draft, suggest SuggestFn) *Model {
-	c := newModel(t, styles, self, suggest)
+func Open(t *theme.CompiledTheme, styles Styles, self string, draftID string, d mailcompose.Draft, suggest SuggestFn, m ansix.Measurer) *Model {
+	c := newModel(t, styles, self, suggest, m)
 	c.draftID = draftID
 	c.Seed(d)
 	return c
@@ -336,13 +337,9 @@ func (c *Model) headerRow(label, value string) string {
 func (c *Model) padRow(s string) string {
 	w := lipgloss.Width(s)
 	if w >= c.width {
-		return truncate(s, c.width)
+		return c.measurer.Truncate(s, c.width)
 	}
 	return s + strings.Repeat(" ", c.width-w)
-}
-
-func truncate(s string, n int) string {
-	return ansix.Truncate(s, n)
 }
 
 // SendMsg fires on Ctrl+X or after a ScheduleAcceptedMsg. ScheduledFor
@@ -999,7 +996,7 @@ func (c *Model) attachRow(atts []string) string {
 	for i, p := range atts {
 		size := ""
 		if info, err := os.Stat(p); err == nil {
-			size = " (" + humanize.Bytes(info.Size()) + ")"
+			size = " (" + humanBytes(info.Size()) + ")"
 		}
 		body := filepath.Base(p) + size
 		style := c.styles.AttachChip

@@ -24,14 +24,14 @@ import (
 )
 
 func TestNew_AccountName(t *testing.T) {
-	b := New(config.AccountConfig{Name: "alice@example.com"})
+	b := New(config.AccountConfig{Name: "alice@example.com"}, nil)
 	if got := b.AccountName(); got != "alice@example.com" {
 		t.Errorf("AccountName = %q, want %q", got, "alice@example.com")
 	}
 }
 
 func TestBackend_DisconnectWithoutConnect(t *testing.T) {
-	b := New(config.AccountConfig{Name: "alice"})
+	b := New(config.AccountConfig{Name: "alice"}, nil)
 	if err := b.Disconnect(); err != nil {
 		t.Fatalf("Disconnect on never-connected: %v", err)
 	}
@@ -1243,13 +1243,13 @@ func TestPushDraft_JMAP_ReplacesPrev(t *testing.T) {
 	}
 }
 
-// TestWithLogger_DroppedUpdate verifies that the WithLogger seam routes
-// the "dropped update, channel full" warn through the supplied logger.
-func TestWithLogger_DroppedUpdate(t *testing.T) {
+// TestLogger_DroppedUpdate verifies that the supplied logger routes
+// the "dropped update, channel full" warn through the constructor.
+func TestLogger_DroppedUpdate(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	b := New(config.AccountConfig{Name: "test"}, WithLogger(logger))
+	b := New(config.AccountConfig{Name: "test"}, logger)
 	// Provide a zero-capacity channel so the very next emit overflows.
 	b.updates = make(chan mail.Update, 0)
 

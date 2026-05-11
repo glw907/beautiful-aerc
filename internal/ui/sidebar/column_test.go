@@ -89,11 +89,11 @@ func newSidebarColumnAt(t *testing.T, width, height int) sidebar.Column {
 	layout := computeLayoutMode(width)
 	uiCfg := config.DefaultUIConfig()
 
-	sb := sidebar.New(styles, sidebarColumnFolders(), uiCfg, width, max(1, height-sidebar.HeaderRows-sidebar.ShelfRows), uicore.SimpleIcons)
+	sb := sidebar.New(styles, sidebarColumnFolders(), uiCfg, width, max(1, height-sidebar.HeaderRows-sidebar.ShelfRows), uicore.SimpleIcons, ansix.NewMeasurer(1))
 	sb.SetLayout(layout)
-	ss := sidebar.NewSearch(styles, width, uicore.SimpleIcons)
+	ss := sidebar.NewSearch(styles, width, uicore.SimpleIcons, ansix.NewMeasurer(1))
 	ss.SetSize(width)
-	return sidebar.NewColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com").
+	return sidebar.NewColumn(styles, uicore.SimpleIcons, ansix.NewMeasurer(1), sb, ss, "user@example.com").
 		SetSize(width, height)
 }
 
@@ -122,7 +122,7 @@ func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 				t.Errorf("View() returned %d lines, want %d", len(lines), tc.h)
 			}
 			for i, line := range lines {
-				if w := ansix.Width(line); w != tc.w {
+				if w := ansix.NewMeasurer(1).Width(line); w != tc.w {
 					t.Errorf("line %d: width %d, want %d (line=%q)", i, w, tc.w, line)
 				}
 			}
@@ -135,9 +135,9 @@ func TestSidebarColumn_SetSizeAndView(t *testing.T) {
 func TestSidebarColumn_EmptyBeforeSize(t *testing.T) {
 	styles := sidebar.NewStyles(theme.Nord)
 	uiCfg := config.DefaultUIConfig()
-	sb := sidebar.New(styles, sidebarColumnFolders(), uiCfg, 22, 20, uicore.SimpleIcons)
-	ss := sidebar.NewSearch(styles, 22, uicore.SimpleIcons)
-	col := sidebar.NewColumn(styles, uicore.SimpleIcons, sb, ss, "user@example.com")
+	sb := sidebar.New(styles, sidebarColumnFolders(), uiCfg, 22, 20, uicore.SimpleIcons, ansix.NewMeasurer(1))
+	ss := sidebar.NewSearch(styles, 22, uicore.SimpleIcons, ansix.NewMeasurer(1))
+	col := sidebar.NewColumn(styles, uicore.SimpleIcons, ansix.NewMeasurer(1), sb, ss, "user@example.com")
 	// No SetSize call. Width and height are zero.
 	if got := col.View(); got != "" {
 		t.Errorf("View() with zero size returned %q, want empty", got)

@@ -150,7 +150,7 @@ func runRoot(f rootFlags) error {
 	if mode == term.IconModeFancy {
 		iconSet = uicore.FancyIcons
 	}
-	ansix.SetSPUACellWidth(cellWidth)
+	measurer := ansix.NewMeasurer(cellWidth)
 
 	cacheCfg, err := config.LoadCache(configPath)
 	if err != nil {
@@ -161,7 +161,7 @@ func runRoot(f rootFlags) error {
 	if !ok {
 		return fmt.Errorf("backend does not implement mail.ChangeTracker")
 	}
-	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{MaxSize: cacheCfg.MaxSize})
+	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{MaxSize: cacheCfg.MaxSize}, nil)
 	if err != nil {
 		return fmt.Errorf("open cache for %s: %v", accts[0].Name, err)
 	}
@@ -170,7 +170,7 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("start drainer: %v", err)
 	}
 
-	app := ui.NewApp(t, acct, uiCfg, iconSet, accts[0].Contacts, accts[0].Identities)
+	app := ui.NewApp(t, acct, uiCfg, iconSet, measurer, accts[0].Contacts, accts[0].Identities)
 
 	p := tea.NewProgram(appModel{app: app})
 	if _, err := p.Run(); err != nil {

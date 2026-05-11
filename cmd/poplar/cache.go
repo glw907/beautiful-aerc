@@ -14,9 +14,30 @@ import (
 
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
-	"github.com/glw907/poplar/internal/humanize"
 	_ "modernc.org/sqlite"
 )
+
+// humanBytes formats n as a 1-decimal 1024-based size string.
+func humanBytes(n int64) string {
+	if n < 1024 {
+		return fmt.Sprintf("%d B", n)
+	}
+	const k = 1024.0
+	v := float64(n) / k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f KB", v)
+	}
+	v /= k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f MB", v)
+	}
+	v /= k
+	if v < 1024 {
+		return fmt.Sprintf("%.1f GB", v)
+	}
+	v /= k
+	return fmt.Sprintf("%.1f TB", v)
+}
 
 // outboxStatsQ counts pending vs everything else (executing, failed,
 // conflict).
@@ -119,9 +140,9 @@ func formatStatsLine(r statsRow) string {
 		r.Account,
 		formatThousands(r.HeadersCount),
 		formatThousands(r.BodiesCount),
-		humanize.Bytes(r.BodiesBytes),
+		humanBytes(r.BodiesBytes),
 		outbox,
-		humanize.Bytes(r.DBBytes),
+		humanBytes(r.DBBytes),
 	)
 	tw.Flush()
 	return strings.TrimRight(sb.String(), "\n")
@@ -207,7 +228,7 @@ func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) 
 			continue
 		}
 		matched = true
-		acct, err := cache.Open(a.Name, nil, nil, "", cache.Config{})
+		acct, err := cache.Open(a.Name, nil, nil, "", cache.Config{}, nil)
 		if err != nil {
 			return fmt.Errorf("open %s: %w", a.Name, err)
 		}
@@ -216,7 +237,7 @@ func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) 
 		if evictErr != nil {
 			return fmt.Errorf("evict %s: %w", a.Name, evictErr)
 		}
-		fmt.Fprintf(w, "evicted %d bodies (%s freed) from %s\n", rows, humanize.Bytes(freed), a.Name)
+		fmt.Fprintf(w, "evicted %d bodies (%s freed) from %s\n", rows, humanBytes(freed), a.Name)
 	}
 	if scope != "" && !matched {
 		return fmt.Errorf("account %q not found", scope)
@@ -273,7 +294,7 @@ func runVacuum(ctx context.Context, w io.Writer, scope string) error {
 		if fi, statErr := os.Stat(dbPath); statErr == nil {
 			after = fi.Size()
 		}
-		fmt.Fprintf(w, "vacuumed %s: %s → %s\n", a.Name, humanize.Bytes(before), humanize.Bytes(after))
+		fmt.Fprintf(w, "vacuumed %s: %s → %s\n", a.Name, humanBytes(before), humanBytes(after))
 	}
 	if scope != "" && !matched {
 		return fmt.Errorf("account %q not found", scope)

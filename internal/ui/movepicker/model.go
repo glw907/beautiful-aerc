@@ -34,13 +34,14 @@ type ClosedMsg struct{}
 
 // Model is the modal overlay launched by `m` from the account view.
 type Model struct {
-	shell  uicore.ModalShell
-	list   list.Model
-	uids   []mail.UID
-	src    string
-	all    []mail.FolderEntry
-	styles Styles
-	keys   KeyMap
+	shell    uicore.ModalShell
+	list     list.Model
+	uids     []mail.UID
+	src      string
+	all      []mail.FolderEntry
+	styles   Styles
+	measurer ansix.Measurer
+	keys     KeyMap
 }
 
 type KeyMap struct {
@@ -62,8 +63,8 @@ func (i folderItem) FilterValue() string {
 	return i.entry.Provider
 }
 
-func New(styles Styles) Model {
-	l := list.New(nil, folderItemDelegate{styles: styles}, 0, 0)
+func New(styles Styles, m ansix.Measurer) Model {
+	l := list.New(nil, folderItemDelegate{styles: styles, measurer: m}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
@@ -75,8 +76,9 @@ func New(styles Styles) Model {
 	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("down", "j"))
 
 	return Model{
-		styles: styles,
-		list:   l,
+		styles:   styles,
+		measurer: m,
+		list:     l,
 		keys: KeyMap{
 			CursorUp:   key.NewBinding(key.WithKeys("up", "k")),
 			CursorDown: key.NewBinding(key.WithKeys("down", "j")),
@@ -206,7 +208,8 @@ func (p Model) Position(box string, totalW, totalH int) (int, int) {
 }
 
 type folderItemDelegate struct {
-	styles Styles
+	styles   Styles
+	measurer ansix.Measurer
 }
 
 func (d folderItemDelegate) Height() int                             { return 1 }
@@ -225,7 +228,7 @@ func (d folderItemDelegate) Render(w io.Writer, m list.Model, index int, item li
 	contentW := m.Width()
 	matches := m.MatchesForItem(index)
 	body := renderWithMatches(display, matches, d.styles.Match)
-	body = ansix.PadOrTruncate(body, contentW)
+	body = d.measurer.PadOrTruncate(body, contentW)
 	if index == m.Index() {
 		body = d.styles.Cursor.Render(body)
 	}

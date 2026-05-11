@@ -132,7 +132,7 @@ sources or the `poplar cache` CLI. The decision index in
   `acct.maxSize`, skipped when `maxSize <= 0`). Server back-
   pressure (IMAP `[THROTTLED]`, JMAP rate-limit, HTTP 429)
   detected by substring on `err.Error()`; routes through
-  `internal/backoff.Exponential(throttleAttempts, 1s, 60s)`,
+  local `expBackoff(throttleAttempts, 1s, 60s)`,
   mirroring the outbox drainer's curve. `(*Account).
   BackfillProgress()` returns `(done, total)` for the status-bar
   segment. `(*Account).NotifyActivity()` /
@@ -225,8 +225,7 @@ sources or the `poplar cache` CLI. The decision index in
   (buffered 32). Drops on backpressure are counted in
   `(*Account).DroppedEvents()` so the UI can detect staleness
   and reconcile via a full cache re-read.
-- `internal/backoff.Exponential(attempts, initial, max)` is the
-  shared exponential-backoff helper used by the cache drainer,
-  the JMAP push loop, the IMAP idle reconnect loop, and the
-  body backfiller's throttle path. Returns `initial` on attempt
-  ≤ 1; doubles each subsequent attempt; caps at `max`.
+- `expBackoff(attempts, initial, max)` is a small per-package
+  helper duplicated in `internal/cache/`, `internal/mailjmap/`,
+  and `internal/mailimap/`. Returns `initial` on attempt ≤ 1;
+  doubles each subsequent attempt; caps at `max`. ADR-0209.

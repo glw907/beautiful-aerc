@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	gomail "github.com/emersion/go-message/mail"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/contacts"
@@ -42,7 +43,7 @@ func (f *fakeCache) LoadDraft(_ context.Context, _ string) ([]byte, error) {
 
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
-	c := New(theme.OneDark, Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life", nil)
+	c := New(theme.OneDark, Styles{ErrorBanner: lipgloss.NewStyle()}, "geoff@907.life", nil, ansix.NewMeasurer(1))
 	c.SetSize(80, 24)
 	return c
 }
@@ -302,7 +303,7 @@ func TestModel_AcceptsSuggestionWithTab(t *testing.T) {
 	suggest := staticSuggest([]contacts.Suggestion{
 		{Name: "Alice Adams", Email: "alice@example.com"},
 	})
-	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
+	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest, ansix.NewMeasurer(1))
 	c.SetSize(80, 24)
 	c, _ = c.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	c, _ = c.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
@@ -333,7 +334,7 @@ func TestModel_DropdownPrefixUsesTrailingFragment(t *testing.T) {
 	suggest := staticSuggest([]contacts.Suggestion{
 		{Name: "Bob", Email: "bob@example.com"},
 	})
-	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
+	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest, ansix.NewMeasurer(1))
 	c.SetSize(80, 24)
 	c.to.SetValue("Alice <alice@example.com>, ")
 	c, _ = c.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
@@ -353,7 +354,7 @@ func TestModel_View_WidthHonoredWhileDropdownOpen(t *testing.T) {
 		{Name: "Alice Adams", Email: "alice@example.com", Org: "Acme"},
 		{Name: "Alex Brown", Email: "alex@example.com"},
 	})
-	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest)
+	c := New(theme.OneDark, Styles{}, "geoff@907.life", suggest, ansix.NewMeasurer(1))
 	c.SetSize(80, 24)
 	c, _ = c.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	c, _ = c.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
@@ -378,7 +379,7 @@ func TestModel_DraftIDIsSet(t *testing.T) {
 func TestModel_OpenPreservesID(t *testing.T) {
 	styles := Styles{ErrorBanner: lipgloss.NewStyle()}
 	d := mailcompose.Draft{Subject: "saved", Body: "body text"}
-	c := Open(theme.OneDark, styles, "geoff@907.life", "fixed-id", d, nil)
+	c := Open(theme.OneDark, styles, "geoff@907.life", "fixed-id", d, nil, ansix.NewMeasurer(1))
 	if c.DraftID() != "fixed-id" {
 		t.Fatalf("Open draftID = %q, want fixed-id", c.DraftID())
 	}

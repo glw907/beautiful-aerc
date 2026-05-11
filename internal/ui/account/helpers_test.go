@@ -16,7 +16,7 @@ func init() {
 	// Fixture expectations were written with uicore.FancyIcons (SPUA-A
 	// glyphs). spuaCellWidth must be 2 so ansix.Width measures
 	// them correctly in tests run independently of the App-level init.
-	ansix.SetSPUACellWidth(2)
+	_ = ansix.NewMeasurer(2)
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -73,7 +73,7 @@ func drainBatch(cmd tea.Cmd) []tea.Msg {
 
 func newTestCache(t *testing.T, backend mail.Backend) *cache.Account {
 	t.Helper()
-	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir(), cache.Config{})
+	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir(), cache.Config{}, nil)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}

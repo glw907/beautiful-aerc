@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -12,7 +13,7 @@ import (
 
 func newTestAttachPicker(t *testing.T) AttachPicker {
 	t.Helper()
-	return NewAttachPicker(NewStyles(theme.Nord), uicore.SimpleIcons).SetSize(120, 40)
+	return NewAttachPicker(NewStyles(theme.Nord), uicore.SimpleIcons, ansix.NewMeasurer(1)).SetSize(120, 40)
 }
 
 func TestAttachPicker_OpenClose(t *testing.T) {
@@ -84,7 +85,7 @@ func TestAttachPicker_listModel_cursorAdvances(t *testing.T) {
 		{Filename: "a.pdf", Size: 1234},
 		{Filename: "b.png", Size: 5678},
 	}
-	p := NewAttachPicker(st, icons).Open("u1", atts)
+	p := NewAttachPicker(st, icons, ansix.NewMeasurer(1)).Open("u1", atts)
 	p = p.SetSize(60, 12)
 
 	if got := p.Cursor(); got != 0 {
@@ -103,7 +104,7 @@ func TestAttachPicker_listModel_enterOpensCursor(t *testing.T) {
 		{Filename: "a.pdf", Size: 1234},
 		{Filename: "b.png", Size: 5678},
 	}
-	p := NewAttachPicker(st, icons).Open("u7", atts)
+	p := NewAttachPicker(st, icons, ansix.NewMeasurer(1)).Open("u7", atts)
 	p = p.SetSize(60, 12)
 	p, _ = p.Update(tea.KeyPressMsg{Code: 'j'})
 

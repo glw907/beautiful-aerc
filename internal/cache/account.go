@@ -22,12 +22,6 @@ import (
 	"github.com/glw907/poplar/internal/mail"
 )
 
-// Option configures an Account at construction time.
-type Option func(*Account)
-
-// WithLogger sets the structured logger for the account and its drainer.
-func WithLogger(l *slog.Logger) Option { return func(a *Account) { a.log = l } }
-
 // Account is a single account's UI-facing read/write handle.
 type Account struct {
 	Backend        mail.Backend
@@ -136,7 +130,11 @@ func OpenDB(path string) (*sql.DB, error) {
 //
 // dir is the cache base directory. The per-account subdirectory is
 // created if absent. A leading ~ is expanded to the user's home.
-func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string, cfg Config, opts ...Option) (*Account, error) {
+// A nil log defaults to slog.Default() tagged with the package name.
+func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string, cfg Config, log *slog.Logger) (*Account, error) {
+	if log == nil {
+		log = slog.Default().With("component", "cache")
+	}
 	dbPath, err := DBPath(accountName, dir)
 	if err != nil {
 		return nil, err
@@ -159,7 +157,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 	a := &Account{
 		Backend:           backend,
 		ChangeTracker:     ct,
-		log:               slog.Default().With("component", "cache"),
+		log:               log,
 		db:                db,
 		dir:               acctDir,
 		name:              accountName,
@@ -168,9 +166,6 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		events:            make(chan CacheEvent, 32),
 		drainSignal:       make(chan struct{}, 1),
 		stop:              make(chan struct{}),
-	}
-	for _, o := range opts {
-		o(a)
 	}
 	a.backfiller = newBackfiller(a)
 	bfCtx, cancel := context.WithCancel(context.Background())

@@ -31,7 +31,7 @@ var smtpDial = func(b *Backend) (smtpClient, error) {
 // ProbeSMTP dials, authenticates, and closes. `poplar config check`
 // uses it to validate submission credentials alongside IMAP.
 func ProbeSMTP(cfg config.AccountConfig) error {
-	b := New(cfg)
+	b := New(cfg, nil)
 	cli, err := smtpDial(b)
 	if err != nil {
 		return err

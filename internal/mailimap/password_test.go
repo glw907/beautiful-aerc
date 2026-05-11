@@ -28,7 +28,7 @@ func TestResolvedPassword_XOAUTH2_BypassesCache(t *testing.T) {
 		Name:        "g",
 		Auth:        "xoauth2",
 		PasswordCmd: counterCmd(t),
-	})
+	}, nil)
 
 	first, err := b.resolvedPassword()
 	if err != nil {
@@ -48,7 +48,7 @@ func TestResolvedPassword_NonXOAUTH2_Caches(t *testing.T) {
 		Name:        "f",
 		Auth:        "plain",
 		PasswordCmd: counterCmd(t),
-	})
+	}, nil)
 
 	first, _ := b.resolvedPassword()
 	second, _ := b.resolvedPassword()

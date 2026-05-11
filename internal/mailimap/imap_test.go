@@ -16,7 +16,7 @@ import (
 // Construction bypasses the network dial so unit tests don't need
 // a live server.
 func newWithFake(cfg config.AccountConfig, cmd, idle imapClient) *Backend {
-	b := New(cfg)
+	b := New(cfg, nil)
 	b.cmd = cmd
 	b.idle = idle
 	return b
@@ -72,7 +72,7 @@ func TestDisconnectLogsOutBoth(t *testing.T) {
 
 func TestFinishConnect_GmailQuirks_RequiresXGM(t *testing.T) {
 	cfg := config.AccountConfig{Name: "g", Backend: "imap", GmailQuirks: true}
-	b := New(cfg)
+	b := New(cfg, nil)
 	fc := newFakeClient()
 	fc.caps = map[string]bool{"UIDPLUS": true} // X-GM-EXT-1 absent
 	b.cmd = fc
@@ -89,7 +89,7 @@ func TestFinishConnect_GmailQuirks_RequiresXGM(t *testing.T) {
 
 func TestFinishConnect_GmailQuirks_AcceptsXGM(t *testing.T) {
 	cfg := config.AccountConfig{Name: "g", Backend: "imap", GmailQuirks: true}
-	b := New(cfg)
+	b := New(cfg, nil)
 	fc := newFakeClient()
 	fc.caps = map[string]bool{"UIDPLUS": true, "X-GM-EXT-1": true}
 	b.cmd = fc
@@ -152,13 +152,13 @@ func TestPushDraft_IMAP_ReplacesPrev(t *testing.T) {
 	}
 }
 
-// TestWithLogger_DroppedUpdate verifies that the WithLogger seam routes
-// the "dropped update, channel full" warn through the supplied logger.
-func TestWithLogger_DroppedUpdate(t *testing.T) {
+// TestLogger_DroppedUpdate verifies that the supplied logger routes
+// the "dropped update, channel full" warn through the constructor.
+func TestLogger_DroppedUpdate(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	b := New(config.AccountConfig{Name: "test"}, WithLogger(logger))
+	b := New(config.AccountConfig{Name: "test"}, logger)
 	// Zero-capacity channel: the very next emit overflows.
 	b.updates = make(chan mail.Update, 0)
 
