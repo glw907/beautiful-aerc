@@ -26,7 +26,10 @@ provider → email → credentials → probe → identity → signature → labe
 The signature step renders:
 
 ```
-Email signature — optional, markdown supported
+Email signature — optional
+
+Markdown is supported and will be rendered as HTML on send.
+Leave blank to skip.
 
 -- 
 ┃Geoff Wright
@@ -38,6 +41,15 @@ Wizard    ^X save · Esc skip · ^P back
 
 `┃` marks catkin's cursor. The `-- ` row is chrome — it is not in
 catkin's buffer and the cursor cannot reach it.
+
+The description block below the title sets two expectations the user
+cannot derive from the editor itself: that markdown syntax is honored
+(rather than going out verbatim), and that the wire format on send is
+HTML (the multipart/alternative `text/html` part `AssembleMIME` builds
+via `filter.MarkdownToHTML`). The plaintext alternative receives the
+markdown source unchanged, which keeps the `-- ` boundary intact for
+the plaintext reader's signature-stripping heuristics — worth knowing
+later when documenting, but not a fact the wizard surfaces.
 
 Keys:
 
@@ -106,8 +118,11 @@ func newSignatureSection(parent *Model) *signatureSection {
 
 `Update` routes `Ctrl+X` / `Esc` / `Ctrl+P` to the wizard's message
 types and delegates every other key to `s.editor.Update`. `View`
-composes title, blank line, sentinel chrome row, catkin viewport, blank
-line, two hint rows. The sentinel row is a literal `"-- "` string
+composes title, blank line, two-line description block, blank line,
+sentinel chrome row, catkin viewport, blank line, two hint rows. The
+description ("Markdown is supported and will be rendered as HTML on
+send. / Leave blank to skip.") renders through `Styles.Help` so it
+sits visually below the bright title. The sentinel row is a literal `"-- "` string
 rendered through `Styles.Help` — a comment cites ADR-0177 so a future
 reader does not "fix" the trailing space.
 
