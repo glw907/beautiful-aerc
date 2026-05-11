@@ -18,9 +18,9 @@ import (
 // needs to render each displayRow. messagelist.Model holds it as
 // *rowDelegate so context refreshes (SetSize, SetLayout,
 // SetSearchResults, SetMessages) mutate fields in place without
-// rebuilding the list's item slice. The pointer escape parallels
-// ADR-0130's overlay-cache carveout. It is scoped here to per-frame
-// context; the delegate never memoizes rendered output.
+// rebuilding the list's item slice. The pointer is a deliberate
+// escape from the Elm immutable-model contract, analogous to
+// ADR-0130's overlay-cache field but without memoization.
 type rowDelegate struct {
 	styles      Styles
 	layout      uicore.LayoutMode
@@ -130,6 +130,9 @@ func (d *rowDelegate) senderWithOrigin(msg mail.MessageInfo) string {
 	return "[" + folder + "] " + msg.From
 }
 
+// renderFlagCell renders the flag column. Glyph priority is flagged,
+// answered, unread, none; output is always exactly mlFlagWidth display
+// cells regardless of icon mode.
 func (d *rowDelegate) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgloss.Style) string {
 	iconStyle := d.styles.MsgListIconRead
 	if isUnread {
