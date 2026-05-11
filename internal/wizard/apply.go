@@ -75,10 +75,14 @@ func Apply(m Model) (config.AccountConfig, error) {
 		}
 	}
 
-	if m.IdentityName != "" {
-		cfg.Identities = []config.Identity{
-			{Name: m.IdentityName, Email: m.Email},
+	if m.IdentityName != "" || m.Signature != "" {
+		id := config.Identity{Name: m.IdentityName, Email: m.Email}
+		if m.Signature != "" {
+			id.Signatures = []config.Signature{
+				{Name: "default", Text: m.Signature},
+			}
 		}
+		cfg.Identities = []config.Identity{id}
 	}
 
 	return cfg, nil

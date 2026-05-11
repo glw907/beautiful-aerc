@@ -105,3 +105,78 @@ func TestApplyOAuthNotDoneErrors(t *testing.T) {
 		t.Fatal("expected error when OAuthDone is false")
 	}
 }
+
+func TestApplySignatureOnlyNoIdentityName(t *testing.T) {
+	m := Model{
+		Preset:    "fastmail",
+		Email:     "geoff@907.life",
+		Token:     "tok",
+		Signature: "Geoff\nlinks at [907.life](https://907.life)",
+	}
+	cfg, err := Apply(m)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(cfg.Identities) != 1 {
+		t.Fatalf("Identities len = %d, want 1", len(cfg.Identities))
+	}
+	id := cfg.Identities[0]
+	if id.Name != "" || id.Email != "geoff@907.life" {
+		t.Errorf("Identity = %+v", id)
+	}
+	if len(id.Signatures) != 1 {
+		t.Fatalf("Signatures len = %d, want 1", len(id.Signatures))
+	}
+	sig := id.Signatures[0]
+	if sig.Name != "default" || sig.Text != "Geoff\nlinks at [907.life](https://907.life)" {
+		t.Errorf("Signature = %+v", sig)
+	}
+}
+
+func TestApplyIdentityNamePlusSignature(t *testing.T) {
+	m := Model{
+		Preset:       "fastmail",
+		Email:        "geoff@907.life",
+		Token:        "tok",
+		IdentityName: "Geoff Wright",
+		Signature:    "Geoff Wright\ngeoff@907.life",
+	}
+	cfg, err := Apply(m)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(cfg.Identities) != 1 {
+		t.Fatalf("Identities len = %d, want 1", len(cfg.Identities))
+	}
+	id := cfg.Identities[0]
+	if id.Name != "Geoff Wright" || id.Email != "geoff@907.life" {
+		t.Errorf("Identity = %+v", id)
+	}
+	if len(id.Signatures) != 1 {
+		t.Fatalf("Signatures len = %d, want 1", len(id.Signatures))
+	}
+	sig := id.Signatures[0]
+	if sig.Name != "default" || sig.Text != "Geoff Wright\ngeoff@907.life" {
+		t.Errorf("Signature = %+v", sig)
+	}
+}
+
+func TestApplyEmptySignatureWithIdentityNameProducesNoSignatures(t *testing.T) {
+	m := Model{
+		Preset:       "fastmail",
+		Email:        "geoff@907.life",
+		Token:        "tok",
+		IdentityName: "Geoff Wright",
+	}
+	cfg, err := Apply(m)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(cfg.Identities) != 1 {
+		t.Fatalf("Identities len = %d, want 1", len(cfg.Identities))
+	}
+	id := cfg.Identities[0]
+	if len(id.Signatures) != 0 {
+		t.Errorf("Signatures = %+v, want none", id.Signatures)
+	}
+}
