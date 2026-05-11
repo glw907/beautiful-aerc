@@ -77,7 +77,7 @@ func (p LinkPicker) Close() LinkPicker {
 
 func (p LinkPicker) SetSize(width, height int) LinkPicker {
 	p.shell = p.shell.SetSize(width, height)
-	contentW, listH := linkPickerListSize(width, height)
+	contentW, listH := uicore.PickerListSize(width, height, linkPickerMaxWidth, 20, 7)
 	p.list.SetSize(contentW, listH)
 	return p
 }
@@ -123,22 +123,6 @@ func (p LinkPicker) Update(msg tea.Msg) (LinkPicker, tea.Cmd) {
 
 const linkPickerMaxWidth = 70
 
-func linkPickerListSize(boxW, boxH int) (contentW, listH int) {
-	bw := linkPickerMaxWidth
-	if boxW-4 < bw {
-		bw = boxW - 4
-	}
-	if bw < 20 {
-		bw = 20
-	}
-	contentW = bw - 2
-	listH = boxH - 7
-	if listH < 1 {
-		listH = 1
-	}
-	return contentW, listH
-}
-
 func (p LinkPicker) View() string {
 	if !p.shell.IsOpen() {
 		return ""
@@ -147,12 +131,8 @@ func (p LinkPicker) View() string {
 }
 
 func (p LinkPicker) Box(w, h int) string {
-	contentW, _ := linkPickerListSize(w, h)
-	listView := p.list.View()
-	bodyRows := strings.Split(listView, "\n")
-	for i, row := range bodyRows {
-		bodyRows[i] = uicore.PadOrTruncate(row, contentW)
-	}
+	contentW, _ := uicore.PickerListSize(w, h, linkPickerMaxWidth, 20, 7)
+	bodyRows := uicore.SplitAndPad(p.list.View(), contentW)
 
 	previewLines := p.previewLines(contentW)
 	footerRows := make([]string, 2)

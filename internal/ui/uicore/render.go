@@ -58,6 +58,37 @@ func ClampScrollOffset(cursor, visible, offset int) int {
 	return offset
 }
 
+// SplitAndPad splits view on newlines and pads or truncates each row to width
+// cells. Used by picker Box renderers to normalize list.View() output before
+// passing it to ModalShell.Box.
+func SplitAndPad(view string, width int) []string {
+	rows := strings.Split(view, "\n")
+	for i, row := range rows {
+		rows[i] = PadOrTruncate(row, width)
+	}
+	return rows
+}
+
+// PickerListSize derives content width and list height for a modal picker box.
+// boxW/boxH are the outer box dims. maxW caps the picker width; minW floors it.
+// headerRows is the count of body rows reserved for title, footer, and borders,
+// subtracted from boxH to give listH.
+func PickerListSize(boxW, boxH, maxW, minW, headerRows int) (contentW, listH int) {
+	bw := maxW
+	if boxW-4 < bw {
+		bw = boxW - 4
+	}
+	if bw < minW {
+		bw = minW
+	}
+	contentW = bw - 2
+	listH = boxH - headerRows
+	if listH < 1 {
+		listH = 1
+	}
+	return contentW, listH
+}
+
 // CenterOverlay returns the top-left cell coordinates that center box on a
 // terminal of totalW × totalH cells.
 func CenterOverlay(box string, totalW, totalH int) (int, int) {

@@ -3,7 +3,6 @@ package reader
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
@@ -85,7 +84,7 @@ func (p AttachPicker) Close() AttachPicker {
 
 func (p AttachPicker) SetSize(width, height int) AttachPicker {
 	p.shell = p.shell.SetSize(width, height)
-	contentW, listH := attachPickerListSize(width, height)
+	contentW, listH := uicore.PickerListSize(width, height, attachPickerMaxWidth, 24, 5)
 	p.list.SetSize(contentW, listH)
 	return p
 }
@@ -143,22 +142,6 @@ func (p AttachPicker) saveIndex(i int) tea.Cmd {
 
 const attachPickerMaxWidth = 70
 
-func attachPickerListSize(boxW, boxH int) (contentW, listH int) {
-	bw := attachPickerMaxWidth
-	if boxW-4 < bw {
-		bw = boxW - 4
-	}
-	if bw < 24 {
-		bw = 24
-	}
-	contentW = bw - 2
-	listH = boxH - 5
-	if listH < 1 {
-		listH = 1
-	}
-	return contentW, listH
-}
-
 func (p AttachPicker) View() string {
 	if !p.shell.IsOpen() {
 		return ""
@@ -167,12 +150,8 @@ func (p AttachPicker) View() string {
 }
 
 func (p AttachPicker) Box(w, h int) string {
-	contentW, _ := attachPickerListSize(w, h)
-	listView := p.list.View()
-	bodyRows := strings.Split(listView, "\n")
-	for i, row := range bodyRows {
-		bodyRows[i] = uicore.PadOrTruncate(row, contentW)
-	}
+	contentW, _ := uicore.PickerListSize(w, h, attachPickerMaxWidth, 24, 5)
+	bodyRows := uicore.SplitAndPad(p.list.View(), contentW)
 	footer := uicore.PadOrTruncate("Enter/o open  s save  Esc close", contentW)
 	return p.shell.Box("Attachments", bodyRows, []string{footer}, contentW)
 }

@@ -107,9 +107,7 @@ func (p Model) Open(uids []mail.UID, src string, folders []mail.FolderEntry) Mod
 		items[i] = folderItem{entry: f}
 	}
 	p.list.SetItems(items)
-	// SetFilterText("") synchronously populates filteredItems (all items, no
-	// matches), then sets filterState=FilterApplied. We follow with
-	// SetFilterState(Filtering) to enter the always-on input mode.
+	// SetFilterText("") forces filteredItems to populate before we enter Filtering.
 	p.list.SetFilterText("")
 	p.list.SetFilterState(list.Filtering)
 	return p
@@ -122,7 +120,7 @@ func (p Model) Close() Model {
 
 func (p Model) SetSize(width, height int) Model {
 	p.shell = p.shell.SetSize(width, height)
-	contentW, listH := movepickerListSize(width, height)
+	contentW, listH := uicore.PickerListSize(width, height, movepickerMaxWidth, movepickerMinWidth, 7)
 	p.list.SetSize(contentW, listH)
 	return p
 }
@@ -185,22 +183,6 @@ const (
 	movepickerMinWidth = 24
 )
 
-func movepickerListSize(boxW, boxH int) (contentW, listH int) {
-	bw := movepickerMaxWidth
-	if boxW-4 < bw {
-		bw = boxW - 4
-	}
-	if bw < movepickerMinWidth {
-		bw = movepickerMinWidth
-	}
-	contentW = bw - 2
-	listH = boxH - 7
-	if listH < 1 {
-		listH = 1
-	}
-	return contentW, listH
-}
-
 func (p Model) View() string {
 	if !p.shell.IsOpen() {
 		return ""
@@ -210,12 +192,8 @@ func (p Model) View() string {
 
 // Box renders the picker at the given dims regardless of open state.
 func (p Model) Box(w, h int) string {
-	contentW, _ := movepickerListSize(w, h)
-	listView := p.list.View()
-	bodyRows := strings.Split(listView, "\n")
-	for i, row := range bodyRows {
-		bodyRows[i] = uicore.PadOrTruncate(row, contentW)
-	}
+	contentW, _ := uicore.PickerListSize(w, h, movepickerMaxWidth, movepickerMinWidth, 7)
+	bodyRows := uicore.SplitAndPad(p.list.View(), contentW)
 	footerRows := []string{
 		p.styles.Dim.Render(uicore.PadOrTruncate("↑↓ select · enter pick · esc cancel", contentW)),
 	}
@@ -258,16 +236,14 @@ func renderWithMatches(s string, matches []int, matchStyle lipgloss.Style) strin
 	if len(matches) == 0 {
 		return s
 	}
-	mset := make(map[int]bool, len(matches))
-	for _, i := range matches {
-		mset[i] = true
-	}
+	mi := 0
 	var b strings.Builder
 	for i, r := range s {
-		if mset[i] {
+		if mi < len(matches) && matches[mi] == i {
 			b.WriteString(matchStyle.Render(string(r)))
+			mi++
 		} else {
-			b.WriteString(string(r))
+			b.WriteRune(r)
 		}
 	}
 	return b.String()
