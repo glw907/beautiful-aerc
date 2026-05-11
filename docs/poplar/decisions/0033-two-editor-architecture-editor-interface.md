@@ -22,3 +22,9 @@ and send pipeline are shared.
 ## Consequences
 
 No follow-on notes recorded.
+
+- Superseded — implementation strategy. ADR-0213 deleted the
+  `mailcompose.Editor` interface that this ADR proposed as the
+  v1.1 adapter seam. The neovim adapter remains a post-1.0 goal;
+  its shape will be designed fresh against value-typed
+  `catkin.Model` when concrete requirements exist.

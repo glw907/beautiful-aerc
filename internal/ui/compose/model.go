@@ -123,8 +123,8 @@ func newModel(t *theme.CompiledTheme, styles Styles, self string, suggest Sugges
 		cc:       mk(),
 		bcc:      mk(),
 		subject:  mk(),
-		editor:  catkin.New().WithStyles(styles.CatkinStyles()),
-		suggest: NewDropdown(suggest).WithStyles(styles),
+		editor:   catkin.New().WithStyles(styles.CatkinStyles()),
+		suggest:  NewDropdown(suggest).WithStyles(styles),
 	}
 	c.tidyFn = tidytext.Tidy
 	c.attach = NewAttachPicker(styles, uicore.SimpleIcons, m)

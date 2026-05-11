@@ -277,16 +277,15 @@ Auto-loaded via `.claude/rules/catkin-invariants.md` when editing `internal/catk
 
 ### Compose
 
-- `internal/mailcompose/` is the UI-free outbound-mail surface: the
-  `Editor` seam (CatkinEditor wraps `catkin.Model`; v1.1 will add a
-  neovim adapter), the `Draft` value type, pure
-  `AssembleMIME(d, now)` (multipart/alternative text+html via
-  `filter.MarkdownToHTML`; multipart/mixed when attachments are
-  present), and `SeedReply`/`SeedReplyAll`/`SeedForward` parsing
-  parent Message-Id and References from raw RFC 5322 bytes with
-  depth-preserving `>` quoting. `gomail.Address` is the Draft
-  address type; `content.ParseAddressList` is the shared list
-  parser. `internal/filter` exposes `MarkdownBody`/`MarkdownToHTML` as the shared goldmark entries (Linkify + Table).
+- `internal/mailcompose/` is the UI-free outbound-mail surface:
+  the `Draft` value type, pure `AssembleMIME(d, now)` (multipart/
+  alternative text+html via `filter.MarkdownToHTML`; multipart/
+  mixed when attachments are present), and `SeedReply` /
+  `SeedReplyAll` / `SeedForward` parsing parent Message-Id and
+  References from raw RFC 5322 bytes with depth-preserving `>`
+  quoting. `gomail.Address` is the Draft address type;
+  `content.ParseAddressList` is the shared list parser.
+  `internal/filter` exposes `MarkdownBody` / `MarkdownToHTML` as the shared goldmark entries (Linkify + Table). `compose.Model` (`internal/ui/compose/`) embeds `catkin.Model` directly. ADRs 0212, 0213.
 - `internal/ui/compose/` owns the live compose surface. `Dropdown`
   is a value-type To/Cc/Bcc autocomplete sub-model on
   `compose.Model`; `SuggestFn` threads from `App.suggestAddresses`

@@ -13,7 +13,7 @@ on a full audit cycle returning no findings (`docs/poplar/audit-plan.md`).
 |------|------|--------|
 | 1 – 26.1 | Scaffold through Audit A remediation (ADRs 0001–0211) | done |
 | 27 | Catkin Elm conformance — all-value path (ADR-0212) | done |
-| 28 | **Compose Editor wrapper deletion** | next |
+| 28 | **Compose Editor wrapper deletion** | done |
 | 29 | `app.go` decomposition — split 874-line `App.Update` | gated |
 | 30 | **Audit B.1** — Elm + bubbletea v2 conformance | gate |
 | 31 | **Audit B.2** — general structural integrity | gate |
@@ -27,34 +27,29 @@ on a full audit cycle returning no findings (`docs/poplar/audit-plan.md`).
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 28)
+### Next starter prompt (Pass 29)
 
-> **Goal.** Delete `mailcompose.Editor` + `CatkinEditor`; compose
-> embeds `catkin.Model` directly. Mechanical follow-up to Pass 27
-> (ADR-0212).
+> **Goal.** Decompose `internal/ui/app.go` so no single file
+> exceeds ~600 lines and `App.Update` is split into per-screen
+> controllers.
 >
-> **Scope.** Remove `internal/mailcompose/editor.go`. Change
-> `compose.Model.editor` field type to `catkin.Model`. Rewire the
-> constructor and every call site in
-> `internal/ui/compose/model.go` and `internal/ui/compose/tidy.go`
-> to use `With*` setters. Fold the tidy result handler's paired
-> mutation into one statement (value + highlights in a single
-> `WithValue(...).WithTidyHighlights(...)` chain). Convert
-> `internal/ui/compose/*_test.go` to the value-setter form.
-> Update ADR-0033 Consequences to mark the interface-based
-> adapter strategy superseded; the goal survives. Write
-> ADR-0213.
+> **Scope.** Split the 874-line `App.Update` into
+> `updateAccount`, `updateContacts`, `updateCompose`,
+> `updateModals`, `updateOutbox`, `updateWizard`. Peel the file
+> into `app_update.go` / `app_view.go` / `app_chrome.go`. No
+> behavior change. Touches `internal/ui/`.
 >
-> **Settled (do not re-brainstorm):** Direction is set by
-> ADR-0212. The Editor interface is a single-impl seam; it
-> deletes. Compose mutates the embedded catkin from its own
-> Update via `c.editor = c.editor.WithX(...)`, mirroring the
-> wizard.
+> **Settled (do not re-brainstorm):** Per-screen controllers is
+> the direction. File-size cap is the "no single file > ~600
+> lines" budget per `STATUS.md`'s pass-size note.
 >
-> **Still open — brainstorm these:** None. Pure mechanical
-> follow-up.
+> **Still open — brainstorm these:** Exact controller boundaries
+> for cross-screen messages (modals over compose, popovers over
+> account); how `App.Update` dispatches to controllers when the
+> active screen owns the keystroke vs. a modal intercepts.
 >
-> **Approach.** Execute the Pass 28 section of
-> `docs/superpowers/plans/2026-05-11-catkin-elm.md` (Tasks 8–10).
-> Standard pass-end checklist applies; UI work requires the
-> idiomatic-bubbletea §10 checklist at pass-end.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-app-decomposition.md`,
+> then implement. Standard pass-end checklist applies; UI work
+> requires reading `docs/poplar/bubbletea-conventions.md` and
+> the §10 review checklist at pass-end.
