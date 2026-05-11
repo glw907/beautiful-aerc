@@ -20,10 +20,9 @@ type signatureSection struct {
 }
 
 func newSignatureSection(parent *Model) *signatureSection {
-	ed := catkin.New()
-	ed.SetSize(64, 8)
+	ed := catkin.New().WithSize(64, 8)
 	if parent.State.Signature != "" {
-		ed.SetValue(parent.State.Signature)
+		ed = ed.WithValue(parent.State.Signature)
 	}
 	return &signatureSection{parent: parent, editor: ed}
 }

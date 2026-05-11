@@ -37,7 +37,7 @@ func TestSignatureSection_EscSkipsWithEmptyBody(t *testing.T) {
 
 func TestSignatureSection_CtrlXSavesAndAdvances(t *testing.T) {
 	s, parent := newSignatureSectionForTest(t)
-	s.editor.SetValue("Geoff\ngeoff@907.life")
+	s.editor = s.editor.WithValue("Geoff\ngeoff@907.life")
 	_, cmd := s.Update(tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("Ctrl+X must emit a command")
@@ -64,7 +64,7 @@ func TestSignatureSection_CtrlPGoesBack(t *testing.T) {
 
 func TestSignatureSection_OtherKeysReachCatkin(t *testing.T) {
 	s, _ := newSignatureSectionForTest(t)
-	s.editor.Focus()
+	s.editor, _ = s.editor.WithFocus()
 	before := s.editor.Value()
 	s.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	if s.editor.Value() == before {
