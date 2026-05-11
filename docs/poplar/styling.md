@@ -87,6 +87,7 @@ until unread, then escalate to `FgBright` + bold.
 | `SidebarFolder` | `FgBase` | inherit | Folder icon + name (no unread) |
 | `SidebarUnread` | `FgBright` bold | inherit | Folder icon + name + count (has unread) |
 | `SidebarIndicator` | `AccentSecondary` | inherit | `┃` selection indicator (selected row) |
+| `SidebarTreeRule` | `FgDim` | inherit | Tree prefix glyphs (`│ ├─ └─`) in the Custom group hierarchy |
 
 Background composition: sidebar rows carry their bg via the `bgStyle`
 parameter into `renderRow`. Each text segment runs through `withBg()`

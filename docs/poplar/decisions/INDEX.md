@@ -16,6 +16,7 @@ when you need the full record.
 | Elm architecture in internal/ui/ | 0023, 0035, 0036, 0037, 0042, 0044, 0054, 0088 |
 | Frame, chrome, status, footer | 0025, 0026, 0027, 0028, 0029, 0030, 0038 |
 | Sidebar groups, nested indent, classification | 0018, 0019, 0034, 0049, 0050 |
+| Sidebar tree, expand/collapse, depth cap | 0198 |
 | Message list, threading, fold | 0041, 0045, 0047, 0048, 0055, 0059, 0060, 0061, 0062, 0063 |
 | Vim-first keybindings — no command mode, no multi-key, no modifiers (text-entry exempt per 0076) | 0015, 0024, 0051, 0068, 0076 |
 | Compose, Catkin, editor interface, library foundation | 0031, 0032, 0033, 0076 |

@@ -129,7 +129,7 @@ func (s *Model) pruneExpanded(known map[string]struct{}) {
 }
 
 // customPaths returns every full path that could appear as an expand-state
-// key — real Custom folder names plus every synthesized intermediate.
+// key: real Custom folder names plus every synthesized intermediate.
 func customPaths(entries []folderEntry) map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, e := range entries {

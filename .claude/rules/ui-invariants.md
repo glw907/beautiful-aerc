@@ -35,8 +35,21 @@ file describes behavior, not the key tables.
   refreshes the count from `Account.OutboxDepth` on every
   `account.CacheEventMsg`, guarded against unchanged totals.
   ADR-0184.
-- Nested folder names (containing `/`) render flat. The `/` in the
-  display name is the only affordance. No tree, no expand/collapse.
+- Custom folders with `/`-paths render as a tree. `→` expands the
+  parent under the cursor; `←` collapses (or, on a child, jumps
+  to the ancestor and collapses it). Expand state is per-session,
+  keyed by full provider path on `sidebar.Model.expanded`,
+  pruned to live paths on every `SetFolders`. Collapsed parents
+  show sum-of-descendants unread synthesized in the walk
+  (`rowMeta.aggUnread` is descendants-only); expanded parents
+  show their own `Unseen` only. Synthesized intermediate nodes
+  (path segment with no real folder, e.g. "Lists" when only
+  "Lists/golang" exists) render with the same prefix machinery
+  and aggregate unread. Spartan tier (`LayoutMode.Spartan`, W=80–
+  89) caps depth at 1: depth-2+ entries fold into their depth-1
+  ancestor. Primary and Disposal groups are always flat.
+  `sidebar.Model` exports a `KeyMap` + `Update`; imperative
+  movement methods have been removed. ADR-0198.
 - Sidebar width, sender column, date column, flag column, and
   sidebar icons are all derived from `uicore.ComputeLayout(
   termWidth)`. Three tiers: Spartan (W=80–89, sidebar=14, no
