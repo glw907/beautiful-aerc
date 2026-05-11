@@ -49,9 +49,7 @@ func TestFindStateFooterRows(t *testing.T) {
 }
 
 func TestReplaceCurrent(t *testing.T) {
-	m := New()
-	m.SetSize(40, 10)
-	m.SetValue("foo bar foo")
+	m := New().WithSize(40, 10).WithValue("foo bar foo")
 	m.find = findState{mode: findReplace, query: "foo", replacement: "baz", inputFocus: 1}
 	m.find.recomputeMatches(m.buf.Value(), 0)
 
@@ -67,9 +65,7 @@ func TestReplaceCurrent(t *testing.T) {
 }
 
 func TestReplaceAll(t *testing.T) {
-	m := New()
-	m.SetSize(40, 10)
-	m.SetValue("a a a")
+	m := New().WithSize(40, 10).WithValue("a a a")
 	m.find = findState{mode: findReplace, query: "a", replacement: "X", inputFocus: 1}
 	m.find.recomputeMatches(m.buf.Value(), 0)
 	m = m.replaceAll()

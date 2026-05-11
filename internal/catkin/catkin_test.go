@@ -7,8 +7,8 @@ func TestNewReturnsUsableModel(t *testing.T) {
 	if got := m.Value(); got != "" {
 		t.Errorf("new model: Value() = %q, want empty", got)
 	}
-	m.SetValue("hello")
+	m = m.WithValue("hello")
 	if got := m.Value(); got != "hello" {
-		t.Errorf("after SetValue: Value() = %q, want %q", got, "hello")
+		t.Errorf("after WithValue: Value() = %q, want %q", got, "hello")
 	}
 }

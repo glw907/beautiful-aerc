@@ -11,10 +11,7 @@ import (
 func newModelWithMisspelling(t *testing.T) (Model, Range) {
 	t.Helper()
 	speller := newFixtureSpeller(t, nil)
-	m := New()
-	m.SetSize(80, 10)
-	m.SetValue("the tradeof is real")
-	m.RegisterAnnotator(NewSpellcheckAnnotator(speller, Styles{}))
+	m := New().WithSize(80, 10).WithValue("the tradeof is real").WithAnnotator(NewSpellcheckAnnotator(speller, Styles{}))
 	// Run annotators inline, bypassing the tick.
 	anns := runAnnotators(m.annotators, m.buf.Value())
 	m.annotations = newAnnotationSet(m.buf.Value(), anns)
@@ -26,7 +23,7 @@ func newModelWithMisspelling(t *testing.T) (Model, Range) {
 
 func TestPopoverOpensOnRange(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
-	m.buf.SetRuneOffset(r.Start) // cursor on misspelling
+	m.buf = m.buf.WithRuneOffset(r.Start) // cursor on misspelling
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if !m.popover.open {
 		t.Errorf("; on misspelling should open popover")
@@ -38,7 +35,7 @@ func TestPopoverOpensOnRange(t *testing.T) {
 
 func TestPopoverCloseOnEsc(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
-	m.buf.SetRuneOffset(r.Start)
+	m.buf = m.buf.WithRuneOffset(r.Start)
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if m.popover.open {
@@ -48,7 +45,7 @@ func TestPopoverCloseOnEsc(t *testing.T) {
 
 func TestPopoverApplyReplacesRange(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
-	m.buf.SetRuneOffset(r.Start)
+	m.buf = m.buf.WithRuneOffset(r.Start)
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // apply first suggestion
 	if got := m.buf.Value(); got != "the tradeoff is real" {
@@ -61,7 +58,7 @@ func TestPopoverApplyReplacesRange(t *testing.T) {
 
 func TestPopoverDoesNotOpenOffRange(t *testing.T) {
 	m, _ := newModelWithMisspelling(t)
-	m.buf.SetRuneOffset(0) // cursor on "the", not on misspelling
+	m.buf = m.buf.WithRuneOffset(0) // cursor on "the", not on misspelling
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if m.popover.open {
 		t.Errorf("; off a misspelling should not open popover")
@@ -70,7 +67,7 @@ func TestPopoverDoesNotOpenOffRange(t *testing.T) {
 
 func TestPopoverDigitJumpApply(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
-	m.buf.SetRuneOffset(r.Start)
+	m.buf = m.buf.WithRuneOffset(r.Start)
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if len(m.popover.suggestions) < 1 {
 		t.Skipf("no suggestions; cannot exercise digit jump")
@@ -86,8 +83,8 @@ func TestPopoverAddToWordlist(t *testing.T) {
 	listPath := dir + "/wordlist.txt"
 
 	m, r := newModelWithMisspelling(t)
-	m.SetUserWordlistPath(listPath)
-	m.buf.SetRuneOffset(r.Start)
+	m = m.WithUserWordlistPath(listPath)
+	m.buf = m.buf.WithRuneOffset(r.Start)
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	m, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 
@@ -203,10 +200,7 @@ func TestOverlaySkipsOutOfRangeRows(t *testing.T) {
 func modelWithPopoverOpen(t *testing.T, value, word string) Model {
 	t.Helper()
 	speller := newFixtureSpeller(t, nil)
-	m := New()
-	m.SetSize(80, 24)
-	m.SetValue(value)
-	m.RegisterAnnotator(NewSpellcheckAnnotator(speller, Styles{}))
+	m := New().WithSize(80, 24).WithValue(value).WithAnnotator(NewSpellcheckAnnotator(speller, Styles{}))
 	anns := runAnnotators(m.annotators, m.buf.Value())
 	m.annotations = newAnnotationSet(m.buf.Value(), anns)
 	off := -1
@@ -223,8 +217,8 @@ func modelWithPopoverOpen(t *testing.T, value, word string) Model {
 	if off < 0 {
 		t.Fatalf("no misspelling matching %q in %d annotations", word, len(anns))
 	}
-	m.buf.SetRuneOffset(off)
-	m.Focus()
+	m.buf = m.buf.WithRuneOffset(off)
+	m, _ = m.WithFocus()
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if !m.popover.open {
 		t.Fatalf("popover did not open on %q", word)
@@ -276,8 +270,8 @@ func TestPopoverFlipsAboveAtBottomEdge(t *testing.T) {
 
 func TestPopoverClosesOnCursorLeave(t *testing.T) {
 	m, r := newModelWithMisspelling(t)
-	m.buf.SetRuneOffset(r.Start)
-	m.Focus()
+	m.buf = m.buf.WithRuneOffset(r.Start)
+	m, _ = m.WithFocus()
 	m, _ = m.Update(tea.KeyPressMsg{Code: ';', Text: ";"})
 	if !m.popover.open {
 		t.Fatalf("setup: popover should be open")

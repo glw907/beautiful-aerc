@@ -77,7 +77,7 @@ func (f *fakeAnnotator) Annotate(_ string) []Annotation {
 func TestRegisterAnnotator(t *testing.T) {
 	m := New()
 	a := &fakeAnnotator{out: []Annotation{{Range: Range{0, 3}, Kind: KindMisspelling}}}
-	m.RegisterAnnotator(a)
+	m = m.WithAnnotator(a)
 	set := runAnnotators(m.annotators, "abc def")
 	if len(set) != 1 || set[0].Range.Start != 0 {
 		t.Fatalf("runAnnotators output = %#v, want one annotation at 0", set)
@@ -106,7 +106,7 @@ func TestAnnotateStaleDrop(t *testing.T) {
 func TestAnnotateRequestStaleDrop(t *testing.T) {
 	m := New()
 	a := &fakeAnnotator{}
-	m.RegisterAnnotator(a)
+	m = m.WithAnnotator(a)
 	m.srcGen = 7
 	// Request from gen 6 should not run annotators.
 	m, _ = m.Update(annotateRequestMsg{gen: 6})
@@ -153,8 +153,8 @@ func TestTidyAnnotator(t *testing.T) {
 
 func TestTidyAnnotatorClearedByMutation(t *testing.T) {
 	m := New()
-	m.SetValue("teh quick brown")
-	m.SetTidyHighlights("the quick brown", []Range{{1, 3}})
+	m = m.WithValue("teh quick brown")
+	m = m.WithTidyHighlights("the quick brown", []Range{{1, 3}})
 	if got := runAnnotators(m.annotators, "the quick brown"); len(got) == 0 {
 		t.Fatalf("post-set: want at least one tidy annotation")
 	}

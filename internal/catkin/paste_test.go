@@ -8,8 +8,7 @@ import (
 
 func newModelWithValue(val string, off int) Model {
 	m := New()
-	m.buf.SetValue(val)
-	m.buf.SetRuneOffset(off)
+	m.buf = m.buf.WithValue(val).WithRuneOffset(off)
 	m.undo.seed(snap{val, off})
 	return m
 }

@@ -21,8 +21,7 @@ func TestWordCount(t *testing.T) {
 }
 
 func TestModelCounts(t *testing.T) {
-	m := New()
-	m.SetValue("hello world")
+	m := New().WithValue("hello world")
 	if got := m.WordCount(); got != 2 {
 		t.Errorf("WordCount = %d, want 2", got)
 	}
