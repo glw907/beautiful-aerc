@@ -11,11 +11,14 @@ import (
 // Buffer wraps a bubbles/textarea.Model. Catkin uses textarea for
 // its buffer storage, cursor management, and edit operations. The
 // renderer is Catkin's own (see render.go).
+//
+// Buffer is a value type. Mutators return a new Buffer; callers
+// reassign. The wrapped textarea.Model is sealed — it never leaves
+// the package.
 type Buffer struct {
 	ta textarea.Model
 }
 
-// NewBuffer wraps an existing textarea.Model.
 func NewBuffer(ta textarea.Model) Buffer { return Buffer{ta: ta} }
 
 func (b Buffer) Update(msg tea.Msg) (Buffer, tea.Cmd) {
@@ -25,14 +28,33 @@ func (b Buffer) Update(msg tea.Msg) (Buffer, tea.Cmd) {
 }
 
 func (b Buffer) Value() string { return b.ta.Value() }
+func (b Buffer) Focused() bool { return b.ta.Focused() }
 
-func (b *Buffer) SetValue(s string) { b.ta.SetValue(s) }
-func (b *Buffer) SetWidth(w int)    { b.ta.SetWidth(w) }
-func (b *Buffer) SetHeight(h int)   { b.ta.SetHeight(h) }
+func (b Buffer) WithValue(s string) Buffer {
+	b.ta.SetValue(s)
+	return b
+}
 
-func (b *Buffer) Focus() tea.Cmd { return b.ta.Focus() }
-func (b *Buffer) Blur()          { b.ta.Blur() }
-func (b Buffer) Focused() bool   { return b.ta.Focused() }
+func (b Buffer) WithWidth(w int) Buffer {
+	b.ta.SetWidth(w)
+	return b
+}
+
+func (b Buffer) WithHeight(h int) Buffer {
+	b.ta.SetHeight(h)
+	return b
+}
+
+// WithFocus focuses the buffer and returns the cursor-blink command from textarea.
+func (b Buffer) WithFocus() (Buffer, tea.Cmd) {
+	cmd := b.ta.Focus()
+	return b, cmd
+}
+
+func (b Buffer) WithBlur() Buffer {
+	b.ta.Blur()
+	return b
+}
 
 // RuneOffset returns the cursor's rune offset from the start of the value.
 func (b Buffer) RuneOffset() int {
@@ -52,8 +74,8 @@ func (b Buffer) RuneOffset() int {
 	return off
 }
 
-// SetRuneOffset positions the cursor at rune offset off.
-func (b *Buffer) SetRuneOffset(off int) {
+// WithRuneOffset positions the cursor at rune offset off.
+func (b Buffer) WithRuneOffset(off int) Buffer {
 	value := b.ta.Value()
 	total := utf8.RuneCountInString(value)
 	if off > total {
@@ -73,9 +95,8 @@ func (b *Buffer) SetRuneOffset(off int) {
 		row = len(lines) - 1
 		col = utf8.RuneCountInString(lines[row])
 	}
-	// Navigate to the target row first. SetCursor operates on the current row,
-	// so col must be set after the row is in place or it will be clamped to the
-	// wrong line's length.
+	// Navigate to the row first: SetCursorColumn clamps col to the
+	// current row's length, so the column must be set last.
 	for b.ta.Line() < row {
 		b.ta.CursorDown()
 	}
@@ -83,4 +104,5 @@ func (b *Buffer) SetRuneOffset(off int) {
 		b.ta.CursorUp()
 	}
 	b.ta.SetCursorColumn(col)
+	return b
 }
