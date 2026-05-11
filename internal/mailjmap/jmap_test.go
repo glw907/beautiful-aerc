@@ -1,9 +1,11 @@
 package mailjmap
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1238,5 +1240,22 @@ func TestPushDraft_JMAP_ReplacesPrev(t *testing.T) {
 	// Two invocations: Email/import + Email/set destroy.
 	if got := len(fake.sent[0].Calls); got != 2 {
 		t.Errorf("request calls = %d, want 2 (import + destroy)", got)
+	}
+}
+
+// TestWithLogger_DroppedUpdate verifies that the WithLogger seam routes
+// the "dropped update, channel full" warn through the supplied logger.
+func TestWithLogger_DroppedUpdate(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	b := New(config.AccountConfig{Name: "test"}, WithLogger(logger))
+	// Provide a zero-capacity channel so the very next emit overflows.
+	b.updates = make(chan mail.Update, 0)
+
+	b.emit(mail.Update{Type: mail.UpdateNewMail})
+
+	if !strings.Contains(buf.String(), "dropped update, channel full") {
+		t.Errorf("expected warn in log output, got: %s", buf.String())
 	}
 }

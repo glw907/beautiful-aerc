@@ -3,7 +3,6 @@ package mailjmap
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -124,7 +123,7 @@ func (b *Backend) handleStateChange(typ string, newState string) {
 	}
 
 	if dispatchErr != nil {
-		fmt.Fprintf(os.Stderr, "mailjmap: handleStateChange %s: %v\n", typ, dispatchErr)
+		b.log.Error("handleStateChange failed", "type", typ, "err", dispatchErr)
 		return
 	}
 
@@ -186,7 +185,7 @@ func (b *Backend) refreshBlobIDs(accountID jmap.ID, ids []jmap.ID) {
 	})
 	resp, err := b.do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mailjmap: refreshBlobIDs: %v\n", err)
+		b.log.Error("refreshBlobIDs failed", "err", err)
 		return
 	}
 	for _, inv := range resp.Responses {
@@ -262,7 +261,7 @@ func (b *Backend) emit(u mail.Update) {
 	select {
 	case ch <- u:
 	default:
-		fmt.Fprintln(os.Stderr, "mailjmap: dropped update, buffer full")
+		b.log.Warn("dropped update, channel full")
 	}
 }
 

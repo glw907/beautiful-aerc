@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -36,10 +36,17 @@ type jmapClient interface {
 	Do(req *jmap.Request) (*jmap.Response, error)
 }
 
+// Option configures a Backend at construction time.
+type Option func(*Backend)
+
+// WithLogger sets the structured logger for the backend.
+func WithLogger(l *slog.Logger) Option { return func(b *Backend) { b.log = l } }
+
 // Backend is one JMAP account. Construct with New, drive lifecycle
 // with Connect/Disconnect.
 type Backend struct {
 	cfg config.AccountConfig
+	log *slog.Logger
 
 	mu         sync.Mutex
 	client     jmapClient
@@ -74,15 +81,20 @@ type folderEntry struct {
 // New constructs an unconnected Backend. cfg.Source is the JMAP
 // session URL (e.g. https://api.fastmail.com/jmap/session) and
 // cfg.Password supplies the bearer token after env-var substitution.
-func New(cfg config.AccountConfig) *Backend {
-	return &Backend{
+func New(cfg config.AccountConfig, opts ...Option) *Backend {
+	b := &Backend{
 		cfg:         cfg,
+		log:         slog.Default().With("component", "mailjmap"),
 		folders:     make(map[string]folderEntry),
 		blobIDs:     make(map[mail.UID]string),
 		partBlobIDs: make(map[mail.UID]map[string]string),
 		states:      make(map[string]string),
 		identityIDs: make(map[string]jmap.ID),
 	}
+	for _, o := range opts {
+		o(b)
+	}
+	return b
 }
 
 // NewWithClient bypasses the network handshake for tests. The caller
@@ -856,7 +868,7 @@ func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.
 
 	if destroyCallID != "" {
 		if err := checkEmailSetDestroyed(resp, destroyCallID); err != nil {
-			fmt.Fprintln(os.Stderr, "push-draft: destroy prior:", err)
+			b.log.Warn("push-draft destroy prior failed", "err", err)
 		}
 	}
 
