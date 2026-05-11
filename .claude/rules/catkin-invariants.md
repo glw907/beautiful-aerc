@@ -33,6 +33,11 @@ each fact back to its ADR(s).
   (suppressed in code), smart URL paste, bracket-match via
   `walkSpans`, `DisplayMode` cycle on `Ctrl+\`.
   ADR-0144, 0145, 0146, 0147.
+- Model and Buffer are value types; runtime mutations are
+  value-returning `With*` setters called from the parent's
+  Update; mount-time uses a `New().With*` builder. The wrapped
+  `textarea.Model` pointer is sealed inside Buffer and never
+  escapes the package. ADR-0212.
 - Annotation pipeline: pure `Annotator` over raw-source byte
   ranges; 350 ms idle tick + `srcGen` counter drops stale
   results. `RenderAnnotated` splices via `ansiSpliceAtCol`

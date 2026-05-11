@@ -13,7 +13,7 @@ import (
 // renderer is Catkin's own (see render.go).
 //
 // Buffer is a value type. Mutators return a new Buffer; callers
-// reassign. The wrapped textarea.Model is sealed — it never leaves
+// reassign. The wrapped textarea.Model is sealed; it never leaves
 // the package.
 type Buffer struct {
 	ta textarea.Model
