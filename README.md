@@ -1,414 +1,158 @@
-# beautiful-aerc
+# poplar
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A themeable, productive email environment for the [aerc](https://aerc-mail.org/) email client.
+*A modern TUI mail client with all the fixin's.*
 
-<!-- screenshot: Hero shot — full aerc window with the Nord theme
-     size: 140x48 terminal (match kitty-mail.conf dimensions)
-     show: Message list on left with Nerd Font icons and thread prefixes.
-           Rendered HTML email on right with colored headers and styled
-           markdown body. Inbox folder, mix of read/unread messages.
-     file: docs/images/hero.png
--->
+<p align="center">
+  <img src="docs/assets/two-pane.png" alt="poplar two-pane view — sidebar, message list, and a markdown-rendered reader" width="90%" />
+</p>
 
-## Table of contents
+## Status
 
-- [Why aerc?](#why-aerc)
-- [The problem: email is a mess](#the-problem-email-is-a-mess)
-- [What beautiful-aerc gives you](#what-beautiful-aerc-gives-you)
-- [The markdown-forward design](#the-markdown-forward-design)
-- [Components](#components)
-- [Prerequisites](#prerequisites)
-- [Install](#install)
-- [How email renders](#how-email-renders)
-- [Theme system](#theme-system)
-- [Composing email with nvim-mail](#composing-email-with-nvim-mail)
-- [Optional components](#optional-components)
-- [Roadmap](#roadmap)
-- [Further reading](#further-reading)
+poplar is in **beta soak**. Data formats are frozen at `v0.9.0`;
+only bug-fix releases land on the `v0.9.x` line until `v1.0`.
+The release model is documented in [ADR-0105](docs/poplar/decisions/0105-release-stance.md).
 
-> **Want to understand the internals?** See
-> [docs/power-users.md](docs/power-users.md) for the full filter
-> pipeline, theme token resolution, and architectural details.
+Coming after v1.0: native OAuth for Gmail / Outlook IMAP
+([#42](BACKLOG.md)) and a Neovim companion plugin
+([#6](BACKLOG.md)).
 
-## Why aerc?
+## Features
 
-There are several terminal email clients out there — mutt, nstrstreomutt, notmuch, himalaya — but aerc stands out for a few reasons that make it the right foundation for this project.
+Every feature you expect from a modern desktop mail client, in 80×24.
 
-First, aerc is fast and keyboard-driven. It's written in Go, renders quickly, and gets out of your way. Navigation is vim-style, and the interface is clean — no chrome you don't need.
+- **Threaded conversations.** Depth-aware prefix walker, in-place expand/collapse, search-results mode that keeps thread structure.
+- **Cross-folder search.** SQLite FTS5 with an operator vocabulary: `from:`, `to:`, `cc:`, `subject:`, `in:`, `has:attachment`, quoted phrases. The sidebar `\` key toggles folder scope.
+- **Compose with catkin.** A markdown-first bubbletea editor with live styling, soft wrap, 50-step undo/redo, find/replace, smart Enter, list indent, bracket matching, and an embedded SymSpell spellchecker. Contacts autocomplete from CardDAV. Attachments, scheduled send, undo send, multiple identities and signatures.
+- **Contacts.** CardDAV sync into the local cache, a T9-grouped sidebar, edit form. Address autocomplete in compose, contact popovers in the reader.
+- **Attachments.** Viewer chip row, `@` picker for inline display, `Ctrl+O` in compose to attach.
+- **Outbound delivery.** Outbox state machine on top of a per-account SQLite queue. Undo send (10s default), schedule send, optimistic UI — sent messages appear immediately, the drainer reconciles on completion.
+- **Themes.** 15 built-in compiled themes, One Dark by default. No runtime TOML, no glamour. Palette-to-surface map lives in [`docs/poplar/styling.md`](docs/poplar/styling.md).
 
-Second, and more importantly, aerc is *extensible in exactly the right way*. It has a simple, powerful filter protocol: any program that reads email content on stdin and writes styled text to stdout can be a filter. This is aerc's greatest design strength — it doesn't try to do everything itself. It gives you the hooks to build what you need.
+## What's distinctive
 
-The gap? Aerc provides the engine, but its out-of-the-box experience for HTML email is basic. The default approach is to shell out to `w3m` or `lynx` for HTML-to-text conversion. The result is functional but rough — you lose document structure, links are hard to follow, and there's no theming. The compose experience is similarly bare. beautiful-aerc fills that gap.
+- **mailrender** — `internal/content` + `internal/filter` build a lipgloss block model for message bodies. Plain text *and* HTML render through one structured pipeline. No glamour dependency, no shelling out to pandoc or w3m.
+- **First-class markdown support.** Compose writes markdown; the wire carries `multipart/alternative` with text and HTML synthesized by goldmark (Linkify + Tables enabled).
+- **tidytext.** `Ctrl+T` in compose hands the current draft to an AI rewrite step. User-invoked, never silent. Changes apply in place.
+- **Full JMAP.** Direct on [`rockorager/go-jmap`](https://git.sr.ht/~rockorager/go-jmap). Atomic `Email/import` + `EmailSubmission/set` in one request. Native push (no polling on Fastmail).
+- **Local cache + outbox.** Per-account SQLite with background body backfill, lazy attachment storage, a typed-op queue for all mutations, and a drainer with a conflict matrix. Offline-tolerant; UI never blocks on the network.
 
-## The problem: email is a mess
+## Quickstart
 
-This isn't just about marketing spam. *All* email HTML on the internet is a mess.
-
-Every sender generates HTML differently. There are no real standards in practice — just decades of accumulated workarounds. Layout tables nested three levels deep. Tracking pixels spliced into the middle of hyperlink text. Invisible Unicode characters (zero-width joiners, soft hyphens, Mongolian vowel separators) scattered through the content. Hidden `display:none` divs containing duplicated copies of the entire message body. Thunderbird-specific CSS classes. Broken nesting. Inline styles that fight each other.
-
-GUI email clients — Gmail, Outlook, Apple Mail — do an enormous amount of hidden work to clean all of this up and present you with a coherent reading experience. You never see the mess because they handle it for you.
-
-CLI email clients traditionally don't. They either show you the raw HTML, or pipe it through a basic text converter like `w3m` or `lynx`. You get the words, more or less, but you lose the structure, the links are buried in the text, and the experience doesn't feel like *reading email* — it feels like reading a dump.
-
-beautiful-aerc bridges that gap. It gives you the same clean, structured email experience that GUI users take for granted, but in your terminal.
-
-## What beautiful-aerc gives you
-
-<!-- screenshot: Before/after comparison
-     size: Two panels side by side, each ~70 columns wide
-     show: The same HTML email (a newsletter or marketing email with
-           links, headings, and lists) rendered by stock aerc on the
-           left (w3m/lynx output) and beautiful-aerc on the right
-           (mailrender html output with styled markdown).
-           Pick something that shows the difference dramatically.
-     file: docs/images/before-after.png
--->
-
-- **Clean rendering of HTML emails** — even the messy ones. A multi-stage pipeline cleans up the worst HTML the internet can throw at it and renders styled markdown via [Glamour](https://github.com/charmbracelet/glamour).
-
-- **A semantic theme system** with three built-in themes (Nord, Solarized Dark, Gruvbox Dark) that colors everything consistently — the UI, the message viewer, and the compose editor.
-
-<!-- screenshot: Theme comparison
-     size: Three panels stacked vertically or side by side
-     show: The same email rendered in Nord, Solarized Dark, and Gruvbox
-           Dark. Same message, same layout, different color palettes.
-     file: docs/images/themes.png
--->
-
-- **A proper compose editor** in Neovim with spell check, fuzzy contact search, and prose tidying.
-
-- **Consistent visual design** across the entire email experience — reading, composing, and navigating all feel like parts of the same tool.
-
-This pipeline was built by processing real personal email over many hours of iteration. Every edge case fix came from an actual broken email in the author's inbox. The project is actively maintained — check back for ongoing improvements as new sender patterns surface.
-
-## The markdown-forward design
-
-Markdown is the core abstraction throughout beautiful-aerc, in both directions.
-
-**Reading email:** HTML messages are converted to clean markdown, then rendered with styled ANSI output by [Glamour](https://github.com/charmbracelet/glamour). Headings, bold text, lists, blockquotes, and links all render as you'd expect from a markdown document.
-
-**Writing email:** You compose in markdown in the Neovim editor. When you send, aerc converts your markdown to HTML via `mailrender to-html` and sends both versions as a multipart message. Recipients with GUI clients see rich text; recipients with CLI clients see your clean plain text.
-
-Why markdown? Because it's the natural language for terminal users. It's readable as-is — no markup noise cluttering your terminal. It gives you clean formatting options (headings, bold, lists, links) when composing. And it converts losslessly to HTML for recipients who expect rich email. Your reading and writing experiences use the same formatting language, which makes the whole system feel coherent.
-
-## Components
-
-aerc's filter protocol is simple and powerful: any program that reads stdin and writes styled text to stdout can be a filter. aerc ships with a handful of built-in shell-script filters (`colorize`, `plaintext`, `wrap`) that work fine for plain text email between technical users.
-
-But most email on the internet is HTML. aerc's default approach is to shell out to `w3m` or `lynx`, which produces functional but rough output — you lose document structure, links are hard to follow, and there's no theming.
-
-beautiful-aerc replaces these defaults with purpose-built Go binaries. Why Go instead of more shell scripts? For simple filters, shell works great — aerc's design encourages that. But the problems we're solving (multi-stage HTML cleanup, RFC 2822 header parsing, consistent theming across tools) need things that shell scripts struggle with: proper Unicode handling, structured error handling, shared code between tools. Go gives us single compiled binaries with no runtime dependencies — easy to install, easy to maintain.
-
-### Go binaries (core)
-
-**mailrender** — The filter pipeline, and the heart of the project. This is where the hard work happens.
-
-Email HTML is the messiest markup on the internet — every sender generates it differently, there are no real standards in practice, and the edge cases are endless. mailrender is a multi-stage pipeline that tames all of this into clean, readable markdown rendered by Glamour. Its subcommands cover the full email lifecycle: `headers` for header rendering, `html` for HTML-to-markdown conversion, `plain` for plain text handling, `markdown` for extracting clean markdown from HTML (used in reply templates), `to-html` for converting composed markdown to HTML on send, `compose` for normalizing compose buffers, and `themes` for generating aerc stylesets.
-
-Here's a taste of what email actually looks like under the hood — and what mailrender handles so you don't have to:
-
-```go
-// Every email sender on the internet embeds invisible Unicode
-// characters in their HTML: soft hyphens, zero-width joiners,
-// Mongolian vowel separators, byte order marks, and more. These
-// are invisible to you but wreak havoc on terminal rendering.
-reNBSP      = regexp.MustCompile(`[\x{a0}\x{2000}-\x{200a}]+`)
-reZeroWidth = regexp.MustCompile(`[\x{ad}\x{34f}\x{180e}\x{200b}-\x{200d}\x{2060}-\x{2064}\x{feff}]`)
+```bash
+go install github.com/glw907/poplar/cmd/poplar@latest
+poplar
 ```
 
-```go
-// Bank of America (and others) embed 1x1 tracking pixel <img> tags
-// literally inside hyperlink text. This causes the HTML-to-markdown
-// converter to split a single URL across multiple paragraphs.
-reZeroImg = regexp.MustCompile(
-    `(?i)<img[^>]*(?:width:\s*0|height:\s*0|width="0"|height="0")[^>]*/?>`)
+On first run, poplar detects the missing config and launches an
+interactive wizard. The wizard walks you through provider
+selection, credentials, and a connection test, then writes
+`~/.config/poplar/config.toml`.
+
+### Provider notes
+
+- **Fastmail (JMAP).** Generate an API token at
+  [fastmail.com → Settings → Privacy & Security → API tokens](https://app.fastmail.com/settings/security/tokens),
+  paste it into the wizard. Native JMAP push means no IDLE
+  reconnect loops; submission and Sent placement land atomically.
+- **Gmail (IMAP).** v0.9.0 uses XOAUTH2 via your own `password-cmd`
+  helper that prints a fresh access token (the wizard explains the
+  shape). Native OAuth with BYO client ID
+  ([#42](BACKLOG.md)) lands in v1.1 — the wizard's provider row is
+  there now and will route to a "Sign in with Google" flow once
+  the OAuth subsystem ships.
+- **Generic IMAP.** Presets cover iCloud, Yahoo, Zoho, Outlook,
+  mailbox.org, Posteo, Runbox, GMX, and ProtonMail (Bridge on
+  loopback). Self-hosted IMAP works with explicit `host`/`port`
+  plus `insecure-tls = true` for self-signed certs.
+
+Validate your config end-to-end before launching:
+
+```bash
+poplar config check
 ```
 
-```go
-// Apple receipts and responsive emails embed a hidden copy of the
-// entire email body inside a display:none div — often deeply nested.
-// A simple regex would close at the first inner </div>, so we
-// hand-track nesting depth to find the real closing tag.
-func stripHiddenElements(body string) string {
-    for {
-        loc := reHiddenDivOpen.FindStringIndex(body)
-        if loc == nil { break }
-        start := loc[0]
-        rest := body[loc[1]:]
-        depth := 1
-        pos := 0
-        for depth > 0 && pos < len(rest) {
-            nextOpen := strings.Index(rest[pos:], "<div")
-            nextClose := strings.Index(rest[pos:], "</div>")
-            if nextClose < 0 { pos = len(rest); break }
-            if nextOpen >= 0 && nextOpen < nextClose {
-                depth++
-                pos += nextOpen + len("<div")
-            } else {
-                depth--
-                pos += nextClose + len("</div>")
-            }
-        }
-        body = body[:start] + body[loc[1]+pos:]
-    }
-    return body
-}
-```
+The command runs the IMAP probe, SMTP probe (or JMAP session
+probe), and reports each step.
 
-### Go binaries (optional)
+## Keybindings
 
-**fastmail-cli** — Fastmail JMAP CLI for mail filter rules, masked email management, and folder listing. Designed to be called from aerc keybindings. *(Fastmail users only.)*
+vim-first, modifier-free single keys. No Ctrl/Alt sequences in
+the core key map.
 
-**tidytext** — Claude-powered prose tidier for the compose editor. Fixes spelling, grammar, and punctuation without altering meaning or style. *(Requires Anthropic API key.)*
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move down / up in the message list |
+| `Enter` | Open the focused message |
+| `q` | Close reader / back to list |
+| `r` / `R` | Reply / Reply-all |
+| `f` | Forward |
+| `c` | Compose new |
+| `D` | Move to Trash |
+| `M` | Move to… (folder picker) |
+| `/` | Search |
+| `?` | Help popover |
 
-### Configuration and scripts
+Full key map: [`docs/poplar/keybindings.md`](docs/poplar/keybindings.md).
 
-The project also ships working configuration files and launcher scripts, installed via GNU Stow:
+## Architecture
 
-- **aerc config** (`aerc.conf`, `binds.conf`) — ready-to-use settings with the beautiful-aerc filter pipeline, theme system, Nerd Font icons, and keybindings. Heavily commented to explain what everything does and why.
-- **nvim-mail** — A dedicated Neovim profile for composing email, with custom syntax highlighting, spell check, and a fuzzy contact picker. See [Composing email with nvim-mail](#composing-email-with-nvim-mail) below.
-- **kitty terminal profile** — An example of how to customize your terminal emulator for a dedicated email experience: prose-optimized font, generous padding, matching colors, and a fixed window size. See [Customizing your terminal](#customizing-your-terminal-for-email) under Optional components.
-- **Launcher scripts** — `mail` launches aerc in a dedicated kitty window. `aerc-mail.desktop` puts it in your application launcher. These are examples to adapt for your own setup.
+- **Single Go module, single binary** — `cmd/poplar` plus
+  `internal/`. No plugins, no subcommands beyond `config` and
+  `diagnose`.
+- **bubbletea v2** throughout — `charm.land/bubbletea/v2`,
+  `lipgloss/v2`, `bubbles/v2`. Strict Elm architecture: state in
+  models, mutations only in `Update`, I/O in `tea.Cmd`. Showcase
+  build for the v2 stack.
+- **Direct on emersion** — `go-imap` v2, `go-smtp`, `go-webdav`,
+  `go-vcard`, plus `rockorager/go-jmap`. No aerc fork.
+- **Modern Go 1.26** — slices/maps/iter/slog idioms throughout
+  (ADR-0196). Vet, gofmt, and the project's voice check are commit
+  gates.
 
-## Prerequisites
+Deeper architecture references:
 
-- [aerc](https://aerc-mail.org/) — the email client itself
-- [Go](https://go.dev/) 1.26+ — needed to build the binaries (not needed at runtime)
-- [GNU Stow](https://www.gnu.org/software/stow/) — symlink manager for installing the config files
+- [`docs/poplar/system-map.md`](docs/poplar/system-map.md) —
+  package layout and data flow
+- [`docs/poplar/invariants.md`](docs/poplar/invariants.md) —
+  binding facts
+- [`docs/poplar/decisions/INDEX.md`](docs/poplar/decisions/INDEX.md) —
+  ADR archive
 
-Optional:
+## Configuration
 
-- [Neovim](https://neovim.io/) 0.10+ — for the nvim-mail compose editor. Plugins install automatically on first launch.
-- [khard](https://github.com/lucc/khard) — for address book completion in the compose editor. Needs contacts synced via [vdirsyncer](https://github.com/pimutils/vdirsyncer).
-- [kitty](https://sw.kovidgoyal.net/kitty/) — for the `mail` launcher script (any terminal works with aerc itself)
-- A [Nerd Font](https://www.nerdfonts.com/) — for the folder and status icons in the message list. Without one, you'll see placeholder squares for the icons, but everything else works fine.
-- Fastmail account with API token — for fastmail-cli
-- Anthropic API key — for tidytext
+One file: `~/.config/poplar/config.toml`. Self-documenting
+template. The wizard writes it on first run; hand-editing is
+welcome and round-trips through `poplar config check`.
 
-## Install
+Themes are picked by name in the `[ui]` table — see
+[`docs/poplar/styling.md`](docs/poplar/styling.md) for the
+palette-to-surface map.
 
-**1. Clone the repo**
+## Building from source
 
-```sh
-git clone https://github.com/glw907/beautiful-aerc.git
-cd beautiful-aerc
-```
-
-**2. Build and install the binaries**
-
-This builds all four Go binaries and installs them to `~/.local/bin/` (make sure that's on your `PATH`):
-
-```sh
-make build
+```bash
+git clone https://github.com/glw907/poplar.git
+cd poplar
 make install
 ```
 
-**3. Generate a styleset**
-
-Pick one of the three built-in themes and generate the aerc styleset:
-
-```sh
-mailrender themes generate nord
-```
-
-This reads the theme file (`themes/nord.toml`) and writes an aerc styleset to `stylesets/Nord`. The three built-in themes are `nord`, `solarized-dark`, and `gruvbox-dark`.
-
-**4. Install the config files with Stow**
-
-From the repo directory:
-
-```sh
-stow beautiful-aerc
-```
-
-This creates symlinks from `~/.config/aerc/`, `~/.config/nvim-mail/`, `~/.config/kitty/kitty-mail.conf`, and `~/.local/bin/` scripts into your clone. If you keep repos in `~/Projects/`, stow from there. If you manage dotfiles in `~/.dotfiles/`, you can symlink the repo into your dotfiles directory first:
-
-```sh
-ln -s ~/Projects/beautiful-aerc ~/.dotfiles/beautiful-aerc
-cd ~/.dotfiles && stow beautiful-aerc
-```
-
-**5. Configure your account**
-
-```sh
-cp ~/.config/aerc/accounts.conf.example ~/.config/aerc/accounts.conf
-```
-
-Edit `accounts.conf` with your mail server settings. See the comments in the file for guidance on JMAP, IMAP, and credential helpers.
-
-**6. Launch aerc**
-
-```sh
-aerc
-```
-
-The first launch may take a moment as aerc connects to your mail server and downloads headers. If you installed nvim-mail, the first time you compose a message Neovim will auto-install the plugins — wait a few seconds and they'll be ready.
-
-## How email renders
-
-aerc routes every message through filters defined in `aerc.conf`:
-
-```ini
-.headers = mailrender headers
-text/html = mailrender html
-text/plain = mailrender plain
-```
-
-When you open an email, here's what happens:
-
-- **headers** — Receives the raw RFC 2822 headers. Reorders them (From, To, Cc, Date, Subject), colorizes field names, wraps long address lines to fit the terminal width, and prints a separator line below.
-- **html** — Receives the raw HTML body. Cleans up sender-specific junk, converts to markdown via the [html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown) Go library, normalizes whitespace and structure, reflows paragraphs to 78 columns, and renders styled output via [Glamour](https://github.com/charmbracelet/glamour) with theme-derived colors for headings, bold, italic, links, blockquotes, and rules.
-- **plain** — Receives the raw plain text body. Checks whether it's actually HTML in disguise (some clients send full HTML in a text/plain MIME part) and routes it through the HTML pipeline if so. Otherwise uses aerc's built-in `wrap | colorize`.
-
-## Theme system
-
-beautiful-aerc uses a semantic theme system: 16 named color slots (background, foreground, accent, error, success, etc.) defined in a single TOML file. The Go binaries read this file directly at runtime, so changing a color in the theme file changes it everywhere — the message viewer, the link picker, the header rendering, and the UI.
-
-Three themes are included:
-
-| Theme | Style |
-|-------|-------|
-| **Nord** | Cool dark (Arctic Ice Studio) |
-| **Solarized Dark** | Classic dark (Ethan Schoonover) |
-| **Gruvbox Dark** | Warm dark (morhetz) |
-
-To switch themes, edit `styleset-name` in `aerc.conf`, regenerate the styleset, and restart aerc:
-
-```sh
-# In aerc.conf: styleset-name=solarized-dark
-mailrender themes generate solarized-dark
-# Restart aerc
-```
-
-To create your own theme, copy one of the built-in `.toml` files, adjust the hex values, and run the generator. See [docs/themes.md](docs/themes.md) for the full color slot reference and token format.
-
-## Composing email with nvim-mail
-
-### Why Neovim for email?
-
-Most CLI email clients use whatever `$EDITOR` you have set — usually vim or nano. That works, but it's a minimal experience: no syntax highlighting for email, no contact search, no spell check integration, no awareness of what you're actually doing (composing a message, not editing code).
-
-nvim-mail is a dedicated Neovim profile that turns the compose window into a proper email editor. Because Neovim is programmable, we can add features that would be impossible in a plain text editor:
-
-- **Fuzzy contact search** — type a few letters and pick from your address book (via Telescope + khard)
-- **Inline spell check** — catches misspellings as you type, with a pre-send check that prompts you before sending with errors
-- **Prose tidying** — one-key AI-powered grammar and spelling fixes (via tidytext, optional)
-- **Smart formatting** — headers are automatically reformatted for readability, quoted text is reflowed
-
-If you already use Neovim, the keybindings will feel familiar. If you're new to Neovim, nvim-mail is a gentle introduction — the compose workflow only uses a handful of keys.
-
-### Plugins
-
-nvim-mail uses five Neovim plugins, all managed by [lazy.nvim](https://github.com/folke/lazy.nvim). **Plugins install automatically on first launch** — you don't need to install anything manually. Just open a compose window and wait a few seconds.
-
-- **lazy.nvim** — Plugin manager. Auto-bootstraps itself the first time nvim-mail runs, then installs and updates all other plugins.
-- **nord.nvim** — The Nord color scheme, matching the default aerc theme. Keeps the compose editor visually consistent with the rest of the email experience.
-- **telescope.nvim** — A fuzzy finder framework. Powers the contact picker — press `Ctrl-k` in insert mode to search your address book by typing a few letters.
-- **which-key.nvim** — Shows available keybindings when you press the leader key (Space) and wait. Invaluable for discovering what's available without memorizing everything.
-- **nvim-treesitter** — Provides syntax highlighting for the compose buffer via the custom `aercmail` filetype.
-
-### The compose flow
-
-1. **Open compose** — press `C` or `m` in the message list, or `rr` to reply. aerc opens nvim-mail.
-2. **Headers are reformatted** — `mailrender compose` normalizes the raw RFC 2822 headers: unfolds continuation lines, cleans up angle brackets, wraps long address lists. You see clean, readable headers.
-3. **Write your message** in markdown. Text wraps automatically at 72 characters.
-4. **Exit to review** — press `<Space>q` to save and exit. If there are misspelled words, you'll be prompted: fix them, send anyway, or go back.
-5. **Review and send** — aerc shows a review screen. Press `y` to convert your markdown to HTML and send, `e` to re-edit, `n` to abort, or `p` to postpone as a draft.
-6. **Abort anytime** — press `<Space>x` to immediately close the compose window without sending.
-
-For the full walkthrough, keybindings reference, contact picker setup, and troubleshooting, see [docs/nvim-mail.md](docs/nvim-mail.md).
-
-## Optional components
-
-### fastmail-cli
-
-For Fastmail users, `fastmail-cli` provides JMAP operations designed to be called from aerc keybindings. Set `FASTMAIL_API_TOKEN` in your environment, then uncomment the bindings in `binds.conf`:
-
-- **ff / fs / ft** — create a filter rule from the sender, subject, or recipient
-- **md** — delete a masked email address and the message that used it
-
-Rules can also be managed from the command line:
-
-```sh
-fastmail-cli rules add --search "from:news@example.com" --folder Newsletters
-fastmail-cli rules sweep --search "from:news@example.com" --folder Newsletters
-fastmail-cli folders   # list custom mailboxes
-```
-
-### tidytext
-
-`tidytext` pipes text through Claude Haiku to fix spelling, grammar, and punctuation without altering meaning or style. Set `ANTHROPIC_API_KEY` in your environment.
-
-```sh
-echo "Plese review the attatchd documnt." | tidytext fix
-# Please review the attached document.
-```
-
-In nvim-mail, `<leader>t` runs tidytext on the compose body. Changed words are highlighted with teal undercurl marks that clear on the next edit.
-
-### Customizing your terminal for email
-
-You don't need a special terminal setup to use beautiful-aerc — aerc runs in any terminal. But if you want your email experience to feel like a dedicated app rather than another terminal window, a separate terminal profile can make a real difference.
-
-The project includes an example kitty profile that shows what this looks like in practice. The ideas apply to any terminal emulator:
-
-**A prose-optimized font.** Code fonts are designed for distinguishing similar characters (`0` vs `O`, `1` vs `l`). Prose fonts are designed for comfortable reading over long periods. The example uses iA Writer Mono.
-
-**Generous padding.** Email doesn't need to fill every pixel. Adding padding around the edges (the example uses 15px top/bottom, 30px left/right) makes the whole experience feel more spacious and less like staring at a code terminal.
-
-**Matching colors.** The terminal's color palette should match your aerc theme so everything looks intentional.
-
-**A fixed window size.** A consistent width (the example uses 140 columns) gives mailrender a predictable canvas for text wrapping and link truncation.
-
-**A hidden tab bar.** aerc manages its own tabs — showing the terminal's tab bar too is redundant and confusing.
-
-Here's the launcher script that ties it together:
-
-```bash
-#!/usr/bin/env bash
-exec kitty --class aerc-mail --config ~/.config/kitty/kitty-mail.conf --title Mail aerc
-```
-
-And a `.desktop` file so it appears in your application launcher:
-
-```ini
-[Desktop Entry]
-Name=Mail (aerc)
-Comment=Terminal email client
-Exec=mail
-Icon=mutt
-Terminal=false
-Type=Application
-Categories=Network;Email;
-StartupWMClass=aerc-mail
-Keywords=mail;email;aerc;
-```
-
-See `.config/kitty/kitty-mail.conf` for the full profile with annotated design choices. Adapt these ideas for your own terminal emulator.
-
-## Roadmap
-
-beautiful-aerc today is a filter pipeline and configuration package for the aerc email client. The long-term goal is **poplar** — a standalone bubbletea-based terminal email client that lives in this same repo.
-
-Poplar reuses the existing filter, theme, and compose infrastructure as library code and adds its own UI layer built on [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss). It targets Fastmail (JMAP) and Gmail (IMAP) with an opinionated, keyboard-driven interface.
-
-Development is iterative — poplar is being built in numbered passes, from scaffold to daily-driver. See [docs/poplar/STATUS.md](docs/poplar/STATUS.md) for current progress and [docs/poplar/architecture.md](docs/poplar/architecture.md) for design decisions.
+Targets:
+
+- `make build` — compile to `./poplar`
+- `make test` — run the test suite
+- `make check` — fmt-check, vet, voice check, modern-go check, test (commit gate)
+- `make install` — install to `~/.local/bin/poplar`
+
+## Contributing
+
+Poplar is solo-maintained pre-1.0. Issues and feature requests
+live in [`BACKLOG.md`](BACKLOG.md); the `make check` gate is the
+contract for any change. Broader contribution norms (PR shape,
+CI workflow, `CONTRIBUTING.md`) land alongside v1.0 prep
+([#41](BACKLOG.md), [#40](BACKLOG.md)).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-Vendored snippets retain their original copyright notices in file
-headers; all are MIT-compatible. See `internal/mailauth/xoauth2.go`,
-`internal/mailauth/keepalive/`, and `internal/ui/overlay.go` for
-provenance details.
-
-## Further reading
-
-- [docs/themes.md](docs/themes.md) — Color slots, token format, custom themes, and styleset generation
-- [docs/nvim-mail.md](docs/nvim-mail.md) — Full compose workflow, keybindings, contact picker, and troubleshooting
-- [docs/power-users.md](docs/power-users.md) — Filter pipeline internals, theme token resolution, edge cases, and architecture
-- [docs/contributing.md](docs/contributing.md) — Project layout, code conventions, adding filters, adding themes, testing
-- [docs/styling.md](docs/styling.md) — Visual hierarchy, layout patterns, and color token usage for contributors
+MIT — see [`LICENSE`](LICENSE).
