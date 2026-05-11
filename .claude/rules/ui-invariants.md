@@ -308,9 +308,14 @@ file describes behavior, not the key tables.
 ### Overlays
 
 - App owns modal overlays via the same compose pattern: render
-  underlying frame, dim via `uicore.DimANSI`, composite via
+  underlying frame, composite the overlay box via
   `uicore.PlaceOverlay` (vendored from superfile, MIT) at the
-  centered top-left from `uicore.CenterOverlay`. While an
+  centered top-left from `uicore.CenterOverlay`. The frame is
+  *not* dimmed — dim is reserved for unwired keybinding rows
+  (ADR-0072), never for overlay underlays (ADR-0202). The
+  `m.viewOverlay(box, x, y, frame)` helper in `App` collapses
+  the simple `PlaceOverlay` + chrome-wrap sequence to one call.
+  While an
   overlay is open, `App.Update` short-circuits keys into it.
   Seven overlays exist: help popover (`App` owns `helpOpen` +
   `help helppopover.Model`; `viewerOpen` selects `HelpAccount`

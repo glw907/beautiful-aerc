@@ -240,20 +240,20 @@ func (h Model) Position(box string, width, height int) (x, y int) {
 	return uicore.CenterOverlay(box, width, height)
 }
 
-// View renders the popover centered on a width × height area. Callers
+// View renders the popover centered on the model's stored size. Callers
 // that have the underlying frame should prefer Box + Position +
 // PlaceOverlay; View is the standalone fallback used by tests.
-func (h Model) View(width, height int) string {
-	box, tooNarrow := h.Box(width, height)
+func (h Model) View() string {
+	box, tooNarrow := h.Box(h.width, h.height)
 	if tooNarrow != "" {
 		return lipgloss.Place(
-			width, height,
+			h.width, h.height,
 			lipgloss.Center, lipgloss.Center,
 			tooNarrow,
 		)
 	}
 	return lipgloss.Place(
-		width, height,
+		h.width, h.height,
 		lipgloss.Center, lipgloss.Center,
 		box,
 	)

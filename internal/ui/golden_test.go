@@ -204,7 +204,7 @@ func TestGolden_HelpPopover(t *testing.T) {
 			h := helppopover.New(helppopover.NewStyles(theme.Nord), tc.ctx)
 			h = h.SetSize(tc.w, tc.h)
 			// HelpPopover.View already centers with lipgloss.Place.
-			got := h.View(tc.w, tc.h)
+			got := h.View()
 			checkGolden(t, tc.name, got)
 		})
 	}

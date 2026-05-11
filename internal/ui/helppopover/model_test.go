@@ -98,7 +98,7 @@ func TestHelpPopover_AccountViewContent(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	h := New(styles, Account)
 
-	view := stripANSI(h.View(80, 24))
+	view := stripANSI(h.SetSize(80, 24).View())
 
 	// Title in the top border.
 	if !strings.Contains(view, "Message List") {
@@ -143,7 +143,7 @@ func TestHelpPopover_ViewerViewContent(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	h := New(styles, Viewer)
 
-	view := stripANSI(h.View(80, 24))
+	view := stripANSI(h.SetSize(80, 24).View())
 
 	// Title.
 	if !strings.Contains(view, "Message Viewer") {
@@ -211,7 +211,7 @@ func TestHelpPopover_WiredStyling(t *testing.T) {
 
 	// Confirm render path routes correctly: wired row content is
 	// present in the account popover, unwired row content is present too.
-	view := stripANSI(New(styles, Account).View(120, 30))
+	view := stripANSI(New(styles, Account).SetSize(120, 30).View())
 	for _, want := range []string{"j/k", "up/down", "d", "delete"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("account popover missing %q", want)
@@ -229,7 +229,7 @@ func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
 	}
 
 	// Confirm "Reply" heading appears in the rendered account popover.
-	view := stripANSI(New(styles, Account).View(120, 30))
+	view := stripANSI(New(styles, Account).SetSize(120, 30).View())
 	if !strings.Contains(view, "Reply") {
 		t.Error("account popover: Reply group heading not found")
 	}
@@ -270,7 +270,7 @@ func BenchmarkHelpPopoverView(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		_ = h.View(120, 40)
+		_ = h.SetSize(120, 40).View()
 	}
 }
 
@@ -280,7 +280,7 @@ func BenchmarkHelpPopoverView(b *testing.B) {
 func TestHelpPopover_VerticallyCentered(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	for _, dims := range []struct{ w, h int }{{120, 30}, {120, 40}, {160, 50}} {
-		view := stripANSI(New(styles, Account).View(dims.w, dims.h))
+		view := stripANSI(New(styles, Account).SetSize(dims.w, dims.h).View())
 		lines := strings.Split(view, "\n")
 		var first, last int = -1, -1
 		for i, ln := range lines {

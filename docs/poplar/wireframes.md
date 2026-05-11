@@ -267,7 +267,9 @@ dim throughout.
                   ╰─────────────────────────────────────────────────────────╯
 ```
 
-- Modal: centered, content behind dimmed via `DimANSI`.
+- Modal: centered, composited over the undimmed frame via
+  `PlaceOverlay`. Dim is reserved for unwired keybinding rows
+  (ADR-0202).
 - Title bar embeds the context name in `accent_primary` bold.
 - Group headings `fg_bright` bold. Wired keys `fg_bright` bold +
   desc `fg_dim`. Unwired rows dim throughout.

@@ -9,7 +9,7 @@ import (
 )
 
 func TestExpanded_ToggleAndPrune(t *testing.T) {
-	m := Model{expanded: map[string]bool{}}
+	m := Model{expanded: map[string]bool{}, cache: &renderCache{dirty: true}}
 	if m.IsExpanded("a") {
 		t.Fatal("new model: nothing expanded")
 	}

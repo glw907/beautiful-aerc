@@ -207,7 +207,7 @@ func (f Footer) ViewGroups(groups [][]footerHint, width int) string {
 }
 
 func (f Footer) renderGroups(groups [][]footerHint, width int) string {
-	visible := fitFooterHints(groups, width)
+	visible, truncated := fitFooterHints(groups, width)
 
 	sep := " " + f.styles.FooterSep.Render("┊") + "  "
 
@@ -226,26 +226,36 @@ func (f Footer) renderGroups(groups [][]footerHint, width int) string {
 	}
 
 	line := " " + strings.Join(parts, sep)
+	if truncated {
+		line += f.styles.FooterHint.Render(" …")
+	}
 	pad := max(0, width-lipgloss.Width(line))
 	return line + strings.Repeat(" ", pad)
 }
 
 // fitFooterHints returns a trimmed copy of groups that fits within
 // width, dropping the highest-dropRank hint first. A group that loses
-// every hint vanishes along with its preceding separator.
-func fitFooterHints(groups [][]footerHint, width int) [][]footerHint {
+// every hint vanishes along with its preceding separator. The second
+// return is true when any hint was dropped; renderers append a `…`
+// marker so users know hints exist at wider widths.
+func fitFooterHints(groups [][]footerHint, width int) ([][]footerHint, bool) {
 	visible := make([][]footerHint, len(groups))
 	for i, g := range groups {
 		visible[i] = slices.Clone(g)
 	}
-	for measureFooter(visible) > width {
+	if measureFooter(visible) <= width {
+		return visible, false
+	}
+	const ellipsisCells = 2 // " …"
+	budget := width - ellipsisCells
+	for measureFooter(visible) > budget {
 		gi, hi := highestDropRank(visible)
 		if gi < 0 {
 			break
 		}
 		visible[gi] = slices.Delete(visible[gi], hi, hi+1)
 	}
-	return visible
+	return visible, true
 }
 
 // highestDropRank returns the (group, hint) index of the highest

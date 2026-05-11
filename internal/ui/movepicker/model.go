@@ -40,10 +40,10 @@ type Model struct {
 	src    string
 	all    []mail.FolderEntry
 	styles Styles
-	keys   modelKeys
+	keys   KeyMap
 }
 
-type modelKeys struct {
+type KeyMap struct {
 	CursorUp   key.Binding
 	CursorDown key.Binding
 	Pick       key.Binding
@@ -77,7 +77,7 @@ func New(styles Styles) Model {
 	return Model{
 		styles: styles,
 		list:   l,
-		keys: modelKeys{
+		keys: KeyMap{
 			CursorUp:   key.NewBinding(key.WithKeys("up", "k")),
 			CursorDown: key.NewBinding(key.WithKeys("down", "j")),
 			Pick:       key.NewBinding(key.WithKeys("enter")),

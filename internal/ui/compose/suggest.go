@@ -14,13 +14,13 @@ type SuggestFn func(prefix string) []contacts.Suggestion
 
 const minPrefix = 2
 
-type dropdownKeys struct {
+type DropdownKeyMap struct {
 	Up   key.Binding
 	Down key.Binding
 }
 
-func defaultDropdownKeys() dropdownKeys {
-	return dropdownKeys{
+func DefaultDropdownKeyMap() DropdownKeyMap {
+	return DropdownKeyMap{
 		Up:   key.NewBinding(key.WithKeys("up")),
 		Down: key.NewBinding(key.WithKeys("down")),
 	}
@@ -33,11 +33,11 @@ type Dropdown struct {
 	rows   []contacts.Suggestion
 	cursor int
 	styles Styles
-	keys   dropdownKeys
+	keys   DropdownKeyMap
 }
 
 func NewDropdown(fn SuggestFn) Dropdown {
-	return Dropdown{fn: fn, keys: defaultDropdownKeys()}
+	return Dropdown{fn: fn, keys: DefaultDropdownKeyMap()}
 }
 
 func (d Dropdown) WithStyles(s Styles) Dropdown {

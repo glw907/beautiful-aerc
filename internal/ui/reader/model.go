@@ -28,10 +28,10 @@ const (
 	PhaseReady
 )
 
-// viewerKeys covers the keys Model consumes directly. Body scrolling
+// KeyMap covers the keys Model consumes directly. Body scrolling
 // (j/k/space/b) delegates to the viewport's own KeyMap. Links is indexed
 // by harvested-link position minus one (Links[0] is "1", Links[8] is "9").
-type viewerKeys struct {
+type KeyMap struct {
 	Close            key.Binding
 	OpenPicker       key.Binding
 	OpenAttachPicker key.Binding
@@ -41,8 +41,8 @@ type viewerKeys struct {
 	Links            [9]key.Binding
 }
 
-func newViewerKeys() viewerKeys {
-	vk := viewerKeys{
+func DefaultKeyMap() KeyMap {
+	vk := KeyMap{
 		Close:            key.NewBinding(key.WithKeys("q", "esc"), key.WithHelp("q/esc", "close")),
 		OpenPicker:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "links")),
 		OpenAttachPicker: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "attachments")),
@@ -81,7 +81,7 @@ type Model struct {
 	spinner      spinner.Model
 	styles       Styles
 	theme        *theme.CompiledTheme
-	keys         viewerKeys
+	keys         KeyMap
 	width        int
 	height       int
 }
@@ -96,7 +96,7 @@ func New(styles Styles, t *theme.CompiledTheme, accountEmail string, icons uicor
 		accountEmail: accountEmail,
 		icons:        icons,
 		spinner:      sp,
-		keys:         newViewerKeys(),
+		keys:         DefaultKeyMap(),
 	}
 }
 

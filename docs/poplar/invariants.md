@@ -138,7 +138,7 @@ the ADR(s) that justify them.
   Subpackages cannot import the parent. `uicore` holds shared
   chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
-  `DimANSI`, render primitives (`PadOrTruncate`, `TruncateToWidth`,
+  render primitives (`PadOrTruncate`, `TruncateToWidth`,
   `CenterOverlay`, `ApplyBg`, `FillRowToWidth`, `PickerListSize`,
   `SplitAndPad`), `NewListStyles` (compiled theme →
   `bubbles/v2/list.Styles` for the picker family; ADR-0194), and

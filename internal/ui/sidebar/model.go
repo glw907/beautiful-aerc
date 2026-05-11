@@ -44,6 +44,13 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
+// renderCache memoises View output. ADR-0130 covers the pattern.
+type renderCache struct {
+	dirty    bool
+	w, h     int
+	rendered string
+}
+
 // Model renders the folder list with groups, selection, and unread badges.
 type Model struct {
 	entries     []folderEntry
@@ -56,6 +63,7 @@ type Model struct {
 	layout      uicore.LayoutMode
 	width       int
 	height      int
+	cache       *renderCache
 }
 
 // New builds a Model from a pre-classified folder list. UIConfig drives
@@ -70,8 +78,11 @@ func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfi
 		icons:    icons,
 		width:    width,
 		height:   height,
+		cache:    &renderCache{dirty: true},
 	}
 }
+
+func (s *Model) invalidate() { s.cache.dirty = true }
 
 // SetFolders replaces the folder set under a given UIConfig. Selection
 // is preserved by provider name where possible; otherwise it resets to 0.
@@ -91,6 +102,7 @@ func (s *Model) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UICo
 			}
 		}
 	}
+	s.invalidate()
 }
 
 // SetOutboxCount sets the depth of the synthetic Outbox entry. When n > 0,
@@ -99,7 +111,11 @@ func (s *Model) SetOutboxCount(n int) {
 	if n < 0 {
 		n = 0
 	}
+	if s.outboxCount == n {
+		return
+	}
 	s.outboxCount = n
+	s.invalidate()
 }
 
 // IsExpanded reports whether the parent at path is expanded.
@@ -114,9 +130,11 @@ func (s *Model) ToggleExpanded(path string) {
 	}
 	if s.expanded[path] {
 		delete(s.expanded, path)
+		s.invalidate()
 		return
 	}
 	s.expanded[path] = true
+	s.invalidate()
 }
 
 // pruneExpanded drops paths no longer present in known.
@@ -309,7 +327,10 @@ func (s Model) OrderedFolders() []mail.FolderEntry {
 func (s *Model) SelectByCanonical(target string) bool {
 	for i, r := range s.visibleRows() {
 		if r.entry.cf.Canonical == target {
-			s.selected = i
+			if s.selected != i {
+				s.selected = i
+				s.invalidate()
+			}
 			return true
 		}
 	}
@@ -325,15 +346,23 @@ func (s Model) SelectedIcon() string {
 }
 
 func (s *Model) SetSize(width, height int) {
+	if s.width == width && s.height == height {
+		return
+	}
 	s.width = width
 	s.height = height
+	s.invalidate()
 }
 
 func (s Model) Layout() uicore.LayoutMode { return s.layout }
 
 // SetLayout updates the icon toggle. Width is owned by SetSize.
 func (s *Model) SetLayout(l uicore.LayoutMode) {
+	if s.layout == l {
+		return
+	}
 	s.layout = l
+	s.invalidate()
 }
 
 func (s *Model) SetKeyMap(km KeyMap) { s.keys = km }
@@ -345,9 +374,12 @@ func (s Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !ok {
 		return s, nil
 	}
+	prevSelected := s.selected
+	mutated := false
+	rows := s.visibleRows()
 	switch {
 	case key.Matches(km, s.keys.Down):
-		if s.selected < len(s.visibleRows())-1 {
+		if s.selected < len(rows)-1 {
 			s.selected++
 		}
 	case key.Matches(km, s.keys.Up):
@@ -357,27 +389,31 @@ func (s Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case key.Matches(km, s.keys.Top):
 		s.selected = 0
 	case key.Matches(km, s.keys.Bottom):
-		if n := len(s.visibleRows()); n > 0 {
+		if n := len(rows); n > 0 {
 			s.selected = n - 1
 		}
 	case key.Matches(km, s.keys.Expand):
-		rows := s.visibleRows()
 		if s.selected < len(rows) && rows[s.selected].hasChildren {
 			if s.expanded == nil {
 				s.expanded = map[string]bool{}
 			}
 			s.expanded[rows[s.selected].expandKey()] = true
+			mutated = true
 		}
 	case key.Matches(km, s.keys.Collapse):
-		rows := s.visibleRows()
 		if s.selected < len(rows) {
 			r := rows[s.selected]
 			if r.hasChildren && s.expanded[r.expandKey()] {
 				delete(s.expanded, r.expandKey())
+				mutated = true
 			} else if r.depth > 0 {
 				s.collapseToAncestor(rows)
+				mutated = true
 			}
 		}
+	}
+	if mutated || s.selected != prevSelected {
+		s.invalidate()
 	}
 	return s, nil
 }
@@ -396,6 +432,17 @@ func (s *Model) collapseToAncestor(rows []rowMeta) {
 }
 
 func (s Model) View() string {
+	if !s.cache.dirty && s.cache.w == s.width && s.cache.h == s.height {
+		return s.cache.rendered
+	}
+	s.cache.rendered = s.renderView()
+	s.cache.w = s.width
+	s.cache.h = s.height
+	s.cache.dirty = false
+	return s.cache.rendered
+}
+
+func (s Model) renderView() string {
 	rows := s.visibleRows()
 	if len(rows) == 0 || s.width == 0 || s.height == 0 {
 		return ""

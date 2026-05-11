@@ -155,6 +155,25 @@ func TestFooterView(t *testing.T) {
 			t.Error("viewer affordances should survive at width 60")
 		}
 	})
+
+	t.Run("ellipsis appears when hints drop", func(t *testing.T) {
+		f := NewFooter(styles)
+		f = f.SetContext(AccountContext)
+		// 90 cells forces several drops (v select, n/N results, etc.).
+		result := stripANSI(f.View(90))
+		if !strings.Contains(result, "…") {
+			t.Errorf("truncated footer missing … marker:\n%q", result)
+		}
+	})
+
+	t.Run("ellipsis absent when full footer fits", func(t *testing.T) {
+		f := NewFooter(styles)
+		f = f.SetContext(AccountContext)
+		result := stripANSI(f.View(220))
+		if strings.Contains(result, "…") {
+			t.Errorf("untruncated footer should not carry … marker:\n%q", result)
+		}
+	})
 }
 
 func TestFooterWindowCounter(t *testing.T) {

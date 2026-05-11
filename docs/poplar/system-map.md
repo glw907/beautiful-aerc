@@ -22,7 +22,7 @@ Single binary: `cmd/poplar/`. Build with `make build`. Install with
 | `internal/ui/compose/` | `compose.Model` — App-owned inline compose surface (imported as `uicompose` to disambiguate from the `internal/compose` domain package) |
 | `internal/ui/movepicker/` | `movepicker.Model` |
 | `internal/ui/helppopover/` | `helppopover.Model` |
-| `internal/ui/uicore/` | Shared chrome library: `LayoutMode`, `IconSet`, `ComputeLayout`, `NewSpinner`, `ErrorMsg`, `TriageOp`, `ModalShell`, `PlaceOverlay`, `DimANSI`, render primitives. Subpackages and `internal/ui/` both import; subpackages cannot import `internal/ui/` |
+| `internal/ui/uicore/` | Shared chrome library: `LayoutMode`, `IconSet`, `ComputeLayout`, `NewSpinner`, `ErrorMsg`, `TriageOp`, `ModalShell`, `PlaceOverlay`, render primitives. Subpackages and `internal/ui/` both import; subpackages cannot import `internal/ui/` |
 | `internal/mail/` | `Backend` interface, poplar-native types (`Folder`, `MessageInfo`, `UID`), `Classify([]Folder) []ClassifiedFolder`, mock backend |
 | `internal/mailjmap/` | Fastmail JMAP backend, direct on `git.sr.ht/~rockorager/go-jmap` (synchronous) |
 | `internal/mailauth/` | Vendored MIT-licensed snippets: XOAUTH2 against `go-sasl`, Gmail X-GM-EXT keepalive against `go-imap`. Top-of-file provenance comments |

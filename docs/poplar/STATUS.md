@@ -1,8 +1,9 @@
 # Poplar Status
 
-**Current pass:** Pass 18 — Polish II. Closes the popover-dim
-backlog (#14) and the items surfaced during 10–17c. The bubbles-
-adoption arc closed in 17c (ADRs 0198, 0199, 0200, 0201).
+**Current pass:** Pass 19 — pre-beta refactor sweep. Bundles #46
+iter.Seq2 walk, #43 drop legacy `Date string`, #44 compose package
+collision, #47 Levenshtein consolidation, and #12 tidy → tidytext
+rename. Must land before the v0.9.0 freeze (now Pass 20).
 
 ## Passes
 
@@ -10,44 +11,62 @@ adoption arc closed in 17c (ADRs 0198, 0199, 0200, 0201).
 |------|------|--------|
 | 1 – 16d | Scaffold through slog adoption (ADRs 0001–0197) | done |
 | 17a | Sidebar folder hierarchy on a v2 tree component (ADR-0198) | done |
-| 17b | `messagelist` on `bubbles/v2/list` with custom item delegate; iter.Seq2 thread walk (ADR-0199) | done |
-| 17c | `bubbles/v2/help` audit + bubbles-deviation ADRs (0200, 0201); `account.keys.MsgList*` dedup | done |
-| **18** | **Polish II — popover dim (#14) + items surfaced during 10–17c** | **pending — next** |
-| 19 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
+| 17b | `messagelist` on `bubbles/v2/list` (ADR-0199) | done |
+| 17c | `bubbles/v2/help` audit + bubbles-deviation ADRs (0200, 0201) | done |
+| 18 | Polish II — retire underlay dim, footer ellipsis, helppopover zero-arg View, KeyMap exports, sidebar render cache (ADR-0202) | done |
+| **19** | **pre-beta refactor — #46, #43, #44, #47, #12** | **pending — next** |
+| 20 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 18)
+## Next starter prompt (Pass 19)
 
-> **Goal.** Polish II. Close issue #14 (popover dim) and sweep
-> the small adjacent items surfaced during the 10–17c arc.
+> **Goal.** Pre-beta refactor sweep. Land the five
+> "pre-beta refactor" backlog items before v0.9.0 freeze.
 >
-> **Scope.** `internal/ui/` polish only. Issue #14 — the dim
-> underlay behind modal overlays should respect ADR-0072's
-> wired/unwired vocabulary so the dim doesn't wash out the
-> help popover's already-dim unwired rows. Plus whatever else
-> appears in BACKLOG.md tagged "polish" that touches the
-> overlay cascade, the chrome banner row, or the status bar.
+> **Scope.** Five items, each bounded:
+> - **#46** — `messagelist.appendThreadRows` → `iter.Seq2` walk
+>   modeled after `Digital-Shane/treeview`'s
+>   `NodeInfo{Node, Depth, IsLast}`. Touches
+>   `internal/ui/messagelist/model.go` only.
+> - **#43** — drop `mail.MessageInfo.Date string`; regenerate
+>   stale fixtures; remove the `lessMessage` / `displayDate`
+>   fallback branches. Touches `internal/mail/types.go`,
+>   `internal/ui/messagelist/model.go`,
+>   `internal/cache/syncer.go`, the messagelist testdata, and
+>   the wire-shape paragraph in `docs/poplar/invariants.md`.
+> - **#44** — rename `internal/compose/` → `internal/mailcompose/`
+>   (or `internal/mail/outbound/`); drop the `uicompose` /
+>   `mailcompose` alias dance from `internal/ui/compose/` and
+>   the App side. Touches every importer + Architecture section
+>   + ADR-0163.
+> - **#47** — consolidate the two Levenshtein implementations
+>   (`internal/config/accounts.go`, `internal/catkin/spellcheck.go`)
+>   into a shared helper. Decide the package boundary first
+>   (likely `internal/strdist/`).
+> - **#12** — rename `internal/tidy/` → `internal/tidytext/` and
+>   drop the CLI machinery (`LoadConfig`, `ApplyRuleOverrides`,
+>   `ConfigString`). Rename `[ui.tidy]` config section to
+>   `[ui.tidytext]`. Touches every importer + ADR-0178 +
+>   invariants Architecture > Compose.
 >
-> **Settled (do not re-brainstorm):** Overlay cascade order
-> (confirm > conflict > outbox > help > linkpicker >
-> attachpicker > movepicker > form > popover) stays. ModalShell
-> family stays at six consumers + the help popover deviation
-> (ADR-0201). `uicore.DimANSI` is the dimming primitive.
+> **Settled (do not re-brainstorm):** All five are in scope per
+> the pre-beta refactor mandate (CLAUDE.md). All must land
+> before v0.9.0. Splits across multiple passes if the slate is
+> too large; the pass-size budget is 8–12 tasks.
 >
-> **Still open — brainstorm these:** the exact BACKLOG.md
-> selection for this pass (read backlog first; size to the
-> 8–12 task budget); whether #14 wants a contrast-tier ADR or
-> can ride on the existing dim invariant.
+> **Still open — brainstorm these:** Pass split (one pass vs.
+> two — count the touched importers and judge the integration
+> risk); #44 target package name (`mailcompose` vs.
+> `mail/outbound`).
 >
-> **Approach.** Read BACKLOG.md, brainstorm the open questions,
-> write a plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-polish-ii.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/YYYY-MM-DD-pre-beta-refactor.md`,
+> then implement. Standard pass-end checklist applies.
 
 ## Notes for the 16-series (modernization)
 
-ADR-0196 binds the convention; 16b–d apply it. Audit appendix
-in the archived 16a plan has the full file:line list. Pass 16d
+ADR-0196 binds the convention; 16b–d apply it. Audit appendix in
+the archived 16a plan has the full file:line list. Pass 16d
 landed ADR-0197 (slog adoption).

@@ -490,55 +490,40 @@ func TestApp_BannerLastWriteWins(t *testing.T) {
 }
 
 func TestApp_PopoverOverlaysErrorBanner(t *testing.T) {
-	// With the dimmed-overlay design the error banner is part of the dimmed
-	// background that is visible behind the popover. The popover must also
-	// appear in the output. The overlay composites over, not replaces, the
-	// frame. The banner does not steal keys. That's enforced by Update, not
-	// View.
+	// The popover composites over, not replaces, the frame: the error banner
+	// in the underlying frame remains visible behind the popover box. The
+	// banner does not steal keys (enforced by Update, not View).
 	app := newLoadedApp(t, 100, 30)
 	app, _ = app.Update(ErrorMsg{Op: "fetch body", Err: errors.New("EOF")})
 	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 
 	view := stripANSI(app.View().Content)
-	// Popover must be present.
 	if !strings.Contains(view, "Message List") {
 		t.Errorf("popover missing from view with error banner open: %q", view)
 	}
-	// The banner text is in the dimmed background (overlay design).
 	if !strings.Contains(view, "fetch body") {
-		t.Errorf("banner background missing from view: %q", view)
+		t.Errorf("banner row missing from view: %q", view)
 	}
 }
 
-// TestApp_HelpOverlayDimsBg is the F3b.3 composite test. It verifies:
-//  1. Both the popover box content and the underlying account-view content
-//     appear in the ANSI-stripped output (overlay, not replacement).
-//  2. The raw (ANSI-preserved) output contains ESC[2m or ESC[2;X somewhere,
-//     confirming the background frame was passed through DimANSI.
-func TestApp_HelpOverlayDimsBg(t *testing.T) {
+// TestApp_HelpOverlayCompositesOverFrame verifies the popover renders over
+// the undimmed account frame: both the popover content and the underlying
+// content appear in the ANSI-stripped output. Underlay dim was retired in
+// ADR-0202.
+func TestApp_HelpOverlayCompositesOverFrame(t *testing.T) {
 	app := newLoadedApp(t, 120, 40)
 	app, _ = app.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !app.helpOpen {
 		t.Fatal("setup: ? did not open help")
 	}
 
-	raw := app.View().Content
-	plain := stripANSI(raw)
+	plain := stripANSI(app.View().Content)
 
-	// Popover box must appear.
 	if !strings.Contains(plain, "Navigate") {
 		t.Errorf("popover content 'Navigate' missing from overlay view:\n%s", plain)
 	}
-
-	// Underlying account-view content must appear (folder name in sidebar).
 	if !strings.Contains(plain, "Inbox") {
 		t.Errorf("background content 'Inbox' missing from overlay view:\n%s", plain)
-	}
-
-	// The raw output must carry dim ANSI codes injected by DimANSI.
-	hasDim := strings.Contains(raw, "\x1b[2m") || strings.Contains(raw, "\x1b[2;")
-	if !hasDim {
-		t.Error("raw view missing ESC[2m or ESC[2; dim marker — background was not dimmed")
 	}
 }
 

@@ -38,7 +38,7 @@ type AttachPicker struct {
 	err        string
 	styles     Styles
 	icons      uicore.IconSet
-	keys       attachPickerKeys
+	keys       AttachPickerKeyMap
 }
 
 type attachEntry struct {
@@ -51,7 +51,7 @@ type attachEntry struct {
 
 type attachViewState struct{ cursor, offset int }
 
-type attachPickerKeys struct {
+type AttachPickerKeyMap struct {
 	Up, Down     key.Binding
 	PgUp, PgDown key.Binding
 	GoTop, GoBot key.Binding
@@ -63,8 +63,8 @@ type attachPickerKeys struct {
 	Close        key.Binding // esc
 }
 
-func defaultAttachPickerKeys() attachPickerKeys {
-	return attachPickerKeys{
+func DefaultAttachPickerKeyMap() AttachPickerKeyMap {
+	return AttachPickerKeyMap{
 		Up:           key.NewBinding(key.WithKeys("k", "up")),
 		Down:         key.NewBinding(key.WithKeys("j", "down")),
 		PgUp:         key.NewBinding(key.WithKeys("K", "pgup")),
@@ -86,7 +86,7 @@ func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
 	return AttachPicker{
 		styles:   styles,
 		icons:    icons,
-		keys:     defaultAttachPickerKeys(),
+		keys:     DefaultAttachPickerKeyMap(),
 		selected: map[string]bool{},
 	}
 }

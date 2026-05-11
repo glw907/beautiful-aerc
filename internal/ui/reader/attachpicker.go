@@ -20,10 +20,10 @@ type AttachPicker struct {
 	items  []mail.Attachment
 	styles Styles
 	icons  uicore.IconSet
-	keys   attachPickerKeys
+	keys   AttachPickerKeyMap
 }
 
-type attachPickerKeys struct {
+type AttachPickerKeyMap struct {
 	Enter  key.Binding
 	Open   key.Binding
 	Save   key.Binding
@@ -38,7 +38,7 @@ type attachItem struct {
 func (i attachItem) FilterValue() string { return i.att.Filename }
 
 func NewAttachPicker(styles Styles, icons uicore.IconSet) AttachPicker {
-	keys := attachPickerKeys{
+	keys := AttachPickerKeyMap{
 		Enter: key.NewBinding(key.WithKeys("enter")),
 		Open:  key.NewBinding(key.WithKeys("o")),
 		Save:  key.NewBinding(key.WithKeys("s")),

@@ -1192,10 +1192,15 @@ func (m App) viewWithCursor(content string, cur *tea.Cursor) tea.View {
 	return v
 }
 
-// View composes the full-screen layout. When the help popover is open the
-// underlying account frame is rendered, dimmed via DimANSI, and then the
-// popover box is composited over it via PlaceOverlay so the underlying
-// context remains visible but recedes visually.
+// viewOverlay composites a box over the frame at (x, y) and returns the
+// chrome-wrapped view.
+func (m App) viewOverlay(box string, x, y int, frame string) tea.View {
+	return m.view(uicore.PlaceOverlay(x, y, box, frame))
+}
+
+// View composes the full-screen layout. Overlays composite over the
+// undimmed account frame via PlaceOverlay. Dim is reserved for unwired
+// rows (ADR-0072). The underlay is never dimmed (ADR-0202).
 func (m App) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		v := tea.NewView("")
@@ -1208,65 +1213,56 @@ func (m App) View() tea.View {
 
 	if m.helpOpen {
 		box, tooNarrow := m.help.Box(m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
 		if tooNarrow != "" {
-			// Terminal too narrow for the popover; center the notice instead.
 			x, y := (m.width-lipgloss.Width(tooNarrow))/2, m.height/2
 			if x < 0 {
 				x = 0
 			}
-			return m.view(uicore.PlaceOverlay(x, y, tooNarrow, dimmed))
+			return m.viewOverlay(tooNarrow, x, y, frame)
 		}
 		x, y := m.help.Position(box, m.width, m.height)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	if m.confirm.IsOpen() {
 		box := m.confirm.Box(m.width, m.height)
 		x, y := m.confirm.Position(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	if m.conflictOpen {
 		body := m.conflict.View()
 		x, y := uicore.CenterOverlay(body, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, body, dimmed))
+		return m.viewOverlay(body, x, y, frame)
 	}
 
 	if m.outboxOpen {
 		body := m.outbox.View()
 		x, y := uicore.CenterOverlay(body, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, body, dimmed))
+		return m.viewOverlay(body, x, y, frame)
 	}
 
 	if m.linkPicker.IsOpen() {
 		box := m.linkPicker.Box(m.width, m.height)
 		x, y := m.linkPicker.Position(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	if m.attachPicker.IsOpen() {
 		box := m.attachPicker.Box(m.width, m.height)
 		x, y := m.attachPicker.Position(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	if m.compose != nil && m.compose.AttachPickerIsOpen() {
 		box := m.compose.AttachPickerView()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	if m.compose != nil && m.compose.SchedulePickerIsOpen() {
 		box := m.compose.SchedulePickerView()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
 		var cur *tea.Cursor
 		if pc := m.compose.SchedulePickerCursor(); pc != nil {
 			c := *pc
@@ -1274,13 +1270,12 @@ func (m App) View() tea.View {
 			c.Position.Y += y
 			cur = &c
 		}
-		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, dimmed), cur)
+		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, frame), cur)
 	}
 
 	if m.reschedule.picker != nil {
 		box := m.reschedule.picker.View()
 		x, y := uicore.CenterOverlay(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
 		var cur *tea.Cursor
 		if pc := m.reschedule.picker.Cursor(); pc != nil {
 			c := *pc
@@ -1288,20 +1283,18 @@ func (m App) View() tea.View {
 			c.Position.Y += y
 			cur = &c
 		}
-		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, dimmed), cur)
+		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, frame), cur)
 	}
 
 	if m.movePicker.IsOpen() {
 		box := m.movePicker.Box(m.width, m.height)
 		x, y := m.movePicker.Position(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	if m.form != nil && m.form.FromPopover() {
 		box := m.form.Box(m.width, m.height)
 		x, y := m.form.Position(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
 		var cur *tea.Cursor
 		if fc := m.form.Cursor(); fc != nil {
 			c := *fc
@@ -1310,14 +1303,13 @@ func (m App) View() tea.View {
 			c.Position.Y += y + 1
 			cur = &c
 		}
-		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, dimmed), cur)
+		return m.viewWithCursor(uicore.PlaceOverlay(x, y, box, frame), cur)
 	}
 
 	if m.popover != nil {
 		box := m.popover.Box(m.width, m.height)
 		x, y := m.popover.Position(box, m.width, m.height)
-		dimmed := uicore.DimANSI(frame)
-		return m.view(uicore.PlaceOverlay(x, y, box, dimmed))
+		return m.viewOverlay(box, x, y, frame)
 	}
 
 	// No overlay open. Pull cursor from the focused surface.

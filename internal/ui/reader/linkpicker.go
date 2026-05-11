@@ -18,10 +18,10 @@ type LinkPicker struct {
 	list   list.Model
 	links  []string
 	styles Styles
-	keys   linkPickerKeys
+	keys   LinkPickerKeyMap
 }
 
-type linkPickerKeys struct {
+type LinkPickerKeyMap struct {
 	Enter  key.Binding
 	Close  key.Binding
 	Digits [9]key.Binding
@@ -34,7 +34,7 @@ type linkItem struct {
 func (i linkItem) FilterValue() string { return i.url }
 
 func NewLinkPicker(styles Styles) LinkPicker {
-	keys := linkPickerKeys{
+	keys := LinkPickerKeyMap{
 		Enter: key.NewBinding(key.WithKeys("enter")),
 		Close: key.NewBinding(key.WithKeys("esc", "tab")),
 	}
