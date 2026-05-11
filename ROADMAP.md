@@ -4,6 +4,39 @@
 
 ## Active
 
+### AI-overengineering cleanup `overengineering-cleanup`
+Three patterns the codebase explicitly forbids in `CLAUDE.md` /
+`go-conventions` but ships anyway. All three are pre-beta-cheap to
+fix; all three keep paying review tax until they go.
+
+1. **Inline `mailcompose.Editor` + delete `CatkinEditor`.** 17-method
+   single-impl interface with zero-line pass-throughs to `catkin.Model`,
+   justified by a speculative v1.1 neovim adapter (ADR-0033). Pre-beta
+   the rule is "strip the seam, the next consumer re-adds it with
+   itself." Compose holds `*catkin.Model` directly; v1.1 introduces
+   the seam alongside the second implementation.
+
+2. **Collapse the triplicate `WithLogger` functional-options pattern.**
+   `mailjmap.Option` / `mailimap.Option` / `cache.Option` each declare a
+   variadic-options framing for one optional parameter. Replace with a
+   plain `*slog.Logger` argument (nil → `slog.Default()`) or a
+   `SetLogger` setter. Update ADR-0197 to record the simplification.
+
+3. **Fold `internal/backoff/` and `internal/humanize/` into their
+   callers.** Two micro-packages (12 and 18 source lines) plus test
+   files plus package docs for helpers with three or four callers
+   each. `backoff.Exponential` also carries defensive `<= 0` clamps
+   on internal callers — directly forbidden by the no-defensive-
+   checks-between-internal-callers rule. Move both into the package
+   of their primary caller (`mailjmap` for backoff, `internal/ui` or
+   `internal/cache` for `Bytes`), drop the clamps.
+
+Three passes or one — small enough to land together if scheduled
+adjacent to a quiet UI pass. None of the three is load-bearing on
+behavior; all are net deletions.
+
+Related: (none yet — file with `/log-issue` as passes are scoped)
+
 ### app.go decomposition `app-decomposition`
 `internal/ui/app.go` is 1636 lines and `App.Update` is 874 of them
 (line 243–1119), dispatching every screen, modal, key path, and
