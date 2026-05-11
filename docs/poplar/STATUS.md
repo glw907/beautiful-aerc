@@ -1,9 +1,8 @@
 # Poplar Status
 
-**Current pass:** Pass 15a.5 — `bubbles/v2/filepicker` adoption
-for `compose/attachpicker.go` (ADR-0179). Second of four bubbles-
-adoption passes (15a, 15a.5, 15b, 15c, 15d) before Polish II and
-the v0.9.0 freeze.
+**Current pass:** Pass 15b — sidebar folder hierarchy on a v2
+tree component. Third of four bubbles-adoption passes (15a,
+15a.5, 15b, 15c, 15d) before Polish II and the v0.9.0 freeze.
 
 ## Passes
 
@@ -24,7 +23,7 @@ the v0.9.0 freeze.
 | 14c | First-run integration (#27 part 3; ADR-0192) | done |
 | 14.1 | OAuth refresh (#42; ADR-0193) | done |
 | 15a | `bubbles/v2/list` adoption — `movepicker`, `reader/linkpicker`, `reader/attachpicker` (ADR-0194) | done |
-| 15a.5 | `bubbles/v2/filepicker` adoption — `compose/attachpicker` (multi-select gap to solve) | pending |
+| 15a.5 | `compose/attachpicker` filepicker-lessons — symlink + atomic id + size column; ADR-0195 names the deviation | done |
 | 15b | Sidebar folder hierarchy on a v2 tree component (`Digital-Shane/treeview` candidate; ADR the dep) | pending |
 | 15c | `messagelist` on `bubbles/v2/list` (custom item renderer for thread-prefix walk; ADR if it survives) | pending |
 | 15d | `bubbles/v2/help` audit + ADRs for any bubbles deviations that survive 15a–c (`helppopover`, `schedulepicker`) | pending |
@@ -34,47 +33,42 @@ the v0.9.0 freeze.
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 15a.5)
+## Next starter prompt (Pass 15b)
 
-> **Goal.** Adopt `bubbles/v2/filepicker` for
-> `internal/ui/compose/attachpicker.go` (ADR-0179) so the multi-
-> select TUI file browser composes from the upstream bubble
-> instead of hand-rolled directory traversal. Second of four
+> **Goal.** Replace the sidebar's flat-folder rendering with a
+> v2 tree component so nested folder names render as a real
+> tree (expand/collapse, keyboard-driven). Third of four
 > bubbles-adoption passes (15a, 15a.5, 15b, 15c, 15d) before
 > Polish II and the v0.9.0 freeze.
 >
-> **Scope.** `internal/ui/compose/attachpicker.go` and tests.
-> Keep ADR-0179's keymap (Space toggle, `a` accept, Enter single-
-> attach shortcut, `.` toggle hidden, `Esc` cancel) and the
-> external `AttachAcceptedMsg` / `AttachCancelledMsg` surface.
-> Reuse `uicore.NewListStyles` if filepicker exposes a list-
-> styled internal; otherwise add a `uicore.NewFilePickerStyles`
-> sibling.
+> **Scope.** `internal/ui/sidebar/` — `Model`, `Column`, and
+> the folder-group rendering. The Primary/Disposal/Custom
+> group ordering stays; what changes is how Custom folders
+> with `/` in their display names render. Candidate library:
+> `Digital-Shane/treeview` (vet first per memory's "prior art
+> = major clients / Charm-ecosystem first" rule; if it's
+> abandoned or non-idiomatic, hand-roll on top of
+> `bubbles/v2/list` with indent + glyph). The chosen dep gets
+> its own ADR.
 >
-> **Settled (do not re-brainstorm):** External Msg surface
-> unchanged. Multi-select stays the poplar-side responsibility
-> (filepicker is single-select upstream). View-state stack on
-> ascend stays the same UX. Footer hint `^O attach` at rank 6
-> unchanged.
+> **Settled (do not re-brainstorm):** The current invariant
+> "nested folder names render flat; `/` is the only
+> affordance" is **being lifted** in this pass — that's the
+> point. Three-group order (Primary / Disposal / Custom) and
+> the synthetic Outbox row in Disposal both stay. Folder
+> selection mechanics (`J/K` nav, `Tab` cycle to search) stay.
 >
-> **Bundled bubble-shape fix (#45 gap 3).** Change
-> `compose.New()` to return `Model` (value), not `*Model`
-> (`compose/model.go:135`). Every other subpackage returns
-> `Model` by value; the pointer return is the only deviation
-> and conflicts with the elm value-receiver convention. Update
-> the call site in `internal/ui/app.go` and any test
-> constructors. Land inline with 15a.5 since this pass already
-> touches `compose/`.
+> **Still open — brainstorm these:** how to render the tree
+> at the spartan tier (width 80–89, sidebar 14 cells) — one
+> indent level cap? overflow with `…`?; whether collapsed
+> nodes still show unread counts (probably yes, sum of
+> descendants); whether tree state persists across folder
+> reloads or resets like fold state in messagelist; key
+> bindings for expand/collapse (probably `Space` on a folder
+> row, or `l`/`h` for vim-style); whether Primary group can
+> contain nested folders or stays single-level.
 >
-> **Still open — brainstorm these:** how to layer multi-select
-> on top of filepicker's single-select API (own a parallel
-> `selected map[string]bool`, intercept Space before dispatching,
-> render selected chips above the file list?); whether the async
-> readDir + id-guard contract still applies or filepicker handles
-> it; whether `.` (hidden toggle) is exposed by filepicker or
-> stays poplar-side; whether the partial fit warrants an ADR'd
-> deviation instead of full adoption.
->
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-bubbles-filepicker-attach.md`,
-> then implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan
+> doc at
+> `docs/superpowers/plans/YYYY-MM-DD-sidebar-tree.md`, then
+> implement. Standard pass-end checklist applies.

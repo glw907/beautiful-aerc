@@ -136,8 +136,6 @@ func readDirCmd(id int, dir string, showHidden bool) tea.Cmd {
 			full := filepath.Join(dir, name)
 			ent := attachEntry{name: name, path: full}
 			if e.Type()&os.ModeSymlink != 0 {
-				// Symlink: resolve to learn whether it points at a directory.
-				// On error (broken link), treat as a non-traversable file.
 				if resolved, rerr := filepath.EvalSymlinks(full); rerr == nil {
 					if info, serr := os.Stat(resolved); serr == nil {
 						ent.isDir = info.IsDir()
@@ -145,7 +143,6 @@ func readDirCmd(id int, dir string, showHidden bool) tea.Cmd {
 					}
 				}
 				if !ent.isDir {
-					// Size from the link target; ignore error.
 					if info, serr := os.Stat(full); serr == nil {
 						ent.size = info.Size()
 					}
@@ -389,7 +386,6 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 	bodyW := contentW - attachSizeWidth - 1
 	body := fmt.Sprintf("%s%s %s", mark, icon, e.name)
 	if e.target != "" {
-		// Reserve space: body + " → " + target must not exceed bodyW.
 		arrow := " → " + e.target
 		if ansix.Width(body+arrow) > bodyW {
 			maxTarget := bodyW - ansix.Width(body) - 3 // 3 for " → "
