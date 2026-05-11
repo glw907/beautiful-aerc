@@ -3,16 +3,13 @@ description: Cache-layer binding facts for poplar's per-account SQLite store
 paths:
   - "internal/cache/**/*.go"
   - "cmd/poplar/cache*.go"
-  - "docs/superpowers/plans/**/*.md"
-  - "docs/superpowers/specs/**/*.md"
 ---
 
 # Poplar Cache Invariants
 
 Binding facts for `internal/cache/`. Loaded when editing cache
-sources, the `poplar cache` CLI, or planning passes that touch
-the cache. The decision index in `docs/poplar/invariants.md` maps
-each fact back to its ADR(s).
+sources or the `poplar cache` CLI. The decision index in
+`docs/poplar/invariants.md` maps each fact back to its ADR(s).
 
 ## Cache
 

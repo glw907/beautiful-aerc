@@ -102,10 +102,13 @@ binding artifact.
 ## Path-scoped rules
 
 `.claude/rules/ui-invariants.md` auto-loads when editing
-`internal/ui/`, planning a UI pass (plan or spec docs under
-`docs/superpowers/`), or reading `docs/poplar/wireframes.md` /
+`internal/ui/` or reading `docs/poplar/wireframes.md` /
 `docs/poplar/keybindings.md`. It carries the component + UX
-binding facts that are not universal.
+binding facts that are not universal. Subsystem siblings under
+`.claude/rules/` (`cache-`, `catkin-`, `search-`,
+`attachments-invariants.md`) auto-load on their own narrow
+source-path triggers; read them on demand when planning a pass
+that hasn't touched their sources yet.
 
 ## On-demand reading
 

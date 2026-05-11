@@ -6,16 +6,14 @@ paths:
   - "internal/cache/fts.go"
   - "internal/ui/sidebar/search.go"
   - "internal/ui/messagelist/model.go"
-  - "docs/superpowers/plans/**/*.md"
-  - "docs/superpowers/specs/**/*.md"
 ---
 
 # Poplar Search Invariants
 
 Binding facts for the search surface: FTS5 substrate, query
 parser, cache search query, sidebar shelf, results-mode
-messagelist. Loaded when editing search-adjacent files or
-planning passes that touch search. Codified in ADR-0188.
+messagelist. Loaded when editing search-adjacent sources.
+Codified in ADR-0188.
 
 ## Parser + plaintext
 

@@ -2,8 +2,6 @@
 description: UI/UX invariants for poplar's bubbletea layer
 paths:
   - "internal/ui/**/*.go"
-  - "docs/superpowers/plans/**/*.md"
-  - "docs/superpowers/specs/**/*.md"
   - "docs/poplar/wireframes.md"
   - "docs/poplar/keybindings.md"
 ---
@@ -11,8 +9,8 @@ paths:
 # Poplar UI Invariants
 
 Component and UX binding facts for poplar's bubbletea layer. Loaded
-when editing `internal/ui/`, planning a UI pass (plan or spec
-docs), or reading the wireframe / keybinding references.
+when editing `internal/ui/` or reading the wireframe / keybinding
+references.
 
 The authoritative key map is `docs/poplar/keybindings.md` — this
 file describes behavior, not the key tables.

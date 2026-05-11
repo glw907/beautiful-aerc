@@ -2,16 +2,13 @@
 description: Binding facts for poplar's Catkin markdown editor
 paths:
   - "internal/catkin/**/*.go"
-  - "docs/superpowers/plans/**/*.md"
-  - "docs/superpowers/specs/**/*.md"
 ---
 
 # Poplar Catkin Invariants
 
 Binding facts for `internal/catkin/`. Loaded when editing Catkin
-sources or planning passes that touch the editor. The decision
-index in `docs/poplar/invariants.md` maps each fact back to its
-ADR(s).
+sources. The decision index in `docs/poplar/invariants.md` maps
+each fact back to its ADR(s).
 
 ## Catkin
 

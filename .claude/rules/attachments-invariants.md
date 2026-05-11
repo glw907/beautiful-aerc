@@ -1,10 +1,10 @@
 ---
 description: Binding facts for poplar's attachment handling — backend, viewer chip row, picker, save target
 paths:
-  - "internal/ui/attachpicker*.go"
-  - "internal/ui/viewer*.go"
-  - "docs/superpowers/plans/**/*.md"
-  - "docs/superpowers/specs/**/*.md"
+  - "internal/ui/reader/attachpicker*.go"
+  - "internal/ui/compose/attachpicker*.go"
+  - "internal/ui/reader/viewer*.go"
+  - "internal/mail/attachment*.go"
 ---
 
 # Poplar Attachment Invariants
@@ -12,8 +12,8 @@ paths:
 Binding facts for the attachment surface that spans
 `internal/mail/` (wire types), `internal/cache/` (storage and
 eviction), and `internal/ui/` (viewer chip row + picker overlay).
-Loaded when editing the picker or viewer or planning passes that
-touch attachments. The decision index in
+Loaded when editing the picker, viewer, or `internal/mail/`
+attachment types. The decision index in
 `docs/poplar/invariants.md` maps each fact back to its ADR(s).
 
 Cache-side storage facts live in `.claude/rules/cache-invariants.md`
