@@ -4,6 +4,22 @@
 
 ## Active
 
+### app.go decomposition `app-decomposition`
+`internal/ui/app.go` is 1636 lines and `App.Update` is 874 of them
+(line 243–1119), dispatching every screen, modal, key path, and
+cross-cutting message from a single switch. `App.View` is another
+118-line block. The seams already exist (`updateContactsKey` at
+line 1541 is the proof) — they just haven't been pulled out.
+Goal: split into per-screen controller methods (`updateAccount`,
+`updateContacts`, `updateCompose`, `updateModals`, …) plus a thin
+top-level `Update` that routes, and peel the file into
+`app_update.go` / `app_view.go` / `app_chrome.go` so no single
+file exceeds ~600 lines. Pure refactor — no behavior change, no
+new features. Worth doing pre-beta while the `elm-conventions`
+skill is still flexible about restructuring.
+
+Related: (none yet — file with `/log-issue` as passes are scoped)
+
 ### Mouse support throughout `mouse-support`
 Wire `v.MouseMode` + `v.OnMouse` across the UI. Scope: link clicking
 in the reader (linkpicker becomes optional, not the only path),

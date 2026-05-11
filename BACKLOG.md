@@ -92,6 +92,9 @@
 
 ## Medium
 
+- [ ] **#50** Detoxify `ansix.spuaCellWidth` package global `#improvement` `#poplar` `#ansix` *(2026-05-11)*
+  `internal/ansix/ansix.go:23` carries a mutable package-level `spuaCellWidth`, set by `SetSPUACellWidth` from `cmd/poplar/root.go` after the terminal probe and read by every `ansix.Width`/`Truncate` call. Works in production (set once at startup, never again), but makes the width-measurement substrate untestable across icon modes in a single `go test` run — order-dependent and racy whenever a future test wants to exercise both Simple and Fancy in the same process. Principled fix: make ansix value-bearing (`type Measurer struct { spuaCellWidth int }`, methods `Width` / `Truncate` / `TruncateEllipsis`) and thread a `*ansix.Measurer` from `cmd/poplar` into `internal/ui` alongside the `uicore.IconSet` it's already paired with. Touches every `ansix.Width(...)` / `ansix.Truncate(...)` callsite, but the change is mechanical. Pre-beta is when this is cheap.
+
 - [x] **#48** ~~Adopt `bubbles/v2/help` `shouldAddItem` ellipsis truncation for the command footer~~ `#improvement` `#poplar` *(2026-05-11)* (closed 2026-05-11)
   Resolved by Pass 18. `fitFooterHints` (in `internal/ui/footer.go`) now returns `(visible, truncated)` and `renderGroups` appends ` …` styled with `FooterHint` when any hint dropped. 2-cell budget reserved from the drop loop. Algorithm lifted from `bubbles/v2/help.shouldAddItem`; package adoption stays blocked by ADR-0200/0201.
 
