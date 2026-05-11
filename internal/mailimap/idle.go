@@ -34,10 +34,12 @@ func (b *Backend) idleLoop(ctx context.Context) {
 		if err != nil {
 			b.emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
 			attempts++
+			delay := backoff.Exponential(attempts, reconnectInitial, reconnectMax)
+			b.log.Warn("imap idle lost, reconnecting", "attempt", attempts, "delay", delay, "err", err)
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(backoff.Exponential(attempts, reconnectInitial, reconnectMax)):
+			case <-time.After(delay):
 			}
 			continue
 		}
@@ -145,5 +147,6 @@ func (b *Backend) emit(u mail.Update) {
 	select {
 	case ch <- u:
 	default:
+		b.log.Warn("dropped update, channel full", "type", u.Type, "cap", cap(ch))
 	}
 }

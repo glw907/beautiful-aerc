@@ -227,9 +227,13 @@ func (b *Backend) smtpClientLocked() (smtpClient, error) {
 // cached client.
 func (b *Backend) dropSMTP(cli smtpClient) {
 	b.mu.Lock()
-	if b.smtp == cli {
+	cached := b.smtp == cli
+	if cached {
 		b.smtp = nil
 	}
 	b.mu.Unlock()
+	if cached {
+		b.log.Warn("smtp client dropped after send error")
+	}
 	_ = cli.Close()
 }

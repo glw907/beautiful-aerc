@@ -1,8 +1,10 @@
 package mailimap
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -147,5 +149,22 @@ func TestPushDraft_IMAP_ReplacesPrev(t *testing.T) {
 	}
 	if len(cmd.expungeCalls) != 1 || len(cmd.expungeCalls[0]) != 1 || cmd.expungeCalls[0][0] != mail.UID("42") {
 		t.Errorf("expunge calls = %v, want [[42]]", cmd.expungeCalls)
+	}
+}
+
+// TestWithLogger_DroppedUpdate verifies that the WithLogger seam routes
+// the "dropped update, channel full" warn through the supplied logger.
+func TestWithLogger_DroppedUpdate(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	b := New(config.AccountConfig{Name: "test"}, WithLogger(logger))
+	// Zero-capacity channel: the very next emit overflows.
+	b.updates = make(chan mail.Update, 0)
+
+	b.emit(mail.Update{Type: mail.UpdateNewMail})
+
+	if !strings.Contains(buf.String(), "dropped update, channel full") {
+		t.Errorf("expected warn in log output, got: %s", buf.String())
 	}
 }
