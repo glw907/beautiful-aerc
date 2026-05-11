@@ -75,10 +75,10 @@ type displayRow struct {
 	depth        uint8 // 0 = root, derived during prefix computation
 }
 
-// FilterValue satisfies list.Item. bubbles/v2/list uses it for its
-// built-in filter; poplar drives filtering through SetFilter instead,
-// so this returns the subject as a safe fallback.
-func (r displayRow) FilterValue() string { return r.msg.Subject }
+// FilterValue satisfies list.Item. The list's built-in filter stays
+// disabled because the sidebar shelf owns search (ADR-0188), so this
+// is never consulted.
+func (r displayRow) FilterValue() string { return "" }
 
 // searchFilter holds the parsed query plus its raw form for the
 // "is filter active?" predicate. Zero value means no filter.
