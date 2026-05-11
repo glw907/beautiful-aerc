@@ -1,6 +1,7 @@
 # Poplar Status
 
-**Current pass:** post-v0.9.0; pre-beta cadence continues.
+**Current pass:** Pass 23 — First-launch safety (queued, ready to
+start). Pre-beta cadence continues; path to soak in §Next steps.
 
 **Beta soak deferred** (2026-05-11 decision). `v0.9.0` is tagged
 as a milestone but does not gate the rules — pre-beta operational
