@@ -221,6 +221,58 @@ type AccountConfig struct {
 	OAuthStore string
 }
 
+// ResolvePreset fills empty backend/transport fields on c from the
+// provider preset table keyed by c.Preset. Non-empty slots win, so
+// explicit user overrides survive. Idempotent. Safe to call from
+// the decoder and again from the wizard before the TOML round-trip.
+// Unknown preset keys are a no-op; the decoder still surfaces the
+// "unknown provider" error.
+func ResolvePreset(c *AccountConfig) {
+	preset, ok := Providers[c.Preset]
+	if !ok {
+		return
+	}
+	c.Backend = preset.Backend
+	if c.Host == "" {
+		c.Host = preset.Host
+	}
+	if c.Port == 0 {
+		c.Port = preset.Port
+	}
+	if !c.StartTLS {
+		c.StartTLS = preset.StartTLS
+	}
+	if !c.InsecureTLS {
+		c.InsecureTLS = preset.InsecureTLS
+	}
+	c.GmailQuirks = preset.GmailQuirks
+	if c.Source == "" {
+		c.Source = preset.URL
+	}
+	if c.SMTP.Host == "" {
+		c.SMTP.Host = preset.SMTPHost
+	}
+	if c.SMTP.Port == 0 {
+		c.SMTP.Port = preset.SMTPPort
+	}
+	if !c.SMTP.StartTLS {
+		c.SMTP.StartTLS = preset.SMTPStartTLS
+	}
+	if !c.SMTP.InsecureTLS {
+		c.SMTP.InsecureTLS = preset.SMTPInsecureTLS
+	}
+}
+
+func (e *accountEntry) accountLabel(index int) string {
+	if e.Name != "" {
+		return e.Name
+	}
+	if e.Email != "" {
+		return e.Email
+	}
+	return fmt.Sprintf("[%d]", index)
+}
+
 // ExpandHome rewrites a leading "~" to the user's home directory.
 // Other paths and empty strings pass through.
 func ExpandHome(p string) (string, error) {
@@ -331,6 +383,15 @@ func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {
 }
 
 func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
+	if e.Provider == "" {
+		return nil, &ConfigError{
+			Account: e.accountLabel(index),
+			Field:   "provider",
+			Message: "provider is required",
+			Suggest: fmt.Sprintf(`set "provider" on the [[account]] block; known: %s`, knownProvidersList()),
+		}
+	}
+
 	if e.Name == "" {
 		if e.Email == "" {
 			return nil, &ConfigError{
@@ -343,55 +404,33 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		e.Name = e.Email
 	}
 
-	backend := e.Provider
-	host := e.Host
-	port := e.Port
-	startTLS := e.StartTLS
-	insecureTLS := e.InsecureTLS
-	gmailQuirks := false
-	source := e.Source
-
-	smtp := SMTPConfig{
-		Host:        e.SMTP.Host,
-		Port:        e.SMTP.Port,
-		StartTLS:    e.SMTP.StartTLS,
-		InsecureTLS: e.SMTP.InsecureTLS,
-		Auth:        e.SMTP.Auth,
-		Password:    e.SMTP.Password,
-		PasswordCmd: e.SMTP.PasswordCmd,
+	presetKey := ""
+	if _, ok := Providers[e.Provider]; ok {
+		presetKey = e.Provider
 	}
-
-	if preset, ok := Providers[e.Provider]; ok {
-		backend = preset.Backend
-		if host == "" {
-			host = preset.Host
-		}
-		if port == 0 {
-			port = preset.Port
-		}
-		if !startTLS {
-			startTLS = preset.StartTLS
-		}
-		if !insecureTLS {
-			insecureTLS = preset.InsecureTLS
-		}
-		gmailQuirks = preset.GmailQuirks
-		if source == "" {
-			source = preset.URL
-		}
-		if smtp.Host == "" {
-			smtp.Host = preset.SMTPHost
-		}
-		if smtp.Port == 0 {
-			smtp.Port = preset.SMTPPort
-		}
-		if !smtp.StartTLS {
-			smtp.StartTLS = preset.SMTPStartTLS
-		}
-		if !smtp.InsecureTLS {
-			smtp.InsecureTLS = preset.SMTPInsecureTLS
-		}
+	acct := &AccountConfig{
+		Name:        e.Name,
+		Preset:      presetKey,
+		Backend:     e.Provider,
+		Source:      e.Source,
+		Email:       e.Email,
+		Host:        e.Host,
+		Port:        e.Port,
+		StartTLS:    e.StartTLS,
+		InsecureTLS: e.InsecureTLS,
+		Auth:        e.Auth,
+		PasswordCmd: e.PasswordCmd,
+		SMTP: SMTPConfig{
+			Host:        e.SMTP.Host,
+			Port:        e.SMTP.Port,
+			StartTLS:    e.SMTP.StartTLS,
+			InsecureTLS: e.SMTP.InsecureTLS,
+			Auth:        e.SMTP.Auth,
+			Password:    e.SMTP.Password,
+			PasswordCmd: e.SMTP.PasswordCmd,
+		},
 	}
+	ResolvePreset(acct)
 
 	if p, ok := Providers[e.Provider]; ok && p.OAuth != nil {
 		if e.OAuth == nil {
@@ -435,7 +474,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if password != "" && e.PasswordCmd != "" {
 		return nil, fmt.Errorf("account %q (provider = %q): both password and password-cmd set; use one", e.Name, e.Provider)
 	}
-	// "mock" short-circuits to mail.NewMockBackend in cmd/poplar/backend.go.
+	acct.Password = password
 	if e.Provider != "imap" && e.Provider != "jmap" && e.Provider != "mock" {
 		if _, ok := Providers[e.Provider]; !ok {
 			suggest := fmt.Sprintf("known providers: %s", knownProvidersList())
@@ -451,7 +490,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
-	if backend == "imap" && host == "" {
+	if acct.Backend == "imap" && acct.Host == "" {
 		return nil, &ConfigError{
 			Account: e.Name,
 			Field:   "host",
@@ -460,7 +499,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
-	if backend == "jmap" && source == "" {
+	if acct.Backend == "jmap" && acct.Source == "" {
 		return nil, &ConfigError{
 			Account: e.Name,
 			Field:   "source",
@@ -469,26 +508,26 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
-	smtpPassword, err := resolveEnv(smtp.Password)
+	smtpPassword, err := resolveEnv(acct.SMTP.Password)
 	if err != nil {
 		return nil, fmt.Errorf("account %q (provider = %q) smtp password: %w", e.Name, e.Provider, err)
 	}
-	if smtpPassword != "" && smtp.PasswordCmd != "" {
+	if smtpPassword != "" && acct.SMTP.PasswordCmd != "" {
 		return nil, fmt.Errorf("account %q (provider = %q): smtp.password and smtp.password-cmd both set; use one", e.Name, e.Provider)
 	}
-	smtp.Password = smtpPassword
+	acct.SMTP.Password = smtpPassword
 
-	// Default SMTP credentials to IMAP credentials when nothing is
-	// explicit. Typical case is the same login for both transports.
-	if smtp.Password == "" && smtp.PasswordCmd == "" {
-		smtp.Password = password
-		smtp.PasswordCmd = e.PasswordCmd
+	// Default SMTP credentials to account-level credentials when nothing
+	// is explicit. Typical case is the same login for both transports.
+	if acct.SMTP.Password == "" && acct.SMTP.PasswordCmd == "" {
+		acct.SMTP.Password = password
+		acct.SMTP.PasswordCmd = e.PasswordCmd
 	}
-	if smtp.Auth == "" {
-		smtp.Auth = e.Auth
+	if acct.SMTP.Auth == "" {
+		acct.SMTP.Auth = e.Auth
 	}
 
-	if backend == "imap" && smtp.Host == "" {
+	if acct.Backend == "imap" && acct.SMTP.Host == "" {
 		return nil, &ConfigError{
 			Account: e.Name,
 			Field:   "smtp.host",
@@ -497,33 +536,12 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
-	preset := ""
-	if _, ok := Providers[e.Provider]; ok {
-		preset = e.Provider
-	}
-
-	acct := &AccountConfig{
-		Name:           e.Name,
-		Preset:         preset,
-		Display:        e.Display,
-		Backend:        backend,
-		Source:         source,
-		Email:          e.Email,
-		Host:           host,
-		Port:           port,
-		StartTLS:       startTLS,
-		InsecureTLS:    insecureTLS,
-		GmailQuirks:    gmailQuirks,
-		Auth:           e.Auth,
-		Password:       password,
-		PasswordCmd:    e.PasswordCmd,
-		Folders:        e.FoldersSort,
-		FoldersExclude: e.FoldersExclude,
-		Params:         e.Params,
-		SMTP:           smtp,
-		OAuth:          e.OAuth,
-		OAuthStore:     e.OAuthStore,
-	}
+	acct.Display = e.Display
+	acct.Folders = e.FoldersSort
+	acct.FoldersExclude = e.FoldersExclude
+	acct.Params = e.Params
+	acct.OAuth = e.OAuth
+	acct.OAuthStore = e.OAuthStore
 
 	if e.CopyTo != "" {
 		acct.CopyTo = []string{e.CopyTo}

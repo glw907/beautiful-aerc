@@ -12,12 +12,14 @@ import (
 	"github.com/glw907/poplar/internal/mailjmap"
 )
 
-// openBackend constructs a mail.Backend for acct. Mock is the default
-// for unconfigured or test accounts.
+// openBackend constructs a mail.Backend for acct. Production builds
+// only know about "jmap" and "imap"; the "mock" backend is gated
+// behind the dev build tag (see backend_dev.go / backend_nodev.go)
+// so a fake mailbox can never ship in a release binary.
 func openBackend(acct config.AccountConfig) (mail.Backend, error) {
 	switch acct.Backend {
-	case "mock", "":
-		return mail.NewMockBackend(), nil
+	case "mock":
+		return openMockBackend(acct)
 	case "jmap":
 		return mailjmap.New(acct), nil
 	case "imap":

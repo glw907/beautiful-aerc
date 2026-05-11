@@ -213,6 +213,68 @@ password = "x"
 	}
 }
 
+func TestResolvePreset(t *testing.T) {
+	c := &AccountConfig{Preset: "fastmail"}
+	ResolvePreset(c)
+	if c.Backend != "jmap" {
+		t.Errorf("Backend = %q, want jmap", c.Backend)
+	}
+	if c.Source != "https://api.fastmail.com/jmap/session" {
+		t.Errorf("Source = %q, want fastmail session URL", c.Source)
+	}
+	if c.SMTP.Host == "" || c.SMTP.Port == 0 {
+		t.Errorf("SMTP not populated from preset: %+v", c.SMTP)
+	}
+
+	override := &AccountConfig{Preset: "fastmail", Source: "https://example/jmap"}
+	ResolvePreset(override)
+	if override.Source != "https://example/jmap" {
+		t.Errorf("user Source overridden: %q", override.Source)
+	}
+
+	unknown := &AccountConfig{Preset: "imap"}
+	ResolvePreset(unknown)
+	if unknown.Backend != "" {
+		t.Errorf("Backend mutated for non-preset key: %q", unknown.Backend)
+	}
+}
+
+func TestParseAccounts_MissingProvider(t *testing.T) {
+	toml := `[[account]]
+name = "p"
+email = "u@x.com"
+password = "x"
+`
+	_, err := ParseAccountsFromBytes([]byte(toml))
+	if err == nil {
+		t.Fatal("expected error for missing provider")
+	}
+	if !strings.Contains(err.Error(), "provider") {
+		t.Errorf("error %q missing 'provider'", err)
+	}
+}
+
+func TestParseAccounts_TemplateBlockRoundTrips(t *testing.T) {
+	// The default config.Template() block omits `name`. The decoder must
+	// default Name to Email and resolve the preset's session URL so a
+	// user who edits only email/password-cmd lands a working account.
+	src := `[[account]]
+provider     = "fastmail"
+email        = "you@example.com"
+password     = "x"
+`
+	accounts, err := ParseAccountsFromBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("ParseAccountsFromBytes: %v", err)
+	}
+	if accounts[0].Name != "you@example.com" {
+		t.Errorf("Name = %q, want default from email", accounts[0].Name)
+	}
+	if accounts[0].Source == "" {
+		t.Errorf("Source empty — preset URL not resolved")
+	}
+}
+
 func TestParseAccountsFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

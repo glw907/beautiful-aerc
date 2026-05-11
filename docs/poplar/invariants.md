@@ -20,40 +20,34 @@ the ADR(s) that justify them.
 
 - Poplar is a single-binary bubbletea terminal email client built
   from one Go module: `cmd/poplar`.
-- Repository organization: `cmd/poplar/` (CLI wiring only),
-  `internal/ui/` (App + bubbles-shaped subpackages `account`,
+- Repository organization: `cmd/poplar/` (CLI wiring only) and
+  `internal/{ui,mail,mailjmap,mailimap,mailauth,config,theme,term,
+  filter,content,tidytext,wizard}` (plus `internal/ui/wizard`).
+  `internal/ui/` is App + bubbles-shaped subpackages (`account`,
   `compose`, `helppopover`, `messagelist`, `movepicker`, `reader`,
-  `sidebar`, plus `uicore`; ADRs 0161, 0163), `internal/mail/`
-  (`Backend` interface + classifier; `mail.FolderEntry` display
-  projection threads through sidebar/movepicker), `internal/mailjmap/`
-  (Fastmail via `git.sr.ht/~rockorager/go-jmap`), `internal/mailimap/`
-  (generic IMAP via `emersion/go-imap` v2; two physical connections
-  per Backend — command + idle), `internal/mailauth/` (vendored
-  XOAUTH2 SASL snippet; OAuth subsystem: loopback PKCE `Authorize`,
-  cached `Token` + refresh-on-expiry, `TokenStore` keyring/age-file), `internal/config/` (`AccountConfig`,
-  `UIConfig`, `LoadUI`, `Provider` registry), `internal/theme/`
-  (compiled lipgloss themes), `internal/term/` (`HasNerdFont`,
-  `MeasureSPUACells`), `internal/filter/` (markdown→HTML for
-  compose, body rendering for the reader), `internal/content/`
-  (address-list parsing, MIME plaintext extraction, body+footnote
-  rendering, `List-Unsubscribe` parsing), `internal/tidytext/`
-  (Ctrl+T compose rewrite, ADR-0178), `internal/wizard/` +
-  `internal/ui/wizard/` (first-run setup wizard split into UI-free
-  domain + bubbletea/huh surface, ADR-0191).
-- Mail backends call upstream libraries directly. The
-  library family is emersion (`go-imap` v2, `go-message`, `go-smtp`,
-  `go-sasl`, `go-webdav`, `go-vcard`) plus `rockorager/go-jmap`.
-  Vendored snippets are MIT helpers (XOAUTH2 against `go-sasl`,
-  Gmail X-GM-EXT against `go-imap`); each carries a top-of-file
-  provenance comment. TCP keepalive uses stdlib `net.KeepAliveConfig`.
+  `sidebar`, `wizard`) and `uicore` (ADRs 0161, 0163).
+  `internal/mail/` carries the `Backend` interface + classifier;
+  `mailjmap` wraps `go-jmap`, `mailimap` wraps `go-imap` v2 (two
+  physical connections per Backend — command + idle), `mailauth`
+  holds the XOAUTH2 snippet and OAuth subsystem (PKCE Authorize,
+  cached Token + refresh, keyring/age-file TokenStore). System map
+  in `docs/poplar/system-map.md`. ADRs 0178, 0191.
+- Mail backends call upstream libraries directly: emersion
+  (`go-imap` v2, `go-message`, `go-smtp`, `go-sasl`, `go-webdav`,
+  `go-vcard`) plus `rockorager/go-jmap`. Vendored MIT snippets
+  (XOAUTH2, Gmail X-GM-EXT) carry a top-of-file provenance
+  comment. TCP keepalive uses stdlib `net.KeepAliveConfig`.
 - Backends in v1: JMAP (`provider = "jmap"` / `"fastmail"`) and
   generic IMAP (`provider = "imap"` or one of the presets `yahoo`,
   `icloud`, `zoho`, `outlook`, `mailbox-org`, `posteo`, `runbox`,
-  `gmx`, `protonmail`, `gmail`). Provider presets in `config.Providers` resolve at
-  decode time to the canonical `imap`/`jmap` backend with
-  host/port/URL/auth-hint filled in (and `InsecureTLS = true` on
-  the `protonmail` preset for the local Bridge's self-signed
-  loopback cert). Self-hosted IMAP uses explicit `host`/`port`
+  `gmx`, `protonmail`, `gmail`). `config.ResolvePreset(*AccountConfig)`
+  is the single preset-merge function — fills empty Backend, Host,
+  Port, StartTLS, InsecureTLS, GmailQuirks, Source, and SMTP fields
+  from `Providers[c.Preset]`; non-empty slots win. Called both by
+  the TOML decoder and by `wizard.Apply` so the wizard's pre-save
+  probe sees the same resolved config the runtime would after a
+  round-trip (`InsecureTLS = true` on the `protonmail` preset for
+  the local Bridge's self-signed loopback cert). Self-hosted IMAP uses explicit `host`/`port`
   plus `insecure-tls = true` for self-signed certs; the dial path
   surfaces a "set insecure-tls = true if self-signed" hint when
   TLS handshake fails on RFC 1918 / `.local` / `127.x` hosts and
@@ -212,21 +206,23 @@ the ADR(s) that justify them.
 - `wizard.Probe(ctx, cfg)` dispatches on `cfg.Backend` to
   `mailimap.Probe` (appending the SMTP probe) or `mailjmap.Probe`;
   seams `imap/jmap/smtpProbeFn`. `wizard.Apply(Model)` returns a
-  ready-to-render `config.AccountConfig`. `internal/ui/wizard/` is
-  the bubbletea + huh surface; `defaultSections` composes
-  `account` / `theme` / `confirm`. Account-section stages:
-  provider → email → credentials → probe → identity →
-  signature → label; signature hosts catkin with a dim `-- `
-  chrome row and stores the sentinel-free body on
-  `Model.Signature`. ADR-0191.
-- `[account.smtp]` is a TOML sub-table under each `[[account]]`.
-  Presets fill canonical submission endpoints (465 implicit-TLS
-  for gmail/fastmail/yahoo/zoho; 587 STARTTLS for outlook/icloud;
-  protonmail bridge on loopback 1025 STARTTLS with `insecure-tls`).
-  `Auth`/`Password`/`PasswordCmd` default to mirroring IMAP-side
-  credentials. JMAP accounts ignore the block (submission rides
-  the JMAP session). Validation requires `smtp.host` for
-  `provider = "imap"` after preset resolution.
+  probe-ready `config.AccountConfig` (calls `config.ResolvePreset`
+  before returning so Host/Source/SMTP are populated). Account-
+  section stages: provider → email → credentials → probe →
+  identity → signature → label; signature hosts catkin with a
+  dim `-- ` chrome row, sentinel-free body on `Model.Signature`.
+  ADRs 0191, 0207.
+- `[account.smtp]` is a TOML sub-table under each `[[account]]`;
+  presets fill canonical submission endpoints (see
+  `config.Providers`). `Auth`/`Password`/`PasswordCmd` default to
+  mirroring IMAP-side credentials. JMAP ignores the block.
+  Validation requires `smtp.host` for `provider = "imap"` after
+  preset resolution.
+- `mail.MockBackend` is gated behind the `dev` build tag at the
+  `cmd/poplar` layer (`backend_dev.go` / `backend_nodev.go`):
+  release binaries error with "not available in release builds"
+  on `provider = "mock"`. `make test`/`make check` pass
+  `-tags=dev` so tests still drive the mock. ADR-0207.
 - `[[account.identity]]` carries ordered
   `[[account.identity.signature]]` sub-blocks.
   `AccountConfig.Identities` is length >= 1; legacy top-level
@@ -379,14 +375,14 @@ constructors (`mailjmap.New`, `mailimap.New`, `cache.Open`) accept
 
 ## Build & verification
 
-- Makefile targets: `build`, `test`, `vet`, `fmt-check`, `lint`,
-  `install`, `check`, `clean`. `make check` is the commit gate
-  (fmt-check, vet, voice, modern-go-check, test).
-  `scripts/voice-check.sh` scans T4, T10, T14, T16, T27, T28,
-  T33, T35, T39, T40 (T34 voice-lens only; ADR-0173).
+- Makefile: `make check` is the commit gate (fmt-check, vet,
+  voice, modern-go-check, test). `make test` runs with
+  `-tags=dev` to keep MockBackend in scope; release builds drop
+  it. `scripts/voice-check.sh` scans T4/T10/T14/T16/T27/T28/T33/
+  T35/T39/T40 (T34 voice-lens only; ADR-0173).
   `scripts/modern-go-check.sh` (ADR-0196) scans pre-1.21 idioms;
-  `MODERN_GO_STRICT=1` flips hard-fail. Voice rules apply to all
-  Claude-authored docs. `make install` → `~/.local/bin/`.
+  `MODERN_GO_STRICT=1` flips hard-fail. `make install` →
+  `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `docs/poplar/styling.md` before any color

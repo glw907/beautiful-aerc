@@ -58,6 +58,36 @@ func TestApplyPlainIMAP(t *testing.T) {
 	}
 }
 
+func TestApplyResolvesPresetForProbe(t *testing.T) {
+	// The probe screen calls Apply before the config has gone through
+	// the TOML round-trip, so Apply itself must resolve the preset's
+	// transport fields. Otherwise the JMAP probe hits an empty
+	// session URL and the IMAP probe hits an empty host.
+	m := Model{Preset: "fastmail", Email: "u@fm.com", Token: "t"}
+	cfg, err := Apply(m)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if cfg.Source == "" {
+		t.Errorf("Source empty — preset URL not resolved")
+	}
+	if cfg.Backend != "jmap" {
+		t.Errorf("Backend = %q, want jmap", cfg.Backend)
+	}
+
+	yahoo := Model{Preset: "yahoo", Email: "u@yahoo.com", Password: "x"}
+	cfgY, err := Apply(yahoo)
+	if err != nil {
+		t.Fatalf("Apply(yahoo): %v", err)
+	}
+	if cfgY.Host == "" || cfgY.Port == 0 {
+		t.Errorf("yahoo Host/Port not resolved: %q/%d", cfgY.Host, cfgY.Port)
+	}
+	if cfgY.SMTP.Host == "" {
+		t.Errorf("yahoo SMTP.Host not resolved")
+	}
+}
+
 func TestApplyAccountLabelDefaultsToEmail(t *testing.T) {
 	m := Model{Preset: "fastmail", Email: "u@fm.com", Token: "t"}
 	cfg, err := Apply(m)

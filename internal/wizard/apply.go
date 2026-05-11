@@ -55,7 +55,7 @@ func Apply(m Model) (config.AccountConfig, error) {
 		cfg.Password = m.Token
 	default:
 		cfg.Preset = m.Preset
-		cfg.Backend = preset.Backend
+		config.ResolvePreset(&cfg)
 		switch preset.CredentialStrategy {
 		case config.StrategyAppPassword:
 			cfg.Password = m.Password

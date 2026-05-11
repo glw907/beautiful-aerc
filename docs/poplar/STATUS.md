@@ -1,6 +1,6 @@
 # Poplar Status
 
-**Current pass:** Pass 23 — First-launch safety (queued, ready to
+**Current pass:** Pass 24 — IMAP robustness (queued, ready to
 start). Pre-beta cadence continues; path to soak in §Next steps.
 
 **Beta soak deferred** (2026-05-11 decision). `v0.9.0` is tagged
@@ -35,7 +35,7 @@ queue a remediation sub-pass before the next phase runs. The
 | 20 | v0.9.0 prep — README, docs sweep, hero screenshot, tag (ADR-0205) | done |
 | 21 | Beta-soak bug fix — restore compose body Focus() (ADR-0206); compose hero screenshot; Nerd Font in VHS tapes | done |
 | 22 | Wizard signature step — catkin editor between identity and label, multi-line TOML render, sentinel round-trip | done |
-| 23 | First-launch safety — #49 wizard preset, #29 name default, #51 MockBackend | queued |
+| 23 | First-launch safety — #49 ResolvePreset, #29 template defaults pinned, #51 MockBackend dev-gate (ADR-0207) | done |
 | 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate | queued |
 | 25 | Small-refactor sweep — #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
 | 26 | **Audit A** — bug-fix completeness (`audit-plan.md` §Phase A) | gate |
@@ -64,19 +64,6 @@ three work batches and four audits per `docs/poplar/audit-plan.md`.
 
 Closes the mail-infra hazards and the no-behavior-change
 deletions. Gated by Audit A before structural work begins.
-
-**Pass 23 — First-launch safety.** Three first-launch / config
-hazards converging on `internal/config/accounts.go`:
-- **#49** wizard probe runs against unresolved preset (dies on
-  "session URL is empty" for every hosted preset; first-run
-  unusable). Fix: extract `config.ResolvePreset(*AccountConfig)`,
-  call from both the decoder and `wizard.Apply`.
-- **#29** config-template `name` defaults to email (drop the
-  `name == ""` validator check; default `Name` to `Email`).
-- **#51** `MockBackend` ships in production and silently swallows
-  `Send`. Fix: `//go:build dev` tag on `mail.NewMockBackend`
-  registration in `cmd/poplar/backend.go`; reject `provider = ""`
-  and `provider = "mock"` in the production validator.
 
 **Pass 24 — IMAP robustness.** Two related outbox/connection bugs:
 - **#53** IMAP IDLE "reconnect" doesn't redial — `idleLoop` retries
@@ -190,6 +177,30 @@ after soak settles.
 
 Full project descriptions in `ROADMAP.md`; audit methodology in
 `docs/poplar/audit-plan.md`.
+
+### Next starter prompt (Pass 24)
+
+> **Goal.** Fix the two IMAP-side outbound / connection bugs
+> that are soak-blocking under normal long-running operation.
+>
+> **Scope.** `internal/mailimap/` (idleLoop, cmd-path actions),
+> `internal/mail/` (new `ErrConnection` sentinel + classifyErr
+> wiring), `internal/cache/ops.go` (NOT EXISTS gate in
+> `nextOutboxRow`). Reference: BACKLOG #52, #53.
+>
+> **Settled (do not re-brainstorm):** Mirror the SMTP drop-and-
+> redial pattern in the same backend (`smtp.go:141-153`).
+> No schema change for #52 (the `draft_id` FK is already in v10).
+>
+> **Still open — brainstorm these:** None — both fixes have a
+> concrete shape in the BACKLOG entries.
+>
+> **Approach.** Write a plan doc at
+> `docs/superpowers/plans/2026-MM-DD-imap-robustness.md`, then
+> implement. Add a regression test driving the failing-Send /
+> sibling-Append ordering (#52) and an idle-disconnect simulation
+> against a mock IMAP server (#53). Standard pass-end checklist
+> applies.
 
 ## Notes for the 16-series (modernization)
 
