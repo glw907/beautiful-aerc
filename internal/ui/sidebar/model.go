@@ -116,9 +116,10 @@ func customPaths(entries []folderEntry) map[string]struct{} {
 	return out
 }
 
-// effectiveEntries returns s.entries with the synthetic Outbox row injected
-// at the top of the Disposal group when outboxCount > 0. Pure, no mutation.
-func (s Model) effectiveEntries() []folderEntry {
+// allEntries returns s.entries with the synthetic Outbox row injected at the
+// top of the Disposal group when outboxCount > 0. Used by lookup methods that
+// need all entries regardless of tree expand state.
+func (s Model) allEntries() []folderEntry {
 	if s.outboxCount == 0 {
 		return s.entries
 	}
@@ -134,6 +135,38 @@ func (s Model) effectiveEntries() []folderEntry {
 	if !inserted {
 		out = append(out, syntheticOutboxEntry(s.outboxCount, s.icons))
 	}
+	return out
+}
+
+// visibleRows builds the ordered row list for View and selection: Primary,
+// Disposal (with synthetic Outbox if non-zero), then Custom tree-walked.
+func (s Model) visibleRows() []rowMeta {
+	var primary, disposal, custom []folderEntry
+	for _, e := range s.entries {
+		switch e.cf.Group {
+		case mail.GroupPrimary:
+			primary = append(primary, e)
+		case mail.GroupDisposal:
+			disposal = append(disposal, e)
+		default:
+			custom = append(custom, e)
+		}
+	}
+	if s.outboxCount > 0 {
+		disposal = append([]folderEntry{syntheticOutboxEntry(s.outboxCount, s.icons)}, disposal...)
+	}
+	// Task 6 wires s.layout.Spartan to set maxDepth = 1 for the Spartan tier.
+	maxDepth := 0
+	customRows := walkCustom(custom, s.expanded, maxDepth)
+
+	out := make([]rowMeta, 0, len(primary)+len(disposal)+len(customRows))
+	for _, e := range primary {
+		out = append(out, rowMeta{entry: e})
+	}
+	for _, e := range disposal {
+		out = append(out, rowMeta{entry: e})
+	}
+	out = append(out, customRows...)
 	return out
 }
 
@@ -164,9 +197,9 @@ func (s Model) Selected() int { return s.selected }
 // SelectedFolder returns the provider name of the currently selected folder.
 // Backends look up folders by provider name, not display name.
 func (s Model) SelectedFolder() string {
-	entries := s.effectiveEntries()
-	if s.selected < len(entries) {
-		return entries[s.selected].cf.Folder.Name
+	rows := s.visibleRows()
+	if s.selected < len(rows) {
+		return rows[s.selected].entry.cf.Folder.Name
 	}
 	return ""
 }
@@ -174,17 +207,17 @@ func (s Model) SelectedFolder() string {
 // SelectedCanonical returns the canonical name (e.g. "Inbox", "Sent") of the
 // currently selected folder. Returns "" for custom folders.
 func (s Model) SelectedCanonical() string {
-	entries := s.effectiveEntries()
-	if s.selected < len(entries) {
-		return entries[s.selected].cf.Canonical
+	rows := s.visibleRows()
+	if s.selected < len(rows) {
+		return rows[s.selected].entry.cf.Canonical
 	}
 	return ""
 }
 
 func (s Model) SelectedFolderInfo() (mail.Folder, bool) {
-	entries := s.effectiveEntries()
-	if s.selected < len(entries) {
-		return entries[s.selected].cf.Folder, true
+	rows := s.visibleRows()
+	if s.selected < len(rows) {
+		return rows[s.selected].entry.cf.Folder, true
 	}
 	return mail.Folder{}, false
 }
@@ -193,7 +226,7 @@ func (s Model) SelectedFolderInfo() (mail.Folder, bool) {
 // given provider name (canonical name for canonicals, provider name for
 // custom). Returns "" if no matching folder is in the sidebar.
 func (s Model) ConfigKey(providerName string) string {
-	for _, e := range s.effectiveEntries() {
+	for _, e := range s.allEntries() {
 		if e.cf.Folder.Name == providerName {
 			return e.cf.ConfigKey()
 		}
@@ -204,7 +237,7 @@ func (s Model) ConfigKey(providerName string) string {
 // FolderNameByCanonical returns the provider folder name whose canonical
 // matches target. Returns ("", false) when no folder matches.
 func (s Model) FolderNameByCanonical(target string) (string, bool) {
-	for _, e := range s.effectiveEntries() {
+	for _, e := range s.allEntries() {
 		if e.cf.Canonical == target {
 			return e.cf.Folder.Name, true
 		}
@@ -213,7 +246,7 @@ func (s Model) FolderNameByCanonical(target string) (string, bool) {
 }
 
 func (s Model) FolderByProviderName(name string) (mail.Folder, bool) {
-	for _, e := range s.effectiveEntries() {
+	for _, e := range s.allEntries() {
 		if e.cf.Folder.Name == name {
 			return e.cf.Folder, true
 		}
@@ -222,7 +255,7 @@ func (s Model) FolderByProviderName(name string) (mail.Folder, bool) {
 }
 
 func (s Model) OrderedFolders() []mail.FolderEntry {
-	entries := s.effectiveEntries()
+	entries := s.allEntries()
 	out := make([]mail.FolderEntry, 0, len(entries))
 	for _, e := range entries {
 		display := e.cf.DisplayName
@@ -244,8 +277,8 @@ func (s Model) OrderedFolders() []mail.FolderEntry {
 // SelectByCanonical moves the selection to the folder whose canonical name
 // matches target (e.g. "Inbox", "Drafts"). Returns true if found.
 func (s *Model) SelectByCanonical(target string) bool {
-	for i, e := range s.effectiveEntries() {
-		if e.cf.Canonical == target {
+	for i, r := range s.visibleRows() {
+		if r.entry.cf.Canonical == target {
 			s.selected = i
 			return true
 		}
@@ -254,9 +287,9 @@ func (s *Model) SelectByCanonical(target string) bool {
 }
 
 func (s Model) SelectedIcon() string {
-	entries := s.effectiveEntries()
-	if s.selected < len(entries) {
-		return entries[s.selected].icon
+	rows := s.visibleRows()
+	if s.selected < len(rows) {
+		return rows[s.selected].entry.icon
 	}
 	return ""
 }
@@ -280,7 +313,7 @@ func (s *Model) MoveUp() {
 }
 
 func (s *Model) MoveDown() {
-	if s.selected < len(s.effectiveEntries())-1 {
+	if s.selected < len(s.visibleRows())-1 {
 		s.selected++
 	}
 }
@@ -288,14 +321,14 @@ func (s *Model) MoveDown() {
 func (s *Model) MoveToTop() { s.selected = 0 }
 
 func (s *Model) MoveToBottom() {
-	if n := len(s.effectiveEntries()); n > 0 {
+	if n := len(s.visibleRows()); n > 0 {
 		s.selected = n - 1
 	}
 }
 
 func (s Model) View() string {
-	entries := s.effectiveEntries()
-	if len(entries) == 0 || s.width == 0 || s.height == 0 {
+	rows := s.visibleRows()
+	if len(rows) == 0 || s.width == 0 || s.height == 0 {
 		return ""
 	}
 
@@ -303,18 +336,18 @@ func (s Model) View() string {
 	selectedBg := s.styles.SidebarSelected
 
 	var lines []string
-	prevGroup := entries[0].cf.Group
+	prevGroup := rows[0].entry.cf.Group
 
-	for i, entry := range entries {
-		if i > 0 && entry.cf.Group != prevGroup {
+	for i, r := range rows {
+		if i > 0 && r.entry.cf.Group != prevGroup {
 			lines = append(lines, s.renderBlankLine())
 		}
-		prevGroup = entry.cf.Group
+		prevGroup = r.entry.cf.Group
 		bg := plainBg
 		if i == s.selected {
 			bg = selectedBg
 		}
-		lines = append(lines, s.renderRow(i, entry, bg))
+		lines = append(lines, s.renderRow(i, r, bg))
 	}
 
 	for len(lines) < s.height {
@@ -328,9 +361,13 @@ func (s Model) View() string {
 
 // renderRow draws one folder row. The selection indicator ┃ sits in
 // column 0; the icon block is included only when s.layout.Icons is true.
-func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) string {
+// unseen combines entry.cf.Folder.Unseen with r.aggUnread (descendants of
+// collapsed parents).
+func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
+	entry := r.entry
+	unseen := entry.cf.Folder.Unseen + r.aggUnread
 	isSelected := idx == s.selected
-	hasUnread := entry.cf.Folder.Unseen > 0
+	hasUnread := unseen > 0
 
 	var indicator string
 	if isSelected {
@@ -356,7 +393,7 @@ func (s Model) renderRow(idx int, entry folderEntry, bgStyle lipgloss.Style) str
 	var countStr string
 	var countWidth int
 	if hasUnread {
-		countStr = uicore.ApplyBg(textStyle, bgStyle).Render(strconv.Itoa(entry.cf.Folder.Unseen))
+		countStr = uicore.ApplyBg(textStyle, bgStyle).Render(strconv.Itoa(unseen))
 		countWidth = lipgloss.Width(countStr)
 	}
 

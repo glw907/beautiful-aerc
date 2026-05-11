@@ -29,9 +29,12 @@ func TestSidebar(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		view := sb.View()
 		plain := stripANSI(view)
-		for _, f := range folders {
-			if !strings.Contains(plain, f.Name) {
-				t.Errorf("missing folder %q in view", f.Name)
+		// Lists/golang and Lists/rust collapse to a synthetic "Lists" parent row;
+		// check for the parent and the non-nested folders individually.
+		visible := []string{"Inbox", "Drafts", "Sent", "Archive", "Spam", "Trash", "Notifications", "Remind", "Lists"}
+		for _, name := range visible {
+			if !strings.Contains(plain, name) {
+				t.Errorf("missing folder %q in view", name)
 			}
 		}
 	})
@@ -152,18 +155,22 @@ func TestSidebar(t *testing.T) {
 		for range 20 {
 			sb.MoveDown()
 		}
-		last := len(folders) - 1
-		if sb.Selected() != last {
-			t.Errorf("MoveDown past end: selected = %d, want %d", sb.Selected(), last)
+		// Lists/golang + Lists/rust collapse to one synthetic Lists row, so
+		// visible row count = len(folders) - 1 = 9; last index = 8.
+		want := len(folders) - 2
+		if sb.Selected() != want {
+			t.Errorf("MoveDown past end: selected = %d, want %d", sb.Selected(), want)
 		}
 	})
 
 	t.Run("G moves to bottom", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		sb.MoveToBottom()
-		last := len(folders) - 1
-		if sb.Selected() != last {
-			t.Errorf("MoveToBottom: selected = %d, want %d", sb.Selected(), last)
+		// Lists/golang + Lists/rust collapse to one synthetic Lists row, so
+		// visible row count = len(folders) - 1 = 9; last index = 8.
+		want := len(folders) - 2
+		if sb.Selected() != want {
+			t.Errorf("MoveToBottom: selected = %d, want %d", sb.Selected(), want)
 		}
 	})
 
@@ -502,5 +509,40 @@ func TestSidebar_SelectByCanonicalOutbox(t *testing.T) {
 	}
 	if m.SelectedCanonical() != "Outbox" {
 		t.Errorf("SelectedCanonical: got %q, want Outbox", m.SelectedCanonical())
+	}
+}
+
+func TestView_TreeCollapsedShowsAggregateBadge(t *testing.T) {
+	classified := []mail.ClassifiedFolder{
+		{Folder: mail.Folder{Name: "Inbox", Unseen: 0}, Canonical: "Inbox", DisplayName: "Inbox", Group: mail.GroupPrimary},
+		{Folder: mail.Folder{Name: "Lists/golang", Unseen: 3}, DisplayName: "Lists/golang", Group: mail.GroupCustom},
+		{Folder: mail.Folder{Name: "Lists/rust", Unseen: 1}, DisplayName: "Lists/rust", Group: mail.GroupCustom},
+	}
+	m := sidebar.New(sidebar.Styles{}, classified, config.UIConfig{}, 30, 10, uicore.SimpleIcons)
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "Lists") {
+		t.Fatalf("collapsed parent Lists must appear:\n%s", view)
+	}
+	if strings.Contains(view, "golang") || strings.Contains(view, "rust") {
+		t.Errorf("collapsed parent must hide children:\n%s", view)
+	}
+	if !strings.Contains(view, "4") {
+		t.Errorf("collapsed Lists must show aggregate unread (3+1=4):\n%s", view)
+	}
+}
+
+func TestView_TreeExpandedShowsChildrenWithPrefix(t *testing.T) {
+	classified := []mail.ClassifiedFolder{
+		{Folder: mail.Folder{Name: "Lists/golang", Unseen: 3}, DisplayName: "Lists/golang", Group: mail.GroupCustom},
+		{Folder: mail.Folder{Name: "Lists/rust", Unseen: 1}, DisplayName: "Lists/rust", Group: mail.GroupCustom},
+	}
+	m := sidebar.New(sidebar.Styles{}, classified, config.UIConfig{}, 30, 10, uicore.SimpleIcons)
+	m.ToggleExpanded("Lists")
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "golang") || !strings.Contains(view, "rust") {
+		t.Fatalf("expanded: children must render:\n%s", view)
+	}
+	if !strings.Contains(view, "├") || !strings.Contains(view, "└") {
+		t.Errorf("expanded: want box-drawing prefixes ├ and └:\n%s", view)
 	}
 }
