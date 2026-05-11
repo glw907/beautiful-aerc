@@ -39,9 +39,12 @@ install:
 voice:
 	@./scripts/voice-check.sh
 
-check: fmt-check vet voice test
+modern-go-check:
+	@./scripts/modern-go-check.sh
+
+check: fmt-check vet voice modern-go-check test
 
 clean:
 	rm -f $(BINARY)
 
-.PHONY: build test test-imap vet fmt-check voice lint audit install check clean
+.PHONY: build test test-imap vet fmt-check voice modern-go-check lint audit install check clean

@@ -1,8 +1,10 @@
 # Poplar Status
 
-**Current pass:** Pass 15b — sidebar folder hierarchy on a v2
-tree component. Third of four bubbles-adoption passes (15a,
-15a.5, 15b, 15c, 15d) before Polish II and the v0.9.0 freeze.
+**Current pass:** Pass 16b — Mechanical Go modernization sweep.
+Second of four modernization passes (16a infra ✓, 16b sweep,
+16c `iter.Seq`, 16d `log/slog`) before the bubbles-adoption
+remainder (17a sidebar tree, 17b messagelist on `bubbles/v2/list`,
+17c help audit). Polish II (18) and v0.9.0 prep (19) follow.
 
 ## Passes
 
@@ -24,51 +26,59 @@ tree component. Third of four bubbles-adoption passes (15a,
 | 14.1 | OAuth refresh (#42; ADR-0193) | done |
 | 15a | `bubbles/v2/list` adoption — `movepicker`, `reader/linkpicker`, `reader/attachpicker` (ADR-0194) | done |
 | 15a.5 | `compose/attachpicker` filepicker-lessons — symlink + atomic id + size column; ADR-0195 names the deviation | done |
-| 15b | Sidebar folder hierarchy on a v2 tree component (`Digital-Shane/treeview` candidate; ADR the dep) | pending |
-| 15c | `messagelist` on `bubbles/v2/list` (custom item renderer for thread-prefix walk; ADR if it survives) | pending |
-| 15d | `bubbles/v2/help` audit + ADRs for any bubbles deviations that survive 15a–c (`helppopover`, `schedulepicker`) | pending |
-| 16 | Polish II — popover dim (#14) + items surfaced during 10–15d | pending |
-| 17 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
+| 16a | Claude infra: modern-Go defaults (skill bump + simplify Agent 3 + `modern-go-check.sh`; ADR-0196) | done |
+| **16b** | **Mechanical Go modernization sweep — `slices.SortFunc`, `slices.Sort`, `for range N`, `sync.OnceValue`, `maps.Keys`; ~60 sites, no ADR** | **pending — next** |
+| 16c | `iter.Seq` for `catkin/style.go` `walkSpans` + 3 callers; no ADR | pending |
+| 16d | `log/slog` adoption + logging-convention ADR (mailjmap push-loop, error transcript shape) | pending |
+| 17a | Sidebar folder hierarchy on a v2 tree component (plan + spec already on disk; ADR-0197) | pending |
+| 17b | `messagelist` on `bubbles/v2/list` (custom item renderer; absorbs BACKLOG #46 `iter.Seq2`; ADR if it survives) | pending |
+| 17c | `bubbles/v2/help` audit + ADRs for bubbles deviations that survive 15a/17a/17b (`helppopover`, `schedulepicker`) | pending |
+| 18 | Polish II — popover dim (#14) + items surfaced during 10–17c | pending |
+| 19 | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | pending |
 | Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
 | v1.0.0 | Tag when soak settles | pending |
 | 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
 
-## Next starter prompt (Pass 15b)
+## Next starter prompt (Pass 16b)
 
-> **Goal.** Replace the sidebar's flat-folder rendering with a
-> v2 tree component so nested folder names render as a real
-> tree (expand/collapse, keyboard-driven). Third of four
-> bubbles-adoption passes (15a, 15a.5, 15b, 15c, 15d) before
-> Polish II and the v0.9.0 freeze.
+> **Goal.** Apply the mechanical modern-stdlib rewrites the
+> 16a audit surfaced: `sort.SliceStable` / `sort.Slice` →
+> `slices.SortStableFunc` / `slices.SortFunc` with `cmp.Or`;
+> `sort.Strings`/`Ints` → `slices.Sort`; `for i := 0; i < N;
+> i++` (unused `i`) → `for range N`; `sync.Once` + package var
+> → `sync.OnceValue`/`OnceFunc`; manual map-key-collect+sort
+> → `maps.Keys` + `slices.Sorted`. ~60 sites across ~20 files.
+> No new ADR — ADR-0196 already binds the convention.
 >
-> **Scope.** `internal/ui/sidebar/` — `Model`, `Column`, and
-> the folder-group rendering. The Primary/Disposal/Custom
-> group ordering stays; what changes is how Custom folders
-> with `/` in their display names render. Candidate library:
-> `Digital-Shane/treeview` (vet first per memory's "prior art
-> = major clients / Charm-ecosystem first" rule; if it's
-> abandoned or non-idiomatic, hand-roll on top of
-> `bubbles/v2/list` with indent + glyph). The chosen dep gets
-> its own ADR.
+> **Scope.** Production + test files. Drive the working set
+> from `./scripts/modern-go-check.sh` (M1–M4) plus the 16a plan
+> appendix (production-only file:line list). Strict mode locally
+> to verify: `MODERN_GO_STRICT=1 ./scripts/modern-go-check.sh`
+> should exit 0 at the end of the pass; flip the soft-warn gate
+> off in `scripts/modern-go-check.sh` only at the end of 16d
+> (after `iter.Seq` + `slog` land).
 >
-> **Settled (do not re-brainstorm):** The current invariant
-> "nested folder names render flat; `/` is the only
-> affordance" is **being lifted** in this pass — that's the
-> point. Three-group order (Primary / Disposal / Custom) and
-> the synthetic Outbox row in Disposal both stay. Folder
-> selection mechanics (`J/K` nav, `Tab` cycle to search) stay.
+> **Settled (do not re-brainstorm):** Multi-key sorts use
+> `cmp.Or(cmp.Compare(...), cmp.Compare(...))`. Leftover
+> `x := x` loop shadows get deleted as found (1.22+).
+> `internal/term/font.go` collapses two package vars +
+> `HasNerdFont()` to one `var HasNerdFont = sync.OnceValue(...)`.
+> `internal/catkin/spellcheck.go` struct-field `once sync.Once`
+> + `delIdx` becomes `OnceFunc(buildIndex)`. M3 false positives
+> (loops that read `i`) get left alone — flag-only.
 >
-> **Still open — brainstorm these:** how to render the tree
-> at the spartan tier (width 80–89, sidebar 14 cells) — one
-> indent level cap? overflow with `…`?; whether collapsed
-> nodes still show unread counts (probably yes, sum of
-> descendants); whether tree state persists across folder
-> reloads or resets like fold state in messagelist; key
-> bindings for expand/collapse (probably `Space` on a folder
-> row, or `l`/`h` for vim-style); whether Primary group can
-> contain nested folders or stays single-level.
+> **Out of scope:** `iter.Seq` (16c), `slog` (16d), any
+> renaming or signature changes beyond the modernization itself.
+> BACKLOG #46 (`messagelist` `iter.Seq2`) stays deferred to 17b.
 >
-> **Approach.** Brainstorm the open questions, write a plan
-> doc at
-> `docs/superpowers/plans/YYYY-MM-DD-sidebar-tree.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Brainstorm not needed — the plan is mechanical.
+> Write `docs/superpowers/plans/2026-05-1X-go-modernization-sweep.md`
+> grouping the ~60 hits by file and applying them in dependency
+> order. Standard pass-end ritual via `poplar-pass`. Pass ships
+> green: `make check` + `MODERN_GO_STRICT=1 make modern-go-check`
+> both exit 0 by the end.
+
+## Notes for the 16-series (modernization)
+
+ADR-0196 binds the convention; 16b–d apply it. Audit appendix
+in the archived 16a plan has the full file:line list.

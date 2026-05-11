@@ -56,7 +56,8 @@ writing code.
 
 - **`go-conventions`** — mandatory for every Go file. Anti-patterns,
   project structure, cobra shape, error wrapping, tests, Makefile,
-  naming.
+  naming. Includes the modern-stdlib-idiom table
+  (slices/maps/iter/slog/OnceValue defaults; ADR-0196).
 - **`elm-conventions`** — mandatory before touching `internal/ui/`.
   Elm architecture rules: state in models, mutations in Update, I/O
   in tea.Cmd, Msg-driven communication, state ownership at the root.

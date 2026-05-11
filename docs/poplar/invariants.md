@@ -377,11 +377,15 @@ scope toggle, results-mode messagelist, throttle warn) lives in
 
 - Makefile targets: `build`, `test`, `vet`, `fmt-check`, `lint`,
   `install`, `check`, `clean`. `make check` is the commit gate
-  (fmt-check, vet, voice, test). The voice step is
-  `scripts/voice-check.sh`, a grep-tier scan for tells T4, T10,
-  T14, T16, T27, T28, T33, T35, T39, T40 (T34 voice-lens only,
-  ADR-0173). Voice rules apply to all Claude-authored docs, not
-  only Go source. `make install` writes to `~/.local/bin/`.
+  (fmt-check, vet, voice, modern-go-check, test).
+  `scripts/voice-check.sh` is the grep-tier scan for tells T4,
+  T10, T14, T16, T27, T28, T33, T35, T39, T40 (T34 voice-lens
+  only, ADR-0173). `scripts/modern-go-check.sh` (ADR-0196) scans
+  pre-1.21 idioms (sort.Slice(Stable), sort.Strings/Ints/Float64s,
+  three-clause `for i := 0; i < N`, package-scope `sync.Once`);
+  soft-warn through the 16-series, `MODERN_GO_STRICT=1` flips
+  hard-fail. Voice rules apply to all Claude-authored docs.
+  `make install` writes to `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: invoke `go-conventions` before any Go file,
   `elm-conventions` before any `internal/ui/` file, update
