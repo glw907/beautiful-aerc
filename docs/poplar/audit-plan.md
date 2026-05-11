@@ -1,0 +1,166 @@
+# Poplar Audit Plan
+
+The path from pre-beta to soak runs through four directed audits.
+`STATUS.md` tracks which audit is next; this document defines what
+each audit covers and how to know it returned empty.
+
+The soak-entry rule: enter beta soak when a full audit cycle returns
+no findings. Version number, calendar date, and "feels ready" are
+not the rule.
+
+## Why phased
+
+Auditing everything continuously costs more attention than it
+returns, and the same lens scanning unchanged code degrades into
+noise. Auditing at phase boundaries with a per-phase focus list is
+reproducible and bounded. Each phase's audit checks the risk that
+phase introduced; the final audit is the comprehensive sweep.
+
+The audits are themselves passes. They consume context, produce
+findings or an empty result, and gate the next batch of work.
+A blocking finding queues a remediation sub-pass (e.g. `26.1`)
+before the next audit phase runs.
+
+## Phase A — bug-fix completeness
+
+**Trigger.** Passes 23–25 ship; `make check` green.
+
+**Question.** Did the bug fixes leave sibling hazards behind, or
+miss a callsite during mechanical folds?
+
+**Focuses.**
+
+- Mail-infrastructure regression sweep. Re-run the patterns that
+  found #51, #52, #53: dead-handle reuse, sentinel-error gaps,
+  silent-success returns, unbounded retry on a stale cached
+  pointer. Walk every `mail.Backend` method against the IDLE-
+  reconnect lens. JMAP `Connect` error paths, IMAP `OpenFolder`
+  mid-IDLE switch races, cache drainer's conflict-matrix coverage
+  of any new sentinels.
+- Config-validator completeness. Walk every `AccountConfig` field
+  and ask: what happens if it is empty, malformed, of the wrong
+  type, or a typo of an adjacent field? The MockBackend hazard
+  surfaced because empty `provider` was a valid input; others
+  likely exist (`smtp.host` on non-preset, `oauth.client-id`
+  when `oauth-store = "keyring"`, etc.).
+- Defensive clamps. After Pass 25 drops the clamps in
+  `backoff.Exponential`, grep `internal/` for sibling defensive
+  checks between internal callers that the no-defensive-checks
+  rule also forbids.
+
+## Phase B — structural integrity
+
+**Trigger.** Passes 27–29 ship.
+
+**Question.** Did the refactors leave anything half-migrated, or
+recreate the problem they removed in a new shape?
+
+**Focuses.**
+
+- Elm-conformance walk. Every `Model` in `internal/ui/`,
+  `internal/catkin/`, and `internal/ui/wizard/` has value
+  receivers on `Init`/`Update`/`View`, and either value receivers
+  throughout or mutations gated behind Msgs handled in `Update`.
+  Mixed receivers anywhere is the same straddle catkin had.
+- `App.go` decomposition regression. The 874-line `Update` is
+  now several `update<Screen>` methods. Verify the dispatch is
+  exhaustive, no method exceeds roughly 150 lines (otherwise the
+  god object moved rather than dissolved), and no method calls
+  back into a sibling `update<Screen>`. Back-channel coupling
+  between screen controllers is worse than the original god
+  switch.
+- Interface count. With `Editor` deleted, count interfaces in
+  `internal/`. If the count rose, name the new ones and the seam
+  each represents. New single-impl interfaces without a named
+  test fake or DI seam are the same anti-pattern the codebase
+  already documents.
+- Package-boundary leaks. After the `app.go` split, verify no
+  imports from `account`/`compose`/`reader`/etc. point back at
+  `internal/ui` directly. Subpackages cannot import the parent.
+
+## Phase C — feature surface
+
+**Trigger.** Passes 31–34 ship, or whatever subset lands.
+
+**Question.** Did feature work introduce behavioral hazards in
+code paths whose failure modes the project has not yet seen?
+
+**Focuses.**
+
+- OAuth refresh against the #53 lens. Token refresh on auth
+  failure mid-IDLE has to re-resolve and retry, not hammer a
+  stale token. Same dead-handle audit, different cached
+  resource.
+- Mouse hit-test surface. `v.OnMouse` declares clickable
+  regions per frame. Audit stale coordinate math after
+  `WindowSizeMsg`, hit-test overlap across the overlay cascade
+  (confirm > conflict > outbox > help > linkpicker > attachpicker >
+  movepicker > form > popover), wheel-scroll routing to the
+  wrong viewport when a modal is open.
+- `v.ReportFocus` resume path. Pausing JMAP push / IMAP IDLE on
+  blur is correct; resume-on-focus must not double-pump or fire
+  stale commands. Read the resume path against the IDLE
+  re-entry sequence.
+- `v.ProgressBar` lifecycle. Set/unset is per-frame. A long-
+  running op that completes mid-frame must reach the next
+  frame's `ProgressBar = nil`. Orphaned terminal-title bars
+  after an op finishes are an OSC-9;4-shaped #53.
+
+## Phase Final — comprehensive pre-soak
+
+**Trigger.** Phase C returns empty.
+
+**Question.** Across every dimension the project cares about, is
+anything left to fix before stability becomes the priority?
+
+**Focuses.** All Phase A/B/C lenses, plus three not covered
+upstream:
+
+- Test-infrastructure quality. Real coverage of the dangerous
+  paths: drainer conflict matrix, IDLE reconnect, outbox cancel
+  during in-flight, OAuth refresh-on-fail. Fakes that obscure
+  rather than reveal — a `fakeBackend` with a silent-success
+  `Send` is structurally the MockBackend hazard. Snapshot tests
+  where the golden was updated without inspection.
+- Security and credential handling. TLS-verification surface
+  (`InsecureTLS` opt-in paths, self-signed defaults). Secret-
+  in-memory lifetime: cached `password` strings, OAuth refresh
+  tokens, zeroing on disconnect. The `password-cmd` subprocess
+  interface and what it leaks to process listings.
+- Voice and documentation rot. The `go-comment-voice` 32-tell
+  catalogue applied to the whole codebase, not just recent
+  diffs. ADR voice. Invariant drift: `docs/poplar/invariants.md`
+  and `.claude/rules/` against the code as it stands. A
+  silently outdated invariant is the highest-cost failure mode
+  for future audits.
+
+## Audit mechanics
+
+1. Read the focuses for the active phase.
+2. For each focus, run the named search or walk. Record what was
+   looked at, not just what was found.
+3. Categorize findings: bug → `BACKLOG.md` with priority;
+   architectural flaw → `ROADMAP.md` as a project; small nit →
+   folded inline into the next pass.
+4. Blocking findings — silent data loss, credential leak,
+   behavior the user cannot recover from without restart — queue
+   a remediation sub-pass before the next audit phase.
+5. Empty audit: mark the phase complete in `STATUS.md` with the
+   date and a one-line summary.
+
+The record matters more than the result. A future audit comparing
+against an empty prior is weaker evidence than one comparing
+against `"Phase A 2026-05-12 → 0 findings; Phase A 2026-06-03 → 2
+findings (#54, #55), both fixed in Pass 25.1"`.
+
+## Failure modes for the audit itself
+
+- Same lens, same code, expecting different findings. Re-running
+  Phase A over unchanged code is noise. Each audit's focuses are
+  pegged to the phase that just changed.
+- Findings logged but never scheduled. Blocking findings gate
+  the next phase. Non-blocking findings still land within two
+  passes of being logged, or the audit was theatre.
+- Vibes-as-finding. "This feels off" is a hypothesis, not a
+  finding. Convert to a specific check (walk every X for Y) and
+  run it. If the check returns empty, the hypothesis is closed.

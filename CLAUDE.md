@@ -12,11 +12,10 @@ Three phases (ADR-0105). `STATUS.md` shows the active phase. Full
 rules for beta-soak and post-1.0 live in
 `docs/poplar/release-stance.md` — load when entering those phases.
 
-**Pre-beta** (active until a directed Claude audit can find no
-bugs or major flaws; `v0.9.0` is tagged but does not gate the
-rules — beta-soak is gated on audit-clean, not on a version
-number; see `STATUS.md` for the current bar): **clean code
-outweighs stability.**
+**Pre-beta** (active until the full audit cycle in
+`docs/poplar/audit-plan.md` returns empty; `v0.9.0` is tagged
+but does not gate the rules — beta-soak is gated on audit-clean,
+not on a version number): **clean code outweighs stability.**
 
 - Refactor and rename freely. No compat shims, no "churn cost"
   framing, no dead fields preserved "in case Pass N needs them" —
