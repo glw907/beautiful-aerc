@@ -61,7 +61,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("MoveDown advances selection", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
 		if ml.Selected() != 1 {
 			t.Errorf("after MoveDown, Selected() = %d, want 1", ml.Selected())
 		}
@@ -69,7 +69,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("MoveUp at top stays at 0", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveUp()
+		ml, _ = ml.Update(keyPress("k"))
 		if ml.Selected() != 0 {
 			t.Errorf("MoveUp at top: Selected() = %d, want 0", ml.Selected())
 		}
@@ -78,7 +78,7 @@ func TestMessageList(t *testing.T) {
 	t.Run("MoveDown at bottom stays at last", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		for range len(msgs) + 5 {
-			ml.MoveDown()
+			ml, _ = ml.Update(keyPress("j"))
 		}
 		if ml.Selected() != len(msgs)-1 {
 			t.Errorf("MoveDown past end: Selected() = %d, want %d",
@@ -88,7 +88,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("MoveToBottom jumps to last", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveToBottom()
+		ml, _ = ml.Update(keyPress("G"))
 		if ml.Selected() != len(msgs)-1 {
 			t.Errorf("MoveToBottom: Selected() = %d, want %d",
 				ml.Selected(), len(msgs)-1)
@@ -97,9 +97,9 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("MoveToTop jumps to first", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown()
-		ml.MoveDown()
-		ml.MoveToTop()
+		ml, _ = ml.Update(keyPress("j"))
+		ml, _ = ml.Update(keyPress("j"))
+		ml, _ = ml.Update(keyPress("g"))
 		if ml.Selected() != 0 {
 			t.Errorf("MoveToTop: Selected() = %d, want 0", ml.Selected())
 		}
@@ -107,7 +107,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("HalfPageDown moves by half height", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 10, uicore.FancyIcons)
-		ml.HalfPageDown()
+		ml.MoveCursor(max(1, 10/2))
 		if ml.Selected() != 5 {
 			t.Errorf("HalfPageDown with height 10: Selected() = %d, want 5",
 				ml.Selected())
@@ -118,7 +118,7 @@ func TestMessageList(t *testing.T) {
 		ml := New(styles, msgs, 90, 4, uicore.FancyIcons)
 		// Step past the visible window.
 		for range 6 {
-			ml.MoveDown()
+			ml, _ = ml.Update(keyPress("j"))
 		}
 		// Cursor at index 6, height 4 → offset should be at least 3.
 		view := stripANSI(ml.View())
@@ -248,7 +248,7 @@ func TestMessageList(t *testing.T) {
 
 	t.Run("SetMessages resets cursor and offset", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 4, uicore.FancyIcons)
-		ml.MoveToBottom()
+		ml, _ = ml.Update(keyPress("G"))
 		ml.SetMessages(msgs[:2])
 		if ml.Selected() != 0 {
 			t.Errorf("after SetMessages, Selected() = %d, want 0", ml.Selected())
@@ -307,7 +307,7 @@ func TestRenderFlagCell(t *testing.T) {
 			ml := New(styles, nil, 90, 10, tt.iconSet)
 			msg := mail.MessageInfo{Flags: tt.flags}
 			bg := styles.MsgListBg
-			rendered := ml.renderFlagCell(msg, tt.isUnread, bg)
+			rendered := ml.delegate.renderFlagCell(msg, tt.isUnread, bg)
 			got := ansix.Width(rendered)
 			if got != mlFlagWidth {
 				t.Errorf("ansix.Width(renderFlagCell(%s)) = %d, want %d (rendered=%q)",
@@ -500,7 +500,7 @@ func TestMessageListThreading(t *testing.T) {
 			{UID: "11", ThreadID: "T1", InReplyTo: "10", From: "Reply", Date: "2026-04-05 11:00", Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown() // cursor on UID 11 (child)
+		ml, _ = ml.Update(keyPress("j")) // cursor on UID 11 (child)
 		ml.ToggleFold()
 		if got, want := visibleRowCount(ml), 1; got != want {
 			t.Errorf("after fold from child, visible rows = %d, want %d", got, want)
@@ -643,12 +643,12 @@ func TestMessageListThreading(t *testing.T) {
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		// Default sort puts these in date-desc order: Above, Root, Reply, Below.
-		ml.MoveDown() // cursor on Root (index 1)
+		ml, _ = ml.Update(keyPress("j")) // cursor on Root (visible index 1)
 		ml.ToggleFold()
-		// Now visible rows: Above (0), Root (1, folded), Below (3, index 2 hidden).
-		// MoveDown from Root should land on Below (index 3), skipping hidden index 2.
-		ml.MoveDown()
-		if got, want := ml.Selected(), 3; got != want {
+		// Now visible rows: Above (0), Root (1, folded), Below (2).
+		// Reply (m.rows index 2) is hidden; MoveDown from Root skips it.
+		ml, _ = ml.Update(keyPress("j"))
+		if got, want := ml.Selected(), 2; got != want {
 			t.Errorf("after MoveDown across hidden row, Selected() = %d, want %d", got, want)
 		}
 	})
@@ -661,10 +661,10 @@ func TestMessageListThreading(t *testing.T) {
 			{UID: "2", ThreadID: "2", From: "Below", Subject: "below", Date: "2026-04-08", Flags: mail.FlagSeen},
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown() // cursor on Root
+		ml, _ = ml.Update(keyPress("j")) // cursor on Root (visible index 1)
 		ml.ToggleFold()
-		ml.MoveDown() // → index 3 (Below)
-		ml.MoveUp()
+		ml, _ = ml.Update(keyPress("j")) // → Below (visible index 2)
+		ml, _ = ml.Update(keyPress("k"))
 		if got, want := ml.Selected(), 1; got != want {
 			t.Errorf("after MoveUp across hidden row, Selected() = %d, want %d", got, want)
 		}
@@ -677,7 +677,7 @@ func TestMessageListThreading(t *testing.T) {
 		}
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.ToggleFold() // fold T1, child at index 1 hidden
-		ml.MoveToBottom()
+		ml, _ = ml.Update(keyPress("G"))
 		if got, want := ml.Selected(), 0; got != want {
 			t.Errorf("MoveToBottom with only root visible: Selected() = %d, want %d", got, want)
 		}
@@ -754,6 +754,41 @@ func visibleRowCount(ml Model) int {
 		}
 	}
 	return n
+}
+
+func TestToggleFold_PreservesCursorAcrossSetItems(t *testing.T) {
+	// Two threads. Cursor on UID "4" (child of t2); folding t2 snaps the
+	// cursor to the thread root "3" via syncList -> snapToUIDInList. This
+	// exercises the path where syncList rebuilds the embedded list and
+	// snapToUIDInList re-anchors the cursor on the last-selected UID.
+	msgs := []mail.MessageInfo{
+		{UID: "1", ThreadID: "t1", SentAt: time.Unix(100, 0)},
+		{UID: "2", ThreadID: "t1", InReplyTo: "1", SentAt: time.Unix(200, 0)},
+		{UID: "3", ThreadID: "t2", SentAt: time.Unix(300, 0)},
+		{UID: "4", ThreadID: "t2", InReplyTo: "3", SentAt: time.Unix(400, 0)},
+	}
+	m := New(NewStyles(theme.Nord), msgs, 80, 10, uicore.SimpleIcons)
+
+	// Sort: t2 newest first → visible row 0=t2-root("3"), 1=child("4"), 2=t1-root("1"), 3=child("2").
+	// Move cursor to UID "4" (t2 child, visible index 1).
+	m, _ = m.Update(keyPress("j"))
+	if got, _ := m.SelectedMessage(); got.UID != "4" {
+		t.Fatalf("setup: cursor on %q, want %q", got.UID, "4")
+	}
+
+	// ToggleFold from a child snaps to the thread root and folds. After
+	// fold the visible list is [t2-root("3"), t1-root("1"), t1-child("2")].
+	// snapToUIDInList must place the cursor on "3" (the thread root that
+	// absorbed the now-hidden child).
+	m.ToggleFold()
+
+	got, _ := m.SelectedMessage()
+	if got.UID != "3" {
+		t.Errorf("after fold from child, cursor on %q, want t2-root %q", got.UID, "3")
+	}
+	if m.Selected() != 0 {
+		t.Errorf("after fold, visible index = %d, want 0 (t2-root at top)", m.Selected())
+	}
 }
 
 func TestMessageListFilter(t *testing.T) {
@@ -841,10 +876,10 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("cursor saved on first filter application", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown()
-		ml.MoveDown()
-		if ml.selected != 2 {
-			t.Fatalf("setup: selected = %d, want 2", ml.selected)
+		ml, _ = ml.Update(keyPress("j"))
+		ml, _ = ml.Update(keyPress("j"))
+		if ml.Selected() != 2 {
+			t.Fatalf("setup: selected = %d, want 2", ml.Selected())
 		}
 		ml.SetFilter("project")
 		if ml.preSearchCursor != 2 {
@@ -854,8 +889,8 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("subsequent keystrokes don't overwrite saved cursor", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown()
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
+		ml, _ = ml.Update(keyPress("j"))
 		ml.SetFilter("p")
 		ml.SetFilter("pr")
 		ml.SetFilter("pro")
@@ -866,24 +901,24 @@ func TestMessageListFilter(t *testing.T) {
 
 	t.Run("clear restores pre-search cursor", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown()
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
+		ml, _ = ml.Update(keyPress("j"))
 		ml.SetFilter("project")
 		ml.ClearFilter()
-		if ml.selected != 2 {
-			t.Errorf("selected after clear = %d, want 2", ml.selected)
+		if ml.Selected() != 2 {
+			t.Errorf("selected after clear = %d, want 2", ml.Selected())
 		}
 	})
 
 	t.Run("clear with invalid saved cursor clamps to 0", func(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
-		ml.MoveDown()
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
+		ml, _ = ml.Update(keyPress("j"))
 		ml.SetFilter("project")
 		ml.SetMessages(msgs[:1])
 		ml.ClearFilter()
-		if ml.selected != 0 {
-			t.Errorf("selected after clear with shorter source = %d, want 0", ml.selected)
+		if ml.Selected() != 0 {
+			t.Errorf("selected after clear with shorter source = %d, want 0", ml.Selected())
 		}
 	})
 
@@ -891,7 +926,7 @@ func TestMessageListFilter(t *testing.T) {
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons)
 		ml.SetFilter("project")
 		ml.ClearFilter()
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
 		ml.SetFilter("weekend")
 		if ml.preSearchCursor != 1 {
 			t.Errorf("preSearchCursor on re-activate = %d, want 1", ml.preSearchCursor)
@@ -1012,9 +1047,9 @@ func TestMessageList_AppendMessages_PreservesCursor(t *testing.T) {
 
 	ml := New(styles, initial, 90, 20, uicore.FancyIcons)
 	// Advance to the third visible row (index 2).
-	ml.MoveDown()
-	ml.MoveDown()
-	anchorUID := ml.rows[ml.selected].msg.UID
+	ml, _ = ml.Update(keyPress("j"))
+	ml, _ = ml.Update(keyPress("j"))
+	anchorUID := ml.rows[ml.Selected()].msg.UID
 
 	ml.AppendMessages(extra)
 
@@ -1024,7 +1059,7 @@ func TestMessageList_AppendMessages_PreservesCursor(t *testing.T) {
 	}
 
 	// Cursor must still point at the same UID.
-	if got := ml.rows[ml.selected].msg.UID; got != anchorUID {
+	if got := ml.rows[ml.Selected()].msg.UID; got != anchorUID {
 		t.Errorf("cursor UID after AppendMessages = %q, want %q", got, anchorUID)
 	}
 }
@@ -1049,7 +1084,7 @@ func TestMessageList_IsNearBottom(t *testing.T) {
 
 	t.Run("cursor near bottom returns true", func(t *testing.T) {
 		ml := New(styles, make100(), 90, 20, uicore.FancyIcons)
-		ml.MoveToBottom() // selected = 99
+		ml, _ = ml.Update(keyPress("G")) // selected = 99
 		if !ml.IsNearBottom(5) {
 			t.Error("IsNearBottom(5) = false, want true when cursor at last row")
 		}
@@ -1057,10 +1092,10 @@ func TestMessageList_IsNearBottom(t *testing.T) {
 
 	t.Run("cursor within k of bottom returns true", func(t *testing.T) {
 		ml := New(styles, make100(), 90, 20, uicore.FancyIcons)
-		ml.MoveToBottom()
-		ml.MoveUp()
-		ml.MoveUp()
-		ml.MoveUp() // selected = 96, 4 from end
+		ml, _ = ml.Update(keyPress("G"))
+		ml, _ = ml.Update(keyPress("k"))
+		ml, _ = ml.Update(keyPress("k"))
+		ml, _ = ml.Update(keyPress("k")) // selected = 96, 4 from end
 		if !ml.IsNearBottom(5) {
 			t.Error("IsNearBottom(5) = false, want true when cursor is 4 from end")
 		}
@@ -1070,7 +1105,7 @@ func TestMessageList_IsNearBottom(t *testing.T) {
 		ml := New(styles, make100(), 90, 20, uicore.FancyIcons)
 		// Move to row 50 (selected=50, 50 from end of 100).
 		for range 50 {
-			ml.MoveDown()
+			ml, _ = ml.Update(keyPress("j"))
 		}
 		if ml.IsNearBottom(5) {
 			t.Error("IsNearBottom(5) = true, want false when cursor is row 50 of 100")
@@ -1304,7 +1339,7 @@ func TestMessageList_VisualModeAndTargets(t *testing.T) {
 		ml := New(styles, threadMsgs(), 90, 20, uicore.FancyIcons)
 		// Date-desc: T2 solo first (row 0), T1 root at row 1.
 		// Move cursor to T1 root (row 1) then fold.
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
 		ml.ToggleFold()
 		// Cursor should be on the folded T1 root.
 		msg, ok := ml.SelectedMessage()
@@ -1337,7 +1372,7 @@ func TestMessageList_VisualModeAndTargets(t *testing.T) {
 	t.Run("ActionTargets from non-folded thread root returns only root UID", func(t *testing.T) {
 		ml := New(styles, threadMsgs(), 90, 20, uicore.FancyIcons)
 		// Move cursor to T1 root (row 1, unfolded).
-		ml.MoveDown()
+		ml, _ = ml.Update(keyPress("j"))
 		msg, ok := ml.SelectedMessage()
 		if !ok || msg.UID != "10" {
 			t.Fatalf("expected cursor on T1 root (10), got %q ok=%v", msg.UID, ok)
@@ -1366,7 +1401,7 @@ func TestMessageList_RefreshSource(t *testing.T) {
 
 	t.Run("RefreshSource preserves cursor on same UID", func(t *testing.T) {
 		ml := New(styles, flatMsgs(), 90, 20, uicore.FancyIcons)
-		ml.MoveDown() // cursor on row 1 ("c")
+		ml, _ = ml.Update(keyPress("j")) // cursor on row 1 ("c")
 		want := ml.rows[ml.Selected()].msg.UID
 		// Refresh with the same set. Cursor should stay on "c".
 		ml.RefreshSource(flatMsgs())
@@ -1378,7 +1413,7 @@ func TestMessageList_RefreshSource(t *testing.T) {
 
 	t.Run("RefreshSource clamps cursor when its UID disappears", func(t *testing.T) {
 		ml := New(styles, flatMsgs(), 90, 20, uicore.FancyIcons)
-		ml.MoveDown()                                              // cursor on "c" (row 1)
+		ml, _ = ml.Update(keyPress("j"))                           // cursor on "c" (row 1)
 		shrunk := []mail.MessageInfo{flatMsgs()[0], flatMsgs()[1]} // a, b only
 		ml.RefreshSource(shrunk)
 		if ml.Selected() >= len(ml.rows) || ml.Selected() < 0 {

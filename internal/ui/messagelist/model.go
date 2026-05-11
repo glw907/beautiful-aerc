@@ -686,7 +686,9 @@ func (m *Model) ToggleFold() {
 	rootUID := m.rows[rootIdx].msg.UID
 	m.folded[rootUID] = !m.folded[rootUID]
 	m.rebuild()
-	m.snapToVisible()
+	// Snap to the thread root: it is always visible after a fold toggle
+	// and is the natural cursor landing point whether we folded or unfolded.
+	m.snapToUIDInList(rootUID)
 }
 
 // ToggleFoldAll is the bulk counterpart to ToggleFold. If any multi-message
@@ -911,6 +913,14 @@ func (m Model) View() string {
 	}
 	out := m.list.View()
 	lines := strings.Split(out, "\n")
+	// The list normalizes line widths using lipgloss.Width, which counts SPUA
+	// glyphs as 1 cell. ansix.Width counts them as spuaCellWidth cells. When
+	// spuaCellWidth > 1, lipgloss may over-pad rows containing SPUA icons.
+	// Normalize every line to exactly m.width ansix cells so the right panel
+	// edge is consistent regardless of flag glyph or icon mode.
+	for i, line := range lines {
+		lines[i] = uicore.FillRowToWidth(line, m.width, m.styles.MsgListBg)
+	}
 	for len(lines) < m.height {
 		lines = append(lines, m.styles.MsgListBg.Width(m.width).Render(""))
 	}
