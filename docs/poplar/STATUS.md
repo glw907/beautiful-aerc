@@ -23,23 +23,50 @@ pass.
 | 22 | Wizard signature step — catkin editor between identity and label, multi-line TOML render, sentinel round-trip | done |
 | Beta soak | Bug-fix releases on `v0.9.x`; data formats frozen; features queue on `1.1` | **active** |
 | v1.0.0 | Tag when soak settles | pending |
-| 1.1 | Neovim companion (#6); raw RFC822 (#21); native OAuth (#42); other post-beta | post-beta |
+| 23 | Config-decoder bugfix duo — #49 wizard preset, #29 name default | queued |
+| 24 | Small-refactor sweep — #50 ansix Measurer, options collapse, backoff/humanize fold | queued |
+| 1.1 | catkin-all-value → Editor wrapper deletion → app-decomposition → v2-view-fields → mouse-support → native OAuth (#42); plus neovim companion (#6), raw RFC822 (#21) | post-beta |
 
 ## Next steps
 
-Pass 22 added the wizard signature step (catkin editor + multi-
-line TOML render). Live verify surfaced **#49** — the wizard
-probe runs against an unresolved preset config and dies on
-"session URL is empty" for every hosted preset. That's the
-highest-priority next pass; the wizard is unusable for first-
-run setup until it lands.
+Soak is bug-fixes only on master; small reviewable refactors OK;
+new features queue on `1.1`. Two soak passes are queued before
+v1.0.0 tag:
 
-- **#49** Wizard probe runs against unresolved preset config — fix
-  shape: extract `config.ResolvePreset(*AccountConfig)`, call from
-  both decoder and `wizard.Apply` default branch.
-- BACKLOG bug entries flagged with `#bug` / `#poplar` (e.g. #29
-  config-template placeholder).
-- `CONTRIBUTING.md` + CI workflow (#41, #40) — v1.0 prep.
+**Pass 23 — Config-decoder bugfix duo.** Fix **#49** (wizard probe
+runs against unresolved preset; dies on "session URL is empty"
+for every hosted preset — first-run is unusable until this lands)
+and **#29** (config-template `name` defaults). Both converge on
+the same decoder surface: extract `config.ResolvePreset(*AccountConfig)`
+and call from both the decoder and `wizard.Apply`'s default
+branch; drop the empty-name check and default `Name` to `Email`.
+
+**Pass 24 — Small-refactor sweep.** Soak-safe deletions with no
+user-visible behavior change:
+- **#50** ansix `Measurer` (drop the `spuaCellWidth` package global)
+- Collapse triplicate `WithLogger` functional-options in
+  `mailjmap` / `mailimap` / `cache` to plain `*slog.Logger` args
+  (amend ADR-0197)
+- Fold `internal/backoff/` + `internal/humanize/` into their
+  primary callers; drop the defensive `<= 0` clamps
+
+**Reactive bug-fix passes** as soak surfaces issues. Tag
+**v1.0.0** when soak settles.
+
+**1.1 sequence (post-v1.0.0):**
+1. `catkin-all-value` — Elm conformance (deepest; everything else
+   in 1.1 sits on this)
+2. Compose `Editor` wrapper deletion (subsumes
+   `overengineering-cleanup` item 1; mechanical post-#1)
+3. `app-decomposition` — split 874-line `App.Update`
+4. `v2-view-fields` — `ProgressBar` + `ReportFocus` +
+   `KeyboardEnhancements` (Kitty protocol sequenced after #1)
+5. `mouse-support` (reader + attachments + scroll)
+6. `mouse-support` (sidebar + cross-pane) — splits from #5 if
+   task count argues for it
+7. **#42** Native OAuth for Gmail / Outlook IMAP (BYO client ID)
+
+Full project descriptions in `ROADMAP.md`.
 
 ## Notes for the 16-series (modernization)
 
