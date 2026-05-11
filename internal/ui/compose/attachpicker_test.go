@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -61,8 +62,8 @@ func TestAttachPicker_OpenReadsDir(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected readDirMsg, got %T", msg)
 	}
-	if rd.id != p.id {
-		t.Fatalf("id mismatch: msg=%d picker=%d", rd.id, p.id)
+	if rd.id != p.currentID {
+		t.Fatalf("id mismatch: msg=%d picker=%d", rd.id, p.currentID)
 	}
 	p, _ = p.Update(rd)
 	names := make([]string, len(p.entries))
@@ -98,7 +99,7 @@ func TestAttachPicker_StaleReadDirDropped(t *testing.T) {
 	writeTree(t, dir, "a.txt")
 	p := newTestPicker(t)
 	p, _ = p.Open(dir)
-	staleID := p.id
+	staleID := p.currentID
 	// reopen bumps id
 	p, _ = p.Open(dir)
 	stale := readDirMsg{id: staleID, entries: []attachEntry{{name: "ghost", path: "/ghost"}}}
@@ -324,5 +325,94 @@ func TestAttachPicker_Nav(t *testing.T) {
 	p = feedKeys(p, "G", "j")
 	if p.cursor != len(p.entries)-1 {
 		t.Errorf("j at bottom: cursor = %d, want %d", p.cursor, len(p.entries)-1)
+	}
+}
+
+func TestAttachPicker_SymlinkClassification(t *testing.T) {
+	root := t.TempDir()
+	// regular file
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// regular directory
+	if err := os.Mkdir(filepath.Join(root, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// symlink pointing at the directory
+	if err := os.Symlink(filepath.Join(root, "subdir"), filepath.Join(root, "linkdir")); err != nil {
+		t.Fatal(err)
+	}
+	// broken symlink
+	if err := os.Symlink(filepath.Join(root, "nonexistent"), filepath.Join(root, "broken")); err != nil {
+		t.Fatal(err)
+	}
+
+	p := newTestPicker(t)
+	p, cmd := p.Open(root)
+	p, _ = p.Update(cmd())
+
+	byName := map[string]attachEntry{}
+	for _, e := range p.entries {
+		byName[e.name] = e
+	}
+
+	linkdir, ok := byName["linkdir"]
+	if !ok {
+		t.Fatal("linkdir not in entries")
+	}
+	if !linkdir.isDir {
+		t.Errorf("linkdir: isDir = false, want true")
+	}
+	if linkdir.target == "" {
+		t.Errorf("linkdir: target is empty, want resolved path")
+	}
+
+	broken, ok := byName["broken"]
+	if !ok {
+		t.Fatal("broken not in entries")
+	}
+	if broken.isDir {
+		t.Errorf("broken symlink: isDir = true, want false")
+	}
+	if broken.target != "" {
+		t.Errorf("broken symlink: target = %q, want empty", broken.target)
+	}
+}
+
+func TestAttachPicker_FormatEntryRowWidth(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "mydir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "myfile.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := loadDir(t, newTestPicker(t), root)
+	p = p.SetSize(80, 20)
+
+	const contentW = 68 // matches attachPickerMaxWidth-2 at 80-wide terminal
+
+	// locate dir and file indices
+	dirIdx, fileIdx := -1, -1
+	for i, e := range p.entries {
+		if e.isDir {
+			dirIdx = i
+		} else {
+			fileIdx = i
+		}
+	}
+	if dirIdx < 0 || fileIdx < 0 {
+		t.Fatal("need one dir and one file")
+	}
+
+	dirRow := p.formatEntry(dirIdx, contentW)
+	fileRow := p.formatEntry(fileIdx, contentW)
+
+	if w := lipgloss.Width(dirRow); w != contentW {
+		t.Errorf("dir row width = %d, want %d", w, contentW)
+	}
+	if w := lipgloss.Width(fileRow); w != contentW {
+		t.Errorf("file row width = %d, want %d", w, contentW)
 	}
 }

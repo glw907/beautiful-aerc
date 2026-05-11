@@ -6,13 +6,19 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/humanize"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
+
+var nextAttachID atomic.Int64
+
+func nextID() int { return int(nextAttachID.Add(1)) }
 
 // AttachPicker is the compose-side multi-select file browser overlay.
 // Vim-style nav (j/k/g/G), async readDir with an id guard so stale
@@ -20,7 +26,7 @@ import (
 // ascend lands the cursor back on the dir you came from.
 type AttachPicker struct {
 	shell      uicore.ModalShell
-	id         int
+	currentID  int
 	dir        string
 	entries    []attachEntry
 	cursor     int
@@ -35,10 +41,11 @@ type AttachPicker struct {
 }
 
 type attachEntry struct {
-	name  string
-	path  string
-	isDir bool
-	size  int64
+	name   string
+	path   string
+	isDir  bool
+	size   int64
+	target string // non-empty when entry is a symlink that resolved successfully
 }
 
 type attachViewState struct{ cursor, offset int }
@@ -103,7 +110,7 @@ type readDirMsg struct {
 
 func (p AttachPicker) Open(dir string) (AttachPicker, tea.Cmd) {
 	p.shell = p.shell.WithOpen(true)
-	p.id++
+	p.currentID = nextID()
 	p.dir = dir
 	p.entries = nil
 	p.cursor = 0
@@ -111,7 +118,7 @@ func (p AttachPicker) Open(dir string) (AttachPicker, tea.Cmd) {
 	p.selected = map[string]bool{}
 	p.stack = nil
 	p.err = ""
-	return p, readDirCmd(p.id, dir, p.showHidden)
+	return p, readDirCmd(p.currentID, dir, p.showHidden)
 }
 
 func readDirCmd(id int, dir string, showHidden bool) tea.Cmd {
@@ -126,16 +133,32 @@ func readDirCmd(id int, dir string, showHidden bool) tea.Cmd {
 			if !showHidden && strings.HasPrefix(name, ".") {
 				continue
 			}
-			info, err := e.Info()
-			if err != nil {
-				continue
+			full := filepath.Join(dir, name)
+			ent := attachEntry{name: name, path: full}
+			if e.Type()&os.ModeSymlink != 0 {
+				// Symlink: resolve to learn whether it points at a directory.
+				// On error (broken link), treat as a non-traversable file.
+				if resolved, rerr := filepath.EvalSymlinks(full); rerr == nil {
+					if info, serr := os.Stat(resolved); serr == nil {
+						ent.isDir = info.IsDir()
+						ent.target = resolved
+					}
+				}
+				if !ent.isDir {
+					// Size from the link target; ignore error.
+					if info, serr := os.Stat(full); serr == nil {
+						ent.size = info.Size()
+					}
+				}
+			} else {
+				info, ierr := e.Info()
+				if ierr != nil {
+					continue
+				}
+				ent.isDir = info.IsDir()
+				ent.size = info.Size()
 			}
-			out = append(out, attachEntry{
-				name:  name,
-				path:  filepath.Join(dir, name),
-				isDir: e.IsDir(),
-				size:  info.Size(),
-			})
+			out = append(out, ent)
 		}
 		sort.SliceStable(out, func(i, j int) bool {
 			if out[i].isDir != out[j].isDir {
@@ -153,7 +176,7 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 	}
 	switch m := msg.(type) {
 	case readDirMsg:
-		if m.id != p.id {
+		if m.id != p.currentID {
 			return p, nil
 		}
 		if m.err != nil {
@@ -236,9 +259,9 @@ func (p AttachPicker) Update(msg tea.Msg) (AttachPicker, tea.Cmd) {
 			return p.ascend()
 		case key.Matches(m, p.keys.ToggleHidden):
 			p.showHidden = !p.showHidden
-			p.id++
+			p.currentID = nextID()
 			p.entries = nil
-			return p, readDirCmd(p.id, p.dir, p.showHidden)
+			return p, readDirCmd(p.currentID, p.dir, p.showHidden)
 		}
 	}
 	return p, nil
@@ -268,11 +291,11 @@ func selectedCount(p AttachPicker) int {
 
 func (p AttachPicker) descend(path string) (AttachPicker, tea.Cmd) {
 	p.stack = append(p.stack, attachViewState{cursor: p.cursor, offset: p.offset})
-	p.id++
+	p.currentID = nextID()
 	p.dir = path
 	p.entries = nil
 	p.cursor, p.offset = 0, 0
-	return p, readDirCmd(p.id, p.dir, p.showHidden)
+	return p, readDirCmd(p.currentID, p.dir, p.showHidden)
 }
 
 func (p AttachPicker) ascend() (AttachPicker, tea.Cmd) {
@@ -285,11 +308,11 @@ func (p AttachPicker) ascend() (AttachPicker, tea.Cmd) {
 		prev = p.stack[n-1]
 		p.stack = p.stack[:n-1]
 	}
-	p.id++
+	p.currentID = nextID()
 	p.dir = parent
 	p.entries = nil
 	p.cursor, p.offset = prev.cursor, prev.offset
-	return p, readDirCmd(p.id, p.dir, p.showHidden)
+	return p, readDirCmd(p.currentID, p.dir, p.showHidden)
 }
 
 // viewportRows is the body height available for entries inside the
@@ -347,6 +370,8 @@ func (p AttachPicker) View() string {
 	return p.shell.Box("Attach files", bodyRows, footerRows, contentW)
 }
 
+const attachSizeWidth = 7 // fits "999.9MB"; matches filepicker.fileSizeWidth
+
 func (p AttachPicker) formatEntry(idx, contentW int) string {
 	e := p.entries[idx]
 	mark := "  "
@@ -362,8 +387,23 @@ func (p AttachPicker) formatEntry(idx, contentW int) string {
 		size = humanize.Bytes(e.size)
 	}
 	body := fmt.Sprintf("%s%s %s", mark, icon, e.name)
-	rendered := ansix.PadOrTruncate(body, contentW-len(size)-1) + " " + p.styles.PickerDim.Render(size)
-	rendered = ansix.PadOrTruncate(rendered, contentW)
+	if e.target != "" {
+		// Reserve space: body + " → " + target must not exceed bodyW.
+		bodyW := contentW - attachSizeWidth - 1
+		arrow := " → " + e.target
+		if ansix.Width(body+arrow) > bodyW {
+			maxTarget := bodyW - ansix.Width(body) - 3 // 3 for " → "
+			if maxTarget > 0 {
+				arrow = " → " + ansix.Truncate(e.target, maxTarget)
+			} else {
+				arrow = ""
+			}
+		}
+		body += arrow
+	}
+	bodyW := contentW - attachSizeWidth - 1
+	sizeCol := p.styles.PickerDim.Width(attachSizeWidth).Align(lipgloss.Right).Render(size)
+	rendered := ansix.PadOrTruncate(body, bodyW) + " " + sizeCol
 	if idx == p.cursor {
 		return p.styles.PickerCursor.Render(rendered)
 	}

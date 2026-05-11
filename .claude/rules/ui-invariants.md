@@ -214,14 +214,20 @@ file describes behavior, not the key tables.
   footer shows a gated `^T tidy` hint at rank 6 when
   `[ui.tidy] enabled` and the body is focused. ADR-0178.
 - `Ctrl+O` opens `uicompose.AttachPicker` — multi-select TUI
-  file browser overlay (`internal/ui/compose/attachpicker.go`)
-  modeled
-  on `bubbles/filepicker` design vocabulary (vim h/l/g/G nav,
-  async readDir with id-guard, view-state stack on ascend),
-  reimplemented for multi-select. `Space` toggles, `a` accepts,
-  `Enter` on a file with empty selection is a single-attach
-  shortcut, `.` toggles hidden, `Esc` cancels. Picker emits
-  `uicompose.AttachAcceptedMsg{Paths}` /
+  file browser overlay (`internal/ui/compose/attachpicker.go`).
+  This file is a deliberate deviation from the `bubbles/v2/filepicker`
+  adoption pattern (ADR-0194): multi-select model, icon UX, and
+  ModalShell wrap don't compose with filepicker's single-select +
+  permissions columns + freestanding View; see ADR-0195 for the
+  full rationale. Three patterns are lifted from upstream without
+  importing it: symlink resolution via `e.Type()&os.ModeSymlink`
+  + `filepath.EvalSymlinks`/`os.Stat`; atomic package-level id
+  counter (`nextAttachID atomic.Int64`); right-aligned 7-cell size
+  column via `lipgloss.Right`. Vim h/l/g/G nav, async readDir with
+  id-guard, view-state stack on ascend. `Space` toggles, `a`
+  accepts, `Enter` on a file with empty selection is a
+  single-attach shortcut, `.` toggles hidden, `Esc` cancels.
+  Picker emits `uicompose.AttachAcceptedMsg{Paths}` /
   `uicompose.AttachCancelledMsg{}`; compose appends deduped to
   `c.attachments`, bumps `localDirty`, kicks
   autosave, remembers `attachLastDir`. Compose grows a
@@ -234,7 +240,7 @@ file describes behavior, not the key tables.
   at rank 6. App overlays the picker on top of compose via
   `uicore.PlaceOverlay`; compose's `SetSize` forwards into the
   picker. Picker rides inside compose's input window — outside
-  the global modal cascade. ADR-0179.
+  the global modal cascade. ADRs 0179, 0195.
 - `Ctrl+L` in compose opens `uicompose.SchedulePicker` — three
   preset rows (Tomorrow morning / afternoon, Monday morning)
   plus a "Custom…" row that expands a `bubbles/textinput`
