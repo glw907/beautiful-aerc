@@ -62,9 +62,6 @@ func (ContactDeleteArgs) opKind() OpKind { return KindContactDelete }
 // transaction, then signals the drainer. An empty msgUID makes the
 // op folder-scoped (used by send/append/push-draft).
 func (a *Account) QueueOp(ctx context.Context, folder string, msgUID mail.UID, args OpArgs) (int64, error) {
-	if args == nil {
-		return 0, fmt.Errorf("queue: nil args")
-	}
 	body, err := json.Marshal(args)
 	if err != nil {
 		return 0, fmt.Errorf("encode args: %w", err)
@@ -111,9 +108,6 @@ func (a *Account) QueueOp(ctx context.Context, folder string, msgUID mail.UID, a
 // payload. scheduledFor is a unix-nanos hold (0 = dispatch immediately).
 // draftID links the row to a drafts row ("" = no link).
 func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs, payload []byte, scheduledFor int64, draftID string) (int64, error) {
-	if args == nil {
-		return 0, fmt.Errorf("queue: nil args")
-	}
 	if len(payload) == 0 {
 		return 0, fmt.Errorf("queue: empty payload for %s", args.opKind())
 	}

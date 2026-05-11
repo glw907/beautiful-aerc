@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-message/mail"
 
 	"github.com/glw907/poplar/internal/strdist"
@@ -63,6 +62,9 @@ type ContactsConfig struct {
 func (c *ContactsConfig) validate() error {
 	if c == nil {
 		return nil
+	}
+	if c.URL == "" {
+		return fmt.Errorf("contacts: url: required")
 	}
 	u, err := url.Parse(c.URL)
 	if err != nil || u.Host == "" {
@@ -363,8 +365,8 @@ func ParseAccounts(path string) ([]AccountConfig, error) {
 // ParseAccountsFromBytes is the byte-slice form of ParseAccounts.
 func ParseAccountsFromBytes(data []byte) ([]AccountConfig, error) {
 	var cf configFile
-	if err := toml.Unmarshal(data, &cf); err != nil {
-		return nil, fmt.Errorf("decode accounts: %v", err)
+	if err := strictDecode(data, &cf); err != nil {
+		return nil, err
 	}
 
 	if len(cf.Account) == 0 {
@@ -499,6 +501,15 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 		}
 	}
 
+	if acct.Backend == "imap" && acct.Port == 0 {
+		return nil, &ConfigError{
+			Account: e.Name,
+			Field:   "port",
+			Message: fmt.Sprintf("port is required for imap accounts (provider = %q)", e.Provider),
+			Suggest: `set "port" (993 for implicit TLS, 143 for STARTTLS) on the [[account]] block`,
+		}
+	}
+
 	if acct.Backend == "jmap" && acct.Source == "" {
 		return nil, &ConfigError{
 			Account: e.Name,
@@ -534,6 +545,16 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 			Message: fmt.Sprintf("smtp.host is required for imap accounts (provider = %q)", e.Provider),
 			Suggest: `set "host" on the [account.smtp] block, or pick a hosted preset that fills it in`,
 		}
+	}
+
+	if err := validateAuth(e.Name, "auth", acct.Auth); err != nil {
+		return nil, err
+	}
+	if err := validateAuth(e.Name, "smtp.auth", acct.SMTP.Auth); err != nil {
+		return nil, err
+	}
+	if err := validateOAuthStore(e.Name, e.OAuthStore); err != nil {
+		return nil, err
 	}
 
 	acct.Display = e.Display
@@ -579,6 +600,22 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if err := acct.Contacts.validate(); err != nil {
 		return nil, fmt.Errorf("account %q: %w", e.Name, err)
 	}
+	if acct.Contacts != nil {
+		if acct.Contacts.Username == "" {
+			return nil, &ConfigError{
+				Account: e.Name,
+				Field:   "contacts.username",
+				Message: "username required (set on [account.contacts] or inherit from [[account]] email)",
+			}
+		}
+		if acct.Contacts.Password == "" && acct.Contacts.PasswordCmd == "" {
+			return nil, &ConfigError{
+				Account: e.Name,
+				Field:   "contacts.password",
+				Message: "password or password-cmd required (set on [account.contacts] or inherit from [[account]])",
+			}
+		}
+	}
 
 	return acct, nil
 }
@@ -618,6 +655,38 @@ func knownProvidersList() string {
 	names := slices.Sorted(maps.Keys(Providers))
 	names = append(names, "imap", "jmap")
 	return strings.Join(names, ", ")
+}
+
+var validAuthMechanisms = []string{"plain", "login", "cram-md5", "xoauth2", "bearer"}
+
+func validateAuth(account, field, v string) error {
+	if v == "" {
+		return nil
+	}
+	for _, m := range validAuthMechanisms {
+		if v == m {
+			return nil
+		}
+	}
+	return &ConfigError{
+		Account: account,
+		Field:   field,
+		Message: fmt.Sprintf("unknown auth mechanism %q", v),
+		Suggest: fmt.Sprintf("known: %s", strings.Join(validAuthMechanisms, ", ")),
+	}
+}
+
+func validateOAuthStore(account, v string) error {
+	switch v {
+	case "", "keyring", "age-file":
+		return nil
+	}
+	return &ConfigError{
+		Account: account,
+		Field:   "oauth-store",
+		Message: fmt.Sprintf("unknown oauth-store %q", v),
+		Suggest: `known: "keyring", "age-file"`,
+	}
 }
 
 func isShellName(s string) bool {

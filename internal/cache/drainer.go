@@ -127,12 +127,6 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		a.publish(row, OpConflict, err)
 		return
 	}
-	if a.Backend == nil {
-		_ = a.finishOp(row.ID, OpFailed,
-			encodeErr("no-backend", errors.New("backend not wired")),
-			time.Now().Add(cfg.BackoffMax).UnixNano())
-		return
-	}
 	dispatchErr := a.dispatch(args, row)
 	switch {
 	case dispatchErr == nil:
@@ -157,6 +151,8 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		_ = a.finalizeSuccess(ctx, row, args)
 		a.publishNote(row, OpDone, "draft superseded by another client")
 	default:
+		// mail.ErrConnection lands here. Backends drop the dead client
+		// and redial on the next attempt.
 		if cfg.MaxAttempts > 0 && row.Attempts+1 >= cfg.MaxAttempts {
 			_ = a.finishOp(row.ID, OpConflict, encodeErr("max-attempts-exceeded", dispatchErr), 0)
 			a.publish(row, OpConflict, dispatchErr)
@@ -228,6 +224,7 @@ func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
 		}
 		return a.MarkDraftPushed(context.Background(), v.DraftID, newUID, row.FolderName)
 	case ContactPutArgs:
+		// ContactsWriter is nil when the account has no CardDAV config.
 		if a.ContactsWriter == nil {
 			return errors.New("contacts writer not wired")
 		}

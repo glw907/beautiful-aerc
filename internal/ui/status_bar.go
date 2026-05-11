@@ -69,12 +69,6 @@ func (sb StatusBar) ConnectionState() ConnectionState { return sb.connState }
 // pending+executing+failed; conflict is rendered separately so the
 // warning glyph dominates.
 func (sb StatusBar) SetOutboxDepth(inflight, conflict int) StatusBar {
-	if inflight < 0 {
-		inflight = 0
-	}
-	if conflict < 0 {
-		conflict = 0
-	}
 	sb.outboxInflight = inflight
 	sb.outboxConflict = conflict
 	return sb
@@ -97,12 +91,6 @@ func (sb StatusBar) SetMode(mode StatusMode) StatusBar {
 
 // SetScrollPct is only consulted when mode == StatusViewer.
 func (sb StatusBar) SetScrollPct(pct int) StatusBar {
-	if pct < 0 {
-		pct = 0
-	}
-	if pct > 100 {
-		pct = 100
-	}
 	sb.scrollPct = pct
 	return sb
 }

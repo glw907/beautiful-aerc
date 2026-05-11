@@ -311,15 +311,24 @@ func fetchFolders(cli jmapClient, session *jmap.Session) (map[string]folderEntry
 	return folders, "", nil
 }
 
-// refreshFoldersLocked refreshes b.folders and b.states["Mailbox"].
-// Caller holds b.mu.
-func (b *Backend) refreshFoldersLocked() error {
-	folders, state, err := fetchFolders(b.client, b.session)
+// refreshFolders fetches the folder map and Mailbox state without
+// holding b.mu across the HTTP round-trip. Readers and the push loop
+// stay live while the server responds.
+func (b *Backend) refreshFolders() error {
+	b.mu.Lock()
+	client := b.client
+	session := b.session
+	b.mu.Unlock()
+
+	folders, state, err := fetchFolders(client, session)
 	if err != nil {
 		return err
 	}
+
+	b.mu.Lock()
 	b.folders = folders
 	b.states["Mailbox"] = state
+	b.mu.Unlock()
 	return nil
 }
 
@@ -357,12 +366,17 @@ func (b *Backend) Disconnect() error {
 // server when empty.
 func (b *Backend) ListFolders() ([]mail.Folder, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if len(b.folders) == 0 {
-		if err := b.refreshFoldersLocked(); err != nil {
+	empty := len(b.folders) == 0
+	b.mu.Unlock()
+
+	if empty {
+		if err := b.refreshFolders(); err != nil {
 			return nil, fmt.Errorf("list folders: %w", err)
 		}
 	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	out := make([]mail.Folder, 0, len(b.folders))
 	for _, e := range b.folders {
 		out = append(out, e.folder)

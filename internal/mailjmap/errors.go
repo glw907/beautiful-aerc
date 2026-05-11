@@ -15,8 +15,8 @@ func (b *Backend) do(req *jmap.Request) (*jmap.Response, error) {
 	return resp, classifyErr(err)
 }
 
-// classifyErr wraps a JMAP transport or method error with mail.ErrAuth
-// or mail.ErrNotFound so the cache drainer can route on errors.Is.
+// classifyErr wraps a JMAP transport or method error with the
+// mail.Err* sentinels so the cache drainer can route on errors.Is.
 // Unrecognized shapes pass through.
 func classifyErr(err error) error {
 	if err == nil {
@@ -30,6 +30,9 @@ func classifyErr(err error) error {
 		case 404:
 			return mail.WrapSentinel(err, mail.ErrNotFound)
 		}
+	}
+	if mail.IsConnectionDead(err) {
+		return mail.WrapSentinel(err, mail.ErrConnection)
 	}
 	return err
 }

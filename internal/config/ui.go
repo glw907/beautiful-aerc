@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/glw907/poplar/internal/tidytext"
 )
 
@@ -152,8 +151,8 @@ func LoadUI(path string) (UIConfig, error) {
 	}
 
 	var raw rawUIFile
-	if err := toml.Unmarshal(data, &raw); err != nil {
-		return UIConfig{}, fmt.Errorf("decode [ui]: %v", err)
+	if err := strictDecode(data, &raw); err != nil {
+		return UIConfig{}, err
 	}
 
 	out := DefaultUIConfig()

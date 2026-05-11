@@ -210,6 +210,38 @@ func TestDestroy_GmailQuirks_SelectsTrashFirst(t *testing.T) {
 	}
 }
 
+func TestDestroy_GmailQuirks_RestoresCurrentFolder(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = map[string]bool{"UIDPLUS": true, "X-GM-EXT-1": true, "SPECIAL-USE": true}
+	cmd.folders = []listEntry{
+		{Name: "INBOX"},
+		{Name: "[Gmail]/Trash", Attributes: []string{"\\Trash"}},
+	}
+	idle := newFakeClient()
+	idle.caps = cmd.caps
+
+	b := newWithFake(config.AccountConfig{Name: "g", GmailQuirks: true}, cmd, idle)
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	b.mu.Lock()
+	b.current = "INBOX"
+	b.mu.Unlock()
+
+	if err := b.Destroy([]mail.UID{"99"}); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if cmd.selected != "INBOX" {
+		t.Errorf("selected after Destroy = %q, want INBOX (folder restored)", cmd.selected)
+	}
+	b.mu.Lock()
+	cur := b.current
+	b.mu.Unlock()
+	if cur != "INBOX" {
+		t.Errorf("b.current after Destroy = %q, want INBOX", cur)
+	}
+}
+
 func TestDestroy_NonQuirks_DoesNotSelect(t *testing.T) {
 	cmd := newFakeClient()
 	cmd.caps = map[string]bool{"UIDPLUS": true}

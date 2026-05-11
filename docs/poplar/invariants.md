@@ -193,8 +193,14 @@ the ADR(s) that justify them.
   `password-cmd` resolves on first `Connect` and caches on the
   Backend. `AccountConfig.Name` defaults to `Email`; `Preset`
   round-trips (`config.Render` prefers it over `Backend`).
-  `*config.ConfigError{…}` (`ErrConfigInvalid`) covers unknown
-  provider, missing host, missing source, missing smtp.host.
+  Decoding is strict (`config.strictDecode` walks `md.Undecoded()`
+  and rejects unknown keys with a Levenshtein sibling suggestion;
+  map-typed sections keep accept-anything semantics).
+  `*config.ConfigError{…}` (`ErrConfigInvalid`) covers unknown TOML
+  keys, unknown provider, missing host / source / smtp.host /
+  bare-imap port, unknown `auth` / `smtp.auth` / `oauth-store` enum
+  values, empty `contacts.url`, and missing contacts credentials
+  after parent-account fallback. ADR-0211.
 - `config.Render(accts, ui, cache) []byte` emits canonical TOML;
   round-trips are semantic (comments lost, default-valued fields
   elided). `[account.smtp]` precedes `[[account.identity]]`. Multi-
@@ -203,33 +209,27 @@ the ADR(s) that justify them.
   runs the wizard, `--section=…` filters the registry), `check`
   (validate + connect-test via IMAP probe + `mailimap.ProbeSMTP`),
   `path`, `discover-folders`.
-- `mail.ProbeResult{Steps, Err}` (`internal/mail/probe.go`) is the
-  shared connect-test transcript; `mailimap.Probe` records 5 steps,
-  `mailjmap.Probe` 3 (go-jmap bundles TLS + bearer + Session/get).
-  First failure sets `Err` and stops. Test seams `probeDial` /
-  `probeAuth`; `mailimap.layerTLS` is the shared TLS helper.
-  `mail.IsSelfHosted(host)` reports RFC 1918 / IPv6 ULA / loopback
-  / `.local`; the wizard's "skip TLS verify" prompts route through it.
+- `mail.ProbeResult{Steps, Err}` is the shared connect-test
+  transcript; `mailimap.Probe` 5 steps, `mailjmap.Probe` 3. First
+  failure sets `Err` and stops. Seams: `probeDial`/`probeAuth`,
+  `mailimap.layerTLS`. `mail.IsSelfHosted(host)` covers RFC 1918 /
+  IPv6 ULA / loopback / `.local` for the wizard's TLS-skip prompts.
 - `wizard.Probe(ctx, cfg)` dispatches on `cfg.Backend` to
-  `mailimap.Probe` (appending the SMTP probe) or `mailjmap.Probe`;
-  seams `imap/jmap/smtpProbeFn`. `wizard.Apply(Model)` returns a
-  probe-ready `config.AccountConfig` (calls `config.ResolvePreset`
-  before returning so Host/Source/SMTP are populated). Account-
-  section stages: provider → email → credentials → probe →
-  identity → signature → label; signature hosts catkin with a
-  dim `-- ` chrome row, sentinel-free body on `Model.Signature`.
-  ADRs 0191, 0207.
+  `mailimap.Probe` (+ SMTP probe) or `mailjmap.Probe`; seams
+  `imap/jmap/smtpProbeFn`. `wizard.Apply(Model)` calls
+  `config.ResolvePreset` so the probe sees the round-trip config.
+  Account-section stages: provider → email → credentials → probe
+  → identity → signature → label; signature hosts catkin with a
+  dim `-- ` chrome row, sentinel-free body. ADRs 0191, 0207.
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`;
-  presets fill canonical submission endpoints (see
-  `config.Providers`). `Auth`/`Password`/`PasswordCmd` default to
-  mirroring IMAP-side credentials. JMAP ignores the block.
-  Validation requires `smtp.host` for `provider = "imap"` after
-  preset resolution.
-- `mail.MockBackend` is gated behind the `dev` build tag at the
-  `cmd/poplar` layer (`backend_dev.go` / `backend_nodev.go`):
-  release binaries error with "not available in release builds"
-  on `provider = "mock"`. `make test`/`make check` pass
-  `-tags=dev` so tests still drive the mock. ADR-0207.
+  presets fill canonical submission endpoints (`config.Providers`).
+  `Auth`/`Password`/`PasswordCmd` default to the IMAP-side
+  credentials. JMAP ignores the block. `smtp.host` is required for
+  `provider = "imap"` after preset resolution.
+- `mail.MockBackend` is gated behind the `dev` build tag at
+  `cmd/poplar` (`backend_{dev,nodev}.go`); release binaries reject
+  `provider = "mock"`. `make test`/`make check` pass `-tags=dev`.
+  ADR-0207.
 - `[[account.identity]]` carries ordered
   `[[account.identity.signature]]` sub-blocks.
   `AccountConfig.Identities` is length >= 1; legacy top-level

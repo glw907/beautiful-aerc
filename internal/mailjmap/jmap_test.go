@@ -75,6 +75,49 @@ func TestListFolders_ReturnsCachedFolders(t *testing.T) {
 	}
 }
 
+// TestRefreshFolders_DoesNotHoldLockAcrossRoundTrip parks the fake
+// client's Do inside the round-trip and asserts a concurrent reader
+// can still acquire b.mu. Regression for the b.mu-across-HTTP bug
+// closed in Pass 26.1.
+func TestRefreshFolders_DoesNotHoldLockAcrossRoundTrip(t *testing.T) {
+	gate := make(chan struct{})
+	released := make(chan struct{})
+	fake := &fakeClient{
+		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+			close(released)
+			<-gate
+			return fakeResponse(&jmap.Invocation{
+				Name: "Mailbox/get",
+				Args: &mailbox.GetResponse{State: "s1"},
+			}), nil
+		},
+	}
+	b := newTestBackend(fake, "acct-1", nil)
+
+	done := make(chan error, 1)
+	go func() { done <- b.refreshFolders() }()
+
+	<-released
+	// Round-trip is parked. A consumer that takes b.mu must not block.
+	acquired := make(chan struct{})
+	go func() {
+		b.mu.Lock()
+		close(acquired)
+		b.mu.Unlock()
+	}()
+	select {
+	case <-acquired:
+	case <-time.After(time.Second):
+		close(gate)
+		t.Fatal("b.mu held across HTTP round-trip")
+	}
+
+	close(gate)
+	if err := <-done; err != nil {
+		t.Fatalf("refreshFolders: %v", err)
+	}
+}
+
 // --- OpenFolder ---
 
 func TestOpenFolder(t *testing.T) {

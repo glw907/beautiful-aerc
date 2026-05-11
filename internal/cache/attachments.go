@@ -23,9 +23,6 @@ func (a *Account) Attachments(ctx context.Context, uid mail.UID) ([]mail.Attachm
 	if len(rows) > 0 {
 		return rows, nil
 	}
-	if a.Backend == nil {
-		return nil, errors.New("cache: no backend")
-	}
 	atts, err := a.Backend.Attachments(uid)
 	if err != nil {
 		return nil, err
@@ -112,9 +109,6 @@ func (a *Account) FetchAttachment(ctx context.Context, uid mail.UID, partID stri
 		return nil, fmt.Errorf("fetch attachment %s/%s: lookup: %w", uid, partID, err)
 	} else if ok {
 		return buf, nil
-	}
-	if a.Backend == nil {
-		return nil, errors.New("cache: no backend")
 	}
 	body, err := a.Backend.FetchAttachment(uid, partID)
 	if err != nil {

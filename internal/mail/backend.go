@@ -3,6 +3,9 @@ package mail
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/url"
 	"time"
 )
 
@@ -36,6 +39,33 @@ type joinedSentinel struct {
 
 func (j joinedSentinel) Error() string   { return j.orig.Error() }
 func (j joinedSentinel) Unwrap() []error { return []error{j.orig, j.sentinel} }
+
+// IsConnectionDead reports whether err comes from the underlying TCP
+// connection being closed or having timed out.
+func IsConnectionDead(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrClosedPipe) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	var oe *net.OpError
+	if errors.As(err, &oe) {
+		return true
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return IsConnectionDead(ue.Err)
+	}
+	return false
+}
 
 // ErrUnsupported signals the backend does not implement the operation.
 // Callers gate on capability (e.g. IsJMAP) before queuing. Not routed

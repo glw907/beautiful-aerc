@@ -5,8 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/BurntSushi/toml"
 )
 
 // CacheConfig holds tunables for the local cache, decoded from the
@@ -54,8 +52,8 @@ func LoadCache(path string) (CacheConfig, error) {
 		return CacheConfig{}, fmt.Errorf("read %s: %v", path, err)
 	}
 	var raw rawCacheFile
-	if err := toml.Unmarshal(data, &raw); err != nil {
-		return CacheConfig{}, fmt.Errorf("decode [cache]: %v", err)
+	if err := strictDecode(data, &raw); err != nil {
+		return CacheConfig{}, err
 	}
 	if raw.Cache == nil {
 		return defaultCache(), nil

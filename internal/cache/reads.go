@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	gomail "net/mail"
 	"strings"
@@ -259,9 +258,6 @@ func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 	} else if ok {
 		return buf, nil
 	}
-	if a.Backend == nil {
-		return nil, errors.New("cache: no backend")
-	}
 	body, err := a.Backend.FetchBody(uid)
 	if err != nil {
 		return nil, err
@@ -390,9 +386,6 @@ func writeRecipientsTx(ctx context.Context, tx *sql.Tx, msgID int64, m *mail.Mes
 
 // sqlPlaceholders returns "?,?,...,?" with n question marks.
 func sqlPlaceholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
 	return strings.Repeat("?,", n-1) + "?"
 }
 

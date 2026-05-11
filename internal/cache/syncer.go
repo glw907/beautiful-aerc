@@ -14,9 +14,6 @@ import (
 // mail.ErrCannotCalculateChanges the folder is re-anchored, and the
 // next call pulls a fresh baseline.
 func (a *Account) SyncFolder(ctx context.Context, folder string) error {
-	if a.ChangeTracker == nil {
-		return fmt.Errorf("cache: no change tracker")
-	}
 	since, err := a.readSyncToken(folder)
 	if err != nil {
 		return err
@@ -69,9 +66,6 @@ func (a *Account) applyDelta(ctx context.Context, folder string, d mail.ChangeSe
 	if len(fetch) == 0 {
 		return nil
 	}
-	if a.Backend == nil {
-		return fmt.Errorf("cache: no backend")
-	}
 	infos, err := a.Backend.FetchHeaders(fetch)
 	if err != nil {
 		return fmt.Errorf("backend fetch headers: %w", err)
@@ -112,9 +106,6 @@ func (a *Account) reAnchor(ctx context.Context, folder string) error {
 // Rows that no longer appear server-side are deleted, and CASCADE
 // reaps their messages and outbox entries.
 func (a *Account) SyncFolders(ctx context.Context) error {
-	if a.Backend == nil {
-		return fmt.Errorf("cache: no backend")
-	}
 	folders, err := a.Backend.ListFolders()
 	if err != nil {
 		return fmt.Errorf("backend list folders: %w", err)

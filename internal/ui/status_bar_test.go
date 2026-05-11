@@ -102,17 +102,6 @@ func TestStatusBarViewerMode(t *testing.T) {
 	}
 }
 
-func TestStatusBarSetScrollPctClamps(t *testing.T) {
-	styles := NewStyles(theme.Nord)
-	cases := []struct{ in, want int }{{-5, 0}, {0, 0}, {50, 50}, {100, 100}, {150, 100}}
-	for _, c := range cases {
-		sb := NewStatusBar(styles).SetMode(StatusViewer).SetScrollPct(c.in)
-		if sb.scrollPct != c.want {
-			t.Errorf("SetScrollPct(%d) = %d, want %d", c.in, sb.scrollPct, c.want)
-		}
-	}
-}
-
 func TestStatusBar_OutboxSegmentHiddenWhenZero(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	sb := NewStatusBar(styles)

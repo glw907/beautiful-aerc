@@ -1,9 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 26.1 — Audit A remediation (next-up).
-Pass 26 closed Audit A (ADR-0210) with 11 non-blocking findings
-(#54–#58); 26.1 lands them as one bundled remediation pass
-before Batch 2 begins. Pre-beta cadence continues.
+**Current pass:** Pass 27 — Catkin Elm conformance (next-up).
+Pass 26.1 landed Audit A remediation (#54–#58, ADR-0211):
+mailjmap `mail.ErrConnection` sentinel + lock-release across
+`Mailbox/get`, mailimap Gmail Destroy folder restore, strict
+TOML + enum/empty validators, defensive-clamp sweep. Batch 2
+opens.
 
 **Beta soak deferred** (2026-05-11 decision). `v0.9.0` is tagged
 as a milestone but does not gate the rules — pre-beta operational
@@ -41,8 +43,8 @@ queue a remediation sub-pass before the next phase runs. The
 | 24 | IMAP robustness — #53 IDLE/cmd redial, #52 outbox send/append gate (ADR-0208) | done |
 | 25 | Small-refactor sweep — ansix Measurer, plain-logger args, backoff/humanize fold (ADR-0209) | done |
 | 26 | Audit A — bug-fix completeness, 11 non-blocking findings (ADR-0210) | done |
-| 26.1 | **Audit A remediation** — #54–#58 (mailjmap sentinels + lock, mailimap Gmail Destroy, config validator, defensive-clamp sweep) | next |
-| 27 | Catkin Elm conformance (all-value path) | gated |
+| 26.1 | Audit A remediation — #54–#58 (mailjmap sentinels + lock, mailimap Gmail Destroy, strict TOML + validators, defensive-clamp sweep, ADR-0211) | done |
+| 27 | **Catkin Elm conformance (all-value path)** | next |
 | 28 | Compose `Editor` wrapper deletion (subsumes overengineering-cleanup item 1) | gated |
 | 29 | `app.go` decomposition — split 874-line `App.Update` | gated |
 | 30 | **Audit B.1** — Elm + bubbletea v2 conformance (`audit-plan.md` §Phase B.1) | gate |
@@ -93,14 +95,18 @@ behavior change:
   primary callers; drop the defensive `<= 0` clamps
 
 **Pass 26 — Audit A: bug-fix completeness.** Done 2026-05-11
-(ADR-0210). Three-lens sweep (mail-infra regression, config-
-validator completeness, defensive-clamp grep) returned **11 non-
-blocking findings, 0 blocking** — Batch 2 proceeds without a
-remediation pass. Findings file as BACKLOG **#54** (mailjmap
-network-error sentinel gap), **#55** (mailjmap `b.mu` across
-HTTP round-trip), **#56** (mailimap Gmail-Destroy stale
-`b.current`), **#57** (config-validator gaps incl. non-strict
-TOML), **#58** (defensive-clamp cleanup sweep).
+(ADR-0210). Three-lens sweep returned 11 non-blocking findings
+(0 blocking) filed as BACKLOG #54–#58.
+
+**Pass 26.1 — Audit A remediation.** Done 2026-05-11 (ADR-0211).
+Bundled all five findings: `mail.IsConnectionDead` shared helper
++ mailjmap sentinel parity; `refreshFolders` snapshot-release
+pattern; Gmail Destroy folder restore via defer; strict-TOML
+decoding with Levenshtein sibling suggestion (`internal/config/
+strict.go`); auth / oauth-store enum validators, bare-IMAP port
+requirement, contacts-credential post-fallback check; eight
+defensive guards deleted from `internal/cache/` + `internal/ui/
+status_bar.go`.
 
 ### Batch 2 — structural refactor (Passes 27–29)
 
@@ -186,67 +192,7 @@ after soak settles.
 Full project descriptions in `ROADMAP.md`; audit methodology in
 `docs/poplar/audit-plan.md`.
 
-### Next starter prompt (Pass 26.1)
-
-> **Goal.** Land all five Audit A findings as one bundled
-> remediation pass before Batch 2 begins. Per `audit-plan.md`
-> §Mechanics, non-blocking findings land within two passes of
-> being logged — bundling them clears the slate before Pass 27.
->
-> **Scope.** Five BACKLOG items, ~10–12 tasks total:
-> - **#54** — `mailjmap/errors.go:classifyErr` — add `net.Error` /
->   `*url.Error` / `io.EOF` shapes wrapped as `mail.ErrConnection`,
->   mirroring `mailimap.classifyErr`. Add a fake-backed test that
->   forces a transport drop and asserts `errors.Is(err,
->   mail.ErrConnection)`.
-> - **#55** — `mailjmap/jmap.go:refreshFoldersLocked` — copy
->   `b.client`/`b.session` under `b.mu`, release, do the HTTP
->   round-trip, re-acquire to write results. Same pattern as
->   `resolvedPassword`. Verify with a test that lock contention
->   doesn't stall during the round-trip.
-> - **#56** — `mailimap/actions.go:Destroy` (Gmail branch) —
->   update `b.current` after the internal `Select(trash, false)`
->   or re-Select the pre-Destroy folder before returning. Add a
->   regression test that interleaves Destroy with a redial.
-> - **#57** — config validator gaps. Switch all four
->   `toml.Unmarshal` sites (`accounts.go:366`, `ui.go:155`,
->   `cache.go:57`, `writer.go:111`) to strict-mode decoding via
->   `(*toml.Decoder).DisallowUnknownFields()` (or BurntSushi
->   equivalent); surface unknown keys as `*ConfigError` with a
->   `Suggest` field populated via `internal/strdist.Levenshtein`.
->   Add enum validation for `oauth-store` (`accounts.go:544`),
->   `auth`/`smtp.auth` (`accounts.go:421`). Fix `contacts.url`
->   empty error text (`accounts.go:67-69`). Validate `port != 0`
->   for bare `provider = "imap"` (`accounts.go:493-500`).
->   Validate contacts credentials after parent fallback
->   (`accounts.go:586-597`). Tests next to each new check.
-> - **#58** — defensive-clamp sweep. Delete the eight items in
->   the table on BACKLOG #58 (cache `Backend == nil`,
->   `ChangeTracker == nil`, `args == nil`, `n <= 0` in
->   `sqlPlaceholders`, `limit <= 0` in `search.go`, status-bar
->   outbox-depth + scrollPct clamps). Keep `ContactsWriter == nil`
->   in `drainer.go:231,241` with a doc comment explaining the
->   field is legitimately optional. Inline `drainer.go:executeOne`
->   `ErrConnection` routing comment (the F1.4 inline item) here
->   too — single-line addition.
->
-> **Settled (do not re-brainstorm):** Findings + fix shapes are
-> already specified in ADR-0210 and the BACKLOG entries. Strict
-> TOML is the F2.0 root fix; the rest of #57 are leaf validations
-> riding on that base. No design questions.
->
-> **Still open — brainstorm these:** None — this is mechanical
-> remediation with the fix shape settled per finding.
->
-> **Approach.** Write a thin plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-audit-a-remediation.md`
-> (task list per finding; the BACKLOG entries already carry the
-> rationale). Implement straight through. New ADR if and only if
-> the strict-TOML switch or the new validators introduce a
-> binding fact (likely — `DisallowUnknownFields` becomes a config
-> invariant). Standard pass-end checklist applies.
-
-### Starter prompt (Pass 27 — gated until 26.1 ships)
+### Next starter prompt (Pass 27)
 
 > **Goal.** Convert `internal/catkin/` to the Elm all-value path —
 > every pointer-mutator on `catkin.Model` and `catkin.Buffer`

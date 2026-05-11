@@ -90,6 +90,7 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 	}
 	b.mu.Lock()
 	gmail := b.cfg.GmailQuirks
+	prev := b.current
 	b.mu.Unlock()
 
 	if gmail {
@@ -101,6 +102,23 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 			wrapped := classifyErr(err)
 			b.maybeDropOnConn(cmd, wrapped)
 			return fmt.Errorf("select trash: %w", wrapped)
+		}
+		b.mu.Lock()
+		b.current = trash
+		b.mu.Unlock()
+		// Re-select the caller's folder before returning so a
+		// subsequent redial doesn't address the wrong mailbox.
+		if prev != "" && prev != trash {
+			defer func() {
+				if _, err := cmd.Select(prev, false); err != nil {
+					b.log.Warn("imap destroy: re-select prior folder failed", "folder", prev, "err", err)
+					b.maybeDropOnConn(cmd, classifyErr(err))
+					return
+				}
+				b.mu.Lock()
+				b.current = prev
+				b.mu.Unlock()
+			}()
 		}
 	}
 

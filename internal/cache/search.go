@@ -31,9 +31,6 @@ func (a *Account) Search(ctx context.Context, q search.Query, scope SearchScope,
 	if q.IsZero() {
 		return nil, nil
 	}
-	if limit <= 0 {
-		limit = 200
-	}
 	matchExpr := buildMatch(q)
 
 	var sb strings.Builder
