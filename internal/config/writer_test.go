@@ -281,6 +281,57 @@ rank = 5
 	}
 }
 
+func TestRenderMultilineSignature(t *testing.T) {
+	accts := []AccountConfig{{
+		Name:     "geoff",
+		Preset:   "fastmail",
+		Backend:  "jmap",
+		Email:    "geoff@907.life",
+		Password: "tok",
+		Identities: []Identity{{
+			Name:  "Geoff",
+			Email: "geoff@907.life",
+			Signatures: []Signature{{
+				Name: "default",
+				Text: "Geoff Wright\ngeoff@907.life",
+			}},
+		}},
+	}}
+	got := string(Render(accts, UIConfig{}, CacheConfig{}))
+	want := "text = \"\"\"\nGeoff Wright\ngeoff@907.life\"\"\"\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("Render output missing multi-line signature block.\n--- want substring ---\n%s\n--- got ---\n%s", want, got)
+	}
+}
+
+func TestRenderParseSignatureRoundTrip(t *testing.T) {
+	body := "Geoff Wright\ngeoff@907.life"
+	accts := []AccountConfig{{
+		Name:     "geoff",
+		Preset:   "fastmail",
+		Backend:  "jmap",
+		Email:    "geoff@907.life",
+		Password: "tok",
+		Identities: []Identity{{
+			Name:       "Geoff",
+			Email:      "geoff@907.life",
+			Signatures: []Signature{{Name: "default", Text: body}},
+		}},
+	}}
+	tomlBytes := Render(accts, UIConfig{}, CacheConfig{})
+	parsed, err := ParseAccountsFromBytes(tomlBytes)
+	if err != nil {
+		t.Fatalf("ParseAccountsFromBytes: %v", err)
+	}
+	if len(parsed) != 1 || len(parsed[0].Identities) != 1 || len(parsed[0].Identities[0].Signatures) != 1 {
+		t.Fatalf("unexpected shape: %+v", parsed)
+	}
+	want := "-- \n" + body
+	if got := parsed[0].Identities[0].Signatures[0].Text; got != want {
+		t.Errorf("round-trip Text = %q, want %q", got, want)
+	}
+}
+
 func sliceContainsSubseq(src, target []string) bool {
 	i := 0
 	for _, s := range src {

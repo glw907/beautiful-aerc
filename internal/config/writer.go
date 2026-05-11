@@ -244,7 +244,9 @@ func writeAccount(b *strings.Builder, a AccountConfig) {
 		for _, sig := range id.Signatures {
 			b.WriteString("\n[[account.identity.signature]]\n")
 			writeKV(b, "name", sig.Name)
-			writeKV(b, "text", sig.Text)
+			if sig.Text != "" {
+				fmt.Fprintf(b, "text = %s\n", multilineQuoted(sig.Text))
+			}
 		}
 	}
 }
@@ -362,6 +364,17 @@ func writeKVBool(b *strings.Builder, k string, v bool) {
 
 func quoted(s string) string {
 	return `"` + tomlEscape(s) + `"`
+}
+
+// multilineQuoted renders s as a TOML basic multi-line literal when it
+// contains a newline, otherwise as a single-line basic string. Used
+// for signature bodies so rendered config reads naturally.
+func multilineQuoted(s string) string {
+	if !strings.Contains(s, "\n") {
+		return quoted(s)
+	}
+	body := strings.ReplaceAll(s, `"""`, `\"\"\"`)
+	return "\"\"\"\n" + body + "\"\"\""
 }
 
 func tomlEscape(s string) string {
