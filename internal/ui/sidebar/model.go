@@ -92,6 +92,16 @@ func (s Model) effectiveEntries() []folderEntry {
 	return out
 }
 
+// synthFolder builds a ClassifiedFolder for an intermediate tree node that has
+// no on-server folder of its own (e.g. "Lists" when only "Lists/golang" exists).
+func synthFolder(path, displayName string) mail.ClassifiedFolder {
+	return mail.ClassifiedFolder{
+		Folder:      mail.Folder{Name: path},
+		DisplayName: displayName,
+		Group:       mail.GroupCustom,
+	}
+}
+
 func syntheticOutboxEntry(count int, icons uicore.IconSet) folderEntry {
 	return folderEntry{
 		cf: mail.ClassifiedFolder{
