@@ -60,26 +60,20 @@ the ADR(s) that justify them.
   `InsecureTLS` is not already on. No maildir/mbox/notmuch.
 - `mail.Backend` is synchronous blocking; both packages call their
   libraries synchronously — no pump goroutine, no async bridge.
-- IMAP backend invariants: UIDPLUS is required at Connect (asserted
-  in `capSet`). MOVE / SPECIAL-USE / IDLE are negotiated; absence
-  triggers documented fallbacks (COPY+STORE+EXPUNGE for Move, name-
-  alias classification for SPECIAL-USE, 30s STATUS-poll for IDLE).
-  The idle goroutine refreshes IDLE every 9 minutes (well under the
-  RFC 2177 29-minute cap), reconnects with exponential backoff
-  mirroring `mailjmap.pushLoop`, and emits `mail.Update` values on
-  the shared updates channel. `Destroy` issues
-  `UID STORE +FLAGS.SILENT (\Deleted)` then `UID EXPUNGE <uids>`,
-  matching ADR-0092 semantics with no risk of expunging unrelated
-  pre-marked messages. Gmail accounts (`GmailQuirks = true`) assert
-  `X-GM-EXT-1` at Connect and route `Destroy` through `SELECT
-  [Gmail]/Trash` first so EXPUNGE truly deletes; XOAUTH2 tokens
-  come from `mailauth.Token(ctx)`. SMTP is a third connection dialed lazily on first
-  `Send` via `emersion/go-smtp`; the cached client is dropped on
-  any send error so the next call redials. `Append(folder, mime,
-  flags)` runs `APPEND` on the cmd connection. `mailimap.ProbeSMTP`
-  is the connect-test surface for `poplar config check`. `dialRawTCP`
-  in `auth.go` is the shared TCP-setup helper used by both IMAP and
-  SMTP dials.
+- IMAP backend invariants: UIDPLUS required at Connect; MOVE /
+  SPECIAL-USE / IDLE negotiated with fallbacks (COPY+STORE+EXPUNGE,
+  alias classification, 30s STATUS-poll). IDLE refreshes every 9 min
+  (RFC 2177 29-min cap), reconnects via exponential backoff
+  mirroring `mailjmap.pushLoop`, emits `mail.Update` on the shared
+  channel. `Destroy` issues `UID STORE +FLAGS.SILENT (\Deleted)` +
+  `UID EXPUNGE <uids>` (ADR-0092 semantics, no collateral expunge).
+  Gmail (`GmailQuirks = true`) asserts `X-GM-EXT-1` and routes
+  `Destroy` through `SELECT [Gmail]/Trash` first; XOAUTH2 tokens
+  from `mailauth.Token(ctx)`. SMTP is a third connection dialed
+  lazily on first `Send` via `emersion/go-smtp`; cached client
+  dropped on send error. `Append` runs `APPEND` on the cmd
+  connection. `mailimap.ProbeSMTP` is the `poplar config check`
+  surface. `dialRawTCP` (in `auth.go`) is the shared TCP helper.
 
 ### Send + Append
 
@@ -145,8 +139,10 @@ the ADR(s) that justify them.
   chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
   `DimANSI`, render primitives (`PadOrTruncate`, `TruncateToWidth`,
-  `CenterOverlay`, `ApplyBg`, `FillRowToWidth`, …), and the
-  `LayoutMode`/`IconSet`/`SearchMode` enums plus the
+  `CenterOverlay`, `ApplyBg`, `FillRowToWidth`, `PickerListSize`,
+  `SplitAndPad`), `NewListStyles` (compiled theme →
+  `bubbles/v2/list.Styles` for the picker family; ADR-0194), and
+  the `LayoutMode`/`IconSet`/`SearchMode` enums plus the
   `SimpleIcons`/`FancyIcons` tables. Each subpackage exposes one
   `Model` + `New(...)` (sub-models like `sidebar.Column`,
   `reader.LinkPicker` exported alongside). Per-subpackage `Styles`
