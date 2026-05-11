@@ -319,4 +319,3 @@ func encodeErr(kind string, err error) string {
 	b, _ := json.Marshal(payload{Kind: kind, Message: err.Error()})
 	return string(b)
 }
-
