@@ -57,6 +57,15 @@ the v0.9.0 freeze.
 > ascend stays the same UX. Footer hint `^O attach` at rank 6
 > unchanged.
 >
+> **Bundled bubble-shape fix (#45 gap 3).** Change
+> `compose.New()` to return `Model` (value), not `*Model`
+> (`compose/model.go:135`). Every other subpackage returns
+> `Model` by value; the pointer return is the only deviation
+> and conflicts with the elm value-receiver convention. Update
+> the call site in `internal/ui/app.go` and any test
+> constructors. Land inline with 15a.5 since this pass already
+> touches `compose/`.
+>
 > **Still open — brainstorm these:** how to layer multi-select
 > on top of filepicker's single-select API (own a parallel
 > `selected map[string]bool`, intercept Space before dispatching,
