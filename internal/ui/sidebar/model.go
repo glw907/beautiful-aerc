@@ -23,6 +23,7 @@ type Model struct {
 	entries     []folderEntry
 	selected    int
 	outboxCount int
+	expanded    map[string]bool
 	styles      Styles
 	icons       uicore.IconSet
 	layout      uicore.LayoutMode
@@ -36,6 +37,7 @@ func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfi
 	return Model{
 		entries:  buildEntries(classified, uiCfg, icons),
 		selected: 0,
+		expanded: map[string]bool{},
 		styles:   styles,
 		icons:    icons,
 		width:    width,
@@ -51,6 +53,7 @@ func (s *Model) SetFolders(classified []mail.ClassifiedFolder, uiCfg config.UICo
 		prevName = s.entries[s.selected].cf.Folder.Name
 	}
 	s.entries = buildEntries(classified, uiCfg, s.icons)
+	s.pruneExpanded(customPaths(s.entries))
 	s.selected = 0
 	if prevName != "" {
 		for i, e := range s.entries {
@@ -69,6 +72,48 @@ func (s *Model) SetOutboxCount(n int) {
 		n = 0
 	}
 	s.outboxCount = n
+}
+
+// IsExpanded reports whether the parent at path is expanded.
+func (s Model) IsExpanded(path string) bool {
+	return s.expanded[path]
+}
+
+// ToggleExpanded flips expansion at path.
+func (s *Model) ToggleExpanded(path string) {
+	if s.expanded == nil {
+		s.expanded = map[string]bool{}
+	}
+	if s.expanded[path] {
+		delete(s.expanded, path)
+		return
+	}
+	s.expanded[path] = true
+}
+
+// pruneExpanded drops paths no longer present in known.
+func (s *Model) pruneExpanded(known map[string]struct{}) {
+	for k := range s.expanded {
+		if _, ok := known[k]; !ok {
+			delete(s.expanded, k)
+		}
+	}
+}
+
+// customPaths returns every full path that could appear as an expand-state
+// key — real Custom folder names plus every synthesized intermediate.
+func customPaths(entries []folderEntry) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, e := range entries {
+		if e.cf.Group != mail.GroupCustom {
+			continue
+		}
+		segs := strings.Split(e.cf.Folder.Name, "/")
+		for i := range segs {
+			out[strings.Join(segs[:i+1], "/")] = struct{}{}
+		}
+	}
+	return out
 }
 
 // effectiveEntries returns s.entries with the synthetic Outbox row injected
