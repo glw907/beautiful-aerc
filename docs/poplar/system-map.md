@@ -19,7 +19,7 @@ Single binary: `cmd/poplar/`. Build with `make build`. Install with
 | `internal/ui/sidebar/` | `sidebar.Model` + `sidebar.Column` + `sidebar.Search` |
 | `internal/ui/messagelist/` | `messagelist.Model` — thread grouping, fold state, render |
 | `internal/ui/reader/` | `reader.Model` — viewer, plus `reader.LinkPicker` and `reader.AttachPicker` sub-overlays |
-| `internal/ui/compose/` | `compose.Model` — App-owned inline compose surface (imported as `uicompose` to disambiguate from the `internal/compose` domain package) |
+| `internal/ui/compose/` | `compose.Model` — App-owned inline compose surface (imported as `uicompose` to disambiguate from the `internal/mailcompose` domain package) |
 | `internal/ui/movepicker/` | `movepicker.Model` |
 | `internal/ui/helppopover/` | `helppopover.Model` |
 | `internal/ui/uicore/` | Shared chrome library: `LayoutMode`, `IconSet`, `ComputeLayout`, `NewSpinner`, `ErrorMsg`, `TriageOp`, `ModalShell`, `PlaceOverlay`, render primitives. Subpackages and `internal/ui/` both import; subpackages cannot import `internal/ui/` |
@@ -31,7 +31,7 @@ Single binary: `cmd/poplar/`. Build with `make build`. Install with
 | `internal/theme/` | Compiled lipgloss themes (15 themes, `Palette` → `NewCompiledTheme` → `*CompiledTheme`) |
 | `internal/filter/` | Email cleanup pipeline (`CleanHTML`, `CleanPlain`). Library — awaits viewer consumer |
 | `internal/content/` | Block model + lipgloss renderer (`ParseBlocks`, `RenderBody`, `RenderBodyWithFootnotes`, `ParseHeaders`, `RenderHeaders`) |
-| `internal/tidy/` | Claude API prose tidier (config, prompt, API call). Library — awaits Pass 9.5 compose consumer |
+| `internal/tidytext/` | Claude API prose tidier (config, prompt, API call). Library — awaits Pass 9.5 compose consumer |
 
 `internal/mailimap/` (Gmail IMAP, direct on `emersion/go-imap` v1)
 arrives in Pass 8.

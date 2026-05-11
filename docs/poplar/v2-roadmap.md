@@ -109,7 +109,7 @@ mid-pass.
 
 - **Neovim companion plugin.** Project goal beyond v1 (memory:
   `project_nvim_companion`). Architecture stays compatible.
-- **`tidytext` standalone tool spinoff.** `internal/tidy/` may
+- **`tidytext` standalone tool spinoff.** `internal/tidytext/` may
   become its own tool (memory: `project_tidytext_spinoff`); don't
   compromise poplar architecture to keep it pure — extract at
   spinoff time.
