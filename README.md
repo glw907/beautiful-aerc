@@ -106,7 +106,7 @@ Full key map: [`docs/poplar/keybindings.md`](docs/poplar/keybindings.md).
   models, mutations only in `Update`, I/O in `tea.Cmd`. Showcase
   build for the v2 stack.
 - **Direct on emersion** — `go-imap` v2, `go-smtp`, `go-webdav`,
-  `go-vcard`, plus `rockorager/go-jmap`. No aerc fork.
+  `go-vcard`, plus `rockorager/go-jmap`.
 - **Modern Go 1.26** — slices/maps/iter/slog idioms throughout
   (ADR-0196). Vet, gofmt, and the project's voice check are commit
   gates.

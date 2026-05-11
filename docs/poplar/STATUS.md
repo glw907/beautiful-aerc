@@ -1,7 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 20 — v0.9.0 prep (feature freeze, docs
-sweep, README, tag).
+**Current pass:** v0.9.0 cut — beta soak begins.
+
+Data formats are frozen at `v0.9.0`. Only bug-fix releases land
+on the `v0.9.x` line; features queue on `1.1`. Soak rules are in
+`docs/poplar/release-stance.md` — load before the first post-tag
+pass.
 
 ## Passes
 
@@ -14,41 +18,22 @@ sweep, README, tag).
 | 18 | Polish II — retire underlay dim, footer ellipsis, helppopover zero-arg View, KeyMap exports, sidebar render cache (ADR-0202) | done |
 | 19 | pre-beta refactor (outbound) — drop MessageInfo.Date string, compose→mailcompose, tidy→tidytext + CLI strip (ADR-0203) | done |
 | 19.1 | pre-beta refactor (mechanical) — #46 reconciled, #47 strdist consolidation (ADR-0204) | done |
-| **20** | **v0.9.0 prep** — feature freeze, docs sweep, README, tag | **pending — next** |
-| Beta soak | Bug-fix releases; data formats frozen; features queue on `1.1` | pending |
+| 20 | v0.9.0 prep — README, docs sweep, hero screenshot, tag (ADR-0205) | done |
+| Beta soak | Bug-fix releases on `v0.9.x`; data formats frozen; features queue on `1.1` | **active** |
 | v1.0.0 | Tag when soak settles | pending |
-| 1.1 | Neovim companion (#6); raw RFC822 (#21); other post-beta | post-beta |
+| 1.1 | Neovim companion (#6); raw RFC822 (#21); native OAuth (#42); other post-beta | post-beta |
 
-## Next starter prompt (Pass 20)
+## Next steps
 
-> **Goal.** Cut `v0.9.0`. Feature freeze, docs sweep, README,
-> tag.
->
-> **Scope.**
-> - Audit `BACKLOG.md` High/Medium for any remaining pre-beta
->   refactors that should land before freeze (the "showcase
->   before freeze" initiative carved off the bubbles-adoption
->   work in passes 15.x/17.x; #44 `mailcompose` rename is the
->   one remaining named entry).
-> - Sweep `docs/poplar/` for stale references (e.g. dropped
->   `Date` field, renamed packages, retired Pass numbers).
-> - Write the v1 README (target audience: developer evaluating
->   poplar from the GitHub landing page).
-> - Tag `v0.9.0` from master. Beta soak begins on tag; data
->   formats freeze.
->
-> **Settled (do not re-brainstorm):** Release model is fixed
-> (ADR-0105). Tag from master, no release branch.
->
-> **Still open — brainstorm these:**
-> - Final pre-beta refactor scope (apply #44 in this pass or
->   defer to a 19.2-style mechanical pass first?).
-> - README scope and shape — feature tour vs. quickstart vs.
->   architecture overview.
->
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-v0.9.0-prep.md`, then
-> implement. Standard pass-end checklist applies.
+First post-tag work is bug-fix-only on the `v0.9.x` line. Pick up
+the next pass with `release-stance.md` open — soak rules differ
+from pre-beta (no schema work, no breaking renames). Candidates:
+
+- Compose hero screenshot (deferred from Pass 20 — needs a
+  hand-driven capture; tape skeleton at
+  `scripts/screenshots/compose.tape`).
+- BACKLOG bug entries flagged with `#bug` / `#poplar`.
+- `CONTRIBUTING.md` + CI workflow (#41, #40) — v1.0 prep.
 
 ## Notes for the 16-series (modernization)
 
