@@ -62,13 +62,18 @@ func (m Model) WithNow(now func() time.Time) Model {
 // initial folder list asynchronously.
 func New(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet) Model {
 	sidebarStyles := sidebar.NewStyles(t)
+	sidebarKM := sidebar.DefaultKeyMap()
+	sidebarKM.Down = key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next folder"))
+	sidebarKM.Up = key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev folder"))
+	sb := sidebar.New(sidebarStyles, nil, uiCfg, 30, 1, icons)
+	sb.SetKeyMap(sidebarKM)
 	return Model{
 		styles: NewStyles(t),
 		icons:  icons,
 		acct:   acct,
 		uiCfg:  uiCfg,
 		sidebarColumn: sidebar.NewColumn(sidebarStyles, icons,
-			sidebar.New(sidebarStyles, nil, uiCfg, 30, 1, icons),
+			sb,
 			sidebar.NewSearch(sidebarStyles, 30, icons),
 			acct.AccountEmail(),
 		),
@@ -368,13 +373,23 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.SidebarDown):
 		m = m.clearSearchIfActive()
 		sb := m.sidebarColumn.Sidebar()
-		sb.MoveDown()
+		sb, _ = sb.Update(msg)
 		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 		return m.selectionChangedCmds()
 	case key.Matches(msg, m.keys.SidebarUp):
 		m = m.clearSearchIfActive()
 		sb := m.sidebarColumn.Sidebar()
-		sb.MoveUp()
+		sb, _ = sb.Update(msg)
+		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
+		return m.selectionChangedCmds()
+	case key.Matches(msg, m.keys.SidebarExpand):
+		sb := m.sidebarColumn.Sidebar()
+		sb, _ = sb.Update(msg)
+		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
+		return m.selectionChangedCmds()
+	case key.Matches(msg, m.keys.SidebarCollapse):
+		sb := m.sidebarColumn.Sidebar()
+		sb, _ = sb.Update(msg)
 		m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 		return m.selectionChangedCmds()
 	case key.Matches(msg, m.keys.JumpInbox):

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/glw907/poplar/internal/ansix"
@@ -13,6 +14,13 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/sidebar"
 	"github.com/glw907/poplar/internal/ui/uicore"
+)
+
+var (
+	keyDown   = tea.KeyPressMsg{Code: 'j', Text: "j"}
+	keyUp     = tea.KeyPressMsg{Code: 'k', Text: "k"}
+	keyBottom = tea.KeyPressMsg{Code: 'G', Text: "G"}
+	keyTop    = tea.KeyPressMsg{Code: 'g', Text: "g"}
 )
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -123,9 +131,9 @@ func TestSidebar(t *testing.T) {
 
 	t.Run("j moves down", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
-		sb.MoveDown()
+		sb, _ = sb.Update(keyDown)
 		if sb.Selected() != 1 {
-			t.Errorf("after MoveDown, selected = %d, want 1", sb.Selected())
+			t.Errorf("after Down, selected = %d, want 1", sb.Selected())
 		}
 		if sb.SelectedFolder() != "Drafts" {
 			t.Errorf("selected folder = %q, want Drafts", sb.SelectedFolder())
@@ -134,9 +142,9 @@ func TestSidebar(t *testing.T) {
 
 	t.Run("k moves up", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
-		sb.MoveDown()
-		sb.MoveDown()
-		sb.MoveUp()
+		sb, _ = sb.Update(keyDown)
+		sb, _ = sb.Update(keyDown)
+		sb, _ = sb.Update(keyUp)
 		if sb.Selected() != 1 {
 			t.Errorf("after Down+Down+Up, selected = %d, want 1", sb.Selected())
 		}
@@ -144,44 +152,44 @@ func TestSidebar(t *testing.T) {
 
 	t.Run("k at top stays at 0", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
-		sb.MoveUp()
+		sb, _ = sb.Update(keyUp)
 		if sb.Selected() != 0 {
-			t.Errorf("MoveUp at top: selected = %d, want 0", sb.Selected())
+			t.Errorf("Up at top: selected = %d, want 0", sb.Selected())
 		}
 	})
 
 	t.Run("j at bottom stays at last", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
 		for range 20 {
-			sb.MoveDown()
+			sb, _ = sb.Update(keyDown)
 		}
 		// Lists/golang + Lists/rust collapse to one synthetic Lists row, so
 		// visible row count = len(folders) - 1 = 9; last index = 8.
 		want := len(folders) - 2
 		if sb.Selected() != want {
-			t.Errorf("MoveDown past end: selected = %d, want %d", sb.Selected(), want)
+			t.Errorf("Down past end: selected = %d, want %d", sb.Selected(), want)
 		}
 	})
 
 	t.Run("G moves to bottom", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
-		sb.MoveToBottom()
+		sb, _ = sb.Update(keyBottom)
 		// Lists/golang + Lists/rust collapse to one synthetic Lists row, so
 		// visible row count = len(folders) - 1 = 9; last index = 8.
 		want := len(folders) - 2
 		if sb.Selected() != want {
-			t.Errorf("MoveToBottom: selected = %d, want %d", sb.Selected(), want)
+			t.Errorf("Bottom: selected = %d, want %d", sb.Selected(), want)
 		}
 	})
 
 	t.Run("gg moves to top", func(t *testing.T) {
 		sb := sidebar.New(styles, mail.Classify(folders), config.DefaultUIConfig(), 30, 20, uicore.FancyIcons)
-		sb.MoveDown()
-		sb.MoveDown()
-		sb.MoveDown()
-		sb.MoveToTop()
+		sb, _ = sb.Update(keyDown)
+		sb, _ = sb.Update(keyDown)
+		sb, _ = sb.Update(keyDown)
+		sb, _ = sb.Update(keyTop)
 		if sb.Selected() != 0 {
-			t.Errorf("MoveToTop: selected = %d, want 0", sb.Selected())
+			t.Errorf("Top: selected = %d, want 0", sb.Selected())
 		}
 	})
 
@@ -213,9 +221,9 @@ func TestSidebar(t *testing.T) {
 		if sb.SelectedIcon() != "󰇰" {
 			t.Errorf("SelectedIcon() = %q, want inbox icon", sb.SelectedIcon())
 		}
-		sb.MoveDown()
+		sb, _ = sb.Update(keyDown)
 		if sb.SelectedIcon() != "󰏫" {
-			t.Errorf("SelectedIcon() after MoveDown = %q, want drafts icon", sb.SelectedIcon())
+			t.Errorf("SelectedIcon() after Down = %q, want drafts icon", sb.SelectedIcon())
 		}
 	})
 

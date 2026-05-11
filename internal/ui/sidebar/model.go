@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/config"
@@ -18,12 +20,37 @@ type folderEntry struct {
 	icon string
 }
 
+// KeyMap binds sidebar actions to keys. account.Model is responsible for
+// rebinding Down/Up to capital J/K in the account context.
+type KeyMap struct {
+	Down     key.Binding
+	Up       key.Binding
+	Top      key.Binding
+	Bottom   key.Binding
+	Expand   key.Binding
+	Collapse key.Binding
+}
+
+// DefaultKeyMap returns the sidebar-local key bindings. account.Model
+// rebinds Down/Up to J/K when installing the sidebar in its key context.
+func DefaultKeyMap() KeyMap {
+	return KeyMap{
+		Down:     key.NewBinding(key.WithKeys("j"), key.WithHelp("j", "folder down")),
+		Up:       key.NewBinding(key.WithKeys("k"), key.WithHelp("k", "folder up")),
+		Top:      key.NewBinding(key.WithKeys("g")),
+		Bottom:   key.NewBinding(key.WithKeys("G")),
+		Expand:   key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "expand")),
+		Collapse: key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "collapse")),
+	}
+}
+
 // Model renders the folder list with groups, selection, and unread badges.
 type Model struct {
 	entries     []folderEntry
 	selected    int
 	outboxCount int
 	expanded    map[string]bool
+	keys        KeyMap
 	styles      Styles
 	icons       uicore.IconSet
 	layout      uicore.LayoutMode
@@ -38,6 +65,7 @@ func New(styles Styles, classified []mail.ClassifiedFolder, uiCfg config.UIConfi
 		entries:  buildEntries(classified, uiCfg, icons),
 		selected: 0,
 		expanded: map[string]bool{},
+		keys:     DefaultKeyMap(),
 		styles:   styles,
 		icons:    icons,
 		width:    width,
@@ -306,23 +334,62 @@ func (s *Model) SetLayout(l uicore.LayoutMode) {
 	s.layout = l
 }
 
-func (s *Model) MoveUp() {
-	if s.selected > 0 {
-		s.selected--
+func (s *Model) SetKeyMap(km KeyMap) { s.keys = km }
+func (s Model) KeyMap() KeyMap       { return s.keys }
+
+// Update dispatches sidebar key events. Inert on non-key messages.
+func (s Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return s, nil
 	}
+	switch {
+	case key.Matches(km, s.keys.Down):
+		if s.selected < len(s.visibleRows())-1 {
+			s.selected++
+		}
+	case key.Matches(km, s.keys.Up):
+		if s.selected > 0 {
+			s.selected--
+		}
+	case key.Matches(km, s.keys.Top):
+		s.selected = 0
+	case key.Matches(km, s.keys.Bottom):
+		if n := len(s.visibleRows()); n > 0 {
+			s.selected = n - 1
+		}
+	case key.Matches(km, s.keys.Expand):
+		rows := s.visibleRows()
+		if s.selected < len(rows) && rows[s.selected].hasChildren {
+			if s.expanded == nil {
+				s.expanded = map[string]bool{}
+			}
+			s.expanded[rows[s.selected].expandKey()] = true
+		}
+	case key.Matches(km, s.keys.Collapse):
+		rows := s.visibleRows()
+		if s.selected < len(rows) {
+			r := rows[s.selected]
+			if r.hasChildren && s.expanded[r.expandKey()] {
+				delete(s.expanded, r.expandKey())
+			} else if r.depth > 0 {
+				s.collapseToAncestor(rows)
+			}
+		}
+	}
+	return s, nil
 }
 
-func (s *Model) MoveDown() {
-	if s.selected < len(s.visibleRows())-1 {
-		s.selected++
-	}
-}
-
-func (s *Model) MoveToTop() { s.selected = 0 }
-
-func (s *Model) MoveToBottom() {
-	if n := len(s.visibleRows()); n > 0 {
-		s.selected = n - 1
+// collapseToAncestor finds the immediate ancestor of the selected row and
+// jumps the cursor there, then collapses it.
+func (s *Model) collapseToAncestor(rows []rowMeta) {
+	cur := rows[s.selected]
+	for i := s.selected - 1; i >= 0; i-- {
+		if rows[i].depth < cur.depth && rows[i].hasChildren {
+			s.selected = i
+			delete(s.expanded, rows[i].expandKey())
+			return
+		}
 	}
 }
 

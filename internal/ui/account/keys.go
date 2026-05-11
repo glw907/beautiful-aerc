@@ -10,9 +10,11 @@ type Keys struct {
 	ClearSearch   key.Binding
 	SearchCommit  key.Binding
 	OpenMessage   key.Binding
-	SidebarDown   key.Binding
-	SidebarUp     key.Binding
-	JumpInbox     key.Binding
+	SidebarDown    key.Binding
+	SidebarUp      key.Binding
+	SidebarExpand  key.Binding
+	SidebarCollapse key.Binding
+	JumpInbox      key.Binding
 	JumpDrafts    key.Binding
 	JumpSent      key.Binding
 	JumpArchive   key.Binding
@@ -41,9 +43,11 @@ func NewKeys() Keys {
 		ClearSearch:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear search")),
 		SearchCommit:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "commit search")),
 		OpenMessage:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
-		SidebarDown:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next folder")),
-		SidebarUp:     key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev folder")),
-		JumpInbox:     key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "inbox")),
+		SidebarDown:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next folder")),
+		SidebarUp:       key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev folder")),
+		SidebarExpand:   key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "expand folder")),
+		SidebarCollapse: key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "collapse folder")),
+		JumpInbox:       key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "inbox")),
 		JumpDrafts:    key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "drafts")),
 		JumpSent:      key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sent")),
 		JumpArchive:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "archive")),
