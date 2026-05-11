@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/search"
 	"github.com/glw907/poplar/internal/ui/uicore"
@@ -88,26 +90,28 @@ type searchFilter struct {
 }
 
 // Model renders the message list panel: flags, sender, subject, date.
-// Hand-rolled (not bubbles/list) to match the sidebar pattern and to give
-// the ▐ cursor + selection background. Owns thread grouping, fold state,
-// and sort direction. The source slice is preserved alongside a derived
-// []displayRow so fold mutations re-flatten without a backend refetch.
+// Embeds bubbles/v2/list with a custom *rowDelegate (delegate.go) so
+// the list owns cursor + viewport + key dispatch. Owns thread
+// grouping, fold state, sort direction, and the source/derived rows
+// pipeline. The embedded list sees only visible rows (hidden rows
+// stay in m.rows for tests, ActionTargets thread expansion, etc.).
 type Model struct {
 	source   []mail.MessageInfo
 	rows     []displayRow
 	folded   map[mail.UID]bool
 	sort     SortOrder
 	threaded bool
-	selected int
-	offset   int
 	styles   Styles
 	icons    uicore.IconSet
 	layout   uicore.LayoutMode
 	width    int
 	height   int
-	// Captured at construction and refreshed on SetMessages so View never
-	// calls time.Now itself. Tests assign directly to freeze the clock.
-	now             time.Time
+	now      time.Time
+
+	list     list.Model
+	delegate *rowDelegate
+	keys     KeyMap
+
 	filter          searchFilter
 	preSearchCursor int
 	savedByFilter   bool
@@ -115,9 +119,6 @@ type Model struct {
 	visualMode      bool
 	marked          map[mail.UID]struct{}
 
-	// resultsMode replaces the in-folder list with a flat cross-folder
-	// search result set. Threading is suppressed and each row carries
-	// its origin folder via originByUID for the [Folder] sender prefix.
 	resultsMode  bool
 	originByUID  map[mail.UID]string
 	preResults   []mail.MessageInfo
@@ -126,23 +127,79 @@ type Model struct {
 }
 
 // New constructs a Model. layout defaults to (Sender=22, Date=5,
-// FlagColumn=true) so tests that bypass WindowSizeMsg get sensible output
-// before any SetLayout call.
+// FlagColumn=true) so tests that bypass WindowSizeMsg get sensible
+// output before any SetLayout call.
 func New(styles Styles, msgs []mail.MessageInfo, width, height int, icons uicore.IconSet) Model {
+	delegate := &rowDelegate{
+		styles: styles,
+		layout: uicore.LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
+		icons:  icons,
+		now:    time.Now(),
+		width:  width,
+	}
+	ls := list.New(nil, delegate, width, height)
+	ls.SetShowTitle(false)
+	ls.SetShowFilter(false)
+	ls.SetShowStatusBar(false)
+	ls.SetShowPagination(false)
+	ls.SetShowHelp(false)
+	ls.SetFilteringEnabled(false)
+	ls.InfiniteScrolling = false
+	ls.DisableQuitKeybindings()
+	ls.KeyMap = list.KeyMap{
+		CursorUp:   key.NewBinding(),
+		CursorDown: key.NewBinding(),
+	}
+
 	m := Model{
 		styles:   styles,
 		icons:    icons,
-		layout:   uicore.LayoutMode{Sender: 22, Date: 5, FlagColumn: true},
+		layout:   delegate.layout,
 		width:    width,
 		height:   height,
 		folded:   map[mail.UID]bool{},
 		marked:   map[mail.UID]struct{}{},
 		sort:     SortDateDesc,
 		threaded: true,
-		now:      time.Now(),
+		now:      delegate.now,
+		list:     ls,
+		delegate: delegate,
+		keys:     DefaultKeyMap(),
 	}
 	m.SetMessages(msgs)
 	return m
+}
+
+// KeyMap returns the binding set Update dispatches on. Exported so
+// the help popover and external test code can introspect.
+func (m Model) KeyMap() KeyMap { return m.keys }
+
+// SetKeyMap overrides the default bindings. Test seam.
+func (m *Model) SetKeyMap(km KeyMap) { m.keys = km }
+
+// Update is the canonical key-dispatch entry. account.Model
+// forwards messages here after handling its own bindings (triage,
+// open, fold, visual, search). Returns the updated Model and any
+// Cmd; the embedded list does not produce Cmds in messagelist's
+// configuration (filtering disabled, no spinner), so the result is
+// always nil. The signature stays Cmd-shaped for forward
+// compatibility.
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch {
+	case key.Matches(keyMsg, m.keys.Down):
+		m.list.CursorDown()
+	case key.Matches(keyMsg, m.keys.Up):
+		m.list.CursorUp()
+	case key.Matches(keyMsg, m.keys.Top):
+		m.list.GoToStart()
+	case key.Matches(keyMsg, m.keys.Bottom):
+		m.list.GoToEnd()
+	}
+	return m, nil
 }
 
 // SetMessages replaces the source slice and rebuilds rows. Resets fold
@@ -153,13 +210,13 @@ func (m *Model) SetMessages(msgs []mail.MessageInfo) {
 	m.folded = map[mail.UID]bool{}
 	m.marked = map[mail.UID]struct{}{}
 	m.visualMode = false
-	m.selected = 0
-	m.offset = 0
 	m.filter = searchFilter{}
 	m.savedByFilter = false
 	m.preSearchCursor = 0
 	m.now = time.Now()
+	m.delegate.now = m.now
 	m.rebuild()
+	m.list.Select(0)
 }
 
 // rebuild runs the group→sort→flatten pipeline against m.source: bucket by
@@ -214,6 +271,39 @@ func (m *Model) rebuild() {
 		rows[i].dateText = displayDate(rows[i].msg, m.now, m.layout.Date)
 	}
 	m.rows = rows
+	m.delegate.now = m.now
+	m.syncList()
+}
+
+// syncList copies the visible subset of m.rows into the embedded
+// list.Model. Hidden rows (folded thread children) stay in m.rows
+// for ActionTargets / Rows() / threadRootIndex but never reach the
+// list's cursor or viewport.
+func (m *Model) syncList() {
+	visible := make([]list.Item, 0, len(m.rows))
+	for _, r := range m.rows {
+		if r.hidden {
+			continue
+		}
+		visible = append(visible, r)
+	}
+	m.list.SetItems(visible)
+}
+
+// snapToUIDInList moves the list cursor onto the visible row whose
+// msg.UID matches uid. Empty UID or no match leaves cursor at 0.
+func (m *Model) snapToUIDInList(uid mail.UID) {
+	if uid == "" {
+		m.list.Select(0)
+		return
+	}
+	for i, item := range m.list.Items() {
+		if r, ok := item.(displayRow); ok && r.msg.UID == uid {
+			m.list.Select(i)
+			return
+		}
+	}
+	m.list.Select(0)
 }
 
 // bucketByThreadID groups messages by ThreadID, preserving input order
@@ -469,19 +559,6 @@ func applyFoldState(rows []displayRow, folded map[mail.UID]bool) {
 	}
 }
 
-// senderWithOrigin returns the sender display text. In results mode
-// it prepends `[Folder] ` matching the Geary/Gmail/Fastmail
-// muted-tag-then-sender convention.
-func (m Model) senderWithOrigin(msg mail.MessageInfo) string {
-	if !m.resultsMode {
-		return msg.From
-	}
-	folder := m.originByUID[msg.UID]
-	if folder == "" {
-		return msg.From
-	}
-	return "[" + folder + "] " + msg.From
-}
 
 // SetSearchResults switches the model into cross-folder results mode.
 // originByUID maps each result's UID to its origin folder name; that
@@ -493,18 +570,18 @@ func (m *Model) SetSearchResults(msgs []mail.MessageInfo, originByUID map[mail.U
 	if !m.resultsMode {
 		m.preResults = m.source
 		m.preThreaded = m.threaded
-		if m.selected < len(m.rows) {
-			m.preCursorUID = m.rows[m.selected].msg.UID
-		}
+		m.preCursorUID = m.cursorUID()
 	}
 	m.resultsMode = true
 	m.originByUID = originByUID
+	m.delegate.resultsMode = true
+	m.delegate.originByUID = originByUID
 	m.threaded = false
 	m.source = msgs
 	m.now = time.Now()
+	m.delegate.now = m.now
 	m.rebuild()
-	m.selected = 0
-	m.clampOffset()
+	m.list.Select(0)
 }
 
 // ClearSearchResults restores the pre-search source and threading
@@ -516,19 +593,15 @@ func (m *Model) ClearSearchResults() {
 	}
 	m.resultsMode = false
 	m.originByUID = nil
+	m.delegate.resultsMode = false
+	m.delegate.originByUID = nil
 	m.source = m.preResults
 	m.threaded = m.preThreaded
 	m.preResults = nil
 	m.now = time.Now()
+	m.delegate.now = m.now
 	m.rebuild()
-	m.selected = 0
-	for i, r := range m.rows {
-		if r.msg.UID == m.preCursorUID {
-			m.selected = i
-			break
-		}
-	}
-	m.clampOffset()
+	m.snapToUIDInList(m.preCursorUID)
 }
 
 // ResultsMode reports whether the model is currently displaying a
@@ -543,12 +616,12 @@ func (m Model) ResultsMode() bool { return m.resultsMode }
 // snapshot alone.
 func (m *Model) SetFilter(q string) {
 	if !m.savedByFilter && q != "" {
-		m.preSearchCursor = m.selected
+		m.preSearchCursor = m.list.Index()
 		m.savedByFilter = true
 	}
 	m.filter = searchFilter{raw: q, query: lowerQueryTerms(search.Parse(q))}
 	m.rebuild()
-	m.clampOffset()
+	m.list.Select(0)
 }
 
 // ClearFilter clears the active filter, rebuilds rows, and restores the
@@ -558,13 +631,13 @@ func (m *Model) ClearFilter() {
 	m.filter = searchFilter{}
 	m.rebuild()
 	if m.savedByFilter {
-		m.selected = m.preSearchCursor
-		if m.selected >= len(m.rows) {
-			m.selected = 0
+		idx := m.preSearchCursor
+		if idx >= len(m.list.Items()) {
+			idx = 0
 		}
+		m.list.Select(idx)
 		m.savedByFilter = false
 	}
-	m.clampOffset()
 }
 
 // FilterResultCount returns the number of threads matching the active
@@ -599,7 +672,15 @@ func (m *Model) ToggleFold() {
 	if len(m.rows) == 0 {
 		return
 	}
-	rootIdx := m.threadRootIndex(m.selected)
+	uid := m.cursorUID()
+	rowIdx := -1
+	for i, r := range m.rows {
+		if r.msg.UID == uid {
+			rowIdx = i
+			break
+		}
+	}
+	rootIdx := m.threadRootIndex(rowIdx)
 	if rootIdx < 0 {
 		return
 	}
@@ -634,21 +715,35 @@ func (m *Model) ToggleFoldAll() {
 	m.snapToVisible()
 }
 
-// snapToVisible walks the cursor backwards to the nearest visible row.
-// Children always sit below their thread root, so walking back from a
-// hidden child lands on the root that owns it.
+// snapToVisible re-anchors the list cursor on the nearest non-hidden
+// row in m.rows. Called after fold toggles where the previously
+// selected UID may now be hidden under a folded root.
 func (m *Model) snapToVisible() {
-	if m.selected < len(m.rows) && !m.rows[m.selected].hidden {
-		m.clampOffset()
-		return
+	var uid mail.UID
+	if r, ok := m.list.SelectedItem().(displayRow); ok {
+		uid = r.msg.UID
 	}
-	for i := m.selected; i >= 0; i-- {
-		if i < len(m.rows) && !m.rows[i].hidden {
-			m.selected = i
+	// Find uid in m.rows; if hidden, walk backwards to the nearest
+	// visible row (always a thread root for hidden children).
+	if uid != "" {
+		for i, r := range m.rows {
+			if r.msg.UID != uid {
+				continue
+			}
+			if !r.hidden {
+				m.snapToUIDInList(uid)
+				return
+			}
+			for j := i - 1; j >= 0; j-- {
+				if !m.rows[j].hidden {
+					m.snapToUIDInList(m.rows[j].msg.UID)
+					return
+				}
+			}
 			break
 		}
 	}
-	m.clampOffset()
+	m.list.Select(0)
 }
 
 // threadRootIndex returns the row index of the thread root that owns the
@@ -668,7 +763,8 @@ func (m Model) threadRootIndex(idx int) int {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.clampOffset()
+	m.delegate.width = width
+	m.list.SetSize(width, height)
 }
 
 func (m Model) Layout() uicore.LayoutMode { return m.layout }
@@ -679,6 +775,7 @@ func (m Model) Layout() uicore.LayoutMode { return m.layout }
 func (m *Model) SetLayout(l uicore.LayoutMode) {
 	prevDate := m.layout.Date
 	m.layout = l
+	m.delegate.layout = l
 	if prevDate != l.Date {
 		m.rebuild()
 	}
@@ -687,16 +784,19 @@ func (m *Model) SetLayout(l uicore.LayoutMode) {
 // SetNow overrides the clock snapshot used during rebuild. Test seam.
 func (m *Model) SetNow(now time.Time) {
 	m.now = now
+	m.delegate.now = now
 	m.rebuild()
 }
 
-func (m Model) Selected() int { return m.selected }
+// Selected returns the list cursor index over visible rows.
+func (m Model) Selected() int { return m.list.Index() }
 
+// SelectedMessage returns the message under the cursor.
 func (m Model) SelectedMessage() (mail.MessageInfo, bool) {
-	if m.selected < 0 || m.selected >= len(m.rows) {
-		return mail.MessageInfo{}, false
+	if r, ok := m.list.SelectedItem().(displayRow); ok {
+		return r.msg, true
 	}
-	return m.rows[m.selected].msg, true
+	return mail.MessageInfo{}, false
 }
 
 func (m Model) MessageByUID(uid mail.UID) (mail.MessageInfo, bool) {
@@ -736,35 +836,25 @@ func (m Model) VisibleCount() int {
 	return n
 }
 
-// cursorUID returns the UID under the cursor (empty if no rows). Used as
-// an anchor across rebuild.
-func (m *Model) cursorUID() mail.UID {
-	if len(m.rows) == 0 || m.selected >= len(m.rows) {
-		return ""
+func (m Model) cursorUID() mail.UID {
+	if r, ok := m.list.SelectedItem().(displayRow); ok {
+		return r.msg.UID
 	}
-	return m.rows[m.selected].msg.UID
+	return ""
 }
 
-// snapToUID positions the cursor on the row whose UID matches uid, or
-// clamps to the last row when not found.
+// snapToUID positions the list cursor on the visible row whose UID
+// matches uid; falls through to snapToUIDInList semantics.
 func (m *Model) snapToUID(uid mail.UID) {
-	if uid == "" || len(m.rows) == 0 {
-		m.selected = 0
-		return
-	}
-	for i, r := range m.rows {
-		if r.msg.UID == uid {
-			m.selected = i
-			return
-		}
-	}
-	m.selected = len(m.rows) - 1
+	m.snapToUIDInList(uid)
 }
 
-// IsNearBottom reports whether the cursor is within k rows of the last
-// row, used to trigger lazy-load before the user runs out of messages.
+// IsNearBottom reports whether the cursor is within k visible rows
+// of the last visible row, used to trigger lazy-load before the
+// user runs out of messages.
 func (m *Model) IsNearBottom(k int) bool {
-	return len(m.rows) > 0 && m.selected >= len(m.rows)-k
+	n := len(m.list.Items())
+	return n > 0 && m.list.Index() >= n-k
 }
 
 // AppendMessages adds extra to the source slice, rebuilds, and restores
@@ -773,8 +863,9 @@ func (m *Model) AppendMessages(extra []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = append(m.source, extra...)
 	m.now = time.Now()
+	m.delegate.now = m.now
 	m.rebuild()
-	m.snapToUID(uid)
+	m.snapToUIDInList(uid)
 }
 
 // RefreshSource replaces the source slice and rebuilds rows while
@@ -784,244 +875,61 @@ func (m *Model) RefreshSource(msgs []mail.MessageInfo) {
 	uid := m.cursorUID()
 	m.source = msgs
 	m.now = time.Now()
+	m.delegate.now = m.now
 	m.rebuild()
-	m.snapToUID(uid)
+	m.snapToUIDInList(uid)
 }
 
-// moveBy shifts the cursor by delta visible rows, skipping hidden rows
-// in the requested direction.
-func (m *Model) moveBy(delta int) {
-	if len(m.rows) == 0 {
-		return
-	}
-	if delta == 0 {
-		m.clampOffset()
-		return
-	}
 
+// MoveCursor shifts by delta visible rows and returns the resulting
+// UID plus whether the cursor moved. Boundaries are inert: calling
+// at the first or last visible row returns ("", false). Programmatic
+// entry point. The viewer's n/N path uses it; keyboard navigation
+// goes through Update.
+func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
+	before := m.list.Index()
 	step := 1
 	if delta < 0 {
 		step = -1
 		delta = -delta
 	}
-
-	idx := m.selected
-	for delta > 0 {
-		next := idx + step
-		for next >= 0 && next < len(m.rows) && m.rows[next].hidden {
-			next += step
+	for range delta {
+		if step > 0 {
+			m.list.CursorDown()
+		} else {
+			m.list.CursorUp()
 		}
-		if next < 0 || next >= len(m.rows) {
-			break
-		}
-		idx = next
-		delta--
 	}
-	m.selected = idx
-	m.clampOffset()
-}
-
-func (m *Model) MoveDown() { m.moveBy(1) }
-func (m *Model) MoveUp()   { m.moveBy(-1) }
-
-// MoveCursor shifts by delta visible rows and returns the resulting UID
-// plus whether the cursor moved. Boundaries are inert: calling at the
-// first or last visible row returns ("", false).
-func (m *Model) MoveCursor(delta int) (mail.UID, bool) {
-	before := m.selected
-	m.moveBy(delta)
-	if m.selected == before {
+	after := m.list.Index()
+	if after == before {
 		return "", false
 	}
 	return m.cursorUID(), true
 }
 
-func (m *Model) MoveToTop() {
-	for i := range len(m.rows) {
-		if !m.rows[i].hidden {
-			m.selected = i
-			m.offset = 0
-			m.clampOffset()
-			return
-		}
-	}
-}
 
-func (m *Model) MoveToBottom() {
-	for i := len(m.rows) - 1; i >= 0; i-- {
-		if !m.rows[i].hidden {
-			m.selected = i
-			m.clampOffset()
-			return
-		}
-	}
-}
-
-func (m *Model) HalfPageDown() { m.moveBy(max(1, m.height/2)) }
-func (m *Model) HalfPageUp()   { m.moveBy(-max(1, m.height/2)) }
-func (m *Model) PageDown()     { m.moveBy(max(1, m.height)) }
-func (m *Model) PageUp()       { m.moveBy(-max(1, m.height)) }
-
-func (m *Model) clampOffset() {
-	if m.height <= 0 {
-		m.offset = 0
-		return
-	}
-	if m.selected < m.offset {
-		m.offset = m.selected
-	}
-	if m.selected >= m.offset+m.height {
-		m.offset = m.selected - m.height + 1
-	}
-	if m.offset < 0 {
-		m.offset = 0
-	}
-}
-
-// View renders the visible window of message rows. An empty list renders
-// the centered placeholder from renderEmpty.
+// View renders the visible window. Empty list shows the centered
+// placeholder; otherwise the embedded list.Model handles cursor +
+// viewport and the rowDelegate paints each row.
 func (m Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	if len(m.rows) == 0 {
+	if len(m.list.Items()) == 0 {
 		return m.renderEmpty()
 	}
-
-	plainBg := m.styles.MsgListBg
-	selectedBg := m.styles.MsgListSelected
-
-	lines := make([]string, 0, m.height)
-	visible := 0
-	for i := m.offset; i < len(m.rows) && visible < m.height; i++ {
-		if m.rows[i].hidden {
-			continue
-		}
-		bg := plainBg
-		if i == m.selected {
-			bg = selectedBg
-		}
-		lines = append(lines, m.renderRow(i, bg))
-		visible++
-	}
+	out := m.list.View()
+	lines := strings.Split(out, "\n")
 	for len(lines) < m.height {
-		lines = append(lines, m.renderBlankLine())
+		lines = append(lines, m.styles.MsgListBg.Width(m.width).Render(""))
+	}
+	if len(lines) > m.height {
+		lines = lines[:m.height]
 	}
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) renderRow(idx int, bgStyle lipgloss.Style) string {
-	row := m.rows[idx]
-	msg := row.msg
-	isSelected := idx == m.selected
-	isUnread := msg.Flags&mail.FlagSeen == 0
 
-	var cursor string
-	if isSelected {
-		cursor = uicore.ApplyBg(m.styles.MsgListCursor, bgStyle).Render(mlCursorGlyph)
-	} else {
-		cursor = bgStyle.Render(" ")
-	}
-
-	senderStyle := m.styles.MsgListReadSender
-	subjectStyle := m.styles.MsgListReadSubject
-	if isUnread {
-		senderStyle = m.styles.MsgListUnreadSender
-		subjectStyle = m.styles.MsgListUnreadSubject
-	}
-
-	senderText := padRight(truncateCells(m.senderWithOrigin(msg), m.layout.Sender), m.layout.Sender)
-	sender := uicore.ApplyBg(senderStyle, bgStyle).Render(senderText)
-
-	var date string
-	if m.layout.Date > 0 {
-		dateText := padLeft(truncateCells(row.dateText, m.layout.Date), m.layout.Date)
-		date = uicore.ApplyBg(m.styles.MsgListDate, bgStyle).Render(dateText)
-	}
-
-	// Fixed overhead: cursor(1) + 3×sp2(separators) + sp(trail) = 8 cells.
-	// Flag column adds flag(2) + sp2 = 12 cells. When Date=0 the trailing
-	// sp2+date block is omitted. FillRowToWidth absorbs the slack.
-	var flag string
-	fixed := 8
-	if m.layout.FlagColumn {
-		flag = m.renderFlagCell(msg, isUnread, bgStyle)
-		fixed = 12
-	}
-
-	// SPUA-A glyphs in the flag cell are undercounted by lipgloss.Width by
-	// (spuaCellWidth-1) per glyph. Subtract the undercount from the subject
-	// budget so the assembled row measures exactly m.width.
-	flagAdjust := 0
-	if ansix.SPUACellWidth() > 1 && m.layout.FlagColumn {
-		flagAdjust = ansix.SpuaCount(flag) * (ansix.SPUACellWidth() - 1)
-	}
-	subjectWidth := max(1, m.width-fixed-m.layout.Sender-m.layout.Date-flagAdjust)
-	prefixCells := lipgloss.Width(row.prefix)
-	subjectCells := max(0, subjectWidth-prefixCells)
-
-	prefixStyled := uicore.ApplyBg(m.styles.MsgListThreadPrefix, bgStyle).Render(row.prefix)
-	subjectText := padRight(truncateCells(msg.Subject, subjectCells), subjectCells)
-	subjectStyled := uicore.ApplyBg(subjectStyle, bgStyle).Render(subjectText)
-	subject := prefixStyled + subjectStyled
-
-	sp2 := bgStyle.Render("  ")
-	sp1 := bgStyle.Render(" ")
-
-	var rowStr string
-	if m.layout.FlagColumn {
-		rowStr = cursor + sp2 + flag + sp2 + sender + sp2 + subject
-	} else {
-		rowStr = cursor + sp2 + sender + sp2 + subject
-	}
-	if m.layout.Date > 0 {
-		rowStr += sp2 + date
-	}
-	rowStr += sp1
-
-	return uicore.FillRowToWidth(rowStr, m.width, bgStyle)
-}
-
-// renderFlagCell renders the flag column. Glyph priority is flagged >
-// answered > unread > none. Color is gated on read state: read rows use
-// the dim icon style so the glyph dims with the rest of the row. Only
-// the unread+flagged case escalates to the warning accent. Output is
-// always exactly mlFlagWidth display cells. Simple-mode narrow glyphs
-// pad with one trailing space so the sender column stays aligned.
-func (m Model) renderFlagCell(msg mail.MessageInfo, isUnread bool, bgStyle lipgloss.Style) string {
-	iconStyle := m.styles.MsgListIconRead
-	if isUnread {
-		iconStyle = m.styles.MsgListIconUnread
-	}
-	var glyph string
-	switch {
-	case msg.Flags&mail.FlagFlagged != 0:
-		glyph = m.icons.FlagFlagged
-		if isUnread {
-			iconStyle = m.styles.MsgListFlagFlagged
-		}
-	case msg.Flags&mail.FlagAnswered != 0:
-		glyph = m.icons.FlagAnswered
-	case isUnread:
-		glyph = m.icons.FlagUnread
-	default:
-		return bgStyle.Render("  ")
-	}
-	rendered := uicore.ApplyBg(iconStyle, bgStyle).Render(glyph)
-	// Fancy-mode SPUA-A glyphs are already 2 cells, so the loop is a no-op.
-	// Simple-mode narrow glyphs add one trailing space.
-	for ansix.Width(rendered) < mlFlagWidth {
-		rendered += bgStyle.Render(" ")
-	}
-	return rendered
-}
-
-func (m Model) renderBlankLine() string {
-	return m.styles.MsgListBg.Width(m.width).Render("")
-}
-
-// renderEmpty renders the centered placeholder. The wording is "No
-// messages" for an empty source, "No matches" when a filter is active.
 func (m Model) renderEmpty() string {
 	label := "No messages"
 	if m.filter.raw != "" {
@@ -1031,6 +939,7 @@ func (m Model) renderEmpty() string {
 		Foreground(m.styles.MsgListPlaceholder.GetForeground()).
 		Align(lipgloss.Center).
 		Render(label)
+	blank := m.styles.MsgListBg.Width(m.width).Render("")
 
 	mid := m.height / 2
 	lines := make([]string, m.height)
@@ -1038,7 +947,7 @@ func (m Model) renderEmpty() string {
 		if i == mid {
 			lines[i] = labelLine
 		} else {
-			lines[i] = m.renderBlankLine()
+			lines[i] = blank
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -1086,10 +995,10 @@ func (m Model) ActionTargets() []mail.UID {
 	if len(m.marked) > 0 {
 		return m.Marked()
 	}
-	if m.selected < 0 || m.selected >= len(m.rows) {
+	row, ok := m.list.SelectedItem().(displayRow)
+	if !ok {
 		return nil
 	}
-	row := m.rows[m.selected]
 	if row.isThreadRoot && row.threadSize > 1 && m.folded[row.msg.UID] {
 		return m.threadUIDs(row.msg.UID)
 	}
