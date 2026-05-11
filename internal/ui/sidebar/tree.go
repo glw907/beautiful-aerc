@@ -17,6 +17,28 @@ type rowMeta struct {
 	syntheticPath  string
 }
 
+// prefix returns the box-drawing column for this row. Empty for depth 0.
+func (r rowMeta) prefix() string {
+	if r.depth == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(r.depth * 3)
+	for i := range r.depth - 1 {
+		if i < len(r.ancestorIsLast) && r.ancestorIsLast[i] {
+			b.WriteString("   ")
+		} else {
+			b.WriteString("│  ")
+		}
+	}
+	if r.isLast {
+		b.WriteString("└─ ")
+	} else {
+		b.WriteString("├─ ")
+	}
+	return b.String()
+}
+
 // expandKey is the map key used to look up expand state for this row.
 func (r rowMeta) expandKey() string {
 	if r.syntheticPath != "" {

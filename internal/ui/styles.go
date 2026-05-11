@@ -42,6 +42,7 @@ type Styles struct {
 	SidebarFolder    lipgloss.Style
 	SidebarUnread    lipgloss.Style
 	SidebarIndicator lipgloss.Style
+	SidebarTreeRule  lipgloss.Style
 
 	// Message list. Rows use MsgListBg as their base. Selected rows
 	// override with MsgListSelected (BgSelection). Read state is
@@ -144,6 +145,8 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgBright).Bold(true),
 		SidebarIndicator: lipgloss.NewStyle().
 			Foreground(t.AccentSecondary),
+		SidebarTreeRule: lipgloss.NewStyle().
+			Foreground(t.FgDim),
 
 		MsgListBg: lipgloss.NewStyle().
 			Background(t.BgBase),

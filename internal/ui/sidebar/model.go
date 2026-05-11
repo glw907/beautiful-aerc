@@ -381,13 +381,21 @@ func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
 		textStyle = s.styles.SidebarUnread
 	}
 
+	treePrefix := r.prefix()
+	var treePrefixRendered string
+	var treePrefixCells int
+	if treePrefix != "" {
+		treePrefixRendered = uicore.ApplyBg(s.styles.SidebarTreeRule, bgStyle).Render(treePrefix)
+		treePrefixCells = ansix.Width(treePrefixRendered)
+	}
+
 	var icon string
 	var leadCells int
 	if s.layout.Icons {
 		icon = uicore.ApplyBg(textStyle, bgStyle).Render(entry.icon)
-		leadCells = ansix.Width(indicator) + 1 + ansix.Width(icon) + 2
+		leadCells = ansix.Width(indicator) + 1 + treePrefixCells + ansix.Width(icon) + 2
 	} else {
-		leadCells = ansix.Width(indicator) + 1
+		leadCells = ansix.Width(indicator) + 1 + treePrefixCells
 	}
 
 	var countStr string
@@ -411,9 +419,9 @@ func (s Model) renderRow(idx int, r rowMeta, bgStyle lipgloss.Style) string {
 
 	var leftContent string
 	if s.layout.Icons {
-		leftContent = indicator + bgStyle.Render(" ") + icon + bgStyle.Render("  ") + name
+		leftContent = indicator + bgStyle.Render(" ") + treePrefixRendered + icon + bgStyle.Render("  ") + name
 	} else {
-		leftContent = indicator + bgStyle.Render(" ") + name
+		leftContent = indicator + bgStyle.Render(" ") + treePrefixRendered + name
 	}
 	leftWidth := ansix.Width(leftContent)
 

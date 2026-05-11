@@ -13,6 +13,7 @@ type Styles struct {
 	SidebarFolder    lipgloss.Style
 	SidebarUnread    lipgloss.Style
 	SidebarIndicator lipgloss.Style
+	SidebarTreeRule  lipgloss.Style
 
 	SearchIcon        lipgloss.Style
 	SearchHint        lipgloss.Style
@@ -37,6 +38,8 @@ func NewStyles(t *theme.CompiledTheme) Styles {
 			Foreground(t.FgBright).Bold(true),
 		SidebarIndicator: lipgloss.NewStyle().
 			Foreground(t.AccentSecondary),
+		SidebarTreeRule: lipgloss.NewStyle().
+			Foreground(t.FgDim),
 
 		SearchIcon: lipgloss.NewStyle().
 			Foreground(t.FgDim),
