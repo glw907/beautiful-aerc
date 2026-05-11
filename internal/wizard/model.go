@@ -28,6 +28,11 @@ type Model struct {
 	InsecureTLS bool
 	SessionURL  string
 
+	// Signature is the raw markdown body the user typed in the wizard's
+	// catkin editor. config's decoder injects the RFC 3676 "-- \n"
+	// sentinel at load time, so this field never carries it.
+	Signature string
+
 	// Theme section. Empty == use default.
 	Theme string
 
