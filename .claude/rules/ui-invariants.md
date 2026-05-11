@@ -74,12 +74,25 @@ file describes behavior, not the key tables.
 
 ### Message list
 
-- `messagelist.Model` owns thread grouping + fold state. Holds
-  `source []MessageInfo` plus derived `rows []displayRow` rebuilt
-  by a group→sort→flatten pipeline. A transient `*threadNode`
-  tree is built per bucket in `appendThreadRows` to compute box-
-  drawing prefixes, then discarded — the renderer never sees the
-  tree.
+- `messagelist.Model` owns thread grouping + fold state. Embeds
+  `bubbles/v2/list.Model` with a custom `*rowDelegate` for per-row
+  rendering (ADR-0199). Holds `source []MessageInfo` plus derived
+  `rows []displayRow` rebuilt by a group→sort→flatten pipeline; the
+  visible subset of `rows` is materialized into `list.SetItems` via
+  `syncList`. Hidden rows (folded thread children) stay in `m.rows`
+  for `Rows()`, `ActionTargets` thread expansion, and
+  `threadRootIndex`. A transient `*threadNode` tree is built per
+  bucket and walked via `walkThread` (an `iter.Seq2` pull
+  iterator) to compute box-drawing prefixes, then discarded — the
+  renderer never sees the tree.
+- `messagelist.KeyMap` (Down/Up/Top/Bottom) is the dispatch surface
+  consumed by `Model.Update`. `account.Model.handleKey` falls
+  through into `Update` for nav keys; fold (`space`/`F`),
+  visual-mode (`v`), triage (`d`/`a`/`s`/`r`), open (`Enter`),
+  search (`/`), and folder-jump keys keep account-level guards and
+  call mutator methods on `messagelist.Model` directly.
+  `MoveCursor(delta) (UID, bool)` survives as the viewer's
+  programmatic `n`/`N` entry point.
 - Date column: `displayDate(msg, now, width)` in
   `internal/ui/messagelist/model.go`. `width=3` selects
   `formatRelativeDateCompact` (`now`/`5m`/`1h`/`1d`/`1w`/`Jan`/
