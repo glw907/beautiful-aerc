@@ -4,6 +4,21 @@
 
 ## Active
 
+### Bubbletea v2 declarative View fields `v2-view-fields`
+Wire three `tea.View` fields poplar already has access to but doesn't
+set: `ProgressBar` (OSC 9;4 terminal-native progress for sync, outbox
+drain, attachment downloads), `ReportFocus` + `FocusMsg`/`BlurMsg`
+(pause JMAP push / IMAP IDLE refresh on blur, kick a refresh on focus,
+suppress bell), and `KeyboardEnhancements` (Kitty keyboard protocol —
+disambiguates Ctrl+I/M/H from Tab/Enter/Backspace for catkin's chord
+set, unlocks `IsRepeat` for held-key acceleration in messagelist /
+reader, surfaces `ShiftedCode`/`BaseCode` for non-US keyboards).
+Negotiation is graceful — terminals that don't speak the protocol
+fall back to existing behavior. Mouse support is a separate
+initiative.
+
+Related: (none yet — file with `/log-issue` as passes are scoped)
+
 ### Bubbletea v2 alignment + showcase positioning `v2-showcase`
 Migrate poplar to charm.land/{bubbletea,lipgloss,bubbles}/v2 and
 position it as a standout reference implementation by v0.9.0. The
