@@ -23,6 +23,7 @@ const (
 	stageCredentials
 	stageProbe
 	stageIdentity
+	stageSignature
 	stageLabel
 	stageDone
 )
@@ -32,11 +33,12 @@ const (
 // binds directly to the parent Model.State fields; advance happens
 // when huh reports StateCompleted.
 type accountSection struct {
-	parent   *Model
-	stage    accountStage
-	form     *huh.Form
-	probe    *probeScreen
-	oauthSub *oauthSection
+	parent    *Model
+	stage     accountStage
+	form      *huh.Form
+	probe     *probeScreen
+	oauthSub  *oauthSection
+	signature *signatureSection
 }
 
 func newAccountSection(parent *Model) *accountSection {
@@ -95,6 +97,10 @@ func (s *accountSection) buildForm() {
 				Value(&state.IdentityName),
 		)).WithTheme(HuhTheme(s.parent.Theme))
 
+	case stageSignature:
+		s.signature = newSignatureSection(s.parent)
+		s.form = nil
+
 	case stageLabel:
 		if state.AccountLabel == "" {
 			state.AccountLabel = defaultAccountLabel(state.Preset, state.Email)
@@ -118,19 +124,32 @@ func (s *accountSection) Init() tea.Cmd {
 	if s.oauthSub != nil {
 		return s.oauthSub.Init()
 	}
+	if s.signature != nil {
+		return s.signature.Init()
+	}
 	return nil
 }
 
 func (s *accountSection) Update(msg tea.Msg) (section, tea.Cmd) {
 	if _, ok := msg.(BackMsg); ok {
-		s.stage = stageCredentials
+		switch s.stage {
+		case stageSignature:
+			s.stage = stageIdentity
+		case stageLabel:
+			s.stage = stageSignature
+		default:
+			s.stage = stageCredentials
+		}
 		s.probe = nil
 		s.oauthSub = nil
+		s.signature = nil
 		s.buildForm()
-		if s.form != nil {
+		switch {
+		case s.form != nil:
 			return s, s.form.Init()
-		}
-		if s.oauthSub != nil {
+		case s.signature != nil:
+			return s, s.signature.Init()
+		case s.oauthSub != nil:
 			return s, s.oauthSub.Init()
 		}
 		return s, nil
@@ -155,6 +174,20 @@ func (s *accountSection) Update(msg tea.Msg) (section, tea.Cmd) {
 	if s.probe != nil {
 		_, cmd := s.probe.Update(msg)
 		if done, ok := msg.(ProbeDoneMsg); ok && done.Result.OK() {
+			s.advance()
+			if s.stage == stageDone {
+				return s, tea.Batch(cmd, func() tea.Msg { return AdvanceMsg{} })
+			}
+			return s, tea.Batch(cmd, s.Init())
+		}
+		return s, cmd
+	}
+
+	if s.signature != nil {
+		updated, cmd := s.signature.Update(msg)
+		s.signature = updated
+		if _, ok := msg.(AdvanceMsg); ok {
+			s.signature = nil
 			s.advance()
 			if s.stage == stageDone {
 				return s, tea.Batch(cmd, func() tea.Msg { return AdvanceMsg{} })
@@ -200,6 +233,9 @@ func (s *accountSection) View() string {
 	}
 	if s.oauthSub != nil {
 		return s.oauthSub.View()
+	}
+	if s.signature != nil {
+		return s.signature.View()
 	}
 	if s.form == nil {
 		return ""
