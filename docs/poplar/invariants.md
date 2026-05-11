@@ -176,35 +176,32 @@ the ADR(s) that justify them.
 ### Config & theming
 
 - Config lives in `~/.config/poplar/config.toml` (XDG on Linux and
-  macOS, deliberately overriding Apple's Application Support
-  default; `%APPDATA%\poplar\config.toml` on Windows). Both
-  `[[account]]` blocks and the `[ui]` table live in the same file;
-  `config.Load` (accounts) and `config.LoadUI` decode them
-  independently. Path precedence: `--config` flag, `$POPLAR_CONFIG`,
-  OS default, resolved by `config.Resolve`. The TOML key for the
-  preset selector is `provider`.
+  macOS, overriding Apple's Application Support default;
+  `%APPDATA%\poplar\config.toml` on Windows). `[[account]]` blocks
+  and the `[ui]` table share the file; `config.Load` and
+  `config.LoadUI` decode them independently. Path precedence:
+  `--config`, `$POPLAR_CONFIG`, OS default (`config.Resolve`). The
+  TOML preset key is `provider`.
 - First-run flow: missing config returns `ErrFirstRun`; root
   removes the freshly-written template and auto-launches the
   wizard. `--no-wizard` / `POPLAR_NO_WIZARD=1` opts out to exit-78.
   `--repair=<name>` seeds the wizard via `wizard.FromAccount` and
   splices `RepairResult` through `config.Render` + atomic rename.
-  `--reauth=<name>` re-runs the OAuth consent flow for a named account.
-  Legacy `accounts.toml` returns `ErrOldAccountsToml` (exit-78).
-  `password-cmd` resolves on first `Connect` and caches on the Backend.
-  `AccountConfig.Name` defaults to `Email`; `AccountConfig.Preset`
-  round-trips the preset key (`config.Render` prefers it over `Backend`).
-  `*config.ConfigError{…}` (sentinel `ErrConfigInvalid`) covers four
-  validators: unknown provider, missing host, missing source, missing smtp.host.
-- `config.Provider` carries `CredentialStrategy` and `HelpURL` per preset.
-- `config.Render(accts, ui, cache) []byte` emits canonical TOML.
-  Round-trips through `Load*` are semantic: comments not preserved,
-  default-valued fields elided. `[account.smtp]` precedes
-  `[[account.identity]]` (TOML array-of-tables rebind quirk).
-  `[ui] theme` not yet rendered.
-- `poplar config` subcommands: `init` (`--force` to overwrite;
-  `--interactive` runs the wizard, `--section=name1,name2` filters
-  the registry), `check` (validate + connect-test sequentially via
-  the IMAP probe + `mailimap.ProbeSMTP`), `path`, `discover-folders`.
+  `--reauth=<name>` re-runs the OAuth consent flow. Legacy
+  `accounts.toml` returns `ErrOldAccountsToml` (exit-78).
+  `password-cmd` resolves on first `Connect` and caches on the
+  Backend. `AccountConfig.Name` defaults to `Email`; `Preset`
+  round-trips (`config.Render` prefers it over `Backend`).
+  `*config.ConfigError{…}` (`ErrConfigInvalid`) covers unknown
+  provider, missing host, missing source, missing smtp.host.
+- `config.Render(accts, ui, cache) []byte` emits canonical TOML;
+  round-trips are semantic (comments lost, default-valued fields
+  elided). `[account.smtp]` precedes `[[account.identity]]`. Multi-
+  line signature `text` emits as a TOML `"""…"""` basic string.
+- `poplar config` subcommands: `init` (`--force`; `--interactive`
+  runs the wizard, `--section=…` filters the registry), `check`
+  (validate + connect-test via IMAP probe + `mailimap.ProbeSMTP`),
+  `path`, `discover-folders`.
 - `mail.ProbeResult{Steps, Err}` (`internal/mail/probe.go`) is the
   shared connect-test transcript; `mailimap.Probe` records 5 steps,
   `mailjmap.Probe` 3 (go-jmap bundles TLS + bearer + Session/get).
@@ -214,11 +211,14 @@ the ADR(s) that justify them.
   / `.local`; the wizard's "skip TLS verify" prompts route through it.
 - `wizard.Probe(ctx, cfg)` dispatches on `cfg.Backend` to
   `mailimap.Probe` (appending the SMTP probe) or `mailjmap.Probe`;
-  test seams `imap/jmap/smtpProbeFn`. `wizard.SelectStrategy(preset)`
-  returns a `config.CredentialStrategy` (`"imap"`/`"jmap"` → plain).
-  `wizard.Apply(Model)` returns a ready-to-render `config.AccountConfig`. `internal/ui/wizard/` is the bubbletea +
-  huh surface; `defaultSections` registry composes `account` /
-  `theme` / `confirm`. ADR-0191.
+  seams `imap/jmap/smtpProbeFn`. `wizard.Apply(Model)` returns a
+  ready-to-render `config.AccountConfig`. `internal/ui/wizard/` is
+  the bubbletea + huh surface; `defaultSections` composes
+  `account` / `theme` / `confirm`. Account-section stages:
+  provider → email → credentials → probe → identity →
+  signature → label; signature hosts catkin with a dim `-- `
+  chrome row and stores the sentinel-free body on
+  `Model.Signature`. ADR-0191.
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`.
   Presets fill canonical submission endpoints (465 implicit-TLS
   for gmail/fastmail/yahoo/zoho; 587 STARTTLS for outlook/icloud;
