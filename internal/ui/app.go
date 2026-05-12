@@ -76,6 +76,9 @@ type App struct {
 	now                func() time.Time // test seam, defaults to time.Now
 	opener             URLOpener        // test seam, defaults to xdgOpenURL
 
+	progressErrorUntil   time.Time
+	testProgressOverride *testProgressTriple
+
 	tidyEnabled bool
 	tidyAPIKey  string
 	tidyCfg     tidytext.Config
@@ -300,3 +303,4 @@ func (m App) rightPaneSize() (w, h int) {
 func (m App) selectedMessage() (mail.MessageInfo, bool) {
 	return m.acct.SelectedMessage()
 }
+

@@ -11,6 +11,37 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
+// frameProgressBar picks the highest-priority active progress source:
+// attachment download > outbox drain > sync. Error state decays over ~3s.
+func (m App) frameProgressBar() *tea.ProgressBar {
+	if !m.progressErrorUntil.IsZero() && m.now().Before(m.progressErrorUntil) {
+		return tea.NewProgressBar(tea.ProgressBarError, 0)
+	}
+	attach, outbox, outboxPct, sync := m.progressSources()
+	switch {
+	case attach:
+		return tea.NewProgressBar(tea.ProgressBarIndeterminate, 0)
+	case outbox:
+		return tea.NewProgressBar(tea.ProgressBarDefault, outboxPct)
+	case sync:
+		return tea.NewProgressBar(tea.ProgressBarIndeterminate, 0)
+	}
+	return nil
+}
+
+func (m App) progressSources() (attach, outbox bool, outboxPct int, sync bool) {
+	if t := m.testProgressOverride; t != nil {
+		return t.attach, t.outbox, t.outboxPct, t.sync
+	}
+	if m.acct.Cache() == nil {
+		return false, false, 0, false
+	}
+	_, attach = m.acct.Cache().AttachmentDownloadProgress()
+	outboxPct, outbox = m.acct.Cache().OutboxDrainProgress()
+	_, sync = m.acct.Cache().SyncProgress()
+	return
+}
+
 // renderFrame builds the full-screen layout string. View calls it
 // before compositing overlays.
 func (m App) renderFrame() string {
@@ -69,6 +100,7 @@ func (m App) view(content string) tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.WindowTitle = m.windowTitle()
+	v.ProgressBar = m.frameProgressBar()
 	return v
 }
 
