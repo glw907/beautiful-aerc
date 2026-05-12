@@ -29,7 +29,7 @@ func Probe(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Cli
 		if !r.OK() {
 			return r
 		}
-		smtpErr := smtpProbeFn(cfg, oauthCli)
+		smtpErr := smtpProbeFn(ctx, cfg, oauthCli)
 		step := mail.ProbeStep{Label: "SMTP submission", Status: mail.ProbeOK}
 		if smtpErr != nil {
 			step.Status = mail.ProbeFail

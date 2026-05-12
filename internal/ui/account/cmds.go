@@ -49,8 +49,8 @@ func loadFoldersCmd(c *cache.Account) tea.Cmd {
 
 // queryFolderCmd reads the first window of cached headers and emits a
 // FolderLoadedMsg. When sync is true the backend is nudged to converge
-// first (sync errors don't fail the load). Empty name returns nil so
-// callers can chain without nil-checks.
+// first; sync errors surface as ErrorMsg, matching loadFoldersCmd.
+// Empty name returns nil so callers can chain without nil-checks.
 func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	if name == "" {
 		return nil
@@ -61,11 +61,14 @@ func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	}
 	return func() tea.Msg {
 		if sync {
-			func() {
+			err := func() error {
 				c.BeginSync()
 				defer c.EndSync()
-				_ = c.SyncFolder(context.Background(), name)
+				return c.SyncFolder(context.Background(), name)
 			}()
+			if err != nil {
+				return uicore.ErrorMsg{Op: op, Err: err}
+			}
 		}
 		msgs, total, err := c.QueryFolder(name, 0, initialWindow)
 		if err != nil {

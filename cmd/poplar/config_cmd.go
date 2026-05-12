@@ -142,7 +142,7 @@ func newConfigCheckCmd() *cobra.Command {
 						}
 						oauthCli = c
 					}
-					if err := mailimap.ProbeSMTP(a, oauthCli); err != nil {
+					if err := mailimap.ProbeSMTP(cmd.Context(), a, oauthCli); err != nil {
 						fmt.Fprintf(cmd.OutOrStdout(), "%-20s smtp error: %v\n", a.Name, err)
 						anyFail = true
 						continue

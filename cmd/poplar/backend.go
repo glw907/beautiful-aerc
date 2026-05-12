@@ -52,7 +52,7 @@ func buildOAuthClient(acct config.AccountConfig) (*mailauth.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, backend, err := mailauth.OpenStore(acct.Name, tokenDir)
+	store, backend, err := mailauth.OpenStore(acct.Name, tokenDir, mailauth.Backend(acct.OAuthStore))
 	if err != nil {
 		return nil, fmt.Errorf("token store: %w", err)
 	}

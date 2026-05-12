@@ -309,7 +309,7 @@ func oauthFallbackDir() string {
 func buildOAuthClient(state wizdomain.Model) (*mailauth.Client, mailauth.Backend, error) {
 	preset := config.Providers[state.Preset]
 	slug := cache.Slugify(state.Email)
-	store, backend, err := mailauth.OpenStore(slug, oauthFallbackDir())
+	store, backend, err := mailauth.OpenStore(slug, oauthFallbackDir(), mailauth.Backend(state.OAuthStore))
 	if err != nil {
 		return nil, "", err
 	}

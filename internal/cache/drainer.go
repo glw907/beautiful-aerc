@@ -135,44 +135,54 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 	}
 	args, err := decodeArgs(row.Kind, row.ArgsJSON)
 	if err != nil {
-		_ = a.finishOp(row.ID, OpConflict, encodeErr("args-decode", err), 0)
+		a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("args-decode", err), 0), row, "finishOp")
 		a.publish(row, OpConflict, err)
 		return
 	}
 	dispatchErr := a.dispatch(args, row)
 	switch {
 	case dispatchErr == nil:
-		_ = a.finalizeSuccess(ctx, row, args)
+		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, contacts.ErrAuth):
-		_ = a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0)
+		a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0), row, "finishOp")
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, contacts.ErrPreconditionFailed):
-		_ = a.finishOp(row.ID, OpConflict, encodeErr("precondition-failed", dispatchErr), 0)
+		a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("precondition-failed", dispatchErr), 0), row, "finishOp")
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, contacts.ErrNotFound):
-		_ = a.finalizeSuccess(ctx, row, args)
+		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, mail.ErrAuth):
-		_ = a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0)
+		a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0), row, "finishOp")
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, mail.ErrNotFound):
-		_ = a.finalizeSuccess(ctx, row, args)
+		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, ErrDraftSuperseded):
-		_ = a.finalizeSuccess(ctx, row, args)
+		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publishNote(row, OpDone, "draft superseded by another client")
 	default:
 		// mail.ErrConnection lands here. Backends drop the dead client
 		// and redial on the next attempt.
 		if cfg.MaxAttempts > 0 && row.Attempts+1 >= cfg.MaxAttempts {
-			_ = a.finishOp(row.ID, OpConflict, encodeErr("max-attempts-exceeded", dispatchErr), 0)
+			a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("max-attempts-exceeded", dispatchErr), 0), row, "finishOp")
 			a.publish(row, OpConflict, dispatchErr)
 			return
 		}
 		nextAt := time.Now().Add(expBackoff(row.Attempts+1, cfg.BackoffMin, cfg.BackoffMax)).UnixNano()
-		_ = a.finishOp(row.ID, OpFailed, encodeErr("transient", dispatchErr), nextAt)
+		a.logTerminal(a.finishOp(row.ID, OpFailed, encodeErr("transient", dispatchErr), nextAt), row, "finishOp")
 	}
+}
+
+// logTerminal records a terminal-state write failure. A non-nil err
+// here leaves the outbox row stuck in OpExecuting, blocking sibling
+// pickup. The error path is rare but corrosive when it happens.
+func (a *Account) logTerminal(err error, row *outboxRow, op string) {
+	if err == nil {
+		return
+	}
+	a.log.Error("drainer "+op, "op", row.ID, "kind", row.Kind, "err", err)
 }
 
 // finalizeSuccess writes the post-success cache mutation: junction

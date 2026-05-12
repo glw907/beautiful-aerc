@@ -94,12 +94,19 @@ func (c *Client) RequestDeviceAuth(ctx context.Context) (*DeviceAuth, error) {
 	if dar.DeviceCode == "" || dar.UserCode == "" {
 		return nil, fmt.Errorf("device auth missing device_code/user_code")
 	}
+	// RFC 8628 §3.2 leaves expires_in optional; floor a missing or
+	// non-positive value to 5 minutes so PollDeviceCode runs at least
+	// one iteration rather than tripping ErrConsentTimeout immediately.
+	expires := dar.ExpiresIn
+	if expires <= 0 {
+		expires = 300
+	}
 	return &DeviceAuth{
 		DeviceCode:              dar.DeviceCode,
 		UserCode:                dar.UserCode,
 		VerificationURI:         cmp.Or(dar.VerificationURI, dar.VerificationURL),
 		VerificationURIComplete: dar.VerificationURIComplete,
-		ExpiresIn:               dar.ExpiresIn,
+		ExpiresIn:               expires,
 		Interval:                dar.Interval,
 	}, nil
 }

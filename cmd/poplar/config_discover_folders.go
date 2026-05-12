@@ -91,6 +91,9 @@ func writeAtomically(path, content string) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close %s: %v", tmpPath, err)
 	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return fmt.Errorf("chmod %s: %v", tmpPath, err)
+	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("rename %s to %s: %v", tmpPath, path, err)
 	}

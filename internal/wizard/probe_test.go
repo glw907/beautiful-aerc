@@ -13,7 +13,7 @@ import (
 func withFakeProbes(t *testing.T,
 	imap func(context.Context, config.AccountConfig, *mailauth.Client) mail.ProbeResult,
 	jmap func(context.Context, config.AccountConfig) mail.ProbeResult,
-	smtp func(config.AccountConfig, *mailauth.Client) error,
+	smtp func(context.Context, config.AccountConfig, *mailauth.Client) error,
 ) {
 	t.Helper()
 	prevI, prevJ, prevS := imapProbeFn, jmapProbeFn, smtpProbeFn
@@ -27,7 +27,7 @@ func TestProbeRoutesIMAPAndAppendsSMTP(t *testing.T) {
 			return mail.ProbeResult{Steps: []mail.ProbeStep{{Label: "imap", Status: mail.ProbeOK}}}
 		},
 		func(context.Context, config.AccountConfig) mail.ProbeResult { return mail.ProbeResult{} },
-		func(config.AccountConfig, *mailauth.Client) error { return nil },
+		func(context.Context, config.AccountConfig, *mailauth.Client) error { return nil },
 	)
 
 	r := Probe(context.Background(), config.AccountConfig{Backend: "imap"}, nil)
@@ -47,7 +47,7 @@ func TestProbeRoutesJMAP(t *testing.T) {
 		func(context.Context, config.AccountConfig) mail.ProbeResult {
 			return mail.ProbeResult{Steps: []mail.ProbeStep{{Label: "jmap", Status: mail.ProbeOK}}}
 		},
-		func(config.AccountConfig, *mailauth.Client) error { return nil },
+		func(context.Context, config.AccountConfig, *mailauth.Client) error { return nil },
 	)
 
 	r := Probe(context.Background(), config.AccountConfig{Backend: "jmap"}, nil)
@@ -62,7 +62,9 @@ func TestProbeIMAPSurfacesSMTPFailure(t *testing.T) {
 			return mail.ProbeResult{Steps: []mail.ProbeStep{{Label: "imap", Status: mail.ProbeOK}}}
 		},
 		func(context.Context, config.AccountConfig) mail.ProbeResult { return mail.ProbeResult{} },
-		func(config.AccountConfig, *mailauth.Client) error { return errors.New("connection refused") },
+		func(_ context.Context, _ config.AccountConfig, _ *mailauth.Client) error {
+			return errors.New("connection refused")
+		},
 	)
 
 	r := Probe(context.Background(), config.AccountConfig{Backend: "imap"}, nil)
@@ -82,7 +84,10 @@ func TestProbeThreadsOAuthClientIntoIMAPAndSMTP(t *testing.T) {
 			return mail.ProbeResult{Steps: []mail.ProbeStep{{Label: "imap", Status: mail.ProbeOK}}}
 		},
 		func(context.Context, config.AccountConfig) mail.ProbeResult { return mail.ProbeResult{} },
-		func(_ config.AccountConfig, c *mailauth.Client) error { gotSMTP = c != nil; return nil },
+		func(_ context.Context, _ config.AccountConfig, c *mailauth.Client) error {
+			gotSMTP = c != nil
+			return nil
+		},
 	)
 
 	sentinel := &mailauth.Client{}

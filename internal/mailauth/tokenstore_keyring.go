@@ -59,11 +59,22 @@ func isKeyringInit(err error) bool {
 	return errors.Is(err, keyring.ErrUnsupportedPlatform)
 }
 
-// OpenStore probes the system keyring with a write+read+delete round-trip.
-// On success it returns a KeyringStore and BackendKeyring. On probe failure
-// it falls back to an AgeFileStore rooted at fallbackDir. The returned error
-// is always nil; fallback is intentional.
-func OpenStore(slug, fallbackDir string) (TokenStore, Backend, error) {
+// OpenStore returns the requested token-store backend. When preferred
+// is BackendKeyring or BackendAgeFile the requested store is returned
+// without probing. The user's explicit `oauth-store` choice wins, so
+// a config-time decision doesn't drift between processes if keyring
+// availability flips. When preferred is empty the historical probe
+// runs: write+read+delete against the system keyring; on success
+// return KeyringStore, on failure fall back to an AgeFileStore rooted
+// at fallbackDir. The returned error is always nil; fallback is
+// intentional.
+func OpenStore(slug, fallbackDir string, preferred Backend) (TokenStore, Backend, error) {
+	switch preferred {
+	case BackendKeyring:
+		return NewKeyringStore(), BackendKeyring, nil
+	case BackendAgeFile:
+		return NewAgeFileStore(fallbackDir), BackendAgeFile, nil
+	}
 	s := NewKeyringStore()
 	probe := slug + "__probe__"
 	if err := s.Set(probe, "ok"); err == nil {

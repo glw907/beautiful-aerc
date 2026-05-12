@@ -31,7 +31,7 @@ func (a *Account) Attachments(ctx context.Context, uid mail.UID) ([]mail.Attachm
 		return nil, nil
 	}
 	if err := a.storeAttachments(ctx, uid, atts); err != nil {
-		_ = err
+		return nil, fmt.Errorf("attachments %s: store: %w", uid, err)
 	}
 	return atts, nil
 }
@@ -117,7 +117,7 @@ func (a *Account) FetchAttachment(ctx context.Context, uid mail.UID, partID stri
 		return nil, err
 	}
 	if storeErr := a.storeAttachmentBytes(ctx, uid, partID, body); storeErr != nil {
-		_ = storeErr
+		a.log.Warn("cache: storeAttachmentBytes", "uid", uid, "part", partID, "err", storeErr)
 	}
 	return body, nil
 }

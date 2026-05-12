@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 )
 
 type consentResult struct {
@@ -36,7 +37,11 @@ func runConsentServer(portRange [2]int) (srv *http.Server, redirect string, done
 		fmt.Fprint(w, "<p>You can close this window.</p>")
 	})
 
-	srv = &http.Server{Handler: mux}
+	srv = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      5 * time.Second,
+	}
 	addr := ln.Addr().(*net.TCPAddr)
 	redirect = fmt.Sprintf("http://127.0.0.1:%d/callback", addr.Port)
 

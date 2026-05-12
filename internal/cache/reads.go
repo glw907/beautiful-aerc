@@ -263,7 +263,7 @@ func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 		return nil, err
 	}
 	if storeErr := a.storeBody(ctx, uid, body); storeErr != nil {
-		_ = storeErr
+		a.log.Warn("cache: storeBody", "uid", uid, "err", storeErr)
 	}
 	return body, nil
 }

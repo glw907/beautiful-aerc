@@ -97,7 +97,7 @@ func TestKeyringStoreRoundTripIfAvailable(t *testing.T) {
 }
 
 func TestOpenStorePrefersKeyring(t *testing.T) {
-	store, _, err := OpenStore("probe-acct", t.TempDir())
+	store, _, err := OpenStore("probe-acct", t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

@@ -31,20 +31,18 @@ type smtpAuther interface {
 	Auth(c sasl.Client) error
 }
 
-var smtpDial = func(b *Backend) (smtpClient, error) {
-	return realSMTPDial(context.Background(), b)
-}
+var smtpDial = realSMTPDial
 
 // ProbeSMTP dials, authenticates, and closes. oauthCli is nil for
 // non-OAuth accounts.
-func ProbeSMTP(cfg config.AccountConfig, oauthCli *mailauth.Client) error {
+func ProbeSMTP(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) error {
 	var b *Backend
 	if oauthCli != nil {
 		b = NewWithOAuth(cfg, oauthCli, nil)
 	} else {
 		b = New(cfg, nil)
 	}
-	cli, err := smtpDial(b)
+	cli, err := smtpDial(ctx, b)
 	if err != nil {
 		return err
 	}
@@ -169,7 +167,7 @@ func resolveXOAUTH2SMTPToken(ctx context.Context, b *Backend) (string, error) {
 // cached. Any send error drops the cached client so the next call
 // redials.
 func (b *Backend) Send(env mail.Envelope, mime []byte) error {
-	cli, err := b.smtpClientLocked()
+	cli, err := b.smtpClientLocked(context.Background())
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
@@ -229,7 +227,7 @@ func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.
 
 // smtpClientLocked returns the cached SMTP client, dialing on first
 // use.
-func (b *Backend) smtpClientLocked() (smtpClient, error) {
+func (b *Backend) smtpClientLocked(ctx context.Context) (smtpClient, error) {
 	b.mu.Lock()
 	if b.smtp != nil {
 		c := b.smtp
@@ -238,7 +236,7 @@ func (b *Backend) smtpClientLocked() (smtpClient, error) {
 	}
 	b.mu.Unlock()
 
-	cli, err := smtpDial(b)
+	cli, err := smtpDial(ctx, b)
 	if err != nil {
 		return nil, err
 	}
