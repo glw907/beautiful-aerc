@@ -221,6 +221,11 @@ type AccountConfig struct {
 	// OAuthStore names the token-store backend ("keyring", "age-file").
 	// Written by the wizard; empty means unset.
 	OAuthStore string
+
+	// OAuthMode is "loopback" (default) or "device-code"; empty means
+	// loopback. Written when the user picked or fell back to device-code
+	// in the wizard so --reauth retries with the same method.
+	OAuthMode string
 }
 
 // ResolvePreset fills empty backend/transport fields on c from the
@@ -340,6 +345,7 @@ type accountEntry struct {
 	Identities     []identityEntry   `toml:"identity"`
 	OAuth          *OAuthConfig      `toml:"oauth"`
 	OAuthStore     string            `toml:"oauth-store"`
+	OAuthMode      string            `toml:"oauth-mode"`
 }
 
 type smtpEntry struct {
@@ -556,6 +562,9 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	if err := validateOAuthStore(e.Name, e.OAuthStore); err != nil {
 		return nil, err
 	}
+	if err := validateOAuthMode(e.Name, e.OAuthMode); err != nil {
+		return nil, err
+	}
 
 	acct.Display = e.Display
 	acct.Folders = e.FoldersSort
@@ -563,6 +572,7 @@ func (e *accountEntry) toAccountConfig(index int) (*AccountConfig, error) {
 	acct.Params = e.Params
 	acct.OAuth = e.OAuth
 	acct.OAuthStore = e.OAuthStore
+	acct.OAuthMode = e.OAuthMode
 
 	if e.CopyTo != "" {
 		acct.CopyTo = []string{e.CopyTo}
@@ -686,6 +696,19 @@ func validateOAuthStore(account, v string) error {
 		Field:   "oauth-store",
 		Message: fmt.Sprintf("unknown oauth-store %q", v),
 		Suggest: `known: "keyring", "age-file"`,
+	}
+}
+
+func validateOAuthMode(account, v string) error {
+	switch v {
+	case "", "loopback", "device-code":
+		return nil
+	}
+	return &ConfigError{
+		Account: account,
+		Field:   "oauth-mode",
+		Message: fmt.Sprintf("unknown oauth-mode %q", v),
+		Suggest: `known: "loopback", "device-code"`,
 	}
 }
 

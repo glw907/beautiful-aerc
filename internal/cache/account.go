@@ -35,6 +35,7 @@ type Account struct {
 
 	maxSize           int64
 	maxAttachmentSize int64
+	maxOutboxBytes    int64
 
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
@@ -97,6 +98,10 @@ type Config struct {
 	MaxSize int64
 	// MaxAttachmentSize caps attachment bytes, tracked separately from MaxSize.
 	MaxAttachmentSize int64
+	// MaxOutboxBytes rejects an outbox INSERT whose payload exceeds this
+	// many bytes. Zero disables the check; configurable via [cache]
+	// max-outbox-bytes. Mirrors MaxSize's "0 disables" semantics.
+	MaxOutboxBytes int64
 }
 
 // DBPath returns the on-disk SQLite path for accountName under dir.
@@ -170,6 +175,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		name:              accountName,
 		maxSize:           cfg.MaxSize,
 		maxAttachmentSize: cfg.MaxAttachmentSize,
+		maxOutboxBytes:    cfg.MaxOutboxBytes,
 		events:            make(chan CacheEvent, 32),
 		drainSignal:       make(chan struct{}, 1),
 		stop:              make(chan struct{}),

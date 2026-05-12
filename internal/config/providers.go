@@ -4,9 +4,10 @@ package config
 // URLs for a built-in provider preset. Scopes is the recommended
 // minimal set; callers may append provider-specific additions.
 type OAuthDefaults struct {
-	AuthURL  string
-	TokenURL string
-	Scopes   []string
+	AuthURL       string
+	TokenURL      string
+	DeviceAuthURL string // RFC 8628 endpoint; empty when device-code is unsupported
+	Scopes        []string
 }
 
 // CredentialStrategy names how a provider expects callers to obtain
@@ -111,9 +112,10 @@ var Providers = map[string]Provider{
 		CredentialStrategy: StrategyOAuth,
 		HelpURL:            "https://account.microsoft.com/security",
 		OAuth: &OAuthDefaults{
-			AuthURL:  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-			TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-			Scopes:   []string{"https://outlook.office.com/IMAP.AccessAsUser.All", "https://outlook.office.com/SMTP.Send", "offline_access"},
+			AuthURL:       "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			TokenURL:      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			DeviceAuthURL: "https://login.microsoftonline.com/common/oauth2/v2.0/devicecode",
+			Scopes:        []string{"https://outlook.office.com/IMAP.AccessAsUser.All", "https://outlook.office.com/SMTP.Send", "offline_access"},
 		},
 		OAuthRequiresSecret: true,
 	},
@@ -163,9 +165,10 @@ var Providers = map[string]Provider{
 		CredentialStrategy: StrategyOAuth,
 		HelpURL:            "https://myaccount.google.com/apppasswords",
 		OAuth: &OAuthDefaults{
-			AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
-			TokenURL: "https://oauth2.googleapis.com/token",
-			Scopes:   []string{"https://mail.google.com/"},
+			AuthURL:       "https://accounts.google.com/o/oauth2/v2/auth",
+			TokenURL:      "https://oauth2.googleapis.com/token",
+			DeviceAuthURL: "https://oauth2.googleapis.com/device/code",
+			Scopes:        []string{"https://mail.google.com/"},
 		},
 		OAuthRequiresSecret: true,
 	},

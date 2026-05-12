@@ -188,6 +188,9 @@ func writeAccount(b *strings.Builder, a AccountConfig) {
 	if a.OAuthStore != "" {
 		writeKV(b, "oauth-store", a.OAuthStore)
 	}
+	if a.OAuthMode != "" && a.OAuthMode != "loopback" {
+		writeKV(b, "oauth-mode", a.OAuthMode)
+	}
 
 	// [account.oauth] and [account.smtp] precede [[account.identity]]
 	// blocks. A bare [section] header after array-of-tables entries
@@ -298,6 +301,9 @@ func renderCacheBlock(c CacheConfig) string {
 	}
 	if c.MaxAttachmentSize != d.MaxAttachmentSize {
 		rows = append(rows, fmt.Sprintf("max-attachment-size = %q", formatSize(c.MaxAttachmentSize)))
+	}
+	if c.MaxOutboxBytes != d.MaxOutboxBytes {
+		rows = append(rows, fmt.Sprintf("max-outbox-bytes = %q", formatSize(c.MaxOutboxBytes)))
 	}
 	if len(rows) == 0 {
 		return ""

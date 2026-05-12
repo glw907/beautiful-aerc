@@ -133,6 +133,25 @@ func TestApplyOAuthDone(t *testing.T) {
 	}
 }
 
+func TestApplyOAuthDeviceModePropagates(t *testing.T) {
+	m := Model{
+		Preset:      "gmail",
+		Email:       "user@gmail.com",
+		OAuthDone:   true,
+		OAuthStore:  "keyring",
+		OAuthMode:   "device-code",
+		OAuthCID:    "cid",
+		OAuthSecret: "secret",
+	}
+	cfg, err := Apply(m)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if cfg.OAuthMode != "device-code" {
+		t.Errorf("OAuthMode = %q, want device-code", cfg.OAuthMode)
+	}
+}
+
 func TestApplyOAuthNotDoneErrors(t *testing.T) {
 	m := Model{Preset: "gmail", Email: "user@gmail.com"}
 	if _, err := Apply(m); err == nil {

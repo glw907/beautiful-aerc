@@ -111,6 +111,10 @@ func (a *Account) insertFolderOp(ctx context.Context, folder string, args OpArgs
 	if len(payload) == 0 {
 		return 0, fmt.Errorf("queue: empty payload for %s", args.opKind())
 	}
+	if a.maxOutboxBytes > 0 && int64(len(payload)) > a.maxOutboxBytes {
+		return 0, fmt.Errorf("queue %s (%d bytes, cap %d): %w",
+			args.opKind(), len(payload), a.maxOutboxBytes, ErrOutboxRowTooLarge)
+	}
 	body, err := json.Marshal(args)
 	if err != nil {
 		return 0, fmt.Errorf("encode args: %w", err)
@@ -314,6 +318,10 @@ func (a *Account) finishOpDoneAndDeleteDraft(ctx context.Context, opID int64, dr
 // ErrNotConflict is returned by RetryOp/DiscardOp when the row is
 // not in conflict. Treat as benign and refresh.
 var ErrNotConflict = errors.New("cache: op is not in conflict state")
+
+// ErrOutboxRowTooLarge is returned when a payload exceeds the
+// [cache] max-outbox-bytes cap.
+var ErrOutboxRowTooLarge = errors.New("cache: outbox row exceeds max-outbox-bytes")
 
 // revertOptimisticTx mirrors applyOptimisticTx so a discard leaves
 // the cache reflecting what the server actually has. Send/Append/

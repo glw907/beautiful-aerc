@@ -29,8 +29,9 @@ the ADR(s) that justify them.
   `internal/mail/` carries the `Backend` interface + classifier;
   `mailjmap` wraps `go-jmap`, `mailimap` wraps `go-imap` v2 (two
   physical connections per Backend — command + idle), `mailauth`
-  holds the XOAUTH2 snippet and OAuth subsystem (PKCE Authorize,
-  cached Token + refresh, keyring/age-file TokenStore). System map
+  holds the XOAUTH2 snippet and OAuth subsystem (loopback PKCE
+  Authorize default + opt-in RFC 8628 device-code, cached Token
+  + refresh, keyring/age-file TokenStore). System map
   in `docs/poplar/system-map.md`. ADRs 0178, 0191.
 - Mail backends call upstream libraries directly: emersion
   (`go-imap` v2, `go-message`, `go-smtp`, `go-sasl`, `go-webdav`,
@@ -247,16 +248,16 @@ the ADR(s) that justify them.
   sentinel; `Signature.Name` is unique within its identity.
   ADR-0177.
 - `[account.oauth]` carries `client-id`, `client-secret`, optional
-  `auth-url`/`token-url`/`scopes` (preset defaults fill missing
-  fields). `oauth-store` (`"keyring"`/`"age-file"`) is written by
-  the wizard on first `Authorize`. `mailimap.Probe` and
-  `ProbeSMTP` both take an optional `*mailauth.Client` (threaded
-  by `wizard.Probe`) so the pre-save reachability check
-  authenticates the same way as the live backend. The two wizard
-  construction sites share `ui/wizard.buildOAuthClient`. The
-  template documents native consent + `--reauth`; `oauth2l` is
-  unsupported in fresh configs (existing `password-cmd` setups
-  still work). ADRs 0193, 0220.
+  `auth-url`/`token-url`/`device-auth-url`/`scopes` (preset
+  defaults fill missing fields). `oauth-store`
+  (`"keyring"`/`"age-file"`) and `oauth-mode` (`"loopback"`
+  default, `"device-code"`) are written by the wizard.
+  `mailimap.Probe` / `ProbeSMTP` take an optional
+  `*mailauth.Client` (threaded by `wizard.Probe`) so the pre-save
+  reachability check authenticates like the live backend. The two
+  wizard construction sites share `ui/wizard.buildOAuthClient`;
+  template documents native consent + `--reauth`. ADRs 0193,
+  0220, 0227.
 - `[account.contacts]` is the optional CardDAV-ingest sub-table
   (URL, credentials, default-addressbook, refresh-interval,
   insecure-tls); credentials fall back to the parent. Absent
@@ -283,8 +284,7 @@ the ADR(s) that justify them.
   `uicore/layout.go`: `SimpleIcons` runes are EAW Na/N, `FancyIcons`
   are in `[U+F0000, U+FFFFD]`.
 
-### Catkin
-Auto-loaded via `.claude/rules/catkin-invariants.md` on `internal/catkin/`. ADRs 0144–0147, 0149, 0150, 0152.
+### Catkin — see `.claude/rules/catkin-invariants.md` (auto-loaded on `internal/catkin/`). ADRs 0144–0147, 0149, 0150, 0152.
 
 ### Compose
 
@@ -322,10 +322,10 @@ Auto-loaded via `.claude/rules/catkin-invariants.md` on `internal/catkin/`. ADRs
 
 ### Viewer
 
-Viewer harvests `List-Unsubscribe` / `-Post` at body-fetch time via
+Viewer harvests `List-Unsubscribe` / `-Post` at body-fetch via
 `content.ParseListUnsubscribe`; `content.Unsubscribe` rides on
 `reader.BodyLoadedMsg.Unsub`. `U` confirms; routes https one-click
-POST > mailto > plain http. Banner row confirms success (5s). ADR-0185.
+POST > mailto > plain http. 5s success banner. ADR-0185.
 
 ## Mail model
 

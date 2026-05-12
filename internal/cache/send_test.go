@@ -49,6 +49,66 @@ func outboxKinds(t *testing.T, a *Account) []string {
 	return kinds
 }
 
+func TestQueueOutbound_OverCap_Rejects(t *testing.T) {
+	be := &jmapFakeBackend{fakeBackend{
+		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
+	}}
+	ct := &fakeChangeTracker{}
+	a, err := Open("Test Account", be, ct, t.TempDir(), Config{MaxOutboxBytes: 16}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { a.Close() })
+	if err := a.SyncFolders(context.Background()); err != nil {
+		t.Fatalf("SyncFolders: %v", err)
+	}
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
+	_, err = a.QueueOutbound(context.Background(), "Sent",
+		env, []byte("seventeen bytes!!"), 0, "")
+	if !errors.Is(err, ErrOutboxRowTooLarge) {
+		t.Fatalf("want ErrOutboxRowTooLarge, got %v", err)
+	}
+	if got := outboxKinds(t, a); len(got) != 0 {
+		t.Errorf("want no rows after reject, got %v", got)
+	}
+}
+
+func TestQueueOutbound_UnderCap_Accepts(t *testing.T) {
+	be := &jmapFakeBackend{fakeBackend{
+		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
+	}}
+	ct := &fakeChangeTracker{}
+	a, err := Open("Test Account", be, ct, t.TempDir(), Config{MaxOutboxBytes: 1024}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { a.Close() })
+	if err := a.SyncFolders(context.Background()); err != nil {
+		t.Fatalf("SyncFolders: %v", err)
+	}
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
+	if _, err := a.QueueOutbound(context.Background(), "Sent",
+		env, []byte("small payload"), 0, ""); err != nil {
+		t.Fatalf("QueueOutbound under cap: %v", err)
+	}
+}
+
+func TestQueueOutbound_ZeroCap_Unlimited(t *testing.T) {
+	be := &jmapFakeBackend{fakeBackend{
+		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
+	}}
+	a := openTestAccountWith(t, be) // Config{} → MaxOutboxBytes = 0
+
+	env := mail.Envelope{From: "geoff@907.life", Rcpts: []string{"x@y.com"}}
+	huge := make([]byte, 5*1024*1024)
+	if _, err := a.QueueOutbound(context.Background(), "Sent",
+		env, huge, 0, ""); err != nil {
+		t.Fatalf("QueueOutbound 5MB with no cap: %v", err)
+	}
+}
+
 func TestQueueOutbound_JMAP_OneOp(t *testing.T) {
 	be := &jmapFakeBackend{fakeBackend{
 		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},

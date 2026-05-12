@@ -21,11 +21,12 @@ import (
 
 // Config holds the OAuth2 client parameters for a single provider.
 type Config struct {
-	ClientID     string
-	ClientSecret string
-	AuthURL      string
-	TokenURL     string
-	Scopes       []string
+	ClientID      string
+	ClientSecret  string
+	AuthURL       string
+	TokenURL      string
+	DeviceAuthURL string // RFC 8628 endpoint; required for AuthorizeDeviceCode.
+	Scopes        []string
 	// RedirectPortRange bounds the loopback port the consent server listens on.
 	RedirectPortRange [2]int
 }
@@ -33,6 +34,12 @@ type Config struct {
 var (
 	ErrConsentTimeout = errors.New("mailauth: consent timeout")
 	ErrStateMismatch  = errors.New("mailauth: oauth state mismatch")
+	// ErrDeviceCodeUnsupported fires when AuthorizeDeviceCode is called
+	// against a preset that lacks DeviceAuthURL.
+	ErrDeviceCodeUnsupported = errors.New("mailauth: device-code not supported by provider")
+	// ErrDeviceConsentDenied fires when the user denies the device-code
+	// prompt or the user_code times out.
+	ErrDeviceConsentDenied = errors.New("mailauth: device-code consent denied")
 )
 
 // Client obtains and refreshes access tokens via a stored refresh token.

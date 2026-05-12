@@ -178,7 +178,10 @@ sources or the `poplar cache` CLI. The decision index in
   id, insert outbox row with `status='pending'` and
   `next_eligible_at=NULL`, apply optimistic `ui_flags`/`ui_hide`
   to the message row (Move/Flag/Destroy only), commit, signal
-  drainer.
+  drainer. `insertFolderOp` rejects with `cache.ErrOutboxRowTooLarge`
+  before opening the tx when `Config.MaxOutboxBytes > 0` and the
+  payload exceeds it (default 0 / unlimited, mirrors `MaxSize`;
+  TOML `[cache] max-outbox-bytes`). ADR-0226.
 - `(*Account).CancelOps(ctx, opIDs)` deletes named outbox rows
   iff every one is `OpPending`; atomic across the slice. Returns
   `ErrNotPending` if any row has advanced. Used by the App's `u`

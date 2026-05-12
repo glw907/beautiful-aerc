@@ -16,6 +16,9 @@ type CacheConfig struct {
 	// MaxSize caps the body cache in bytes; zero disables the cap.
 	MaxSize           int64
 	MaxAttachmentSize int64
+	// MaxOutboxBytes rejects an outbox INSERT whose payload exceeds
+	// this many bytes; zero disables the check.
+	MaxOutboxBytes int64
 }
 
 // DefaultCacheConfig returns the cache caps applied when no [cache]
@@ -39,6 +42,7 @@ type rawCacheFile struct {
 type rawCache struct {
 	MaxSize           string `toml:"max-size"`
 	MaxAttachmentSize string `toml:"max-attachment-size"`
+	MaxOutboxBytes    string `toml:"max-outbox-bytes"`
 }
 
 // LoadCache reads the [cache] table. A missing file or missing
@@ -72,6 +76,13 @@ func LoadCache(path string) (CacheConfig, error) {
 			return CacheConfig{}, fmt.Errorf("cache.max-attachment-size: %w", err)
 		}
 		out.MaxAttachmentSize = n
+	}
+	if raw.Cache.MaxOutboxBytes != "" {
+		n, err := parseSize(raw.Cache.MaxOutboxBytes)
+		if err != nil {
+			return CacheConfig{}, fmt.Errorf("cache.max-outbox-bytes: %w", err)
+		}
+		out.MaxOutboxBytes = n
 	}
 	return out, nil
 }

@@ -32,6 +32,16 @@ type PickedMsg struct {
 // ClosedMsg fires when the picker is dismissed without a pick.
 type ClosedMsg struct{}
 
+// Mode tags the two input states. Filter is the default: keystrokes
+// feed the filter, only arrows navigate. Nav is the typing reprieve
+// where `j`/`k` advance the cursor and filter text stays put.
+type Mode int
+
+const (
+	ModeFilter Mode = iota
+	ModeNav
+)
+
 // Model is the modal overlay launched by `m` from the account view.
 type Model struct {
 	shell    uicore.ModalShell
@@ -42,11 +52,15 @@ type Model struct {
 	styles   Styles
 	measurer ansix.Measurer
 	keys     KeyMap
+	mode     Mode
 }
 
 type KeyMap struct {
-	CursorUp   key.Binding
-	CursorDown key.Binding
+	ArrowUp    key.Binding
+	ArrowDown  key.Binding
+	NavUp      key.Binding
+	NavDown    key.Binding
+	ToggleMode key.Binding
 	Pick       key.Binding
 	Close      key.Binding
 	Swallow    key.Binding
@@ -72,16 +86,21 @@ func New(styles Styles, m ansix.Measurer) Model {
 	l.SetFilteringEnabled(true)
 	l.Styles = styles.List
 	l.DisableQuitKeybindings()
-	l.KeyMap.CursorUp = key.NewBinding(key.WithKeys("up", "k"))
-	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("down", "j"))
+	// Strip `j`/`k` from the list's own nav keymap so filter mode can
+	// accept them as filter text.
+	l.KeyMap.CursorUp = key.NewBinding(key.WithKeys("up"))
+	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("down"))
 
 	return Model{
 		styles:   styles,
 		measurer: m,
 		list:     l,
 		keys: KeyMap{
-			CursorUp:   key.NewBinding(key.WithKeys("up", "k")),
-			CursorDown: key.NewBinding(key.WithKeys("down", "j")),
+			ArrowUp:    key.NewBinding(key.WithKeys("up")),
+			ArrowDown:  key.NewBinding(key.WithKeys("down")),
+			NavUp:      key.NewBinding(key.WithKeys("k")),
+			NavDown:    key.NewBinding(key.WithKeys("j")),
+			ToggleMode: key.NewBinding(key.WithKeys("tab")),
 			Pick:       key.NewBinding(key.WithKeys("enter")),
 			Close:      key.NewBinding(key.WithKeys("esc")),
 			Swallow:    key.NewBinding(key.WithKeys("q")),
@@ -95,6 +114,7 @@ func (p Model) IsOpen() bool { return p.shell.IsOpen() }
 // excluded so the picker never offers a no-op move-to-self.
 func (p Model) Open(uids []mail.UID, src string, folders []mail.FolderEntry) Model {
 	p.shell = p.shell.WithOpen(true)
+	p.mode = ModeFilter
 	p.uids = uids
 	p.src = src
 	p.all = make([]mail.FolderEntry, 0, len(folders))
@@ -130,6 +150,7 @@ func (p Model) SetSize(width, height int) Model {
 func (p Model) Len() int        { return len(p.all) }
 func (p Model) Filter() string  { return p.list.FilterValue() }
 func (p Model) MatchCount() int { return len(p.list.VisibleItems()) }
+func (p Model) Mode() Mode      { return p.mode }
 
 func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !p.shell.IsOpen() {
@@ -141,6 +162,9 @@ func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 	switch {
 	case key.Matches(keyMsg, p.keys.Swallow):
+		return p, nil
+	case key.Matches(keyMsg, p.keys.ToggleMode):
+		p.mode ^= 1
 		return p, nil
 	case key.Matches(keyMsg, p.keys.Close):
 		return p, func() tea.Msg { return ClosedMsg{} }
@@ -158,11 +182,22 @@ func (p Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			func() tea.Msg { return PickedMsg{UIDs: uids, Src: src, Dest: dest} },
 			func() tea.Msg { return ClosedMsg{} },
 		)
-	case key.Matches(keyMsg, p.keys.CursorUp):
+	case key.Matches(keyMsg, p.keys.ArrowUp):
 		p.list.CursorUp()
 		return p, nil
-	case key.Matches(keyMsg, p.keys.CursorDown):
+	case key.Matches(keyMsg, p.keys.ArrowDown):
 		p.list.CursorDown()
+		return p, nil
+	case p.mode == ModeNav && key.Matches(keyMsg, p.keys.NavUp):
+		p.list.CursorUp()
+		return p, nil
+	case p.mode == ModeNav && key.Matches(keyMsg, p.keys.NavDown):
+		p.list.CursorDown()
+		return p, nil
+	}
+	if p.mode == ModeNav {
+		// Nav mode parks the filter. Swallow non-nav key input so the
+		// list's filter text stays the user's last typed query.
 		return p, nil
 	}
 	prevFilter := p.list.FilterValue()
@@ -196,8 +231,15 @@ func (p Model) View() string {
 func (p Model) Box(w, h int) string {
 	contentW, _ := uicore.PickerListSize(w, h, movepickerMaxWidth, movepickerMinWidth, 7)
 	bodyRows := uicore.SplitAndPad(p.list.View(), contentW)
+	var hint string
+	switch p.mode {
+	case ModeNav:
+		hint = "jk select · tab filter · enter pick · esc cancel"
+	default:
+		hint = "↑↓ select · tab nav · enter pick · esc cancel"
+	}
 	footerRows := []string{
-		p.styles.Dim.Render(uicore.PadOrTruncate("↑↓ select · enter pick · esc cancel", contentW)),
+		p.styles.Dim.Render(uicore.PadOrTruncate(hint, contentW)),
 	}
 	title := fmt.Sprintf("Move to (%d)", p.MatchCount())
 	return p.shell.Box(title, bodyRows, footerRows, contentW)

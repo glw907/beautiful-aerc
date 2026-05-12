@@ -71,6 +71,7 @@ func Apply(m Model) (config.AccountConfig, error) {
 				ClientSecret: m.OAuthSecret,
 			}
 			cfg.OAuthStore = m.OAuthStore
+			cfg.OAuthMode = m.OAuthMode
 		default:
 			return config.AccountConfig{}, fmt.Errorf("provider %q has no credential strategy", m.Preset)
 		}

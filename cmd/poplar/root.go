@@ -161,7 +161,11 @@ func runRoot(f rootFlags) error {
 	if !ok {
 		return fmt.Errorf("backend does not implement mail.ChangeTracker")
 	}
-	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{MaxSize: cacheCfg.MaxSize}, nil)
+	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{
+		MaxSize:           cacheCfg.MaxSize,
+		MaxAttachmentSize: cacheCfg.MaxAttachmentSize,
+		MaxOutboxBytes:    cacheCfg.MaxOutboxBytes,
+	}, nil)
 	if err != nil {
 		return fmt.Errorf("open cache for %s: %v", accts[0].Name, err)
 	}

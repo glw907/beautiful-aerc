@@ -178,6 +178,22 @@ current message carries `List-Unsubscribe` (RFC 2369) headers.
 | `1`–`9` | Open Nth attachment |
 | `Esc`, `q`, `@` | Close picker |
 
+### Move picker
+
+Two modes mirror the sidebar-search pattern (ADR-0064): filter
+is the default — keystrokes feed the filter, arrows navigate.
+`Tab` toggles to nav mode where `j`/`k` advance the cursor.
+
+| Key | Action |
+|-----|--------|
+| (any printable, in filter mode) | Append to filter |
+| `↑` / `↓` | Cursor up / down (both modes) |
+| `j` / `k` | Cursor down / up (nav mode only) |
+| `Tab` | Toggle filter ↔ nav |
+| `Enter` | Pick destination |
+| `Esc` | Close picker |
+| `q` | Swallowed (prevent accidental quit) |
+
 ## Contacts
 
 | Key | Action | Context |

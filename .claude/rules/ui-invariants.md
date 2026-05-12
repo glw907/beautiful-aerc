@@ -345,7 +345,10 @@ file describes behavior, not the key tables.
   vs `HelpViewer` context), link picker (viewer-context-only,
   `reader.LinkPicker`), attachment picker (`reader.AttachPicker`,
   `@` from viewer; `o`/`s`/`Enter`/digit/`Esc`), move picker
-  (`movepicker.Model`, `m` from account view), confirm modal
+  (`movepicker.Model`, `m` from account view; two modes
+  mirroring ADR-0064 — filter default, `Tab` toggles to nav,
+  `j`/`k` advance the cursor only in nav mode, arrows always
+  navigate), confirm modal
   (`ConfirmModal` — generic destructive-action prompt, used by
   manual empty), outbox overlay (`OutboxOverlay`, `Q` — read-only
   grouped summary), and conflict overlay (`ConflictOverlay`,

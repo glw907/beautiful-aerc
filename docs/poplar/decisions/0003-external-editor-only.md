@@ -1,6 +1,6 @@
 ---
 title: External editor only
-status: accepted
+status: superseded by 0034
 date: 2026-04-09
 ---
 
@@ -17,4 +17,6 @@ No built-in compose editor. Always launch `$EDITOR`
 
 ## Consequences
 
-No follow-on notes recorded.
+Superseded by [ADR-0034](0034-inline-compose-over-terminal-takeover.md): inline
+compose landed inside bubbletea after all, riding the `catkin`
+markdown editor. `$EDITOR` is no longer the only path.

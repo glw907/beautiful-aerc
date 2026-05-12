@@ -297,6 +297,72 @@ func TestMovepicker_listModel_enterEmitsPicked(t *testing.T) {
 	}
 }
 
+func TestMovePicker_FilterModeAcceptsJK(t *testing.T) {
+	// Folder list includes "Junk" so the filter actually needs `j`/`k`.
+	folders := []mail.FolderEntry{
+		{Provider: "INBOX", Display: "Inbox"},
+		{Provider: "Junk", Display: "Junk"},
+	}
+	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", folders).SetSize(60, 16)
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if got := p.Filter(); got != "ju" {
+		t.Fatalf("Filter = %q, want %q (filter mode must accept j)", got, "ju")
+	}
+	if p.MatchCount() != 1 {
+		t.Errorf("MatchCount = %d, want 1 (Junk)", p.MatchCount())
+	}
+}
+
+func TestMovePicker_NavModeJKNavigates(t *testing.T) {
+	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders()).SetSize(60, 16)
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.Mode() != ModeNav {
+		t.Fatalf("Mode after Tab = %v, want ModeNav", p.Mode())
+	}
+	start := p.list.Index()
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if got := p.list.Index(); got != start+1 {
+		t.Errorf("cursor after j in nav mode = %d, want %d", got, start+1)
+	}
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if got := p.list.Index(); got != start {
+		t.Errorf("cursor after k in nav mode = %d, want %d", got, start)
+	}
+	if p.Filter() != "" {
+		t.Errorf("Filter = %q, want empty (nav mode must not feed filter)", p.Filter())
+	}
+}
+
+func TestMovePicker_TabTogglesMode(t *testing.T) {
+	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders()).SetSize(60, 16)
+	if p.Mode() != ModeFilter {
+		t.Fatalf("initial Mode = %v, want ModeFilter", p.Mode())
+	}
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.Mode() != ModeNav {
+		t.Errorf("Mode after 1st Tab = %v, want ModeNav", p.Mode())
+	}
+	p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.Mode() != ModeFilter {
+		t.Errorf("Mode after 2nd Tab = %v, want ModeFilter", p.Mode())
+	}
+}
+
+func TestMovePicker_ArrowsNavigateInBothModes(t *testing.T) {
+	p := newTestPicker().Open([]mail.UID{"1"}, "INBOX", sampleFolders()).SetSize(60, 16)
+	for _, mode := range []Mode{ModeFilter, ModeNav} {
+		if p.Mode() != mode {
+			p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		}
+		start := p.list.Index()
+		p, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		if got := p.list.Index(); got != start+1 {
+			t.Errorf("mode=%v: cursor after ↓ = %d, want %d", mode, got, start+1)
+		}
+	}
+}
+
 // BenchmarkMovePickerView measures Box() cost on a realistic 7-folder list.
 func BenchmarkMovePickerView(b *testing.B) {
 	p := newTestPicker()

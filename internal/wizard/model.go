@@ -44,4 +44,8 @@ type Model struct {
 	OAuthStore  string
 	OAuthCID    string
 	OAuthSecret string
+	// OAuthMode is "loopback" (default, empty allowed) or "device-code".
+	// Set when the user picked device-code in the wizard radio or
+	// fell back to it after a loopback failure.
+	OAuthMode string
 }
