@@ -31,7 +31,10 @@ const (
 
 func loadFoldersCmd(c *cache.Account) tea.Cmd {
 	return func() tea.Msg {
-		if err := c.SyncFolders(context.Background()); err != nil {
+		c.BeginSync()
+		err := c.SyncFolders(context.Background())
+		c.EndSync()
+		if err != nil {
 			return uicore.ErrorMsg{Op: "list folders", Err: err}
 		}
 		cls, err := c.ListFolders()
@@ -56,7 +59,9 @@ func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	}
 	return func() tea.Msg {
 		if sync {
+			c.BeginSync()
 			_ = c.SyncFolder(context.Background(), name)
+			c.EndSync()
 		}
 		msgs, total, err := c.QueryFolder(name, 0, initialWindow)
 		if err != nil {

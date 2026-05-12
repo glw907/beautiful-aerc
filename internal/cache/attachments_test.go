@@ -139,6 +139,39 @@ func TestFetchAttachment_LazyPopulate(t *testing.T) {
 	}
 }
 
+func TestAttachmentDownloadProgress(t *testing.T) {
+	a := openTestAccount(t)
+
+	if _, ok := a.AttachmentDownloadProgress(); ok {
+		t.Fatal("idle: ok = true, want false")
+	}
+
+	a.BeginAttachmentDownload()
+	if _, ok := a.AttachmentDownloadProgress(); !ok {
+		t.Fatal("in-flight: ok = false, want true")
+	}
+	a.EndAttachmentDownload()
+	if _, ok := a.AttachmentDownloadProgress(); ok {
+		t.Fatal("after end: ok = true, want false")
+	}
+}
+
+func TestSyncProgress(t *testing.T) {
+	a := openTestAccount(t)
+
+	if _, ok := a.SyncProgress(); ok {
+		t.Fatal("idle: ok = true, want false")
+	}
+	a.BeginSync()
+	if _, ok := a.SyncProgress(); !ok {
+		t.Fatal("in-flight: ok = false, want true")
+	}
+	a.EndSync()
+	if _, ok := a.SyncProgress(); ok {
+		t.Fatal("after end: ok = true, want false")
+	}
+}
+
 func TestFetchAttachment_EvictBySize(t *testing.T) {
 	be := &attachBackend{
 		atts: map[mail.UID][]mail.Attachment{

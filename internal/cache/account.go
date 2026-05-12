@@ -48,6 +48,9 @@ type Account struct {
 
 	burstTotal atomic.Int32
 	burstDone  atomic.Int32
+
+	attachInFlight atomic.Int32
+	syncInFlight   atomic.Int32
 }
 
 // OpStatus is the lifecycle state of an outbox row.
@@ -231,6 +234,23 @@ func (a *Account) OutboxDrainProgress() (pct int, active bool) {
 	done := a.burstDone.Load()
 	return int(int64(done) * 100 / int64(total)), true
 }
+
+// AttachmentDownloadProgress reports whether an attachment fetch is in
+// flight. pct is always 0 (indeterminate).
+func (a *Account) AttachmentDownloadProgress() (pct int, active bool) {
+	return 0, a.attachInFlight.Load() > 0
+}
+
+// SyncProgress reports whether a folder sync is in flight.
+// pct is always 0 (indeterminate).
+func (a *Account) SyncProgress() (pct int, active bool) {
+	return 0, a.syncInFlight.Load() > 0
+}
+
+func (a *Account) BeginAttachmentDownload() { a.attachInFlight.Add(1) }
+func (a *Account) EndAttachmentDownload()   { a.attachInFlight.Add(-1) }
+func (a *Account) BeginSync()               { a.syncInFlight.Add(1) }
+func (a *Account) EndSync()                 { a.syncInFlight.Add(-1) }
 
 // NotifyActivity signals recent user input, pausing backfill until
 // the idle threshold elapses.

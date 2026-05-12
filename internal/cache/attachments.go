@@ -110,6 +110,8 @@ func (a *Account) FetchAttachment(ctx context.Context, uid mail.UID, partID stri
 	} else if ok {
 		return buf, nil
 	}
+	a.BeginAttachmentDownload()
+	defer a.EndAttachmentDownload()
 	body, err := a.Backend.FetchAttachment(uid, partID)
 	if err != nil {
 		return nil, err
