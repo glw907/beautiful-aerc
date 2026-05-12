@@ -9,47 +9,47 @@ ErrAuth → drainer coverage, T15 renames
 em-dash trim, six line-level voice fixes, three invariant
 doc-drift repairs.
 
-Pass 42 opens beta soak.
+**Dogfood phase, pre-beta rules still in force.** Geoff is the
+sole user; soak (as `release-stance.md` defines it — stability
+first, no schema breaks, features queued to `1.1`) is the wrong
+posture while there's no one to protect. Pre-beta refactor
+license stays open. Beta soak enters when a second user lands or
+Geoff explicitly calls the tree feature-frozen.
+
 Pass 35.1 still pending Gmail/Outlook creds.
 
 ## Passes
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 34 | Scaffold through cross-pane mouse | done |
-| 35 | Native OAuth final wiring (ADR-0220) | done |
+| 1 – 41.1 | Scaffold through Audit Final remediation (ADRs 0001–0239) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 36 / 36.1 | Audit C + remediation (ADR-0221/0222) | done |
-| 37 / 37.1 | Audit D + remediation (ADR-0223/0224) | done |
-| 38 / 38.1 | Audit E + remediation (ADRs 0225/0226/0227) | done |
-| 39 / 39.1 | Audit F + remediation (ADRs 0228/0229) | done |
-| 40 | Audit G + FK inline fix (ADRs 0230/0231) | done |
-| 40.1 | Audit G remediation — 21 P1 items (ADR-0233) | done |
-| 40.2 | Mutation-testing scaffolding (ADR-0232) | done |
-| 40.3 | check-deep calibration + AST skipcheck (ADR-0234) | done |
-| 40.4 | `internal/mail` mutation lift to 94.44% (ADR-0235) | done |
-| 40.5a | mailauth coverage + check-deep flag fix (ADR-0236) | done |
-| 40.5b | mailauth survivor kill + floor recalibration (ADR-0237) | done |
-| 41 | Audit Final — comprehensive pre-soak (ADR-0238) | done |
-| 41.1 | Audit Final remediation (ADR-0239) | done |
-| 42 | Beta soak entry | next |
+| 42+ | Dogfood-driven fixes + quality (rolling) | active |
+| Beta soak | Gated on second user or explicit feature freeze | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 42)
+### Next starter prompt (rolling — Pass 42+)
 
-> **Goal.** Open beta soak. Audit Final returned empty after Pass
-> 41.1; the soak gate is clear.
+> **Goal.** Fix what daily-driver use surfaces; keep tightening
+> code quality while there are no other users to protect.
 >
-> **Scope.** Per `docs/poplar/release-stance.md` beta-soak rules
-> (load on entry — not yet in scope here). Tag `v0.9.1` if the
-> stance asks for a soak-entry version bump, otherwise leave the
-> tag policy alone. Update `STATUS.md` to mark soak active and
-> set the post-1.0 rules pointer.
+> **Scope.** Driven by what Geoff hits in real use. No fixed
+> task list. Each session may be one bug, one refactor, or a
+> small theme of related fixes. Adjacent quality wins land
+> inline per pre-beta `CLAUDE.md` rules.
 >
-> **Settled.** Audit gate cleared by ADR-0239 re-skim.
+> **Settled.**
+> - Pre-beta rules stay in force; the documented beta-soak
+>   posture is not entered.
+> - Schema breaks are fair game; the only sacred data is the
+>   mail cache contents (and those rebuild from server anyway).
+> - Bug reports from Geoff are authoritative without external
+>   repro.
 >
-> **Open.** Read `docs/poplar/release-stance.md` first — it owns
-> the soak-entry checklist; this pass executes that checklist.
+> **Open.** Whatever surfaces in use.
 >
-> **Approach.** Load release-stance, work the checklist, write
-> the soak-entry ADR. Standard pass-end checklist applies.
+> **Approach.** Each session opens with a bug or itch from
+> Geoff. Fix it, fix adjacent issues inline, run the pass-end
+> ritual when the change set has cohered into something
+> commit-shaped. Soak entry is deferred until a second user
+> lands or Geoff calls feature freeze.
