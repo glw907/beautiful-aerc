@@ -80,19 +80,29 @@ const templateBody = `# poplar — terminal email client
 #
 # OAuth providers
 #
-#   gmail and outlook authenticate with a short-lived access
-#   token (XOAUTH2), not a password. Set ` + "`password-cmd`" + ` to a
-#   command that prints a fresh access token to stdout. Examples:
+#   gmail and outlook authenticate via OAuth 2.0 (XOAUTH2). Poplar
+#   handles the consent flow natively — when you run ` + "`poplar`" + ` for
+#   the first time, the setup wizard opens a browser, you grant
+#   access, and a refresh token is stored in your system keyring
+#   (or, as a fallback, an age-encrypted file under
+#   ` + "`$XDG_CONFIG_HOME/poplar/oauth/`" + `).
 #
-#       oauth2l fetch --type=oauth2 --output_format=bare \
-#           --credentials=$HOME/.config/poplar/gmail-client.json \
-#           https://mail.google.com/
+#   Bring your own OAuth app: register a desktop/installed client
+#   with Google or Microsoft, then set the client ID and secret
+#   under [account.oauth]:
 #
-#       op read op://Personal/Gmail-XOAUTH2/access-token
+#       [[account]]
+#       name = "personal-gmail"
+#       email = "you@gmail.com"
+#       provider = "gmail"
 #
-#   The token expires every hour; password-cmd is re-run on each
-#   reconnect, so wire it to a refresher that returns a current
-#   token (most CLIs above handle the refresh transparently).
+#         [account.oauth]
+#         client-id     = "1234567890-abc.apps.googleusercontent.com"
+#         client-secret = "GOCSPX-..."
+#         oauth-store   = "keyring"  # or "age-file"
+#
+#   To rerun consent (e.g. after revoking access), run
+#   ` + "`poplar --reauth=<account-name>`" + `.
 #
 # ProtonMail
 #
