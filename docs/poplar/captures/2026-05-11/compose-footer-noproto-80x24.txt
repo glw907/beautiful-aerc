@@ -1,0 +1,24 @@
+──────────────┬────────────────────────────────────────────────────────────────╮
+              │From:    geoff@907.life                                         │
+ geoff@907.li…│To:                                                             │
+              │Cc:                                                             │
+┃ Inbox    87 │Bcc:                                                            │
+  Drafts      │Subject:                                                        │
+  Sent        │────────────────────────────────────────────────────────────────│
+  Archive     │█                                                               │
+              │                                                                │
+  Spam        │                                                                │
+  Trash       │                                                                │
+              │                                                                │
+  Buccaneer … │                                                                │
+  DMARC Repo… │                                                                │
+  Finance … 4 │                                                                │
+  Membership… │                                                                │
+  Notifi… 111 │                                                                │
+  Program Co… │                                                                │
+  Remind      │                                                                │
+              │                                                                │
+   / to search│                                                                │
+              │                                                                │
+──────────────┴─────────────────── 167 messages · 87 unread · ↓ · ● connected ─╯
+ Ctrl+X send  Ctrl+C cancel  Tab field  Ctrl+O attach  Ctrl+L later …
