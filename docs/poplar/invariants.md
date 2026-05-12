@@ -388,9 +388,9 @@ trailing `*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. AD
   (ADR-0196, `MODERN_GO_STRICT=1` hard-fails) scan grep-tier tells;
   `scripts/skipcheck` rejects `Test*` bodies whose first statement
   is an unguarded `t.Skip`/`SkipNow`/`Skipf` (ADR-0234).
-  `make check-deep` runs gremlins per-package with calibrated efficacy
-  floors (observed − 5pp; ADR-documented equivalent mutants count as
-  clean; ADRs 0232, 0234, 0235). `make install` → `~/.local/bin/`.
+  `make check-deep` runs gremlins per-package with
+  `--timeout-coefficient 10 --workers 1` and observed − 5pp floors
+  (equivalents documented; ADRs 0232, 0234–0236). `make install` → `~/.local/bin/`.
   Module `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `styling.md` before any color; `poplar-pass`

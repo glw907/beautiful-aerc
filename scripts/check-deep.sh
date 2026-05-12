@@ -41,17 +41,31 @@ fi
 # per-run timing variance. Raise a floor only by writing new tests
 # that lift the observed number — never by closing the buffer.
 #
+# Invocation uses --timeout-coefficient 10 --workers 1 (ADR-0236).
+# Default gremlins timeout (3× base test runtime) is too tight for
+# packages whose tests have intrinsic wall-clock waits (mailauth's
+# RFC 8628 slow_down test, etc); timed-out mutants are excluded
+# from the efficacy denominator and silently inflate the score.
+# Coefficient 10 + single worker eliminate the timeout channel so
+# each mutant lands as KILLED / LIVED / NOT_COVERED.
+#
 # Baselines (per-package observed efficacy, floor = observed − 5pp):
-#   mailauth     76.00% (Pass 40.3)   filter     82.14% (Pass 40.3)
-#   content      78.75% (Pass 40.3)   mail       94.44% (Pass 40.4)
-#   cache        77.54% (Pass 40.3)   tidytext   79.07% (Pass 40.3)
-#   mailcompose  83.76% (Pass 40.3)   config     83.93% (Pass 40.3)
+#   mailauth     78.50% (Pass 40.5a)  filter     82.14% (Pass 40.3) *
+#   content      78.75% (Pass 40.3) * mail       94.44% (Pass 40.4)
+#   cache        77.54% (Pass 40.3) * tidytext   79.07% (Pass 40.3) *
+#   mailcompose  83.76% (Pass 40.3) * config     83.93% (Pass 40.3) *
+#
+# (*) measured under the prior flag set (no timeout-coefficient);
+# the seven non-mailauth packages will be re-measured in Pass 40.5b
+# and their floors revised accordingly. Their existing floors stay
+# put for now — the script's role is to catch regressions, and a
+# stale-but-low floor still does that.
 #
 # mail's lone surviving mutant (mock.go:117 `end > total` ↔
 # `end >= total`) is the documented equivalent mutant from
 # ADR-0235 — cannot be killed without rewriting the clamp.
 declare -A PKGS=(
-    [internal/mailauth]=71
+    [internal/mailauth]=73
     [internal/content]=73
     [internal/filter]=77
     [internal/mail]=89
@@ -67,6 +81,8 @@ for pkg in "${!PKGS[@]}"; do
     echo
     echo "=== $pkg (threshold: ${threshold}%) ==="
     if ! "$GREMLINS" unleash -t dev \
+        --timeout-coefficient 10 \
+        --workers 1 \
         --threshold-efficacy "$threshold" \
         --output-statuses lk \
         "./$pkg"; then

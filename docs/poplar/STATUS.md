@@ -1,14 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 40.4 lifted `internal/mail` mutation
-efficacy from 69.23% to 94.44% (ADR-0235). New tests:
-`TestIsConnectionDead`, `TestConfigKey`, `TestClassifyDisposition`,
-`TestIsSelfHosted`. Extended `TestMockBackend_QueryFolder` with an
-`at end` boundary case + capacity assertion, and added
-`TestMockBackend_FetchBody_SeededUIDs` to cover `mockBodies`.
-`scripts/check-deep.sh` floor moved 64 → 89. Two equivalent
-mutants (`mock.go:117` clamp, `probe.go:28` `iota+1`) documented
-and accepted rather than chased — this codifies the policy.
+**Current pass:** Pass 40.5a covered `internal/mailauth`'s seven
+NOT_COVERED mutants (coverage 78.79% → 99.07%) and fixed
+`scripts/check-deep.sh` to run gremlins with
+`--timeout-coefficient 10 --workers 1` (ADR-0236). The corrected
+flags revealed 23 real survivors hidden as timeouts; honest
+baseline 78.50%. Floor 71 → 73; other packages held for 40.5b.
 
 Pass 35.1 still pending Gmail/Outlook creds.
 
@@ -30,29 +27,28 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 40.2 | Mutation-testing scaffolding (ADR-0232) | done |
 | 40.3 | check-deep calibration + AST skipcheck (ADR-0234) | done |
 | 40.4 | `internal/mail` mutation lift to 94.44% (ADR-0235) | done |
-| 40.5 | Next queue: `internal/mailauth` (76% → 80%+) | next |
+| 40.5a | mailauth coverage + check-deep flag fix (ADR-0236) | done |
+| 40.5b | Re-measure floors + kill mailauth's 23 survivors | next |
 | 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 40.5)
+### Next starter prompt (Pass 40.5b)
 
-> **Goal.** Lift `internal/mailauth` mutation efficacy past 80%
-> by writing tests around the surviving and uncovered mutants
-> surfaced by `make check-deep`.
+> **Goal.** Kill `internal/mailauth`'s 23 real survivors and
+> re-measure the seven other package floors under the calibrated
+> `--timeout-coefficient 10 --workers 1` invocation (ADR-0236).
 >
-> **Scope.** `internal/mailauth/*_test.go`; the 71% threshold in
-> `scripts/check-deep.sh` gets raised to observed − 5pp at
-> pass-end. Out: the other six packages' floors.
+> **Scope.** `internal/mailauth/*_test.go` + per-package floor
+> updates in `scripts/check-deep.sh`.
 >
-> **Settled.** ADRs 0232/0234/0235 establish the calibration
-> shape: per-package observed − 5pp floors, document equivalent
-> mutants rather than chase them.
+> **Settled.** ADR-0236 calibration protocol; survivor + floor
+> lists come from `make check-deep` output.
 >
-> **Open.** None — survivors are mechanical from
-> `make check-deep` output.
+> **Open.** None — mechanical from gremlins output.
 >
-> **Approach.** Run gremlins against `./internal/mailauth` only,
-> classify survivors, write the missing assertions, plan doc at
-> `docs/superpowers/plans/2026-05-XX-mailauth-mutation-lift.md`,
+> **Approach.** Run `gremlins unleash -t dev
+> --timeout-coefficient 10 --workers 1 --output-statuses l`
+> per package; classify; write targeted tests; plan doc at
+> `docs/superpowers/plans/2026-05-XX-mailauth-survivor-kill.md`;
 > standard pass-end checklist.

@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+func TestDefaultDevicePollInterval(t *testing.T) {
+	if defaultDevicePollInterval != 5*time.Second {
+		t.Fatalf("defaultDevicePollInterval = %v, want 5s", defaultDevicePollInterval)
+	}
+}
+
 func TestAuthorizeDeviceCode_HappyPath(t *testing.T) {
 	store := newMemStore()
 	var deviceHits, tokenHits atomic.Int32

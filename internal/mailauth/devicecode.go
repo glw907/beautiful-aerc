@@ -111,13 +111,19 @@ func (c *Client) RequestDeviceAuth(ctx context.Context) (*DeviceAuth, error) {
 	}, nil
 }
 
+// defaultDevicePollInterval is the fallback used when the provider
+// omits an `interval` field in the device-auth response. RFC 8628
+// §3.2 recommends 5 seconds; the field becomes a named site for
+// mutation testing to pin against.
+var defaultDevicePollInterval = 5 * time.Second
+
 // PollDeviceCode polls TokenURL per da.Interval (with RFC 8628 §3.5
 // slow_down handling) until success, denial, or da.ExpiresIn elapses.
 // On success the refresh token is persisted via the configured store.
 func (c *Client) PollDeviceCode(ctx context.Context, da *DeviceAuth) error {
 	interval := time.Duration(da.Interval) * time.Second
 	if interval <= 0 {
-		interval = 5 * time.Second
+		interval = defaultDevicePollInterval
 	}
 	deadline := time.Now().Add(time.Duration(da.ExpiresIn) * time.Second)
 
