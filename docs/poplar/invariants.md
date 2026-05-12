@@ -390,7 +390,7 @@ trailing `*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. AD
   is an unguarded `t.Skip`/`SkipNow`/`Skipf` (ADR-0234).
   `make check-deep` runs gremlins per-package with
   `--timeout-coefficient 10 --workers 1` and observed − 5pp floors
-  (equivalents documented; ADRs 0232, 0234–0236). `make install` → `~/.local/bin/`.
+  (equivalents documented; ADRs 0232, 0234–0237). `make install` → `~/.local/bin/`.
   Module `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `styling.md` before any color; `poplar-pass`

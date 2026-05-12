@@ -65,6 +65,21 @@ func TestConsentServer_PassesCode(t *testing.T) {
 	}
 }
 
+func TestConsentServer_Timeouts(t *testing.T) {
+	srv, _, _, err := runConsentServer([2]int{0, 0})
+	if err != nil {
+		t.Fatalf("runConsentServer: %v", err)
+	}
+	defer srv.Shutdown(context.Background()) //nolint:errcheck
+
+	if srv.ReadHeaderTimeout != 10*time.Second {
+		t.Errorf("ReadHeaderTimeout = %v, want 10s", srv.ReadHeaderTimeout)
+	}
+	if srv.WriteTimeout != 5*time.Second {
+		t.Errorf("WriteTimeout = %v, want 5s", srv.WriteTimeout)
+	}
+}
+
 func TestListen_ScansPortRange(t *testing.T) {
 	// Occupy a port, then ask listen() to scan a two-port range that
 	// starts on the busy port. Exercises the loop's second iteration.

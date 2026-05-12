@@ -49,27 +49,27 @@ fi
 # Coefficient 10 + single worker eliminate the timeout channel so
 # each mutant lands as KILLED / LIVED / NOT_COVERED.
 #
-# Baselines (per-package observed efficacy, floor = observed − 5pp):
-#   mailauth     78.50% (Pass 40.5a)  filter     82.14% (Pass 40.3) *
-#   content      78.75% (Pass 40.3) * mail       94.44% (Pass 40.4)
-#   cache        77.54% (Pass 40.3) * tidytext   79.07% (Pass 40.3) *
-#   mailcompose  83.76% (Pass 40.3) * config     83.93% (Pass 40.3) *
+# Baselines (per-package observed efficacy, floor = observed − 5pp).
+# All eight packages measured under the calibrated flag set
+# (--timeout-coefficient 10 --workers 1) in Pass 40.5b (ADR-0237):
+#   mailauth     99.07%  filter      82.14%
+#   content      77.05%  mail        94.44%
+#   cache       100.00%  tidytext    79.39%
+#   mailcompose  83.20%  config      83.86%
 #
-# (*) measured under the prior flag set (no timeout-coefficient);
-# the seven non-mailauth packages will be re-measured in Pass 40.5b
-# and their floors revised accordingly. Their existing floors stay
-# put for now — the script's role is to catch regressions, and a
-# stale-but-low floor still does that.
-#
-# mail's lone surviving mutant (mock.go:117 `end > total` ↔
-# `end >= total`) is the documented equivalent mutant from
-# ADR-0235 — cannot be killed without rewriting the clamp.
+# Documented equivalent mutants (cannot be killed without
+# functional changes):
+#   mail/mock.go:117    `end > total` ↔ `end >= total` (ADR-0235).
+#   mailauth/oauth.go:213  `time.Until > 5*time.Minute` boundary
+#       — equivalent under any non-clock-controlled test; the
+#       5-minute refresh buffer is conservative, not load-bearing
+#       (ADR-0237).
 declare -A PKGS=(
-    [internal/mailauth]=73
-    [internal/content]=73
+    [internal/mailauth]=94
+    [internal/content]=72
     [internal/filter]=77
     [internal/mail]=89
-    [internal/cache]=72
+    [internal/cache]=95
     [internal/tidytext]=74
     [internal/mailcompose]=78
     [internal/config]=78

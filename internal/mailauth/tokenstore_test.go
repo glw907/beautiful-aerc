@@ -1,10 +1,13 @@
 package mailauth
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zalando/go-keyring"
 )
 
 func TestAgeFileStoreRoundTrip(t *testing.T) {
@@ -114,6 +117,105 @@ func TestOpenStorePrefersKeyring(t *testing.T) {
 		t.Errorf("Get = %q, want %q", got, "val")
 	}
 	_ = store.Delete("probe-acct")
+}
+
+// resetKeyring restores the OS provider after a test mocked it. The
+// mock state is process-global, so each mocking test must clean up.
+func resetKeyring(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() { keyring.MockInit() })
+}
+
+func TestKeyringStore_MockedRoundTrip(t *testing.T) {
+	keyring.MockInit()
+	resetKeyring(t)
+
+	s := NewKeyringStore()
+	if err := s.Set("acct", "tok"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, err := s.Get("acct")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != "tok" {
+		t.Errorf("Get = %q, want tok", got)
+	}
+	if err := s.Delete("acct"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	got, err = s.Get("acct")
+	if err != nil {
+		t.Fatalf("Get after Delete: %v", err)
+	}
+	if got != "" {
+		t.Errorf("Get after Delete = %q, want empty", got)
+	}
+}
+
+func TestKeyringStore_SurfacesBackendError(t *testing.T) {
+	sentinel := errors.New("simulated keyring failure")
+	keyring.MockInitWithError(sentinel)
+	resetKeyring(t)
+
+	s := NewKeyringStore()
+	if err := s.Set("acct", "tok"); err == nil || !errors.Is(err, sentinel) {
+		t.Errorf("Set err = %v, want wrap of %v", err, sentinel)
+	}
+	if _, err := s.Get("acct"); err == nil || !errors.Is(err, sentinel) {
+		t.Errorf("Get err = %v, want wrap of %v", err, sentinel)
+	}
+	if err := s.Delete("acct"); err == nil || !errors.Is(err, sentinel) {
+		t.Errorf("Delete err = %v, want wrap of %v", err, sentinel)
+	}
+}
+
+func TestKeyringStore_UnavailableMapsToSentinel(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	resetKeyring(t)
+
+	s := NewKeyringStore()
+	if err := s.Set("acct", "tok"); err != ErrKeyringUnavailable {
+		t.Errorf("Set err = %v, want ErrKeyringUnavailable", err)
+	}
+	if _, err := s.Get("acct"); err != ErrKeyringUnavailable {
+		t.Errorf("Get err = %v, want ErrKeyringUnavailable", err)
+	}
+	if err := s.Delete("acct"); err != ErrKeyringUnavailable {
+		t.Errorf("Delete err = %v, want ErrKeyringUnavailable", err)
+	}
+}
+
+func TestOpenStore_FallsBackOnProbeFailure(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	resetKeyring(t)
+
+	store, backend, err := OpenStore("probe", t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	if backend != BackendAgeFile {
+		t.Errorf("backend = %q, want %q", backend, BackendAgeFile)
+	}
+	if _, ok := store.(*AgeFileStore); !ok {
+		t.Errorf("store type = %T, want *AgeFileStore", store)
+	}
+}
+
+func TestOpenStore_PrefersKeyringWhenProbeSucceeds(t *testing.T) {
+	keyring.MockInit()
+	resetKeyring(t)
+
+	store, backend, err := OpenStore("probe", t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	if backend != BackendKeyring {
+		t.Errorf("backend = %q, want %q", backend, BackendKeyring)
+	}
+	if _, ok := store.(*KeyringStore); !ok {
+		t.Errorf("store type = %T, want *KeyringStore", store)
+	}
 }
 
 func TestAgeFileStoreAtomicWrite(t *testing.T) {

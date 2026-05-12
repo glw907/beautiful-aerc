@@ -306,3 +306,119 @@ func TestForceRefreshDropsCache(t *testing.T) {
 func isErrAuth(err error) bool {
 	return errors.Is(err, mail.ErrAuth)
 }
+
+func TestBuildAuthURL_ScopeOmittedWhenEmpty(t *testing.T) {
+	c := NewClient(Config{
+		ClientID: "cid",
+		AuthURL:  "https://example.test/auth",
+	}, newMemStore(), "u", BackendKeyring)
+	got := c.buildAuthURL("st", "ch", "http://127.0.0.1:1234/callback")
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if u.Query().Has("scope") {
+		t.Errorf("auth URL contains scope= with empty Scopes: %s", got)
+	}
+
+	c = NewClient(Config{
+		ClientID: "cid",
+		AuthURL:  "https://example.test/auth",
+		Scopes:   []string{"a", "b"},
+	}, newMemStore(), "u", BackendKeyring)
+	got = c.buildAuthURL("st", "ch", "http://127.0.0.1:1234/callback")
+	u, _ = url.Parse(got)
+	if u.Query().Get("scope") != "a b" {
+		t.Errorf("scope = %q, want %q", u.Query().Get("scope"), "a b")
+	}
+}
+
+func TestGeneratePKCEVerifierAndStateAreNonEmpty(t *testing.T) {
+	v, err := generatePKCEVerifier()
+	if err != nil {
+		t.Fatalf("generatePKCEVerifier: %v", err)
+	}
+	if v == "" {
+		t.Error("verifier is empty")
+	}
+	s, err := generateState()
+	if err != nil {
+		t.Fatalf("generateState: %v", err)
+	}
+	if s == "" {
+		t.Error("state is empty")
+	}
+}
+
+type countingStore struct {
+	memStore
+	sets int
+}
+
+func (s *countingStore) Set(account, refresh string) error {
+	s.sets++
+	return s.memStore.Set(account, refresh)
+}
+
+func TestTokenPersistsRefreshOnlyWhenRotated(t *testing.T) {
+	cases := []struct {
+		name       string
+		serverRT   string
+		wantSets   int
+		wantStored string
+	}{
+		{"unchanged", "rt-original", 0, "rt-original"},
+		{"omitted", "", 0, "rt-original"},
+		{"rotated", "rt-new", 1, "rt-new"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newFakeTokenServer(t)
+			fs.respond = func(w http.ResponseWriter) {
+				w.Header().Set("Content-Type", "application/json")
+				resp := map[string]any{"access_token": "at", "expires_in": 3600}
+				if tc.serverRT != "" {
+					resp["refresh_token"] = tc.serverRT
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+			}
+			store := &countingStore{memStore: memStore{m: map[string]string{"test-account": "rt-original"}}}
+			c := newTestClient(Config{ClientID: "cid", TokenURL: fs.srv.URL + "/token"}, store)
+			if _, err := c.Token(t.Context()); err != nil {
+				t.Fatalf("Token: %v", err)
+			}
+			if store.sets != tc.wantSets {
+				t.Errorf("Set calls = %d, want %d", store.sets, tc.wantSets)
+			}
+			if got := store.m["test-account"]; got != tc.wantStored {
+				t.Errorf("stored refresh = %q, want %q", got, tc.wantStored)
+			}
+		})
+	}
+}
+
+func TestClassifyOAuthErr_StatusGuard(t *testing.T) {
+	// The `sc == 400 || sc == 401` guard means an invalid_grant body at
+	// 500 must not classify as ErrAuth. Either condition could drop
+	// silently without changing 200/400/401 behavior, so the 500 case
+	// is what pins both halves of the OR.
+	fs := newFakeTokenServer(t)
+	fs.respond = func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": "invalid_grant",
+		})
+	}
+	store := newMemStore()
+	store.m["test-account"] = "rt"
+	c := newTestClient(Config{ClientID: "cid", TokenURL: fs.srv.URL + "/token"}, store)
+
+	_, err := c.Token(t.Context())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if errors.Is(err, mail.ErrAuth) {
+		t.Errorf("err wraps mail.ErrAuth for 500-status response: %v", err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -189,6 +190,198 @@ func TestAuthorizeDeviceCode_AccessDenied(t *testing.T) {
 	err := c.AuthorizeDeviceCode(ctx, func(string, string, string) {})
 	if !errors.Is(err, ErrDeviceConsentDenied) {
 		t.Errorf("want ErrDeviceConsentDenied, got %v", err)
+	}
+}
+
+func TestRequestDeviceAuth_FormShape(t *testing.T) {
+	cases := []struct {
+		name         string
+		scopes       []string
+		clientSecret string
+		wantScope    bool
+		wantSecret   bool
+	}{
+		{"empty-scopes-and-secret", nil, "", false, false},
+		{"scopes-only", []string{"a", "b"}, "", true, false},
+		{"secret-only", nil, "sek", false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotDevice, gotToken string
+			mux := http.NewServeMux()
+			mux.HandleFunc("/device", func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				gotDevice = string(raw)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"device_code":      "dc",
+					"user_code":        "U",
+					"verification_uri": "https://example.test",
+					"expires_in":       30,
+					"interval":         1,
+				})
+			})
+			mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				gotToken = string(raw)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token": "at",
+					"expires_in":   3600,
+				})
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			c := NewClient(Config{
+				ClientID:      "cid",
+				ClientSecret:  tc.clientSecret,
+				DeviceAuthURL: srv.URL + "/device",
+				TokenURL:      srv.URL + "/token",
+				Scopes:        tc.scopes,
+			}, newMemStore(), "u", BackendKeyring)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := c.AuthorizeDeviceCode(ctx, func(string, string, string) {}); err != nil {
+				t.Fatalf("AuthorizeDeviceCode: %v", err)
+			}
+			hasScope := strings.Contains(gotDevice, "scope=")
+			if hasScope != tc.wantScope {
+				t.Errorf("device form scope= present=%v, want %v: %q", hasScope, tc.wantScope, gotDevice)
+			}
+			hasSecret := strings.Contains(gotToken, "client_secret=")
+			if hasSecret != tc.wantSecret {
+				t.Errorf("token form client_secret= present=%v, want %v: %q", hasSecret, tc.wantSecret, gotToken)
+			}
+		})
+	}
+}
+
+func TestRequestDeviceAuth_DefaultsExpiresIn(t *testing.T) {
+	// expires_in omitted (zero) and negative both floor to 300 (RFC 8628 §3.2).
+	for _, want := range []int{0, -1} {
+		t.Run(fmt.Sprintf("expires_in_%d", want), func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/device", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"device_code":      "dc",
+					"user_code":        "U",
+					"verification_uri": "https://example.test",
+					"expires_in":       want,
+					"interval":         1,
+				})
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			c := NewClient(Config{
+				ClientID:      "cid",
+				DeviceAuthURL: srv.URL + "/device",
+				TokenURL:      srv.URL + "/token",
+			}, newMemStore(), "u", BackendKeyring)
+
+			da, err := c.RequestDeviceAuth(t.Context())
+			if err != nil {
+				t.Fatalf("RequestDeviceAuth: %v", err)
+			}
+			if da.ExpiresIn != 300 {
+				t.Errorf("ExpiresIn = %d, want 300", da.ExpiresIn)
+			}
+		})
+	}
+}
+
+func TestPollDeviceCode_DefaultsInterval(t *testing.T) {
+	// Interval=0 must default to defaultDevicePollInterval. Override the
+	// package-level default to a small duration so the test is fast; the
+	// boundary mutant (interval <= 0 → interval < 0) is killed by the
+	// default-branch executing.
+	orig := defaultDevicePollInterval
+	defaultDevicePollInterval = 20 * time.Millisecond
+	defer func() { defaultDevicePollInterval = orig }()
+
+	var hits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  "at",
+			"refresh_token": "rt",
+			"expires_in":    3600,
+		})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewClient(Config{
+		ClientID: "cid",
+		TokenURL: srv.URL + "/token",
+	}, newMemStore(), "u", BackendKeyring)
+
+	start := time.Now()
+	err := c.PollDeviceCode(t.Context(), &DeviceAuth{
+		DeviceCode: "dc",
+		ExpiresIn:  5,
+		Interval:   0,
+	})
+	if err != nil {
+		t.Fatalf("PollDeviceCode: %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Errorf("token hits = %d, want 1", hits.Load())
+	}
+	if elapsed := time.Since(start); elapsed < 15*time.Millisecond {
+		t.Errorf("PollDeviceCode returned in %v, want >= 15ms (the default tick)", elapsed)
+	}
+}
+
+func TestPollDeviceToken_ExpiryArithmetic(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "at",
+			"expires_in":   3600,
+		})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	before := time.Now()
+	tok, slow, err := pollDeviceToken(t.Context(), Config{ClientID: "cid", TokenURL: srv.URL + "/token"}, "dc")
+	after := time.Now()
+	if err != nil || slow || tok == nil {
+		t.Fatalf("pollDeviceToken: tok=%v slow=%v err=%v", tok, slow, err)
+	}
+	// Expiry must land in [before+3600s, after+3600s]. Pins both the
+	// multiplication and the boundary check (ExpiresIn > 0).
+	if tok.Expiry.Before(before.Add(3600*time.Second)) || tok.Expiry.After(after.Add(3600*time.Second)) {
+		t.Errorf("Expiry = %v, want in [%v, %v]", tok.Expiry,
+			before.Add(3600*time.Second), after.Add(3600*time.Second))
+	}
+}
+
+func TestPollDeviceToken_NoExpiryWhenZero(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "at",
+			// expires_in omitted → zero, must leave Expiry zero.
+		})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	tok, _, err := pollDeviceToken(t.Context(), Config{ClientID: "cid", TokenURL: srv.URL + "/token"}, "dc")
+	if err != nil || tok == nil {
+		t.Fatalf("pollDeviceToken: tok=%v err=%v", tok, err)
+	}
+	if !tok.Expiry.IsZero() {
+		t.Errorf("Expiry = %v, want zero", tok.Expiry)
 	}
 }
 

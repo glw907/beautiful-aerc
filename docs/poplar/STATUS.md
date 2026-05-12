@@ -1,12 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 40.5a covered `internal/mailauth`'s seven
-NOT_COVERED mutants (coverage 78.79% → 99.07%) and fixed
-`scripts/check-deep.sh` to run gremlins with
-`--timeout-coefficient 10 --workers 1` (ADR-0236). The corrected
-flags revealed 23 real survivors hidden as timeouts; honest
-baseline 78.50%. Floor 71 → 73; other packages held for 40.5b.
+**Current pass:** Pass 40.5b killed 22 of 23 mailauth survivors
+(efficacy 78.50% → 99.07%, floor 73 → 94; one equivalent mutant
+documented) and recalibrated the seven other curated package
+floors under the calibrated flag set. `cache` jumped from 72 to
+95 once the bad-flag artifact lifted (ADR-0237).
 
+Pass 41 (Audit Final) is the next gate.
 Pass 35.1 still pending Gmail/Outlook creds.
 
 **Beta soak deferred.** Pre-beta rules apply.
@@ -28,27 +28,27 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 40.3 | check-deep calibration + AST skipcheck (ADR-0234) | done |
 | 40.4 | `internal/mail` mutation lift to 94.44% (ADR-0235) | done |
 | 40.5a | mailauth coverage + check-deep flag fix (ADR-0236) | done |
-| 40.5b | Re-measure floors + kill mailauth's 23 survivors | next |
-| 41 | Audit Final — comprehensive pre-soak | gate |
+| 40.5b | mailauth survivor kill + floor recalibration (ADR-0237) | done |
+| 41 | Audit Final — comprehensive pre-soak | next |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 40.5b)
+### Next starter prompt (Pass 41)
 
-> **Goal.** Kill `internal/mailauth`'s 23 real survivors and
-> re-measure the seven other package floors under the calibrated
-> `--timeout-coefficient 10 --workers 1` invocation (ADR-0236).
+> **Goal.** Run the comprehensive pre-soak audit per
+> `docs/poplar/audit-plan.md`; surface any remaining
+> production-risk findings before beta-soak entry.
 >
-> **Scope.** `internal/mailauth/*_test.go` + per-package floor
-> updates in `scripts/check-deep.sh`.
+> **Scope.** Whole codebase. Output is a fresh audit doc under
+> `docs/superpowers/plans/` listing P0/P1 findings with file:line
+> citations and ADR pointers; no code yet.
 >
-> **Settled.** ADR-0236 calibration protocol; survivor + floor
-> lists come from `make check-deep` output.
+> **Settled.** Audit cadence + scope live in
+> `docs/poplar/audit-plan.md`; release-stance gate is
+> "Audit Final returns empty" (CLAUDE.md).
 >
-> **Open.** None — mechanical from gremlins output.
+> **Open.** None — the audit plan is the spec.
 >
-> **Approach.** Run `gremlins unleash -t dev
-> --timeout-coefficient 10 --workers 1 --output-statuses l`
-> per package; classify; write targeted tests; plan doc at
-> `docs/superpowers/plans/2026-05-XX-mailauth-survivor-kill.md`;
-> standard pass-end checklist.
+> **Approach.** Walk the audit plan section by section, log
+> findings as you go, classify P0/P1/P2. The remediation pass
+> (41.1) will land afterwards. Standard pass-end checklist.
