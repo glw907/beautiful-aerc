@@ -1,10 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 35 — native OAuth for Gmail / Outlook IMAP
-(#42, BYO client ID). Pass 34 closed ADR-0219: mouse is
-one-to-one keyboard shorthand across sidebar + right pane +
-cross-pane, with `account.Model.CloseViewer()` as the new
-viewer-close seam.
+**Current pass:** Pass 36 — Audit C (feature surface). Pass 35
+closed ADR-0220: `mailimap.Probe`/`ProbeSMTP` thread an optional
+`*mailauth.Client`; the wizard probe builds it via
+`ui/wizard.buildOAuthClient`; the config template documents the
+native consent flow and `oauth2l` is gone. Live Gmail + Outlook
+verification (Pass 35.1) is queued — no OAuth client IDs on hand
+to run it now.
 
 **Beta soak deferred.** Pre-beta rules apply; soak entry gated
 on a full audit cycle returning no findings.
@@ -16,44 +18,35 @@ on a full audit cycle returning no findings.
 | 1 – 32 | Scaffold through v2 declarative chrome (ADRs 0001–0217) | done |
 | 33 | Mouse support — reader + attachments + scroll (ADR-0218) | done |
 | 34 | Mouse support — sidebar + cross-pane (ADR-0219) | done |
-| 35 | **Native OAuth** for Gmail / Outlook IMAP (#42, BYO client ID) | next |
-| 36 | **Audit C** — feature surface | gate |
+| 35 | Native OAuth final wiring (ADR-0220) | done |
+| 35.1 | Live Gmail + Outlook OAuth verification — captures + refresh rotation (Tasks 6-7 of archived plan `2026-05-11-native-oauth.md`) | pending creds |
+| 36 | **Audit C** — feature surface | next |
 | 37 | **Audit D** — database (schema ladder, tx boundaries, FTS5, UIDVALIDITY, on-disk shape) | gate |
 | 38 | **Audit Final** — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 35)
+### Next starter prompt (Pass 36)
 
-> **Goal.** Wire native OAuth (PKCE + refresh) for Gmail and
-> Outlook IMAP so the user no longer needs to paste app-specific
-> passwords or shell-out to `oauth2l`. BYO client ID via
-> `[account.oauth] client-id` / `client-secret`.
+> **Goal.** Audit C — feature surface. Walk every user-facing
+> feature against the wireframes / keybindings / invariants and
+> file findings as ADR-grade deviations, in the pattern of
+> Pass 8.5 / Pass 31 / Audits A and B.
 >
-> **Scope.** End-to-end consent + token cache for Gmail and
-> Outlook. `mailauth.Authorize` opens a localhost loopback,
-> drives the PKCE authorize endpoint, stores the refresh token
-> via `oauth-store` (`keyring` or `age-file`), and
-> `mailauth.Token(ctx)` resolves access tokens on every IMAP /
-> SMTP dial. `poplar --reauth=<name>` re-runs consent.
+> **Scope.** Read-only audit. Findings land in a plan doc with
+> per-finding fix recommendations. Remediation is a follow-on
+> pass.
 >
-> **Settled (do not re-brainstorm):** `[account.oauth]` schema
-> (ADR-0193); `mailauth.Token(ctx)` is the read seam;
-> XOAUTH2 wraps the access token (ADR-0208); IMAP backend
-> already routes through `mailauth.Token` when
-> `[account.oauth]` is present.
+> **Settled (do not re-brainstorm):** Audit format follows
+> ADR-0211 (Audit A remediation) and Audit B's structure —
+> findings cite the grounding ADR / invariant, the drift, and
+> a proposed fix.
 >
-> **Still open — brainstorm these:**
-> - Loopback redirect URI port — fixed vs ephemeral. Gmail
->   accepts `http://127.0.0.1:PORT` for native apps;
->   Outlook's policy may differ.
-> - Browser-open seam. We have `URLOpener` for viewer links —
->   reuse, or split out a `mailauth.Opener` for testability?
-> - First-run flow integration. Wizard hits `Authorize` during
->   the credentials stage; how does that compose with the
->   existing probe step (`wizard.Probe`)?
+> **Still open — brainstorm these:** None — pure walk-the-
+> surface pass.
 >
-> **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-native-oauth.md`, then
-> implement. Standard pass-end checklist applies.
+> **Approach.** Write a plan doc at
+> `docs/superpowers/plans/YYYY-MM-DD-audit-c.md` listing the
+> feature surfaces and file checklist. Walk in order.
+> Standard pass-end checklist applies.

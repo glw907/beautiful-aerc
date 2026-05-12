@@ -55,19 +55,17 @@ the ADR(s) that justify them.
   SPECIAL-USE / IDLE negotiated with fallbacks (COPY+STORE+EXPUNGE,
   alias classification, 30s STATUS-poll). IDLE refreshes every 9 min
   (RFC 2177 29-min cap), emits `mail.Update` on the shared channel.
-  Both connections are drop-and-redial on `mail.ErrConnection`:
-  `idleLoop` calls `b.dialIdle` on session error with exponential
-  backoff; cmd-path actions reach `b.cmd` through `b.cmdClient()`
-  (lazy redial via `b.dialFn` on `b.connCtx`). `Destroy` issues
-  `UID STORE +FLAGS.SILENT (\Deleted)` + `UID EXPUNGE <uids>`
-  (ADR-0092 semantics, no collateral expunge). Gmail
-  (`GmailQuirks = true`) asserts `X-GM-EXT-1` and routes `Destroy`
-  through `SELECT [Gmail]/Trash` first; XOAUTH2 tokens from
-  `mailauth.Token(ctx)`. SMTP is a third connection dialed lazily
-  on first `Send` via `emersion/go-smtp`; cached client dropped on
-  send error. `Append` runs `APPEND` on the cmd connection.
-  `mailimap.ProbeSMTP` is the `poplar config check` surface.
-  `dialRawTCP` (in `auth.go`) is the shared TCP helper. ADR-0208.
+  Both connections are drop-and-redial on `mail.ErrConnection` with
+  exponential backoff; cmd-path actions go through `b.cmdClient()`,
+  idle through `b.dialIdle`. `Destroy` issues `UID STORE
+  +FLAGS.SILENT (\Deleted)` + `UID EXPUNGE <uids>` (ADR-0092
+  semantics, no collateral expunge). Gmail (`GmailQuirks = true`)
+  asserts `X-GM-EXT-1` and routes `Destroy` through `SELECT
+  [Gmail]/Trash` first; XOAUTH2 tokens from `mailauth.Token(ctx)`.
+  SMTP is a third connection dialed lazily on first `Send` via
+  `emersion/go-smtp`; cached client dropped on send error. `Append`
+  runs `APPEND` on the cmd connection. `mailimap.ProbeSMTP` is the
+  `poplar config check` surface. ADR-0208.
 
 ### Send + Append
 
@@ -218,44 +216,49 @@ the ADR(s) that justify them.
   (validate + connect-test via IMAP probe + `mailimap.ProbeSMTP`),
   `path`, `discover-folders`.
 - `mail.ProbeResult{Steps, Err}` is the shared connect-test
-  transcript; `mailimap.Probe` 5 steps, `mailjmap.Probe` 3. First
-  failure sets `Err` and stops. Seams: `probeDial`/`probeAuth`,
-  `mailimap.layerTLS`. `mail.IsSelfHosted(host)` covers RFC 1918 /
-  IPv6 ULA / loopback / `.local` for the wizard's TLS-skip prompts.
-- `wizard.Probe(ctx, cfg)` dispatches on `cfg.Backend` to
-  `mailimap.Probe` (+ SMTP probe) or `mailjmap.Probe`; seams
-  `imap/jmap/smtpProbeFn`. `wizard.Apply(Model)` calls
+  transcript; `mailimap.Probe` runs 5 steps (or 6 with an
+  `*mailauth.Client`, adding `oauth-token`), `mailjmap.Probe` 3.
+  First failure sets `Err` and stops. `mail.IsSelfHosted(host)`
+  covers RFC 1918 / IPv6 ULA / loopback / `.local` for the
+  wizard's TLS-skip prompts.
+- `wizard.Probe(ctx, cfg, oauthCli)` dispatches on `cfg.Backend`
+  to `mailimap.Probe` (+ `ProbeSMTP`) or `mailjmap.Probe`; both
+  IMAP paths receive `oauthCli`. `wizard.Apply(Model)` calls
   `config.ResolvePreset` so the probe sees the round-trip config.
   Account-section stages: provider → email → credentials → probe
   → identity → signature → label; signature hosts catkin with a
-  dim `-- ` chrome row, sentinel-free body. ADRs 0191, 0207.
+  dim `-- ` chrome row, sentinel-free body. ADRs 0191, 0207, 0220.
 - `[account.smtp]` is a TOML sub-table under each `[[account]]`;
-  presets fill canonical submission endpoints (`config.Providers`).
-  `Auth`/`Password`/`PasswordCmd` default to the IMAP-side
-  credentials. JMAP ignores the block. `smtp.host` is required for
-  `provider = "imap"` after preset resolution.
+  presets fill submission endpoints, `Auth`/`Password`/`PasswordCmd`
+  default to the IMAP-side credentials, JMAP ignores it, and
+  `smtp.host` is required for `provider = "imap"` after preset
+  resolution.
 - `mail.MockBackend` is gated behind the `dev` build tag at
   `cmd/poplar` (`backend_{dev,nodev}.go`); release binaries reject
   `provider = "mock"`. `make test`/`make check` pass `-tags=dev`.
   ADR-0207.
 - `[[account.identity]]` carries ordered
   `[[account.identity.signature]]` sub-blocks.
-  `AccountConfig.Identities` is length >= 1; legacy top-level
-  `from` synthesizes one when blocks are absent. Each signature
-  sets exactly one of `text`/`file`; `Signature.Text` carries
-  the RFC 3676 `"-- \n"` sentinel; `Signature.Name` is unique
-  within its identity. ADR-0177.
+  `AccountConfig.Identities` is length >= 1 (legacy top-level
+  `from` synthesizes one). Each signature sets exactly one of
+  `text`/`file`; `Signature.Text` carries the RFC 3676 `"-- \n"`
+  sentinel; `Signature.Name` is unique within its identity.
+  ADR-0177.
 - `[account.oauth]` carries `client-id`, `client-secret`, optional
-  `auth-url`/`token-url`/`scopes` for `gmail`/`outlook` xoauth2
-  accounts (preset defaults fill missing fields). `oauth-store`
-  (`"keyring"`/`"age-file"`) is written by the wizard on first
-  `Authorize`. `mailauth.Token(ctx)` resolves credentials when
-  `[account.oauth]` is present; parallel to `password`/`password-cmd`.
-  ADR-0193.
+  `auth-url`/`token-url`/`scopes` (preset defaults fill missing
+  fields). `oauth-store` (`"keyring"`/`"age-file"`) is written by
+  the wizard on first `Authorize`. `mailimap.Probe` and
+  `ProbeSMTP` both take an optional `*mailauth.Client` (threaded
+  by `wizard.Probe`) so the pre-save reachability check
+  authenticates the same way as the live backend. The two wizard
+  construction sites share `ui/wizard.buildOAuthClient`. The
+  template documents native consent + `--reauth`; `oauth2l` is
+  unsupported in fresh configs (existing `password-cmd` setups
+  still work). ADRs 0193, 0220.
 - `[account.contacts]` is the optional CardDAV-ingest sub-table
   (URL, credentials, default-addressbook, refresh-interval,
-  insecure-tls); credentials fall back to the parent
-  `[[account]]` block. Absent block disables sync. ADR-0175.
+  insecure-tls); credentials fall back to the parent. Absent
+  block disables sync. ADR-0175.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
   through `theme.CompiledTheme.Styles`. `lipgloss.NewStyle()` is
@@ -337,11 +340,11 @@ POST > mailto > plain http. Banner row confirms success (5s). ADR-0185.
   date carrier; renderers fall back to "" when zero. Cache schema
   v12 dropped the legacy `messages.date_str` column. ADR-0203.
 - `mail.Backend.Destroy(uids)` is the irreversible permanent-delete
-  primitive (no inverse). Empty input is a no-op. JMAP impl issues
-  `Email/set { destroy }` and treats `notFound` as success
-  (idempotent). IMAP impl issues `UID STORE +FLAGS.SILENT (\Deleted)`
-  then `UID EXPUNGE <uids>`, scoped by UIDPLUS so unrelated
-  pre-marked messages are unaffected.
+  primitive (no inverse). Empty input is a no-op. JMAP issues
+  `Email/set { destroy }` (idempotent — `notFound` is success).
+  IMAP issues `UID STORE +FLAGS.SILENT (\Deleted)` then `UID
+  EXPUNGE <uids>`, scoped by UIDPLUS so unrelated pre-marked
+  messages are unaffected.
 - Typed sentinels `mail.{ErrAuth, ErrNotFound, ErrConnection}`
   attach via `mail.WrapSentinel` inside each backend's
   `classifyErr`: JMAP `*jmap.RequestError` 401/403 → `ErrAuth`,
@@ -382,17 +385,15 @@ take a trailing `*slog.Logger` arg; nil falls back to
 
 - Makefile: `make check` is the commit gate (fmt-check, vet,
   voice, modern-go-check, test). `make test` runs `-tags=dev` to
-  keep MockBackend in scope; release builds drop it. `scripts/
-  voice-check.sh` scans T4/T10/T14/T16/T27/T28/T33/T35/T39/T40
-  (T34 is voice-lens only; ADR-0173). `scripts/modern-go-check.sh`
-  (ADR-0196) flags pre-1.21 idioms; `MODERN_GO_STRICT=1` hard-fails.
-  `make install` → `~/.local/bin/`.
+  keep MockBackend in scope; release builds drop it.
+  `scripts/voice-check.sh` scans the grep-tier tells (ADR-0173);
+  `scripts/modern-go-check.sh` (ADR-0196) flags pre-1.21 idioms
+  (`MODERN_GO_STRICT=1` hard-fails). `make install` →
+  `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `styling.md` before any color change;
   `poplar-pass` for pass-end. UI verification uses tmux
   (`.claude/docs/tmux-testing.md`); capture 80×24 and 120×40.
 
-## Decisions
-
-ADRs in `docs/poplar/decisions/`; the themed map is `INDEX.md`.
+## Decisions — `docs/poplar/decisions/` (themed map: `INDEX.md`).
