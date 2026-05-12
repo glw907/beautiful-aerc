@@ -1,14 +1,13 @@
 # Poplar Status
 
-**Current pass:** Pass 40.2 landed the structural answer to
-Audit G — `make check-deep` runs gremlins mutation testing
-across eight curated logic-heavy packages (ADR-0232), and the
-`go-conventions` skill grows an "Assertion Discipline"
-subsection codifying the five anti-patterns Audit G surfaced.
-Initial thresholds are 0% (informational); calibration waits
-for Pass 40.3 against the post-40.1 suite. Mutation-testing
-smoke on `internal/mailcompose` returned 82.28% efficacy / 14
-surviving mutants — real signal at expected granularity.
+**Current pass:** Pass 40.1 closed Audit G's 21 P1 queue (ADR-0233).
+Dominant fix family: per-method `*Err error` injection on six
+silent-success fakes plus the matching error-path tests. Eleven
+single-site assertion tightenings replaced `cmd != nil` /
+SUT-derived expectations / `Render("x") != ""` checks with
+type-switches, hard-coded values, and resolved-style attribute
+assertions. Four real `contacts.Sync` tests against an httptest
+`carddav.Handler` retired the four `t.Skip` placeholders.
 
 Pass 35.1 still pending Gmail/Outlook creds.
 
@@ -26,33 +25,35 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 38 / 38.1 | Audit E + remediation (ADRs 0225/0226/0227) | done |
 | 39 / 39.1 | Audit F + remediation (ADRs 0228/0229) | done |
 | 40 | Audit G + FK inline fix (ADRs 0230/0231) | done |
-| 40.1 | Audit G remediation — 21 P1 items | next |
+| 40.1 | Audit G remediation — 21 P1 items (ADR-0233) | done |
 | 40.2 | Mutation-testing scaffolding (ADR-0232) | done |
-| 40.3 | check-deep calibration + AST skipcheck (BACKLOG #59) | queued |
+| 40.3 | check-deep calibration + AST skipcheck (BACKLOG #59) | next |
 | 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 40.1)
+### Next starter prompt (Pass 40.3)
 
-> **Goal.** Land the 21 P1 remediations from Audit G (ADR-0230).
+> **Goal.** Run `make check-deep` for the first time against the
+> post-40.1 suite, calibrate per-package mutation thresholds from
+> the observed efficacy, and land the AST-based unconditional-
+> `t.Skip` detector queued as BACKLOG #59.
 >
-> **Scope.** Finding tables in
-> `docs/superpowers/archive/plans/2026-05-14-audit-g.md` and
-> ADR-0230. Dominant fix shapes: per-method error-injection on
-> six fakes (`MockBackend`, `mailimap.fakeClient`,
-> `mailjmap.fakeClient`, `blockingBackend`, `fakeCache`,
-> `fakeContactsWriter`); tighten lipgloss assertions to
-> `GetForeground()` style attribute checks; type-switch on
-> returned `tea.Msg` instead of `cmd != nil`; unskip the four
-> `contacts.Sync` tests against a `webdavtest` fake server.
+> **Scope.** `scripts/check-deep.sh` for threshold wiring; a new
+> `scripts/skipcheck.go` (or similar) for the AST walker. The
+> calibration target per package is the observed efficacy minus
+> a small buffer (5 pp); document the calibration rationale per
+> package in the ADR. Detector lives in `scripts/` and runs in
+> `make check` (so a future `t.Skip(...)` without `runtime.GOOS`
+> guard or test-build-tag fence fails the gate).
 >
-> **Settled.** Remediation cadence + ADR shape from Pass 39.1.
-> Triage rubric per audit-plan.md. Pre-beta rules apply.
+> **Settled.** ADR-0232 already named the eight packages, the
+> threshold mechanism, and the BACKLOG entry. Pre-beta rules
+> apply.
 >
-> **Open.** None; mechanical remediation.
+> **Open.** None; calibration is mechanical against observed
+> output.
 >
 > **Approach.** Plan doc at
-> `docs/superpowers/plans/2026-05-15-audit-g-remediation.md`,
-> walk the 21 P1 items fake-injection-first, write ADR-0233,
-> standard pass-end checklist applies.
+> `docs/superpowers/plans/2026-05-16-check-deep-calibration.md`;
+> run the matrix; write ADR-0234; standard pass-end checklist.

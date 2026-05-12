@@ -99,6 +99,9 @@ func TestTokenReturnsCachedWhenFresh(t *testing.T) {
 	if got := fs.requests.Load(); got != 0 {
 		t.Errorf("expected 0 network hits, got %d", got)
 	}
+	if tok1 != tok2 {
+		t.Errorf("cached token mismatch: tok1=%q tok2=%q", tok1, tok2)
+	}
 }
 
 func TestTokenRefreshesNearExpiry(t *testing.T) {

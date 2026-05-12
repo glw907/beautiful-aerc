@@ -52,6 +52,16 @@ func TestPutAddressObject_PreconditionFailed(t *testing.T) {
 	}
 }
 
+func TestPutAddressObject_Auth(t *testing.T) {
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	_, _, err := c.PutAddressObject(context.Background(), "/x.vcf", "", []byte("x"))
+	if !errors.Is(err, ErrAuth) {
+		t.Fatalf("err = %v want ErrAuth", err)
+	}
+}
+
 func TestDeleteAddressObject_NotFound(t *testing.T) {
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	idleRefreshInterval  = 9 * time.Minute // under Gmail's 10-min cap
-	pollFallbackInterval = 60 * time.Second
-	reconnectInitial     = 1 * time.Second
-	reconnectMax         = 30 * time.Second
+	idleRefreshInterval = 9 * time.Minute // under Gmail's 10-min cap
+	defaultPollFallback = 60 * time.Second
+	reconnectInitial    = 1 * time.Second
+	reconnectMax        = 30 * time.Second
 )
 
 // expBackoff returns initial * 2^(attempts-1) capped at max.
@@ -148,7 +148,11 @@ func (b *Backend) runIdleSession(ctx context.Context) error {
 // pollLoop is the IDLE-less fallback. UpdateFolderInfo fires every
 // pollFallbackInterval. The UI re-fetches on receipt.
 func (b *Backend) pollLoop(ctx context.Context, folder string, switchCh chan string) error {
-	t := time.NewTicker(pollFallbackInterval)
+	interval := b.pollInterval
+	if interval == 0 {
+		interval = defaultPollFallback
+	}
+	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
 		select {

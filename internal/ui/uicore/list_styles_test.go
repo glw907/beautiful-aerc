@@ -3,6 +3,7 @@ package uicore
 import (
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -11,18 +12,26 @@ func TestNewListStyles(t *testing.T) {
 	s := NewListStyles(ct)
 
 	cases := []struct {
-		name string
-		out  string
+		name     string
+		style    lipgloss.Style
+		wantBold bool
+		wantIt   bool
 	}{
-		{"Title", s.Title.Render("title")},
-		{"StatusBar", s.StatusBar.Render("status")},
-		{"NoItems", s.NoItems.Render("nothing")},
-		{"FilterPrompt", s.Filter.Focused.Prompt.Render(">")},
-		{"DefaultFilterCharacterMatch", s.DefaultFilterCharacterMatch.Render("a")},
+		{name: "Title", style: s.Title, wantBold: true},
+		{name: "StatusBar", style: s.StatusBar},
+		{name: "NoItems", style: s.NoItems, wantIt: true},
+		{name: "FilterPrompt", style: s.Filter.Focused.Prompt},
+		{name: "DefaultFilterCharacterMatch", style: s.DefaultFilterCharacterMatch},
 	}
 	for _, c := range cases {
-		if c.out == "" {
-			t.Errorf("%s rendered empty string", c.name)
+		if c.style.GetForeground() == nil {
+			t.Errorf("%s.GetForeground() = nil, want non-nil", c.name)
+		}
+		if c.wantBold && !c.style.GetBold() {
+			t.Errorf("%s.GetBold() = false, want true", c.name)
+		}
+		if c.wantIt && !c.style.GetItalic() {
+			t.Errorf("%s.GetItalic() = false, want true", c.name)
 		}
 	}
 }

@@ -37,6 +37,21 @@ scan() {
     fi
 }
 
+# scan_excl_tests is like scan but skips *_test.go files. Use for
+# tells that legitimately recur in test fakes (Get-prefixed methods
+# required by third-party interfaces, for instance).
+scan_excl_tests() {
+    local tell=$1 pattern=$2 rule=$3
+    local out
+    out=$(grep "${SCAN_ARGS[@]}" --exclude='*_test.go' "$pattern" "$ROOT" 2>/dev/null || true)
+    if [[ -n "$out" ]]; then
+        while IFS= read -r line; do
+            echo "$line: $tell — $rule"
+            hits=$((hits + 1))
+        done <<< "$out"
+    fi
+}
+
 # T10: "failed to" chorus in error strings.
 scan "T10" \
     '(errors\.New|fmt\.Errorf)\("failed to\b' \
@@ -44,8 +59,10 @@ scan "T10" \
 
 # T14: GetX getter prefix on a method declaration.
 # Anchored to receiver-method form, so stdlib calls like os.Getenv
-# inside function bodies do not match.
-scan "T14" \
+# inside function bodies do not match. Test files are excluded
+# because third-party interface fakes (e.g. carddav.Backend) hard-
+# code Get-prefixed method names and can't be renamed.
+scan_excl_tests "T14" \
     '^func \([^)]+\) Get[A-Z]\w*\(' \
     'getter prefixed with Get — drop the prefix'
 

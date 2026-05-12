@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -162,6 +163,51 @@ func TestMockBackend_Destroy_EmptyIsNoop(t *testing.T) {
 	}
 	if len(m.DestroyCalls) != 0 {
 		t.Errorf("DestroyCalls len = %d, want 0", len(m.DestroyCalls))
+	}
+}
+
+func TestMockBackend_SendRecordsAndInjectsError(t *testing.T) {
+	m := NewMockBackend()
+	env := Envelope{From: "a@x", Rcpts: []string{"b@y"}}
+	if err := m.Send(env, []byte("body")); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if len(m.SendCalls) != 1 {
+		t.Fatalf("SendCalls = %d, want 1", len(m.SendCalls))
+	}
+	if !reflect.DeepEqual(m.SendCalls[0].Env, env) {
+		t.Errorf("SendCalls[0].Env = %+v, want %+v", m.SendCalls[0].Env, env)
+	}
+	if string(m.SendCalls[0].MIME) != "body" {
+		t.Errorf("SendCalls[0].MIME = %q, want %q", m.SendCalls[0].MIME, "body")
+	}
+
+	want := errors.New("smtp denied")
+	m.SendErr = want
+	if got := m.Send(env, nil); !errors.Is(got, want) {
+		t.Errorf("Send err = %v, want %v", got, want)
+	}
+	if len(m.SendCalls) != 2 {
+		t.Errorf("SendCalls = %d, want 2 (call still recorded on error)", len(m.SendCalls))
+	}
+}
+
+func TestMockBackend_AppendRecordsAndInjectsError(t *testing.T) {
+	m := NewMockBackend()
+	if err := m.Append("Sent", []byte("mime"), FlagSeen); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if len(m.AppendCalls) != 1 {
+		t.Fatalf("AppendCalls = %d, want 1", len(m.AppendCalls))
+	}
+	if m.AppendCalls[0].Folder != "Sent" || m.AppendCalls[0].Flag != FlagSeen {
+		t.Errorf("AppendCalls[0] = %+v", m.AppendCalls[0])
+	}
+
+	want := errors.New("append denied")
+	m.AppendErr = want
+	if got := m.Append("Sent", nil, 0); !errors.Is(got, want) {
+		t.Errorf("Append err = %v, want %v", got, want)
 	}
 }
 

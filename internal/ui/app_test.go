@@ -624,9 +624,6 @@ func TestApp_BackendUpdateClosedChannelGoesOffline(t *testing.T) {
 }
 
 func TestApp_BackendUpdateReArmspump(t *testing.T) {
-	// Verify that handling a backendUpdateMsg returns a non-nil Cmd
-	// (the re-armed pump). We can't execute it without blocking, but
-	// we confirm the Cmd is present.
 	backend := mail.NewMockBackend()
 	app := NewApp(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2), nil, nil)
 	msg := backendUpdateMsg{update: mail.Update{
@@ -635,7 +632,28 @@ func TestApp_BackendUpdateReArmspump(t *testing.T) {
 	}}
 	_, cmd := app.Update(msg)
 	if cmd == nil {
-		t.Error("backendUpdateMsg handler returned nil Cmd; pump would die")
+		t.Fatal("backendUpdateMsg handler returned nil Cmd; pump would die")
+	}
+
+	// Drive the cmd through one cycle to confirm it returns a
+	// backendUpdateMsg, the type that keeps the pump re-arming.
+	resultCh := make(chan tea.Msg, 1)
+	go func() { resultCh <- cmd() }()
+	backend.Emit(mail.Update{Type: mail.UpdateConnState, ConnState: mail.ConnReconnecting})
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	select {
+	case got := <-resultCh:
+		bu, ok := got.(backendUpdateMsg)
+		if !ok {
+			t.Fatalf("re-armed pump returned %T, want backendUpdateMsg", got)
+		}
+		if bu.update.ConnState != mail.ConnReconnecting {
+			t.Errorf("update.ConnState = %v, want Reconnecting", bu.update.ConnState)
+		}
+	case <-ctx.Done():
+		t.Fatal("re-armed pump cmd did not return within 1s")
 	}
 }
 

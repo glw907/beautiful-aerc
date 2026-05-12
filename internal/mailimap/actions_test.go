@@ -2,6 +2,7 @@ package mailimap
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/glw907/poplar/internal/config"
@@ -149,6 +150,58 @@ func TestFlagClearRemovesFlag(t *testing.T) {
 	item := cmd.storeCalls[0][1].(string)
 	if item != "-FLAGS.SILENT" {
 		t.Errorf("item = %q, want -FLAGS.SILENT", item)
+	}
+}
+
+func TestMoveSurfacesUIDMoveError(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = map[string]bool{"IMAP4REV1": true, "UIDPLUS": true, "MOVE": true}
+	cmd.moveErr = errors.New("move denied")
+	idle := newFakeClient()
+	idle.caps = cmd.caps
+
+	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if err := b.Move([]mail.UID{"1"}, "Trash"); err == nil {
+		t.Fatalf("Move want error, got nil")
+	}
+}
+
+func TestMoveSurfacesCopyFallbackError(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = map[string]bool{"IMAP4REV1": true, "UIDPLUS": true}
+	cmd.copyErr = errors.New("copy denied")
+	idle := newFakeClient()
+	idle.caps = cmd.caps
+
+	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if err := b.Move([]mail.UID{"1"}, "Trash"); err == nil {
+		t.Fatalf("Move want error, got nil")
+	}
+	if len(cmd.storeCalls) != 0 || len(cmd.expungeCalls) != 0 {
+		t.Errorf("Copy error must short-circuit fallback; got store=%d expunge=%d",
+			len(cmd.storeCalls), len(cmd.expungeCalls))
+	}
+}
+
+func TestDestroySurfacesExpungeError(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.caps = map[string]bool{"IMAP4REV1": true, "UIDPLUS": true}
+	cmd.expungeErr = errors.New("expunge denied")
+	idle := newFakeClient()
+	idle.caps = cmd.caps
+
+	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
+	if err := b.finishConnect(context.Background()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if err := b.Destroy([]mail.UID{"7"}); err == nil {
+		t.Fatalf("Destroy want error, got nil")
 	}
 }
 

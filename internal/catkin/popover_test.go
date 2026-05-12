@@ -231,9 +231,12 @@ func TestPopoverRendersAtRightShiftedColumn(t *testing.T) {
 	m := modelWithPopoverOpen(t, pad+"tradeof", "tradeof")
 	out := m.View()
 	rows := strings.Split(out, "\n")
-	// The popover top-border row is the second body row (cursorRow=0,
-	// position returns row=1). It should start near col 80-popover.width().
-	wantCol := 80 - m.popover.width()
+	// Popover footer line "a add  i ignore  esc x" is 22 cells; sized
+	// with a 1-cell border on each side and the +2 in width() makes
+	// the outer width 24 cells regardless of which suggestions the
+	// speller returns. Pane is 80 cells wide, so the popover's top-
+	// border row sits at col 80-24 = 56.
+	const wantCol = 56
 	border := rows[1]
 	idx := strings.Index(border, "╭")
 	if idx != wantCol {

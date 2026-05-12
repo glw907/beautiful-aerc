@@ -64,15 +64,15 @@ func TestParseEvictDuration(t *testing.T) {
 }
 
 func TestRunEvict_NoMatchingAccount(t *testing.T) {
-	// This test depends on loadAccounts succeeding. The dev config has
-	// accounts with empty names which causes loadAccounts to error, so
-	// we skip rather than fail with the wrong error.
-	if _, _, err := loadAccounts(); err != nil {
-		t.Skipf("loadAccounts error (dev config): %v", err)
-	}
+	_, cfgPath := loadReauthTestConfig(t)
+	t.Setenv("POPLAR_CONFIG", cfgPath)
+
 	var buf bytes.Buffer
 	err := runEvict(context.Background(), &buf, time.Now(), "no-such-account")
 	if err == nil {
-		t.Errorf("expected error for unknown account scope")
+		t.Fatal("expected error for unknown account scope, got nil")
+	}
+	if !strings.Contains(err.Error(), "no-such-account") {
+		t.Errorf("err = %v, want it to name the missing account", err)
 	}
 }

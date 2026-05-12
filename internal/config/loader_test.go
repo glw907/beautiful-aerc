@@ -76,8 +76,13 @@ func TestLoadFirstRunWritesTemplate(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("template not written: %v", readErr)
 	}
-	if string(got) != Template() {
-		t.Errorf("on-disk content does not match Template()")
+	want, err := os.ReadFile("template.golden")
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("on-disk content drifted from template.golden\n"+
+			"len got=%d want=%d", len(got), len(want))
 	}
 }
 

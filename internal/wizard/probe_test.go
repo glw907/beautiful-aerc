@@ -40,6 +40,7 @@ func TestProbeRoutesIMAPAndAppendsSMTP(t *testing.T) {
 }
 
 func TestProbeRoutesJMAP(t *testing.T) {
+	var smtpCalls int
 	withFakeProbes(t,
 		func(_ context.Context, _ config.AccountConfig, _ *mailauth.Client) mail.ProbeResult {
 			return mail.ProbeResult{}
@@ -47,12 +48,18 @@ func TestProbeRoutesJMAP(t *testing.T) {
 		func(context.Context, config.AccountConfig) mail.ProbeResult {
 			return mail.ProbeResult{Steps: []mail.ProbeStep{{Label: "jmap", Status: mail.ProbeOK}}}
 		},
-		func(context.Context, config.AccountConfig, *mailauth.Client) error { return nil },
+		func(context.Context, config.AccountConfig, *mailauth.Client) error {
+			smtpCalls++
+			return errors.New("smtp must not be probed on jmap route")
+		},
 	)
 
 	r := Probe(context.Background(), config.AccountConfig{Backend: "jmap"}, nil)
 	if len(r.Steps) != 1 || r.Steps[0].Label != "jmap" {
 		t.Fatalf("expected jmap-only, got %+v", r.Steps)
+	}
+	if smtpCalls != 0 {
+		t.Errorf("smtp probe invoked %d times on jmap route, want 0", smtpCalls)
 	}
 }
 

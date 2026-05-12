@@ -35,23 +35,50 @@ func TestAttachPicker_OpenClose(t *testing.T) {
 }
 
 func TestAttachPicker_OpenAction(t *testing.T) {
-	p := newTestAttachPicker(t).Open("u1",
-		[]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 10}})
+	att := mail.Attachment{PartID: "2", Filename: "x.pdf", Size: 10}
+	p := newTestAttachPicker(t).Open("u1", []mail.Attachment{att})
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter should emit a Cmd")
 	}
-	if cmd() == nil {
-		t.Fatal("batch nil")
+	var sawOpen, sawClose bool
+	for _, m := range collectMsgs(cmd) {
+		switch v := m.(type) {
+		case OpenAttachmentMsg:
+			if v.UID != "u1" || v.Att.PartID != att.PartID {
+				t.Errorf("OpenAttachmentMsg = %+v, want UID=u1 PartID=2", v)
+			}
+			sawOpen = true
+		case AttachPickerClosedMsg:
+			sawClose = true
+		}
+	}
+	if !sawOpen || !sawClose {
+		t.Errorf("got open=%v close=%v, want both", sawOpen, sawClose)
 	}
 }
 
 func TestAttachPicker_SaveAction(t *testing.T) {
-	p := newTestAttachPicker(t).Open("u1",
-		[]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 10}})
+	att := mail.Attachment{PartID: "2", Filename: "x.pdf", Size: 10}
+	p := newTestAttachPicker(t).Open("u1", []mail.Attachment{att})
 	_, cmd := p.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	if cmd == nil {
 		t.Fatal("s should emit a Cmd")
+	}
+	var sawSave, sawClose bool
+	for _, m := range collectMsgs(cmd) {
+		switch v := m.(type) {
+		case SaveAttachmentMsg:
+			if v.UID != "u1" || v.Att.Filename != att.Filename {
+				t.Errorf("SaveAttachmentMsg = %+v", v)
+			}
+			sawSave = true
+		case AttachPickerClosedMsg:
+			sawClose = true
+		}
+	}
+	if !sawSave || !sawClose {
+		t.Errorf("got save=%v close=%v, want both", sawSave, sawClose)
 	}
 }
 

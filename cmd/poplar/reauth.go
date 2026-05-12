@@ -2,10 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/glw907/poplar/internal/config"
+)
+
+// errUnknownReauthAccount and errReauthAccountNotOAuth are exit-78
+// (config error) sentinels.
+var (
+	errUnknownReauthAccount  = errors.New("unknown account")
+	errReauthAccountNotOAuth = errors.New("account is not OAuth")
 )
 
 func runReauth(f rootFlags) error {
@@ -22,12 +30,10 @@ func runReauth(f rootFlags) error {
 		}
 	}
 	if acct == nil {
-		fmt.Fprintf(os.Stderr, "poplar: unknown account %q in %s\n", f.reauth, configPath)
-		os.Exit(78)
+		return fmt.Errorf("%w: %q in %s", errUnknownReauthAccount, f.reauth, configPath)
 	}
 	if acct.OAuth == nil {
-		fmt.Fprintf(os.Stderr, "poplar: account %q is not OAuth\n", f.reauth)
-		os.Exit(78)
+		return fmt.Errorf("%w: %q", errReauthAccountNotOAuth, f.reauth)
 	}
 
 	cli, err := buildOAuthClient(*acct)

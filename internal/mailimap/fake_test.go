@@ -34,7 +34,11 @@ type fakeClient struct {
 	onIdle   func(emit func(mail.Update)) error
 	idleStop func()
 
-	logoutErr error
+	logoutErr  error
+	copyErr    error
+	moveErr    error
+	expungeErr error
+	appendErr  error
 
 	// searchFn, when non-nil, overrides the default Search stub.
 	searchFn func(mail.SearchCriteria) ([]mail.UID, error)
@@ -120,17 +124,17 @@ func (f *fakeClient) Store(uids []mail.UID, item string, value any) error {
 
 func (f *fakeClient) Copy(uids []mail.UID, dest string) error {
 	f.copyCalls = append(f.copyCalls, [2]any{uids, dest})
-	return nil
+	return f.copyErr
 }
 
 func (f *fakeClient) Move(uids []mail.UID, dest string) error {
 	f.moveCalls = append(f.moveCalls, [2]any{uids, dest})
-	return nil
+	return f.moveErr
 }
 
 func (f *fakeClient) UIDExpunge(uids []mail.UID) error {
 	f.expungeCalls = append(f.expungeCalls, uids)
-	return nil
+	return f.expungeErr
 }
 
 func (f *fakeClient) Idle(onUpdate func(mail.Update)) error {
@@ -154,6 +158,9 @@ type appendCall struct {
 
 func (f *fakeClient) Append(folder string, mime []byte, flags []string) (mail.UID, error) {
 	f.appendCalls = append(f.appendCalls, appendCall{folder: folder, mime: append([]byte(nil), mime...), flags: append([]string(nil), flags...)})
+	if f.appendErr != nil {
+		return "", f.appendErr
+	}
 	if f.nextUID == 0 {
 		return "", nil
 	}

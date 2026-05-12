@@ -1098,8 +1098,10 @@ func TestAppend_ImportsToFolder(t *testing.T) {
 	folders := map[string]folderEntry{
 		"Drafts": {id: "drafts-mb", folder: mail.Folder{Name: "Drafts", Role: "drafts"}},
 	}
+	var capturedReq *jmap.Request
 	fake := &fakeClient{
-		respond: func(_ *jmap.Request) (*jmap.Response, error) {
+		respond: func(req *jmap.Request) (*jmap.Response, error) {
+			capturedReq = req
 			return fakeResponse(&jmap.Invocation{
 				CallID: "0",
 				Args:   &email.ImportResponse{Created: map[jmap.ID]*email.Email{"k1": {}}},
@@ -1111,6 +1113,30 @@ func TestAppend_ImportsToFolder(t *testing.T) {
 
 	if err := b.Append("Drafts", []byte("draft"), mail.FlagDraft); err != nil {
 		t.Fatalf("Append: %v", err)
+	}
+
+	if capturedReq == nil || len(capturedReq.Calls) != 1 {
+		t.Fatalf("captured req calls = %d, want 1", len(capturedReq.Calls))
+	}
+	imp, ok := capturedReq.Calls[0].Args.(*email.Import)
+	if !ok {
+		t.Fatalf("args type = %T, want *email.Import", capturedReq.Calls[0].Args)
+	}
+	if imp.Account != "acct-1" {
+		t.Errorf("account = %q, want %q", imp.Account, "acct-1")
+	}
+	row, ok := imp.Emails["k1"]
+	if !ok {
+		t.Fatalf("Emails missing key %q; got %+v", "k1", imp.Emails)
+	}
+	if row.BlobID != "blob-2" {
+		t.Errorf("BlobID = %q, want %q", row.BlobID, "blob-2")
+	}
+	if !row.MailboxIDs["drafts-mb"] {
+		t.Errorf("MailboxIDs missing drafts-mb; got %v", row.MailboxIDs)
+	}
+	if !row.Keywords["$draft"] {
+		t.Errorf("Keywords missing $draft; got %v", row.Keywords)
 	}
 }
 

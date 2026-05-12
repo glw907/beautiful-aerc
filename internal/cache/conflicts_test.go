@@ -296,12 +296,15 @@ func seedContact(t *testing.T, a *Account, uid, etag string) {
 }
 
 type fakeContactsWriter struct {
-	putErr  error
-	delErr  error
-	puts    int
-	deletes int
-	newHref string
-	newETag string
+	putErr      error
+	delErr      error
+	multigetErr error
+	puts        int
+	deletes     int
+	multigets   int
+	multigetRet []carddav.AddressObject
+	newHref     string
+	newETag     string
 }
 
 func (f *fakeContactsWriter) PutAddressObject(_ context.Context, href, _ string, _ []byte) (string, string, error) {
@@ -321,7 +324,8 @@ func (f *fakeContactsWriter) DeleteAddressObject(_ context.Context, _ string, _ 
 }
 
 func (f *fakeContactsWriter) Multiget(_ context.Context, _ string, _ []string) ([]carddav.AddressObject, error) {
-	return nil, nil
+	f.multigets++
+	return f.multigetRet, f.multigetErr
 }
 
 func TestDrainer_ContactPut_Success(t *testing.T) {

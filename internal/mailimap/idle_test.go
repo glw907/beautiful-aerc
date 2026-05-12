@@ -229,23 +229,30 @@ func TestIdlePollFallback(t *testing.T) {
 	idleClient := newFakeClient()
 
 	b := idleBackend(t, cmd, idleClient)
-	// Disable IDLE cap.
 	b.caps.IDLE = false
 
-	// pollFallbackInterval is 60s, too long for a test. Stub it via a
-	// dedicated field if we add one. Instead we drive the test by
-	// cancelling the context quickly and checking emit didn't crash.
-	// A real poll-interval test would require a configurable tick. See
-	// comments below.
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	b.pollInterval = 5 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	go b.idleLoop(ctx)
 	<-b.idleDone
 
-	// No crash, goroutine exited cleanly. The poll interval (60s) is
-	// longer than the test duration so we won't see a FolderInfo update
-	// here. That's expected and acceptable.
+	var polls int
+	for {
+		select {
+		case u := <-b.updates:
+			if u.Type == mail.UpdateFolderInfo {
+				polls++
+			}
+		default:
+			if polls < 1 {
+				t.Errorf("poll-fallback emitted %d UpdateFolderInfo, want >= 1", polls)
+			}
+			return
+		}
+	}
 }
 
 func TestIdleExitOnContextCancel(t *testing.T) {

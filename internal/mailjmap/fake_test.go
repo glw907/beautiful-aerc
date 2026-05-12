@@ -1,6 +1,7 @@
 package mailjmap
 
 import (
+	"errors"
 	"sync"
 
 	"git.sr.ht/~rockorager/go-jmap"
@@ -19,7 +20,7 @@ func (f *fakeClient) Do(req *jmap.Request) (*jmap.Response, error) {
 	f.sent = append(f.sent, req)
 	f.mu.Unlock()
 	if f.respond == nil {
-		return &jmap.Response{}, nil
+		return nil, errors.New("fakeClient: no respond func; set respond to control Do() output")
 	}
 	return f.respond(req)
 }

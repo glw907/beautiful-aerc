@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -49,6 +50,10 @@ type Backend struct {
 	// dialFn opens a fresh IMAP connection for the given role.
 	// Defaults to dial(ctx, b, role); tests swap in a fake.
 	dialFn func(ctx context.Context, role string) (imapClient, error)
+
+	// pollInterval drives pollLoop when the server lacks IDLE. Zero
+	// means use the default 60s cadence.
+	pollInterval time.Duration
 }
 
 type capSet struct {

@@ -28,6 +28,22 @@ type MockBackend struct {
 		Flag Flag
 		Set  bool
 	}
+	SendCalls   []SendCall
+	AppendCalls []AppendCall
+
+	SendErr   error
+	AppendErr error
+}
+
+type SendCall struct {
+	Env  Envelope
+	MIME []byte
+}
+
+type AppendCall struct {
+	Folder string
+	MIME   []byte
+	Flag   Flag
 }
 
 // NewMockBackend creates a MockBackend with realistic sample data.
@@ -262,19 +278,24 @@ func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
 	return nil
 }
 
-func (m *MockBackend) Send(_ Envelope, _ []byte) error {
-	return nil
+func (m *MockBackend) Send(env Envelope, mime []byte) error {
+	m.SendCalls = append(m.SendCalls, SendCall{Env: env, MIME: append([]byte(nil), mime...)})
+	return m.SendErr
 }
 
-func (m *MockBackend) Append(_ string, _ []byte, _ Flag) error {
-	return nil
+func (m *MockBackend) Append(folder string, mime []byte, flag Flag) error {
+	m.AppendCalls = append(m.AppendCalls, AppendCall{Folder: folder, MIME: append([]byte(nil), mime...), Flag: flag})
+	return m.AppendErr
 }
 
 func (m *MockBackend) PushDraft(_ string, _ []byte, _ UID) (UID, error) {
 	return "", ErrUnsupported
 }
 
-// Updates returns a channel that never sends.
-func (m *MockBackend) Updates() <-chan Update {
-	return m.updates
-}
+func (m *MockBackend) Updates() <-chan Update { return m.updates }
+
+// Emit pushes u onto the updates channel, blocking until a reader
+// accepts so tests deterministically wake pumpUpdatesCmd.
+func (m *MockBackend) Emit(u Update) { m.updates <- u }
+
+func (m *MockBackend) CloseUpdates() { close(m.updates) }

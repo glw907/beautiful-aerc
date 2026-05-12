@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,32 +37,17 @@ func loadReauthTestConfig(t *testing.T) ([]config.AccountConfig, string) {
 }
 
 func TestRunReauth_UnknownAccountLookup(t *testing.T) {
-	accts, _ := loadReauthTestConfig(t)
-
-	var found *config.AccountConfig
-	for i := range accts {
-		if accts[i].Name == "nonexistent" {
-			found = &accts[i]
-		}
-	}
-	if found != nil {
-		t.Fatal("expected nil for unknown account")
+	_, cfgPath := loadReauthTestConfig(t)
+	err := runReauth(rootFlags{config: cfgPath, reauth: "nonexistent"})
+	if !errors.Is(err, errUnknownReauthAccount) {
+		t.Fatalf("err = %v, want errUnknownReauthAccount", err)
 	}
 }
 
 func TestRunReauth_NonOAuthAccount(t *testing.T) {
-	accts, _ := loadReauthTestConfig(t)
-
-	var found *config.AccountConfig
-	for i := range accts {
-		if accts[i].Name == "work" {
-			found = &accts[i]
-		}
-	}
-	if found == nil {
-		t.Fatal("account 'work' not found")
-	}
-	if found.OAuth != nil {
-		t.Fatal("expected nil OAuth for plain-IMAP account")
+	_, cfgPath := loadReauthTestConfig(t)
+	err := runReauth(rootFlags{config: cfgPath, reauth: "work"})
+	if !errors.Is(err, errReauthAccountNotOAuth) {
+		t.Fatalf("err = %v, want errReauthAccountNotOAuth", err)
 	}
 }

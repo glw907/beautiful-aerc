@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/glw907/poplar/internal/mailcompose"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui/contacts"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func stripANSI(s string) string { return ansi.Strip(s) }
@@ -23,21 +25,28 @@ type fakeCache struct {
 	createCalls int
 	updateCalls int
 	lastPayload []byte
+
+	createErr error
+	updateErr error
+	loadErr   error
 }
 
 func (f *fakeCache) CreateDraft(_ context.Context, _ string, payload []byte) error {
 	f.createCalls++
 	f.lastPayload = payload
-	return nil
+	return f.createErr
 }
 
 func (f *fakeCache) UpdateDraft(_ context.Context, _ string, payload []byte) error {
 	f.updateCalls++
 	f.lastPayload = payload
-	return nil
+	return f.updateErr
 }
 
 func (f *fakeCache) LoadDraft(_ context.Context, _ string) ([]byte, error) {
+	if f.loadErr != nil {
+		return nil, f.loadErr
+	}
 	return f.lastPayload, nil
 }
 
@@ -278,6 +287,39 @@ func TestModel_AutosaveDebounce(t *testing.T) {
 	}
 	if len(cache.lastPayload) == 0 {
 		t.Fatalf("cache.lastPayload is empty; no bytes written")
+	}
+}
+
+func TestModel_UpdateDraftSurfacesError(t *testing.T) {
+	cache := &fakeCache{updateErr: errors.New("disk full")}
+	c := newTestModel(t)
+	c.SetCache(cache)
+
+	msg := c.updateDraftCmd()()
+	errMsg, ok := msg.(uicore.ErrorMsg)
+	if !ok {
+		t.Fatalf("updateDraftCmd returned %T, want uicore.ErrorMsg", msg)
+	}
+	if errMsg.Op != "save draft" {
+		t.Errorf("ErrorMsg.Op = %q, want %q", errMsg.Op, "save draft")
+	}
+	if !errors.Is(errMsg.Err, cache.updateErr) {
+		t.Errorf("ErrorMsg.Err = %v, want %v", errMsg.Err, cache.updateErr)
+	}
+}
+
+func TestModel_CreateDraftSurfacesError(t *testing.T) {
+	cache := &fakeCache{createErr: errors.New("constraint violation")}
+	c := newTestModel(t)
+	c.SetCache(cache)
+
+	msg := c.createDraftCmd()()
+	errMsg, ok := msg.(uicore.ErrorMsg)
+	if !ok {
+		t.Fatalf("createDraftCmd returned %T, want uicore.ErrorMsg", msg)
+	}
+	if !errors.Is(errMsg.Err, cache.createErr) {
+		t.Errorf("ErrorMsg.Err = %v, want %v", errMsg.Err, cache.createErr)
 	}
 }
 
