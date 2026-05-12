@@ -36,17 +36,29 @@ else
 fi
 
 # Curated logic-heavy packages. Add as new pure-logic packages land.
-# Thresholds are per-package efficacy floors. 0 = informational only
-# (calibration phase). Tighten as the suite hardens.
+# Per-package efficacy floor = observed - 5pp buffer. Buffer absorbs
+# the 1–3pp run-to-run drift gremlins shows from mutant ordering and
+# per-run timing variance. Raise a floor only by writing new tests
+# that lift the observed number — never by closing the buffer.
+#
+# Baseline run 2026-05-16 (Pass 40.3, ADR-0234):
+#   mailauth     76.00%   filter     82.14%
+#   content      78.75%   mail       69.23%
+#   cache        77.54%   tidytext   79.07%
+#   mailcompose  83.76%   config     83.93%
+#
+# mail at 69% is the queue: classifyErr sentinel routing carries
+# the most surviving mutants. Lifting it past 80% is a follow-up
+# pass; the 64% floor is the no-regression line, not a target.
 declare -A PKGS=(
-    [internal/mailcompose]=0
-    [internal/mail]=0
-    [internal/cache]=0
-    [internal/content]=0
-    [internal/filter]=0
-    [internal/tidytext]=0
-    [internal/mailauth]=0
-    [internal/config]=0
+    [internal/mailauth]=71
+    [internal/content]=73
+    [internal/filter]=77
+    [internal/mail]=64
+    [internal/cache]=72
+    [internal/tidytext]=74
+    [internal/mailcompose]=78
+    [internal/config]=78
 )
 
 fail=0

@@ -42,12 +42,15 @@ voice:
 modern-go-check:
 	@./scripts/modern-go-check.sh
 
+skipcheck:
+	@go run ./scripts/skipcheck
+
 check-deep:
 	@./scripts/check-deep.sh
 
-check: fmt-check vet voice modern-go-check test
+check: fmt-check vet voice modern-go-check skipcheck test
 
 clean:
 	rm -f $(BINARY)
 
-.PHONY: build test test-imap vet fmt-check voice modern-go-check check-deep lint audit install check clean
+.PHONY: build test test-imap vet fmt-check voice modern-go-check skipcheck check-deep lint audit install check clean

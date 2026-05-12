@@ -372,29 +372,29 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 
 ## Logging
 
-`log/slog` is the diagnostic logging path for `internal/`. CLI/UX
-strings in `cmd/poplar/` stay on `os.Stderr`. `cmd/poplar/main.go`
-installs the root handler via `installLogger` before cobra runs:
-`slog.NewTextHandler`, `LevelInfo` default, `POPLAR_LOG=debug` for
-`LevelDebug`. TTY stdout → `$XDG_STATE_HOME/poplar/poplar.log`
-(append, on demand); non-TTY → `os.Stderr`; open failure silent.
-Backend constructors (`mailjmap.New`, `mailimap.New`, `cache.Open`)
-take a trailing `*slog.Logger` arg; nil falls back to
-`slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
+`log/slog` is the diagnostic path for `internal/`; CLI/UX strings
+in `cmd/poplar/` stay on `os.Stderr`. `cmd/poplar/main.go` installs
+the root `slog.NewTextHandler` via `installLogger` before cobra
+runs (LevelInfo default; `POPLAR_LOG=debug` raises). TTY stdout →
+`$XDG_STATE_HOME/poplar/poplar.log` (append, on demand); non-TTY
+→ `os.Stderr`; open failure silent. Backend constructors take a
+trailing `*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
 
 ## Build & verification
 
-- Makefile: `make check` (commit gate) = fmt-check + vet +
-  voice + modern-go-check + test; `-tags=dev` keeps MockBackend
-  in scope. `voice-check.sh` scans grep-tier tells (ADR-0173);
-  `modern-go-check.sh` flags pre-1.21 idioms, `MODERN_GO_STRICT=1`
-  hard-fails (ADR-0196). `make check-deep` runs gremlins mutation
-  testing on logic-heavy packages — pass-end gate, not in `make
-  check` (ADR-0232). `make install` → `~/.local/bin/`.
-- Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
+- `make check` (commit gate) = fmt-check + vet + voice +
+  modern-go-check + skipcheck + test; `-tags=dev` keeps MockBackend
+  in scope. `voice-check.sh` (ADR-0173) and `modern-go-check.sh`
+  (ADR-0196, `MODERN_GO_STRICT=1` hard-fails) scan grep-tier tells;
+  `scripts/skipcheck` rejects `Test*` bodies whose first statement
+  is an unguarded `t.Skip`/`SkipNow`/`Skipf` (ADR-0234).
+  `make check-deep` runs gremlins per-package with calibrated
+  efficacy floors (observed − 5pp; ADRs 0232, 0234) — pass-end
+  gate. `make install` → `~/.local/bin/`. Module
+  `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
-  before `internal/ui/`; `styling.md` before any color change;
-  `poplar-pass` for pass-end. UI verification uses tmux
-  (`.claude/docs/tmux-testing.md`); capture 80×24 and 120×40.
+  before `internal/ui/`; `styling.md` before any color; `poplar-pass`
+  for pass-end. UI verification via tmux (`.claude/docs/tmux-testing.md`);
+  capture 80×24 and 120×40.
 
 ## Decisions — `docs/poplar/decisions/` (themed map: `INDEX.md`).
