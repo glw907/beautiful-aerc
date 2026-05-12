@@ -10,20 +10,32 @@ import (
 	"github.com/glw907/poplar/internal/ui/sidebar"
 )
 
-// updateKey runs the overlay cascade for a key press, falling through
-// to App-level shortcuts and finally to the account tab.
 func (m App) updateKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 	m.acct.NotifyActivity()
+	if m2, cmd, claimed := m.routeOverlayKey(msg); claimed {
+		return m2, cmd
+	}
+	if m.contactsMode {
+		return m.updateContactsKey(msg)
+	}
+	return m.updateGlobalKey(msg)
+}
+
+// The overlay cascade runs help > confirm > conflict > outbox >
+// reschedule > outboxView > linkPicker > attachPicker > movePicker >
+// form > popover > compose. Help, while open, swallows every key but
+// its own close binding.
+func (m App) routeOverlayKey(msg tea.KeyPressMsg) (App, tea.Cmd, bool) {
 	if m.helpOpen {
 		if key.Matches(msg, m.keys.CloseHelp) {
 			m.helpOpen = false
 		}
-		return m, nil
+		return m, nil, true
 	}
 	if m.confirm.IsOpen() {
 		var cmd tea.Cmd
 		m.confirm, cmd = m.confirm.Update(msg)
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.conflictOpen {
 		var cmd tea.Cmd
@@ -31,7 +43,7 @@ func (m App) updateKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 		if !m.conflict.IsOpen() {
 			m.conflictOpen = false
 		}
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.outboxOpen {
 		var cmd tea.Cmd
@@ -39,51 +51,53 @@ func (m App) updateKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 		if !m.outbox.IsOpen() {
 			m.outboxOpen = false
 		}
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.reschedule.picker != nil {
 		p, cmd := m.reschedule.picker.Update(msg)
 		m.reschedule.picker = &p
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.outboxView != nil {
 		next, cmd := m.outboxView.Update(msg)
 		m.outboxView = &next
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.linkPicker.IsOpen() {
 		var cmd tea.Cmd
 		m.linkPicker, cmd = m.linkPicker.Update(msg)
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.attachPicker.IsOpen() {
 		var cmd tea.Cmd
 		m.attachPicker, cmd = m.attachPicker.Update(msg)
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.movePicker.IsOpen() {
 		var cmd tea.Cmd
 		m.movePicker, cmd = m.movePicker.Update(msg)
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.form != nil {
 		next, cmd := m.form.Update(msg)
 		m.form = &next
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.popover != nil {
 		next, cmd := m.popover.Update(msg)
 		m.popover = &next
-		return m, cmd
+		return m, cmd, true
 	}
 	if m.compose != nil {
 		next, cmd := m.compose.Update(msg)
 		m.compose = next
-		return m, cmd
+		return m, cmd, true
 	}
-	if m.contactsMode {
-		return m.updateContactsKey(msg)
-	}
+	return m, nil, false
+}
+
+// Unmatched keys fall through to acct.Update.
+func (m App) updateGlobalKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 	// In the Drafts folder, Enter opens compose instead of the viewer.
 	if msg.Code == tea.KeyEnter && !m.viewerOpen {
 		if info, ok := m.acct.SelectedMessage(); ok {

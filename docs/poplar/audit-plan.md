@@ -178,14 +178,69 @@ code paths whose failure modes the project has not yet seen?
   frame's `ProgressBar = nil`. Orphaned terminal-title bars
   after an op finishes are an OSC-9;4-shaped #53.
 
-## Phase Final — comprehensive pre-soak
+## Phase D — database
 
 **Trigger.** Phase C returns empty.
+
+**Question.** The per-account SQLite cache is the only thing the
+project promises not to corrupt across versions. Does the schema,
+the migration ladder, the drainer's transactional discipline, and
+the on-disk-shape contract hold under the failure modes the user
+will hit but the test suite hasn't?
+
+**Focuses.**
+
+- Schema migration ladder. Walk every `migrateVN` step against
+  its predecessor: column adds, drops, renames, FK changes,
+  index churn. A migration that ran clean on a fresh dev cache
+  may not on a real one with 80k messages, 12k attachments,
+  and a non-empty outbox. The `messages_fts` rebuild step
+  (schema v11) is the obvious one — others are mid-ladder.
+- Transactional boundaries. Every drainer op (Flag / Move /
+  Destroy / Append / Send / EmptyFolder / Send-Later) flips
+  `ui_flags` / `ui_hide` and inserts the outbox row in one
+  tx. Audit each for a partial-commit window: a path that
+  could leave the optimistic flip without its outbox row, or
+  vice versa. `OpDone` cleanup must also be transactional with
+  any compensating-state delete (draft FK `SET NULL`, retry-
+  counter reset).
+- FTS5 consistency. `messages_fts` is rowid-linked to
+  `messages.id`. Every upsert and storeBody path that touches
+  body text must reach the FTS write helpers inside the same
+  tx. Backfill (`Backfiller`) is the largest body writer —
+  audit its tx shape against the search invariants. A drift
+  here means stale or missing search hits with no surface
+  symptom until the user notices.
+- Schema version probe + refusal. Old binaries against newer
+  caches must refuse to open rather than silently corrupt
+  (e.g. by writing schema-vN columns that vN+1 has renamed).
+  Walk every `cache.Open` precondition for the "future
+  schema" branch.
+- UIDVALIDITY re-key + IMAP scan-and-diff. The protocol
+  semantics that motivated the cache (ADR-0118): a mid-flight
+  UIDVALIDITY change has to invalidate the per-folder UID
+  mapping atomically. Audit the re-key path against
+  in-flight outbox rows scoped by the old UID.
+- File-on-disk shape. Attachment storage is the cache's only
+  out-of-DB persistence (chunked blob? path-keyed?). Audit
+  cleanup on `Destroy` / EmptyFolder. Orphaned blobs are
+  silent disk-leak; the inverse (DB row pointing at a missing
+  blob) is a render-time error with no recovery path.
+- Drainer conflict matrix recheck. Audit A covered the
+  error-routing side (`errors.Is(err, mail.ErrConnection)`).
+  This pass audits the *state* side: every conflict path
+  reaches a terminal `OpConflict` row and never an undead
+  retry-loop. Cross-reference against the BACKLOG conflict
+  items still open after Audit A.
+
+## Phase Final — comprehensive pre-soak
+
+**Trigger.** Phase D returns empty.
 
 **Question.** Across every dimension the project cares about, is
 anything left to fix before stability becomes the priority?
 
-**Focuses.** All Phase A/B/C lenses, plus three not covered
+**Focuses.** All Phase A/B/C/D lenses, plus three not covered
 upstream:
 
 - Test-infrastructure quality. Real coverage of the dangerous

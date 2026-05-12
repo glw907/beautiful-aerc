@@ -1,11 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 31 — Audit B.2 (general structural
-integrity). Pass 30 closed Audit B.1 (ADR-0215) with three
-inline fixes — wizard `writeConfig` as a Cmd, catkin
-`SetVirtualCursor(false)`, `WindowSizeMsg` forwards in
-messagelist + reader — and one ROADMAP project (`ui-all-value`,
-the eight-subpackage receiver-discipline remediation).
+**Current pass:** Pass 32 — v2 declarative View fields
+(ProgressBar + ReportFocus + KeyboardEnhancements). Pass 31
+closed Audit B.2 (ADR-0216) with one inline fix —
+`App.updateKey` split into `routeOverlayKey` + `updateGlobalKey`
+— and one note-only observation (six >600-line UI files, each
+named, deferred to the `ui-all-value` ROADMAP project).
 **Beta soak deferred.** Pre-beta rules apply; soak entry gated
 on a full audit cycle returning no findings.
 
@@ -13,47 +13,44 @@ on a full audit cycle returning no findings.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 26.1 | Scaffold through Audit A remediation (ADRs 0001–0211) | done |
-| 27 | Catkin Elm conformance — all-value path (ADR-0212) | done |
-| 28 | Compose Editor wrapper deletion (ADR-0213) | done |
-| 29 | `App.Update` decomposition (ADR-0214) | done |
-| 30 | Audit B.1 — Elm + bubbletea v2 conformance (ADR-0215) | done |
-| 31 | **Audit B.2** — general structural integrity | gate |
-| 32 | v2 declarative View fields — ProgressBar + ReportFocus + KeyboardEnhancements | gated |
+| 1 – 30 | Scaffold through Audit B.1 (ADRs 0001–0215) | done |
+| 31 | Audit B.2 — general structural integrity (ADR-0216) | done |
+| 32 | **v2 declarative View fields** — ProgressBar + ReportFocus + KeyboardEnhancements | next |
 | 33 | Mouse support (reader + attachments + scroll) | gated |
 | 34 | Mouse support (sidebar + cross-pane) — optional split from 33 | gated |
 | 35 | Native OAuth for Gmail / Outlook IMAP (#42, BYO client ID) | gated |
 | 36 | **Audit C** — feature surface | gate |
-| 37 | **Audit Final** — comprehensive pre-soak | gate |
+| 37 | **Audit D** — database (schema ladder, tx boundaries, FTS5, UIDVALIDITY, on-disk shape) | gate |
+| 38 | **Audit Final** — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 31)
+### Next starter prompt (Pass 32)
 
-> **Goal.** Audit B.2 — general structural integrity across
-> `internal/ui/` after the `app.go` decomposition + Editor-
-> wrapper deletion. Find divergences on non-Elm dimensions
-> (file size, interface design, package layering); fix only
-> the no-judgment-call ones inline.
+> **Goal.** Wire the three `tea.View` fields poplar has access to
+> but doesn't set: `ProgressBar` (OSC 9;4 for sync / outbox /
+> attachments), `ReportFocus` + `FocusMsg`/`BlurMsg` (pause IDLE
+> + JMAP push on blur, refresh on focus), and
+> `KeyboardEnhancements` (Kitty keyboard protocol — disambiguates
+> Ctrl+I/M/H from Tab/Enter/Backspace for catkin's chords,
+> unlocks `IsRepeat` and `ShiftedCode`/`BaseCode`).
 >
-> **Scope.** Walk against the focus list in
-> `docs/poplar/audit-plan.md` §"Phase B.2": `app.go`
-> decomposition regression (no `update<Screen>` >150 lines,
-> no back-channel coupling, dispatch exhaustive), file-size
-> budget (no `internal/ui/` file > ~600 lines without a named
-> reason), interface count after `Editor` deletion (any new
-> single-impl interfaces named with their seam), package-
-> boundary leaks (no subpackage imports `internal/ui`).
+> **Scope.** All three set per-frame on `App.View()`'s `tea.View`
+> with graceful fallback. Mouse is Pass 33, not this one.
 >
-> **Settled (do not re-brainstorm):** Audit-only pass. Findings
-> classified as P0 (apply inline), P1 (BACKLOG/ROADMAP), P2
-> (note in ADR only). The `ui-all-value` ROADMAP project is
-> already booked; do not refile it as a B.2 finding.
+> **Settled (do not re-brainstorm):** `tea.View` is the per-frame
+> declarative chrome surface (ADR-0189b). The ROADMAP entry
+> `v2-view-fields` describes the sub-features.
 >
-> **Still open — brainstorm these:** None.
+> **Still open — brainstorm these:**
+> - ProgressBar value source — OSC 9;4 carries one value; need
+>   a tie-breaker across simultaneous long-running ops.
+> - ReportFocus resume — re-arm IDLE refresh or full re-issue?
+>   Same lens as the dead-handle audit (#53).
+> - KeyboardEnhancements feature-detect + catkin binding table —
+>   adjust in place or fork a popover view?
 >
-> **Approach.** Write a findings doc at
-> `docs/superpowers/plans/2026-05-13-audit-b2.md`, classify,
-> apply P0s, file P1s in BACKLOG / ROADMAP. Standard pass-end
-> checklist applies.
+> **Approach.** Brainstorm the open questions, write a plan doc
+> at `docs/superpowers/plans/2026-05-13-v2-view-fields.md`,
+> then implement. Standard pass-end checklist applies.
