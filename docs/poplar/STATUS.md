@@ -1,13 +1,13 @@
 # Poplar Status
 
-**Current pass:** Pass 37 — Audit D (database). Pass 36.1 closed
-ADR-0222: SMTP `smtpAuth` now mirrors IMAP `dial`'s ForceRefresh-
-on-`ErrAuth` retry, `classifyErr` covers `*gosmtp.SMTPError`
-530/535/538, IMAP `dial` wraps `authenticate` through
-`classifyErr` so the existing retry actually fires, and both
-compose-open sites close the viewer first so mouse routing
-matches the rendered surface. Live Gmail + Outlook verification
-(Pass 35.1) still queued — no OAuth client IDs on hand.
+**Current pass:** Pass 37.1 — Audit D remediation. Pass 37 closed
+ADR-0223: Audit D returns 3 P1 + 1 P2, 0 P0. Orphan
+`message_recipients` bias `SuggestAddresses`; `migrateV11`
+backfills FTS headers but not bodies; `mailimap.Changes` never
+reads UIDVALIDITY despite docstring claim. F2 (orphan
+`messages_fts` rows) is P2 storage-only, noted only. Live Gmail +
+Outlook verification (Pass 35.1) still queued — no OAuth client
+IDs on hand.
 
 **Beta soak deferred.** Pre-beta rules apply.
 
@@ -22,35 +22,33 @@ matches the rendered surface. Live Gmail + Outlook verification
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
 | 36 | Audit C — feature surface (ADR-0221) | done |
 | 36.1 | Audit C remediation (ADR-0222) | done |
-| 37 | **Audit D** — database | next |
-| 38 | **Audit Final** — comprehensive pre-soak | gate |
+| 37 | Audit D — database (ADR-0223) | done |
+| 37.1 | **Audit D remediation** — F1/F3/F4 | next |
+| 38 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
-| post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 37)
+### Next starter prompt (Pass 37.1)
 
-> **Goal.** Walk Audit D's database focuses (`docs/poplar/audit-plan.md`
-> §"Phase D") read-only and classify findings P0/P1/P2. Apply P0
-> inline; queue P1 for a Pass 37.1 remediation if any land.
+> **Goal.** Land the three P1 findings from Audit D (ADR-0223).
 >
-> **Scope.** Cache + outbox + drainer + FTS schema and operational
-> contract. Read `internal/cache/` (account.go, drainer.go, schema
-> migrations, fts.go, attachments.go, outbox.go) and the `cache-`
-> and `search-` invariants under `.claude/rules/`. Cross-check
-> ADRs 0110–0124 + 0132–0134 + 0183 + 0184 + 0188 against current
-> code.
+> **Scope.** F1 — Schema v13 rebuilds `message_recipients` with
+> `REFERENCES messages(id) ON DELETE CASCADE` (SQLite has no
+> `ALTER COLUMN`; mirror v9's outbox rebuild). F3 — extend
+> `migrateV11` to loop `bodies.bytes` rows, run
+> `content.ExtractPlainText`, populate `messages_fts.body` via
+> `writeFTSBodyTx` in the same tx. F4 — add `UIDValidity uint32`
+> to `mail.Folder`; `mailimap` captures from `SELECT`/`EXAMINE`,
+> packs into `SyncToken` bytes 0–3 via existing encode/decode,
+> compares in `Changes`, returns `mail.ErrCannotCalculateChanges`
+> on mismatch. JMAP unchanged.
 >
-> **Settled:** Pre-beta — schema work is welcomed (v1.0 freeze is
-> the trigger to land schema improvements). Audit follows the
-> `audit-plan.md` mechanics: P0 inline this pass, P1 to a
-> remediation pass before the next audit, P2 noted only.
+> **Settled:** Pre-beta endorses schema work + cross-package
+> widening. F2 stays noted-only; absorb explicit `DELETE FROM
+> messages_fts` alongside F1 only if free.
 >
-> **Still open — brainstorm:** None at start; the audit will
-> surface questions per finding.
+> **Still open — brainstorm:** None. Direct implementation.
 >
 > **Approach.** Plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-audit-d.md` listing the
-> focuses + walk surface + findings table. ADR records the audit
-> outcome (P0 inline + P1 queued summary). Standard pass-end
-> checklist applies.
+> `docs/superpowers/plans/YYYY-MM-DD-audit-d-remediation.md`,
+> ADR-0224 records remediation. Standard pass-end checklist.
