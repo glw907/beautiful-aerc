@@ -344,6 +344,8 @@ func (m App) View() tea.View {
     v.AltScreen = true
     v.MouseMode = tea.MouseCellMotion
     v.ReportFocus = true
+    v.ProgressBar = m.frameProgressBar() // attachment > outbox > sync; ADR-0217
+    v.KeyboardEnhancements.ReportEventTypes = true
     if name := m.activeAccountName(); name != "" {
         v.WindowTitle = "poplar — " + name
     } else {

@@ -115,21 +115,6 @@ toggle defaults to on with an opt-out for keyboard purists.
 
 Related: (none yet — file with `/log-issue` as passes are scoped)
 
-### Bubbletea v2 declarative View fields `v2-view-fields`
-Wire three `tea.View` fields poplar already has access to but doesn't
-set: `ProgressBar` (OSC 9;4 terminal-native progress for sync, outbox
-drain, attachment downloads), `ReportFocus` + `FocusMsg`/`BlurMsg`
-(pause JMAP push / IMAP IDLE refresh on blur, kick a refresh on focus,
-suppress bell), and `KeyboardEnhancements` (Kitty keyboard protocol —
-disambiguates Ctrl+I/M/H from Tab/Enter/Backspace for catkin's chord
-set, unlocks `IsRepeat` for held-key acceleration in messagelist /
-reader, surfaces `ShiftedCode`/`BaseCode` for non-US keyboards).
-Negotiation is graceful — terminals that don't speak the protocol
-fall back to existing behavior. Mouse support is a separate
-initiative.
-
-Related: (none yet — file with `/log-issue` as passes are scoped)
-
 ### SPUA-aware width measurement for bubbletea `spua-width-upstream`
 Collapse ADR-0084's architectural cost — `displayCells`, `displayTruncate`,
 `padToVisibleWidth`, the `lipgloss.JoinHorizontal` ban on icon-bearing
@@ -168,6 +153,17 @@ Related: BACKLOG #20 (closed by ADR-0084 — superseded if upstream
 ever lands).
 
 ## Done
+
+### Bubbletea v2 declarative View fields `v2-view-fields`
+Pass 32 (ADR-0217) wired `ProgressBar` (priority ladder
+attachment > outbox > sync), `ReportFocus` + an unfocused-only
+new-mail toast (`[ui] new-mail-toast`, 1s coalesce), and
+`KeyboardEnhancements.ReportEventTypes`. `uicore.GatedBinding`
+tags catkin's six chord bindings; `catkin.ActiveChords(disambig)`
+projects the renderable subset for helppopover Compose and the
+compose body-focus footer hint. Deferred consumers: server-side
+IDLE pause on blur and `IsRepeat` held-key acceleration — the
+field plumbing is in place but no consumer is wired yet.
 
 ### Catkin Elm conformance (all-value path) `catkin-all-value`
 Pass 27 (ADR-0212) landed the catkin all-value path: every pointer

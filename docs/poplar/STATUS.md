@@ -1,11 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 32 — v2 declarative View fields
-(ProgressBar + ReportFocus + KeyboardEnhancements). Pass 31
-closed Audit B.2 (ADR-0216) with one inline fix —
-`App.updateKey` split into `routeOverlayKey` + `updateGlobalKey`
-— and one note-only observation (six >600-line UI files, each
-named, deferred to the `ui-all-value` ROADMAP project).
+**Current pass:** Pass 33 — mouse support (reader + attachments
++ scroll). Pass 32 closed ADR-0217 (v2 declarative `tea.View`
+fields): `ProgressBar` priority ladder, `ReportFocus` + new-mail
+toast, `KeyboardEnhancements` + `GatedBinding`-aware compose
+chord hints.
+
 **Beta soak deferred.** Pre-beta rules apply; soak entry gated
 on a full audit cycle returning no findings.
 
@@ -13,10 +13,9 @@ on a full audit cycle returning no findings.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 30 | Scaffold through Audit B.1 (ADRs 0001–0215) | done |
-| 31 | Audit B.2 — general structural integrity (ADR-0216) | done |
-| 32 | **v2 declarative View fields** — ProgressBar + ReportFocus + KeyboardEnhancements | next |
-| 33 | Mouse support (reader + attachments + scroll) | gated |
+| 1 – 31 | Scaffold through Audit B.2 (ADRs 0001–0216) | done |
+| 32 | v2 declarative `tea.View` fields (ADR-0217) | done |
+| 33 | **Mouse support** — reader + attachments + scroll | next |
 | 34 | Mouse support (sidebar + cross-pane) — optional split from 33 | gated |
 | 35 | Native OAuth for Gmail / Outlook IMAP (#42, BYO client ID) | gated |
 | 36 | **Audit C** — feature surface | gate |
@@ -26,31 +25,29 @@ on a full audit cycle returning no findings.
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 32)
+### Next starter prompt (Pass 33)
 
-> **Goal.** Wire the three `tea.View` fields poplar has access to
-> but doesn't set: `ProgressBar` (OSC 9;4 for sync / outbox /
-> attachments), `ReportFocus` + `FocusMsg`/`BlurMsg` (pause IDLE
-> + JMAP push on blur, refresh on focus), and
-> `KeyboardEnhancements` (Kitty keyboard protocol — disambiguates
-> Ctrl+I/M/H from Tab/Enter/Backspace for catkin's chords,
-> unlocks `IsRepeat` and `ShiftedCode`/`BaseCode`).
+> **Goal.** Wire `tea.MouseMode` and `tea.MouseClickMsg` /
+> `tea.MouseWheelMsg` so the reader scrolls on wheel, attachment
+> chips open on click, and link runs route through xdg-open on
+> click. Sidebar and cross-pane mouse is Pass 34.
 >
-> **Scope.** All three set per-frame on `App.View()`'s `tea.View`
-> with graceful fallback. Mouse is Pass 33, not this one.
+> **Scope.** Reader viewport wheel + click-to-launch on
+> harvested URL runs and attachment chips. No keybinding
+> changes; mouse is additive.
 >
-> **Settled (do not re-brainstorm):** `tea.View` is the per-frame
-> declarative chrome surface (ADR-0189b). The ROADMAP entry
-> `v2-view-fields` describes the sub-features.
+> **Settled (do not re-brainstorm):** `tea.View.MouseMode` is
+> the declarative carrier (mirrors ADR-0189b /-0217). Per-row
+> hit-testing lives in `reader.Model`.
 >
 > **Still open — brainstorm these:**
-> - ProgressBar value source — OSC 9;4 carries one value; need
->   a tie-breaker across simultaneous long-running ops.
-> - ReportFocus resume — re-arm IDLE refresh or full re-issue?
->   Same lens as the dead-handle audit (#53).
-> - KeyboardEnhancements feature-detect + catkin binding table —
->   adjust in place or fork a popover view?
+> - MouseMode value — CellMotion vs AllMotion. Trade-off:
+>   throughput vs hover affordances (none today).
+> - Click bubbling — whose `Update` claims a click? Reader vs
+>   App, and how does the link-picker overlay interact?
+> - Footnote ribbon click target — bare URL vs `[^N]` glyph;
+>   what's the SPUA-safe column math?
 >
 > **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/2026-05-13-v2-view-fields.md`,
-> then implement. Standard pass-end checklist applies.
+> at `docs/superpowers/plans/YYYY-MM-DD-mouse-reader.md`, then
+> implement. Standard pass-end checklist applies.

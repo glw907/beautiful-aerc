@@ -170,9 +170,32 @@ file describes behavior, not the key tables.
   if a forward op already flipped state. The chrome row above
   the status bar is shared with the error banner; error wins,
   then toast, else the row collapses (`App.chromeBannerRow`).
-  `pendingAction.IsZero()` checks `op == ""`. "Delete" is a Move
-  to the canonical Trash folder (no `mail.Backend.Delete` exists);
-  the inverse moves it back to the source folder.
+  `pendingAction.IsZero()` checks `op == ""` and
+  `newMailCount == 0`. "Delete" is a Move to the canonical Trash
+  folder (no `mail.Backend.Delete` exists); the inverse moves it
+  back to the source folder.
+- New-mail toast (ADR-0217). Unfocused-only — gated on
+  `!App.focused && App.newMailToast` (`[ui] new-mail-toast`,
+  default true). On `mail.Update` with `NewArrivals > 0`, the
+  arrival accumulates into `App.pendingNewMail` (a
+  `newMailAccum`): first arrival seeds `sender`/`folder`; a
+  second arrival from a different sender flips `mixedSender`;
+  count adds across the window. The 1s `coalesceTimerMsg` fires
+  once per window, draining the accumulator into a
+  `pendingAction{newMailCount, newMailSender or newMailFolder}`
+  via `armToast`. Renders as `· N new from Foo ·` (single
+  sender) or `· N new in Inbox ·` (mixed). `tea.FocusMsg` clears
+  the toast iff `newMailCount > 0` (the undo bar variant
+  survives a focus regain). `App` requests
+  `tea.View.ReportFocus = true` per frame.
+- Compose chord hints (ADR-0217). `uicore.GatedBinding` pairs a
+  `key.Binding` with `RequiresKittyKbd`; `catkin.ChordSet()` is
+  the full vocabulary (`^B`/`^I`/`^K`/`^L`/`^Q`/`^@`);
+  `catkin.ActiveChords(disambig)` projects the subset that
+  should render given negotiated caps. Helppopover's Compose
+  context and the compose footer body-focus hint consume
+  `ActiveChords`. With Kitty disambiguation absent, both
+  collapse to the plain markdown nudge.
 - Permanent-delete consumers — both bypass the undo bar (the
   primitive is irreversible). **Retention sweep:** opt-in via `[ui]
   trash_retention_days` / `spam_retention_days` (default 0, clamp

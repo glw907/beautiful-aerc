@@ -78,14 +78,14 @@ the ADR(s) that justify them.
   `Append(folder, mime, flags) error` are the outbound primitives;
   `Envelope = { From, Rcpts }` is RFC 5321. `compose.AssembleMIME`
   pre-assembles `mime`; `internal/mail/` does not import compose.
-- JMAP `Send` batches `Email/import` + `EmailSubmission/set` in one
-  request via the `#k1` creation reference (atomic submission +
-  Sent placement). `Identity/get` is lazy and cached on
-  `Backend.identityIDs` keyed by lowercased email. JMAP `Append`
-  drops the submission call.
-- IMAP `Send` runs SMTP `MAIL`/`RCPT`/`DATA`; `Append` runs IMAP
-  APPEND on the cmd connection. Sent placement is a separate
-  caller-issued `Append`. SASL: plain (default), login, xoauth2.
+- JMAP `Send` batches `Email/import` + `EmailSubmission/set` via
+  the `#k1` creation reference (atomic submission + Sent
+  placement); `Identity/get` is lazy and cached on
+  `Backend.identityIDs` (lowercased-email keyed). JMAP `Append`
+  drops the submission call. IMAP `Send` runs SMTP
+  `MAIL`/`RCPT`/`DATA`; `Append` runs IMAP APPEND on the cmd
+  connection; sent placement is a separate caller-issued
+  `Append`; SASL: plain (default), login, xoauth2.
 - Cache outbox dispatches Send and Append. Schema v6 carries
   assembled MIME bytes in `outbox.payload`; v10 adds
   `scheduled_for` (undo-send / send-later) and `draft_id` FK
@@ -103,35 +103,40 @@ the ADR(s) that justify them.
   canonical; `AdaptiveColor` removed; palette + Styles take
   concrete `color.Color` (`lipgloss.Color(s)` is a function).
   Chrome is declarative: `App.View()` returns a `tea.View` with
-  `v.AltScreen` and `v.WindowTitle` set every frame; cursor is
-  hoisted via `Cursor() *tea.Cursor` accessors and
+  `v.AltScreen`, `v.WindowTitle`, `v.ProgressBar`,
+  `v.ReportFocus = true`, and
+  `v.KeyboardEnhancements.ReportEventTypes = true` set every
+  frame (ADR-0217). ProgressBar follows the fixed ladder
+  attachment > outbox > sync sourced from
+  `cache.Account.{AttachmentDownloadProgress,OutboxDrainProgress,
+  SyncProgress}`. `tea.FocusMsg`/`BlurMsg` toggle `App.focused`;
+  `tea.KeyboardEnhancementsMsg` lands in `App.kbdCaps` (Flags
+  bitmask via `SupportsKeyDisambiguation`/`SupportsEventTypes`).
+  Cursor is hoisted via `Cursor() *tea.Cursor` accessors and
   `App.frameCursor()`; `SetVirtualCursor(false)` on every
-  textinput/textarea. Paste handling routes by focus: address
-  fields atomic-emit chips, Catkin splices and wraps URL tokens
-  as markdown links — see ADR-0189b for the full paste contract.
+  textinput/textarea. Paste handling routes by focus — see
+  ADR-0189b.
 - `internal/ui/` follows the Elm architecture — invoke the
   `elm-conventions` skill before touching any file there. State in
   tea.Model structs; mutations only in Update; I/O only in tea.Cmd;
   children expose accessors, parents read after delegation
   (`App.deriveChromeFromAcct`). `tea.Msg` is reserved for
   cross-tree signals, never child→parent state mirrors.
-- Idiomatic bubbletea is the default. UI uses `bubbles` components
-  as primary analogues; deviations are ADR'd. `View()` self-enforces
-  size via `clipPane`; renderers honor `width` via wordwrap +
-  hardwrap. SPUA-aware width math lives in `internal/ansix/`:
-  `ansix.Measurer` is a value type carrying the resolved cell
-  width, constructed once in `cmd/poplar/root.go` via
-  `ansix.NewMeasurer(cellWidth)` and threaded through `ui.NewApp`
-  into every subpackage Model. Use `m.Width` / `m.Truncate` /
-  `m.TruncateEllipsis` for icon-bearing strings, `lipgloss.Width`
-  otherwise (never `len()`). `ansix.SpuaCount` is a free function.
-  `uicore.FillRowToWidth` takes a Measurer. ADRs 0181, 0209.
-  `lipgloss.JoinHorizontal`/`JoinVertical` are forbidden when
-  cellWidth != 1; use row-by-row `strings.Join` with pre-padded
-  children (kept under both modes — see ADR-0084).
-  Keys declared as `key.Binding`, dispatched via `key.Matches`;
-  `WindowSizeMsg` handlers both `SetSize` children and forward the
-  msg. Full contract in `docs/poplar/bubbletea-conventions.md`.
+- Idiomatic bubbletea is the default. `bubbles` components are the
+  primary analogues; deviations are ADR'd. SPUA-aware width math
+  lives in `internal/ansix/`: `ansix.Measurer` (value type,
+  resolved cell width) is constructed once in
+  `cmd/poplar/root.go` via `ansix.NewMeasurer(cellWidth)` and
+  threaded through `ui.NewApp` into every subpackage Model. Use
+  `m.Width`/`m.Truncate`/`m.TruncateEllipsis` for icon-bearing
+  strings, `lipgloss.Width` otherwise (never `len()`);
+  `ansix.SpuaCount` is a free function; `uicore.FillRowToWidth`
+  takes a Measurer. `lipgloss.JoinHorizontal`/`JoinVertical` are
+  forbidden when cellWidth != 1 — use row-by-row `strings.Join`
+  with pre-padded children. Keys are `key.Binding`, dispatched
+  via `key.Matches`; `WindowSizeMsg` handlers both `SetSize`
+  children and forward the msg. Full contract in
+  `docs/poplar/bubbletea-conventions.md`. ADRs 0084, 0181, 0209.
 - `internal/ui/` is the App parent plus eight bubbles-shaped
   subpackages (`account`, `compose`, `helppopover`, `messagelist`,
   `movepicker`, `reader`, `sidebar`, `wizard`) and the `uicore`
@@ -251,26 +256,25 @@ the ADR(s) that justify them.
   `[[account]]` block. Absent block disables sync. ADR-0175.
 - Themes are compiled Go values in `internal/theme/` (15 themes,
   One Dark default). No runtime TOML, no glamour. Components style
-  through the `Styles` struct from `theme.CompiledTheme`.
-  `lipgloss.NewStyle()` is permitted only in
-  `internal/theme/palette.go`, `internal/ui/styles.go`, and
-  per-subpackage `styles.go` files (each bubbles-shaped
-  subpackage projects a narrow `Styles` from `internal/ui.Styles`
-  via `NewStyles(*theme.CompiledTheme)`; `uicore/styles.go` holds
-  its own chrome-primitive styles, since uicore does not project
-  a `Styles` struct). Hex literals only in `themes.go`.
-  The semantic map from palette slots to UI surfaces lives in
-  `docs/poplar/styling.md`; update it before changing any color.
+  through `theme.CompiledTheme.Styles`. `lipgloss.NewStyle()` is
+  permitted only in `internal/theme/palette.go`,
+  `internal/ui/styles.go`, and per-subpackage `styles.go` files
+  (each subpackage projects a narrow `Styles` from
+  `internal/ui.Styles` via `NewStyles(*theme.CompiledTheme)`;
+  `uicore/styles.go` holds its own chrome-primitive styles).
+  Hex literals only in `themes.go`. The palette-to-surface map
+  lives in `docs/poplar/styling.md`; update it before changing
+  any color.
 
 ### Icon mode
 
 - Icon mode is resolved once at startup. `cmd/poplar/root.go` runs
-  `term.HasNerdFont` + `term.MeasureSPUACells` + `term.Resolve` for
-  `(IconMode, cellWidth)`; the resulting `uicore.IconSet` and
-  `ansix.NewMeasurer(cellWidth)` thread into `ui.NewApp`. No runtime
-  toggling. Icon literals live only in `internal/ui/uicore/layout.go`:
-  `SimpleIcons` runes are EAW Na/N (`lipgloss.Width == 1`),
-  `FancyIcons` runes are in `[U+F0000, U+FFFFD]`. Unit-tested.
+  `term.HasNerdFont` + `term.MeasureSPUACells` + `term.Resolve`
+  for `(IconMode, cellWidth)`; the resulting `uicore.IconSet` and
+  `ansix.NewMeasurer(cellWidth)` thread into `ui.NewApp`. No
+  runtime toggling. Icon literals live only in
+  `uicore/layout.go`: `SimpleIcons` runes are EAW Na/N, `FancyIcons`
+  are in `[U+F0000, U+FFFFD]`.
 
 ### Catkin
 
@@ -296,21 +300,19 @@ Auto-loaded via `.claude/rules/catkin-invariants.md` when editing `internal/catk
 
 ### Address book
 
-- `internal/contacts/` is the UI-free contacts surface: value
-  types, CardDAV `Client` (wraps `emersion/go-webdav/carddav` for
-  discovery, multiget, sync-collection, CTAG), `emersion/go-vcard`
-  parser, `Sync` orchestrator + `Store` seam (`internal/cache`
-  implements). `internal/ui/contacts/` adds per-package `Styles`,
-  pure `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form`
-  sub-models. Compose autocomplete + `i`-popover read from
-  `cache.Account.SuggestAddresses` / `LookupContact`; `C`/`M`
+- `internal/contacts/` is the UI-free contacts surface (CardDAV
+  `Client` wrapping `emersion/go-webdav/carddav`,
+  `emersion/go-vcard` parser, `Sync` + `Store` seam — `cache`
+  implements). `internal/ui/contacts/` adds `Styles`, pure
+  `RenderDetailCard`, and `Popover`/`Sidebar`/`List`/`Form`
+  sub-models; compose autocomplete + `i`-popover read from
+  `cache.Account.SuggestAddresses`/`LookupContact`; `C`/`M`
   toggle Contacts mode. Overlay cascade: confirm > conflict >
-  outbox > help > linkpicker > attachpicker > movepicker > form >
-  popover.
-- `contacts.Form` is the contact edit sub-model. Confirm cascade:
-  form-discard > contact-delete > compose-save > empty-folder.
-  Save via `PatchVCard` (existing) or `BuildVCard` (new); multi-book
-  destination is post-1.0. ADR-0176.
+  outbox > help > linkpicker > attachpicker > movepicker > form
+  > popover. `contacts.Form` confirm cascade: form-discard >
+  contact-delete > compose-save > empty-folder; save via
+  `PatchVCard`/`BuildVCard`; multi-book destination is post-1.0.
+  ADR-0176.
 
 ### Viewer
 
@@ -380,21 +382,19 @@ take a trailing `*slog.Logger` arg; nil falls back to
 ## Build & verification
 
 - Makefile: `make check` is the commit gate (fmt-check, vet,
-  voice, modern-go-check, test). `make test` runs with
-  `-tags=dev` to keep MockBackend in scope; release builds drop
-  it. `scripts/voice-check.sh` scans T4/T10/T14/T16/T27/T28/T33/
-  T35/T39/T40 (T34 voice-lens only; ADR-0173).
-  `scripts/modern-go-check.sh` (ADR-0196) scans pre-1.21 idioms;
-  `MODERN_GO_STRICT=1` flips hard-fail. `make install` →
-  `~/.local/bin/`.
+  voice, modern-go-check, test). `make test` runs `-tags=dev`
+  to keep MockBackend in scope; release builds drop it.
+  `scripts/voice-check.sh` scans T4/T10/T14/T16/T27/T28/T33/
+  T35/T39/T40 (T34 is voice-lens only; ADR-0173).
+  `scripts/modern-go-check.sh` (ADR-0196) flags pre-1.21 idioms;
+  `MODERN_GO_STRICT=1` hard-fails. `make install` → `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
-  before `internal/ui/`; `docs/poplar/styling.md` before any color
-  change. Pass-end ritual: `poplar-pass`.
-- Live UI verification uses tmux (`.claude/docs/tmux-testing.md`); 80×24 polish bar, UI passes capture 80×24 and 120×40.
+  before `internal/ui/`; `styling.md` before any color change;
+  `poplar-pass` for pass-end. Live UI verification uses tmux
+  (`.claude/docs/tmux-testing.md`); 80×24 polish bar, UI passes
+  capture 80×24 and 120×40.
 
 ## Decisions
 
-ADRs live in `docs/poplar/decisions/`. Load
-`docs/poplar/decisions/INDEX.md` for the themed map from binding
-facts to ADR numbers; load specific ADRs for full rationale.
+ADRs in `docs/poplar/decisions/`; the themed map is `INDEX.md`.

@@ -345,3 +345,24 @@ Once the query is committed with `Enter`, the shelf enters Active
 state and all normal account-view keys (including `j/k`, folder
 jumps, triage) route normally again. `q` is stolen while the shelf
 is non-idle to prevent accidental quit. See ADR 0064.
+
+## Catkin chords (Kitty keyboard protocol)
+
+Inside compose's body, six Ctrl+letter chords format markdown.
+They require the Kitty keyboard protocol to disambiguate from
+Tab/Enter/Backspace; on terminals without it, the compose
+footer collapses to the plain markdown nudge and the chords
+are inert.
+
+| key  | action |
+|------|--------|
+| ^B   | bold   |
+| ^I   | italic |
+| ^K   | link   |
+| ^L   | list   |
+| ^Q   | quote  |
+| ^@   | task   |
+
+Source of truth: `catkin.ChordSet()` (`internal/catkin/bindings.go`);
+filtered for render via `catkin.ActiveChords(disambig)`. See
+ADR-0217.
