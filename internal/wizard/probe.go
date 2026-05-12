@@ -13,13 +13,9 @@ import (
 
 // Indirection so tests can substitute fakes without dialing real servers.
 var (
-	imapProbeFn = func(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) mail.ProbeResult {
-		return mailimap.Probe(ctx, cfg, oauthCli)
-	}
+	imapProbeFn = mailimap.Probe
 	jmapProbeFn = mailjmap.Probe
-	smtpProbeFn = func(cfg config.AccountConfig, oauthCli *mailauth.Client) error {
-		return mailimap.ProbeSMTP(cfg, oauthCli)
-	}
+	smtpProbeFn = mailimap.ProbeSMTP
 )
 
 // Probe routes to the right backend based on cfg.Backend and returns a

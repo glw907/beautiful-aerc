@@ -145,32 +145,16 @@ func (s *oauthSection) updateFlow(msg tea.Msg) (section, tea.Cmd) {
 }
 
 func (s *oauthSection) runAuthorize() tea.Cmd {
-	preset := s.parent.State.Preset
-	email := s.parent.State.Email
-	cid := s.clientID
-	secret := s.clientSecret
-	p, _ := config.Providers[preset]
+	state := s.parent.State
+	state.OAuthCID = s.clientID
+	state.OAuthSecret = s.clientSecret
 
 	return func() tea.Msg {
-		slug := cache.Slugify(email)
-		fallbackDir := oauthFallbackDir()
-		store, backend, err := mailauth.OpenStore(slug, fallbackDir)
+		cli, backend, err := buildOAuthClient(state)
 		if err != nil {
 			return oauthDoneMsg{err: fmt.Errorf("open token store: %w", err)}
 		}
-
-		cfg := mailauth.Config{
-			ClientID:     cid,
-			ClientSecret: secret,
-		}
-		if p.OAuth != nil {
-			cfg.AuthURL = p.OAuth.AuthURL
-			cfg.TokenURL = p.OAuth.TokenURL
-			cfg.Scopes = p.OAuth.Scopes
-		}
-
-		cli := mailauth.NewClient(cfg, store, slug, backend)
-		strategy := wizdomain.NewOAuthStrategy(cli, cid, secret)
+		strategy := wizdomain.NewOAuthStrategy(cli, state.OAuthCID, state.OAuthSecret)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -208,4 +192,28 @@ func oauthFallbackDir() string {
 		base = filepath.Join(home, ".config")
 	}
 	return filepath.Join(base, "poplar", "oauth")
+}
+
+// buildOAuthClient assembles a *mailauth.Client from collected
+// wizard state. Returns the resolved store backend so callers that
+// need to record it on the account config (the consent flow) can.
+// Both the consent step and the probe step share this path so the
+// probe sees the same store the consent step just wrote to.
+func buildOAuthClient(state wizdomain.Model) (*mailauth.Client, mailauth.Backend, error) {
+	preset := config.Providers[state.Preset]
+	slug := cache.Slugify(state.Email)
+	store, backend, err := mailauth.OpenStore(slug, oauthFallbackDir())
+	if err != nil {
+		return nil, "", err
+	}
+	cfg := mailauth.Config{
+		ClientID:     state.OAuthCID,
+		ClientSecret: state.OAuthSecret,
+	}
+	if preset.OAuth != nil {
+		cfg.AuthURL = preset.OAuth.AuthURL
+		cfg.TokenURL = preset.OAuth.TokenURL
+		cfg.Scopes = preset.OAuth.Scopes
+	}
+	return mailauth.NewClient(cfg, store, slug, backend), backend, nil
 }

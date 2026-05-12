@@ -3,6 +3,7 @@ package wizard
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/mailauth"
@@ -50,23 +50,18 @@ func (p *probeScreen) oauthClient() *mailauth.Client {
 	if !state.OAuthDone {
 		return nil
 	}
-	preset := config.Providers[state.Preset]
-	if preset.OAuth == nil {
+	if config.Providers[state.Preset].OAuth == nil {
 		return nil
 	}
-	slug := cache.Slugify(state.Email)
-	store, backend, err := mailauth.OpenStore(slug, oauthFallbackDir())
+	cli, _, err := buildOAuthClient(state)
 	if err != nil {
+		// Probe will fall through to a password attempt and fail at
+		// AUTHENTICATE, which is the right user-facing surface;
+		// the store-open error itself is rare and worth tracing.
+		slog.Warn("wizard probe: open oauth token store", "err", err)
 		return nil
 	}
-	cfg := mailauth.Config{
-		ClientID:     state.OAuthCID,
-		ClientSecret: state.OAuthSecret,
-		AuthURL:      preset.OAuth.AuthURL,
-		TokenURL:     preset.OAuth.TokenURL,
-		Scopes:       preset.OAuth.Scopes,
-	}
-	return mailauth.NewClient(cfg, store, slug, backend)
+	return cli
 }
 
 func (p *probeScreen) runProbe() tea.Cmd {

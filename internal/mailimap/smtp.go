@@ -28,10 +28,8 @@ var smtpDial = func(b *Backend) (smtpClient, error) {
 	return realSMTPDial(context.Background(), b)
 }
 
-// ProbeSMTP dials, authenticates, and closes. `poplar config check` and
-// the wizard's probe stage call it after IMAP succeeds. oauthCli is non-nil
-// for accounts whose SMTP.Auth is xoauth2; passing nil for non-OAuth
-// accounts keeps the password-based path.
+// ProbeSMTP dials, authenticates, and closes. oauthCli is nil for
+// non-OAuth accounts.
 func ProbeSMTP(cfg config.AccountConfig, oauthCli *mailauth.Client) error {
 	var b *Backend
 	if oauthCli != nil {

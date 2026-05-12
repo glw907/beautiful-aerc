@@ -133,7 +133,6 @@ func TestProbe_MissingUIDPLUSFails(t *testing.T) {
 	}
 }
 
-// memTokenStore is a map-backed TokenStore for probe tests.
 type memTokenStore struct {
 	tok string
 }
@@ -142,8 +141,6 @@ func (s *memTokenStore) Set(_, v string) error        { s.tok = v; return nil }
 func (s *memTokenStore) Get(_ string) (string, error) { return s.tok, nil }
 func (s *memTokenStore) Delete(_ string) error        { return nil }
 
-// tokenServerStub starts an httptest server that returns a fresh access token
-// using the stored refresh token, and returns the server URL.
 func tokenServerStub(t *testing.T) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

@@ -56,12 +56,6 @@ func buildOAuthClient(acct config.AccountConfig) (*mailauth.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("token store: %w", err)
 	}
-
-	// If config specifies a store backend, override when it differs.
-	if acct.OAuthStore != "" {
-		_ = backend // preference recorded in config; store selection already done by OpenStore
-	}
-
 	return mailauth.NewClient(cfg, store, acct.Name, backend), nil
 }
 
