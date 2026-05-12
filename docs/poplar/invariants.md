@@ -3,16 +3,12 @@
 Universal binding facts for the poplar codebase. Edited in place —
 new facts replace or narrow old facts, they do not append. When a
 pass changes a binding fact, update this file before committing.
-
-Component- and UX-level invariants live in
-`.claude/rules/ui-invariants.md` and load when editing
-`internal/ui/`, planning a UI pass, or reading wireframes /
-keybindings. The authoritative key map is
-`docs/poplar/keybindings.md`.
-
-Every fact here is codified in an ADR under `docs/poplar/decisions/`.
-The decision index at the bottom maps each section's claims back to
-the ADR(s) that justify them.
+Component- and UX-level invariants live in `.claude/rules/ui-invariants.md`
+and load when editing `internal/ui/`, planning a UI pass, or reading
+wireframes / keybindings. The authoritative key map is
+`docs/poplar/keybindings.md`. Every fact here is codified in an ADR
+under `docs/poplar/decisions/`; the index at the bottom maps each
+section's claims back to the justifying ADR(s).
 
 ## Architecture
 
@@ -74,8 +70,8 @@ the ADR(s) that justify them.
 
 - `mail.Backend.Send(env Envelope, mime []byte) error` and
   `Append(folder, mime, flags) error` are the outbound primitives;
-  `Envelope = { From, Rcpts }` is RFC 5321. `compose.AssembleMIME`
-  pre-assembles `mime`; `internal/mail/` does not import compose.
+  `Envelope = { From, Rcpts }` is RFC 5321. `mailcompose.AssembleMIME`
+  pre-assembles `mime`; `internal/mail/` does not import mailcompose.
 - JMAP `Send` batches `Email/import` + `EmailSubmission/set` via
   the `#k1` creation reference (atomic submission + Sent
   placement); `Identity/get` is lazy and cached on
@@ -288,15 +284,18 @@ the ADR(s) that justify them.
 
 ### Compose
 
-- `internal/mailcompose/` is the UI-free outbound-mail surface:
-  the `Draft` value type, pure `AssembleMIME(d, now)` (multipart/
-  alternative text+html via `filter.MarkdownToHTML`; multipart/
-  mixed when attachments are present), and `SeedReply` /
-  `SeedReplyAll` / `SeedForward` parsing parent Message-Id and
-  References from raw RFC 5322 bytes with depth-preserving `>`
-  quoting. `gomail.Address` is the Draft address type;
-  `content.ParseAddressList` is the shared list parser.
-  `internal/filter` exposes `MarkdownBody` / `MarkdownToHTML` as the shared goldmark entries (Linkify + Table). `compose.Model` (`internal/ui/compose/`) embeds `catkin.Model` directly. ADRs 0212, 0213.
+- `internal/mailcompose/` is the UI-free outbound surface: the
+  `Draft` value type, pure `AssembleMIME(d, identities, now)`
+  (multipart/alternative text+html via `filter.MarkdownToHTML`;
+  multipart/mixed when attachments present), and
+  `SeedReply`/`SeedReplyAll`/`SeedForward` parsing parent
+  Message-Id + References from raw RFC 5322 bytes with
+  depth-preserving `>` quoting. `gomail.Address` is the Draft
+  address type; `content.ParseAddressList` is the list parser.
+  `internal/filter` exposes `MarkdownBody`/`MarkdownToHTML` as
+  the shared goldmark entries (Linkify + Table). `compose.Model`
+  (`internal/ui/compose/`) holds a named `editor catkin.Model`
+  field. ADRs 0212, 0213.
 - `internal/ui/compose/` owns the live compose surface. `Dropdown`
   is a value-type To/Cc/Bcc autocomplete sub-model on
   `compose.Model`; `SuggestFn` threads from `App.suggestAddresses`
@@ -374,11 +373,11 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 
 `log/slog` is the diagnostic path for `internal/`; CLI/UX strings
 in `cmd/poplar/` stay on `os.Stderr`. `cmd/poplar/main.go` installs
-the root `slog.NewTextHandler` via `installLogger` before cobra
-runs (LevelInfo default; `POPLAR_LOG=debug` raises). TTY stdout →
-`$XDG_STATE_HOME/poplar/poplar.log` (append, on demand); non-TTY
-→ `os.Stderr`; open failure silent. Backend constructors take a
-trailing `*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
+the root `slog.NewTextHandler` via `installLogger` before cobra runs
+(LevelInfo default; `POPLAR_LOG=debug` raises). TTY stdout →
+`$XDG_STATE_HOME/poplar/poplar.log` (append, on demand); non-TTY →
+`os.Stderr`; open failure silent. Backend constructors take a trailing
+`*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
 
 ## Build & verification
 
@@ -386,15 +385,15 @@ trailing `*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. AD
   modern-go-check + skipcheck + test; `-tags=dev` keeps MockBackend
   in scope. `voice-check.sh` (ADR-0173) and `modern-go-check.sh`
   (ADR-0196, `MODERN_GO_STRICT=1` hard-fails) scan grep-tier tells;
-  `scripts/skipcheck` rejects `Test*` bodies whose first statement
-  is an unguarded `t.Skip`/`SkipNow`/`Skipf` (ADR-0234).
-  `make check-deep` runs gremlins per-package with
-  `--timeout-coefficient 10 --workers 1` and observed − 5pp floors
-  (equivalents documented; ADRs 0232, 0234–0237). `make install` → `~/.local/bin/`.
-  Module `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
+  `scripts/skipcheck` rejects `Test*` bodies starting with an
+  unguarded `t.Skip`/`SkipNow`/`Skipf` (ADR-0234). `make check-deep`
+  runs gremlins per-package with `--timeout-coefficient 10
+  --workers 1` and observed − 5pp floors (equivalents documented;
+  ADRs 0232, 0234–0237). `make install` → `~/.local/bin/`. Module
+  `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `styling.md` before any color; `poplar-pass`
-  for pass-end. UI verification via tmux (`.claude/docs/tmux-testing.md`);
-  capture 80×24 and 120×40.
+  for pass-end. UI via tmux (`.claude/docs/tmux-testing.md`); capture
+  80×24 and 120×40.
 
 ## Decisions — `docs/poplar/decisions/` (themed map: `INDEX.md`).

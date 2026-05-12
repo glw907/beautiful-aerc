@@ -1,12 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 40.5b killed 22 of 23 mailauth survivors
-(efficacy 78.50% → 99.07%, floor 73 → 94; one equivalent mutant
-documented) and recalibrated the seven other curated package
-floors under the calibrated flag set. `cache` jumped from 72 to
-95 once the bad-flag artifact lifted (ADR-0237).
+**Current pass:** Pass 41 ran the pre-soak Audit Final via four
+parallel agents (test-infra, security/credentials, voice/doc rot,
+invariant drift). Zero P0; the P1 tail is queued for Pass 41.1.
+Two doc-drift findings on `mailcompose.AssembleMIME` were repaired
+in `invariants.md` inline (ADR-0238).
 
-Pass 41 (Audit Final) is the next gate.
+Pass 41.1 (remediation) is the soak gate.
 Pass 35.1 still pending Gmail/Outlook creds.
 
 **Beta soak deferred.** Pre-beta rules apply.
@@ -29,26 +29,30 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 40.4 | `internal/mail` mutation lift to 94.44% (ADR-0235) | done |
 | 40.5a | mailauth coverage + check-deep flag fix (ADR-0236) | done |
 | 40.5b | mailauth survivor kill + floor recalibration (ADR-0237) | done |
-| 41 | Audit Final — comprehensive pre-soak | next |
-| Beta soak | Enter when Audit Final returns empty | conditional |
+| 41 | Audit Final — comprehensive pre-soak (ADR-0238) | done |
+| 41.1 | Audit Final remediation | next |
+| Beta soak | Enter when 41.1 re-skim returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 41)
+### Next starter prompt (Pass 41.1)
 
-> **Goal.** Run the comprehensive pre-soak audit per
-> `docs/poplar/audit-plan.md`; surface any remaining
-> production-risk findings before beta-soak entry.
+> **Goal.** Remediate the P1 findings from Audit Final (ADR-0238)
+> so a re-skim returns empty and beta soak can open.
 >
-> **Scope.** Whole codebase. Output is a fresh audit doc under
-> `docs/superpowers/plans/` listing P0/P1 findings with file:line
-> citations and ADR pointers; no code yet.
+> **Scope.** Per `docs/superpowers/archive/plans/2026-05-12-audit-final.md`:
+> three config-write temp-file races → `OpenFile(..., O_EXCL, 0o600)`;
+> five fake-backend `*Err` injection seams + one IMAP-cmd-path
+> `ErrAuth` end-to-end drainer test; T15 renames
+> `cache.CacheEvent → cache.Event` and `compose.CacheStore → compose.Store`;
+> ADR-0233–0237 em-dash density trim; six line-level voice fixes;
+> three invariant doc corrections (ADR refs at `invariants.md:31`,
+> internal-package list, catkin-invariants muesli/reflow provenance).
 >
-> **Settled.** Audit cadence + scope live in
-> `docs/poplar/audit-plan.md`; release-stance gate is
-> "Audit Final returns empty" (CLAUDE.md).
+> **Settled.** Findings + remediation plan in ADR-0238 and the
+> archived audit plan.
 >
-> **Open.** None — the audit plan is the spec.
+> **Open.** None — mechanical from the findings table.
 >
-> **Approach.** Walk the audit plan section by section, log
-> findings as you go, classify P0/P1/P2. The remediation pass
-> (41.1) will land afterwards. Standard pass-end checklist.
+> **Approach.** Group changes into one ADR. Standard pass-end
+> checklist applies. End with a quick re-skim against the same
+> agents — if empty, the next pass opens beta soak.
