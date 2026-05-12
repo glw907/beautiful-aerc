@@ -219,7 +219,7 @@ sources or the `poplar cache` CLI. The decision index in
   stored as the underlying string. Op kind is `cache.OpKind`
   (`KindMove`/`KindFlag`/`KindDestroy`/`KindSend`/`KindAppend`/
   `KindPushDraft`/`KindContactPut`/`KindContactDelete`).
-  `CacheEvent` carries both as typed values.
+  `cache.Event` carries both as typed values.
 - Drainer is per-account, single goroutine. Wakes on `drainSignal`
   (every QueueOp) or a 5-second idle ticker. Conflict matrix:
   success → `OpDone`; `ErrAuth` → `OpConflict auth-failure`;

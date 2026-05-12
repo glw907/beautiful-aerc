@@ -9,7 +9,7 @@ date: 2026-05-12
 ADR-0236 calibrated `make check-deep` to run gremlins with
 `--timeout-coefficient 10 --workers 1` and pinned `internal/mailauth`
 at an honest 78.50% baseline. The 23 LIVED mutants surfaced by
-that calibration were real, not artifacts — see the table in
+that calibration were real, not artifacts. See the table in
 `docs/superpowers/archive/plans/2026-05-12-mailauth-survivor-kill.md`.
 
 This pass kills those survivors and re-measures the seven other
@@ -45,7 +45,7 @@ Recalibrated floors for the remaining seven curated packages:
 | mailcompose | 83.20% | 78 | 78 |
 | config | 83.86% | 78 | 78 |
 
-`cache` jumped from 72 to 95 — the prior 77.54% baseline was
+`cache` jumped from 72 to 95: the prior 77.54% baseline was
 itself an artifact of the pre-ADR-0236 flag set; the calibrated
 run kills every covered mutant.
 

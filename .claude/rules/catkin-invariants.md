@@ -16,9 +16,8 @@ each fact back to its ADR(s).
   bubbletea editor, library-pure on the charm.land/v2 substrate
   (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`,
   `charm.land/lipgloss/v2`, `charmbracelet/x/ansi`,
-  `alecthomas/chroma/v2`). The reflow primitives are the
-  vendored algorithm from `muesli/reflow` — provenance-noted in
-  `catkin.go` and `uicore/overlay.go`, not a module dep. Wraps
+  `alecthomas/chroma/v2`). The reflow primitives are a clean-room
+  reimplementation; soft-wrap routes through `ansi.Hardwrap`. Wraps
   `bubbles/textarea` as
   buffer/cursor but owns `View()`. Pure `Classify` + `Reflow`
   (non-whitespace rune count for cursor remap); word nav

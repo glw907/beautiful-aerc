@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -246,37 +245,9 @@ func runRepair(f rootFlags) error {
 	uiCfg, _ := config.LoadUI(configPath)
 	cacheCfg, _ := config.LoadCache(configPath)
 	body := config.Render(accts, uiCfg, cacheCfg)
-	if err := writeConfigAtomic(configPath, body); err != nil {
-		return fmt.Errorf("write %s: %v", configPath, err)
+	if err := config.AtomicWrite(configPath, body); err != nil {
+		return fmt.Errorf("write %s: %w", configPath, err)
 	}
 	fmt.Fprintf(os.Stderr, "repaired %s in %s\n", f.repair, configPath)
 	return nil
-}
-
-func writeConfigAtomic(path string, body []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".config.toml.*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
 }

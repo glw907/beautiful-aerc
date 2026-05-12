@@ -42,8 +42,7 @@ func Apply(m Model) (config.AccountConfig, error) {
 		cfg.InsecureTLS = m.InsecureTLS
 		cfg.Password = m.Password
 		// SMTP defaults to the same host on submission ports; without
-		// this the round-trip is rejected by the missing-smtp.host
-		// validator. The user can edit afterwards.
+		// this the round-trip fails the missing-smtp.host validator.
 		cfg.SMTP = config.SMTPConfig{
 			Host: m.Host,
 			Port: 587,

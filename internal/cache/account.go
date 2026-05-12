@@ -37,7 +37,7 @@ type Account struct {
 	maxAttachmentSize int64
 	maxOutboxBytes    int64
 
-	events        chan CacheEvent
+	events        chan Event
 	droppedEvents atomic.Uint64
 
 	drainSignal   chan struct{}
@@ -79,8 +79,8 @@ const (
 	KindContactDelete OpKind = "contact-delete"
 )
 
-// CacheEvent is the drainer→UI signal payload.
-type CacheEvent struct {
+// Event is the drainer→UI signal payload.
+type Event struct {
 	Account string
 	OpID    int64
 	Kind    OpKind
@@ -94,7 +94,7 @@ type CacheEvent struct {
 
 // Config sets the cache size backstops. Zero values disable.
 type Config struct {
-	// MaxSize caps the body-cache in bytes. Zero (the new default) disables the cap; configurable via [cache] max-size in config.toml.
+	// MaxSize caps the body-cache in bytes. Zero disables the cap; configurable via [cache] max-size in config.toml.
 	MaxSize int64
 	// MaxAttachmentSize caps attachment bytes, tracked separately from MaxSize.
 	MaxAttachmentSize int64
@@ -176,7 +176,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		maxSize:           cfg.MaxSize,
 		maxAttachmentSize: cfg.MaxAttachmentSize,
 		maxOutboxBytes:    cfg.MaxOutboxBytes,
-		events:            make(chan CacheEvent, 32),
+		events:            make(chan Event, 32),
 		drainSignal:       make(chan struct{}, 1),
 		stop:              make(chan struct{}),
 	}
@@ -209,9 +209,9 @@ func (a *Account) DB() *sql.DB { return a.db }
 
 func (a *Account) Dir() string { return a.dir }
 
-func (a *Account) Events() <-chan CacheEvent { return a.events }
+func (a *Account) Events() <-chan Event { return a.events }
 
-// DroppedEvents counts CacheEvents the drainer dropped on a full
+// DroppedEvents counts Events the drainer dropped on a full
 // buffer. A change since the last read means incremental Event
 // handling has lost ground. Re-read the cache instead.
 func (a *Account) DroppedEvents() uint64 { return a.droppedEvents.Load() }

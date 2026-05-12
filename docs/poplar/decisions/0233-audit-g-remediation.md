@@ -87,7 +87,7 @@ verifiable claim:
 - `cmd/poplar/reauth_test.go` calls `runReauth` directly and
   asserts `errors.Is(err, errUnknownReauthAccount)` /
   `errReauthAccountNotOAuth`. `runReauth` no longer calls
-  `os.Exit(78)` — it returns the sentinels and `main` maps them
+  `os.Exit(78)`. It returns the sentinels and `main` maps them
   to exit codes.
 - `internal/wizard/probe_test.go::TestProbeRoutesJMAP` injects an
   SMTP fake that returns an error and asserts the JMAP route
@@ -146,7 +146,7 @@ third-party interface.
   code for T14 (`Get*` getter prefix). The rule remains hard for
   production callers; tests are free to satisfy third-party
   interfaces that hard-code Get-prefix method names.
-- No invariant changes — these are test-correctness fixes, not
+- No invariant changes. These are test-correctness fixes, not
   new binding facts. The `Backend.pollInterval` field is an
   implementation detail of `mailimap.idleLoop` and not part of
   the contract.

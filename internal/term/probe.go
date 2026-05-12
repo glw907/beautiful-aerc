@@ -14,8 +14,8 @@ import (
 
 // MeasureSPUACells returns the rendered cell width (1 or 2) of an
 // SPUA-A glyph in the current terminal+font, or 0 on failure. The
-// probe runs ESC[6n, writes a test glyph, runs ESC[6n again, and
-// returns the column delta.
+// probe queries the cursor position with ESC[6n, writes the glyph,
+// queries again, and returns the column delta.
 //
 // The probe-glyph-probe shape is adapted from
 // github.com/hymkor/go-cursorposition (MIT).

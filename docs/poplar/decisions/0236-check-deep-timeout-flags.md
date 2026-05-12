@@ -20,7 +20,7 @@ in the script's header comment was measured *with* the flags
 Pass 40.4 happened to pass on the command line
 (`--timeout-coefficient 10 --workers 1`), not with the flags the
 script itself uses. The script and the recorded baselines were
-out of sync — under the script's own flags, no package's floor
+out of sync. Under the script's own flags, no package's floor
 was meaningful.
 
 Re-running with `--timeout-coefficient 10 --workers 1` and the
@@ -51,7 +51,7 @@ invocation and revise the floors.
 header comment records the flag rationale and the calibration
 caveat. `internal/mailauth`'s floor moves to **73**
 (78.50 observed − 5pp). The other seven packages keep their
-existing floors until Pass 40.5b re-measures them — a stale
+existing floors until Pass 40.5b re-measures them. A stale
 floor still catches regressions, even if it understates the
 ceiling.
 
@@ -66,7 +66,7 @@ and benefit from running with the calibrated script in hand.
 ## Consequences
 
 - `make check-deep` runtime grows with the timeout coefficient.
-  Mailauth alone runs ~14 minutes (108 mutants). Acceptable —
+  Mailauth alone runs ~14 minutes (108 mutants). Acceptable:
   `make check-deep` is a pass-end / nightly gate, never on the
   inner loop. Single-worker isolation avoids CPU contention
   skewing per-mutant timing.

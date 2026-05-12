@@ -39,6 +39,8 @@ type fakeClient struct {
 	moveErr    error
 	expungeErr error
 	appendErr  error
+	selectErr  error
+	capsErr    error
 
 	// searchFn, when non-nil, overrides the default Search stub.
 	searchFn func(mail.SearchCriteria) ([]mail.UID, error)
@@ -61,7 +63,7 @@ func newFakeClient() *fakeClient {
 
 func (f *fakeClient) Logout() error { return f.logoutErr }
 
-func (f *fakeClient) Capabilities() (map[string]bool, error) { return f.caps, nil }
+func (f *fakeClient) Capabilities() (map[string]bool, error) { return f.caps, f.capsErr }
 
 func (f *fakeClient) List(ref, pattern string, specialUse bool) ([]listEntry, error) {
 	return f.folders, nil
@@ -69,6 +71,9 @@ func (f *fakeClient) List(ref, pattern string, specialUse bool) ([]listEntry, er
 
 func (f *fakeClient) Select(folder string, readOnly bool) (mail.Folder, error) {
 	f.selected = folder
+	if f.selectErr != nil {
+		return mail.Folder{}, f.selectErr
+	}
 	if s, ok := f.folderSummary[folder]; ok {
 		return s, nil
 	}

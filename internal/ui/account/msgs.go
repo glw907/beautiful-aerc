@@ -32,10 +32,10 @@ type folderAppendedMsg struct {
 	total int
 }
 
-// CacheEventMsg wraps a cache.CacheEvent for tea routing. Account refreshes
+// CacheEventMsg wraps a cache.Event for tea routing. Account refreshes
 // the active folder on it. App refreshes the outbox depth segment and any
 // open outbox or conflict overlay.
-type CacheEventMsg struct{ Event cache.CacheEvent }
+type CacheEventMsg struct{ Event cache.Event }
 
 // TriageStartedMsg is emitted after an optimistic triage flip. App sets
 // the toast and schedules the undo timer. Inverse is the sole undo Cmd

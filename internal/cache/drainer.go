@@ -126,7 +126,7 @@ func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
 }
 
 // executeOne runs one op against the backend and writes its terminal
-// state. CacheEvents fire only on terminal transitions, never on
+// state. Events fire only on terminal transitions, never on
 // failed→retry.
 func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerConfig) {
 	if err := a.markExecuting(row.ID); err != nil {
@@ -279,7 +279,7 @@ func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
 	if status == OpDone {
 		a.burstDone.Add(1)
 	}
-	ev := CacheEvent{Account: a.name, OpID: row.ID, Kind: OpKind(row.Kind), Status: status}
+	ev := Event{Account: a.name, OpID: row.ID, Kind: OpKind(row.Kind), Status: status}
 	if err != nil {
 		ev.Err = err.Error()
 	}
@@ -291,7 +291,7 @@ func (a *Account) publishNote(row *outboxRow, status OpStatus, note string) {
 	if status == OpDone {
 		a.burstDone.Add(1)
 	}
-	a.emit(CacheEvent{
+	a.emit(Event{
 		Account: a.name,
 		OpID:    row.ID,
 		Kind:    OpKind(row.Kind),
@@ -300,7 +300,7 @@ func (a *Account) publishNote(row *outboxRow, status OpStatus, note string) {
 	})
 }
 
-func (a *Account) emit(ev CacheEvent) {
+func (a *Account) emit(ev Event) {
 	select {
 	case a.events <- ev:
 	default:

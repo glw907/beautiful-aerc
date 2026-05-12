@@ -190,12 +190,16 @@ func TestStoreBody_MaxSizeZero(t *testing.T) {
 // path doesn't re-call the backend on cache hit.
 type fakeBackendWithBody struct {
 	fakeBackend
-	calls int
-	body  []byte
+	calls   int
+	body    []byte
+	bodyErr error
 }
 
 func (f *fakeBackendWithBody) FetchBody(_ mail.UID) ([]byte, error) {
 	f.calls++
+	if f.bodyErr != nil {
+		return nil, f.bodyErr
+	}
 	return f.body, nil
 }
 

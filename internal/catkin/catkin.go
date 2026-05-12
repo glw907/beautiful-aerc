@@ -5,9 +5,9 @@
 // and block-aware reflow can drive the display directly from the
 // raw source without parsing textarea's ANSI output.
 //
-// This package depends only on bubbletea, bubbles, lipgloss, and
-// muesli/reflow. It has no poplar-specific imports and is
-// extractable as github.com/glw907/catkin.
+// This package depends only on bubbletea, bubbles, and lipgloss. It
+// has no poplar-specific imports and is extractable as
+// github.com/glw907/catkin.
 package catkin
 
 import (

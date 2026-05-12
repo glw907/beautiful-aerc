@@ -8,7 +8,7 @@ date: 2026-05-12
 
 Pass 40.3 (ADR-0234) calibrated `make check-deep` against the
 post-40.1 baseline and parked `internal/mail` at 69.23% efficacy
-with a 64% floor — the package was the queue item for a
+with a 64% floor. The package was the queue item for a
 follow-up pass. The surviving mutants were `mock.go:113`
 (`offset >= total` boundary), `mock.go:117` (`end > total`
 clamping boundary), and two capacity-expression mutants on
@@ -24,10 +24,10 @@ additions in `backend_test.go`, `classify_test.go`,
 `scripts/check-deep.sh` floor moves from 64 to 89 (observed minus
 the standard 5pp buffer).
 
-Two surviving mutants are accepted as **equivalent mutants** —
+Two surviving mutants are accepted as **equivalent mutants**:
 mathematically distinct under syntactic mutation but
 behaviorally identical to the original code, so no test can
-kill them without rewriting the source to a worse shape:
+kill them without rewriting the source to a worse shape.
 
 - `mock.go:117:9` — `end > total` ↔ `end >= total` in the clamp
   `if end > total { end = total }`. At the boundary
@@ -45,7 +45,7 @@ clean state for a package.
 The fifteen `NOT COVERED` mutants in `mockBodies` (ARITHMETIC_BASE
 on `+` string-concatenation operators) are now covered by
 `TestMockBackend_FetchBody_SeededUIDs`, but each mutation is a
-compile error — gremlins reports them as not-viable once it
+compile error. Gremlins reports them as not-viable once it
 attempts the build. They no longer count against efficacy.
 
 ## Consequences

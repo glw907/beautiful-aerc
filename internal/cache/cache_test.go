@@ -21,6 +21,8 @@ type fakeBackend struct {
 	sendErr      error
 	appErr       error
 	err          error
+	connectErr   error
+	queryErr     error
 	folders      []mail.Folder
 	headers      []mail.MessageInfo
 	updates      chan mail.Update
@@ -41,11 +43,14 @@ type appendCall struct {
 func (f *fakeBackend) AccountName() string                 { return "fake" }
 func (f *fakeBackend) AccountEmail() string                { return "fake@example.com" }
 func (f *fakeBackend) IsJMAP() bool                        { return false }
-func (f *fakeBackend) Connect(_ context.Context) error     { return nil }
+func (f *fakeBackend) Connect(_ context.Context) error     { return f.connectErr }
 func (f *fakeBackend) Disconnect() error                   { return nil }
 func (f *fakeBackend) ListFolders() ([]mail.Folder, error) { return f.folders, nil }
 func (f *fakeBackend) OpenFolder(_ string) error           { return nil }
 func (f *fakeBackend) QueryFolder(_ string, _, _ int) ([]mail.UID, int, error) {
+	if f.queryErr != nil {
+		return nil, 0, f.queryErr
+	}
 	return nil, 0, nil
 }
 func (f *fakeBackend) FetchHeaders(_ []mail.UID) ([]mail.MessageInfo, error) {

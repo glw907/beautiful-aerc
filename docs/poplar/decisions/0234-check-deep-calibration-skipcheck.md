@@ -9,7 +9,7 @@ date: 2026-05-16
 ADR-0232 landed `make check-deep` with every per-package floor at
 0%: the driver was wired but had no teeth. ADR-0230 also surfaced
 the unconditional `t.Skip("stand up httptest server")` placeholder
-shape — four committed test bodies in `internal/contacts/` whose
+shape: four committed test bodies in `internal/contacts/` whose
 first executable statement was `t.Skip`, passing CI with zero
 coverage. Pass 40.1 replaced those bodies with real tests, but the
 shape itself is grep-resistant: ~10 legitimate guarded skips
@@ -35,7 +35,7 @@ minus a 5pp buffer:
 
 The 5pp buffer absorbs the 1–3pp run-to-run drift gremlins shows
 from mutant ordering. Raising a floor requires writing new tests
-that lift the observed number — closing the buffer is forbidden.
+that lift the observed number. Closing the buffer is forbidden.
 `internal/mail` at 69% is the queue: `classifyErr` sentinel
 routing carries the most surviving mutants. A follow-up pass
 lifts it past 80%; the 64% floor is the no-regression line, not a

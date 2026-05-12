@@ -3,7 +3,6 @@ package wizard
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
@@ -107,36 +106,12 @@ func writeConfig(state wizdomain.Model) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve config path: %w", err)
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create config dir: %w", err)
-	}
 	if existing, err := os.Stat(path); err == nil && existing.Size() > 0 {
 		return "", fmt.Errorf("%s already has content; refusing to overwrite", path)
 	}
 	body := config.Render([]config.AccountConfig{cfg}, config.DefaultUIConfig(), config.DefaultCacheConfig())
-	tmp, err := os.CreateTemp(dir, ".config.toml.*")
-	if err != nil {
-		return "", fmt.Errorf("create tmp file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		return "", fmt.Errorf("write tmp: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return "", fmt.Errorf("sync tmp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("close tmp: %w", err)
-	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		return "", fmt.Errorf("chmod tmp: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return "", fmt.Errorf("rename to %s: %w", path, err)
+	if err := config.AtomicWrite(path, body); err != nil {
+		return "", err
 	}
 	return path, nil
 }

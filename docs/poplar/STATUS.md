@@ -1,15 +1,16 @@
 # Poplar Status
 
-**Current pass:** Pass 41 ran the pre-soak Audit Final via four
-parallel agents (test-infra, security/credentials, voice/doc rot,
-invariant drift). Zero P0; the P1 tail is queued for Pass 41.1.
-Two doc-drift findings on `mailcompose.AssembleMIME` were repaired
-in `invariants.md` inline (ADR-0238).
+**Current pass:** Pass 41.1 landed the Audit Final remediation
+batch (ADR-0239): `config.AtomicWrite` collapses three temp-file
+write sites with chmod-on-handle, five fake-backend `*Err` seams,
+`TestCmdClient_AuthDialFailure` completes the IMAP cmd-path
+ErrAuth → drainer coverage, T15 renames
+(`cache.CacheEvent → Event`, `compose.CacheStore → Store`), ADR
+em-dash trim, six line-level voice fixes, three invariant
+doc-drift repairs.
 
-Pass 41.1 (remediation) is the soak gate.
+Pass 42 opens beta soak.
 Pass 35.1 still pending Gmail/Outlook creds.
-
-**Beta soak deferred.** Pre-beta rules apply.
 
 ## Passes
 
@@ -30,29 +31,25 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 40.5a | mailauth coverage + check-deep flag fix (ADR-0236) | done |
 | 40.5b | mailauth survivor kill + floor recalibration (ADR-0237) | done |
 | 41 | Audit Final — comprehensive pre-soak (ADR-0238) | done |
-| 41.1 | Audit Final remediation | next |
-| Beta soak | Enter when 41.1 re-skim returns empty | conditional |
+| 41.1 | Audit Final remediation (ADR-0239) | done |
+| 42 | Beta soak entry | next |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 41.1)
+### Next starter prompt (Pass 42)
 
-> **Goal.** Remediate the P1 findings from Audit Final (ADR-0238)
-> so a re-skim returns empty and beta soak can open.
+> **Goal.** Open beta soak. Audit Final returned empty after Pass
+> 41.1; the soak gate is clear.
 >
-> **Scope.** Per `docs/superpowers/archive/plans/2026-05-12-audit-final.md`:
-> three config-write temp-file races → `OpenFile(..., O_EXCL, 0o600)`;
-> five fake-backend `*Err` injection seams + one IMAP-cmd-path
-> `ErrAuth` end-to-end drainer test; T15 renames
-> `cache.CacheEvent → cache.Event` and `compose.CacheStore → compose.Store`;
-> ADR-0233–0237 em-dash density trim; six line-level voice fixes;
-> three invariant doc corrections (ADR refs at `invariants.md:31`,
-> internal-package list, catkin-invariants muesli/reflow provenance).
+> **Scope.** Per `docs/poplar/release-stance.md` beta-soak rules
+> (load on entry — not yet in scope here). Tag `v0.9.1` if the
+> stance asks for a soak-entry version bump, otherwise leave the
+> tag policy alone. Update `STATUS.md` to mark soak active and
+> set the post-1.0 rules pointer.
 >
-> **Settled.** Findings + remediation plan in ADR-0238 and the
-> archived audit plan.
+> **Settled.** Audit gate cleared by ADR-0239 re-skim.
 >
-> **Open.** None — mechanical from the findings table.
+> **Open.** Read `docs/poplar/release-stance.md` first — it owns
+> the soak-entry checklist; this pass executes that checklist.
 >
-> **Approach.** Group changes into one ADR. Standard pass-end
-> checklist applies. End with a quick re-skim against the same
-> agents — if empty, the next pass opens beta soak.
+> **Approach.** Load release-stance, work the checklist, write
+> the soak-entry ADR. Standard pass-end checklist applies.

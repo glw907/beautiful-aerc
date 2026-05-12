@@ -23,9 +23,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// CacheStore is the subset of cache.Account compose needs. Defined here
+// Store is the subset of cache.Account compose needs. Defined here
 // so tests can inject a fake without importing internal/cache.
-type CacheStore interface {
+type Store interface {
 	CreateDraft(ctx context.Context, draftID string, payload []byte) error
 	UpdateDraft(ctx context.Context, draftID string, payload []byte) error
 	LoadDraft(ctx context.Context, draftID string) ([]byte, error)
@@ -63,7 +63,7 @@ type Model struct {
 	height  int
 	divider string
 
-	cache         CacheStore
+	cache         Store
 	draftID       string
 	draftsFolder  string
 	prevServerUID string
@@ -150,7 +150,7 @@ func Open(t *theme.CompiledTheme, styles Styles, self string, draftID string, d 
 
 // SetCache wires the autosave store. When set, Init seeds an empty row
 // so the draft appears in ListDrafts immediately.
-func (c *Model) SetCache(cache CacheStore) { c.cache = cache }
+func (c *Model) SetCache(cache Store) { c.cache = cache }
 
 func (c *Model) DraftID() string { return c.draftID }
 

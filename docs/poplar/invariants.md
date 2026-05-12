@@ -17,8 +17,9 @@ section's claims back to the justifying ADR(s).
 - Poplar is a single-binary bubbletea terminal email client built
   from one Go module: `cmd/poplar`.
 - Repository organization: `cmd/poplar/` (CLI wiring only) and
-  `internal/{ui,mail,mailjmap,mailimap,mailauth,config,theme,term,
-  filter,content,tidytext,wizard}` (plus `internal/ui/wizard`).
+  `internal/{ansix,cache,catkin,config,contacts,content,filter,
+  icalendar,mail,mailauth,mailcompose,mailimap,mailjmap,search,
+  strdist,term,theme,tidytext,ui,wizard}` (plus `internal/ui/wizard`).
   `internal/ui/` is App + bubbles-shaped subpackages (`account`,
   `compose`, `helppopover`, `messagelist`, `movepicker`, `reader`,
   `sidebar`, `wizard`) and `uicore` (ADRs 0161, 0163).
@@ -28,7 +29,7 @@ section's claims back to the justifying ADR(s).
   holds the XOAUTH2 snippet and OAuth subsystem (loopback PKCE
   Authorize default + opt-in RFC 8628 device-code, cached Token
   + refresh, keyring/age-file TokenStore). System map
-  in `docs/poplar/system-map.md`. ADRs 0178, 0191.
+  in `docs/poplar/system-map.md`. ADRs 0193, 0220, 0227.
 - Mail backends call upstream libraries directly: emersion
   (`go-imap` v2, `go-message`, `go-smtp`, `go-sasl`, `go-webdav`,
   `go-vcard`) plus `rockorager/go-jmap`. Vendored MIT snippets

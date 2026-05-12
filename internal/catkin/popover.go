@@ -165,9 +165,9 @@ func (m Model) addCurrentWordToWordlist() Model {
 	return m
 }
 
-// appendUserWord appends word to path (creating 0o600 if absent). I/O
-// errors are swallowed; the in-memory speller already has the word for
-// this session and the popover has no error surface.
+// appendUserWord appends word to path, creating the file at 0o600 if
+// absent. I/O errors are swallowed: the in-memory speller already has
+// the word for this session and the popover has no error surface.
 func appendUserWord(path, word string) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {

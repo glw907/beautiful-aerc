@@ -94,7 +94,7 @@ func (d Disposition) String() string {
 }
 
 // ParseDisposition is the inverse of String. Empty or unknown input
-// returns an error so callers can pick a fallback.
+// returns an error.
 func ParseDisposition(s string) (Disposition, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "attachment":

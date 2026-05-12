@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
@@ -64,38 +63,9 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 				fmt.Fprint(cmd.Root().OutOrStdout(), merged)
 				return nil
 			}
-			return writeAtomically(path, merged)
+			return config.AtomicWrite(path, []byte(merged))
 		},
 	}
 	cmd.Flags().BoolVar(&write, "write", false, "write merged output to the config file (default: dry-run to stdout)")
 	return cmd
-}
-
-func writeAtomically(path, content string) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".config.toml.tmp-*")
-	if err != nil {
-		return fmt.Errorf("temp file in %s: %v", dir, err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-
-	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write %s: %v", tmpPath, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return fmt.Errorf("fsync %s: %v", tmpPath, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close %s: %v", tmpPath, err)
-	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		return fmt.Errorf("chmod %s: %v", tmpPath, err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("rename %s to %s: %v", tmpPath, path, err)
-	}
-	return nil
 }

@@ -130,6 +130,30 @@ func TestFlag_DropsCmdOnConnectionError(t *testing.T) {
 	}
 }
 
+// Auth failures on cmd-path redial propagate as mail.ErrAuth so the
+// cache drainer routes the op to OpConflict auth-failure.
+func TestCmdClient_AuthDialFailure(t *testing.T) {
+	cmd := newFakeClient()
+	cmd.storeFn = func(_ []mail.UID, _ string, _ any) error { return io.EOF }
+	idle := newFakeClient()
+
+	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
+	b.connCtx = context.Background()
+	b.dialFn = func(_ context.Context, _ string) (imapClient, error) {
+		return nil, mail.WrapSentinel(errors.New("AUTHENTICATIONFAILED"), mail.ErrAuth)
+	}
+
+	// First Flag triggers the io.EOF path → drops cmd → redials → ErrAuth.
+	_ = b.Flag([]mail.UID{"1"}, mail.FlagSeen, true)
+	if b.cmd != nil {
+		t.Fatal("Flag did not drop b.cmd after connection error")
+	}
+	err := b.Flag([]mail.UID{"1"}, mail.FlagSeen, true)
+	if !errors.Is(err, mail.ErrAuth) {
+		t.Fatalf("Flag err = %v, want ErrAuth", err)
+	}
+}
+
 func TestIdleLoop_RedialsOnConnectionError(t *testing.T) {
 	cmd := newFakeClient()
 	idle := newFakeClient()
