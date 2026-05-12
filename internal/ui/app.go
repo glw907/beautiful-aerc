@@ -23,6 +23,13 @@ import (
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
+// progressOverride pins progress-bar state during tests, bypassing the
+// cache accessors. nil means use real sources.
+type progressOverride struct {
+	attach, outbox, sync bool
+	outboxPct            int
+}
+
 // pendingEmptyConfirm holds the parameters needed to emit
 // EmptyFolderConfirmedMsg when the user accepts the confirm modal. The
 // zero value means no empty-folder confirm is pending.
@@ -76,8 +83,10 @@ type App struct {
 	now                func() time.Time // test seam, defaults to time.Now
 	opener             URLOpener        // test seam, defaults to xdgOpenURL
 
+	focused bool
+
 	progressErrorUntil   time.Time
-	testProgressOverride *testProgressTriple
+	testProgressOverride *progressOverride
 
 	tidyEnabled bool
 	tidyAPIKey  string
@@ -123,6 +132,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	cStyles := contacts.NewStyles(t)
 	cFixtures := contacts.Fixtures()
 	app := App{
+		focused:         true,
 		acct:            account.New(t, acct, uiCfg, icons, m),
 		icons:           icons,
 		measurer:        m,
@@ -243,6 +253,12 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m.updateSize(msg)
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
+	case tea.FocusMsg:
+		m.focused = true
+		return m, nil
+	case tea.BlurMsg:
+		m.focused = false
+		return m, nil
 	}
 	// Chrome runs first: backendUpdateMsg and account.CacheEventMsg
 	// fire on every drainer/idle cycle and would otherwise walk every
@@ -303,4 +319,3 @@ func (m App) rightPaneSize() (w, h int) {
 func (m App) selectedMessage() (mail.MessageInfo, bool) {
 	return m.acct.SelectedMessage()
 }
-

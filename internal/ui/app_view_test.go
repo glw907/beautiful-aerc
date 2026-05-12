@@ -7,13 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-type testProgressTriple struct {
-	attach, outbox, sync bool
-	outboxPct            int
-}
-
 func (m *App) testProgressSources(attach, outbox bool, outboxPct int, sync bool) {
-	m.testProgressOverride = &testProgressTriple{
+	m.testProgressOverride = &progressOverride{
 		attach:    attach,
 		outbox:    outbox,
 		outboxPct: outboxPct,

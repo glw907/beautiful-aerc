@@ -1747,3 +1747,18 @@ func TestAppUndoSendCancelsAndRestores(t *testing.T) {
 		t.Errorf("pending not cleared: %+v", app.toast)
 	}
 }
+
+func TestFocusBlurTogglesAppFocused(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	if !app.focused {
+		t.Fatalf("initial: focused = false, want true")
+	}
+	app, _ = app.Update(tea.BlurMsg{})
+	if app.focused {
+		t.Fatalf("after Blur: focused = true, want false")
+	}
+	app, _ = app.Update(tea.FocusMsg{})
+	if !app.focused {
+		t.Fatalf("after Focus: focused = false, want true")
+	}
+}

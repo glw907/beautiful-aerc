@@ -101,6 +101,7 @@ func (m App) view(content string) tea.View {
 	v.AltScreen = true
 	v.WindowTitle = m.windowTitle()
 	v.ProgressBar = m.frameProgressBar()
+	v.ReportFocus = true
 	return v
 }
 
