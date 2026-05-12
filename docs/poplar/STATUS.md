@@ -1,13 +1,13 @@
 # Poplar Status
 
-**Current pass:** Pass 37.1 — Audit D remediation. Pass 37 closed
-ADR-0223: Audit D returns 3 P1 + 1 P2, 0 P0. Orphan
-`message_recipients` bias `SuggestAddresses`; `migrateV11`
-backfills FTS headers but not bodies; `mailimap.Changes` never
-reads UIDVALIDITY despite docstring claim. F2 (orphan
-`messages_fts` rows) is P2 storage-only, noted only. Live Gmail +
-Outlook verification (Pass 35.1) still queued — no OAuth client
-IDs on hand.
+**Current pass:** Pass 38 — Audit E (specified vs. assumed
+across the ADR archive). Pass 37.1 closed ADR-0224: schema v13
+rebuilt `message_recipients` with FK CASCADE (orphan
+`messages_fts` rows scrubbed free), `migrateV11` now backfills
+FTS body text from cached bodies, IMAP `Changes` reads the
+captured UIDVALIDITY and returns `ErrCannotCalculateChanges` on
+mismatch. Live Gmail + Outlook verification (Pass 35.1) still
+queued — no OAuth client IDs on hand.
 
 **Beta soak deferred.** Pre-beta rules apply.
 
@@ -23,35 +23,34 @@ IDs on hand.
 | 36 | Audit C — feature surface (ADR-0221) | done |
 | 36.1 | Audit C remediation (ADR-0222) | done |
 | 37 | Audit D — database (ADR-0223) | done |
-| 37.1 | **Audit D remediation** — F1/F3/F4 | next |
-| 38 | Audit E — specified vs. assumed (ADR walk) | gate |
+| 37.1 | Audit D remediation (ADR-0224) | done |
+| 38 | **Audit E — specified vs. assumed (ADR walk)** | next |
 | 39 | Audit F — sharp edges + insecure defaults | gate |
 | 40 | Audit G — test assertion meaningfulness | gate |
 | 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 37.1)
+### Next starter prompt (Pass 38)
 
-> **Goal.** Land the three P1 findings from Audit D (ADR-0223).
+> **Goal.** Run Audit E per `docs/poplar/audit-plan.md` §"Phase
+> E": walk the ADR archive (`docs/poplar/decisions/`) against
+> the running code and flag every binding fact that is asserted
+> but unimplemented, drifted, or contradicted.
 >
-> **Scope.** F1 — Schema v13 rebuilds `message_recipients` with
-> `REFERENCES messages(id) ON DELETE CASCADE` (SQLite has no
-> `ALTER COLUMN`; mirror v9's outbox rebuild). F3 — extend
-> `migrateV11` to loop `bodies.bytes` rows, run
-> `content.ExtractPlainText`, populate `messages_fts.body` via
-> `writeFTSBodyTx` in the same tx. F4 — add `UIDValidity uint32`
-> to `mail.Folder`; `mailimap` captures from `SELECT`/`EXAMINE`,
-> packs into `SyncToken` bytes 0–3 via existing encode/decode,
-> compares in `Changes`, returns `mail.ErrCannotCalculateChanges`
-> on mismatch. JMAP unchanged.
+> **Scope.** Pure read pass — no code edits. Output is a single
+> ADR (next number after 0224) cataloging findings (P0/P1/P2 per
+> the audit-plan rubric) and the plan's audit walk surface
+> archived under `docs/superpowers/archive/plans/`. Each finding
+> cites the asserting ADR + the contradicting file:line.
 >
-> **Settled:** Pre-beta endorses schema work + cross-package
-> widening. F2 stays noted-only; absorb explicit `DELETE FROM
-> messages_fts` alongside F1 only if free.
+> **Settled:** Audit walks emit one ADR + one queued remediation
+> pass when P0/P1 land. Pre-beta endorses inline remediation
+> only for P0; P1 lands the following pass.
 >
-> **Still open — brainstorm:** None. Direct implementation.
+> **Still open — brainstorm:** None. Direct audit.
 >
 > **Approach.** Plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-audit-d-remediation.md`,
-> ADR-0224 records remediation. Standard pass-end checklist.
+> `docs/superpowers/plans/YYYY-MM-DD-audit-e.md` listing the
+> ADR groups to walk and the checking strategy per group, then
+> execute. Standard pass-end checklist.

@@ -105,8 +105,9 @@ func (r *realClient) Select(folder string, readOnly bool) (mail.Folder, error) {
 		return mail.Folder{}, fmt.Errorf("select %q: %w", folder, err)
 	}
 	return mail.Folder{
-		Name:   folder,
-		Exists: int(data.NumMessages),
+		Name:        folder,
+		Exists:      int(data.NumMessages),
+		UIDValidity: data.UIDValidity,
 	}, nil
 }
 

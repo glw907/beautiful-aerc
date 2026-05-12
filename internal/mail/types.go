@@ -23,11 +23,14 @@ const (
 )
 
 // Folder represents a mail folder with summary counts.
+// UIDValidity carries RFC 3501 UIDVALIDITY for IMAP backends;
+// JMAP leaves it zero.
 type Folder struct {
-	Name   string
-	Exists int
-	Unseen int
-	Role   string
+	Name        string
+	Exists      int
+	Unseen      int
+	Role        string
+	UIDValidity uint32
 }
 
 // UpdateType classifies asynchronous backend updates.

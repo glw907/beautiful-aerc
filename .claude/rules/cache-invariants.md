@@ -44,7 +44,9 @@ sources or the `poplar cache` CLI. The decision index in
   (uid PK, vCard blob + projection columns, FK addressbook_href
   ON DELETE CASCADE), `contact_emails` and `contact_phones`
   (FK contact_uid ON DELETE CASCADE, label, pref order, NOCASE
-  index on email address), and `message_recipients` (message_uid,
+  index on email address), and `message_recipients` (`message_uid
+  INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE`
+  since v13; column name is historical, value is `messages.id`),
   role IN ('from','to','cc'), address, name, sent_at; PK
   (message_uid, role, address); NOCASE+sent_at-DESC index for the
   ranking query). Migration backfills `message_recipients` from
@@ -59,7 +61,13 @@ sources or the `poplar cache` CLI. The decision index in
   0)`; `outbox_pickup` is rebuilt with `scheduled_for` as the
   leading column. Send/Append's OpDone transition runs in one tx
   with `DELETE FROM drafts WHERE draft_id = ?` when draft_id is
-  set.
+  set. v11 adds `messages_fts` (FTS5; subject/from/to/cc/body)
+  and backfills both header columns and body text (via
+  `content.ExtractPlainText` over cached `bodies.bytes`) in one
+  tx. v12 drops `messages.date_str`. v13 rebuilds
+  `message_recipients` with FK + CASCADE to `messages(id)` (the
+  copy step's JOIN drops pre-existing orphans) and scrubs orphan
+  `messages_fts` rows. Current schema version: 13. ADR-0224.
 - The contacts ingest path lives in `internal/contacts/` (Client
   + Sync + Store seam); `cache.Account` implements `contacts.Store`
   (`Books`/`UpsertBook`/`ApplyChangeset`) and adds

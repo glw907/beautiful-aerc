@@ -26,15 +26,16 @@ type Backend struct {
 	log   *slog.Logger
 	oauth *mailauth.Client // non-nil for xoauth2 accounts using mailauth
 
-	mu       sync.Mutex
-	cmd      imapClient // command connection, nil before Connect
-	idle     imapClient
-	smtp     smtpClient // dialed lazily on first Send
-	caps     capSet
-	current  string // selected folder on cmd
-	trash    string // resolved on first Delete
-	password string // cached PasswordCmd result
-	updates  chan mail.Update
+	mu            sync.Mutex
+	cmd           imapClient // command connection, nil before Connect
+	idle          imapClient
+	smtp          smtpClient // dialed lazily on first Send
+	caps          capSet
+	current       string // selected folder on cmd
+	currentUIDVal uint32 // captured on Select; read by Changes
+	trash         string // resolved on first Delete
+	password      string // cached PasswordCmd result
+	updates       chan mail.Update
 
 	idleCancel context.CancelFunc
 	idleDone   chan struct{}

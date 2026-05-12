@@ -65,7 +65,8 @@ func (b *Backend) OpenFolder(name string) error {
 	switchCh := b.switchCh
 	b.mu.Unlock()
 
-	if _, err := cmd.Select(name, false); err != nil {
+	f, err := cmd.Select(name, false)
+	if err != nil {
 		wrapped := classifyErr(err)
 		b.maybeDropOnConn(cmd, wrapped)
 		return fmt.Errorf("select %q: %w", name, wrapped)
@@ -73,6 +74,7 @@ func (b *Backend) OpenFolder(name string) error {
 
 	b.mu.Lock()
 	b.current = name
+	b.currentUIDVal = f.UIDValidity
 	b.mu.Unlock()
 
 	if switchCh != nil {

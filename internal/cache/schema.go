@@ -1,13 +1,17 @@
 package cache
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"strings"
+
+	"github.com/glw907/poplar/internal/content"
 )
 
-const schemaVersion = 12
+const schemaVersion = 13
 
 // migration applies one schema step inside a transaction. Index 0 is v0→v1.
 type migration func(*sql.Tx) error
@@ -25,6 +29,7 @@ var migrations = []migration{
 	migrateV10, // v9 → v10: outbox.scheduled_for + outbox.draft_id FK
 	migrateV11, // v10 → v11: messages_fts FTS5 virtual table for search
 	migrateV12, // v11 → v12: drop messages.date_str (sent_at is authoritative)
+	migrateV13, // v12 → v13: message_recipients FK to messages(id) ON DELETE CASCADE
 }
 
 // migrateV1 installs the full Cache I schema (spec §A.3).
@@ -384,9 +389,10 @@ func migrateV10(tx *sql.Tx) error {
 // migrateV11 adds the messages_fts FTS5 virtual table for cross-folder
 // search. The cache layer owns all writes from Go; SQLite triggers
 // can't extract plain text from MIME bytes, which is what feeds the
-// body column. Header columns backfill from existing messages rows
-// in the same transaction; bodies populate later as storeBody runs
-// and the Backfiller catches up.
+// body column. Header columns backfill from existing messages rows;
+// body columns backfill from any cached bodies.bytes in the same
+// transaction so users upgrading with a warm cache get body-search
+// coverage without waiting for evict-and-refetch.
 func migrateV11(tx *sql.Tx) error {
 	stmts := []string{
 		`CREATE VIRTUAL TABLE messages_fts USING fts5(
@@ -406,7 +412,35 @@ func migrateV11(tx *sql.Tx) error {
 			return fmt.Errorf("install messages_fts: %v", err)
 		}
 	}
-	return nil
+	return backfillFTSBodies(tx)
+}
+
+// backfillFTSBodies populates messages_fts.body from cached body rows.
+// Parse and write failures skip the row rather than abort the upgrade;
+// a corrupt body that was already on disk shouldn't trap users out of
+// the new schema.
+func backfillFTSBodies(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT message, bytes FROM bodies`)
+	if err != nil {
+		return fmt.Errorf("backfill fts bodies: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var msgID int64
+		var raw []byte
+		if err := rows.Scan(&msgID, &raw); err != nil {
+			return fmt.Errorf("backfill fts scan: %w", err)
+		}
+		body, err := content.ExtractPlainText(raw)
+		if err != nil || body == "" {
+			continue
+		}
+		if err := writeFTSBodyTx(context.Background(), tx, msgID, body); err != nil {
+			slog.Default().Debug("backfill fts write skipped", "msg", msgID, "err", err)
+			continue
+		}
+	}
+	return rows.Err()
 }
 
 // migrateV12 drops messages.date_str. SentAt has been authoritative
@@ -415,6 +449,39 @@ func migrateV11(tx *sql.Tx) error {
 func migrateV12(tx *sql.Tx) error {
 	if _, err := tx.Exec(`ALTER TABLE messages DROP COLUMN date_str`); err != nil {
 		return fmt.Errorf("drop messages.date_str: %w", err)
+	}
+	return nil
+}
+
+// migrateV13 narrows message_recipients with a FK to messages(id)
+// ON DELETE CASCADE. SQLite has no ALTER COLUMN, so we rebuild;
+// the JOIN in the copy step drops any pre-existing orphans rather
+// than carry them past the FK boundary. The same migration also
+// scrubs orphan messages_fts rows (F2): FTS5 virtual tables don't
+// participate in FK cascade, and the scan is free here.
+func migrateV13(tx *sql.Tx) error {
+	stmts := []string{
+		`CREATE TABLE message_recipients_new (
+            message_uid INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            role        TEXT NOT NULL CHECK (role IN ('from','to','cc')),
+            address     TEXT NOT NULL,
+            name        TEXT NOT NULL DEFAULT '',
+            sent_at     INTEGER NOT NULL,
+            PRIMARY KEY (message_uid, role, address)
+        )`,
+		`INSERT INTO message_recipients_new
+            SELECT mr.message_uid, mr.role, mr.address, mr.name, mr.sent_at
+              FROM message_recipients mr
+              JOIN messages m ON m.id = mr.message_uid`,
+		`DROP TABLE message_recipients`,
+		`ALTER TABLE message_recipients_new RENAME TO message_recipients`,
+		`CREATE INDEX message_recipients_by_addr_sent ON message_recipients(address COLLATE NOCASE, sent_at DESC)`,
+		`DELETE FROM messages_fts WHERE rowid NOT IN (SELECT id FROM messages)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("rebuild message_recipients: %v", err)
+		}
 	}
 	return nil
 }
