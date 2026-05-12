@@ -2,7 +2,10 @@ package mailimap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/glw907/poplar/internal/config"
@@ -26,7 +29,7 @@ func withProbeDial(t *testing.T, fn probeDialFn) {
 }
 
 func okDial(cli imapClient) probeDialFn {
-	return func(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, error) {
+	return func(cfg config.AccountConfig, _ string) (imapClient, []mail.ProbeStep, error) {
 		return cli, []mail.ProbeStep{
 			{Label: "Connecting", Status: mail.ProbeOK, Detail: "imap.example:993"},
 			{Label: "TLS handshake", Status: mail.ProbeOK},
@@ -49,7 +52,7 @@ func TestProbeOAuthTokenStepFirst(t *testing.T) {
 }
 
 func TestProbeNoOAuthStepWhenNoClient(t *testing.T) {
-	withProbeDial(t, func(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, error) {
+	withProbeDial(t, func(cfg config.AccountConfig, _ string) (imapClient, []mail.ProbeStep, error) {
 		return nil, []mail.ProbeStep{{Label: "Connecting", Status: mail.ProbeFail, Detail: "refused"}},
 			errors.New("dial: refused")
 	})
@@ -96,7 +99,7 @@ func TestProbe_HappyPath(t *testing.T) {
 }
 
 func TestProbe_DialFailureStopsTranscript(t *testing.T) {
-	withProbeDial(t, func(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, error) {
+	withProbeDial(t, func(cfg config.AccountConfig, _ string) (imapClient, []mail.ProbeStep, error) {
 		return nil, []mail.ProbeStep{
 			{Label: "Connecting", Status: mail.ProbeFail, Detail: "i/o timeout"},
 		}, errors.New("dial: i/o timeout")
@@ -127,5 +130,56 @@ func TestProbe_MissingUIDPLUSFails(t *testing.T) {
 	}
 	if r.Err == nil {
 		t.Fatal("Err = nil, want non-nil")
+	}
+}
+
+// memTokenStore is a map-backed TokenStore for probe tests.
+type memTokenStore struct {
+	tok string
+}
+
+func (s *memTokenStore) Set(_, v string) error        { s.tok = v; return nil }
+func (s *memTokenStore) Get(_ string) (string, error) { return s.tok, nil }
+func (s *memTokenStore) Delete(_ string) error        { return nil }
+
+// tokenServerStub starts an httptest server that returns a fresh access token
+// using the stored refresh token, and returns the server URL.
+func tokenServerStub(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"access_token":  "stub-access-token",
+			"expires_in":    3600,
+			"refresh_token": "stub-refresh-token",
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func TestProbeUsesOAuthAccessToken(t *testing.T) {
+	prev := probeDial
+	t.Cleanup(func() { probeDial = prev })
+
+	var gotToken string
+	probeDial = func(cfg config.AccountConfig, accessToken string) (imapClient, []mail.ProbeStep, error) {
+		gotToken = accessToken
+		fc := newFakeClient()
+		fc.caps["UIDPLUS"] = true
+		return fc, nil, nil
+	}
+
+	store := &memTokenStore{tok: "rt"}
+	cli := mailauth.NewClient(mailauth.Config{
+		ClientID: "id", AuthURL: "https://example/auth", TokenURL: tokenServerStub(t),
+	}, store, "slug", mailauth.BackendKeyring)
+
+	r := Probe(context.Background(), config.AccountConfig{Auth: "xoauth2", Host: "h"}, cli)
+	if !r.OK() {
+		t.Fatalf("probe failed: %+v", r)
+	}
+	if gotToken == "" {
+		t.Fatal("expected access token threaded into probeDial")
 	}
 }

@@ -22,20 +22,23 @@ import (
 // callers run both.
 func Probe(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) mail.ProbeResult {
 	var r mail.ProbeResult
+	var accessToken string
 	if oauthCli != nil {
 		step := mail.ProbeStep{Label: "oauth-token"}
-		if _, err := oauthCli.Token(ctx); err != nil {
+		tok, err := oauthCli.Token(ctx)
+		if err != nil {
 			step.Status = mail.ProbeFail
 			step.Detail = err.Error()
 			r.Steps = append(r.Steps, step)
 			r.Err = err
 			return r
 		}
+		accessToken = tok
 		step.Status = mail.ProbeOK
 		r.Steps = append(r.Steps, step)
 	}
 
-	cli, steps, err := probeDial(cfg)
+	cli, steps, err := probeDial(cfg, accessToken)
 	r.Steps = append(r.Steps, steps...)
 	if err != nil {
 		r.Err = err
@@ -84,9 +87,9 @@ func Probe(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Cli
 // probeDial is the test seam for the dial+TLS+auth phase.
 var probeDial probeDialFn = realProbeDial
 
-type probeDialFn func(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, error)
+type probeDialFn func(cfg config.AccountConfig, accessToken string) (imapClient, []mail.ProbeStep, error)
 
-func realProbeDial(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, error) {
+func realProbeDial(cfg config.AccountConfig, accessToken string) (imapClient, []mail.ProbeStep, error) {
 	if cfg.Host == "" {
 		return nil, nil, errors.New("imap: host is required")
 	}
@@ -122,13 +125,19 @@ func realProbeDial(cfg config.AccountConfig) (imapClient, []mail.ProbeStep, erro
 		Label: "TLS handshake", Status: mail.ProbeOK,
 	})
 
-	pw, err := cfg.ResolvePassword()
-	if err != nil {
-		_ = cli.Logout().Wait()
-		steps = append(steps, mail.ProbeStep{
-			Label: "AUTHENTICATE", Status: mail.ProbeFail, Detail: err.Error(),
-		})
-		return nil, steps, fmt.Errorf("password: %v", err)
+	var pw string
+	if accessToken != "" && cfg.Auth == "xoauth2" {
+		pw = accessToken
+	} else {
+		var err error
+		pw, err = cfg.ResolvePassword()
+		if err != nil {
+			_ = cli.Logout().Wait()
+			steps = append(steps, mail.ProbeStep{
+				Label: "AUTHENTICATE", Status: mail.ProbeFail, Detail: err.Error(),
+			})
+			return nil, steps, fmt.Errorf("password: %v", err)
+		}
 	}
 
 	if err := authenticate(cli, cfg, pw); err != nil {
