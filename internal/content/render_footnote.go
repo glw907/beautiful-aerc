@@ -11,28 +11,44 @@ import (
 // nbsp is the no-break space wordwrap will not split.
 const nbsp = " "
 
+// FootnoteRow locates one ribbon entry in the rendered output.
+// Row is the 0-based line index of the entry's first line (the
+// "[^N]: " line; wrap continuations are not click targets).
+// PickerIndex indexes the URL in the returned picker slice, which
+// spans every harvested URL, not just marker-bearing ones.
+type FootnoteRow struct {
+	Row         int
+	PickerIndex int
+}
+
 // RenderBodyWithFootnotes renders blocks and harvests outbound URLs.
 // The picker list spans every URL in first-seen order. The footnote
 // section spans only URLs that received a [^N] marker, so short bare
 // URLs appear in the picker but not in the footnote list (ADR-0086).
-func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) (string, []string) {
+// The returned footnotes slice carries the click-target row for each
+// ribbon entry.
+func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) (string, []string, []FootnoteRow) {
 	rewritten, pickerURLs, hasMarker := harvestFootnotes(blocks)
 	body := RenderBody(rewritten, t, width)
 	if len(pickerURLs) == 0 {
-		return body, pickerURLs
+		return body, pickerURLs, nil
 	}
 
 	// [^N] labels index marker-bearing URLs only. The picker list
 	// spans every URL, so the two index spaces differ.
-	var markerURLs []string
+	type marker struct {
+		url    string
+		picker int
+	}
+	var markers []marker
 	for i, u := range pickerURLs {
 		if hasMarker[i] {
-			markerURLs = append(markerURLs, u)
+			markers = append(markers, marker{u, i})
 		}
 	}
 
-	if len(markerURLs) == 0 {
-		return body, pickerURLs
+	if len(markers) == 0 {
+		return body, pickerURLs, nil
 	}
 
 	w := width
@@ -44,14 +60,18 @@ func RenderBodyWithFootnotes(blocks []Block, t *theme.CompiledTheme, width int) 
 	b.WriteString(body)
 	b.WriteString("\n\n")
 	b.WriteString(t.HorizontalRule.Render(strings.Repeat("─", w)))
-	for i, u := range markerURLs {
+	row := lipgloss.Height(body) + 1
+	footnotes := make([]FootnoteRow, 0, len(markers))
+	for i, m := range markers {
+		row++
+		footnotes = append(footnotes, FootnoteRow{Row: row, PickerIndex: m.picker})
 		b.WriteString("\n")
-		// Long URLs are unbreakable tokens. Wrap before styling so
-		// Hardwrap catches them inside the width budget.
-		label := fmt.Sprintf("[^%d]: %s", i+1, u)
-		b.WriteString(t.Link.Render(wrap(label, w)))
+		label := fmt.Sprintf("[^%d]: %s", i+1, m.url)
+		wrapped := wrap(label, w)
+		b.WriteString(t.Link.Render(wrapped))
+		row += lipgloss.Height(wrapped) - 1
 	}
-	return b.String(), pickerURLs
+	return b.String(), pickerURLs, footnotes
 }
 
 // harvestFootnotes returns a deep-rewritten block slice, the ordered

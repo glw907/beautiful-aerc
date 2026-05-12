@@ -16,7 +16,7 @@ func TestFootnoteHarvestBasic(t *testing.T) {
 			Link{Text: "the spec", URL: "https://example.com/spec"},
 		}},
 	}
-	out, urls := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, urls, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(urls) != 2 {
 		t.Fatalf("urls: got %d, want 2", len(urls))
 	}
@@ -39,7 +39,7 @@ func TestFootnoteDedupe(t *testing.T) {
 			Link{Text: "again", URL: "https://example.com"},
 		}},
 	}
-	out, urls := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, urls, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(urls) != 1 {
 		t.Fatalf("urls: got %d, want 1 (deduped)", len(urls))
 	}
@@ -62,7 +62,7 @@ func TestFootnoteSkipAutoLinked(t *testing.T) {
 			Link{Text: "https://bare.example.com", URL: "https://bare.example.com"},
 		}},
 	}
-	out, urls := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, urls, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(urls) != 1 {
 		t.Errorf("short bare URL must appear in picker list: got %v", urls)
 	}
@@ -87,7 +87,7 @@ func TestFootnoteLastWordAtomic(t *testing.T) {
 			Link{Text: "thorough documentation", URL: "https://example.com"},
 		}},
 	}
-	out, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 50)
+	out, _, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 50)
 	flat := stripANSITest(out)
 	// Find the line containing "[^1]" and assert "documentation[^1]" is unbroken.
 	for _, line := range strings.Split(flat, "\n") {
@@ -106,7 +106,7 @@ func TestFootnoteEmptyURL(t *testing.T) {
 			Link{Text: "weird", URL: ""},
 		}},
 	}
-	out, urls := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, urls, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(urls) != 0 {
 		t.Errorf("empty URL must not be footnoted: %v", urls)
 	}
@@ -121,7 +121,7 @@ func TestFootnoteListAfterRule(t *testing.T) {
 			Link{Text: "click", URL: "https://x.example"},
 		}},
 	}
-	out, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 40)
+	out, _, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 40)
 	flat := stripANSITest(out)
 	ruleIdx := strings.Index(flat, strings.Repeat("─", 40))
 	listIdx := strings.Index(flat, "[^1]: ")
@@ -255,7 +255,7 @@ func TestHarvestShortBareURLAppearsInPickerNotFootnoteSection(t *testing.T) {
 		t.Errorf("hasMarker[0] must be false for short bare URL")
 	}
 
-	out, pickerURLs := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, pickerURLs, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(pickerURLs) != 1 {
 		t.Fatalf("RenderBodyWithFootnotes picker: got %d urls, want 1", len(pickerURLs))
 	}
@@ -285,7 +285,7 @@ func TestHarvestLongBareURLAppearsInBoth(t *testing.T) {
 		t.Errorf("hasMarker[0] must be true for long bare URL")
 	}
 
-	out, pickerURLs := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, pickerURLs, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(pickerURLs) != 1 {
 		t.Fatalf("RenderBodyWithFootnotes picker: got %d urls, want 1", len(pickerURLs))
 	}
@@ -338,7 +338,7 @@ func TestHarvestMixed(t *testing.T) {
 		t.Errorf("hasMarker[1] must be true for long bare URL")
 	}
 
-	out, pickerURLs := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	out, pickerURLs, _ := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
 	if len(pickerURLs) != 2 {
 		t.Fatalf("RenderBodyWithFootnotes picker: got %d urls, want 2", len(pickerURLs))
 	}
@@ -357,5 +357,37 @@ func TestHarvestMixed(t *testing.T) {
 	// No [^2] should exist. The short URL does not appear in the footnote section.
 	if strings.Contains(flat, "[^2]") {
 		t.Errorf("no [^2] should appear; short URL is not in footnote section: %s", flat)
+	}
+}
+
+func TestFootnoteRowsLineIndices(t *testing.T) {
+	blocks := []Block{
+		Paragraph{Spans: []Span{
+			Text{Content: "see "},
+			Link{Text: "the docs", URL: "https://example.com/docs"},
+			Text{Content: " and "},
+			Link{Text: "the spec", URL: "https://example.com/spec"},
+		}},
+	}
+	out, urls, footnotes := RenderBodyWithFootnotes(blocks, theme.Nord, 80)
+	if len(footnotes) != 2 {
+		t.Fatalf("footnotes: got %d, want 2", len(footnotes))
+	}
+	flatLines := strings.Split(stripANSITest(out), "\n")
+	for i, fr := range footnotes {
+		if fr.Row < 0 || fr.Row >= len(flatLines) {
+			t.Fatalf("footnotes[%d].Row=%d out of bounds (lines=%d)", i, fr.Row, len(flatLines))
+		}
+		line := flatLines[fr.Row]
+		want := strings.TrimSpace(line)
+		if !strings.HasPrefix(want, "[^") {
+			t.Errorf("footnotes[%d] points at row %d (%q), want a [^N]: line", i, fr.Row, line)
+		}
+		if fr.PickerIndex != i {
+			t.Errorf("footnotes[%d].PickerIndex=%d, want %d", i, fr.PickerIndex, i)
+		}
+		if !strings.Contains(line, urls[fr.PickerIndex]) {
+			t.Errorf("footnotes[%d] row %q does not contain URL %q", i, line, urls[fr.PickerIndex])
+		}
 	}
 }

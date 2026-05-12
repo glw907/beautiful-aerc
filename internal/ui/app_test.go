@@ -1847,3 +1847,38 @@ func TestKeyboardEnhancementsMsgStored(t *testing.T) {
 		t.Fatalf("SupportsEventTypes not stored")
 	}
 }
+
+func TestMouseEventInertWhenViewerClosed(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	if app.viewerOpen {
+		t.Skip("test assumes viewer starts closed")
+	}
+	_, cmd := app.Update(tea.MouseClickMsg{X: 30, Y: 10, Button: tea.MouseLeft})
+	if cmd != nil {
+		t.Errorf("mouse click with viewer closed should be inert, got cmd: %v", cmd())
+	}
+	_, cmd = app.Update(tea.MouseWheelMsg{X: 30, Y: 10, Button: tea.MouseWheelDown})
+	if cmd != nil {
+		t.Errorf("mouse wheel with viewer closed should be inert, got cmd: %v", cmd())
+	}
+}
+
+func TestMouseAbsorbedWhenOverlayOpen(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app.helpOpen = true
+	if !app.anyOverlayOpen() {
+		t.Fatal("precondition: anyOverlayOpen() should be true with helpOpen")
+	}
+	_, cmd := app.Update(tea.MouseClickMsg{X: 30, Y: 10, Button: tea.MouseLeft})
+	if cmd != nil {
+		t.Errorf("mouse click with overlay open should be absorbed, got cmd: %v", cmd())
+	}
+}
+
+func TestViewDeclaresCellMotionMouseMode(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	v := app.View()
+	if v.MouseMode != tea.MouseModeCellMotion {
+		t.Errorf("MouseMode = %v, want MouseModeCellMotion", v.MouseMode)
+	}
+}

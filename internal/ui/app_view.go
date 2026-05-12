@@ -103,6 +103,7 @@ func (m App) view(content string) tea.View {
 	v.ProgressBar = m.frameProgressBar()
 	v.ReportFocus = true
 	v.KeyboardEnhancements.ReportEventTypes = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 

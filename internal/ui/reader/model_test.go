@@ -333,3 +333,97 @@ func TestViewer_InviteAccessor(t *testing.T) {
 		t.Errorf("Invite().Summary = %q, want Check", v.Invite().Summary)
 	}
 }
+
+func TestMouseClickFootnoteRibbon(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
+	blocks := []content.Block{content.Paragraph{Spans: []content.Span{
+		content.Text{Content: "see "},
+		content.Link{Text: "the docs", URL: "https://example.com/docs"},
+	}}}
+	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	if len(v.bodyHits) != 1 {
+		t.Fatalf("bodyHits: got %d, want 1", len(v.bodyHits))
+	}
+	hitRow := v.bodyHits[0].rowStart
+	mouseY := v.bodyOriginY() + hitRow - v.viewport.YOffset()
+	msg := tea.MouseClickMsg{X: 2, Y: mouseY, Button: tea.MouseLeft}
+	_, cmd := v.Update(msg)
+	if cmd == nil {
+		t.Fatal("click on ribbon row produced no Cmd")
+	}
+	out := cmd()
+	launch, ok := out.(LaunchURLMsg)
+	if !ok {
+		t.Fatalf("got %T, want LaunchURLMsg", out)
+	}
+	if launch.URL != "https://example.com/docs" {
+		t.Errorf("LaunchURLMsg.URL = %q, want the docs URL", launch.URL)
+	}
+}
+
+func TestMouseClickAttachmentChip(t *testing.T) {
+	v := newTestViewer().SetSize(120, 30).Open(mail.MessageInfo{UID: "u1", Subject: "Hi", From: "Alice"})
+	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}
+	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	v = v.SetAttachments([]mail.Attachment{
+		{Filename: "first.pdf", Size: 1024},
+		{Filename: "second.png", Size: 4096},
+	})
+	if len(v.chipHits) != 2 {
+		t.Fatalf("chipHits: got %d, want 2", len(v.chipHits))
+	}
+	hit := v.chipHits[1]
+	mouseY := v.chipOriginY() + hit.rowStart
+	mouseX := hit.colStart + 1
+	msg := tea.MouseClickMsg{X: mouseX, Y: mouseY, Button: tea.MouseLeft}
+	_, cmd := v.Update(msg)
+	if cmd == nil {
+		t.Fatal("click on chip produced no Cmd")
+	}
+	out := cmd()
+	open, ok := out.(OpenAttachmentMsg)
+	if !ok {
+		t.Fatalf("got %T, want OpenAttachmentMsg", out)
+	}
+	if open.Att.Filename != "second.png" {
+		t.Errorf("OpenAttachmentMsg.Att.Filename = %q, want second.png", open.Att.Filename)
+	}
+}
+
+func TestMouseClickOutsideHitsNoOp(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
+	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "plain body, no links"}}}}
+	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	msg := tea.MouseClickMsg{X: 5, Y: v.bodyOriginY() + 1, Button: tea.MouseLeft}
+	_, cmd := v.Update(msg)
+	if cmd != nil {
+		t.Fatalf("click on plain body should be a no-op, got cmd: %v", cmd())
+	}
+}
+
+func TestMouseWheelForwardsToViewport(t *testing.T) {
+	v := newTestViewer().SetSize(80, 10).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
+	var blocks []content.Block
+	for range 50 {
+		blocks = append(blocks, content.Paragraph{Spans: []content.Span{content.Text{Content: "line"}}})
+	}
+	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	if v.viewport.YOffset() != 0 {
+		t.Fatalf("pre-condition: viewport YOffset = %d, want 0", v.viewport.YOffset())
+	}
+	msg := tea.MouseWheelMsg{X: 5, Y: v.bodyOriginY() + 1, Button: tea.MouseWheelDown}
+	v, _ = v.Update(msg)
+	if v.viewport.YOffset() == 0 {
+		t.Errorf("wheel-down should advance YOffset; still 0")
+	}
+}
+
+func TestMouseEventsWhileClosedNoOp(t *testing.T) {
+	v := newTestViewer().SetSize(80, 24)
+	if _, cmd := v.Update(tea.MouseClickMsg{X: 1, Y: 1}); cmd != nil {
+		t.Errorf("click while closed produced cmd")
+	}
+	if _, cmd := v.Update(tea.MouseWheelMsg{X: 1, Y: 1}); cmd != nil {
+		t.Errorf("wheel while closed produced cmd")
+	}
+}

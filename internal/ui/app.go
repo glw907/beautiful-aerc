@@ -272,6 +272,8 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m.updateSize(msg)
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
+	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.MouseMotionMsg:
+		return m.updateMouse(msg.(tea.MouseMsg))
 	case tea.FocusMsg:
 		m.focused = true
 		if m.toast.newMailCount > 0 {
@@ -312,6 +314,58 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	return m, cmd
 }
 
+func (m App) anyOverlayOpen() bool {
+	if m.helpOpen || m.confirm.IsOpen() || m.conflictOpen || m.outboxOpen || m.outboxView != nil {
+		return true
+	}
+	if m.linkPicker.IsOpen() || m.attachPicker.IsOpen() || m.movePicker.IsOpen() {
+		return true
+	}
+	if m.compose != nil && (m.compose.AttachPickerIsOpen() || m.compose.SchedulePickerIsOpen()) {
+		return true
+	}
+	if m.reschedule.picker != nil {
+		return true
+	}
+	if m.form != nil && m.form.FromPopover() {
+		return true
+	}
+	if m.popover != nil {
+		return true
+	}
+	return false
+}
+
+func (m App) updateMouse(msg tea.MouseMsg) (App, tea.Cmd) {
+	if m.anyOverlayOpen() {
+		return m, nil
+	}
+	if !m.viewerOpen || m.acct.Viewer().Phase() != reader.PhaseReady {
+		return m, nil
+	}
+	ox, oy := m.rightPaneOrigin()
+	mu := msg.Mouse()
+	mu.X -= ox
+	mu.Y -= oy
+	var local tea.Msg
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		local = tea.MouseClickMsg(mu)
+	case tea.MouseReleaseMsg:
+		local = tea.MouseReleaseMsg(mu)
+	case tea.MouseWheelMsg:
+		local = tea.MouseWheelMsg(mu)
+	case tea.MouseMotionMsg:
+		local = tea.MouseMotionMsg(mu)
+	default:
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.acct, cmd = m.acct.UpdateViewer(local)
+	m = m.deriveChromeFromAcct()
+	return m, cmd
+}
+
 func (m App) IsLinkPickerOpen() bool { return m.linkPicker.IsOpen() }
 func (m App) IsConfirmOpen() bool    { return m.confirm.IsOpen() }
 
@@ -342,6 +396,17 @@ func (m App) rightPaneSize() (w, h int) {
 	w = max(1, contentW-sw-1) // -1 for divider
 	h = m.contentHeight()
 	return w, h
+}
+
+// rightPaneOrigin returns the top-left cell of the right pane in
+// the global frame.
+func (m App) rightPaneOrigin() (x, y int) {
+	layout := uicore.ComputeLayout(m.width)
+	sw := layout.Sidebar
+	if sw > m.width/2 {
+		sw = m.width / 2
+	}
+	return sw + 1, 1
 }
 
 func (m App) selectedMessage() (mail.MessageInfo, bool) {

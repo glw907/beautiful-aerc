@@ -56,6 +56,16 @@ func DefaultKeyMap() KeyMap {
 	return vk
 }
 
+// hitZone is one clickable rectangle. The owning slice
+// (chipHits or bodyHits) tells which coord space it sits in.
+type hitZone struct {
+	index    int
+	rowStart int
+	rowEnd   int
+	colStart int
+	colEnd   int
+}
+
 // Model renders one message in the right panel. It holds no backend
 // reference; body fetch and mark-read Cmds are built at the AccountTab
 // level. Pure state + render, with scroll tracked by the embedded
@@ -67,9 +77,12 @@ type Model struct {
 	accountEmail string
 	blocks       []content.Block
 	links        []string
+	footnoteRows []content.FootnoteRow
 	attachments  []mail.Attachment
 	chipRow      string
 	chipHeight   int
+	chipHits     []hitZone
+	bodyHits     []hitZone
 	invite       *icalendar.Invite
 	inviteRow    string
 	inviteHeight int
@@ -124,6 +137,9 @@ func (v Model) Open(msg mail.MessageInfo) Model {
 	v.attachments = nil
 	v.chipRow = ""
 	v.chipHeight = 0
+	v.footnoteRows = nil
+	v.chipHits = nil
+	v.bodyHits = nil
 	v.invite = nil
 	v.inviteRow = ""
 	v.inviteHeight = 0
@@ -194,8 +210,8 @@ func (v Model) ScrollPct() int {
 	return int(v.viewport.ScrollPercent() * 100)
 }
 
-// Update handles spinner ticks and key events while open and returns
-// any emitted Cmd (link launch, viewer-closed signal, scroll broadcast).
+// Update routes ticks, keys, and mouse events. Mouse coordinates
+// must already be pane-local; App.updateMouse owns the translation.
 func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !v.open {
 		return v, nil
@@ -217,6 +233,76 @@ func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return v, nil
 	case tea.KeyPressMsg:
 		return v.handleKey(m)
+	case tea.MouseWheelMsg:
+		return v.handleMouseWheel(m)
+	case tea.MouseClickMsg:
+		return v.handleMouseClick(m)
+	}
+	return v, nil
+}
+
+func (v Model) chipOriginY() int { return lipgloss.Height(v.panel) + v.inviteHeight }
+func (v Model) bodyOriginY() int { return v.chipOriginY() + v.chipHeight }
+
+func (v Model) mouseInChipRow(m tea.Mouse) bool {
+	if v.chipHeight == 0 {
+		return false
+	}
+	o := v.chipOriginY()
+	return m.Y >= o && m.Y < o+v.chipHeight
+}
+
+func (v Model) mouseInBody(m tea.Mouse) bool {
+	if v.phase != PhaseReady {
+		return false
+	}
+	o := v.bodyOriginY()
+	return m.Y >= o && m.Y < v.height
+}
+
+func (v Model) hitChip(m tea.Mouse) (hitZone, bool) {
+	rowLocal := m.Y - v.chipOriginY()
+	for _, h := range v.chipHits {
+		if rowLocal >= h.rowStart && rowLocal < h.rowEnd && m.X >= h.colStart && m.X < h.colEnd {
+			return h, true
+		}
+	}
+	return hitZone{}, false
+}
+
+func (v Model) hitFootnote(bodyRow int) (hitZone, bool) {
+	for _, h := range v.bodyHits {
+		if bodyRow >= h.rowStart && bodyRow < h.rowEnd {
+			return h, true
+		}
+	}
+	return hitZone{}, false
+}
+
+func (v Model) handleMouseWheel(m tea.MouseWheelMsg) (Model, tea.Cmd) {
+	if !v.mouseInBody(tea.Mouse(m)) {
+		return v, nil
+	}
+	var c tea.Cmd
+	v.viewport, c = v.viewport.Update(m)
+	return v, c
+}
+
+func (v Model) handleMouseClick(m tea.MouseClickMsg) (Model, tea.Cmd) {
+	if v.mouseInChipRow(tea.Mouse(m)) {
+		if h, ok := v.hitChip(tea.Mouse(m)); ok {
+			uid := v.msg.UID
+			att := v.attachments[h.index]
+			return v, func() tea.Msg { return OpenAttachmentMsg{UID: uid, Att: att} }
+		}
+		return v, nil
+	}
+	if v.mouseInBody(tea.Mouse(m)) {
+		bodyRow := m.Y - v.bodyOriginY() + v.viewport.YOffset()
+		if h, ok := v.hitFootnote(bodyRow); ok {
+			url := v.links[h.index]
+			return v, func() tea.Msg { return LaunchURLMsg{URL: url} }
+		}
 	}
 	return v, nil
 }
@@ -349,38 +435,57 @@ func clipPaneBg(m ansix.Measurer, s string, width, height int, bg lipgloss.Style
 	return strings.Join(lines, "\n")
 }
 
-// renderChipRow returns the wrapped chip block and its row count.
-// Returns ("", 0) when there are no attachments.
-func (v Model) renderChipRow(width int) (string, int) {
+// renderChipRow returns the wrapped chip block, its row count, and
+// per-chip hit zones appended onto the caller-owned hits slice. The
+// caller's backing array survives resize churn.
+func (v Model) renderChipRow(width int, hits []hitZone) (string, int, []hitZone) {
+	hits = hits[:0]
 	if len(v.attachments) == 0 || width < 1 {
-		return "", 0
+		return "", 0, hits
 	}
 	icon := v.icons.Attachment
 	bg := v.styles.ViewerBg
-	chips := make([]string, len(v.attachments))
+	var lines []string
+	var cur string
+	curWidth := 0
+	curRow := 0
 	for i, a := range v.attachments {
 		name := a.Filename
 		if name == "" {
 			name = "attachment"
 		}
-		chips[i] = fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanBytes(int64(a.Size)))
-	}
-	var lines []string
-	var cur string
-	for _, c := range chips {
-		if v.measurer.Width(c) > width {
+		c := fmt.Sprintf("%s %d. %s (%s)", icon, i+1, name, humanBytes(int64(a.Size)))
+		w := v.measurer.Width(c)
+		if w > width {
 			c = v.measurer.Truncate(c, width)
+			w = v.measurer.Width(c)
 		}
+		var col int
+		switch {
+		case cur == "":
+			col = 0
+		case curWidth+2+w > width:
+			lines = append(lines, cur)
+			curRow++
+			cur = ""
+			curWidth = 0
+			col = 0
+		default:
+			col = curWidth + 2
+		}
+		hits = append(hits, hitZone{
+			index:    i,
+			rowStart: curRow,
+			rowEnd:   curRow + 1,
+			colStart: col,
+			colEnd:   col + w,
+		})
 		if cur == "" {
 			cur = c
-			continue
+		} else {
+			cur = cur + "  " + c
 		}
-		if v.measurer.Width(cur)+2+v.measurer.Width(c) > width {
-			lines = append(lines, cur)
-			cur = c
-			continue
-		}
-		cur = cur + "  " + c
+		curWidth = col + w
 	}
 	if cur != "" {
 		lines = append(lines, cur)
@@ -388,7 +493,7 @@ func (v Model) renderChipRow(width int) (string, int) {
 	for i, l := range lines {
 		lines[i] = uicore.FillRowToWidth(v.measurer, l, width, bg)
 	}
-	return strings.Join(lines, "\n"), len(lines)
+	return strings.Join(lines, "\n"), len(lines), hits
 }
 
 // layout renders headers + body and populates the viewport. Headers stay
@@ -406,10 +511,21 @@ func (v *Model) layout() {
 	contentWidth := max(1, v.width-1)
 	headerStr := content.RenderHeaders(hdrs, v.theme, contentWidth)
 	v.panel = v.styles.ViewerHeader.Width(v.width).Render(headerStr)
-	v.chipRow, v.chipHeight = v.renderChipRow(v.width)
+	v.chipRow, v.chipHeight, v.chipHits = v.renderChipRow(v.width, v.chipHits)
 	v.inviteRow, v.inviteHeight = renderInviteBlock(v.measurer, v.invite, v.icons, v.styles, v.width)
-	body, urls := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
+	body, urls, footnotes := content.RenderBodyWithFootnotes(v.blocks, v.theme, contentWidth)
 	v.links = urls
+	v.footnoteRows = footnotes
+	v.bodyHits = v.bodyHits[:0]
+	for _, fr := range footnotes {
+		v.bodyHits = append(v.bodyHits, hitZone{
+			index:    fr.PickerIndex,
+			rowStart: fr.Row,
+			rowEnd:   fr.Row + 1,
+			colStart: 0,
+			colEnd:   contentWidth,
+		})
+	}
 	bodyHeight := max(1, v.height-lipgloss.Height(v.panel)-v.inviteHeight-v.chipHeight)
 	vp := viewport.New(viewport.WithWidth(contentWidth), viewport.WithHeight(bodyHeight))
 	// Modifier-free viewport bindings. g/G are handled by the wrapper.

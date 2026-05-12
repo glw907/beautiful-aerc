@@ -1,10 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 33 — mouse support (reader + attachments
-+ scroll). Pass 32 closed ADR-0217 (v2 declarative `tea.View`
-fields): `ProgressBar` priority ladder, `ReportFocus` + new-mail
-toast, `KeyboardEnhancements` + `GatedBinding`-aware compose
-chord hints.
+**Current pass:** Pass 34 — mouse support (sidebar + cross-pane).
+Pass 33 closed ADR-0218: `tea.View.MouseMode = CellMotion`
+declared every frame; `App.updateMouse` cascade absorbs over
+overlays, forwards to reader when viewer-ready; reader hit-tests
+attachment chips and `[N]: <url>` ribbon rows; wheel forwards
+to the body viewport.
 
 **Beta soak deferred.** Pre-beta rules apply; soak entry gated
 on a full audit cycle returning no findings.
@@ -13,10 +14,9 @@ on a full audit cycle returning no findings.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 31 | Scaffold through Audit B.2 (ADRs 0001–0216) | done |
-| 32 | v2 declarative `tea.View` fields (ADR-0217) | done |
-| 33 | **Mouse support** — reader + attachments + scroll | next |
-| 34 | Mouse support (sidebar + cross-pane) — optional split from 33 | gated |
+| 1 – 32 | Scaffold through v2 declarative chrome (ADRs 0001–0217) | done |
+| 33 | Mouse support — reader + attachments + scroll (ADR-0218) | done |
+| 34 | **Mouse support** — sidebar + cross-pane | next |
 | 35 | Native OAuth for Gmail / Outlook IMAP (#42, BYO client ID) | gated |
 | 36 | **Audit C** — feature surface | gate |
 | 37 | **Audit D** — database (schema ladder, tx boundaries, FTS5, UIDVALIDITY, on-disk shape) | gate |
@@ -25,29 +25,32 @@ on a full audit cycle returning no findings.
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 33)
+### Next starter prompt (Pass 34)
 
-> **Goal.** Wire `tea.MouseMode` and `tea.MouseClickMsg` /
-> `tea.MouseWheelMsg` so the reader scrolls on wheel, attachment
-> chips open on click, and link runs route through xdg-open on
-> click. Sidebar and cross-pane mouse is Pass 34.
+> **Goal.** Extend the Pass 33 mouse dispatch to the sidebar
+> and message list so a click moves the folder cursor / message
+> cursor, and pane-crossing clicks behave intuitively (e.g.
+> clicking a message in the list while the viewer is open opens
+> that message in the viewer).
 >
-> **Scope.** Reader viewport wheel + click-to-launch on
-> harvested URL runs and attachment chips. No keybinding
-> changes; mouse is additive.
+> **Scope.** Sidebar folder rows (single-click selects + loads),
+> message-list rows (single-click moves cursor + opens), tree
+> expand/collapse on parent rows, scroll wheel in sidebar and
+> message list. No keybinding changes; mouse is additive.
 >
-> **Settled (do not re-brainstorm):** `tea.View.MouseMode` is
-> the declarative carrier (mirrors ADR-0189b /-0217). Per-row
-> hit-testing lives in `reader.Model`.
+> **Settled (do not re-brainstorm):** `App.updateMouse` is the
+> dispatch arm (ADR-0218); cascade absorbs while an overlay is
+> open; mouse never closes overlays via outside-click. Sidebar
+> width math threads `uicore.ComputeLayout`.
 >
 > **Still open — brainstorm these:**
-> - MouseMode value — CellMotion vs AllMotion. Trade-off:
->   throughput vs hover affordances (none today).
-> - Click bubbling — whose `Update` claims a click? Reader vs
->   App, and how does the link-picker overlay interact?
-> - Footnote ribbon click target — bare URL vs `[^N]` glyph;
->   what's the SPUA-safe column math?
+> - Double-click vs single-click semantics for message-list
+>   rows. Trade-off: discoverability vs accidental viewer open.
+> - Sidebar tree expand-on-click — same row as selection or a
+>   gutter target? Account for synthesized intermediate nodes.
+> - Scroll-wheel inside the message list — own viewport or
+>   bubble up to a future global scroll model?
 >
 > **Approach.** Brainstorm the open questions, write a plan doc
-> at `docs/superpowers/plans/YYYY-MM-DD-mouse-reader.md`, then
+> at `docs/superpowers/plans/YYYY-MM-DD-mouse-sidebar.md`, then
 > implement. Standard pass-end checklist applies.

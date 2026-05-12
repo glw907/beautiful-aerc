@@ -28,7 +28,7 @@ func TestFootnoteURLNoOverflow(t *testing.T) {
 
 	for _, w := range []int{40, 72, 100} {
 		t.Run(fmt.Sprintf("width=%d", w), func(t *testing.T) {
-			out, urls := RenderBodyWithFootnotes(blocks, theme.Nord, w)
+			out, urls, _ := RenderBodyWithFootnotes(blocks, theme.Nord, w)
 			if len(urls) != 1 {
 				t.Fatalf("expected 1 url, got %d", len(urls))
 			}
@@ -79,7 +79,7 @@ func TestRenderFixturesNoOverflow(t *testing.T) {
 				if widthCap > maxBodyWidth {
 					widthCap = maxBodyWidth
 				}
-				out, _ := RenderBodyWithFootnotes(blocks, theme.Nord, w)
+				out, _, _ := RenderBodyWithFootnotes(blocks, theme.Nord, w)
 				for i, line := range strings.Split(out, "\n") {
 					cw := lipgloss.Width(line)
 					if cw > widthCap {

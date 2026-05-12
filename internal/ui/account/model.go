@@ -634,6 +634,15 @@ func (m Model) WindowCounter() string {
 
 func (m Model) ViewerOpen() bool { return m.viewer.IsOpen() }
 
+// UpdateViewer forwards msg straight to the viewer, bypassing the
+// account-level dispatch switch. App uses this for pane-local
+// mouse events.
+func (m Model) UpdateViewer(msg tea.Msg) (Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.viewer, cmd = m.viewer.Update(msg)
+	return m, cmd
+}
+
 // MessageListCount returns the message-list row count. App reads it to
 // decide whether a FolderLoadedMsg represents a fresh open so it can
 // commit any in-flight toast.

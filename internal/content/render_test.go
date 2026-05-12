@@ -341,7 +341,7 @@ func TestRenderBodyFootnoteEdge(t *testing.T) {
 		Text{Content: pad},
 		Link{Text: "documentation", URL: "https://example.com/x"},
 	}}}
-	out, _ := RenderBodyWithFootnotes(blocks, theme.Nord, maxBodyWidth)
+	out, _, _ := RenderBodyWithFootnotes(blocks, theme.Nord, maxBodyWidth)
 	visible := stripANSITest(out)
 	for _, line := range strings.Split(visible, "\n") {
 		if strings.Contains(line, "[^1]") && !strings.Contains(line, "[^1]: ") {

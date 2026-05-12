@@ -1,0 +1,40 @@
+──────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────╮
+                      │                                                                                                │
+ geoff@907.life       │ A shipment from order #6410 is on the way                                                      │
+                      │                                                                                                │
+┃ 󰇰  Inbox         87 │   FROM     Inspire Woodcraft                                                                   │
+  󰏫  Drafts           │   TO       short.cube2181@fastmail.com                                                         │
+  󰑚  Sent             │   DATE     Mon, May 11 2026 8:44 PM                                                            │
+  󰀼  Archive          │                                                                                                │
+                      │────────────────────────────────────────────────────────────────────────────────────────────────│
+  󰍷  Spam             │ Your order is on the way                                                                       │
+  󰩺  Trash            │                                                                                                │
+                      │ ────────────────────────────────────────────────────────────────────────                       │
+  󰡡  Buccaneer 18     │                                                                                                │
+  󰡡  DMARC Reports    │ Inspire Woodcraft  ( inspirewoodcraft.com… [^1] )                                              │
+  󰡡  Finance Commi… 4 │                                                                                                │
+  󰡡  Membership Comm… │ ────────────────────────────────────────────────────────────────────────                       │
+  󰡡  Notificatio… 111 │                                                                                                │
+  󰡡  Program Committ… │ Order #6410                                                                                    │
+  󰡡  Remind           │                                                                                                │
+  󰡡  Scheduled        │ ────────────────────────────────────────────────────────────────────────                       │
+                      │                                                                                                │
+                      │ Your order is on the way                                                                       │
+                      │                                                                                                │
+                      │ ────────────────────────────────────────────────────────────────────────                       │
+                      │                                                                                                │
+                      │ Your order is on the way. Track your shipment to see the delivery                              │
+                      │ status.                                                                                        │
+                      │                                                                                                │
+                      │ View your order  ( inspirewoodcraft.com/80081715510… [^2] )                                    │
+                      │                                                                                                │
+                      │ Download to track with Shop  ( open.shop.app/E2jp6… [^3] )                                     │
+                      │                                                                                                │
+                      │ or Visit our store  ( inspirewoodcraft.com… [^4] )                                             │
+                      │                                                                                                │
+                      │ USPS tracking number: 9234690267338822839497  ( tools.usps.com/go… [^5]                        │
+                      │ )                                                                                              │
+   / to search        │                                                                                                │
+                      │ Items in this shipment                                                                         │
+──────────────────────┴──────────────────────────────────────────────────────────────── 0% · ↓ 82/33619 · ● connected ─╯
+ d del  a archive  s star  . read ┊  r/R reply  f fwd  c compose ┊  Tab links  q close  ? help

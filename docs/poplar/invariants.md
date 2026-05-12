@@ -41,17 +41,14 @@ the ADR(s) that justify them.
   generic IMAP (`provider = "imap"` or one of the presets `yahoo`,
   `icloud`, `zoho`, `outlook`, `mailbox-org`, `posteo`, `runbox`,
   `gmx`, `protonmail`, `gmail`). `config.ResolvePreset(*AccountConfig)`
-  is the single preset-merge function — fills empty Backend, Host,
-  Port, StartTLS, InsecureTLS, GmailQuirks, Source, and SMTP fields
-  from `Providers[c.Preset]`; non-empty slots win. Called both by
-  the TOML decoder and by `wizard.Apply` so the wizard's pre-save
-  probe sees the same resolved config the runtime would after a
-  round-trip (`InsecureTLS = true` on the `protonmail` preset for
-  the local Bridge's self-signed loopback cert). Self-hosted IMAP uses explicit `host`/`port`
-  plus `insecure-tls = true` for self-signed certs; the dial path
-  surfaces a "set insecure-tls = true if self-signed" hint when
-  TLS handshake fails on RFC 1918 / `.local` / `127.x` hosts and
-  `InsecureTLS` is not already on. No maildir/mbox/notmuch.
+  fills empty Backend, Host, Port, StartTLS, InsecureTLS,
+  GmailQuirks, Source, and SMTP fields from `Providers[c.Preset]`;
+  non-empty slots win. Called by both the TOML decoder and
+  `wizard.Apply` so the pre-save probe matches the runtime.
+  Self-hosted IMAP uses explicit `host`/`port` plus `insecure-tls
+  = true` for self-signed certs; the dial path surfaces a "set
+  insecure-tls" hint when TLS fails on RFC 1918 / `.local` /
+  `127.x` and `InsecureTLS` is not already on. No maildir.
 - `mail.Backend` is synchronous blocking; both packages call their
   libraries synchronously — no pump goroutine, no async bridge.
 - IMAP backend invariants: UIDPLUS required at Connect; MOVE /
@@ -103,10 +100,10 @@ the ADR(s) that justify them.
   canonical; `AdaptiveColor` removed; palette + Styles take
   concrete `color.Color` (`lipgloss.Color(s)` is a function).
   Chrome is declarative: `App.View()` returns a `tea.View` with
-  `v.AltScreen`, `v.WindowTitle`, `v.ProgressBar`,
-  `v.ReportFocus = true`, and
-  `v.KeyboardEnhancements.ReportEventTypes = true` set every
-  frame (ADR-0217). ProgressBar follows the fixed ladder
+  `v.AltScreen`, `v.WindowTitle`, `v.ProgressBar`, `v.ReportFocus
+  = true`, `v.KeyboardEnhancements.ReportEventTypes = true`, and
+  `v.MouseMode = tea.MouseModeCellMotion` set every frame (ADRs
+  0217, 0218). ProgressBar follows the fixed ladder
   attachment > outbox > sync sourced from
   `cache.Account.{AttachmentDownloadProgress,OutboxDrainProgress,
   SyncProgress}`. `tea.FocusMsg`/`BlurMsg` toggle `App.focused`;
@@ -174,11 +171,18 @@ the ADR(s) that justify them.
   `cache.Account.QueueOp`. `messagelist.Model` is presentation-only;
   `RefreshSource` re-reads cache state after every write, preserving
   cursor on UID. `reader.Model` holds the theme reference for
-  markdown rendering. `mail.Backend` shrunk in cutover and Pass 8.5:
-  `Mark{Read,Unread,Answered}`/`Delete`/`Search`/`Copy` are gone.
-  `Flag(uids, flag, set)` is canonical; "delete" is a
-  `MoveArgs{Dest: trash}` queued op. IMAP `Move` falls back to
-  `cmd.Copy` when MOVE is absent (internal helper, not on interface).
+  markdown rendering. `mail.Backend.Flag(uids, flag, set)` is the
+  canonical mutator; "delete" is `MoveArgs{Dest: trash}` queued.
+  IMAP `Move` falls back to `cmd.Copy` when MOVE is absent.
+- `App.updateMouse` is the pointer-event arm. Overlay open →
+  absorb; viewer ready → translate to right-pane-local coords
+  and forward via `account.Model.UpdateViewer`; else inert.
+  `reader.Model.chipHits`/`bodyHits` populate at `layout()`:
+  wheel-in-body forwards to the viewport, click on a chip emits
+  `OpenAttachmentMsg`, click on a `[N]: <url>` ribbon row emits
+  `LaunchURLMsg`. The inline `[^N]` glyph is not a click target.
+  `content.RenderBodyWithFootnotes` returns `[]FootnoteRow{Row,
+  PickerIndex}`. ADR-0218.
 
 ### Config & theming
 
@@ -340,16 +344,13 @@ POST > mailto > plain http. Banner row confirms success (5s). ADR-0185.
   (idempotent). IMAP impl issues `UID STORE +FLAGS.SILENT (\Deleted)`
   then `UID EXPUNGE <uids>`, scoped by UIDPLUS so unrelated
   pre-marked messages are unaffected.
-- `mail.ErrAuth`, `mail.ErrNotFound`, `mail.ErrConnection` are
-  the typed sentinels; backends attach via `mail.WrapSentinel`
-  inside package-local `classifyErr`. JMAP routes
-  `*jmap.RequestError` 401/403 → `ErrAuth`, 404 → `ErrNotFound`.
-  IMAP routes `*imap.Error` `AUTHENTICATIONFAILED` /
+- Typed sentinels `mail.{ErrAuth, ErrNotFound, ErrConnection}`
+  attach via `mail.WrapSentinel` inside each backend's
+  `classifyErr`: JMAP `*jmap.RequestError` 401/403 → `ErrAuth`,
+  404 → `ErrNotFound`; IMAP `AUTHENTICATIONFAILED` /
   `AUTHORIZATIONFAILED` / `PRIVACYREQUIRED` → `ErrAuth`,
-  `NONEXISTENT` → `ErrNotFound`, and `io.EOF` / `net.ErrClosed`
-  / `*net.OpError` / `net.Error.Timeout()` → `ErrConnection`.
-  The cache drainer's conflict matrix routes via `errors.Is`
-  against these sentinels.
+  `NONEXISTENT` → `ErrNotFound`, transport errors → `ErrConnection`.
+  Cache drainer's conflict matrix routes via `errors.Is`.
 
 Attachment wire shape and the picker/viewer surface live in
 `.claude/rules/attachments-invariants.md` (auto-loaded on
@@ -382,18 +383,17 @@ take a trailing `*slog.Logger` arg; nil falls back to
 ## Build & verification
 
 - Makefile: `make check` is the commit gate (fmt-check, vet,
-  voice, modern-go-check, test). `make test` runs `-tags=dev`
-  to keep MockBackend in scope; release builds drop it.
-  `scripts/voice-check.sh` scans T4/T10/T14/T16/T27/T28/T33/
-  T35/T39/T40 (T34 is voice-lens only; ADR-0173).
-  `scripts/modern-go-check.sh` (ADR-0196) flags pre-1.21 idioms;
-  `MODERN_GO_STRICT=1` hard-fails. `make install` → `~/.local/bin/`.
+  voice, modern-go-check, test). `make test` runs `-tags=dev` to
+  keep MockBackend in scope; release builds drop it. `scripts/
+  voice-check.sh` scans T4/T10/T14/T16/T27/T28/T33/T35/T39/T40
+  (T34 is voice-lens only; ADR-0173). `scripts/modern-go-check.sh`
+  (ADR-0196) flags pre-1.21 idioms; `MODERN_GO_STRICT=1` hard-fails.
+  `make install` → `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `styling.md` before any color change;
-  `poplar-pass` for pass-end. Live UI verification uses tmux
-  (`.claude/docs/tmux-testing.md`); 80×24 polish bar, UI passes
-  capture 80×24 and 120×40.
+  `poplar-pass` for pass-end. UI verification uses tmux
+  (`.claude/docs/tmux-testing.md`); capture 80×24 and 120×40.
 
 ## Decisions
 
