@@ -297,7 +297,13 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 			if !m.SentAt.IsZero() {
 				sentNS = m.SentAt.UnixNano()
 			}
-			res, err := tx.Exec(`
+			// RETURNING id over LastInsertId. The latter is the
+			// connection-scoped rowid of the most recent real INSERT.
+			// On the UPDATE branch of an UPSERT it returns a stale
+			// value (often a now-deleted rowid), and the FK link below
+			// blows up downstream.
+			var id int64
+			err := tx.QueryRow(`
                 INSERT INTO messages
                   (protocol_id, thread_id, in_reply_to, subject, from_addr, to_addr, cc_addr, bcc_addr,
                    sent_at, flags, size, ui_flags, ui_hide)
@@ -322,19 +328,11 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
                                   THEN messages.ui_flags
                                   ELSE excluded.flags
                                 END
+                RETURNING id
             `, string(m.UID), string(m.ThreadID), string(m.InReplyTo), m.Subject, m.From,
-				m.To, m.Cc, m.Bcc, sentNS, uint32(m.Flags), int64(m.Size), uint32(m.Flags))
+				m.To, m.Cc, m.Bcc, sentNS, uint32(m.Flags), int64(m.Size), uint32(m.Flags)).Scan(&id)
 			if err != nil {
 				return fmt.Errorf("upsert message %s: %w", m.UID, err)
-			}
-			id, err := res.LastInsertId()
-			if err != nil {
-				return err
-			}
-			if id == 0 {
-				if err := tx.QueryRow(`SELECT id FROM messages WHERE protocol_id = ?`, string(m.UID)).Scan(&id); err != nil {
-					return err
-				}
 			}
 			if err := writeRecipientsTx(ctx, tx, id, &m); err != nil {
 				return fmt.Errorf("write recipients %s: %w", m.UID, err)
