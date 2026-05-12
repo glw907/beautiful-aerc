@@ -48,7 +48,7 @@ func (p *probeScreen) runProbe() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		return ProbeDoneMsg{Result: wizdomain.Probe(ctx, cfg)}
+		return ProbeDoneMsg{Result: wizdomain.Probe(ctx, cfg, nil)}
 	}
 }
 

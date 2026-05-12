@@ -6,31 +6,34 @@ import (
 
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailauth"
 	"github.com/glw907/poplar/internal/mailimap"
 	"github.com/glw907/poplar/internal/mailjmap"
 )
 
-// Indirection so tests can substitute fakes without dialing real
-// servers.
+// Indirection so tests can substitute fakes without dialing real servers.
 var (
-	imapProbeFn = func(ctx context.Context, cfg config.AccountConfig) mail.ProbeResult {
-		return mailimap.Probe(ctx, cfg, nil)
+	imapProbeFn = func(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) mail.ProbeResult {
+		return mailimap.Probe(ctx, cfg, oauthCli)
 	}
 	jmapProbeFn = mailjmap.Probe
-	smtpProbeFn = func(cfg config.AccountConfig) error { return mailimap.ProbeSMTP(cfg, nil) }
+	smtpProbeFn = func(cfg config.AccountConfig, oauthCli *mailauth.Client) error {
+		return mailimap.ProbeSMTP(cfg, oauthCli)
+	}
 )
 
 // Probe routes to the right backend based on cfg.Backend and returns a
-// step-by-step transcript. SMTP is appended for IMAP accounts only;
-// JMAP submission rides the JMAP session itself.
-func Probe(ctx context.Context, cfg config.AccountConfig) mail.ProbeResult {
+// step-by-step transcript. oauthCli is non-nil for accounts using xoauth2;
+// nil otherwise. SMTP is appended for IMAP accounts only; JMAP submission
+// rides the JMAP session itself.
+func Probe(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) mail.ProbeResult {
 	switch cfg.Backend {
 	case "imap":
-		r := imapProbeFn(ctx, cfg)
+		r := imapProbeFn(ctx, cfg, oauthCli)
 		if !r.OK() {
 			return r
 		}
-		smtpErr := smtpProbeFn(cfg)
+		smtpErr := smtpProbeFn(cfg, oauthCli)
 		step := mail.ProbeStep{Label: "SMTP submission", Status: mail.ProbeOK}
 		if smtpErr != nil {
 			step.Status = mail.ProbeFail
