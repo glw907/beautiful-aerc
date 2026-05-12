@@ -17,7 +17,7 @@ var (
 		return mailimap.Probe(ctx, cfg, nil)
 	}
 	jmapProbeFn = mailjmap.Probe
-	smtpProbeFn = mailimap.ProbeSMTP
+	smtpProbeFn = func(cfg config.AccountConfig) error { return mailimap.ProbeSMTP(cfg, nil) }
 )
 
 // Probe routes to the right backend based on cfg.Backend and returns a

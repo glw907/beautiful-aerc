@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/mailauth"
 	"github.com/glw907/poplar/internal/mailimap"
 	"github.com/glw907/poplar/internal/theme"
 	uiwizard "github.com/glw907/poplar/internal/ui/wizard"
@@ -131,7 +132,17 @@ func newConfigCheckCmd() *cobra.Command {
 				}
 				_ = b.Disconnect()
 				if a.Backend == "imap" {
-					if err := mailimap.ProbeSMTP(a); err != nil {
+					var oauthCli *mailauth.Client
+					if a.OAuth != nil {
+						c, err := buildOAuthClient(a)
+						if err != nil {
+							fmt.Fprintf(cmd.OutOrStdout(), "%-20s oauth error: %v\n", a.Name, err)
+							anyFail = true
+							continue
+						}
+						oauthCli = c
+					}
+					if err := mailimap.ProbeSMTP(a, oauthCli); err != nil {
 						fmt.Fprintf(cmd.OutOrStdout(), "%-20s smtp error: %v\n", a.Name, err)
 						anyFail = true
 						continue
