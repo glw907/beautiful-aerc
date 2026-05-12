@@ -316,6 +316,27 @@ func TestApp_ViewerClosedRestoresFooterContext(t *testing.T) {
 	}
 }
 
+// TestApp_ComposeClosesOpenViewer verifies that pressing the Compose
+// key while the viewer is open closes the viewer first, so
+// updateMouse's right-pane routing matches the rendered surface
+// (compose, not the now-hidden viewer). Audit C finding B.
+func TestApp_ComposeClosesOpenViewer(t *testing.T) {
+	app := newLoadedApp(t, 120, 30)
+	app, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	drainApp(t, &app, cmd)
+	if !app.viewerOpen {
+		t.Fatal("setup: viewerOpen should be true after Enter")
+	}
+	app, cmd = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	drainApp(t, &app, cmd)
+	if app.compose == nil {
+		t.Fatal("compose should be open after 'c'")
+	}
+	if app.viewerOpen {
+		t.Error("viewerOpen should be false once compose has taken the right pane")
+	}
+}
+
 func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 	app := newLoadedApp(t, 120, 30)
 	// Open the viewer and give it a body long enough to scroll.

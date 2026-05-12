@@ -45,10 +45,9 @@ the ADR(s) that justify them.
   GmailQuirks, Source, and SMTP fields from `Providers[c.Preset]`;
   non-empty slots win. Called by both the TOML decoder and
   `wizard.Apply` so the pre-save probe matches the runtime.
-  Self-hosted IMAP uses explicit `host`/`port` plus `insecure-tls
-  = true` for self-signed certs; the dial path surfaces a "set
-  insecure-tls" hint when TLS fails on RFC 1918 / `.local` /
-  `127.x` and `InsecureTLS` is not already on. No maildir.
+  Self-hosted IMAP uses explicit `host`/`port` + `insecure-tls`;
+  the dial path emits a "set insecure-tls" hint on TLS failure for
+  RFC 1918 / `.local` / `127.x`. No maildir.
 - `mail.Backend` is synchronous blocking; both packages call their
   libraries synchronously — no pump goroutine, no async bridge.
 - IMAP backend invariants: UIDPLUS required at Connect; MOVE /
@@ -62,10 +61,13 @@ the ADR(s) that justify them.
   semantics, no collateral expunge). Gmail (`GmailQuirks = true`)
   asserts `X-GM-EXT-1` and routes `Destroy` through `SELECT
   [Gmail]/Trash` first; XOAUTH2 tokens from `mailauth.Token(ctx)`.
-  SMTP is a third connection dialed lazily on first `Send` via
-  `emersion/go-smtp`; cached client dropped on send error. `Append`
-  runs `APPEND` on the cmd connection. `mailimap.ProbeSMTP` is the
-  `poplar config check` surface. ADR-0208.
+  IMAP `dial` and SMTP `smtpAuth` ForceRefresh-and-retry once on
+  `mail.ErrAuth` when `b.oauth != nil`; `classifyErr` covers
+  `*imap.Error` codes + `*gosmtp.SMTPError` 530/535/538. SMTP
+  dials lazily on first `Send` via `emersion/go-smtp`; cached
+  client dropped on send error. `Append` runs on the cmd connection.
+  `mailimap.ProbeSMTP` is the `poplar config check` surface.
+  ADRs 0208, 0222.
 
 ### Send + Append
 
@@ -282,8 +284,7 @@ the ADR(s) that justify them.
   are in `[U+F0000, U+FFFFD]`.
 
 ### Catkin
-
-Auto-loaded via `.claude/rules/catkin-invariants.md` when editing `internal/catkin/` or planning passes. ADRs 0144–0147, 0149, 0150, 0152.
+Auto-loaded via `.claude/rules/catkin-invariants.md` on `internal/catkin/`. ADRs 0144–0147, 0149, 0150, 0152.
 
 ### Compose
 

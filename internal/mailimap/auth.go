@@ -94,7 +94,7 @@ func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
 		_ = cli.Logout().Wait()
 		return nil, fmt.Errorf("authenticate (%s): %w", role, err)
 	}
-	if authErr := authenticate(cli, cfg, pw); authErr != nil {
+	if authErr := classifyErr(authenticate(cli, cfg, pw)); authErr != nil {
 		if errors.Is(authErr, mail.ErrAuth) && b.oauth != nil {
 			// Stale cached token: force a refresh and try once more.
 			fresh, rerr := b.oauth.ForceRefresh(ctx)
@@ -102,7 +102,7 @@ func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
 				_ = cli.Logout().Wait()
 				return nil, fmt.Errorf("authenticate (%s): %w", role, rerr)
 			}
-			if retryErr := authenticate(cli, cfg, fresh); retryErr != nil {
+			if retryErr := classifyErr(authenticate(cli, cfg, fresh)); retryErr != nil {
 				_ = cli.Logout().Wait()
 				return nil, fmt.Errorf("authenticate (%s): %w", role, retryErr)
 			}

@@ -112,6 +112,10 @@ func (m App) updateGlobalKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 	}
 	switch {
 	case key.Matches(msg, m.keys.Compose):
+		if m.viewerOpen {
+			m.acct = m.acct.CloseViewer()
+			m = m.deriveChromeFromAcct()
+		}
 		w, h := m.rightPaneSize()
 		m.compose = uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses, m.measurer)
 		m.compose.SetSize(w, h)

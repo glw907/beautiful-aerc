@@ -24,6 +24,13 @@ type smtpClient interface {
 	Close() error
 }
 
+// smtpAuther is the cli.Auth surface smtpAuth needs. *gosmtp.Client
+// satisfies it; tests substitute a fake to exercise the
+// stale-token-retry branch without dialing.
+type smtpAuther interface {
+	Auth(c sasl.Client) error
+}
+
 var smtpDial = func(b *Backend) (smtpClient, error) {
 	return realSMTPDial(context.Background(), b)
 }
@@ -101,7 +108,11 @@ func (a *smtpClientAdapter) Close() error { return a.c.Close() }
 // xoauth2 accounts, the access token comes from b.oauth when set;
 // otherwise from cfg.SMTP.ResolvePassword. Non-xoauth2 mechanisms
 // always resolve via cfg.SMTP.ResolvePassword.
-func smtpAuth(ctx context.Context, cli *gosmtp.Client, b *Backend) error {
+//
+// On a stale OAuth token (cli.Auth → mail.ErrAuth and b.oauth set),
+// ForceRefresh and retry once. Mirrors the IMAP dial pattern in
+// auth.go so the 5-minute Token cushion can't strand outbox sends.
+func smtpAuth(ctx context.Context, cli smtpAuther, b *Backend) error {
 	cfg := b.cfg
 	smtp := cfg.SMTP
 	mech := smtp.Auth
@@ -117,7 +128,18 @@ func smtpAuth(ctx context.Context, cli *gosmtp.Client, b *Backend) error {
 		if pw == "" {
 			return errors.New("xoauth2: access token required")
 		}
-		return cli.Auth(mailauth.NewXoauth2Client(cfg.Email, pw))
+		authErr := classifyErr(cli.Auth(mailauth.NewXoauth2Client(cfg.Email, pw)))
+		if authErr == nil {
+			return nil
+		}
+		if !errors.Is(authErr, mail.ErrAuth) || b.oauth == nil {
+			return authErr
+		}
+		fresh, rerr := b.oauth.ForceRefresh(ctx)
+		if rerr != nil {
+			return rerr
+		}
+		return classifyErr(cli.Auth(mailauth.NewXoauth2Client(cfg.Email, fresh)))
 	}
 
 	pw, err := smtp.ResolvePassword()

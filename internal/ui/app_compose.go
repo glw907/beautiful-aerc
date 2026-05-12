@@ -120,8 +120,13 @@ func (m App) updateComposeMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 
 // openNewCompose mounts a fresh compose with the given seed draft.
 // Used for SeededMsg and RestoreFromDraftMsg, where compose opens
-// without a cache-side draft target.
+// without a cache-side draft target. Closes any open viewer first
+// so updateMouse's right-pane routing matches the rendered surface.
 func (m App) openNewCompose(draft mailcompose.Draft) (App, tea.Cmd) {
+	if m.viewerOpen {
+		m.acct = m.acct.CloseViewer()
+		m = m.deriveChromeFromAcct()
+	}
 	w, h := m.rightPaneSize()
 	c := uicompose.New(m.theme, uicompose.NewStyles(m.theme), m.acct.AccountEmail(), m.suggestAddresses, m.measurer)
 	c.SetSize(w, h)
