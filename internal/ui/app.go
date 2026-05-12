@@ -30,6 +30,15 @@ type progressOverride struct {
 	outboxPct            int
 }
 
+// newMailAccum accumulates new-mail arrivals across the 1s coalesce
+// window. coalesceTimerMsg drains it into m.toast.
+type newMailAccum struct {
+	count       int
+	sender      string
+	mixedSender bool
+	folder      string
+}
+
 // pendingEmptyConfirm holds the parameters needed to emit
 // EmptyFolderConfirmedMsg when the user accepts the confirm modal. The
 // zero value means no empty-folder confirm is pending.
@@ -87,15 +96,8 @@ type App struct {
 	kbdCaps      tea.KeyboardEnhancementsMsg
 	newMailToast bool // mirrors [ui] new-mail-toast; true by default
 
-	// pendingNewMail accumulates arrivals during the 1s coalesce window;
-	// flushed into m.toast on coalesceTimerMsg.
-	pendingNewMail struct {
-		count       int
-		sender      string
-		mixedSender bool
-		folder      string
-	}
-	coalesceArmed bool
+	pendingNewMail newMailAccum
+	coalesceArmed  bool
 
 	progressErrorUntil   time.Time
 	testProgressOverride *progressOverride
@@ -134,8 +136,8 @@ func (m App) WithOpener(opener URLOpener) App {
 	return m
 }
 
-// KbdCaps returns the negotiated keyboard-enhancement capabilities.
-// The zero value (no fields set) means the protocol isn't active.
+// KbdCaps returns the negotiated keyboard-enhancement capabilities; the
+// zero value means the protocol is inactive.
 func (m App) KbdCaps() tea.KeyboardEnhancementsMsg { return m.kbdCaps }
 
 // NewApp creates the root model. Folder loading runs in Init's Cmd chain,

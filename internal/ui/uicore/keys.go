@@ -2,11 +2,10 @@ package uicore
 
 import "charm.land/bubbles/v2/key"
 
-// GatedBinding pairs a key.Binding with a capability tag. Bindings whose
-// semantics require the Kitty keyboard protocol (Ctrl+letter chords that
-// the legacy ASCII mapping confuses with Tab/Enter/Backspace) carry
-// RequiresKittyKbd = true. helppopover filters them out when the protocol
-// isn't negotiated.
+// GatedBinding pairs a key.Binding with a capability flag.
+// RequiresKittyKbd marks chords that rely on Kitty keyboard protocol
+// disambiguation; without it, Ctrl+letter chords collide with
+// Tab/Enter/Backspace in the legacy ASCII mapping.
 type GatedBinding struct {
 	Binding          key.Binding
 	RequiresKittyKbd bool

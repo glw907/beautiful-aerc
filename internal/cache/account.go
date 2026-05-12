@@ -241,12 +241,13 @@ func (a *Account) AttachmentDownloadProgress() (pct int, active bool) {
 	return 0, a.attachInFlight.Load() > 0
 }
 
-// SyncProgress reports whether a folder sync is in flight.
-// pct is always 0 (indeterminate).
+// SyncProgress is active while a folder sync runs. pct is unused.
 func (a *Account) SyncProgress() (pct int, active bool) {
 	return 0, a.syncInFlight.Load() > 0
 }
 
+// Bracket the long-running progress sources. UI sets the OSC 9;4 bar from
+// the corresponding *Progress accessors.
 func (a *Account) BeginAttachmentDownload() { a.attachInFlight.Add(1) }
 func (a *Account) EndAttachmentDownload()   { a.attachInFlight.Add(-1) }
 func (a *Account) BeginSync()               { a.syncInFlight.Add(1) }

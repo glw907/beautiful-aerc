@@ -82,12 +82,7 @@ func (m App) updateChromeMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 
 	case coalesceTimerMsg:
 		p := m.pendingNewMail
-		m.pendingNewMail = struct {
-			count       int
-			sender      string
-			mixedSender bool
-			folder      string
-		}{}
+		m.pendingNewMail = newMailAccum{}
 		m.coalesceArmed = false
 		if p.count > 0 {
 			deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)

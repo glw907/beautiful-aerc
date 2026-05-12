@@ -426,30 +426,26 @@ var composeBottomHints = []bindingRow{
 
 func renderComposeLayout(styles Styles, caps tea.KeyboardEnhancementsMsg) string {
 	chordRows := chordBindingRows(caps)
-	groups := composeGroups
+	// cap-exact slice header so an append never aliases composeGroups's
+	// backing array if it ever gains spare capacity.
+	groups := composeGroups[:len(composeGroups):len(composeGroups)]
+	thirdCol := ""
 	if len(chordRows) > 0 {
 		groups = append(groups, bindingGroup{title: "Markdown chords", rows: chordRows})
+		thirdCol = renderGroup(styles, groups[2])
 	}
 	return joinColumnsRow(renderGap(),
 		renderGroup(styles, groups[0]),
 		renderGroup(styles, groups[1]),
-		func() string {
-			if len(groups) > 2 {
-				return renderGroup(styles, groups[2])
-			}
-			return ""
-		}(),
+		thirdCol,
 	)
 }
 
-// chordBindingRows builds bindingRow entries from catkin.ChordSet, omitting
-// entries tagged RequiresKittyKbd when the Kitty keyboard protocol isn't active.
+// chordBindingRows projects the active catkin chord set into popover rows.
 func chordBindingRows(caps tea.KeyboardEnhancementsMsg) []bindingRow {
-	var rows []bindingRow
-	for _, gb := range catkin.ChordSet() {
-		if gb.RequiresKittyKbd && !caps.SupportsKeyDisambiguation() {
-			continue
-		}
+	active := catkin.ActiveChords(caps.SupportsKeyDisambiguation())
+	rows := make([]bindingRow, 0, len(active))
+	for _, gb := range active {
 		h := gb.Binding.Help()
 		rows = append(rows, bindingRow{key: h.Key, desc: h.Desc, wired: true})
 	}

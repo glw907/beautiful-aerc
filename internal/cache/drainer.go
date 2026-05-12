@@ -98,7 +98,6 @@ func (a *Account) drainLoop(ctx context.Context, cfg drainerConfig) {
 // drainOnce clears all eligible rows in a single sweep. It sets the
 // burst counters on first pickup and resets them when the queue empties.
 func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
-	burstSet := false
 	for {
 		if ctx.Err() != nil {
 			return
@@ -108,25 +107,19 @@ func (a *Account) drainOnce(ctx context.Context, cfg drainerConfig) {
 		}
 		row, err := a.nextOutboxRow(time.Now())
 		if errors.Is(err, sql.ErrNoRows) {
-			if burstSet {
-				a.burstTotal.Store(0)
-				a.burstDone.Store(0)
-			}
+			a.burstTotal.Store(0)
+			a.burstDone.Store(0)
 			return
 		}
 		if err != nil {
 			a.log.Error("drainer pickup error", "err", err)
 			return
 		}
-		if !burstSet && a.burstTotal.Load() == 0 {
-			n := a.pendingCount()
-			if n > 0 {
-				a.burstTotal.Store(int32(n))
+		if a.burstTotal.Load() == 0 {
+			if n := a.pendingCount(); n > 0 {
+				a.burstTotal.Store(n)
 				a.burstDone.Store(0)
-				burstSet = true
 			}
-		} else if !burstSet {
-			burstSet = true
 		}
 		a.executeOne(ctx, row, cfg)
 	}
@@ -264,21 +257,18 @@ func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
 
 func (a *Account) pendingCount() int32 {
 	var n int32
-	a.db.QueryRow(
-		`SELECT COUNT(*) FROM outbox WHERE status IN (?, ?)`, OpPending, OpFailed,
-	).Scan(&n)
+	row := a.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE status IN (?, ?)`, OpPending, OpFailed)
+	if err := row.Scan(&n); err != nil {
+		a.log.Error("pendingCount scan", "err", err)
+		return 0
+	}
 	return n
 }
 
-// countOpDone advances the burst-progress counter for completed ops.
-func (a *Account) countOpDone(status OpStatus) {
+func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
 	if status == OpDone {
 		a.burstDone.Add(1)
 	}
-}
-
-func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
-	a.countOpDone(status)
 	ev := CacheEvent{Account: a.name, OpID: row.ID, Kind: OpKind(row.Kind), Status: status}
 	if err != nil {
 		ev.Err = err.Error()
@@ -288,7 +278,9 @@ func (a *Account) publish(row *outboxRow, status OpStatus, err error) {
 
 // publishNote is publish + an advisory banner string.
 func (a *Account) publishNote(row *outboxRow, status OpStatus, note string) {
-	a.countOpDone(status)
+	if status == OpDone {
+		a.burstDone.Add(1)
+	}
 	a.emit(CacheEvent{
 		Account: a.name,
 		OpID:    row.ID,

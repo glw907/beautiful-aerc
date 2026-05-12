@@ -147,15 +147,16 @@ func composeFooterGroups(hasSig, isFocusFrom, isFocusBody, tidyVisible bool, cap
 	return groups
 }
 
-// chordFooterHints builds the Markdown-chord hint group for the compose footer.
-// When Kitty disambiguation is active the full chord list renders; otherwise a
-// plain-markdown nudge appears so users know formatting is still possible.
+// chordFooterHints emits the chord hint group for compose body focus.
+// Without Kitty disambiguation the chord list collapses to a markdown nudge.
 func chordFooterHints(caps tea.KeyboardEnhancementsMsg) []footerHint {
-	if !caps.SupportsKeyDisambiguation() {
+	disambiguates := caps.SupportsKeyDisambiguation()
+	if !disambiguates {
 		return []footerHint{hint("**bold** *italic* [link](url)", "markdown", 7)}
 	}
-	var hints []footerHint
-	for _, gb := range catkin.ChordSet() {
+	active := catkin.ActiveChords(disambiguates)
+	hints := make([]footerHint, 0, len(active))
+	for _, gb := range active {
 		h := gb.Binding.Help()
 		hints = append(hints, hint(h.Key, h.Desc, 7))
 	}
