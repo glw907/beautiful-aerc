@@ -39,11 +39,15 @@ type Account struct {
 	events        chan CacheEvent
 	droppedEvents atomic.Uint64
 
-	drainSignal  chan struct{}
-	stop         chan struct{}
-	wg           sync.WaitGroup
-	backfiller   *Backfiller
-	backfillStop context.CancelFunc
+	drainSignal   chan struct{}
+	drainerPaused atomic.Bool
+	stop          chan struct{}
+	wg            sync.WaitGroup
+	backfiller    *Backfiller
+	backfillStop  context.CancelFunc
+
+	burstTotal atomic.Int32
+	burstDone  atomic.Int32
 }
 
 // OpStatus is the lifecycle state of an outbox row.
@@ -214,6 +218,18 @@ func (a *Account) BackfillProgress() (done, total int, warn bool, err error) {
 		return 0, 0, false, err
 	}
 	return done, total, a.backfiller.Throttling(), nil
+}
+
+// OutboxDrainProgress reports the current outbox drain burst's progress.
+// Returns (pct, true) while the drainer is working a non-empty queue;
+// (0, false) when idle.
+func (a *Account) OutboxDrainProgress() (pct int, active bool) {
+	total := a.burstTotal.Load()
+	if total == 0 {
+		return 0, false
+	}
+	done := a.burstDone.Load()
+	return int(int64(done) * 100 / int64(total)), true
 }
 
 // NotifyActivity signals recent user input, pausing backfill until
