@@ -1,13 +1,14 @@
 # Poplar Status
 
-**Current pass:** Pass 40 ran Audit G (test assertion
-meaningfulness, ADR-0230) — 22 packages, ~185 test files,
-returning 0 P0, 21 P1, 17 P2. Dominant cluster: silent-success
-fakes. Also landed an inline FK fix (ADR-0231) — `upsertMessages`
-now uses `RETURNING id` rather than `LastInsertId()` whose
-connection-scoped semantics returned stale rowids on the UPDATE
-branch of an UPSERT, intermittently FK-failing the
-`message_mailboxes` link.
+**Current pass:** Pass 40.2 landed the structural answer to
+Audit G — `make check-deep` runs gremlins mutation testing
+across eight curated logic-heavy packages (ADR-0232), and the
+`go-conventions` skill grows an "Assertion Discipline"
+subsection codifying the five anti-patterns Audit G surfaced.
+Initial thresholds are 0% (informational); calibration waits
+for Pass 40.3 against the post-40.1 suite. Mutation-testing
+smoke on `internal/mailcompose` returned 82.28% efficacy / 14
+surviving mutants — real signal at expected granularity.
 
 Pass 35.1 still pending Gmail/Outlook creds.
 
@@ -25,7 +26,9 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 38 / 38.1 | Audit E + remediation (ADRs 0225/0226/0227) | done |
 | 39 / 39.1 | Audit F + remediation (ADRs 0228/0229) | done |
 | 40 | Audit G + FK inline fix (ADRs 0230/0231) | done |
-| 40.1 | **Audit G remediation — 21 P1 items** | next |
+| 40.1 | Audit G remediation — 21 P1 items | next |
+| 40.2 | Mutation-testing scaffolding (ADR-0232) | done |
+| 40.3 | check-deep calibration + AST skipcheck (BACKLOG #59) | queued |
 | 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
@@ -51,5 +54,5 @@ Pass 35.1 still pending Gmail/Outlook creds.
 >
 > **Approach.** Plan doc at
 > `docs/superpowers/plans/2026-05-15-audit-g-remediation.md`,
-> walk the 21 P1 items fake-injection-first, write ADR-0232,
+> walk the 21 P1 items fake-injection-first, write ADR-0233,
 > standard pass-end checklist applies.

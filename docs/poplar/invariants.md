@@ -384,13 +384,13 @@ take a trailing `*slog.Logger` arg; nil falls back to
 
 ## Build & verification
 
-- Makefile: `make check` is the commit gate (fmt-check, vet,
-  voice, modern-go-check, test). `make test` runs `-tags=dev` to
-  keep MockBackend in scope; release builds drop it.
-  `scripts/voice-check.sh` scans the grep-tier tells (ADR-0173);
-  `scripts/modern-go-check.sh` (ADR-0196) flags pre-1.21 idioms
-  (`MODERN_GO_STRICT=1` hard-fails). `make install` →
-  `~/.local/bin/`.
+- Makefile: `make check` (commit gate) = fmt-check + vet +
+  voice + modern-go-check + test; `-tags=dev` keeps MockBackend
+  in scope. `voice-check.sh` scans grep-tier tells (ADR-0173);
+  `modern-go-check.sh` flags pre-1.21 idioms, `MODERN_GO_STRICT=1`
+  hard-fails (ADR-0196). `make check-deep` runs gremlins mutation
+  testing on logic-heavy packages — pass-end gate, not in `make
+  check` (ADR-0232). `make install` → `~/.local/bin/`.
 - Go module: `github.com/glw907/poplar`. `go.mod` 1.26.0; toolchain 1.26.1.
 - Skills: `go-conventions` before any Go file; `elm-conventions`
   before `internal/ui/`; `styling.md` before any color change;
