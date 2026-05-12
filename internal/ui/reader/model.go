@@ -201,6 +201,13 @@ func (v Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return v, nil
 	}
 	switch m := msg.(type) {
+	case tea.WindowSizeMsg:
+		if v.phase == PhaseReady {
+			var c tea.Cmd
+			v.viewport, c = v.viewport.Update(m)
+			return v, c
+		}
+		return v, nil
 	case spinner.TickMsg:
 		if v.phase == PhaseLoading {
 			var c tea.Cmd

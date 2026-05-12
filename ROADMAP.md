@@ -4,40 +4,48 @@
 
 ## Active
 
-### Catkin Elm conformance (all-value path) `catkin-all-value`
-`catkin.Model` (and `catkin.Buffer` underneath) ship with mixed
-receivers: `Update`/`View`/`Value`/`Focused` are value receivers
-(the Elm contract), but `SetStyles`/`SetSize`/`SetWidth`/`SetValue`/
-`SetTidyHighlights`/`RegisterAnnotator`/`Focus`/`Blur`/`recordSnap`
-mutate the receiver in place. The same instance is simultaneously
-immutable-by-Update and mutable-by-setter. This violates
-`elm-conventions` ("state in models, mutations only in Update, I/O
-only in tea.Cmd, children signal parents via Msg types") at the
-most-touched editor surface in the app, and the violation is
-load-bearing — the 17-method `mailcompose.Editor` interface +
-`CatkinEditor` adapter exists specifically to babysit the
-straddle (compose holds a stable pointer that re-syncs the
-value-Update result back into a field after every `Update`).
+### `internal/ui/` all-value path `ui-all-value`
+Pass 27 (ADR-0212) converted `catkin.Model` to all-value and Pass
+28 (ADR-0213) deleted the `mailcompose.Editor` adapter. Every
+other UI subpackage still ships the pre-27 straddle: value
+`Update`/`View` for the Elm contract, but state mutates through
+pointer-receiver setters (`SetMessages`, `SetSize`, `SetLayout`,
+`ToggleFold`, `dispatchTriage`, `layout()`, …) that the parent
+calls directly. Surfaced by Audit B.1 (2026-05-12). The straddle
+works — it forecloses the reasoning gains that motivated ADR-0212
+(immutable snapshots, value diffs, no hidden aliasing) but it
+isn't a bug.
 
-Convert every pointer-mutator on `catkin.Model` (and `catkin.Buffer`)
-into a Msg type handled in `Update`. `SetStylesMsg`, `SetSizeMsg`,
-`SetValueMsg`, `SetTidyHighlightsMsg`, `RegisterAnnotatorMsg`,
-`FocusMsg`/`BlurMsg`, `SetUserWordlistPathMsg`. All-value
-throughout. Bubbles/v2/textarea is the upstream contagion vector
-— wrap it in a value-typed adapter inside catkin rather than
-inheriting its mutation shape.
+Convert one subpackage per follow-up pass. Order, highest mutation
+density first:
 
-Knock-on cleanups: `mailcompose.Editor` + `CatkinEditor` collapse
-(this subsumes item 1 of `overengineering-cleanup` — once catkin
-is pure-value, compose holds `catkin.Model` directly and the
-wrapper disappears). `compose.Model` and `wizard/section_signature`
-become straight Elm children. Test fakes simplify — no more
-stable-pointer dance.
+1. `internal/ui/messagelist/` — 22 pointer mutators on `*Model`,
+   most-touched after compose.
+2. `internal/ui/sidebar/` — 9 mutators on `*Model` plus `*Search`
+   mutators.
+3. `internal/ui/compose/` — entirely pointer-receivered, including
+   `Init`/`Update`/`View`. Largest subpackage; the conversion will
+   want its own ADR for the Msg vocabulary.
+4. `internal/ui/account/` — 10 pointer dispatch helpers; value
+   `Update`/`View`.
+5. `internal/ui/reader/` — value almost-everywhere; one
+   pointer-receiver `layout()`.
+6. `internal/ui/contacts/` — `*Popover`, `*List`, `*Sidebar`
+   mutators.
+7. `internal/ui/outbox/` — `SetSize`, `SetRows`.
+8. `internal/ui/wizard/` — every `*Section` type. Bootstrap-only
+   surface; lowest priority.
 
-This is the deepest structural fix on the roadmap; sequence it
-before any further compose feature work so new code lands on
-the conformant shape. ADR-sized — the Msg vocabulary and the
-upstream-textarea-adapter shape are the load-bearing decisions.
+Each conversion mirrors the catkin pattern: pointer setter →
+`SetFooMsg{...}` handled in `Update`. Where the parent currently
+calls `child.SetX(v)`, it returns a Cmd that emits the Msg, or
+the parent threads `v` through the `Update` delegation. The cost
+is parent-side refactoring more than child-side mechanical work
+— the parent currently relies on synchronous `SetX` calls to set
+state *before* the next render frame.
+
+This is structural cleanup, not a bug. Sequence between feature
+passes; not a gate on beta soak.
 
 Related: (none yet — file with `/log-issue` as passes are scoped)
 
@@ -160,6 +168,16 @@ Related: BACKLOG #20 (closed by ADR-0084 — superseded if upstream
 ever lands).
 
 ## Done
+
+### Catkin Elm conformance (all-value path) `catkin-all-value`
+Pass 27 (ADR-0212) landed the catkin all-value path: every pointer
+mutator on `catkin.Model` and `catkin.Buffer` became a value-
+returning `With*` setter, `Update` returns a fresh value, and the
+wrapped `textarea.Model` is sealed behind value-typed accessors.
+Pass 28 (ADR-0213) deleted the `mailcompose.Editor` interface and
+`CatkinEditor` adapter — `compose.Model` now embeds `catkin.Model`
+directly. Closed 2026-05-12 (Audit B.1 confirmed). The follow-on
+work for the rest of `internal/ui/` lives in `ui-all-value`.
 
 ### Bubbletea v2 alignment + showcase positioning `v2-showcase`
 Migrated poplar to charm.land/{bubbletea,lipgloss,bubbles}/v2 and

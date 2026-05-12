@@ -1,10 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 30 — Audit B.1 (Elm + bubbletea v2
-conformance). Pass 29 landed the `App.Update` decomposition
-(ADR-0214): per-domain `app_{chrome,outbox,compose,modals,
-contacts}.go`, chrome runs first in the dispatcher chain,
-`armToast` + `openNewCompose` unify duplicated call sites.
+**Current pass:** Pass 31 — Audit B.2 (general structural
+integrity). Pass 30 closed Audit B.1 (ADR-0215) with three
+inline fixes — wizard `writeConfig` as a Cmd, catkin
+`SetVirtualCursor(false)`, `WindowSizeMsg` forwards in
+messagelist + reader — and one ROADMAP project (`ui-all-value`,
+the eight-subpackage receiver-discipline remediation).
 **Beta soak deferred.** Pre-beta rules apply; soak entry gated
 on a full audit cycle returning no findings.
 
@@ -16,7 +17,7 @@ on a full audit cycle returning no findings.
 | 27 | Catkin Elm conformance — all-value path (ADR-0212) | done |
 | 28 | Compose Editor wrapper deletion (ADR-0213) | done |
 | 29 | `App.Update` decomposition (ADR-0214) | done |
-| 30 | **Audit B.1** — Elm + bubbletea v2 conformance | gate |
+| 30 | Audit B.1 — Elm + bubbletea v2 conformance (ADR-0215) | done |
 | 31 | **Audit B.2** — general structural integrity | gate |
 | 32 | v2 declarative View fields — ProgressBar + ReportFocus + KeyboardEnhancements | gated |
 | 33 | Mouse support (reader + attachments + scroll) | gated |
@@ -28,31 +29,31 @@ on a full audit cycle returning no findings.
 | v1.0.0 | Tag after soak settles | conditional |
 | post-1.0 | Neovim companion (#6), raw RFC822 (#21), beyond | future |
 
-### Next starter prompt (Pass 30)
+### Next starter prompt (Pass 31)
 
-> **Goal.** Audit B.1 — Elm architecture + bubbletea v2 conformance
-> across `internal/ui/`. Find divergences, report findings; fix
-> only the no-judgment-call ones inline.
+> **Goal.** Audit B.2 — general structural integrity across
+> `internal/ui/` after the `app.go` decomposition + Editor-
+> wrapper deletion. Find divergences on non-Elm dimensions
+> (file size, interface design, package layering); fix only
+> the no-judgment-call ones inline.
 >
-> **Scope.** Walk every `internal/ui/**/*.go` Update / View /
-> Cmd against the Elm rules in `elm-conventions` and the v2 idioms
-> in `docs/poplar/bubbletea-conventions.md` §10. Flag: state
-> mutation in View or Cmd closures, blocking I/O outside Cmds,
-> `len()` used as width on icon-bearing strings, parent-side
-> clipping, callback / parent-pointer back-channels, missing
-> `WindowSizeMsg` forwarding, raw `tea.KeyMsg` literals, v1-only
-> API leaks, manual chrome setup that should be declarative on
-> `tea.View`.
+> **Scope.** Walk against the focus list in
+> `docs/poplar/audit-plan.md` §"Phase B.2": `app.go`
+> decomposition regression (no `update<Screen>` >150 lines,
+> no back-channel coupling, dispatch exhaustive), file-size
+> budget (no `internal/ui/` file > ~600 lines without a named
+> reason), interface count after `Editor` deletion (any new
+> single-impl interfaces named with their seam), package-
+> boundary leaks (no subpackage imports `internal/ui`).
 >
 > **Settled (do not re-brainstorm):** Audit-only pass. Findings
-> classified as P0 (apply inline), P1 (BACKLOG), P2 (note in ADR
-> only).
+> classified as P0 (apply inline), P1 (BACKLOG/ROADMAP), P2
+> (note in ADR only). The `ui-all-value` ROADMAP project is
+> already booked; do not refile it as a B.2 finding.
 >
-> **Still open — brainstorm these:** None. Pure implementation
-> pass following `docs/poplar/audit-plan.md`.
+> **Still open — brainstorm these:** None.
 >
 > **Approach.** Write a findings doc at
-> `docs/superpowers/plans/2026-05-12-audit-b1.md`, classify, apply
-> P0s, file P1s in BACKLOG. Standard pass-end checklist applies;
-> UI work requires reading `docs/poplar/bubbletea-conventions.md`
-> and the §10 review checklist at pass-end.
+> `docs/superpowers/plans/2026-05-13-audit-b2.md`, classify,
+> apply P0s, file P1s in BACKLOG / ROADMAP. Standard pass-end
+> checklist applies.

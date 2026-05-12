@@ -19,7 +19,12 @@ type Buffer struct {
 	ta textarea.Model
 }
 
-func NewBuffer(ta textarea.Model) Buffer { return Buffer{ta: ta} }
+func NewBuffer(ta textarea.Model) Buffer {
+	// Catkin draws its own cursor block via insertCursorBlock; the wrapped
+	// textarea must not paint one into its own output.
+	ta.SetVirtualCursor(false)
+	return Buffer{ta: ta}
+}
 
 func (b Buffer) Update(msg tea.Msg) (Buffer, tea.Cmd) {
 	var cmd tea.Cmd

@@ -37,7 +37,20 @@ func (s *confirmSection) Name() string { return "confirm" }
 
 func (s *confirmSection) Init() tea.Cmd { return s.form.Init() }
 
+type writeConfigDoneMsg struct {
+	Path string
+	Err  error
+}
+
 func (s *confirmSection) Update(msg tea.Msg) (section, tea.Cmd) {
+	if done, ok := msg.(writeConfigDoneMsg); ok {
+		if done.Err != nil {
+			s.err = done.Err
+			return s, nil
+		}
+		s.written = done.Path
+		return s, func() tea.Msg { return FinishMsg{Path: done.Path} }
+	}
 	updated, cmd := s.form.Update(msg)
 	if f, ok := updated.(*huh.Form); ok {
 		s.form = f
@@ -58,13 +71,11 @@ func (s *confirmSection) Update(msg tea.Msg) (section, tea.Cmd) {
 		s.written = "(repair: caller will splice and write)"
 		return s, func() tea.Msg { return FinishMsg{} }
 	}
-	path, err := writeConfig(s.parent.State)
-	if err != nil {
-		s.err = err
-		return s, nil
+	state := s.parent.State
+	return s, func() tea.Msg {
+		path, err := writeConfig(state)
+		return writeConfigDoneMsg{Path: path, Err: err}
 	}
-	s.written = path
-	return s, func() tea.Msg { return FinishMsg{Path: path} }
 }
 
 func (s *confirmSection) View() string {

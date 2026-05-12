@@ -188,19 +188,22 @@ func (m *Model) SetKeyMap(km KeyMap) { m.keys = km }
 // always nil. The signature stays Cmd-shaped for forward
 // compatibility.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return m, nil
-	}
-	switch {
-	case key.Matches(keyMsg, m.keys.Down):
-		m.list.CursorDown()
-	case key.Matches(keyMsg, m.keys.Up):
-		m.list.CursorUp()
-	case key.Matches(keyMsg, m.keys.Top):
-		m.list.GoToStart()
-	case key.Matches(keyMsg, m.keys.Bottom):
-		m.list.GoToEnd()
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
+	case tea.KeyPressMsg:
+		switch {
+		case key.Matches(msg, m.keys.Down):
+			m.list.CursorDown()
+		case key.Matches(msg, m.keys.Up):
+			m.list.CursorUp()
+		case key.Matches(msg, m.keys.Top):
+			m.list.GoToStart()
+		case key.Matches(msg, m.keys.Bottom):
+			m.list.GoToEnd()
+		}
 	}
 	return m, nil
 }
