@@ -41,20 +41,20 @@ fi
 # per-run timing variance. Raise a floor only by writing new tests
 # that lift the observed number — never by closing the buffer.
 #
-# Baseline run 2026-05-16 (Pass 40.3, ADR-0234):
-#   mailauth     76.00%   filter     82.14%
-#   content      78.75%   mail       69.23%
-#   cache        77.54%   tidytext   79.07%
-#   mailcompose  83.76%   config     83.93%
+# Baselines (per-package observed efficacy, floor = observed − 5pp):
+#   mailauth     76.00% (Pass 40.3)   filter     82.14% (Pass 40.3)
+#   content      78.75% (Pass 40.3)   mail       94.44% (Pass 40.4)
+#   cache        77.54% (Pass 40.3)   tidytext   79.07% (Pass 40.3)
+#   mailcompose  83.76% (Pass 40.3)   config     83.93% (Pass 40.3)
 #
-# mail at 69% is the queue: classifyErr sentinel routing carries
-# the most surviving mutants. Lifting it past 80% is a follow-up
-# pass; the 64% floor is the no-regression line, not a target.
+# mail's lone surviving mutant (mock.go:117 `end > total` ↔
+# `end >= total`) is the documented equivalent mutant from
+# ADR-0235 — cannot be killed without rewriting the clamp.
 declare -A PKGS=(
     [internal/mailauth]=71
     [internal/content]=73
     [internal/filter]=77
-    [internal/mail]=64
+    [internal/mail]=89
     [internal/cache]=72
     [internal/tidytext]=74
     [internal/mailcompose]=78

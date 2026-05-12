@@ -39,3 +39,29 @@ func TestProbeResult_NotOKOnErrAlone(t *testing.T) {
 		t.Fatalf("OK() = true, want false")
 	}
 }
+
+func TestIsSelfHosted(t *testing.T) {
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"mail.local", true},
+		{"box.home.local", true},
+		{"192.168.1.10", true},
+		{"10.0.0.1", true},
+		{"172.16.0.1", true},
+		{"127.0.0.1", true},
+		{"::1", true},
+		{"fd00::1", true},
+		{"8.8.8.8", false},
+		{"imap.fastmail.com", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		t.Run(c.host, func(t *testing.T) {
+			if got := IsSelfHosted(c.host); got != c.want {
+				t.Errorf("IsSelfHosted(%q) = %v, want %v", c.host, got, c.want)
+			}
+		})
+	}
+}

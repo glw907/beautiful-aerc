@@ -1,14 +1,14 @@
 # Poplar Status
 
-**Current pass:** Pass 40.3 calibrated `make check-deep` against
-the post-40.1 baseline and landed `scripts/skipcheck` (ADR-0234,
-closing BACKLOG #59). Per-package efficacy floors set to observed
-minus a 5pp buffer: mailauth 71, content 73, filter 77, mail 64,
-cache 72, tidytext 74, mailcompose 78, config 78. `internal/mail`
-at 69% baseline is the queue item — `classifyErr` sentinel routing
-carries the most surviving mutants. AST skipcheck wired into
-`make check` between modern-go-check and test; tree clean (seven
-existing skips all guarded or build-tag-fenced).
+**Current pass:** Pass 40.4 lifted `internal/mail` mutation
+efficacy from 69.23% to 94.44% (ADR-0235). New tests:
+`TestIsConnectionDead`, `TestConfigKey`, `TestClassifyDisposition`,
+`TestIsSelfHosted`. Extended `TestMockBackend_QueryFolder` with an
+`at end` boundary case + capacity assertion, and added
+`TestMockBackend_FetchBody_SeededUIDs` to cover `mockBodies`.
+`scripts/check-deep.sh` floor moved 64 → 89. Two equivalent
+mutants (`mock.go:117` clamp, `probe.go:28` `iota+1`) documented
+and accepted rather than chased — this codifies the policy.
 
 Pass 35.1 still pending Gmail/Outlook creds.
 
@@ -29,30 +29,30 @@ Pass 35.1 still pending Gmail/Outlook creds.
 | 40.1 | Audit G remediation — 21 P1 items (ADR-0233) | done |
 | 40.2 | Mutation-testing scaffolding (ADR-0232) | done |
 | 40.3 | check-deep calibration + AST skipcheck (ADR-0234) | done |
-| 40.4 | Lift `internal/mail` efficacy past 80% | next |
+| 40.4 | `internal/mail` mutation lift to 94.44% (ADR-0235) | done |
+| 40.5 | Next queue: `internal/mailauth` (76% → 80%+) | next |
 | 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 40.4)
+### Next starter prompt (Pass 40.5)
 
-> **Goal.** Lift `internal/mail`'s mutation efficacy past 80% by
-> writing tests around the surviving mutants — `classifyErr`
-> sentinel routing is the dominant cluster.
+> **Goal.** Lift `internal/mailauth` mutation efficacy past 80%
+> by writing tests around the surviving and uncovered mutants
+> surfaced by `make check-deep`.
 >
-> **Scope.** `internal/mail/*_test.go`; the 64% threshold in
+> **Scope.** `internal/mailauth/*_test.go`; the 71% threshold in
 > `scripts/check-deep.sh` gets raised to observed − 5pp at
-> pass-end. Out: touching the other seven packages' floors —
-> each lift earns its own pass when there's enough survivor
-> signal to justify the work.
+> pass-end. Out: the other six packages' floors.
 >
-> **Settled.** ADR-0234 calibration ratios stand. Pre-beta
-> rules apply.
+> **Settled.** ADRs 0232/0234/0235 establish the calibration
+> shape: per-package observed − 5pp floors, document equivalent
+> mutants rather than chase them.
 >
 > **Open.** None — survivors are mechanical from
 > `make check-deep` output.
 >
-> **Approach.** Run `make check-deep` against `./internal/mail`
-> only, list survivors, write the missing assertions, plan doc
-> at `docs/superpowers/plans/2026-05-XX-mail-mutation-lift.md`,
+> **Approach.** Run gremlins against `./internal/mailauth` only,
+> classify survivors, write the missing assertions, plan doc at
+> `docs/superpowers/plans/2026-05-XX-mailauth-mutation-lift.md`,
 > standard pass-end checklist.

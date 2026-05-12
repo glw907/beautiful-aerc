@@ -181,3 +181,29 @@ func TestClassifyPreservesOrder(t *testing.T) {
 		t.Errorf("got[2] canonical = %q, want Trash", got[2].Canonical)
 	}
 }
+
+func TestConfigKey(t *testing.T) {
+	cases := []struct {
+		name string
+		cf   ClassifiedFolder
+		want string
+	}{
+		{
+			"canonical wins",
+			ClassifiedFolder{Folder: Folder{Name: "[Gmail]/All Mail"}, Canonical: "Archive"},
+			"Archive",
+		},
+		{
+			"custom falls back to provider name",
+			ClassifiedFolder{Folder: Folder{Name: "Lists/golang"}, Canonical: ""},
+			"Lists/golang",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.cf.ConfigKey(); got != c.want {
+				t.Errorf("ConfigKey() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

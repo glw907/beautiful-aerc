@@ -39,3 +39,26 @@ func TestParseDisposition(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyDisposition(t *testing.T) {
+	cases := []struct {
+		name      string
+		raw       string
+		contentID string
+		want      Disposition
+	}{
+		{"explicit attachment", "attachment", "", DispAttachment},
+		{"explicit inline", "inline", "", DispInline},
+		{"raw wins over cid", "attachment", "<cid@x>", DispAttachment},
+		{"unknown raw + cid → inline", "", "<cid@x>", DispInline},
+		{"unknown raw + blank cid → attachment", "", "   ", DispAttachment},
+		{"unknown raw + no cid → attachment", "bogus", "", DispAttachment},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ClassifyDisposition(c.raw, c.contentID); got != c.want {
+				t.Errorf("ClassifyDisposition(%q, %q) = %v, want %v", c.raw, c.contentID, got, c.want)
+			}
+		})
+	}
+}

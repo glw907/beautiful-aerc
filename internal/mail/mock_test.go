@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -97,11 +98,14 @@ func TestMockBackend_QueryFolder(t *testing.T) {
 		name          string
 		offset, limit int
 		wantLen       int
+		wantNil       bool // result slice must be nil (early-return path)
+		wantCap       int  // -1 = don't check
 	}{
-		{"first window", 0, 5, 5},
-		{"past end", total + 10, 5, 0},
-		{"clamps end", total - 2, 10, 2},
-		{"zero limit", 0, 0, 0},
+		{"first window", 0, 5, 5, false, 5},
+		{"past end", total + 10, 5, 0, true, -1},
+		{"at end", total, 5, 0, true, -1},
+		{"clamps end", total - 2, 10, 2, false, 2},
+		{"zero limit", 0, 0, 0, false, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,8 +119,58 @@ func TestMockBackend_QueryFolder(t *testing.T) {
 			if len(uids) != tc.wantLen {
 				t.Errorf("len(uids) = %d, want %d", len(uids), tc.wantLen)
 			}
+			if tc.wantNil && uids != nil {
+				t.Errorf("uids = %v, want nil (early-return path)", uids)
+			}
+			if !tc.wantNil && uids == nil {
+				t.Errorf("uids = nil, want non-nil slice")
+			}
+			if tc.wantCap >= 0 && cap(uids) != tc.wantCap {
+				t.Errorf("cap(uids) = %d, want %d", cap(uids), tc.wantCap)
+			}
 		})
 	}
+}
+
+func TestMockBackend_FetchBody_SeededUIDs(t *testing.T) {
+	b := NewMockBackend()
+	// Each UID in the seeded mockBodies table has a distinctive substring
+	// near every ARITHMETIC_BASE mutation site so a corruption shifts
+	// the substring out of the body.
+	cases := map[UID]string{
+		"1": "Q2 launch",
+		"2": "/v2/messages",
+		"3": "lunch tomorrow",
+		"4": "planning meeting",
+		"5": "invoice_id",
+		"6": "Cougar Mountain",
+		"7": "Acme Cloud Pro",
+		"8": "SessionGuard",
+	}
+	for uid, marker := range cases {
+		t.Run(string(uid), func(t *testing.T) {
+			body, err := b.FetchBody(uid)
+			if err != nil {
+				t.Fatalf("FetchBody(%s): %v", uid, err)
+			}
+			if len(body) == 0 {
+				t.Fatalf("FetchBody(%s) returned empty body", uid)
+			}
+			if !strings.Contains(string(body), marker) {
+				t.Errorf("FetchBody(%s) missing marker %q", uid, marker)
+			}
+		})
+	}
+
+	t.Run("unknown uid returns synthetic body", func(t *testing.T) {
+		body, err := b.FetchBody("nope")
+		if err != nil {
+			t.Fatalf("FetchBody(nope): %v", err)
+		}
+		if !strings.Contains(string(body), "Mock body for message nope") {
+			t.Errorf("synthetic fallback missing UID echo: %q", body)
+		}
+	})
 }
 
 func TestMockBackend_Destroy_RecordsAndRemoves(t *testing.T) {
