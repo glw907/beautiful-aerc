@@ -84,6 +84,7 @@ type App struct {
 	opener             URLOpener        // test seam, defaults to xdgOpenURL
 
 	focused      bool
+	kbdCaps      tea.KeyboardEnhancementsMsg
 	newMailToast bool // mirrors [ui] new-mail-toast; true by default
 
 	// pendingNewMail accumulates arrivals during the 1s coalesce window;
@@ -132,6 +133,10 @@ func (m App) WithOpener(opener URLOpener) App {
 	m.opener = opener
 	return m
 }
+
+// KbdCaps returns the negotiated keyboard-enhancement capabilities.
+// The zero value (no fields set) means the protocol isn't active.
+func (m App) KbdCaps() tea.KeyboardEnhancementsMsg { return m.kbdCaps }
 
 // NewApp creates the root model. Folder loading runs in Init's Cmd chain,
 // not synchronously.
@@ -273,6 +278,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 	case tea.BlurMsg:
 		m.focused = false
+		return m, nil
+	case tea.KeyboardEnhancementsMsg:
+		m.kbdCaps = msg
 		return m, nil
 	}
 	// Chrome runs first: backendUpdateMsg and account.CacheEventMsg

@@ -102,6 +102,7 @@ func (m App) view(content string) tea.View {
 	v.WindowTitle = m.windowTitle()
 	v.ProgressBar = m.frameProgressBar()
 	v.ReportFocus = true
+	v.KeyboardEnhancements.ReportEventTypes = true
 	return v
 }
 

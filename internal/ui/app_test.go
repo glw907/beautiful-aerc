@@ -1834,3 +1834,16 @@ func TestNewMailToast_FocusClearsNewMailToast(t *testing.T) {
 		t.Fatalf("FocusMsg should clear new-mail toast; count = %d", app.toast.newMailCount)
 	}
 }
+
+func TestKeyboardEnhancementsMsgStored(t *testing.T) {
+	m := newLoadedApp(t, 120, 40)
+	msg := tea.KeyboardEnhancementsMsg{Flags: 3} // KittyDisambiguateEscapeCodes | KittyReportEventTypes
+
+	m, _ = m.Update(msg)
+	if !m.kbdCaps.SupportsKeyDisambiguation() {
+		t.Fatalf("SupportsKeyDisambiguation not stored")
+	}
+	if !m.kbdCaps.SupportsEventTypes() {
+		t.Fatalf("SupportsEventTypes not stored")
+	}
+}
