@@ -281,6 +281,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m, nil
 	case tea.KeyboardEnhancementsMsg:
 		m.kbdCaps = msg
+		if m.helpOpen {
+			m.help = m.help.WithKbdCaps(msg)
+		}
 		return m, nil
 	}
 	// Chrome runs first: backendUpdateMsg and account.CacheEventMsg

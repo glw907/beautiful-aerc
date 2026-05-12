@@ -4,7 +4,9 @@ import (
 	"slices"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/catkin"
 )
 
 // FooterContext picks which keybinding set the footer displays.
@@ -119,7 +121,7 @@ func contactsFooterGroups() [][]footerHint {
 	}
 }
 
-func composeFooterGroups(hasSig, isFocusFrom, tidyVisible bool) [][]footerHint {
+func composeFooterGroups(hasSig, isFocusFrom, isFocusBody, tidyVisible bool, caps tea.KeyboardEnhancementsMsg) [][]footerHint {
 	core := []footerHint{
 		hint("Ctrl+X", "send", 0),
 		hint("Ctrl+C", "cancel", 0),
@@ -139,7 +141,25 @@ func composeFooterGroups(hasSig, isFocusFrom, tidyVisible bool) [][]footerHint {
 			hint("Space/←→", "identity", 6),
 		})
 	}
+	if isFocusBody {
+		groups = append(groups, chordFooterHints(caps))
+	}
 	return groups
+}
+
+// chordFooterHints builds the Markdown-chord hint group for the compose footer.
+// When Kitty disambiguation is active the full chord list renders; otherwise a
+// plain-markdown nudge appears so users know formatting is still possible.
+func chordFooterHints(caps tea.KeyboardEnhancementsMsg) []footerHint {
+	if !caps.SupportsKeyDisambiguation() {
+		return []footerHint{hint("**bold** *italic* [link](url)", "markdown", 7)}
+	}
+	var hints []footerHint
+	for _, gb := range catkin.ChordSet() {
+		h := gb.Binding.Help()
+		hints = append(hints, hint(h.Key, h.Desc, 7))
+	}
+	return hints
 }
 
 // Footer renders context-appropriate keybinding hints with group

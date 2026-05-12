@@ -177,10 +177,13 @@ func (m App) updateGlobalKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 	case key.Matches(msg, m.keys.Help):
 		m.helpOpen = true
 		ctx := helppopover.Account
-		if m.viewerOpen {
+		switch {
+		case m.viewerOpen:
 			ctx = helppopover.Viewer
+		case m.compose != nil:
+			ctx = helppopover.Compose
 		}
-		m.help = helppopover.New(helppopover.NewStyles(m.theme), ctx).SetSize(m.width, m.height)
+		m.help = helppopover.New(helppopover.NewStyles(m.theme), ctx).WithKbdCaps(m.kbdCaps).SetSize(m.width, m.height)
 		return m, nil
 	case key.Matches(msg, m.keys.SenderPopover):
 		if !m.viewerOpen {

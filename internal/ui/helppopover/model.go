@@ -3,7 +3,9 @@ package helppopover
 import (
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/catkin"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -23,6 +25,7 @@ type Context int
 const (
 	Account Context = iota
 	Viewer
+	Compose
 )
 
 // cache memoises the Box output. Heap-allocated so the pointer survives
@@ -31,6 +34,7 @@ const (
 type cache struct {
 	dirty     bool
 	context   Context
+	kbdFlags  int
 	w, h      int
 	box       string
 	tooNarrow string
@@ -41,6 +45,7 @@ type cache struct {
 type Model struct {
 	styles  Styles
 	context Context
+	kbdCaps tea.KeyboardEnhancementsMsg
 	width   int
 	height  int
 	c       *cache
@@ -57,6 +62,15 @@ func New(styles Styles, context Context) Model {
 func (h Model) SetSize(width, height int) Model {
 	h.width = width
 	h.height = height
+	return h
+}
+
+// WithKbdCaps records the negotiated keyboard-enhancement capabilities so
+// the popover can hide chord rows that require the Kitty keyboard protocol
+// when it isn't active.
+func (h Model) WithKbdCaps(caps tea.KeyboardEnhancementsMsg) Model {
+	h.kbdCaps = caps
+	h.c.dirty = true
 	return h
 }
 
@@ -189,7 +203,7 @@ var viewerBottomHints = []bindingRow{
 // call always rebuilds.
 func (h Model) Box(width, height int) (box string, tooNarrow string) {
 	c := h.c
-	if !c.dirty && c.context == h.context && c.w == width && c.h == height {
+	if !c.dirty && c.context == h.context && c.kbdFlags == h.kbdCaps.Flags && c.w == width && c.h == height {
 		return c.box, c.tooNarrow
 	}
 
@@ -200,6 +214,10 @@ func (h Model) Box(width, height int) (box string, tooNarrow string) {
 		title = "Message Viewer"
 		body = renderViewerLayout(h.styles, viewerGroups)
 		bottomHints = viewerBottomHints
+	case Compose:
+		title = "Compose"
+		body = renderComposeLayout(h.styles, h.kbdCaps)
+		bottomHints = composeBottomHints
 	default:
 		title = "Message List"
 		body = renderAccountLayout(h.styles, accountGroups)
@@ -229,6 +247,7 @@ func (h Model) Box(width, height int) (box string, tooNarrow string) {
 		c.tooNarrow = ""
 	}
 	c.context = h.context
+	c.kbdFlags = h.kbdCaps.Flags
 	c.w = width
 	c.h = height
 	c.dirty = false
@@ -376,4 +395,63 @@ func renderHintLine(styles Styles, hints []bindingRow) string {
 		parts = append(parts, renderKeyDesc(styles, h.key, h.desc, h.wired))
 	}
 	return strings.Join(parts, "    ")
+}
+
+var composeGroups = []bindingGroup{
+	{
+		title: "Navigate",
+		rows: []bindingRow{
+			{"Tab", "next field", true},
+			{"Esc", "toggle body", true},
+		},
+	},
+	{
+		title: "Actions",
+		rows: []bindingRow{
+			{"^X", "send", true},
+			{"^C", "cancel", true},
+			{"^L", "later", true},
+			{"^O", "attach", true},
+			{"^G", "sig", true},
+			{"^T", "tidy", true},
+		},
+	},
+}
+
+var composeBottomHints = []bindingRow{
+	{"^X", "send", true},
+	{"^C", "cancel", true},
+	{"?", "close", true},
+}
+
+func renderComposeLayout(styles Styles, caps tea.KeyboardEnhancementsMsg) string {
+	chordRows := chordBindingRows(caps)
+	groups := composeGroups
+	if len(chordRows) > 0 {
+		groups = append(groups, bindingGroup{title: "Markdown chords", rows: chordRows})
+	}
+	return joinColumnsRow(renderGap(),
+		renderGroup(styles, groups[0]),
+		renderGroup(styles, groups[1]),
+		func() string {
+			if len(groups) > 2 {
+				return renderGroup(styles, groups[2])
+			}
+			return ""
+		}(),
+	)
+}
+
+// chordBindingRows builds bindingRow entries from catkin.ChordSet, omitting
+// entries tagged RequiresKittyKbd when the Kitty keyboard protocol isn't active.
+func chordBindingRows(caps tea.KeyboardEnhancementsMsg) []bindingRow {
+	var rows []bindingRow
+	for _, gb := range catkin.ChordSet() {
+		if gb.RequiresKittyKbd && !caps.SupportsKeyDisambiguation() {
+			continue
+		}
+		h := gb.Binding.Help()
+		rows = append(rows, bindingRow{key: h.Key, desc: h.Desc, wired: true})
+	}
+	return rows
 }

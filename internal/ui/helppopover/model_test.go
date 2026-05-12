@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -232,6 +233,24 @@ func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
 	view := stripANSI(New(styles, Account).SetSize(120, 30).View())
 	if !strings.Contains(view, "Reply") {
 		t.Error("account popover: Reply group heading not found")
+	}
+}
+
+func TestPopoverFiltersGatedBindings(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+
+	var caps tea.KeyboardEnhancementsMsg // protocol absent (Flags == 0)
+	m := New(styles, Compose).WithKbdCaps(caps).SetSize(80, 40)
+	out := stripANSI(m.View())
+	if strings.Contains(out, "^I") || strings.Contains(out, "italic") {
+		t.Fatalf("gated chord rendered with protocol absent:\n%s", out)
+	}
+
+	caps.Flags = 1 // kittyDisambiguateEscapeCodes bit
+	m = New(styles, Compose).WithKbdCaps(caps).SetSize(80, 40)
+	out = stripANSI(m.View())
+	if !strings.Contains(out, "italic") {
+		t.Fatalf("gated chord missing with protocol active:\n%s", out)
 	}
 }
 

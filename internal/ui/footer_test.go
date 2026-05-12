@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -238,44 +239,69 @@ func TestFooterThreadsGroup(t *testing.T) {
 }
 
 func TestComposeFooterAlwaysIncludesAttachHint(t *testing.T) {
-	g := composeFooterGroups(false, false, false)
+	g := composeFooterGroups(false, false, false, false, tea.KeyboardEnhancementsMsg{})
 	if !containsHint(g, "Ctrl+O", "attach") {
 		t.Errorf("compose footer missing Ctrl+O attach:\n%v", g)
 	}
 }
 
 func TestComposeFooterIncludesSigHint(t *testing.T) {
-	g := composeFooterGroups(true, false, false)
+	g := composeFooterGroups(true, false, false, false, tea.KeyboardEnhancementsMsg{})
 	if !containsHint(g, "Ctrl+G", "sig") {
 		t.Errorf("compose footer missing Ctrl+G sig:\n%v", g)
 	}
 }
 
 func TestComposeFooterOmitsSigWhenNoSigs(t *testing.T) {
-	g := composeFooterGroups(false, false, false)
+	g := composeFooterGroups(false, false, false, false, tea.KeyboardEnhancementsMsg{})
 	if containsHint(g, "Ctrl+G", "sig") {
 		t.Errorf("compose footer included Ctrl+G sig with no sigs:\n%v", g)
 	}
 }
 
 func TestComposeFooterAddsFromHintsOnFocusFrom(t *testing.T) {
-	g := composeFooterGroups(true, true, false)
+	g := composeFooterGroups(true, true, false, false, tea.KeyboardEnhancementsMsg{})
 	if !containsHint(g, "Space/←→", "identity") {
 		t.Errorf("focusFrom footer missing identity hint:\n%v", g)
 	}
 }
 
 func TestComposeFooterIncludesTidyHintWhenVisible(t *testing.T) {
-	g := composeFooterGroups(false, false, true)
+	g := composeFooterGroups(false, false, false, true, tea.KeyboardEnhancementsMsg{})
 	if !containsHint(g, "Ctrl+T", "tidy") {
 		t.Errorf("compose footer missing Ctrl+T tidy:\n%v", g)
 	}
 }
 
 func TestComposeFooterOmitsTidyHintWhenInert(t *testing.T) {
-	g := composeFooterGroups(false, false, false)
+	g := composeFooterGroups(false, false, false, false, tea.KeyboardEnhancementsMsg{})
 	if containsHint(g, "Ctrl+T", "tidy") {
 		t.Errorf("compose footer included Ctrl+T tidy when inert:\n%v", g)
+	}
+}
+
+func TestComposeFooterChordHintBodyFocus(t *testing.T) {
+	// No chord hints when body is not focused.
+	g := composeFooterGroups(false, false, false, false, tea.KeyboardEnhancementsMsg{})
+	if containsHint(g, "**bold** *italic* [link](url)", "markdown") {
+		t.Error("chord hint rendered when body not focused")
+	}
+
+	// Plain markdown nudge when body focused but Kitty protocol absent.
+	g = composeFooterGroups(false, false, true, false, tea.KeyboardEnhancementsMsg{})
+	if !containsHint(g, "**bold** *italic* [link](url)", "markdown") {
+		t.Error("plain markdown hint missing when body focused, no Kitty")
+	}
+
+	// Chord list when body focused and Kitty protocol active.
+	var caps tea.KeyboardEnhancementsMsg
+	caps.Flags = 1 // kittyDisambiguateEscapeCodes bit
+	g = composeFooterGroups(false, false, true, false, caps)
+	if !containsHint(g, "^I", "italic") {
+		t.Error("italic chord missing in footer with Kitty protocol active")
+	}
+	if containsHint(g, "**bold** *italic* [link](url)", "markdown") {
+		t.Error("plain markdown nudge should not appear when Kitty protocol active")
 	}
 }
 
