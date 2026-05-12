@@ -10,8 +10,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
 	"github.com/glw907/poplar/internal/mail"
+	"github.com/glw907/poplar/internal/mailauth"
 	"github.com/glw907/poplar/internal/ui/uicore"
 	wizdomain "github.com/glw907/poplar/internal/wizard"
 )
@@ -43,12 +45,37 @@ func (p *probeScreen) Init() tea.Cmd {
 	return tea.Batch(p.spinner.Tick, p.runProbe())
 }
 
+func (p *probeScreen) oauthClient() *mailauth.Client {
+	state := p.parent.State
+	if !state.OAuthDone {
+		return nil
+	}
+	preset := config.Providers[state.Preset]
+	if preset.OAuth == nil {
+		return nil
+	}
+	slug := cache.Slugify(state.Email)
+	store, backend, err := mailauth.OpenStore(slug, oauthFallbackDir())
+	if err != nil {
+		return nil
+	}
+	cfg := mailauth.Config{
+		ClientID:     state.OAuthCID,
+		ClientSecret: state.OAuthSecret,
+		AuthURL:      preset.OAuth.AuthURL,
+		TokenURL:     preset.OAuth.TokenURL,
+		Scopes:       preset.OAuth.Scopes,
+	}
+	return mailauth.NewClient(cfg, store, slug, backend)
+}
+
 func (p *probeScreen) runProbe() tea.Cmd {
 	cfg := p.cfg
+	oauthCli := p.oauthClient()
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		return ProbeDoneMsg{Result: wizdomain.Probe(ctx, cfg, nil)}
+		return ProbeDoneMsg{Result: wizdomain.Probe(ctx, cfg, oauthCli)}
 	}
 }
 
