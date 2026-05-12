@@ -169,10 +169,6 @@ code paths whose failure modes the project has not yet seen?
   (confirm > conflict > outbox > help > linkpicker > attachpicker >
   movepicker > form > popover), wheel-scroll routing to the
   wrong viewport when a modal is open.
-- `v.ReportFocus` resume path. Pausing JMAP push / IMAP IDLE on
-  blur is correct; resume-on-focus must not double-pump or fire
-  stale commands. Read the resume path against the IDLE
-  re-entry sequence.
 - `v.ProgressBar` lifecycle. Set/unset is per-frame. A long-
   running op that completes mid-frame must reach the next
   frame's `ProgressBar = nil`. Orphaned terminal-title bars
