@@ -450,3 +450,27 @@ oxford_comma = "yes"
 		t.Error("LoadUI accepted bad oxford_comma, want error")
 	}
 }
+
+func TestLoadUI_NewMailToast(t *testing.T) {
+	cases := []struct {
+		toml string
+		want bool
+	}{
+		{"", true},
+		{"[ui]\n", true},
+		{"[ui]\nnew-mail-toast = true\n", true},
+		{"[ui]\nnew-mail-toast = false\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.toml, func(t *testing.T) {
+			path := writeTempUI(t, tc.toml)
+			cfg, err := LoadUI(path)
+			if err != nil {
+				t.Fatalf("LoadUI: %v", err)
+			}
+			if cfg.NewMailToast != tc.want {
+				t.Fatalf("NewMailToast = %v, want %v", cfg.NewMailToast, tc.want)
+			}
+		})
+	}
+}

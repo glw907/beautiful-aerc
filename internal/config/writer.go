@@ -258,6 +258,9 @@ func renderUIBlock(ui UIConfig) string {
 	if ui.Threading != d.Threading {
 		rows = append(rows, entry{"threading", boolStr(ui.Threading)})
 	}
+	if !ui.NewMailToast {
+		rows = append(rows, entry{"new-mail-toast", "false"})
+	}
 	if ui.Icons != "" && ui.Icons != d.Icons {
 		rows = append(rows, entry{"icons", quoted(ui.Icons)})
 	}

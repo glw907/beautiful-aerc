@@ -1762,3 +1762,75 @@ func TestFocusBlurTogglesAppFocused(t *testing.T) {
 		t.Fatalf("after Focus: focused = false, want true")
 	}
 }
+
+func TestNewMailToast_GatedOnFocusAndConfig(t *testing.T) {
+	mkUpd := func() backendUpdateMsg {
+		return backendUpdateMsg{update: mail.Update{
+			Type:         mail.UpdateNewMail,
+			Folder:       "Inbox",
+			NewArrivals:  1,
+			LatestSender: "Alice",
+		}}
+	}
+
+	t.Run("focused: no toast", func(t *testing.T) {
+		app := newLoadedApp(t, 120, 40)
+		app.focused = true
+		app.newMailToast = true
+		app, _ = app.Update(mkUpd())
+		if app.toast.newMailCount != 0 {
+			t.Fatalf("focused should not toast: got count = %d", app.toast.newMailCount)
+		}
+	})
+
+	t.Run("blurred + cfg off: no toast", func(t *testing.T) {
+		app := newLoadedApp(t, 120, 40)
+		app.focused = false
+		app.newMailToast = false
+		app, _ = app.Update(mkUpd())
+		if app.toast.newMailCount != 0 {
+			t.Fatalf("cfg off should not toast: got count = %d", app.toast.newMailCount)
+		}
+	})
+}
+
+func TestNewMailToast_CoalesceCollapses(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app.focused = false
+	app.newMailToast = true
+
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:         mail.UpdateNewMail,
+		Folder:       "Inbox",
+		NewArrivals:  1,
+		LatestSender: "Alice",
+	}})
+	app, _ = app.Update(backendUpdateMsg{update: mail.Update{
+		Type:         mail.UpdateNewMail,
+		Folder:       "Inbox",
+		NewArrivals:  1,
+		LatestSender: "Bob",
+	}})
+	app, _ = app.Update(coalesceTimerMsg{})
+
+	if got := app.toast.newMailCount; got != 2 {
+		t.Fatalf("count = %d, want 2", got)
+	}
+	if app.toast.newMailSender != "" || app.toast.newMailFolder != "Inbox" {
+		t.Fatalf("mixed senders should fall back to folder; got sender=%q folder=%q",
+			app.toast.newMailSender, app.toast.newMailFolder)
+	}
+}
+
+func TestNewMailToast_FocusClearsNewMailToast(t *testing.T) {
+	app := newLoadedApp(t, 120, 40)
+	app.focused = false
+	app.newMailToast = true
+	// Arm a new-mail toast directly.
+	app.toast = pendingAction{newMailCount: 3, newMailFolder: "Inbox"}
+
+	app, _ = app.Update(tea.FocusMsg{})
+	if app.toast.newMailCount != 0 {
+		t.Fatalf("FocusMsg should clear new-mail toast; count = %d", app.toast.newMailCount)
+	}
+}

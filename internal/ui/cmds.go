@@ -675,6 +675,15 @@ func queueContactDeleteCmd(c *cache.Account, uid string) tea.Cmd {
 	}
 }
 
+// coalesceTimerMsg fires 1s after the first arrival in a coalesce
+// window so any pending new-mail toast can render with the accumulated
+// count.
+type coalesceTimerMsg struct{}
+
+func coalesceNewMailCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return coalesceTimerMsg{} })
+}
+
 // noticeExpireMsg fires when a transient notice's window elapses.
 // The handler still gates on m.lastNoticeDeadline so a stale tick
 // from a superseded notice can't clear a fresh one.

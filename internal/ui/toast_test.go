@@ -101,3 +101,30 @@ func TestRenderToast_EmptyOpHasNoUndoHint(t *testing.T) {
 		t.Errorf("expected count in toast; got %q", out)
 	}
 }
+
+func TestRenderToast_NewMail(t *testing.T) {
+	th := theme.Themes[theme.DefaultThemeName]
+	styles := NewStyles(th)
+
+	t.Run("single sender", func(t *testing.T) {
+		p := pendingAction{
+			newMailCount:  1,
+			newMailSender: "Alice",
+		}
+		got := renderToast(p, 80, styles)
+		if !strings.Contains(got, "1 new from Alice") {
+			t.Fatalf("got %q, want substring %q", got, "1 new from Alice")
+		}
+	})
+
+	t.Run("mixed senders", func(t *testing.T) {
+		p := pendingAction{
+			newMailCount:  3,
+			newMailFolder: "Inbox",
+		}
+		got := renderToast(p, 80, styles)
+		if !strings.Contains(got, "3 new in Inbox") {
+			t.Fatalf("got %q, want substring %q", got, "3 new in Inbox")
+		}
+	})
+}

@@ -46,17 +46,30 @@ type pendingAction struct {
 	// populated only when op == opSendUndo
 	sendOpIDs []int64
 	sendDraft mailcompose.Draft
+
+	// populated for new-mail toasts (op is opNone when these are set)
+	newMailCount  int
+	newMailSender string // set when all arrivals share one sender
+	newMailFolder string // set when senders are mixed
 }
 
-// IsZero reports whether p represents no active toast. Every active
-// pending action has op set, so a single check suffices.
-func (p pendingAction) IsZero() bool { return p.op == opNone }
+// IsZero reports whether p represents no active toast.
+func (p pendingAction) IsZero() bool { return p.op == opNone && p.newMailCount == 0 }
 
 // renderToast produces the one-row toast string, "" for the zero value.
 // Truncated with ellipsis to fit width.
 func renderToast(p pendingAction, width int, styles Styles) string {
 	if p.IsZero() {
 		return ""
+	}
+	if p.newMailCount > 0 {
+		var body string
+		if p.newMailSender != "" {
+			body = fmt.Sprintf(" · %d new from %s ·", p.newMailCount, p.newMailSender)
+		} else {
+			body = fmt.Sprintf(" · %d new in %s ·", p.newMailCount, p.newMailFolder)
+		}
+		return styles.Toast.Render(uicore.TruncateToWidth(body, width))
 	}
 	verb := toastVerb(p.op)
 	var body string

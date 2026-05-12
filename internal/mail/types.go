@@ -59,6 +59,13 @@ type Update struct {
 	Folder    string
 	UIDs      []UID
 	ConnState ConnState
+
+	// NewArrivals is the count of new messages in this update. Populated
+	// for UpdateNewMail only; zero for all other types.
+	NewArrivals int
+	// LatestSender is the display name of the most recent sender in this
+	// update. Empty when the sender is unknown or there are multiple senders.
+	LatestSender string
 }
 
 // Disposition classifies a MIME part as a user-visible attachment or

@@ -38,6 +38,10 @@ type UIConfig struct {
 	// $XDG_DOWNLOAD_DIR, $HOME/Downloads.
 	DownloadDir string
 
+	// NewMailToast shows a transient toast when new mail arrives while
+	// the terminal is unfocused. Defaults to true.
+	NewMailToast bool
+
 	Tidytext TidytextConfig
 }
 
@@ -77,6 +81,7 @@ type FolderConfig struct {
 func DefaultUIConfig() UIConfig {
 	return UIConfig{
 		Threading:      true,
+		NewMailToast:   true,
 		Folders:        map[string]FolderConfig{},
 		Icons:          "auto",
 		UndoSeconds:    6,
@@ -90,6 +95,7 @@ func DefaultUIConfig() UIConfig {
 // differently from "explicit false".
 type rawUI struct {
 	Threading          *bool                   `toml:"threading"`
+	NewMailToast       *bool                   `toml:"new-mail-toast"`
 	Folders            map[string]rawFolderCfg `toml:"folders"`
 	Icons              string                  `toml:"icons"`
 	UndoSeconds        *int                    `toml:"undo_seconds"`
@@ -158,6 +164,9 @@ func LoadUI(path string) (UIConfig, error) {
 	out := DefaultUIConfig()
 	if raw.UI.Threading != nil {
 		out.Threading = *raw.UI.Threading
+	}
+	if raw.UI.NewMailToast != nil {
+		out.NewMailToast = *raw.UI.NewMailToast
 	}
 
 	if raw.UI.Icons != "" {

@@ -83,7 +83,18 @@ type App struct {
 	now                func() time.Time // test seam, defaults to time.Now
 	opener             URLOpener        // test seam, defaults to xdgOpenURL
 
-	focused bool
+	focused      bool
+	newMailToast bool // mirrors [ui] new-mail-toast; true by default
+
+	// pendingNewMail accumulates arrivals during the 1s coalesce window;
+	// flushed into m.toast on coalesceTimerMsg.
+	pendingNewMail struct {
+		count       int
+		sender      string
+		mixedSender bool
+		folder      string
+	}
+	coalesceArmed bool
 
 	progressErrorUntil   time.Time
 	testProgressOverride *progressOverride
@@ -151,6 +162,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 		conflict:        NewConflictOverlay(styles),
 		undoSeconds:     uiCfg.UndoSeconds,
 		undoSendWindow:  uiCfg.UndoSendWindow,
+		newMailToast:    uiCfg.NewMailToast,
 		now:             time.Now,
 		opener:          xdgOpenURL,
 		tidyEnabled:     uiCfg.Tidytext.Enabled,
@@ -255,6 +267,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 		return m.updateKey(msg)
 	case tea.FocusMsg:
 		m.focused = true
+		if m.toast.newMailCount > 0 {
+			m.toast = pendingAction{}
+		}
 		return m, nil
 	case tea.BlurMsg:
 		m.focused = false

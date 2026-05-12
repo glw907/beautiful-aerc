@@ -80,6 +80,32 @@ func (m App) updateChromeMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 		})
 		return m, cmd, true
 
+	case coalesceTimerMsg:
+		p := m.pendingNewMail
+		m.pendingNewMail = struct {
+			count       int
+			sender      string
+			mixedSender bool
+			folder      string
+		}{}
+		m.coalesceArmed = false
+		if p.count > 0 {
+			deadline := m.now().Add(time.Duration(m.undoSeconds) * time.Second)
+			action := pendingAction{
+				newMailCount: p.count,
+				deadline:     deadline,
+			}
+			if p.mixedSender {
+				action.newMailFolder = p.folder
+			} else {
+				action.newMailSender = p.sender
+			}
+			var cmd tea.Cmd
+			m, cmd = m.armToast(action)
+			return m, cmd, true
+		}
+		return m, nil, true
+
 	case toastExpireMsg:
 		if m.toast.IsZero() || !msg.deadline.Equal(m.toast.deadline) {
 			return m, nil, true
@@ -210,6 +236,19 @@ func (m App) handleBackendUpdate(msg backendUpdateMsg) (App, tea.Cmd, bool) {
 		m.statusBar = m.statusBar.SetConnectionState(cs)
 		m.acct.NotifyConnState(cs == Connected)
 		m = m.refreshBackfillSegment()
+	}
+	if !m.focused && m.newMailToast && msg.update.NewArrivals > 0 {
+		if m.pendingNewMail.count == 0 {
+			m.pendingNewMail.sender = msg.update.LatestSender
+			m.pendingNewMail.folder = msg.update.Folder
+		} else if m.pendingNewMail.sender != msg.update.LatestSender {
+			m.pendingNewMail.mixedSender = true
+		}
+		m.pendingNewMail.count += msg.update.NewArrivals
+		if !m.coalesceArmed {
+			m.coalesceArmed = true
+			cmds = append(cmds, coalesceNewMailCmd())
+		}
 	}
 	return m, tea.Batch(cmds...), true
 }
