@@ -1,13 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 38 — Audit E (specified vs. assumed
-across the ADR archive). Pass 37.1 closed ADR-0224: schema v13
-rebuilt `message_recipients` with FK CASCADE (orphan
-`messages_fts` rows scrubbed free), `migrateV11` now backfills
-FTS body text from cached bodies, IMAP `Changes` reads the
-captured UIDVALIDITY and returns `ErrCannotCalculateChanges` on
-mismatch. Live Gmail + Outlook verification (Pass 35.1) still
-queued — no OAuth client IDs on hand.
+**Current pass:** Pass 38.1 — Audit E remediation. Pass 38 closed
+ADR-0225: walked 212 active ADRs → 121 chosen / 79
+defaulted-still-right / 12 defaulted-and-wrong. Three P1
+findings queue (F2 movepicker arrow-keys, F4 outbox payload
+unbounded, F6 OAuth no device-code) plus F1 doc-hygiene bundled
+free. F6 may split to 38.2 if 38.1 oversizes. Pass 35.1 still
+pending Gmail/Outlook creds.
 
 **Beta soak deferred.** Pre-beta rules apply.
 
@@ -15,42 +14,51 @@ queued — no OAuth client IDs on hand.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 32 | Scaffold through v2 declarative chrome | done |
-| 33 | Mouse — reader (ADR-0218) | done |
-| 34 | Mouse — sidebar + cross-pane (ADR-0219) | done |
+| 1 – 34 | Scaffold through cross-pane mouse | done |
 | 35 | Native OAuth final wiring (ADR-0220) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 36 | Audit C — feature surface (ADR-0221) | done |
-| 36.1 | Audit C remediation (ADR-0222) | done |
-| 37 | Audit D — database (ADR-0223) | done |
-| 37.1 | Audit D remediation (ADR-0224) | done |
-| 38 | **Audit E — specified vs. assumed (ADR walk)** | next |
+| 36 / 36.1 | Audit C + remediation (ADR-0221/0222) | done |
+| 37 / 37.1 | Audit D + remediation (ADR-0223/0224) | done |
+| 38 | Audit E (ADR-0225) | done |
+| 38.1 | **Audit E remediation — F1/F2/F4/F6** | next |
 | 39 | Audit F — sharp edges + insecure defaults | gate |
 | 40 | Audit G — test assertion meaningfulness | gate |
 | 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (Pass 38)
+### Next starter prompt (Pass 38.1)
 
-> **Goal.** Run Audit E per `docs/poplar/audit-plan.md` §"Phase
-> E": walk the ADR archive (`docs/poplar/decisions/`) against
-> the running code and flag every binding fact that is asserted
-> but unimplemented, drifted, or contradicted.
+> **Goal.** Land Audit E's three P1 findings plus F1's bundled
+> doc-hygiene fix per ADR-0225, gating Audit F.
 >
-> **Scope.** Pure read pass — no code edits. Output is a single
-> ADR (next number after 0224) cataloging findings (P0/P1/P2 per
-> the audit-plan rubric) and the plan's audit walk surface
-> archived under `docs/superpowers/archive/plans/`. Each finding
-> cites the asserting ADR + the contradicting file:line.
+> **Scope.**
 >
-> **Settled:** Audit walks emit one ADR + one queued remediation
-> pass when P0/P1 land. Pre-beta endorses inline remediation
-> only for P0; P1 lands the following pass.
+> - **F1.** Set `docs/poplar/decisions/0003-external-editor-only.md`
+>   frontmatter to `status: superseded by 0034`; link from 0003's
+>   Consequences section. Doc-only.
+> - **F2.** `internal/ui/movepicker/`: mirror the sidebar-search
+>   pattern (ADR-0064) — `Tab` cycles filter/nav, `j`/`k` navigate
+>   in nav mode. Update `docs/poplar/keybindings.md` and
+>   `.claude/rules/ui-invariants.md`.
+> - **F4.** `[cache] max-outbox-bytes` config field (default
+>   unlimited, like ADR-0122's `max-size`). `insertFolderOp` /
+>   `QueueOutbound` validates per-row before INSERT; surface as
+>   `cache.ErrOutboxRowTooLarge`.
+> - **F6.** RFC 8628 device-code Authorize mode in
+>   `internal/mailauth/`. Wizard offers it as fallback when
+>   loopback PKCE fails or the user picks remote/SSH. Reuses
+>   keyring/age-file token store. Update ADR-0193's Consequences;
+>   no new ADR.
 >
-> **Still open — brainstorm:** None. Direct audit.
+> **Settled.** F12 already fixed by ADR-0165 — skip. P2 findings
+> (F3, F5, F7–F11) not in scope.
 >
-> **Approach.** Plan doc at
-> `docs/superpowers/plans/YYYY-MM-DD-audit-e.md` listing the
-> ADR groups to walk and the checking strategy per group, then
-> execute. Standard pass-end checklist.
+> **Open — brainstorm.** F6 wizard surface: separate stage vs.
+> credential-strategy radio (ADR-0190 projection). Probably the
+> radio; confirm before coding. Split F6 to Pass 38.2 if 38.1
+> task count exceeds 12 per CLAUDE.md pass-size budget.
+>
+> **Approach.** Brainstorm F6's wizard shape, plan at
+> `docs/superpowers/plans/YYYY-MM-DD-audit-e-remediation.md`,
+> then implement. Standard pass-end checklist.
