@@ -340,28 +340,53 @@ func (m App) updateMouse(msg tea.MouseMsg) (App, tea.Cmd) {
 	if m.anyOverlayOpen() {
 		return m, nil
 	}
-	if !m.viewerOpen || m.acct.Viewer().Phase() != reader.PhaseReady {
+	mu := msg.Mouse()
+	// Account region sits below the App's one-row top border.
+	if mu.Y < 1 || mu.Y >= 1+m.contentHeight() {
 		return m, nil
 	}
-	ox, oy := m.rightPaneOrigin()
-	mu := msg.Mouse()
-	mu.X -= ox
-	mu.Y -= oy
-	var local tea.Msg
-	switch msg.(type) {
-	case tea.MouseClickMsg:
-		local = tea.MouseClickMsg(mu)
-	case tea.MouseReleaseMsg:
-		local = tea.MouseReleaseMsg(mu)
-	case tea.MouseWheelMsg:
-		local = tea.MouseWheelMsg(mu)
-	case tea.MouseMotionMsg:
-		local = tea.MouseMotionMsg(mu)
+	mu.Y -= 1
+
+	sw := uicore.ClampSidebar(uicore.ComputeLayout(m.width), m.width)
+
+	switch {
+	case m.viewerOpen && mu.X > sw:
+		return m.routeMouseToViewer(msg, mu, sw)
+	case m.viewerOpen && mu.X < sw:
+		m.acct = m.acct.CloseViewer()
+		m = m.deriveChromeFromAcct()
+		return m.routeMouseToAccount(msg, mu)
+	case mu.X == sw:
+		return m, nil // divider
 	default:
+		return m.routeMouseToAccount(msg, mu)
+	}
+}
+
+// routeMouseToViewer translates msg into right-pane-local coords
+// and forwards it to the viewer. No-op when the viewer is not ready.
+func (m App) routeMouseToViewer(msg tea.MouseMsg, mu tea.Mouse, sw int) (App, tea.Cmd) {
+	if m.acct.Viewer().Phase() != reader.PhaseReady {
+		return m, nil
+	}
+	mu.X -= sw + 1
+	local := uicore.RebuildMouseMsg(msg, mu)
+	if local == nil {
 		return m, nil
 	}
 	var cmd tea.Cmd
 	m.acct, cmd = m.acct.UpdateViewer(local)
+	m = m.deriveChromeFromAcct()
+	return m, cmd
+}
+
+func (m App) routeMouseToAccount(msg tea.MouseMsg, mu tea.Mouse) (App, tea.Cmd) {
+	local := uicore.RebuildMouseMsg(msg, mu)
+	if local == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.acct, cmd = m.acct.Update(local)
 	m = m.deriveChromeFromAcct()
 	return m, cmd
 }
@@ -388,11 +413,7 @@ func (m App) contentHeight() int {
 // WindowSizeMsg handler.
 func (m App) rightPaneSize() (w, h int) {
 	contentW := m.width - 1 // one cell for the right border App appends
-	layout := uicore.ComputeLayout(contentW)
-	sw := layout.Sidebar
-	if sw > contentW/2 {
-		sw = contentW / 2
-	}
+	sw := uicore.ClampSidebar(uicore.ComputeLayout(contentW), contentW)
 	w = max(1, contentW-sw-1) // -1 for divider
 	h = m.contentHeight()
 	return w, h
@@ -401,11 +422,7 @@ func (m App) rightPaneSize() (w, h int) {
 // rightPaneOrigin returns the top-left cell of the right pane in
 // the global frame.
 func (m App) rightPaneOrigin() (x, y int) {
-	layout := uicore.ComputeLayout(m.width)
-	sw := layout.Sidebar
-	if sw > m.width/2 {
-		sw = m.width / 2
-	}
+	sw := uicore.ClampSidebar(uicore.ComputeLayout(m.width), m.width)
 	return sw + 1, 1
 }
 

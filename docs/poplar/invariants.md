@@ -137,33 +137,25 @@ the ADR(s) that justify them.
 - `internal/ui/` is the App parent plus eight bubbles-shaped
   subpackages (`account`, `compose`, `helppopover`, `messagelist`,
   `movepicker`, `reader`, `sidebar`, `wizard`) and the `uicore`
-  sibling. Subpackages cannot import the parent. `uicore` holds shared
-  chrome: `ErrorMsg`, `TriageOp` + `Triage*` constants,
+  sibling. Subpackages cannot import the parent. `uicore` holds
+  shared chrome — `ErrorMsg`, `TriageOp` constants,
   `ComputeLayout`, `NewSpinner`, `ModalShell`, `PlaceOverlay`,
-  render primitives (`PadOrTruncate`, `TruncateToWidth`,
-  `CenterOverlay`, `ApplyBg`, `FillRowToWidth`, `PickerListSize`,
-  `SplitAndPad`), `NewListStyles` (compiled theme →
-  `bubbles/v2/list.Styles` for the picker family; ADR-0194), and
-  the `LayoutMode`/`IconSet`/`SearchMode` enums plus the
-  `SimpleIcons`/`FancyIcons` tables. Each subpackage exposes one
-  `Model` + `New(...)` (sub-models like `sidebar.Column`,
-  `reader.LinkPicker` exported alongside). Per-subpackage `Styles`
-  lives in that subpackage's `styles.go` with a
-  `NewStyles(*theme.CompiledTheme)` constructor; those files are
+  render primitives, `NewListStyles` (ADR-0194), and the
+  `LayoutMode`/`IconSet`/`SearchMode` enums plus icon tables.
+  Each subpackage exposes one `Model` + `New(...)`; per-subpackage
+  `Styles` lives in `styles.go` with `NewStyles(*CompiledTheme)`,
   the only places outside `internal/ui/styles.go` and
   `internal/theme/palette.go` permitted to call
-  `lipgloss.NewStyle()`. Cross-boundary msgs are exported in
-  `<subpkg>/msgs.go` and qualified at the call site (e.g.
-  `account.TriageStartedMsg`); subpackage-private msgs stay unexported.
-  Reader/compose cmds emitting `uicore.ErrorMsg` and orchestrating
-  the App `URLOpener` seam live in `internal/ui/cmds.go`.
-  `internal/ui/compose` is the UI surface; `internal/mailcompose`
-  is the domain. App-side imports use `uicompose` for the UI,
-  bare `mailcompose` for the domain. `App` is split across
-  `app.go` (model + dispatcher), `app_view.go`, `app_keys.go`, and
-  per-domain `app_{chrome,outbox,compose,modals,contacts}.go`; each
-  domain owns `updateXMsg(msg) (App, tea.Cmd, claimed bool)` reached
-  via the chain in `App.Update`. ADRs 0161–0163, 0203, 0214.
+  `lipgloss.NewStyle()`. Cross-boundary msgs export in
+  `<subpkg>/msgs.go` and qualify at the call site; private msgs
+  stay unexported. Reader/compose Cmds emitting `uicore.ErrorMsg`
+  and the App `URLOpener` seam live in `internal/ui/cmds.go`.
+  `internal/ui/compose` is the UI surface (`uicompose` alias);
+  `internal/mailcompose` is the domain. `App` splits across
+  `app.go` (model + dispatcher), `app_view.go`, `app_keys.go`,
+  and per-domain `app_{chrome,outbox,compose,modals,contacts}.go`;
+  each domain owns `updateXMsg(msg) (App, tea.Cmd, claimed bool)`
+  chained in `App.Update`. ADRs 0161–0163, 0203, 0214.
 - `App` threads `*cache.Account` + `*theme.CompiledTheme` into the
   tree. `account.Model` holds the cache handle (backend reachable via
   `account.Model.Backend()` for `pumpUpdatesCmd`); reads come from
@@ -174,15 +166,21 @@ the ADR(s) that justify them.
   markdown rendering. `mail.Backend.Flag(uids, flag, set)` is the
   canonical mutator; "delete" is `MoveArgs{Dest: trash}` queued.
   IMAP `Move` falls back to `cmd.Copy` when MOVE is absent.
-- `App.updateMouse` is the pointer-event arm. Overlay open →
-  absorb; viewer ready → translate to right-pane-local coords
-  and forward via `account.Model.UpdateViewer`; else inert.
-  `reader.Model.chipHits`/`bodyHits` populate at `layout()`:
-  wheel-in-body forwards to the viewport, click on a chip emits
-  `OpenAttachmentMsg`, click on a `[N]: <url>` ribbon row emits
-  `LaunchURLMsg`. The inline `[^N]` glyph is not a click target.
-  `content.RenderBodyWithFootnotes` returns `[]FootnoteRow{Row,
-  PickerIndex}`. ADR-0218.
+- Mouse is keyboard shorthand. `App.updateMouse` absorbs on
+  overlay; else translates Y to account-local and branches on
+  `viewerOpen` × pane: viewer-ready right pane →
+  `account.Model.UpdateViewer`; viewer-open sidebar click →
+  `CloseViewer()` then `account.Model.Update`; else →
+  `account.Model.Update`. Divider inert. Account partitions by
+  X: sidebar click on a real folder = `J`/`K`, on a
+  synthesized intermediate = toggle expand; right-pane click =
+  `Enter`; wheel = the cursor key per notch.
+  `messagelist.Model.ItemIndexAt` and
+  `sidebar.Model.RowAtLineOffset` are the hit-test seams.
+  Reader: wheel → viewport, chip → `OpenAttachmentMsg`,
+  `[N]: <url>` row → `LaunchURLMsg`; inline `[^N]` not a
+  target. `content.RenderBodyWithFootnotes` returns
+  `[]FootnoteRow`. ADRs 0218, 0219.
 
 ### Config & theming
 

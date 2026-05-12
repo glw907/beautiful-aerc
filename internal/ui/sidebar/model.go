@@ -371,11 +371,115 @@ func (s *Model) SetKeyMap(km KeyMap) { s.keys = km }
 func (s Model) KeyMap() KeyMap       { return s.keys }
 
 // Update dispatches sidebar key events. Inert on non-key messages.
+// RowAtLineOffset maps a y offset (zero-based, relative to the
+// start of View() output) to a visibleRows index. Returns
+// (-1, false) when y lands on a group-separator blank line, on
+// trailing padding, or past the last row.
+func (s Model) RowAtLineOffset(y int) (int, bool) {
+	if y < 0 {
+		return -1, false
+	}
+	line := 0
+	for i, sep := range groupSeparators(s.visibleRows()) {
+		if sep {
+			if line == y {
+				return -1, false
+			}
+			line++
+		}
+		if line == y {
+			return i, true
+		}
+		line++
+	}
+	return -1, false
+}
+
+// groupSeparators yields (rowIdx, separatorBefore) pairs in
+// render order. A separator is the blank line emitted between
+// adjacent rows of different Group values.
+func groupSeparators(rows []rowMeta) func(yield func(int, bool) bool) {
+	return func(yield func(int, bool) bool) {
+		for i, r := range rows {
+			sep := i > 0 && r.entry.cf.Group != rows[i-1].entry.cf.Group
+			if !yield(i, sep) {
+				return
+			}
+		}
+	}
+}
+
+// IsSynthesizedAt reports whether the visible row at idx is a
+// synthesized intermediate tree node (no underlying server folder).
+func (s Model) IsSynthesizedAt(idx int) bool {
+	rows := s.visibleRows()
+	if idx < 0 || idx >= len(rows) {
+		return false
+	}
+	return rows[idx].syntheticPath != ""
+}
+
 func (s Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	km, ok := msg.(tea.KeyPressMsg)
+	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		return s.handleMouseClick(msg)
+	case tea.MouseWheelMsg:
+		return s.handleMouseWheel(msg)
+	case tea.KeyPressMsg:
+		return s.handleKey(msg)
+	}
+	return s, nil
+}
+
+func (s Model) handleMouseClick(msg tea.MouseClickMsg) (Model, tea.Cmd) {
+	if msg.Button != tea.MouseLeft {
+		return s, nil
+	}
+	idx, ok := s.RowAtLineOffset(msg.Y)
 	if !ok {
 		return s, nil
 	}
+	rows := s.visibleRows()
+	r := rows[idx]
+	if r.syntheticPath != "" {
+		if s.expanded == nil {
+			s.expanded = map[string]bool{}
+		}
+		if s.expanded[r.expandKey()] {
+			delete(s.expanded, r.expandKey())
+		} else {
+			s.expanded[r.expandKey()] = true
+		}
+		s.invalidate()
+		return s, nil
+	}
+	if idx != s.selected {
+		s.selected = idx
+		s.invalidate()
+	}
+	return s, nil
+}
+
+func (s Model) handleMouseWheel(msg tea.MouseWheelMsg) (Model, tea.Cmd) {
+	rows := s.visibleRows()
+	prev := s.selected
+	switch msg.Button {
+	case tea.MouseWheelDown:
+		if s.selected < len(rows)-1 {
+			s.selected++
+		}
+	case tea.MouseWheelUp:
+		if s.selected > 0 {
+			s.selected--
+		}
+	}
+	if s.selected != prev {
+		s.invalidate()
+	}
+	return s, nil
+}
+
+func (s Model) handleKey(km tea.KeyPressMsg) (Model, tea.Cmd) {
 	prevSelected := s.selected
 	mutated := false
 	rows := s.visibleRows()
@@ -454,18 +558,15 @@ func (s Model) renderView() string {
 	selectedBg := s.styles.SidebarSelected
 
 	var lines []string
-	prevGroup := rows[0].entry.cf.Group
-
-	for i, r := range rows {
-		if i > 0 && r.entry.cf.Group != prevGroup {
+	for i, sep := range groupSeparators(rows) {
+		if sep {
 			lines = append(lines, s.renderBlankLine())
 		}
-		prevGroup = r.entry.cf.Group
 		bg := plainBg
 		if i == s.selected {
 			bg = selectedBg
 		}
-		lines = append(lines, s.renderRow(i, r, bg))
+		lines = append(lines, s.renderRow(i, rows[i], bg))
 	}
 
 	for len(lines) < s.height {

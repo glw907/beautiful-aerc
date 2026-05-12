@@ -126,9 +126,7 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		layout := uicore.ComputeLayout(m.width)
-		if layout.Sidebar > m.width/2 {
-			layout.Sidebar = m.width / 2
-		}
+		layout.Sidebar = uicore.ClampSidebar(layout, m.width)
 		m.layout = layout
 		m.msglist.SetLayout(layout)
 
@@ -289,6 +287,9 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseClickMsg, tea.MouseWheelMsg:
+		return m.handleMouse(msg.(tea.MouseMsg))
 	}
 
 	// Forward unhandled msgs to the viewer when open so its sub-models
@@ -454,6 +455,62 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleMouse routes a mouse event whose coords are pane-local
+// (origin at the account's top-left, i.e. App has already
+// subtracted its own top border). Clicks in the sidebar select +
+// load the folder; clicks in the right pane select + open the
+// message. Wheel events repeat the equivalent cursor key.
+func (m Model) handleMouse(msg tea.MouseMsg) (Model, tea.Cmd) {
+	mu := msg.Mouse()
+	sw := uicore.ClampSidebar(m.layout, m.width)
+	if mu.X < sw {
+		return m.handleSidebarMouse(msg, mu)
+	}
+	if mu.X == sw {
+		return m, nil // divider
+	}
+	return m.handleRightPaneMouse(msg, mu, sw)
+}
+
+func (m Model) handleSidebarMouse(msg tea.MouseMsg, mu tea.Mouse) (Model, tea.Cmd) {
+	// Folder list sits below the account-header rows and above the
+	// search shelf.
+	shelfTop := m.height - sidebar.ShelfRows
+	if mu.Y < sidebar.HeaderRows || mu.Y >= shelfTop {
+		return m, nil
+	}
+	mu.Y -= sidebar.HeaderRows
+	local := uicore.RebuildMouseMsg(msg, mu)
+	if local == nil {
+		return m, nil
+	}
+	sb := m.sidebarColumn.Sidebar()
+	prevSel := sb.Selected()
+	sb, _ = sb.Update(local)
+	m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
+	if sb.Selected() != prevSel {
+		m = m.clearSearchIfActive()
+		return m.selectionChangedCmds()
+	}
+	return m, nil
+}
+
+func (m Model) handleRightPaneMouse(msg tea.MouseMsg, mu tea.Mouse, sw int) (Model, tea.Cmd) {
+	mu.X -= sw + 1
+	local := uicore.RebuildMouseMsg(msg, mu)
+	if local == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.msglist, cmd = m.msglist.Update(local)
+	if click, ok := msg.(tea.MouseClickMsg); ok && click.Button == tea.MouseLeft {
+		if openModel, openCmd := m.openSelectedMessage(); openCmd != nil {
+			return openModel, tea.Batch(cmd, openCmd)
+		}
+	}
+	return m, cmd
+}
+
 // jumpToFolder moves the sidebar selection to the named canonical folder.
 // Inert (no Cmd) when the account has no such folder. Otherwise behaves
 // like J/K: clears any active search and fires the load Cmd.
@@ -465,6 +522,13 @@ func (m Model) jumpToFolder(canonical string) (Model, tea.Cmd) {
 	m.sidebarColumn = m.sidebarColumn.WithSidebar(sb)
 	m = m.clearSearchIfActive()
 	return m.selectionChangedCmds()
+}
+
+// CloseViewer closes the viewer and cancels any in-flight body
+// fetch without routing through the viewer's own key handler.
+func (m Model) CloseViewer() Model {
+	m.viewer = m.viewer.Close()
+	return m.cancelInflightBodyFetch()
 }
 
 // cancelInflightBodyFetch cancels any in-flight loadBodyCmd.

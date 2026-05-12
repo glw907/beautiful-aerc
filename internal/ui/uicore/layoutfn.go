@@ -29,6 +29,16 @@ func ComputeLayout(termWidth int) LayoutMode {
 	}
 }
 
+// ClampSidebar caps the layout's sidebar width at half the
+// terminal width. Two-pane composition needs at least half the
+// width for the right pane.
+func ClampSidebar(layout LayoutMode, termWidth int) int {
+	if layout.Sidebar > termWidth/2 {
+		return termWidth / 2
+	}
+	return layout.Sidebar
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo

@@ -204,8 +204,41 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Bottom):
 			m.list.GoToEnd()
 		}
+	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft {
+			return m, nil
+		}
+		if idx, ok := m.ItemIndexAt(msg.Y); ok {
+			m.list.Select(idx)
+		}
+	case tea.MouseWheelMsg:
+		switch msg.Button {
+		case tea.MouseWheelDown:
+			m.list.CursorDown()
+		case tea.MouseWheelUp:
+			m.list.CursorUp()
+		}
 	}
 	return m, nil
+}
+
+// ItemIndexAt maps a pane-local Y offset to a visible-list index.
+// Returns (-1, false) when y lands past the last visible item on
+// the current page or outside the page.
+func (m Model) ItemIndexAt(y int) (int, bool) {
+	if y < 0 {
+		return -1, false
+	}
+	pp := m.list.Paginator.PerPage
+	page := m.list.Paginator.Page
+	if pp <= 0 || y >= pp {
+		return -1, false
+	}
+	idx := page*pp + y
+	if idx >= len(m.list.Items()) {
+		return -1, false
+	}
+	return idx, true
 }
 
 // SetMessages replaces the source slice and rebuilds rows. Resets fold
