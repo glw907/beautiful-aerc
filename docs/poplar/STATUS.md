@@ -24,7 +24,10 @@ IDs on hand.
 | 36.1 | Audit C remediation (ADR-0222) | done |
 | 37 | Audit D — database (ADR-0223) | done |
 | 37.1 | **Audit D remediation** — F1/F3/F4 | next |
-| 38 | Audit Final — comprehensive pre-soak | gate |
+| 38 | Audit E — specified vs. assumed (ADR walk) | gate |
+| 39 | Audit F — sharp edges + insecure defaults | gate |
+| 40 | Audit G — test assertion meaningfulness | gate |
+| 41 | Audit Final — comprehensive pre-soak | gate |
 | Beta soak | Enter when Audit Final returns empty | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 

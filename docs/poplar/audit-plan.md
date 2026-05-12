@@ -229,15 +229,122 @@ will hit but the test suite hasn't?
   retry-loop. Cross-reference against the BACKLOG conflict
   items still open after Audit A.
 
-## Phase Final — comprehensive pre-soak
+## Phase E — specified vs. assumed
 
 **Trigger.** Phase D returns empty.
+
+**Question.** For every architectural decision in
+`docs/poplar/decisions/`, was the decision *chosen* — surfaced
+as a tradeoff, brainstormed, deliberately picked — or *defaulted*
+— Claude proposed it inside a plan, you accepted, and it
+ossified without ever being interrogated?
+
+The premise: bugs that survive structural and feature audits
+live at the decision layer. LLMs default to sensible-looking
+choices that are right 80% of the time and silently wrong in
+the remaining 20%. Unquestioned defaults compound across passes.
+This phase runs first among the late audits because findings
+here may invalidate ADRs that subsequent phases would otherwise
+assume settled.
+
+**Focuses.**
+
+- Walk each ADR (currently 0001–0223). Tag one of three:
+  *chosen* / *defaulted-and-still-right* / *defaulted-and-wrong*.
+  The third bucket is the finding set.
+- For every *defaulted-and-still-right* ADR, write the
+  alternative you would have picked given the chance. If you
+  can't articulate one, that's its own finding — the ADR records
+  a foregone conclusion, not a decision.
+- Suspect categories: every "X over Y" framing whose rationale
+  is one sentence; every "we chose X because it's idiomatic";
+  every "the obvious choice" claim; every ADR whose Context
+  section is shorter than its Decision section.
+
+**Out of scope.** Re-deciding settled ADRs in this pass. The
+audit produces a finding list with a one-line counterfactual per
+row; remediation, if any, runs as a follow-up.
+
+## Phase F — sharp edges and insecure defaults
+
+**Trigger.** Phase E returns empty.
+
+**Question.** Does the codebase ship config defaults, API
+surfaces, and convenience helpers whose easy path is the wrong
+path?
+
+The Trail of Bits `sharp-edges` and `insecure-defaults` skills
+codify this lens. The bias the lens targets: LLMs prefer
+"looks helpful," which produces convenience methods that obscure
+failure modes and config defaults tuned for the example case
+rather than the production case.
+
+**Focuses.**
+
+- Boolean config fields. For each, name which default is example-
+  friendly and which is production-safe. Flag every disagreement
+  where the default is the wrong side (`insecure-tls`, debug
+  toggles, retry caps, timeouts, fallback-on-error switches).
+- Boolean parameters on exported functions. Each is a footgun
+  candidate; ask what `f(x, true)` means at the call site without
+  the signature in view.
+- Optional fields with magic defaults (zero means "unlimited,"
+  nil means "stdlib's"). Each is a documentation dependency, and
+  documentation rots first.
+- Ignored returns. `_ = x.Close()`, `_, _ = w.Write(...)`. Some
+  are correct (deferred close, intentional drop); others are
+  silent error suppression. Walk every site.
+- Permissive failure paths. `if err != nil { log.Warn(); return
+  nil }` and variants. The error-banner discipline (ADR-0073)
+  ensures errors *can* surface; this lens checks they *do*.
+
+Mechanical walks. Runs as a single pass; findings cluster by
+package.
+
+## Phase G — test assertion meaningfulness
+
+**Trigger.** Phase F returns empty.
+
+**Question.** For each test in the suite, what would have to be
+wrong about the code under test for the test to fail? If the
+answer is "nothing realistic," the test is theatre.
+
+The empirical finding (Sonar 2026, METR): LLMs reliably write
+tests that pass syntax but verify nothing. Coverage rises;
+correctness doesn't. The Audit Final test-infrastructure lens
+covers *fakes that obscure*; this phase covers *assertions that
+don't assert*, which is the larger surface.
+
+**Focuses.**
+
+- Every `Test*` in `internal/`. For each, name the property it
+  asserts. "Function returned," "no panic," "result is non-nil,"
+  "no error" on a function with no error path — tells.
+- Tests where the expected value is *derived* by the same code
+  under test (test and implementation wrong together; both
+  pass). Look for expectations computed from the input via a
+  helper that's also exercised by other tests.
+- Snapshot / golden tests where the golden was committed without
+  inspection — the drainer FSM transitions, renderer fixture
+  frames, ConfigError messages. For each, was the golden read
+  end-to-end before commit, or accepted because the diff was
+  green?
+- Fakes' silent-success paths. A `fakeBackend.Send` that returns
+  nil unconditionally is the MockBackend hazard at test scope.
+  Every fake method whose unhappy path is "return nil" is a
+  finding.
+
+Single pass; findings cluster by package and by fake.
+
+## Phase Final — comprehensive pre-soak
+
+**Trigger.** Phase G returns empty.
 
 **Question.** Across every dimension the project cares about, is
 anything left to fix before stability becomes the priority?
 
-**Focuses.** All Phase A/B/C/D lenses, plus three not covered
-upstream:
+**Focuses.** All Phase A/B/C/D/E/F/G lenses, plus three not
+covered upstream:
 
 - Test-infrastructure quality. Real coverage of the dangerous
   paths: drainer conflict matrix, IDLE reconnect, outbox cancel
