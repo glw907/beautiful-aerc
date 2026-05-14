@@ -118,8 +118,7 @@ func (m App) viewOverlay(box string, x, y int, frame string) tea.View {
 }
 
 // View composes the full-screen layout. Overlays composite over the
-// undimmed account frame via PlaceOverlay. Dim is reserved for unwired
-// rows (ADR-0072). The underlay is never dimmed (ADR-0202).
+// undimmed account frame via PlaceOverlay (ADR-0202).
 func (m App) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		v := tea.NewView("")

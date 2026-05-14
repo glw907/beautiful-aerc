@@ -199,16 +199,9 @@ the body's `BgBase` extends to the pane edge across every line.
 |-------|----|----|------|
 | `HelpTitle` | `AccentPrimary` (bold) | — | Popover title embedded in top border ("Message List" / "Message Viewer") |
 | `HelpGroupHeader` | `FgBright` (bold) | — | Group headings ("Navigate", "Triage", etc.) |
-| `HelpKey` | `FgBright` (bold) | — | Key column for *wired* rows |
-| `Dim` (reuse) | `FgDim` | — | Description column (all rows) and entire key+desc for *unwired* (future) rows |
+| `HelpKey` | `FgBright` (bold) | — | Key column |
+| `Dim` (reuse) | `FgDim` | — | Description column |
 | `FrameBorder` (reuse) | `BgBorder` | — | Rounded box border |
-
-**Wired vs. unwired:** rows whose binding is not yet implemented
-render the entire row in `Dim` (no bold). Group headings stay
-`HelpGroupHeader` (bright) regardless. The contrast between the
-bright-bold key column on wired rows and the flat-dim key column
-on unwired rows is the only visual signal — no glyph, no legend.
-See ADR for help popover future-binding policy.
 
 ### Tab bar (unused in current chrome, reserved)
 

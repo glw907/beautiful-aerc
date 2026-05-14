@@ -206,7 +206,7 @@ is the default — keystrokes feed the filter, arrows navigate.
 | `a`–`z` | Jump to that letter within the active group | Contacts |
 | `n` | New contact (opens form) | Contacts, popover (no-match) |
 | `e` | Edit contact under cursor (opens form) | Contacts |
-| `D` | Delete contact (wired in 9.3) | Contacts |
+| `D` | Delete contact | Contacts |
 
 ### Contact edit form
 
@@ -243,7 +243,7 @@ to the current context. Bindings are grouped logically with
 The unified one-pane footer. Multi-key bindings are compressed
 (`j/k/J/K`, `I/D/S/A`) into single hint entries so the footer
 has room for every account-view action, including hints for
-features that aren't yet wired up.
+features at various drop-ranks.
 
 ```
  j/k/J/K nav  I/D/S/A folders ┊ d del  a archive  s star  . read ┊ r/R reply  f fwd  c compose ┊ / find  n/N results  v select ┊ ␣ fold  F fold all ┊ ? help  q quit

@@ -222,8 +222,7 @@ to the message list — no tab switching.
 ## 5. Help popover
 
 Modal overlay, `?` opens it. Two contexts: account view and viewer.
-Help advertises the full planned vocabulary; unwired rows render
-dim throughout.
+Help advertises the full keybinding vocabulary.
 
 ### Account view context
 
@@ -268,11 +267,9 @@ dim throughout.
 ```
 
 - Modal: centered, composited over the undimmed frame via
-  `PlaceOverlay`. Dim is reserved for unwired keybinding rows
-  (ADR-0202).
+  `PlaceOverlay` (ADR-0202).
 - Title bar embeds the context name in `accent_primary` bold.
-- Group headings `fg_bright` bold. Wired keys `fg_bright` bold +
-  desc `fg_dim`. Unwired rows dim throughout.
+- Group headings `fg_bright` bold. Keys `fg_bright` bold + desc `fg_dim`.
 - Input routing: only `?` and `Esc` are handled while open; `q` is
   swallowed (help is a view, not a state to escape).
 

@@ -334,8 +334,7 @@ file describes behavior, not the key tables.
   underlying frame, composite the overlay box via
   `uicore.PlaceOverlay` (vendored from superfile, MIT) at the
   centered top-left from `uicore.CenterOverlay`. The frame is
-  *not* dimmed — dim is reserved for unwired keybinding rows
-  (ADR-0072), never for overlay underlays (ADR-0202). The
+  *not* dimmed — the underlay is never dimmed (ADR-0202). The
   `m.viewOverlay(box, x, y, frame)` helper in `App` collapses
   the simple `PlaceOverlay` + chrome-wrap sequence to one call.
   While an
@@ -366,20 +365,16 @@ file describes behavior, not the key tables.
   contentW)`. `helppopover.Model` uses `lipgloss.Style` with a
   rounded border + embedded-title top edge and is *not* a
   ModalShell consumer (ADR-0201); the popover does not adopt
-  `bubbles/v2/help` (ADR-0200 — six concrete deviations covering
-  ADR-0072 wired/unwired dimming and the ADR-0084 JoinHorizontal
-  ban among them). `movepicker.Model`,
+  `bubbles/v2/help` (ADR-0200 — deviations include the
+  ADR-0084 JoinHorizontal ban among others). `movepicker.Model`,
   `helppopover.Model`, and `ConflictOverlay` cache their per-
   frame render via a heap-allocated `*<T>Cache` pointer + dirty
   flag (the only Elm-immutable-model escape hatch in the tree,
   scoped to view-stable overlays — see ADR-0130).
   `OutboxOverlay` does not — its content churns every cache
   event while the queue drains.
-- Help popover advertises the full planned keybinding vocabulary,
-  not just currently-wired keys. Each row in the binding tables
-  carries a `wired bool` flag. Wired rows: bright-bold key + dim
-  desc. Unwired rows: dim throughout. Group headings stay bright.
-  Later passes flip wired flags as bindings come online.
+- Help popover renders all keybindings: bright-bold key column,
+  dim description column, bold group headings.
 - Viewer link launch: `1`–`9` opens the Nth harvested URL via
   `xdg-open` (fire-and-forget). `Tab` opens `reader.LinkPicker`
   when ≥1 URL is harvested (inert otherwise). Picker is App-

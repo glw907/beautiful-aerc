@@ -74,12 +74,9 @@ func (h Model) WithKbdCaps(caps tea.KeyboardEnhancementsMsg) Model {
 	return h
 }
 
-// bindingRow is a single key/description entry. Unwired rows render dim
-// per the future-binding policy.
 type bindingRow struct {
-	key   string
-	desc  string
-	wired bool
+	key  string
+	desc string
 }
 
 type bindingGroup struct {
@@ -91,109 +88,109 @@ var accountGroups = []bindingGroup{
 	{
 		title: "Navigate",
 		rows: []bindingRow{
-			{"j/k", "up/down", true},
-			{"g/G", "top/bot", true},
+			{"j/k", "up/down"},
+			{"g/G", "top/bot"},
 		},
 	},
 	{
 		title: "Triage",
 		rows: []bindingRow{
-			{"d", "delete", true},
-			{"a", "archive", true},
-			{"s", "star", true},
-			{".", "read/unrd", true},
-			{"m", "move", true},
-			{"E", "empty", true},
-			{"u", "undo", true},
+			{"d", "delete"},
+			{"a", "archive"},
+			{"s", "star"},
+			{".", "read/unrd"},
+			{"m", "move"},
+			{"E", "empty"},
+			{"u", "undo"},
 		},
 	},
 	{
 		title: "Reply",
 		rows: []bindingRow{
-			{"r", "reply", true},
-			{"R", "all", true},
-			{"f", "forward", true},
-			{"c", "compose", true},
+			{"r", "reply"},
+			{"R", "all"},
+			{"f", "forward"},
+			{"c", "compose"},
 		},
 	},
 	{
 		title: "Search",
 		rows: []bindingRow{
-			{"/", "search", true},
-			{"n", "next", false},
-			{"N", "prev", false},
+			{"/", "search"},
+			{"n", "next"},
+			{"N", "prev"},
 		},
 	},
 	{
 		title: "Select",
 		rows: []bindingRow{
-			{"v", "select", true},
-			{"␣", "toggle", true},
+			{"v", "select"},
+			{"␣", "toggle"},
 		},
 	},
 	{
 		title: "Threads",
 		rows: []bindingRow{
-			{"␣", "fold", true},
-			{"F", "fold all", true},
+			{"␣", "fold"},
+			{"F", "fold all"},
 		},
 	},
 	{
 		title: "Go To",
 		rows: []bindingRow{
-			{"I", "inbox", true},
-			{"D", "drafts", true},
-			{"S", "sent", true},
-			{"A", "archive", true},
-			{"X", "spam", true},
-			{"T", "trash", true},
+			{"I", "inbox"},
+			{"D", "drafts"},
+			{"S", "sent"},
+			{"A", "archive"},
+			{"X", "spam"},
+			{"T", "trash"},
 		},
 	},
 }
 
 var accountBottomHints = []bindingRow{
-	{"Enter", "open", true},
-	{"Q", "outbox", true},
-	{"!", "conflicts", true},
-	{"?", "close", true},
+	{"Enter", "open"},
+	{"Q", "outbox"},
+	{"!", "conflicts"},
+	{"?", "close"},
 }
 
 var viewerGroups = []bindingGroup{
 	{
 		title: "Navigate",
 		rows: []bindingRow{
-			{"j/k", "scroll", true},
-			{"g/G", "top/bot", true},
-			{"␣/b", "page d/u", true},
-			{"1-9", "open link", true},
+			{"j/k", "scroll"},
+			{"g/G", "top/bot"},
+			{"␣/b", "page d/u"},
+			{"1-9", "open link"},
 		},
 	},
 	{
 		title: "Triage",
 		rows: []bindingRow{
-			{"d", "delete", true},
-			{"a", "archive", true},
-			{"s", "star", true},
-			{"u", "undo", true},
+			{"d", "delete"},
+			{"a", "archive"},
+			{"s", "star"},
+			{"u", "undo"},
 		},
 	},
 	{
 		title: "Reply",
 		rows: []bindingRow{
-			{"r", "reply", true},
-			{"R", "all", true},
-			{"f", "forward", true},
-			{"c", "compose", true},
+			{"r", "reply"},
+			{"R", "all"},
+			{"f", "forward"},
+			{"c", "compose"},
 		},
 	},
 }
 
 var viewerBottomHints = []bindingRow{
-	{"Tab", "link picker", true},
-	{"Q", "outbox", true},
-	{"!", "conflicts", true},
-	{"q", "close", true},
-	{"?", "close", true},
+	{"Tab", "link picker"},
+	{"Q", "outbox"},
+	{"!", "conflicts"},
+	{"q", "close"},
+	{"?", "close"},
 }
 
 // Box returns the raw popover box ready for overlay compositing, with
@@ -358,16 +355,11 @@ func renderRow(styles Styles, r bindingRow) string {
 	for lipgloss.Width(keyPadded) < keyWidth {
 		keyPadded += " "
 	}
-	return renderKeyDesc(styles, keyPadded, r.desc, r.wired)
+	return renderKeyDesc(styles, keyPadded, r.desc)
 }
 
-// renderKeyDesc styles the key+desc pair. Wired entries get a bright-bold
-// key; unwired entries dim everything to signal a future binding.
-func renderKeyDesc(styles Styles, key, desc string, wired bool) string {
-	if wired {
-		return styles.HelpKey.Render(key) + "  " + styles.Dim.Render(desc)
-	}
-	return styles.Dim.Render(key + "  " + desc)
+func renderKeyDesc(styles Styles, key, desc string) string {
+	return styles.HelpKey.Render(key) + "  " + styles.Dim.Render(desc)
 }
 
 func renderGap() string { return "    " }
@@ -392,7 +384,7 @@ func renderGotoGrid(styles Styles, g bindingGroup) string {
 func renderHintLine(styles Styles, hints []bindingRow) string {
 	parts := make([]string, 0, len(hints))
 	for _, h := range hints {
-		parts = append(parts, renderKeyDesc(styles, h.key, h.desc, h.wired))
+		parts = append(parts, renderKeyDesc(styles, h.key, h.desc))
 	}
 	return strings.Join(parts, "    ")
 }
@@ -401,27 +393,27 @@ var composeGroups = []bindingGroup{
 	{
 		title: "Navigate",
 		rows: []bindingRow{
-			{"Tab", "next field", true},
-			{"Esc", "toggle body", true},
+			{"Tab", "next field"},
+			{"Esc", "toggle body"},
 		},
 	},
 	{
 		title: "Actions",
 		rows: []bindingRow{
-			{"^X", "send", true},
-			{"^C", "cancel", true},
-			{"^L", "later", true},
-			{"^O", "attach", true},
-			{"^G", "sig", true},
-			{"^T", "tidy", true},
+			{"^X", "send"},
+			{"^C", "cancel"},
+			{"^L", "later"},
+			{"^O", "attach"},
+			{"^G", "sig"},
+			{"^T", "tidy"},
 		},
 	},
 }
 
 var composeBottomHints = []bindingRow{
-	{"^X", "send", true},
-	{"^C", "cancel", true},
-	{"?", "close", true},
+	{"^X", "send"},
+	{"^C", "cancel"},
+	{"?", "close"},
 }
 
 func renderComposeLayout(styles Styles, caps tea.KeyboardEnhancementsMsg) string {
@@ -441,13 +433,12 @@ func renderComposeLayout(styles Styles, caps tea.KeyboardEnhancementsMsg) string
 	)
 }
 
-// chordBindingRows projects the active catkin chord set into popover rows.
 func chordBindingRows(caps tea.KeyboardEnhancementsMsg) []bindingRow {
 	active := catkin.ActiveChords(caps.SupportsKeyDisambiguation())
 	rows := make([]bindingRow, 0, len(active))
 	for _, gb := range active {
 		h := gb.Binding.Help()
-		rows = append(rows, bindingRow{key: h.Key, desc: h.Desc, wired: true})
+		rows = append(rows, bindingRow{key: h.Key, desc: h.Desc})
 	}
 	return rows
 }

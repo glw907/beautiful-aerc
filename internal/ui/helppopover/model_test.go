@@ -47,66 +47,16 @@ func TestHelpPopover_ViewerGroupsCoverage(t *testing.T) {
 	}
 }
 
-func TestHelpPopover_WiredFlagsAccount(t *testing.T) {
-	cases := []struct {
-		group string
-		key   string
-		want  bool
-	}{
-		{"Navigate", "j/k", true},
-		{"Triage", "d", true},
-		{"Triage", "u", true},
-		{"Reply", "r", true},
-		{"Reply", "R", true},
-		{"Reply", "f", true},
-		{"Reply", "c", true},
-		{"Search", "/", true},
-		{"Select", "v", true},
-		{"Threads", "F", true},
-		{"Go To", "I", true},
-		{"Go To", "T", true},
-	}
-	for _, tc := range cases {
-		row, ok := findAccountRow(tc.group, tc.key)
-		if !ok {
-			t.Errorf("group %q key %q: row not found", tc.group, tc.key)
-			continue
-		}
-		if row.wired != tc.want {
-			t.Errorf("group %q key %q: wired = %v, want %v",
-				tc.group, tc.key, row.wired, tc.want)
-		}
-	}
-}
-
-// findAccountRow walks accountGroups looking for a row by group title
-// and key.
-func findAccountRow(group, key string) (bindingRow, bool) {
-	for _, g := range accountGroups {
-		if g.title != group {
-			continue
-		}
-		for _, r := range g.rows {
-			if r.key == key {
-				return r, true
-			}
-		}
-	}
-	return bindingRow{}, false
-}
-
 func TestHelpPopover_AccountViewContent(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 	h := New(styles, Account)
 
 	view := stripANSI(h.SetSize(80, 24).View())
 
-	// Title in the top border.
 	if !strings.Contains(view, "Message List") {
 		t.Error("account popover: missing title 'Message List'")
 	}
 
-	// Every group heading appears.
 	for _, want := range []string{
 		"Navigate", "Triage", "Reply",
 		"Search", "Select", "Threads", "Go To",
@@ -116,7 +66,6 @@ func TestHelpPopover_AccountViewContent(t *testing.T) {
 		}
 	}
 
-	// Spot-check binding rows from each group.
 	for _, want := range []string{
 		"j/k", "up/down",
 		"d", "delete",
@@ -132,7 +81,6 @@ func TestHelpPopover_AccountViewContent(t *testing.T) {
 		}
 	}
 
-	// Rounded border corners present.
 	for _, want := range []string{"╭", "╮", "╰", "╯"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("account popover: missing border char %q", want)
@@ -146,12 +94,10 @@ func TestHelpPopover_ViewerViewContent(t *testing.T) {
 
 	view := stripANSI(h.SetSize(80, 24).View())
 
-	// Title.
 	if !strings.Contains(view, "Message Viewer") {
 		t.Error("viewer popover: missing title 'Message Viewer'")
 	}
 
-	// Viewer-only rows.
 	for _, want := range []string{
 		"j/k", "scroll",
 		"␣/b", "page d/u",
@@ -170,7 +116,6 @@ func TestHelpPopover_ViewerViewContent(t *testing.T) {
 		}
 	}
 
-	// Border corners.
 	for _, want := range []string{"╭", "╮", "╰", "╯"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("viewer popover: missing border char %q", want)
@@ -178,61 +123,24 @@ func TestHelpPopover_ViewerViewContent(t *testing.T) {
 	}
 }
 
-func TestHelpPopover_WiredStyling(t *testing.T) {
+func TestHelpPopover_Styles(t *testing.T) {
 	styles := NewStyles(theme.Nord)
 
-	// Wired rows use HelpKey (Bold) for the key column. Unwired rows
-	// use Dim (not Bold) for the entire row. Test via style properties
-	// rather than rendered ANSI (lipgloss suppresses ANSI without a TTY).
 	if !styles.HelpKey.GetBold() {
-		t.Error("HelpKey style must be bold (used for wired key column)")
+		t.Error("HelpKey style must be bold")
 	}
 	if styles.Dim.GetBold() {
-		t.Error("Dim style must not be bold (used for unwired rows)")
+		t.Error("Dim style must not be bold")
 	}
-
-	// Sanity-check that the data tables use wired=true / wired=false
-	// as expected for the rows the render path branches on.
-	wiredRow, ok := findAccountRow("Navigate", "j/k")
-	if !ok {
-		t.Fatal("Navigate j/k row not found in accountGroups")
-	}
-	if !wiredRow.wired {
-		t.Error("Navigate j/k: expected wired=true")
-	}
-
-	// "Reply" rows are all wired.
-	replyRow, ok := findAccountRow("Reply", "c")
-	if !ok {
-		t.Fatal("Reply c row not found in accountGroups")
-	}
-	if !replyRow.wired {
-		t.Error("Reply c: expected wired=true")
-	}
-
-	// Confirm render path routes correctly: wired row content is
-	// present in the account popover, unwired row content is present too.
-	view := stripANSI(New(styles, Account).SetSize(120, 30).View())
-	for _, want := range []string{"j/k", "up/down", "d", "delete"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("account popover missing %q", want)
-		}
-	}
-}
-
-func TestHelpPopover_GroupHeadersBoldEvenWhenAllUnwired(t *testing.T) {
-	styles := NewStyles(theme.Nord)
-
-	// HelpGroupHeader must be bold. It is used for every group heading
-	// including "Reply" which has no wired rows today.
 	if !styles.HelpGroupHeader.GetBold() {
 		t.Error("HelpGroupHeader style must be bold")
 	}
 
-	// Confirm "Reply" heading appears in the rendered account popover.
 	view := stripANSI(New(styles, Account).SetSize(120, 30).View())
-	if !strings.Contains(view, "Reply") {
-		t.Error("account popover: Reply group heading not found")
+	for _, want := range []string{"j/k", "up/down", "d", "delete", "Reply"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("account popover missing %q", want)
+		}
 	}
 }
 
@@ -254,8 +162,8 @@ func TestPopoverFiltersGatedBindings(t *testing.T) {
 	}
 }
 
-// BenchmarkHelpPopoverBox_Cold measures the full Box rebuild cost (dirty
-// cache. One new Model per iteration.
+// BenchmarkHelpPopoverBox_Cold measures the full Box rebuild cost (dirty cache).
+// One new Model per iteration.
 func BenchmarkHelpPopoverBox_Cold(b *testing.B) {
 	styles := NewStyles(theme.Nord)
 	b.ReportAllocs()
