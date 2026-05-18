@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/contacts"
+	"github.com/glw907/poplar/internal/logctx"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -139,9 +140,12 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		a.publish(row, OpConflict, err)
 		return
 	}
-	dispatchErr := a.dispatch(args, row)
+	opCtx := logctx.WithOpID(ctx, fmt.Sprint(row.ID))
+	a.log.DebugContext(opCtx, "drainer dispatch", "kind", row.Kind)
+	dispatchErr := a.dispatch(opCtx, args, row)
 	switch {
 	case dispatchErr == nil:
+		a.log.DebugContext(opCtx, "drainer done", "kind", row.Kind)
 		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, contacts.ErrAuth):
@@ -151,15 +155,18 @@ func (a *Account) executeOne(ctx context.Context, row *outboxRow, cfg drainerCon
 		a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("precondition-failed", dispatchErr), 0), row, "finishOp")
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, contacts.ErrNotFound):
+		a.log.DebugContext(opCtx, "drainer done", "kind", row.Kind)
 		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, mail.ErrAuth):
 		a.logTerminal(a.finishOp(row.ID, OpConflict, encodeErr("auth-failure", dispatchErr), 0), row, "finishOp")
 		a.publish(row, OpConflict, dispatchErr)
 	case errors.Is(dispatchErr, mail.ErrNotFound):
+		a.log.DebugContext(opCtx, "drainer done", "kind", row.Kind)
 		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publish(row, OpDone, nil)
 	case errors.Is(dispatchErr, ErrDraftSuperseded):
+		a.log.DebugContext(opCtx, "drainer done", "kind", row.Kind)
 		a.logTerminal(a.finalizeSuccess(ctx, row, args), row, "finalizeSuccess")
 		a.publishNote(row, OpDone, "draft superseded by another client")
 	default:
@@ -223,34 +230,34 @@ func (a *Account) finalizeSuccess(ctx context.Context, row *outboxRow, args OpAr
 	})
 }
 
-func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
+func (a *Account) dispatch(ctx context.Context, args OpArgs, row *outboxRow) error {
 	uids := []mail.UID{}
 	if row.ProtocolID.Valid && row.ProtocolID.String != "" {
 		uids = append(uids, mail.UID(row.ProtocolID.String))
 	}
 	switch v := args.(type) {
 	case MoveArgs:
-		return a.Backend.Move(uids, v.Dest)
+		return a.Backend.Move(ctx, uids, v.Dest)
 	case FlagArgs:
-		return a.Backend.Flag(uids, v.Flag, v.Set)
+		return a.Backend.Flag(ctx, uids, v.Flag, v.Set)
 	case DestroyArgs:
-		return a.Backend.Destroy(uids)
+		return a.Backend.Destroy(ctx, uids)
 	case SendArgs:
-		return a.Backend.Send(v.Envelope, row.Payload)
+		return a.Backend.Send(ctx, v.Envelope, row.Payload)
 	case AppendArgs:
-		return a.Backend.Append(row.FolderName, row.Payload, v.Flag)
+		return a.Backend.Append(ctx, row.FolderName, row.Payload, v.Flag)
 	case PushDraftArgs:
-		newUID, err := a.Backend.PushDraft(row.FolderName, row.Payload, v.PrevServerUID)
+		newUID, err := a.Backend.PushDraft(ctx, row.FolderName, row.Payload, v.PrevServerUID)
 		if err != nil {
 			return err
 		}
-		return a.MarkDraftPushed(context.Background(), v.DraftID, newUID, row.FolderName)
+		return a.MarkDraftPushed(ctx, v.DraftID, newUID, row.FolderName)
 	case ContactPutArgs:
 		// ContactsWriter is nil when the account has no CardDAV config.
 		if a.ContactsWriter == nil {
 			return errors.New("contacts writer not wired")
 		}
-		newHref, newETag, err := a.ContactsWriter.PutAddressObject(context.Background(), v.Href, v.IfMatch, row.Payload)
+		newHref, newETag, err := a.ContactsWriter.PutAddressObject(ctx, v.Href, v.IfMatch, row.Payload)
 		if err != nil {
 			return err
 		}
@@ -260,7 +267,7 @@ func (a *Account) dispatch(args OpArgs, row *outboxRow) error {
 		if a.ContactsWriter == nil {
 			return errors.New("contacts writer not wired")
 		}
-		return a.ContactsWriter.DeleteAddressObject(context.Background(), v.Href, v.IfMatch)
+		return a.ContactsWriter.DeleteAddressObject(ctx, v.Href, v.IfMatch)
 	}
 	return fmt.Errorf("dispatch: unknown args %T", args)
 }

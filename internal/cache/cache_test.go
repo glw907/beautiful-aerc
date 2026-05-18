@@ -61,27 +61,27 @@ func (f *fakeBackend) Attachments(_ mail.UID) ([]mail.Attachment, error) { retur
 func (f *fakeBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) {
 	return nil, nil
 }
-func (f *fakeBackend) Move(uids []mail.UID, _ string) error {
+func (f *fakeBackend) Move(_ context.Context, uids []mail.UID, _ string) error {
 	f.moves = append(f.moves, uids...)
 	return f.err
 }
-func (f *fakeBackend) Destroy(uids []mail.UID) error {
+func (f *fakeBackend) Destroy(_ context.Context, uids []mail.UID) error {
 	f.destroys = append(f.destroys, uids...)
 	return f.err
 }
-func (f *fakeBackend) Flag(uids []mail.UID, _ mail.Flag, _ bool) error {
+func (f *fakeBackend) Flag(_ context.Context, uids []mail.UID, _ mail.Flag, _ bool) error {
 	f.flags = append(f.flags, uids...)
 	return f.err
 }
-func (f *fakeBackend) Send(env mail.Envelope, mime []byte) error {
+func (f *fakeBackend) Send(_ context.Context, env mail.Envelope, mime []byte) error {
 	f.sends = append(f.sends, sendCall{Env: env, MIME: append([]byte(nil), mime...)})
 	return f.sendErr
 }
-func (f *fakeBackend) Append(folder string, mime []byte, flag mail.Flag) error {
+func (f *fakeBackend) Append(_ context.Context, folder string, mime []byte, flag mail.Flag) error {
 	f.appends = append(f.appends, appendCall{Folder: folder, MIME: append([]byte(nil), mime...), Flag: flag})
 	return f.appErr
 }
-func (f *fakeBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
+func (f *fakeBackend) PushDraft(_ context.Context, _ string, _ []byte, _ mail.UID) (mail.UID, error) {
 	if f.pushDraftUID != "" {
 		return f.pushDraftUID, nil
 	}
