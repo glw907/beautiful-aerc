@@ -1,13 +1,16 @@
 # Poplar Status
 
-**Current pass:** Pass 43 landed the visibility layer (ADR-0241):
-`[ui] wire-trace` / `POPLAR_WIRE_TRACE=1` wires IMAP/SMTP
-`DebugWriter` + JMAP `loggingTransport` to `logctx.WireWriter`;
-backend ctors take trailing `wireTrace bool`, threaded from
-`runRoot` via `openBackend`; lumberjack rotates the state log
-(10 MB × 2); debug checkpoints at `mailimap` dial/TLS/auth/IDLE/
-redial, `mailjmap` session/eventsource/state-change, `cache` open
-+ each migration; `slog.Info("poplar start", ...)` marks sessions.
+**Current pass:** Pass 44 landed async backend connect (ADR-0242):
+`cache.Open(name, dir, cfg, log)` is sqlite + migrations only;
+`(*Account).WireBackend(backend, ct)` attaches the backend and
+starts the backfiller + drainer; `cache.ErrNotConnected` is the
+pre-wire sentinel for backend-touching reads; `App.Init` returns
+`connectBackendCmd` which calls Connect + WireBackend and emits
+`BackendReadyMsg`; App owns `backendState`/`backendErr`; status
+bar renders Connecting / Failed pre-wire (`r` retries when
+Failed); messagelist shows `◐ Connecting…` when empty during
+warmup; `mail.ConnConnecting` distinguishes pre-auth from
+"was-connected"; `AccountName()` layering bug fixed inline.
 
 **Dogfood phase, pre-beta rules still in force.** Geoff is the
 sole user; soak (as `release-stance.md` defines it — stability
@@ -22,13 +25,13 @@ Pass 35.1 still pending Gmail/Outlook creds.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 43 | Scaffold through visibility layer (ADRs 0001–0241) | done |
+| 1 – 44 | Scaffold through async backend connect (ADRs 0001–0242) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 44+ | Dogfood-driven fixes + quality (rolling) | active |
+| 45+ | Dogfood-driven fixes + quality (rolling) | active |
 | Beta soak | Gated on second user or explicit feature freeze | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (rolling — Pass 44+)
+### Next starter prompt (rolling — Pass 45+)
 
 > **Goal.** Fix what daily-driver use surfaces; keep tightening
 > code quality while there are no other users to protect.
