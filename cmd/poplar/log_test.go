@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/glw907/poplar/internal/logctx"
 )
 
 func TestOpenStateLog_CreatesAndAppends(t *testing.T) {
@@ -104,5 +109,24 @@ func TestInstallLogger_EnvOverridesConfig(t *testing.T) {
 
 	if !slog.Default().Enabled(nil, slog.LevelDebug) {
 		t.Error("expected env to override config: debug should be enabled")
+	}
+}
+
+func TestInstallLogger_OpIDPropagation(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	t.Setenv("POPLAR_LOG", "debug")
+
+	installLogger("")
+
+	var buf bytes.Buffer
+	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(logctx.Handler{Handler: inner}))
+
+	ctx := logctx.WithOpID(context.Background(), "42")
+	slog.DebugContext(ctx, "probe")
+
+	if !strings.Contains(buf.String(), "op_id=42") {
+		t.Errorf("op_id not propagated: %s", buf.String())
 	}
 }

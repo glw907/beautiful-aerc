@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/glw907/poplar/internal/logctx"
 	"golang.org/x/term"
 )
 
@@ -22,7 +23,7 @@ func installLogger(cfgLevel string) {
 			w = f
 		}
 	}
-	h := slog.NewTextHandler(w, &slog.HandlerOptions{Level: level})
+	h := logctx.Handler{Handler: slog.NewTextHandler(w, &slog.HandlerOptions{Level: level})}
 	slog.SetDefault(slog.New(h))
 }
 
