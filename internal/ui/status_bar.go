@@ -44,10 +44,8 @@ type StatusBar struct {
 	backfillTotal  int
 	backfillPaused bool
 	backfillWarn   bool
-	// Pre-wire lifecycle state. Connecting and Failed override the
-	// connState-derived render; Connected falls through to it.
-	backendState uicore.BackendState
-	backendErr   error
+	backendState   uicore.BackendState
+	backendErr     error
 }
 
 func NewStatusBar(styles Styles) StatusBar {

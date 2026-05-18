@@ -206,7 +206,7 @@ func (m App) handleFolderLoaded(msg account.FolderLoadedMsg) (App, tea.Cmd, bool
 }
 
 func (m App) handleBackendUpdate(msg backendUpdateMsg) (App, tea.Cmd, bool) {
-	cmds := []tea.Cmd{pumpUpdatesCmd(m.acct.Backend())}
+	cmds := []tea.Cmd{pumpUpdatesCmd(m.backend)}
 	if msg.update.Type == mail.UpdateConnState {
 		var cs ConnectionState
 		switch msg.update.ConnState {

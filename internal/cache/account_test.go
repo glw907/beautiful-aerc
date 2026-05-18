@@ -77,7 +77,6 @@ func TestWireBackend_StartsDrainer(t *testing.T) {
 	if err := a.WireBackend(be, ct); err != nil {
 		t.Fatalf("WireBackend: %v", err)
 	}
-	// Shape check: WireBackend must have stored a cancel for the drainer context.
 	// End-to-end drain behavior is validated by TestIntegration_TriageRoundTrip.
 	if a.drainerStop == nil {
 		t.Fatal("drainerStop is nil after WireBackend; drainer was not started")

@@ -218,8 +218,9 @@ func (m *App) suggestAddresses(prefix string) []contacts.Suggestion {
 	return out
 }
 
-// Init starts the account and dispatches connectBackendCmd when the backend
-// is not yet connected; the pre-wired path is transitional.
+// Init starts the account and dispatches connectBackendCmd when the
+// backend is not yet wired. Tests construct a pre-wired cache via
+// newTestCache and take the pump branch directly.
 func (m App) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.acct.Init()}
 	if m.acct.Cache().Connected() {

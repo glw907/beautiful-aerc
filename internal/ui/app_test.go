@@ -2005,9 +2005,7 @@ func TestApp_RetryKey_NotClaimedWhenConnecting(t *testing.T) {
 		t.Fatalf("setup: backendState = %v, want BackendConnecting", app.backendState)
 	}
 	_, cmd := app.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	// No connectBackendCmd should be dispatched here; the key falls through
-	// to reply or other consumers. A nil cmd is expected since no message is
-	// selected in the bare test app.
+	// r falls through to reply or other consumers; nil expected here.
 	if cmd != nil {
 		// Drain to see if the result is a BackendReadyMsg or similar connect start.
 		select {

@@ -183,9 +183,8 @@ func Open(accountName string, dir string, cfg Config, log *slog.Logger) (*Accoun
 	}, nil
 }
 
-// WireBackend attaches the backend and change tracker, then
-// starts the backfiller and drainer goroutines. Call exactly
-// once per Account.
+// WireBackend wires b and ct and starts background goroutines.
+// Call exactly once.
 func (a *Account) WireBackend(backend mail.Backend, ct mail.ChangeTracker) error {
 	if a.Backend != nil {
 		return errors.New("cache: backend already wired")
