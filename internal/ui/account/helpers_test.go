@@ -73,11 +73,14 @@ func drainBatch(cmd tea.Cmd) []tea.Msg {
 
 func newTestCache(t *testing.T, backend mail.Backend) *cache.Account {
 	t.Helper()
-	acct, err := cache.Open("test", backend, newFullSyncTracker(backend), t.TempDir(), cache.Config{}, nil)
+	acct, err := cache.Open("test", t.TempDir(), cache.Config{}, nil)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
 	t.Cleanup(func() { acct.Close() })
+	if err := acct.WireBackend(backend, newFullSyncTracker(backend)); err != nil {
+		t.Fatalf("cache.WireBackend: %v", err)
+	}
 	if err := acct.SyncFolders(context.Background()); err != nil {
 		t.Fatalf("SyncFolders: %v", err)
 	}

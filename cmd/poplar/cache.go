@@ -228,7 +228,7 @@ func runEvict(ctx context.Context, w io.Writer, cutoff time.Time, scope string) 
 			continue
 		}
 		matched = true
-		acct, err := cache.Open(a.Name, nil, nil, "", cache.Config{}, nil)
+		acct, err := cache.Open(a.Name, "", cache.Config{}, nil)
 		if err != nil {
 			return fmt.Errorf("open %s: %w", a.Name, err)
 		}

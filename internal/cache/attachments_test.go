@@ -34,12 +34,14 @@ func (b *attachBackend) FetchAttachment(uid mail.UID, partID string) ([]byte, er
 func openAttachAccount(t *testing.T, be *attachBackend) *Account {
 	t.Helper()
 	be.fakeBackend.folders = []mail.Folder{{Name: "INBOX", Role: "inbox"}}
-	ct := &fakeChangeTracker{}
-	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxAttachmentSize: 1 << 30}, nil)
+	a, err := Open("Test", t.TempDir(), Config{MaxAttachmentSize: 1 << 30}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { a.Close() })
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
 	if err := a.SyncFolders(context.Background()); err != nil {
 		t.Fatalf("SyncFolders: %v", err)
 	}
@@ -184,12 +186,14 @@ func TestFetchAttachment_EvictBySize(t *testing.T) {
 		},
 	}
 	be.fakeBackend.folders = []mail.Folder{{Name: "INBOX", Role: "inbox"}}
-	ct := &fakeChangeTracker{}
-	a, err := Open("Test", be, ct, t.TempDir(), Config{MaxAttachmentSize: 150}, nil)
+	a, err := Open("Test", t.TempDir(), Config{MaxAttachmentSize: 150}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { a.Close() })
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
 	if err := a.SyncFolders(context.Background()); err != nil {
 		t.Fatalf("SyncFolders: %v", err)
 	}

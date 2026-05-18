@@ -170,13 +170,16 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("backend does not implement mail.ChangeTracker")
 	}
 	log.Debug("opening cache")
-	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{
+	acct, err := cache.Open(accts[0].Name, "", cache.Config{
 		MaxSize:           cacheCfg.MaxSize,
 		MaxAttachmentSize: cacheCfg.MaxAttachmentSize,
 		MaxOutboxBytes:    cacheCfg.MaxOutboxBytes,
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("open cache for %s: %v", accts[0].Name, err)
+	}
+	if err := acct.WireBackend(backend, ct); err != nil {
+		return fmt.Errorf("wire backend for %s: %v", accts[0].Name, err)
 	}
 	defer acct.Close()
 	log.Debug("starting drainer")

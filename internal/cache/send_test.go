@@ -18,12 +18,14 @@ func (j *jmapFakeBackend) IsJMAP() bool { return true }
 // openTestAccountWith opens an account backed by the given backend.
 func openTestAccountWith(t *testing.T, be mail.Backend) *Account {
 	t.Helper()
-	ct := &fakeChangeTracker{}
-	a, err := Open("Test Account", be, ct, t.TempDir(), Config{}, nil)
+	a, err := Open("Test Account", t.TempDir(), Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { a.Close() })
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
 	if err := a.SyncFolders(context.Background()); err != nil {
 		t.Fatalf("SyncFolders: %v", err)
 	}
@@ -53,12 +55,14 @@ func TestQueueOutbound_OverCap_Rejects(t *testing.T) {
 	be := &jmapFakeBackend{fakeBackend{
 		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
 	}}
-	ct := &fakeChangeTracker{}
-	a, err := Open("Test Account", be, ct, t.TempDir(), Config{MaxOutboxBytes: 16}, nil)
+	a, err := Open("Test Account", t.TempDir(), Config{MaxOutboxBytes: 16}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { a.Close() })
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
 	if err := a.SyncFolders(context.Background()); err != nil {
 		t.Fatalf("SyncFolders: %v", err)
 	}
@@ -78,12 +82,14 @@ func TestQueueOutbound_UnderCap_Accepts(t *testing.T) {
 	be := &jmapFakeBackend{fakeBackend{
 		folders: []mail.Folder{{Name: "Sent", Role: "sent"}},
 	}}
-	ct := &fakeChangeTracker{}
-	a, err := Open("Test Account", be, ct, t.TempDir(), Config{MaxOutboxBytes: 1024}, nil)
+	a, err := Open("Test Account", t.TempDir(), Config{MaxOutboxBytes: 1024}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { a.Close() })
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
 	if err := a.SyncFolders(context.Background()); err != nil {
 		t.Fatalf("SyncFolders: %v", err)
 	}

@@ -12,11 +12,14 @@ func TestIntegration_TriageRoundTrip(t *testing.T) {
 	be := &fakeBackend{
 		folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}},
 	}
-	a, err := Open("integration", be, &fakeChangeTracker{}, t.TempDir(), Config{}, nil)
+	a, err := Open("integration", t.TempDir(), Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	defer a.Close()
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
 	ctx := context.Background()
 
 	if err := a.SyncFolders(ctx); err != nil {
@@ -90,9 +93,12 @@ func TestIntegration_CrashRecovery(t *testing.T) {
 	dir := t.TempDir()
 	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
 
-	a, err := Open("crash", be, &fakeChangeTracker{}, dir, Config{}, nil)
+	a, err := Open("crash", dir, Config{}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
+	}
+	if err := a.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend: %v", err)
 	}
 	ctx := context.Background()
 	if err := a.SyncFolders(ctx); err != nil {
@@ -117,11 +123,14 @@ func TestIntegration_CrashRecovery(t *testing.T) {
 	a.Close()
 
 	// Re-open: recoverExecuting fires inside StartDrainer.
-	a2, err := Open("crash", be, &fakeChangeTracker{}, dir, Config{}, nil)
+	a2, err := Open("crash", dir, Config{}, nil)
 	if err != nil {
 		t.Fatalf("re-Open: %v", err)
 	}
 	defer a2.Close()
+	if err := a2.WireBackend(be, &fakeChangeTracker{}); err != nil {
+		t.Fatalf("WireBackend (a2): %v", err)
+	}
 	if err := a2.recoverExecuting(); err != nil {
 		t.Fatalf("recoverExecuting: %v", err)
 	}

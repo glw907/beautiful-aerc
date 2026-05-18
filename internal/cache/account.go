@@ -137,14 +137,14 @@ func OpenDB(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", dsn)
 }
 
-// Open returns an Account ready for reads and writes. It opens (or
-// creates) the per-account SQLite database under dir, applies
-// pragmas, and runs schema migrations to the current version.
+// Open opens (or creates) the per-account SQLite database under dir,
+// applies pragmas, and runs schema migrations. It does not connect a
+// backend; call WireBackend after Connect succeeds.
 //
 // dir is the cache base directory. The per-account subdirectory is
 // created if absent. A leading ~ is expanded to the user's home.
 // A nil log defaults to slog.Default() tagged with the package name.
-func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir string, cfg Config, log *slog.Logger) (*Account, error) {
+func Open(accountName string, dir string, cfg Config, log *slog.Logger) (*Account, error) {
 	if log == nil {
 		log = slog.Default().With("component", "cache")
 	}
@@ -168,9 +168,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		return nil, err
 	}
 	log.Debug("cache open", "schema", schemaVersion, "account", accountName)
-	a := &Account{
-		Backend:           backend,
-		ChangeTracker:     ct,
+	return &Account{
 		log:               log,
 		db:                db,
 		dir:               acctDir,
@@ -181,12 +179,22 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		events:            make(chan Event, 32),
 		drainSignal:       make(chan struct{}, 1),
 		stop:              make(chan struct{}),
+	}, nil
+}
+
+// WireBackend attaches a backend and change tracker, then starts
+// the per-account backfiller. Call exactly once per Account.
+func (a *Account) WireBackend(backend mail.Backend, ct mail.ChangeTracker) error {
+	if a.Backend != nil {
+		return errors.New("cache: backend already wired")
 	}
+	a.Backend = backend
+	a.ChangeTracker = ct
 	a.backfiller = newBackfiller(a)
 	bfCtx, cancel := context.WithCancel(context.Background())
 	a.backfillStop = cancel
 	go a.backfiller.Run(bfCtx)
-	return a, nil
+	return nil
 }
 
 // ErrNotConnected is returned by cache methods that require a live backend
@@ -198,12 +206,7 @@ func (a *Account) Name() string { return a.name }
 // Connected reports whether a backend has been attached to this account.
 func (a *Account) Connected() bool { return a.Backend != nil }
 
-func (a *Account) AccountName() string {
-	if a.Backend == nil {
-		return a.name
-	}
-	return a.Backend.AccountName()
-}
+func (a *Account) AccountName() string { return a.name }
 
 func (a *Account) AccountEmail() string {
 	if a.Backend == nil {

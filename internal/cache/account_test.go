@@ -25,3 +25,64 @@ func TestErrNotConnected_IsSentinel(t *testing.T) {
 		t.Fatalf("errors.Is wrapped ErrNotConnected = false")
 	}
 }
+
+func TestOpen_NoBackend_SucceedsAndDeferredWire(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	if a.Connected() {
+		t.Fatalf("Connected() after Open without WireBackend = true, want false")
+	}
+	if got := a.AccountName(); got != "Test" {
+		t.Fatalf("AccountName() pre-wire = %q, want %q", got, "Test")
+	}
+	if got := a.AccountEmail(); got != "" {
+		t.Fatalf("AccountEmail() pre-wire = %q, want \"\"", got)
+	}
+}
+
+func TestWireBackend_AssignsAndStartsBackfiller(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
+	ct := &fakeChangeTracker{}
+	if err := a.WireBackend(be, ct); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
+	if !a.Connected() {
+		t.Fatalf("Connected() after WireBackend = false")
+	}
+	// Second call must error; backend is wired exactly once.
+	if err := a.WireBackend(be, ct); err == nil {
+		t.Fatalf("second WireBackend = nil, want error")
+	}
+}
+
+func TestOpen_AccountName_FromName(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("MyAccount", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	// AccountName must return the name passed to Open, not delegate to backend.
+	if got := a.AccountName(); got != "MyAccount" {
+		t.Fatalf("AccountName() = %q, want %q", got, "MyAccount")
+	}
+	be := &fakeBackend{}
+	ct := &fakeChangeTracker{}
+	if err := a.WireBackend(be, ct); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
+	// After wiring, AccountName must still return the name from Open, not from backend.
+	if got := a.AccountName(); got != "MyAccount" {
+		t.Fatalf("AccountName() post-wire = %q, want %q", got, "MyAccount")
+	}
+}
