@@ -7,6 +7,7 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -188,7 +189,14 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 	return a, nil
 }
 
+// ErrNotConnected is returned by cache methods that require a live backend
+// when no backend has been attached.
+var ErrNotConnected = errors.New("cache: backend not yet wired")
+
 func (a *Account) Name() string { return a.name }
+
+// Connected reports whether a backend has been attached to this account.
+func (a *Account) Connected() bool { return a.Backend != nil }
 
 func (a *Account) AccountName() string {
 	if a.Backend == nil {
