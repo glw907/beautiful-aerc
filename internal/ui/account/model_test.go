@@ -831,12 +831,12 @@ func (b *pagingFakeBackend) FetchHeaders(uids []mail.UID) ([]mail.MessageInfo, e
 	return result, nil
 }
 func (b *pagingFakeBackend) FetchBody(_ mail.UID) ([]byte, error)         { return nil, nil }
-func (b *pagingFakeBackend) Move(_ []mail.UID, _ string) error            { return nil }
-func (b *pagingFakeBackend) Destroy(_ []mail.UID) error                   { return nil }
-func (b *pagingFakeBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return nil }
-func (b *pagingFakeBackend) Send(_ mail.Envelope, _ []byte) error         { return nil }
-func (b *pagingFakeBackend) Append(_ string, _ []byte, _ mail.Flag) error { return nil }
-func (b *pagingFakeBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
+func (b *pagingFakeBackend) Move(_ context.Context, _ []mail.UID, _ string) error            { return nil }
+func (b *pagingFakeBackend) Destroy(_ context.Context, _ []mail.UID) error                   { return nil }
+func (b *pagingFakeBackend) Flag(_ context.Context, _ []mail.UID, _ mail.Flag, _ bool) error { return nil }
+func (b *pagingFakeBackend) Send(_ context.Context, _ mail.Envelope, _ []byte) error         { return nil }
+func (b *pagingFakeBackend) Append(_ context.Context, _ string, _ []byte, _ mail.Flag) error { return nil }
+func (b *pagingFakeBackend) PushDraft(_ context.Context, _ string, _ []byte, _ mail.UID) (mail.UID, error) {
 	return "", mail.ErrUnsupported
 }
 func (b *pagingFakeBackend) IsJMAP() bool                { return false }

@@ -49,14 +49,18 @@ func (b *blockingBackend) FetchAttachment(_ mail.UID, _ string) ([]byte, error) 
 	return nil, nil
 }
 
-func (b *blockingBackend) Move(_ []mail.UID, _ string) error { return b.moveErr }
-func (b *blockingBackend) Destroy(_ []mail.UID) error        { return b.destroyErr }
+func (b *blockingBackend) Move(_ context.Context, _ []mail.UID, _ string) error { return b.moveErr }
+func (b *blockingBackend) Destroy(_ context.Context, _ []mail.UID) error        { return b.destroyErr }
 
-func (b *blockingBackend) Flag(_ []mail.UID, _ mail.Flag, _ bool) error { return b.flagErr }
+func (b *blockingBackend) Flag(_ context.Context, _ []mail.UID, _ mail.Flag, _ bool) error {
+	return b.flagErr
+}
 
-func (b *blockingBackend) Send(_ mail.Envelope, _ []byte) error         { return b.sendErr }
-func (b *blockingBackend) Append(_ string, _ []byte, _ mail.Flag) error { return b.appendErr }
-func (b *blockingBackend) PushDraft(_ string, _ []byte, _ mail.UID) (mail.UID, error) {
+func (b *blockingBackend) Send(_ context.Context, _ mail.Envelope, _ []byte) error { return b.sendErr }
+func (b *blockingBackend) Append(_ context.Context, _ string, _ []byte, _ mail.Flag) error {
+	return b.appendErr
+}
+func (b *blockingBackend) PushDraft(_ context.Context, _ string, _ []byte, _ mail.UID) (mail.UID, error) {
 	return "", mail.ErrUnsupported
 }
 func (b *blockingBackend) IsJMAP() bool { return false }
