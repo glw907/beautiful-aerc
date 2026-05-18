@@ -31,8 +31,9 @@ type MockBackend struct {
 	SendCalls   []SendCall
 	AppendCalls []AppendCall
 
-	SendErr   error
-	AppendErr error
+	SendErr    error
+	AppendErr  error
+	ConnectErr error
 }
 
 type SendCall struct {
@@ -98,7 +99,8 @@ func (m *MockBackend) AccountName() string             { return m.name }
 func (m *MockBackend) AccountEmail() string            { return m.email }
 func (m *MockBackend) IsJMAP() bool                    { return m.isJMAP }
 func (m *MockBackend) SetJMAP(v bool)                  { m.isJMAP = v }
-func (m *MockBackend) Connect(_ context.Context) error { return nil }
+func (m *MockBackend) Connect(_ context.Context) error { return m.ConnectErr }
+func (m *MockBackend) SetConnectErr(err error)         { m.ConnectErr = err }
 func (m *MockBackend) Disconnect() error               { return nil }
 
 func (m *MockBackend) ListFolders() ([]Folder, error) {

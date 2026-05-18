@@ -692,3 +692,26 @@ type noticeExpireMsg struct{}
 func clearNoticeAfter(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return noticeExpireMsg{} })
 }
+
+// BackendReadyMsg fires after Connect succeeds and the account is
+// wired. By the time Update sees it, acct.Connected() is true.
+type BackendReadyMsg struct{}
+
+// BackendErrMsg fires when Connect or WireBackend fails. The account
+// stays unwired; cached reads still work.
+type BackendErrMsg struct{ Err error }
+
+// connectBackendCmd runs backend.Connect then WireBackend so Update
+// always sees a fully-wired account on BackendReadyMsg.
+func connectBackendCmd(ctx context.Context, b mail.Backend, acct *cache.Account) tea.Cmd {
+	return func() tea.Msg {
+		if err := b.Connect(ctx); err != nil {
+			return BackendErrMsg{Err: err}
+		}
+		ct, _ := b.(mail.ChangeTracker)
+		if err := acct.WireBackend(b, ct); err != nil {
+			return BackendErrMsg{Err: fmt.Errorf("wire backend: %w", err)}
+		}
+		return BackendReadyMsg{}
+	}
+}

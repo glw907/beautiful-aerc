@@ -1,12 +1,17 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/glw907/poplar/internal/cache"
+	"github.com/glw907/poplar/internal/mail"
 )
 
 func TestSanitizeAttachFilename(t *testing.T) {
@@ -51,6 +56,48 @@ func TestResolveSaveTarget_Fresh(t *testing.T) {
 	}
 	if got != filepath.Join(dir, "fresh.bin") {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestConnectBackendCmd_Success_WiresAndEmitsReady(t *testing.T) {
+	dir := t.TempDir()
+	acct, err := cache.Open("Test", dir, cache.Config{}, nil)
+	if err != nil {
+		t.Fatalf("cache.Open: %v", err)
+	}
+	defer acct.Close()
+	b := mail.NewMockBackend()
+	cmd := connectBackendCmd(context.Background(), b, acct)
+	msg := cmd()
+	if _, ok := msg.(BackendReadyMsg); !ok {
+		t.Fatalf("msg = %T, want BackendReadyMsg", msg)
+	}
+	if !acct.Connected() {
+		t.Fatalf("Connected() after BackendReadyMsg = false")
+	}
+}
+
+func TestConnectBackendCmd_Failure_EmitsErr(t *testing.T) {
+	dir := t.TempDir()
+	acct, err := cache.Open("Test", dir, cache.Config{}, nil)
+	if err != nil {
+		t.Fatalf("cache.Open: %v", err)
+	}
+	defer acct.Close()
+	b := mail.NewMockBackend()
+	wantErr := errors.New("network down")
+	b.SetConnectErr(wantErr)
+	cmd := connectBackendCmd(context.Background(), b, acct)
+	msg := cmd()
+	got, ok := msg.(BackendErrMsg)
+	if !ok {
+		t.Fatalf("msg = %T, want BackendErrMsg", msg)
+	}
+	if !errors.Is(got.Err, wantErr) {
+		t.Fatalf("Err = %v, want %v", got.Err, wantErr)
+	}
+	if acct.Connected() {
+		t.Fatalf("Connected() after failed connect = true, want false")
 	}
 }
 
