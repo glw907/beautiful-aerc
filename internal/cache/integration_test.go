@@ -53,10 +53,7 @@ func TestIntegration_TriageRoundTrip(t *testing.T) {
 		t.Fatal("optimistic ui_flags not reflected in QueryFolder pre-drain")
 	}
 
-	// Start the drainer. Wait for the done event.
-	if err := a.StartDrainer(ctx); err != nil {
-		t.Fatalf("StartDrainer: %v", err)
-	}
+	// The drainer started inside WireBackend. Wait for the done event.
 	select {
 	case ev := <-a.Events():
 		if ev.Status != "done" {
@@ -122,7 +119,7 @@ func TestIntegration_CrashRecovery(t *testing.T) {
 	}
 	a.Close()
 
-	// Re-open: recoverExecuting fires inside StartDrainer.
+	// Re-open: recoverExecuting fires inside WireBackend → startDrainer.
 	a2, err := Open("crash", dir, Config{}, nil)
 	if err != nil {
 		t.Fatalf("re-Open: %v", err)
@@ -130,9 +127,6 @@ func TestIntegration_CrashRecovery(t *testing.T) {
 	defer a2.Close()
 	if err := a2.WireBackend(be, &fakeChangeTracker{}); err != nil {
 		t.Fatalf("WireBackend (a2): %v", err)
-	}
-	if err := a2.recoverExecuting(); err != nil {
-		t.Fatalf("recoverExecuting: %v", err)
 	}
 
 	check := func(opID int64, wantStatus string) {

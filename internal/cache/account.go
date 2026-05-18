@@ -43,6 +43,7 @@ type Account struct {
 
 	drainSignal   chan struct{}
 	drainerPaused atomic.Bool
+	drainerStop   context.CancelFunc
 	stop          chan struct{}
 	wg            sync.WaitGroup
 	backfiller    *Backfiller
@@ -137,9 +138,9 @@ func OpenDB(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", dsn)
 }
 
-// Open opens (or creates) the per-account SQLite database under dir,
-// applies pragmas, and runs schema migrations. It does not connect a
-// backend; call WireBackend after Connect succeeds.
+// Open opens the per-account SQLite store and runs migrations. The
+// returned Account has no backend; call WireBackend before any sync,
+// backfill, or outbox work.
 //
 // dir is the cache base directory. The per-account subdirectory is
 // created if absent. A leading ~ is expanded to the user's home.
@@ -182,8 +183,9 @@ func Open(accountName string, dir string, cfg Config, log *slog.Logger) (*Accoun
 	}, nil
 }
 
-// WireBackend attaches a backend and change tracker, then starts
-// the per-account backfiller. Call exactly once per Account.
+// WireBackend attaches the backend and change tracker, then
+// starts the backfiller and drainer goroutines. Call exactly
+// once per Account.
 func (a *Account) WireBackend(backend mail.Backend, ct mail.ChangeTracker) error {
 	if a.Backend != nil {
 		return errors.New("cache: backend already wired")
@@ -191,9 +193,13 @@ func (a *Account) WireBackend(backend mail.Backend, ct mail.ChangeTracker) error
 	a.Backend = backend
 	a.ChangeTracker = ct
 	a.backfiller = newBackfiller(a)
-	bfCtx, cancel := context.WithCancel(context.Background())
-	a.backfillStop = cancel
+	bfCtx, bfCancel := context.WithCancel(context.Background())
+	a.backfillStop = bfCancel
 	go a.backfiller.Run(bfCtx)
+	if err := a.startDrainer(); err != nil {
+		bfCancel()
+		return err
+	}
 	return nil
 }
 
@@ -284,6 +290,9 @@ func (a *Account) NotifyConnState(online bool) {
 
 // Close stops background goroutines and closes the database.
 func (a *Account) Close() error {
+	if a.drainerStop != nil {
+		a.drainerStop()
+	}
 	if a.backfillStop != nil {
 		a.backfillStop()
 	}

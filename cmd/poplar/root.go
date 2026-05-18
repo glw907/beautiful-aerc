@@ -176,16 +176,12 @@ func runRoot(f rootFlags) error {
 		MaxOutboxBytes:    cacheCfg.MaxOutboxBytes,
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("open cache for %s: %v", accts[0].Name, err)
+		return fmt.Errorf("open cache for %s: %w", accts[0].Name, err)
 	}
 	if err := acct.WireBackend(backend, ct); err != nil {
-		return fmt.Errorf("wire backend for %s: %v", accts[0].Name, err)
+		return fmt.Errorf("wire backend for %s: %w", accts[0].Name, err)
 	}
 	defer acct.Close()
-	log.Debug("starting drainer")
-	if err := acct.StartDrainer(ctx); err != nil {
-		return fmt.Errorf("start drainer: %v", err)
-	}
 	log.Debug("startup complete, launching UI")
 
 	app := ui.NewApp(t, acct, uiCfg, iconSet, measurer, accts[0].Contacts, accts[0].Identities)

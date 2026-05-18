@@ -213,9 +213,6 @@ func TestDrainer_FlagSuccess(t *testing.T) {
 	if _, err := a.QueueOp(context.Background(), "Inbox", "9", FlagArgs{Flag: mail.FlagSeen, Set: true}); err != nil {
 		t.Fatalf("QueueOp: %v", err)
 	}
-	if err := a.StartDrainer(context.Background()); err != nil {
-		t.Fatalf("StartDrainer: %v", err)
-	}
 	select {
 	case ev := <-a.Events():
 		if ev.Status != OpDone {
@@ -245,7 +242,6 @@ func TestDrainer_ConflictOnAuthError(t *testing.T) {
 	a.SyncFolders(context.Background())
 	a.upsertMessages(context.Background(), "Inbox", []mail.MessageInfo{{UID: "1"}})
 	a.QueueOp(context.Background(), "Inbox", "1", FlagArgs{Flag: mail.FlagSeen, Set: true})
-	a.StartDrainer(context.Background())
 	select {
 	case ev := <-a.Events():
 		if ev.Status != OpConflict {

@@ -196,10 +196,6 @@ func TestDrainer_PushDraft_SupersededEmitsNote(t *testing.T) {
 	if _, err := a.QueuePushDraft(ctx, "missing-id", "Drafts", []byte("MIME"), mail.UID("")); err != nil {
 		t.Fatalf("QueuePushDraft: %v", err)
 	}
-	if err := a.StartDrainer(ctx); err != nil {
-		t.Fatalf("StartDrainer: %v", err)
-	}
-
 	deadline := time.After(2 * time.Second)
 	for {
 		select {

@@ -46,16 +46,18 @@ func defaultDrainerConfig() drainerConfig {
 	}
 }
 
-// StartDrainer launches the per-account outbox drainer. Crash-
-// recovered `executing` rows are reset before the loop starts.
-// The goroutine exits when Close is called.
-func (a *Account) StartDrainer(ctx context.Context) error {
+// startDrainer resets crash-recovered rows and launches the
+// drainer goroutine. Called from WireBackend; the goroutine
+// exits when a.drainerStop is called or a.stop is closed.
+func (a *Account) startDrainer() error {
 	if err := a.recoverExecuting(); err != nil {
 		return fmt.Errorf("recover executing: %w", err)
 	}
+	drCtx, cancel := context.WithCancel(context.Background())
+	a.drainerStop = cancel
 	cfg := defaultDrainerConfig()
 	a.wg.Add(1)
-	go a.drainLoop(ctx, cfg)
+	go a.drainLoop(drCtx, cfg)
 	return nil
 }
 

@@ -59,9 +59,27 @@ func TestWireBackend_AssignsAndStartsBackfiller(t *testing.T) {
 	if !a.Connected() {
 		t.Fatalf("Connected() after WireBackend = false")
 	}
-	// Second call must error; backend is wired exactly once.
 	if err := a.WireBackend(be, ct); err == nil {
 		t.Fatalf("second WireBackend = nil, want error")
+	}
+}
+
+func TestWireBackend_StartsDrainer(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	be := &fakeBackend{folders: []mail.Folder{{Name: "INBOX", Role: "inbox"}}}
+	ct := &fakeChangeTracker{}
+	if err := a.WireBackend(be, ct); err != nil {
+		t.Fatalf("WireBackend: %v", err)
+	}
+	// Shape check: WireBackend must have stored a cancel for the drainer context.
+	// End-to-end drain behavior is validated by TestIntegration_TriageRoundTrip.
+	if a.drainerStop == nil {
+		t.Fatal("drainerStop is nil after WireBackend; drainer was not started")
 	}
 }
 
@@ -72,7 +90,6 @@ func TestOpen_AccountName_FromName(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	defer a.Close()
-	// AccountName must return the name passed to Open, not delegate to backend.
 	if got := a.AccountName(); got != "MyAccount" {
 		t.Fatalf("AccountName() = %q, want %q", got, "MyAccount")
 	}
@@ -81,7 +98,6 @@ func TestOpen_AccountName_FromName(t *testing.T) {
 	if err := a.WireBackend(be, ct); err != nil {
 		t.Fatalf("WireBackend: %v", err)
 	}
-	// After wiring, AccountName must still return the name from Open, not from backend.
 	if got := a.AccountName(); got != "MyAccount" {
 		t.Fatalf("AccountName() post-wire = %q, want %q", got, "MyAccount")
 	}
