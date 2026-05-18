@@ -256,6 +256,9 @@ func (m App) deriveChromeFromAcct() App {
 	}
 	m.footer = m.footer.SetCounter(m.acct.WindowCounter())
 	m.statusBar = m.statusBar.SetBackendState(m.backendState, m.backendErr)
+	ml := m.acct.MsgList()
+	ml.SetConnecting(m.backendState == uicore.BackendConnecting)
+	m.acct = m.acct.WithMsgList(ml)
 	return m
 }
 

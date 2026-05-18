@@ -17,6 +17,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Connected)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := stripANSI(sb.View(80, 30))
 		if !strings.Contains(result, "10 messages") {
 			t.Error("missing message count")
@@ -33,6 +34,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Connected)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := stripANSI(sb.View(80, 30))
 		if strings.Contains(result, "Inbox") {
 			t.Error("status bar should not show folder name")
@@ -43,6 +45,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Connected)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := stripANSI(sb.View(80, 30))
 		trimmed := strings.TrimRight(result, " ")
 		if !strings.HasSuffix(trimmed, "─╯") {
@@ -54,6 +57,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Connected)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := stripANSI(sb.View(80, 30))
 		runes := []rune(result)
 		if len(runes) > 30 && runes[30] != '┴' {
@@ -65,6 +69,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Offline)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := stripANSI(sb.View(80, 30))
 		if !strings.Contains(result, "○ offline") {
 			t.Error("missing offline indicator")
@@ -75,6 +80,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Connected)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := stripANSI(sb.View(80, 0))
 		if strings.Contains(result, "┴") {
 			t.Error("should not have ┴ when dividerCol is 0")
@@ -85,6 +91,7 @@ func TestStatusBarView(t *testing.T) {
 		sb := NewStatusBar(styles)
 		sb = sb.SetCounts(10, 3)
 		sb = sb.SetConnectionState(Connected)
+		sb = sb.SetBackendState(uicore.BackendConnected, nil)
 		result := sb.View(80, 30)
 		if lipgloss.Width(result) != 80 {
 			t.Errorf("width = %d, want 80", lipgloss.Width(result))
@@ -94,7 +101,7 @@ func TestStatusBarView(t *testing.T) {
 
 func TestStatusBarViewerMode(t *testing.T) {
 	styles := NewStyles(theme.Nord)
-	sb := NewStatusBar(styles).SetMode(StatusViewer).SetScrollPct(42).SetConnectionState(Connected)
+	sb := NewStatusBar(styles).SetMode(StatusViewer).SetScrollPct(42).SetConnectionState(Connected).SetBackendState(uicore.BackendConnected, nil)
 	result := stripANSI(sb.View(80, 30))
 	if !strings.Contains(result, "42%") {
 		t.Errorf("expected scroll pct in viewer mode: %q", result)
@@ -146,9 +153,6 @@ func TestStatusBar_BackendConnecting(t *testing.T) {
 	out := stripANSI(sb.View(80, 0))
 	if !strings.Contains(out, "connecting") {
 		t.Fatalf("Connecting render missing 'connecting': %q", out)
-	}
-	if strings.Contains(out, "connected") && !strings.Contains(out, "connecting") {
-		t.Fatalf("Connecting render shows 'connected' instead of 'connecting': %q", out)
 	}
 }
 

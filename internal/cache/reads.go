@@ -225,7 +225,6 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 			missing = append(missing, u)
 		}
 	}
-	// Backend-touching paths below require a wired connection.
 	if len(missing) > 0 {
 		if !a.Connected() {
 			return nil, ErrNotConnected

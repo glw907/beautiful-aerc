@@ -125,6 +125,8 @@ type Model struct {
 	preResults   []mail.MessageInfo
 	preThreaded  bool
 	preCursorUID mail.UID
+
+	connecting bool
 }
 
 // New constructs a Model. layout defaults to (Sender=22, Date=5,
@@ -679,6 +681,9 @@ func (m *Model) SetSort(order SortOrder) {
 	m.rebuild()
 }
 
+// SetConnecting controls the connecting placeholder shown when the source is empty.
+func (m *Model) SetConnecting(b bool) { m.connecting = b }
+
 // SetThreaded toggles thread grouping. When false the list flattens to one
 // row per message: sort and filter still apply, prefixes and fold state do
 // not. Per-folder [ui.folders.<name>] threading = false flips this.
@@ -958,8 +963,11 @@ func (m Model) View() string {
 
 func (m Model) renderEmpty() string {
 	label := "No messages"
-	if m.filter.raw != "" {
+	switch {
+	case m.filter.raw != "":
 		label = "No matches"
+	case m.connecting:
+		label = "◐ Connecting…"
 	}
 	labelLine := m.styles.MsgListBg.Width(m.width).
 		Foreground(m.styles.MsgListPlaceholder.GetForeground()).

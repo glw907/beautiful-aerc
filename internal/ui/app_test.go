@@ -1978,3 +1978,47 @@ func TestApp_BackendErrMsg_StoresError(t *testing.T) {
 		t.Fatalf("backendErr = %v, want %v", next.backendErr, wantErr)
 	}
 }
+
+func TestApp_RetryKey_ClaimedWhenFailed(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(BackendErrMsg{Err: errors.New("conn error")})
+	if app.backendState != uicore.BackendFailed {
+		t.Fatalf("setup: backendState = %v, want BackendFailed", app.backendState)
+	}
+	next, cmd := app.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	if cmd == nil {
+		t.Fatal("r in Failed state: cmd = nil, want connectBackendCmd")
+	}
+	if next.backendState != uicore.BackendConnecting {
+		t.Errorf("backendState = %v, want BackendConnecting", next.backendState)
+	}
+	if next.backendErr != nil {
+		t.Errorf("backendErr = %v, want nil", next.backendErr)
+	}
+}
+
+func TestApp_RetryKey_NotClaimedWhenConnecting(t *testing.T) {
+	// r while Connecting must not claim so it falls through to other handlers.
+	app := newTestApp(t)
+	// backendState starts as BackendConnecting (zero value).
+	if app.backendState != uicore.BackendConnecting {
+		t.Fatalf("setup: backendState = %v, want BackendConnecting", app.backendState)
+	}
+	_, cmd := app.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	// No connectBackendCmd should be dispatched here; the key falls through
+	// to reply or other consumers. A nil cmd is expected since no message is
+	// selected in the bare test app.
+	if cmd != nil {
+		// Drain to see if the result is a BackendReadyMsg or similar connect start.
+		select {
+		case msg := <-execCmd(cmd):
+			if _, ok := msg.(BackendReadyMsg); ok {
+				t.Error("r while Connecting dispatched a second connectBackendCmd")
+			}
+			if _, ok := msg.(BackendErrMsg); ok {
+				t.Error("r while Connecting dispatched a second connectBackendCmd (error path)")
+			}
+		default:
+		}
+	}
+}

@@ -1491,3 +1491,22 @@ func TestMessageListView_FullTier(t *testing.T) {
 		t.Errorf("short date %q missing from output:\n%s", "04-30", out)
 	}
 }
+
+func TestMessageList_EmptyAndConnecting_ShowsConnectingPlaceholder(t *testing.T) {
+	m := New(NewStyles(theme.Nord), nil, 80, 20, uicore.SimpleIcons, ansix.NewMeasurer(1))
+	m.SetConnecting(true)
+	out := stripANSI(m.View())
+	if !strings.Contains(strings.ToLower(out), "connecting") {
+		t.Fatalf("empty+connecting render missing 'connecting': %q", out)
+	}
+}
+
+func TestMessageList_NonEmpty_IgnoresConnecting(t *testing.T) {
+	msgs := []mail.MessageInfo{{UID: "1", Subject: "test", ThreadID: "1"}}
+	m := New(NewStyles(theme.Nord), msgs, 80, 20, uicore.SimpleIcons, ansix.NewMeasurer(1))
+	m.SetConnecting(true)
+	out := stripANSI(m.View())
+	if strings.Contains(strings.ToLower(out), "connecting") {
+		t.Fatalf("non-empty list shows connecting placeholder: %q", out)
+	}
+}

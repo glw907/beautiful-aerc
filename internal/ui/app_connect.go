@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
@@ -24,4 +27,19 @@ func (m App) updateConnectMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 		return m, nil, true
 	}
 	return m, nil, false
+}
+
+// updateConnectKey claims r only when backendState == BackendFailed; unclaimed
+// otherwise so r reaches the reply binding.
+func (m App) updateConnectKey(msg tea.KeyPressMsg) (App, tea.Cmd, bool) {
+	if m.backendState != uicore.BackendFailed {
+		return m, nil, false
+	}
+	if !key.Matches(msg, m.keys.RetryConnect) {
+		return m, nil, false
+	}
+	m.backendState = uicore.BackendConnecting
+	m.backendErr = nil
+	m = m.deriveChromeFromAcct()
+	return m, connectBackendCmd(context.Background(), m.backend, m.acct.Cache()), true
 }

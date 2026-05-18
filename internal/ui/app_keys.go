@@ -15,6 +15,9 @@ func (m App) updateKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
 	if m2, cmd, claimed := m.routeOverlayKey(msg); claimed {
 		return m2, cmd
 	}
+	if m2, cmd, claimed := m.updateConnectKey(msg); claimed {
+		return m2, cmd
+	}
 	if m.contactsMode {
 		return m.updateContactsKey(msg)
 	}

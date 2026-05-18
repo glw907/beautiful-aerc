@@ -20,6 +20,7 @@ type GlobalKeys struct {
 	SenderPopover   key.Binding
 	ContactsMode    key.Binding
 	MailMode        key.Binding
+	RetryConnect    key.Binding
 }
 
 func NewGlobalKeys() GlobalKeys {
@@ -38,6 +39,7 @@ func NewGlobalKeys() GlobalKeys {
 		SenderPopover:   key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "sender info")),
 		ContactsMode:    key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "contacts")),
 		MailMode:        key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mail")),
+		RetryConnect:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "retry")),
 	}
 }
 

@@ -52,9 +52,8 @@ type StatusBar struct {
 
 func NewStatusBar(styles Styles) StatusBar {
 	return StatusBar{
-		styles:       styles,
-		connState:    Connected,
-		backendState: uicore.BackendConnected,
+		styles:    styles,
+		connState: Connected,
 	}
 }
 
