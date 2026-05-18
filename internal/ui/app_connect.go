@@ -5,6 +5,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/glw907/poplar/internal/ui/account"
 	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
@@ -13,7 +14,10 @@ func (m App) updateConnectMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 	case BackendReadyMsg:
 		m.backendState = uicore.BackendConnected
 		m.backendErr = nil
-		cmds := []tea.Cmd{pumpUpdatesCmd(m.backend)}
+		cmds := []tea.Cmd{
+			pumpUpdatesCmd(m.backend),
+			account.LoadFoldersCmd(m.acct.Cache()),
+		}
 		if m.contactsCfg != nil {
 			cmds = append(cmds,
 				syncContactsCmd(m.acct.Cache(), m.contactsCfg),

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"log/slog"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -150,7 +151,7 @@ func (m App) updateChromeMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 		hadBanner := m.hasBannerRow()
 		m.toast = pendingAction{}
 		m.lastNotice = ""
-		m.lastErr = msg
+		m = m.setErr(msg)
 		cmds := make([]tea.Cmd, 0, 2)
 		var rcmd tea.Cmd
 		m, rcmd = m.maybeResizeChild(hadBanner)
@@ -220,10 +221,10 @@ func (m App) handleBackendUpdate(msg backendUpdateMsg) (App, tea.Cmd, bool) {
 			if !m.offlineHinted {
 				d := m.lastOutboxDepth
 				if d.Pending+d.Executing+d.Failed+d.Conflict > 0 {
-					m.lastErr = ErrorMsg{
+					m = m.setErr(ErrorMsg{
 						Op:  "connection",
 						Err: errors.New("offline — queued ops will sync on reconnect"),
-					}
+					})
 					m.offlineHinted = true
 				}
 			}
@@ -260,7 +261,7 @@ func (m App) handleCacheEvent(msg account.CacheEventMsg) (App, tea.Cmd, bool) {
 		cmds = append(cmds, loadOutboxScheduledCmd(m.acct.Cache()))
 	}
 	if msg.Event.Note != "" {
-		m.lastErr = ErrorMsg{Op: "draft", Err: errors.New(msg.Event.Note)}
+		m = m.setErr(ErrorMsg{Op: "draft", Err: errors.New(msg.Event.Note)})
 	}
 	acct, fcmd := m.acct.Update(msg)
 	m.acct = acct
@@ -306,4 +307,14 @@ func (m App) armToast(action pendingAction) (App, tea.Cmd) {
 		cmds = append(cmds, rcmd)
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// setErr is the single banner-error write path: every banner the user
+// sees must be recoverable from poplar.log.
+func (m App) setErr(msg ErrorMsg) App {
+	if msg.Err != nil || msg.Op != "" {
+		slog.Warn("ui error banner", "op", msg.Op, "err", msg.Err)
+	}
+	m.lastErr = msg
+	return m
 }

@@ -26,7 +26,7 @@ func newLoadedTab(t *testing.T, width, height int) Model {
 	backend := mail.NewMockBackend()
 	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
 	tab, _ = tab.updateTab(tea.WindowSizeMsg{Width: width, Height: height})
-	// Init returns a Batch (loadFoldersCmd + pumpCacheCmd). Drain it so
+	// Init returns a Batch (LoadFoldersCmd + pumpCacheCmd). Drain it so
 	// foldersLoadedMsg → FolderLoadedMsg both flow into the tab.
 	drain(t, &tab, tab.Init())
 	return tab
@@ -214,7 +214,7 @@ func TestModel(t *testing.T) {
 func TestModelInit_ReturnsFoldersCmd(t *testing.T) {
 	backend := mail.NewMockBackend()
 	tab := New(theme.Nord, newTestCache(t, backend), config.DefaultUIConfig(), uicore.FancyIcons, ansix.NewMeasurer(2))
-	// Init returns a Batch (loadFoldersCmd + pumpCacheCmd). Look for
+	// Init returns a Batch (LoadFoldersCmd + pumpCacheCmd). Look for
 	// foldersLoadedMsg among the batched results.
 	msg := runCmd(tab.Init())
 	batch, ok := msg.(tea.BatchMsg)

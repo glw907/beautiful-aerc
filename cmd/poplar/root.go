@@ -165,6 +165,7 @@ func runRoot(f rootFlags) error {
 	if err != nil {
 		return fmt.Errorf("open cache for %s: %w", accts[0].Name, err)
 	}
+	acct.SetEmail(accts[0].Email)
 	defer acct.Close()
 	log.Debug("startup complete, launching UI")
 

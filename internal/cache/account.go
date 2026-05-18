@@ -29,10 +29,11 @@ type Account struct {
 	ChangeTracker  mail.ChangeTracker
 	ContactsWriter contacts.Writer
 
-	log  *slog.Logger
-	db   *sql.DB
-	dir  string
-	name string
+	log   *slog.Logger
+	db    *sql.DB
+	dir   string
+	name  string
+	email string
 
 	maxSize           int64
 	maxAttachmentSize int64
@@ -213,7 +214,15 @@ func (a *Account) Connected() bool { return a.Backend != nil }
 
 func (a *Account) AccountName() string { return a.name }
 
+// SetEmail records the account's primary email so AccountEmail() can
+// answer pre-wire. Callers set it once between Open and WireBackend
+// from config; subsequent backend wiring does not override it.
+func (a *Account) SetEmail(email string) { a.email = email }
+
 func (a *Account) AccountEmail() string {
+	if a.email != "" {
+		return a.email
+	}
 	if a.Backend == nil {
 		return ""
 	}

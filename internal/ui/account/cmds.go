@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/textproto"
 	"strings"
@@ -29,14 +30,18 @@ const (
 	loadMoreTrigger = 20  // rows from the bottom that trigger a load-more
 )
 
-func loadFoldersCmd(c *cache.Account) tea.Cmd {
+// LoadFoldersCmd refreshes the sidebar from cache, kicking a backend
+// sync first when one is wired. Pre-wire (ADR-0242) the sync is skipped
+// silently; the cache read is authoritative and BackendReadyMsg fires a
+// second LoadFoldersCmd once the backend is up.
+func LoadFoldersCmd(c *cache.Account) tea.Cmd {
 	return func() tea.Msg {
 		err := func() error {
 			c.BeginSync()
 			defer c.EndSync()
 			return c.SyncFolders(context.Background())
 		}()
-		if err != nil {
+		if err != nil && !errors.Is(err, cache.ErrNotConnected) {
 			return uicore.ErrorMsg{Op: "list folders", Err: err}
 		}
 		cls, err := c.ListFolders()
@@ -49,7 +54,7 @@ func loadFoldersCmd(c *cache.Account) tea.Cmd {
 
 // queryFolderCmd reads the first window of cached headers and emits a
 // FolderLoadedMsg. When sync is true the backend is nudged to converge
-// first; sync errors surface as ErrorMsg, matching loadFoldersCmd.
+// first; sync errors surface as ErrorMsg, matching LoadFoldersCmd.
 // Empty name returns nil so callers can chain without nil-checks.
 func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 	if name == "" {
@@ -66,7 +71,7 @@ func queryFolderCmd(c *cache.Account, name string, sync bool) tea.Cmd {
 				defer c.EndSync()
 				return c.SyncFolder(context.Background(), name)
 			}()
-			if err != nil {
+			if err != nil && !errors.Is(err, cache.ErrNotConnected) {
 				return uicore.ErrorMsg{Op: op, Err: err}
 			}
 		}

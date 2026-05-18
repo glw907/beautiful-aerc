@@ -382,7 +382,7 @@ injects ctx `op_id`; mutating `Backend` methods take `ctx` first,
 drainer wraps with `WithOpID(ctx, row.ID)`. Backend ctors take
 `*slog.Logger` + `wireTrace bool`; true wires IMAP/SMTP
 `DebugWriter` + JMAP `loggingTransport` to `logctx.WireWriter`.
-Debug checkpoints at connect/TLS/auth/idle/redial, eventsource, and cache migrations; `slog.Info("poplar start", ...)` marks sessions. ADRs 0197, 0209, 0240, 0241.
+Debug checkpoints at connect/TLS/auth/idle/redial, eventsource, and cache migrations; `slog.Info("poplar start", ...)` marks sessions. **Every user-visible failure (banner, toast, modal) also reaches `poplar.log` via `slog` — chrome banners funnel through `App.setErr`, which logs before storing; new error-display surfaces adopt the same shape. A failure the user reports but you cannot find in the log is a logging bug, not a missing repro.** ADRs 0197, 0209, 0240, 0241.
 
 ## Build & verification
 

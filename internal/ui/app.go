@@ -196,7 +196,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, b mail.Backend, uiCfg c
 			}
 			cl, cerr := corecontacts.NewClient(cfg.URL, cfg.Username, cfg.Password, cfg.InsecureTLS)
 			if cerr != nil {
-				app.lastErr = ErrorMsg{Op: "contacts init", Err: cerr}
+				app = app.setErr(ErrorMsg{Op: "contacts init", Err: cerr})
 			} else {
 				acct.ContactsWriter = cl
 				app.contactsCfg = cfg

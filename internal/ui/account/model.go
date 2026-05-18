@@ -113,7 +113,7 @@ func (m Model) Closeable() bool { return false }
 
 // Init fires the initial folder-list fetch and starts the cache event pump.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadFoldersCmd(m.acct), pumpCacheCmd(m.acct))
+	return tea.Batch(LoadFoldersCmd(m.acct), pumpCacheCmd(m.acct))
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {

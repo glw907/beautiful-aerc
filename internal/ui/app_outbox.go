@@ -16,7 +16,7 @@ func (m App) updateOutboxMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case outboxScheduledMsg:
 		if msg.err != nil {
-			m.lastErr = ErrorMsg{Op: "outbox", Err: msg.err}
+			m = m.setErr(ErrorMsg{Op: "outbox", Err: msg.err})
 			return m, nil, true
 		}
 		if m.outboxView != nil {
@@ -26,16 +26,16 @@ func (m App) updateOutboxMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 
 	case outboxCancelledMsg:
 		if msg.err != nil && !errors.Is(msg.err, cache.ErrNotPending) {
-			m.lastErr = ErrorMsg{Op: "cancel op", Err: msg.err}
+			m = m.setErr(ErrorMsg{Op: "cancel op", Err: msg.err})
 		}
 		return m, tea.Batch(loadOutboxScheduledCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache())), true
 
 	case rescheduleOpMsg:
 		if msg.err != nil {
 			if errors.Is(msg.err, cache.ErrNotPending) {
-				m.lastErr = ErrorMsg{Op: "reschedule", Err: errors.New("op already dispatched")}
+				m = m.setErr(ErrorMsg{Op: "reschedule", Err: errors.New("op already dispatched")})
 			} else {
-				m.lastErr = ErrorMsg{Op: "reschedule", Err: msg.err}
+				m = m.setErr(ErrorMsg{Op: "reschedule", Err: msg.err})
 			}
 		}
 		return m, tea.Batch(loadOutboxScheduledCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache())), true
@@ -54,7 +54,7 @@ func (m App) updateOutboxMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 
 	case outboxSummaryMsg:
 		if msg.err != nil {
-			m.lastErr = ErrorMsg{Op: "outbox summary", Err: msg.err}
+			m = m.setErr(ErrorMsg{Op: "outbox summary", Err: msg.err})
 			return m, nil, true
 		}
 		if m.outboxOpen {
@@ -64,7 +64,7 @@ func (m App) updateOutboxMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 
 	case outboxConflictsMsg:
 		if msg.err != nil {
-			m.lastErr = ErrorMsg{Op: "outbox conflicts", Err: msg.err}
+			m = m.setErr(ErrorMsg{Op: "outbox conflicts", Err: msg.err})
 			return m, nil, true
 		}
 		if m.conflictOpen {
@@ -90,7 +90,7 @@ func (m App) updateOutboxMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 
 	case conflictResolvedMsg:
 		if msg.err != nil && !errors.Is(msg.err, cache.ErrNotConflict) {
-			m.lastErr = ErrorMsg{Op: "resolve conflict", Err: msg.err}
+			m = m.setErr(ErrorMsg{Op: "resolve conflict", Err: msg.err})
 		}
 		return m, tea.Batch(loadOutboxConflictsCmd(m.acct.Cache()), refreshOutboxDepthCmd(m.acct.Cache())), true
 
