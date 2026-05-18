@@ -616,7 +616,7 @@ func (b *Backend) FetchBody(uid mail.UID) ([]byte, error) {
 }
 
 // Move patches mailboxIds so each uid lives only in destFolder.
-func (b *Backend) Move(uids []mail.UID, destFolder string) error {
+func (b *Backend) Move(_ context.Context, uids []mail.UID, destFolder string) error {
 	if len(uids) == 0 {
 		return nil
 	}
@@ -650,7 +650,7 @@ func (b *Backend) Move(uids []mail.UID, destFolder string) error {
 
 // Destroy permanently deletes uids via Email/set destroy, bypassing
 // Trash. Empty input is a no-op.
-func (b *Backend) Destroy(uids []mail.UID) error {
+func (b *Backend) Destroy(_ context.Context, uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
@@ -699,7 +699,7 @@ func checkEmailSetDestroyed(resp *jmap.Response, callID string) error {
 	return fmt.Errorf("Email/set: no response for destroy")
 }
 
-func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
+func (b *Backend) Flag(_ context.Context, uids []mail.UID, flag mail.Flag, set bool) error {
 	keyword, err := keywordForFlag(flag)
 	if err != nil {
 		return err
@@ -710,7 +710,7 @@ func (b *Backend) Flag(uids []mail.UID, flag mail.Flag, set bool) error {
 // Send batches Email/import (Sent mailbox) and EmailSubmission/set
 // in one request so server-side Sent placement is atomic with
 // submission.
-func (b *Backend) Send(env mail.Envelope, mime []byte) error {
+func (b *Backend) Send(_ context.Context, env mail.Envelope, mime []byte) error {
 	b.mu.Lock()
 	upload := b.uploadBlob
 	sent, hasSent := b.folders["Sent"]
@@ -778,7 +778,7 @@ func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 	return nil
 }
 
-func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
+func (b *Backend) Append(_ context.Context, folder string, mime []byte, flags mail.Flag) error {
 	b.mu.Lock()
 	upload := b.uploadBlob
 	entry, ok := b.folders[folder]
@@ -826,7 +826,7 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 // PushDraft uploads mime as a draft and, when prevUID is non-empty,
 // destroys the prior server image in the same request. The destroy
 // is best-effort and does not block returning the new UID.
-func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
+func (b *Backend) PushDraft(_ context.Context, folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
 	b.mu.Lock()
 	upload := b.uploadBlob
 	entry, ok := b.folders[folder]

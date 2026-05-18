@@ -808,10 +808,10 @@ func TestSetKeyword_EmptyUIDs(t *testing.T) {
 	fake := &fakeClient{}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	if err := b.Flag(nil, mail.FlagSeen, true); err != nil {
+	if err := b.Flag(context.Background(), nil, mail.FlagSeen, true); err != nil {
 		t.Errorf("Flag(nil): %v", err)
 	}
-	if err := b.Flag([]mail.UID{}, mail.FlagSeen, true); err != nil {
+	if err := b.Flag(context.Background(), []mail.UID{}, mail.FlagSeen, true); err != nil {
 		t.Errorf("Flag([]): %v", err)
 	}
 	if len(fake.sent) != 0 {
@@ -835,7 +835,7 @@ func TestSetKeyword_NotUpdatedError(t *testing.T) {
 	}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	err := b.Flag([]mail.UID{"e-1"}, mail.FlagSeen, true)
+	err := b.Flag(context.Background(), []mail.UID{"e-1"}, mail.FlagSeen, true)
 	if err == nil {
 		t.Fatal("expected error from NotUpdated, got nil")
 	}
@@ -873,7 +873,7 @@ func TestFlag_KeywordMapping(t *testing.T) {
 				},
 			}
 			b := newTestBackend(fake, "acct-1", nil)
-			if err := b.Flag([]mail.UID{"e-1"}, tt.flag, tt.set); err != nil {
+			if err := b.Flag(context.Background(), []mail.UID{"e-1"}, tt.flag, tt.set); err != nil {
 				t.Fatalf("Flag: %v", err)
 			}
 			s, ok := capturedReq.Calls[0].Args.(*email.Set)
@@ -894,7 +894,7 @@ func TestFlag_UnsupportedFlag(t *testing.T) {
 	b := newTestBackend(fake, "acct-1", nil)
 
 	// Flag(0) is not in the supported keyword switch.
-	err := b.Flag([]mail.UID{"e-1"}, mail.Flag(0), true)
+	err := b.Flag(context.Background(), []mail.UID{"e-1"}, mail.Flag(0), true)
 	if err == nil {
 		t.Fatal("expected error for unsupported flag")
 	}
@@ -912,7 +912,7 @@ func TestMove_EmptyUIDs(t *testing.T) {
 	}
 	b := newTestBackend(fake, "acct-1", folders)
 
-	if err := b.Move(nil, "Sent"); err != nil {
+	if err := b.Move(context.Background(), nil, "Sent"); err != nil {
 		t.Errorf("Move(nil): %v", err)
 	}
 	if len(fake.sent) != 0 {
@@ -937,7 +937,7 @@ func TestMove_RequestShape(t *testing.T) {
 	}
 	b := newTestBackend(fake, "acct-1", folders)
 
-	if err := b.Move([]mail.UID{"e-1", "e-2"}, "Archive"); err != nil {
+	if err := b.Move(context.Background(), []mail.UID{"e-1", "e-2"}, "Archive"); err != nil {
 		t.Fatalf("Move: %v", err)
 	}
 	if capturedReq == nil {
@@ -964,7 +964,7 @@ func TestMove_UnknownFolder(t *testing.T) {
 	fake := &fakeClient{}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	err := b.Move([]mail.UID{"e-1"}, "Nonexistent")
+	err := b.Move(context.Background(), []mail.UID{"e-1"}, "Nonexistent")
 	if err == nil {
 		t.Fatal("expected error for unknown folder")
 	}
@@ -974,7 +974,7 @@ func TestMove_UnknownFolder(t *testing.T) {
 
 func TestSend_BeforeConnectErrors(t *testing.T) {
 	b := newTestBackend(&fakeClient{}, "acct-1", nil)
-	err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi"))
+	err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi"))
 	if err == nil {
 		t.Fatal("expected error when not connected")
 	}
@@ -1019,7 +1019,7 @@ func TestSend_BatchesImportAndSubmission(t *testing.T) {
 	b.cfg.Email = "alice@example.com"
 	b.uploadBlob = func(_ []byte) (string, error) { return "blob-1", nil }
 
-	err := b.Send(mail.Envelope{From: "alice@example.com", Rcpts: []string{"bob@example.com"}}, []byte("Subject: hi\r\n\r\nbody"))
+	err := b.Send(context.Background(), mail.Envelope{From: "alice@example.com", Rcpts: []string{"bob@example.com"}}, []byte("Subject: hi\r\n\r\nbody"))
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -1035,7 +1035,7 @@ func TestSend_BatchesImportAndSubmission(t *testing.T) {
 func TestSend_NoSentMailboxFails(t *testing.T) {
 	b := newTestBackend(&fakeClient{}, "acct-1", nil)
 	b.uploadBlob = func(_ []byte) (string, error) { return "x", nil }
-	err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi"))
+	err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi"))
 	if err == nil || !strings.Contains(err.Error(), "Sent") {
 		t.Fatalf("expected no-sent-mailbox error, got %v", err)
 	}
@@ -1080,10 +1080,10 @@ func TestSendCachesIdentityIDByEmail(t *testing.T) {
 	b := newTestBackend(fake, "acct-1", folders)
 	b.uploadBlob = func(_ []byte) (string, error) { return "blob-x", nil }
 
-	if err := b.Send(mail.Envelope{From: "alice@example.com", Rcpts: []string{"x@y"}}, []byte("Subject: hi\r\n\r\nbody")); err != nil {
+	if err := b.Send(context.Background(), mail.Envelope{From: "alice@example.com", Rcpts: []string{"x@y"}}, []byte("Subject: hi\r\n\r\nbody")); err != nil {
 		t.Fatalf("first send: %v", err)
 	}
-	if err := b.Send(mail.Envelope{From: "bob@example.com", Rcpts: []string{"x@y"}}, []byte("Subject: hi\r\n\r\nbody")); err != nil {
+	if err := b.Send(context.Background(), mail.Envelope{From: "bob@example.com", Rcpts: []string{"x@y"}}, []byte("Subject: hi\r\n\r\nbody")); err != nil {
 		t.Fatalf("second send: %v", err)
 	}
 
@@ -1111,7 +1111,7 @@ func TestAppend_ImportsToFolder(t *testing.T) {
 	b := newTestBackend(fake, "acct-1", folders)
 	b.uploadBlob = func(_ []byte) (string, error) { return "blob-2", nil }
 
-	if err := b.Append("Drafts", []byte("draft"), mail.FlagDraft); err != nil {
+	if err := b.Append(context.Background(), "Drafts", []byte("draft"), mail.FlagDraft); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 
@@ -1146,10 +1146,10 @@ func TestDestroy_EmptyUIDs(t *testing.T) {
 	fake := &fakeClient{}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	if err := b.Destroy(nil); err != nil {
+	if err := b.Destroy(context.Background(), nil); err != nil {
 		t.Errorf("Destroy(nil): %v", err)
 	}
-	if err := b.Destroy([]mail.UID{}); err != nil {
+	if err := b.Destroy(context.Background(), []mail.UID{}); err != nil {
 		t.Errorf("Destroy([]): %v", err)
 	}
 	if len(fake.sent) != 0 {
@@ -1172,7 +1172,7 @@ func TestDestroy_RequestShape(t *testing.T) {
 	b := newTestBackend(fake, "acct-42", nil)
 
 	uids := []mail.UID{"id-1", "id-2"}
-	if err := b.Destroy(uids); err != nil {
+	if err := b.Destroy(context.Background(), uids); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 
@@ -1216,7 +1216,7 @@ func TestDestroy_NotDestroyedError(t *testing.T) {
 	}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	err := b.Destroy([]mail.UID{"id-1"})
+	err := b.Destroy(context.Background(), []mail.UID{"id-1"})
 	if err == nil {
 		t.Fatal("expected error from NotDestroyed, got nil")
 	}
@@ -1239,7 +1239,7 @@ func TestDestroy_NotFoundIsSuccess(t *testing.T) {
 	}
 	b := newTestBackend(fake, "acct-1", nil)
 
-	if err := b.Destroy([]mail.UID{"id-gone"}); err != nil {
+	if err := b.Destroy(context.Background(), []mail.UID{"id-gone"}); err != nil {
 		t.Errorf("Destroy with notFound: expected success, got %v", err)
 	}
 }
@@ -1263,7 +1263,7 @@ func TestPushDraft_JMAP_FirstPush(t *testing.T) {
 	b := newTestBackend(fake, "acct-1", folders)
 	b.uploadBlob = func(_ []byte) (string, error) { return "blob-1", nil }
 
-	uid, err := b.PushDraft("Drafts", []byte("draft mime"), mail.UID(""))
+	uid, err := b.PushDraft(context.Background(), "Drafts", []byte("draft mime"), mail.UID(""))
 	if err != nil {
 		t.Fatalf("PushDraft: %v", err)
 	}
@@ -1299,7 +1299,7 @@ func TestPushDraft_JMAP_ReplacesPrev(t *testing.T) {
 	b := newTestBackend(fake, "acct-1", folders)
 	b.uploadBlob = func(_ []byte) (string, error) { return "blob-2", nil }
 
-	uid, err := b.PushDraft("Drafts", []byte("updated mime"), mail.UID("old-email-id-1"))
+	uid, err := b.PushDraft(context.Background(), "Drafts", []byte("updated mime"), mail.UID("old-email-id-1"))
 	if err != nil {
 		t.Fatalf("PushDraft: %v", err)
 	}
