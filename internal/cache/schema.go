@@ -533,6 +533,7 @@ func applyMigrationsTo(db *sql.DB, target int) error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration v%d: %w", current+1, err)
 		}
+		slog.Default().With("component", "cache").Debug("cache migrate", "from", current, "to", current+1)
 		current++
 	}
 	return nil

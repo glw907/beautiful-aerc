@@ -166,6 +166,7 @@ func Open(accountName string, backend mail.Backend, ct mail.ChangeTracker, dir s
 		db.Close()
 		return nil, err
 	}
+	log.Debug("cache open", "schema", schemaVersion, "account", accountName)
 	a := &Account{
 		Backend:           backend,
 		ChangeTracker:     ct,

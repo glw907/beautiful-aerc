@@ -49,6 +49,7 @@ func (b *Backend) cmdClient() (imapClient, error) {
 		}
 	}
 	b.log.Info("imap cmd redialed")
+	b.log.Debug("imap cmd redial complete", "folder", current)
 	return fresh, nil
 }
 

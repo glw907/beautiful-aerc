@@ -41,6 +41,7 @@ func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
 		port = 993
 	}
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(port))
+	b.log.Debug("imap dial", "addr", addr, "role", role)
 	tlsCfg := &tls.Config{ServerName: cfg.Host, InsecureSkipVerify: cfg.InsecureTLS} //nolint:gosec // InsecureTLS is opt-in for self-hosted dev servers
 
 	raw, err := dialRawTCP(addr)
@@ -92,6 +93,7 @@ func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
 		}
 		return nil, fmt.Errorf("tls handshake %s (%s): %w", addr, role, err)
 	}
+	b.log.Debug("imap tls", "server", cfg.Host, "role", role)
 
 	pw, err := resolveXOAUTH2Token(ctx, b)
 	if err != nil {
@@ -116,8 +118,16 @@ func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
 		}
 	}
 
+	b.log.Debug("imap auth", "mechanism", resolvedMechanism(cfg), "role", role)
 	rc.c = cli
 	return rc, nil
+}
+
+func resolvedMechanism(cfg config.AccountConfig) string {
+	if cfg.Auth == "" {
+		return "plain"
+	}
+	return cfg.Auth
 }
 
 // resolveXOAUTH2Token returns an access token via b.oauth when set, or

@@ -113,6 +113,7 @@ func (b *Backend) runIdleSession(ctx context.Context) error {
 	timer := time.NewTimer(idleRefreshInterval)
 	defer timer.Stop()
 
+	b.log.Debug("imap idle start", "folder", current)
 	idleErrCh := make(chan error, 1)
 	go func() {
 		idleErrCh <- idle.Idle(b.emit)
@@ -125,6 +126,7 @@ func (b *Backend) runIdleSession(ctx context.Context) error {
 			<-idleErrCh
 			return nil
 		case <-timer.C:
+			b.log.Debug("imap idle stop", "reason", "refresh")
 			idle.IdleStop()
 			if err := <-idleErrCh; err != nil {
 				return err

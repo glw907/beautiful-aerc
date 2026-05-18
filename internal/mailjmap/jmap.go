@@ -189,6 +189,7 @@ func (b *Backend) Connect(_ context.Context) error {
 	if err := cli.Authenticate(); err != nil {
 		return fmt.Errorf("authenticate: %w", err)
 	}
+	b.log.Debug("jmap session", "endpoint", b.cfg.Source)
 	session := cli.Session
 
 	folders, mailboxState, err := fetchFolders(cli, session)

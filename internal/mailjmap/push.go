@@ -73,6 +73,7 @@ func (b *Backend) runEventSource(ctx context.Context) error {
 		return fmt.Errorf("run event source: no push client")
 	}
 
+	b.log.Debug("jmap eventsource connect")
 	var connectedOnce sync.Once
 	es := &push.EventSource{
 		Client: cli,
@@ -92,6 +93,7 @@ func (b *Backend) runEventSource(ctx context.Context) error {
 				return
 			}
 			for typ, newState := range ts {
+				b.log.Debug("jmap state change", "type", typ)
 				b.handleStateChange(typ, newState)
 			}
 		},
