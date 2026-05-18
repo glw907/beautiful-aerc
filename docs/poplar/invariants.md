@@ -48,6 +48,10 @@ section's claims back to the justifying ADR(s).
   RFC 1918 / `.local` / `127.x`. No maildir.
 - `mail.Backend` is synchronous blocking; both packages call their
   libraries synchronously — no pump goroutine, no async bridge.
+  `mail.ConnConnecting` is the pre-authenticated initial state;
+  distinct from `ConnReconnecting` ("was connected, lost it").
+  `App.backendState` overrides `mail.ConnState` in the status-bar
+  render pre-wire. ADR-0242.
 - IMAP backend invariants: UIDPLUS required at Connect; MOVE /
   SPECIAL-USE / IDLE negotiated with fallbacks (COPY+STORE+EXPUNGE,
   alias classification, 30s STATUS-poll). IDLE refreshes every 9 min
@@ -164,6 +168,7 @@ section's claims back to the justifying ADR(s).
   markdown rendering. `mail.Backend.Flag(uids, flag, set)` is the
   canonical mutator; "delete" is `MoveArgs{Dest: trash}` queued.
   IMAP `Move` falls back to `cmd.Copy` when MOVE is absent.
+  `App` owns `backendState uicore.BackendState` + `backendErr`; `Init` dispatches `connectBackendCmd`; `BackendReadyMsg` fans out pump + contacts sync; `BackendErrMsg` stores the error. ADR-0242.
 - Mouse is keyboard shorthand. `App.updateMouse` absorbs on
   overlay; else translates Y to account-local and branches on
   `viewerOpen` × pane: viewer-ready right pane →
@@ -373,16 +378,11 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 from `main()`, re-run in `runRoot` after `LoadUI`; `POPLAR_LOG=debug`
 beats `[ui] log-level`. TTY → `lumberjack.Logger` on
 `$XDG_STATE_HOME/poplar/poplar.log` (10 MB × 2). `logctx.Handler`
-injects ctx `op_id`; mutating `Backend` methods (Move/Flag/Destroy/
-Send/Append/PushDraft) take `ctx` first, drainer wraps with
-`WithOpID(ctx, row.ID)`. Backend ctors take `*slog.Logger` +
-`wireTrace bool` (resolved from `[ui] wire-trace` /
-`POPLAR_WIRE_TRACE=1`, threaded via `openBackend`); true wires IMAP/
-SMTP `DebugWriter` + JMAP `loggingTransport` to `logctx.WireWriter`.
-Debug checkpoints at `mailimap` dial/TLS/auth/idle/redial, `mailjmap`
-session/eventsource/state-change, `cache` open + each migration.
-`slog.Info("poplar start", ...)` marks sessions. ADRs 0197, 0209,
-0240, 0241.
+injects ctx `op_id`; mutating `Backend` methods take `ctx` first,
+drainer wraps with `WithOpID(ctx, row.ID)`. Backend ctors take
+`*slog.Logger` + `wireTrace bool`; true wires IMAP/SMTP
+`DebugWriter` + JMAP `loggingTransport` to `logctx.WireWriter`.
+Debug checkpoints at connect/TLS/auth/idle/redial, eventsource, and cache migrations; `slog.Info("poplar start", ...)` marks sessions. ADRs 0197, 0209, 0240, 0241.
 
 ## Build & verification
 

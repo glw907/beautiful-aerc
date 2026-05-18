@@ -155,6 +155,22 @@ sources or the `poplar cache` CLI. The decision index in
   max-attachment-size` in `config.toml`), oldest by
   `messages.sent_at`, clearing `bytes`/`fetched_at` while keeping
   the metadata row. Bodies and attachments evict independently.
+- `cache.Open(name, dir, cfg, log)` opens the SQLite store and
+  runs migrations; the returned `*Account` has no backend wired.
+  `(*Account).WireBackend(backend, ct)` attaches the backend,
+  assigns the change tracker, and starts the per-account backfiller
+  and drainer goroutines. Call `WireBackend` exactly once per
+  Account lifetime; a second call returns an error. `(*Account).Close`
+  cancels both goroutines before shutting the DB pool.
+  `AccountName()` reads the name passed to `Open`; no backend
+  delegation.
+- `cache.ErrNotConnected` is the pre-wire sentinel returned by
+  backend-touching reads (`FetchHeaders` backfill branch, `FetchBody`
+  on cache miss, `Attachments`/`FetchAttachment` on cache miss,
+  `SyncFolders`, `SyncFolder`). Cache-only reads (`ListFolders`,
+  `QueryFolder`, `FetchBodyCached` on hit, `SuggestAddresses`,
+  `LookupContact`) work unchanged. `(*Account).Connected() bool`
+  reports whether a backend is wired. ADR-0242.
 - `cache.Slugify`, `cache.DBPath`, `cache.OpenDB` are exported
   helpers used by `cmd/poplar/cache.go`; all path/DSN logic is
   canonical here.
