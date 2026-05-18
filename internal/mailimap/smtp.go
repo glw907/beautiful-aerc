@@ -13,6 +13,7 @@ import (
 	gosmtp "github.com/emersion/go-smtp"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/logctx"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/mailauth"
 )
@@ -85,6 +86,10 @@ func realSMTPDial(ctx context.Context, b *Backend) (smtpClient, error) {
 			return nil, fmt.Errorf("smtp tls handshake %s: %w", addr, err)
 		}
 		cli = gosmtp.NewClient(tlsConn)
+	}
+
+	if b.wireTrace {
+		cli.DebugWriter = logctx.WireWriter{Component: "smtp"}
 	}
 
 	if err := smtpAuth(ctx, cli, b); err != nil {
