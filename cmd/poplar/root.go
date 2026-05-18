@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,7 +11,6 @@ import (
 	"github.com/glw907/poplar/internal/ansix"
 	"github.com/glw907/poplar/internal/cache"
 	"github.com/glw907/poplar/internal/config"
-	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/term"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui"
@@ -141,13 +139,6 @@ func runRoot(f rootFlags) error {
 	if err != nil {
 		return fmt.Errorf("open backend %q: %v", accts[0].Name, err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	log.Debug("connecting")
-	if err := backend.Connect(ctx); err != nil {
-		return fmt.Errorf("connect %s: %v", accts[0].Name, err)
-	}
-	log.Debug("connected")
 	defer backend.Disconnect()
 
 	hasNF := term.HasNerdFont()
@@ -165,10 +156,6 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("cache config: %v", err)
 	}
 
-	ct, ok := backend.(mail.ChangeTracker)
-	if !ok {
-		return fmt.Errorf("backend does not implement mail.ChangeTracker")
-	}
 	log.Debug("opening cache")
 	acct, err := cache.Open(accts[0].Name, "", cache.Config{
 		MaxSize:           cacheCfg.MaxSize,
@@ -177,9 +164,6 @@ func runRoot(f rootFlags) error {
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("open cache for %s: %w", accts[0].Name, err)
-	}
-	if err := acct.WireBackend(backend, ct); err != nil {
-		return fmt.Errorf("wire backend for %s: %w", accts[0].Name, err)
 	}
 	defer acct.Close()
 	log.Debug("startup complete, launching UI")

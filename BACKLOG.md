@@ -134,6 +134,9 @@
 
 ## Medium
 
+- [ ] **#60** `connectBackendCmd` uses `context.Background()` — quit during connect orphans the dial goroutine until timeout `#improvement` `#poplar` `#async` *(2026-05-17)*
+  `App.Init` dispatches `connectBackendCmd(context.Background(), ...)`. If the user quits before connect completes the goroutine runs to dial-timeout (~30s) before exiting. Benign for single-user daily-driver use; no data loss. Fix: hoist a cancel func onto App and call it in the quit path. Revisit if real complaints surface.
+
 - [x] ~~**#59** AST-based unconditional `t.Skip` detector for `make check`~~ `#improvement` `#poplar` `#testing` *(2026-05-12, Audit G follow-up → 2026-05-16)* (closed 2026-05-16)
   Resolved by Pass 40.3 (ADR-0234). `scripts/skipcheck/main.go` walks every `*_test.go` under the working directory; for each `func Test*(t *testing.T)` whose body's first executable statement is a top-level `t.Skip` / `SkipNow` / `Skipf` call on the actual `*testing.T` parameter name, prints `file:line: SK1 …` and exits 1. Wired into `make check` between `modern-go-check` and `test`. Tree is clean — seven existing skips are all guarded (`testing.Short`, `runtime.GOOS`, env-gated) or build-tag-fenced.
 
