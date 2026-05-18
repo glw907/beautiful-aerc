@@ -185,7 +185,7 @@ func TestMockBackend_Destroy_RecordsAndRemoves(t *testing.T) {
 	}
 	target := []UID{headers[0].UID, headers[1].UID}
 
-	if err := m.Destroy(target); err != nil {
+	if err := m.Destroy(context.Background(), target); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 
@@ -212,7 +212,7 @@ func TestMockBackend_Destroy_RecordsAndRemoves(t *testing.T) {
 
 func TestMockBackend_Destroy_EmptyIsNoop(t *testing.T) {
 	m := NewMockBackend()
-	if err := m.Destroy(nil); err != nil {
+	if err := m.Destroy(context.Background(), nil); err != nil {
 		t.Fatalf("Destroy(nil): %v", err)
 	}
 	if len(m.DestroyCalls) != 0 {
@@ -223,7 +223,7 @@ func TestMockBackend_Destroy_EmptyIsNoop(t *testing.T) {
 func TestMockBackend_SendRecordsAndInjectsError(t *testing.T) {
 	m := NewMockBackend()
 	env := Envelope{From: "a@x", Rcpts: []string{"b@y"}}
-	if err := m.Send(env, []byte("body")); err != nil {
+	if err := m.Send(context.Background(), env, []byte("body")); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	if len(m.SendCalls) != 1 {
@@ -238,7 +238,7 @@ func TestMockBackend_SendRecordsAndInjectsError(t *testing.T) {
 
 	want := errors.New("smtp denied")
 	m.SendErr = want
-	if got := m.Send(env, nil); !errors.Is(got, want) {
+	if got := m.Send(context.Background(), env, nil); !errors.Is(got, want) {
 		t.Errorf("Send err = %v, want %v", got, want)
 	}
 	if len(m.SendCalls) != 2 {
@@ -248,7 +248,7 @@ func TestMockBackend_SendRecordsAndInjectsError(t *testing.T) {
 
 func TestMockBackend_AppendRecordsAndInjectsError(t *testing.T) {
 	m := NewMockBackend()
-	if err := m.Append("Sent", []byte("mime"), FlagSeen); err != nil {
+	if err := m.Append(context.Background(), "Sent", []byte("mime"), FlagSeen); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 	if len(m.AppendCalls) != 1 {
@@ -260,7 +260,7 @@ func TestMockBackend_AppendRecordsAndInjectsError(t *testing.T) {
 
 	want := errors.New("append denied")
 	m.AppendErr = want
-	if got := m.Append("Sent", nil, 0); !errors.Is(got, want) {
+	if got := m.Append(context.Background(), "Sent", nil, 0); !errors.Is(got, want) {
 		t.Errorf("Append err = %v, want %v", got, want)
 	}
 }

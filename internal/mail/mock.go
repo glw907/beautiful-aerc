@@ -240,7 +240,7 @@ Reply directly to this email or visit the discussion at https://github.example.c
 func (m *MockBackend) Attachments(_ UID) ([]Attachment, error)         { return nil, nil }
 func (m *MockBackend) FetchAttachment(_ UID, _ string) ([]byte, error) { return nil, nil }
 
-func (m *MockBackend) Move(uids []UID, dest string) error {
+func (m *MockBackend) Move(_ context.Context, uids []UID, dest string) error {
 	m.MoveCalls = append(m.MoveCalls, struct {
 		UIDs []UID
 		Dest string
@@ -249,7 +249,7 @@ func (m *MockBackend) Move(uids []UID, dest string) error {
 }
 
 // Destroy removes uids from the in-memory list. Empty input is a no-op.
-func (m *MockBackend) Destroy(uids []UID) error {
+func (m *MockBackend) Destroy(_ context.Context, uids []UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
@@ -269,7 +269,7 @@ func (m *MockBackend) Destroy(uids []UID) error {
 	return nil
 }
 
-func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
+func (m *MockBackend) Flag(_ context.Context, uids []UID, flag Flag, set bool) error {
 	m.FlagCalls = append(m.FlagCalls, struct {
 		UIDs []UID
 		Flag Flag
@@ -278,17 +278,17 @@ func (m *MockBackend) Flag(uids []UID, flag Flag, set bool) error {
 	return nil
 }
 
-func (m *MockBackend) Send(env Envelope, mime []byte) error {
+func (m *MockBackend) Send(_ context.Context, env Envelope, mime []byte) error {
 	m.SendCalls = append(m.SendCalls, SendCall{Env: env, MIME: append([]byte(nil), mime...)})
 	return m.SendErr
 }
 
-func (m *MockBackend) Append(folder string, mime []byte, flag Flag) error {
+func (m *MockBackend) Append(_ context.Context, folder string, mime []byte, flag Flag) error {
 	m.AppendCalls = append(m.AppendCalls, AppendCall{Folder: folder, MIME: append([]byte(nil), mime...), Flag: flag})
 	return m.AppendErr
 }
 
-func (m *MockBackend) PushDraft(_ string, _ []byte, _ UID) (UID, error) {
+func (m *MockBackend) PushDraft(_ context.Context, _ string, _ []byte, _ UID) (UID, error) {
 	return "", ErrUnsupported
 }
 

@@ -114,21 +114,21 @@ type Backend interface {
 	// must come from a prior Attachments call on the same Backend.
 	FetchAttachment(uid UID, partID string) ([]byte, error)
 
-	Move(uids []UID, dest string) error
+	Move(ctx context.Context, uids []UID, dest string) error
 	// Destroy permanently deletes uids from the selected folder,
 	// bypassing Trash. Irreversible. Empty input is a no-op.
-	Destroy(uids []UID) error
-	Flag(uids []UID, flag Flag, set bool) error
+	Destroy(ctx context.Context, uids []UID) error
+	Flag(ctx context.Context, uids []UID, flag Flag, set bool) error
 
 	// Send transmits mime to env's recipients. JMAP collapses send
 	// and Sent-copy atomically. IMAP+SMTP only transmits, and the
 	// caller issues a separate Append for the Sent copy.
-	Send(env Envelope, mime []byte) error
+	Send(ctx context.Context, env Envelope, mime []byte) error
 
 	// Append writes mime to folder with the given flags. The cache
 	// outbox uses it for the Sent copy on IMAP and for manual drafts.
 	// Callers set \Seen on Sent copies.
-	Append(folder string, mime []byte, flags Flag) error
+	Append(ctx context.Context, folder string, mime []byte, flags Flag) error
 
 	// PushDraft writes mime to folder as a draft and, when prevUID is
 	// non-empty, destroys the prior server image in the same operation.
@@ -136,7 +136,7 @@ type Backend interface {
 	// request. IMAP is not atomic and may orphan the prior image.
 	// Backends without server-side draft persistence return
 	// ErrUnsupported.
-	PushDraft(folder string, mime []byte, prevUID UID) (UID, error)
+	PushDraft(ctx context.Context, folder string, mime []byte, prevUID UID) (UID, error)
 
 	IsJMAP() bool
 
