@@ -52,6 +52,7 @@ const (
 	ConnOffline ConnState = iota
 	ConnReconnecting
 	ConnConnected
+	ConnConnecting
 )
 
 // Update represents an asynchronous update from the backend. The

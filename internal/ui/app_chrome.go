@@ -213,7 +213,7 @@ func (m App) handleBackendUpdate(msg backendUpdateMsg) (App, tea.Cmd, bool) {
 		case mail.ConnConnected:
 			cs = Connected
 			m.offlineHinted = false
-		case mail.ConnReconnecting:
+		case mail.ConnReconnecting, mail.ConnConnecting:
 			cs = Reconnecting
 		default:
 			cs = Offline
