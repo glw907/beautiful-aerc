@@ -8,6 +8,7 @@ import (
 
 	"github.com/glw907/poplar/internal/logctx"
 	"golang.org/x/term"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func installLogger(cfgLevel string) {
@@ -18,21 +19,17 @@ func installLogger(cfgLevel string) {
 	var w io.Writer = os.Stderr
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		// TUI mode: stderr is hidden under altscreen.
-		// Route to $XDG_STATE_HOME/poplar/poplar.log instead.
-		if f, err := openStateLog(); err == nil {
-			w = f
+		// Route to $XDG_STATE_HOME/poplar/poplar.log with size-based rotation.
+		if err := os.MkdirAll(stateDir(), 0o755); err == nil {
+			w = &lumberjack.Logger{
+				Filename:   filepath.Join(stateDir(), "poplar.log"),
+				MaxSize:    10,
+				MaxBackups: 2,
+			}
 		}
 	}
 	h := logctx.Handler{Handler: slog.NewTextHandler(w, &slog.HandlerOptions{Level: level})}
 	slog.SetDefault(slog.New(h))
-}
-
-func openStateLog() (*os.File, error) {
-	dir := stateDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
-	}
-	return os.OpenFile(filepath.Join(dir, "poplar.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 }
 
 func stateDir() string {
