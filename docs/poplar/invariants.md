@@ -273,13 +273,12 @@ section's claims back to the justifying ADR(s).
 
 ### Icon mode
 
-- Icon mode is resolved once at startup. `cmd/poplar/root.go` runs
-  `term.HasNerdFont` + `term.MeasureSPUACells` + `term.Resolve`
-  for `(IconMode, cellWidth)`; the resulting `uicore.IconSet` and
-  `ansix.NewMeasurer(cellWidth)` thread into `ui.NewApp`. No
-  runtime toggling. Icon literals live only in
-  `uicore/layout.go`: `SimpleIcons` runes are EAW Na/N, `FancyIcons`
-  are in `[U+F0000, U+FFFFD]`.
+- Icon mode resolved once at startup: `cmd/poplar/root.go` runs
+  `term.HasNerdFont` + `term.MeasureSPUACells` + `term.Resolve` for
+  `(IconMode, cellWidth)`; resulting `uicore.IconSet` +
+  `ansix.NewMeasurer(cellWidth)` thread into `ui.NewApp`. No runtime
+  toggle. Icon literals live only in `uicore/layout.go`: `SimpleIcons`
+  are EAW Na/N, `FancyIcons` in `[U+F0000, U+FFFFD]`.
 
 ### Catkin — see `.claude/rules/catkin-invariants.md` (auto-loaded on `internal/catkin/`). ADRs 0144–0147, 0149, 0150, 0152.
 
@@ -322,10 +321,10 @@ section's claims back to the justifying ADR(s).
 
 ### Viewer
 
-Viewer harvests `List-Unsubscribe` / `-Post` at body-fetch via
-`content.ParseListUnsubscribe`; `content.Unsubscribe` rides on
-`reader.BodyLoadedMsg.Unsub`. `U` confirms; routes https one-click
-POST > mailto > plain http. 5s success banner. ADR-0185.
+Viewer harvests `List-Unsubscribe` / `-Post` at body-fetch
+(`content.ParseListUnsubscribe` → `reader.BodyLoadedMsg.Unsub`).
+`U` confirms; routes https one-click POST > mailto > http; 5s
+banner. ADR-0185.
 
 ## Mail model
 
@@ -354,17 +353,15 @@ POST > mailto > plain http. 5s success banner. ADR-0185.
   `NONEXISTENT` → `ErrNotFound`, transport errors → `ErrConnection`.
   Cache drainer's conflict matrix routes via `errors.Is`.
 
-Attachment wire shape and the picker/viewer surface live in
+Attachment wire shape + picker/viewer surface: see
 `.claude/rules/attachments-invariants.md` (auto-loaded on
-`internal/ui/attachpicker*.go` / `internal/ui/viewer*.go` and on
-plan/spec docs).
+`internal/ui/attachpicker*.go` / `viewer*.go` and plan/spec docs).
 
 ## Cache
 
-The cache layer (per-account SQLite, schema versions, drainer,
-outbox state machine, body + attachment storage) lives in
-`.claude/rules/cache-invariants.md`. Auto-loaded when editing
-`internal/cache/`, `cmd/poplar/cache*.go`, or planning passes.
+Per-account SQLite, schema versions, drainer, outbox state machine,
+body + attachment storage: see `.claude/rules/cache-invariants.md`
+(auto-loaded on `internal/cache/`, `cmd/poplar/cache*.go`, plans).
 
 ## Search
 
@@ -372,29 +369,32 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 
 ## Logging
 
-`log/slog` for `internal/`; stderr for `cmd/poplar/`.
-`installLogger("")` in `main()`, re-called from `runRoot` after
-`LoadUI`. `POPLAR_LOG=debug` beats `[ui] log-level`; both absent →
-LevelInfo. TTY → append `$XDG_STATE_HOME/poplar/poplar.log`;
-non-TTY → stderr; silent on open failure. Wraps text handler with
-`logctx.Handler` (injects ctx-carried `op_id`). Six mutating
-`mail.Backend` methods (`Move`/`Flag`/`Destroy`/`Send`/`Append`/
-`PushDraft`) take `ctx` first; drainer attaches
-`logctx.WithOpID(ctx, row.ID)` before dispatch. Backend ctors take
-`*slog.Logger` (nil → `slog.Default()`). ADRs 0197, 0209, 0240.
+`log/slog` for `internal/`, stderr for `cmd/poplar/`. `installLogger`
+from `main()`, re-run in `runRoot` after `LoadUI`; `POPLAR_LOG=debug`
+beats `[ui] log-level`. TTY → `lumberjack.Logger` on
+`$XDG_STATE_HOME/poplar/poplar.log` (10 MB × 2). `logctx.Handler`
+injects ctx `op_id`; mutating `Backend` methods (Move/Flag/Destroy/
+Send/Append/PushDraft) take `ctx` first, drainer wraps with
+`WithOpID(ctx, row.ID)`. Backend ctors take `*slog.Logger` +
+`wireTrace bool` (resolved from `[ui] wire-trace` /
+`POPLAR_WIRE_TRACE=1`, threaded via `openBackend`); true wires IMAP/
+SMTP `DebugWriter` + JMAP `loggingTransport` to `logctx.WireWriter`.
+Debug checkpoints at `mailimap` dial/TLS/auth/idle/redial, `mailjmap`
+session/eventsource/state-change, `cache` open + each migration.
+`slog.Info("poplar start", ...)` marks sessions. ADRs 0197, 0209,
+0240, 0241.
 
 ## Build & verification
 
 - `make check` (commit gate) = fmt-check + vet + voice +
   modern-go-check + skipcheck + test; `-tags=dev` keeps MockBackend
   in scope. Grep-tier voice/modern-go checks per ADRs 0173, 0196;
-  `scripts/skipcheck` rejects unguarded `t.Skip*` in `Test*`
-  (ADR-0234). `make check-deep` runs gremlins per-package
-  (ADRs 0232, 0234–0237). `make install` → `~/.local/bin/`. Module
-  `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
+  `scripts/skipcheck` rejects unguarded `t.Skip*` (ADR-0234).
+  `make check-deep` runs gremlins per-package (ADRs 0232, 0234–0237).
+  `make install` → `~/.local/bin/`. Module `github.com/glw907/poplar`;
+  `go.mod` 1.26.0, toolchain 1.26.1.
 - Skills: `go-conventions` (any Go file), `elm-conventions`
   (`internal/ui/`), `styling.md` (any color), `poplar-pass`
-  (pass-end). UI via tmux (`.claude/docs/tmux-testing.md`); capture
-  80×24 and 120×40.
+  (pass-end). UI via tmux (`.claude/docs/tmux-testing.md`).
 
 ## Decisions — `docs/poplar/decisions/` (themed map: `INDEX.md`).

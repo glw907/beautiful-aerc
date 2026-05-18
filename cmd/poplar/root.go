@@ -132,6 +132,7 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("ui config: %v", err)
 	}
 	installLogger(uiCfg.LogLevel)
+	slog.Info("poplar start", "account", accts[0].Name, "config", configPath)
 
 	wireTrace := uiCfg.WireTrace || os.Getenv("POPLAR_WIRE_TRACE") == "1"
 	log := slog.With("account", accts[0].Name)
