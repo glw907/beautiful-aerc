@@ -47,10 +47,10 @@ func TestSend_LazyDial(t *testing.T) {
 	t.Cleanup(func() { smtpDial = prev })
 
 	b := New(config.AccountConfig{Name: "t"}, nil)
-	if err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err != nil {
+	if err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
-	if err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"u@x"}}, []byte("hi2")); err != nil {
+	if err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"u@x"}}, []byte("hi2")); err != nil {
 		t.Fatalf("Send 2: %v", err)
 	}
 	if got := dials.Load(); got != 1 {
@@ -71,10 +71,10 @@ func TestSend_DropsClientOnError(t *testing.T) {
 	t.Cleanup(func() { smtpDial = prev })
 
 	b := New(config.AccountConfig{Name: "t"}, nil)
-	if err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err == nil {
+	if err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err == nil {
 		t.Fatal("expected error")
 	}
-	if err := b.Send(mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err == nil {
+	if err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err == nil {
 		t.Fatal("expected error 2")
 	}
 	if got := dials.Load(); got != 2 {
@@ -201,7 +201,7 @@ func TestAppend_GoesThroughCmdConnection(t *testing.T) {
 	b := New(config.AccountConfig{Name: "t"}, nil)
 	b.cmd = cmd
 
-	if err := b.Append("Sent", []byte("rfc822 bytes"), mail.FlagSeen); err != nil {
+	if err := b.Append(context.Background(), "Sent", []byte("rfc822 bytes"), mail.FlagSeen); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 	if len(cmd.appendCalls) != 1 {

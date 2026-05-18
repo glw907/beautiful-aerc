@@ -19,7 +19,7 @@ func TestMoveUsesUIDMoveWhenAdvertised(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Move([]mail.UID{"1", "2"}, "Trash"); err != nil {
+	if err := b.Move(context.Background(), []mail.UID{"1", "2"}, "Trash"); err != nil {
 		t.Fatalf("move: %v", err)
 	}
 	if len(cmd.moveCalls) != 1 {
@@ -40,7 +40,7 @@ func TestMoveFallsBackToCopyExpungeWithoutMOVE(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Move([]mail.UID{"1", "2"}, "Trash"); err != nil {
+	if err := b.Move(context.Background(), []mail.UID{"1", "2"}, "Trash"); err != nil {
 		t.Fatalf("move: %v", err)
 	}
 	if len(cmd.copyCalls) != 1 {
@@ -64,7 +64,7 @@ func TestMoveEmptyIsNoOp(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Move(nil, "Trash"); err != nil {
+	if err := b.Move(context.Background(), nil, "Trash"); err != nil {
 		t.Errorf("Move(nil) = %v, want nil", err)
 	}
 	if len(cmd.moveCalls) != 0 || len(cmd.copyCalls) != 0 {
@@ -82,7 +82,7 @@ func TestDestroyEmptyIsNoOp(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Destroy(nil); err != nil {
+	if err := b.Destroy(context.Background(), nil); err != nil {
 		t.Errorf("Destroy(nil) = %v, want nil", err)
 	}
 	if len(cmd.storeCalls) != 0 || len(cmd.expungeCalls) != 0 {
@@ -100,7 +100,7 @@ func TestDestroyStoresDeletedThenExpunges(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Destroy([]mail.UID{"7", "8"}); err != nil {
+	if err := b.Destroy(context.Background(), []mail.UID{"7", "8"}); err != nil {
 		t.Fatalf("destroy: %v", err)
 	}
 	if len(cmd.storeCalls) != 1 || len(cmd.expungeCalls) != 1 {
@@ -119,7 +119,7 @@ func TestFlagSetAddsFlag(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Flag([]mail.UID{"1"}, mail.FlagSeen, true); err != nil {
+	if err := b.Flag(context.Background(), []mail.UID{"1"}, mail.FlagSeen, true); err != nil {
 		t.Fatalf("flag: %v", err)
 	}
 	if len(cmd.storeCalls) != 1 {
@@ -141,7 +141,7 @@ func TestFlagClearRemovesFlag(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Flag([]mail.UID{"1"}, mail.FlagSeen, false); err != nil {
+	if err := b.Flag(context.Background(), []mail.UID{"1"}, mail.FlagSeen, false); err != nil {
 		t.Fatalf("flag: %v", err)
 	}
 	if len(cmd.storeCalls) != 1 {
@@ -164,7 +164,7 @@ func TestMoveSurfacesUIDMoveError(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Move([]mail.UID{"1"}, "Trash"); err == nil {
+	if err := b.Move(context.Background(), []mail.UID{"1"}, "Trash"); err == nil {
 		t.Fatalf("Move want error, got nil")
 	}
 }
@@ -180,7 +180,7 @@ func TestMoveSurfacesCopyFallbackError(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Move([]mail.UID{"1"}, "Trash"); err == nil {
+	if err := b.Move(context.Background(), []mail.UID{"1"}, "Trash"); err == nil {
 		t.Fatalf("Move want error, got nil")
 	}
 	if len(cmd.storeCalls) != 0 || len(cmd.expungeCalls) != 0 {
@@ -200,7 +200,7 @@ func TestDestroySurfacesExpungeError(t *testing.T) {
 	if err := b.finishConnect(context.Background()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if err := b.Destroy([]mail.UID{"7"}); err == nil {
+	if err := b.Destroy(context.Background(), []mail.UID{"7"}); err == nil {
 		t.Fatalf("Destroy want error, got nil")
 	}
 }
@@ -249,7 +249,7 @@ func TestDestroy_GmailQuirks_SelectsTrashFirst(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	if err := b.Destroy([]mail.UID{"10", "11"}); err != nil {
+	if err := b.Destroy(context.Background(), []mail.UID{"10", "11"}); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 	if cmd.selected != "[Gmail]/Trash" {
@@ -281,7 +281,7 @@ func TestDestroy_GmailQuirks_RestoresCurrentFolder(t *testing.T) {
 	b.current = "INBOX"
 	b.mu.Unlock()
 
-	if err := b.Destroy([]mail.UID{"99"}); err != nil {
+	if err := b.Destroy(context.Background(), []mail.UID{"99"}); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 	if cmd.selected != "INBOX" {
@@ -306,7 +306,7 @@ func TestDestroy_NonQuirks_DoesNotSelect(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	if err := b.Destroy([]mail.UID{"7"}); err != nil {
+	if err := b.Destroy(context.Background(), []mail.UID{"7"}); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 	if cmd.selected != "" {

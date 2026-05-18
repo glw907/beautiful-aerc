@@ -108,7 +108,7 @@ func TestPushDraft_IMAP_FirstPush(t *testing.T) {
 	idle := newFakeClient()
 	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
 
-	uid, err := b.PushDraft("Drafts", []byte("draft mime"), mail.UID(""))
+	uid, err := b.PushDraft(context.Background(), "Drafts", []byte("draft mime"), mail.UID(""))
 	if err != nil {
 		t.Fatalf("PushDraft: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestPushDraft_IMAP_ReplacesPrev(t *testing.T) {
 	idle := newFakeClient()
 	b := newWithFake(config.AccountConfig{Name: "t"}, cmd, idle)
 
-	uid, err := b.PushDraft("Drafts", []byte("v2"), mail.UID("42"))
+	uid, err := b.PushDraft(context.Background(), "Drafts", []byte("v2"), mail.UID("42"))
 	if err != nil {
 		t.Fatalf("PushDraft: %v", err)
 	}

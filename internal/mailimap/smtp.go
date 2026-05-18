@@ -166,8 +166,8 @@ func resolveXOAUTH2SMTPToken(ctx context.Context, b *Backend) (string, error) {
 // Send transmits mime via SMTP. The client is dialed lazily and
 // cached. Any send error drops the cached client so the next call
 // redials.
-func (b *Backend) Send(env mail.Envelope, mime []byte) error {
-	cli, err := b.smtpClientLocked(context.Background())
+func (b *Backend) Send(ctx context.Context, env mail.Envelope, mime []byte) error {
+	cli, err := b.smtpClientLocked(ctx)
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
@@ -178,7 +178,7 @@ func (b *Backend) Send(env mail.Envelope, mime []byte) error {
 	return nil
 }
 
-func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
+func (b *Backend) Append(_ context.Context, folder string, mime []byte, flags mail.Flag) error {
 	if folder == "" {
 		return errors.New("append: empty folder")
 	}
@@ -197,7 +197,7 @@ func (b *Backend) Append(folder string, mime []byte, flags mail.Flag) error {
 // PushDraft APPENDs mime as \Draft and best-effort expunges the prior
 // image at prevUID. APPEND failure aborts. EXPUNGE failure orphans
 // the prior image but the new draft is good (ADR-0164).
-func (b *Backend) PushDraft(folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
+func (b *Backend) PushDraft(_ context.Context, folder string, mime []byte, prevUID mail.UID) (mail.UID, error) {
 	if folder == "" {
 		return "", errors.New("push-draft: empty folder")
 	}

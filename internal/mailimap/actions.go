@@ -1,6 +1,7 @@
 package mailimap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -11,7 +12,7 @@ import (
 // otherwise COPY + STORE \Deleted + UID EXPUNGE. Partial failure of
 // the fallback surfaces before EXPUNGE fires, so the source folder
 // stays in a known state.
-func (b *Backend) Move(uids []mail.UID, dest string) error {
+func (b *Backend) Move(_ context.Context, uids []mail.UID, dest string) error {
 	if len(uids) == 0 {
 		return nil
 	}
@@ -80,7 +81,7 @@ func (b *Backend) resolveTrashFolder() (string, error) {
 // Destroy selects [Gmail]/Trash first. The caller must pass UIDs that
 // already live in Trash, which both Empty Trash and the retention
 // sweep do.
-func (b *Backend) Destroy(uids []mail.UID) error {
+func (b *Backend) Destroy(_ context.Context, uids []mail.UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
@@ -137,7 +138,7 @@ func (b *Backend) Destroy(uids []mail.UID) error {
 
 // Flag uses +FLAGS.SILENT when set is true, -FLAGS.SILENT otherwise.
 // Unknown flag bits are silently ignored.
-func (b *Backend) Flag(uids []mail.UID, f mail.Flag, set bool) error {
+func (b *Backend) Flag(_ context.Context, uids []mail.UID, f mail.Flag, set bool) error {
 	if len(uids) == 0 {
 		return nil
 	}

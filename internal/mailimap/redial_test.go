@@ -111,7 +111,7 @@ func TestFlag_DropsCmdOnConnectionError(t *testing.T) {
 		return newFakeClient(), nil
 	}
 
-	err := b.Flag([]mail.UID{"1"}, mail.FlagSeen, true)
+	err := b.Flag(context.Background(), []mail.UID{"1"}, mail.FlagSeen, true)
 	if !errors.Is(err, mail.ErrConnection) {
 		t.Fatalf("Flag err = %v, want ErrConnection", err)
 	}
@@ -120,7 +120,7 @@ func TestFlag_DropsCmdOnConnectionError(t *testing.T) {
 	}
 
 	// Next call should redial.
-	if err := b.Flag([]mail.UID{"1"}, mail.FlagSeen, true); err == nil {
+	if err := b.Flag(context.Background(), []mail.UID{"1"}, mail.FlagSeen, true); err == nil {
 		// fresh fake's storeFn is nil, so the second Flag should
 		// succeed.
 		// nothing to do
@@ -144,11 +144,11 @@ func TestCmdClient_AuthDialFailure(t *testing.T) {
 	}
 
 	// First Flag triggers the io.EOF path → drops cmd → redials → ErrAuth.
-	_ = b.Flag([]mail.UID{"1"}, mail.FlagSeen, true)
+	_ = b.Flag(context.Background(), []mail.UID{"1"}, mail.FlagSeen, true)
 	if b.cmd != nil {
 		t.Fatal("Flag did not drop b.cmd after connection error")
 	}
-	err := b.Flag([]mail.UID{"1"}, mail.FlagSeen, true)
+	err := b.Flag(context.Background(), []mail.UID{"1"}, mail.FlagSeen, true)
 	if !errors.Is(err, mail.ErrAuth) {
 		t.Fatalf("Flag err = %v, want ErrAuth", err)
 	}
