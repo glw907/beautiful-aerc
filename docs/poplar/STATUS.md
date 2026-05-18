@@ -1,13 +1,12 @@
 # Poplar Status
 
-**Current pass:** Pass 41.1 landed the Audit Final remediation
-batch (ADR-0239): `config.AtomicWrite` collapses three temp-file
-write sites with chmod-on-handle, five fake-backend `*Err` seams,
-`TestCmdClient_AuthDialFailure` completes the IMAP cmd-path
-ErrAuth → drainer coverage, T15 renames
-(`cache.CacheEvent → Event`, `compose.CacheStore → Store`), ADR
-em-dash trim, six line-level voice fixes, three invariant
-doc-drift repairs.
+**Current pass:** Pass 42 landed the correlation foundation
+(ADR-0240): `internal/logctx` (`WithOpID`, `Handler` slog
+wrapper); `installLogger` wraps with `logctx.Handler`; six
+mutating `mail.Backend` methods take `ctx` first; drainer
+`executeOne` attaches `WithOpID(ctx, row.ID)` before `dispatch`
+and emits debug events on every terminal-success branch;
+`mailimap.Send` threads ctx into `smtpClientLocked`.
 
 **Dogfood phase, pre-beta rules still in force.** Geoff is the
 sole user; soak (as `release-stance.md` defines it — stability
@@ -22,13 +21,13 @@ Pass 35.1 still pending Gmail/Outlook creds.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 41.1 | Scaffold through Audit Final remediation (ADRs 0001–0239) | done |
+| 1 – 42 | Scaffold through correlation foundation (ADRs 0001–0240) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 42+ | Dogfood-driven fixes + quality (rolling) | active — log-level config, startup checkpoints, passes 42/43 plans ready |
+| 43+ | Dogfood-driven fixes + quality (rolling) | active — Pass 43 (visibility) plan ready |
 | Beta soak | Gated on second user or explicit feature freeze | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (rolling — Pass 42+)
+### Next starter prompt (rolling — Pass 43+)
 
 > **Goal.** Fix what daily-driver use surfaces; keep tightening
 > code quality while there are no other users to protect.

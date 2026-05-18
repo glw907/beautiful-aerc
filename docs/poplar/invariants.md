@@ -372,29 +372,29 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 
 ## Logging
 
-`log/slog` for `internal/`; `os.Stderr` for CLI/UX in `cmd/poplar/`.
-`installLogger("")` in `main()`; `runRoot` re-calls after `LoadUI`,
-before `openBackend`/`Connect`. Level: `POPLAR_LOG=debug` beats
-`[ui] log-level`; both absent → LevelInfo. TTY → append
-`$XDG_STATE_HOME/poplar/poplar.log`; non-TTY → stderr; open failure
-silent. Backend constructors take `*slog.Logger`; nil →
-`slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
+`log/slog` for `internal/`; stderr for `cmd/poplar/`.
+`installLogger("")` in `main()`, re-called from `runRoot` after
+`LoadUI`. `POPLAR_LOG=debug` beats `[ui] log-level`; both absent →
+LevelInfo. TTY → append `$XDG_STATE_HOME/poplar/poplar.log`;
+non-TTY → stderr; silent on open failure. Wraps text handler with
+`logctx.Handler` (injects ctx-carried `op_id`). Six mutating
+`mail.Backend` methods (`Move`/`Flag`/`Destroy`/`Send`/`Append`/
+`PushDraft`) take `ctx` first; drainer attaches
+`logctx.WithOpID(ctx, row.ID)` before dispatch. Backend ctors take
+`*slog.Logger` (nil → `slog.Default()`). ADRs 0197, 0209, 0240.
 
 ## Build & verification
 
 - `make check` (commit gate) = fmt-check + vet + voice +
   modern-go-check + skipcheck + test; `-tags=dev` keeps MockBackend
-  in scope. `voice-check.sh` (ADR-0173) and `modern-go-check.sh`
-  (ADR-0196, `MODERN_GO_STRICT=1` hard-fails) scan grep-tier tells;
-  `scripts/skipcheck` rejects `Test*` bodies starting with an
-  unguarded `t.Skip`/`SkipNow`/`Skipf` (ADR-0234). `make check-deep`
-  runs gremlins per-package with `--timeout-coefficient 10
-  --workers 1` and observed − 5pp floors (equivalents documented;
-  ADRs 0232, 0234–0237). `make install` → `~/.local/bin/`. Module
+  in scope. Grep-tier voice/modern-go checks per ADRs 0173, 0196;
+  `scripts/skipcheck` rejects unguarded `t.Skip*` in `Test*`
+  (ADR-0234). `make check-deep` runs gremlins per-package
+  (ADRs 0232, 0234–0237). `make install` → `~/.local/bin/`. Module
   `github.com/glw907/poplar`; `go.mod` 1.26.0, toolchain 1.26.1.
-- Skills: `go-conventions` before any Go file; `elm-conventions`
-  before `internal/ui/`; `styling.md` before any color; `poplar-pass`
-  for pass-end. UI via tmux (`.claude/docs/tmux-testing.md`); capture
+- Skills: `go-conventions` (any Go file), `elm-conventions`
+  (`internal/ui/`), `styling.md` (any color), `poplar-pass`
+  (pass-end). UI via tmux (`.claude/docs/tmux-testing.md`); capture
   80×24 and 120×40.
 
 ## Decisions — `docs/poplar/decisions/` (themed map: `INDEX.md`).
