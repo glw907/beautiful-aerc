@@ -36,7 +36,7 @@ func TestCmdClient_RedialsAfterDrop(t *testing.T) {
 	first := newFakeClient()
 	second := newFakeClient()
 
-	b := New(config.AccountConfig{Name: "t"}, nil)
+	b := New(config.AccountConfig{Name: "t"}, nil, false)
 	b.cmd = first
 	b.connCtx = context.Background()
 	called := 0
@@ -83,7 +83,7 @@ func TestCmdClient_RedialReselectsCurrent(t *testing.T) {
 	first := newFakeClient()
 	second := newFakeClient()
 
-	b := New(config.AccountConfig{Name: "t"}, nil)
+	b := New(config.AccountConfig{Name: "t"}, nil, false)
 	b.cmd = first
 	b.current = "INBOX"
 	b.connCtx = context.Background()

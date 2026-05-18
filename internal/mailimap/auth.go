@@ -14,6 +14,7 @@ import (
 	"github.com/emersion/go-sasl"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/logctx"
 	"github.com/glw907/poplar/internal/mail"
 	"github.com/glw907/poplar/internal/mailauth"
 )
@@ -78,6 +79,9 @@ func dial(ctx context.Context, b *Backend, role string) (imapClient, error) {
 				})
 			},
 		},
+	}
+	if b.wireTrace {
+		opts.DebugWriter = logctx.WireWriter{Component: "imap"}
 	}
 
 	cli, err := layerTLS(raw, cfg, tlsCfg, opts)

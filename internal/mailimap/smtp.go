@@ -38,9 +38,9 @@ var smtpDial = realSMTPDial
 func ProbeSMTP(ctx context.Context, cfg config.AccountConfig, oauthCli *mailauth.Client) error {
 	var b *Backend
 	if oauthCli != nil {
-		b = NewWithOAuth(cfg, oauthCli, nil)
+		b = NewWithOAuth(cfg, oauthCli, nil, false)
 	} else {
-		b = New(cfg, nil)
+		b = New(cfg, nil, false)
 	}
 	cli, err := smtpDial(ctx, b)
 	if err != nil {

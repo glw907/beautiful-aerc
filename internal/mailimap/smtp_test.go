@@ -46,7 +46,7 @@ func TestSend_LazyDial(t *testing.T) {
 	}
 	t.Cleanup(func() { smtpDial = prev })
 
-	b := New(config.AccountConfig{Name: "t"}, nil)
+	b := New(config.AccountConfig{Name: "t"}, nil, false)
 	if err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestSend_DropsClientOnError(t *testing.T) {
 	}
 	t.Cleanup(func() { smtpDial = prev })
 
-	b := New(config.AccountConfig{Name: "t"}, nil)
+	b := New(config.AccountConfig{Name: "t"}, nil, false)
 	if err := b.Send(context.Background(), mail.Envelope{From: "f@x", Rcpts: []string{"t@x"}}, []byte("hi")); err == nil {
 		t.Fatal("expected error")
 	}
@@ -198,7 +198,7 @@ func TestClassifyErr_SMTPAuthCodes(t *testing.T) {
 
 func TestAppend_GoesThroughCmdConnection(t *testing.T) {
 	cmd := newFakeClient()
-	b := New(config.AccountConfig{Name: "t"}, nil)
+	b := New(config.AccountConfig{Name: "t"}, nil, false)
 	b.cmd = cmd
 
 	if err := b.Append(context.Background(), "Sent", []byte("rfc822 bytes"), mail.FlagSeen); err != nil {

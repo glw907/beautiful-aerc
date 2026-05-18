@@ -34,7 +34,7 @@ func TestLiveIMAPLifecycle(t *testing.T) {
 		Auth:        "plain",
 		Password:    pass,
 	}
-	b := New(cfg, nil)
+	b := New(cfg, nil, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

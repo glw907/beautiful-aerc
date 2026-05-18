@@ -98,7 +98,7 @@ func TestNewWithOAuth(t *testing.T) {
 		mailauth.Config{ClientID: "id", TokenURL: tokenURL},
 		store, "acct", mailauth.BackendKeyring,
 	)
-	b := NewWithOAuth(config.AccountConfig{Name: "acct"}, c, nil)
+	b := NewWithOAuth(config.AccountConfig{Name: "acct"}, c, nil, false)
 	if b.oauth == nil {
 		t.Fatal("expected b.oauth to be set")
 	}

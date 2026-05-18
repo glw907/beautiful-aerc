@@ -23,9 +23,10 @@ import (
 
 // Backend is one IMAP account.
 type Backend struct {
-	cfg   config.AccountConfig
-	log   *slog.Logger
-	oauth *mailauth.Client // non-nil for xoauth2 accounts using mailauth
+	cfg       config.AccountConfig
+	log       *slog.Logger
+	oauth     *mailauth.Client // non-nil for xoauth2 accounts using mailauth
+	wireTrace bool
 
 	mu            sync.Mutex
 	cmd           imapClient // command connection, nil before Connect
@@ -65,22 +66,22 @@ type capSet struct {
 
 // New constructs an unconnected Backend. A nil logger defaults to
 // slog.Default() tagged with the package name.
-func New(cfg config.AccountConfig, log *slog.Logger) *Backend {
+func New(cfg config.AccountConfig, log *slog.Logger, wireTrace bool) *Backend {
 	if log == nil {
 		log = slog.Default().With("component", "mailimap")
 	}
-	b := &Backend{cfg: cfg, log: log}
+	b := &Backend{cfg: cfg, log: log, wireTrace: wireTrace}
 	b.dialFn = func(ctx context.Context, role string) (imapClient, error) { return dial(ctx, b, role) }
 	return b
 }
 
 // NewWithOAuth returns a Backend that obtains XOAUTH2 access tokens via c
 // rather than running password-cmd on every dial. c must be non-nil.
-func NewWithOAuth(cfg config.AccountConfig, c *mailauth.Client, log *slog.Logger) *Backend {
+func NewWithOAuth(cfg config.AccountConfig, c *mailauth.Client, log *slog.Logger, wireTrace bool) *Backend {
 	if log == nil {
 		log = slog.Default().With("component", "mailimap")
 	}
-	b := &Backend{cfg: cfg, log: log, oauth: c}
+	b := &Backend{cfg: cfg, log: log, oauth: c, wireTrace: wireTrace}
 	b.dialFn = func(ctx context.Context, role string) (imapClient, error) { return dial(ctx, b, role) }
 	return b
 }
