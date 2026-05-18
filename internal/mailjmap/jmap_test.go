@@ -24,14 +24,14 @@ import (
 )
 
 func TestNew_AccountName(t *testing.T) {
-	b := New(config.AccountConfig{Name: "alice@example.com"}, nil)
+	b := New(config.AccountConfig{Name: "alice@example.com"}, nil, false)
 	if got := b.AccountName(); got != "alice@example.com" {
 		t.Errorf("AccountName = %q, want %q", got, "alice@example.com")
 	}
 }
 
 func TestBackend_DisconnectWithoutConnect(t *testing.T) {
-	b := New(config.AccountConfig{Name: "alice"}, nil)
+	b := New(config.AccountConfig{Name: "alice"}, nil, false)
 	if err := b.Disconnect(); err != nil {
 		t.Fatalf("Disconnect on never-connected: %v", err)
 	}
@@ -1318,7 +1318,7 @@ func TestLogger_DroppedUpdate(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	b := New(config.AccountConfig{Name: "test"}, logger)
+	b := New(config.AccountConfig{Name: "test"}, logger, false)
 	// Provide a zero-capacity channel so the very next emit overflows.
 	b.updates = make(chan mail.Update, 0)
 

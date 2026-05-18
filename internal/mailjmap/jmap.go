@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -39,8 +40,9 @@ type jmapClient interface {
 // Backend is one JMAP account. Construct with New, drive lifecycle
 // with Connect/Disconnect.
 type Backend struct {
-	cfg config.AccountConfig
-	log *slog.Logger
+	cfg       config.AccountConfig
+	log       *slog.Logger
+	wireTrace bool
 
 	mu         sync.Mutex
 	client     jmapClient
@@ -77,13 +79,14 @@ type folderEntry struct {
 // cfg.Password supplies the bearer token after env-var substitution.
 // A nil logger defaults to slog.Default() tagged with the package
 // name.
-func New(cfg config.AccountConfig, log *slog.Logger) *Backend {
+func New(cfg config.AccountConfig, log *slog.Logger, wireTrace bool) *Backend {
 	if log == nil {
 		log = slog.Default().With("component", "mailjmap")
 	}
 	return &Backend{
 		cfg:         cfg,
 		log:         log,
+		wireTrace:   wireTrace,
 		folders:     make(map[string]folderEntry),
 		blobIDs:     make(map[mail.UID]string),
 		partBlobIDs: make(map[mail.UID]map[string]string),
@@ -96,7 +99,7 @@ func New(cfg config.AccountConfig, log *slog.Logger) *Backend {
 // must assign b.session directly when the method under test reads
 // PrimaryAccounts.
 func NewWithClient(cfg config.AccountConfig, c jmapClient) *Backend {
-	b := New(cfg, nil)
+	b := New(cfg, nil, false)
 	b.client = c
 	b.runEventSourceFunc = b.runEventSource
 	cache, _ := lru.New[string, []byte](bodyCacheSize)
@@ -176,6 +179,13 @@ func (b *Backend) Connect(_ context.Context) error {
 		SessionEndpoint: b.cfg.Source,
 	}
 	cli.WithAccessToken(pw)
+	if b.wireTrace {
+		rt := cli.HttpClient.Transport
+		if rt == nil {
+			rt = http.DefaultTransport
+		}
+		cli.HttpClient.Transport = &loggingTransport{inner: rt}
+	}
 	if err := cli.Authenticate(); err != nil {
 		return fmt.Errorf("authenticate: %w", err)
 	}

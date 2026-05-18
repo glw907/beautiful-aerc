@@ -21,7 +21,7 @@ func openBackend(acct config.AccountConfig) (mail.Backend, error) {
 	case "mock":
 		return openMockBackend(acct)
 	case "jmap":
-		return mailjmap.New(acct, nil), nil
+		return mailjmap.New(acct, nil, false), nil
 	case "imap":
 		if acct.OAuth != nil {
 			c, err := buildOAuthClient(acct)
