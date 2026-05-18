@@ -59,3 +59,41 @@ func TestHandler_WithAttrs_PreservesInjection(t *testing.T) {
 		t.Errorf("component missing after With: %s", out)
 	}
 }
+
+func TestWireWriter_EmitsLines(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(inner))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	w := WireWriter{Component: "imap"}
+	_, _ = w.Write([]byte("A001 LOGIN user pass\nA002 SELECT INBOX\n"))
+
+	out := buf.String()
+	if !strings.Contains(out, "A001 LOGIN user pass") {
+		t.Errorf("first line missing: %s", out)
+	}
+	if !strings.Contains(out, "A002 SELECT INBOX") {
+		t.Errorf("second line missing: %s", out)
+	}
+	if !strings.Contains(out, "component=imap") {
+		t.Errorf("component missing: %s", out)
+	}
+}
+
+func TestWireWriter_SkipsEmptyLines(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(inner))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	w := WireWriter{Component: "smtp"}
+	_, _ = w.Write([]byte("\n\nfoo\n"))
+
+	lines := strings.Count(buf.String(), "\n")
+	if lines != 1 {
+		t.Errorf("want 1 line, got %d: %s", lines, buf.String())
+	}
+}
