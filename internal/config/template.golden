@@ -281,6 +281,17 @@ password-cmd = "op read op://Personal/Fastmail/credential"
 #
 # spam_retention_days = 0
 #     Same as above, for Spam.
+#
+# log-level = "info"
+#     Diagnostic log level. "info" (default) or "debug".
+#     POPLAR_LOG=debug overrides this setting.
+#
+# wire-trace = false
+#     Log all IMAP, SMTP, and JMAP protocol traffic at DEBUG level.
+#     POPLAR_WIRE_TRACE=1 overrides this setting. Warning: wire
+#     trace logs contain credentials and message content — enable
+#     only when debugging connection problems, and rotate or delete
+#     the log when done.
 
 
 # ──────────────────────────────────────────────────────────────────────

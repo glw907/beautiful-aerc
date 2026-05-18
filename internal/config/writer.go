@@ -285,6 +285,9 @@ func renderUIBlock(ui UIConfig) string {
 	if ui.LogLevel != "" && ui.LogLevel != "info" {
 		rows = append(rows, entry{"log-level", quoted(ui.LogLevel)})
 	}
+	if ui.WireTrace {
+		rows = append(rows, entry{"wire-trace", "true"})
+	}
 	if len(rows) == 0 {
 		return ""
 	}

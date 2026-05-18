@@ -18,6 +18,11 @@ type UIConfig struct {
 	// Accepts "info" (default) or "debug". POPLAR_LOG=debug takes precedence.
 	LogLevel string
 
+	// WireTrace enables protocol-level wire logging for IMAP, SMTP, and
+	// JMAP. Logs all traffic including credentials; use only for debugging.
+	// POPLAR_WIRE_TRACE=1 overrides this setting.
+	WireTrace bool
+
 	// Folders maps canonical name (Inbox, Drafts, Sent, Archive, Spam,
 	// Trash) or literal provider name to its overrides.
 	Folders map[string]FolderConfig
@@ -107,6 +112,7 @@ type rawUI struct {
 	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
 	DownloadDir        string                  `toml:"download_dir"`
 	LogLevel           *string                 `toml:"log-level"`
+	WireTrace          *bool                   `toml:"wire-trace"`
 	Tidy               *rawTidy                `toml:"tidytext"`
 }
 
@@ -227,6 +233,10 @@ func LoadUI(path string) (UIConfig, error) {
 		default:
 			return UIConfig{}, fmt.Errorf("ui.log-level: invalid value %q (want \"info\" or \"debug\")", *raw.UI.LogLevel)
 		}
+	}
+
+	if raw.UI.WireTrace != nil {
+		out.WireTrace = *raw.UI.WireTrace
 	}
 
 	if raw.UI.Tidy != nil {

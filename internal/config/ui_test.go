@@ -500,3 +500,32 @@ func TestLoadUI_NewMailToast(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadUI_WireTrace(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cases := []struct {
+		name string
+		toml string
+		want bool
+	}{
+		{"absent", "[ui]\n", false},
+		{"true", "[ui]\nwire-trace = true\n", true},
+		{"false", "[ui]\nwire-trace = false\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(tc.toml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadUI(path)
+			if err != nil {
+				t.Fatalf("LoadUI: %v", err)
+			}
+			if cfg.WireTrace != tc.want {
+				t.Errorf("WireTrace = %v, want %v", cfg.WireTrace, tc.want)
+			}
+		})
+	}
+}
