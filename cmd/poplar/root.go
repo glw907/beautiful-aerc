@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -125,21 +126,27 @@ func runRoot(f rootFlags) error {
 	if len(accts) == 0 {
 		return fmt.Errorf("no accounts configured; see %s", configPath)
 	}
+
+	uiCfg, err := config.LoadUI(configPath)
+	if err != nil {
+		return fmt.Errorf("ui config: %v", err)
+	}
+	installLogger(uiCfg.LogLevel)
+
+	log := slog.With("account", accts[0].Name)
+	log.Debug("opening backend", "provider", accts[0].Backend)
 	backend, err := openBackend(accts[0])
 	if err != nil {
 		return fmt.Errorf("open backend %q: %v", accts[0].Name, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	log.Debug("connecting")
 	if err := backend.Connect(ctx); err != nil {
 		return fmt.Errorf("connect %s: %v", accts[0].Name, err)
 	}
+	log.Debug("connected")
 	defer backend.Disconnect()
-
-	uiCfg, err := config.LoadUI(configPath)
-	if err != nil {
-		return fmt.Errorf("ui config: %v", err)
-	}
 
 	hasNF := term.HasNerdFont()
 	probe := term.MeasureSPUACells()
@@ -160,6 +167,7 @@ func runRoot(f rootFlags) error {
 	if !ok {
 		return fmt.Errorf("backend does not implement mail.ChangeTracker")
 	}
+	log.Debug("opening cache")
 	acct, err := cache.Open(accts[0].Name, backend, ct, "", cache.Config{
 		MaxSize:           cacheCfg.MaxSize,
 		MaxAttachmentSize: cacheCfg.MaxAttachmentSize,
@@ -169,9 +177,11 @@ func runRoot(f rootFlags) error {
 		return fmt.Errorf("open cache for %s: %v", accts[0].Name, err)
 	}
 	defer acct.Close()
+	log.Debug("starting drainer")
 	if err := acct.StartDrainer(ctx); err != nil {
 		return fmt.Errorf("start drainer: %v", err)
 	}
+	log.Debug("startup complete, launching UI")
 
 	app := ui.NewApp(t, acct, uiCfg, iconSet, measurer, accts[0].Contacts, accts[0].Identities)
 

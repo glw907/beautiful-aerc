@@ -282,6 +282,9 @@ func renderUIBlock(ui UIConfig) string {
 	if ui.DownloadDir != "" && ui.DownloadDir != d.DownloadDir {
 		rows = append(rows, entry{"download_dir", quoted(ui.DownloadDir)})
 	}
+	if ui.LogLevel != "" && ui.LogLevel != "info" {
+		rows = append(rows, entry{"log-level", quoted(ui.LogLevel)})
+	}
 	if len(rows) == 0 {
 		return ""
 	}

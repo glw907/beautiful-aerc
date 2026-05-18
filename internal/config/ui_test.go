@@ -321,6 +321,32 @@ undo-send-window = "-5s"
 	}
 }
 
+func TestLoadUI_LogLevel(t *testing.T) {
+	cases := []struct {
+		name    string
+		toml    string
+		want    string
+		wantErr bool
+	}{
+		{"default when absent", `[ui]`, "", false},
+		{"explicit info", "[ui]\nlog-level = \"info\"", "", false},
+		{"debug", "[ui]\nlog-level = \"debug\"", "debug", false},
+		{"invalid", "[ui]\nlog-level = \"trace\"", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTempUI(t, tc.toml)
+			cfg, err := LoadUI(path)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("LoadUI err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if !tc.wantErr && cfg.LogLevel != tc.want {
+				t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadUIMissingFile(t *testing.T) {
 	_, err := LoadUI("/nonexistent/config.toml")
 	if err == nil {

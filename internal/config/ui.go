@@ -15,6 +15,9 @@ type UIConfig struct {
 	// override. Defaults to true.
 	Threading bool
 
+	// Accepts "info" (default) or "debug". POPLAR_LOG=debug takes precedence.
+	LogLevel string
+
 	// Folders maps canonical name (Inbox, Drafts, Sent, Archive, Spam,
 	// Trash) or literal provider name to its overrides.
 	Folders map[string]FolderConfig
@@ -103,6 +106,7 @@ type rawUI struct {
 	TrashRetentionDays *int                    `toml:"trash_retention_days"`
 	SpamRetentionDays  *int                    `toml:"spam_retention_days"`
 	DownloadDir        string                  `toml:"download_dir"`
+	LogLevel           *string                 `toml:"log-level"`
 	Tidy               *rawTidy                `toml:"tidytext"`
 }
 
@@ -212,6 +216,17 @@ func LoadUI(path string) (UIConfig, error) {
 			return UIConfig{}, fmt.Errorf("ui.download_dir: %w", err)
 		}
 		out.DownloadDir = expanded
+	}
+
+	if raw.UI.LogLevel != nil {
+		switch *raw.UI.LogLevel {
+		case "info", "":
+			// leave at default
+		case "debug":
+			out.LogLevel = "debug"
+		default:
+			return UIConfig{}, fmt.Errorf("ui.log-level: invalid value %q (want \"info\" or \"debug\")", *raw.UI.LogLevel)
+		}
 	}
 
 	if raw.UI.Tidy != nil {

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	installLogger()
+	installLogger("")
 	cmd := newRootCmd()
 	cmd.AddCommand(newThemesCmd())
 	cmd.AddCommand(newConfigCmd())

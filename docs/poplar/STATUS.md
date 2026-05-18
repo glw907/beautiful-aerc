@@ -24,7 +24,7 @@ Pass 35.1 still pending Gmail/Outlook creds.
 |------|------|--------|
 | 1 – 41.1 | Scaffold through Audit Final remediation (ADRs 0001–0239) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 42+ | Dogfood-driven fixes + quality (rolling) | active |
+| 42+ | Dogfood-driven fixes + quality (rolling) | active — log-level config, startup checkpoints, passes 42/43 plans ready |
 | Beta soak | Gated on second user or explicit feature freeze | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 

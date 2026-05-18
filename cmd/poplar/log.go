@@ -9,9 +9,9 @@ import (
 	"golang.org/x/term"
 )
 
-func installLogger() {
+func installLogger(cfgLevel string) {
 	level := slog.LevelInfo
-	if os.Getenv("POPLAR_LOG") == "debug" {
+	if os.Getenv("POPLAR_LOG") == "debug" || cfgLevel == "debug" {
 		level = slog.LevelDebug
 	}
 	var w io.Writer = os.Stderr

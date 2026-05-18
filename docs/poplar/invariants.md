@@ -372,13 +372,13 @@ Search layer (FTS5 schema v11, parser, cache `Search`, sidebar scope toggle, res
 
 ## Logging
 
-`log/slog` is the diagnostic path for `internal/`; CLI/UX strings
-in `cmd/poplar/` stay on `os.Stderr`. `cmd/poplar/main.go` installs
-the root `slog.NewTextHandler` via `installLogger` before cobra runs
-(LevelInfo default; `POPLAR_LOG=debug` raises). TTY stdout →
-`$XDG_STATE_HOME/poplar/poplar.log` (append, on demand); non-TTY →
-`os.Stderr`; open failure silent. Backend constructors take a trailing
-`*slog.Logger`; nil → `slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
+`log/slog` for `internal/`; `os.Stderr` for CLI/UX in `cmd/poplar/`.
+`installLogger("")` in `main()`; `runRoot` re-calls after `LoadUI`,
+before `openBackend`/`Connect`. Level: `POPLAR_LOG=debug` beats
+`[ui] log-level`; both absent → LevelInfo. TTY → append
+`$XDG_STATE_HOME/poplar/poplar.log`; non-TTY → stderr; open failure
+silent. Backend constructors take `*slog.Logger`; nil →
+`slog.Default().With("component", "<pkg>")`. ADRs 0197, 0209.
 
 ## Build & verification
 

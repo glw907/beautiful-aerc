@@ -96,8 +96,16 @@ func (m App) routeOverlayKey(msg tea.KeyPressMsg) (App, tea.Cmd, bool) {
 	return m, nil, false
 }
 
-// Unmatched keys fall through to acct.Update.
 func (m App) updateGlobalKey(msg tea.KeyPressMsg) (App, tea.Cmd) {
+	// Search shelf owns all input while typing. Enter and Esc route through
+	// account.Model.handleKey. All other keys feed the textinput.
+	if m.acct.SearchState() == sidebar.SearchTyping {
+		var cmd tea.Cmd
+		m.acct, cmd = m.acct.Update(msg)
+		m = m.deriveChromeFromAcct()
+		return m, cmd
+	}
+
 	// In the Drafts folder, Enter opens compose instead of the viewer.
 	if msg.Code == tea.KeyEnter && !m.viewerOpen {
 		if info, ok := m.acct.SelectedMessage(); ok {

@@ -61,7 +61,7 @@ func TestInstallLogger_DebugLevel(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", dir)
 	t.Setenv("POPLAR_LOG", "debug")
 
-	installLogger()
+	installLogger("")
 
 	if !slog.Default().Enabled(nil, slog.LevelDebug) {
 		t.Error("expected debug level to be enabled")
@@ -73,12 +73,36 @@ func TestInstallLogger_InfoLevel(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", dir)
 	t.Setenv("POPLAR_LOG", "")
 
-	installLogger()
+	installLogger("")
 
 	if slog.Default().Enabled(nil, slog.LevelDebug) {
 		t.Error("expected debug level to be disabled at info")
 	}
 	if !slog.Default().Enabled(nil, slog.LevelInfo) {
 		t.Error("expected info level to be enabled")
+	}
+}
+
+func TestInstallLogger_ConfigDebug(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	t.Setenv("POPLAR_LOG", "")
+
+	installLogger("debug")
+
+	if !slog.Default().Enabled(nil, slog.LevelDebug) {
+		t.Error("expected debug level from config")
+	}
+}
+
+func TestInstallLogger_EnvOverridesConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	t.Setenv("POPLAR_LOG", "debug")
+
+	installLogger("info")
+
+	if !slog.Default().Enabled(nil, slog.LevelDebug) {
+		t.Error("expected env to override config: debug should be enabled")
 	}
 }
