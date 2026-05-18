@@ -184,7 +184,7 @@ func runRoot(f rootFlags) error {
 	defer acct.Close()
 	log.Debug("startup complete, launching UI")
 
-	app := ui.NewApp(t, acct, uiCfg, iconSet, measurer, accts[0].Contacts, accts[0].Identities)
+	app := ui.NewApp(t, acct, backend, uiCfg, iconSet, measurer, accts[0].Contacts, accts[0].Identities)
 
 	p := tea.NewProgram(appModel{app: app})
 	if _, err := p.Run(); err != nil {

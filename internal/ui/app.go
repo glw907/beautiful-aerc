@@ -115,6 +115,10 @@ type App struct {
 	lastBackfillPaused bool
 	lastBackfillWarn   bool
 
+	backend      mail.Backend
+	backendState uicore.BackendState
+	backendErr   error
+
 	theme                *theme.CompiledTheme
 	compose              *uicompose.Model
 	pendingComposeSave   bool // Save? modal is open for a dirty compose
@@ -142,7 +146,7 @@ func (m App) KbdCaps() tea.KeyboardEnhancementsMsg { return m.kbdCaps }
 
 // NewApp creates the root model. Folder loading runs in Init's Cmd chain,
 // not synchronously.
-func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, icons uicore.IconSet, m ansix.Measurer, contactsCfg *config.ContactsConfig, identities []config.Identity) App {
+func NewApp(t *theme.CompiledTheme, acct *cache.Account, b mail.Backend, uiCfg config.UIConfig, icons uicore.IconSet, m ansix.Measurer, contactsCfg *config.ContactsConfig, identities []config.Identity) App {
 	styles := NewStyles(t)
 	sb := NewStatusBar(styles)
 	sb = sb.SetConnectionState(Offline)
@@ -151,6 +155,7 @@ func NewApp(t *theme.CompiledTheme, acct *cache.Account, uiCfg config.UIConfig, 
 	cFixtures := contacts.Fixtures()
 	app := App{
 		focused:         true,
+		backend:         b,
 		acct:            account.New(t, acct, uiCfg, icons, m),
 		icons:           icons,
 		measurer:        m,
@@ -213,15 +218,22 @@ func (m *App) suggestAddresses(prefix string) []contacts.Suggestion {
 	return out
 }
 
-// Init kicks off the account tab's initial folder fetch and starts the
-// backend update pump.
+// Init kicks off the account tab's initial folder fetch and returns the
+// appropriate backend-connect Cmd. When the account arrives pre-wired,
+// the pump and contacts sync start immediately. Otherwise connectBackendCmd
+// does it after BackendReadyMsg arrives.
 func (m App) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.acct.Init(), pumpUpdatesCmd(m.acct.Backend())}
-	if m.contactsCfg != nil {
-		cmds = append(cmds,
-			syncContactsCmd(m.acct.Cache(), m.contactsCfg),
-			scheduleSyncCmd(m.contactsRefresh),
-		)
+	cmds := []tea.Cmd{m.acct.Init()}
+	if m.acct.Cache().Connected() {
+		cmds = append(cmds, pumpUpdatesCmd(m.backend))
+		if m.contactsCfg != nil {
+			cmds = append(cmds,
+				syncContactsCmd(m.acct.Cache(), m.contactsCfg),
+				scheduleSyncCmd(m.contactsRefresh),
+			)
+		}
+	} else {
+		cmds = append(cmds, connectBackendCmd(context.Background(), m.backend, m.acct.Cache()))
 	}
 	return tea.Batch(cmds...)
 }
@@ -293,6 +305,9 @@ func (m App) Update(msg tea.Msg) (App, tea.Cmd) {
 	// Chrome runs first: backendUpdateMsg and account.CacheEventMsg
 	// fire on every drainer/idle cycle and would otherwise walk every
 	// other dispatcher.
+	if m2, cmd, ok := m.updateConnectMsg(msg); ok {
+		return m2, cmd
+	}
 	if m2, cmd, ok := m.updateChromeMsg(msg); ok {
 		return m2, cmd
 	}
