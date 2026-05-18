@@ -147,12 +147,8 @@ func realProbeDial(cfg config.AccountConfig, accessToken string) (imapClient, []
 		})
 		return nil, steps, fmt.Errorf("authenticate: %v", err)
 	}
-	mech := cfg.Auth
-	if mech == "" {
-		mech = "plain"
-	}
 	steps = append(steps, mail.ProbeStep{
-		Label: "AUTHENTICATE", Status: mail.ProbeOK, Detail: mech,
+		Label: "AUTHENTICATE", Status: mail.ProbeOK, Detail: resolvedMechanism(cfg),
 	})
 
 	return &realClient{c: cli}, steps, nil

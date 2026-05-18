@@ -20,9 +20,10 @@ func installLogger(cfgLevel string) {
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		// TUI mode: stderr is hidden under altscreen.
 		// Route to $XDG_STATE_HOME/poplar/poplar.log with size-based rotation.
-		if err := os.MkdirAll(stateDir(), 0o755); err == nil {
+		dir := stateDir()
+		if err := os.MkdirAll(dir, 0o755); err == nil {
 			w = &lumberjack.Logger{
-				Filename:   filepath.Join(stateDir(), "poplar.log"),
+				Filename:   filepath.Join(dir, "poplar.log"),
 				MaxSize:    10,
 				MaxBackups: 2,
 			}

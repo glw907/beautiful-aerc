@@ -32,9 +32,8 @@ func (h Handler) WithGroup(name string) slog.Handler {
 	return Handler{h.Handler.WithGroup(name)}
 }
 
-// WireWriter is an io.Writer that splits input on newlines and emits one
-// slog.Debug record per non-empty line. Component labels the source
-// protocol in the "component" field.
+// WireWriter is an [io.Writer] that emits one slog.Debug record per
+// non-empty line, tagged with Component.
 type WireWriter struct{ Component string }
 
 func (w WireWriter) Write(p []byte) (int, error) {

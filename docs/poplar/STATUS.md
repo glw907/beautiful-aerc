@@ -1,12 +1,13 @@
 # Poplar Status
 
-**Current pass:** Pass 42 landed the correlation foundation
-(ADR-0240): `internal/logctx` (`WithOpID`, `Handler` slog
-wrapper); `installLogger` wraps with `logctx.Handler`; six
-mutating `mail.Backend` methods take `ctx` first; drainer
-`executeOne` attaches `WithOpID(ctx, row.ID)` before `dispatch`
-and emits debug events on every terminal-success branch;
-`mailimap.Send` threads ctx into `smtpClientLocked`.
+**Current pass:** Pass 43 landed the visibility layer (ADR-0241):
+`[ui] wire-trace` / `POPLAR_WIRE_TRACE=1` wires IMAP/SMTP
+`DebugWriter` + JMAP `loggingTransport` to `logctx.WireWriter`;
+backend ctors take trailing `wireTrace bool`, threaded from
+`runRoot` via `openBackend`; lumberjack rotates the state log
+(10 MB × 2); debug checkpoints at `mailimap` dial/TLS/auth/IDLE/
+redial, `mailjmap` session/eventsource/state-change, `cache` open
++ each migration; `slog.Info("poplar start", ...)` marks sessions.
 
 **Dogfood phase, pre-beta rules still in force.** Geoff is the
 sole user; soak (as `release-stance.md` defines it — stability
@@ -21,13 +22,13 @@ Pass 35.1 still pending Gmail/Outlook creds.
 
 | Pass | Goal | Status |
 |------|------|--------|
-| 1 – 42 | Scaffold through correlation foundation (ADRs 0001–0240) | done |
+| 1 – 43 | Scaffold through visibility layer (ADRs 0001–0241) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 43+ | Dogfood-driven fixes + quality (rolling) | active — Pass 43 (visibility) plan ready |
+| 44+ | Dogfood-driven fixes + quality (rolling) | active |
 | Beta soak | Gated on second user or explicit feature freeze | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (rolling — Pass 43+)
+### Next starter prompt (rolling — Pass 44+)
 
 > **Goal.** Fix what daily-driver use surfaces; keep tightening
 > code quality while there are no other users to protect.

@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/glw907/poplar/internal/config"
+	"github.com/glw907/poplar/internal/logctx"
 	"github.com/glw907/poplar/internal/mail"
 )
 
@@ -184,7 +185,7 @@ func (b *Backend) Connect(_ context.Context) error {
 		if rt == nil {
 			rt = http.DefaultTransport
 		}
-		cli.HttpClient.Transport = &loggingTransport{inner: rt}
+		cli.HttpClient.Transport = &loggingTransport{inner: rt, w: logctx.WireWriter{Component: "jmap"}}
 	}
 	if err := cli.Authenticate(); err != nil {
 		return fmt.Errorf("authenticate: %w", err)

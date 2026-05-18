@@ -198,11 +198,7 @@ func (b *Backend) resolvedPassword() (string, error) {
 // authenticate runs the SASL exchange named by cfg.Auth. Supported
 // mechanisms: plain (default), login, cram-md5, xoauth2.
 func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) error {
-	mech := cfg.Auth
-	if mech == "" {
-		mech = "plain"
-	}
-	switch mech {
+	switch resolvedMechanism(cfg) {
 	case "plain":
 		return cli.Authenticate(sasl.NewPlainClient("", cfg.Email, pw))
 	case "login":
@@ -216,7 +212,7 @@ func authenticate(cli *imapclient.Client, cfg config.AccountConfig, pw string) e
 		}
 		return cli.Authenticate(mailauth.NewXoauth2Client(cfg.Email, pw))
 	default:
-		return fmt.Errorf("unsupported auth mechanism %q", mech)
+		return fmt.Errorf("unsupported auth mechanism %q", resolvedMechanism(cfg))
 	}
 }
 

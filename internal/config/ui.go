@@ -18,9 +18,8 @@ type UIConfig struct {
 	// Accepts "info" (default) or "debug". POPLAR_LOG=debug takes precedence.
 	LogLevel string
 
-	// WireTrace enables protocol-level wire logging for IMAP, SMTP, and
-	// JMAP. Logs all traffic including credentials; use only for debugging.
-	// POPLAR_WIRE_TRACE=1 overrides this setting.
+	// WireTrace logs all IMAP, SMTP, and JMAP protocol traffic, including
+	// credentials. POPLAR_WIRE_TRACE=1 overrides this setting.
 	WireTrace bool
 
 	// Folders maps canonical name (Inbox, Drafts, Sent, Archive, Spam,
