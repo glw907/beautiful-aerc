@@ -14,6 +14,9 @@ import (
 // mail.ErrCannotCalculateChanges the folder is re-anchored, and the
 // next call pulls a fresh baseline.
 func (a *Account) SyncFolder(ctx context.Context, folder string) error {
+	if !a.Connected() {
+		return ErrNotConnected
+	}
 	since, err := a.readSyncToken(folder)
 	if err != nil {
 		return err
@@ -106,6 +109,9 @@ func (a *Account) reAnchor(ctx context.Context, folder string) error {
 // Rows that no longer appear server-side are deleted, and CASCADE
 // reaps their messages and outbox entries.
 func (a *Account) SyncFolders(ctx context.Context) error {
+	if !a.Connected() {
+		return ErrNotConnected
+	}
 	folders, err := a.Backend.ListFolders()
 	if err != nil {
 		return fmt.Errorf("backend list folders: %w", err)

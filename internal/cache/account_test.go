@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -80,6 +81,73 @@ func TestWireBackend_StartsDrainer(t *testing.T) {
 	// End-to-end drain behavior is validated by TestIntegration_TriageRoundTrip.
 	if a.drainerStop == nil {
 		t.Fatal("drainerStop is nil after WireBackend; drainer was not started")
+	}
+}
+
+func TestFetchBody_PreWire_ErrNotConnected(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	_, err = a.FetchBody(mail.UID("nonexistent"))
+	if !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("FetchBody pre-wire = %v, want ErrNotConnected", err)
+	}
+}
+
+func TestAttachments_PreWire_ErrNotConnected(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	_, err = a.Attachments(context.Background(), mail.UID("nonexistent"))
+	if !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("Attachments pre-wire = %v, want ErrNotConnected", err)
+	}
+}
+
+func TestFetchAttachment_PreWire_ErrNotConnected(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	_, err = a.FetchAttachment(context.Background(), mail.UID("nonexistent"), "1")
+	if !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("FetchAttachment pre-wire = %v, want ErrNotConnected", err)
+	}
+}
+
+func TestSyncFolders_PreWire_ErrNotConnected(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	if err := a.SyncFolders(context.Background()); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("SyncFolders pre-wire = %v, want ErrNotConnected", err)
+	}
+}
+
+func TestListFolders_PreWire_WorksFromCache(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open("Test", dir, Config{}, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	folders, err := a.ListFolders()
+	if err != nil {
+		t.Fatalf("ListFolders pre-wire = %v, want nil", err)
+	}
+	if len(folders) != 0 {
+		t.Fatalf("ListFolders on empty cache = %d folders, want 0", len(folders))
 	}
 }
 

@@ -225,7 +225,11 @@ func (a *Account) FetchHeaders(ctx context.Context, uids []mail.UID) ([]mail.Mes
 			missing = append(missing, u)
 		}
 	}
-	if len(missing) > 0 && a.Backend != nil {
+	// Backend-touching paths below require a wired connection.
+	if len(missing) > 0 {
+		if !a.Connected() {
+			return nil, ErrNotConnected
+		}
 		fresh, err := a.Backend.FetchHeaders(missing)
 		if err != nil {
 			return nil, fmt.Errorf("backend fetch headers: %w", err)
@@ -257,6 +261,9 @@ func (a *Account) FetchBody(uid mail.UID) ([]byte, error) {
 		return nil, fmt.Errorf("fetch body %s: lookup: %w", uid, err)
 	} else if ok {
 		return buf, nil
+	}
+	if !a.Connected() {
+		return nil, ErrNotConnected
 	}
 	body, err := a.Backend.FetchBody(uid)
 	if err != nil {
