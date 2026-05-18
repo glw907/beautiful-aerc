@@ -134,6 +134,12 @@
 
 ## Medium
 
+- [ ] **#62** Status-bar hardcodes `"r retry"` hint — silently lies if `RetryConnect` is rebound `#improvement` `#poplar` *(2026-05-17)*
+  `internal/ui/status_bar.go` renders `" · r retry"` as a string literal in the `BackendFailed` branch. The actual binding lives at `internal/ui/keys.go` `RetryConnect`. If the key ever moves, the status bar still shows `r`. Fix: thread the key hint (e.g. `m.keys.RetryConnect.Help().Key`) into `SetBackendState`, or export a `uicore.RetryHint` constant referenced from both sites.
+
+- [ ] **#61** Status-bar long `connText` overflows past `width` instead of clipping `#bug` `#poplar` `#ui` *(2026-05-17, pre-existing — surfaced during Pass 44 simplify)*
+  `internal/ui/status_bar.go` `View`: when `connText` is long (long error string from `BackendFailed`, or any long `reconnecting` text), `rightWidth` exceeds `width`, `fillWidth = max(0, …)` clamps to 0, and the bar renders wider than `width`. Same defect for any future long connection text. Fix: budget `connTextPart` against remaining width after `counts+outbox+backfill+icon+end`; truncate with ellipsis when over budget.
+
 - [ ] **#60** `connectBackendCmd` uses `context.Background()` — quit during connect orphans the dial goroutine until timeout `#improvement` `#poplar` `#async` *(2026-05-17)*
   `App.Init` dispatches `connectBackendCmd(context.Background(), ...)`. If the user quits before connect completes the goroutine runs to dial-timeout (~30s) before exiting. Benign for single-user daily-driver use; no data loss. Fix: hoist a cancel func onto App and call it in the quit path. Revisit if real complaints surface.
 
