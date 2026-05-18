@@ -218,10 +218,8 @@ func (m *App) suggestAddresses(prefix string) []contacts.Suggestion {
 	return out
 }
 
-// Init kicks off the account tab's initial folder fetch and returns the
-// appropriate backend-connect Cmd. When the account arrives pre-wired,
-// the pump and contacts sync start immediately. Otherwise connectBackendCmd
-// does it after BackendReadyMsg arrives.
+// Init starts the account and dispatches connectBackendCmd when the backend
+// is not yet connected; the pre-wired path is transitional.
 func (m App) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.acct.Init()}
 	if m.acct.Cache().Connected() {
@@ -257,6 +255,7 @@ func (m App) deriveChromeFromAcct() App {
 		m.statusBar = m.statusBar.SetMode(StatusAccount)
 	}
 	m.footer = m.footer.SetCounter(m.acct.WindowCounter())
+	m.statusBar = m.statusBar.SetBackendState(m.backendState, m.backendErr)
 	return m
 }
 

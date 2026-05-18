@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 func TestStatusBarView(t *testing.T) {
@@ -135,6 +137,97 @@ func TestStatusBar_OutboxConflictWinsOverPending(t *testing.T) {
 	}
 	if strings.Contains(out, "⇅") {
 		t.Errorf("⇅ still present alongside ⚠ in %q", out)
+	}
+}
+
+func TestStatusBar_BackendConnecting(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetBackendState(uicore.BackendConnecting, nil)
+	out := stripANSI(sb.View(80, 0))
+	if !strings.Contains(out, "connecting") {
+		t.Fatalf("Connecting render missing 'connecting': %q", out)
+	}
+	if strings.Contains(out, "connected") && !strings.Contains(out, "connecting") {
+		t.Fatalf("Connecting render shows 'connected' instead of 'connecting': %q", out)
+	}
+}
+
+func TestStatusBar_BackendFailed_ShowsErrorAndRetryHint(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetBackendState(uicore.BackendFailed, errors.New("dial: timeout"))
+	out := stripANSI(sb.View(120, 0))
+	if !strings.Contains(out, "dial: timeout") {
+		t.Fatalf("Failed render missing error text: %q", out)
+	}
+	if !strings.Contains(out, "r retry") {
+		t.Fatalf("Failed render missing 'r retry' hint: %q", out)
+	}
+}
+
+func TestStatusBar_BackendFailed_NilErr(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetBackendState(uicore.BackendFailed, nil)
+	out := stripANSI(sb.View(80, 0))
+	if !strings.Contains(out, "disconnected") {
+		t.Fatalf("Failed nil-err render missing 'disconnected': %q", out)
+	}
+	if !strings.Contains(out, "r retry") {
+		t.Fatalf("Failed nil-err render missing 'r retry': %q", out)
+	}
+}
+
+func TestStatusBar_BackendFailed_MultilineErr(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetBackendState(uicore.BackendFailed, errors.New("dial: timeout\nextra detail"))
+	out := stripANSI(sb.View(120, 0))
+	if !strings.Contains(out, "dial: timeout") {
+		t.Fatalf("Failed multiline render missing first line: %q", out)
+	}
+	if strings.Contains(out, "extra detail") {
+		t.Fatalf("Failed multiline render should show only first line: %q", out)
+	}
+}
+
+func TestStatusBar_BackendConnected_FallsThroughToConnState(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).
+		SetConnectionState(Connected).
+		SetBackendState(uicore.BackendConnected, nil)
+	out := stripANSI(sb.View(80, 0))
+	if !strings.Contains(out, "● connected") {
+		t.Fatalf("BackendConnected render should show '● connected': %q", out)
+	}
+	if strings.Contains(out, "connecting") || strings.Contains(out, "retry") {
+		t.Fatalf("BackendConnected render must not show pre-wire text: %q", out)
+	}
+}
+
+func TestStatusBar_BackendConnected_OfflineConnState(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).
+		SetConnectionState(Offline).
+		SetBackendState(uicore.BackendConnected, nil)
+	out := stripANSI(sb.View(80, 0))
+	if !strings.Contains(out, "○ offline") {
+		t.Fatalf("BackendConnected+Offline render should show '○ offline': %q", out)
+	}
+}
+
+func TestStatusBar_BackendConnecting_Width(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetBackendState(uicore.BackendConnecting, nil)
+	result := sb.View(80, 0)
+	if lipgloss.Width(result) != 80 {
+		t.Errorf("width = %d, want 80", lipgloss.Width(result))
+	}
+}
+
+func TestStatusBar_BackendFailed_Width(t *testing.T) {
+	styles := NewStyles(theme.Nord)
+	sb := NewStatusBar(styles).SetBackendState(uicore.BackendFailed, errors.New("connect: connection refused"))
+	result := sb.View(80, 0)
+	if lipgloss.Width(result) != 80 {
+		t.Errorf("width = %d, want 80", lipgloss.Width(result))
 	}
 }
 

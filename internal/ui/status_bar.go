@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/glw907/poplar/internal/ui/uicore"
 )
 
 type ConnectionState int
@@ -43,12 +44,17 @@ type StatusBar struct {
 	backfillTotal  int
 	backfillPaused bool
 	backfillWarn   bool
+	// Pre-wire lifecycle state. Connecting and Failed override the
+	// connState-derived render; Connected falls through to it.
+	backendState uicore.BackendState
+	backendErr   error
 }
 
 func NewStatusBar(styles Styles) StatusBar {
 	return StatusBar{
-		styles:    styles,
-		connState: Connected,
+		styles:       styles,
+		connState:    Connected,
+		backendState: uicore.BackendConnected,
 	}
 }
 
@@ -95,6 +101,16 @@ func (sb StatusBar) SetScrollPct(pct int) StatusBar {
 	return sb
 }
 
+// SetBackendState supplies the App-level connection lifecycle.
+// Pre-wire states (Connecting, Failed) override the local
+// ConnectionState in render; BackendConnected falls through to
+// the existing live-transport rendering.
+func (sb StatusBar) SetBackendState(state uicore.BackendState, err error) StatusBar {
+	sb.backendState = state
+	sb.backendErr = err
+	return sb
+}
+
 // buildFill builds a horizontal rule of width characters with the ┴
 // junction placed at dividerCol.
 func buildFill(width, dividerCol int) string {
@@ -126,19 +142,34 @@ func (sb StatusBar) View(width, dividerCol int) string {
 
 	var connIcon, connText string
 	var connStyle lipgloss.Style
-	switch sb.connState {
-	case Connected:
-		connIcon = "●"
-		connText = "connected"
-		connStyle = sb.styles.StatusConnected
-	case Offline:
-		connIcon = "○"
-		connText = "offline"
-		connStyle = sb.styles.StatusOffline
-	case Reconnecting:
+	switch sb.backendState {
+	case uicore.BackendConnecting:
 		connIcon = "◐"
-		connText = "reconnecting"
+		connText = "connecting"
 		connStyle = sb.styles.StatusReconnect
+	case uicore.BackendFailed:
+		connIcon = "○"
+		connStyle = sb.styles.StatusOffline
+		if sb.backendErr != nil {
+			connText = strings.SplitN(sb.backendErr.Error(), "\n", 2)[0] + " · r retry"
+		} else {
+			connText = "disconnected · r retry"
+		}
+	default: // BackendConnected: fall through to live-transport rendering
+		switch sb.connState {
+		case Connected:
+			connIcon = "●"
+			connText = "connected"
+			connStyle = sb.styles.StatusConnected
+		case Offline:
+			connIcon = "○"
+			connText = "offline"
+			connStyle = sb.styles.StatusOffline
+		case Reconnecting:
+			connIcon = "◐"
+			connText = "reconnecting"
+			connStyle = sb.styles.StatusReconnect
+		}
 	}
 
 	// Build the styled segments first, then measure them with
