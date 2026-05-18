@@ -119,7 +119,7 @@ func newConfigCheckCmd() *cobra.Command {
 			}
 			anyFail := false
 			for _, a := range accounts {
-				b, err := openBackend(a)
+				b, err := openBackend(a, false)
 				if err != nil {
 					fmt.Fprintf(cmd.OutOrStdout(), "%-20s error: %v\n", a.Name, err)
 					anyFail = true

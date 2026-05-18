@@ -133,9 +133,10 @@ func runRoot(f rootFlags) error {
 	}
 	installLogger(uiCfg.LogLevel)
 
+	wireTrace := uiCfg.WireTrace || os.Getenv("POPLAR_WIRE_TRACE") == "1"
 	log := slog.With("account", accts[0].Name)
 	log.Debug("opening backend", "provider", accts[0].Backend)
-	backend, err := openBackend(accts[0])
+	backend, err := openBackend(accts[0], wireTrace)
 	if err != nil {
 		return fmt.Errorf("open backend %q: %v", accts[0].Name, err)
 	}

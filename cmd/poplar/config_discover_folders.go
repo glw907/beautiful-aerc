@@ -36,7 +36,7 @@ func newConfigDiscoverFoldersCmd() *cobra.Command {
 				return fmt.Errorf("no accounts in %s", path)
 			}
 
-			backend, err := openBackend(accounts[0])
+			backend, err := openBackend(accounts[0], false)
 			if err != nil {
 				return fmt.Errorf("backend for %q: %v", accounts[0].Name, err)
 			}

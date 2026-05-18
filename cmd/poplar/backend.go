@@ -16,21 +16,21 @@ import (
 // only know about "jmap" and "imap"; the "mock" backend is gated
 // behind the dev build tag (see backend_dev.go / backend_nodev.go)
 // so a fake mailbox can never ship in a release binary.
-func openBackend(acct config.AccountConfig) (mail.Backend, error) {
+func openBackend(acct config.AccountConfig, wireTrace bool) (mail.Backend, error) {
 	switch acct.Backend {
 	case "mock":
 		return openMockBackend(acct)
 	case "jmap":
-		return mailjmap.New(acct, nil, false), nil
+		return mailjmap.New(acct, nil, wireTrace), nil
 	case "imap":
 		if acct.OAuth != nil {
 			c, err := buildOAuthClient(acct)
 			if err != nil {
 				return nil, fmt.Errorf("oauth client for %q: %w", acct.Name, err)
 			}
-			return mailimap.NewWithOAuth(acct, c, nil, false), nil
+			return mailimap.NewWithOAuth(acct, c, nil, wireTrace), nil
 		}
-		return mailimap.New(acct, nil, false), nil
+		return mailimap.New(acct, nil, wireTrace), nil
 	default:
 		return nil, fmt.Errorf("unknown backend %q for account %q", acct.Backend, acct.Name)
 	}
