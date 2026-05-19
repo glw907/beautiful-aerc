@@ -129,7 +129,7 @@ func ansiSpliceAtCol(styled string, col, width int, replacement string) string {
 
 // renderFences runs chroma over fenced blocks whose interior intersects
 // [top, bottom) and maps styled output back to source-line indexes
-// (marker lines excluded). Blocks outside the viewport are skipped.
+// (marker lines excluded).
 func renderFences(lines []string, ctxs []LineContext, st Styles, top, bottom int) map[int]string {
 	out := map[int]string{}
 	i := 0
