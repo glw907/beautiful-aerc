@@ -1,25 +1,11 @@
 # Poplar Status
 
-**Current pass:** Pass 44 landed async backend connect (ADR-0242):
-`cache.Open(name, dir, cfg, log)` is sqlite + migrations only;
-`(*Account).WireBackend(backend, ct)` attaches the backend and
-starts the backfiller + drainer; `cache.ErrNotConnected` is the
-pre-wire sentinel for backend-touching reads; `App.Init` returns
-`connectBackendCmd` which calls Connect + WireBackend and emits
-`BackendReadyMsg`; App owns `backendState`/`backendErr`; status
-bar renders Connecting / Failed pre-wire (`r` retries when
-Failed); messagelist shows `◐ Connecting…` when empty during
-warmup; `mail.ConnConnecting` distinguishes pre-auth from
-"was-connected"; `AccountName()` layering bug fixed inline.
+**Current pass:** Pass 44 landed async backend connect (ADR-0242).
+Pass 45 (catkin render-time soft wrap) is next.
 
-**Dogfood phase, pre-beta rules still in force.** Geoff is the
-sole user; soak (as `release-stance.md` defines it — stability
-first, no schema breaks, features queued to `1.1`) is the wrong
-posture while there's no one to protect. Pre-beta refactor
-license stays open. Beta soak enters when a second user lands or
-Geoff explicitly calls the tree feature-frozen.
-
-Pass 35.1 still pending Gmail/Outlook creds.
+**Dogfood phase, pre-beta rules in force.** Geoff is the sole
+user; soak enters when a second user lands or Geoff calls feature
+freeze. Pass 35.1 still pending Gmail/Outlook creds.
 
 ## Passes
 
@@ -27,32 +13,50 @@ Pass 35.1 still pending Gmail/Outlook creds.
 |------|------|--------|
 | 1 – 44 | Scaffold through async backend connect (ADRs 0001–0242) | done |
 | 35.1 | Live Gmail + Outlook OAuth verification | pending creds |
-| 45+ | Dogfood-driven fixes + quality (rolling) | active |
-| Beta soak | Gated on second user or explicit feature freeze | conditional |
+| 45 | Catkin render-time soft wrap (Typora/iA Writer model) | next |
+| 46+ | Dogfood-driven fixes + quality (rolling) | queued |
+| Beta soak | Gated on second user or feature freeze | conditional |
 | v1.0.0 | Tag after soak settles | conditional |
 
-### Next starter prompt (rolling — Pass 45+)
+### Next starter prompt (Pass 45)
 
-> **Goal.** Fix what daily-driver use surfaces; keep tightening
-> code quality while there are no other users to protect.
+> **Goal.** Move catkin's soft-wrap to the Typora / iA Writer
+> model: source pristine, renderer word-wraps visually each
+> paint, and a wrapped continuation of a quoted line carries
+> `> ` (× source `QuoteDepth`) on every visual row. Live editing
+> in a long quoted paragraph stops overflowing; resize stops
+> being required to re-fit. Roadmap: `catkin-soft-wrap`.
 >
-> **Scope.** Driven by what Geoff hits in real use. No fixed
-> task list. Each session may be one bug, one refactor, or a
-> small theme of related fixes. Adjacent quality wins land
-> inline per pre-beta `CLAUDE.md` rules.
+> **Scope.** `internal/catkin/render.go` + tests, plus any
+> downstream consumer assuming character-cell wrap. Adjacent
+> fixes inline.
 >
 > **Settled.**
-> - Pre-beta rules stay in force; the documented beta-soak
->   posture is not entered.
-> - Schema breaks are fair game; the only sacred data is the
->   mail cache contents (and those rebuild from server anyway).
-> - Bug reports from Geoff are authoritative without external
->   repro.
+> - Source pristine; typing never mutates for wrap. `Reflow`
+>   becomes a manual command (or wrap-on-send in
+>   `mailcompose.AssembleMIME`), no longer auto.
+> - `mailcompose` 72-cell pre-wrap of seeded quotes stays.
+> - `LineContext.QuoteDepth` + `buildPrefix` (`reflow.go`) drive
+>   the prefix; reuse them.
+> - Arrows move by visual row (bubbles/textarea default).
+> - Out: list-item continuation rules, code-fence wrap,
+>   `Reflow`→manual demotion (separate or follow-up).
 >
-> **Open.** Whatever surfaces in use.
+> **Open — brainstorm before coding.**
+> - `ansi.Wordwrap`: does it preserve span styling across the
+>   break, or is an ANSI-aware splitter needed? Read its source.
+> - Cursor block: `insertCursorBlock` runs pre-wrap. After
+>   word-aware re-prefix, does the cursor land on the right
+>   visual row with styling intact?
+> - `applyAnnotationsToLine` runs pre-wrap — confirm visual wrap
+>   doesn't tear ANSI runs.
+> - Scroll-off works in source rows; with visual wrap, does the
+>   3-row margin need a source→visual map?
+> - Long unbreakable tokens (URLs > budget): match
+>   `mailcompose/seed.go wrapWords` — own visual row, overflow OK.
 >
-> **Approach.** Each session opens with a bug or itch from
-> Geoff. Fix it, fix adjacent issues inline, run the pass-end
-> ritual when the change set has cohered into something
-> commit-shaped. Soak entry is deferred until a second user
-> lands or Geoff calls feature freeze.
+> **Approach.** Brainstorm, write a plan at
+> `docs/superpowers/plans/2026-05-19-catkin-soft-wrap.md` naming
+> bubbles analogues per `bubbletea-conventions.md`, verify with
+> a live tmux capture (Gold Nugget Mailchimp reply is good
+> stress). Pass-end ritual applies.
