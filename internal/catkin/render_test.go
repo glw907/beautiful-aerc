@@ -5,7 +5,10 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
+
+func ansiStrip(s string) string { return ansi.Strip(s) }
 
 func TestRenderPlainSingleLine(t *testing.T) {
 	got := Render("hello", 20, 5, 0, 5, Styles{}, ModeNormal)
@@ -95,6 +98,30 @@ func TestRenderZeroStylesUnchangedFromPlain(t *testing.T) {
 	got := Render(src, 40, 5, 0, 999, Styles{}, ModeNormal)
 	if strings.Contains(got, "\x1b[") {
 		t.Errorf("zero Styles emitted ANSI: %q", got)
+	}
+}
+
+func TestRenderQuoteContinuationCarriesStyledPrefix(t *testing.T) {
+	st := Styles{Quote: lipgloss.NewStyle().Italic(true)}
+	src := "> alpha beta gamma delta epsilon zeta eta theta"
+	got := Render(src, 16, 6, 0, 0, st, ModeNormal)
+	rows := strings.Split(got, "\n")
+	nonBlank := 0
+	for _, r := range rows {
+		if strings.TrimSpace(ansiStrip(r)) == "" {
+			continue
+		}
+		nonBlank++
+		if !strings.Contains(r, "\x1b[3m") {
+			t.Errorf("continuation row missing italic SGR: %q", r)
+		}
+		plain := ansiStrip(r)
+		if !strings.HasPrefix(plain, "> ") {
+			t.Errorf("continuation row missing > prefix: %q", plain)
+		}
+	}
+	if nonBlank < 2 {
+		t.Fatalf("expected ≥2 continuation rows, got %d", nonBlank)
 	}
 }
 
