@@ -346,7 +346,11 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 			if err := writeFTSHeadersTx(ctx, tx, id, &m); err != nil {
 				return fmt.Errorf("write fts headers %s: %w", m.UID, err)
 			}
-			if folder != "" {
+			if len(m.Mailboxes) > 0 {
+				if err := reconcileMembershipTx(tx, id, m.Mailboxes); err != nil {
+					return fmt.Errorf("reconcile membership %s: %w", m.UID, err)
+				}
+			} else if folder != "" {
 				if _, err := tx.Exec(`INSERT OR IGNORE INTO message_mailboxes (message, folder) VALUES (?, ?)`, id, folderID); err != nil {
 					return fmt.Errorf("link message %s ↔ folder: %w", m.UID, err)
 				}
@@ -354,6 +358,35 @@ func (a *Account) upsertMessages(ctx context.Context, folder string, msgs []mail
 		}
 		return nil
 	})
+}
+
+// reconcileMembershipTx replaces a message's folder membership with
+// the server-authoritative set. Rows protected by a pending or
+// executing Move op are left alone so the optimistic flip survives.
+func reconcileMembershipTx(tx *sql.Tx, msgID int64, names []string) error {
+	wantIDs, err := folderIDsByName(tx, names)
+	if err != nil {
+		return err
+	}
+	q := `DELETE FROM message_mailboxes
+	      WHERE message = ?
+	        AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.message = message_mailboxes.message AND o.status IN ('pending','executing'))`
+	args := []any{msgID}
+	if len(wantIDs) > 0 {
+		q += ` AND folder NOT IN (` + sqlPlaceholders(len(wantIDs)) + `)`
+		for _, id := range wantIDs {
+			args = append(args, id)
+		}
+	}
+	if _, err := tx.Exec(q, args...); err != nil {
+		return err
+	}
+	for _, fid := range wantIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO message_mailboxes (message, folder) VALUES (?, ?)`, msgID, fid); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeRecipientsTx(ctx context.Context, tx *sql.Tx, msgID int64, m *mail.MessageInfo) error {
@@ -386,6 +419,33 @@ func writeRecipientsTx(ctx context.Context, tx *sql.Tx, msgID int64, m *mail.Mes
 		}
 	}
 	return nil
+}
+
+// folderIDsByName resolves folder names to ids in one query.
+// Unknown names (not yet in the cache) are silently dropped;
+// SyncFolders will reconcile and the next header fetch re-links.
+func folderIDsByName(tx *sql.Tx, names []string) ([]int64, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(names))
+	for i, n := range names {
+		args[i] = n
+	}
+	rows, err := tx.Query(`SELECT id FROM folders WHERE name IN (`+sqlPlaceholders(len(names))+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]int64, 0, len(names))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // sqlPlaceholders returns "?,?,...,?" with n question marks.

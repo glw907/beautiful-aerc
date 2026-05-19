@@ -453,7 +453,7 @@ func (b *Backend) QueryFolder(name string, offset, limit int) ([]mail.UID, int, 
 // headerProperties is the minimal Email/get property set for list display.
 var headerProperties = []string{
 	"id", "blobId", "subject", "from", "to", "cc", "bcc", "receivedAt",
-	"keywords", "size", "inReplyTo", "threadId",
+	"keywords", "size", "inReplyTo", "threadId", "mailboxIds",
 }
 
 // headerFetchChunk caps IDs per Email/get to stay under typical
@@ -497,25 +497,32 @@ func (b *Backend) fetchHeadersChunk(accountID jmap.ID, uids []mail.UID) ([]mail.
 	if err != nil {
 		return nil, fmt.Errorf("fetch headers: %w", err)
 	}
+	b.mu.Lock()
+	idToFolder := make(map[string]string, len(b.folders))
+	for name, entry := range b.folders {
+		idToFolder[entry.id] = name
+	}
+	b.mu.Unlock()
 	for _, inv := range resp.Responses {
 		gr, ok := inv.Args.(*email.GetResponse)
 		if !ok {
 			continue
 		}
 		out := make([]mail.MessageInfo, 0, len(gr.List))
+		b.mu.Lock()
 		for _, e := range gr.List {
-			uid := mail.UID(e.ID)
-			b.mu.Lock()
-			b.blobIDs[uid] = string(e.BlobID)
-			b.mu.Unlock()
-			out = append(out, translateEmail(e))
+			b.blobIDs[mail.UID(e.ID)] = string(e.BlobID)
+		}
+		b.mu.Unlock()
+		for _, e := range gr.List {
+			out = append(out, translateEmail(e, idToFolder))
 		}
 		return out, nil
 	}
 	return nil, fmt.Errorf("fetch headers: no Email/get response")
 }
 
-func translateEmail(e *email.Email) mail.MessageInfo {
+func translateEmail(e *email.Email, idToFolder map[string]string) mail.MessageInfo {
 	info := mail.MessageInfo{
 		UID:      mail.UID(e.ID),
 		Subject:  e.Subject,
@@ -533,6 +540,15 @@ func translateEmail(e *email.Email) mail.MessageInfo {
 	if e.ReceivedAt != nil {
 		info.SentAt = *e.ReceivedAt
 	}
+	for id, present := range e.MailboxIDs {
+		if !present {
+			continue
+		}
+		if name, ok := idToFolder[string(id)]; ok {
+			info.Mailboxes = append(info.Mailboxes, name)
+		}
+	}
+	slices.Sort(info.Mailboxes)
 	return info
 }
 

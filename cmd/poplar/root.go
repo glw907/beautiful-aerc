@@ -57,15 +57,22 @@ type appModel struct {
 	app ui.App
 }
 
-func (m appModel) Init() tea.Cmd { return m.app.Init() }
+func (m appModel) Init() tea.Cmd {
+	defer logPanic()
+	return m.app.Init()
+}
 
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer logPanic()
 	app, cmd := m.app.Update(msg)
 	m.app = app
 	return m, cmd
 }
 
-func (m appModel) View() tea.View { return m.app.View() }
+func (m appModel) View() tea.View {
+	defer logPanic()
+	return m.app.View()
+}
 
 func runRoot(f rootFlags) error {
 	t, ok := theme.Themes[strings.ToLower(f.theme)]

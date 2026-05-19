@@ -252,6 +252,9 @@ func (a *Account) BackfillProgress() (done, total int, warn bool, err error) {
 	if err = a.db.QueryRow(`SELECT COUNT(*) FROM bodies`).Scan(&done); err != nil {
 		return 0, 0, false, err
 	}
+	if a.backfiller == nil {
+		return done, total, false, nil
+	}
 	return done, total, a.backfiller.Throttling(), nil
 }
 
@@ -286,13 +289,21 @@ func (a *Account) BeginSync()               { a.syncInFlight.Add(1) }
 func (a *Account) EndSync()                 { a.syncInFlight.Add(-1) }
 
 // NotifyActivity signals recent user input, pausing backfill until
-// the idle threshold elapses.
+// the idle threshold elapses. No-op before WireBackend; a keystroke
+// can land between cache.Open and the BackendReadyMsg fanout
+// (ADR-0242).
 func (a *Account) NotifyActivity() {
+	if a.backfiller == nil {
+		return
+	}
 	a.backfiller.NotifyActivity()
 }
 
-// NotifyConnState pauses backfill while offline.
+// NotifyConnState pauses backfill while offline. No-op pre-wire.
 func (a *Account) NotifyConnState(online bool) {
+	if a.backfiller == nil {
+		return
+	}
 	a.backfiller.NotifyConnState(online)
 }
 

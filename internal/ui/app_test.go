@@ -349,7 +349,7 @@ func TestApp_ViewerScrollUpdatesStatusBar(t *testing.T) {
 	long := strings.Repeat("alpha bravo charlie delta epsilon ", 50)
 	app.acct = app.acct.WithViewer(app.acct.Viewer().SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
-	}, content.Unsubscribe{}, nil))
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil))
 	// Press G. deriveChromeFromAcct reads ViewerScrollPct after delegation.
 	app, _ = app.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	if app.statusBar.scrollPct != 100 {
@@ -871,7 +871,7 @@ func TestAppLinkPickerRoundTrip(t *testing.T) {
 		content.Paragraph{Spans: []content.Span{
 			content.Link{Text: "click", URL: "https://example.com"},
 		}},
-	}, content.Unsubscribe{}, nil))
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil))
 
 	// Tab → viewer sets pendingLinkPicker → AccountTab relays → App opens picker via deriveChromeFromAcct.
 	app, cmd = app.Update(tea.KeyPressMsg{Code: tea.KeyTab})

@@ -87,6 +87,7 @@ type Model struct {
 	inviteRow    string
 	inviteHeight int
 	unsub        content.Unsubscribe
+	headers      content.ParsedHeaders
 	icons        uicore.IconSet
 	measurer     ansix.Measurer
 	panel        string // headers rendered through ViewerHeader at v.width
@@ -145,6 +146,7 @@ func (v Model) Open(msg mail.MessageInfo) Model {
 	v.inviteHeight = 0
 	v.panel = ""
 	v.unsub = content.Unsubscribe{}
+	v.headers = content.ParsedHeaders{}
 	return v
 }
 
@@ -157,9 +159,10 @@ func (v Model) Close() Model {
 // SetBody installs parsed blocks, unsubscribe data, and invite (nil when
 // absent), then transitions to ready. Callers must drop BodyLoadedMsg
 // with a UID mismatch before invoking.
-func (v Model) SetBody(blocks []content.Block, unsub content.Unsubscribe, invite *icalendar.Invite) Model {
+func (v Model) SetBody(blocks []content.Block, unsub content.Unsubscribe, headers content.ParsedHeaders, invite *icalendar.Invite) Model {
 	v.blocks = blocks
 	v.unsub = unsub
+	v.headers = headers
 	v.invite = invite
 	v.phase = PhaseReady
 	v.layout()
@@ -501,10 +504,10 @@ func (v Model) renderChipRow(width int, hits []hitZone) (string, int, []hitZone)
 // v.width - 1 to account for the panel's PaddingLeft.
 func (v *Model) layout() {
 	hdrs := content.ParsedHeaders{
-		From:    []content.Address{{Name: v.msg.From}},
-		To:      addressesFor(v.msg.To, v.accountEmail),
-		Cc:      namesAsAddresses(v.msg.Cc),
-		Bcc:     namesAsAddresses(v.msg.Bcc),
+		From:    preferParsed(v.headers.From, []content.Address{{Name: v.msg.From}}),
+		To:      preferParsed(v.headers.To, addressesFor(v.msg.To, v.accountEmail)),
+		Cc:      preferParsed(v.headers.Cc, namesAsAddresses(v.msg.Cc)),
+		Bcc:     preferParsed(v.headers.Bcc, namesAsAddresses(v.msg.Bcc)),
 		Date:    viewerDateString(v.msg),
 		Subject: v.msg.Subject,
 	}
@@ -537,6 +540,16 @@ func (v *Model) layout() {
 	}
 	vp.SetContent(body)
 	v.viewport = vp
+}
+
+// preferParsed picks the RFC 5322 headers when available; the
+// MessageInfo fallback only carries display names and bridges the gap
+// until the body fetch lands.
+func preferParsed(parsed, fallback []content.Address) []content.Address {
+	if len(parsed) > 0 {
+		return parsed
+	}
+	return fallback
 }
 
 // addressesFor returns the To: list to render. Real recipient strings

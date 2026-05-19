@@ -82,7 +82,7 @@ func TestWalkBody_ExtractsInvite(t *testing.T) {
 	raw := fmt.Sprintf("From: alice@example.com\r\nTo: bob@example.com\r\nSubject: Invite\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=%q\r\n\r\n--%s\r\nContent-Type: text/plain\r\n\r\nYou are invited.\r\n--%s\r\nContent-Type: text/calendar\r\n\r\n%s\r\n--%s--\r\n",
 		boundary, boundary, boundary, string(icsData), boundary)
 
-	_, _, invite := walkBody([]byte(raw))
+	_, _, _, invite := walkBody([]byte(raw))
 	if invite == nil {
 		t.Fatal("walkBody: invite is nil, want non-nil")
 	}
@@ -96,7 +96,7 @@ func TestWalkBody_ExtractsInvite(t *testing.T) {
 
 func TestWalkBody_NoInviteWhenAbsent(t *testing.T) {
 	raw := "From: alice@example.com\r\nTo: bob@example.com\r\nSubject: Plain\r\nContent-Type: text/plain\r\n\r\nHello.\r\n"
-	_, _, invite := walkBody([]byte(raw))
+	_, _, _, invite := walkBody([]byte(raw))
 	if invite != nil {
 		t.Errorf("walkBody: invite = %+v, want nil", invite)
 	}

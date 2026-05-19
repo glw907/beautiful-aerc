@@ -50,13 +50,21 @@ func (b *Backend) Changes(ctx context.Context, folder string, since mail.SyncTok
 		}
 		var cr *email.ChangesResponse
 		for _, inv := range resp.Responses {
-			if r, ok := inv.Args.(*email.ChangesResponse); ok {
+			switch r := inv.Args.(type) {
+			case *email.ChangesResponse:
 				cr = r
+			case *jmap.MethodError:
+				if r.Type == "cannotCalculateChanges" {
+					return mail.ChangeSet{}, since, mail.ErrCannotCalculateChanges
+				}
+				return mail.ChangeSet{}, since, fmt.Errorf("Email/changes: %s", r.Error())
+			}
+			if cr != nil {
 				break
 			}
 		}
 		if cr == nil {
-			return mail.ChangeSet{}, since, errors.New("changes: empty response")
+			return mail.ChangeSet{}, since, errors.New("Email/changes: no response")
 		}
 		out.Added = append(out.Added, idsToUIDs(cr.Created)...)
 		out.Modified = append(out.Modified, idsToUIDs(cr.Updated)...)

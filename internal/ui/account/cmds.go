@@ -200,17 +200,20 @@ func pumpCacheCmd(c *cache.Account) tea.Cmd {
 }
 
 // walkBody parses buf as an RFC 5322 message and extracts display text,
-// list-unsubscribe data, and the first calendar invite part (if present).
-// Non-RFC822 input is returned as-is with a zero Unsubscribe and nil Invite.
-func walkBody(buf []byte) (text string, unsub content.Unsubscribe, invite *icalendar.Invite) {
-	unsub = parseUnsubscribeFromRaw(buf)
+// list-unsubscribe data, structured headers, and the first calendar invite
+// part (if present). Non-RFC822 input returns text plus zero values.
+func walkBody(buf []byte) (text string, unsub content.Unsubscribe, headers content.ParsedHeaders, invite *icalendar.Invite) {
 	text, _ = content.ExtractPlainText(buf)
 	if !content.IsRFC822Frame(buf) {
-		return text, unsub, nil
+		return text, unsub, headers, nil
+	}
+	headers = content.ParseHeaders(string(buf))
+	if mh, err := textproto.NewReader(bufio.NewReader(bytes.NewReader(buf))).ReadMIMEHeader(); err == nil {
+		unsub = content.ParseListUnsubscribe(mh)
 	}
 	mr, err := gomail.CreateReader(bytes.NewReader(buf))
 	if err != nil {
-		return text, unsub, nil
+		return text, unsub, headers, nil
 	}
 	for {
 		p, perr := mr.NextPart()
@@ -235,7 +238,7 @@ func walkBody(buf []byte) (text string, unsub content.Unsubscribe, invite *icale
 		}
 	}
 	mr.Close()
-	return text, unsub, invite
+	return text, unsub, headers, invite
 }
 
 // loadBodyCmd fetches a message body via the cache and parses it into
@@ -250,8 +253,8 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 				resultCh <- uicore.ErrorMsg{Op: "fetch body", Err: err}
 				return
 			}
-			text, unsub, invite := walkBody(buf)
-			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text), Unsub: unsub, Invite: invite}
+			text, unsub, headers, invite := walkBody(buf)
+			resultCh <- reader.BodyLoadedMsg{UID: uid, Blocks: content.ParseBlocks(text), Unsub: unsub, Headers: headers, Invite: invite}
 		}()
 		select {
 		case <-ctx.Done():
@@ -260,21 +263,6 @@ func loadBodyCmd(ctx context.Context, c *cache.Account, uid mail.UID) tea.Cmd {
 			return msg
 		}
 	}
-}
-
-// parseUnsubscribeFromRaw reads the RFC 5322 header block from buf
-// and returns parsed List-Unsubscribe data. Non-RFC822 input returns
-// a zero Unsubscribe.
-func parseUnsubscribeFromRaw(buf []byte) content.Unsubscribe {
-	if !content.IsRFC822Frame(buf) {
-		return content.Unsubscribe{}
-	}
-	r := textproto.NewReader(bufio.NewReader(bytes.NewReader(buf)))
-	h, err := r.ReadMIMEHeader()
-	if err != nil {
-		return content.Unsubscribe{}
-	}
-	return content.ParseListUnsubscribe(h)
 }
 
 func markReadCmd(c *cache.Account, folder string, uid mail.UID) tea.Cmd {

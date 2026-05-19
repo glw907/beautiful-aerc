@@ -229,7 +229,7 @@ func renderHeaderKey(key string, t *theme.CompiledTheme, bg lipgloss.Style) stri
 	if pad < 0 {
 		pad = 0
 	}
-	return t.HeaderDim.Render(label) + bg.Render(strings.Repeat(" ", pad))
+	return t.HeaderKey.Render(label) + bg.Render(strings.Repeat(" ", pad))
 }
 
 func renderHeaderScalar(key, value string, t *theme.CompiledTheme, bg lipgloss.Style) string {

@@ -217,7 +217,7 @@ func (m Model) updateTab(msg tea.Msg) (Model, tea.Cmd) {
 	case reader.BodyLoadedMsg:
 		if m.viewer.CurrentUID() == msg.UID {
 			m.bodyFetchCancel = nil
-			m.viewer = m.viewer.SetBody(msg.Blocks, msg.Unsub, msg.Invite)
+			m.viewer = m.viewer.SetBody(msg.Blocks, msg.Unsub, msg.Headers, msg.Invite)
 		}
 		return m, nil
 

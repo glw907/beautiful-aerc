@@ -45,7 +45,7 @@ func TestViewerOpenTransitionsToLoading(t *testing.T) {
 func TestViewerBodyLoadedSetsReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
 	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello world"}}}}
-	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	v = v.SetBody(blocks, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	if v.Phase() != PhaseReady {
 		t.Errorf("phase = %v, want ready", v.Phase())
 	}
@@ -82,7 +82,7 @@ func TestViewerCloseFromLoading(t *testing.T) {
 
 func TestViewerCloseFromReady(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
-	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}, content.Unsubscribe{}, nil)
+	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	v, _ = v.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if v.IsOpen() {
 		t.Error("q must close viewer from ready phase")
@@ -94,7 +94,7 @@ func TestViewerScrollPctUpdatesOnNav(t *testing.T) {
 	long := strings.Repeat("alpha bravo charlie ", 40)
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: long}}},
-	}, content.Unsubscribe{}, nil)
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	if v.ScrollPct() != 0 {
 		t.Errorf("initial scroll pct = %d, want 0", v.ScrollPct())
 	}
@@ -109,7 +109,7 @@ func TestViewerNumericLaunchesURL(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://example.com/one"},
-	}}}, content.Unsubscribe{}, nil)
+	}}}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	if len(v.Links()) != 1 {
 		t.Fatalf("expected 1 harvested link, got %d", len(v.Links()))
 	}
@@ -134,7 +134,7 @@ func TestViewerNumericNoOpOutOfRange(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1"})
 	v = v.SetBody([]content.Block{content.Paragraph{Spans: []content.Span{
 		content.Link{Text: "click", URL: "https://only.example"},
-	}}}, content.Unsubscribe{}, nil)
+	}}}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	_, cmd := v.Update(tea.KeyPressMsg{Code: '5', Text: "5"})
 	if cmd != nil {
 		if msg, ok := cmd().(LaunchURLMsg); ok {
@@ -153,7 +153,7 @@ func TestViewerTabEmitsOpenLinkPickerMsg(t *testing.T) {
 		content.Paragraph{Spans: []content.Span{
 			content.Link{Text: "click", URL: "https://a.com"},
 		}},
-	}, content.Unsubscribe{}, nil)
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 
 	_, cmd := v.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if cmd == nil {
@@ -173,7 +173,7 @@ func TestViewerTabNoLinksInert(t *testing.T) {
 	v = v.Open(mail.MessageInfo{UID: "uid-1"})
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "no links"}}},
-	}, content.Unsubscribe{}, nil)
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 
 	_, cmd := v.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 
@@ -210,7 +210,7 @@ func TestViewerLeftPaddingGeometry(t *testing.T) {
 	})
 	v = v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "Hello, padding world."}}},
-	}, content.Unsubscribe{}, nil)
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 
 	out := v.View()
 	lines := strings.Split(out, "\n")
@@ -228,7 +228,7 @@ func TestViewer_ChipRow_Hidden_WhenEmpty(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(80, 24)
 	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
-	v = v.SetBody(nil, content.Unsubscribe{}, nil)
+	v = v.SetBody(nil, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	v = v.SetAttachments(nil)
 	out := v.View()
 	if strings.Contains(out, "§") || strings.Contains(out, "\U000F0184") {
@@ -240,7 +240,7 @@ func TestViewer_ChipRow_Visible(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1", Subject: "x"})
-	v = v.SetBody(nil, content.Unsubscribe{}, nil)
+	v = v.SetBody(nil, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	v = v.SetAttachments([]mail.Attachment{
 		{PartID: "2", Filename: "report.pdf", Size: 2400},
 	})
@@ -257,7 +257,7 @@ func TestViewer_AtKey_Inert_WhenEmpty(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1"})
-	v = v.SetBody(nil, content.Unsubscribe{}, nil)
+	v = v.SetBody(nil, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	v = v.SetAttachments(nil)
 	_, cmd := v.Update(tea.KeyPressMsg{Code: '@', Text: "@"})
 	if cmd != nil {
@@ -269,7 +269,7 @@ func TestViewer_AtKey_OpensPicker(t *testing.T) {
 	v := newTestViewer()
 	v = v.SetSize(120, 40)
 	v = v.Open(mail.MessageInfo{UID: "u1"})
-	v = v.SetBody(nil, content.Unsubscribe{}, nil)
+	v = v.SetBody(nil, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	v = v.SetAttachments([]mail.Attachment{{PartID: "2", Filename: "x.pdf", Size: 1}})
 	_, cmd := v.Update(tea.KeyPressMsg{Code: '@', Text: "@"})
 	if cmd == nil {
@@ -288,7 +288,7 @@ func TestViewer_AtKey_OpensPicker(t *testing.T) {
 func TestViewer_InviteBlock_AppearsInView(t *testing.T) {
 	v := newTestViewer().SetSize(80, 30).Open(mail.MessageInfo{UID: "1", Subject: "Meeting"})
 	inv := &icalendar.Invite{Summary: "Quarterly sync"}
-	v = v.SetBody(nil, content.Unsubscribe{}, inv)
+	v = v.SetBody(nil, content.Unsubscribe{}, content.ParsedHeaders{}, inv)
 	out := v.View()
 	if !strings.Contains(out, "Quarterly sync") {
 		t.Errorf("invite block missing Summary in View output: %q", out)
@@ -302,14 +302,14 @@ func TestViewer_InviteBlock_BodyHeightAccountsForInvite(t *testing.T) {
 	// Baseline: no invite.
 	v0 := v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}},
-	}, content.Unsubscribe{}, nil)
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	baseHeight := v0.inviteHeight
 
 	// With invite.
 	inv := &icalendar.Invite{Summary: "Sync"}
 	v1 := v.SetBody([]content.Block{
 		content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}},
-	}, content.Unsubscribe{}, inv)
+	}, content.Unsubscribe{}, content.ParsedHeaders{}, inv)
 
 	if v1.inviteHeight == 0 {
 		t.Fatal("expected non-zero inviteHeight when invite is set")
@@ -325,7 +325,7 @@ func TestViewer_InviteAccessor(t *testing.T) {
 		t.Error("Invite() should be nil before SetBody")
 	}
 	inv := &icalendar.Invite{Summary: "Check"}
-	v = v.SetBody(nil, content.Unsubscribe{}, inv)
+	v = v.SetBody(nil, content.Unsubscribe{}, content.ParsedHeaders{}, inv)
 	if v.Invite() == nil {
 		t.Error("Invite() should be non-nil after SetBody with invite")
 	}
@@ -340,7 +340,7 @@ func TestMouseClickFootnoteRibbon(t *testing.T) {
 		content.Text{Content: "see "},
 		content.Link{Text: "the docs", URL: "https://example.com/docs"},
 	}}}
-	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	v = v.SetBody(blocks, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	if len(v.bodyHits) != 1 {
 		t.Fatalf("bodyHits: got %d, want 1", len(v.bodyHits))
 	}
@@ -364,7 +364,7 @@ func TestMouseClickFootnoteRibbon(t *testing.T) {
 func TestMouseClickAttachmentChip(t *testing.T) {
 	v := newTestViewer().SetSize(120, 30).Open(mail.MessageInfo{UID: "u1", Subject: "Hi", From: "Alice"})
 	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "body"}}}}
-	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	v = v.SetBody(blocks, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	v = v.SetAttachments([]mail.Attachment{
 		{Filename: "first.pdf", Size: 1024},
 		{Filename: "second.png", Size: 4096},
@@ -393,7 +393,7 @@ func TestMouseClickAttachmentChip(t *testing.T) {
 func TestMouseClickOutsideHitsNoOp(t *testing.T) {
 	v := newTestViewer().SetSize(80, 24).Open(mail.MessageInfo{UID: "1", Subject: "Hi", From: "Alice"})
 	blocks := []content.Block{content.Paragraph{Spans: []content.Span{content.Text{Content: "plain body, no links"}}}}
-	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	v = v.SetBody(blocks, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	msg := tea.MouseClickMsg{X: 5, Y: v.bodyOriginY() + 1, Button: tea.MouseLeft}
 	_, cmd := v.Update(msg)
 	if cmd != nil {
@@ -407,7 +407,7 @@ func TestMouseWheelForwardsToViewport(t *testing.T) {
 	for range 50 {
 		blocks = append(blocks, content.Paragraph{Spans: []content.Span{content.Text{Content: "line"}}})
 	}
-	v = v.SetBody(blocks, content.Unsubscribe{}, nil)
+	v = v.SetBody(blocks, content.Unsubscribe{}, content.ParsedHeaders{}, nil)
 	if v.viewport.YOffset() != 0 {
 		t.Fatalf("pre-condition: viewport YOffset = %d, want 0", v.viewport.YOffset())
 	}

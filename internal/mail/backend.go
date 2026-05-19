@@ -165,4 +165,10 @@ type MessageInfo struct {
 
 	ThreadID  UID
 	InReplyTo UID
+
+	// Mailboxes is the authoritative set of folder names (canonical
+	// poplar names) this message lives in. JMAP populates it on every
+	// FetchHeaders. IMAP leaves it nil and the cache falls back to the
+	// caller's folder argument.
+	Mailboxes []string
 }

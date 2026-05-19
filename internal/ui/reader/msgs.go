@@ -11,10 +11,11 @@ import (
 // mismatches against the viewer's current UID (user closed and reopened
 // on a different UID before the Cmd resolved).
 type BodyLoadedMsg struct {
-	UID    mail.UID
-	Blocks []content.Block
-	Unsub  content.Unsubscribe
-	Invite *icalendar.Invite // nil when absent
+	UID     mail.UID
+	Blocks  []content.Block
+	Unsub   content.Unsubscribe
+	Headers content.ParsedHeaders
+	Invite  *icalendar.Invite // nil when absent
 }
 
 // AttachmentsLoadedMsg carries metadata for the viewer's current UID.
