@@ -192,11 +192,7 @@ func styleLine(line string, ctx LineContext, st Styles, fenceLines map[int]strin
 		return st.ListMarker.Render(pfx) + st.Heading[level-1].Render(renderSpans(tokenize(body), st))
 
 	case BlockQuote:
-		face := st.Quote
-		if ctx.QuoteDepth >= 2 {
-			face = st.DeepQuote
-		}
-		return face.Render(line)
+		return quoteFace(ctx.QuoteDepth, st).Render(line)
 
 	case BlockListItem, BlockTaskItem:
 		return styleListLine(line, ctx, st)
@@ -238,19 +234,21 @@ func styleListLine(line string, ctx LineContext, st Styles) string {
 	return st.ListMarker.Render(prefix) + renderSpans(tokenize(body), st)
 }
 
-// styledQuotePrefix returns the quote-prefix string ("> " × depth)
-// rendered through the face styleLine would choose at this depth.
-// A zero Styles value yields the plain prefix.
+// styledQuotePrefix renders "> " × depth through the same face
+// styleLine would choose. A zero Styles value yields the plain prefix.
 func styledQuotePrefix(ctx LineContext, st Styles) string {
 	if ctx.QuoteDepth == 0 {
 		return ""
 	}
-	plain := strings.Repeat("> ", ctx.QuoteDepth)
-	face := st.Quote
-	if ctx.QuoteDepth >= 2 {
-		face = st.DeepQuote
+	return quoteFace(ctx.QuoteDepth, st).Render(strings.Repeat("> ", ctx.QuoteDepth))
+}
+
+// quoteFace picks the lipgloss face for a given quote depth.
+func quoteFace(depth int, st Styles) lipgloss.Style {
+	if depth >= 2 {
+		return st.DeepQuote
 	}
-	return face.Render(plain)
+	return st.Quote
 }
 
 // visualWrap splits a possibly-styled source line into width-bounded
@@ -277,8 +275,7 @@ func visualWrap(line string, width int, ctx LineContext, styles Styles) []string
 		budget = 1
 	}
 
-	// styleLine renders the whole quoted line through one face, so the
-	// styled body sits after exactly prefixCells visible cells.
+	// line is already styled; strip the prefix by cell width, not rune count.
 	body := ansi.TruncateLeft(line, prefixCells, "")
 
 	if lipgloss.Width(body) <= budget {

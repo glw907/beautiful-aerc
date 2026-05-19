@@ -8,8 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func ansiStrip(s string) string { return ansi.Strip(s) }
-
 func TestRenderPlainSingleLine(t *testing.T) {
 	got := Render("hello", 20, 5, 0, 5, Styles{}, ModeNormal)
 	want := "hello█"
@@ -108,14 +106,14 @@ func TestRenderQuoteContinuationCarriesStyledPrefix(t *testing.T) {
 	rows := strings.Split(got, "\n")
 	nonBlank := 0
 	for _, r := range rows {
-		if strings.TrimSpace(ansiStrip(r)) == "" {
+		if strings.TrimSpace(ansi.Strip(r)) == "" {
 			continue
 		}
 		nonBlank++
 		if !strings.Contains(r, "\x1b[3m") {
 			t.Errorf("continuation row missing italic SGR: %q", r)
 		}
-		plain := ansiStrip(r)
+		plain := ansi.Strip(r)
 		if !strings.HasPrefix(plain, "> ") {
 			t.Errorf("continuation row missing > prefix: %q", plain)
 		}
@@ -132,7 +130,7 @@ func TestRenderQuoteCursorLandsOnContinuationRow(t *testing.T) {
 	rows := strings.Split(got, "\n")
 	cursorRowIdx := -1
 	for i, r := range rows {
-		if strings.Contains(ansiStrip(r), "█") {
+		if strings.Contains(ansi.Strip(r), "█") {
 			cursorRowIdx = i
 			break
 		}
@@ -140,7 +138,7 @@ func TestRenderQuoteCursorLandsOnContinuationRow(t *testing.T) {
 	if cursorRowIdx < 1 {
 		t.Fatalf("cursor must land on a continuation row (>=1); got idx=%d rows=%q", cursorRowIdx, rows)
 	}
-	if !strings.HasPrefix(ansiStrip(rows[cursorRowIdx]), "> ") {
+	if !strings.HasPrefix(ansi.Strip(rows[cursorRowIdx]), "> ") {
 		t.Errorf("cursor's continuation row missing > prefix: %q", rows[cursorRowIdx])
 	}
 }

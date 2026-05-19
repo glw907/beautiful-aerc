@@ -56,19 +56,18 @@ func cursorVisualRow(lines []string, ctxs []LineContext, width, cursorRow, curso
 	return cursorVR, total
 }
 
-// visualHeight returns the number of visual rows a source line occupies
-// at width, mirroring visualWrap's budget arithmetic.
+// visualHeight mirrors visualWrap's budget arithmetic for a source line
+// at width.
 func visualHeight(line string, width int, ctx LineContext) int {
 	if width <= 0 {
 		return 1
 	}
 	if ctx.QuoteDepth > 0 && !ctx.InsideFence {
-		budget := width - 2*ctx.QuoteDepth
+		budget := width - ctx.PrefixWidth
 		if budget < 1 {
 			budget = 1
 		}
-		prefix := strings.Repeat("> ", ctx.QuoteDepth)
-		body := strings.TrimPrefix(line, prefix)
+		body := strings.TrimPrefix(line, strings.Repeat("> ", ctx.QuoteDepth))
 		if lipgloss.Width(body) <= budget {
 			return 1
 		}
@@ -80,8 +79,8 @@ func visualHeight(line string, width int, ctx LineContext) int {
 	return strings.Count(ansi.Wrap(line, width, ""), "\n") + 1
 }
 
-// visualOffsetInLine returns the cursor's visual-row offset within its
-// source line: 0 for the first visual row, 1 for the second, etc.
+// visualOffsetInLine returns 0 for the first visual row of the source
+// line, 1 for the second, and so on.
 func visualOffsetInLine(line string, width int, ctx LineContext, col int) int {
 	if width <= 0 || col <= 0 {
 		return 0
@@ -89,11 +88,11 @@ func visualOffsetInLine(line string, width int, ctx LineContext, col int) int {
 	budget := width
 	skip := 0
 	if ctx.QuoteDepth > 0 && !ctx.InsideFence {
-		budget = width - 2*ctx.QuoteDepth
+		budget = width - ctx.PrefixWidth
 		if budget < 1 {
 			budget = 1
 		}
-		skip = 2 * ctx.QuoteDepth
+		skip = ctx.PrefixWidth
 	}
 	if col <= skip {
 		return 0
