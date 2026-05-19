@@ -4,6 +4,52 @@
 
 ## Active
 
+### Catkin render-time soft-wrap (Typora/iA Writer model) `catkin-soft-wrap`
+Catkin's renderer currently soft-wraps via `ansi.Hardwrap` at the
+cell boundary, which produces mid-word cuts and — on quoted reply
+lines — prefix-less visual continuations (`> applause a` / `nd a
+pat on…`). The wrap is also static: source mutation does not
+trigger re-wrap, so live editing inside a long quoted paragraph
+overflows until the next window resize. The pre-fix in mailcompose
+(2026-05-19) hard-wraps the *seeded* quote at 72 cells so the
+on-disk and wire forms are clean, but the live editing experience
+still breaks the moment the user inserts a word.
+
+Goal: move catkin's soft-wrap to the Typora / iA Writer / Obsidian
+model — source stays as one logical line per paragraph, the
+renderer word-wraps visually on every paint, and continuation rows
+in a quoted block carry the `> ` prefix repeated to match the
+source line's `LineContext.QuoteDepth`. Source is never mutated by
+typing; `Reflow` survives as a `gq`-style manual command (or
+collapses to a wrap-on-send pass in `mailcompose.AssembleMIME`)
+but is no longer the auto-trigger.
+
+Architecture already supports this. `Classify` returns
+`LineContext` with `QuoteDepth` and `ListMarker` per source row.
+The work is in `internal/catkin/render.go`:
+
+- `softWrap(line, width)` becomes `softWrapPrefixed(line, width,
+  prefix)` — splits at word boundaries (`ansi.Wordwrap` or a
+  small word-aware splitter), then re-prefixes every continuation
+  row with the source line's quote/list prefix.
+- The render loop passes `buildPrefix(ctxs[i])` (already exists
+  in `reflow.go`) into `softWrapPrefixed`.
+- Cursor visual-row tracking is `bubbles/textarea`'s job; arrow
+  keys move by visual row which is what users expect from a
+  21st-century editor.
+
+Scope is one pass, mostly `render.go` and its tests. Out of scope:
+list-item continuation prefixes (markdown convention is to indent,
+not re-mark — separate decision), code fences (preserved blocks,
+no wrap), and the `Reflow` → manual command demotion (could ship
+in the same pass or follow-up).
+
+Poplar is positioned as a 21st-century terminal mail client;
+character-cell wrap with broken quote prefixes is a 1990s
+artifact.
+
+Related: (none yet — file with `/log-issue` once the pass is scoped)
+
 ### `internal/ui/` all-value path `ui-all-value`
 Pass 27 (ADR-0212) converted `catkin.Model` to all-value and Pass
 28 (ADR-0213) deleted the `mailcompose.Editor` adapter. Every
