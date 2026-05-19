@@ -61,7 +61,7 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 		if mode.focus() && (i < focusFirst || i > focusLast) {
 			styled = styles.Dim.Render(ansi.Strip(styled))
 		}
-		for _, w := range softWrap(styled, width) {
+		for _, w := range visualWrap(styled, width, ctxs[i], styles) {
 			if len(visual) >= height {
 				break
 			}
@@ -233,13 +233,27 @@ func styleListLine(line string, ctx LineContext, st Styles) string {
 	return st.ListMarker.Render(prefix) + renderSpans(tokenize(body), st)
 }
 
-// softWrap splits a possibly-styled line into width-bounded chunks via
-// ansi.Hardwrap, which preserves ANSI escapes intact.
-func softWrap(line string, width int) []string {
-	if width <= 0 || lipgloss.Width(line) <= width {
+// visualWrap splits a possibly-styled source line into width-bounded
+// visual rows. For quoted lines (ctx.QuoteDepth > 0) the prefix is
+// rendered separately and prepended to every emitted row; the body is
+// wrapped against the reduced budget. Non-quoted lines wrap directly.
+// Uses ansi.Wrap, which is word-aware and hardwraps overlong tokens
+// while preserving ANSI escape codes across breaks.
+func visualWrap(line string, width int, ctx LineContext, styles Styles) []string {
+	if width <= 0 {
 		return []string{line}
 	}
-	return strings.Split(ansi.Hardwrap(line, width, true), "\n")
+	if ctx.QuoteDepth == 0 || ctx.InsideFence {
+		if lipgloss.Width(line) <= width {
+			return []string{line}
+		}
+		return strings.Split(ansi.Wrap(line, width, ""), "\n")
+	}
+	// Quote-aware path lands in Task 3.
+	if lipgloss.Width(line) <= width {
+		return []string{line}
+	}
+	return strings.Split(ansi.Wrap(line, width, ""), "\n")
 }
 
 func offsetToRowCol(src string, off int) (row, col int) {

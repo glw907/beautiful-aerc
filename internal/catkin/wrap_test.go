@@ -1,6 +1,10 @@
 package catkin
 
-import "testing"
+import (
+	"slices"
+	"strings"
+	"testing"
+)
 
 func TestWrapWordBold(t *testing.T) {
 	tests := []struct {
@@ -54,5 +58,24 @@ func TestInsertLinkSkeleton(t *testing.T) {
 	wantSrc, wantCur := "hello [](url)", 7
 	if gotSrc != wantSrc || gotCur != wantCur {
 		t.Errorf("insertLinkSkeleton:\n  got  (%q, %d)\n  want (%q, %d)", gotSrc, gotCur, wantSrc, wantCur)
+	}
+}
+
+func TestVisualWrapPlainWordBoundary(t *testing.T) {
+	got := visualWrap("alpha beta gamma delta", 10, LineContext{Kind: BlockParagraph}, Styles{})
+	want := []string{"alpha beta", "gamma", "delta"}
+	if !slices.Equal(got, want) {
+		t.Errorf("visualWrap plain word-boundary:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestVisualWrapHardwrapsLongToken(t *testing.T) {
+	url := "https://example.com/very/long/path/that/exceeds/the/budget"
+	got := visualWrap(url, 15, LineContext{Kind: BlockParagraph}, Styles{})
+	if len(got) < 2 {
+		t.Fatalf("expected hardwrap into multiple rows, got %d: %q", len(got), got)
+	}
+	if joined := strings.Join(got, ""); joined != url {
+		t.Errorf("hardwrap lost content:\n got %q\nwant %q", joined, url)
 	}
 }
