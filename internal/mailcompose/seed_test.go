@@ -36,6 +36,17 @@ func TestQuoteLinesDepthPreserving(t *testing.T) {
 	}
 }
 
+func TestExtractPlainBodyNormalizesCRLF(t *testing.T) {
+	raw := []byte("Subject: x\r\nContent-Type: text/plain\r\n\r\npara1\r\n\r\npara2\r\n")
+	got := extractPlainBody(raw)
+	if strings.Contains(got, "\r") {
+		t.Errorf("extractPlainBody left CR in output: %q", got)
+	}
+	if want := "para1\n\npara2\n"; got != want {
+		t.Errorf("extractPlainBody = %q, want %q", got, want)
+	}
+}
+
 func TestStripAngles(t *testing.T) {
 	if got := stripAngles("<abc@x>"); got != "abc@x" {
 		t.Errorf("stripAngles = %q", got)

@@ -96,7 +96,9 @@ func quoteLines(s string) string {
 }
 
 // extractPlainBody returns the first text/plain inline part, or the
-// raw body when go-message can't parse it as multipart.
+// raw body when go-message can't parse it as multipart. CRLF is
+// normalized to LF so downstream line splits don't leave \r tails
+// that corrupt terminal rendering.
 func extractPlainBody(body []byte) string {
 	if len(body) == 0 {
 		return ""
@@ -118,19 +120,19 @@ func extractPlainBody(body []byte) string {
 			ct, _, _ := ih.ContentType()
 			if ct == "text/plain" {
 				b, _ := io.ReadAll(p.Body)
-				return string(b)
+				return strings.ReplaceAll(string(b), "\r\n", "\n")
 			}
 		}
 	}
 	msg, err := mail.ReadMessage(bytes.NewReader(body))
 	if err != nil {
-		return string(body)
+		return strings.ReplaceAll(string(body), "\r\n", "\n")
 	}
 	b, err := io.ReadAll(msg.Body)
 	if err != nil {
 		return ""
 	}
-	return string(b)
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
 
 // ensurePrefix attaches prefix to subject, collapsing repeated runs
