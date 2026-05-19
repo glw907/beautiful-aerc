@@ -5,12 +5,18 @@ import (
 	"io"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	gomail "github.com/emersion/go-message/mail"
 
 	"github.com/glw907/poplar/internal/content"
 	pmail "github.com/glw907/poplar/internal/mail"
 )
+
+// quoteWrapWidth is the canonical column at which quoted replies wrap.
+// RFC 5322 §2.1.1 caps lines at 78; 72 leaves room for several nested
+// "> " prefixes without overflowing as the thread deepens.
+const quoteWrapWidth = 72
 
 // SeedReply builds a Draft replying to parent. body is the parent's
 // raw RFC 5322 bytes, mined for Message-Id, References, and a
@@ -78,21 +84,73 @@ func quoteAttribution(parent pmail.MessageInfo, body []byte) string {
 	return "\n\n" + attribution + "\n" + quoted
 }
 
-// quoteLines prefixes every line with "> ", deepening any existing
-// quote depth by one.
+// quoteLines deepens each line's quote depth by one and word-wraps the
+// result to quoteWrapWidth so a single long source paragraph doesn't
+// land as one prefix-less visual continuation in the editor.
 func quoteLines(s string) string {
 	if s == "" {
 		return ""
 	}
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		if l == "" {
-			lines[i] = ">"
-		} else {
-			lines[i] = "> " + l
+	var out []string
+	for _, l := range strings.Split(s, "\n") {
+		depth, body := stripQuoteDepth(l)
+		prefix := strings.Repeat("> ", depth+1)
+		body = strings.TrimLeft(body, " ")
+		if body == "" {
+			out = append(out, strings.TrimRight(prefix, " "))
+			continue
+		}
+		budget := quoteWrapWidth - utf8.RuneCountInString(prefix)
+		if budget < 1 {
+			budget = 1
+		}
+		for _, chunk := range wrapWords(body, budget) {
+			out = append(out, prefix+chunk)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(out, "\n")
+}
+
+// stripQuoteDepth peels leading "> " (or bare ">") markers from a quoted
+// line, returning the depth and the remaining content. Tolerates either
+// spacing convention; RFC 3676 senders sometimes omit the trailing space.
+func stripQuoteDepth(s string) (int, string) {
+	depth := 0
+	for {
+		switch {
+		case strings.HasPrefix(s, "> "):
+			depth++
+			s = s[2:]
+		case strings.HasPrefix(s, ">"):
+			depth++
+			s = s[1:]
+		default:
+			return depth, s
+		}
+	}
+}
+
+// wrapWords breaks s into lines no wider than width cells, splitting on
+// whitespace. Tokens longer than width get their own line; an overflowing
+// URL beats a mid-word cut.
+func wrapWords(s string, width int) []string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	out := []string{words[0]}
+	curLen := utf8.RuneCountInString(words[0])
+	for _, w := range words[1:] {
+		wLen := utf8.RuneCountInString(w)
+		if curLen+1+wLen <= width {
+			out[len(out)-1] += " " + w
+			curLen += 1 + wLen
+			continue
+		}
+		out = append(out, w)
+		curLen = wLen
+	}
+	return out
 }
 
 // extractPlainBody returns the first text/plain inline part, or the

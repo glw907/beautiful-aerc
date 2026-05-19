@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	gomail "github.com/emersion/go-message/mail"
 
@@ -33,6 +34,39 @@ func TestQuoteLinesDepthPreserving(t *testing.T) {
 	want := "> hi\n> > nested\n>\n> bye"
 	if got != want {
 		t.Errorf("quoteLines:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestQuoteLinesWrapsLongParagraph(t *testing.T) {
+	long := strings.Repeat("the quick brown fox jumps over the lazy dog ", 8)
+	long = strings.TrimRight(long, " ")
+	got := quoteLines(long)
+	for _, line := range strings.Split(got, "\n") {
+		if !strings.HasPrefix(line, "> ") {
+			t.Errorf("wrapped line missing %q prefix: %q", "> ", line)
+		}
+		if n := utf8.RuneCountInString(line); n > quoteWrapWidth {
+			t.Errorf("wrapped line exceeds %d cells (%d): %q", quoteWrapWidth, n, line)
+		}
+	}
+	// Continuation lines exist; single-line input is the bug we're fixing.
+	if !strings.Contains(got, "\n") {
+		t.Errorf("expected wrap into multiple lines, got %q", got)
+	}
+}
+
+func TestQuoteLinesNestedDepthBudget(t *testing.T) {
+	// At depth 2 ("> > ") prefix eats 4 cells; content budget is 68.
+	long := strings.Repeat("alpha bravo charlie delta echo foxtrot golf ", 4)
+	in := "> " + strings.TrimRight(long, " ")
+	got := quoteLines(in)
+	for _, line := range strings.Split(got, "\n") {
+		if !strings.HasPrefix(line, "> > ") {
+			t.Errorf("nested wrap dropped depth: %q", line)
+		}
+		if n := utf8.RuneCountInString(line); n > quoteWrapWidth {
+			t.Errorf("nested wrap line exceeds %d cells (%d): %q", quoteWrapWidth, n, line)
+		}
 	}
 }
 

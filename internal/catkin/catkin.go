@@ -231,6 +231,19 @@ func (m Model) WithValue(s string) Model {
 	return m
 }
 
+// Reflowed re-wraps the current buffer at the configured width. Callers
+// use this after WithValue when the seeded text predates the editor's
+// width (drafts loaded from cache, replies whose quoted body was wrapped
+// at a wider canonical column than the live terminal).
+func (m Model) Reflowed() Model {
+	if m.width <= 0 {
+		return m
+	}
+	src, cur := Reflow(m.buf.Value(), m.width, m.buf.RuneOffset())
+	m.buf = m.buf.WithValue(src).WithRuneOffset(cur)
+	return m
+}
+
 // WithUserWordlistPath sets the file the popover's add-action appends to.
 // An empty path makes the add a session-local addition only.
 func (m Model) WithUserWordlistPath(path string) Model {

@@ -965,7 +965,7 @@ func (c *Model) Seed(d mailcompose.Draft) {
 	c.cc.SetValue(joinAddresses(d.Cc))
 	c.bcc.SetValue(joinAddresses(d.Bcc))
 	c.subject.SetValue(d.Subject)
-	c.editor = c.editor.WithValue(d.Body)
+	c.editor = c.editor.WithValue(d.Body).Reflowed()
 	c.attachments = d.Attachments
 	c.attachCursor = 0
 }
