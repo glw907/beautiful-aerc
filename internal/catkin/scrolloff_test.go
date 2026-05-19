@@ -57,3 +57,18 @@ func TestCursorVisualRowPlainTotalMatchesSourceLineCount(t *testing.T) {
 		t.Errorf("plain short lines: expected total=3, got %d", total)
 	}
 }
+
+func TestApplyScrollOffKeepsCursorVisibleInLongQuote(t *testing.T) {
+	src := "padding\n> alpha beta gamma delta epsilon zeta eta theta iota\npadding"
+	m := New().WithValue(src).WithSize(16, 4)
+	target := len("padding\n") + len("> alpha beta gamma delta epsilon zeta eta theta iota")
+	m.buf = m.buf.WithRuneOffset(target)
+	m = applyScrollOff(m)
+	lines := strings.Split(src, "\n")
+	ctxs := Classify(lines)
+	cursorRow, cursorCol := offsetToRowCol(src, target)
+	cvr, _ := cursorVisualRow(lines, ctxs, 16, cursorRow, cursorCol)
+	if cvr < m.viewportTop || cvr >= m.viewportTop+m.height {
+		t.Errorf("cursor visual row %d outside viewport [%d, %d)", cvr, m.viewportTop, m.viewportTop+m.height)
+	}
+}
