@@ -81,15 +81,9 @@ func (m ConfirmModal) Update(msg tea.Msg) (ConfirmModal, tea.Cmd) {
 	}
 	switch {
 	case key.Matches(keyMsg, m.keys.Yes):
-		return m, tea.Batch(
-			func() tea.Msg { return ConfirmModalYesMsg{} },
-			func() tea.Msg { return ConfirmModalClosedMsg{} },
-		)
+		return m, func() tea.Msg { return ConfirmModalYesMsg{} }
 	case key.Matches(keyMsg, m.keys.No):
-		return m, tea.Batch(
-			func() tea.Msg { return ConfirmModalNoMsg{} },
-			func() tea.Msg { return ConfirmModalClosedMsg{} },
-		)
+		return m, func() tea.Msg { return ConfirmModalNoMsg{} }
 	case key.Matches(keyMsg, m.keys.Esc):
 		return m, func() tea.Msg { return ConfirmModalClosedMsg{} }
 	}

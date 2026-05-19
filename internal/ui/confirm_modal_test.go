@@ -26,6 +26,8 @@ func containsMsgType(msgs []tea.Msg, target interface{}) bool {
 		switch target.(type) {
 		case ConfirmModalYesMsg:
 			return "ConfirmModalYesMsg"
+		case ConfirmModalNoMsg:
+			return "ConfirmModalNoMsg"
 		case ConfirmModalClosedMsg:
 			return "ConfirmModalClosedMsg"
 		default:
@@ -37,6 +39,8 @@ func containsMsgType(msgs []tea.Msg, target interface{}) bool {
 		switch m.(type) {
 		case ConfirmModalYesMsg:
 			got = "ConfirmModalYesMsg"
+		case ConfirmModalNoMsg:
+			got = "ConfirmModalNoMsg"
 		case ConfirmModalClosedMsg:
 			got = "ConfirmModalClosedMsg"
 		}
@@ -62,7 +66,7 @@ func TestConfirmModal_OpenClose(t *testing.T) {
 	}
 }
 
-func TestConfirmModal_YesEmitsYesAndCloses(t *testing.T) {
+func TestConfirmModal_YesEmitsYes(t *testing.T) {
 	m := newTestConfirmModal()
 	m = m.Open(testReq())
 	m = m.SetSize(80, 24)
@@ -71,29 +75,38 @@ func TestConfirmModal_YesEmitsYesAndCloses(t *testing.T) {
 	msgs := drainBatch(cmd)
 
 	if !containsMsgType(msgs, ConfirmModalYesMsg{}) {
-		t.Error("expected ConfirmModalYesMsg in batch")
+		t.Error("expected ConfirmModalYesMsg")
 	}
-	if !containsMsgType(msgs, ConfirmModalClosedMsg{}) {
-		t.Error("expected ConfirmModalClosedMsg in batch")
+	if containsMsgType(msgs, ConfirmModalClosedMsg{}) {
+		t.Error("y must not emit ConfirmModalClosedMsg (closing is the handler's job)")
 	}
 }
 
-func TestConfirmModal_NoAndEscClose(t *testing.T) {
-	for _, key := range []tea.KeyPressMsg{
-		{Code: 'n', Text: "n"},
-		{Code: tea.KeyEscape},
-	} {
-		m := newTestConfirmModal()
-		m = m.Open(testReq())
-		_, cmd := m.Update(key)
-		msgs := drainBatch(cmd)
+func TestConfirmModal_NoEmitsNo(t *testing.T) {
+	m := newTestConfirmModal()
+	m = m.Open(testReq())
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	msgs := drainBatch(cmd)
 
-		if !containsMsgType(msgs, ConfirmModalClosedMsg{}) {
-			t.Errorf("key %q: expected ConfirmModalClosedMsg", key)
-		}
-		if containsMsgType(msgs, ConfirmModalYesMsg{}) {
-			t.Errorf("key %q: must NOT emit ConfirmModalYesMsg", key)
-		}
+	if !containsMsgType(msgs, ConfirmModalNoMsg{}) {
+		t.Error("expected ConfirmModalNoMsg")
+	}
+	if containsMsgType(msgs, ConfirmModalClosedMsg{}) {
+		t.Error("n must not emit ConfirmModalClosedMsg (closing is the handler's job)")
+	}
+}
+
+func TestConfirmModal_EscEmitsClosed(t *testing.T) {
+	m := newTestConfirmModal()
+	m = m.Open(testReq())
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	msgs := drainBatch(cmd)
+
+	if !containsMsgType(msgs, ConfirmModalClosedMsg{}) {
+		t.Error("expected ConfirmModalClosedMsg")
+	}
+	if containsMsgType(msgs, ConfirmModalYesMsg{}) || containsMsgType(msgs, ConfirmModalNoMsg{}) {
+		t.Error("esc must emit only ConfirmModalClosedMsg")
 	}
 }
 

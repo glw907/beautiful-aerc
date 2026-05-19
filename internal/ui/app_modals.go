@@ -84,6 +84,7 @@ func (m App) updateModalsMsg(msg tea.Msg) (App, tea.Cmd, bool) {
 }
 
 func (m App) confirmYes() (App, tea.Cmd, bool) {
+	m.confirm = m.confirm.Close()
 	switch {
 	case m.pendingFormDiscard:
 		m.pendingFormDiscard = false
@@ -123,6 +124,7 @@ func (m App) confirmYes() (App, tea.Cmd, bool) {
 }
 
 func (m App) confirmNo() (App, tea.Cmd, bool) {
+	m.confirm = m.confirm.Close()
 	m.pendingUnsub = nil
 	if m.pendingFormDiscard {
 		m.pendingFormDiscard = false

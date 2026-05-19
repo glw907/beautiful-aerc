@@ -1560,6 +1560,37 @@ func TestApp_ConfirmModalYes_DiscardsCompose(t *testing.T) {
 	}
 }
 
+// Exercises the full keypress → modal → discard path so a regression in
+// the modal's own Update can't slip past the direct-dispatch test below.
+func TestApp_ConfirmModalNoKey_DiscardsCompose(t *testing.T) {
+	app := newTestApp(t)
+	app, _ = app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app, _ = app.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	if app.compose == nil {
+		t.Fatal("setup: compose should be open after c")
+	}
+	app.compose.SetBody("dirty content")
+
+	app, _ = app.Update(uicompose.CancelMsg{Dirty: true})
+	if !app.confirm.IsOpen() {
+		t.Fatal("setup: confirm should be open")
+	}
+
+	out, cmd := app.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	for _, m := range drainBatch(cmd) {
+		out, _ = out.Update(m)
+	}
+	if out.compose != nil {
+		t.Fatal("compose should be nil after pressing 'n' (discard)")
+	}
+	if out.confirm.IsOpen() {
+		t.Fatal("confirm should be closed after pressing 'n'")
+	}
+	if out.pendingComposeSave {
+		t.Fatal("pendingComposeSave should be cleared after pressing 'n'")
+	}
+}
+
 // Pressing n on the Save? modal discards the draft and closes mailcompose.
 func TestApp_ConfirmModalNo_DiscardsCompose(t *testing.T) {
 	app := newTestApp(t)
