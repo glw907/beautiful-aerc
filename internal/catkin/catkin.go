@@ -258,17 +258,14 @@ func (m Model) WithSize(w, h int) Model {
 	return m
 }
 
-// WithWidth sets the body wrap width and re-runs reflow.
+// WithWidth sets the body wrap width. Source is not mutated; wrap is
+// resolved at render time.
 func (m Model) WithWidth(w int) Model {
 	if w == m.width {
 		return m
 	}
 	m.width = w
 	m.buf = m.buf.WithWidth(w)
-	src := m.buf.Value()
-	cur := m.buf.RuneOffset()
-	src, cur = Reflow(src, w, cur)
-	m.buf = m.buf.WithValue(src).WithRuneOffset(cur)
 	return m
 }
 
