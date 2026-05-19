@@ -21,7 +21,7 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 	lines := strings.Split(src, "\n")
 	ctxs := Classify(lines)
 	cursorRow, cursorCol := offsetToRowCol(src, cursor)
-	fenceLines := renderFences(lines, ctxs, styles, top, top+height)
+	fenceLines := renderFences(lines, ctxs, styles, 0, len(lines))
 	focusFirst, focusLast := -1, -1
 	if mode.focus() {
 		focusFirst, focusLast = activeParagraphRange(ctxs, cursorRow)
@@ -33,7 +33,8 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 	}
 
 	var visual []string
-	for i := top; i < len(lines) && len(visual) < height; i++ {
+	skipRows := top
+	for i := 0; i < len(lines) && len(visual) < height; i++ {
 		raw := lines[i]
 		var matchCol = -1
 		var matchCh rune
@@ -62,6 +63,10 @@ func RenderAnnotated(src string, width, height, top, cursor int, styles Styles, 
 			styled = styles.Dim.Render(ansi.Strip(styled))
 		}
 		for _, w := range visualWrap(styled, width, ctxs[i], styles) {
+			if skipRows > 0 {
+				skipRows--
+				continue
+			}
 			if len(visual) >= height {
 				break
 			}
