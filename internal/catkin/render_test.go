@@ -125,6 +125,26 @@ func TestRenderQuoteContinuationCarriesStyledPrefix(t *testing.T) {
 	}
 }
 
+func TestRenderQuoteCursorLandsOnContinuationRow(t *testing.T) {
+	src := "> alpha beta gamma delta epsilon"
+	// Place cursor inside "epsilon" (offset 28 in the source).
+	got := Render(src, 14, 6, 0, 28, Styles{}, ModeNormal)
+	rows := strings.Split(got, "\n")
+	cursorRowIdx := -1
+	for i, r := range rows {
+		if strings.Contains(ansiStrip(r), "█") {
+			cursorRowIdx = i
+			break
+		}
+	}
+	if cursorRowIdx < 1 {
+		t.Fatalf("cursor must land on a continuation row (>=1); got idx=%d rows=%q", cursorRowIdx, rows)
+	}
+	if !strings.HasPrefix(ansiStrip(rows[cursorRowIdx]), "> ") {
+		t.Errorf("cursor's continuation row missing > prefix: %q", rows[cursorRowIdx])
+	}
+}
+
 func TestRenderAppliesSquiggle(t *testing.T) {
 	src := "the tradeof is real"
 	anns := []Annotation{
