@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
 
 func TestWrapWordBold(t *testing.T) {
@@ -77,5 +79,36 @@ func TestVisualWrapHardwrapsLongToken(t *testing.T) {
 	}
 	if joined := strings.Join(got, ""); joined != url {
 		t.Errorf("hardwrap lost content:\n got %q\nwant %q", joined, url)
+	}
+}
+
+func TestVisualWrapQuotedSingleDepth(t *testing.T) {
+	line := "> alpha beta gamma delta epsilon"
+	ctx := LineContext{Kind: BlockQuote, QuoteDepth: 1, PrefixWidth: 2}
+	got := visualWrap(line, 14, ctx, Styles{})
+	if len(got) < 2 {
+		t.Fatalf("expected ≥2 visual rows, got %d: %q", len(got), got)
+	}
+	for i, row := range got {
+		if !strings.HasPrefix(row, "> ") {
+			t.Errorf("row %d missing quote prefix: %q", i, row)
+		}
+		if w := lipgloss.Width(row); w > 14 {
+			t.Errorf("row %d exceeds width 14: %d cells, %q", i, w, row)
+		}
+	}
+}
+
+func TestVisualWrapQuotedDepthTwo(t *testing.T) {
+	line := "> > alpha beta gamma delta epsilon zeta"
+	ctx := LineContext{Kind: BlockQuote, QuoteDepth: 2, PrefixWidth: 4}
+	got := visualWrap(line, 18, ctx, Styles{})
+	if len(got) < 2 {
+		t.Fatalf("expected ≥2 rows, got %d: %q", len(got), got)
+	}
+	for i, row := range got {
+		if !strings.HasPrefix(row, "> > ") {
+			t.Errorf("row %d missing depth-2 prefix: %q", i, row)
+		}
 	}
 }

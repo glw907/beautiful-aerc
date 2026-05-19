@@ -233,6 +233,21 @@ func styleListLine(line string, ctx LineContext, st Styles) string {
 	return st.ListMarker.Render(prefix) + renderSpans(tokenize(body), st)
 }
 
+// styledQuotePrefix returns the quote-prefix string ("> " × depth)
+// rendered through the face styleLine would choose at this depth.
+// A zero Styles value yields the plain prefix.
+func styledQuotePrefix(ctx LineContext, st Styles) string {
+	if ctx.QuoteDepth == 0 {
+		return ""
+	}
+	plain := strings.Repeat("> ", ctx.QuoteDepth)
+	face := st.Quote
+	if ctx.QuoteDepth >= 2 {
+		face = st.DeepQuote
+	}
+	return face.Render(plain)
+}
+
 // visualWrap splits a possibly-styled source line into width-bounded
 // visual rows. For quoted lines (ctx.QuoteDepth > 0) the prefix is
 // rendered separately and prepended to every emitted row; the body is
@@ -249,11 +264,27 @@ func visualWrap(line string, width int, ctx LineContext, styles Styles) []string
 		}
 		return strings.Split(ansi.Wrap(line, width, ""), "\n")
 	}
-	// Quote-aware path lands in Task 3.
-	if lipgloss.Width(line) <= width {
-		return []string{line}
+
+	prefix := styledQuotePrefix(ctx, styles)
+	prefixCells := lipgloss.Width(prefix)
+	budget := width - prefixCells
+	if budget < 1 {
+		budget = 1
 	}
-	return strings.Split(ansi.Wrap(line, width, ""), "\n")
+
+	// styleLine renders the whole quoted line through one face, so the
+	// styled body sits after exactly prefixCells visible cells.
+	body := ansi.TruncateLeft(line, prefixCells, "")
+
+	if lipgloss.Width(body) <= budget {
+		return []string{prefix + body}
+	}
+	wrapped := strings.Split(ansi.Wrap(body, budget, ""), "\n")
+	out := make([]string, len(wrapped))
+	for i, row := range wrapped {
+		out[i] = prefix + row
+	}
+	return out
 }
 
 func offsetToRowCol(src string, off int) (row, col int) {
