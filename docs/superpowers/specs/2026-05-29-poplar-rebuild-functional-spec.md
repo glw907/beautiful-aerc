@@ -230,3 +230,243 @@ else and must not cross it for those two.
 15. A cache reset preserves OAuth refresh tokens and forces no re-consent;
     cached bodies and attachments refetch on demand without data loss beyond
     bandwidth.
+
+---
+
+## 2. Organization, threading, automation
+
+Owner: Pass 2. Settles charter §6 decisions 3 to 5 and the label UX that
+section 1's data model left open.
+
+Section 1 fixed the data model. Folders are single-membership, labels are
+server-backed and capability-gated, and the unified inbox is a read-side
+merge. Section 2 builds organization, threading, and automation on top of
+that model. Each automation feature gates at the backend boundary the way
+`SupportsLabels` does, so a backend that cannot support a feature says so
+instead of faking it. The field survey behind these decisions is
+`docs/poplar/research/2026-05-29-mail-client-gap-analysis.md` §2.
+
+### 2.1 Threading and the conversation model
+
+The list groups by conversation. A thread is a first-class organizational
+unit, and the actions that follow (triage, mute, snooze) target it.
+
+Thread identity comes from the backend where it carries one (JMAP
+`threadId`, Gmail `X-GM-THRID`) and from a `References` and `In-Reply-To`
+walk over the cached headers otherwise. A non-threaded message is a thread
+of one, consistent with section 1's `ThreadID == UID` rule.
+
+A collapsed thread row stands for the whole conversation. It sorts by its
+latest member's `SentAt`. It reads as unread when any member is unread.
+Triage on a collapsed row applies to every message in the thread. Acting
+inside an expanded thread targets the single message under the cursor.
+
+Threaded is the default mode. A flat mode, one row per message with depth
+markers, ships as well; its rendering and the toggle between modes belong
+to Pass 3, which owns list UX and wireframes. Threads stay account-scoped,
+because section 1 keeps storage account-partitioned. The same external
+conversation seen through two accounts therefore shows as two rows in the
+unified inbox.
+
+### 2.2 Labels: operations and views
+
+Section 1 settled the label data model. This section settles what the user
+does with labels.
+
+Apply and remove run through a multi-select picker that toggles each label
+on or off for the selected messages or thread. Typing a name that does not
+exist yet creates the label on the backend and applies it, so there is no
+separate create-label step. Every change goes through the `Label(uids,
+label, set)` mutator and the outbox, so it is optimistic locally and queued
+for the backend like any other write.
+
+A message carries zero or more labels, surfaced in both the list and the
+reader; the exact chrome is a Pass 3 and Pass 4 wireframe decision.
+Selecting a label opens a label-scoped view, which is a saved search over
+that label. Label views and saved searches therefore share one mechanism,
+described next.
+
+Backend mapping follows section 1. JMAP labels are keywords set through
+`Email/set`, IMAP labels are custom keywords set through `STORE`, and Gmail
+user labels ride `X-GM-LABELS` over the IMAP connection. A backend whose
+`PERMANENTFLAGS` forbid custom keywords reports `SupportsLabels = false`,
+and the label surface is absent for that account.
+
+### 2.3 Saved searches and virtual folders
+
+One stored-query type backs saved searches, virtual folders, and
+label-scoped views. A stored query has a name, a query expression, and a
+scope. The query grammar is Pass 6's to define; this section commits only
+to the stored-query shape and its behavior.
+
+Stored queries persist in config and are also creatable at runtime by
+saving the current search. A runtime save writes back through the same
+`config.Render` round-trip section 1 relies on, so a saved search the user
+creates in the UI survives a restart as a config entry. They appear as
+virtual folders in the sidebar next to the classified folder tree.
+
+A stored query is a projection, never a stored result set. Opening one runs
+the query against the local FTS index, so it resolves offline and stays
+responsive, per section 1's performance-by-locality and local-index-first
+rules. It refreshes on open and on the change events that touch its scope.
+
+Scope is one account, a set of folders within an account, or cross-account.
+A cross-account stored query is the mechanism that later delivers unified
+surfaces beyond the inbox, such as flagged-across-accounts. Section 1
+scoped the always-present unified view to the inbox for v1; cross-account
+stored queries are opt-in views the user defines, so they extend that
+boundary without making every cross-account merge a default surface.
+
+### 2.4 Server-side filters
+
+Filtering rules run on the server so they apply while poplar is closed.
+Poplar owns an abstract rule model and presents it as the client-visible
+rule config. The model is an ordered list of rules. Each rule pairs a
+condition over the message (sender, recipient, subject, an arbitrary
+header, or size) with one or more actions, among them file into a folder,
+set or clear a flag, set a label, discard, redirect, and stop processing.
+
+The rule list compiles to Sieve (RFC 5228) using the extensions the server
+advertises, among them `fileinto`, `imap4flags` (RFC 5232), and `mailbox`
+with `:create` (RFC 5490). Poplar writes its compiled output into a managed
+block fenced by sentinel comments and regenerates that block wholesale on
+every change. Sieve written outside the fence by hand or by another tool is
+preserved verbatim. A raw view shows the full active script read-only, so a
+power user can audit exactly what runs.
+
+Transport is capability-gated through `SupportsServerRules`. A JMAP account
+that advertises `urn:ietf:params:jmap:sieve` (RFC 9661) manages the script
+through `SieveScript/get`, `/set`, and `/validate`, and feature-detects
+extensions through the capability's `sieveExtensions` list. An IMAP account
+reaches ManageSieve (RFC 5804) on its own connection, separate from the
+command and idle connections, and feature-detects through the `SIEVE`
+capability line. A backend with neither path, including Gmail over IMAP and
+plain IMAP without ManageSieve, reports `SupportsServerRules = false`, and
+the rule surface states that server rules are unavailable for that account.
+Gmail server filters need the Gmail REST API, which this client does not
+use for mail in v1, so Gmail rule management is a tracked post-1.0
+addition.
+
+Rules are account-scoped. A change validates before it activates, through
+`SieveScript/validate` on JMAP or `CHECKSCRIPT` on ManageSieve, and a
+compile or validation failure surfaces to the user instead of dropping
+silently.
+
+### 2.5 Snooze and thread mute
+
+Snooze and mute present one UX each and select their execution engine from
+backend capability. Both features are always offered. The capability
+decides how each one runs, and the feature itself is never withheld.
+
+Snooze removes a thread or message from the inbox until a wake time, then
+returns it. Where the backend advertises `SupportsServerSnooze`, poplar
+uses the server engine, so the wake fires even when poplar is not running.
+The JMAP path sets the `snoozed` property through the
+`urn:ietf:params:jmap:mail:snooze` extension; a ManageSieve path uses the
+Sieve `snooze` extension where the server lists it. Where no server engine
+exists, poplar manages snooze itself. It moves the item to a managed
+Snoozed folder, records the wake time in the cache, and returns due items
+to the inbox on the next sync. The two engines differ in one user-visible
+way, and the UI states it. A server snooze returns at the chosen time. A
+client snooze returns at the chosen time, or at the next sync after it.
+Both spec drafts (`snoozed` and Sieve `snooze`) are unratified, so the
+server path is confirmed against the live account capability at build time.
+
+Mute means future replies to a thread skip the inbox, with archive
+semantics, so the thread stays reachable in Archive or All Mail. Mute has
+no standard primitive, so its engine is also capability-tiered. Gmail uses
+its native `Muted` label over `X-GM-LABELS`, which the Gmail server
+enforces against future replies. A Sieve-capable backend gets a generated
+mute rule, keyed on the thread, written into the same managed block section
+2.4 defines; the rule files later thread members into Archive. A plain IMAP
+account without Sieve falls back to a mute list in the cache, applied on
+sync, so new members of a muted thread auto-archive the next time poplar
+reconciles. Unmuting clears the label, the rule, or the list entry.
+
+### 2.6 Triage across folders and the unified inbox
+
+Triage on a unified-inbox row dispatches to that row's owning account, as
+section 1 requires, and writes only that account's cache. On a collapsed
+thread the action covers the thread; on an expanded message it covers the
+one message.
+
+Next-unread crosses folder boundaries. The key advances to the next unread
+item in the current folder, then to the next folder that holds unread in
+classified order, and in the unified context onward across accounts in
+config order. The traversal is deterministic. Pass 3 owns the key binding
+and the on-screen prompt; this section fixes the order.
+
+Bulk action by criteria selects a set by a predicate instead of by manual
+marking, then applies one action to the whole set. Built-in predicates
+cover all unread, all from a sender, the whole thread, and everything
+matching the current saved search. Each action queues per owning account
+through the outbox, and it operates on the full matching set rather than
+the visible page. Pass 3 owns the keyboard surface for selection and apply,
+modeled on neomutt's tag-pattern-then-apply adapted to single keys; this
+section fixes that bulk acts on a result set and dispatches per account.
+
+### 2.7 Backend interface additions
+
+Section 2 adds `SupportsServerRules`, `SupportsServerSnooze`, and
+`SupportsNativeMute` to the capability set section 1 began with
+`SupportsLabels`. Each gates a feature's server engine at the boundary, and
+each has a defined fallback so the feature still works when the flag is
+false.
+
+The interface gains capability-gated operations for managing the compiled
+rule set, for server snooze, and for the native-mute label path. An IMAP
+backend that supports ManageSieve opens a third connection for it,
+alongside the command and idle connections, because ManageSieve is a
+separate service. The exact method signatures are build-plan work; this
+section fixes the operations and their capability gates.
+
+### 2.8 Acceptance scenarios
+
+1. The message list groups by conversation by default; a thread shows as
+   one row that sorts by its latest message and reads unread when any
+   member is unread.
+2. Triage on a collapsed thread (archive, delete, flag, label, snooze,
+   mute) applies to every message in the thread; the same action inside an
+   expanded thread applies to the single message under the cursor.
+3. The same external conversation arriving on two accounts shows as two
+   separate rows in the unified inbox, each dispatching to its own account.
+4. Applying a label through the picker persists through the backend's
+   keyword mechanism and survives a resync; typing a new name creates and
+   applies the label without a separate step; removing it clears the
+   keyword.
+5. On a backend whose `PERMANENTFLAGS` forbid custom keywords,
+   `SupportsLabels` is false and the label surface is absent, stated in the
+   UI.
+6. Selecting a label opens a label-scoped view that is the saved search
+   over that label, using the same stored-query mechanism as a
+   user-defined saved search.
+7. Saving a search in the UI persists it across a restart as a config
+   entry, and it reopens as a virtual folder in the sidebar.
+8. A saved search resolves against the local FTS index with the network
+   down and refreshes on open.
+9. A cross-account saved search lists matching messages from every
+   in-scope account, each row dispatching triage to its owning account.
+10. Editing the rule config regenerates the managed Sieve block and leaves
+    hand-written Sieve outside the fence unchanged; the raw view shows the
+    full active script.
+11. On a JMAP account advertising `urn:ietf:params:jmap:sieve`, a saved
+    rule validates and activates through `SieveScript/set`; an invalid rule
+    surfaces the validation error and does not activate.
+12. A Gmail-over-IMAP account and a plain IMAP account without ManageSieve
+    report `SupportsServerRules = false`, and the rule surface states that
+    server rules are unavailable.
+13. On a backend advertising server snooze, a snoozed thread leaves the
+    inbox and returns at the wake time while poplar is closed; on a backend
+    without it, the thread returns on the next sync after the wake time,
+    and the UI states the difference.
+14. Muting a thread routes its future replies out of the inbox with archive
+    semantics: Gmail through its native muted label, a Sieve backend
+    through a generated managed-block rule, a plain IMAP backend through a
+    cache mute list applied on sync; unmuting restores inbox delivery.
+15. Next-unread advances within the current folder, then into the next
+    folder with unread in classified order, then across accounts in the
+    unified context, deterministically.
+16. A bulk action by criteria (all unread, all from a sender, the whole
+    thread, or the current saved search) applies to the full matching set
+    rather than the visible page, and queues per owning account through the
+    outbox.

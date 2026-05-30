@@ -6,7 +6,7 @@
 
 ## Current state (2026-05-29)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), and Pass 1 (Accounts, protocols, sync) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), and Pass 2 (Organization, threading, automation) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -23,31 +23,49 @@ Pass 1 outcomes (functional spec §1, 15 acceptance scenarios):
 - Best-practice-first framing adopted at Geoff's direction (see memory). OAuth per RFC 8252 loopback+PKCE plus RFC 8628 device-code; bring-your-own client for v1 (Gmail restricted-scope CASA reality, verified 2026-05-29); credential source is config so a shipped verified client is a post-1.0 preset change; alias-pattern identities in; performance-by-locality cache principle.
 - Audience is Gmail-first; Geoff dogfoods Fastmail (JMAP bearer token, no OAuth), so Gmail/Outlook OAuth onboarding needs explicit test coverage and a live-OAuth gate in the build phase.
 
-## Next: Pass 2, organization, threading, automation
+Pass 2 outcomes (functional spec §2, 16 acceptance scenarios):
+- Threading: conversation-grouped is the default list mode; both modes ship (flat is a Pass 3 presentation toggle); the thread is a first-class unit that triage, mute, and snooze target. Threads stay account-scoped, so one external conversation across two accounts shows as two unified-inbox rows.
+- Labels: multi-select picker with create-on-apply; a label-scoped view is a saved search, so labels and saved searches share one stored-query mechanism.
+- Saved searches and virtual folders: one stored-query type (name, query, scope), config-persisted and runtime-creatable through the config round-trip, run offline against the FTS index, per-account or cross-account. Cross-account stored queries are the opt-in path to unified surfaces beyond the inbox.
+- Filters: an abstract rule model (a condition plus actions) compiles to a sentinel-fenced managed Sieve block, preserving hand-written Sieve, with a raw read-only view. Capability-gated through `SupportsServerRules`: JMAP Sieve (RFC 9661) and ManageSieve (RFC 5804, its own connection). Gmail server filters need the Gmail REST API and are deferred post-1.0.
+- Snooze and mute: capability-tiered with an always-available UX. Server snooze where advertised (JMAP `snoozed` / Sieve `snooze`, both unratified drafts, verified at build), client-managed-on-sync fallback otherwise. Mute via Gmail's native label, a generated Sieve rule, or a cache mute list.
+- Triage: per-owning-account dispatch from the unified inbox; deterministic next-unread across folders then accounts; bulk-by-criteria on the full result set, not the visible page.
+- Backend additions: `SupportsServerRules`, `SupportsServerSnooze`, `SupportsNativeMute`; ManageSieve is a third IMAP connection alongside command and idle.
+- Protocol research backing these decisions: RFC 9661 (JMAP Sieve), RFC 5804 (ManageSieve), RFC 5228/5232/5490 (Sieve), the expired EXTRA snooze drafts, the Gmail-filters-need-REST-API boundary, and saved-search-is-client-side everywhere.
 
-Starter prompt (paste after /clear, or say "start Pass 2"):
+## Next: Pass 3, reading, triage, navigation
+
+Starter prompt (paste after /clear, or say "start Pass 3"):
 
 ```
-Start Pass 2 of the poplar rebuild (organization, threading, automation). A
-domain spec pass: it appends a spec section, it does not build. Read first:
-docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md section 1
-(the settled account, folder, and label model), the charter section 6
-decisions 3 to 5, and the gap analysis section 2.
+Start Pass 3 of the poplar rebuild (reading, triage, navigation). A domain
+spec pass: it appends a spec section, it does not build. Read first:
+docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md sections
+1 and 2 (the settled account, folder, label, threading, and automation
+model), the charter section 2 (product definition) and section 6 decision 6,
+and the gap analysis sections 3 and 4.
 
-Pass 1 settled the data model: folders single-membership, labels server-backed
-and capability-gated. Pass 2 builds organization on top of it. Brainstorm and
-settle, then spec:
-- Saved searches and virtual folders (ties to Pass 6 search).
-- Server-side filters: Sieve for JMAP, with a client-visible rule config.
-- Snooze and thread mute (mute routes future replies out of the inbox).
-- Label UX and operations: apply, remove, label-scoped views, multi-label.
-- Triage model across folders and the unified inbox; next-unread across folders.
+Pass 2 settled the organizational semantics: a threaded-by-default
+conversation model, label and saved-search views, and the triage model
+(per-account dispatch, next-unread across folders, bulk-by-criteria). Pass 3
+designs the surfaces that drive them. Wireframe-first for every screen.
+Brainstorm and settle, then spec:
+- Keyboard model: modifier-free single keys, the full triage and navigation
+  key map, the flat-vs-threaded toggle.
+- Pane model: sidebar, list, reader layout; one-pane Pine-style reading;
+  responsive tiers.
+- List UX: conversation rows, label and flag display, the results-mode list
+  for saved searches and search.
+- Reader UX: header presentation, body region, link and attachment
+  affordances (rendering itself is Pass 4).
+- Triage and bulk UX: the tag-pattern-then-apply surface, the undo window,
+  snooze/mute/label entry points.
 End with numbered acceptance scenarios appended to the functional spec
-section 2.
+section 3.
 
 Pass-end: update the rebuild STATUS and append the execution record.
 ```
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [next] -> 3 Reading/triage -> 4 Rendering -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [next] -> 4 Rendering -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
