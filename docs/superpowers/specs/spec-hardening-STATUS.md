@@ -25,7 +25,7 @@ report artifact. Pass C ingests both reports, edits the spec, and reformats it.
 
 ## State (2026-05-30)
 
-- [ ] Pass A: gap hunt. Artifact: `docs/poplar/research/2026-05-30-spec-gap-analysis.md`.
+- [x] Pass A: gap hunt. Artifact: `docs/poplar/research/2026-05-30-spec-gap-analysis.md` (78 confirmed gaps, 17 high priority; 22 locked-decision tensions; 7 candidates adversarially refuted and dropped).
 - [ ] Pass B: critique. Artifact: `docs/poplar/research/2026-05-30-spec-critique.md`.
 - [ ] Pass C: integrate and reformat. Edits the canonical spec.
 
