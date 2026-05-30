@@ -18,7 +18,7 @@ This runs by default at every pass close ("ship pass", "finish pass", or a compl
 
 ## Current state (2026-05-30)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), Pass 5 (Compose and sending), and Pass 6 (Search) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), Pass 5 (Compose and sending), Pass 6 (Search), and Pass 7 (Contacts, calendar, security) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -190,36 +190,79 @@ Pass 6 outcomes (functional spec §6, 19 acceptance scenarios):
   body backfill for index completeness, `text/*` attachment extraction, and the
   full Gmail-compatible grammar.
 
-## Next: Pass 7, contacts, calendar, security
+Pass 7 outcomes (functional spec §7, 17 acceptance scenarios):
+- Contacts model: vCard (RFC 6350) end to end. Three sources behind one
+  query-and-suggest seam: synced CardDAV books (first-class, credentials per
+  §1.6, cached for offline), a local `contacts.vcf`/`contacts.d/` store for
+  non-syncing users, and a suggestion-only auto-collect cache that never writes
+  back. The surfaced and editable field set is mail-client-minimal at Geoff's
+  direction, a display name plus multiple emails and multiple phones, each with
+  a type and a primary marker; richer vCard fields round-trip untouched.
+  Multi-value primary cascades PREF=1, then TYPE=pref, then first-seen.
+- Suggest-and-lookup seam: one path feeds compose autocomplete (§5.2) and the
+  reader card, ranks curated sources above auto-collect, and dedupes on email.
+- Contacts mode and the reader card: a slim contacts mode on a dedicated mode
+  key (reconciled against the §3 keymap, since legacy `M` is now mute), an A-Z
+  sidebar index, and a detail card on `Enter`. The §3.5 `i` hook opens a sender
+  contact-card popover with add-to-contacts. Create and edit write
+  name/emails/phones to one default destination; the multi-book picker is
+  deferred post-1.0 (ADR-0176).
+- Calendar: an inline ICS invite block; one-action RSVP (accept, tentative,
+  decline) sends an iMIP `METHOD=REPLY` with updated `PARTSTAT` through the §5
+  outbox, needing no calendar backend; CalDAV calendar write is deferred (no
+  calendar account model in v1). ICS parses through the locked
+  `arran4/golang-ical`.
+- Security, verification: a reader-header badge from the `Authentication-Results`
+  header (RFC 8601) for DKIM, SPF, and DMARC, trusting the delivery boundary; a
+  DMARC failure or From-mismatch warns; local DNS re-verification is deferred.
+- Security, encryption: read-side PGP only at Geoff's direction. v1 verifies
+  PGP/MIME (RFC 3156) and inline-PGP signatures and decrypts incoming mail
+  through the local GnuPG keyring and gpg-agent; a missing key shows an honest
+  unverified state. Signing and encrypting on send and S/MIME are deferred to a
+  post-1.0 encryption pass with the send-side scope stated.
+- List-Unsubscribe one-click carries forward unchanged (§3.5, ADR-0185).
+- Best-practice-first at Geoff's direction; legacy poplar's contacts, calendar,
+  and unsubscribe code is evidence, not the template. Two tradeoffs settled with
+  Geoff: read-side PGP scope, and a minimal local vCard store alongside
+  first-class CardDAV sync.
 
-Starter prompt (paste after /clear, or say "start Pass 7"):
+## Next: Pass 8, consolidation
+
+Starter prompt (paste after /clear, or say "start Pass 8"):
 
 ```
-Start Pass 7 of the poplar rebuild (contacts, calendar, security). A domain
-spec pass: it appends a spec section, it does not build. Read first: the gap
-analysis section 7 (contacts, calendar, security), and functional spec section
-1.6 (OAuth and credentials, which CardDAV contacts credentials fall back to),
-section 3.5 (the reader's sender line reserves `i` as this pass's contact hook,
-and the Labels row carrying snooze and mute state), and section 5.2 (the
-compose address autocomplete seam this pass's contacts feed).
+Start Pass 8 of the poplar rebuild (consolidation). This is the terminal spec
+pass. It folds the seven domain sections into one coherent canonical functional
+spec, resolves the cross-pass carry-forwards, runs a full self-review, and ends
+at the user review gate before the build plans. It writes no code.
 
-Pass 7 owns contacts, calendar, and security. Derive from the field and current
-best practice, not from legacy poplar. Brainstorm and settle, then spec:
-- Contacts: CardDAV sync with multiple address books and auto-collect from
-  sent, the contact popover on the reader's `i` hook, and the contacts mode,
-  and how the section 5.2 suggestion seam and the cache feed both.
-- Calendar: inline ICS invite display and one-action RSVP, which the gap
-  analysis flags as the missing piece, and how the response sends.
-- Security: a sender-verification surface from DKIM and DMARC results, and the
-  scope decision on PGP and S/MIME, which the gap analysis flags as a scope
-  call rather than an automatic include.
-- List-Unsubscribe one-click carries forward from the legacy reader; place it
-  against this pass's security surface.
-End with numbered acceptance scenarios appended to the functional spec
-section 7.
+Read first: the whole functional spec
+`docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md` end to
+end, the charter `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`
+(§9 spec build plan, §10 conventions), and the Carry-forward considerations
+section of this STATUS.
+
+Pass 8 work:
+- Resolve the carry-forwards this STATUS holds. Order and group the keyboard
+  commands holistically across every key-bearing surface (the account view and
+  reader §3.1, the compose chords §5.1, the search keys §6, the contacts and
+  RSVP keys §7), reflect the result back into the owning sections and the help
+  popover, and name a single source of truth for the binding tables. Settle
+  command visibility across the responsive tiers §3.2.
+- Reconcile the keys each later pass deferred to the build phase (the §4.2
+  render-mode key, the §6.5 save-search key and §6.3 scope key, the §7 contacts
+  mode and RSVP keys) against the locked §3 keymap, in one place.
+- Read the seven sections for cross-section consistency: shared seams, the
+  capability-gate vocabulary, the cache and outbox contract, and the wireframe
+  and keybinding references, fixing drift in place.
+- Run the brainstorming spec self-review over the whole document (placeholders,
+  contradictions, scope, ambiguity) and fix inline.
+- End at the user review gate, presenting the consolidated spec for Geoff's
+  review before the build-plan phase.
 
 Pass-end: run the Pass-end ritual at the top of this STATUS. It updates this
-STATUS by default.
+STATUS by default. After Pass 8 the spec phase is complete and the next work is
+the numbered build plans.
 ```
 
 ## Carry-forward considerations
@@ -245,4 +288,4 @@ raised them.
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [done] -> 7 Contacts/calendar/security [next] -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [done] -> 7 Contacts/calendar/security [done] -> 8 Consolidation [next] -> build plans + clean build.

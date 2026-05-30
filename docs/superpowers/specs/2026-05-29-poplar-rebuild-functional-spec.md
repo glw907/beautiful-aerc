@@ -1562,3 +1562,202 @@ round-trip.
     account.
 19. A label view resolves as the saved search `label:<name>`, using the same
     stored-query mechanism as a user-defined saved search.
+
+---
+
+## 7. Contacts, calendar, security
+
+Owner: Pass 7. Settles charter §6 decisions 7 (RSVP and sender verification)
+and 8 (the PGP and S/MIME scope call). Fills the reader's `i` contact hook
+section 3.5 reserved and feeds the address suggestion seam section 5.2 named.
+The pass keeps the contacts surface slim, since poplar is a mail client rather
+than a contacts manager, while supporting CardDAV sync as a first-class source
+because many users need it. The field survey behind these decisions is
+`docs/poplar/research/2026-05-29-mail-client-gap-analysis.md` §7. Decisions
+derive from the field and current practice; legacy poplar's contacts, calendar,
+and unsubscribe code is evidence, not the baseline.
+
+### 7.1 The contacts model and its sources
+
+Contacts use one format end to end, vCard (RFC 6350). Three sources sit behind
+a single query-and-suggest seam.
+
+- **CardDAV books.** A synced, curated, browsable source, and the prominent
+  path since many users want sync. Credentials follow section 1.6's
+  `[account.contacts]` table and fall back to the parent account, and the
+  synced book caches locally so browse, search, and suggest resolve offline.
+- **Local vCard store.** A `~/.config/poplar/contacts.vcf` file or a
+  `contacts.d/` directory, for a user who runs no CardDAV. It browses exactly
+  like a book.
+- **Auto-collected addresses.** A recency-decayed cache filled from sent mail,
+  used only for suggestion. It never shows in the browse UI and never writes
+  back to a book or the local store, so a curated source stays clean.
+
+Poplar surfaces and edits a mail-client-minimal field set, a display name with
+multiple emails and multiple phones, each carrying a type label and a primary
+marker. Organization, postal addresses, birthdays, and photos never show or
+edit. The raw vCard bytes stay the source of truth, so a CardDAV book carrying
+richer fields round-trips untouched while poplar edits only the name, the
+emails, and the phones. A multi-value read cascades `PREF=1`, then the legacy
+`TYPE=pref`, then first-seen. In the list, the primary email and phone show
+with a `+N more` count, and the card shows every value with its type and the
+primary marked.
+
+### 7.2 The suggest-and-lookup seam
+
+One seam serves the compose autocomplete section 5.2 specified and the reader
+contact card. The suggest call queries every source, ranks the curated sources
+above auto-collect, and dedupes on email address. The lookup call resolves one
+address to a contact for the card. CardDAV, the local store, and the
+auto-collect cache all feed the seam through one path, the shape section 5.2
+relies on.
+
+### 7.3 Contacts mode and the reader card
+
+Contacts mode stays slim. A dedicated mode key, reconciled against the locked
+section 3 keymap in the build phase since legacy `M` is now mute, switches the
+account view to a contacts list with an A-Z index in the sidebar. `Enter` opens
+a detail card. The reader keeps the `i` hook from section 3.5. On a sender line
+it opens a contact-card popover with the sender's name, emails, and phones, the
+primary of each marked, and an add-to-contacts action when the sender is
+unknown.
+
+```
+╭─ Alice Johnson ──────────────────╮
+│  alice@example.com      work ★   │
+│  alice.j@gmail.com      home     │
+│  +1 555 0101            mobile ★ │
+│  a add to contacts  e edit  Esc  │
+╰──────────────────────────────────╯
+```
+
+Create and edit write name, emails, and phones to the local store or a chosen
+CardDAV book. In v1 the write lands in one default destination, and the
+multi-book destination picker is deferred post-1.0 per ADR-0176. The editor
+manages the email and phone lists, so a value can be added, removed, retyped,
+or set as the primary.
+
+### 7.4 Calendar: ICS invites and RSVP
+
+A `text/calendar` part or an `.ics` attachment renders inline as an invite
+block showing the title, the time, the place, the organizer, and the user's
+status. One-action RSVP offers accept, tentative, and decline.
+
+```
+ ┌ Invite ──────────────────────────────────┐
+ │  Q2 Planning                              │
+ │  Thu 10 Apr 2026 · 14:00-15:00            │
+ │  Organizer: Bob Lee                       │
+ │  Status: needs action                     │
+ │  a accept   t tentative   d decline       │
+ └───────────────────────────────────────────┘
+```
+
+Section 1 carries no calendar account, so RSVP sends an iMIP reply rather than
+writing a calendar. The reply is a `text/calendar` part with `METHOD=REPLY` and
+the user's `PARTSTAT` updated, emailed to the organizer through the Send and
+outbox path section 5 built. That path needs no calendar backend. Writing the
+event into a CalDAV calendar is named here and deferred, since v1 has no
+calendar account model. The RSVP key is reconciled against the section 3 keymap
+in the build phase, and the invite block reflects the new status once the reply
+queues.
+
+### 7.5 Security: sender verification
+
+Poplar reads the `Authentication-Results` header (RFC 8601) the trusted
+receiving boundary stamps and shows a compact badge in the reader header for the
+DKIM, SPF, and DMARC results. Trusting the delivery boundary is the standard
+mail-client approach, since the client cannot reliably re-fetch DNS and the raw
+signature on every message. Local re-verification, fetching the DNS records and
+re-checking the DKIM signature over the raw MIME, is named here and deferred as
+a later hardening. A DMARC failure or a From-domain mismatch shows a clear
+warning rather than a quiet pass.
+
+```
+  From:  Alice Johnson <alice@example.com>
+  ✓ dkim  ✓ spf  ✓ dmarc          signed · key CACA1234
+```
+
+### 7.6 Security: read-side PGP
+
+v1 verifies PGP signatures and decrypts encrypted incoming mail, and it does not
+sign or encrypt on send. It reads PGP/MIME (RFC 3156) and inline-PGP signatures,
+and it decrypts a PGP/MIME or inline-PGP body. Keys come from the local GnuPG
+keyring through gpg-agent, the source a coder's machine already carries. A
+missing key shows an unverified state with a no-public-key reason rather than
+failing silently, and a decrypted body renders through the section 4 pipeline
+like any other. The reader shows a signature chip beside the section 7.5
+verification badge, naming a good signature's key, a bad signature, or an
+unknown key.
+
+Signing and encrypting on compose, and S/MIME in either direction, are named
+here and deferred to a post-1.0 encryption pass. Their deferred scope is
+send-side key selection, recipient key lookup, and the trust UI, the surface
+that makes outbound encryption a larger undertaking than inbound verification.
+
+### 7.7 List-Unsubscribe
+
+One-click List-Unsubscribe carries forward unchanged from section 3.5 and
+ADR-0185. The reader harvests `List-Unsubscribe` and `List-Unsubscribe-Post` at
+body fetch, `U` runs it, and it routes an https one-click POST ahead of a mailto
+ahead of an http link, behind a confirm and a short banner. It sits in the
+reader's affordance set beside the verification surfaces, so the
+security-relevant reader actions read as one group.
+
+### 7.8 Seam additions
+
+Section 7 adds three seams the build plans fill. The contacts seam wraps a
+CardDAV client, a vCard parser, the local-file source, and the auto-collect
+cache behind one query-suggest-and-store interface. A calendar seam parses ICS
+through the locked `arran4/golang-ical` and assembles the iMIP `METHOD=REPLY`
+that rides the Send path. The security seam parses `Authentication-Results` and
+verifies and decrypts PGP against the local keyring. Exact signatures are
+build-plan work; this section fixes the sources, the surfaced fields, and the
+capability boundaries.
+
+### 7.9 Acceptance scenarios
+
+1. Contacts read from three sources behind one seam, a synced CardDAV book, a
+   local `contacts.vcf` or `contacts.d/`, and an auto-collected cache; the
+   CardDAV book caches locally and browses offline.
+2. A user with no CardDAV browses and searches the local vCard store
+   identically to a book.
+3. Auto-collected addresses feed suggestion only; they never appear in the
+   browse UI and never write back to a book or the local store.
+4. The surfaced and editable field set is a display name with multiple emails
+   and multiple phones, each with a type and a primary marker, and other vCard
+   fields round-trip untouched and never display.
+5. A multi-value field resolves its primary by `PREF=1`, then `TYPE=pref`, then
+   first-seen; the list shows the primary email and phone with a `+N more`
+   count, and the card shows every value typed and primary-marked.
+6. Compose autocomplete and the reader card draw from the same suggest seam,
+   which ranks the curated sources above auto-collect and dedupes on email.
+7. A mode key opens contacts mode with an A-Z sidebar index, and `Enter` opens a
+   contact detail card.
+8. `i` on a sender line opens the contact-card popover, and for an unknown
+   sender it offers add-to-contacts.
+9. Creating or editing a contact writes name, emails, and phones to the default
+   destination; the editor adds, removes, retypes, and sets the primary of an
+   email or phone, and the multi-book destination picker is absent and named as
+   deferred.
+10. A `text/calendar` part or an `.ics` attachment renders inline as an invite
+    block with title, time, place, organizer, and the user's status.
+11. Accept, tentative, or decline sends an iMIP `METHOD=REPLY` with the updated
+    `PARTSTAT` to the organizer through the outbox, the invite block reflects
+    the new status, and no calendar backend is required.
+12. Writing the event to a CalDAV calendar is absent in v1 and named as
+    deferred.
+13. The reader header shows a sender-verification badge derived from the
+    `Authentication-Results` header for DKIM, SPF, and DMARC, and a DMARC
+    failure or a From-domain mismatch shows a warning.
+14. Local DNS-and-raw-MIME re-verification is absent in v1 and named as
+    deferred.
+15. v1 verifies PGP/MIME and inline-PGP signatures and decrypts encrypted
+    incoming mail using the local GnuPG keyring; a missing key shows an
+    unverified, no-public-key state rather than a silent pass, and the decrypted
+    body renders through the section 4 pipeline.
+16. Signing and encrypting on compose and S/MIME are absent in v1 and named as
+    deferred, with the deferred send-side scope stated.
+17. One-click List-Unsubscribe carries forward from section 3.5, harvested at
+    body fetch, run by `U`, and routing an https one-click POST ahead of mailto
+    ahead of http behind a confirm.
