@@ -1120,3 +1120,240 @@ default rendering path is the offline pipeline in 4.1.
     classes that drove each change.
 18. The runtime LLM-clean-HTML path is absent in Pass 4, and the spec names it
     as a deferred opt-in with its boundary stated.
+
+---
+
+## 5. Compose and sending
+
+Compose is the outbound surface. Catkin hosts the body, the surface gathers
+the headers and attachments, and the outbox owns dispatch, the send delay,
+and scheduling. The decisions here derive from the field and current
+practice; legacy poplar is evidence, not the baseline. The audience sends to
+mailing lists and patch queues as well as to people, so the surface treats
+clean text/plain output as a first-class case rather than an afterthought.
+
+### 5.1 The compose surface
+
+Compose is a modeless full-pane surface. It opens in place of the list or
+the reader with the sidebar still drawn, the placement the full reader uses.
+It is not an overlay and does not dim an underlay (§3.7). `c` opens a blank
+compose, and `r`, `R`, and `f` open it seeded as a reply, reply-all, or
+forward.
+
+The surface is a text-entry context, so it takes the whole keyboard and the
+modifier-free account-view rule lifts here (§3.1). Body editing is modeless
+in the Pico tradition. Every keystroke inserts, and editing runs through
+chords rather than an editor mode. Vim modal editing inside catkin is named
+and deferred; the rebuild ships the modeless editor. A persistent command
+row along the foot lists the message-level chords.
+
+```
+ Compose ─ geoff@907.life ▾                              text+html
+  To:    alice@example.com, Bob Lee <bob@example.com>▏
+  Cc:
+  Bcc:
+  Subj:  Re: Q2 launch
+  ── signature: Work ▾ ─────────────────────────────────────────
+  Hey Alice,
+
+  Thanks for the update. A few notes below.
+
+  > Just wanted to follow up on the Q2 launch timeline.
+
+  ▏
+
+  § draft.diff (4 KB)   § notes.md (1 KB)
+  ──────────────────────────────────────────────────────────────
+  ^X send  ^O draft  ^A attach  ^J snippet  ^T tidy  Esc cancel
+```
+
+Poplar owns the message-level commands and catkin owns the body. `Ctrl-X`
+sends, `Ctrl-O` saves a draft and closes, `Ctrl-A` attaches a file through
+the attachment picker, `Ctrl-J` inserts a snippet, and `Esc` leaves the
+surface, postponing a dirty draft to Drafts and offering discard for an empty
+or unwanted one (§5.6). Tidy is catkin's own command on
+`Ctrl-T` (§5.9). The surface claims its chords before delegating the rest to
+catkin, and catkin leaves those keys unbound, so the boundary holds for the
+standalone editor too. Its header carries From, To, Cc, Bcc, and Subject.
+The From field shows the active identity with a picker, the top-right shows
+the send mode (`text+html` or `text`), and a signature row divides the
+headers from the body. Cc and Bcc collapse to a hint line until focused or
+non-empty.
+
+### 5.2 Address entry and autocomplete
+
+To, Cc, and Bcc take comma-separated addresses. As the user types a trailing
+fragment of two or more characters, a dropdown offers recency-decayed
+suggestions from the cache's address history, ranked by recency and
+frequency, a few at a time. `Tab` or `Enter` accepts the highlighted entry
+and rewrites it as `Name <email>, `. The suggestion seam is the same one
+Pass 7 contacts feed, so CardDAV entries join the dropdown without a second
+code path. It renders only on the focused field and only while the trailing
+fragment is open.
+
+### 5.3 Reply, reply-all, and forward
+
+`r` seeds a reply to the sender. `R` seeds reply-all with the original From
+in To and the original To and Cc in Cc, dropping the user's own identities
+and any duplicates. `f` seeds a forward and carries the parent's attachments
+into the attachment row, each removable.
+
+The parent body quotes with depth-preserving `>` markers, so a reply to a
+reply deepens to `>>`. The cursor lands above the quote, the top-post
+default, with the quote present and trimmable so list-style trimming and
+interleaving stay natural. Threading headers follow RFC 5322. `In-Reply-To`
+is the parent's Message-Id, and `References` extends the parent's References
+with the parent's Message-Id. The reply subject takes a single `Re: ` prefix
+and a forward takes `Fwd: `, neither doubled when already present. Identity
+auto-selection runs per §1.5, matching the delivered-to address with
+alias-pattern awareness, and seeds the chosen identity's default signature.
+
+### 5.4 Identities and signatures
+
+The From field picks the active identity. For a reply or forward the
+candidate set is the owning account's identities, pre-selected by §1.5. For a
+fresh unified compose it starts from the primary account's first identity and
+allows an account switch from the same picker, so the merged view needs no
+separate account modal. Each identity carries an ordered signature list, and
+the first signature is the identity's default. A signature picker in the
+surface switches among them, and each signature carries the RFC 3676 `-- `
+separator. Switching identity re-seeds the new identity's default signature
+unless the user has edited the signature text, which is preserved.
+
+### 5.5 MIME assembly and the text/HTML contract
+
+On send the draft assembles to MIME. The default is multipart/alternative
+with a text/plain part and a text/html part. Its text/plain half is the
+markdown source, lightly reflowed. Its text/html half is the goldmark render
+of that same markdown. That render uses the Pass 4 reader's goldmark
+configuration, so the structure a recipient sees in an HTML client matches
+the structure poplar renders on receive, and a message that round-trips
+through poplar reads the same on both ends. With attachments present the
+alternative nests inside a multipart/mixed wrapper.
+
+Text-only mode drops the HTML part and emits a single text/plain body. An
+identity carries a `text-only` flag, and a per-message toggle in the
+surface's top-right mode indicator overrides it either way. A list identity
+sends clean text by default, and the per-message toggle handles a one-off
+patch from an otherwise rich identity. The markdown source is the wire text
+in this mode, so fenced code blocks and unified diffs pass through unmangled,
+which is the reason a coder's client needs the toggle at all.
+
+### 5.6 Drafts
+
+The surface autosaves to the cache on a debounce and on leave. Leaving with
+`Esc` postpones the draft to Drafts rather than discarding it, with an
+explicit discard path for an empty or unwanted draft. A draft syncs to the
+server Drafts folder so another client sees it. `D` opens Drafts (§3.1), and
+selecting a draft re-opens the compose surface seeded from it, restoring
+identity, recipients, subject, body, attachments, and send mode. On send the
+outbox row carries the `draft_id` FK from the cache contract (§1.7), and the
+drainer deletes the linked draft in the same transaction that records the
+send, so a sent draft does not linger in the folder.
+
+### 5.7 Outbox: send delay, send-later, and undo-send
+
+Send never dispatches inline. `Ctrl-X` queues an outbox row and closes the
+surface, optimistic through the cache. The row's `scheduled_for` defaults to
+the current time plus the send-delay window (`[ui] send-delay`, a few seconds
+by default, zero to disable). During the window the undo chrome row shows a
+countdown and `u` cancels the send, returning the message to Drafts; the
+drainer dispatches the row only once `scheduled_for` has passed and the
+backend is reachable.
+
+Send-later sets `scheduled_for` to a chosen future time through a time picker
+that shares the snooze picker's time parsing. A scheduled message sits in the
+outbox as a visible pending row in the outbox overlay (`Q`), where it can be
+canceled back to a draft or rescheduled. Undo-send and send-later are one
+mechanism. A future `scheduled_for` with a cancel-to-draft inverse covers
+both, so neither is special-cased state. Dispatch failures route through the
+§1.7 conflict matrix by typed sentinel, retrying on `ErrConnection` and
+surfacing on `ErrAuth`, without losing the queued message.
+
+### 5.8 Templates, snippets, and the attachment reminder
+
+Snippets are named reusable bodies stored in config, each a `[[snippet]]`
+block with a name and text. `Ctrl-J` opens a snippet picker filterable by
+name, and choosing one inserts its text at the cursor. A single `{{cursor}}`
+placeholder positions the cursor after insertion, and no other substitution
+applies, which keeps the feature small per the charter. A template is just a
+snippet used as a whole-message starting body, so templates and snippets
+share one mechanism at different scales.
+
+The attachment reminder scans the assembled body at send for
+attachment-intent keywords, the default set covering "attached",
+"attachment", and "enclosed". If the body signals an attachment and none is
+attached, send pauses on a confirm modal offering attach-now or send-anyway.
+The scan runs at send time, so it catches a forgotten attachment after the
+body is final. Its keyword set is overridable for a non-English composing
+language.
+
+### 5.9 AI prose tidy
+
+Tidy is a catkin feature, user-invoked, and never on the send path. `Ctrl-T`
+runs it over the whole body or the current selection. The result shows as an
+in-place diff with insertions and deletions marked inline, and the user
+accepts or rejects the change as a whole or steps through it hunk by hunk.
+Tidy never mutates the body without an explicit accept, and it never fires on
+send or on save. It corrects grammar, clarity, and tone while preserving
+meaning, and it leaves fenced code blocks and quoted text untouched. The
+model and the prompt are catkin's concern, and poplar threads the configured
+provider through. Tidy is offline-optional. With no provider configured the
+key is inert and says so.
+
+### 5.10 Acceptance scenarios
+
+1. `c` opens a blank compose as a non-overlay full pane with the sidebar
+   still drawn, and the surface does not dim an underlay.
+2. Body editing is modeless, every keystroke inserts, and the message-level
+   commands are chords shown in a persistent command row; no body edit
+   requires a mode switch.
+3. Typing a two-character trailing fragment in To, Cc, or Bcc shows
+   recency-decayed address suggestions from the cache, and `Tab` accepts the
+   highlighted entry rewritten as `Name <email>, `.
+4. `r` seeds a reply to the sender, `R` seeds reply-all with the original
+   recipients minus the user's own identities and with no duplicates, and `f`
+   seeds a forward carrying the parent's attachments.
+5. A reply sets `In-Reply-To` to the parent's Message-Id and extends
+   `References` per RFC 5322, quotes the parent body with depth-preserving `>`
+   markers, and lands the cursor above the quote.
+6. A reply to a message delivered to an alias selects the alias-matching
+   identity with alias-pattern awareness and seeds that identity's default
+   signature, and both the identity and the signature are switchable in the
+   header before send.
+7. By default, send assembles multipart/alternative with a text/plain
+   markdown source and a text/html goldmark render matching the Pass 4
+   reader's render of the same markdown.
+8. With attachments, the message is multipart/mixed wrapping the alternative,
+   and each attachment appears in the surface's attachment row and is
+   removable.
+9. With the identity's `text-only` flag set or the per-message text-only
+   toggle on, the message is a single text/plain part with the markdown
+   source as the wire text and no HTML part, and fenced code and diffs pass
+   through unaltered.
+10. Leaving compose with `Esc` postpones the draft to Drafts and syncs it to
+    the server Drafts folder, and an empty draft offers an explicit discard.
+11. Reopening a draft from `D` restores identity, recipients, subject, body,
+    attachments, and send mode, and sending it deletes the linked draft in
+    the same transaction that records the send.
+12. `Ctrl-X` queues the message to the outbox with `scheduled_for` at the
+    current time plus `[ui] send-delay` and closes the surface, and the
+    message is not dispatched during the window.
+13. During the send-delay window the undo chrome row counts down and `u`
+    cancels the send back to Drafts; with `send-delay = 0` the message
+    dispatches as soon as the backend is reachable.
+14. Send-later sets `scheduled_for` to a chosen future time, and the pending
+    row shows in the outbox overlay where it can be canceled to a draft or
+    rescheduled.
+15. A dispatch failure routes through the §1.7 conflict matrix by sentinel,
+    retrying on `ErrConnection` and surfacing on `ErrAuth`, without losing the
+    queued message.
+16. `Ctrl-J` inserts a named config snippet at the cursor, honors a single
+    `{{cursor}}` placeholder, and applies no other substitution.
+17. A body carrying an attachment-intent keyword with no attachment attached
+    pauses send on a confirm modal offering attach-now or send-anyway, and the
+    scan runs at send time.
+18. `Ctrl-T` runs tidy over the body or the selection and shows an in-place
+    accept-or-reject diff; tidy never alters the body without an explicit
+    accept and never runs on send or save, and with no provider configured
+    the key is inert and says so.

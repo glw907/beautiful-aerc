@@ -18,7 +18,7 @@ This runs by default at every pass close ("ship pass", "finish pass", or a compl
 
 ## Current state (2026-05-30)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), and Pass 4 (Message rendering) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), and Pass 5 (Compose and sending) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -111,34 +111,75 @@ Pass 4 outcomes (functional spec §4, 18 acceptance scenarios):
 - Best-practice-first throughout at Geoff's direction; the legacy
   `mailrender-training` system is evidence, not the template.
 
-## Next: Pass 5, compose and sending
+Pass 5 outcomes (functional spec §5, 18 acceptance scenarios):
+- Compose is a modeless full-pane catkin surface, non-overlay so it does not
+  dim, opened by `c`/`r`/`R`/`f`. Vim modal editing is named and deferred; the
+  rebuild ships the Pico-tradition modeless editor. Poplar owns the
+  message-level chords (`Ctrl-X` send, `Ctrl-O` draft, `Ctrl-A` attach,
+  `Ctrl-J` snippet, `Esc` leave) and catkin owns the body and tidy (`Ctrl-T`);
+  the surface claims its chords before delegating, so the boundary holds for
+  the standalone editor.
+- Address entry: To/Cc/Bcc with recency-decayed cache suggestions and
+  `Tab`/`Enter` accept, on the same suggest seam Pass 7 contacts feed.
+- Reply and forward seed depth-preserving `>` quotes with a top-post default
+  and a trimmable quote, RFC 5322 `In-Reply-To` and `References`, and
+  alias-aware identity auto-select (§1.5); forward carries the attachments.
+- MIME: default multipart/alternative with a text/plain markdown source and a
+  text/html goldmark render on the Pass 4 reader's config, so a message
+  round-trips faithfully; multipart/mixed wraps it when attachments are
+  present. A per-identity `text-only` flag plus a per-message toggle drop the
+  HTML part for mailing-list and patch mail, the coder-audience call, and the
+  markdown source becomes the wire text so code and diffs pass unmangled.
+- Drafts autosave to cache, sync to server Drafts, and restore fully on
+  reopen; the outbox row links the draft and the drainer deletes it in the
+  send transaction (§1.7).
+- Outbox: send never dispatches inline. `Ctrl-X` queues with `scheduled_for =
+  now + [ui] send-delay` (a few seconds by default, zero disables) and the
+  undo chrome row cancels within the window. Send-later sets a future
+  `scheduled_for` through the snooze picker's time parse, and the outbox
+  overlay (`Q`) cancels-to-draft or reschedules. Undo-send and send-later are
+  one mechanism with no special-cased state.
+- Templates and snippets share one mechanism: named `[[snippet]]` config
+  bodies inserted on `Ctrl-J` with a single `{{cursor}}` placeholder and no
+  further substitution, kept small per the charter. The attachment reminder
+  scans the body at send for intent keywords and pauses on a confirm modal
+  when none is attached.
+- AI prose tidy is a catkin command on `Ctrl-T`, user-invoked, an in-place
+  accept-or-reject diff, never on send or save, and inert with no provider
+  configured (charter §8).
+- Best-practice-first throughout at Geoff's direction; legacy poplar's compose
+  is evidence, not the template.
 
-Starter prompt (paste after /clear, or say "start Pass 5"):
+## Next: Pass 6, search
+
+Starter prompt (paste after /clear, or say "start Pass 6"):
 
 ```
-Start Pass 5 of the poplar rebuild (compose and sending). A domain spec pass:
-it appends a spec section, it does not build. Read first: the charter section 8
-(catkin and tidy) and section 6 decision 9 (templates/snippets, attachment
-reminder), the gap analysis section 5 (composing and sending), and functional
-spec section 1.5 (identities and alias auto-selection) and section 3.5 (the
-reader the reply and forward flows launch from).
+Start Pass 6 of the poplar rebuild (search). A domain spec pass: it appends a
+spec section, it does not build. Read first: the gap analysis section 6
+(search), and functional spec section 1.7 (the cache and sync contract, which
+defers the FTS5 index shape to this pass), section 2.3 (saved searches and
+virtual folders, the stored-query mechanism this pass shares), and section 3
+(the keyboard model's `/` search shelf, `n`/`N` match stepping, and the
+results-mode list).
 
-Pass 5 owns the outbound surface. Derive from the field and current best
-practice, not from legacy poplar. Brainstorm and settle, then spec:
-- The catkin compose surface: the markdown editor kept poplar-agnostic for a
-  standalone spinoff, address entry with autocomplete, and how reply,
-  reply-all, and forward seed a draft.
-- MIME assembly: markdown to multipart/alternative, attachments to
-  multipart/mixed, and the text-plus-HTML fidelity contract against Pass 4's
-  renderer.
-- Signatures and identities: per-identity multi-signature selection and
-  alias-pattern auto-selection on reply.
-- Drafts, send-later, and undo-send: the outbox state machine, the scheduled
-  send window, and the cancel-and-reschedule mechanics.
-- Templates and snippets and the attachment reminder.
-- AI prose tidy folded into catkin, user-invoked and never on the send path.
+Pass 6 owns the search layer. Derive from the field and current best practice,
+not from legacy poplar. Brainstorm and settle, then spec:
+- The local FTS5 index in the per-account cache: its schema, what is indexed
+  (envelope, body, attachment text), and how it stays in sync with the message
+  cache.
+- The query language: typed operators (`from:`, `to:`, `subject:`,
+  `has:attachment`, `is:read`, and the date and size operators the gap
+  analysis flags as missing), free-text terms, and how they combine.
+- Scope: folder, account, and cross-account (unified) search, and how scope
+  ties to the sidebar and the stored-query mechanism from section 2.3.
+- Search-as-you-type: incremental results against the local index, operator
+  suggestion, and the throttle that keeps it responsive.
+- Saved searches: the run surface for the stored queries section 2.3 defined,
+  including cross-account saved searches as the path to unified views beyond
+  the inbox.
 End with numbered acceptance scenarios appended to the functional spec
-section 5.
+section 6.
 
 Pass-end: run the Pass-end ritual at the top of this STATUS. It updates this
 STATUS by default.
@@ -146,4 +187,4 @@ STATUS by default.
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [next] -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [next] -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
