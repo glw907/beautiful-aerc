@@ -260,6 +260,8 @@ Pass 8 outcomes (functional spec §8, 10 acceptance scenarios):
 
 ## Next: build plans (post-spec)
 
+Before the build plans, a three-pass spec-hardening review runs: a gap hunt, a critique, then an integrate-and-reformat pass. Its tracker and starter prompts are `docs/superpowers/specs/spec-hardening-STATUS.md`. The build-plan starter prompt below applies once that review completes.
+
 Spec phase is complete. The canonical functional spec is locked pending Geoff's
 review at the consolidation gate. Next comes the phase that turns the locked spec
 into numbered TDD build plans, then the clean build (charter §9).
