@@ -1,4 +1,11 @@
-# Poplar Status
+# Poplar Status (ARCHIVED dogfood track)
+
+> **This track is archived.** The dogfood client shipped through Pass 45
+> and is preserved at tag `poplar-legacy` and branch `legacy`. Active
+> work is the greenfield rebuild: see
+> `docs/superpowers/specs/poplar-rebuild-STATUS.md`. On "continue" or
+> "next pass", go there, not here. Everything below is the historical
+> dogfood record, kept as reference.
 
 **Current pass:** Pass 45 landed catkin render-time soft wrap
 (ADR-0243). Pass 46+ is rolling dogfood-driven work.

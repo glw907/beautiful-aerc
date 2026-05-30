@@ -1,6 +1,6 @@
 # Poplar Rebuild: STATUS
 
-**Track:** Greenfield spec-first rebuild. Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`. This is separate from the live poplar tracker at `docs/poplar/STATUS.md`.
+**Track:** Greenfield spec-first rebuild. The sole active track. Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`. The old dogfood client is archived at tag `poplar-legacy` and branch `legacy`; its tracker `docs/poplar/STATUS.md` is retired reference.
 
 ## Current state (2026-05-29)
 

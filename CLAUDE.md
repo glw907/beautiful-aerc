@@ -4,6 +4,17 @@ A bubbletea terminal email client. Single binary, built from one Go
 module. Opinionated, vim-first, showcase-quality — "better Pine,"
 not "better mutt."
 
+> **Active work: the rebuild.** Poplar is being rebuilt greenfield,
+> spec-first. The dogfood client described in this file and in
+> `invariants.md` is archived at tag `poplar-legacy` and branch
+> `legacy`, kept as reference. On "continue" or "next pass", read
+> `docs/superpowers/specs/poplar-rebuild-STATUS.md` and the charter
+> `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`. The
+> rebuild is in its spec phase: Passes 1 through 8 write the spec and
+> build no code. The greenfield tree replaces the archived code at the
+> build boundary. Everything below this banner describes the archived
+> client and stays valid as reference.
+
 @docs/poplar/invariants.md
 
 ## Release stance

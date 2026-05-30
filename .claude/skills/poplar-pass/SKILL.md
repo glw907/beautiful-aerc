@@ -1,14 +1,21 @@
 ---
 name: poplar-pass
 description: >
-  Invoke at the start or end of a poplar development pass. Covers the
-  pass-end consolidation ritual (ADR writing, invariants update, plan
-  archival, commit + push + install) and the starter-prompt format
-  for the next pass. Trigger on "continue development", "next pass",
-  "finish pass", "ship pass", or explicit invocation.
+  ARCHIVED dogfood-track ritual for the old poplar client (tag
+  `poplar-legacy`). Active poplar work is the greenfield rebuild: do
+  not invoke this on a plain "continue" or "next pass". Read
+  `docs/superpowers/specs/poplar-rebuild-STATUS.md` instead. Invoke
+  only when the user explicitly asks to work on the archived client.
 ---
 
-# Poplar Pass
+# Poplar Pass (archived dogfood ritual)
+
+> **This skill is the archived dogfood ritual.** Active poplar work is
+> the greenfield rebuild, whose pass flow lives in
+> `docs/superpowers/specs/poplar-rebuild-STATUS.md`. If you reached
+> this skill on a "continue" or "next pass" trigger, stop and read that
+> STATUS instead. Use the ritual below only when the user explicitly
+> asks to work on the archived client (tag `poplar-legacy`).
 
 Poplar development proceeds in numbered passes. Each pass has a
 starter prompt in `docs/poplar/STATUS.md`, a plan doc under
