@@ -1,0 +1,50 @@
+# Poplar rebuild commit gate. Drop into the greenfield tree's Makefile.
+#
+# Carries the current poplar gate forward (fmt-check, vet, voice,
+# modern-go-check, skipcheck, test) with three changes for the rebuild:
+#   1. gofumpt replaces gofmt (backward-compatible superset).
+#   2. modern-go-check runs strict (exit 1) instead of soft-warn.
+#   3. golangci-lint joins the gate (config: .golangci.yml in this dir).
+#
+# The three companion scripts (scripts/voice-check.sh,
+# scripts/modern-go-check.sh, scripts/skipcheck/) carry forward verbatim
+# from the current tree. Only the modern-go-check invocation changes,
+# via MODERN_GO_STRICT=1; the script already honors that flag.
+
+GOFUMPT ?= gofumpt
+GOLANGCI_LINT ?= golangci-lint
+
+.PHONY: check fmt fmt-check vet voice modern-go-check skipcheck lint test
+
+check: fmt-check vet voice modern-go-check skipcheck lint test
+
+fmt:
+	$(GOFUMPT) -w .
+
+fmt-check:
+	@out=$$($(GOFUMPT) -l .); \
+	if [ -n "$$out" ]; then \
+		echo "gofumpt: $$out"; \
+		echo "run: gofumpt -w ."; \
+		exit 1; \
+	fi
+
+vet:
+	go vet ./...
+
+voice:
+	@./scripts/voice-check.sh
+
+modern-go-check:
+	@MODERN_GO_STRICT=1 ./scripts/modern-go-check.sh
+
+skipcheck:
+	@go run ./scripts/skipcheck
+
+lint:
+	$(GOLANGCI_LINT) run
+
+# The dev build tag (MockBackend in the current tree) is a domain-pass
+# decision; add -tags=dev here if the rebuild keeps a build-tagged mock.
+test:
+	go test ./...

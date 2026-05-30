@@ -1,0 +1,40 @@
+# Poplar rebuild golangci-lint config (golangci-lint v2 schema).
+#
+# Drop-in artifact: copy to the greenfield tree root as .golangci.yml
+# when the tree is created. Validated with `golangci-lint config verify`
+# against v2.12.2 (Pass I, 2026-05-29).
+#
+# The standard default set (errcheck, govet, ineffassign, staticcheck,
+# unused) carries the current poplar linters; gosimple folded into
+# staticcheck in v2. The enabled extras catch the structural LLM-isms
+# the grep-tier voice gate cannot see: single-impl interfaces, context
+# in structs, un-propagated context, named returns, and missing doc
+# periods.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - unparam        # unused function parameters (carried from v1 config)
+    - iface          # single-impl / unused / identical interfaces (the biggest /simplify gap)
+    - containedctx   # context.Context stored in a struct
+    - contextcheck   # context not propagated through a call chain
+    - nonamedreturns # named returns read explanatory and cause naked-return bugs
+    - godot          # doc comments end in a period
+  settings:
+    errcheck:
+      check-type-assertions: true
+    unused:
+      exported-fields-are-used: false
+    godot:
+      scope: declarations
+  exclusions:
+    generated: lax
+    # Start strict. The greenfield tree is clean from day one, so a
+    # domain pass that needs a per-linter exclusion adds it here with a
+    # one-line rationale rather than carrying a blanket allowance now.
+    rules:
+      - path: _test\.go
+        linters:
+          - containedctx
+          - contextcheck
