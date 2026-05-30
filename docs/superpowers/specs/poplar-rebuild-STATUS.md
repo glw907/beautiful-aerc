@@ -2,9 +2,11 @@
 
 **Track:** Greenfield spec-first rebuild. The sole active track. Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`. The old dogfood client is archived at tag `poplar-legacy` and branch `legacy`; its tracker `docs/poplar/STATUS.md` is retired reference.
 
+**Canonical functional spec:** `docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md`. Domain passes append sections; Pass 8 consolidates.
+
 ## Current state (2026-05-29)
 
-Pass 0 (Charter) and Pass I (Claude infrastructure refresh) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), and Pass 1 (Accounts, protocols, sync) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -12,40 +14,40 @@ Pass 0 artifacts:
 - Infra-refresh research: `docs/poplar/research/2026-05-29-infra-refresh-research.md`.
 
 Pass I outcomes:
-- `CLAUDE_CODE_SUBAGENT_MODEL` set to `inherit`, so each agent's frontmatter model resolves normally (verified against the model-config doc). The five user agents pin full model IDs; the reviewers run Opus again, which is what their frontmatter always declared.
-- Rebuild agents in `.claude/agents/`: `poplar-implementer` (Sonnet, dispatch `model:opus` for judgment-heavy), `poplar-reviewer` (Opus, spec plus quality, effort high), `poplar-go-reviewer` (Sonnet, conventions).
-- Gate artifacts in `docs/superpowers/specs/rebuild-gate/`: `Makefile.gate`, `.golangci.yml` (v2 schema, validated; golangci-lint joins the gate, gofumpt replaces gofmt, modern-go-check runs strict), and `README.md` (gate, model-per-role table, orchestration default).
-- Go-idiom catalogue extended: tells T42 (reflexive pointer receivers) and T43 (goroutine without lifecycle coordination), plus a `cmp.Or` coalescing voice-lens note. Mirrored in the go-conventions skill.
-- Plan and execution record: `docs/superpowers/plans/2026-05-29-pass-I-infra-refresh.md`.
-- Greenfield tree location stays deferred to the spec-to-build boundary (charter §11), affirmed this pass.
+- `CLAUDE_CODE_SUBAGENT_MODEL` set to `inherit`; rebuild agents in `.claude/agents/` (`poplar-implementer`, `poplar-reviewer`, `poplar-go-reviewer`); gate artifacts in `docs/superpowers/specs/rebuild-gate/`; Go-idiom catalogue extended (T42, T43). Record: `docs/superpowers/plans/2026-05-29-pass-I-infra-refresh.md`.
+- Orchestration default: `subagent-driven-development` for domain passes; Workflow for wide fan-out.
 
-Orchestration default: `subagent-driven-development` for the domain passes; Workflow for wide independent fan-out; `ultracode` as the middle path.
+Pass 1 outcomes (functional spec §1, 15 acceptance scenarios):
+- Decision 1: account-partitioned with a unified view (Thunderbird/K-9 model); one SQLite DB per account; unified inbox is a read-side k-way merge by `SentAt`, cursor composite `(account, UID, SentAt)`; writes always account-scoped.
+- Decision 2: folders single-membership, labels server-backed and capability-gated (`SupportsLabels`), gated off on plain IMAP without persistable custom keywords; labels additive so the folder tree stays primary nav.
+- Best-practice-first framing adopted at Geoff's direction (see memory). OAuth per RFC 8252 loopback+PKCE plus RFC 8628 device-code; bring-your-own client for v1 (Gmail restricted-scope CASA reality, verified 2026-05-29); credential source is config so a shipped verified client is a post-1.0 preset change; alias-pattern identities in; performance-by-locality cache principle.
+- Audience is Gmail-first; Geoff dogfoods Fastmail (JMAP bearer token, no OAuth), so Gmail/Outlook OAuth onboarding needs explicit test coverage and a live-OAuth gate in the build phase.
 
-## Next: Pass 1, accounts, protocols, sync
+## Next: Pass 2, organization, threading, automation
 
-Starter prompt (paste after /clear, or say "start Pass 1"):
+Starter prompt (paste after /clear, or say "start Pass 2"):
 
 ```
-Start Pass 1 of the poplar rebuild (accounts, protocols, sync). This is a
-domain spec pass: it writes a spec section, it does not build. Read first:
-docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md (esp. section 5
-seams 1 and 2, section 6 decisions 1 and 2) and
-docs/poplar/research/2026-05-29-mail-client-gap-analysis.md.
+Start Pass 2 of the poplar rebuild (organization, threading, automation). A
+domain spec pass: it appends a spec section, it does not build. Read first:
+docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md section 1
+(the settled account, folder, and label model), the charter section 6
+decisions 3 to 5, and the gap analysis section 2.
 
-Brainstorm and settle the two foundational decisions, then write the spec
-section and append it to the canonical functional spec:
-1. Multiple accounts plus unified inbox: cache layout, credential storage,
-   sidebar shape, per-account vs unified views.
-2. Labels/tags vs folders-only: whether labels are a poplar-side overlay or
-   strictly server-backed (JMAP multi-membership maps cleanly).
-Then specify the Backend interface (JMAP and IMAP coequal), identities, the
-OAuth flow, and the cache/sync contract. End with numbered acceptance
-scenarios.
+Pass 1 settled the data model: folders single-membership, labels server-backed
+and capability-gated. Pass 2 builds organization on top of it. Brainstorm and
+settle, then spec:
+- Saved searches and virtual folders (ties to Pass 6 search).
+- Server-side filters: Sieve for JMAP, with a client-visible rule config.
+- Snooze and thread mute (mute routes future replies out of the inbox).
+- Label UX and operations: apply, remove, label-scoped views, multi-label.
+- Triage model across folders and the unified inbox; next-unread across folders.
+End with numbered acceptance scenarios appended to the functional spec
+section 2.
 
-Pass-end: update the rebuild STATUS and append the execution record. The
-Pass I gate and agents are live; domain passes that build later use them.
+Pass-end: update the rebuild STATUS and append the execution record.
 ```
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [next] -> 2 Organization -> 3 Reading/triage -> 4 Rendering -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [next] -> 3 Reading/triage -> 4 Rendering -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
