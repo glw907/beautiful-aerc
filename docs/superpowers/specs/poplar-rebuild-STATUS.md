@@ -185,6 +185,27 @@ Pass-end: run the Pass-end ritual at the top of this STATUS. It updates this
 STATUS by default.
 ```
 
+## Carry-forward considerations
+
+Items that span passes and resolve at consolidation, not in the pass that
+raised them.
+
+- Keyboard command order and grouping, reviewed holistically across every
+  key-bearing surface: the account view and reader (§3.1), the compose editor
+  chords (§5.1), the search keys (Pass 6), and the contacts keys (Pass 7).
+  Their full set exists only after Pass 7, so Pass 8 orders and groups it in
+  one place, in the editor and outside it, and reflects the result back into
+  the owning sections and the help popover. The build also wants a single
+  source of truth for the binding tables so the help popover and the docs do
+  not drift from the code.
+- Command visibility across the responsive tiers (§3.2). That grouping review
+  decides which commands and on-screen affordances surface, fold into the help
+  popover, or recede at narrower widths, the same data-driven cliff the chrome
+  (date and flag columns, label chips, sidebar) already rides down to Spartan.
+  A command stays bound when its surface is reachable; what changes by tier is
+  what the chrome advertises and how the command rows and the help popover
+  prioritize, so a smaller screen hides the hint, not the key.
+
 ## Pass roadmap
 
 (Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [next] -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
