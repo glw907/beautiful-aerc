@@ -1357,3 +1357,208 @@ key is inert and says so.
     accept-or-reject diff; tidy never alters the body without an explicit
     accept and never runs on send or save, and with no provider configured
     the key is inert and says so.
+
+---
+
+## 6. Search
+
+Owner: Pass 6. Fills the FTS index shape section 1.7 deferred to this pass,
+binds the query grammar section 2.3's stored queries hold, and drives the
+search shelf, match stepping, and results mode section 3 framed. Search is
+local-index-first by section 1.7's performance-by-locality rule. Server search
+is too slow and inconsistent to sit on the read path, so every search resolves
+against a local FTS5 index in the per-account cache and stays responsive enough
+to run as the user types. The field survey behind these decisions is
+`docs/poplar/research/2026-05-29-mail-client-gap-analysis.md` §6. Decisions
+derive from the field and current practice; legacy poplar's search layer is
+evidence, not the baseline.
+
+### 6.1 The local FTS5 index
+
+Each account's cache holds one FTS5 virtual table, `messages_fts`, with its
+rowid keyed to the message row. A write happens inside the same transaction
+that mutates the message it mirrors, so the index never drifts from the cache.
+FTS5 has no UPSERT, so an update is a DELETE then an INSERT. The table carries
+its own content rather than running contentless, because contentless delete
+semantics are awkward and the storage cost of a plain table is small.
+
+The index splits full text from structured metadata. Its FTS5 columns hold the
+matchable text, subject, from, to, cc, body, and attachment text. Predicates a
+query filters on rather than matches against stay in the regular message and
+attachment tables as SQL constraints, among them folder, account,
+`SentAt`, size, flags, label, and attachment presence. A parsed query compiles
+to one FTS5 `MATCH` expression and a set of SQL `WHERE` clauses over those
+columns. This is the same full-text-versus-metadata split notmuch and the web
+clients draw.
+
+The tokenizer is `unicode61` with diacritic folding and a prefix index, so a
+prefix query for search-as-you-type resolves quickly. There is no stemming, so
+an identifier or a code token matches exactly for the coder audience, and
+recall comes from the explicit prefix wildcard instead.
+
+What the index covers, and when each part populates, follows the cache's sync
+model from section 1.7.
+
+- **Envelope.** Subject and addresses index eagerly, in the same transaction
+  as the metadata sync section 1.7 runs per folder, so envelope search is
+  complete for every message the cache knows.
+- **Body.** A body indexes when its raw MIME is cached, through the shared
+  plain-text extraction, whether the body was fetched on demand or pulled by
+  the backfiller below.
+- **Attachments.** Filename and content-type index for `has:attachment` and
+  `filename:`, alongside extracted text from `text/*` parts. Text extraction
+  from binary formats such as PDF and DOCX is named here and deferred post-1.0.
+
+Because bodies fetch on demand, the body column would otherwise cover only
+opened messages. A throttled per-account body backfiller closes that gap. It
+walks messages that carry an envelope but no cached body, fetches and caches
+each one, which populates its FTS body column, and backs off under backend
+pressure with an exponential delay. A `warn` substate surfaces in the status
+bar while the backfiller sits in that backoff, so a user sees when index depth
+is waiting on the server. Foreground reads stay local-first while the
+backfiller runs behind them.
+
+The whole FTS table is a rebuildable projection under section 1.7. A schema
+change drops and rebuilds it from the message rows and the cached bodies with
+no network refetch, so the index never falls under section 1.7's
+do-not-discard line.
+
+### 6.2 The query language
+
+A pure `Parse` function turns the query string into a query value with no I/O.
+The grammar is Gmail-compatible, the syntax the coder audience already carries.
+A bare term matches across subject, addresses, body, and attachment text, and
+bare terms combine by implicit AND. A quoted string is an exact phrase match.
+
+The typed operators fall into text, structured, date, and size families.
+
+- **Text.** `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`, and
+  `filename:` each match the field they name.
+- **Structured.** The structured operators are `in:` (alias `folder:`),
+  `account:`, `label:`, `has:attachment`, and `is:` taking `read`, `unread`,
+  `starred`, `replied`, `snoozed`, or `muted`.
+- **Date.** `before:` and `after:` take a calendar date, and `newer_than:` and
+  `older_than:` take a relative span such as `7d`, `2w`, or `3m`.
+- **Size.** `larger:` and `smaller:` take a byte count with a `k` or `M`
+  suffix.
+
+Boolean structure wraps the terms and operators. Two parts combine by implicit
+AND, `OR` unions two sides, parentheses group, and a `-` prefix negates the
+term or operator that follows. `account:` is the operator the multi-account
+model adds, since a cross-account search needs a way to name one account. An
+unknown `key:value` falls through as a bare term, so an operator typo widens
+the result set rather than silently shrinking it.
+
+Results sort by `sent_at` descending with no relevance toggle, the default
+Geary, K-9, aerc, Apple Mail, Outlook, and Fastmail all settle on.
+
+### 6.3 Scope
+
+A search runs at one of three scopes, a single folder, one account's whole
+tree, or across every account. The three line up with the sidebar context from
+section 3.3 and with the stored-query scope section 2.3 defined.
+
+Scope defaults to where the sidebar cursor sits. A search from a folder
+searches that folder, a search from an account header searches that account,
+and a search from the Unified Inbox or a cross-account saved search searches
+across accounts. The shelf's scope key (`\`, the legacy toggle, now a
+three-stop cycle, reconciled against the locked section 3 keymap in the build
+phase) steps folder to account to all, and the shelf badge names the active
+scope. The `in:` and `account:` operators override the scope from inside the
+query, so a folder-scoped shelf still reaches another folder by naming it.
+
+Results render in the section 3.4 results mode, a flat list with an account
+marker on each row when the scope crosses accounts and an origin-folder prefix
+when it crosses folders.
+
+### 6.4 Search-as-you-type
+
+The shelf searches incrementally and only ever against the local index, so it
+stays responsive with the network down. Each keystroke, after a short debounce,
+re-runs the query and refreshes the list. The trailing term takes a prefix
+wildcard against the prefix index from section 6.1, so a partial word matches
+while a completed operator or a quoted phrase stays exact. A query still in
+flight is superseded by the next keystroke rather than queued, and every query
+carries a row limit, so a fast typist never stacks work.
+
+Operator suggestion runs alongside the typing. A leading fragment such as `fr`
+offers `from:`, and `in:`, `is:`, and `label:` offer their valid values, the
+folder names, the flag names, and the existing labels. Tab accepts the
+highlighted suggestion.
+
+### 6.5 Saved searches
+
+Section 2.3 fixed the stored-query shape (a name, a query, and a scope),
+config-persisted and runtime-creatable. Section 6 binds the section 6.2 grammar
+and the section 6.3 scope into that shape and gives it a run surface.
+
+Saving the current shelf query is a shelf action on its own key. The key
+prompts for a name and writes a `[[saved-search]]` block through the same
+`config.Render` round-trip section 1 relies on, so a search saved in the UI
+survives a restart as config. Its key is reconciled against the locked section
+3 keymap in the build phase, the way section 4.2 reconciled the render-mode
+key.
+
+Saved searches sit in the sidebar Saved Searches group from section 3.3.
+Selecting one runs its stored query at its stored scope against the local FTS
+index and renders the matches in results mode. A saved search is a projection,
+never a stored result set, so it re-runs on open and on the change events that
+touch its scope, the rule section 2.3 set. One of these saved searches is the
+label view, the query `label:<name>`, per section 2.2.
+
+Cross-account saved searches scope across accounts and list matches from every
+account in scope, each row carrying its account marker and dispatching triage
+to its owning account. This is the section 2.3 path to unified surfaces
+past the inbox, such as a flagged-across-accounts view. Editing a saved
+search's query or scope and deleting one both run through the same config
+round-trip.
+
+### 6.6 Acceptance scenarios
+
+1. Each account's cache holds one `messages_fts` FTS5 table; an envelope
+   indexes in the same transaction as the message metadata sync, so envelope
+   search is complete for every known message.
+2. A parsed query compiles to one FTS5 `MATCH` over the text columns plus SQL
+   `WHERE` constraints over folder, account, date, size, flags, label, and
+   attachment presence.
+3. A body indexes when its MIME is cached; the body backfiller fetches
+   un-cached bodies in the background, deepens the index, and backs off under
+   backend pressure with a `warn` substate shown in the status bar.
+4. Attachment filename and content-type index for `has:attachment` and
+   `filename:`, and `text/*` attachment parts contribute their extracted text;
+   binary-format extraction is absent and named as deferred.
+5. With the network down, a search resolves against the local index and stays
+   responsive as the query grows character by character.
+6. Text operators `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`, and
+   `filename:` each match their named field.
+7. Structured operators `in:`/`folder:`, `account:`, `label:`,
+   `has:attachment`, and `is:` apply each as a SQL constraint.
+8. The parser reads the `before:`, `after:`, `newer_than:`, and `older_than:`
+   date operators and the `larger:` and `smaller:` size operators with
+   byte-suffix values.
+9. Implicit AND joins bare terms, `OR` unions, parentheses group, and a `-`
+   prefix negates; a quoted string matches as an exact phrase.
+10. An unknown `key:value` is treated as a bare term, so an operator typo does
+    not silently shrink the result set.
+11. Results sort by `sent_at` descending, with no relevance-sort toggle.
+12. Search scope defaults to the sidebar cursor's context (folder, account, or
+    cross-account); the scope key cycles folder to account to all, and the
+    badge names the active scope.
+13. An `in:` or `account:` operator overrides the active scope from inside the
+    query.
+14. Search-as-you-type re-runs on each debounced keystroke, wildcards the
+    trailing term against the prefix index, supersedes an in-flight query
+    rather than queuing it, and caps result rows.
+15. Operator suggestion offers an operator for a leading fragment and offers
+    valid values for `in:`, `is:`, and `label:`, accepted with Tab.
+16. Saving the current search writes a `[[saved-search]]` config block through
+    the `config.Render` round-trip and survives a restart as a sidebar saved
+    search.
+17. Selecting a saved search runs its stored query at its stored scope against
+    the local index and renders the matches in results mode; it re-runs on open
+    and on change events touching its scope.
+18. A cross-account saved search lists matches from every in-scope account, each
+    row carrying its account marker and dispatching triage to its owning
+    account.
+19. A label view resolves as the saved search `label:<name>`, using the same
+    stored-query mechanism as a user-defined saved search.

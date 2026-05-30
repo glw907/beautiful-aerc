@@ -18,7 +18,7 @@ This runs by default at every pass close ("ship pass", "finish pass", or a compl
 
 ## Current state (2026-05-30)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), and Pass 5 (Compose and sending) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), Pass 5 (Compose and sending), and Pass 6 (Search) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -150,36 +150,73 @@ Pass 5 outcomes (functional spec §5, 18 acceptance scenarios):
 - Best-practice-first throughout at Geoff's direction; legacy poplar's compose
   is evidence, not the template.
 
-## Next: Pass 6, search
+Pass 6 outcomes (functional spec §6, 19 acceptance scenarios):
+- FTS5 substrate: one own-content `messages_fts` table per account, rowid-keyed
+  to the message row, written in the message's own transaction (DELETE+INSERT,
+  no UPSERT). Full text and structured metadata split: FTS5 columns hold
+  subject, addresses, body, and attachment text, while folder, account, date,
+  size, flags, label, and attachment presence stay SQL constraints, so a query
+  compiles to one MATCH plus WHERE clauses. Tokenizer is `unicode61` with
+  diacritic folding and a prefix index, no stemming, so code tokens match
+  exactly and recall comes from the explicit prefix wildcard.
+- Index coverage: envelope eager and complete; body indexed when its MIME is
+  cached; attachments index filename, content-type, and `text/*` extracted
+  text, with binary extraction (PDF, DOCX) deferred post-1.0. A throttled
+  per-account body backfiller fetches un-cached bodies to deepen body search,
+  backing off under backend pressure with a status-bar `warn` substate. The FTS
+  table is a rebuildable projection per §1.7.
+- Query language: Gmail-compatible, parsed by a pure `Parse`. Text operators
+  (`from:` `to:` `cc:` `bcc:` `subject:` `body:` `filename:`), structured
+  (`in:`/`folder:` `account:` `label:` `has:attachment` `is:`), date (`before:`
+  `after:` `newer_than:` `older_than:`), size (`larger:` `smaller:`), boolean
+  AND and OR, parentheses, `-` negation, and quoted phrases. `account:` is the
+  multi-account addition; an unknown `key:value` falls through as a bare term.
+  Sort is `sent_at` descending with no relevance toggle.
+- Scope: folder, account, or cross-account, defaulting to the sidebar cursor's
+  context; the shelf scope key (`\`) cycles the three stops; `in:`/`account:`
+  override from inside the query. Results render in the §3.4 results mode.
+- Search-as-you-type: incremental against the local index only, debounced, with
+  a trailing-term prefix wildcard, an in-flight query superseded rather than
+  queued, and a row limit; operator suggestion completes values for `in:`,
+  `is:`, and `label:`.
+- Saved searches: §2.3's stored query gains the §6.2 grammar and a run surface.
+  Saving the shelf query writes a `[[saved-search]]` config block through the
+  round-trip; saved searches run from the sidebar group, re-run on open and on
+  scope-touching change events, and never store results. A label view is the
+  saved search `label:<name>`, and cross-account saved searches are the path to
+  unified surfaces past the inbox.
+- Best-practice-first at Geoff's direction; legacy poplar's FTS5 search layer is
+  evidence, not the template. Three tradeoffs settled with Geoff: background
+  body backfill for index completeness, `text/*` attachment extraction, and the
+  full Gmail-compatible grammar.
 
-Starter prompt (paste after /clear, or say "start Pass 6"):
+## Next: Pass 7, contacts, calendar, security
+
+Starter prompt (paste after /clear, or say "start Pass 7"):
 
 ```
-Start Pass 6 of the poplar rebuild (search). A domain spec pass: it appends a
-spec section, it does not build. Read first: the gap analysis section 6
-(search), and functional spec section 1.7 (the cache and sync contract, which
-defers the FTS5 index shape to this pass), section 2.3 (saved searches and
-virtual folders, the stored-query mechanism this pass shares), and section 3
-(the keyboard model's `/` search shelf, `n`/`N` match stepping, and the
-results-mode list).
+Start Pass 7 of the poplar rebuild (contacts, calendar, security). A domain
+spec pass: it appends a spec section, it does not build. Read first: the gap
+analysis section 7 (contacts, calendar, security), and functional spec section
+1.6 (OAuth and credentials, which CardDAV contacts credentials fall back to),
+section 3.5 (the reader's sender line reserves `i` as this pass's contact hook,
+and the Labels row carrying snooze and mute state), and section 5.2 (the
+compose address autocomplete seam this pass's contacts feed).
 
-Pass 6 owns the search layer. Derive from the field and current best practice,
-not from legacy poplar. Brainstorm and settle, then spec:
-- The local FTS5 index in the per-account cache: its schema, what is indexed
-  (envelope, body, attachment text), and how it stays in sync with the message
-  cache.
-- The query language: typed operators (`from:`, `to:`, `subject:`,
-  `has:attachment`, `is:read`, and the date and size operators the gap
-  analysis flags as missing), free-text terms, and how they combine.
-- Scope: folder, account, and cross-account (unified) search, and how scope
-  ties to the sidebar and the stored-query mechanism from section 2.3.
-- Search-as-you-type: incremental results against the local index, operator
-  suggestion, and the throttle that keeps it responsive.
-- Saved searches: the run surface for the stored queries section 2.3 defined,
-  including cross-account saved searches as the path to unified views beyond
-  the inbox.
+Pass 7 owns contacts, calendar, and security. Derive from the field and current
+best practice, not from legacy poplar. Brainstorm and settle, then spec:
+- Contacts: CardDAV sync with multiple address books and auto-collect from
+  sent, the contact popover on the reader's `i` hook, and the contacts mode,
+  and how the section 5.2 suggestion seam and the cache feed both.
+- Calendar: inline ICS invite display and one-action RSVP, which the gap
+  analysis flags as the missing piece, and how the response sends.
+- Security: a sender-verification surface from DKIM and DMARC results, and the
+  scope decision on PGP and S/MIME, which the gap analysis flags as a scope
+  call rather than an automatic include.
+- List-Unsubscribe one-click carries forward from the legacy reader; place it
+  against this pass's security surface.
 End with numbered acceptance scenarios appended to the functional spec
-section 6.
+section 7.
 
 Pass-end: run the Pass-end ritual at the top of this STATUS. It updates this
 STATUS by default.
@@ -208,4 +245,4 @@ raised them.
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [next] -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [done] -> 7 Contacts/calendar/security [next] -> 8 Consolidation -> build plans + clean build.
