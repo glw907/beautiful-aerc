@@ -41,8 +41,9 @@ Every message has exactly one **folder** and zero or more **labels**.
 Folders are single-membership and define a message's location. They classify
 per account through the pure function `Classify([]Folder) []ClassifiedFolder`
 (Inbox, Sent, Trash, Archive, Drafts, Junk, Custom). Provider names normalize
-to canonical display names regardless of JMAP or IMAP naming. Move and triage
-semantics operate on the folder.
+to canonical display names regardless of JMAP or IMAP naming. Junk and Trash
+are the Disposal folders the empty action targets (section 3.6). Move and
+triage semantics operate on the folder.
 
 Labels are the multi-membership overlay: account-scoped, server-backed tags
 that persist through the backend's native mechanism (JMAP keyword, Gmail
@@ -302,11 +303,11 @@ to the stored-query shape and its behavior.
 Stored queries persist in config and are also creatable at runtime by
 saving the current search. A runtime save writes back through the same
 `config.Render` round-trip section 1 relies on, so a saved search the user
-creates in the UI survives a restart as a config entry. They appear as
-virtual folders in the sidebar next to the classified folder tree.
+creates in the UI survives a restart as a config entry. They appear in the
+sidebar's Saved Searches group next to the classified folder tree.
 
 A stored query is a projection, never a stored result set. Opening one runs
-the query against the local FTS index, so it resolves offline and stays
+the query against the local FTS5 index, so it resolves offline and stays
 responsive, per section 1's performance-by-locality and local-index-first
 rules. It refreshes on open and on the change events that touch its scope.
 
@@ -374,7 +375,8 @@ server path is confirmed against the live account capability at build time.
 
 Mute means future replies to a thread skip the inbox, with archive
 semantics, so the thread stays reachable in Archive or All Mail. Mute has
-no standard primitive, so its engine is also capability-tiered. Gmail uses
+no standard primitive, so its engine is capability-tiered through
+`SupportsNativeMute`. Gmail uses
 its native `Muted` label over `X-GM-LABELS`, which the Gmail server
 enforces against future replies. A Sieve-capable backend gets a generated
 mute rule, keyed on the thread, written into the same managed block section
@@ -455,7 +457,7 @@ section fixes the operations and their capability gates.
 12. A Gmail-over-IMAP account and a plain IMAP account without ManageSieve
     report `SupportsServerRules = false`, and the rule surface states that
     server rules are unavailable.
-13. On a backend advertising server snooze, a snoozed thread leaves the
+13. On a backend with `SupportsServerSnooze`, a snoozed thread leaves the
     inbox and returns at the wake time while poplar is closed; on a backend
     without it, the thread returns on the next sync after the wake time,
     and the UI states the difference.
@@ -525,6 +527,7 @@ The full account-view key map:
 | `r` / `R` / `f` / `c` | Reply / reply all / forward / compose |
 | `t` / `P` | Threaded-flat toggle / preview-pane toggle |
 | `v` / `V` | Manual visual select / select-by-criteria |
+| `C` | Contacts mode (section 7.3) |
 | `/` | Search shelf |
 | `u` | Undo last triage (within the undo window) |
 | `Q` / `!` | Outbox overlay / conflict overlay |
@@ -532,8 +535,12 @@ The full account-view key map:
 
 The viewer keeps `j`/`k`/`Space`/`b`/`g`/`G` for scroll, `n`/`N` for the
 next and previous visible message, `Tab` and `1`-`9` for links, `@` for
-attachments, `U` for unsubscribe, and `q` to close. Triage, reply, label,
-snooze, and mute stay live in the viewer on the open message.
+attachments, `U` for unsubscribe, `v` to cycle render mode, `V` to respond
+to an invite, and `q` to close. Triage, reply, label, snooze, and mute stay
+live in the viewer on the open message.
+
+The cross-surface master key map, covering the reader, compose, the search
+shelf, contacts mode, and the overlays, is section 8.1.
 
 ### 3.2 Pane model and responsive tiers
 
@@ -562,7 +569,8 @@ through one layout computation. Spartan is the narrow floor: it trims the
 sidebar, drops the date and flag columns, and hides label chips. Flags and
 a compact date return in the intermediate tier. Every chrome element turns
 on at the full tier. Widescreen is the full tier plus the offer of the
-preview pane. Spartan is also the minimum supported width, and below it the
+preview pane. Spartan is also the minimum supported width, around 60 columns,
+and below it the
 layout is undefined.
 
 ### 3.3 The sidebar
@@ -587,7 +595,7 @@ since section 2 made a label view a saved search.
     󰡡  Lists/golang
  ▸  work@company.com       2        collapsed, badge sums unread
  ── Saved searches ──
-    󰈻  Flagged
+    󰈻  Starred
     󰓹  golang                       a label view is a saved search
 ```
 
@@ -620,7 +628,7 @@ carries a flag column, a sender, a subject, optional label chips, and a
 date. Read state shows through brightness: an unread sender and subject
 render bright, a read row dims, and hue stays reserved for the cursor and
 the unread-and-flagged case. The flag column glyphs mark unread, replied,
-and flagged, as in the legacy list.
+and starred.
 
 ```
  ▍󰇮 Alice Johnson    Re: Q2 launch          ·golang      10:32 AM
@@ -633,7 +641,7 @@ Cross-account views carry an account color marker. In the Unified Inbox and
 in any cross-account saved search, a one-cell marker at the row's left
 edge takes each account's stable accent color. The glyph is constant and
 the color carries the identity. A single-account folder omits the marker
-column, so a per-account folder reads like the legacy list.
+column, so a per-account folder shows no marker column.
 
 Labels render as compact chips between the subject and the date, dim and
 in the label's color. Several labels overflow to a `+N` count. The Spartan
@@ -651,10 +659,11 @@ under the cursor, and `F` folds or unfolds every thread; `Space` instead
 toggles the row's selection while a visual selection is active.
 
 A saved search, a label view, and the search shelf all render in the same
-results mode: a flat list of matching messages, each tagged with its
-account marker when the scope crosses accounts, with no folder-tree
-context. Triage on a result dispatches to that row's owning account, as
-section 2 requires.
+results mode: a flat list of matching messages, each tagged with its account
+marker when the scope crosses accounts and an origin-folder prefix when the
+scope crosses folders, with no folder-tree context. The thread markers stay,
+so a matching thread still folds. Triage on a result dispatches to that row's
+owning account, as section 2 requires.
 
 ### 3.5 The reader
 
@@ -690,8 +699,8 @@ when set, such as `󰒲 snoozed → Mon 9:00 AM` or `󰂛 muted`. That row is
 absent when the message has no labels and no snooze or mute state.
 
 The body region, the footnote link handling, the invite block, the
-attachment chip row, and unsubscribe carry forward from the legacy reader
-unchanged, since Pass 4 owns their fidelity. Links harvest into a footnote
+attachment chip row, and unsubscribe are owned by Pass 4 (section 4) for
+fidelity; this section fixes their placement. Links harvest into a footnote
 list with inline `[^N]` markers and a `[N]:` block, launchable by `1`-`9`
 or the `Tab` picker. Attachments open through the `@` picker. `U` runs
 List-Unsubscribe when the header is present.
@@ -727,8 +736,8 @@ every toggle through the `Label` mutator.
 ```
 
 `z` opens the snooze picker: preset wake times plus a custom row that
-parses a typed time. On a client-managed account, one whose backend does
-not advertise server snooze, the picker states that the item returns at the
+parses a typed time. On a client-managed account, one whose backend reports
+`SupportsServerSnooze = false`, the picker states that the item returns at the
 next sync after the wake time, the difference section 2.5 requires the UI
 to surface.
 
@@ -769,7 +778,7 @@ dispatch rule manual selection uses.
 ╰──────────────────────────────────╯
 ```
 
-The undo window is the legacy chrome row above the status bar. A reversible
+The undo window uses the notification chrome row above the status bar. A reversible
 triage lands a toast with a `[u undo]` hint and a countdown, and `u` fires
 the inverse op within the window. Label, snooze, and mute are reversible,
 so each lands the undo hint; the inverse is unlabel, unsnooze, and unmute.
@@ -786,7 +795,8 @@ inverse.
 traversal follows the deterministic order section 2.6 fixed: the next
 unread in the current folder, then the next folder holding unread in
 classified order, then onward across accounts in configuration order in the
-unified context.
+unified context. When the traversal crosses into another folder or account,
+the status bar names the jump target.
 
 ### 3.7 Overlays
 
@@ -905,9 +915,9 @@ The reader body wraps to the reader's content width through the
 ### 4.2 Source selection and render modes
 
 `[ui] body-render` takes `"markdown"`, `"html"`, or `"plain"` and defaults to
-`"markdown"`. A reader-scoped key cycles the active message through the three
-modes for a one-off look; its binding is reconciled against the locked section
-3 keymap in the build phase.
+`"markdown"`. In the reader, `v` cycles the active message through the three
+modes for a one-off look, leaving the `[ui] body-render` default unchanged
+(section 8.1).
 
 - `"markdown"` runs the full cleaning and structural-inference pipeline and
   produces poplar's signature render. The pipeline selects the source part
@@ -995,7 +1005,8 @@ per-message action loads remote resources only when the user asks.
 
 Inline image rendering is opt-in and capability-detected. At startup poplar
 probes the terminal for a graphics protocol (kitty, iTerm2, or sixel), the same
-shape as icon-mode resolution in section 1, and `[ui] inline-images` gates the
+shape as the terminal-capability resolution poplar runs at startup (section
+8.3), and `[ui] inline-images` gates the
 feature. When the feature is on and the terminal supports a protocol, the reader
 renders embedded `multipart/related` (CID) images and image attachments inline,
 and renders remote images only after an explicit load. When the feature is off
@@ -1102,7 +1113,7 @@ default rendering path is the offline pipeline in 4.1.
     remove, and hunk-header coloring and a file-header treatment.
 11. Each harvested link offers a copy action alongside the launch action from
     section 3.5.
-12. The rendering tool renders any raw email file deterministically and emits
+12. The eval tool renders any raw email file deterministically and emits
     both the themed output and the audit markdown, and the same input always
     produces the same output.
 13. A public-set fixture commits to the repo directly, and a fixture derived
@@ -1225,8 +1236,8 @@ unless the user has edited the signature text, which is preserved.
 On send the draft assembles to MIME. The default is multipart/alternative
 with a text/plain part and a text/html part. Its text/plain half is the
 markdown source, lightly reflowed. Its text/html half is the goldmark render
-of that same markdown. That render uses the Pass 4 reader's goldmark
-configuration, so the structure a recipient sees in an HTML client matches
+of that same markdown, using the shared goldmark configuration (section 8.4),
+so the structure a recipient sees in an HTML client matches
 the structure poplar renders on receive, and a message that round-trips
 through poplar reads the same on both ends. With attachments present the
 alternative nests inside a multipart/mixed wrapper.
@@ -1255,7 +1266,7 @@ send, so a sent draft does not linger in the folder.
 
 Send never dispatches inline. `Ctrl-X` queues an outbox row and closes the
 surface, optimistic through the cache. The row's `scheduled_for` defaults to
-the current time plus the send-delay window (`[ui] send-delay`, a few seconds
+the current time plus the send-delay window (`[ui] send-delay`, 5 seconds
 by default, zero to disable). During the window the undo chrome row shows a
 countdown and `u` cancels the send, returning the message to Drafts; the
 drainer dispatches the row only once `scheduled_for` has passed and the
@@ -1285,8 +1296,8 @@ attachment-intent keywords, the default set covering "attached",
 "attachment", and "enclosed". If the body signals an attachment and none is
 attached, send pauses on a confirm modal offering attach-now or send-anyway.
 The scan runs at send time, so it catches a forgotten attachment after the
-body is final. Its keyword set is overridable for a non-English composing
-language.
+body is final. Its keyword set is `[compose] attachment-keywords`, overridable
+for a non-English composing language.
 
 ### 5.9 AI prose tidy
 
@@ -1389,7 +1400,9 @@ attachment tables as SQL constraints, among them folder, account,
 `SentAt`, size, flags, label, and attachment presence. A parsed query compiles
 to one FTS5 `MATCH` expression and a set of SQL `WHERE` clauses over those
 columns. This is the same full-text-versus-metadata split notmuch and the web
-clients draw.
+clients draw. Snooze and mute state for the `is:snoozed` and `is:muted`
+operators reads from the cache's snooze-and-mute projection (section 8.4),
+uniform across capability tiers.
 
 The tokenizer is `unicode61` with diacritic folding and a prefix index, so a
 prefix query for search-as-you-type resolves quickly. There is no stemming, so
@@ -1461,9 +1474,8 @@ section 3.3 and with the stored-query scope section 2.3 defined.
 Scope defaults to where the sidebar cursor sits. A search from a folder
 searches that folder, a search from an account header searches that account,
 and a search from the Unified Inbox or a cross-account saved search searches
-across accounts. The shelf's scope key (`\`, the legacy toggle, now a
-three-stop cycle, reconciled against the locked section 3 keymap in the build
-phase) steps folder to account to all, and the shelf badge names the active
+across accounts. The shelf's scope key (`\`, section 8.1) steps folder to
+account to all, and the shelf badge names the active
 scope. The `in:` and `account:` operators override the scope from inside the
 query, so a folder-scoped shelf still reaches another folder by naming it.
 
@@ -1492,12 +1504,10 @@ Section 2.3 fixed the stored-query shape (a name, a query, and a scope),
 config-persisted and runtime-creatable. Section 6 binds the section 6.2 grammar
 and the section 6.3 scope into that shape and gives it a run surface.
 
-Saving the current shelf query is a shelf action on its own key. The key
-prompts for a name and writes a `[[saved-search]]` block through the same
+Saving the current shelf query is the shelf's `Ctrl-S` action (section 8.1).
+It prompts for a name and writes a `[[saved-search]]` block through the same
 `config.Render` round-trip section 1 relies on, so a search saved in the UI
-survives a restart as config. Its key is reconciled against the locked section
-3 keymap in the build phase, the way section 4.2 reconciled the render-mode
-key.
+survives a restart as config.
 
 Saved searches sit in the sidebar Saved Searches group from section 3.3.
 Selecting one runs its stored query at its stored scope against the local FTS
@@ -1614,9 +1624,8 @@ relies on.
 
 ### 7.3 Contacts mode and the reader card
 
-Contacts mode stays slim. A dedicated mode key, reconciled against the locked
-section 3 keymap in the build phase since legacy `M` is now mute, switches the
-account view to a contacts list with an A-Z index in the sidebar. `Enter` opens
+Contacts mode stays slim. The `C` key (section 8.1) switches the account view
+to a contacts list with an A-Z index in the sidebar. `Enter` opens
 a detail card. The reader keeps the `i` hook from section 3.5. On a sender line
 it opens a contact-card popover with the sender's name, emails, and phones, the
 primary of each marked, and an add-to-contacts action when the sender is
@@ -1649,7 +1658,7 @@ status. One-action RSVP offers accept, tentative, and decline.
  │  Thu 10 Apr 2026 · 14:00-15:00            │
  │  Organizer: Bob Lee                       │
  │  Status: needs action                     │
- │  a accept   t tentative   d decline       │
+ │  V respond                                │
  └───────────────────────────────────────────┘
 ```
 
@@ -1658,9 +1667,9 @@ writing a calendar. The reply is a `text/calendar` part with `METHOD=REPLY` and
 the user's `PARTSTAT` updated, emailed to the organizer through the Send and
 outbox path section 5 built. That path needs no calendar backend. Writing the
 event into a CalDAV calendar is named here and deferred, since v1 has no
-calendar account model. The RSVP key is reconciled against the section 3 keymap
-in the build phase, and the invite block reflects the new status once the reply
-queues.
+calendar account model. The reader's `V` key opens the RSVP picker (section
+8.1); accept, tentative, and decline send the iMIP `METHOD=REPLY`, and the
+invite block reflects the new status once the reply queues.
 
 ### 7.5 Security: sender verification
 
@@ -1761,3 +1770,427 @@ capability boundaries.
 17. One-click List-Unsubscribe carries forward from section 3.5, harvested at
     body fetch, run by `U`, and routing an https one-click POST ahead of mailto
     ahead of http behind a confirm.
+
+---
+
+## 8. Consolidation
+
+Owner: Pass 8. This section folds the seven domain sections into one whole. It
+adds no features. It assigns the keys earlier passes deferred to "the locked
+section 3 keymap," names one source of truth for the binding tables, settles
+command visibility across the responsive tiers, unifies the capability
+vocabulary, maps the load-bearing seams and the contracts they share, and
+gathers the deferral register, the acceptance-scenario index, the glossary, and
+the config-key index. Where this section and a domain section once disagreed,
+the domain section was edited to match and the canonical statement now lives
+here.
+
+### 8.1 The unified keyboard map
+
+The keyboard model is the one section 3.1 fixed: modifier-free single keys, no
+multi-key sequences, no `:` command mode, with text-entry surfaces (compose, the
+search shelf, picker filters) as the exemption that takes the whole keyboard.
+This section completes that model across every surface and names its source of
+truth.
+
+**Contexts.** A key's meaning is scoped to the surface that owns it. The
+surfaces are the account view (sidebar plus message list, the keymap the
+widescreen preview pane also drives), the reader, compose, the search shelf,
+contacts mode, and the modal overlays. The account view and the reader share one
+pane and have distinct keymaps, so a key may carry one meaning in the list and
+another in the open message. Section 3.1 already relies on this split: `n`/`N`
+step unread in the account view and step messages in the reader, and `g`/`G` and
+`Space` differ the same way. Pass 8 extends the split to the keys it newly
+assigns and states the rule once here so the reuse reads as design rather than
+collision.
+
+**The overlay-shadow rule.** While any overlay or picker is open, its local keys
+take precedence and the global keymap is suspended. Only the overlay's own keys,
+`Esc` to cancel, and the unadvertised `Ctrl-c` terminal-kill stay live. This is
+why a picker may bind `a`, `t`, `d`, or `e` to local choices without colliding
+with account-view triage: the global triage keys do not fire while the picker
+owns the keyboard. The RSVP picker, the contact-card popover, and the
+select-by-criteria menu all rely on this rule.
+
+**Account view.** The canonical account-view map, extended from section 3.1 with
+the contacts-mode key:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Message cursor down / up |
+| `J` / `K` | Sidebar cursor down / up |
+| `h` / `l` | Collapse / expand the sidebar node (`←`/`→` alias) |
+| `g` / `G` | Message list top / bottom |
+| `Space` / `F` | Fold the thread under the cursor / fold all threads (toggle selection when a visual selection is active) |
+| `Enter` | Open the message in the full reader |
+| `Tab` / `Shift-Tab` | Next / previous unread (across folders, then accounts) |
+| `n` / `N` | Next / previous search match (under an active search) |
+| `[` / `]` | Previous / next account |
+| `I` | Unified Inbox |
+| `D` / `S` / `A` / `X` / `T` | Active account's Drafts / Sent / Archive / Junk / Trash |
+| `d` / `a` / `s` / `.` | Delete / archive / star / toggle read |
+| `L` / `z` / `M` | Label picker / snooze / mute |
+| `m` | Move picker |
+| `E` | Empty the current Disposal folder (confirm, no undo) |
+| `r` / `R` / `f` / `c` | Reply / reply all / forward / compose |
+| `t` / `P` | Threaded-flat toggle / preview-pane toggle |
+| `v` / `V` | Manual visual select / select-by-criteria |
+| `C` | Contacts mode (toggle) |
+| `/` | Search shelf |
+| `u` | Undo last triage (within the undo window) |
+| `Q` / `!` | Outbox overlay / conflict overlay |
+| `?` / `q` | Help / quit |
+
+**Reader.** The reader keeps the account view's triage, reply, label, snooze,
+and mute keys live on the open message, and adds its own surface keys:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` / `Space` / `b` / `g` / `G` | Scroll the body |
+| `n` / `N` | Next / previous visible message |
+| `Tab`, `1`-`9` | Open a footnote link (picker, or by number) |
+| `@` | Attachment picker |
+| `U` | Run List-Unsubscribe |
+| `i` | Sender contact card |
+| `v` | Cycle render mode (markdown, html, plain) for this message |
+| `V` | Respond to invite (opens the RSVP picker when the message carries one) |
+| `q` | Close the reader |
+
+`v` in the reader cycles the open message through the three render modes for a
+one-off look. It is per-message and does not change the `[ui] body-render`
+default. `V` in the reader opens the RSVP picker only when the message carries an
+ICS invite. The reader's `v` and `V` are context-distinct from the account
+view's visual-select `v` and select-by-criteria `V`: a single open message has
+nothing to multi-select, so the meanings never overlap in use.
+
+**Compose.** Compose is a text-entry surface. Poplar owns the message-level
+chords and catkin owns the body (section 5.1).
+
+| Key | Action |
+|-----|--------|
+| `Ctrl-X` | Send (queues to the outbox) |
+| `Ctrl-O` | Save draft and close |
+| `Ctrl-A` | Attach a file |
+| `Ctrl-J` | Insert a snippet |
+| `Ctrl-T` | Tidy (catkin) |
+| `Tab` / `Enter` | Accept the highlighted address suggestion |
+| `Esc` | Leave the surface (postpone a dirty draft, offer discard for an empty one) |
+
+**Search shelf.** The shelf is a text-entry surface. Typed characters build the
+query; the reserved keys are shelf commands:
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Accept the highlighted operator or value suggestion |
+| `Enter` | Run the query (results render in the section 3.4 results mode) |
+| `\` | Cycle scope: folder, account, all |
+| `Ctrl-S` | Save the current query as a saved search |
+| `Esc` | Close the shelf |
+
+The shelf reserves `\` from text entry. The query grammar (section 6.2) uses no
+backslash, so reserving it costs nothing. `Ctrl-S` follows compose's precedent
+that a text-entry surface may carry a chord.
+
+**Contacts mode.** `C` switches the account view to contacts mode and back. The
+sidebar becomes an A-Z index, `J`/`K` walk it, `Enter` opens a contact detail
+card, and `i` on the reader's sender line still opens the contact-card popover
+(section 7.3). `q` or `C` leaves the mode.
+
+**Overlays and pickers.** Each opens over a dimmed underlay, one at a time,
+through the section 3.7 cascade, and runs under the overlay-shadow rule. A
+label picker filters by text with `Space` to toggle and `Enter` to apply.
+Snooze and RSVP pickers navigate with `j`/`k` and commit with `Enter`.
+Select-by-criteria, the contact-card popover, and the confirm modal use
+single-letter local choices. `Esc` cancels every overlay.
+
+**The single source of truth.** The build phase keeps one Go binding registry of
+`key.Binding` values grouped by context, and every surface dispatches through
+`key.Matches` against it (the elm-conventions and bubbles pattern). The help
+popover renders from that registry, and a test asserts the popover lists exactly
+the registry's bindings, so the help, the registry, and the code cannot drift.
+The tables in this section are the spec-phase authority the registry must match.
+No separate hand-maintained keybindings document is the source of truth; if one
+ships for the website or the manual, it generates from the registry.
+
+### 8.2 Command visibility across the responsive tiers
+
+Bindings are constant across every tier at or above the Spartan floor. A key
+bound at the full tier stays bound at Spartan. What changes by tier is what the
+chrome advertises, the same data-driven cliff that drops the date and flag
+columns, the label chips, and the sidebar detail in section 3.2.
+
+| Tier | Width | Advertised affordances |
+|------|-------|------------------------|
+| Spartan | floor (around 60 columns) to the intermediate breakpoint | Keys all bound; on-screen hints minimal; the help popover (`?`) carries the full reference |
+| Intermediate | up to the full breakpoint | Flags and a compact date return; common hints reappear in the chrome |
+| Full | up to the widescreen breakpoint | Every chrome element on; command hints shown |
+| Widescreen | around 130 columns and up | Full tier plus the offer of the preview pane (`P`) |
+
+A smaller screen hides the hint, not the key. The help popover is the
+always-complete reference at every tier, so a user who cannot see a hint reaches
+the binding through `?`. Below the Spartan floor the layout is undefined.
+
+### 8.3 Capability vocabulary
+
+Poplar gates a feature where the backend, the transport, or the terminal cannot
+support it, and says so rather than faking it. Three families of capability
+exist, and they use different mechanisms on purpose.
+
+**Backend capability flags.** Named `Supports*` booleans on the Backend
+interface, each with a defined fallback so the feature still works when the flag
+is false.
+
+| Flag | Gates | Fallback when false |
+|------|-------|---------------------|
+| `SupportsLabels` | The label surface for the account | Label chrome absent; the UI states labels are unavailable |
+| `SupportsServerRules` | Server-side rule (Sieve) management | The rule surface states server rules are unavailable |
+| `SupportsServerSnooze` | The server snooze engine | Client-managed snooze (managed Snoozed folder, returns at the next sync after the wake time) |
+| `SupportsNativeMute` | The native mute-label engine (Gmail) | A generated Sieve mute rule, or a cache mute list applied on sync |
+
+Acceptance scenarios state these in the crisp `SupportsX` form. The mute spec
+(section 2.5) and the snooze picker (section 3.6) were edited to name
+`SupportsNativeMute` and `SupportsServerSnooze` at their feature sites rather
+than describing the gate in loose prose.
+
+**Transport capabilities.** Detected from the protocol session, not exposed as
+poplar `Supports*` flags: IMAP MOVE versus COPY-fallback, SPECIAL-USE, IDLE
+versus poll, CONDSTORE and QRESYNC (RFC 7162) for delta sync, the
+`urn:ietf:params:jmap:sieve` and `urn:ietf:params:jmap:mail:snooze` JMAP
+capabilities, and the ManageSieve `SIEVE` capability line with its
+`sieveExtensions`. An IMAP backend runs two base connections, command and idle,
+and opens a third for ManageSieve when the account advertises it; a JMAP backend
+uses one HTTP client plus its event source. The two unratified snooze drafts are
+confirmed against the live account capability at build time.
+
+**Terminal capabilities.** Resolved once at startup, the same shape for each: the
+graphics protocol probe (kitty, iTerm2, sixel) that gates `[ui] inline-images`,
+and the Nerd Font and cell-width probe that resolves icon mode. These are
+terminal facts, not backend or transport facts, so they are resolved in process
+startup and threaded into the UI rather than carried on the Backend interface.
+
+### 8.4 Cross-section seams and shared contracts
+
+The charter named six load-bearing seams. Each domain section consumes them; this
+subsection states each once and lists where it is shared.
+
+- **Backend.** JMAP and IMAP behind one synchronous interface (section 1.3),
+  consumed by the cache drainer, by triage and label mutators (sections 2, 3),
+  by the outbox drainer's `Send` and `Append` (section 5), and by the RSVP iMIP
+  reply that rides `Send` (section 7.4).
+- **Per-account cache.** The source of truth the UI reads (section 1.7). It
+  carries the outbox and its conflict matrix (consumed by sections 2.6, 3.6,
+  5.6, 5.7), the FTS5 index `messages_fts` (section 6.1, consumed by the saved
+  searches of sections 2.3 and 6.5), the draft store (section 5.6), the
+  client-managed snooze wake table and mute list (section 2.5), the
+  auto-collect address cache (section 7.1), and the snooze-and-mute projection
+  the reader and the `is:snoozed` / `is:muted` operators read (sections 3.5,
+  6.2).
+- **UI tree.** The Elm root and its bubbles-shaped subpackages (section 3). The
+  preview pane renders through the reader's own code (section 3.2), so the
+  rendering contract covers both surfaces without a second path.
+- **Catkin.** The poplar-agnostic markdown editor that hosts the compose body
+  and the tidy command (sections 5.1, 5.9). Poplar claims the message-level
+  chords and catkin leaves them unbound, so the boundary holds for the
+  standalone editor.
+- **Content renderer.** The block-tree pipeline that turns a MIME part into
+  themed terminal lines (section 4). It renders the reader body (section 3.5),
+  the preview pane (section 3.2), and a decrypted PGP body (section 7.6). It is
+  poplar's own renderer, distinct from the goldmark markdown-to-HTML engine
+  compose uses for the text/html part (section 5.5); the two share the same
+  markdown source, not the same code.
+- **Rendering eval harness.** The dev-tagged tool, corpus, and judge loop
+  (sections 4.7, 4.8), fenced off from the live backend, the cache, and the UI
+  tree. Referred to as the eval tool throughout.
+
+Three contracts span sections and are stated once here so the build plans share
+one definition:
+
+- **The shared time parser.** The snooze custom row (section 3.6) and send-later
+  (section 5.7) use one parser. It accepts the named presets, relative forms
+  (`30m`, `2h`, `3d`, `tomorrow 9am`), and absolute forms (`2026-06-01`,
+  `2026-06-01 14:00`). An unparseable entry surfaces an error and commits
+  nothing.
+- **Account accent color.** Each account renders with a stable accent color used
+  by the cross-account row marker (section 3.4) and the reader account chip
+  (section 3.5). It comes from `[account] color` when set, and otherwise from a
+  fixed palette ring assigned by config order. The assignment is identical
+  across restarts.
+- **The suggest-and-lookup seam.** One path feeds compose autocomplete (section
+  5.2) and the reader contact card (section 7.2). It ranks curated sources above
+  auto-collect and dedupes on email.
+
+### 8.5 Resolved drift and the canonical terms
+
+The self-review fixed the following in the owning sections. The canonical term
+is in bold; retired synonyms are noted.
+
+- **Saved search** is the user-facing term and **stored query** is the
+  underlying type (one type backs saved searches, label views, and the former
+  "virtual folder"). "Virtual folder" is retired. The sidebar group is "Saved
+  searches."
+- **Star** and **starred** are the user-facing flag and state (the `s` key, the
+  `is:starred` operator). The backend mutator is `Flag(uids, "starred", set)`;
+  "flag" names the generic mechanism and the status-glyph column, not the user
+  action. Section 3.4's column description and section 3.3's saved-search name
+  were normalized to "starred."
+- **Disposal folder** means Junk or Trash, the two folders `E` empties. The
+  term is anchored in the folder model at section 1.2.
+- **FTS5 index** is the consistent name; the table is **`messages_fts`**.
+  Section 2.3's "local FTS index" was corrected to "local FTS5 index."
+- **`SentAt`** is the Go metadata field and **`sent_at`** is the SQL and FTS
+  column. They are the same value in two casings, noted in the glossary.
+- Render pipeline and goldmark engine were disentangled (section 8.4);
+  section 5.5 no longer attributes a "goldmark configuration" to the reader.
+- Bottom-of-screen surfaces are named once: the **status bar** (bottom
+  line), the **notification chrome row** above it (the undo and toast row), the
+  **compose command row** (compose foot), and the **search shelf** (the `/`
+  input). Section 3.6 was reworded off "legacy chrome row."
+- Section 3's references to "the legacy list," "the legacy reader," and "the
+  legacy chrome row" were reworded to describe the behavior directly, since the
+  rebuild does not port the archived code.
+- `is:snoozed` and `is:muted` (section 6.2) resolve against the cache's
+  snooze-and-mute projection (section 8.4), so they return the same set on every
+  capability tier. On an account with `SupportsLabels = false`, `label:` matches
+  nothing, a label-view saved search scoped there is empty, and a cross-account
+  label search omits that account.
+- The undo within the window is a capability-matched inverse op (section 1.7):
+  for server snooze it issues the inverse server operation, for client snooze it
+  clears the cache wake entry, and for mute it removes the label, the rule, or
+  the list entry. The window applies to every tier.
+
+### 8.6 The deferral register
+
+The features named and deferred across the sections, gathered for the build
+plans. Each is out of v1 scope.
+
+| Deferred | Section | Note |
+|----------|---------|------|
+| Unified Sent and unified Flagged views | 1.1 | Cross-account stored queries deliver these later |
+| Lazy-connect knob | 1.4 | Connecting all accounts at startup is the v1 default |
+| Gmail server-side rule management | 2.4 | Needs the Gmail REST API; tracked post-1.0 |
+| Send-side PGP (signing and encrypting) | 7.6 | A post-1.0 encryption pass owns the send side |
+| S/MIME in either direction | 7.6 | Post-1.0 |
+| CalDAV calendar write | 7.4 | No calendar account model in v1 |
+| Binary attachment text extraction (PDF, DOCX) | 6.1 | `text/*` extraction ships; binary is post-1.0 |
+| Multi-book contacts destination picker | 7.3 | One default destination in v1 (ADR-0176) |
+| Runtime LLM HTML cleaning | 4.9 | A deferred opt-in, never the default path |
+| Local DNS and raw-MIME re-verification of DKIM | 7.5 | The delivery-boundary header is trusted in v1 |
+| Vim modal editing in catkin | 5.1 | The rebuild ships the modeless editor |
+| A shipped verified OAuth client | 1.6 | Bring-your-own client for v1; a verified preset is a post-1.0 milestone |
+
+### 8.7 The acceptance-scenario index
+
+The domain sections carry 122 numbered scenarios. Pass 8 adds 10 for the
+decisions this section settled. The build plans turn the full set into the
+done-contract.
+
+| Section | Scenarios |
+|---------|-----------|
+| 1.8 Accounts, protocols, sync | 15 |
+| 2.8 Organization, threading, automation | 16 |
+| 3.8 Reading, triage, navigation | 19 |
+| 4.10 Message rendering and display | 18 |
+| 5.10 Compose and sending | 18 |
+| 6.6 Search | 19 |
+| 7.9 Contacts, calendar, security | 17 |
+| 8.7 Consolidation | 10 |
+| **Total** | **132** |
+
+Pass 8 acceptance scenarios:
+
+1. With any overlay or picker open, the global keymap is suspended; only the
+   overlay's local keys, `Esc`, and `Ctrl-c` act, so `a` in an open invite
+   picker accepts the invite and never archives.
+2. In the full reader, `v` cycles the open message through markdown, html, and
+   plain render modes; the change is per-message and leaves `[ui] body-render`
+   unchanged.
+3. `C` switches the account view to contacts mode and back.
+4. The reader's `V` opens the RSVP picker for a message carrying an invite,
+   and accept, tentative, or decline sends the iMIP reply through the outbox.
+5. The search shelf binds `\` to cycle the scope folder to account to all and
+   `Ctrl-S` to save the current query as a saved search.
+6. Every key bound at the full tier stays bound at the Spartan tier; narrowing
+   the terminal recedes hints and chrome, never a binding, and the help popover
+   lists the complete set at every tier.
+7. The help popover lists exactly the bindings in the build-phase key registry,
+   and a test fails if the two diverge.
+8. Each account renders with a stable accent color taken from `[account] color`
+   when set and otherwise assigned from a fixed palette ring by config order,
+   identical across restarts.
+9. The snooze custom row and send-later share one time parser that accepts the
+   documented preset, relative, and absolute forms, and an unparseable entry
+   commits nothing.
+10. `is:snoozed` and `is:muted` resolve against poplar's local snooze-and-mute
+    projection and return the same set on every backend tier.
+
+---
+
+## Appendix A: Glossary
+
+Canonical terms, with retired synonyms noted.
+
+- **Account.** One mail identity domain: one backend, its credentials, one or
+  more sending identities, and its own SQLite cache.
+- **Identity.** A From address, an optional display name, and ordered
+  signatures. An **alias-pattern identity** matches an address pattern so a
+  reply under a wildcard domain sends from the right address.
+- **Backend.** JMAP or IMAP behind one synchronous interface.
+- **Capability flag.** A `Supports*` boolean on the Backend (section 8.3),
+  distinct from transport and terminal capabilities.
+- **Folder.** A message's single location, classified per account (Inbox, Sent,
+  Trash, Archive, Drafts, Junk, Custom). **Disposal folder** means Junk or
+  Trash.
+- **Label.** A multi-membership server-backed tag. A **label view** is the saved
+  search `label:<name>`.
+- **Saved search.** A user-facing named query. **Stored query** is its
+  underlying type. "Virtual folder" is the retired synonym.
+- **Unified inbox.** The read-side cross-account merge of every account's Inbox.
+- **Thread / conversation.** A first-class organizational unit; triage, snooze,
+  and mute target it.
+- **Snooze / mute.** Capability-tiered features with one UX each (sections 2.5,
+  8.3).
+- **Outbox.** The durable optimistic operation queue. The **drainer** dispatches
+  rows; the **conflict matrix** routes failures by sentinel; the **inverse op**
+  is the undo.
+- **Cache.** A per-account SQLite store, the source of truth the UI reads,
+  built on **performance-by-locality**. Its **FTS5 index** is the
+  `messages_fts` table.
+- **`SentAt` / `sent_at`.** The Go metadata field and the SQL and FTS column for
+  the same sent timestamp.
+- **Star / starred.** The user-facing flag and state, mutated through
+  `Flag(uids, "starred", set)`. A **flag column** is the status-glyph column.
+- **Account view / reader / preview pane.** A sidebar-plus-list surface, the
+  open message, and the widescreen follower pane.
+- **Search shelf / results mode / notification chrome row / compose command row
+  / status bar.** The named UI surfaces (section 8.5).
+- **Render pipeline.** Poplar's block-tree renderer (section 4), distinct from
+  the **goldmark** markdown-to-HTML engine compose uses (section 5.5). The
+  **rendering contract**, the **gold standard**, the **eval tool**, and the
+  **golden corpus** are the rendering program's artifacts.
+- **Catkin.** The poplar-agnostic markdown editor. **Tidy** is its user-invoked
+  AI prose command.
+- **Suggest-and-lookup seam.** The one path feeding compose autocomplete and the
+  reader contact card.
+
+## Appendix B: Config-key index
+
+The config keys the spec introduces. The build plans own the full schema and
+defaults; this index is the surface the sections name.
+
+- `[ui] unified-inbox` (bool, default true).
+- `[ui] body-render` (`"markdown"` default, `"html"`, `"plain"`).
+- `[ui] inline-images` (bool, default false; gated by terminal graphics
+  support).
+- `[ui] send-delay` (duration, default 5s; 0 disables the undo-send window).
+- `[ui] undo-window` (duration, default 5s; the triage-undo countdown).
+- `[ui.folders.<name>] threading` (per-folder threaded or flat default).
+- `[compose] attachment-keywords` (list; overrides the default English
+  attachment-intent set for a non-English composing language).
+- `[account] color` (accent color; optional, else assigned from the palette
+  ring).
+- `[account] primary` (bool; the default account for a fresh unified-view
+  compose).
+- `[[snippet]]` blocks (`name`, `body` with one `{{cursor}}` placeholder).
+- `[[saved-search]]` blocks (`name`, `query`, `scope`).
+- `[account.identity]` and `[account.identity.signature]` (section 1.5).
+- `[account.oauth]`, `[account.contacts]` (sections 1.6, 7.1).

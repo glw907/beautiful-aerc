@@ -18,7 +18,7 @@ This runs by default at every pass close ("ship pass", "finish pass", or a compl
 
 ## Current state (2026-05-30)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), Pass 5 (Compose and sending), Pass 6 (Search), and Pass 7 (Contacts, calendar, security) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), Pass 4 (Message rendering), Pass 5 (Compose and sending), Pass 6 (Search), Pass 7 (Contacts, calendar, security), and Pass 8 (Consolidation) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -226,66 +226,71 @@ Pass 7 outcomes (functional spec §7, 17 acceptance scenarios):
   Geoff: read-side PGP scope, and a minimal local vCard store alongside
   first-class CardDAV sync.
 
-## Next: Pass 8, consolidation
+Pass 8 outcomes (functional spec §8, 10 acceptance scenarios):
+- Consolidated §8, Appendix A (glossary), and Appendix B (config-key index) are
+  written, and the seven domain sections were edited in place to agree with §8.
+- A unified keyboard map is the single source of truth (§8.1). The five keys
+  earlier passes deferred are assigned: render-mode cycle `v` and invite RSVP
+  `V` in the reader, contacts mode `C` in the account view, scope cycle `\` and
+  save-search `Ctrl-S` in the search shelf. An overlay-shadow rule lets a picker
+  bind triage letters without colliding with live reader triage. The build phase
+  keeps one Go `key.Binding` registry; the help popover and any keymap doc
+  generate from it, and a test asserts they match.
+- Command visibility across the responsive tiers is settled (§8.2). Bindings
+  stay constant at and above the Spartan floor of around 60 columns; narrowing
+  recedes hints and chrome, never a key, and the help popover is the complete
+  reference at every tier.
+- Capability vocabulary is unified into three families (§8.3): backend
+  `Supports*` flags each with a fallback, transport capabilities detected from
+  the session, and terminal capabilities resolved at startup. The mute (§2.5)
+  and snooze (§3.6) sites now name their flags.
+- Cross-section seams and shared contracts are stated once (§8.4): the six
+  charter seams plus the shared time parser, the per-account accent color, and
+  the suggest-and-lookup seam.
+- Drift is fixed in the owning sections (§8.5): saved search over virtual
+  folder, star and starred over flagged, the Disposal folder anchored in §1.2,
+  consistent FTS5 naming, the goldmark engine disentangled from the reader
+  pipeline, the legacy-baseline references reworded for the greenfield, and the
+  bottom-of-screen surfaces named.
+- A deferral register (§8.6), the master acceptance index of 122 domain
+  scenarios plus 10 Pass 8 scenarios for 132 total (§8.7), the glossary, and the
+  config-key index are gathered. prose-guard passes on the whole spec.
+- Spec phase is complete pending the user review gate. Next work is the numbered
+  build plans.
 
-Starter prompt (paste after /clear, or say "start Pass 8"):
+## Next: build plans (post-spec)
+
+Spec phase is complete. The canonical functional spec is locked pending Geoff's
+review at the consolidation gate. Next comes the phase that turns the locked spec
+into numbered TDD build plans, then the clean build (charter §9).
+
+Starter prompt (paste after /clear, or say "start the build-plan phase"):
 
 ```
-Start Pass 8 of the poplar rebuild (consolidation). This is the terminal spec
-pass. It folds the seven domain sections into one coherent canonical functional
-spec, resolves the cross-pass carry-forwards, runs a full self-review, and ends
-at the user review gate before the build plans. It writes no code.
+Start the build-plan phase of the poplar rebuild. The spec is locked. Read
+docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md end to end
+and the charter docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md
+(§3 method, §5 seams, §9 plan sequence, §10 conventions).
 
-Read first: the whole functional spec
-`docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md` end to
-end, the charter `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`
-(§9 spec build plan, §10 conventions), and the Carry-forward considerations
-section of this STATUS.
+Draft the numbered build-plan roadmap from the locked spec, then write the first
+plan. Sequence the plans so the foundational seams land first: the per-account
+cache and the Backend interface (charter §5 seams 1 and 2), since every later
+surface reads from them. Each plan turns one spec area into a task list of
+red-green-commit TDD cycles with verbatim steps. An implementer subagent runs
+one task at a time and clears make check before reporting done, and reviewer
+subagents check spec-compliance and code per task. Use subagent-driven-
+development for the domain work and Workflow for wide fan-out.
 
-Pass 8 work:
-- Resolve the carry-forwards this STATUS holds. Order and group the keyboard
-  commands holistically across every key-bearing surface (the account view and
-  reader §3.1, the compose chords §5.1, the search keys §6, the contacts and
-  RSVP keys §7), reflect the result back into the owning sections and the help
-  popover, and name a single source of truth for the binding tables. Settle
-  command visibility across the responsive tiers §3.2.
-- Reconcile the keys each later pass deferred to the build phase (the §4.2
-  render-mode key, the §6.5 save-search key and §6.3 scope key, the §7 contacts
-  mode and RSVP keys) against the locked §3 keymap, in one place.
-- Read the seven sections for cross-section consistency: shared seams, the
-  capability-gate vocabulary, the cache and outbox contract, and the wireframe
-  and keybinding references, fixing drift in place.
-- Run the brainstorming spec self-review over the whole document (placeholders,
-  contradictions, scope, ambiguity) and fix inline.
-- End at the user review gate, presenting the consolidated spec for Geoff's
-  review before the build-plan phase.
-
-Pass-end: run the Pass-end ritual at the top of this STATUS. It updates this
-STATUS by default. After Pass 8 the spec phase is complete and the next work is
-the numbered build plans.
+Settle the greenfield code-tree location at the build boundary (charter §11 open
+decision) before the first plan writes code. Pass-end: run the Pass-end ritual.
 ```
 
-## Carry-forward considerations
+## Carry-forwards (resolved at Pass 8)
 
-Items that span passes and resolve at consolidation, not in the pass that
-raised them.
-
-- Keyboard command order and grouping, reviewed holistically across every
-  key-bearing surface: the account view and reader (§3.1), the compose editor
-  chords (§5.1), the search keys (Pass 6), and the contacts keys (Pass 7).
-  Their full set exists only after Pass 7, so Pass 8 orders and groups it in
-  one place, in the editor and outside it, and reflects the result back into
-  the owning sections and the help popover. The build also wants a single
-  source of truth for the binding tables so the help popover and the docs do
-  not drift from the code.
-- Command visibility across the responsive tiers (§3.2). That grouping review
-  decides which commands and on-screen affordances surface, fold into the help
-  popover, or recede at narrower widths, the same data-driven cliff the chrome
-  (date and flag columns, label chips, sidebar) already rides down to Spartan.
-  A command stays bound when its surface is reachable; what changes by tier is
-  what the chrome advertises and how the command rows and the help popover
-  prioritize, so a smaller screen hides the hint, not the key.
+Functional spec §8.1 and §8.2 resolve the keyboard-command ordering and grouping
+across every surface, the single source of truth for the binding tables, and
+command visibility across the responsive tiers. No carry-forward remains open.
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [done] -> 7 Contacts/calendar/security [done] -> 8 Consolidation [next] -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [done] -> 6 Search [done] -> 7 Contacts/calendar/security [done] -> 8 Consolidation [done] -> build plans [next] + clean build.
