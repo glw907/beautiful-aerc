@@ -4,6 +4,18 @@
 
 **Canonical functional spec:** `docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md`. Domain passes append sections; Pass 8 consolidates.
 
+## Pass-end ritual
+
+This runs by default at every pass close ("ship pass", "finish pass", or a completed pass), whether or not the pass's starter prompt restates it. Updating this STATUS is step one and is never optional.
+
+1. Append a `Pass N outcomes (functional spec §N, K acceptance scenarios)` block to Current state below, summarizing the settled decisions.
+2. Add Pass N to the Current-state completion line.
+3. Replace the `## Next` section with the next pass's title and its starter prompt.
+4. Mark `[done]` and `[next]` on the Pass roadmap line.
+5. Run `prose-guard` on every changed doc; a draft that fails is rewritten before commit.
+6. Commit the changed spec section and this STATUS as `Rebuild Pass N: <title> spec section`, then push to `origin/master`.
+7. Refresh the `project_poplar_rebuild_initiative` memory's settled-decisions digest only when a load-bearing decision changed. The done/next-pass cursor is not tracked in memory; this STATUS owns it.
+
 ## Current state (2026-05-30)
 
 Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), and Pass 4 (Message rendering) complete.
@@ -128,7 +140,8 @@ practice, not from legacy poplar. Brainstorm and settle, then spec:
 End with numbered acceptance scenarios appended to the functional spec
 section 5.
 
-Pass-end: update the rebuild STATUS and append the execution record.
+Pass-end: run the Pass-end ritual at the top of this STATUS. It updates this
+STATUS by default.
 ```
 
 ## Pass roadmap
