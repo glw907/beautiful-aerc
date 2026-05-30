@@ -470,3 +470,400 @@ section fixes the operations and their capability gates.
     thread, or the current saved search) applies to the full matching set
     rather than the visible page, and queues per owning account through the
     outbox.
+
+---
+
+## 3. Reading, triage, navigation
+
+Owner: Pass 3. Sections 1 and 2 settled the data model and the
+organization, threading, and automation semantics. Section 3 designs the
+surfaces that drive them: the keyboard model, the pane and sidebar layout,
+the message list, the reader, and the triage and bulk surfaces. Rendering
+fidelity belongs to Pass 4; this section fixes layout and affordances only.
+The wireframes below are canonical and carry the reference layout for each
+screen.
+
+### 3.1 The keyboard model
+
+Poplar binds modifier-free single keys. No user-facing action carries a
+Ctrl, Alt, or Meta chord, and no action is a multi-key sequence, because
+bubbletea delivers one key event per press. There is no `:` command mode.
+Every action is a bare key, or a modal picker that a bare key opens.
+`Ctrl-c` survives as an unadvertised terminal-kill alias on Quit.
+Text-entry surfaces are the single exemption: compose, the search input,
+and picker filters take the whole keyboard, and Pass 5 owns the compose
+chords.
+
+The account view and the viewer share one pane. The account view is the
+sidebar and the message list together, and the viewer is the open reader.
+There is no focus cycling in the account view. `j`/`k` always move the message list,
+`J`/`K` always walk the sidebar, and every triage and reply key stays live.
+Uppercase keys carry the folder jumps and the less-frequent verbs, clear of
+the lowercase motions and triage, so the pairs never collide: `d` deletes
+and `D` opens Drafts, `s` stars and `S` opens Sent, `m` moves and `M` mutes,
+and `l` expands a sidebar node while `L` opens the label picker.
+
+The full account-view key map:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Message cursor down / up |
+| `J` / `K` | Sidebar cursor down / up |
+| `h` / `l` | Collapse / expand the sidebar node (`←`/`→` alias) |
+| `g` / `G` | Message list top / bottom |
+| `Space` / `F` | Fold the thread under the cursor / fold all threads |
+| `Enter` | Open the message in the full reader |
+| `Tab` / `Shift-Tab` | Next / previous unread (across folders, then accounts) |
+| `n` / `N` | Next / previous search match (under an active search) |
+| `[` / `]` | Previous / next account |
+| `I` | Unified Inbox |
+| `D` / `S` / `A` / `X` / `T` | Active account's Drafts / Sent / Archive / Junk / Trash |
+| `d` / `a` / `s` / `.` | Delete / archive / star / toggle read |
+| `L` / `z` / `M` | Label picker / snooze / mute |
+| `m` | Move picker |
+| `E` | Empty the current Disposal folder (confirm, no undo) |
+| `r` / `R` / `f` / `c` | Reply / reply all / forward / compose |
+| `t` / `P` | Threaded-flat toggle / preview-pane toggle |
+| `v` / `V` | Manual visual select / select-by-criteria |
+| `/` | Search shelf |
+| `u` | Undo last triage (within the undo window) |
+| `Q` / `!` | Outbox overlay / conflict overlay |
+| `?` / `q` | Help / quit |
+
+The viewer keeps `j`/`k`/`Space`/`b`/`g`/`G` for scroll, `n`/`N` for the
+next and previous visible message, `Tab` and `1`-`9` for links, `@` for
+attachments, `U` for unsubscribe, and `q` to close. Triage, reply, label,
+snooze, and mute stay live in the viewer on the open message.
+
+### 3.2 Pane model and responsive tiers
+
+One pane is the default, true to the Pine lineage. The sidebar sits at the
+left, the message list fills the rest, and opening a message replaces the
+list with the reader in place. `q` returns to the list. Reading happens at
+full width.
+
+A widescreen tier adds an opt-in follower preview pane. When the terminal
+is wide enough (around 130 columns, with the exact breakpoint left to the
+build plan), `P` toggles a reader pane to the right of the list. The pane
+re-renders the message under the list cursor, top-aligned, and never
+scrolls on its own. `j`/`k` still move the list, so the keyboard model is
+unchanged. `Enter` expands the message to the full-width reader and marks
+it read. Cursoring the preview does not mark read, so scanning a folder
+leaves unread state intact. The pane renders through the reader's own code
+at its narrower width, so the Pass 4 rendering contract covers both
+surfaces without a second path. The toggle is sticky for the session. A
+pane open past the tier auto-collapses when the terminal narrows below it
+and returns when there is room again.
+
+Responsive tiers carry the legacy three-tier ladder and add the widescreen
+pane tier above it. Sidebar width, the sender and date columns, the flag
+column, icon mode, and the label chips all derive from the terminal width
+through one layout computation. Spartan is the narrow floor: it trims the
+sidebar, drops the date and flag columns, and hides label chips. Flags and
+a compact date return in the intermediate tier. Every chrome element turns
+on at the full tier. Widescreen is the full tier plus the offer of the
+preview pane. Spartan is also the minimum supported width, and below it the
+layout is undefined.
+
+### 3.3 The sidebar
+
+The sidebar follows the Thunderbird and K-9 shape that section 1 fixed. A
+Unified Inbox row pins to the top. Below it, each account is a collapsible
+section over its own classified folder tree. A Saved Searches group sits at
+the bottom, where label views and user saved searches share one list,
+since section 2 made a label view a saved search.
+
+```
+ sidebar -- Full tier
+────────────────────────────────
+ ★  Unified Inbox          5        pinned cross-account merge
+ ▾  geoff@907.life         3        account header, expanded
+    󰇰  Inbox               3
+    󰏫  Drafts
+    󰑚  Sent
+    󰀼  Archive
+    󰍷  Junk              12
+    󰩺  Trash
+    󰡡  Lists/golang
+ ▸  work@company.com       2        collapsed, badge sums unread
+ ── Saved searches ──
+    󰈻  Flagged
+    󰓹  golang                       a label view is a saved search
+```
+
+`J`/`K` walk the whole column as one vertical list: the Unified Inbox row,
+each account header, that account's folders, and the saved searches. The
+active account is wherever the cursor sits. `h` and `l` collapse and expand
+an account section and the custom-folder subtrees within it, with `←`/`→`
+as aliases. A collapsed account shows the sum of its unread as a badge.
+
+Folder jumps target the active account. `D`/`S`/`A`/`X`/`T` open that
+account's Drafts, Sent, Archive, Junk, and Trash. `I` opens the Unified
+Inbox, which is the primary triage surface, so a specific account's own
+Inbox is reached by walking into its section. `[` and `]` step to the
+previous and next account, cycling through the Unified Inbox and each
+account in turn and landing the cursor on that scope's Inbox, so a
+multi-account user moves to "work in this account now" in one keystroke.
+`Tab` and `Shift-Tab` stay reserved for next and previous unread (3.1) and
+do not switch accounts.
+
+`[ui] unified-inbox` defaults to true and turns the unified view off when
+set false. With the unified view off, the pinned row is absent and `I`
+opens the active account's Inbox. A configuration with one account hides
+the unified row and the account-header chrome, so the sidebar reads exactly
+like a single classified tree.
+
+### 3.4 The message list
+
+The list groups by conversation by default, per section 2.1. Each row
+carries a flag column, a sender, a subject, optional label chips, and a
+date. Read state shows through brightness: an unread sender and subject
+render bright, a read row dims, and hue stays reserved for the cursor and
+the unread-and-flagged case. The flag column glyphs mark unread, replied,
+and flagged, as in the legacy list.
+
+```
+ ▍󰇮 Alice Johnson    Re: Q2 launch          ·golang      10:32 AM
+ ▍  Bob Smith        Weekly standup notes                  9:15 AM
+ ▎󰑚 Carol White      Re: Budget review                  Yesterday
+ ▎󰈻 Eve Martinez [3] Re: Server migration    ·ops          Apr 06
+```
+
+Cross-account views carry an account color marker. In the Unified Inbox and
+in any cross-account saved search, a one-cell marker at the row's left
+edge takes each account's stable accent color. The glyph is constant and
+the color carries the identity. A single-account folder omits the marker
+column, so a per-account folder reads like the legacy list.
+
+Labels render as compact chips between the subject and the date, dim and
+in the label's color. Several labels overflow to a `+N` count. The Spartan
+tier drops the chips, and the reader shows the full set.
+
+`t` toggles the current folder between threaded and flat display. Threaded
+collapses a conversation to one row that sorts by its latest member and
+carries an `[N]` count badge; expanding shows the members with box-drawing
+prefixes. Flat lists every message as its own row in the folder's date
+order, with a dim reply marker as a light depth cue and no folding. The
+default and any per-folder override come from the `[ui.folders.<name>]
+threading` setting that section 1 carries; `t` is a session toggle over
+that default. In threaded display, `Space` folds and unfolds the thread
+under the cursor, and `F` folds or unfolds every thread; `Space` instead
+toggles the row's selection while a visual selection is active.
+
+A saved search, a label view, and the search shelf all render in the same
+results mode: a flat list of matching messages, each tagged with its
+account marker when the scope crosses accounts, with no folder-tree
+context. Triage on a result dispatches to that row's owning account, as
+section 2 requires.
+
+### 3.5 The reader
+
+The full reader opens in place of the list, with the sidebar still drawn.
+
+```
+ ▍ geoff@907.life
+  From:     Alice Johnson <alice@example.com>
+  To:       Geoff Wright <geoff@907.life>
+  Date:     Thu, 10 Apr 2026 10:32 AM
+  Subject:  Re: Q2 launch
+  Labels:   ·golang  ·priority           󰒲 snoozed → Mon 9:00 AM
+  ──────────────────────────────────────────────────────────────
+
+  Hey Geoff,
+
+  Just wanted to follow up on the Q2 launch timeline.
+
+  ## Key changes
+  - Beta release moved to April 15 [^1]
+
+  § 1. invite.ics (2.1 KB)   § 2. agenda.pdf (88 KB)
+
+  [1]: https://example.com/q2-plan
+```
+
+The header shows an account chip, the standard From, To, Date, and Subject
+rows, and a Labels row. In cross-account contexts the account chip carries
+the account color marker and name, so the reader states which account owns
+the message and which identity a reply defaults to. A Labels row lists the
+message's labels as chips, and its right edge shows snooze or mute state
+when set, such as `󰒲 snoozed → Mon 9:00 AM` or `󰂛 muted`. That row is
+absent when the message has no labels and no snooze or mute state.
+
+The body region, the footnote link handling, the invite block, the
+attachment chip row, and unsubscribe carry forward from the legacy reader
+unchanged, since Pass 4 owns their fidelity. Links harvest into a footnote
+list with inline `[^N]` markers and a `[N]:` block, launchable by `1`-`9`
+or the `Tab` picker. Attachments open through the `@` picker. `U` runs
+List-Unsubscribe when the header is present.
+
+A contact affordance hangs off the sender line, reserved on `i`. The
+contact model is Pass 7, so this section reserves the key and leaves the
+popover behavior to that pass.
+
+### 3.6 Triage, bulk, undo, and traversal
+
+Single-key triage acts on the cursor row, or on the marked set when a
+selection is live. The scope rule from section 2 holds: a collapsed thread
+root covers the whole thread, an expanded message covers the one message.
+`d`, `a`, `s`, and `.` delete, archive, star, and toggle read. `L`, `z`,
+and `M` label, snooze, and mute. Each is optimistic through the cache and
+queued through the outbox.
+
+`L` opens the label picker, a multi-select toggle with a filter input.
+Checking a label applies it and unchecking removes it across the selection.
+Typing a name that does not exist offers a create row, so a new label is
+created on the backend and applied without a separate step. `Enter` commits
+every toggle through the `Label` mutator.
+
+```
+╭─ Labels ─────────────────────────╮
+│  > gol▏                          │
+│  ☑ golang                        │
+│  ☐ priority                      │
+│  ☐ ops                           │
+│  + create "gol"                  │
+│  ␣ toggle  ⏎ apply  Esc cancel   │
+╰──────────────────────────────────╯
+```
+
+`z` opens the snooze picker: preset wake times plus a custom row that
+parses a typed time. On a client-managed account, one whose backend does
+not advertise server snooze, the picker states that the item returns at the
+next sync after the wake time, the difference section 2.5 requires the UI
+to surface.
+
+```
+╭─ Snooze until ───────────────────╮
+│  ┃ Later today       4:00 PM     │
+│    Tomorrow          8:00 AM     │
+│    This weekend      Sat 8:00 AM │
+│    Next week         Mon 8:00 AM │
+│    Custom…                       │
+│  returns at sync after wake      │   client-managed only
+│  ⏎ snooze  Esc cancel            │
+╰──────────────────────────────────╯
+```
+
+`M` mutes with no overlay. It fires the capability-tiered engine from
+section 2.5 and drops a toast.
+
+`E` empties the current Disposal folder, Junk or Trash. It opens the
+confirm modal, since the operation runs `Destroy` and cannot be undone. On
+confirm the folder's messages are permanently deleted and the toast omits
+the undo hint.
+
+`v` enters manual visual select, where `Space` marks rows. `V` opens the
+select-by-criteria menu, the tag-pattern surface adapted to single keys.
+Choosing a predicate marks the matching set across the full results, not
+the visible page, and closes the menu. The next triage key then applies to
+the whole marked set and clears the marks, the same marks-survive-then-
+dispatch rule manual selection uses.
+
+```
+╭─ Select by ──────────────────────╮
+│  u  all unread                   │
+│  f  from Alice Johnson           │   sender of the cursor row
+│  t  this thread                  │
+│  s  current search results       │   enabled under an active search
+│  Esc  cancel                     │
+╰──────────────────────────────────╯
+```
+
+The undo window is the legacy chrome row above the status bar. A reversible
+triage lands a toast with a `[u undo]` hint and a countdown, and `u` fires
+the inverse op within the window. Label, snooze, and mute are reversible,
+so each lands the undo hint; the inverse is unlabel, unsnooze, and unmute.
+Permanent-delete operations suppress the hint, since the primitive has no
+inverse.
+
+```
+───┴───── 󰒲 Snoozed until Mon 8:00 AM   [u undo · 6s] ────╯
+───┴───── 󰓹 +2 labels: golang, ops      [u undo · 6s] ────╯
+───┴───── 󰂛 Muted thread                 [u undo · 6s] ────╯
+```
+
+`Tab` and `Shift-Tab` advance to the next and previous unread. The
+traversal follows the deterministic order section 2.6 fixed: the next
+unread in the current folder, then the next folder holding unread in
+classified order, then onward across accounts in configuration order in the
+unified context.
+
+### 3.7 Overlays
+
+App owns the modal overlays and composites each over the current frame.
+Only one overlay is active at a time, resolved through a fixed cascade. The
+overlays are the help popover, the label picker, the snooze picker, the
+select-by-criteria menu, the move picker, the confirm modal, the link
+picker, the attachment picker, the outbox overlay, and the conflict
+overlay.
+
+An overlay composites over a dimmed underlay. The dim recedes the frame
+beneath so attention lands on the overlay, while the underlay stays legible
+as context, so the user keeps their place. In the terminal the dim blends
+the underlay's foreground toward the background to lower its contrast,
+rather than blanking it. The exact blend follows the styling map and the
+build plan; the principle is a focus scrim, neither so faint that the
+overlay fails to stand out nor so heavy that the context is lost. The
+preview pane and the inline compose surface are not overlays and do not
+dim.
+
+### 3.8 Acceptance scenarios
+
+1. In the account view, `j`/`k` move the message cursor and `J`/`K` move
+   the sidebar cursor; triage and reply keys act with no focus change and
+   no focus-cycling step.
+2. Every bound action is a single bare key or opens a modal picker; no
+   user-facing action requires a modifier or a key sequence, and there is
+   no `:` command line.
+3. `Tab` and `Shift-Tab` advance to the next and previous unread, crossing
+   into the next folder with unread in classified order and then across
+   accounts in configuration order, per section 2.6.
+4. `[` and `]` switch the active account to the previous and next account
+   and land the cursor on that account's Inbox; with the unified view on,
+   the cycle includes the Unified Inbox.
+5. `I` opens the Unified Inbox, and `D`/`S`/`A`/`X`/`T` open the active
+   account's Drafts, Sent, Archive, Junk, and Trash.
+6. With `[ui] unified-inbox = false`, the Unified Inbox row is absent and
+   `I` opens the active account's Inbox; a single-account configuration
+   also hides the account-header chrome.
+7. The sidebar shows a pinned Unified Inbox, one collapsible section per
+   account over its classified tree, and a Saved Searches group; `h`/`l`
+   (and the `←`/`→` aliases) collapse and expand a section, and a collapsed
+   account shows summed unread.
+8. In the Unified Inbox and any cross-account saved search, each row
+   carries its account's color marker; a single-account folder omits the
+   marker column.
+9. `t` toggles the current folder between threaded and flat; threaded
+   collapses a conversation to one `[N]`-badged row, and flat lists every
+   message in date order with a depth cue and no folding.
+10. A message's labels render as chips in the list row and in full on the
+    reader's Labels row; list chips overflow to `+N` and drop in the
+    Spartan tier.
+11. Past the widescreen breakpoint, `P` opens a follower preview pane;
+    `j`/`k` still move the list, the pane re-renders the cursored message
+    without scrolling, cursoring does not mark read, and `Enter` opens the
+    full reader and marks read.
+12. Below the widescreen breakpoint the preview pane is unavailable; the
+    reader opens in place of the list, and `q` returns to the list.
+13. `L` opens the label picker, which toggles labels across the selection
+    and creates a typed name that does not yet exist, committing through
+    the `Label` mutator and the outbox.
+14. `V` opens the select-by-criteria menu; a chosen predicate (all unread,
+    from the cursor's sender, this thread, or the current search) marks the
+    full matching set, and the next triage key applies to the whole set and
+    clears the marks.
+15. `z` opens the snooze picker and, on a client-managed account, states
+    that the item returns at the next sync after the wake time; `M` mutes
+    with no overlay; both land an undo toast whose inverse op restores the
+    prior state within the window.
+16. A modal overlay composites over a dimmed underlay that stays legible as
+    context, and the overlay cascade keeps one overlay active at a time;
+    the preview pane and inline compose do not dim.
+17. In threaded display, `Space` folds and unfolds the thread under the
+    cursor and `F` folds or unfolds every thread; while a visual selection
+    is active, `Space` toggles the cursor row's selection instead.
+18. With a search active in the account view, `n` and `N` advance to the
+    next and previous match; `g` and `G` jump the message list to its top
+    and bottom.
+19. `E` on a Disposal folder opens the confirm modal and, on confirm,
+    permanently empties the folder through `Destroy` with no undo hint.

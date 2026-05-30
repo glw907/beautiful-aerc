@@ -4,9 +4,9 @@
 
 **Canonical functional spec:** `docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md`. Domain passes append sections; Pass 8 consolidates.
 
-## Current state (2026-05-29)
+## Current state (2026-05-30)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), and Pass 2 (Organization, threading, automation) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), and Pass 3 (Reading, triage, navigation) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -33,39 +33,73 @@ Pass 2 outcomes (functional spec §2, 16 acceptance scenarios):
 - Backend additions: `SupportsServerRules`, `SupportsServerSnooze`, `SupportsNativeMute`; ManageSieve is a third IMAP connection alongside command and idle.
 - Protocol research backing these decisions: RFC 9661 (JMAP Sieve), RFC 5804 (ManageSieve), RFC 5228/5232/5490 (Sieve), the expired EXTRA snooze drafts, the Gmail-filters-need-REST-API boundary, and saved-search-is-client-side everywhere.
 
-## Next: Pass 3, reading, triage, navigation
+Pass 3 outcomes (functional spec §3, 19 acceptance scenarios):
+- Pane model: strict one-pane by default and on the narrow and standard
+  tiers; a widescreen tier (around 130 cols) adds an opt-in follower
+  preview pane (`P`). The pane re-renders the cursored message top-aligned,
+  never scrolls on its own, and does not mark read; `Enter` opens the
+  full-width reader and marks read. This reverses the legacy no-preview
+  stance at Geoff's direction, keeping the Pine one-pane keyboard model
+  while adding the widescreen scan-and-read flow.
+- Sidebar: the Thunderbird and K-9 shape settled in §1. A pinned Unified
+  Inbox, per-account collapsible classified trees, and a Saved Searches
+  group where label views are saved searches. `J`/`K` walk the whole
+  column; the active account follows the cursor; `h`/`l` (arrows alias)
+  collapse and expand nodes; `[`/`]` step accounts and cycle through the
+  unified scope; `Tab`/`Shift-Tab` are next and previous unread. `[ui]
+  unified-inbox` opts the merge out, and a single-account config collapses
+  to a plain classified tree.
+- Keyboard model: modifier-free single keys, no `:` mode, two contexts
+  sharing one pane with no focus cycling. New verbs are `L` label, `z`
+  snooze, `M` mute, `t` thread-toggle, `P` preview, `V` select-by-criteria,
+  and `E` empty-folder; `Space`/`F` fold threads; `n`/`N` step search
+  matches. Vim-aligned choices win over pine and mutt precedent at Geoff's
+  direction, since the audience carries vim muscle memory.
+- Overlays: a single-active cascade, and modal overlays composite over a
+  dimmed underlay. The dim is a principled focus scrim that keeps the
+  underlay legible as context, reversing the legacy undimmed-underlay rule
+  (ADR-0202). Neither the preview pane nor inline compose is an overlay, so
+  they do not dim.
+- List and reader: a per-account color marker in cross-account views, label
+  chips on rows, and the flat-vs-threaded toggle (`t`). The reader gains an
+  account chip and a Labels row that carries snooze and mute state. Its
+  sender line reserves `i` as the Pass 7 contact hook.
+- An independent vim-priority keymap review folded in before lock: it fixed
+  a `Tab` double-binding, restored `Space`/`F` and `n`/`N`, added `E`,
+  moved label off the `l` motion key to `L`, put tree collapse/expand on
+  `h`/`l`, and demoted the preview toggle to `P`.
 
-Starter prompt (paste after /clear, or say "start Pass 3"):
+## Next: Pass 4, message rendering
+
+Starter prompt (paste after /clear, or say "start Pass 4"):
 
 ```
-Start Pass 3 of the poplar rebuild (reading, triage, navigation). A domain
-spec pass: it appends a spec section, it does not build. Read first:
-docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md sections
-1 and 2 (the settled account, folder, label, threading, and automation
-model), the charter section 2 (product definition) and section 6 decision 6,
-and the gap analysis sections 3 and 4.
+Start Pass 4 of the poplar rebuild (message rendering). A domain spec pass:
+it appends a spec section, it does not build. Read first: the charter
+section 7 (the rendering program) and section 6 decision 6, the gap
+analysis section 4 (message rendering and display), and functional spec
+section 3.5 (the reader surface this pass renders into).
 
-Pass 2 settled the organizational semantics: a threaded-by-default
-conversation model, label and saved-search views, and the triage model
-(per-account dispatch, next-unread across folders, bulk-by-criteria). Pass 3
-designs the surfaces that drive them. Wireframe-first for every screen.
-Brainstorm and settle, then spec:
-- Keyboard model: modifier-free single keys, the full triage and navigation
-  key map, the flat-vs-threaded toggle.
-- Pane model: sidebar, list, reader layout; one-pane Pine-style reading;
-  responsive tiers.
-- List UX: conversation rows, label and flag display, the results-mode list
-  for saved searches and search.
-- Reader UX: header presentation, body region, link and attachment
-  affordances (rendering itself is Pass 4).
-- Triage and bulk UX: the tag-pattern-then-apply surface, the undo window,
-  snooze/mute/label entry points.
+Pass 3 fixed the reader surface: the header, the Labels row, the body
+region, and the link and attachment affordances. Pass 4 owns what fills the
+body. Derive from the field and current best practice, not from legacy
+poplar. Brainstorm and settle, then spec:
+- The rendering contract: the HTML-to-markdown-to-terminal pipeline,
+  fidelity targets, the plain-vs-HTML policy, and remote-content blocking.
+- The golden corpus: the user's own Fastmail mail via the JMAP token plus
+  public sets (SpamAssassin, TREC, public-inbox/lore, Enron).
+- The offline AI eval and improve loop: render, judge against the source,
+  cluster failures, lock golden files; the judge rationales become the
+  contract.
+- Dev-first features: reader syntax highlighting, patch and diff rendering,
+  and richer link handling.
+- The deferred runtime LLM-clean-HTML opt-in.
 End with numbered acceptance scenarios appended to the functional spec
-section 3.
+section 4.
 
 Pass-end: update the rebuild STATUS and append the execution record.
 ```
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [next] -> 4 Rendering -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [next] -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
