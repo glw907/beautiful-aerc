@@ -867,3 +867,256 @@ dim.
     and bottom.
 19. `E` on a Disposal folder opens the confirm modal and, on confirm,
     permanently empties the folder through `Destroy` with no undo hint.
+
+---
+
+## 4. Message rendering and display
+
+Owner: Pass 4. Settles charter §6 decision 6 and the rendering program in
+charter §7. Fills the reader body region that section 3.5 framed but left to
+this pass.
+
+Section 3 fixed the reader surface, including the header, the Labels row, the
+body region, and the link and attachment affordances. Section 4 owns what
+fills the body. The default render is poplar's own cleaned markdown, derived
+from whichever message part carries the most structure, rather than a verbatim
+dump of a MIME part. Its pipeline is built to be improved by Claude against a
+corpus, so this section specs the renderer with its contract and gold standard,
+the fidelity targets, the developer-facing features, and the offline tool and
+eval loop that drive the renderer toward solid. The field survey behind these decisions is
+`docs/poplar/research/2026-05-29-mail-client-gap-analysis.md` §4, which found
+poplar's HTML-to-markdown-to-blocks reduction already ahead of the
+w3m-dump terminal field. Pass 4 raises fidelity and adds developer features on
+that base.
+
+### 4.1 The rendering pipeline
+
+The pipeline runs in three stages. It parses the chosen message part into a
+normalized block tree, cleans the tree and infers structure the source only
+implied, then renders the tree to themed terminal lines. The block tree is the
+single intermediate. Two outputs derive from the same tree. The themed terminal
+lines are the runtime render the reader shows. A deterministic markdown
+serialization of the tree is the audit artifact the contract and the eval tool
+judge against, so what Claude inspects is exactly what the pipeline produced.
+
+The reader body wraps to the reader's content width through the
+`ansix.Measurer`, so the render is pane-relative. There is no fixed column cap.
+
+### 4.2 Source selection and render modes
+
+`[ui] body-render` takes `"markdown"`, `"html"`, or `"plain"` and defaults to
+`"markdown"`. A reader-scoped key cycles the active message through the three
+modes for a one-off look; its binding is reconciled against the locked section
+3 keymap in the build phase.
+
+- `"markdown"` runs the full cleaning and structural-inference pipeline and
+  produces poplar's signature render. The pipeline selects the source part
+  itself, preferring `text/html` when it carries real structure and falling
+  back to `text/plain`.
+- `"html"` forces the HTML part as the source and renders its structure with
+  the inference layer relaxed, a render closer to the source with less
+  normalization.
+- `"plain"` shows the `text/plain` part with reflow only and no inference.
+
+The raw source is always reachable for inspection regardless of mode.
+
+### 4.3 The rendering contract and the gold standard
+
+The contract is a versioned normative document,
+`docs/poplar/rendering-contract.md`. It is the standard the eval tool judges
+every render against, and the document a Claude session loads before a
+rendering pass so two sessions judge the same render the same way. It carries
+four load-bearing parts.
+
+- **Principles.** The design philosophy the rules rest on, including density is
+  signal, structure is inferred rather than copied, output is for a narrow
+  terminal column, and consistency beats cleverness. When a case is ambiguous,
+  principles decide and the conflicting rule is flagged for revision.
+- **Structural-inference rules.** Heuristics that derive markdown structure
+  from presentation when the source lacks semantic tags, such as a bold
+  standalone short line becoming a heading, a hard-wrapped plain-text source
+  reflowing to logical paragraphs, marker runs becoming a list, and a `-- `
+  line opening a signature block.
+- **Syntactic rules.** RFC 2119 MUST and SHOULD checks on the rendered output,
+  covering entity decoding, whitespace hygiene, heading and blockquote and list
+  and code formatting, and link handling. Each rule names an observable failure
+  mode so a bad render points at a specific violation.
+- **Density signals.** Smoke-detector metrics computed from the output,
+  including lines per paragraph, characters per non-blank line, blank-line
+  ratio, orphan rate, and heading density. A failing signal flags a render for
+  inspection rather than failing it outright.
+
+The eval loop's judge rationales are how this document grows. A new failure
+class that the loop confirms becomes a new rule, so the contract sharpens with
+each pass.
+
+Alongside the rules, a gold standard fixes what good output looks like in the
+concrete. It is a small, hand-curated set of exemplar renders, each pairing a
+representative message shape (a newsletter, a threaded reply, a mailed patch, a
+calendar invite) with the markdown render a human has blessed as excellent.
+Excellent is a quality bar measured against the source. The render must carry
+the original message's meaning, structure, and emphasis into clean markdown, so
+a render that is valid markdown yet loses what the message conveyed still fails.
+The contract rules generalize from these exemplars, and the judge calibrates
+against them, so scoring measures a render against shown-good output rather than
+abstract checks alone. When a message shape the gold standard does not yet cover appears,
+a human blesses a new exemplar and the contract rules extend to match.
+
+The tunable data the rules reference lives in one hand-edited Go file,
+`rules.go`, holding the entity table, the tracking-parameter list, the heading
+and density thresholds, the list-marker sets, and the patch and diff
+signatures. Centralizing it gives a tuning fix one obvious home and a reviewable
+diff. The structural logic stays hand-written Go. Nothing here is
+code-generated; "compiled into poplar" means the ruleset is Go in the binary,
+edited like any other source.
+
+### 4.4 Fidelity targets
+
+The gap analysis flagged two debts this pass closes alongside the contract
+rules.
+
+- **Quote folding ships.** A quoted block, identified by `>` depth and an
+  `On … wrote:` attribution, collapses by default to a one-line stub with a
+  depth cue, and a single key expands and re-collapses the block under the
+  cursor. The terminal field folds quotes and poplar does not today.
+- **Tables split by intent.** A table carrying tabular data renders as a GFM
+  pipe table. A table used only as layout scaffolding flattens to sequential
+  blocks. The structural-inference rule distinguishes the two.
+
+Entity decoding, tracking-parameter stripping (`utm_*`, `fbclid`, `gclid`, and
+the rest of the list in `rules.go`), and footnote link extraction into the
+section 3.5 list are contract MUSTs the renderer always applies.
+
+### 4.5 Remote content, inline images, and terminal graphics
+
+Remote resources never load on render. That is the privacy floor and it holds
+in every mode. A blocked remote image leaves an alt-text placeholder, and a
+per-message action loads remote resources only when the user asks.
+
+Inline image rendering is opt-in and capability-detected. At startup poplar
+probes the terminal for a graphics protocol (kitty, iTerm2, or sixel), the same
+shape as icon-mode resolution in section 1, and `[ui] inline-images` gates the
+feature. When the feature is on and the terminal supports a protocol, the reader
+renders embedded `multipart/related` (CID) images and image attachments inline,
+and renders remote images only after an explicit load. When the feature is off
+or the terminal lacks a protocol, every image is an alt-text placeholder and the
+layout is unchanged.
+
+### 4.6 Developer-facing features
+
+The audience is coders, so the body renders three developer cases as
+first-class output.
+
+- **Syntax highlighting.** Fenced code blocks render through chroma, themed to
+  the active palette. The language comes from the fence tag when the source
+  declared one, with light autodetection otherwise.
+- **Patch and diff rendering.** A body that is a unified diff or `git
+  format-patch` output, or a `text/x-patch` or `text/x-diff` part, renders with
+  add, remove, and hunk-header coloring and a file-header treatment. A mailed
+  patch reads natively.
+- **Richer links.** The footnote model from section 3.5 stays, and each
+  harvested link gains a copy action alongside the launch already specced
+  there.
+
+### 4.7 The golden corpus
+
+The corpus has two tiers. Public sets commit to the repo directly as golden
+inputs, including Apache SpamAssassin and TREC for breadth, public-inbox and
+lore for patches and threading, and Enron for scale. The real-world tier is the
+user's own Fastmail mail, read by the eval tool's own JMAP pull rather than
+through a running poplar backend. A message from that tier enters the repo as a
+committed fixture only after a minimize step strips it to the smallest input
+that still reproduces the case and a human reviews and approves the scrubbed
+result. Raw captures stay outside the repo. The corpus and the tool are
+dev-only and reach no runtime path.
+
+Of these golden files, the small quality-defining subset blessed as the target
+is the gold standard from 4.3. The rest serve as regression baselines, locking
+the current accepted render of each corpus message so a change that alters them
+is caught.
+
+### 4.8 The rendering tool and the eval loop
+
+The tool is a dev-build-tagged CLI in the poplar repo, built around the renderer
+package and decoupled from the app. It talks to the renderer and the corpus on
+disk, never to a live backend, the cache, or the UI tree. That isolation is
+what makes Claude's inner loop on rendering fast and reproducible without
+standing up the whole client. The tool renders any raw email file
+deterministically, emits the themed output and the audit markdown side by side,
+diffs a current render against a locked snapshot, scores a render against the
+contract, and lists and addresses corpus entries so Claude sweeps many cases in
+one pass.
+
+The improve loop runs as a skill. It loads the contract, lists the corpus,
+renders and judges each case against the contract, and clusters the failures by
+root cause. It fixes the pipeline logic or the `rules.go` data, diffs the
+affected renders to confirm no regression, runs the gate, then locks the golden
+and scrubs the fixture. The judge's rationale for a confirmed failure class
+feeds back into the contract document. Locked golden renders and the public
+corpus run under `make check` as a permanent regression gate, so an unreviewed
+rendering change fails the build.
+
+The loop also runs unattended. A batch mode renders the whole corpus, judges
+each render with Claude, clusters the failures, applies the ruleset and pipeline
+fixes that clear the gate, and commits the result, so the renderer can be driven
+toward the gold standard on a schedule rather than only by hand. The same tool
+emits a human-readable evolution report, written with Claude, that traces how
+the ruleset changed over time and names the failure classes that drove each
+change. The report is the narrative record behind the rules, and the contract
+document stays the normative source.
+
+### 4.9 Deferred: runtime LLM HTML cleaning
+
+A runtime feature that sends one message's HTML to an LLM for cleaning is named
+here and deferred. It is an opt-in, never the default path, and its boundary is
+cost, latency, privacy, and offline operation. Pass 4 does not build it. The
+default rendering path is the offline pipeline in 4.1.
+
+### 4.10 Acceptance scenarios
+
+1. A message carrying both `text/plain` and `text/html` renders by default as
+   poplar's cleaned markdown, derived from the structure-richest part, not as a
+   verbatim MIME part.
+2. `[ui] body-render = "html"` renders from the HTML part with inference
+   relaxed, `"plain"` shows the `text/plain` part reflowed only, and the default
+   `"markdown"` runs the full pipeline; the reader's render-mode key cycles the
+   active message through the three modes.
+3. Body text reflows to the reader's content width, so a widescreen reader wraps
+   wider than a standard one, and no fixed column cap applies.
+4. A quoted block collapses by default to a one-line stub with a depth cue, and
+   a single key expands and re-collapses the block under the cursor.
+5. A table carrying tabular data renders as a GFM pipe table, and a table used
+   only for layout flattens to sequential blocks.
+6. Rendered output carries no raw HTML entities and no tracking parameters in
+   link hrefs, and it harvests links into the section 3.5 footnote list.
+7. Remote images never load on render; each shows an alt-text placeholder, and a
+   per-message action loads remote resources on request.
+8. With `[ui] inline-images` on and a supporting terminal, embedded CID images
+   and image attachments render inline; with the feature off or the terminal
+   unsupported, every image is an alt-text placeholder and the layout is
+   unchanged.
+9. A fenced code block renders with chroma syntax highlighting themed to the
+   palette, using the fence language tag when present and autodetection
+   otherwise.
+10. A body that is a unified diff or `git format-patch` output renders with add,
+    remove, and hunk-header coloring and a file-header treatment.
+11. Each harvested link offers a copy action alongside the launch action from
+    section 3.5.
+12. The rendering tool renders any raw email file deterministically and emits
+    both the themed output and the audit markdown, and the same input always
+    produces the same output.
+13. A public-set fixture commits to the repo directly, and a fixture derived
+    from real Fastmail mail enters the repo only after a minimize step and a
+    human scrub gate.
+14. Locked golden renders and the public corpus run under `make check` and fail
+    the build on an unreviewed rendering change.
+15. The judge scores a render for quality relative to its source, against the
+    gold-standard exemplars together with the contract; a render that is valid
+    markdown but loses the source's meaning fails, and a newly blessed exemplar
+    extends the standard to a message shape it did not yet cover.
+16. An unattended batch run drives the full corpus loop, applying and committing
+    the ruleset and pipeline fixes that clear the gate.
+17. A human-readable report traces how the ruleset evolved, naming the failure
+    classes that drove each change.
+18. The runtime LLM-clean-HTML path is absent in Pass 4, and the spec names it
+    as a deferred opt-in with its boundary stated.

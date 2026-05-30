@@ -6,7 +6,7 @@
 
 ## Current state (2026-05-30)
 
-Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), and Pass 3 (Reading, triage, navigation) complete.
+Pass 0 (Charter), Pass I (Claude infrastructure refresh), Pass 1 (Accounts, protocols, sync), Pass 2 (Organization, threading, automation), Pass 3 (Reading, triage, navigation), and Pass 4 (Message rendering) complete.
 
 Pass 0 artifacts:
 - Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`.
@@ -69,37 +69,68 @@ Pass 3 outcomes (functional spec §3, 19 acceptance scenarios):
   moved label off the `l` motion key to `L`, put tree collapse/expand on
   `h`/`l`, and demoted the preview toggle to `P`.
 
-## Next: Pass 4, message rendering
+Pass 4 outcomes (functional spec §4, 18 acceptance scenarios):
+- Default render is poplar's own cleaned markdown, derived from the
+  structure-richest message part, with `[ui] body-render` overriding to `html`
+  or `plain` and a per-message reader toggle. The well-crafted-markdown render
+  is the product; the source MIME part is an implementation detail the pipeline
+  picks.
+- The rendering contract is a versioned normative doc holding principles,
+  structural-inference rules, RFC 2119 syntactic rules, and density signals. A
+  gold standard of hand-blessed exemplar renders defines excellent, where
+  excellent is high-quality markdown relative to the source, so a valid render
+  that loses the message's meaning fails. Tunable data lives in one hand-edited
+  `rules.go`; nothing is code-generated.
+- Fidelity gains include pane-relative reflow with no fixed column cap, quote
+  folding collapsed by default, a GFM-vs-layout table split, and entity-decode,
+  tracking-strip, and footnote extraction as MUSTs.
+- Remote resources never load, the privacy floor; inline images are opt-in and
+  capability-detected (kitty/iTerm2/sixel). Dev-first body features are chroma
+  syntax highlighting, patch and diff rendering, and per-link copy.
+- The golden corpus commits public sets directly and adds the user's Fastmail
+  mail through a minimize-and-human-scrub gate; locked goldens and public sets
+  gate `make check` as a permanent regression check.
+- A poplar-internal package holds the renderer, and the eval tool is a
+  dev-tagged CLI decoupled from the app, built so Claude's
+  render-judge-fix-gate loop is fast and isolated. The loop runs interactively
+  and as an unattended batch mode that applies and commits fixes on a schedule,
+  and the tool emits a human-readable evolution report written with Claude.
+  Runtime LLM HTML cleaning is named and deferred.
+- Best-practice-first throughout at Geoff's direction; the legacy
+  `mailrender-training` system is evidence, not the template.
 
-Starter prompt (paste after /clear, or say "start Pass 4"):
+## Next: Pass 5, compose and sending
+
+Starter prompt (paste after /clear, or say "start Pass 5"):
 
 ```
-Start Pass 4 of the poplar rebuild (message rendering). A domain spec pass:
-it appends a spec section, it does not build. Read first: the charter
-section 7 (the rendering program) and section 6 decision 6, the gap
-analysis section 4 (message rendering and display), and functional spec
-section 3.5 (the reader surface this pass renders into).
+Start Pass 5 of the poplar rebuild (compose and sending). A domain spec pass:
+it appends a spec section, it does not build. Read first: the charter section 8
+(catkin and tidy) and section 6 decision 9 (templates/snippets, attachment
+reminder), the gap analysis section 5 (composing and sending), and functional
+spec section 1.5 (identities and alias auto-selection) and section 3.5 (the
+reader the reply and forward flows launch from).
 
-Pass 3 fixed the reader surface: the header, the Labels row, the body
-region, and the link and attachment affordances. Pass 4 owns what fills the
-body. Derive from the field and current best practice, not from legacy
-poplar. Brainstorm and settle, then spec:
-- The rendering contract: the HTML-to-markdown-to-terminal pipeline,
-  fidelity targets, the plain-vs-HTML policy, and remote-content blocking.
-- The golden corpus: the user's own Fastmail mail via the JMAP token plus
-  public sets (SpamAssassin, TREC, public-inbox/lore, Enron).
-- The offline AI eval and improve loop: render, judge against the source,
-  cluster failures, lock golden files; the judge rationales become the
-  contract.
-- Dev-first features: reader syntax highlighting, patch and diff rendering,
-  and richer link handling.
-- The deferred runtime LLM-clean-HTML opt-in.
+Pass 5 owns the outbound surface. Derive from the field and current best
+practice, not from legacy poplar. Brainstorm and settle, then spec:
+- The catkin compose surface: the markdown editor kept poplar-agnostic for a
+  standalone spinoff, address entry with autocomplete, and how reply,
+  reply-all, and forward seed a draft.
+- MIME assembly: markdown to multipart/alternative, attachments to
+  multipart/mixed, and the text-plus-HTML fidelity contract against Pass 4's
+  renderer.
+- Signatures and identities: per-identity multi-signature selection and
+  alias-pattern auto-selection on reply.
+- Drafts, send-later, and undo-send: the outbox state machine, the scheduled
+  send window, and the cancel-and-reschedule mechanics.
+- Templates and snippets and the attachment reminder.
+- AI prose tidy folded into catkin, user-invoked and never on the send path.
 End with numbered acceptance scenarios appended to the functional spec
-section 4.
+section 5.
 
 Pass-end: update the rebuild STATUS and append the execution record.
 ```
 
 ## Pass roadmap
 
-(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [next] -> 5 Compose -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
+(Charter section 9.) 0 Charter [done] -> I Infra refresh [done] -> 1 Accounts/sync [done] -> 2 Organization [done] -> 3 Reading/triage [done] -> 4 Rendering [done] -> 5 Compose [next] -> 6 Search -> 7 Contacts/calendar/security -> 8 Consolidation -> build plans + clean build.
