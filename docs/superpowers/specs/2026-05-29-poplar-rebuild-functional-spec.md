@@ -293,9 +293,9 @@ user labels ride `X-GM-LABELS` over the IMAP connection. A backend whose
 `PERMANENTFLAGS` forbid custom keywords reports `SupportsLabels = false`,
 and the label surface is absent for that account.
 
-### 2.3 Saved searches and virtual folders
+### 2.3 Saved searches and stored queries
 
-One stored-query type backs saved searches, virtual folders, and
+One stored-query type backs saved searches and
 label-scoped views. A stored query has a name, a query expression, and a
 scope. The query grammar is Pass 6's to define; this section commits only
 to the stored-query shape and its behavior.
@@ -443,7 +443,7 @@ section fixes the operations and their capability gates.
    over that label, using the same stored-query mechanism as a
    user-defined saved search.
 7. Saving a search in the UI persists it across a restart as a config
-   entry, and it reopens as a virtual folder in the sidebar.
+   entry, and it reopens as a saved search in the sidebar.
 8. A saved search resolves against the local FTS index with the network
    down and refreshes on open.
 9. A cross-account saved search lists matching messages from every
@@ -562,7 +562,7 @@ surfaces without a second path. The toggle is sticky for the session. A
 pane open past the tier auto-collapses when the terminal narrows below it
 and returns when there is room again.
 
-Responsive tiers carry the legacy three-tier ladder and add the widescreen
+Responsive tiers carry the three-tier ladder and add the widescreen
 pane tier above it. Sidebar width, the sender and date columns, the flag
 column, icon mode, and the label chips all derive from the terminal width
 through one layout computation. Spartan is the narrow floor: it trims the
