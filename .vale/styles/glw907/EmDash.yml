@@ -1,0 +1,6 @@
+extends: existence
+message: "Em dash is a tell here. End the sentence, or use a colon, a comma, or parentheses. Allowed only in a register that sets glw907.EmDash = NO."
+level: error
+nonword: true
+tokens:
+  - '—'

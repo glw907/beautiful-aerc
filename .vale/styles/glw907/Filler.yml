@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' is throat-clearing filler. Cut it."
+level: error
+ignorecase: true
+tokens:
+  - '\bgenuinely\b'
+  - '\bhonestly\b'

@@ -1,5 +1,5 @@
 // skipcheck flags committed test functions that begin with an
-// unconditional t.Skip / t.SkipNow / t.Skipf — the placeholder-
+// unconditional t.Skip / t.SkipNow / t.Skipf, the placeholder-
 // stub shape Audit G surfaced in internal/contacts/sync_test.go.
 //
 // Walks every *_test.go below the working directory. For each
@@ -65,7 +65,7 @@ func main() {
 			}
 			if call, ok := skipCall(stmt, tName); ok {
 				pos := fset.Position(call.Pos())
-				fmt.Printf("%s:%d: SK1 unconditional %s in %s — guard with if testing.Short()/GOOS/env or fence with a build tag\n",
+				fmt.Printf("%s:%d: SK1 unconditional %s in %s; guard with if testing.Short()/GOOS/env or fence with a build tag\n",
 					pos.Filename, pos.Line, callName(call), fn.Name.Name)
 				hits++
 			}

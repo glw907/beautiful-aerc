@@ -1,0 +1,25 @@
+extends: existence
+message: "'%s' is a judgment word with no exact sense here. Be specific or cut it."
+level: error
+ignorecase: true
+tokens:
+  - robust
+  - leverage
+  - comprehensive
+  - dedicated
+  - curated
+  - tailored
+  - foster
+  - elevate
+  - transformative
+  - pivotal
+  - thriving
+  - meticulous
+  - nuanced
+  - embark
+  - harness
+  - bolster
+  - groundbreaking
+  - cutting-edge
+  - innovative
+  - foundational

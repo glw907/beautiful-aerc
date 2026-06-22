@@ -1170,7 +1170,7 @@ func TestModel_WindowSizeMsg_ThreadsLayoutToChildren(t *testing.T) {
 	tab := newLoadedTab(t, 95, 30)
 
 	wantLayout := uicore.ComputeLayout(95)
-	// Model clamps Sidebar against width/2 — replicate that here:
+	// Model clamps Sidebar against width/2, so replicate that here:
 	if wantLayout.Sidebar > 95/2 {
 		wantLayout.Sidebar = 95 / 2
 	}

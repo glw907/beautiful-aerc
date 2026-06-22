@@ -854,7 +854,7 @@ func TestMessageListFilter(t *testing.T) {
 	})
 
 	t.Run("date text is not a filter target", func(t *testing.T) {
-		// The pre-13.1 [name]/[all] mode toggle is retired — operators
+		// The pre-13.1 [name]/[all] mode toggle is retired. Operators
 		// (`from:`, `subject:`) replace it. Bare terms match
 		// subject + from + to + cc, never the rendered date column.
 		ml := New(styles, msgs, 90, 20, uicore.FancyIcons, ansix.NewMeasurer(2))
