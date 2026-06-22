@@ -63,7 +63,7 @@ func (b *Backend) pushLoop(ctx context.Context) {
 // runEventSource opens a JMAP EventSource stream and blocks until the
 // stream closes or ctx is cancelled. ConnConnected is emitted on the
 // first received event, the earliest signal that the SSE socket is
-// genuinely open. The push package does not accept a context, so a
+// open. The push package does not accept a context, so a
 // goroutine closes the response body when ctx is done.
 func (b *Backend) runEventSource(ctx context.Context) error {
 	b.mu.Lock()
