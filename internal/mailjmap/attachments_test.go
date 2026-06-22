@@ -120,8 +120,8 @@ func TestAttachments_TwoParts(t *testing.T) {
 }
 
 func TestAttachments_SkipsTopLevelTextParts(t *testing.T) {
-	// A plain single-part text/plain message — top-level body, should
-	// return empty attachments.
+	// A plain single-part text/plain message, with the body at the top
+	// level, should return empty attachments.
 	bodyStructure := &email.BodyPart{
 		PartID: "1",
 		BlobID: jmap.ID("blob-body"),

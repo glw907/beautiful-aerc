@@ -11,7 +11,7 @@ func TestAttachments(t *testing.T) {
 	cmd.caps = baseCaps()
 
 	// Fixture: multipart/mixed root
-	//   section "1": text/plain  — body, must be skipped
+	//   section "1": text/plain, the body, must be skipped
 	//   section "2": application/pdf, disposition=attachment, filename=r.pdf, size=4096
 	//   section "3": image/png, ContentID="<logo@x>", no explicit disposition
 	cmd.bodyStructure[mail.UID("7")] = BodyStructure{

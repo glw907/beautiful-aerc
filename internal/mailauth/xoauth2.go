@@ -1,4 +1,4 @@
-// Vendored from git.sr.ht/~rjarry/aerc — auth/xoauth2.go.
+// Vendored from git.sr.ht/~rjarry/aerc (auth/xoauth2.go).
 // MIT-licensed. Modifications: package renamed to mailauth. Aerc-specific
 // functions (ExchangeRefreshToken, Authenticate, SaveRefreshToken,
 // GetRefreshToken) and their imports (xdg, go-imap/client, golang.org/x/oauth2)

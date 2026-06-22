@@ -13,8 +13,8 @@ import (
 )
 
 // searchToggleScope binds `\` to the folder ↔ all-folders scope toggle
-// while typing. Replaces the Pass 13's `[name]/[all]` Tab toggle —
-// operators (`from:`, `subject:`, …) cover the field-selection axis.
+// while typing. Replaces the Pass 13's `[name]/[all]` Tab toggle.
+// Operators (`from:`, `subject:`, …) cover the field-selection axis.
 var searchToggleScope = key.NewBinding(key.WithKeys("\\"))
 
 // SearchState is the lifecycle state of the sidebar search UI.
