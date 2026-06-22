@@ -1,0 +1,20 @@
+extends: existence
+message: "'%s' is a banned phrase. Say it plainly."
+level: error
+ignorecase: true
+tokens:
+  - "it's worth noting"
+  - "when it comes to"
+  - "dive into"
+  - "delve"
+  - "let's explore"
+  - "at the end of the day"
+  - "game.?changer"
+  - "state-of-the-art"
+  - "look no further"
+  - "in today's world"
+  - "to be honest"
+  - "to be frank"
+  - "the honest answer is"
+  - "in the realm of"
+  - "in the world of"

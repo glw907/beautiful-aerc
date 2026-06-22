@@ -1,0 +1,14 @@
+extends: existence
+message: "'%s' is marketing language. Use a plain word."
+level: error
+ignorecase: true
+tokens:
+  - empower
+  - streamline
+  - supercharge
+  - turbocharge
+  - revolutionize
+  - effortless
+  - effortlessly
+  - plethora
+  - myriad

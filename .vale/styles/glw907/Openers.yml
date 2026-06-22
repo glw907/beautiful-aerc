@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' is a banned opener. Start with the subject."
+level: error
+ignorecase: true
+scope: sentence
+tokens:
+  - '^(?:Moreover|Additionally|Furthermore|In conclusion|Needless to say|Certainly|It should be noted)\b'

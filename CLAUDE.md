@@ -193,3 +193,14 @@ make install   # install poplar into ~/.local/bin/
 `BACKLOG.md` is the project issue tracker. Log with `/log-issue`.
 Check it before starting work — may contain known limitations or
 upstream blockers relevant to the task.
+
+## Authoring
+
+Claude's drafting on this repo follows the workstation authoring charter at
+`~/.claude/docs/authoring-charter.md`. The Go comment audience is wired: the in-tree
+`.vale.ini` lints `.go` comment prose through the vendored `glw907` overlay in
+`.vale/styles/glw907`, which catches the em dash and the banned lexicon inside comments.
+The semantic layer stays the `/simplify` Go voice lens (the T-numbered catalogue in
+`~/.claude/docs/go-comment-voice.md`). Re-sync the overlay after a canonical change with
+`~/.dotfiles/scripts/glw907-vendor.sh ~/Projects/poplar --sync`. The docs prose mapping
+arrives with the charter's prose arm.
