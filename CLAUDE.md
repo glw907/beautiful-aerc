@@ -200,7 +200,9 @@ Claude's drafting on this repo follows the workstation authoring charter at
 `~/.claude/docs/authoring-charter.md`. The Go comment audience is wired: the in-tree
 `.vale.ini` lints `.go` comment prose through the vendored `glw907` overlay in
 `.vale/styles/glw907`, which catches the em dash and the banned lexicon inside comments.
-The semantic layer stays the `/simplify` Go voice lens (the T-numbered catalogue in
+`make check` runs `scripts/vale-comments.sh` to block a commit on an error-level finding,
+with the `Judgment` rule kept advisory there because it over-fires on legitimate technical
+words. The semantic layer stays the `/simplify` Go voice lens (the T-numbered catalogue in
 `~/.claude/docs/go-comment-voice.md`). Re-sync the overlay after a canonical change with
 `~/.dotfiles/scripts/glw907-vendor.sh ~/Projects/poplar --sync`. The docs prose mapping
 arrives with the charter's prose arm.

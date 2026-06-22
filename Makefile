@@ -48,9 +48,12 @@ skipcheck:
 check-deep:
 	@./scripts/check-deep.sh
 
-check: fmt-check vet voice modern-go-check skipcheck test
+vale-comments:
+	@./scripts/vale-comments.sh
+
+check: fmt-check vet voice modern-go-check skipcheck vale-comments test
 
 clean:
 	rm -f $(BINARY)
 
-.PHONY: build test test-imap vet fmt-check voice modern-go-check skipcheck check-deep lint audit install check clean
+.PHONY: build test test-imap vet fmt-check voice modern-go-check skipcheck check-deep vale-comments lint audit install check clean
