@@ -177,7 +177,7 @@ STATUS, and stop.
 ```
 make build     # go build -o poplar ./cmd/poplar
 make test      # go test ./...
-make check     # vet + test (commit gate)
+make check     # fmt, vet, voice, modern-go, skipcheck, vale-comments, test (commit gate)
 make install   # install poplar into ~/.local/bin/
 ```
 
