@@ -115,8 +115,14 @@
   improve loop Phase 1 is spiking (ideals, rule derivation, regression grading), so the
   renderer improves from real failures over time. Contingent on the rendering bet landing
   viable; candidate for the Phase 2 knowable-horizon register so the architecture keeps a
-  seam for it (local corpus store plus a raw-source capture path). Privacy: flagged mail
-  stays local; any upstream submission would need explicit scrubbing consent.
+  seam for it (local corpus store plus a raw-source capture path). Collection needs a small,
+  secure, hosted endpoint (Geoff, 2026-07-19), and submission is strictly opt-in twice over:
+  the feature is off by default, and each flagged message gets a show-exactly-what-leaves
+  review before anything is sent, because flagged mail carries third parties' content, not
+  just the flagger's. Poplar's likely user base is highly security conscious, so the
+  explanation must be careful and concrete: what is captured, what is stripped (attachments
+  and non-flagged headers by default), where it lands, retention. Local-only flagging must
+  remain useful without ever opting in.
 
 - [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)* — **scheduled: Pass 1.2 (post-v1)**
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
