@@ -1,5 +1,13 @@
 # Poplar Rebuild: Spec-Hardening Review
 
+> **Superseded (2026-07-19).** Passes B and C are cancelled under the
+> re-founding charter
+> (`docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md`);
+> their critique energy spends inside each re-founding phase's
+> adversarial review. Pass A's gap analysis remains a research input.
+> The active tracker is
+> `docs/superpowers/specs/poplar-refounding-STATUS.md`.
+
 A three-pass quality gate that runs after Pass 8 (consolidation) locks the
 canonical functional spec and before the numbered build plans begin. The goal is
 a spec that is complete, correct, and structured for a Claude-first build.

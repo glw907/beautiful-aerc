@@ -1,5 +1,13 @@
 # Poplar Rebuild: STATUS
 
+> **Superseded (2026-07-19).** This track is closed under the
+> re-founding charter
+> (`docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md`).
+> The functional spec and gap analysis it produced are research
+> inputs; nothing here binds. The active tracker is
+> `docs/superpowers/specs/poplar-refounding-STATUS.md`. This document
+> is retained as a record.
+
 **Track:** Greenfield spec-first rebuild. The sole active track. Charter: `docs/superpowers/specs/2026-05-29-poplar-rebuild-charter.md`. The old dogfood client is archived at tag `poplar-legacy` and branch `legacy`; its tracker `docs/poplar/STATUS.md` is retired reference.
 
 **Canonical functional spec:** `docs/superpowers/specs/2026-05-29-poplar-rebuild-functional-spec.md`. Domain passes append sections; Pass 8 consolidates.
