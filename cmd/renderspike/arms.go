@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/filter"
+	"github.com/glw907/poplar/internal/spikerender"
 )
 
 // armResult is the output of one rendering arm for one message.
@@ -81,6 +82,15 @@ func runLegacy(content []byte, contentType string) armResult {
 	} else {
 		out = filter.CleanPlain(string(content))
 	}
+	ms := time.Since(start).Milliseconds()
+	return armResult{output: []byte(out), ms: ms}
+}
+
+// runIterated renders content through the iterated pipeline: go-readability
+// preprocessing plus the legacy filter pipeline plus email-specific rules.
+func runIterated(content []byte, contentType string) armResult {
+	start := time.Now()
+	out := spikerender.Render(content, contentType)
 	ms := time.Since(start).Milliseconds()
 	return armResult{output: []byte(out), ms: ms}
 }

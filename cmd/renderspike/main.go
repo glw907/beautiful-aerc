@@ -1,6 +1,6 @@
 // Package main is the renderspike tool. It renders each message from
-// corpus/manifest.json through three arms (lynx, w3m, legacy) and writes
-// the results to corpus/renders/ for quality comparison.
+// corpus/manifest.json through four arms (lynx, w3m, legacy, iterated)
+// and writes the results to corpus/renders/ for quality comparison.
 package main
 
 import (
@@ -32,11 +32,12 @@ type armStat struct {
 }
 
 type msgStat struct {
-	Class  string  `json:"class"`
-	Source string  `json:"source"`
-	Lynx   armStat `json:"lynx"`
-	W3M    armStat `json:"w3m"`
-	Legacy armStat `json:"legacy"`
+	Class    string  `json:"class"`
+	Source   string  `json:"source"`
+	Lynx     armStat `json:"lynx"`
+	W3M      armStat `json:"w3m"`
+	Legacy   armStat `json:"legacy"`
+	Iterated armStat `json:"iterated"`
 }
 
 type statsFile struct {
@@ -105,6 +106,7 @@ func run() error {
 		lynxRes := runLynx(part.content)
 		w3mRes := runW3M(part.content, part.contentType)
 		legacyRes := runLegacy(part.content, part.contentType)
+		iteratedRes := runIterated(part.content, part.contentType)
 
 		for _, pair := range []struct {
 			arm string
@@ -113,6 +115,7 @@ func run() error {
 			{"lynx", lynxRes},
 			{"w3m", w3mRes},
 			{"legacy", legacyRes},
+			{"iterated", iteratedRes},
 		} {
 			if pair.res.errMsg != "" {
 				slog.Warn("arm failed", "id", entry.ID, "arm", pair.arm, "err", pair.res.errMsg)
@@ -128,11 +131,12 @@ func run() error {
 		}
 
 		stats.Messages[entry.ID] = msgStat{
-			Class:  entry.Class,
-			Source: part.contentType,
-			Lynx:   toArmStat(lynxRes),
-			W3M:    toArmStat(w3mRes),
-			Legacy: toArmStat(legacyRes),
+			Class:    entry.Class,
+			Source:   part.contentType,
+			Lynx:     toArmStat(lynxRes),
+			W3M:      toArmStat(w3mRes),
+			Legacy:   toArmStat(legacyRes),
+			Iterated: toArmStat(iteratedRes),
 		}
 	}
 
@@ -159,15 +163,16 @@ func toArmStat(r armResult) armStat {
 	}
 }
 
-// errStat builds a msgStat where all three arms carry errMsg and no bytes
-// were produced. Used when a message fails before any arm runs.
+// errStat builds a msgStat where all arms carry errMsg and no bytes were
+// produced. Used when a message fails before any arm runs.
 func errStat(entry manifestEntry, errMsg string) msgStat {
 	arm := armStat{Error: errMsg}
 	return msgStat{
-		Class:  entry.Class,
-		Lynx:   arm,
-		W3M:    arm,
-		Legacy: arm,
+		Class:    entry.Class,
+		Lynx:     arm,
+		W3M:      arm,
+		Legacy:   arm,
+		Iterated: arm,
 	}
 }
 

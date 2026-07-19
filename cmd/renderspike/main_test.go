@@ -82,6 +82,7 @@ func TestErrStat(t *testing.T) {
 		{"Lynx", got.Lynx},
 		{"W3M", got.W3M},
 		{"Legacy", got.Legacy},
+		{"Iterated", got.Iterated},
 	} {
 		if arm.s.Error != "no text part found" {
 			t.Errorf("%s.Error = %q, want %q", arm.name, arm.s.Error, "no text part found")
@@ -127,6 +128,14 @@ func TestRenderOutPath(t *testing.T) {
 			class: "personal",
 			id:    "xyz-789",
 			want:  "corpus/renders/legacy/personal/xyz-789.md",
+		},
+		{
+			name:  "iterated arm",
+			dir:   "corpus/renders",
+			arm:   "iterated",
+			class: "newsletter",
+			id:    "abc-def",
+			want:  "corpus/renders/iterated/newsletter/abc-def.md",
 		},
 	}
 	for _, tt := range tests {
