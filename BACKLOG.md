@@ -109,6 +109,15 @@
 
 ## Someday
 
+- [ ] **#63** Flag-a-bad-render: user-submitted problem corpus for the rendering loop `#feature` `#poplar` *(2026-07-19)*
+  A keybinding in the reader to flag a message whose markdown render failed, saving the raw
+  MIME locally into a known-problems corpus. That corpus feeds the same offline
+  improve loop Phase 1 is spiking (ideals, rule derivation, regression grading), so the
+  renderer improves from real failures over time. Contingent on the rendering bet landing
+  viable; candidate for the Phase 2 knowable-horizon register so the architecture keeps a
+  seam for it (local corpus store plus a raw-source capture path). Privacy: flagged mail
+  stays local; any upstream submission would need explicit scrubbing consent.
+
 - [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)* — **scheduled: Pass 1.2 (post-v1)**
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
 
