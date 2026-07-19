@@ -44,6 +44,13 @@ Phase 0 outcomes:
 
 ## Next: Phase 1, the rendering bet
 
+**In progress (2026-07-19).** Plan:
+`docs/superpowers/plans/2026-07-19-rendering-bet.md`. A fresh session
+resuming mid-phase executes that plan from the first unchecked task
+via superpowers:subagent-driven-development. Settled with Geoff:
+standard depth (25 per class, 3 ideals per class), harvest from all
+folders including Spam and Trash.
+
 Starter prompt (paste after /clear, or say "run Phase 1 of the
 re-founding"):
 
