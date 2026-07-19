@@ -88,9 +88,10 @@ func runLegacy(content []byte, contentType string) armResult {
 
 // runIterated renders content through the iterated pipeline: go-readability
 // preprocessing plus the legacy filter pipeline plus email-specific rules.
-func runIterated(content []byte, contentType string) armResult {
+func runIterated(part bodyPart) armResult {
 	start := time.Now()
-	out := spikerender.Render(content, contentType)
+	hdr := spikerender.MsgHeaders{Subject: part.subject, FromDisplay: part.fromDisplay}
+	out := spikerender.Render(part.content, part.contentType, hdr)
 	ms := time.Since(start).Milliseconds()
 	return armResult{output: []byte(out), ms: ms}
 }

@@ -106,7 +106,7 @@ func run() error {
 		lynxRes := runLynx(part.content)
 		w3mRes := runW3M(part.content, part.contentType)
 		legacyRes := runLegacy(part.content, part.contentType)
-		iteratedRes := runIterated(part.content, part.contentType)
+		iteratedRes := runIterated(part)
 
 		for _, pair := range []struct {
 			arm string
