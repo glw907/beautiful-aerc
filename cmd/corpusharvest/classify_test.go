@@ -74,6 +74,46 @@ func TestClassify(t *testing.T) {
 			h:    msgHeaders{from: "author@example.com", subject: "[patch 1/3] Add feature"},
 			want: "list-patch",
 		},
+		// list-patch precedence: corporate List-Id + List-Unsubscribe must not route here
+		{
+			name: "corporate list-id with list-unsubscribe is newsletter not list-patch",
+			h: msgHeaders{
+				from:            "digest@shopify.com",
+				subject:         "Your weekly merchant update",
+				listID:          "<digest.shopify.com>",
+				listUnsubscribe: "<https://shopify.com/unsubscribe>",
+			},
+			want: "newsletter",
+		},
+		{
+			name: "corporate list-id with list-unsubscribe and sale subject is marketing",
+			h: msgHeaders{
+				from:            "deals@retailer.com",
+				subject:         "50% off this weekend only",
+				listID:          "<promotions.retailer.com>",
+				listUnsubscribe: "<mailto:unsub@retailer.com>",
+			},
+			want: "marketing",
+		},
+		{
+			name: "groups.io with list-unsubscribe stays list-patch",
+			h: msgHeaders{
+				from:            "dev@groups.io",
+				subject:         "Re: project discussion",
+				listID:          "<dev.groups.io>",
+				listUnsubscribe: "<mailto:dev+unsubscribe@groups.io>",
+			},
+			want: "list-patch",
+		},
+		{
+			name: "[PATCH] subject wins regardless of list-unsubscribe",
+			h: msgHeaders{
+				from:            "author@example.com",
+				subject:         "[PATCH v3] fix: handle nil case",
+				listUnsubscribe: "<mailto:unsub@example.com>",
+			},
+			want: "list-patch",
+		},
 		// newsletter
 		{
 			name: "newsletter with list-unsubscribe",

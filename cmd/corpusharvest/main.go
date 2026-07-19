@@ -136,7 +136,18 @@ func run() error {
 
 	byClass := groupByClass(pass1)
 
-	// Select from pass 1 pool and identify actual shortfalls after sender cap.
+	unclassified := 0
+	for _, c := range pass1 {
+		if c.class == "unclassified" {
+			unclassified++
+		}
+	}
+	if unclassified > 0 {
+		slog.Info("unclassified messages excluded", "count", unclassified)
+	}
+
+	// Pool size before selection does not predict the selected count because the
+	// sender cap can reduce a class below minPerClass even when the pool is large enough.
 	pool := make(map[string][]candidate)
 	for k, v := range byClass {
 		sorted := make([]candidate, len(v))
@@ -174,7 +185,6 @@ func run() error {
 				}
 			}
 		}
-		// Re-sort and re-select for shortfall classes.
 		for _, cls := range shortfallClasses {
 			slices.SortFunc(pool[cls], func(a, b candidate) int {
 				return b.receivedAt.Compare(a.receivedAt)
@@ -234,7 +244,7 @@ func run() error {
 		fsID := sanitizeID(c.id)
 		relPath := filepath.Join("raw", c.class, fsID+".eml")
 		absPath := filepath.Join(corpusDir, relPath)
-		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+		if err := writeFileAtomic(absPath, data); err != nil {
 			return fmt.Errorf("write %s: %w", absPath, err)
 		}
 		entries = append(entries, corpusEntry{
@@ -248,7 +258,7 @@ func run() error {
 		})
 	}
 
-	stats := make(map[string]classStats, len(allClasses))
+	stats := make(map[string]classStats, len(allClasses)+1)
 	for _, cls := range allClasses {
 		count := 0
 		for _, e := range entries {
@@ -258,6 +268,7 @@ func run() error {
 		}
 		stats[cls] = classStats{Count: count, Window: windows[cls]}
 	}
+	stats["unclassified"] = classStats{Count: unclassified, Window: "12mo"}
 
 	m := harvestManifest{
 		HarvestDate: time.Now().UTC().Format(time.RFC3339),
@@ -269,7 +280,7 @@ func run() error {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 	mpath := filepath.Join(corpusDir, "manifest.json")
-	if err := os.WriteFile(mpath, mdata, 0o644); err != nil {
+	if err := writeFileAtomic(mpath, mdata); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
@@ -439,9 +450,9 @@ func extractMsgHeaders(e *email.Email) msgHeaders {
 	return h
 }
 
-// selectCandidates picks up to max candidates with round-robin sender
+// selectCandidates picks up to limit candidates with round-robin sender
 // diversity, capping each sender at senderMax.
-func selectCandidates(cands []candidate, max, senderMax int) []candidate {
+func selectCandidates(cands []candidate, limit, senderMax int) []candidate {
 	bySender := make(map[string][]candidate)
 	var senderOrder []string
 	for _, c := range cands {
@@ -453,10 +464,10 @@ func selectCandidates(cands []candidate, max, senderMax int) []candidate {
 
 	senderIdx := make(map[string]int, len(senderOrder))
 	var out []candidate
-	for len(out) < max {
+	for len(out) < limit {
 		progress := false
 		for _, sk := range senderOrder {
-			if len(out) >= max {
+			if len(out) >= limit {
 				break
 			}
 			idx := senderIdx[sk]
@@ -516,6 +527,36 @@ func safeTime(t *time.Time) time.Time {
 		return time.Time{}
 	}
 	return *t
+}
+
+// writeFileAtomic writes data to path via a temp file in the same directory
+// then renames into place, so a concurrent reader never sees a partial write.
+func writeFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
+	if err != nil {
+		return fmt.Errorf("create temp: %w", err)
+	}
+	tmpPath := f.Name()
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write temp: %w", err)
+	}
+	if err := f.Chmod(0o644); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("chmod temp: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("close temp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename to %s: %w", path, err)
+	}
+	return nil
 }
 
 func sanitizeID(id string) string {

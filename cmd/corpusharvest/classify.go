@@ -31,7 +31,7 @@ func classify(h msgHeaders) string {
 	if isCalendar(ct, subj) {
 		return "calendar"
 	}
-	if listID != "" || strings.Contains(subj, "[patch") {
+	if isListPatch(listID, subj, h.listUnsubscribe) {
 		return "list-patch"
 	}
 	if h.listUnsubscribe != "" {
@@ -86,6 +86,42 @@ var calendarSubjectKeywords = []string{
 	"invitation:", "meeting invite", "you've been invited",
 	"calendar invite", "calendar notification",
 	"accepted:", "declined:", "tentative:",
+}
+
+// genuineListPatterns matches List-Id host components that belong to real
+// discussion-list infrastructure rather than corporate bulk-mail senders.
+var genuineListPatterns = []string{
+	".groups.io",
+	".googlegroups.com",
+	".lists.", // host component starts with "lists."
+	"lore.kernel.org",
+	"vger.kernel.org",
+	".sr.ht",
+	"sourceware.org",
+}
+
+func isGenuineListHost(listID string) bool {
+	for _, p := range genuineListPatterns {
+		if strings.Contains(listID, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func isListPatch(listID, subj, listUnsubscribe string) bool {
+	if strings.Contains(subj, "[patch") {
+		return true
+	}
+	if listID == "" {
+		return false
+	}
+	if isGenuineListHost(listID) {
+		return true
+	}
+	// Corporate bulk mailers set both List-Id and List-Unsubscribe.
+	// A bare List-Id without List-Unsubscribe comes from a mailing list server.
+	return listUnsubscribe == ""
 }
 
 var marketingKeywords = []string{
