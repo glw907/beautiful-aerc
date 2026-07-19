@@ -2,17 +2,17 @@
 name: poplar-pass
 description: >
   ARCHIVED dogfood-track ritual for the old poplar client (tag
-  `poplar-legacy`). Active poplar work is the greenfield rebuild: do
-  not invoke this on a plain "continue" or "next pass". Read
-  `docs/superpowers/specs/poplar-rebuild-STATUS.md` instead. Invoke
+  `poplar-legacy`). Active poplar work is the re-founding: do not
+  invoke this on a plain "continue" or "next pass". Read
+  `docs/superpowers/specs/poplar-refounding-STATUS.md` instead. Invoke
   only when the user explicitly asks to work on the archived client.
 ---
 
 # Poplar Pass (archived dogfood ritual)
 
 > **This skill is the archived dogfood ritual.** Active poplar work is
-> the greenfield rebuild, whose pass flow lives in
-> `docs/superpowers/specs/poplar-rebuild-STATUS.md`. If you reached
+> the re-founding, whose phase flow lives in
+> `docs/superpowers/specs/poplar-refounding-STATUS.md`. If you reached
 > this skill on a "continue" or "next pass" trigger, stop and read that
 > STATUS instead. Use the ritual below only when the user explicitly
 > asks to work on the archived client (tag `poplar-legacy`).
