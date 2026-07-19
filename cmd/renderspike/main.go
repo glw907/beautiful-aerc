@@ -89,6 +89,7 @@ func run() error {
 		raw, err := os.ReadFile(filepath.Join(corpusDir, entry.Path))
 		if err != nil {
 			slog.Warn("read eml", "id", entry.ID, "err", err)
+			stats.Messages[entry.ID] = errStat(entry, err.Error())
 			errs++
 			continue
 		}
@@ -96,6 +97,7 @@ func run() error {
 		part, err := extractBody(raw)
 		if err != nil {
 			slog.Warn("extract body", "id", entry.ID, "err", err)
+			stats.Messages[entry.ID] = errStat(entry, err.Error())
 			errs++
 			continue
 		}
@@ -154,6 +156,18 @@ func toArmStat(r armResult) armStat {
 		MS:    r.ms,
 		Bytes: len(r.output),
 		Error: r.errMsg,
+	}
+}
+
+// errStat builds a msgStat where all three arms carry errMsg and no bytes
+// were produced. Used when a message fails before any arm runs.
+func errStat(entry manifestEntry, errMsg string) msgStat {
+	arm := armStat{Error: errMsg}
+	return msgStat{
+		Class:  entry.Class,
+		Lynx:   arm,
+		W3M:    arm,
+		Legacy: arm,
 	}
 }
 

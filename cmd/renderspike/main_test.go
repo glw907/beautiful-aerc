@@ -66,6 +66,35 @@ func TestExtractBody(t *testing.T) {
 	}
 }
 
+func TestErrStat(t *testing.T) {
+	entry := manifestEntry{ID: "abc123", Class: "marketing"}
+	got := errStat(entry, "no text part found")
+	if got.Class != "marketing" {
+		t.Errorf("Class = %q, want %q", got.Class, "marketing")
+	}
+	if got.Source != "" {
+		t.Errorf("Source = %q, want empty", got.Source)
+	}
+	for _, arm := range []struct {
+		name string
+		s    armStat
+	}{
+		{"Lynx", got.Lynx},
+		{"W3M", got.W3M},
+		{"Legacy", got.Legacy},
+	} {
+		if arm.s.Error != "no text part found" {
+			t.Errorf("%s.Error = %q, want %q", arm.name, arm.s.Error, "no text part found")
+		}
+		if arm.s.MS != 0 {
+			t.Errorf("%s.MS = %d, want 0", arm.name, arm.s.MS)
+		}
+		if arm.s.Bytes != 0 {
+			t.Errorf("%s.Bytes = %d, want 0", arm.name, arm.s.Bytes)
+		}
+	}
+}
+
 func TestRenderOutPath(t *testing.T) {
 	tests := []struct {
 		name  string

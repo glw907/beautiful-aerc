@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 
 	_ "github.com/emersion/go-message/charset"
 	gomail "github.com/emersion/go-message/mail"
@@ -27,7 +28,11 @@ func extractBody(raw []byte) (bodyPart, error) {
 	var htmlContent, plainContent []byte
 	for {
 		p, perr := mr.NextPart()
+		if perr == io.EOF {
+			break
+		}
 		if perr != nil {
+			slog.Warn("MIME part read", "err", perr)
 			break
 		}
 		ih, ok := p.Header.(*gomail.InlineHeader)
