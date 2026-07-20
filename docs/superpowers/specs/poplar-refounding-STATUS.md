@@ -55,7 +55,14 @@ never an LLM in the render path. LLM use is confined to the offline
 loop (rule derivation, corpus improvement, grading). The Task 5 LLM
 arm is reframed as a comprehension-ceiling benchmark that prices the
 deterministic gap, not as a runtime candidate; the verdict judges
-viability on the deterministic arm alone.
+viability on the deterministic arm alone. Also settled 2026-07-19:
+the production rule system must be structured for extension,
+modification, and explanation, so that people and LLMs can improve
+the rules over time. Rules carry a name, an observable trigger and
+transform, provenance (the corpus messages that motivated them), and
+tests, and the renderer can report which rules fired on a given
+message. Binds the Phase 4 rendering-pipeline design; the verdict
+should assess rule structure, not only rule quality.
 
 Starter prompt (paste after /clear, or say "run Phase 1 of the
 re-founding"):
