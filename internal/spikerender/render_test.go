@@ -978,6 +978,46 @@ func TestPromoteButtonLinks(t *testing.T) {
 	}
 }
 
+// Regression pin: StnoH1-dPdyV CTA button links must survive the full pipeline.
+// The bug: promoteButtonLinks promoted the button cells to <p><a>, but
+// go-readability still dropped them as layout content. The pipeline must
+// re-inject any CTA hrefs that readability discards.
+
+func TestCTALinksNotDroppedByReadability(t *testing.T) {
+	// Minimal newsletter HTML: enough article text for readability to extract
+	// an article (triggering the CTA-drop bug), plus two button_content-cell
+	// CTAs in a separate table section outside the article region.
+	html := `<!DOCTYPE html>
+<html><body>
+<table><tr><td>
+<p>Welcome to the spring newsletter. This issue covers all the upcoming sailing events
+and news from the club. We have a full season of races and cruising events planned,
+from the Wednesday night series to our annual Governor Cup regatta. All members are
+encouraged to participate and bring guests along to enjoy the water.</p>
+<p>The board has approved several new initiatives for the year, including a junior
+sailing program, improved dock facilities, and expanded social calendar. Monthly potluck
+dinners and educational seminars will be held throughout the season.</p>
+</td></tr></table>
+<table><tr>
+<td class="button_content-cell" style="background-color:#1e3a5f;padding:12px;text-align:center;">
+<a class="button_link" href="https://example.nsaa.org/join" style="color:#f5f5f5;font-weight:bold;">JOIN NSAA</a>
+</td>
+</tr><tr>
+<td class="button_content-cell" style="background-color:#1e3a5f;padding:12px;text-align:center;">
+<a class="button_link" href="https://example.nsaa.org/events" style="color:#f5f5f5;font-weight:bold;">BROWSE NSAA EVENTS</a>
+</td>
+</tr></table>
+</body></html>`
+
+	out := Render([]byte(html), "text/html", MsgHeaders{})
+	if !strings.Contains(out, "example.nsaa.org/join") {
+		t.Errorf("JOIN NSAA href dropped by pipeline\nfull output:\n%s", out)
+	}
+	if !strings.Contains(out, "example.nsaa.org/events") {
+		t.Errorf("BROWSE NSAA EVENTS href dropped by pipeline\nfull output:\n%s", out)
+	}
+}
+
 // Regression pin: StnoH1-dPdyV action links must survive R15 and R17.
 
 func TestActionLinksNotDroppedByResidueOrRedirect(t *testing.T) {

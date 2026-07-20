@@ -45,8 +45,10 @@ func Render(content []byte, contentType string, hdr MsgHeaders) string {
 	src = stripHiddenPreheaders(src)
 	src = repairWordSplits(src)
 	src = promoteStyledHeadings(src)
+	ctas := collectButtonCTAs(src)
 	src = promoteButtonLinks(src)
 	extracted := extractReadable(src)
+	extracted = reinjectMissingCTAs(extracted, ctas)
 	md := filter.CleanHTML(extracted)
 	md = stripGitHubTracking(md)
 	md = stripGitHubFooter(md)
@@ -1080,6 +1082,9 @@ var reButtonLinkAnchor = regexp.MustCompile(
 	`(?is)<a[^>]*\bhref="([^"]+)"[^>]*>(.*?)</a>`,
 )
 
+// reInlineTag matches any HTML tag. Used to strip tags from button link text.
+var reInlineTag = regexp.MustCompile(`<[^>]+>`)
+
 // promoteButtonLinks converts Constant Contact button table cells to plain
 // paragraph links before readability extraction. go-readability drops table
 // cells whose class or style marks them as decorative buttons; promoting
@@ -1097,7 +1102,7 @@ func promoteButtonLinks(src string) string {
 		var sb strings.Builder
 		for _, a := range anchors {
 			href := a[1]
-			text := regexp.MustCompile(`<[^>]+>`).ReplaceAllString(a[2], "")
+			text := reInlineTag.ReplaceAllString(a[2], "")
 			text = strings.TrimSpace(text)
 			if text == "" || href == "" {
 				continue
@@ -1113,6 +1118,40 @@ func promoteButtonLinks(src string) string {
 		}
 		return sb.String()
 	})
+}
+
+// collectButtonCTAs returns (href, text) pairs for all button_content-cell
+// anchors in src. Called before promoteButtonLinks so that reinjectMissingCTAs
+// can recover any pairs that go-readability later discards.
+func collectButtonCTAs(src string) [][2]string {
+	var pairs [][2]string
+	for _, cell := range reButtonContentCell.FindAllStringSubmatch(src, -1) {
+		for _, a := range reButtonLinkAnchor.FindAllStringSubmatch(cell[1], -1) {
+			href := a[1]
+			text := reInlineTag.ReplaceAllString(a[2], "")
+			text = strings.TrimSpace(text)
+			if href != "" && text != "" {
+				pairs = append(pairs, [2]string{href, text})
+			}
+		}
+	}
+	return pairs
+}
+
+// reinjectMissingCTAs appends any CTA links from pairs whose hrefs are absent
+// from extracted. go-readability drops button cells even after promoteButtonLinks
+// promotes them to <p><a>; this step recovers them.
+func reinjectMissingCTAs(extracted string, pairs [][2]string) string {
+	var missing []string
+	for _, p := range pairs {
+		if !strings.Contains(extracted, p[0]) {
+			missing = append(missing, `<p><a href="`+p[0]+`">`+p[1]+`</a></p>`)
+		}
+	}
+	if len(missing) == 0 {
+		return extracted
+	}
+	return extracted + "\n" + strings.Join(missing, "\n")
 }
 
 // R21: duplicate-destination link collapse.
@@ -1217,9 +1256,7 @@ func collapseDuplicateLinks(text string) string {
 		}
 	}
 
-	if len(replacements) == 0 {
-		// Still check for bare URL duplicates.
-	} else {
+	if len(replacements) > 0 {
 		text = reMdLink.ReplaceAllStringFunc(text, func(m string) string {
 			if r, ok := replacements[m]; ok {
 				return r
