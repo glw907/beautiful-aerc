@@ -128,7 +128,11 @@
   the show-what-leaves review reconcile at opt-in time: the enrollment flow is where the
   careful explanation and consent live, and it lets the user choose the fast path (one-key
   sends immediately) or the review path (one key opens the preview, one more sends). Rule
-  evolution depends on volume, so friction budget is near zero for enrolled users.
+  evolution depends on volume, so friction budget is near zero for enrolled users. The
+  note stays strictly optional because the raw message plus its bad render is sufficient
+  data on its own: the Phase 1 steering loop diagnoses defects from exactly that pair with
+  no human notes, so an unannotated flag is a full-value submission, and a note is bonus
+  signal, never the price of admission.
 
 - [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)* — **scheduled: Pass 1.2 (post-v1)**
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
