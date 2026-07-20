@@ -594,3 +594,341 @@ func TestStripNavLinkWall(t *testing.T) {
 		})
 	}
 }
+
+// R14: inline word-split repair.
+
+func TestRepairWordSplits(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			// Both tags are removed so inlineBoundaryPad has no injection site.
+			name:  "join word split at span boundary",
+			input: `on S</span><span style="font-weight: bold;">unday, September 27`,
+			want:  `on Sunday, September 27`,
+		},
+		{
+			name:  "join split at strong boundary",
+			input: `<strong>D</strong><strong>onations`,
+			want:  `<strong>Donations`,
+		},
+		{
+			name:  "leave space-separated inline tags unchanged",
+			input: `Hello </span> <span>World`,
+			want:  `Hello </span> <span>World`,
+		},
+		{
+			name:  "leave punctuation boundary unchanged",
+			input: `end.</span><span>Next`,
+			want:  `end.</span><span>Next`,
+		},
+		{
+			name:  "handle chain of splits in successive passes",
+			input: `A</span><span>B</span><span>C`,
+			want:  `ABC`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := repairWordSplits(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R15: image-alt residue drop.
+
+func TestDropImageAltResidues(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "remove link whose text starts with Image of",
+			input: "[Image of Ghurka Blazer](https://example.com/img)\n\nReal content",
+			want:  "Real content",
+		},
+		{
+			name:  "remove link whose text ends with Logo",
+			input: "[Brooks Brothers Logo](https://example.com/logo)\n\nReal content",
+			want:  "Real content",
+		},
+		{
+			name:  "remove link whose text starts with A woman",
+			input: "[A woman is packaging a parcel on a table.](https://example.com/)\n\nReal content",
+			want:  "Real content",
+		},
+		{
+			name:  "remove credit line",
+			input: "Real content\n\nIllustration: Aida Amer/Axios. Stock: Getty Images",
+			want:  "Real content",
+		},
+		{
+			name:  "remove illustration caption",
+			input: "Real content\n\nIllustration of the Capitol building circling in a recursive style.",
+			want:  "Real content",
+		},
+		{
+			name:  "remove AI generated disclaimer",
+			input: "Real content\n\nAI-generated content may be incorrect.",
+			want:  "Real content",
+		},
+		{
+			name:  "remove standalone GitHub logo line",
+			input: "GitHub\n\n## CI workflow run",
+			want:  "## CI workflow run",
+		},
+		{
+			name:  "leave descriptive link text unchanged",
+			input: "[Read the full article](https://example.com/article)\n\nReal content",
+			want:  "[Read the full article](https://example.com/article)\n\nReal content",
+		},
+		{
+			name:  "leave mixed-content lines unchanged",
+			input: "Call us at 555-1234 · A black and white letter heading",
+			want:  "Call us at 555-1234 · A black and white letter heading",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dropImageAltResidues(tt.input)
+			if strings.TrimSpace(got) != strings.TrimSpace(tt.want) {
+				t.Errorf("got:\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R16: hidden preheader/preview-text drop.
+
+func TestStripHiddenPreheaders(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "remove div with snippet-container id",
+			input: `<div id="snippet-container"><p>Preheader text here</p></div><h1>Real content</h1>`,
+			want:  `<h1>Real content</h1>`,
+		},
+		{
+			name:  "remove div with preheader class",
+			input: `<div class="preheader" style="display:none">Hidden text</div><p>Visible</p>`,
+			want:  `<p>Visible</p>`,
+		},
+		{
+			name:  "remove span with display:none style",
+			input: `<span style="display:none">hidden</span>visible text`,
+			want:  `visible text`,
+		},
+		{
+			name:  "remove h1 with font-size 11px",
+			input: `<h1 style="font-size:11px;"><a href="http://x.com">Tiny heading</a></h1><h2>Real heading</h2>`,
+			want:  `<h2>Real heading</h2>`,
+		},
+		{
+			name:  "leave normal elements unchanged",
+			input: `<div><p>Normal content</p></div>`,
+			want:  `<div><p>Normal content</p></div>`,
+		},
+		{
+			name:  "leave h1 with large font-size unchanged",
+			input: `<h1 style="font-size:24px;">Big heading</h1>`,
+			want:  `<h1 style="font-size:24px;">Big heading</h1>`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripHiddenPreheaders(tt.input)
+			if strings.TrimSpace(got) != strings.TrimSpace(tt.want) {
+				t.Errorf("got:\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R17: redirect-wrapper unwrap and tracking param extension.
+
+func TestUnwrapRedirectLinks(t *testing.T) {
+	// aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20v decodes to https://www.example.com/
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "decode Axios-style base64url redirect",
+			input: "[Click here](https://link.axios.com/click/1/aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20v/abc)",
+			want:  "[Click here](https://www.example.com/)",
+		},
+		{
+			name:  "strip utm params from decoded URL",
+			input: "[Click here](https://link.axios.com/click/1/aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20vP3V0bV9zb3VyY2U9ZW1haWw/abc)",
+			want:  "[Click here](https://www.example.com/)",
+		},
+		{
+			name:  "leave non-redirect URLs unchanged",
+			input: "[Visit](https://www.example.com/page)",
+			want:  "[Visit](https://www.example.com/page)",
+		},
+		{
+			name:  "leave short path segments unchanged",
+			input: "[Visit](https://example.com/a/b/c)",
+			want:  "[Visit](https://example.com/a/b/c)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := unwrapRedirectLinks(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrackingParamsExtended(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "strip ch tracking param",
+			input: `[RSVP](https://www.rsvp.ebay.com/signup?ch=osgood&id=123)`,
+			want:  `[RSVP](https://www.rsvp.ebay.com/signup?id=123)`,
+		},
+		{
+			name:  "strip c tracking param",
+			input: `[See terms](https://example.com/?c=base64value&q=real)`,
+			want:  `[See terms](https://example.com/?q=real)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripTrackingParams(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R18: style-driven heading promotion.
+
+func TestPromoteStyledHeadings(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "promote td with large font-size to h2",
+			input: `<td style="font-size: 26px;">Order Details</td>`,
+			want:  `<td><h2>Order Details</h2></td>`,
+		},
+		{
+			name:  "promote span with large font-size to h2",
+			input: `<span style="font-size: 25px; color: blue;">Photo Contest</span>`,
+			want:  `<h2>Photo Contest</h2>`,
+		},
+		{
+			name:  "skip td with small font-size",
+			input: `<td style="font-size: 14px;">Small text</td>`,
+			want:  `<td style="font-size: 14px;">Small text</td>`,
+		},
+		{
+			name:  "skip td with HTML child elements",
+			input: `<td style="font-size: 26px;"><strong>Bold heading</strong></td>`,
+			want:  `<td style="font-size: 26px;"><strong>Bold heading</strong></td>`,
+		},
+		{
+			name:  "skip span with long text",
+			input: `<span style="font-size: 26px;">` + strings.Repeat("x", 121) + `</span>`,
+			want:  `<span style="font-size: 26px;">` + strings.Repeat("x", 121) + `</span>`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := promoteStyledHeadings(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R19: serializer cleanup.
+
+func TestFixSerializerArtifacts(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "remove space before comma after backtick",
+			input: "see `url.origin` , for details",
+			want:  "see `url.origin`, for details",
+		},
+		{
+			name:  "remove space before period after link close",
+			input: "see the [release notes](https://example.com/releases) .",
+			want:  "see the [release notes](https://example.com/releases).",
+		},
+		{
+			name:  "remove space before period after bold close",
+			input: "**close tomorrow** .",
+			want:  "**close tomorrow**.",
+		},
+		{
+			name:  "remove space before period after italic close",
+			input: "*941 words, 3.5 minutes* .",
+			want:  "*941 words, 3.5 minutes*.",
+		},
+		{
+			name:  "fix unnecessary backslash before underscore",
+			input: "Transaction ID: ch\\_3Tu8a8EG4pw3",
+			want:  "Transaction ID: ch_3Tu8a8EG4pw3",
+		},
+		{
+			name:  "fix unnecessary backslash before star before digit",
+			input: "Payment: Visa \\*9111",
+			want:  "Payment: Visa *9111",
+		},
+		{
+			name:  "convert black circle bullet to list item",
+			input: "● Baby",
+			want:  "- Baby",
+		},
+		{
+			name:  "convert middle dot bullet to list item",
+			input: "·   Photos (interior and exterior)",
+			want:  "- Photos (interior and exterior)",
+		},
+		{
+			name:  "convert bullet inside blockquote",
+			input: "> · Item one",
+			want:  "> - Item one",
+		},
+		{
+			name:  "leave space before period mid-sentence unchanged",
+			input: "The U.S. government said so.",
+			want:  "The U.S. government said so.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fixSerializerArtifacts(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

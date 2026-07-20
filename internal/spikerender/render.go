@@ -5,9 +5,11 @@
 package spikerender
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/glw907/poplar/internal/filter"
@@ -40,6 +42,9 @@ func Render(content []byte, contentType string, hdr MsgHeaders) string {
 		return filter.CleanPlain(string(content))
 	}
 	src := string(content)
+	src = stripHiddenPreheaders(src)
+	src = repairWordSplits(src)
+	src = promoteStyledHeadings(src)
 	extracted := extractReadable(src)
 	md := filter.CleanHTML(extracted)
 	md = stripGitHubTracking(md)
@@ -48,11 +53,14 @@ func Render(content []byte, contentType string, hdr MsgHeaders) string {
 	md = stripGroupsIoFooter(md)
 	md = stripViewInBrowser(md)
 	md = stripTrailingBoilerplate(md)
+	md = unwrapRedirectLinks(md)
 	md = stripTrackingParams(md)
 	md = stripSelfLinks(md)
+	md = dropImageAltResidues(md)
 	md = mergeKeyValueParagraphs(md)
 	md = stripNavLinkWall(md)
 	md = formatReplyForwardBlock(md)
+	md = fixSerializerArtifacts(md)
 	if strings.TrimSpace(md) == "" && hdr.Subject != "" {
 		return synthesizeFromHeaders(hdr.Subject, hdr.FromDisplay)
 	}
@@ -528,6 +536,9 @@ var trackingParams = map[string]bool{
 	"hs_email_open_id": true,
 	"_hsmi":            true,
 	"_hsenc":           true,
+	// ch and c appear in Constant Contact and eBay redirect URLs.
+	"ch": true,
+	"c":  true,
 }
 
 // reMdLinkForStrip matches markdown links for tracking param stripping.
@@ -729,4 +740,334 @@ func stripNavLinkWall(text string) string {
 		out = append(out, block)
 	}
 	return strings.Join(out, "\n\n")
+}
+
+// R14: inline word-split repair.
+
+// reWordSplitBoundary matches adjacent close/open inline tag pairs where
+// both surrounding characters are word characters. The filter's
+// inlineBoundaryPad spaces every inline tag boundary, so adjacent spans
+// with no source whitespace ("S</span><span>unday") would gain a spurious
+// space even after removing just the close+open pair. Removing both tags
+// and keeping the surrounding word characters eliminates the injection site.
+var reWordSplitBoundary = regexp.MustCompile(
+	`(?i)(\w)</(span|strong|b|em|i|u)><(?:span|strong|b|em|i|u)(?:\s[^>]*)?>(\w)`,
+)
+
+// repairWordSplits collapses adjacent inline close+open tag pairs at
+// word-character boundaries before the filter pipeline runs. Both tags are
+// removed so inlineBoundaryPad has no tag boundary to space around.
+// Runs until stable to handle chains of adjacent splits.
+func repairWordSplits(src string) string {
+	for {
+		next := reWordSplitBoundary.ReplaceAllString(src, "${1}${3}")
+		if next == src {
+			return src
+		}
+		src = next
+	}
+}
+
+// R15: image-alt residue drop.
+
+// reImageAltLink matches a markdown link that occupies its own line,
+// with an optional blockquote prefix.
+var reImageAltLink = regexp.MustCompile(`(?im)^\[([^\]]+)\]\([^)]+\)\s*$`)
+
+// reAltTextPattern identifies link display texts that are image alt text.
+var reAltTextPattern = regexp.MustCompile(
+	`(?i)(?:^image of |^a (?:woman|man|person)\b|^(?:photo|illustration)\s+of\b|\blogo\s*$|^github$)`,
+)
+
+// reCreditLine matches standalone attribution credit lines
+// (e.g. "Illustration: Aida Amer/Axios").
+var reCreditLine = regexp.MustCompile(
+	`(?im)^(?:>\s*)*(?:photo|illustration|data|chart|image)\s*:[^\n]+$`,
+)
+
+// reIllustrationCaption matches standalone plain-text image captions
+// that start with "Image of" or "Illustration of".
+var reIllustrationCaption = regexp.MustCompile(
+	`(?im)^(?:>\s*)*(?:image of |illustration of )[^\n]+$`,
+)
+
+// reAIDisclaimer matches Microsoft Outlook's AI-generated content notice.
+var reAIDisclaimer = regexp.MustCompile(
+	`(?im)^(?:>\s*)*ai-generated content may be incorrect\.\s*$`,
+)
+
+// reKnownLogoLine matches standalone platform logo alt-text lines.
+// These appear at the top of GitHub notification emails and similar SaaS
+// transactional emails where the logo image is not wrapped in an anchor.
+var reKnownLogoLine = regexp.MustCompile(
+	`(?im)^(?:>\s*)*(?:github|mimestream)\s*$`,
+)
+
+// reExcessBlanks collapses three or more consecutive newlines.
+var reExcessBlanks = regexp.MustCompile(`\n{3,}`)
+
+// dropImageAltResidues removes standalone image alt-text content from
+// rendered markdown. The html-to-markdown converter renders img alt
+// attributes as visible text; this function strips the resulting noise:
+// logo names, "Image of X" links, illustration captions, credit lines,
+// and AI-generated content disclaimers.
+func dropImageAltResidues(text string) string {
+	text = reCreditLine.ReplaceAllString(text, "")
+	text = reIllustrationCaption.ReplaceAllString(text, "")
+	text = reAIDisclaimer.ReplaceAllString(text, "")
+	text = reKnownLogoLine.ReplaceAllString(text, "")
+	text = reImageAltLink.ReplaceAllStringFunc(text, func(m string) string {
+		sub := reImageAltLink.FindStringSubmatch(m)
+		if len(sub) < 2 {
+			return m
+		}
+		if reAltTextPattern.MatchString(strings.TrimSpace(sub[1])) {
+			return ""
+		}
+		return m
+	})
+	text = reExcessBlanks.ReplaceAllString(text, "\n\n")
+	return strings.TrimRight(text, "\n ")
+}
+
+// R16: hidden preheader/preview-text drop.
+
+// rePreheaderClassID matches opening tags of div/span/p/table elements whose
+// id or class attribute value contains a preheader/snippet/preview keyword.
+// These elements carry email preview text that should not appear in the body.
+var rePreheaderClassID = regexp.MustCompile(
+	`(?i)<(div|span|p|table)[^>]*(?:id|class)\s*=\s*["'][^"']*(?:preheader|snippet-container|preview)[^"']*["'][^>]*>`,
+)
+
+// reHiddenInlineOpen matches opening span or p tags styled invisible via
+// display:none, max-height:0, opacity:0, or font-size:0/1px.
+var reHiddenInlineOpen = regexp.MustCompile(
+	`(?i)<(span|p)[^>]*\bstyle\s*=\s*"[^"]*(?:display\s*:\s*none|max-height\s*:\s*0|opacity\s*:\s*0|font-size\s*:\s*[01]px)[^"]*"[^>]*>`,
+)
+
+// reSmallHeading matches a complete h1-h6 element with an inline font-size
+// style. The second capture group holds the font-size value in pixels.
+var reSmallHeading = regexp.MustCompile(
+	`(?is)<(h[1-6])[^>]*\bstyle\s*=\s*"[^"]*\bfont-size\s*:\s*(\d+)px[^"]*"[^>]*>.*?</h[1-6]>`,
+)
+
+// stripHiddenPreheaders removes invisible preheader/preview elements from
+// raw HTML before readability extraction. Three cases: (1) elements whose
+// id or class names the element as a preheader/snippet/preview container,
+// (2) span/p elements with visibility-hiding inline styles, (3) heading
+// elements with a cosmetically tiny font-size (<=14px) used as preheader
+// text in marketing emails.
+func stripHiddenPreheaders(src string) string {
+	src = stripHiddenByPattern(src, rePreheaderClassID)
+	src = stripHiddenByPattern(src, reHiddenInlineOpen)
+	src = stripSmallHeadings(src)
+	return src
+}
+
+// stripHiddenByPattern removes every element whose opening tag matches
+// openRe, including its children, by depth-counting open/close pairs.
+// openRe must capture the tag name in submatch group 1.
+func stripHiddenByPattern(src string, openRe *regexp.Regexp) string {
+	for {
+		loc := openRe.FindStringSubmatchIndex(src)
+		if loc == nil {
+			break
+		}
+		if loc[2] < 0 {
+			break
+		}
+		tagName := strings.ToLower(src[loc[2]:loc[3]])
+		openTag := "<" + tagName
+		closeTag := "</" + tagName + ">"
+
+		start := loc[0]
+		rest := src[loc[1]:]
+		depth := 1
+		pos := 0
+		for depth > 0 && pos < len(rest) {
+			nextOpen := strings.Index(rest[pos:], openTag)
+			nextClose := strings.Index(rest[pos:], closeTag)
+			if nextClose < 0 {
+				pos = len(rest)
+				break
+			}
+			if nextOpen >= 0 && nextOpen < nextClose {
+				depth++
+				pos += nextOpen + len(openTag)
+			} else {
+				depth--
+				pos += nextClose + len(closeTag)
+			}
+		}
+		end := loc[1] + pos
+		if end > len(src) {
+			end = len(src)
+		}
+		src = src[:start] + src[end:]
+	}
+	return src
+}
+
+// stripSmallHeadings removes heading elements (h1-h6) whose inline
+// font-size is 14px or smaller. Marketing emails use such headings as
+// invisible preheader text rendered at a size below the visible threshold.
+func stripSmallHeadings(src string) string {
+	return reSmallHeading.ReplaceAllStringFunc(src, func(m string) string {
+		sub := reSmallHeading.FindStringSubmatch(m)
+		if len(sub) < 3 {
+			return m
+		}
+		size, err := strconv.Atoi(sub[2])
+		if err != nil || size > 14 {
+			return m
+		}
+		return ""
+	})
+}
+
+// R17: redirect-wrapper unwrap.
+
+// unwrapRedirectLinks replaces redirect-wrapper hrefs with their embedded
+// target URLs when the target is encoded as a base64url path segment.
+// Tracking parameters are stripped from the decoded URL in the same pass.
+func unwrapRedirectLinks(text string) string {
+	return reMdLinkForStrip.ReplaceAllStringFunc(text, func(m string) string {
+		sub := reMdLinkForStrip.FindStringSubmatch(m)
+		if len(sub) != 3 {
+			return m
+		}
+		linkText, rawURL := sub[1], sub[2]
+		decoded := decodeRedirectURL(rawURL)
+		if decoded == "" {
+			return m
+		}
+		u, err := url.Parse(decoded)
+		if err != nil {
+			return fmt.Sprintf("[%s](%s)", linkText, decoded)
+		}
+		q := u.Query()
+		changed := false
+		for k := range q {
+			if trackingParams[k] || strings.HasPrefix(k, "utm_") {
+				q.Del(k)
+				changed = true
+			}
+		}
+		if changed {
+			u.RawQuery = q.Encode()
+		}
+		return fmt.Sprintf("[%s](%s)", linkText, u.String())
+	})
+}
+
+// decodeRedirectURL looks for a base64url-encoded URL among the path
+// segments of rawURL. It returns the decoded URL if a segment of 20 or
+// more characters decodes to an http/https URL, and empty string otherwise.
+func decodeRedirectURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	for _, seg := range strings.Split(u.Path, "/") {
+		if len(seg) < 20 {
+			continue
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(seg)
+		if err != nil {
+			continue
+		}
+		s := string(decoded)
+		if strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") {
+			return s
+		}
+	}
+	return ""
+}
+
+// R18: style-driven heading promotion.
+
+// reStyleHeadTD matches a td element whose inline style includes a
+// font-size in pixels, capturing the size and the text-only content.
+var reStyleHeadTD = regexp.MustCompile(
+	`(?i)<td[^>]*\bstyle="[^"]*\bfont-size\s*:\s*(\d+)px[^"]*"[^>]*>([^<]{3,200})</td>`,
+)
+
+// reStyleHeadSpan matches a span element whose inline style includes a
+// font-size in pixels, capturing the size and the text-only content.
+var reStyleHeadSpan = regexp.MustCompile(
+	`(?i)<span[^>]*\bstyle="[^"]*\bfont-size\s*:\s*(\d+)px[^"]*"[^>]*>([^<]{3,200})</span>`,
+)
+
+// promoteStyledHeadings converts td and span elements with a font-size
+// of 20px or larger and short plain-text content to h2 elements before
+// the HTML reaches the markdown converter. The converter renders these
+// as ## headings. Only elements whose text content contains no child
+// HTML tags and is 120 characters or fewer are promoted.
+func promoteStyledHeadings(src string) string {
+	src = reStyleHeadTD.ReplaceAllStringFunc(src, func(m string) string {
+		sub := reStyleHeadTD.FindStringSubmatch(m)
+		if len(sub) < 3 {
+			return m
+		}
+		size, _ := strconv.Atoi(sub[1])
+		if size < 20 {
+			return m
+		}
+		text := strings.TrimSpace(sub[2])
+		if text == "" || len(text) > 120 || strings.ContainsAny(text, "<>") {
+			return m
+		}
+		return "<td><h2>" + text + "</h2></td>"
+	})
+	src = reStyleHeadSpan.ReplaceAllStringFunc(src, func(m string) string {
+		sub := reStyleHeadSpan.FindStringSubmatch(m)
+		if len(sub) < 3 {
+			return m
+		}
+		size, _ := strconv.Atoi(sub[1])
+		if size < 20 {
+			return m
+		}
+		text := strings.TrimSpace(sub[2])
+		if text == "" || len(text) > 120 || strings.ContainsAny(text, "<>") {
+			return m
+		}
+		return "<h2>" + text + "</h2>"
+	})
+	return src
+}
+
+// R19: serializer cleanup.
+
+// reSpaceBeforePunct matches a closing markdown character (backtick,
+// closing paren, double-star, or word-char+star) followed by a single
+// space and then a punctuation character. The space is an artifact from
+// inlineBoundaryPad in the html filter.
+var reSpaceBeforePunct = regexp.MustCompile("([\x60)]|\\*\\*|\\w\\*) ([,.;:!?])")
+
+// reEscapeUnderscore matches an unnecessary backslash before an underscore
+// between two word characters. The html-to-markdown converter escapes
+// underscores to prevent markdown italic interpretation, but underscores
+// inside identifiers (e.g. transaction IDs) do not need escaping.
+var reEscapeUnderscore = regexp.MustCompile(`(\w)\\_(\w)`)
+
+// reEscapeStarDigit matches a backslash-escaped asterisk before a digit.
+// The converter escapes * to avoid markdown bold/italic, but *digit is
+// never emphasis in practice (e.g. Visa *9111).
+var reEscapeStarDigit = regexp.MustCompile(`\\\*(\d)`)
+
+// reGlyphBullet matches a glyph bullet character (● • ·) at the start
+// of a line, with an optional blockquote prefix.
+var reGlyphBullet = regexp.MustCompile("(?m)^((?:> ?)*)([●•·])\\s+")
+
+// fixSerializerArtifacts cleans up noise introduced by the html-to-markdown
+// serializer: spaces before punctuation after inline code or link closers,
+// unnecessary backslash escapes before underscores and asterisks, and glyph
+// bullets that should be markdown list items.
+func fixSerializerArtifacts(text string) string {
+	text = reSpaceBeforePunct.ReplaceAllString(text, "${1}${2}")
+	text = reEscapeUnderscore.ReplaceAllString(text, "${1}_${2}")
+	text = reEscapeStarDigit.ReplaceAllString(text, "*${1}")
+	text = reGlyphBullet.ReplaceAllString(text, "${1}- ")
+	return text
 }
