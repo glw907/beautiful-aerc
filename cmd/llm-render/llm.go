@@ -47,16 +47,23 @@ const llmTimeout = 3 * time.Minute
 
 // runLLM calls claude -p with the given model, passing prompt on stdin.
 // It returns the rendered markdown, wall milliseconds, and any error.
+// stderr is captured and appended to the error when non-empty, making
+// refusal and timeout messages visible without a separate log call.
 func runLLM(ctx context.Context, prompt, model string) (string, int64, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, llmTimeout)
 	defer cancel()
 
+	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "claude", "-p", "--model", model)
 	cmd.Stdin = bytes.NewBufferString(prompt)
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	ms := time.Since(start).Milliseconds()
 	if err != nil {
+		if s := strings.TrimSpace(stderr.String()); s != "" {
+			return "", ms, fmt.Errorf("claude: %w\nstderr: %s", err, s)
+		}
 		return "", ms, fmt.Errorf("claude: %w", err)
 	}
 	return string(out), ms, nil

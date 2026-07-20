@@ -10,13 +10,10 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 )
 
-// bodyPart holds extracted email body content, its MIME type, and header
-// fields needed for synthesis when the body is empty.
+// bodyPart holds extracted email body content and its MIME type.
 type bodyPart struct {
 	content     []byte
 	contentType string // "text/html" or "text/plain"
-	subject     string
-	fromDisplay string
 }
 
 // extractBody parses a raw .eml message and returns the first text/html part,
@@ -27,17 +24,6 @@ func extractBody(raw []byte) (bodyPart, error) {
 		return bodyPart{}, fmt.Errorf("parse message: %w", err)
 	}
 	defer mr.Close()
-
-	h := mr.Header
-	subject, _ := h.Subject()
-	fromList, _ := h.AddressList("From")
-	var fromDisplay string
-	if len(fromList) > 0 {
-		fromDisplay = fromList[0].Name
-		if fromDisplay == "" {
-			fromDisplay = fromList[0].Address
-		}
-	}
 
 	var htmlContent, plainContent []byte
 	for {
@@ -70,9 +56,9 @@ func extractBody(raw []byte) (bodyPart, error) {
 
 	switch {
 	case htmlContent != nil:
-		return bodyPart{content: htmlContent, contentType: "text/html", subject: subject, fromDisplay: fromDisplay}, nil
+		return bodyPart{content: htmlContent, contentType: "text/html"}, nil
 	case plainContent != nil:
-		return bodyPart{content: plainContent, contentType: "text/plain", subject: subject, fromDisplay: fromDisplay}, nil
+		return bodyPart{content: plainContent, contentType: "text/plain"}, nil
 	default:
 		return bodyPart{}, fmt.Errorf("no text part found")
 	}

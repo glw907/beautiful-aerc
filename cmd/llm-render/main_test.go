@@ -138,6 +138,53 @@ func TestRenderOutPath(t *testing.T) {
 	}
 }
 
+func TestHasValidLLMStat(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  json.RawMessage
+		want bool
+	}{
+		{
+			name: "nil raw",
+			raw:  nil,
+			want: false,
+		},
+		{
+			name: "no llm key",
+			raw:  json.RawMessage(`{"class":"github-ci","lynx":{"ms":10}}`),
+			want: false,
+		},
+		{
+			name: "llm with ms and no error",
+			raw:  json.RawMessage(`{"class":"github-ci","llm":{"ms":500,"tokens":42}}`),
+			want: true,
+		},
+		{
+			name: "llm with zero ms",
+			raw:  json.RawMessage(`{"class":"github-ci","llm":{"ms":0,"tokens":42}}`),
+			want: false,
+		},
+		{
+			name: "llm with error",
+			raw:  json.RawMessage(`{"class":"github-ci","llm":{"ms":100,"tokens":0,"error":"timeout"}}`),
+			want: false,
+		},
+		{
+			name: "invalid json",
+			raw:  json.RawMessage(`not json`),
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasValidLLMStat(tt.raw)
+			if got != tt.want {
+				t.Errorf("hasValidLLMStat() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractBodyLLM(t *testing.T) {
 	tests := []struct {
 		name             string

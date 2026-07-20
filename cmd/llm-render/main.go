@@ -38,10 +38,13 @@ type rawStats struct {
 }
 
 // entryResult carries one message's outcome back to the main goroutine.
+// skip is set when a valid llm stat already exists in stats.json and the
+// render file is present; in that case the main loop leaves the entry alone.
 type entryResult struct {
 	id    string
 	class string
 	stat  llmStat
+	skip  bool
 }
 
 func main() {
@@ -107,6 +110,15 @@ func run() error {
 		return fmt.Errorf("load stats: %w", err)
 	}
 
+	// validLLM is a pre-built snapshot (read-only in goroutines) of which
+	// entries already have a non-error llm stat with recorded latency.
+	// Using a snapshot avoids a data race with the results-processing loop
+	// that writes to s.Messages concurrently.
+	validLLM := make(map[string]bool, len(m.Entries))
+	for _, e := range m.Entries {
+		validLLM[e.ID] = hasValidLLMStat(s.Messages[e.ID])
+	}
+
 	results := make(chan entryResult, len(m.Entries))
 	sem := semaphore.NewWeighted(int64(parallel))
 	ctx := context.Background()
@@ -117,14 +129,19 @@ func run() error {
 		go func(e manifestEntry) {
 			defer wg.Done()
 
-			// If the render file already exists, record stats from it
+			// If the render file already exists, skip or record token count
 			// without making another LLM call.
 			outPath := renderOutPath(llmDir, e.Class, e.ID)
 			if existing, readErr := os.ReadFile(outPath); readErr == nil {
+				if validLLM[e.ID] {
+					// Latency already recorded; leave stats.json untouched.
+					results <- entryResult{id: e.ID, class: e.Class, skip: true}
+					return
+				}
 				results <- entryResult{
 					id:    e.ID,
 					class: e.Class,
-					stat:  llmStat{MS: 0, Tokens: tokenEst(string(existing))},
+					stat:  llmStat{Tokens: tokenEst(string(existing))},
 				}
 				return
 			}
@@ -147,6 +164,9 @@ func run() error {
 
 	var errCount int
 	for r := range results {
+		if r.skip {
+			continue
+		}
 		existing := s.Messages[r.id]
 		if existing == nil {
 			init := map[string]any{"class": r.class}
@@ -195,8 +215,11 @@ func processEntry(ctx context.Context, e manifestEntry, corpusDir, llmDir, princ
 	outPath := renderOutPath(llmDir, e.Class, e.ID)
 	if mkErr := os.MkdirAll(filepath.Dir(outPath), 0o755); mkErr != nil {
 		slog.Warn("mkdir render", "id", e.ID, "err", mkErr)
-	} else if wErr := os.WriteFile(outPath, []byte(output), 0o644); wErr != nil {
+		return llmStat{MS: ms, Tokens: tokenEst(output), Error: "mkdir: " + mkErr.Error()}
+	}
+	if wErr := os.WriteFile(outPath, []byte(output), 0o644); wErr != nil {
 		slog.Warn("write render", "id", e.ID, "err", wErr)
+		return llmStat{MS: ms, Tokens: tokenEst(output), Error: "write: " + wErr.Error()}
 	}
 
 	return llmStat{MS: ms, Tokens: tokenEst(output)}
@@ -254,6 +277,28 @@ func writeFileAtomic(path string, data []byte) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 	return nil
+}
+
+// hasValidLLMStat reports whether the raw entry JSON already contains a
+// non-error llm stat with recorded latency. Used to avoid clobbering a
+// previously-recorded ms value on resume.
+func hasValidLLMStat(raw json.RawMessage) bool {
+	if raw == nil {
+		return false
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return false
+	}
+	llmRaw, ok := obj["llm"]
+	if !ok {
+		return false
+	}
+	var stat llmStat
+	if err := json.Unmarshal(llmRaw, &stat); err != nil {
+		return false
+	}
+	return stat.Error == "" && stat.MS > 0
 }
 
 // renderOutPath returns the output path for one LLM-rendered message.
