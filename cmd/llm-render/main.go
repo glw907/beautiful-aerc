@@ -64,6 +64,7 @@ func run() error {
 		parallel    int
 		limit       int
 		model       string
+		force       bool
 	)
 	flag.StringVar(&corpusDir, "corpus", "corpus", "path to corpus directory")
 	flag.StringVar(&rendersDir, "renders", "", "output directory (default: corpus/renders)")
@@ -72,6 +73,10 @@ func run() error {
 	flag.IntVar(&parallel, "parallel", 4, "max concurrent LLM calls")
 	flag.IntVar(&limit, "limit", 0, "process at most N entries (0 = all)")
 	flag.StringVar(&model, "model", "claude-haiku-4-5-20251001", "model name")
+	// force re-calls the LLM for all entries, ignoring existing render files.
+	// Use this to recover entries that were recorded with ms:0 on a previous
+	// interrupted run, which cannot be healed by a normal resume.
+	flag.BoolVar(&force, "force", false, "re-call LLM for all entries, ignoring existing render files")
 	flag.Parse()
 
 	if rendersDir == "" {
@@ -129,21 +134,24 @@ func run() error {
 		go func(e manifestEntry) {
 			defer wg.Done()
 
-			// If the render file already exists, skip or record token count
-			// without making another LLM call.
-			outPath := renderOutPath(llmDir, e.Class, e.ID)
-			if existing, readErr := os.ReadFile(outPath); readErr == nil {
-				if validLLM[e.ID] {
-					// Latency already recorded; leave stats.json untouched.
-					results <- entryResult{id: e.ID, class: e.Class, skip: true}
+			// Without --force, skip entries whose render files already exist.
+			// Entries with ms:0 (latency lost on a prior interrupted run) are
+			// not skippable; --force is required to re-call and recover them.
+			if !force {
+				outPath := renderOutPath(llmDir, e.Class, e.ID)
+				if existing, readErr := os.ReadFile(outPath); readErr == nil {
+					if validLLM[e.ID] {
+						// Latency already recorded; leave stats.json untouched.
+						results <- entryResult{id: e.ID, class: e.Class, skip: true}
+						return
+					}
+					results <- entryResult{
+						id:    e.ID,
+						class: e.Class,
+						stat:  llmStat{Tokens: tokenEst(string(existing))},
+					}
 					return
 				}
-				results <- entryResult{
-					id:    e.ID,
-					class: e.Class,
-					stat:  llmStat{Tokens: tokenEst(string(existing))},
-				}
-				return
 			}
 
 			if err := sem.Acquire(ctx, 1); err != nil {

@@ -185,6 +185,22 @@ func TestHasValidLLMStat(t *testing.T) {
 	}
 }
 
+// TestForceRecovery documents the invariant that makes --force necessary.
+// An entry with ms:0 fails hasValidLLMStat, so a normal resume re-records ms:0
+// without re-calling the LLM. Only --force bypasses the file check so that
+// a fresh LLM call produces a real latency measurement.
+func TestForceRecovery(t *testing.T) {
+	corrupted := json.RawMessage(`{"class":"github-ci","llm":{"ms":0,"tokens":10}}`)
+	if hasValidLLMStat(corrupted) {
+		t.Error("ms:0 entry must not be valid; a normal resume cannot recover it")
+	}
+
+	healed := json.RawMessage(`{"class":"github-ci","llm":{"ms":500,"tokens":10}}`)
+	if !hasValidLLMStat(healed) {
+		t.Error("ms>0 entry must be valid and skippable on resume")
+	}
+}
+
 func TestExtractBodyLLM(t *testing.T) {
 	tests := []struct {
 		name             string
