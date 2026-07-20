@@ -864,6 +864,533 @@ func TestPromoteStyledHeadings(t *testing.T) {
 	}
 }
 
+// R20: extended trailing boilerplate patterns.
+
+func TestStripTrailingBoilerplateExtended(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "strip copyright with space before year",
+			input: "Real content.\n\n© 2026 Black Tree Gaming Ltd. All rights reserved.",
+			want:  "Real content.",
+		},
+		{
+			name:  "strip copyright range without All Rights Reserved",
+			input: "Real content.\n\n© 1995-2026 eBay Inc. or its affiliates",
+			want:  "Real content.",
+		},
+		{
+			name:  "strip Follow X on social media line",
+			input: "Real content.\n\nFollow Axios on social media:",
+			want:  "Real content.",
+		},
+		{
+			name:  "strip Find us on social media line",
+			input: "Real content.\n\nFind us on social media and never miss an update!",
+			want:  "Real content.",
+		},
+		{
+			name:  "strip Please add X to your address book",
+			input: "Real content.\n\nPlease add newsletter@example.com to your address book.",
+			want:  "Real content.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripTrailingBoilerplate(tt.input)
+			if strings.TrimSpace(got) != strings.TrimSpace(tt.want) {
+				t.Errorf("got:\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripViewInBrowserLeadingHR(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "strip leading hr after view-in-browser removal",
+			input: "[View in your browser](https://buccaneer18.org/content)\n\n* * *\n\nGreetings Pirates,",
+			want:  "Greetings Pirates,",
+		},
+		{
+			name:  "strip leading dash hr after view-in-browser removal",
+			input: "[View in browser](https://example.com/view)\n\n---\n\nNewsletter content",
+			want:  "Newsletter content",
+		},
+		{
+			name:  "leave content hr unchanged when no leading view-in-browser",
+			input: "Content\n\n* * *\n\nMore content",
+			want:  "Content\n\n* * *\n\nMore content",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripViewInBrowser(tt.input)
+			if strings.TrimSpace(got) != strings.TrimSpace(tt.want) {
+				t.Errorf("got:\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPromoteButtonLinks pins the StnoH1-dPdyV regression where go-readability
+// dropped Constant Contact button table cells, losing the "Join NSAA" action link.
+
+func TestPromoteButtonLinks(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantContains string
+		wantAbsent   string
+	}{
+		{
+			name: "promote Constant Contact button_link td to paragraph",
+			input: `<td class="button_content-cell button_link" style="background-color:#ed8131">` +
+				`<a class="button_link" href="https://example.com/join">JOIN NSAA</a>` +
+				`</td>`,
+			wantContains: `<a href="https://example.com/join">JOIN NSAA</a>`,
+			wantAbsent:   `button_content-cell`,
+		},
+		{
+			name:         "leave non-button td unchanged",
+			input:        `<td class="text_content-cell"><p>Hello</p></td>`,
+			wantContains: `<td class="text_content-cell">`,
+			wantAbsent:   "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := promoteButtonLinks(tt.input)
+			if !strings.Contains(got, tt.wantContains) {
+				t.Errorf("output does not contain %q\nfull: %q", tt.wantContains, got)
+			}
+			if tt.wantAbsent != "" && strings.Contains(got, tt.wantAbsent) {
+				t.Errorf("output should not contain %q\nfull: %q", tt.wantAbsent, got)
+			}
+		})
+	}
+}
+
+// Regression pin: StnoH1-dPdyV action links must survive R15 and R17.
+
+func TestActionLinksNotDroppedByResidueOrRedirect(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "JOIN NSAA standalone link",
+			input: "[JOIN NSAA](https://6i5ywvbab.cc.rs6.net/tn.jsp?f=001abc)",
+		},
+		{
+			name:  "BROWSE NSAA EVENTS standalone link",
+			input: "[BROWSE NSAA EVENTS](https://6i5ywvbab.cc.rs6.net/tn.jsp?f=001def)",
+		},
+		{
+			name:  "REGISTER standalone link",
+			input: "[REGISTER](https://example.com/register)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			afterResidues := dropImageAltResidues(tt.input)
+			if !strings.Contains(afterResidues, "[") {
+				t.Errorf("dropImageAltResidues dropped action link %q, got %q", tt.input, afterResidues)
+			}
+			afterRedirect := unwrapRedirectLinks(tt.input)
+			if strings.TrimSpace(afterRedirect) == "" {
+				t.Errorf("unwrapRedirectLinks dropped action link %q, got %q", tt.input, afterRedirect)
+			}
+		})
+	}
+}
+
+// R21: duplicate-destination link collapse.
+
+func TestCollapseDuplicateLinks(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "collapse URL-label link in favor of descriptive label",
+			input: "[Join with Google Meet](https://meet.google.com/abc?hs=224)\n\n" +
+				"[meet.google.com/abc](https://meet.google.com/abc?hs=224)",
+			wantContains: []string{"Join with Google Meet"},
+			wantAbsent:   []string{"meet.google.com/abc]("},
+		},
+		{
+			name: "collapse numeric label in favor of descriptive label",
+			input: "[View workflow run](https://github.com/org/repo/actions/runs/123)\n\n" +
+				"[1](https://github.com/org/repo/actions/runs/123)",
+			wantContains: []string{"View workflow run"},
+			wantAbsent:   []string{"[1]("},
+		},
+		{
+			name: "remove bare URL adjacent to link with same target",
+			input: "> [registration link NOW!!](https://www.wryc.org/gov-cup-registration) " +
+				"https://www.wryc.org/gov-cup-registration your host needs to know",
+			wantContains: []string{"registration link NOW!!", "your host needs to know"},
+			wantAbsent:   []string{"https://www.wryc.org/gov-cup-registration your"},
+		},
+		{
+			name:         "leave unique links unchanged",
+			input:        "[Yes](https://example.com/yes)\n\n[No](https://example.com/no)",
+			wantContains: []string{"[Yes]", "[No]"},
+			wantAbsent:   []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collapseDuplicateLinks(tt.input)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("output does not contain %q\nfull: %q", want, got)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("output should not contain %q\nfull: %q", absent, got)
+				}
+			}
+		})
+	}
+}
+
+// R22: Google Calendar template rendering.
+
+func TestRenderGCalTemplate(t *testing.T) {
+	respURL := "https://calendar.google.com/calendar/event?action=RESPOND&eid=abc&rst=1"
+	viewURL := "https://calendar.google.com/calendar/event?action=VIEW&eid=abc"
+
+	tests := []struct {
+		name         string
+		input        string
+		hdr          MsgHeaders
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name:  "add subject as H1 from invitation",
+			input: "[Yes](" + respURL + ")\n[No](" + respURL + ")\n[Maybe](" + respURL + ")",
+			hdr: MsgHeaders{
+				Subject: "Invitation: House Meeting @ Tue Aug 12, 2025 7:30pm (AKDT) (email@example.com)",
+			},
+			wantContains: []string{"# House Meeting"},
+			wantAbsent:   []string{},
+		},
+		{
+			name:  "add subject as H1 from updated invitation",
+			input: "[Yes](" + respURL + ")\n[No](" + respURL + ")",
+			hdr: MsgHeaders{
+				Subject: "Updated invitation: Team Meeting @ Mon Jun 1, 2026 3:30pm (AKDT) (Geoffrey Wright)",
+			},
+			wantContains: []string{"# Team Meeting"},
+			wantAbsent:   []string{},
+		},
+		{
+			name:         "drop CHANGED badge text",
+			input:        "This event has been updated\n\nCHANGED\n\n[Yes](" + respURL + ")",
+			hdr:          MsgHeaders{},
+			wantContains: []string{"This event has been updated", "[Yes]"},
+			wantAbsent:   []string{"CHANGED"},
+		},
+		{
+			name: "render dual datetime as new was old",
+			input: "Monday Jun 1, 2026 ⋅ 3:30pm – 4:30pm (Alaska Time - Anchorage) " +
+				"Friday May 22, 2026 ⋅ 3:30pm – 4:30pm (Alaska Time - Anchorage)\n\n" +
+				"[Yes](" + respURL + ")",
+			hdr: MsgHeaders{},
+			wantContains: []string{
+				"Monday Jun 1, 2026",
+				"was",
+				"Friday May 22, 2026",
+			},
+			wantAbsent: []string{},
+		},
+		{
+			name:         "do not modify non-gcal markdown",
+			input:        "Just a regular email body.\n\n[Visit](https://example.com)",
+			hdr:          MsgHeaders{Subject: "Hello"},
+			wantContains: []string{"Just a regular email body."},
+			wantAbsent:   []string{"# Hello"},
+		},
+		{
+			name:         "do not add H1 when heading already present",
+			input:        "# Existing heading\n\n[Yes](" + respURL + ")",
+			hdr:          MsgHeaders{Subject: "Invitation: Different Name @ time"},
+			wantContains: []string{"# Existing heading"},
+			wantAbsent:   []string{"# Different Name"},
+		},
+		{
+			name:         "leave VIEW links unchanged without RESPOND links",
+			input:        "[View all guest info](" + viewURL + ")",
+			hdr:          MsgHeaders{Subject: "Invitation: Test @ time"},
+			wantContains: []string{"View all guest info"},
+			wantAbsent:   []string{"# Test"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := renderGCalTemplate(tt.input, tt.hdr)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("output does not contain %q\nfull:\n%s", want, got)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("output should not contain %q\nfull:\n%s", absent, got)
+				}
+			}
+		})
+	}
+}
+
+// R23: sponsor block excision.
+
+func TestStripSponsorBlocks(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "strip A MESSAGE FROM block through CTA link",
+			input: "Article content here.\n\nA MESSAGE FROM RTX\n\n" +
+				"## RTX Headline\n\nSponsor body text.\n\n" +
+				"[Discover more.](https://www.rtx.com/article)\n\n" +
+				"More article content.",
+			wantContains: []string{"Article content here.", "More article content."},
+			wantAbsent:   []string{"A MESSAGE FROM RTX", "RTX Headline", "Sponsor body text", "rtx.com"},
+		},
+		{
+			name: "strip PRESENTED BY block",
+			input: "Content\n\nPRESENTED BY Acme Corp\n\n" +
+				"Sponsor text\n\n[Learn more.](https://acme.com)\n\nMore content",
+			wantContains: []string{"Content", "More content"},
+			wantAbsent:   []string{"PRESENTED BY", "Sponsor text", "acme.com"},
+		},
+		{
+			name: "strip multiple sponsor blocks",
+			input: "Article 1.\n\nA MESSAGE FROM RTX\n\n## RTX Ad\n\nAd text.\n\n" +
+				"[Click here.](https://rtx.com)\n\nArticle 2.\n\n" +
+				"A MESSAGE FROM RTX\n\n## RTX Ad 2\n\nAd text 2.\n\n" +
+				"[Click here 2.](https://rtx.com/other)\n\nArticle 3.",
+			wantContains: []string{"Article 1.", "Article 2.", "Article 3."},
+			wantAbsent:   []string{"A MESSAGE FROM RTX", "Ad text", "rtx.com"},
+		},
+		{
+			name:         "leave non-sponsor content unchanged",
+			input:        "Regular content.\n\n[Read more.](https://example.com)\n\nMore content.",
+			wantContains: []string{"Regular content.", "Read more.", "More content."},
+			wantAbsent:   []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripSponsorBlocks(tt.input)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("output does not contain %q\nfull:\n%s", want, got)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("output should not contain %q\nfull:\n%s", absent, got)
+				}
+			}
+		})
+	}
+}
+
+func TestStreamTrackingParam(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "strip stream tracking param from Axios article link",
+			input: "[Read the story](https://www.axios.com/2026/07/17/article?stream=top)",
+			want:  "[Read the story](https://www.axios.com/2026/07/17/article)",
+		},
+		{
+			name:  "strip axios_adlink tracking param",
+			input: "[Discover more.](https://www.rtx.com/news/article?axios_adlink=1&stream=top)",
+			want:  "[Discover more.](https://www.rtx.com/news/article)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripTrackingParams(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R24: GitHub workflow-run table reconstruction.
+
+func TestReconstructGitHubJobsTable(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "reconstruct jobs table from Status Job Annotations pattern",
+			input: "[View workflow run](https://github.com/org/repo/actions/runs/123)\n\n" +
+				"Status Job Annotations\n\n" +
+				"**CI** / ci\nFailed in 6 minutes and 53 seconds\n\n" +
+				"[1](https://github.com/org/repo/actions/runs/123)",
+			wantContains: []string{
+				"| Job | Result | Annotations |",
+				"| --- | --- | --- |",
+				"CI / ci",
+				"Failed in 6 minutes and 53 seconds",
+			},
+			wantAbsent: []string{"Status Job Annotations"},
+		},
+		{
+			name:         "leave text without Status Job Annotations unchanged",
+			input:        "Regular content.\n\n[View workflow run](https://github.com/org/repo/actions/runs/123)",
+			wantContains: []string{"Regular content.", "View workflow run"},
+			wantAbsent:   []string{"| Job |"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := reconstructGitHubJobsTable(tt.input)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("output does not contain %q\nfull:\n%s", want, got)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("output should not contain %q\nfull:\n%s", absent, got)
+				}
+			}
+		})
+	}
+}
+
+func TestFixSerializerArtifactsHeadingBrackets(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "unescape backslash-bracket in h2 heading",
+			input: `## \[glw907/aksailingclub-org] CI workflow run`,
+			want:  `## [glw907/aksailingclub-org] CI workflow run`,
+		},
+		{
+			name:  "unescape backslash-bracket in h1 heading",
+			input: `# \[org/repo] workflow notification`,
+			want:  `# [org/repo] workflow notification`,
+		},
+		{
+			name:  "leave escaped bracket in body text unchanged",
+			input: `Regular text with \[escaped bracket\] in body`,
+			want:  `Regular text with \[escaped bracket\] in body`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fixSerializerArtifacts(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// R25: legal-disclaimer and signature-address drop.
+
+func TestStripLegalDisclaimers(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "drop confidentiality notice paragraph",
+			input: "> Warm regards,\n>\n> **Spring Ortega**\n>\n" +
+				"> This email, including any attachments or subsequent replies or forwards, " +
+				"(a) may include confidential, proprietary or other protected information.",
+			wantContains: []string{"Warm regards", "Spring Ortega"},
+			wantAbsent:   []string{"may include confidential"},
+		},
+		{
+			name: "drop IMPORTANT NOTICE block",
+			input: "> **Name**\n>\n> IMPORTANT NOTICE :\n>\n" +
+				"> If you are not the intended recipient, please delete this message.",
+			wantContains: []string{"Name"},
+			wantAbsent:   []string{"IMPORTANT NOTICE", "intended recipient"},
+		},
+		{
+			name: "drop coverage disclaimer paragraph",
+			input: "Good afternoon,\n\nPlease see attached.\n\n" +
+				"> Coverage may not be issued, bound, changed, modified, altered, " +
+				"canceled or terminated without receiving written confirmation.",
+			wantContains: []string{"Good afternoon", "Please see attached"},
+			wantAbsent:   []string{"Coverage may not be issued"},
+		},
+		{
+			name: "drop Google Maps signature address line",
+			input: "> **Spring Ortega, CISR**\n>\n" +
+				"> Commercial Account Executive\n>\n" +
+				"> [582 East 36](https://www.google.com/maps/search/582+East+36?entry=gmail&source=g) th Avenue\n>\n" +
+				"> Anchorage, AK 99503",
+			wantContains: []string{"Spring Ortega", "Commercial Account Executive"},
+			wantAbsent:   []string{"google.com/maps"},
+		},
+		{
+			name:         "drop quoted list footer separator",
+			input:        "> Main content here.\n>\n> --- Alaska Sailing Club aksailingclub.org",
+			wantContains: []string{"Main content here."},
+			wantAbsent:   []string{"--- Alaska Sailing Club"},
+		},
+		{
+			name:         "leave regular content unchanged",
+			input:        "Regular email with no disclaimers.",
+			wantContains: []string{"Regular email with no disclaimers."},
+			wantAbsent:   []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripLegalDisclaimers(tt.input)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("output does not contain %q\nfull:\n%s", want, got)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("output should not contain %q\nfull:\n%s", absent, got)
+				}
+			}
+		})
+	}
+}
+
 // R19: serializer cleanup.
 
 func TestFixSerializerArtifacts(t *testing.T) {

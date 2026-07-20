@@ -45,6 +45,7 @@ func Render(content []byte, contentType string, hdr MsgHeaders) string {
 	src = stripHiddenPreheaders(src)
 	src = repairWordSplits(src)
 	src = promoteStyledHeadings(src)
+	src = promoteButtonLinks(src)
 	extracted := extractReadable(src)
 	md := filter.CleanHTML(extracted)
 	md = stripGitHubTracking(md)
@@ -53,13 +54,18 @@ func Render(content []byte, contentType string, hdr MsgHeaders) string {
 	md = stripGroupsIoFooter(md)
 	md = stripViewInBrowser(md)
 	md = stripTrailingBoilerplate(md)
+	md = stripSponsorBlocks(md)
+	md = reconstructGitHubJobsTable(md)
 	md = unwrapRedirectLinks(md)
 	md = stripTrackingParams(md)
+	md = collapseDuplicateLinks(md)
 	md = stripSelfLinks(md)
 	md = dropImageAltResidues(md)
 	md = mergeKeyValueParagraphs(md)
 	md = stripNavLinkWall(md)
+	md = stripLegalDisclaimers(md)
 	md = formatReplyForwardBlock(md)
+	md = renderGCalTemplate(md, hdr)
 	md = fixSerializerArtifacts(md)
 	if strings.TrimSpace(md) == "" && hdr.Subject != "" {
 		return synthesizeFromHeaders(hdr.Subject, hdr.FromDisplay)
@@ -212,17 +218,29 @@ func stripGroupsIoFooter(text string) string {
 // reViewInBrowser matches a "View in browser" or "View online" markdown
 // link, including when it appears inside an H1/H2 heading, that newsletters
 // include at the top of their HTML as a fallback for email clients.
+// The "in (?:\w+ )?browser" alternative handles "in browser", "in web browser",
+// and "in your browser" variants.
 var reViewInBrowser = regexp.MustCompile(
-	`(?im)^(?:#{1,6}\s*)?\[View (in (?:web )?browser|online|this email(?: in your browser)?|on the web)\]\([^)]+\)\s*$`,
+	`(?im)^(?:#{1,6}\s*)?\[View (in (?:\w+ )?browser|online|this email(?: in your browser)?|on the web)\]\([^)]+\)\s*$`,
 )
 
+// reLeadingHR matches a horizontal rule at the very start of a string.
+var reLeadingHR = regexp.MustCompile(`^(\*\s*\*\s*\*|---+)\s*\n+`)
+
 // stripViewInBrowser removes "View in browser" boilerplate links including
-// those that have been promoted to headings by the HTML converter.
+// those that have been promoted to headings by the HTML converter. Any
+// horizontal rule at the start of the remaining content is also removed,
+// since newsletters often use a separator between the chrome and the body.
 func stripViewInBrowser(text string) string {
+	hadLink := reViewInBrowser.MatchString(text)
 	text = reViewInBrowser.ReplaceAllString(text, "")
-	// Remove empty heading lines left by stripping (e.g., "# " with no content).
 	text = reEmptyHeading.ReplaceAllString(text, "")
-	return strings.TrimLeft(strings.TrimSpace(text), "\n ")
+	text = strings.TrimLeft(strings.TrimSpace(text), "\n ")
+	if hadLink {
+		text = reLeadingHR.ReplaceAllString(text, "")
+		text = strings.TrimLeft(strings.TrimSpace(text), "\n ")
+	}
+	return text
 }
 
 // reEmptyHeading matches a heading marker with nothing after it.
@@ -462,10 +480,14 @@ var boilerplatePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)You (?:have received|are receiving) this (?:email|message) (?:because|from the mailing list)`),
 	// "Was this email forwarded to you" recruitment line.
 	regexp.MustCompile(`(?i)Was this email forwarded to you`),
-	// Social-follow link runs: three or more "Follow on X" links on adjacent lines.
-	regexp.MustCompile(`(?i)^\[?Follow (?:us )?on `),
-	// Copyright line paired with privacy policy.
-	regexp.MustCompile(`(?i)©\d{4}[^\n]*All Rights Reserved`),
+	// Social-follow and social-find lines.
+	regexp.MustCompile(`(?i)^\[?Follow (?:us |[A-Za-z]+ )?on `),
+	regexp.MustCompile(`(?i)^Find us on social`),
+	// "Please add X to your address book" deliverability notice.
+	regexp.MustCompile(`(?i)^Please add .+ to your address book`),
+	// Copyright lines: "© YYYY" or "© YYYY-YYYY", with or without "All Rights Reserved".
+	regexp.MustCompile(`(?i)©\s*\d{4}[^\n]*All Rights Reserved`),
+	regexp.MustCompile(`(?i)©\s*\d{4}-\d{4}\s+[A-Za-z]`),
 	// Privacy-policy standalone line.
 	regexp.MustCompile(`(?i)\[Privacy Policy\]|\bprivacy policy\b.*\[`),
 	// Postal address: single line ending with a country name or US state+zip.
@@ -539,6 +561,11 @@ var trackingParams = map[string]bool{
 	// ch and c appear in Constant Contact and eBay redirect URLs.
 	"ch": true,
 	"c":  true,
+	// stream and axios_adlink appear in Axios newsletter links.
+	"stream":       true,
+	"axios_adlink": true,
+	// hs appears in Google Calendar Meet join links.
+	"hs": true,
 }
 
 // reMdLinkForStrip matches markdown links for tracking param stripping.
@@ -1037,6 +1064,412 @@ func promoteStyledHeadings(src string) string {
 	return src
 }
 
+// Regression fix: Constant Contact button link promotion.
+
+// reButtonContentCell matches a Constant Contact button table cell. The cell
+// carries background-color styling that go-readability treats as decorative,
+// causing the link inside to be dropped. Converting the cell to a plain
+// paragraph before readability runs preserves the action link.
+var reButtonContentCell = regexp.MustCompile(
+	`(?is)<td[^>]*\bclass="[^"]*button_content-cell[^"]*"[^>]*>(.*?)</td>`,
+)
+
+// reButtonLinkAnchor matches the anchor inside a button content cell,
+// capturing the href and link text.
+var reButtonLinkAnchor = regexp.MustCompile(
+	`(?is)<a[^>]*\bhref="([^"]+)"[^>]*>(.*?)</a>`,
+)
+
+// promoteButtonLinks converts Constant Contact button table cells to plain
+// paragraph links before readability extraction. go-readability drops table
+// cells whose class or style marks them as decorative buttons; promoting
+// them to <p><a href="...">text</a></p> preserves the CTA action links.
+func promoteButtonLinks(src string) string {
+	return reButtonContentCell.ReplaceAllStringFunc(src, func(m string) string {
+		inner := reButtonContentCell.FindStringSubmatch(m)
+		if len(inner) < 2 {
+			return m
+		}
+		anchors := reButtonLinkAnchor.FindAllStringSubmatch(inner[1], -1)
+		if len(anchors) == 0 {
+			return m
+		}
+		var sb strings.Builder
+		for _, a := range anchors {
+			href := a[1]
+			text := regexp.MustCompile(`<[^>]+>`).ReplaceAllString(a[2], "")
+			text = strings.TrimSpace(text)
+			if text == "" || href == "" {
+				continue
+			}
+			sb.WriteString(`<p><a href="`)
+			sb.WriteString(href)
+			sb.WriteString(`">`)
+			sb.WriteString(text)
+			sb.WriteString("</a></p>")
+		}
+		if sb.Len() == 0 {
+			return m
+		}
+		return sb.String()
+	})
+}
+
+// R21: duplicate-destination link collapse.
+
+// normURL returns a normalized form of rawURL with known tracking parameters
+// stripped and the query re-encoded in sorted key order. Fragment and scheme
+// are preserved. Used to compare two links that point to the same destination.
+func normURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	if u.RawQuery != "" {
+		q := u.Query()
+		for k := range q {
+			if trackingParams[k] || strings.HasPrefix(k, "utm_") {
+				q.Del(k)
+			}
+		}
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
+// labelScore returns a score for a markdown link label. Higher scores win
+// when collapsing duplicate-destination links: a descriptive text label beats
+// a bare URL label beats a short numeric label.
+func labelScore(label string) int {
+	if label == "" {
+		return 0
+	}
+	// Pure number labels (e.g. "[1]") are least informative.
+	allDigits := true
+	for _, r := range label {
+		if r < '0' || r > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		return 1
+	}
+	// URL-shaped labels score below descriptive text.
+	if strings.HasPrefix(label, "http://") || strings.HasPrefix(label, "https://") ||
+		(strings.Contains(label, ".") && !strings.Contains(label, " ")) {
+		return 2
+	}
+	return 3
+}
+
+// reMdLink matches any markdown link.
+var reMdLink = regexp.MustCompile(`\[([^\]]*)\]\(([^)]+)\)`)
+
+// reBareURL matches a bare http/https URL not inside a markdown link.
+var reBareURL = regexp.MustCompile(`(?:^|(?:[^(]))https?://\S+`)
+
+// collapseDuplicateLinks keeps the most informative label for links that
+// share the same normalized destination URL and removes subsequent occurrences.
+// Bare URLs that duplicate a nearby markdown link are also removed.
+func collapseDuplicateLinks(text string) string {
+	// Collect all markdown links grouped by normalized URL.
+	type linkInfo struct {
+		full  string
+		label string
+		score int
+	}
+	byURL := map[string][]linkInfo{}
+	var order []string
+	matches := reMdLink.FindAllStringSubmatch(text, -1)
+	for _, m := range matches {
+		label, href := m[1], m[2]
+		norm := normURL(href)
+		if _, seen := byURL[norm]; !seen {
+			order = append(order, norm)
+		}
+		byURL[norm] = append(byURL[norm], linkInfo{
+			full:  m[0],
+			label: label,
+			score: labelScore(label),
+		})
+	}
+
+	// For each URL group with more than one link, pick the best label and
+	// build a replacement set.
+	replacements := map[string]string{}
+	for _, norm := range order {
+		group := byURL[norm]
+		if len(group) < 2 {
+			continue
+		}
+		best := group[0]
+		for _, li := range group[1:] {
+			if li.score > best.score {
+				best = li
+			}
+		}
+		for _, li := range group {
+			if li.full == best.full {
+				continue
+			}
+			replacements[li.full] = ""
+		}
+	}
+
+	if len(replacements) == 0 {
+		// Still check for bare URL duplicates.
+	} else {
+		text = reMdLink.ReplaceAllStringFunc(text, func(m string) string {
+			if r, ok := replacements[m]; ok {
+				return r
+			}
+			return m
+		})
+	}
+
+	// Remove bare URLs whose normalized form matches a markdown link in the text.
+	knownURLs := map[string]bool{}
+	for _, m := range reMdLink.FindAllStringSubmatch(text, -1) {
+		knownURLs[normURL(m[2])] = true
+	}
+	text = reBareURL.ReplaceAllStringFunc(text, func(m string) string {
+		// reBareURL may include a leading character; extract the URL part.
+		urlStart := strings.Index(m, "http")
+		prefix := m[:urlStart]
+		rawURL := strings.TrimRight(m[urlStart:], ",;.!?)")
+		if knownURLs[normURL(rawURL)] {
+			return prefix
+		}
+		return m
+	})
+
+	text = reExcessBlanks.ReplaceAllString(text, "\n\n")
+	return strings.TrimRight(text, "\n ")
+}
+
+// R22: Google Calendar template rendering.
+
+// reGCalRespond detects a Google Calendar RESPOND action link in markdown.
+var reGCalRespond = regexp.MustCompile(
+	`\[[^\]]+\]\(https://calendar\.google\.com/calendar/event\?action=RESPOND[^)]*\)`,
+)
+
+// reGCalSubject extracts the event title from a Google Calendar invitation
+// or updated-invitation subject line. Google Calendar subjects follow the
+// pattern "Invitation: TITLE @ DATE (ATTENDEE)" or "Updated invitation: TITLE @ ...".
+var reGCalSubject = regexp.MustCompile(
+	`(?i)^(?:(?:Updated|Cancelled|Canceled)\s+)?[Ii]nvitation:\s*(.+?)\s*@`,
+)
+
+// reGCalDualDatetime matches two consecutive Google Calendar datetime lines
+// in the format "Weekday Mon DD, YYYY ⋅ H:MMpm – H:MMpm (Timezone)".
+// The first line is the new time; the second is the old time.
+var reGCalDualDatetime = regexp.MustCompile(
+	`((?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \w+ \d+, \d{4} ⋅[^\n]+)\s+((?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \w+ \d+, \d{4} ⋅[^\n]+)`,
+)
+
+// reGCalChangedBadge matches the standalone "CHANGED" badge text that Google
+// Calendar injects into updated-invitation emails.
+var reGCalChangedBadge = regexp.MustCompile(`(?m)^CHANGED\s*$`)
+
+// reExistingHeading matches an H1 or H2 heading line.
+var reExistingHeading = regexp.MustCompile(`(?m)^#{1,2}\s+\S`)
+
+// renderGCalTemplate applies Google Calendar-specific rendering to md when
+// the content looks like a calendar invitation (contains a RESPOND action
+// link). It: injects the event title as an H1 from the subject header (when
+// no heading is already present), drops the "CHANGED" badge text, and
+// reformats dual datetime lines (new-time old-time) as "new (was: old)".
+func renderGCalTemplate(md string, hdr MsgHeaders) string {
+	if !reGCalRespond.MatchString(md) {
+		return md
+	}
+
+	// Drop CHANGED badge.
+	md = reGCalChangedBadge.ReplaceAllString(md, "")
+
+	// Reformat dual datetimes: new\nwas-old -> "new\n\n(was: old)"
+	md = reGCalDualDatetime.ReplaceAllString(md, "$1\n\n(was: $2)")
+
+	// Inject H1 from subject when no heading is already present.
+	if !reExistingHeading.MatchString(md) && hdr.Subject != "" {
+		if m := reGCalSubject.FindStringSubmatch(hdr.Subject); m != nil {
+			eventTitle := strings.TrimSpace(m[1])
+			if eventTitle != "" {
+				md = "# " + eventTitle + "\n\n" + strings.TrimLeft(md, "\n ")
+			}
+		}
+	}
+
+	md = reExcessBlanks.ReplaceAllString(md, "\n\n")
+	return strings.TrimRight(md, "\n ")
+}
+
+// R23: sponsor block excision.
+
+// reSponsorBlockStart matches the opening line of a sponsor advertisement
+// block. Both "A MESSAGE FROM" and "PRESENTED BY" patterns are used by
+// newsletter publishers to label sponsored content sections.
+var reSponsorBlockStart = regexp.MustCompile(
+	`(?m)^(?:A MESSAGE FROM|PRESENTED BY)\b[^\n]*$`,
+)
+
+// reSponsorBlockCTA matches a call-to-action link that ends a sponsor block.
+// Publisher convention is a single-sentence CTA on its own line.
+var reSponsorBlockCTA = regexp.MustCompile(
+	`(?m)\[[^\]]{3,80}\]\(https?://[^)]+\)\s*$`,
+)
+
+// stripSponsorBlocks removes "A MESSAGE FROM" and "PRESENTED BY" sponsor
+// advertisement blocks from newsletter markdown. Each block starts at the
+// marker line and ends at the first standalone CTA link that follows it.
+func stripSponsorBlocks(text string) string {
+	for {
+		loc := reSponsorBlockStart.FindStringIndex(text)
+		if loc == nil {
+			break
+		}
+		before := text[:loc[0]]
+		after := text[loc[1]:]
+
+		// Find the CTA link that closes this block.
+		ctaLoc := reSponsorBlockCTA.FindStringIndex(after)
+		if ctaLoc == nil {
+			// No CTA found; remove from marker to end of next paragraph.
+			nextPara := strings.Index(after, "\n\n")
+			if nextPara < 0 {
+				text = strings.TrimRight(before, "\n ")
+				break
+			}
+			text = strings.TrimRight(before, "\n ") + after[nextPara:]
+			continue
+		}
+
+		// Remove from marker through end of the CTA line.
+		ctaEnd := ctaLoc[1]
+		// Advance past the trailing newline.
+		if ctaEnd < len(after) && after[ctaEnd] == '\n' {
+			ctaEnd++
+		}
+		text = strings.TrimRight(before, "\n ") + "\n\n" + strings.TrimLeft(after[ctaEnd:], "\n ")
+	}
+	text = reExcessBlanks.ReplaceAllString(text, "\n\n")
+	return strings.TrimRight(text, "\n ")
+}
+
+// R24: GitHub workflow-run table reconstruction.
+
+// reGitHubJobsTableHeader matches the "Status Job Annotations" text that
+// GitHub Actions emails emit as the collapsed header of their jobs table.
+var reGitHubJobsTableHeader = regexp.MustCompile(
+	`(?m)^Status Job Annotations\s*$`,
+)
+
+// reGitHubJobRow matches a GitHub Actions job entry: a bold job name on the
+// first line followed by a result line. GitHub formats these as
+// `**Name** / sub-job\nResult text`, so we capture the bold name, any
+// remainder on the first line (e.g. " / ci"), and the result line separately.
+var reGitHubJobRow = regexp.MustCompile(
+	`(?m)^\*\*([^*]+)\*\*([^\n]*)\n([^\n]+)`,
+)
+
+// reconstructGitHubJobsTable replaces the GitHub Actions "Status Job
+// Annotations" flat text dump with a markdown table. The table has three
+// columns: Job, Result, and Annotations. Annotation links (if present) are
+// placed in the third column; the result text goes in the second.
+func reconstructGitHubJobsTable(text string) string {
+	loc := reGitHubJobsTableHeader.FindStringIndex(text)
+	if loc == nil {
+		return text
+	}
+
+	before := text[:loc[0]]
+	after := text[loc[1]:]
+
+	// Collect job rows from the text that follows the header.
+	rows := reGitHubJobRow.FindAllStringSubmatch(after, -1)
+	if len(rows) == 0 {
+		return text
+	}
+
+	var sb strings.Builder
+	sb.WriteString("| Job | Result | Annotations |\n")
+	sb.WriteString("| --- | --- | --- |\n")
+	for _, row := range rows {
+		// row[1] is the bold name, row[2] is the rest of the first line (e.g. " / ci"),
+		// row[3] is the result/duration line.
+		job := strings.TrimSpace(row[1] + row[2])
+		result := strings.TrimSpace(row[3])
+		sb.WriteString("| ")
+		sb.WriteString(job)
+		sb.WriteString(" | ")
+		sb.WriteString(result)
+		sb.WriteString(" | |\n")
+	}
+
+	// Remove the job rows from the after text.
+	remaining := reGitHubJobRow.ReplaceAllString(after, "")
+	remaining = reExcessBlanks.ReplaceAllString(remaining, "\n\n")
+	remaining = strings.TrimLeft(remaining, "\n ")
+
+	result := strings.TrimRight(before, "\n ") + "\n\n" + sb.String()
+	if remaining != "" {
+		result += "\n" + remaining
+	}
+	return strings.TrimRight(result, "\n ")
+}
+
+// R25: legal-disclaimer and signature-address drop.
+
+// legalPatterns holds patterns that identify legal disclaimer and boilerplate
+// signature blocks in quoted reply email content.
+var legalPatterns = []*regexp.Regexp{
+	// Confidentiality and forwarding notices.
+	regexp.MustCompile(`(?i)may include confidential`),
+	regexp.MustCompile(`(?i)if you are not the intended recipient`),
+	regexp.MustCompile(`(?i)\bIMPORTANT NOTICE\s*:`),
+	// Insurance coverage disclaimers.
+	regexp.MustCompile(`(?i)Coverage may not be issued`),
+	// Google Maps address links in signatures.
+	regexp.MustCompile(`google\.com/maps/search/`),
+	// Quoted footer separator lines "--- Organization name".
+	regexp.MustCompile(`(?m)^> --- [A-Z]`),
+}
+
+// reBlockquoteEmptyLine matches an empty blockquote line used as a
+// paragraph separator within a quoted block.
+var reBlockquoteEmptyLine = regexp.MustCompile(`\n>[ \t]*\n`)
+
+// stripLegalDisclaimers removes legal disclaimer paragraphs and signature
+// address noise from markdown. Both regular \n\n-separated paragraphs and
+// blockquote-internal paragraphs (separated by empty > lines) are processed.
+// Paragraphs matching any legalPatterns entry are dropped.
+func stripLegalDisclaimers(text string) string {
+	// Treat empty blockquote lines as paragraph boundaries so we can
+	// process blockquote sub-paragraphs alongside normal paragraphs.
+	text = reBlockquoteEmptyLine.ReplaceAllString(text, "\n\n")
+
+	blocks := strings.Split(text, "\n\n")
+	out := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		trimmed := strings.TrimSpace(block)
+		drop := false
+		for _, re := range legalPatterns {
+			if re.MatchString(trimmed) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, block)
+		}
+	}
+	result := strings.Join(out, "\n\n")
+	result = reExcessBlanks.ReplaceAllString(result, "\n\n")
+	return strings.TrimRight(result, "\n ")
+}
+
 // R19: serializer cleanup.
 
 // reSpaceBeforePunct matches a closing markdown character (backtick,
@@ -1060,14 +1493,29 @@ var reEscapeStarDigit = regexp.MustCompile(`\\\*(\d)`)
 // of a line, with an optional blockquote prefix.
 var reGlyphBullet = regexp.MustCompile("(?m)^((?:> ?)*)([●•·])\\s+")
 
+// reHeadingEscapedBracket matches a backslash-escaped `\[` or `\]` inside
+// a markdown heading line. The serializer escapes brackets in heading text to
+// prevent link parsing, but `[org/repo]` in a subject heading reads cleaner
+// without the backslashes.
+var reHeadingEscapedBracket = regexp.MustCompile(`(?m)^(#{1,6}\s+.*)\\([\[\]])`)
+
 // fixSerializerArtifacts cleans up noise introduced by the html-to-markdown
 // serializer: spaces before punctuation after inline code or link closers,
-// unnecessary backslash escapes before underscores and asterisks, and glyph
-// bullets that should be markdown list items.
+// unnecessary backslash escapes before underscores and asterisks, glyph
+// bullets that should be markdown list items, and escaped brackets inside
+// heading lines.
 func fixSerializerArtifacts(text string) string {
 	text = reSpaceBeforePunct.ReplaceAllString(text, "${1}${2}")
 	text = reEscapeUnderscore.ReplaceAllString(text, "${1}_${2}")
 	text = reEscapeStarDigit.ReplaceAllString(text, "*${1}")
 	text = reGlyphBullet.ReplaceAllString(text, "${1}- ")
+	// Unescape \[ and \] inside heading lines (run until stable for `\[a\]`).
+	for {
+		next := reHeadingEscapedBracket.ReplaceAllString(text, "${1}${2}")
+		if next == text {
+			break
+		}
+		text = next
+	}
 	return text
 }
