@@ -122,7 +122,13 @@
   just the flagger's. Poplar's likely user base is highly security conscious, so the
   explanation must be careful and concrete: what is captured, what is stripped (attachments
   and non-flagged headers by default), where it lands, retention. Local-only flagging must
-  remain useful without ever opting in.
+  remain useful without ever opting in. Submission UX (Geoff, 2026-07-19): effortless,
+  with a one-key submit (house style: modifier-free single key in the reader) plus an
+  optional "what is wrong" note the user can skip with a keypress. The one-key path and
+  the show-what-leaves review reconcile at opt-in time: the enrollment flow is where the
+  careful explanation and consent live, and it lets the user choose the fast path (one-key
+  sends immediately) or the review path (one key opens the preview, one more sends). Rule
+  evolution depends on volume, so friction budget is near zero for enrolled users.
 
 - [ ] **#21** View raw message content `#feature` `#poplar` `#v2` *(2026-04-28)* — **scheduled: Pass 1.2 (post-v1)**
   Toggle in viewer to show the unparsed RFC822 source — headers, MIME structure, raw HTML/text body — instead of the rendered block view. Diagnostic / power-user feature; useful for debugging filter pipeline regressions and inspecting what the server actually sent. Post-1.0.
