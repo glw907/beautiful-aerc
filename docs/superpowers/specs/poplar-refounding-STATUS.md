@@ -49,7 +49,13 @@ Phase 0 outcomes:
 resuming mid-phase executes that plan from the first unchecked task
 via superpowers:subagent-driven-development. Settled with Geoff:
 standard depth (25 per class, 3 ideals per class), harvest from all
-folders including Spam and Trash.
+folders including Spam and Trash. Settled 2026-07-19 mid-phase:
+poplar's runtime rendering must be a robust deterministic algorithm,
+never an LLM in the render path. LLM use is confined to the offline
+loop (rule derivation, corpus improvement, grading). The Task 5 LLM
+arm is reframed as a comprehension-ceiling benchmark that prices the
+deterministic gap, not as a runtime candidate; the verdict judges
+viability on the deterministic arm alone.
 
 Starter prompt (paste after /clear, or say "run Phase 1 of the
 re-founding"):
