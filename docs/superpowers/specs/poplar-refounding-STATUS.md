@@ -25,7 +25,30 @@ it. Updating this STATUS is step one and is never optional.
 
 ## Current state (2026-07-19)
 
-Phase 0 (founding reset) complete.
+Phase 1 (rendering bet) executed; the gate ruling is Geoff's and is
+the only open item.
+
+Phase 1 outcomes:
+- Verdict: viable inside a measured boundary. Deterministic rules
+  reach 87% usable-or-better on the coder-relevant core (github-ci
+  100%, personal 88%, list-patch 84%, transactional 76%), 41% on the
+  commercial-and-calendar tail; calendar is an artifact (the product
+  renders invites from the text/calendar part, not HTML). Verdict doc:
+  `docs/poplar/research/2026-07-19-rendering-bet-verdict.md`.
+- Settled constraints: no LLM in the render path (runtime is
+  deterministic Go; LLM works offline in the improve loop);
+  rules are declarative, named, provenance-carrying, and traceable
+  so people and LLMs can improve them; both bind Phase 4.
+- Committed artifacts: readability principles doc (grade definitions
+  included), rendering-bet verdict, public-corpus survey (no modern
+  public corpus exists; capture mailbox is the path), spike code
+  (corpusharvest, renderspike, llm-render, spikerender). Local-only:
+  corpus, ideals, renders, grades.
+- Backlog #63 captures the flag-a-bad-render loop (one-key submit,
+  double opt-in, hosted collection) as the long-term corpus strategy.
+- Method finding worth keeping: blinded grading diagnosed failures to
+  named rules, and one corrective round halved fails without
+  regressions. The offline improve loop works end to end.
 
 Phase 0 outcomes:
 - Charter committed:
@@ -42,7 +65,35 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 1, the rendering bet
+## Next: Phase 2, vision
+
+Blocked on the Phase 1 gate: Geoff reads the verdict doc and sample
+renders and rules on the bet. On a proceed ruling, start Phase 2.
+
+Starter prompt (paste after /clear, or say "run Phase 2 of the
+re-founding"):
+
+```
+Run Phase 2 of the poplar re-founding: vision. Read the charter
+docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
+(Phase 2 section) and the rendering-bet verdict
+docs/poplar/research/2026-07-19-rendering-bet-verdict.md first.
+
+This phase is interactive: Geoff's taste drives, the verdict is on
+the table. Output is a short, opinionated vision doc: what the MVP
+daily driver must do for Geoff to switch full-time; the
+differentiators, with the rendering verdict as evidence; the
+audience; explicit non-goals; and the knowable-horizon register of
+post-MVP improvements the architecture must not foreclose (seed it
+from backlog #63's flag loop, the capture-mailbox corpus strategy,
+ICS-first calendar rendering, the fact-inventory self-check, and the
+nvim companion). Constraints already settled and binding: no LLM in
+the render path; rules declarative, explainable, and traceable.
+
+End at the gate: Geoff approves the vision doc.
+```
+
+## Superseded: Phase 1, the rendering bet
 
 **In progress (2026-07-19).** Plan:
 `docs/superpowers/plans/2026-07-19-rendering-bet.md`. A fresh session
@@ -98,5 +149,5 @@ Geoff reads the verdict and sample renders and rules on the bet.
 ## Phase roadmap
 
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
-[next] -> 2 Vision -> 3 Requirements -> 4 Technical design -> 5 Build
-machine + build.
+[done, gate ruling pending] -> 2 Vision [next] -> 3 Requirements ->
+4 Technical design -> 5 Build machine + build.
