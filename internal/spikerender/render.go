@@ -507,9 +507,14 @@ var boilerplatePatterns = []*regexp.Regexp{
 }
 
 // isBoilerplateBlock reports whether a markdown block matches any of the
-// trailing-boilerplate patterns.
+// trailing-boilerplate patterns. Blocks over 500 characters are never treated
+// as boilerplate: they contain actionable content (calendar invites, news
+// digests) that merely happen to embed a footer notice in the same paragraph.
 func isBoilerplateBlock(block string) bool {
 	trimmed := strings.TrimSpace(block)
+	if len(trimmed) > 500 {
+		return false
+	}
 	for _, re := range boilerplatePatterns {
 		if re.MatchString(trimmed) {
 			return true
@@ -568,6 +573,14 @@ var trackingParams = map[string]bool{
 	"axios_adlink": true,
 	// hs appears in Google Calendar Meet join links.
 	"hs": true,
+	// LinkedIn email-notification tracking params.
+	"lipi":     true,
+	"midToken": true,
+	"midSig":   true,
+	"trk":      true,
+	"trkEmail": true,
+	"eid":      true,
+	"otpToken": true,
 }
 
 // reMdLinkForStrip matches markdown links for tracking param stripping.
@@ -804,8 +817,11 @@ func repairWordSplits(src string) string {
 var reImageAltLink = regexp.MustCompile(`(?im)^\[([^\]]+)\]\([^)]+\)\s*$`)
 
 // reAltTextPattern identifies link display texts that are image alt text.
+// The "taking a" alternative catches scene-description alt texts such as
+// "Brand Girls taking a selfie with mountains behind them" that marketing
+// emails use for lifestyle photography.
 var reAltTextPattern = regexp.MustCompile(
-	`(?i)(?:^image of |^a (?:woman|man|person)\b|^(?:photo|illustration)\s+of\b|\blogo\s*$|^github$)`,
+	`(?i)(?:^image of |^a (?:woman|man|person)\b|^(?:photo|illustration)\s+of\b|\blogo\s*$|^github$|\btaking a\b)`,
 )
 
 // reCreditLine matches standalone attribution credit lines
@@ -1235,7 +1251,13 @@ func collapseDuplicateLinks(text string) string {
 	}
 
 	// For each URL group with more than one link, pick the best label and
-	// build a replacement set.
+	// build a replacement set. For equal-score groups, subsumption guards
+	// the collapse: a link is only removed when the best label contains its
+	// label as a substring (case-insensitive). This prevents CTA links like
+	// "Start Learning for $199" from being silently dropped in favour of an
+	// unrelated image-description link that happens to share the redirect URL.
+	// When subsumption does collapse a score-3 (descriptive) label, the anchor
+	// text is kept in place to avoid blank gaps in prose sentences.
 	replacements := map[string]string{}
 	for _, norm := range order {
 		group := byURL[norm]
@@ -1244,7 +1266,12 @@ func collapseDuplicateLinks(text string) string {
 		}
 		best := group[0]
 		for _, li := range group[1:] {
-			if li.score > best.score {
+			switch {
+			case li.score > best.score:
+				best = li
+			case li.score == best.score && len(li.label) > len(best.label):
+				// Among equal-score labels prefer the longer one: it is more
+				// informative and is more likely to subsume the shorter ones.
 				best = li
 			}
 		}
@@ -1252,7 +1279,22 @@ func collapseDuplicateLinks(text string) string {
 			if li.full == best.full {
 				continue
 			}
-			replacements[li.full] = ""
+			if li.score < best.score {
+				// Clear score advantage: remove the weaker label entirely.
+				replacements[li.full] = ""
+				continue
+			}
+			// Equal score: only collapse when best's label contains li's label
+			// as a substring. No subsumption means both links carry distinct
+			// meaning and must be preserved.
+			if strings.Contains(strings.ToLower(best.label), strings.ToLower(li.label)) {
+				if li.score == 3 {
+					// Preserve anchor text so mid-sentence prose stays readable.
+					replacements[li.full] = li.label
+				} else {
+					replacements[li.full] = ""
+				}
+			}
 		}
 	}
 
@@ -1481,7 +1523,10 @@ var reBlockquoteEmptyLine = regexp.MustCompile(`\n>[ \t]*\n`)
 // stripLegalDisclaimers removes legal disclaimer paragraphs and signature
 // address noise from markdown. Both regular \n\n-separated paragraphs and
 // blockquote-internal paragraphs (separated by empty > lines) are processed.
-// Paragraphs matching any legalPatterns entry are dropped.
+// Paragraphs matching any legalPatterns entry are dropped. Blocks over 500
+// characters are skipped: a large block containing a maps link or a
+// confidentiality phrase is actionable content (a calendar invite body, a
+// full email thread) and must not be silently erased.
 func stripLegalDisclaimers(text string) string {
 	// Treat empty blockquote lines as paragraph boundaries so we can
 	// process blockquote sub-paragraphs alongside normal paragraphs.
@@ -1491,6 +1536,10 @@ func stripLegalDisclaimers(text string) string {
 	out := make([]string, 0, len(blocks))
 	for _, block := range blocks {
 		trimmed := strings.TrimSpace(block)
+		if len(trimmed) > 500 {
+			out = append(out, block)
+			continue
+		}
 		drop := false
 		for _, re := range legalPatterns {
 			if re.MatchString(trimmed) {

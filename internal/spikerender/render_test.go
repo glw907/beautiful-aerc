@@ -1431,6 +1431,130 @@ func TestStripLegalDisclaimers(t *testing.T) {
 	}
 }
 
+// R26: Block-size guard for stripTrailingBoilerplate and stripLegalDisclaimers.
+// Motivating messages: calendar/Stss8oJBvzTZ (blockquote stripped as boilerplate),
+// calendar/StuPQ0erDxw7 (calendar content dropped by maps-link legal pattern).
+
+func TestBoilerplateDoesNotStripLargeBlock(t *testing.T) {
+	// A blockquote-wrapped calendar invite is a single \n\n-separated block
+	// much larger than any real trailing boilerplate. The "You are receiving"
+	// notice embedded inside it must not cause the whole block to be stripped.
+	bulkContent := strings.Repeat("Invite content here. ", 30) // 630 chars
+	largeBlock := bulkContent +
+		"You are receiving this email from the mailing list." +
+		strings.Repeat(" More invite text.", 10)
+	input := "Great, see you there!\n\n" + largeBlock
+	got := stripTrailingBoilerplate(input)
+	if !strings.Contains(got, "Invite content here.") {
+		t.Errorf("large block incorrectly stripped as boilerplate; got:\n%s", got)
+	}
+	if !strings.Contains(got, "Great, see you there!") {
+		t.Errorf("content before large block was lost; got:\n%s", got)
+	}
+}
+
+func TestLegalDisclaimerLargeBlockGuard(t *testing.T) {
+	// A Google Calendar invite body is a single \n\n block containing the maps link.
+	// stripLegalDisclaimers must not drop the entire block just because it contains
+	// google.com/maps/search/.
+	calBody := "## When\nFriday Aug 8, 2025\n\n## Location\n" +
+		strings.Repeat("My Shawarma House, 6311 DeBarr Rd, Anchorage AK. ", 10) +
+		"[View map](https://www.google.com/maps/search/My+Shawarma+House) " +
+		strings.Repeat("Additional location details. ", 5)
+	got := stripLegalDisclaimers(calBody)
+	if !strings.Contains(got, "My Shawarma House") {
+		t.Errorf("calendar location block incorrectly dropped; got:\n%s", got)
+	}
+	if !strings.Contains(got, "google.com/maps") {
+		t.Errorf("map link dropped from large block; got:\n%s", got)
+	}
+}
+
+// R27: Subsumption-guarded duplicate-link collapse.
+// Motivating messages: list-patch/Stp-Z2cDNRsc (blank gap where 'announce' link was),
+// marketing/StopxoOwXh7k ('Start Learning for $199' CTA dropped).
+
+func TestCollapseDuplicateLinksSubsumption(t *testing.T) {
+	// "announce" is a substring of "announcement blog post" -> prefer the longer label.
+	// The shorter label removed from mid-sentence must leave plain text, not a blank gap.
+	blogURL := "https://blog.zulip.com/2025/transition/"
+	input := "We're reaching out to [announce](" + blogURL + ") a major transition.\n\n" +
+		"See the [announcement blog post](" + blogURL + ") for all the details."
+	got := collapseDuplicateLinks(input)
+	if strings.Contains(got, "  a major") {
+		t.Errorf("blank gap left where 'announce' link was; got:\n%s", got)
+	}
+	if !strings.Contains(got, "[announcement blog post]") {
+		t.Errorf("longer label 'announcement blog post' not kept; got:\n%s", got)
+	}
+	if strings.Contains(got, "[announce](") {
+		t.Errorf("shorter link '[announce]' not removed; got:\n%s", got)
+	}
+}
+
+func TestCollapseDuplicateLinksNoSubsumption(t *testing.T) {
+	// "Babbel Girls taking a selfie" and "Start Learning for $199" share a URL but
+	// neither label is a substring of the other. Both must be kept so that
+	// dropImageAltResidues can later drop only the image-description link.
+	ctaURL := "https://go.babbel.com/cta-link"
+	input := "[Babbel Girls taking a selfie with water and mountains behind them](" + ctaURL + ")\n\n" +
+		"[Start Learning for $199](" + ctaURL + ")"
+	got := collapseDuplicateLinks(input)
+	if !strings.Contains(got, "[Babbel Girls taking a selfie") {
+		t.Errorf("image-description link dropped without subsumption; got:\n%s", got)
+	}
+	if !strings.Contains(got, "[Start Learning for $199]") {
+		t.Errorf("CTA link 'Start Learning for $199' dropped; got:\n%s", got)
+	}
+}
+
+// R28: LinkedIn tracking param strip.
+// Motivating message: newsletter/Stnr6ejqiDF3 (~800-char LinkedIn tracking blobs).
+
+func TestLinkedInTrackingParamsStripped(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name: "strip lipi and trk from LinkedIn feed link",
+			input: "[LinkedIn Feed](https://www.linkedin.com/comm/feed/?lipi=urn%3Ali%3Apage%3A123" +
+				"&trk=eml-email_new_connection_single_01-null&midToken=AQE5J7&midSig=sig)",
+			want: "[LinkedIn Feed](https://www.linkedin.com/comm/feed/)",
+		},
+		{
+			name: "strip trkEmail and eid from LinkedIn notification",
+			input: "[View notification](https://www.linkedin.com/comm/notifications/" +
+				"?trkEmail=notif&eid=abc123&otpToken=secr3t)",
+			want: "[View notification](https://www.linkedin.com/comm/notifications/)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripTrackingParams(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Extended reAltTextPattern: scene descriptions containing "taking a".
+// Motivating message: marketing/StopxoOwXh7k.
+
+func TestDropImageAltResiduesTakingA(t *testing.T) {
+	input := "[Babbel Girls taking a selfie with water and mountains behind them](https://go.babbel.com/img)\n\n" +
+		"[Start Learning for $199](https://go.babbel.com/cta)"
+	got := dropImageAltResidues(input)
+	if strings.Contains(got, "Babbel Girls taking a selfie") {
+		t.Errorf("image description with 'taking a' not dropped; got:\n%s", got)
+	}
+	if !strings.Contains(got, "[Start Learning for $199]") {
+		t.Errorf("CTA link dropped by residue rule; got:\n%s", got)
+	}
+}
+
 // R19: serializer cleanup.
 
 func TestFixSerializerArtifacts(t *testing.T) {
