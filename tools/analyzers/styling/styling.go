@@ -8,9 +8,11 @@
 // reaches rendered output. A line carrying a `//poplar:allow-unicode
 // <reason>` comment is exempt (a `/*poplar:allow-unicode <reason>*/`
 // block comment works too, so the directive can share a line with
-// another trailing comment). The reason is mandatory, and each use
-// surfaces as its own diagnostic so a pass-end reviewer can find the
-// ones a diff adds.
+// another trailing comment). The reason is mandatory. An escape
+// reports no diagnostic, since multichecker.Main exits non-zero on
+// any diagnostic and a documented escape must not fail the gate; the
+// Analyzer's ResultType instead returns the escape count for a
+// pass-end reviewer to follow up with a source grep.
 package styling
 
 import (
@@ -154,13 +156,15 @@ func lineReasons(fset *token.FileSet, f *ast.File) map[int]string {
 	return reasons
 }
 
-// report emits the violation at pos, or the escape diagnostic in
-// its place when the line carries an allow-unicode reason, and
-// returns 1 if it counted as an escape.
+// report counts and returns 1 for a line carrying an allow-unicode
+// reason without emitting a diagnostic (multichecker.Main exits
+// non-zero on any diagnostic, and a documented escape must not fail
+// the gate), or emits the violation at pos and returns 0 otherwise.
+// The Analyzer's ResultType carries the count to the pass-end
+// reviewer.
 func report(pass *analysis.Pass, reasons map[int]string, pos token.Pos, format string, args ...any) int {
 	line := pass.Fset.Position(pos).Line
-	if reason, ok := reasons[line]; ok {
-		pass.Reportf(pos, "poplar:allow-unicode escape used: %s", reason)
+	if _, ok := reasons[line]; ok {
 		return 1
 	}
 	pass.Reportf(pos, format, args...)

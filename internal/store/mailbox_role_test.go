@@ -21,11 +21,16 @@ func TestRoleTable(t *testing.T) {
 		{"[Gmail]/Drafts", roleDrafts},
 		{"Brouillons", roleDrafts},
 		{"Borradores", roleDrafts},
+		{"Entwurfe", roleDrafts},
+		{"Entwuerfe", roleDrafts},
+		{"Entwürfe", roleDrafts},
 		{"Sent", roleSent},
 		{"Sent Items", roleSent},
 		{"[Gmail]/Sent Mail", roleSent},
 		{"Gesendet", roleSent},
 		{"Enviados", roleSent},
+		{"Envoyes", roleSent},
+		{"Envoyés", roleSent},
 		{"Junk", roleJunk},
 		{"Junk E-mail", roleJunk},
 		{"Spam", roleJunk},
@@ -40,6 +45,10 @@ func TestRoleTable(t *testing.T) {
 		{"Corbeille", roleTrash},
 		{"Papelera", roleTrash},
 		{"Cestino", roleTrash},
+		{"Elements supprimes", roleTrash},
+		{"Éléments supprimés", roleTrash},
+		{"Geloeschte Elemente", roleTrash},
+		{"Gelöschte Elemente", roleTrash},
 		{"Scheduled", roleScheduled},
 		{"Send Later", roleScheduled},
 		{"Team Updates", ""},
@@ -53,28 +62,35 @@ func TestRoleTable(t *testing.T) {
 	}
 }
 
-// TestServerRoleWins proves a server-declared role is never overridden
-// by the name heuristic, even when the mailbox's own name would
-// classify differently under roleByName.
+// TestServerRoleWins proves a server-declared role, once normalized
+// into FO-1's closed six-role set, is never overridden by the name
+// heuristic, that the JMAP/Gmail "all" alias normalizes to archive
+// the same as the name heuristic's "all mail" does, and that a
+// declared role outside the six (inbox, guaranteed by protocol but
+// not one of FO-1's special-use roles) classifies to no role rather
+// than passing through verbatim.
 func TestServerRoleWins(t *testing.T) {
 	if got := classifyMailboxRole("archive", "Trash"); got != roleArchive {
 		t.Errorf("classifyMailboxRole(archive, Trash) = %q, want %q", got, roleArchive)
 	}
-	if got := classifyMailboxRole("inbox", "Team Updates"); got != "inbox" {
-		t.Errorf("classifyMailboxRole(inbox, Team Updates) = %q, want %q", got, "inbox")
+	if got := classifyMailboxRole("all", "Team Updates"); got != roleArchive {
+		t.Errorf("classifyMailboxRole(all, Team Updates) = %q, want %q", got, roleArchive)
+	}
+	if got := classifyMailboxRole("inbox", "Team Updates"); got != "" {
+		t.Errorf("classifyMailboxRole(inbox, Team Updates) = %q, want no role", got)
 	}
 }
 
-// TestDuplicateRoleResolution proves that when two mailboxes classify
-// to the same role, resolveMailboxRoles keeps the first-created one
-// (the lower ID), drops the role from the rest without an error, and
-// logs the collision.
+// TestDuplicateRoleResolution proves that when two mailboxes in the
+// same account classify to the same role, resolveMailboxRoles keeps
+// the first-created one (the lower ID), drops the role from the rest
+// without an error, and logs the collision.
 func TestDuplicateRoleResolution(t *testing.T) {
 	log := captureSlog(t)
 
 	candidates := []mailboxRoleCandidate{
-		{ID: 1, Name: "Trash"},
-		{ID: 2, Name: "Papierkorb"},
+		{ID: 1, AccountID: 1, Name: "Trash"},
+		{ID: 2, AccountID: 1, Name: "Papierkorb"},
 	}
 	resolved := resolveMailboxRoles(candidates)
 
@@ -86,5 +102,47 @@ func TestDuplicateRoleResolution(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "duplicate mailbox role") {
 		t.Errorf("no log line for the role collision, got: %q", log.String())
+	}
+}
+
+// TestDuplicateRoleResolutionPrefersDeclared proves that when one
+// candidate carries a server-declared role and another only matches
+// the name heuristic, the declared one wins even when its ID is
+// higher, since a server's own classification must never lose to a
+// guess about a display name.
+func TestDuplicateRoleResolutionPrefersDeclared(t *testing.T) {
+	captureSlog(t)
+
+	candidates := []mailboxRoleCandidate{
+		{ID: 1, AccountID: 1, Name: "Trash"},
+		{ID: 2, AccountID: 1, ServerRole: "trash", Name: "Team Updates"},
+	}
+	resolved := resolveMailboxRoles(candidates)
+
+	if got := resolved[2]; got != roleTrash {
+		t.Errorf("resolved[2] = %q, want %q (server-declared wins over the name heuristic)", got, roleTrash)
+	}
+	if _, ok := resolved[1]; ok {
+		t.Errorf("resolved[1] present, want the heuristic-only candidate dropped")
+	}
+}
+
+// TestDuplicateRoleResolutionScopedToAccount proves that two accounts
+// each claiming the trash role keep their own mailbox, since role
+// collisions resolve per account, not globally across the store.
+func TestDuplicateRoleResolutionScopedToAccount(t *testing.T) {
+	captureSlog(t)
+
+	candidates := []mailboxRoleCandidate{
+		{ID: 1, AccountID: 1, Name: "Trash"},
+		{ID: 2, AccountID: 2, Name: "Trash"},
+	}
+	resolved := resolveMailboxRoles(candidates)
+
+	if got := resolved[1]; got != roleTrash {
+		t.Errorf("resolved[1] = %q, want %q", got, roleTrash)
+	}
+	if got := resolved[2]; got != roleTrash {
+		t.Errorf("resolved[2] = %q, want %q (a different account's own trash mailbox)", got, roleTrash)
 	}
 }
