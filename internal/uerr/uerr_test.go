@@ -40,6 +40,7 @@ func TestConstructorIsTheOnlyPath(t *testing.T) {
 		{"connection", ClassConnection},
 		{"server", ClassServer},
 		{"throttled", ClassThrottled},
+		{"store local", ClassStoreLocal},
 	}
 
 	for _, tt := range tests {
@@ -78,7 +79,7 @@ func TestEveryClassLogs(t *testing.T) {
 
 	classes := []Class{
 		ClassAuth, ClassAuthRefreshFailed, ClassNotFound,
-		ClassConnection, ClassServer, ClassThrottled,
+		ClassConnection, ClassServer, ClassThrottled, ClassStoreLocal,
 	}
 	for _, class := range classes {
 		t.Run(class.String(), func(t *testing.T) {

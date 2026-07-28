@@ -47,6 +47,11 @@ const (
 	// exceeds this build's known maximum: a newer poplar binary
 	// migrated it forward, and this build cannot read it (SY-1).
 	ClassSchemaVersion
+	// ClassStoreLocal is a local store failure with no server
+	// involved: a failed migration, corruption, or a full disk
+	// (SY-8). It must not reuse ClassServer, which names a remote
+	// failure.
+	ClassStoreLocal
 )
 
 // String returns class's log key.
@@ -66,6 +71,8 @@ func (c Class) String() string {
 		return "throttled"
 	case ClassSchemaVersion:
 		return "schema-version"
+	case ClassStoreLocal:
+		return "store-local"
 	default:
 		return "unknown"
 	}
@@ -83,6 +90,7 @@ var sentence = map[Class]string{
 	ClassServer:            "The server reported a problem",
 	ClassThrottled:         "The server asked us to slow down",
 	ClassSchemaVersion:     "This store needs a newer version of poplar",
+	ClassStoreLocal:        "Poplar could not open its store",
 }
 
 // Error is poplar's user-visible error. Op, IDs, Class, Message, and

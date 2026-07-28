@@ -67,6 +67,17 @@ CREATE VIRTUAL TABLE message_fts USING fts5(
     prefix='2 3'
 );
 
+-- ON DELETE CASCADE (from account or mailbox) removes message rows
+-- inside SQLite itself, below the store-internal helper that
+-- otherwise owns FTS maintenance. This trigger is the only path a
+-- deleted message row takes out of the index: it fires for every
+-- deletion regardless of cause, cascade or direct, so message_fts
+-- can never hold a term for a row the store no longer has.
+CREATE TRIGGER trg_message_fts_delete AFTER DELETE ON message BEGIN
+    INSERT INTO message_fts(message_fts, rowid, subject, search_text)
+    VALUES ('delete', OLD.id, OLD.subject, OLD.search_text);
+END;
+
 CREATE TABLE message_mailbox (
     message_id  INTEGER NOT NULL REFERENCES message(id) ON DELETE CASCADE,
     mailbox_id  INTEGER NOT NULL REFERENCES mailbox(id) ON DELETE CASCADE,

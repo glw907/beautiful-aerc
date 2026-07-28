@@ -29,15 +29,15 @@ var migrationFiles embed.FS
 func Migrate(db *sql.DB) error {
 	names, err := migrationNames()
 	if err != nil {
-		return err
+		return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
 	}
 
 	if err := ensureSchemaVersionTable(db); err != nil {
-		return err
+		return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
 	}
 	current, err := readSchemaVersion(db)
 	if err != nil {
-		return err
+		return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
 	}
 
 	maxVersion := len(names)
@@ -49,10 +49,11 @@ func Migrate(db *sql.DB) error {
 	for current < maxVersion {
 		stmt, err := migrationFiles.ReadFile("migrations/" + names[current])
 		if err != nil {
-			return fmt.Errorf("read migration %s: %w", names[current], err)
+			return uerr.New("store.migrate", nil, uerr.ClassStoreLocal,
+				fmt.Errorf("read migration %s: %w", names[current], err))
 		}
 		if err := applyMigration(db, string(stmt), current+1); err != nil {
-			return err
+			return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
 		}
 		current++
 	}

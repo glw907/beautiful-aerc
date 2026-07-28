@@ -70,6 +70,39 @@ func TestMigrateRejectsNewerSchema(t *testing.T) {
 	}
 }
 
+// TestMigrateFailureReachesUerrSeam proves a failed migration is not
+// a bare error string: it reaches the caller as a uerr.Error under
+// ClassStoreLocal, naming the underlying database failure as its
+// Cause, so it logs through uerr's one seam (ER-1) instead of
+// surfacing as an opaque, unclassified string.
+func TestMigrateFailureReachesUerrSeam(t *testing.T) {
+	db := openTestDB(t)
+
+	// Pre-create a table the first migration also creates, without
+	// IF NOT EXISTS, so applyMigration's CREATE TABLE fails partway
+	// through: a realistic "failed migration" rather than a
+	// synthetic error injected below the seam.
+	if _, err := db.Exec(`CREATE TABLE account (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatalf("pre-create account table: %v", err)
+	}
+
+	err := Migrate(db)
+	if err == nil {
+		t.Fatal("Migrate against a colliding table returned nil error")
+	}
+
+	var uerrErr uerr.Error
+	if !errors.As(err, &uerrErr) {
+		t.Fatalf("Migrate error is not a uerr.Error: %v", err)
+	}
+	if uerrErr.Class != uerr.ClassStoreLocal {
+		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
+	}
+	if uerrErr.Cause == nil {
+		t.Error("Cause is nil, want the underlying CREATE TABLE failure")
+	}
+}
+
 // dumpSchema returns a deterministic text form of db's schema: every
 // sqlite_master row with a CREATE statement, sorted by type and name.
 func dumpSchema(t *testing.T, db *sql.DB) string {

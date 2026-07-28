@@ -225,3 +225,9 @@ CREATE TABLE thread (
     data             TEXT NOT NULL DEFAULT '{}'
 );
 
+-- trigger trg_message_fts_delete
+CREATE TRIGGER trg_message_fts_delete AFTER DELETE ON message BEGIN
+    INSERT INTO message_fts(message_fts, rowid, subject, search_text)
+    VALUES ('delete', OLD.id, OLD.subject, OLD.search_text);
+END;
+
