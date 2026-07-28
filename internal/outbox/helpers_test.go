@@ -132,8 +132,10 @@ func readUndoGroup(t *testing.T, w *store.Writer, id int64) string {
 	return group
 }
 
-// newFakeBackend returns a Fake backend with the given per-account
-// server limits, ready for its Mail source's fields to be scripted.
+// newFakeBackend returns a Fake backend with a 100-object
+// MaxObjectsInSet limit, ready for its Mail source's fields to be
+// scripted. A test wanting a different limit overrides Caps.Limits
+// directly on the returned value.
 func newFakeBackend() *backendtest.Fake {
 	return &backendtest.Fake{Caps: backend.Capabilities{Limits: backend.ServerLimits{MaxObjectsInSet: 100}}}
 }

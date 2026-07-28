@@ -54,7 +54,7 @@ func TestFailureClasses(t *testing.T) {
 			}
 			dispatcher := NewDispatcher(accountID, be, w)
 
-			_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, 10, false, time.Now())
+			_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, be, false, time.Now())
 			if err != nil {
 				t.Fatalf("enqueue: %v", err)
 			}
@@ -91,6 +91,33 @@ func TestFailureClasses(t *testing.T) {
 				if state, attempts := outboxState(t, w, ids[0]); state != "queued" || attempts != 1 {
 					t.Errorf("state = %s attempts = %d, want queued/1", state, attempts)
 				}
+			}
+		})
+	}
+}
+
+// TestShouldLogFailure covers report's log-dedup gate (ADR-0013
+// revision 2): a first failure and a class change both log, a
+// repeated failure of the same class does not, and an unretriable
+// failure always logs, since its row is deleted once this pass
+// finalizes and this is its only chance to reach the log.
+func TestShouldLogFailure(t *testing.T) {
+	tests := []struct {
+		name      string
+		lastClass string
+		class     uerr.Class
+		retry     bool
+		want      bool
+	}{
+		{name: "first failure logs", lastClass: "", class: uerr.ClassConnection, retry: true, want: true},
+		{name: "repeated same class does not log", lastClass: uerr.ClassConnection.String(), class: uerr.ClassConnection, retry: true, want: false},
+		{name: "class change logs", lastClass: uerr.ClassConnection.String(), class: uerr.ClassAuth, retry: true, want: true},
+		{name: "unretriable always logs", lastClass: uerr.ClassNotFound.String(), class: uerr.ClassNotFound, retry: false, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldLogFailure(tt.lastClass, tt.class, tt.retry); got != tt.want {
+				t.Errorf("shouldLogFailure(%q, %v, %v) = %v, want %v", tt.lastClass, tt.class, tt.retry, got, tt.want)
 			}
 		})
 	}

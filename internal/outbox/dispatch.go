@@ -118,6 +118,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		var class uerr.Class
 		var detail string
 		var failed bool
+		var move *MoveMessagesPayload
 		switch c.kind {
 		case KindCreateMailbox:
 			var serverID string
@@ -130,9 +131,14 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		case KindDeleteMailbox:
 			failed, class, detail = d.dispatchDeleteMailbox(ctx, c)
 		case KindMoveMessages:
-			failed, class, detail = d.dispatchMoveMessages(ctx, c, resolvedCreates)
+			move, failed, class, detail = d.dispatchMoveMessages(ctx, c, resolvedCreates)
 		default:
-			return result, fmt.Errorf("outbox: dispatch: unknown kind %q", c.kind)
+			// A kind this build does not recognize (a newer poplar
+			// wrote it, or the schema grew one this dispatcher has not
+			// caught up with) fails this one intent rather than
+			// aborting the pass: every other claimed row still needs
+			// its finalize action decided below.
+			failed, class, detail = true, uerr.ClassServer, fmt.Sprintf("unknown kind %q", c.kind)
 		}
 
 		if failed {
@@ -140,7 +146,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 			stopped = class == uerr.ClassConnection
 			continue
 		}
-		result.Delivered = append(result.Delivered, delivered(c))
+		result.Delivered = append(result.Delivered, delivered(c, move))
 		actions = append(actions, finalizeAction{id: c.id, verb: finalizeDelete})
 	}
 
@@ -164,11 +170,16 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 	return result, err
 }
 
-// report appends c's classified failure to result and returns its
-// finalize action: requeue with backoff if class is worth retrying,
-// delete (give up and let the caller's report stand) otherwise.
+// report appends c's classified failure to result, logs it through
+// uerr's one seam when shouldLogFailure says it is new, and returns
+// its finalize action: requeue with backoff if class is worth
+// retrying, delete (give up and let the caller's report stand)
+// otherwise.
 func (d *Dispatcher) report(result *Result, c claimed, class uerr.Class, detail string) finalizeAction {
 	retry := isRetriable(class)
+	if shouldLogFailure(c.failureClass, class, retry) {
+		_ = uerr.New("outbox.dispatch", failureIDs(c), class, errors.New(detail))
+	}
 	result.Failures = append(result.Failures, Failure{
 		IntentID: c.id, UndoGroup: c.undoGroup, Class: class, Detail: detail, Retrying: retry, Warn: isWarn(class),
 	})
@@ -178,17 +189,44 @@ func (d *Dispatcher) report(result *Result, c claimed, class uerr.Class, detail 
 	return finalizeAction{id: c.id, attempt: c.attemptCount, verb: finalizeRequeue, class: class.String(), detail: detail}
 }
 
-// delivered builds c's Delivered entry, attaching its resolved
-// payload for KindMoveMessages.
-func delivered(c claimed) Delivered {
-	dv := Delivered{IntentID: c.id, UndoGroup: c.undoGroup, Kind: c.kind}
-	if c.kind == KindMoveMessages {
-		var p MoveMessagesPayload
-		if err := json.Unmarshal(c.payload, &p); err == nil {
-			dv.Move = &p
+// shouldLogFailure reports whether a failure classified class, with
+// retry as isRetriable(class), is worth a fresh uerr.New call:
+// lastClass is the class this row's failure_class column carried
+// after its last attempt, empty if it never failed before. A
+// retriable failure logs only on its first occurrence or a class
+// change from lastClass (ADR-0013 revision 2: construction is the
+// surfacing event, not the retry); an unretriable failure always
+// logs, since its row is deleted once this pass finalizes and this is
+// its only chance to reach the log.
+func shouldLogFailure(lastClass string, class uerr.Class, retry bool) bool {
+	return !retry || lastClass != class.String()
+}
+
+// failureIDs returns the server ids c's failure correlates against,
+// for uerr's redaction-safe IDs field: whichever entities c's kind
+// resolved before the failure, or nil when nothing resolved yet.
+func failureIDs(c claimed) []string {
+	switch c.kind {
+	case KindMoveMessages:
+		ids := make([]string, 0, len(c.messageServerIDs))
+		for _, id := range c.messageServerIDs {
+			ids = append(ids, id)
 		}
+		return ids
+	case KindRenameMailbox, KindDeleteMailbox:
+		if c.mailboxServerID == "" {
+			return nil
+		}
+		return []string{c.mailboxServerID}
+	default:
+		return nil
 	}
-	return dv
+}
+
+// delivered builds c's Delivered entry, attaching move (already
+// decoded by dispatchMoveMessages) for KindMoveMessages.
+func delivered(c claimed, move *MoveMessagesPayload) Delivered {
+	return Delivered{IntentID: c.id, UndoGroup: c.undoGroup, Kind: c.kind, Move: move}
 }
 
 // claim selects accountID's dispatch-eligible rows and moves each to
@@ -232,6 +270,10 @@ func resolveClaim(tx *sql.Tx, r row) (claimed, error) {
 		var p CreateMailboxPayload
 		if err := json.Unmarshal(r.payload, &p); err != nil {
 			return c, err
+		}
+		if p.ParentServerID != "" {
+			c.parentServerID = p.ParentServerID
+			return c, nil
 		}
 		if p.ParentMailboxID == 0 {
 			return c, nil
@@ -289,6 +331,10 @@ func resolveClaim(tx *sql.Tx, r row) (claimed, error) {
 			}
 			c.messageServerIDs[msgID] = serverID
 		}
+		if p.DestServerID != "" {
+			c.destServerID = p.DestServerID
+			return c, nil
+		}
 		if p.DestMailboxID == 0 {
 			return c, nil
 		}
@@ -312,35 +358,105 @@ func notFound(c claimed, detail string) claimed {
 // dispatchCreateMailbox executes c, a claimed KindCreateMailbox
 // intent, returning the mailbox's resolved server id on success. A
 // payload already carrying ResolvedServerID is an idempotent replay:
-// the earlier attempt's CreateMailbox call is not repeated.
+// the earlier attempt's CreateMailbox call is not repeated, though
+// resolveDependentRefs still runs every time, in case an earlier
+// attempt's own requeue happened before it reached that step.
 func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resolvedCreates map[int64]string) (string, bool, uerr.Class, string) {
 	var p CreateMailboxPayload
 	if err := json.Unmarshal(c.payload, &p); err != nil {
 		return "", true, uerr.ClassServer, err.Error()
 	}
-	if p.ResolvedServerID != "" {
-		return p.ResolvedServerID, false, 0, ""
-	}
 
-	parentID := c.parentServerID
-	if p.ParentRef != 0 && parentID == "" {
-		parentID = resolvedCreates[p.ParentRef]
-	}
-	newID, err := d.backend.Mail().CreateMailbox(ctx, p.Name, parentID)
-	if err != nil {
-		class, detail := classifyFailure(err)
-		return "", true, class, detail
-	}
+	newID := p.ResolvedServerID
+	if newID == "" {
+		parentID := c.parentServerID
+		if p.ParentRef != 0 && parentID == "" {
+			parentID = resolvedCreates[p.ParentRef]
+		}
+		var err error
+		newID, err = d.backend.Mail().CreateMailbox(ctx, p.Name, parentID)
+		if err != nil {
+			class, detail := classifyFailure(err)
+			return "", true, class, detail
+		}
 
-	p.ResolvedServerID = newID
-	payload, err := json.Marshal(p)
-	if err != nil {
-		return "", true, uerr.ClassServer, err.Error()
+		p.ResolvedServerID = newID
+		payload, err := json.Marshal(p)
+		if err != nil {
+			return "", true, uerr.ClassServer, err.Error()
+		}
+		if err := d.persistPayload(ctx, c.id, payload); err != nil {
+			return "", true, uerr.ClassServer, err.Error()
+		}
 	}
-	if err := d.persistPayload(ctx, c.id, payload); err != nil {
+	if err := d.resolveDependentRefs(ctx, c.id, newID); err != nil {
 		return "", true, uerr.ClassServer, err.Error()
 	}
 	return newID, false, 0, ""
+}
+
+// resolveDependentRefs persists newID, createID's own resolved server
+// id, into every other row of this account's outbox whose payload
+// still names createID by DestRef (a move) or ParentRef (a nested
+// create). createID's own row is deleted once this pass finalizes, so
+// without this a dependent that does not finish dispatching in the
+// same pass, whether it was never claimed this pass or was claimed
+// and then requeued after a failure, finds nothing left in the store
+// to resolve its back-reference against on its next attempt.
+func (d *Dispatcher) resolveDependentRefs(ctx context.Context, createID int64, newID string) error {
+	return d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+		rows, err := selectByAccount(tx, d.accountID, createID)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			patched, ok, err := rewriteRef(r, createID, newID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+			if err := updatePayload(tx, r.id, patched); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// rewriteRef reports whether r's payload names createID by DestRef or
+// ParentRef, returning the payload with that reference replaced by
+// serverID if so.
+func rewriteRef(r row, createID int64, serverID string) (patched []byte, ok bool, err error) {
+	switch r.kind {
+	case KindMoveMessages:
+		var p MoveMessagesPayload
+		if err := json.Unmarshal(r.payload, &p); err != nil {
+			return nil, false, err
+		}
+		if p.DestRef != createID {
+			return nil, false, nil
+		}
+		p.DestRef, p.DestServerID = 0, serverID
+		patched, err = json.Marshal(p)
+	case KindCreateMailbox:
+		var p CreateMailboxPayload
+		if err := json.Unmarshal(r.payload, &p); err != nil {
+			return nil, false, err
+		}
+		if p.ParentRef != createID {
+			return nil, false, nil
+		}
+		p.ParentRef, p.ParentServerID = 0, serverID
+		patched, err = json.Marshal(p)
+	default:
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return patched, true, nil
 }
 
 func (d *Dispatcher) dispatchRenameMailbox(ctx context.Context, c claimed) (bool, uerr.Class, string) {
@@ -367,11 +483,13 @@ func (d *Dispatcher) dispatchDeleteMailbox(ctx context.Context, c claimed) (bool
 // as one ApplyBatch call: each chunk is its own request, so the
 // backend's maxObjectsInSet bound applies per chunk rather than to
 // the whole bulk action. A chunk fails as a whole if any of its
-// messages fail, using the first failure's class.
-func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolvedCreates map[int64]string) (bool, uerr.Class, string) {
+// messages fail, using the first failure's class. It returns the
+// decoded payload on success, so a caller building this intent's
+// Delivered entry does not have to decode c.payload a second time.
+func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolvedCreates map[int64]string) (*MoveMessagesPayload, bool, uerr.Class, string) {
 	var p MoveMessagesPayload
 	if err := json.Unmarshal(c.payload, &p); err != nil {
-		return true, uerr.ClassServer, err.Error()
+		return nil, true, uerr.ClassServer, err.Error()
 	}
 
 	dest := c.destServerID
@@ -379,7 +497,7 @@ func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolv
 		dest = resolvedCreates[p.DestRef]
 	}
 	if dest == "" {
-		return true, uerr.ClassNotFound, "move destination not resolved"
+		return nil, true, uerr.ClassNotFound, "move destination not resolved"
 	}
 
 	mutations := make([]backend.Mutation, 0, len(p.MessageIDs))
@@ -394,15 +512,15 @@ func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolv
 	res, err := d.backend.Mail().ApplyBatch(ctx, mutations)
 	if err != nil {
 		class, detail := classifyFailure(err)
-		return true, class, detail
+		return nil, true, class, detail
 	}
 	for _, mut := range mutations {
 		if mutErr, bad := res.Failed[mut.ID]; bad {
 			class, detail := classifyFailure(mutErr)
-			return true, class, detail
+			return nil, true, class, detail
 		}
 	}
-	return false, 0, ""
+	return &p, false, 0, ""
 }
 
 // persistPayload writes payload back into id's row in its own

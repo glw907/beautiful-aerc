@@ -36,14 +36,15 @@ func TestClaimIsTransactional(t *testing.T) {
 			messageIDs[i] = seedMessage(t, w, accountID, src, fmt.Sprintf("trial%d-msg%d", trial, i))
 		}
 
-		_, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, messageIDs, dest, 0, 1, false, time.Now())
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = 1
+		_, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, messageIDs, dest, 0, be, false, time.Now())
 		if err != nil {
 			t.Fatalf("trial %d: enqueue: %v", trial, err)
 		}
 
 		var mu sync.Mutex
 		var sent []string
-		be := newFakeBackend()
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 			mu.Lock()
 			for _, m := range muts {

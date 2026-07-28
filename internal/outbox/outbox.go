@@ -36,14 +36,20 @@ const UndoWindow = 10 * time.Second
 // CreateMailboxPayload is KindCreateMailbox's payload. ParentMailboxID
 // names an existing mailbox row; ParentRef names another queued
 // KindCreateMailbox intent's own id, for a parent created in the same
-// offline session. ResolvedServerID is empty until the dispatcher's
-// backend call succeeds, at which point it is persisted back into
-// this same row: a replay that finds it already set skips the backend
-// call, since CreateMailbox has no natural idempotency of its own.
+// offline session, until that intent's own create dispatches, at
+// which point the dispatcher resolves ParentRef into ParentServerID
+// and clears it: ParentRef only ever names a row that still exists,
+// so the reference survives even if the referenced create finishes
+// in a later pass than this one, after its own row is gone.
+// ResolvedServerID is empty until the dispatcher's backend call
+// succeeds, at which point it is persisted back into this same row: a
+// replay that finds it already set skips the backend call, since
+// CreateMailbox has no natural idempotency of its own.
 type CreateMailboxPayload struct {
 	Name             string `json:"name"`
 	ParentMailboxID  int64  `json:"parent_mailbox_id,omitempty"`
 	ParentRef        int64  `json:"parent_ref,omitempty"`
+	ParentServerID   string `json:"parent_server_id,omitempty"`
 	ResolvedServerID string `json:"resolved_server_id,omitempty"`
 }
 
@@ -62,13 +68,17 @@ type DeleteMailboxPayload struct {
 // bulk move, or a standalone move of one message. DestMailboxID names
 // an existing mailbox row; DestRef names a KindCreateMailbox intent's
 // own id instead, when the destination was itself created offline in
-// the same batch. PriorMailboxIDs records each message's mailbox
-// before this move (its only mailbox, pass 1's move semantics), so a
-// caller can build the exact compensating move without a second store
-// read once the original intent's row is gone.
+// the same batch, until that intent's own create dispatches, at which
+// point the dispatcher resolves DestRef into DestServerID and clears
+// it, the same durable back-reference CreateMailboxPayload.ParentRef
+// resolves into ParentServerID. PriorMailboxIDs records each
+// message's mailbox before this move (its only mailbox, pass 1's move
+// semantics), so a caller can build the exact compensating move
+// without a second store read once the original intent's row is gone.
 type MoveMessagesPayload struct {
 	MessageIDs      []int64         `json:"message_ids"`
 	DestMailboxID   int64           `json:"dest_mailbox_id,omitempty"`
 	DestRef         int64           `json:"dest_ref,omitempty"`
+	DestServerID    string          `json:"dest_server_id,omitempty"`
 	PriorMailboxIDs map[int64]int64 `json:"prior_mailbox_ids,omitempty"`
 }

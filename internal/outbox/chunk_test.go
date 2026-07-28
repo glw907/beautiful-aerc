@@ -32,7 +32,9 @@ func TestChunkedBulk(t *testing.T) {
 			messageIDs[i] = seedMessage(t, w, accountID, src, "msg-"+strconv.Itoa(i))
 		}
 
-		undoGroup, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, messageIDs, dest, 0, maxPerChunk, false, time.Now())
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = maxPerChunk
+		undoGroup, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, messageIDs, dest, 0, be, false, time.Now())
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
@@ -63,7 +65,9 @@ func TestChunkedBulk(t *testing.T) {
 			seedMessage(t, w, accountID, src, "msg-1"),
 			seedMessage(t, w, accountID, src, "msg-2"),
 		}
-		_, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, 1, false, time.Now())
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = 1
+		_, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, be, false, time.Now())
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
@@ -72,7 +76,6 @@ func TestChunkedBulk(t *testing.T) {
 		}
 
 		applyCalls := 0
-		be := newFakeBackend()
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 			applyCalls++
 			if applyCalls == 2 {
@@ -141,7 +144,7 @@ func TestChunkedBulk(t *testing.T) {
 		}
 		dispatcher := NewDispatcher(accountID, be, w)
 
-		_, _, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, 10, false, time.Now())
+		_, _, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, be, false, time.Now())
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
@@ -166,7 +169,7 @@ func TestChunkedBulk(t *testing.T) {
 		// using the payload it was just handed, with no second store
 		// read: every message here shares one prior mailbox, so one
 		// compensating move suffices.
-		_, _, err = EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, src, 0, 10, false, time.Now())
+		_, _, err = EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, src, 0, be, false, time.Now())
 		if err != nil {
 			t.Fatalf("enqueue compensation: %v", err)
 		}

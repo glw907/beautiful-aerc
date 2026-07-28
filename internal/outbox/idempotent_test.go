@@ -159,7 +159,7 @@ func TestIdempotentReplay(t *testing.T) {
 		dispatcher := NewDispatcher(accountID, be, w)
 
 		for i := range 2 {
-			_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, 10, false, time.Now())
+			_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, be, false, time.Now())
 			if err != nil {
 				t.Fatalf("enqueue %d: %v", i, err)
 			}

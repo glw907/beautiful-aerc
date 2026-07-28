@@ -6,14 +6,18 @@ import (
 )
 
 // row is one outbox row as read back for dispatch: the columns
-// dispatchOne and its callers need, decoded from the table's raw
-// storage shape.
+// resolveClaim and DispatchOnce's finalize step need, decoded from
+// the table's raw storage shape. failureClass is the class an
+// earlier attempt recorded, empty if this row has never failed; the
+// dispatcher compares against it to log a failure only on its first
+// occurrence or a class change, never once per retry.
 type row struct {
 	id           int64
 	kind         Kind
 	payload      []byte
 	undoGroup    string
 	attemptCount int
+	failureClass string
 }
 
 // insertRow inserts one outbox row inside tx and returns its id.
@@ -32,20 +36,41 @@ func insertRow(tx *sql.Tx, accountID int64, kind Kind, payload []byte, undoGroup
 // expired, oldest first: the dispatcher's claim candidates.
 func selectEligible(tx *sql.Tx, accountID int64, now time.Time) ([]row, error) {
 	rows, err := tx.Query(
-		`SELECT id, kind, payload, COALESCE(undo_group, ''), attempt_count FROM outbox
+		`SELECT id, kind, payload, COALESCE(undo_group, ''), attempt_count, COALESCE(failure_class, '') FROM outbox
 		 WHERE account_id = ? AND state = 'queued' AND next_attempt_at <= ? ORDER BY id`,
 		accountID, now.Unix(),
 	)
 	if err != nil {
 		return nil, err
 	}
+	return scanRows(rows)
+}
+
+// selectByAccount returns every accountID row other than exclude,
+// regardless of state: DispatchOnce's key-resolution patch needs to
+// reach a dependent row whether it is still queued or already
+// claimed for this same pass.
+func selectByAccount(tx *sql.Tx, accountID, exclude int64) ([]row, error) {
+	rows, err := tx.Query(
+		`SELECT id, kind, payload, COALESCE(undo_group, ''), attempt_count, COALESCE(failure_class, '') FROM outbox
+		 WHERE account_id = ? AND id != ?`,
+		accountID, exclude,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return scanRows(rows)
+}
+
+// scanRows drains rows into row values, closing rows once done.
+func scanRows(rows *sql.Rows) ([]row, error) {
 	defer func() { _ = rows.Close() }()
 
 	var out []row
 	for rows.Next() {
 		var r row
 		var kind string
-		if err := rows.Scan(&r.id, &kind, &r.payload, &r.undoGroup, &r.attemptCount); err != nil {
+		if err := rows.Scan(&r.id, &kind, &r.payload, &r.undoGroup, &r.attemptCount, &r.failureClass); err != nil {
 			return nil, err
 		}
 		r.kind = Kind(kind)

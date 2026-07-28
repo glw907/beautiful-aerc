@@ -2,12 +2,14 @@ package outbox
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // TestKeyResolutionAtDispatch covers an offline create-folder-then-
@@ -48,7 +50,7 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enqueue create: %v", err)
 	}
-	_, moveIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, 10, false, now)
+	_, moveIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, be, false, now)
 	if err != nil {
 		t.Fatalf("enqueue move: %v", err)
 	}
@@ -81,5 +83,65 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 	}
 	if n := outboxCount(t, w, moveIDs[0]); n != 0 {
 		t.Errorf("move intent %d still queued", moveIDs[0])
+	}
+}
+
+// TestKeyResolutionSurvivesRequeue covers the cross-pass case
+// TestKeyResolutionAtDispatch's single pass cannot: the create
+// dispatches and its own row is deleted in the same pass, but the
+// dependent move fails and requeues before it can use the same pass's
+// in-memory resolution. A later pass, with the create's row long
+// gone, must still resolve the move's destination, because the
+// dispatcher persisted the resolved server id into the move's own
+// payload the moment the create succeeded.
+func TestKeyResolutionSurvivesRequeue(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+	msgID := seedMessage(t, w, accountID, src, "msg-1")
+
+	applyCalls := 0
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(_ context.Context, _, _ string) (string, error) {
+		return "mbx-new-1", nil
+	}
+	be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
+		applyCalls++
+		if applyCalls == 1 {
+			return backend.BatchResult{}, backend.MutationFailure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+		}
+		return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
+	}
+	dispatcher := NewDispatcher(accountID, be, w)
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+	_, moveIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, be, false, now)
+	if err != nil {
+		t.Fatalf("enqueue move: %v", err)
+	}
+
+	if _, err := dispatcher.DispatchOnce(context.Background(), now); err != nil {
+		t.Fatalf("pass 1: %v", err)
+	}
+	if n := outboxCount(t, w, createID); n != 0 {
+		t.Fatalf("create intent %d still queued after it dispatched", createID)
+	}
+	if state, attempts := outboxState(t, w, moveIDs[0]); state != "queued" || attempts != 1 {
+		t.Fatalf("move intent state = %s attempts = %d, want queued/1", state, attempts)
+	}
+
+	pass2 := now.Add(2 * time.Second)
+	if _, err := dispatcher.DispatchOnce(context.Background(), pass2); err != nil {
+		t.Fatalf("pass 2: %v", err)
+	}
+	if applyCalls != 2 {
+		t.Fatalf("ApplyBatch calls = %d, want 2", applyCalls)
+	}
+	if n := outboxCount(t, w, moveIDs[0]); n != 0 {
+		t.Errorf("move intent %d still queued after pass 2, its destination reference was lost", moveIDs[0])
 	}
 }
