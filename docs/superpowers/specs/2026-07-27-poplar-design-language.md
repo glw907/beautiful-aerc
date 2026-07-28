@@ -366,36 +366,59 @@ grammar, one chrome.
 
 ## 9. Responsive layout grammar
 
-(Added at the gate by Geoff's directive, 2026-07-27: a clear plan
-for accommodating the variety of terminal window sizes.) The
-method salvages the legacy client's proven responsive model
-(`docs/poplar/responsive-design.md`, reference): layout is
-formulas plus thresholds in pure Go, computed once per
-`WindowSizeMsg` into one `LayoutMode` struct every component
-consumes; no renderer hardcodes a width; no CSS-style query
-system; no user-configurable breakpoints. The evidence base
-carries too: 80×24 is the legacy floor, the usage cluster is
-100-140 columns peaking near 120, and rows run 24-30 with a tail
-to ~50.
+(Added at the gate by Geoff's directive, 2026-07-27, and refined
+the same day: fully functional at traditional sizes, taking real
+advantage of large windows, grounded first in research on the
+sizes people actually use. Evidence:
+`docs/poplar/research/2026-07-27-terminal-size-survey.md`; the
+legacy model at `docs/poplar/responsive-design.md` is salvaged
+reference.) The method: layout is formulas plus thresholds in
+pure Go, computed once per `WindowSizeMsg` into one `LayoutMode`
+struct every component consumes; no renderer hardcodes a width;
+no CSS-style query system; no user-configurable breakpoints.
 
-**Named width classes.** The runtime flows on formulas; the named
-classes exist for wireframes, goldens, and review language, the
-terminal equivalent of cairn's five-viewport bar:
+**The ladder principle.** Size changes what is shown, never what
+the keys mean (C6 holds at every size). The product is a
+strictly-necessary core plus an additive ladder: the core is
+complete at small sizes, and each rung up adds capability the
+extra space genuinely earns. Two rules keep the ladder honest.
+A rung exists only where *capability* changes (a pane appears);
+density, column widths, and truncation flex continuously on the
+formulas inside a rung and are never rungs themselves. And each
+boundary changes exactly one obvious thing, so a resize reads as
+a single legible transition, never a reshuffle.
 
-| Class | Columns | Layout identity |
+**Three rungs, plus the floor.** The evidence sized the ladder:
+80×24 is still the universal default (the core must be complete
+there), the usage cluster is 100-140 columns (the polish
+center), splits make 60-100 columns routine, and the ultrawide
+tail is 2-3% of desktops, too small to justify a fourth
+capability rung, so capped reading measures are the wide rung's
+own behavior rather than a separate class.
+
+| Class | Columns | What the space buys |
 |---|---|---|
-| floor | under 60 | the too-small state: a centered notice naming the required minimum, nothing else; never garbled chrome |
-| spartan | 60-89 | one content pane, no sidebar, compact list columns; graceful, never embarrassing |
-| standard | 90-139 | sidebar plus one content pane (list and reader swap full-pane); the experience peak, polished hardest |
-| wide | 140-199 | split view: list beside reader; each pane at or above its minimum, never squeezed |
-| ultra | 200+ | measures cap and center: reader content at ~100 cells, Catkin's writing measure at ~80; surplus becomes calm margin, the iA instinct |
+| floor | under 60 | the too-small state: a centered notice naming the required minimum, nothing else; never garbled chrome, never a hard block above it |
+| spartan | 60-99 | the strictly-necessary core, complete: one content pane at a time, every switch-bar verb, compact columns via the formulas. Fully functional at 80×24 by test, graceful in a split at 66 |
+| standard | 100-139 | + the sidebar (the one capability this boundary adds); columns relax toward full. The modal cluster lives here; this rung is polished hardest |
+| wide | 140+ | + the split: list beside reader, reading while triaging, each pane at or above its minimum. Within the rung, reader content caps at ~100 cells and Catkin's writing measure at ~80; surplus becomes calm centered margin, the iA instinct |
 
-Height classes: short (under 20 rows) collapses the footer to one
-row and demotes banners to toasts; standard (20 and up) is the
-full chrome; grid calendar views additionally require the rows
-they declare and degrade by name to the agenda below that
-(CA-3's views are never squeezed into illegibility). Below 15
-rows is the floor state.
+Further capability at extreme width (a docked calendar peek, a
+thread-context pane beside compose) is deliberately not a v1
+rung: the pane-priority model admits a fourth pane later without
+restructuring, and any such extra must individually pass C11's
+lean test when proposed. The rung count may shrink but not grow
+without amending this document.
+
+**Height classes.** Short windows are a first-class condition,
+not an edge case (the largest real cohort is likely embedded
+editor terminals, short and width-constrained): under 20 rows,
+chrome compresses first (footer to one row, banners demote to
+toasts) before any content degrades; 20 rows and up carries full
+chrome; grid calendar views additionally require the rows they
+declare and degrade by name to the agenda below that (CA-3's
+views are never squeezed into illegibility). Below 15 rows is
+the floor state.
 
 **Composition rules.**
 

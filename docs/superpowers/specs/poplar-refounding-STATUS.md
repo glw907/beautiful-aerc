@@ -47,12 +47,22 @@ Phase 4 outcomes:
   allowlist (`2026-07-27-poplar-html-allowlist.md`), the C9
   library survey and the measurement-spike report (under
   `docs/poplar/research/`), and the `cmd/perfspike` tool.
-- Gate directive (Geoff, 2026-07-27): a clear responsive-design
-  plan for varied terminal sizes. Encoded as the design
-  language's section 9 responsive layout grammar (named width
-  and height classes, pane priority, coverage-cliff formulas,
-  floor state, golden matrix), salvaging the legacy model and
-  its terminal-size evidence.
+- Gate directive (Geoff, 2026-07-27), refined same day: a clear
+  responsive-design plan, fully functional at traditional sizes
+  and taking real advantage of large windows, starting from
+  research into actual terminal-size usage. Encoded as the
+  design language's section 9: the ladder principle (a complete
+  strictly-necessary core plus additive capability rungs; a rung
+  only where capability changes; one change per boundary), three
+  rungs plus a floor state (spartan 60-99 complete at 80×24,
+  standard 100-139 adds the sidebar, wide 140+ adds the split
+  with capped centered measures), short-height first-class
+  treatment, and the coverage-cliff formulas inside rungs.
+  Evidence committed:
+  `docs/poplar/research/2026-07-27-terminal-size-survey.md`
+  (no telemetry exists anywhere; defaults, shipped TUI
+  breakpoints, and split math are the base; the 2-3% ultrawide
+  tail ruled out a fourth rung).
 - Review shape that worked: three adversarial Opus lenses (~85
   findings, 8 blockers, all folded) plus a fresh-context
   verification pass; the blockers were real (unservable list
