@@ -56,6 +56,13 @@ Phase 2 outcomes:
   Protonmail and actively used TUI clients covering UX patterns as
   well as features, so requirements are complete in advance and
   their priorities set the implementation order.
+- Phase 5 directive (Geoff, 2026-07-27): audit the Go and bubbletea
+  Claude infrastructure (CLAUDE.md, the go-conventions and
+  elm-conventions skills, linters, the `make check` gate, the
+  implementer and reviewer agents) against current best practice for
+  high-quality, idiomatic Go before the build machine is finalized.
+  Pairs with the vision's current-stack posture: the tooling gets the
+  same freshness audit as the dependencies.
 
 Phase 1 outcomes:
 - Verdict: viable inside a measured boundary. Deterministic rules
