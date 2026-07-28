@@ -1,21 +1,13 @@
-/mailrender
-/fastmail-cli
-/tidytext
 /poplar
-/perfspike
+/tools/bin/
 
-.config/aerc/signature.md
-.config/aerc/accounts.conf
-.config/aerc/fastmail-*.age
-.config/aerc/mailrules.json
-.config/aerc/stylesets/*
-!.config/aerc/stylesets/.gitkeep
-.config/aerc/generated/
 .claude/memory/
 .claude/hookify.*.local.md
 .claude/scheduled_tasks.lock
-audit-output/
 corpus/
 .worktrees/
 
 .superpowers/
+
+# Leftover local state from the retired aerc-era stow package.
+/.config/

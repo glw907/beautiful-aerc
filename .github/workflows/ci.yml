@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # 09:00 UTC: the nightly depth jobs (build-machine design, section 2).
+    - cron: "0 9 * * *"
+
+env:
+  VALE_VERSION: "3.15.1"
+
+jobs:
+  check:
+    name: make check (linux)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Vale
+        run: |
+          curl -sfL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin vale
+      - run: make check
+
+  race:
+    name: go test -race
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./...
+
+  darwin:
+    # QA-7's cross-platform byte-identity check: the golden
+    # comparisons must match Linux exactly on the gate's second
+    # platform.
+    name: build and test (darwin)
+    if: github.event_name != 'schedule'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go test ./...
+
+  nightly:
+    name: nightly depth jobs
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: govulncheck
+        # Network-dependent and its exit code cannot distinguish a
+        # CVE from a network failure, so it never gates a commit
+        # (build-machine design, section 2).
+        run: |
+          go build -C tools -o bin/govulncheck golang.org/x/vuln/cmd/govulncheck
+          ./tools/bin/govulncheck ./...
+
+      - name: deadcode
+        run: |
+          go build -C tools -o bin/deadcode golang.org/x/tools/cmd/deadcode
+          ./tools/bin/deadcode ./...
+
+      - name: "QA-5 soak (PLACEHOLDER, no harness yet)"
+        run: |
+          echo "::warning::QA-5's 30-minute soak harness (5% RSS-growth bound) does not exist yet. This step is a placeholder and exercises nothing."
+
+      - name: "QA-8 idle-CPU (PLACEHOLDER, no harness yet)"
+        run: |
+          echo "::warning::QA-8's 5-minute idle-CPU harness does not exist yet. This step is a placeholder and exercises nothing."

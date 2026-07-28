@@ -1,6 +1,5 @@
 {
   "backlog_path": "BACKLOG.md",
-  "roadmap_path": "ROADMAP.md",
   "domains": ["poplar", "config", "docs"],
   "default_priority": "medium"
 }

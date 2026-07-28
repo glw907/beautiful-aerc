@@ -7,20 +7,42 @@
 # stops before the dash. Judgment words stay advisory (see .vale.ini), not gate
 # blockers, because they recur in legitimate technical comments.
 #
-# Exit 1 on any error-level finding; 0 otherwise.
+# A missing Vale hard-fails: an advisory guard that skips quietly is the
+# silent-decay class this gate exists to close, and "installed on the
+# workstation" is not portability.
+#
+# Pass --check-vendor to additionally assert the vendored glw907 overlay
+# matches the workstation's canonical copy. Off by default: a fresh clone
+# or CI has no workstation dotfiles to compare against, and the committed
+# overlay is the source of truth there.
+#
+# Exit 1 on any error-level finding, a missing Vale, or (with
+# --check-vendor) a drifted overlay; 0 otherwise.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+check_vendor=0
+for arg in "$@"; do
+  case "$arg" in
+    --check-vendor) check_vendor=1 ;;
+    *)
+      echo "vale-comments: unknown argument: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
+
 if ! command -v vale >/dev/null 2>&1; then
-  echo "vale-comments: vale not installed, skipping (see CLAUDE.md, Authoring)"
-  exit 0
+  echo "vale-comments: vale not installed; install it, do not skip the gate" >&2
+  exit 1
 fi
 
-# Workstation hygiene: when the canonical glw907 source is present, assert the
-# vendored copy has not drifted from it. Skips on CI or a fresh clone, where the
-# committed copy is itself the source of truth.
-vendor="$HOME/.dotfiles/scripts/glw907-vendor.sh"
-if [ -x "$vendor" ] && [ -d "$HOME/.dotfiles/vale/.config/vale/styles/glw907" ]; then
+if [ "$check_vendor" -eq 1 ]; then
+  vendor="$HOME/.dotfiles/scripts/glw907-vendor.sh"
+  if [ ! -x "$vendor" ]; then
+    echo "vale-comments: --check-vendor given but $vendor is not present or not executable" >&2
+    exit 1
+  fi
   "$vendor" "$PWD" || exit 1
 fi
 

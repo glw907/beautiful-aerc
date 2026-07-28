@@ -1,0 +1,40 @@
+version: "2"
+
+# default: none plus an explicit enable list. v2's default set silently
+# drops errcheck, unused, and ineffassign unless named, and this
+# project's review lens is silent-failure hunting, so losing errcheck
+# is not an option (build-machine design, section 2).
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - modernize
+    - unparam
+    - misspell
+    - gosec
+    - nolintlint
+  settings:
+    errcheck:
+      check-type-assertions: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    presets:
+      - common-false-positives
+    rules:
+      # scripts/ holds build tooling, not product code: it walks
+      # paths the operator names on its own command line, not
+      # untrusted external input.
+      - path: ^scripts/
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
