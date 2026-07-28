@@ -224,8 +224,14 @@ is the `ServerHeuristic` capability case, section 4. Thread rows
 are derived from message threadIds; there is no Thread/changes
 sync round trip.
 
-**Store recovery (SY-8).** Startup runs `PRAGMA quick_check` plus
-the FTS integrity check behind the schema-version gate. Detected
+**Store recovery (SY-8).** Integrity checking is event-driven,
+never a synchronous startup step: the measurement spike priced
+`PRAGMA quick_check` at 14.5 seconds on a 924 MB store, which
+would destroy QA-1 on every launch. A clean-shutdown marker is
+written at exit; startup runs `quick_check` plus the FTS
+integrity check only when the marker is absent (unclean
+shutdown), when a migration runs, or on explicit request, and
+the check runs with a progress state. Detected
 corruption or a failed migration surfaces per ER-1 and offers
 rebuild-from-server, which exports and re-imports the preserved
 set (undispatched outbox rows, drafts and their local revisions,
@@ -776,11 +782,32 @@ LT-1 has no preview line).
 
 ## 18. Risks and open items for the gate
 
-1. **The measurement spike** (running) replaces the provisional
-   QA-1/2/3 numbers; blocking input to Phase 5 planning. Relief
-   valves if it disappoints: statement caching, and the
-   `search_text` column already avoids body-table reads on hot
-   paths.
+1. **The measurement spike ran** (report:
+   `docs/poplar/research/2026-07-27-phase4-measurement-spike.md`;
+   35,837 real messages amplified to 100k, this machine). The
+   measured baselines and the gates they imply, for
+   ratification per the requirements' provisional rule:
+   - QA-1: exec + open + first 50 rows ≈ 5 ms warm once
+     quick_check is event-driven (section 3). The 200 ms gate
+     holds with wide headroom; keep it.
+   - QA-2: 22 ms quiescent / 25 ms under-write p95 on the
+     unoptimized spike (random-offset pages, no statement
+     caching, no keyset pagination). Recommendation: set the
+     gate at 25 ms p95 measured-informed, keep 20 ms as the
+     design target the build optimizes toward. Zero
+     SQLITE_BUSY across the concurrent run validates the
+     single-writer discipline.
+   - QA-3: all query classes 0.9-4.5 ms p95 at 100k with real
+     body text; the 100/200/500 ms gates hold with 20x
+     headroom; keep them.
+   - QA-5: storage overhead measured 53% of body bytes (FTS5
+     postings alone 36%); the 15% target was mis-priced when
+     full-text postings live in the denominator's store.
+     Recommendation: restate the criterion as total store size
+     under 1.6x retained body bytes, gate from the measured
+     baseline. Spike-process RSS after the full bench was
+     272 MB, near the 250 MB app ceiling; the app gate stands
+     but is flagged tight.
 2. **CalDAV RSVP and free/busy probes**: blocked on the
    calendar-scoped token (requirements section 16 items 1 and
    2). Both design branches exist; the capability flag makes the
