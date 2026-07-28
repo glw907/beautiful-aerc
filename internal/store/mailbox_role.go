@@ -200,10 +200,10 @@ func resolveMailboxRoles(candidates []mailboxRoleCandidate) map[int64]mailboxRol
 	resolved := make(map[int64]mailboxRole, len(byRole))
 	for key, group := range byRole {
 		winner := slices.MinFunc(group, func(a, b mailboxRoleCandidate) int {
-			if declared := cmp.Compare(boolRank(a.ServerRole != ""), boolRank(b.ServerRole != "")); declared != 0 {
-				return declared
-			}
-			return cmp.Compare(a.ID, b.ID)
+			return cmp.Or(
+				cmp.Compare(boolRank(a.ServerRole != ""), boolRank(b.ServerRole != "")),
+				cmp.Compare(a.ID, b.ID),
+			)
 		})
 		resolved[winner.ID] = key.role
 		for _, c := range group {
