@@ -23,10 +23,39 @@ it. Updating this STATUS is step one and is never optional.
    a load-bearing decision changed. The cursor lives here, not in
    memory.
 
-## Current state (2026-07-19)
+## Current state (2026-07-27)
 
-Phase 1 (rendering bet) executed; the gate ruling is Geoff's and is
-the only open item.
+Phase 2 (vision) closed with Geoff's approval. Geoff ruled proceed on
+the Phase 1 rendering bet the same day. Phase 3 (requirements) is
+next and opens with a grounding survey.
+
+Phase 2 outcomes:
+- Vision doc approved and committed:
+  `docs/superpowers/specs/2026-07-27-poplar-vision.md`. It binds
+  Phases 3 through 5.
+- Switch bar: full mail replacement for one Fastmail/JMAP account.
+  Triage, threading, search, folder management, Catkin compose,
+  contacts autocomplete, multiple identities/aliases, ICS-first
+  calendar RSVP from the reader, offline read and triage.
+- Named product goals: near-instant speed on every operation
+  (local-first store, JMAP as sync layer; Phase 3 sets the numbers);
+  self-containment (one binary, no external editor, indexer, or
+  delivery agent, no companion daemon); attractive, research-grounded
+  UI (wireframes before any screen build); current-stack posture
+  (Phase 4 freshness audit; no dependency inherits its legacy pin).
+- Non-goals for v1: user configurability, PGP/S-MIME, plugin or
+  scripting systems, external-editor integration, multi-account,
+  Gmail or generic IMAP, any non-terminal UI.
+- The nvim companion plugin is dropped entirely (Geoff, 2026-07-27),
+  off the horizon register; its workstation memory is deleted.
+- Knowable-horizon register, seven items, recorded in the doc:
+  multi-account (early post-v1, the named first priority), Gmail
+  OAuth backend, flag-a-bad-render loop (#63), capture-mailbox
+  corpus, Catkin spinoff, encryption seams, contacts micro-highlight.
+- Phase 3 directive (Geoff): open with a grounding survey of
+  Protonmail and actively used TUI clients covering UX patterns as
+  well as features, so requirements are complete in advance and
+  their priorities set the implementation order.
 
 Phase 1 outcomes:
 - Verdict: viable inside a measured boundary. Deterministic rules
@@ -65,32 +94,34 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 2, vision
+## Next: Phase 3, requirements
 
-Blocked on the Phase 1 gate: Geoff reads the verdict doc and sample
-renders and rules on the bet. On a proceed ruling, start Phase 2.
-
-Starter prompt (paste after /clear, or say "run Phase 2 of the
+Starter prompt (paste after /clear, or say "run Phase 3 of the
 re-founding"):
 
 ```
-Run Phase 2 of the poplar re-founding: vision. Read the charter
+Run Phase 3 of the poplar re-founding: requirements. Read the charter
 docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
-(Phase 2 section) and the rendering-bet verdict
-docs/poplar/research/2026-07-19-rendering-bet-verdict.md first.
+(Phase 3 section) and the approved vision
+docs/superpowers/specs/2026-07-27-poplar-vision.md first.
 
-This phase is interactive: Geoff's taste drives, the verdict is on
-the table. Output is a short, opinionated vision doc: what the MVP
-daily driver must do for Geoff to switch full-time; the
-differentiators, with the rendering verdict as evidence; the
-audience; explicit non-goals; and the knowable-horizon register of
-post-MVP improvements the architecture must not foreclose (seed it
-from backlog #63's flag loop, the capture-mailbox corpus strategy,
-ICS-first calendar rendering, the fact-inventory self-check, and the
-nvim companion). Constraints already settled and binding: no LLM in
-the render path; rules declarative, explainable, and traceable.
+Open with the grounding survey Geoff directed: Protonmail as the
+polished-incumbent baseline and the actively used TUI clients (aerc,
+neomutt, alpine, meli, himalaya) for the terminal state of the art,
+covering UX and interaction patterns as well as features. Mine the
+existing mail-client field survey and the 132-scenario rebuild
+functional spec as inputs, never as inherited scope. Survey research
+dispatches to cheap models; synthesis stays in the main loop.
 
-End at the gate: Geoff approves the vision doc.
+Then draft the requirements spec: MVP scope with real priorities
+(must, should, later), quality attributes with numbers (startup,
+keypress-to-paint, search latency, sync convergence, offline
+behavior, large-mailbox performance: the vision's speed goal made
+testable), and acceptance criteria per requirement. Priorities must
+be firm enough to derive the Phase 5 implementation order from them.
+Adversarially review the spec before the gate.
+
+End at the gate: Geoff approves the requirements spec.
 ```
 
 ## Superseded: Phase 1, the rendering bet
@@ -149,5 +180,5 @@ Geoff reads the verdict and sample renders and rules on the bet.
 ## Phase roadmap
 
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
-[done, gate ruling pending] -> 2 Vision [next] -> 3 Requirements ->
+[done] -> 2 Vision [done] -> 3 Requirements [next] ->
 4 Technical design -> 5 Build machine + build.
