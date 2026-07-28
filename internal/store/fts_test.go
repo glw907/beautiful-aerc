@@ -1,14 +1,18 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"errors"
+	"slices"
 	"testing"
 )
 
 // TestMessageFTSSurvivesCascadeDelete proves message_fts stays
 // consistent with message across a cascading delete, not only a
-// direct one. Deleting an account cascades through mailbox to
-// message inside SQLite itself, below the store-internal helper
+// direct one. Deleting an account cascades straight to message
+// (message.account_id's own foreign key; message has none to
+// mailbox) inside SQLite itself, below the store-internal helper
 // that otherwise owns FTS maintenance; without
 // trg_message_fts_delete, that cascade orphans the deleted row's
 // terms in the index. An orphaned term still matches a search and,
@@ -21,9 +25,6 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 
 	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
 		t.Fatalf("insert account: %v", err)
-	}
-	if _, err := db.Exec(`INSERT INTO mailbox (id, account_id, name) VALUES (1, 1, 'Inbox')`); err != nil {
-		t.Fatalf("insert mailbox: %v", err)
 	}
 	if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
 		t.Fatalf("insert message: %v", err)
@@ -52,13 +53,204 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 	}
 }
 
+// TestUnindexedMessageRowMustBeIndexed pins the reciprocal invariant
+// trg_message_fts_delete assumes: every message row carries a
+// message_fts entry. Probed against modernc.org/sqlite v1.54.0,
+// deleting a row this invariant does not hold for surfaces as
+// SQLite's own disk-image-malformed error, indistinguishable from
+// real corruption, rather than a clean no-op. This is why every
+// insert path in this package must call reindexMessage in the same
+// transaction as the message write.
+func TestUnindexedMessageRowMustBeIndexed(t *testing.T) {
+	db := openMigratedTestDB(t)
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
+		t.Fatalf("insert account: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+
+	if _, err := db.Exec(`DELETE FROM message WHERE id = 1`); err == nil {
+		t.Fatal("delete of a never-indexed message row succeeded, want the trigger's disk-image error the reciprocal invariant predicts")
+	}
+}
+
+// TestIndexTransactional asserts reindexMessage's write lands or
+// vanishes with the message write it shares a transaction with: a
+// rolled-back write leaves no message_fts row, and a committed one
+// leaves exactly one.
+func TestIndexTransactional(t *testing.T) {
+	w, _ := newTestWriter(t, DefaultWriterConfig())
+	seedAccountAndMailbox(t, w)
+
+	forcedFailure := errors.New("forced rollback")
+	err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		if err := reindexMessage(tx, 1, "hello", "world"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
+			return err
+		}
+		return forcedFailure
+	})
+	if err == nil {
+		t.Fatal("submit succeeded, want the forced failure to roll back")
+	}
+	if got := matchingRowCount(t, w.db, "hello"); got != 0 {
+		t.Fatalf("matching rows after rolled-back write = %d, want 0", got)
+	}
+
+	err = w.submit(context.Background(), func(tx *sql.Tx) error {
+		if err := reindexMessage(tx, 1, "hello", "world"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("commit message write: %v", err)
+	}
+	if got := matchingRowCount(t, w.db, "hello"); got != 1 {
+		t.Fatalf("matching rows after committed write = %d, want 1", got)
+	}
+}
+
+// TestBackfillReindexes covers a message indexed before its body
+// arrives: the initial insert carries an empty search_text, so a body
+// term finds nothing until a later transaction backfills search_text
+// and reindexes the row.
+func TestBackfillReindexes(t *testing.T) {
+	w, _ := newTestWriter(t, DefaultWriterConfig())
+	seedAccountAndMailbox(t, w)
+
+	err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		if err := reindexMessage(tx, 1, "hello", ""); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', '')`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("index message before body: %v", err)
+	}
+	if got := matchingRowCount(t, w.db, "hello"); got != 1 {
+		t.Fatalf("subject search before backfill = %d, want 1", got)
+	}
+	if got := matchingRowCount(t, w.db, "world"); got != 0 {
+		t.Fatalf("body search before backfill = %d, want 0 (the body has not arrived yet)", got)
+	}
+
+	err = w.submit(context.Background(), func(tx *sql.Tx) error {
+		if err := reindexMessage(tx, 1, "hello", "world arrives"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE message SET search_text = 'world arrives' WHERE id = 1`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("backfill body: %v", err)
+	}
+	if got := matchingRowCount(t, w.db, "world"); got != 1 {
+		t.Fatalf("body search after backfill = %d, want 1", got)
+	}
+	if got := matchingRowCount(t, w.db, "hello"); got != 1 {
+		t.Fatalf("subject search after backfill = %d, want 1 (subject reindex must not drop the row)", got)
+	}
+}
+
+// TestRebuildIndex corrupts message_fts with FTS5's own 'delete-all'
+// command, which wipes the index while leaving message untouched, and
+// asserts RebuildIndex restores every term a pre-corruption baseline
+// found.
+func TestRebuildIndex(t *testing.T) {
+	db := openMigratedTestDB(t)
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
+		t.Fatalf("insert account: %v", err)
+	}
+
+	messages := []struct {
+		id                  int64
+		subject, searchText string
+	}{
+		{1, "alpha bravo", "charlie delta"},
+		{2, "bravo charlie", "echo"},
+		{3, "delta echo", "alpha"},
+	}
+	for _, m := range messages {
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatalf("begin: %v", err)
+		}
+		if err := reindexMessage(tx, m.id, m.subject, m.searchText); err != nil {
+			t.Fatalf("reindexMessage(%d): %v", m.id, err)
+		}
+		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (?, 1, 0, ?, ?)`,
+			m.id, m.subject, m.searchText); err != nil {
+			t.Fatalf("insert message %d: %v", m.id, err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit message %d: %v", m.id, err)
+		}
+	}
+
+	terms := []string{"alpha", "bravo", "charlie", "delta", "echo"}
+	baseline := make(map[string][]int64, len(terms))
+	for _, term := range terms {
+		baseline[term] = searchIDs(t, db, term)
+	}
+
+	if _, err := db.Exec(`INSERT INTO message_fts(message_fts) VALUES ('delete-all')`); err != nil {
+		t.Fatalf("corrupt index with delete-all: %v", err)
+	}
+	for _, term := range terms {
+		if got := searchIDs(t, db, term); len(got) != 0 {
+			t.Fatalf("search(%q) after delete-all = %v, want empty", term, got)
+		}
+	}
+
+	if err := RebuildIndex(db); err != nil {
+		t.Fatalf("RebuildIndex: %v", err)
+	}
+	for _, term := range terms {
+		got := searchIDs(t, db, term)
+		if !slices.Equal(got, baseline[term]) {
+			t.Fatalf("search(%q) after rebuild = %v, want the pre-corruption baseline %v", term, got, baseline[term])
+		}
+	}
+}
+
 // matchingRowCount returns how many message_fts rows match term.
 func matchingRowCount(t *testing.T, db *sql.DB, term string) int {
 	t.Helper()
 
-	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM message_fts WHERE message_fts MATCH ?`, term).Scan(&count); err != nil {
-		t.Fatalf("count matches for %q: %v", term, err)
+	return len(searchIDs(t, db, term))
+}
+
+// searchIDs returns the message ids message_fts matches against term,
+// in ascending order.
+func searchIDs(t *testing.T, db *sql.DB, term string) []int64 {
+	t.Helper()
+
+	rows, err := db.Query(`SELECT rowid FROM message_fts WHERE message_fts MATCH ? ORDER BY rowid`, term)
+	if err != nil {
+		t.Fatalf("search %q: %v", term, err)
 	}
-	return count
+	defer func() { _ = rows.Close() }()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan search row for %q: %v", term, err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate search rows for %q: %v", term, err)
+	}
+	return ids
 }
