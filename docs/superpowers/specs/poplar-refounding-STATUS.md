@@ -25,9 +25,61 @@ it. Updating this STATUS is step one and is never optional.
 
 ## Current state (2026-07-27)
 
-Phase 4 (technical design) closed with Geoff's approval the same
-day it ran. Phase 5 (build machine, then build) is next and opens
-with the directed tooling audit.
+Phase 5 is in progress: the machine gate passed with Geoff's
+approval the same day it ran (all five rulings as presented).
+The next action is the execution session below: boundary ritual,
+machine assembly, then pass 1.
+
+Phase 5 machine-gate outcomes (2026-07-27):
+- Two Geoff directives arrived at phase open, both ratified at
+  the gate: solid mouse support from day one, and a keybinding
+  machinery ruling. Mouse is ADR-0017 (pointer as accelerator
+  over the keyboard-complete grammar, eleven-row vocabulary,
+  immediate single-click, two-grain hit-testing, message-level
+  testing); it amends UX-6 from SHOULD to MUST in requirements
+  revision 4. Keybindings settle on bubbles/key with
+  registry-derived help.KeyMap (crush's production pattern).
+- Approved artifacts, all committed: the build machine design
+  (`2026-07-27-poplar-build-machine.md`, revision 2), ADR-0017,
+  and the tooling audit
+  (`docs/poplar/research/2026-07-27-phase5-tooling-audit.md`,
+  revision 2). Evidence base: five research dispatches (in-repo
+  inventory, Go toolchain, Charm ecosystem incl. a crush
+  deep-dive, keybinding machinery, mouse) under the standing
+  live-research directive.
+- Audit verdict ratified: nothing carries forward by default.
+  Broken today: the dangling voice catalogue (six citing
+  artifacts), golangci-lint v1 config vs v2 binary with the
+  failure swallowed, dead agent model pins, a hookify rule
+  quoting deleted doctrine, and the phantom `legacy` branch
+  (cited everywhere, exists nowhere; the tag predates the spike
+  tools). The boundary ritual creates and pushes `legacy` from
+  the last pre-boundary master commit before deleting anything.
+- Gate composition ratified: one-tier local gate (build incl.
+  darwin cross-compile, golangci-lint v2 explicit enables, four
+  design analyzers via a tools-module multichecker, Vale,
+  skipcheck, tests, non-race perf step); CI runs the gate
+  verbatim plus race, darwin goldens (QA-7), and nightly
+  govulncheck/deadcode/soak/idle; kill harness scales with
+  subjects, full scope at pass 6. Mutation testing dropped;
+  voice consolidates on Vale; gosec suppressions carry rule id
+  plus reason and are reviewer-read.
+- Spec amendments ratified for the boundary: requirements
+  revision 4 (the Phase 4 ratified numbers plus the UX-6
+  amendment) and revision blocks on ADR-0001 (one store file),
+  ADR-0011 (LayoutMode pane rectangles; registry binds pointer
+  targets), ADR-0012 (basic key disambiguation is v2's default;
+  decline covers only opt-in enhancements).
+- Two workstation fixes owed outside the repo:
+  bubbletea-conventions.md relocates to `~/.claude/docs/` with
+  the elm-conventions skill repointed; go-conventions' example
+  golangci config updates to the v2 schema.
+- Review shape that worked again: two Opus adversarial lenses
+  (spec-consistency, evidence-and-feasibility; ~40 findings, 9
+  blockers, all folded) over revision 1 of the three artifacts.
+- Watch item for wireframe passes: lazygit retracted digit
+  panel-switching under user pushback; poplar's `1`-`4` stands
+  but digit semantics stay under the eye.
 
 Phase 4 outcomes:
 - Design approved at the gate (Geoff, 2026-07-27), with the
@@ -205,48 +257,45 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 5, build machine, then build
+## Next: Phase 5 execution, boundary ritual then pass 1
 
-Starter prompt (paste after /clear, or say "run Phase 5 of the
-re-founding"):
+Runs in a fresh Opus 5 execution session per the model economy
+(the Fable planning sitting ended at the machine gate). Starter
+prompt (paste after /clear in ~/Projects/poplar):
 
 ```
-Run Phase 5 of the poplar re-founding: the build machine, then the
-build. Read the charter
-docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
-(Phase 5 section), the approved technical design
-docs/superpowers/specs/2026-07-27-poplar-technical-design.md and
-its ADRs (docs/superpowers/specs/adr/), the design language
-docs/superpowers/specs/2026-07-27-poplar-design-language.md
-(responsive grammar included), the requirements' build-order spine
-(section 15), and the measurement-spike report. The standing
-live-research directive applies to every tooling and dependency
-claim.
+Execute the approved poplar build machine and open pass 1. The
+machine design is
+docs/superpowers/specs/2026-07-27-poplar-build-machine.md
+(approved at the gate 2026-07-27 with all five section-11
+rulings); read it first and follow it exactly, alongside
+ADR-0017 and the tooling audit
+docs/poplar/research/2026-07-27-phase5-tooling-audit.md. The
+standing live-research directive applies to every version claim
+at the moment of pinning.
 
-Open with the directed tooling audit: CLAUDE.md, the
-go-conventions and elm-conventions skills, the linters and vale
-gate, make check, and the poplar implementer/reviewer agents,
-audited against current best practice for the settled stack
-(Go 1.26, bubbletea v2) before the machine is finalized. Then
-design the machine against the real architecture: implementer and
-reviewer agents tuned to it, the quality gate from day one
-(including the four design analyzers), the TDD plan format for
-build passes, and the verification harness (teatest goldens per
-responsive class, tmux checks, the QA-1/2/3 harnesses from build
-step 1, the kill harness). Settle the build-boundary mechanics:
-the legacy tree retires cleanly and the new module starts with no
-migration scars. Gate: Geoff approves the machine design; then
-the numbered build passes follow the spine, subagent-driven, with
-execution sessions conducted per the workstation model economy.
-
-Phase 5 obligations from the Phase 4 close: the CalDAV RSVP and
-free/busy probes when the calendar-scoped token lands (default
-branch until then: poplar sends iMIP); the go-ical/golang-ical
-bake-off and rrule DST fixtures before the calendar pass; the
-clipboard spike on the gate box; text wireframes per screen per
-responsive class before each screen's pass; column formulas
-re-derived from the spike harvest.
+Execute in order: (1) the boundary ritual per machine design
+section 1 — create and push the legacy branch BEFORE any
+deletion, then the two boundary commits, the spec amendments of
+step 4 (requirements revision 4; ADR-0001/0011/0012 revision
+blocks), and the two workstation fixes of step 5. (2) Machine
+assembly per sections 2-4 and 7-8: Makefile and gate, tools
+module, the four analyzers, CI workflow, rewritten agents and
+CLAUDE.md and routing rule, the amended vale-comments guard;
+make check green on the empty module. (3) Author the pass 1
+(foundation) plan per section 5's task format from the
+requirements spine step 1, then execute it subagent-driven
+(poplar-implementer per task, poplar-reviewer plus
+poplar-go-reviewer per diff), Geoff at the pass gate. Invoke
+go-conventions before any Go, elm-conventions before any
+bubbletea code. Do not carry legacy files across the boundary
+unreviewed; salvage is copy-with-rewrite from the legacy branch
+with a named pointer in the plan task.
 ```
+
+Carried obligations and their scheduled homes are machine design
+section 10; the wireframe-pass watch item (digit semantics,
+lazygit precedent) is in the gate outcomes above.
 
 ## Superseded: Phase 1, the rendering bet
 
