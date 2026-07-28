@@ -25,9 +25,47 @@ it. Updating this STATUS is step one and is never optional.
 
 ## Current state (2026-07-27)
 
-Phase 2 (vision) closed with Geoff's approval. Geoff ruled proceed on
-the Phase 1 rendering bet the same day. Phase 3 (requirements) is
-next and opens with a grounding survey.
+Phase 3 (requirements) closed with Geoff's approval the same day it
+ran. Phase 4 (technical design) is next and opens with the
+exhaustive prior-art and library survey Geoff directed.
+
+Phase 3 outcomes:
+- Requirements spec approved and committed:
+  `docs/superpowers/specs/2026-07-27-poplar-requirements.md`
+  (revision 3). It binds Phases 4 and 5: ten constraints plus C11,
+  ~95 prioritized requirements with acceptance criteria, measured
+  quality attributes, explicit scope rulings, and the Phase 5
+  build-order spine. Revision 2 folded a three-lens adversarial
+  review (~90 findings).
+- Grounding survey committed:
+  `docs/poplar/research/2026-07-27-phase3-grounding-survey.md`.
+  Seven live research dispatches plus a live JMAP probe of the
+  target account.
+- Directives received during the phase, all encoded as spec
+  constraints: calendar is a first-class v1 surface with full
+  requirements (C4/section 10; "mail just isn't that useful without
+  it"); local-first from the first build, JMAP never on the
+  interactive path (C1; the legacy direct-JMAP path was painfully
+  slow); a unified design language before any screen, cairn-cms as
+  the exemplar (C5); mail/calendar/contacts/config deeply unified
+  in keys, look, and concepts, config as an in-app surface (C6);
+  forward-looking lean stance, exhaustive prior-art survey opening
+  Phase 4 (C11, C9).
+- Load-bearing backend fact: Fastmail exposes calendars over CalDAV
+  only (their dev docs commit to JMAP calendars only after the spec
+  finalizes; draft-ietf-jmap-calendars sits approved but held in
+  the RFC Editor queue). v1 calendar rides CalDAV with a designed
+  JMAP upgrade seam.
+- Account facts (live probe): folders-mode, 14 flat mailboxes,
+  ~36k messages, JMAP contacts capability present, no snooze usage,
+  scheduled folder empty. QA envelope set at 100k messages.
+- Gate calls ratified with approval: agenda view MUST with grid
+  views SHOULD (CA-3, still listed as an owner call if taste says
+  otherwise), recurring-series editing SHOULD, reminders while
+  poplar is closed a ruled non-goal, labels/snooze/saved-searches
+  LATER.
+- Phase 4 needs from Geoff: a calendar-scoped Fastmail API token
+  for the CalDAV RSVP and free/busy probes (spec section 16).
 
 Phase 2 outcomes:
 - Vision doc approved and committed:
@@ -107,34 +145,46 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 3, requirements
+## Next: Phase 4, technical design
 
-Starter prompt (paste after /clear, or say "run Phase 3 of the
+Starter prompt (paste after /clear, or say "run Phase 4 of the
 re-founding"):
 
 ```
-Run Phase 3 of the poplar re-founding: requirements. Read the charter
-docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
-(Phase 3 section) and the approved vision
-docs/superpowers/specs/2026-07-27-poplar-vision.md first.
+Run Phase 4 of the poplar re-founding: technical design. Read the
+charter docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
+(Phase 4 section), the approved requirements
+docs/superpowers/specs/2026-07-27-poplar-requirements.md (its
+constraints bind every decision), and the grounding survey
+docs/poplar/research/2026-07-27-phase3-grounding-survey.md.
 
-Open with the grounding survey Geoff directed: Protonmail as the
-polished-incumbent baseline and the actively used TUI clients (aerc,
-neomutt, alpine, meli, himalaya) for the terminal state of the art,
-covering UX and interaction patterns as well as features. Mine the
-existing mail-client field survey and the 132-scenario rebuild
-functional spec as inputs, never as inherited scope. Survey research
-dispatches to cheap models; synthesis stays in the main loop.
+Open with the exhaustive prior-art and library survey Geoff directed
+(spec C9): for every subsystem (store engine, JMAP sync, CalDAV and
+iCalendar, recurrence, MIME, HTML-to-text, markdown rendering, the
+bubbletea/Charm ecosystem, full-text search, keyring, notifications,
+clipboard), inventory existing libraries, tools, and prior art at
+their current releases, verified live; poplar builds nothing a
+maintained dependency already does well, and no version inherits a
+legacy pin. Survey dispatches go to cheap models.
 
-Then draft the requirements spec: MVP scope with real priorities
-(must, should, later), quality attributes with numbers (startup,
-keypress-to-paint, search latency, sync convergence, offline
-behavior, large-mailbox performance: the vision's speed goal made
-testable), and acceptance criteria per requirement. Priorities must
-be firm enough to derive the Phase 5 implementation order from them.
-Adversarially review the spec before the gate.
+Then settle the design: data model and store schema (account-keyed
+per C4), package boundaries and the backend seam, sync engine and
+concurrency model, the rendering pipeline as a first-class subsystem
+per the Phase 1 verdict, the calendar subsystem on CalDAV with the
+JMAP-calendars upgrade seam, TUI architecture, the unified design
+language artifact (UX-3, cairn-cms as the exemplar), the error and
+logging model, and the testing strategy. An ADR per major decision
+with alternatives considered. Run the spec section 16 probes: CalDAV
+RSVP behavior at Fastmail (ask Geoff for a calendar-scoped token),
+JMAP draft and Identity semantics, the CO-5 HTML allowlist, and the
+measurement spike that replaces the provisional QA numbers (a
+blocking input to Phase 5 planning). Judge the design against the
+knowable-horizon register and C11's forward-looking lean stance: it
+must foreclose nothing on the list and should land where mail,
+calendar, and contacts are heading. Adversarially review before the
+gate.
 
-End at the gate: Geoff approves the requirements spec.
+End at the gate: Geoff approves the design.
 ```
 
 ## Superseded: Phase 1, the rendering bet
@@ -193,5 +243,5 @@ Geoff reads the verdict and sample renders and rules on the bet.
 ## Phase roadmap
 
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
-[done] -> 2 Vision [done] -> 3 Requirements [next] ->
-4 Technical design -> 5 Build machine + build.
+[done] -> 2 Vision [done] -> 3 Requirements [done] ->
+4 Technical design [next] -> 5 Build machine + build.

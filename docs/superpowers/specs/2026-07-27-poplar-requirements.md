@@ -1,17 +1,18 @@
 # Poplar requirements
 
 **Date:** 2026-07-27
-**Status:** Phase 3 output of the re-founding, pending the gate.
-Revision 2: the first draft went through a three-lens adversarial
-review (completeness, testability, scope); this revision folds the
-accepted findings.
+**Status:** Approved at the Phase 3 gate (Geoff, 2026-07-27).
+Revision 2 folded a three-lens adversarial review (completeness,
+testability, scope); revision 3 adds the two gate directives (C9's
+prior-art obligation, C11).
 **Charter:** `2026-07-19-poplar-refounding-charter.md`
-**Vision:** `2026-07-27-poplar-vision.md` (binding). Mid-phase
-directives from Geoff (2026-07-27) amend it: calendar is a
-first-class v1 surface with full requirements; the local store
-exists from the first build with no direct-JMAP interim; a unified
-design language precedes any screen; mail, calendar, contacts, and
-config are deeply unified.
+**Vision:** `2026-07-27-poplar-vision.md` (binding). Directives from
+Geoff (2026-07-27) amend it: calendar is a first-class v1 surface
+with full requirements; the local store exists from the first build
+with no direct-JMAP interim; a unified design language precedes any
+screen; mail, calendar, contacts, and config are deeply unified; the
+product stance is forward-looking and lean (C11); Phase 4 opens with
+an exhaustive prior-art and library survey (C9).
 **Evidence:** `docs/poplar/research/2026-07-27-phase3-grounding-survey.md`
 and the Phase 1 rendering verdict
 (`docs/poplar/research/2026-07-19-rendering-bet-verdict.md`).
@@ -94,16 +95,29 @@ These bind every requirement and every Phase 4 decision.
   idiom bent to that constraint. Text-entry contexts follow the
   UX-8 model: printable keys are input there, and command verbs are
   reached through the leave-field verb, never through modifiers.
-- **C9. Current stack.** Phase 4 pins the latest stable Go, current
-  Charm releases, and actively maintained mail, JMAP, iCalendar, and
-  CalDAV libraries. No dependency inherits its legacy pin. Claims
-  about releases and idioms are verified live at the point of use.
+- **C9. Current stack, prior art first.** Phase 4 pins the latest
+  stable Go, current Charm releases, and actively maintained mail,
+  JMAP, iCalendar, and CalDAV libraries. No dependency inherits its
+  legacy pin. Claims about releases and idioms are verified live at
+  the point of use. Phase 4 opens with an exhaustive survey of
+  existing libraries, tools, and prior art per subsystem; poplar
+  builds nothing a maintained dependency already does well (Geoff,
+  2026-07-27).
 - **C10. Platforms.** v1's gate platform is Linux (the development
   workstation: ThinkPad X1 Carbon, Linux Mint, kitty; the perf
   harness records the exact spec). macOS builds and passes tests but
   does not block the v1 gate. Every platform-specific integration
   (keyring, notifications, clipboard, opener, terminal graphics)
   degrades by name on platforms that lack it.
+- **C11. Forward-looking and lean.** Poplar anticipates where mail,
+  calendar, and contacts are heading and lands there: it bets on
+  the protocols and formats the field is moving to (JMAP-native
+  sync, the JSCalendar upgrade seam, modern terminal capabilities)
+  rather than re-implementing the field's past. Its feature
+  philosophy is all the features you actually need and none you
+  don't: a requirement earns its place by daily usefulness, never
+  by field parity, and Phase 4 design choices are graded against
+  both halves (Geoff, 2026-07-27).
 
 ## 1. Shell and unification (UX)
 
