@@ -1,0 +1,14 @@
+{
+  "methodResponses": [
+    ["Email/query", {
+      "accountId": "u1",
+      "queryState": "qs1",
+      "canCalculateChanges": false,
+      "position": 0,
+      "ids": ["msg-1", "msg-2"],
+      "total": 2,
+      "limit": 256
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

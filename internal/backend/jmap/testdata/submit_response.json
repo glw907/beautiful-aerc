@@ -1,0 +1,17 @@
+{
+  "methodResponses": [
+    ["Email/import", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "2",
+      "created": {"m1": {"id": "msg-new"}}
+    }, "0"],
+    ["EmailSubmission/set", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "2",
+      "created": {"s1": {"id": "sub-1"}}
+    }, "1"]
+  ],
+  "sessionState": "session-2"
+}

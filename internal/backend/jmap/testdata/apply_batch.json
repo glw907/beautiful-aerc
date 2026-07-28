@@ -1,0 +1,13 @@
+{
+  "methodResponses": [
+    ["Email/set", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "2",
+      "updated": {"msg-1": {"id": "msg-1"}},
+      "destroyed": ["msg-2"],
+      "notUpdated": {"msg-3": {"type": "notFound"}}
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

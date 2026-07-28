@@ -1,0 +1,20 @@
+{
+  "methodResponses": [
+    ["Email/query", {
+      "accountId": "u1",
+      "queryState": "qs1",
+      "canCalculateChanges": false,
+      "position": 0,
+      "ids": ["msg-1"],
+      "total": 5,
+      "limit": 1
+    }, "0"],
+    ["Email/get", {
+      "accountId": "u1",
+      "state": "state-x",
+      "list": [{"id": "msg-1", "blobId": "blob-1", "subject": "Baseline one"}],
+      "notFound": []
+    }, "1"]
+  ],
+  "sessionState": "session-2"
+}

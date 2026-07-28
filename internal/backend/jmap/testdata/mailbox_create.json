@@ -1,0 +1,11 @@
+{
+  "methodResponses": [
+    ["Mailbox/set", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "2",
+      "created": {"m1": {"id": "mbx-new"}}
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

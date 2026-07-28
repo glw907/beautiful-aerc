@@ -1,0 +1,14 @@
+{
+  "methodResponses": [
+    ["Mailbox/query", {
+      "accountId": "u1",
+      "queryState": "qs1",
+      "canCalculateChanges": false,
+      "position": 0,
+      "ids": ["mbx-sent"],
+      "total": 1,
+      "limit": 10
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

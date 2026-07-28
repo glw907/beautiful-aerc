@@ -1,0 +1,26 @@
+{
+  "methodResponses": [
+    ["Email/changes", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "2",
+      "hasMoreChanges": true,
+      "created": ["msg-1"],
+      "updated": [],
+      "destroyed": []
+    }, "0"],
+    ["Email/get", {
+      "accountId": "u1",
+      "state": "2",
+      "list": [{"id": "msg-1", "blobId": "blob-1", "subject": "Page one"}],
+      "notFound": []
+    }, "1"],
+    ["Email/get", {
+      "accountId": "u1",
+      "state": "2",
+      "list": [],
+      "notFound": []
+    }, "2"]
+  ],
+  "sessionState": "session-2"
+}

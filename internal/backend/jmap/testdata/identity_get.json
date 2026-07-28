@@ -1,0 +1,11 @@
+{
+  "methodResponses": [
+    ["Identity/get", {
+      "accountId": "u1",
+      "state": "is1",
+      "list": [{"id": "identity-1", "email": "geoff@907.life"}],
+      "notFound": []
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}
