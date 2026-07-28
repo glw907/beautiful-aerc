@@ -86,6 +86,15 @@ type MailboxPage struct {
 	Revision Revision
 }
 
+// MailboxDetails is a MailboxRowDetails result: a MessageSummary per
+// requested id, plus the store revision the read saw. A caller pairs
+// this revision against a MailboxPage's own Revision to tell whether
+// the two reads landed on the same store state.
+type MailboxDetails struct {
+	Summaries map[int64]MessageSummary
+	Revision  Revision
+}
+
 // ListMailboxForward returns up to limit rows older than cursor, in
 // received_at DESC, message_id ASC order. The zero MailboxCursor
 // starts at the newest message in the mailbox.
@@ -151,9 +160,15 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 // ListMailboxBackward already returned. It selects only the
 // list-painting columns and never message.data. An id with no
 // matching message is simply absent from the result.
-func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (map[int64]MessageSummary, error) {
+//
+// It captures the store revision before running the query, the same
+// timing listMailbox uses, so a caller can compare a page's Revision
+// against this result's Revision to tell whether the two reads landed
+// on the same store state.
+func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (MailboxDetails, error) {
+	rev := p.rev.Current()
 	if len(ids) == 0 {
-		return nil, nil
+		return MailboxDetails{Revision: rev}, nil
 	}
 
 	var query strings.Builder
@@ -170,7 +185,7 @@ func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (map[int6
 
 	rows, err := p.db.QueryContext(ctx, query.String(), args...)
 	if err != nil {
-		return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return MailboxDetails{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -180,14 +195,14 @@ func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (map[int6
 		var flags int64
 		var hasAttachment int
 		if err := rows.Scan(&s.MessageID, &s.Subject, &s.FromAddr, &flags, &hasAttachment, &s.ThreadKey); err != nil {
-			return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+			return MailboxDetails{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
 		}
 		s.Flags = Flags(flags) //nolint:gosec // G115: message.flags is written only through EncodeFlags's uint32 bitfield, never a value outside its range
 		s.HasAttachment = hasAttachment != 0
 		summaries[s.MessageID] = s
 	}
 	if err := rows.Err(); err != nil {
-		return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return MailboxDetails{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
 	}
-	return summaries, nil
+	return MailboxDetails{Summaries: summaries, Revision: rev}, nil
 }

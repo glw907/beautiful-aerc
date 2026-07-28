@@ -93,8 +93,61 @@ func TestMailboxRowDetails(t *testing.T) {
 		1: {MessageID: 1, Subject: "hello", FromAddr: "a@example.com", Flags: FlagFlagged, HasAttachment: true, ThreadKey: "thread-1"},
 		2: {MessageID: 2, Subject: "world", FromAddr: "b@example.com", Flags: 0, HasAttachment: false, ThreadKey: "thread-2"},
 	}
-	if !maps.Equal(got, want) {
-		t.Fatalf("MailboxRowDetails(1, 2, 999) = %+v, want %+v (999 absent)", got, want)
+	if !maps.Equal(got.Summaries, want) {
+		t.Fatalf("MailboxRowDetails(1, 2, 999).Summaries = %+v, want %+v (999 absent)", got.Summaries, want)
+	}
+	if got.Revision == 0 {
+		t.Fatalf("MailboxRowDetails(1, 2, 999).Revision = 0, want the revision the seed commits advanced past")
+	}
+}
+
+// TestMailboxRowDetailsRevisionPairsWithPage proves a page's Revision
+// and a details read's Revision are directly comparable: a details
+// read taken before a write commits must not claim the freshness of a
+// page read after it, and vice versa. This is the caller-facing
+// guarantee a bare map result cannot carry.
+func TestMailboxRowDetailsRevisionPairsWithPage(t *testing.T) {
+	w, path := newTestWriter(t, DefaultWriterConfig())
+	pool, err := NewReadPool(path, DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("NewReadPool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	ctx := context.Background()
+	seedAccountAndMailbox(t, w)
+
+	err = w.submit(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, from_addr, flags, has_attachment, thread_key) VALUES (1, 1, 100, 'hello', 'a@example.com', 0, 0, 'thread-1')`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO message_mailbox (message_id, mailbox_id, received_at) VALUES (1, 1, 100)`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed message: %v", err)
+	}
+
+	page, err := pool.ListMailboxForward(ctx, 1, MailboxCursor{}, 10)
+	if err != nil {
+		t.Fatalf("ListMailboxForward: %v", err)
+	}
+
+	err = w.submit(ctx, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE message SET subject = 'updated' WHERE id = 1`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("update message: %v", err)
+	}
+
+	details, err := pool.MailboxRowDetails(ctx, []int64{1})
+	if err != nil {
+		t.Fatalf("MailboxRowDetails: %v", err)
+	}
+
+	if details.Revision <= page.Revision {
+		t.Fatalf("details.Revision = %d, page.Revision = %d, want details taken after a later commit to compare greater", details.Revision, page.Revision)
 	}
 }
 
