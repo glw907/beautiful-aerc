@@ -13,6 +13,8 @@ import (
 	"context"
 	"errors"
 	"iter"
+
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // ErrStateReset reports that a Changes token no longer names any
@@ -105,6 +107,26 @@ type BatchResult struct {
 	Created map[string]string
 	Failed  map[string]error
 }
+
+// MutationFailure is one mutation's classified failure: the uerr.Class
+// a backend assigns it, and the wire-level cause preserved as Cause
+// for outbox.failure_detail. A backend populates BatchResult.Failed
+// with this instead of a uerr.Error: ApplyBatch runs once per outbox
+// dispatch attempt, and ADR-0013 revision 2 reserves uerr.New for a
+// state transition (first failure, class change, recovery), not every
+// attempt. The dispatcher constructs the uerr.Error itself, once, when
+// a mutation's failure state changes, using the id BatchResult.Failed
+// already keys the result by.
+type MutationFailure struct {
+	Class uerr.Class
+	Cause error
+}
+
+// Error returns f's cause's message.
+func (f MutationFailure) Error() string { return f.Cause.Error() }
+
+// Unwrap returns f's cause.
+func (f MutationFailure) Unwrap() error { return f.Cause }
 
 // SubmitResult is what Submit returns once the backend accepts an
 // outgoing message: the backend's submission id, and whether the

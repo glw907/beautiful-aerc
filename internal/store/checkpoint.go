@@ -36,13 +36,12 @@ func checkpoint(ctx context.Context, db *sql.DB, mode string) error {
 }
 
 // incrementalVacuumPages bounds each idle-triggered incremental_vacuum
-// step (item 3 of the pass-1 audit): with auto_vacuum=INCREMENTAL, a
-// deleted row's pages sit on the freelist until reclaimed, and an
-// unbounded incremental_vacuum() call would walk the whole freelist
-// in one shot, the same unbounded stall a bare VACUUM causes.
-// Reclaiming a bounded slice per idle window keeps every call fast,
-// at the cost of needing more than one idle window to shrink a file
-// after a large delete.
+// step: with auto_vacuum=INCREMENTAL, a deleted row's pages sit on
+// the freelist until reclaimed, and an unbounded incremental_vacuum()
+// call would walk the whole freelist in one shot, the same unbounded
+// stall a bare VACUUM causes. Reclaiming a bounded slice per idle
+// window keeps every call fast, at the cost of needing more than one
+// idle window to shrink a file after a large delete.
 const incrementalVacuumPages = 500
 
 // incrementalVacuum runs a bounded incremental_vacuum pragma against

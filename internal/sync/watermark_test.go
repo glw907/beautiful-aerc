@@ -10,10 +10,10 @@ import (
 	"github.com/glw907/poplar/internal/store/storetest"
 )
 
-// TestWatermarkPerCollection proves sync_state's key (item 4 of the
-// pass-1 audit) holds a distinct token per collection rather than one
-// row per account and object kind: two calendars of the same kind
-// each keep their own RFC 6578 sync token.
+// TestWatermarkPerCollection proves sync_state's key (ADR-0005's
+// Decision, "poll by collection state") holds a distinct token per
+// collection rather than one row per account and object kind: two
+// calendars of the same kind each keep their own RFC 6578 sync token.
 func TestWatermarkPerCollection(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)

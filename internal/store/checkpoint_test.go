@@ -98,17 +98,24 @@ func TestCheckpointPassiveReclaimsWithoutAReader(t *testing.T) {
 	// finish before measuring.
 	time.Sleep(50 * time.Millisecond)
 
+	// 450_000 bytes: this workload's flat, PASSIVE-kept WAL measures
+	// ~410KB at the schema's page_size=8192 (WAL frames are
+	// page_size-sized, so it roughly doubled from the ~200KB territory
+	// a 4096-byte page_size left it at). The ceiling stays comfortably
+	// under TestCheckpointLifecycle's 500_000-byte floor for the
+	// blocked-reader case, so the two assertions keep proving distinct
+	// things rather than converging on the same number.
 	flat := walSize(t, path+"-wal")
-	if flat > 600_000 {
-		t.Errorf("wal size with no reader holding a snapshot = %d bytes, want PASSIVE to keep it well under the multi-megabyte size TestCheckpointLifecycle's blocked reader grows past", flat)
+	if flat > 450_000 {
+		t.Errorf("wal size with no reader holding a snapshot = %d bytes, want PASSIVE to keep it well under the 500_000 bytes TestCheckpointLifecycle's blocked reader grows past", flat)
 	}
 }
 
 // TestIncrementalVacuumReclaimsFreelist proves the idle path's bounded
-// incremental_vacuum step (item 3 of the pass-1 audit) actually
-// shrinks the freelist a large delete leaves behind, rather than only
-// running the pragma without effect: with auto_vacuum=INCREMENTAL, a
-// deleted row's pages sit on the freelist until reclaimed.
+// incremental_vacuum step actually shrinks the freelist a large delete
+// leaves behind, rather than only running the pragma without effect:
+// with auto_vacuum=INCREMENTAL, a deleted row's pages sit on the
+// freelist until reclaimed.
 func TestIncrementalVacuumReclaimsFreelist(t *testing.T) {
 	cfg := DefaultWriterConfig()
 	cfg.CheckpointIdle = 20 * time.Millisecond
@@ -152,6 +159,59 @@ func TestIncrementalVacuumReclaimsFreelist(t *testing.T) {
 
 	if after := freelistCount(t, reader); after != 0 {
 		t.Errorf("freelist_count after the idle window = %d, want 0: incremental_vacuum should reclaim it", after)
+	}
+}
+
+// TestIncrementalVacuumIsBoundedPerIdleWindow proves the idle path's
+// incremental_vacuum step reclaims only incrementalVacuumPages per
+// idle window rather than clearing an oversized freelist in one shot:
+// with a freelist well past that bound, a regression that dropped the
+// pragma's argument (making the call an unbounded incremental_vacuum)
+// would clear the whole freelist here and fail this test, the same
+// bug TestIncrementalVacuumReclaimsFreelist's smaller freelist cannot
+// catch. CheckpointIdle is set past the test's lifetime so the
+// writer's own timer never fires; the test drives exactly one idle
+// window itself by calling runIdleCheckpoint directly.
+func TestIncrementalVacuumIsBoundedPerIdleWindow(t *testing.T) {
+	cfg := DefaultWriterConfig()
+	cfg.CheckpointIdle = time.Hour
+	w, path := newTestWriter(t, cfg)
+
+	reader, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	if err != nil {
+		t.Fatalf("open reader: %v", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	big := strings.Repeat("x", 8192)
+	for i := range 1000 {
+		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
+			_, err := tx.Exec(
+				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
+				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
+			return err
+		})
+		if err != nil {
+			t.Fatalf("submitBulk(%d): %v", i, err)
+		}
+	}
+	if err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`DELETE FROM account`)
+		return err
+	}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	before := freelistCount(t, reader)
+	if before <= incrementalVacuumPages {
+		t.Fatalf("freelist_count = %d, want it to exceed incrementalVacuumPages (%d) so the bound actually binds", before, incrementalVacuumPages)
+	}
+
+	w.runIdleCheckpoint()
+
+	after := freelistCount(t, reader)
+	if want := before - incrementalVacuumPages; after != want {
+		t.Errorf("freelist_count after one idle window = %d, want exactly %d (%d minus the %d-page bound)", after, want, before, incrementalVacuumPages)
 	}
 }
 

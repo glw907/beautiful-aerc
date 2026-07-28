@@ -8,8 +8,7 @@ import (
 
 // TestServerIDLookupUsesIndex proves the (account_id, server_id)
 // upsert lookup UpsertMessage and UpsertMailbox run on every sync
-// page (item 1 of the pass-1 audit) has an index to use, rather than
-// scanning the whole table.
+// page has an index to use, rather than scanning the whole table.
 func TestServerIDLookupUsesIndex(t *testing.T) {
 	db := openMigratedTestDB(t)
 

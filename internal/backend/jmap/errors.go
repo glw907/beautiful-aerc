@@ -9,6 +9,7 @@ import (
 
 	"git.sr.ht/~rockorager/go-jmap"
 
+	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/uerr"
 )
 
@@ -83,18 +84,22 @@ var jmapSetErrorClass = map[string]uerr.Class{
 	"rateLimit": uerr.ClassThrottled,
 }
 
-// classifyMutationFailure wraps one Email/set mutation's raw
-// SetError type in a uerr.Error under jmapSetErrorClass's mapping, so
-// the outbox dispatcher (task 10) can branch on a closed class
-// instead of parsing a protocol string. setErrorType survives as
-// Cause, so outbox.failure_detail can still record exactly what the
-// server said.
-func classifyMutationFailure(op, setErrorType string) error {
+// classifyMutationFailure maps one Email/set mutation's raw SetError
+// type to the uerr.Class jmapSetErrorClass names for it, so the
+// outbox dispatcher (task 10) can branch on a closed class instead of
+// parsing a protocol string. It returns a backend.MutationFailure
+// rather than calling uerr.New: ApplyBatch runs once per outbox
+// dispatch attempt, and constructing a uerr.Error here would write a
+// log line on every retry rather than only on a state transition
+// (ADR-0013 revision 2). setErrorType survives as Cause, so
+// outbox.failure_detail can still record exactly what the server
+// said.
+func classifyMutationFailure(setErrorType string) backend.MutationFailure {
 	class, ok := jmapSetErrorClass[setErrorType]
 	if !ok {
 		class = uerr.ClassServer
 	}
-	return uerr.New(op, nil, class, errors.New(setErrorType))
+	return backend.MutationFailure{Class: class, Cause: errors.New(setErrorType)}
 }
 
 // isConnectionDead reports whether err comes from the underlying TCP

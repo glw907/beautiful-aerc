@@ -69,18 +69,27 @@ func TestClassifyMutationFailure(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.setErrorType, func(t *testing.T) {
-			got := classifyMutationFailure("jmap.test", c.setErrorType)
-			var ue uerr.Error
-			if !errors.As(got, &ue) {
-				t.Fatalf("classifyMutationFailure(%q) = %v, want a uerr.Error", c.setErrorType, got)
+			got := classifyMutationFailure(c.setErrorType)
+			if got.Class != c.want {
+				t.Errorf("Class = %v, want %v", got.Class, c.want)
 			}
-			if ue.Class != c.want {
-				t.Errorf("Class = %v, want %v", ue.Class, c.want)
-			}
-			if ue.Cause == nil || ue.Cause.Error() != c.setErrorType {
-				t.Errorf("Cause = %v, want the raw SetError type %q preserved for failure_detail", ue.Cause, c.setErrorType)
+			if got.Cause == nil || got.Cause.Error() != c.setErrorType {
+				t.Errorf("Cause = %v, want the raw SetError type %q preserved for failure_detail", got.Cause, c.setErrorType)
 			}
 		})
+	}
+}
+
+// TestClassifyMutationFailureDoesNotLog proves classifyMutationFailure
+// never reaches uerr.New: it returns a plain backend.MutationFailure,
+// not a uerr.Error, so ApplyBatch's per-mutation classification stays
+// silent across every dispatch retry attempt and the dispatcher
+// (task 10) is the only place that writes a log line, on a state
+// transition (ADR-0013 revision 2).
+func TestClassifyMutationFailureDoesNotLog(t *testing.T) {
+	got := classifyMutationFailure("notFound")
+	if ue, ok := errors.AsType[uerr.Error](error(got)); ok {
+		t.Fatalf("classifyMutationFailure returned a uerr.Error (%+v), want a plain backend.MutationFailure", ue)
 	}
 }
 
