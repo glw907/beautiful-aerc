@@ -30,43 +30,76 @@ type mailSource struct {
 
 var _ backend.Mail = (*mailSource)(nil)
 
-// ApplyBatch implements backend.Source, translating mutations into
-// one Email/set call. A MutationCreate fails per-mutation rather than
-// the whole batch: message creation from structured fields is compose
-// assembly (pass 4), so it is not supported here.
+// ApplyBatch implements backend.Source, translating mutations into a
+// Mailbox/set call for the mailboxes they create and an Email/set call
+// for the messages they change, invoked in that order within one
+// request so a message update can name a mailbox this same batch
+// creates by its "#"+CreationID back-reference. A message
+// MutationCreate fails per-mutation rather than the whole batch:
+// message creation from structured fields is compose assembly (pass
+// 4), so it is not supported here.
 func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutation) (backend.BatchResult, error) {
 	result := backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}
-	set := &email.Set{Account: m.session.accountID, Update: map[jmap.ID]jmap.Patch{}}
+	mailboxes := &mailbox.Set{Account: m.session.accountID, Create: map[jmap.ID]*mailbox.Mailbox{}}
+	messages := &email.Set{Account: m.session.accountID, Update: map[jmap.ID]jmap.Patch{}}
 	for _, mut := range mutations {
-		switch mut.Op {
-		case backend.MutationUpdate:
-			set.Update[jmap.ID(mut.ID)] = messagePatch(mut.Fields)
-		case backend.MutationDestroy:
-			set.Destroy = append(set.Destroy, jmap.ID(mut.ID))
-		case backend.MutationCreate:
-			result.Failed[mut.CreationID] = errors.New("jmap: message create needs compose assembly (pass 4)")
+		switch mut.Kind {
+		case backend.ObjectKindMailbox:
+			if mut.Op != backend.MutationCreate {
+				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: mailbox %v is RenameMailbox or DeleteMailbox", mut.Op)
+			}
+			mailboxes.Create[jmap.ID(mut.CreationID)] = newMailbox(mut.Fields)
+		case backend.ObjectKindMessage:
+			switch mut.Op {
+			case backend.MutationUpdate:
+				messages.Update[jmap.ID(mut.ID)] = messagePatch(mut.Fields)
+			case backend.MutationDestroy:
+				messages.Destroy = append(messages.Destroy, jmap.ID(mut.ID))
+			case backend.MutationCreate:
+				result.Failed[mut.CreationID] = errors.New("jmap: message create needs compose assembly (pass 4)")
+			default:
+				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: unsupported op %v", mut.Op)
+			}
 		default:
-			return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: unsupported op %v", mut.Op)
+			return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: unsupported kind %v", mut.Kind)
 		}
-	}
-	if len(set.Update) == 0 && len(set.Destroy) == 0 {
-		return result, nil
 	}
 
 	req := &jmap.Request{Context: ctx}
-	callID := req.Invoke(set)
+	var mailboxCall, messageCall string
+	if len(mailboxes.Create) > 0 {
+		mailboxCall = req.Invoke(mailboxes)
+	}
+	if len(messages.Update) > 0 || len(messages.Destroy) > 0 {
+		messageCall = req.Invoke(messages)
+	}
+	if mailboxCall == "" && messageCall == "" {
+		return result, nil
+	}
 	resp, err := m.session.do(req)
 	if err != nil {
-		return backend.BatchResult{}, fmt.Errorf("jmap: email/set: %w", err)
-	}
-	sr, err := findResponse[*email.SetResponse](resp, callID)
-	if err != nil {
-		if isStateMismatch(err) {
-			return backend.BatchResult{}, backend.ErrStateMismatch
-		}
-		return backend.BatchResult{}, fmt.Errorf("jmap: email/set: %w", err)
+		return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: %w", err)
 	}
 
+	if mailboxCall != "" {
+		sr, err := findResponse[*mailbox.SetResponse](resp, mailboxCall)
+		if err != nil {
+			return backend.BatchResult{}, batchError("mailbox/set", err)
+		}
+		for creationID, box := range sr.Created {
+			result.Created[string(creationID)] = string(box.ID)
+		}
+		for creationID, se := range sr.NotCreated {
+			result.Failed[string(creationID)] = classifyMutationFailure(se.Type)
+		}
+	}
+	if messageCall == "" {
+		return result, nil
+	}
+	sr, err := findResponse[*email.SetResponse](resp, messageCall)
+	if err != nil {
+		return backend.BatchResult{}, batchError("email/set", err)
+	}
 	for id, se := range sr.NotUpdated {
 		result.Failed[string(id)] = classifyMutationFailure(se.Type)
 	}
@@ -77,6 +110,27 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 		result.Failed[string(id)] = classifyMutationFailure(se.Type)
 	}
 	return result, nil
+}
+
+// batchError names call in err, translating the server's
+// stateMismatch into the seam's own sentinel so a caller re-fetches
+// state rather than reading a wire error.
+func batchError(call string, err error) error {
+	if isStateMismatch(err) {
+		return backend.ErrStateMismatch
+	}
+	return fmt.Errorf("jmap: %s: %w", call, err)
+}
+
+// newMailbox translates a mailbox create mutation's poplar-vocabulary
+// fields into the wire object, the inverse of mailboxFields.
+func newMailbox(fields map[string]any) *mailbox.Mailbox {
+	box := &mailbox.Mailbox{}
+	box.Name, _ = fields["name"].(string)
+	if parent, _ := fields["parent_id"].(string); parent != "" {
+		box.ParentID = jmap.ID(parent)
+	}
+	return box
 }
 
 // messagePatch translates mut's poplar-vocabulary fields into a JMAP

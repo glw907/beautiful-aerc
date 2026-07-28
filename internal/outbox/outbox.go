@@ -7,9 +7,12 @@
 //
 // Payloads reference poplar's internal keys only: a message or
 // mailbox by its store row id, never a server id. The dispatcher
-// resolves those keys to server ids at dispatch time, including an
-// offline-created referent through another intent's own id as a
-// creation-id back-reference (Kind, CreateMailboxPayload.ResolvedServerID).
+// resolves those keys to server ids at dispatch time. A mailbox
+// created offline dispatches as one batch with the moves into it, the
+// moves naming it by the create's creation-id back-reference; a move
+// left over for a later pass resolves instead against the server id
+// the create persisted into its payload
+// (CreateMailboxPayload.ResolvedServerID).
 package outbox
 
 import "time"

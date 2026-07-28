@@ -88,13 +88,20 @@ const (
 // keyed to the same poplar field vocabulary Record.Fields uses.
 type Mutation struct {
 	Op MutationOp
+	// Kind names the collection the record belongs to, the same
+	// discriminator Changes takes, so one batch can mix the kinds a
+	// source composes (a mailbox create and the message updates
+	// referencing it). The zero value is ObjectKindMessage.
+	Kind ObjectKind
 	// ID names the record Op acts on: a server id for Update or
 	// Destroy, empty for Create.
 	ID string
 	// CreationID names a Create mutation so a later mutation in the
 	// same batch can reference the record before the server assigns
 	// it a permanent id, letting an offline create-folder-then-move
-	// dispatch as one request.
+	// dispatch as one request. A later mutation names it as
+	// "#"+CreationID wherever a field takes an id, and the backend
+	// resolves that reference against its own protocol.
 	CreationID string
 	Fields     map[string]any
 }

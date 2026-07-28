@@ -99,6 +99,82 @@ func TestApplyBatchUpdateDestroyAndUnsupportedCreate(t *testing.T) {
 	}
 }
 
+// TestApplyBatchCreatesMailboxAndMovesInOneRequest covers the offline
+// create-folder-then-move: a mailbox create and the message updates
+// filing messages into it reach the server as one request, with the
+// updates naming the mailbox by its creation-id back-reference because
+// the server has not assigned it an id yet.
+func TestApplyBatchCreatesMailboxAndMovesInOneRequest(t *testing.T) {
+	session, api := newTestSession(t, readFixture(t, "batch_create_and_move.json"))
+
+	result, err := session.Mail().ApplyBatch(context.Background(), []backend.Mutation{
+		{
+			Op:         backend.MutationCreate,
+			Kind:       backend.ObjectKindMailbox,
+			CreationID: "c1",
+			Fields:     map[string]any{"name": "Projects", "parent_id": "mbx-parent"},
+		},
+		{
+			Op:     backend.MutationUpdate,
+			Kind:   backend.ObjectKindMessage,
+			ID:     "msg-1",
+			Fields: map[string]any{"mailbox_ids": []string{"#c1"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplyBatch: %v", err)
+	}
+
+	if api.callCount() != 1 {
+		t.Fatalf("api calls = %d, want 1 (create and move are one request)", api.callCount())
+	}
+	name, args, _ := methodCall(t, api.requestAt(0), 0)
+	if name != "Mailbox/set" {
+		t.Fatalf("methodCalls[0] = %q, want Mailbox/set first, so Email/set can reference it", name)
+	}
+	create, ok := args["create"].(map[string]any)
+	if !ok {
+		t.Fatalf("Mailbox/set create missing: %v", args)
+	}
+	box, ok := create["c1"].(map[string]any)
+	if !ok {
+		t.Fatalf("create[c1] missing: %v", create)
+	}
+	if box["name"] != "Projects" {
+		t.Errorf("created name = %v, want Projects", box["name"])
+	}
+	if box["parentId"] != "mbx-parent" {
+		t.Errorf("created parentId = %v, want mbx-parent", box["parentId"])
+	}
+
+	name, args, _ = methodCall(t, api.requestAt(0), 1)
+	if name != "Email/set" {
+		t.Fatalf("methodCalls[1] = %q, want Email/set", name)
+	}
+	update, ok := args["update"].(map[string]any)
+	if !ok {
+		t.Fatalf("Email/set update missing: %v", args)
+	}
+	patch, ok := update["msg-1"].(map[string]any)
+	if !ok {
+		t.Fatalf("update[msg-1] missing: %v", update)
+	}
+	mailboxIDs, ok := patch["mailboxIds"].(map[string]any)
+	if !ok {
+		t.Fatalf("mailboxIds missing or malformed: %v", patch["mailboxIds"])
+	}
+	if _, present := mailboxIDs["#c1"]; !present {
+		t.Errorf("mailboxIds = %v, want the #c1 back-reference", mailboxIDs)
+	}
+
+	if result.Created["c1"] != "mbx-new" {
+		t.Errorf("Created[c1] = %q, want mbx-new", result.Created["c1"])
+	}
+	if len(result.Failed) != 0 {
+		t.Errorf("Failed = %v, want none", result.Failed)
+	}
+}
+
 func TestApplyBatchNoOpSkipsRoundTrip(t *testing.T) {
 	session, api := newTestSession(t)
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
@@ -72,6 +73,17 @@ type claimed struct {
 	detail           string
 }
 
+// outcome is one claimed intent's disposition after its backend call:
+// delivered, with move carrying the decoded payload for
+// KindMoveMessages, or failed with a class and detail.
+type outcome struct {
+	c      claimed
+	move   *MoveMessagesPayload
+	failed bool
+	class  uerr.Class
+	detail string
+}
+
 // finalizeAction is claim's disposition once DispatchOnce decides it,
 // applied inside finalize's one writer transaction.
 type finalizeAction struct {
@@ -93,7 +105,9 @@ const (
 // DispatchOnce claims every eligible intent and dispatches it in id
 // order, stopping early on a connection failure (further calls
 // against a dead connection cannot succeed) and reverting whatever it
-// claimed but never attempted back to queued untouched.
+// claimed but never attempted back to queued untouched. A create whose
+// dependent moves were claimed in the same pass dispatches with them
+// as one batch.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, error) {
 	claimedRows, err := d.claim(ctx, now)
 	if err != nil {
@@ -105,49 +119,45 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 	resolvedCreates := map[int64]string{}
 	stopped := false
 
+	groups := planBatches(claimedRows, chunkSize(d.backend))
+	batched := map[int64]bool{}
+	for _, moves := range groups {
+		for _, mv := range moves {
+			batched[mv.id] = true
+		}
+	}
+
 	for _, c := range claimedRows {
+		if batched[c.id] {
+			// Already dispatched in its create's batch, which id order
+			// guarantees came earlier in this loop: a DestRef names a
+			// row that had to exist before the move was enqueued.
+			continue
+		}
 		if stopped {
 			actions = append(actions, finalizeAction{id: c.id, verb: finalizeRevert})
 			continue
 		}
-		if c.preFailed {
-			actions = append(actions, d.report(&result, c, c.class, c.detail))
-			continue
-		}
 
-		var class uerr.Class
-		var detail string
-		var failed bool
-		var move *MoveMessagesPayload
-		switch c.kind {
-		case KindCreateMailbox:
-			var serverID string
-			serverID, failed, class, detail = d.dispatchCreateMailbox(ctx, c, resolvedCreates)
-			if !failed {
-				resolvedCreates[c.id] = serverID
-			}
-		case KindRenameMailbox:
-			failed, class, detail = d.dispatchRenameMailbox(ctx, c)
-		case KindDeleteMailbox:
-			failed, class, detail = d.dispatchDeleteMailbox(ctx, c)
-		case KindMoveMessages:
-			move, failed, class, detail = d.dispatchMoveMessages(ctx, c, resolvedCreates)
+		var outcomes []outcome
+		switch {
+		case c.preFailed:
+			outcomes = []outcome{{c: c, failed: true, class: c.class, detail: c.detail}}
+		case len(groups[c.id]) > 0:
+			outcomes = d.dispatchBatch(ctx, c, groups[c.id], resolvedCreates)
 		default:
-			// A kind this build does not recognize (a newer poplar
-			// wrote it, or the schema grew one this dispatcher has not
-			// caught up with) fails this one intent rather than
-			// aborting the pass: every other claimed row still needs
-			// its finalize action decided below.
-			failed, class, detail = true, uerr.ClassServer, fmt.Sprintf("unknown kind %q", c.kind)
+			outcomes = []outcome{d.dispatchOne(ctx, c, resolvedCreates)}
 		}
 
-		if failed {
-			actions = append(actions, d.report(&result, c, class, detail))
-			stopped = class == uerr.ClassConnection
-			continue
+		for _, o := range outcomes {
+			if o.failed {
+				actions = append(actions, d.report(&result, o.c, o.class, o.detail))
+				stopped = stopped || o.class == uerr.ClassConnection
+				continue
+			}
+			result.Delivered = append(result.Delivered, delivered(o.c, o.move))
+			actions = append(actions, finalizeAction{id: o.c.id, verb: finalizeDelete})
 		}
-		result.Delivered = append(result.Delivered, delivered(c, move))
-		actions = append(actions, finalizeAction{id: c.id, verb: finalizeDelete})
 	}
 
 	err = d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
@@ -168,6 +178,181 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		return nil
 	})
 	return result, err
+}
+
+// dispatchOne executes c on its own, one backend call, recording a
+// create's resolved server id in resolvedCreates so a dependent
+// dispatching later in this same pass can substitute it.
+func (d *Dispatcher) dispatchOne(ctx context.Context, c claimed, resolvedCreates map[int64]string) outcome {
+	o := outcome{c: c}
+	switch c.kind {
+	case KindCreateMailbox:
+		serverID, failed, class, detail := d.dispatchCreateMailbox(ctx, c, resolvedCreates)
+		if !failed {
+			resolvedCreates[c.id] = serverID
+		}
+		o.failed, o.class, o.detail = failed, class, detail
+	case KindRenameMailbox:
+		o.failed, o.class, o.detail = d.dispatchRenameMailbox(ctx, c)
+	case KindDeleteMailbox:
+		o.failed, o.class, o.detail = d.dispatchDeleteMailbox(ctx, c)
+	case KindMoveMessages:
+		o.move, o.failed, o.class, o.detail = d.dispatchMoveMessages(ctx, c, resolvedCreates)
+	default:
+		// A kind this build does not recognize (a newer poplar wrote
+		// it, or the schema grew one this dispatcher has not caught up
+		// with) fails this one intent rather than aborting the pass:
+		// every other claimed row still needs its finalize action.
+		o.failed, o.class, o.detail = true, uerr.ClassServer, fmt.Sprintf("unknown kind %q", c.kind)
+	}
+	return o
+}
+
+// planBatches groups each claimed create-mailbox intent with the
+// claimed moves whose destination is the mailbox it creates, so an
+// offline create-folder-then-move reaches the server as one batch and
+// the server resolves the back-reference itself. limit is the
+// backend's per-batch object bound: the create spends one of it, and a
+// move chunk that would push the batch past the rest stays out and
+// dispatches on its own against the server id the create persists into
+// its payload. A create replaying with its server id already resolved
+// takes no batch, since it has no create mutation left to make.
+func planBatches(rows []claimed, limit int) map[int64][]claimed {
+	budget := map[int64]int{}
+	for _, c := range rows {
+		if c.kind != KindCreateMailbox || c.preFailed {
+			continue
+		}
+		var p CreateMailboxPayload
+		if err := json.Unmarshal(c.payload, &p); err != nil || p.ResolvedServerID != "" {
+			continue
+		}
+		budget[c.id] = limit - 1
+	}
+
+	var groups map[int64][]claimed
+	for _, c := range rows {
+		if c.kind != KindMoveMessages || c.preFailed {
+			continue
+		}
+		var p MoveMessagesPayload
+		if err := json.Unmarshal(c.payload, &p); err != nil || p.DestRef == 0 {
+			continue
+		}
+		left, ok := budget[p.DestRef]
+		if !ok || len(p.MessageIDs) > left {
+			continue
+		}
+		budget[p.DestRef] = left - len(p.MessageIDs)
+		if groups == nil {
+			groups = map[int64][]claimed{}
+		}
+		groups[p.DestRef] = append(groups[p.DestRef], c)
+	}
+	return groups
+}
+
+// dispatchBatch executes create and the moves destined for the mailbox
+// it creates as one ApplyBatch request: the create carries a creation
+// id and every message update names the mailbox by that id's
+// back-reference, so the server assigns the mailbox and files the
+// messages into it in one round trip. Nothing has reached the server
+// until that call, so anything failing before it fails the whole
+// group; afterwards each move stands or falls on its own messages.
+func (d *Dispatcher) dispatchBatch(ctx context.Context, create claimed, moves []claimed, resolvedCreates map[int64]string) []outcome {
+	var p CreateMailboxPayload
+	if err := json.Unmarshal(create.payload, &p); err != nil {
+		return failBatch(create, moves, uerr.ClassServer, err.Error())
+	}
+	parentID := create.parentServerID
+	if p.ParentRef != 0 && parentID == "" {
+		parentID = resolvedCreates[p.ParentRef]
+	}
+
+	creationID := "c" + strconv.FormatInt(create.id, 10)
+	mutations := []backend.Mutation{{
+		Op:         backend.MutationCreate,
+		Kind:       backend.ObjectKindMailbox,
+		CreationID: creationID,
+		Fields:     map[string]any{"name": p.Name, "parent_id": parentID},
+	}}
+	payloads := make([]*MoveMessagesPayload, len(moves))
+	for i, mv := range moves {
+		var mp MoveMessagesPayload
+		if err := json.Unmarshal(mv.payload, &mp); err != nil {
+			return failBatch(create, moves, uerr.ClassServer, err.Error())
+		}
+		payloads[i] = &mp
+		for _, msgID := range mp.MessageIDs {
+			mutations = append(mutations, backend.Mutation{
+				Op:     backend.MutationUpdate,
+				Kind:   backend.ObjectKindMessage,
+				ID:     mv.messageServerIDs[msgID],
+				Fields: map[string]any{"mailbox_ids": []string{"#" + creationID}},
+			})
+		}
+	}
+
+	res, err := d.backend.Mail().ApplyBatch(ctx, mutations)
+	if err != nil {
+		class, detail := classifyFailure(err)
+		return failBatch(create, moves, class, detail)
+	}
+	if mutErr, bad := res.Failed[creationID]; bad {
+		class, detail := classifyFailure(mutErr)
+		return failBatch(create, moves, class, detail)
+	}
+	newID, ok := res.Created[creationID]
+	if !ok {
+		return failBatch(create, moves, uerr.ClassServer, "mailbox create returned no server id")
+	}
+	resolvedCreates[create.id] = newID
+
+	p.ResolvedServerID = newID
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return failBatch(create, moves, uerr.ClassServer, err.Error())
+	}
+	if err := d.persistPayload(ctx, create.id, payload); err != nil {
+		return failBatch(create, moves, uerr.ClassServer, err.Error())
+	}
+	if err := d.resolveDependentRefs(ctx, create.id, newID); err != nil {
+		return failBatch(create, moves, uerr.ClassServer, err.Error())
+	}
+
+	outcomes := make([]outcome, 0, len(moves)+1)
+	outcomes = append(outcomes, outcome{c: create})
+	for i, mv := range moves {
+		outcomes = append(outcomes, moveOutcome(mv, payloads[i], res))
+	}
+	return outcomes
+}
+
+// moveOutcome reads mv's disposition out of a batch result: failed
+// with the first of its messages the server rejected, delivered
+// otherwise.
+func moveOutcome(mv claimed, p *MoveMessagesPayload, res backend.BatchResult) outcome {
+	for _, msgID := range p.MessageIDs {
+		mutErr, bad := res.Failed[mv.messageServerIDs[msgID]]
+		if !bad {
+			continue
+		}
+		class, detail := classifyFailure(mutErr)
+		return outcome{c: mv, failed: true, class: class, detail: detail}
+	}
+	return outcome{c: mv, move: p}
+}
+
+// failBatch fails every intent in a batch with one class and detail:
+// the moves exist to file messages into the mailbox the create makes,
+// so none of them can stand without it.
+func failBatch(create claimed, moves []claimed, class uerr.Class, detail string) []outcome {
+	outcomes := make([]outcome, 0, len(moves)+1)
+	outcomes = append(outcomes, outcome{c: create, failed: true, class: class, detail: detail})
+	for _, mv := range moves {
+		outcomes = append(outcomes, outcome{c: mv, failed: true, class: class, detail: detail})
+	}
+	return outcomes
 }
 
 // report appends c's classified failure to result, logs it through
@@ -504,6 +689,7 @@ func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolv
 	for _, msgID := range p.MessageIDs {
 		mutations = append(mutations, backend.Mutation{
 			Op:     backend.MutationUpdate,
+			Kind:   backend.ObjectKindMessage,
 			ID:     c.messageServerIDs[msgID],
 			Fields: map[string]any{"mailbox_ids": []string{dest}},
 		})

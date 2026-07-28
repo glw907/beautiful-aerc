@@ -16,32 +16,31 @@ import (
 // move: both intents are enqueued referencing poplar's internal keys
 // only (the move's destination names the create intent's own id, not
 // a server id that does not exist yet), and one DispatchOnce pass
-// resolves the back-reference and dispatches both.
-//
-// The backend seam as built does not let this reach the wire as one
-// JMAP request: Mail.ApplyBatch speaks only Email/set, and mailbox
-// lifecycle (CreateMailbox) is a separate call with no creation-id
-// parameter of its own (ADR-0004 revision 2's mailbox lifecycle is
-// explicit calls, not a Mutation the way a message create would be).
-// This test proves the resolution ADR-0006 revision 2 actually
-// requires: the dispatcher's own claim-time key resolution, not a
-// combined wire batch.
+// dispatches them as one batch, the move naming its destination by the
+// create's creation id so the server resolves the back-reference
+// itself.
 func TestKeyResolutionAtDispatch(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	msgID := seedMessage(t, w, accountID, src, "msg-1")
 
-	var createdName, createdParent string
-	var moveMutations []backend.Mutation
+	createMailboxCalls := 0
+	var batches [][]backend.Mutation
 	be := newFakeBackend()
-	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, parentID string) (string, error) {
-		createdName, createdParent = name, parentID
-		return "mbx-new-1", nil
+	be.MailSource.CreateMailboxFunc = func(_ context.Context, _, _ string) (string, error) {
+		createMailboxCalls++
+		return "mbx-separate-call", nil
 	}
 	be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
-		moveMutations = muts
-		return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
+		batches = append(batches, muts)
+		created := map[string]string{}
+		for _, mut := range muts {
+			if mut.Op == backend.MutationCreate {
+				created[mut.CreationID] = "mbx-new-1"
+			}
+		}
+		return backend.BatchResult{Created: created, Failed: map[string]error{}}, nil
 	}
 	dispatcher := NewDispatcher(accountID, be, w)
 
@@ -60,19 +59,33 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 		t.Fatalf("dispatch: %v", err)
 	}
 
-	if createdName != "Projects" || createdParent != "" {
-		t.Fatalf("CreateMailbox called with (%q, %q), want (%q, \"\")", createdName, createdParent, "Projects")
+	if createMailboxCalls != 0 {
+		t.Errorf("CreateMailbox calls = %d, want 0 (the create rides the batch)", createMailboxCalls)
 	}
-	if len(moveMutations) != 1 {
-		t.Fatalf("ApplyBatch mutations = %d, want 1", len(moveMutations))
+	if len(batches) != 1 {
+		t.Fatalf("ApplyBatch calls = %d, want 1 (create and move dispatch as one batch)", len(batches))
 	}
-	mut := moveMutations[0]
-	if mut.ID != "msg-1" {
-		t.Errorf("mutation ID = %q, want %q", mut.ID, "msg-1")
+	muts := batches[0]
+	if len(muts) != 2 {
+		t.Fatalf("batch mutations = %+v, want the create and the move", muts)
 	}
-	ids, _ := mut.Fields["mailbox_ids"].([]string)
-	if len(ids) != 1 || ids[0] != "mbx-new-1" {
-		t.Errorf("mailbox_ids = %v, want [mbx-new-1] (the offline create's resolved server id)", ids)
+	create := muts[0]
+	if create.Op != backend.MutationCreate || create.Kind != backend.ObjectKindMailbox {
+		t.Fatalf("mutation 0 = op %v kind %v, want a mailbox create", create.Op, create.Kind)
+	}
+	if create.CreationID == "" {
+		t.Fatal("mailbox create carries no CreationID for the move to reference")
+	}
+	if create.Fields["name"] != "Projects" {
+		t.Errorf("created name = %v, want Projects", create.Fields["name"])
+	}
+	move := muts[1]
+	if move.ID != "msg-1" {
+		t.Errorf("mutation 1 ID = %q, want %q", move.ID, "msg-1")
+	}
+	ids, _ := move.Fields["mailbox_ids"].([]string)
+	if len(ids) != 1 || ids[0] != "#"+create.CreationID {
+		t.Errorf("mailbox_ids = %v, want [#%s] (the create's back-reference)", ids, create.CreationID)
 	}
 
 	if len(result.Delivered) != 2 {
@@ -87,13 +100,16 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 }
 
 // TestKeyResolutionSurvivesRequeue covers the cross-pass case
-// TestKeyResolutionAtDispatch's single pass cannot: the create
-// dispatches and its own row is deleted in the same pass, but the
-// dependent move fails and requeues before it can use the same pass's
-// in-memory resolution. A later pass, with the create's row long
-// gone, must still resolve the move's destination, because the
-// dispatcher persisted the resolved server id into the move's own
-// payload the moment the create succeeded.
+// TestKeyResolutionAtDispatch's single batch cannot: the create
+// dispatches on its own and its row is deleted in the same pass, but
+// the dependent move fails and requeues. A later pass, with the
+// create's row long gone, must still resolve the move's destination,
+// because the dispatcher persisted the resolved server id into the
+// move's own payload the moment the create succeeded.
+//
+// A one-object MaxObjectsInSet is what splits them: the create's own
+// mutation exhausts the batch's budget, so the move cannot ride it and
+// takes the separate-call path this test needs.
 func TestKeyResolutionSurvivesRequeue(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
@@ -102,6 +118,7 @@ func TestKeyResolutionSurvivesRequeue(t *testing.T) {
 
 	applyCalls := 0
 	be := newFakeBackend()
+	be.Caps.Limits.MaxObjectsInSet = 1
 	be.MailSource.CreateMailboxFunc = func(_ context.Context, _, _ string) (string, error) {
 		return "mbx-new-1", nil
 	}
