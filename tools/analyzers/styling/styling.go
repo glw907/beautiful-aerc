@@ -6,9 +6,12 @@
 // The check is positional, not a taint analysis: it flags the
 // literal or call site itself, not whether the value it produces
 // reaches rendered output. A line carrying a `//poplar:allow-unicode
-// <reason>` comment is exempt (a `/*poplar:allow-unicode <reason>*/`
-// block comment works too, so the directive can share a line with
-// another trailing comment). The reason is mandatory. An escape
+// <reason>` comment exempts only a non-ASCII literal on that line (a
+// `/*poplar:allow-unicode <reason>*/` block comment works too, so the
+// directive can share a line with another trailing comment). It
+// never exempts an ANSI escape literal or a lipgloss call: those have
+// no legitimate non-theme use, so the directive stays narrow to what
+// its name promises. The reason is mandatory. An honored escape
 // reports no diagnostic, since multichecker.Main exits non-zero on
 // any diagnostic and a documented escape must not fail the gate; the
 // Analyzer's ResultType instead returns the escape count for a
@@ -36,8 +39,9 @@ files:
   - a string or rune literal containing an ANSI escape byte (0x1b)
   - a call into a lipgloss package
 
-A //poplar:allow-unicode <reason> comment on the same line exempts
-the finding; the reason is required.`
+A //poplar:allow-unicode <reason> comment on the same line exempts a
+non-ASCII literal finding; the reason is required. An ANSI escape
+literal or a lipgloss call is never exempt.`
 
 // Analyzer reports styling-boundary violations and returns the
 // count of `//poplar:allow-unicode` escapes it honored.
@@ -69,11 +73,12 @@ func run(pass *analysis.Pass) (any, error) {
 			switch n := n.(type) {
 			case *ast.BasicLit:
 				if kind, bad := badLiteral(n); bad {
-					escapes += report(pass, reasons, n.Pos(), "%s literal outside internal/theme and internal/catkin", kind)
+					escapable := kind == "non-ASCII"
+					escapes += report(pass, reasons, n.Pos(), escapable, "%s literal outside internal/theme and internal/catkin", kind)
 				}
 			case *ast.CallExpr:
 				if callsLipgloss(n, lipglossAliases) {
-					escapes += report(pass, reasons, n.Pos(), "lipgloss call outside internal/theme and internal/catkin")
+					escapes += report(pass, reasons, n.Pos(), false, "lipgloss call outside internal/theme and internal/catkin")
 				}
 			}
 			return true
@@ -157,15 +162,20 @@ func lineReasons(fset *token.FileSet, f *ast.File) map[int]string {
 }
 
 // report counts and returns 1 for a line carrying an allow-unicode
-// reason without emitting a diagnostic (multichecker.Main exits
-// non-zero on any diagnostic, and a documented escape must not fail
-// the gate), or emits the violation at pos and returns 0 otherwise.
-// The Analyzer's ResultType carries the count to the pass-end
+// reason without emitting a diagnostic, when escapable is true
+// (multichecker.Main exits non-zero on any diagnostic, and a
+// documented escape must not fail the gate). escapable is false for
+// an ANSI escape literal or a lipgloss call, which the directive
+// never exempts regardless of a reason on the line; report emits the
+// violation at pos and returns 0 in every other case. The Analyzer's
+// ResultType carries the honored-escape count to the pass-end
 // reviewer.
-func report(pass *analysis.Pass, reasons map[int]string, pos token.Pos, format string, args ...any) int {
+func report(pass *analysis.Pass, reasons map[int]string, pos token.Pos, escapable bool, format string, args ...any) int {
 	line := pass.Fset.Position(pos).Line
-	if _, ok := reasons[line]; ok {
-		return 1
+	if escapable {
+		if _, ok := reasons[line]; ok {
+			return 1
+		}
 	}
 	pass.Reportf(pos, format, args...)
 	return 0
