@@ -3,8 +3,27 @@ package uerr
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 )
+
+// TestErrorFieldsAreExactlyRedactionSafe pins ADR-0013's structural
+// redaction claim: Error carries no field a body, an address, or a
+// credential could hide in. A field added later must extend this
+// list deliberately, not slip in unnoticed.
+func TestErrorFieldsAreExactlyRedactionSafe(t *testing.T) {
+	want := []string{"Op", "IDs", "Class", "Message", "Cause"}
+
+	typ := reflect.TypeFor[Error]()
+	if typ.NumField() != len(want) {
+		t.Fatalf("Error has %d fields, want %d: %v", typ.NumField(), len(want), want)
+	}
+	for i, name := range want {
+		if got := typ.Field(i).Name; got != name {
+			t.Errorf("field %d = %s, want %s", i, got, name)
+		}
+	}
+}
 
 func TestConstructorIsTheOnlyPath(t *testing.T) {
 	captureLog(t)

@@ -1,12 +1,28 @@
-// Package uerr is poplar's error seam. Every user-visible failure --
-// a banner, a toast, a modal -- is a uerr.Error, built through New,
+// Package uerr is poplar's error seam. Every user-visible failure is
+// a uerr.Error: a banner, a toast, a modal. It is built through New,
 // the package's only exported constructor. New classifies the
 // failure, writes its log line, and returns the view value, so no
 // user-visible failure goes unlogged (ER-1).
+//
+// Redaction is structural, per ADR-0013, not a scrub step at write
+// time. Error's field set is exactly Op, IDs, Class, Message, and
+// Cause. TestErrorFieldsAreExactlyRedactionSafe pins it. None of
+// those fields is a message body or an address, so a type that
+// cannot represent a secret cannot leak one into the log. A field
+// added later must hold the same discipline: no body, no address or
+// subject outside a debug-level type, and never a credential.
 package uerr
 
 // Class classifies a user-visible failure (SY-4, ER-1). The outbox
 // and sync engine branch retry and surfacing behavior on it.
+//
+// Class enumerates SY-4's remote and outbox reasons only: a rejected
+// or expired credential, a missing entity, an unreachable server, a
+// server-side failure, and throttling. A local failure, such as SY-8's
+// store corruption, a failed migration, or a full disk, is not a
+// server problem. It must not reuse ClassServer, or any other class
+// here, to say so. It gets its own class from whichever task first
+// needs to surface one.
 type Class int
 
 const (
@@ -63,10 +79,10 @@ var sentence = map[Class]string{
 }
 
 // Error is poplar's user-visible error. Op, IDs, Class, Message, and
-// Cause are exported so a caller can read them back -- a banner
-// renders Message, the outbox branches on Class -- but every Error is
-// built through New; a composite literal of Error outside this
-// package fails the error-construction analyzer.
+// Cause are exported so a caller can read them back. A banner renders
+// Message; the outbox branches on Class. Every Error is still built
+// through New: a composite literal of Error outside this package
+// fails the error-construction analyzer.
 type Error struct {
 	Op      string
 	IDs     []string
@@ -83,9 +99,13 @@ func (e Error) Unwrap() error { return e.Cause }
 
 // New builds the Error for op, classifies it under class, writes the
 // log line, and returns the view value. ids names the entities op
-// acted on (message IDs, mailbox IDs); New logs them for correlation
-// and never surfaces them to the user. cause is the underlying error;
-// a caller recovers it through errors.As or errors.Is.
+// acted on (message IDs, mailbox IDs). New logs ids for correlation
+// and never surfaces them to the user. cause is the underlying error.
+// A caller recovers cause through errors.As or errors.Is.
+//
+// New logs cause verbatim at error level. cause must never carry a
+// credential and should avoid message-body content. The caller that
+// wraps a secret into cause is the leak, not this seam.
 func New(op string, ids []string, class Class, cause error) Error {
 	e := Error{Op: op, IDs: ids, Class: class, Message: sentence[class], Cause: cause}
 	logError(e)
