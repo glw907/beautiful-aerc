@@ -1,5 +1,14 @@
 # Go Comment Voice — synthesis output
 
+**ARCHIVED, 2026-07-27. This document binds nothing.** It records a
+voice system that no longer exists. The workstation retired
+`~/.claude/docs/go-comment-voice.md` and its numbered tell catalogue
+on 2026-06-22, re-anchoring onto published external standards plus
+Vale. Poplar's live comment standard is Go Doc Comments through the
+`go-conventions` skill, enforced by Vale in `make check`. The text
+below is kept for provenance only; the path it names as canonical
+does not resolve.
+
 The synthesized style guide moved to `~/.claude/docs/go-comment-voice.md`
 so it is accessible from any Go project on this workstation, not just
 poplar.

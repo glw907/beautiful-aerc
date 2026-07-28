@@ -819,9 +819,13 @@ LT-1 has no preview line).
    probe result a configuration, not a redesign. The gate is
    asked to accept this deferral with poplar-sends-iMIP as the
    default branch if the probe stays blocked into Phase 5.
-3. **EventSource auth check**: probe dispatched this session
-   (results land in the survey addendum); the 2021 401 report is
-   the risk.
+3. **EventSource auth check**: closed, no longer a risk. The probe
+   came back the same session: Bearer-header auth works (200,
+   `StateChange` on connect, pings on the requested cadence), and
+   the 2021 401 report does not reproduce. ADR-0005 revision 2
+   carries the result. *Corrected at the Phase 5 build boundary,
+   which found this item still listed as open while the ADR
+   recorded it resolved.*
 4. **iCalendar bake-off and rrule DST fixtures**: run before the
    calendar build pass (ADR-0010 names the fallback); the gate
    is asked to accept the deferral with the defaults named.

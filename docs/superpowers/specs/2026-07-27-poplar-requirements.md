@@ -4,7 +4,15 @@
 **Status:** Approved at the Phase 3 gate (Geoff, 2026-07-27).
 Revision 2 folded a three-lens adversarial review (completeness,
 testability, scope); revision 3 adds the two gate directives (C9's
-prior-art obligation, C11).
+prior-art obligation, C11). Revision 4 lands at the Phase 5 build
+boundary and carries the numbers the Phase 4 and Phase 5 gates
+ratified, which until now lived only in the STATUS record while
+this document still printed the superseded ones: QA-2's 25 ms p95
+gate, QA-5's storage criterion as a ratio against retained body
+bytes, CO-6's writer-admission term, the strengthened UX-3
+analyzer rule, and UX-6's raise from SHOULD to MUST with
+ADR-0017 as its design. Each amended clause carries its own
+revision note.
 **Charter:** `2026-07-19-poplar-refounding-charter.md`
 **Vision:** `2026-07-27-poplar-vision.md` (binding). Directives from
 Geoff (2026-07-27) amend it: calendar is a first-class v1 surface
@@ -146,13 +154,21 @@ These bind every requirement and every Phase 4 decision.
   (charter adjectives, tokens, component vocabulary, interaction
   grammar, and the default values this spec assigns to it) exists as
   a committed document plus a `theme` package of compiled Go values
-  before the first screen lands. Acceptance: outside the theme
-  package, an analyzer forbids lipgloss color constructors, ANSI
-  escape literals, rune or string literals in the Box Drawing,
-  Block Elements, Geometric Shapes, Dingbats, and Emoji blocks, and
-  numeric literals passed to padding, margin, width, or border
-  arguments; the list is the rule. Spacing consistency beyond that
-  rides the component vocabulary and review.
+  before the first screen lands. Acceptance: outside
+  `internal/theme` and `internal/catkin`, in non-test files, an
+  analyzer forbids lipgloss constructor calls, ANSI escape
+  literals, and any rune or string literal containing a non-ASCII
+  code point. An inline `//poplar:allow-unicode <reason>` escape
+  covers the legitimate non-theme cases (entity handling in
+  `internal/render`, tokens in `internal/when`, corpus fixtures);
+  the gate counts escapes and the pass-end reviewer reads new
+  ones. *Revision 4 strengthens the literal rule from five named
+  Unicode blocks to all non-ASCII code points, since the block
+  list enumerated what to catch and so missed everything outside
+  it, and adds the catkin exemption the spinoff needs. The
+  separate numeric-spacing clause is withdrawn: once lipgloss
+  constructors are banned, spacing is reachable only through the
+  theme's spacing-role API, so it needs no check of its own.*
 - **UX-4 (MUST, C6). Surface switching.** Mail, calendar, contacts,
   and config are reachable from anywhere through one switching
   idiom. Acceptance: the switch table is committed and covers every
@@ -165,11 +181,23 @@ These bind every requirement and every Phase 4 decision.
   screen's full keymap and the global grammar. Acceptance: the help
   key opens it on every registered screen; content is derived from
   the keymap registry so it cannot drift, asserted by test.
-- **UX-6 (SHOULD). Mouse basics.** Wheel scroll and click-to-select
-  where the terminal reports them; nothing requires the mouse, and
-  enabling mouse reporting never removes a copy path (RD-16 covers
-  copy). Acceptance: every mouse-reachable action has a keymap
-  entry, asserted through the registry test.
+- **UX-6 (MUST, Geoff 2026-07-27). Pointer support.** The pointer
+  is an accelerator over a keyboard-complete grammar, never the
+  only path to anything. Its scope is ADR-0017's eleven-row
+  vocabulary: click to move the cursor, double-click to open,
+  click a sidebar entry to goto, click a pane to focus it, click a
+  status-line surface digit or footer hint to run that verb under
+  the same state rules the keys obey, click a banner dismiss,
+  wheel to scroll, click inside a focused text-entry field to move
+  the in-field cursor, and click a modal answer. Drag-select in
+  the reader stays SHOULD inside this MUST. Nothing requires the
+  mouse, and enabling mouse reporting never removes a copy path
+  (RD-16 covers copy). Acceptance: every mouse-reachable action
+  has a keymap entry, asserted through the registry test; pointer
+  behavior is tested by injecting typed mouse messages at the
+  Update and golden layers, never at the terminal. *Revision 4
+  raises this from SHOULD on Geoff's day-one-mouse directive,
+  ratified at the Phase 5 machine gate. ADR-0017 is the design.*
 - **UX-7 (MUST, switch-bar). Accessible defaults.** The shipped
   theme's foreground/background pairs compute to at least 4.5:1 for
   text and 3:1 for state indicators, asserted by a test over the
@@ -576,9 +604,13 @@ These bind every requirement and every Phase 4 decision.
   reopening restores full state; send deletes the draft in the same
   transaction. Server-canonical, last-write-wins. Acceptance:
   `kill -9` at a random point during a scripted compose loses at
-  most the debounce window, asserted over 50 seeded runs; a draft
-  round-trips through Fastmail web preserving body and headers; the
-  send transaction leaves no lingering draft.
+  most the debounce window plus the writer's admission ceiling
+  (~50 ms), asserted over 50 seeded runs; a draft round-trips
+  through Fastmail web preserving body and headers; the send
+  transaction leaves no lingering draft. *Revision 4 adds the
+  admission term: a keystroke accepted inside the debounce has
+  still to reach the single writer goroutine, and a bound that
+  ignores that queue is one no implementation can hold.*
 - **CO-7 (MUST, switch-bar). Outbox and undo send.** Send queues
   through the durable outbox with a 10-second send-delay window
   (single-key cancel returning to compose intact); failures surface
@@ -854,16 +886,19 @@ Phase 4 spike.
   under 500 ms. *Provisional.*
 - **QA-2 (MUST, vision differentiator 2). Interaction latency.**
   Two budgets. App-side: key-message receipt to render-buffer
-  flush, instrumented in-process, p95 under 20 ms and p99 under
+  flush, instrumented in-process, p95 under 25 ms and p99 under
   40 ms over a scripted 500-keystroke session (60% list movement,
   15% folder switch, 15% reader open of cached bodies, 10% search
-  keystrokes) at the QA-5 envelope; this number gates. End-to-end:
+  keystrokes) at the QA-5 envelope; this number gates, and 20 ms
+  is the design target the implementation aims at. End-to-end:
   keypress to pixel, measured once per platform by high-framerate
   capture on the reference terminal, reported, not gated. The
   app-side budget also holds while initial sync or a 20k-body
   backfill runs concurrently, and the store's concurrency design
-  must make that true (Phase 4 names the mechanism; a test fails
-  on a UI-thread write). *Provisional.*
+  must make that true (ADR-0003 names the mechanism; a test fails
+  on a UI-thread write). *Measured (revision 4): the Phase 4 spike
+  read 22-25 ms p95 with zero SQLITE_BUSY under concurrent write,
+  which set the gate at 25 ms.*
 - **QA-3 (MUST, vision differentiator 2). Search latency.** A
   committed benchmark set of at least 20 queries in four classes
   against a 100k-message index. Per-class p95: single term and
@@ -883,9 +918,13 @@ Phase 4 spike.
   100k messages and 5k events (roughly three times the target
   account). Steady-state RSS under 250 MB after scrolling the full
   list, opening 50 threads, and visiting all four surfaces; RSS
-  growth under 5% across a 30-minute scripted soak. Store size
-  overhead (index and metadata over raw cached bodies) under 15%.
-  *Provisional by inheritance from QA-1 through QA-3.*
+  growth under 5% across a 30-minute scripted soak. Store size at
+  or under 1.6x retained body bytes, counting the index and all
+  metadata. *Revision 4 restates the storage criterion, which read
+  "overhead under 15%" through revision 3. The Phase 4 spike
+  measured 53% overhead on a real 35,837-message archive amplified
+  to 100k, so the old number was unmeetable by any schema and the
+  ratio against retained bodies is the honest form.*
 - **QA-6 (MUST, switch-bar). Data safety.** A seeded kill harness
   runs a fixed 30-action script (triage, bulk, compose, send,
   RSVP, event edit, folder rename) and SIGKILLs at 200

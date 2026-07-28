@@ -73,3 +73,24 @@ testable; and Catkin's injection contract (its own style struct,
 poplar injects theme-derived values; the analyzer exempts
 `internal/catkin`; a buffer-mutation API lands each external
 mutation as one buffer-undo entry).
+
+## Revision 3 (2026-07-27, build boundary)
+
+Two additions the mouse ruling (ADR-0017) requires, recorded here
+because revision 2 described a keyboard-only registry:
+
+- **`LayoutMode` carries per-pane rectangles.** Layout already
+  computes once per `WindowSizeMsg` into one struct every
+  component consumes. That struct now also carries each pane's
+  `image.Rectangle`, so a pointer event resolves to a pane by
+  comparison against values the layout already produced. No zone
+  library and no render-time registration is involved, which
+  matters because bubblezone v2 documents a caveat against the
+  lipgloss v2 compositor.
+- **Registry entries bind pointer targets alongside keys.** A
+  screen's registry entry is already the single source the
+  footer, help overlay, grammar test, and switch table derive
+  from. Pointer targets join it there, which is what makes UX-6's
+  acceptance criterion mechanical: every mouse-reachable action
+  has a keymap entry because both hang off one entry, and the
+  registry test reads it.

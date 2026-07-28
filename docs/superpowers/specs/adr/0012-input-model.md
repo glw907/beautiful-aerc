@@ -44,3 +44,25 @@ disambiguation only (no release events, no repeat) if leave-field
 shows ambiguity defects on a gate-platform terminal. That change
 alters no binding and no golden. If a future feature genuinely
 needs key-release semantics, this ADR is the record to supersede.
+
+## Revision 2 (2026-07-27, build boundary)
+
+The Phase 5 tooling audit established that bubbletea v2 requests
+basic kitty key disambiguation from the terminal unconditionally.
+Revision 1 wrote that disambiguation as a relief valve poplar
+could reach for later. It is the shipped default, so this ADR was
+describing a choice the framework does not offer.
+
+What the decline still covers is the opt-in enhancements: release
+events, key repeat, and alternate-key reporting. Those stay
+declined on the same reasoning, since poplar binds nothing that
+needs them.
+
+The goldens-representative consequence restates at the message
+layer. Input reaches the application already normalized into
+typed messages, so what golden tests capture is representative
+across terminals whether or not a given terminal negotiated
+disambiguation. The bare-Esc residual is a fixed 50 ms ambiguity
+window in v2's input engine, not app-configurable, and it is
+recorded against UX-8's leave-field model rather than held open
+as a tuning knob.

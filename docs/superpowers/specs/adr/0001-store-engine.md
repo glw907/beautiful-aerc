@@ -46,3 +46,31 @@ envelope; its relief valves (statement caching, and the
 denormalized `search_text` column keeping hot reads off the body
 table) are pre-planned. FTS5 is derived state and rebuildable, so
 index corruption is a repair path, never data loss.
+
+## Revision 2 (2026-07-27, build boundary)
+
+Two clauses of the Decision above are superseded. Read them
+through this block; the Decision text is left intact as the
+record of what was decided when.
+
+**One store file holds every account.** The Decision says "one
+database file per account". Technical design section 3 settled it
+the other way, and ADR-0002's revision 2 agrees, so the Decision
+has been wrong since the design landed. One database is what
+makes a cross-account view a query rather than a merge, keeps the
+FTS5 index single and transactionally consistent with the
+mutations it indexes, and holds ADR-0003's discipline to one
+writer rather than one per account. Multi-account is the named
+first post-v1 priority, so the schema carries `account_id` from
+the first migration even though v1 ships one account.
+
+The cost is that a corrupt file takes every account with it.
+SY-8's failure tests cover that path, and FTS5 stays derived
+state that rebuilds without data loss.
+
+**FTS5 uses a single content source, not external-content
+tables.** The Decision's "external-content tables" is retracted by
+ADR-0002 revision 2, which found the two-table external-content
+shape not constructible as specified. `message_fts` indexes
+`message(subject, search_text)` from one source, maintained in the
+same transaction as the message write.
