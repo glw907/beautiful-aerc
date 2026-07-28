@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // defaultChunkSize is the chunk size EnqueueMoveMessagesBulk falls
@@ -147,6 +149,13 @@ func EnqueueMoveMessagesChunkTx(tx *sql.Tx, accountID int64, messageIDs []int64,
 // each chunk queued for UndoWindow before it becomes dispatch-eligible
 // (UX-9); a non-undoable move (a sync-driven or system action) is
 // eligible immediately.
+//
+// A chunk that fails to enqueue undoes every chunk this call already
+// committed before returning err, so a caller checking err can treat
+// the whole call as never having run. The one gap is a non-undoable
+// move: a chunk a concurrent DispatchOnce pass already claimed before
+// undo runs survives it, and intentIDs then names those escaped
+// chunks (err carries the same detail, and it is logged).
 func EnqueueMoveMessagesBulk(ctx context.Context, w *store.Writer, accountID int64, messageIDs []int64, destMailboxID, destRef int64, be backend.Backend, undoable bool, now time.Time) (undoGroup string, intentIDs []int64, err error) {
 	if (destMailboxID == 0) == (destRef == 0) {
 		return "", nil, fmt.Errorf("outbox: move messages: exactly one of destMailboxID, destRef must be set")
@@ -160,17 +169,73 @@ func EnqueueMoveMessagesBulk(ctx context.Context, w *store.Writer, accountID int
 
 	for seq, chunk := range chunks(messageIDs, chunkSize(be)) {
 		var id int64
-		err = w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+		chunkErr := w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
 			var txErr error
 			id, txErr = EnqueueMoveMessagesChunkTx(tx, accountID, chunk, destMailboxID, destRef, undoGroup, seq, holdUntil, now)
 			return txErr
 		})
-		if err != nil {
+		if chunkErr != nil {
+			intentIDs, err = compensateFailedChunk(ctx, w, intentIDs, seq, chunkErr)
 			return undoGroup, intentIDs, err
 		}
 		intentIDs = append(intentIDs, id)
 	}
 	return undoGroup, intentIDs, nil
+}
+
+// compensateFailedChunk runs when chunk seq fails to enqueue after
+// committed's chunks already landed: it undoes every one of them so
+// the call leaves nothing behind for a caller that treats chunkErr as
+// "nothing happened". committed is all still queued (a chunk this
+// call just wrote holds past its own commit, so nothing but a
+// concurrent DispatchOnce pass on a non-undoable move can claim it
+// first), so undo ordinarily catches every one; it returns whichever
+// ids that pass did catch, if any, as the true result of the call,
+// logged through uerr since that is a bulk move partly taking effect
+// despite the error the caller sees.
+func compensateFailedChunk(ctx context.Context, w *store.Writer, committed []int64, seq int, chunkErr error) ([]int64, error) {
+	if len(committed) == 0 {
+		return nil, fmt.Errorf("outbox: move messages: chunk %d: %w", seq, chunkErr)
+	}
+	annihilated, undoErr := Undo(ctx, w, committed)
+	if undoErr != nil {
+		return committed, fmt.Errorf("outbox: move messages: chunk %d: %w (rollback of %d earlier chunk(s) failed: %v)", seq, chunkErr, len(committed), undoErr)
+	}
+	escaped := escapedIDs(committed, annihilated)
+	if len(escaped) == 0 {
+		return nil, fmt.Errorf("outbox: move messages: chunk %d: %w (%d earlier chunk(s) rolled back)", seq, chunkErr, len(committed))
+	}
+	err := fmt.Errorf("outbox: move messages: chunk %d: %w (%d of %d earlier chunk(s) already dispatched, not rolled back)", seq, chunkErr, len(escaped), len(committed))
+	_ = uerr.New("outbox.enqueue_move", idStrings(escaped), uerr.ClassStoreLocal, err)
+	return escaped, err
+}
+
+// escapedIDs returns every id in committed that annihilated does not
+// cover: the chunks Undo's queued-only guard could not catch because
+// a concurrent DispatchOnce pass had already claimed them.
+func escapedIDs(committed, annihilated []int64) []int64 {
+	caught := make(map[int64]bool, len(annihilated))
+	for _, id := range annihilated {
+		caught[id] = true
+	}
+	var escaped []int64
+	for _, id := range committed {
+		if !caught[id] {
+			escaped = append(escaped, id)
+		}
+	}
+	return escaped
+}
+
+// idStrings renders ids as decimal strings for uerr's redaction-safe
+// IDs field, which takes strings regardless of whether the id names a
+// server or an internal row.
+func idStrings(ids []int64) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = strconv.FormatInt(id, 10)
+	}
+	return out
 }
 
 // chunkSize returns the most messages one chunk carries: be's

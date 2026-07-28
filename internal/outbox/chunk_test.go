@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -178,6 +179,102 @@ func TestChunkedBulk(t *testing.T) {
 		}
 		if serverMailbox["msg-0"] != "mbx-src" || serverMailbox["msg-1"] != "mbx-src" {
 			t.Fatalf("server state after compensation = %+v, want both restored to mbx-src", serverMailbox)
+		}
+	})
+}
+
+// TestEnqueueMoveMessagesBulkCompensatesPartialFailure covers a chunk
+// that fails to enqueue after earlier chunks already committed:
+// EnqueueMoveMessagesBulk must not leave those chunks behind for a
+// caller that reads err as "the call never happened."
+func TestEnqueueMoveMessagesBulkCompensatesPartialFailure(t *testing.T) {
+	t.Run("earlier chunk rolls back", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
+		msg := seedMessage(t, w, accountID, src, "msg-0")
+
+		undoGroup := newUndoGroup()
+		now := time.Now()
+		var committed int64
+		err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+			var txErr error
+			committed, txErr = EnqueueMoveMessagesChunkTx(tx, accountID, []int64{msg}, dest, 0, undoGroup, 0, now, now)
+			return txErr
+		})
+		if err != nil {
+			t.Fatalf("seed committed chunk: %v", err)
+		}
+
+		// A bogus account id violates outbox's account_id foreign key,
+		// the same shape of failure a real chunk 1 write would surface
+		// (a constraint violation, a full disk, a lock timeout).
+		chunkErr := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+			_, txErr := EnqueueMoveMessagesChunkTx(tx, accountID+9999, []int64{msg}, dest, 0, undoGroup, 1, now, now)
+			return txErr
+		})
+		if chunkErr == nil {
+			t.Fatalf("expected chunk 1 to fail")
+		}
+
+		remaining, err := compensateFailedChunk(context.Background(), w, []int64{committed}, 1, chunkErr)
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if len(remaining) != 0 {
+			t.Errorf("remaining = %v, want none (chunk 0 rolled back)", remaining)
+		}
+		if n := outboxCount(t, w, committed); n != 0 {
+			t.Errorf("chunk 0's row still present after compensation")
+		}
+	})
+
+	t.Run("chunk already dispatched escapes rollback", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
+		msg := seedMessage(t, w, accountID, src, "msg-0")
+
+		undoGroup := newUndoGroup()
+		now := time.Now()
+		var dispatched int64
+		err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+			var txErr error
+			dispatched, txErr = EnqueueMoveMessagesChunkTx(tx, accountID, []int64{msg}, dest, 0, undoGroup, 0, now, now)
+			return txErr
+		})
+		if err != nil {
+			t.Fatalf("seed committed chunk: %v", err)
+		}
+
+		be := newFakeBackend()
+		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
+			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
+		}
+		dispatcher := NewDispatcher(accountID, be, w)
+		if _, err := dispatcher.DispatchOnce(context.Background(), now); err != nil {
+			t.Fatalf("dispatch chunk 0: %v", err)
+		}
+		if n := outboxCount(t, w, dispatched); n != 0 {
+			t.Fatalf("chunk 0 still queued, want dispatched and gone")
+		}
+
+		chunkErr := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+			_, txErr := EnqueueMoveMessagesChunkTx(tx, accountID+9999, []int64{msg}, dest, 0, undoGroup, 1, now, now)
+			return txErr
+		})
+		if chunkErr == nil {
+			t.Fatalf("expected chunk 1 to fail")
+		}
+
+		escaped, err := compensateFailedChunk(context.Background(), w, []int64{dispatched}, 1, chunkErr)
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if len(escaped) != 1 || escaped[0] != dispatched {
+			t.Errorf("escaped = %v, want [%d] (already dispatched, Undo cannot catch it)", escaped, dispatched)
 		}
 	})
 }
