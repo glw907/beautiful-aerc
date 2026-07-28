@@ -37,14 +37,14 @@ func TestCheckpointLifecycle(t *testing.T) {
 
 	big := strings.Repeat("x", 4096)
 	for i := range 200 {
-		err := w.SubmitBulk(context.Background(), func(tx *sql.Tx) error {
+		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
 			_, err := tx.Exec(
 				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
 				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
 			return err
 		})
 		if err != nil {
-			t.Fatalf("SubmitBulk(%d): %v", i, err)
+			t.Fatalf("submitBulk(%d): %v", i, err)
 		}
 	}
 
@@ -65,6 +65,42 @@ func TestCheckpointLifecycle(t *testing.T) {
 	shrunk := walSize(t, walPath)
 	if shrunk > 4096 {
 		t.Errorf("wal size after idle = %d bytes, want it back near its bound", shrunk)
+	}
+}
+
+// TestCheckpointPassiveReclaimsWithoutAReader covers the case
+// TestCheckpointLifecycle's blocked reader does not: with nothing
+// holding an old snapshot, PASSIVE alone keeps the WAL from growing
+// across many bulk chunks. CheckpointIdle is set far longer than the
+// test can run, so a TRUNCATE firing mid-test cannot be why the WAL
+// stayed small; deleting the PASSIVE call from runBulk fails this
+// assertion the same way it would fail TestCheckpointLifecycle's.
+func TestCheckpointPassiveReclaimsWithoutAReader(t *testing.T) {
+	cfg := DefaultWriterConfig()
+	cfg.CheckpointIdle = time.Hour
+	w, path := newTestWriter(t, cfg)
+
+	big := strings.Repeat("x", 4096)
+	for i := range 200 {
+		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
+			_, err := tx.Exec(
+				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
+				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
+			return err
+		})
+		if err != nil {
+			t.Fatalf("submitBulk(%d): %v", i, err)
+		}
+	}
+
+	// runBulk's PASSIVE checkpoint runs after the job's done channel
+	// already fired, so give the last chunk's checkpoint room to
+	// finish before measuring.
+	time.Sleep(50 * time.Millisecond)
+
+	flat := walSize(t, path+"-wal")
+	if flat > 200_000 {
+		t.Errorf("wal size with no reader holding a snapshot = %d bytes, want PASSIVE to keep it well under the 500KB TestCheckpointLifecycle's blocked reader grows past", flat)
 	}
 }
 

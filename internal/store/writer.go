@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,13 @@ type WriterConfig struct {
 	CheckpointIdle time.Duration
 	// JournalSizeLimit bounds the WAL file in bytes.
 	JournalSizeLimit int64
+	// WriteCeiling is the admission ceiling a single transaction is
+	// expected to stay under (ADR-0003 revision 2, CO-6). execute
+	// does not cancel a transaction that runs past it, since
+	// interrupting a live *sql.Tx mid-statement risks a stuck
+	// connection; it logs instead, so a caller that runs over the
+	// ceiling is visible rather than silently slow.
+	WriteCeiling time.Duration
 }
 
 // DefaultWriterConfig returns poplar's production writer timing.
@@ -32,10 +40,11 @@ func DefaultWriterConfig() WriterConfig {
 		InteractiveQuiet: time.Second,
 		CheckpointIdle:   3 * time.Second,
 		JournalSizeLimit: 8 << 20,
+		WriteCeiling:     50 * time.Millisecond,
 	}
 }
 
-// errWriterClosed is returned to a Submit or SubmitBulk call racing
+// errWriterClosed is returned to a submit or submitBulk call racing
 // with Close.
 var errWriterClosed = errors.New("store: writer is closed")
 
@@ -45,10 +54,13 @@ type writeJob struct {
 }
 
 // Writer is poplar's single write connection, run by one goroutine
-// serving two lanes (ADR-0003): Submit for interactive, user-facing
-// intents, and SubmitBulk for chunked background work such as a body
+// serving two lanes (ADR-0003): submit for interactive, user-facing
+// intents, and submitBulk for chunked background work such as a body
 // backfill. A queued bulk backlog never delays an interactive job
-// past the chunk boundary the writer is currently on.
+// past the chunk boundary the writer is currently on. Both methods
+// are unexported: nothing outside internal/store reaches a write
+// entry point except through the intent gateway (ADR-0003, the
+// package-boundary rule the writecall analyzer enforces).
 type Writer struct {
 	db  *sql.DB
 	cfg WriterConfig
@@ -90,37 +102,37 @@ func NewWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
 	return w, nil
 }
 
-// Submit runs fn in a transaction on the interactive lane and
+// submit runs fn in a transaction on the interactive lane and
 // returns once it commits or fails. An error fn returns rolls back
 // the whole transaction, so a failure partway through never leaves a
 // partial write.
-func (w *Writer) Submit(ctx context.Context, fn func(*sql.Tx) error) error {
+func (w *Writer) submit(ctx context.Context, fn func(*sql.Tx) error) error {
 	return w.enqueue(ctx, w.interactive, fn)
 }
 
-// SubmitBulk runs fn as one chunk on the bulk lane, with the same
-// all-or-nothing commit as Submit. The caller chunks its own work
+// submitBulk runs fn as one chunk on the bulk lane, with the same
+// all-or-nothing commit as submit. The caller chunks its own work
 // (roughly 50ms per call) and consults RecentInteractiveActivity
 // between chunks so a long bulk job yields to interactive use.
-func (w *Writer) SubmitBulk(ctx context.Context, fn func(*sql.Tx) error) error {
+func (w *Writer) submitBulk(ctx context.Context, fn func(*sql.Tx) error) error {
 	return w.enqueue(ctx, w.bulk, fn)
 }
 
+// enqueue hands fn to lane and waits for it to run. Once fn is
+// admitted onto lane, enqueue always waits for its outcome rather
+// than racing ctx.Done(): a caller whose context is cancelled after
+// admission still learns the true result instead of seeing a
+// cancellation error for a write that lands anyway.
 func (w *Writer) enqueue(ctx context.Context, lane chan writeJob, fn func(*sql.Tx) error) error {
 	j := writeJob{fn: fn, done: make(chan error, 1)}
 	select {
 	case lane <- j:
 	case <-ctx.Done():
-		return ctx.Err()
+		return uerr.New("store.write", nil, uerr.ClassStoreLocal, ctx.Err())
 	case <-w.stop:
-		return errWriterClosed
+		return uerr.New("store.write", nil, uerr.ClassStoreLocal, errWriterClosed)
 	}
-	select {
-	case err := <-j.done:
-		return err
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return <-j.done
 }
 
 // RecentInteractiveActivity reports whether an interactive job ran
@@ -171,11 +183,7 @@ func (w *Writer) run() {
 			w.runBulk(j)
 			resetTimer(idle, w.cfg.CheckpointIdle)
 		case <-idle.C:
-			// A failed checkpoint only misses this round's growth
-			// bound; it is not a correctness issue, so the writer
-			// tries again at the next idle window rather than
-			// surfacing it.
-			_ = checkpoint(context.Background(), w.db, "TRUNCATE")
+			w.runIdleCheckpoint()
 			idle.Reset(w.cfg.CheckpointIdle)
 		case <-w.stop:
 			return
@@ -190,10 +198,31 @@ func (w *Writer) runInteractive(j writeJob) {
 
 func (w *Writer) runBulk(j writeJob) {
 	j.done <- w.execute(j.fn)
-	_ = checkpoint(context.Background(), w.db, "PASSIVE")
+	// A failed checkpoint only misses this chunk's reclaim; the next
+	// chunk or the idle TRUNCATE tries again, so the writer logs and
+	// moves on rather than surfacing it to the caller whose job
+	// already committed.
+	if err := checkpoint(context.Background(), w.db, "PASSIVE"); err != nil {
+		slog.Warn("store: checkpoint failed", "mode", "PASSIVE", "error", err)
+	}
+}
+
+// runIdleCheckpoint runs the idle-triggered TRUNCATE checkpoint.
+// TRUNCATE is the one checkpoint mode that can block on a reader's
+// open snapshot, so it runs under a busy_timeout far shorter than the
+// connection's normal 5s bound: a reader outliving that short window
+// leaves the WAL larger than its bound until the next idle window,
+// rather than delaying a queued interactive job for seconds.
+func (w *Writer) runIdleCheckpoint() {
+	if err := checkpointTruncate(context.Background(), w.db); err != nil {
+		slog.Warn("store: checkpoint failed", "mode", "TRUNCATE", "error", err)
+	}
 }
 
 func (w *Writer) execute(fn func(*sql.Tx) error) error {
+	start := time.Now()
+	defer w.warnIfOverCeiling(start)
+
 	tx, err := w.db.Begin()
 	if err != nil {
 		return uerr.New("store.write", nil, uerr.ClassStoreLocal, err)
@@ -206,6 +235,17 @@ func (w *Writer) execute(fn func(*sql.Tx) error) error {
 		return uerr.New("store.write", nil, uerr.ClassStoreLocal, err)
 	}
 	return nil
+}
+
+// warnIfOverCeiling logs when a transaction that started at start ran
+// past WriteCeiling. It does not classify or surface an error: a slow
+// transaction still committed (or failed and rolled back) on its own
+// merits, and this is visibility into the admission ceiling, not a
+// new failure mode.
+func (w *Writer) warnIfOverCeiling(start time.Time) {
+	if elapsed := time.Since(start); elapsed > w.cfg.WriteCeiling {
+		slog.Warn("store: transaction exceeded admission ceiling", "elapsed", elapsed, "ceiling", w.cfg.WriteCeiling)
+	}
 }
 
 func resetTimer(t *time.Timer, d time.Duration) {

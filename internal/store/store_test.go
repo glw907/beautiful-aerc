@@ -8,14 +8,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// openTestDB opens a fresh sqlite file under t.TempDir and returns
-// the unmigrated connection; the caller decides when to call
-// Migrate.
+// openTestDB opens a fresh sqlite file under t.TempDir through dsn,
+// the pragma set every store connection carries, and returns the
+// unmigrated connection; the caller decides when to call Migrate.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", "file:"+path)
+	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}

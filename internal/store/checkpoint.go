@@ -34,3 +34,26 @@ func checkpoint(ctx context.Context, db *sql.DB, mode string) error {
 	_, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint("+mode+")")
 	return err
 }
+
+// checkpointBusyTimeoutMS is the busy_timeout checkpointTruncate sets
+// for the duration of a TRUNCATE checkpoint, restored to
+// busyTimeoutMS immediately after. TRUNCATE is the one checkpoint
+// mode that can block on a reader's open snapshot; capping that wait
+// at the writer's own admission ceiling keeps an interactive job
+// queued behind it from waiting anywhere near busyTimeoutMS's 5s
+// bound.
+const checkpointBusyTimeoutMS = 50
+
+// checkpointTruncate runs a TRUNCATE checkpoint against db under
+// checkpointBusyTimeoutMS rather than db's normal busy_timeout,
+// restoring the normal timeout before returning whether or not the
+// checkpoint succeeded.
+func checkpointTruncate(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", checkpointBusyTimeoutMS)); err != nil {
+		return fmt.Errorf("lower busy_timeout for checkpoint: %w", err)
+	}
+	defer func() {
+		_, _ = db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", busyTimeoutMS))
+	}()
+	return checkpoint(ctx, db, "TRUNCATE")
+}

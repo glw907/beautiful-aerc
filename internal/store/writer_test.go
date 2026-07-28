@@ -1,10 +1,12 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +16,56 @@ import (
 
 	"github.com/glw907/poplar/internal/uerr"
 )
+
+// syncBuffer is a bytes.Buffer safe for the writer goroutine's
+// concurrent slog calls and the test goroutine's reads of the same
+// log: the writer can still be logging a checkpoint's outcome after
+// the job that triggered it has already returned to its caller.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// captureSlog redirects slog's process-wide default logger to an
+// in-memory buffer for the rest of the test, restoring the previous
+// default on cleanup.
+func captureSlog(t *testing.T) *syncBuffer {
+	t.Helper()
+
+	buf := &syncBuffer{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return buf
+}
+
+// waitForLog polls log for substr up to a short timeout, since a
+// checkpoint's outcome can log after the job that triggered it has
+// already returned to its caller.
+func waitForLog(t *testing.T, log *syncBuffer, substr string) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(log.String(), substr) {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("log output = %q, want a line containing %q", log.String(), substr)
+}
 
 // newTestWriter opens a fresh migrated store file and returns a
 // Writer over it, along with the file's path for tests that inspect
@@ -37,7 +89,7 @@ func newTestWriter(t *testing.T, cfg WriterConfig) (*Writer, string) {
 	return w, path
 }
 
-// TestWriterSerializes proves that many concurrent Submit callers
+// TestWriterSerializes proves that many concurrent submit callers
 // each get their job run in the order their send reached the
 // interactive lane, and that no two jobs ever run at once.
 func TestWriterSerializes(t *testing.T) {
@@ -49,7 +101,7 @@ func TestWriterSerializes(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	go func() {
-		_ = w.Submit(context.Background(), func(*sql.Tx) error {
+		_ = w.submit(context.Background(), func(*sql.Tx) error {
 			close(started)
 			<-release
 			return nil
@@ -67,7 +119,7 @@ func TestWriterSerializes(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			err := w.Submit(context.Background(), func(*sql.Tx) error {
+			err := w.submit(context.Background(), func(*sql.Tx) error {
 				if !active.CompareAndSwap(false, true) {
 					t.Error("two jobs ran concurrently")
 				}
@@ -79,7 +131,7 @@ func TestWriterSerializes(t *testing.T) {
 				return nil
 			})
 			if err != nil {
-				t.Errorf("Submit(%d): %v", i, err)
+				t.Errorf("submit(%d): %v", i, err)
 			}
 		}(i)
 		// Give goroutine i time to block on the channel send before
@@ -119,7 +171,7 @@ func TestInteractivePreemption(t *testing.T) {
 	bulkDone := make(chan error, 1)
 	go func() {
 		for range chunks {
-			err := w.SubmitBulk(context.Background(), func(*sql.Tx) error {
+			err := w.submitBulk(context.Background(), func(*sql.Tx) error {
 				time.Sleep(chunkWork)
 				return nil
 			})
@@ -134,8 +186,8 @@ func TestInteractivePreemption(t *testing.T) {
 	time.Sleep(chunkWork / 2) // let the bulk job start its first chunk
 
 	start := time.Now()
-	if err := w.Submit(context.Background(), func(*sql.Tx) error { return nil }); err != nil {
-		t.Fatalf("Submit: %v", err)
+	if err := w.submit(context.Background(), func(*sql.Tx) error { return nil }); err != nil {
+		t.Fatalf("submit: %v", err)
 	}
 	waited := time.Since(start)
 
@@ -165,15 +217,15 @@ func TestBackfillSubordination(t *testing.T) {
 		if w.RecentInteractiveActivity(cfg.InteractiveQuiet) {
 			return false
 		}
-		return w.SubmitBulk(context.Background(), func(*sql.Tx) error { return nil }) == nil
+		return w.submitBulk(context.Background(), func(*sql.Tx) error { return nil }) == nil
 	}
 
 	if !chunk() {
 		t.Fatal("chunk skipped with no interactive activity yet")
 	}
 
-	if err := w.Submit(context.Background(), func(*sql.Tx) error { return nil }); err != nil {
-		t.Fatalf("Submit: %v", err)
+	if err := w.submit(context.Background(), func(*sql.Tx) error { return nil }); err != nil {
+		t.Fatalf("submit: %v", err)
 	}
 
 	if chunk() {
@@ -212,7 +264,7 @@ func TestDiskFullInjection(t *testing.T) {
 	t.Cleanup(func() { _ = w.Close() })
 
 	big := strings.Repeat("x", 4096)
-	writeErr := w.Submit(context.Background(), func(tx *sql.Tx) error {
+	writeErr := w.submit(context.Background(), func(tx *sql.Tx) error {
 		for i := range 5000 {
 			if _, err := tx.Exec(
 				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
@@ -223,7 +275,7 @@ func TestDiskFullInjection(t *testing.T) {
 		return nil
 	})
 	if writeErr == nil {
-		t.Fatal("Submit succeeded past max_page_count, want a disk-full failure")
+		t.Fatal("submit succeeded past max_page_count, want a disk-full failure")
 	}
 
 	var uerrErr uerr.Error
@@ -241,4 +293,72 @@ func TestDiskFullInjection(t *testing.T) {
 	if rows != 0 {
 		t.Errorf("accounts = %d, want 0 (the failed transaction must not have committed partially)", rows)
 	}
+}
+
+// TestSubmitWaitsAfterAdmission proves a caller whose context is
+// cancelled after its job is admitted still learns the job's true
+// outcome instead of seeing ctx.Err() for a write that commits
+// anyway: with a durable intent row behind submit, that mismatch
+// would make a retry double-apply the mutation.
+func TestSubmitWaitsAfterAdmission(t *testing.T) {
+	w, _ := newTestWriter(t, DefaultWriterConfig())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	admitted := make(chan struct{})
+
+	submitDone := make(chan error, 1)
+	go func() {
+		submitDone <- w.submit(ctx, func(tx *sql.Tx) error {
+			close(admitted) // fn only runs once the job is off the lane and Begin has succeeded
+			time.Sleep(20 * time.Millisecond)
+			_, err := tx.Exec(`INSERT INTO account (slug, backend_kind, address) VALUES ('acct', 'jmap', 'a@example.com')`)
+			return err
+		})
+	}()
+
+	<-admitted
+	cancel()
+
+	if err := <-submitDone; err != nil {
+		t.Fatalf("submit = %v, want the admitted write to succeed despite ctx cancelling mid-flight", err)
+	}
+}
+
+// TestWriteCeilingWarning proves execute logs a warning when a
+// transaction runs past WriterConfig.WriteCeiling, the admission
+// ceiling CO-6's kill harness and ADR-0003 revision 2 name, even
+// though the writer does not cancel the transaction itself.
+func TestWriteCeilingWarning(t *testing.T) {
+	log := captureSlog(t)
+
+	cfg := DefaultWriterConfig()
+	cfg.WriteCeiling = 5 * time.Millisecond
+	w, _ := newTestWriter(t, cfg)
+
+	if err := w.submit(context.Background(), func(*sql.Tx) error {
+		time.Sleep(20 * time.Millisecond)
+		return nil
+	}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	waitForLog(t, log, "admission ceiling")
+}
+
+// TestCheckpointFailureLogged proves a failed checkpoint reaches the
+// log instead of vanishing behind a discarded error: repeated
+// checkpoint failure means unbounded WAL growth ending in a disk-full
+// the user does see, with nothing tracing back to the cause.
+func TestCheckpointFailureLogged(t *testing.T) {
+	log := captureSlog(t)
+
+	w, _ := newTestWriter(t, DefaultWriterConfig())
+	// Closing the connection out from under the running writer makes
+	// every subsequent operation on it fail, including the checkpoint
+	// runBulk always runs after a chunk.
+	_ = w.db.Close()
+
+	_ = w.submitBulk(context.Background(), func(*sql.Tx) error { return nil })
+
+	waitForLog(t, log, "checkpoint failed")
 }

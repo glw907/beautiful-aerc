@@ -19,9 +19,6 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 	db := openMigratedTestDB(t)
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
-		t.Fatalf("enable foreign_keys: %v", err)
-	}
 	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
 		t.Fatalf("insert account: %v", err)
 	}

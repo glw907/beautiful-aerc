@@ -14,25 +14,28 @@ const (
 )
 
 const (
-	// busyTimeoutMS bounds how long a connection retries against a
-	// lock before returning SQLITE_BUSY. The write connection never
-	// contends with itself, so the only lock wait it can hit is a
-	// TRUNCATE checkpoint blocked on a reader's snapshot. Five
-	// seconds is generous next to that (QA-2's interactive budget is
-	// 25ms p95, one transaction is bounded at roughly 50ms of work),
-	// long enough for a slow reader to finish, short enough that a
-	// genuinely stuck connection still surfaces SQLITE_BUSY instead
-	// of hanging the process.
+	// busyTimeoutMS bounds how long the write connection retries
+	// against a lock before returning SQLITE_BUSY. The writer never
+	// contends with itself on an interactive or bulk transaction; the
+	// one lock wait this connection can hit under normal operation is
+	// a TRUNCATE checkpoint blocked on a reader's snapshot, and
+	// checkpointTruncate (checkpoint.go) lowers busy_timeout around
+	// that call specifically, so this 5s bound never gates a queued
+	// interactive job. Five seconds here only covers the unlikely
+	// case of a reader outliving that shorter window, while still
+	// surfacing SQLITE_BUSY instead of hanging the process forever.
 	busyTimeoutMS = 5000
 
 	// cacheSizeKiB is negative, so SQLite interprets it as KiB
-	// regardless of page_size (cache_size pragma). At the
-	// 924MB/100k-message envelope, this many KiB times a single-digit
-	// connection count (one writer, a small read pool) stays a small
-	// fraction of QA-5's RSS ceiling, while still holding the hot
-	// mailbox-list and unread indexes resident across a chunked bulk
-	// batch.
-	cacheSizeKiB = -8000
+	// regardless of page_size (cache_size pragma). QA-5 bounds
+	// poplar's whole-process steady-state RSS at 250MB. At a
+	// single-digit connection count (one writer, a small read pool
+	// from task 3), 2MiB per connection keeps the store's page cache
+	// in the low single-digit percent of that ceiling, leaving the
+	// rest for message bodies, the FTS index, and everything above
+	// the store, while still holding the hot mailbox-list and unread
+	// indexes resident across a chunked bulk batch.
+	cacheSizeKiB = -2000
 )
 
 // dsn builds the modernc.org/sqlite connection string for the
