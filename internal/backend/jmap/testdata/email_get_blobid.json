@@ -1,0 +1,11 @@
+{
+  "methodResponses": [
+    ["Email/get", {
+      "accountId": "u1",
+      "state": "2",
+      "list": [{"id": "msg-1", "blobId": "blob-1"}],
+      "notFound": []
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

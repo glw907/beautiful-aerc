@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 )
@@ -169,6 +170,38 @@ func TestDialProbesCapabilities(t *testing.T) {
 	}
 	if caps.AccountIDs["mail"] != "u1" {
 		t.Errorf("AccountIDs[mail] = %q, want u1", caps.AccountIDs["mail"])
+	}
+}
+
+// TestDialHonorsContextTimeout asserts Dial returns once its context
+// expires against a session endpoint that never responds, rather
+// than blocking forever: go-jmap's own Client.Authenticate builds its
+// request with http.NewRequest and no context, so Dial fetches the
+// session resource itself, ctx-bound.
+func TestDialHonorsContextTimeout(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/session", func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := Dial(ctx, srv.URL+"/session", NewStaticCredentials("tok"))
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Dial: want an error from a hung session endpoint, got nil")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Dial did not return within 2s of its 20ms context timeout expiring")
 	}
 }
 

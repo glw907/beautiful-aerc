@@ -109,7 +109,7 @@ func messagePatch(fields map[string]any) jmap.Patch {
 func (m *mailSource) FetchBodies(ctx context.Context, ids []string) (iter.Seq[backend.BodyChunk], error) {
 	blobIDs, err := m.session.resolveBlobIDs(ctx, ids)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: fetch bodies: %w", err)
+		return nil, err
 	}
 	return func(yield func(backend.BodyChunk) bool) {
 		for _, id := range ids {
@@ -128,27 +128,19 @@ func (m *mailSource) FetchBodies(ctx context.Context, ids []string) (iter.Seq[ba
 	}, nil
 }
 
-// resolveBlobIDs returns each id's blobId, consulting the cache
-// Changes populates first and issuing one Email/get for whatever is
-// missing.
+// resolveBlobIDs returns each id's blobId via one Email/get. It holds
+// no cache across calls: Changes already carries blobId into
+// messageFields for the store to keep, so a per-process cache here
+// would only duplicate that and grow without bound over a long
+// session's lifetime.
 func (s *Session) resolveBlobIDs(ctx context.Context, ids []string) (map[string]jmap.ID, error) {
-	out := make(map[string]jmap.ID, len(ids))
-	var missing []jmap.ID
-	s.mu.Lock()
-	for _, id := range ids {
-		if blobID, ok := s.blobIDs[id]; ok {
-			out[id] = blobID
-		} else {
-			missing = append(missing, jmap.ID(id))
-		}
-	}
-	s.mu.Unlock()
-	if len(missing) == 0 {
-		return out, nil
+	wireIDs := make([]jmap.ID, len(ids))
+	for i, id := range ids {
+		wireIDs[i] = jmap.ID(id)
 	}
 
 	req := &jmap.Request{Context: ctx}
-	callID := req.Invoke(&email.Get{Account: s.accountID, IDs: missing, Properties: []string{"id", "blobId"}})
+	callID := req.Invoke(&email.Get{Account: s.accountID, IDs: wireIDs, Properties: []string{"id", "blobId"}})
 	resp, err := s.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("jmap: email/get blobid: %w", err)
@@ -158,11 +150,7 @@ func (s *Session) resolveBlobIDs(ctx context.Context, ids []string) (map[string]
 		return nil, fmt.Errorf("jmap: email/get blobid: %w", err)
 	}
 
-	s.mu.Lock()
-	for _, e := range get.List {
-		s.blobIDs[string(e.ID)] = e.BlobID
-	}
-	s.mu.Unlock()
+	out := make(map[string]jmap.ID, len(get.List))
 	for _, e := range get.List {
 		out[string(e.ID)] = e.BlobID
 	}
@@ -185,11 +173,11 @@ func (s *Session) downloadBlob(ctx context.Context, blobID jmap.ID) ([]byte, err
 func (m *mailSource) Submit(ctx context.Context, raw []byte) (backend.SubmitResult, error) {
 	sentID, err := m.session.mailboxIDByRole(ctx, mailbox.RoleSent)
 	if err != nil {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: %w", err)
+		return backend.SubmitResult{}, err
 	}
 	identityID, err := m.session.defaultIdentityID(ctx)
 	if err != nil {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: %w", err)
+		return backend.SubmitResult{}, err
 	}
 	upload, err := m.session.client.UploadWithContext(ctx, m.session.accountID, bytes.NewReader(raw))
 	if err != nil {
@@ -274,15 +262,12 @@ func (m *mailSource) CreateMailbox(ctx context.Context, name, parentID string) (
 	if parentID != "" {
 		box.ParentID = jmap.ID(parentID)
 	}
-	req := &jmap.Request{Context: ctx}
-	callID := req.Invoke(&mailbox.Set{Account: m.session.accountID, Create: map[jmap.ID]*mailbox.Mailbox{"m1": box}})
-	resp, err := m.session.do(req)
+	sr, err := m.session.mailboxSet(ctx, "create mailbox", &mailbox.Set{
+		Account: m.session.accountID,
+		Create:  map[jmap.ID]*mailbox.Mailbox{"m1": box},
+	})
 	if err != nil {
-		return "", fmt.Errorf("jmap: create mailbox: %w", err)
-	}
-	sr, err := findResponse[*mailbox.SetResponse](resp, callID)
-	if err != nil {
-		return "", fmt.Errorf("jmap: create mailbox: %w", err)
+		return "", err
 	}
 	if se, bad := sr.NotCreated["m1"]; bad {
 		return "", fmt.Errorf("jmap: create mailbox: rejected: %s", se.Type)
@@ -296,18 +281,12 @@ func (m *mailSource) CreateMailbox(ctx context.Context, name, parentID string) (
 
 // RenameMailbox implements backend.Mail.
 func (m *mailSource) RenameMailbox(ctx context.Context, id, name string) error {
-	req := &jmap.Request{Context: ctx}
-	callID := req.Invoke(&mailbox.Set{
+	sr, err := m.session.mailboxSet(ctx, "rename mailbox", &mailbox.Set{
 		Account: m.session.accountID,
 		Update:  map[jmap.ID]jmap.Patch{jmap.ID(id): {"name": name}},
 	})
-	resp, err := m.session.do(req)
 	if err != nil {
-		return fmt.Errorf("jmap: rename mailbox: %w", err)
-	}
-	sr, err := findResponse[*mailbox.SetResponse](resp, callID)
-	if err != nil {
-		return fmt.Errorf("jmap: rename mailbox: %w", err)
+		return err
 	}
 	if se, bad := sr.NotUpdated[jmap.ID(id)]; bad {
 		return fmt.Errorf("jmap: rename mailbox: rejected: %s", se.Type)
@@ -317,20 +296,36 @@ func (m *mailSource) RenameMailbox(ctx context.Context, id, name string) error {
 
 // DeleteMailbox implements backend.Mail.
 func (m *mailSource) DeleteMailbox(ctx context.Context, id string) error {
-	req := &jmap.Request{Context: ctx}
-	callID := req.Invoke(&mailbox.Set{Account: m.session.accountID, Destroy: []jmap.ID{jmap.ID(id)}})
-	resp, err := m.session.do(req)
+	sr, err := m.session.mailboxSet(ctx, "delete mailbox", &mailbox.Set{
+		Account: m.session.accountID,
+		Destroy: []jmap.ID{jmap.ID(id)},
+	})
 	if err != nil {
-		return fmt.Errorf("jmap: delete mailbox: %w", err)
-	}
-	sr, err := findResponse[*mailbox.SetResponse](resp, callID)
-	if err != nil {
-		return fmt.Errorf("jmap: delete mailbox: %w", err)
+		return err
 	}
 	if se, bad := sr.NotDestroyed[jmap.ID(id)]; bad && se.Type != "notFound" {
 		return fmt.Errorf("jmap: delete mailbox: rejected: %s", se.Type)
 	}
 	return nil
+}
+
+// mailboxSet runs one Mailbox/set call and returns its response,
+// naming op ("create mailbox", "rename mailbox", "delete mailbox")
+// in whatever transport error it wraps. CreateMailbox, RenameMailbox,
+// and DeleteMailbox otherwise differ only in which field of set they
+// populate and which of the response's three result maps they check.
+func (s *Session) mailboxSet(ctx context.Context, op string, set *mailbox.Set) (*mailbox.SetResponse, error) {
+	req := &jmap.Request{Context: ctx}
+	callID := req.Invoke(set)
+	resp, err := s.do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jmap: %s: %w", op, err)
+	}
+	sr, err := findResponse[*mailbox.SetResponse](resp, callID)
+	if err != nil {
+		return nil, fmt.Errorf("jmap: %s: %w", op, err)
+	}
+	return sr, nil
 }
 
 // Search implements backend.Mail (SR-7): a caller checks

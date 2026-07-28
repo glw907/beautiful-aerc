@@ -157,10 +157,11 @@ func TestSubmit(t *testing.T) {
 
 func TestFetchBodies(t *testing.T) {
 	blobs := &fakeBlobs{downloads: map[string][]byte{"blob-1": []byte("raw message one")}}
-	session, api := newTestSessionWithBlobs(t, blobs, readFixture(t, "changes_response.json"))
+	session, api := newTestSessionWithBlobs(t, blobs,
+		readFixture(t, "changes_response.json"),
+		readFixture(t, "email_get_blobid.json"),
+	)
 
-	// Populate the session's blobId cache via Changes so FetchBodies
-	// for msg-1 needs no extra Email/get.
 	if _, err := session.Mail().Changes(context.Background(), backend.ObjectKindMessage, "1", 50); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
@@ -185,8 +186,11 @@ func TestFetchBodies(t *testing.T) {
 	if string(chunks[0].Raw) != "raw message one" {
 		t.Errorf("chunk raw = %q, want %q", chunks[0].Raw, "raw message one")
 	}
-	if got := api.callCount(); got != 1 {
-		t.Errorf("api calls after FetchBodies = %d, want 1 (blobId came from cache)", got)
+	// FetchBodies resolves its own blobId with no session-lifetime
+	// cache (SY-5 memory ceiling), so it costs its own Email/get call
+	// even though Changes just hydrated the same message.
+	if got := api.callCount(); got != 2 {
+		t.Errorf("api calls after FetchBodies = %d, want 2", got)
 	}
 }
 

@@ -8,9 +8,10 @@ package jmap
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"sync"
 
 	"git.sr.ht/~rockorager/go-jmap"
 	"git.sr.ht/~rockorager/go-jmap/core"
@@ -28,28 +29,56 @@ type Session struct {
 	client    *jmap.Client
 	accountID jmap.ID
 	caps      backend.Capabilities
-
-	mu      sync.Mutex
-	blobIDs map[string]jmap.ID
 }
 
 // Dial authenticates against sessionURL, sourcing the bearer token
 // from creds on every request, and probes the resulting session's
-// capabilities.
-func Dial(_ context.Context, sessionURL string, creds backend.Credentials) (*Session, error) {
-	client := &jmap.Client{
-		SessionEndpoint: sessionURL,
-		HttpClient:      &http.Client{Transport: &authTransport{creds: creds}},
+// capabilities. Dial fetches the session resource itself rather than
+// calling go-jmap's Client.Authenticate, which builds its request
+// with http.NewRequest and no context: doing so here threads ctx all
+// the way through, so a caller's deadline or cancellation actually
+// bounds session discovery against a hung server.
+func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*Session, error) {
+	httpClient := &http.Client{Transport: &authTransport{creds: creds}}
+	client := &jmap.Client{SessionEndpoint: sessionURL, HttpClient: httpClient}
+
+	session, err := fetchSession(ctx, httpClient, sessionURL)
+	if err != nil {
+		return nil, fmt.Errorf("jmap: dial: %w", err)
 	}
-	if err := client.Authenticate(); err != nil {
-		return nil, fmt.Errorf("jmap: authenticate: %w", err)
-	}
+	client.Session = session
+
 	return &Session{
 		client:    client,
-		accountID: client.Session.PrimaryAccounts[jmapmail.URI],
-		caps:      probeCapabilities(client.Session),
-		blobIDs:   make(map[string]jmap.ID),
+		accountID: session.PrimaryAccounts[jmapmail.URI],
+		caps:      probeCapabilities(session),
 	}, nil
+}
+
+// fetchSession GETs sessionURL with httpClient, decoding the JMAP
+// session resource ctx-bound.
+func fetchSession(ctx context.Context, httpClient *http.Client, sessionURL string) (*jmap.Session, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sessionURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, classify("jmap.dial", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("session %s: unexpected status %d", sessionURL, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	session := &jmap.Session{}
+	if err := json.Unmarshal(body, session); err != nil {
+		return nil, err
+	}
+	return session, nil
 }
 
 // Capabilities returns the facts s's live session reported.
@@ -59,7 +88,11 @@ func (s *Session) Capabilities() backend.Capabilities { return s.caps }
 func (s *Session) Mail() backend.Mail { return &mailSource{session: s} }
 
 func (s *Session) do(req *jmap.Request) (*jmap.Response, error) {
-	return s.client.Do(req)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return resp, classify("jmap.do", err)
+	}
+	return resp, nil
 }
 
 // authTransport resolves the bearer token from creds per request
@@ -68,7 +101,6 @@ func (s *Session) do(req *jmap.Request) (*jmap.Response, error) {
 // at the call site.
 type authTransport struct {
 	creds backend.Credentials
-	inner http.RoundTripper
 }
 
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -78,11 +110,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+token)
-	inner := t.inner
-	if inner == nil {
-		inner = http.DefaultTransport
-	}
-	return inner.RoundTrip(req)
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 // probeCapabilities reads backend.Capabilities off session rather

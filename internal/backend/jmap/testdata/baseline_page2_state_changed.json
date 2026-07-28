@@ -1,0 +1,20 @@
+{
+  "methodResponses": [
+    ["Email/query", {
+      "accountId": "u1",
+      "queryState": "qs2",
+      "canCalculateChanges": false,
+      "position": 1,
+      "ids": ["msg-3"],
+      "total": 4,
+      "limit": 1
+    }, "0"],
+    ["Email/get", {
+      "accountId": "u1",
+      "state": "state-y",
+      "list": [{"id": "msg-3", "blobId": "blob-3", "subject": "Shifted"}],
+      "notFound": []
+    }, "1"]
+  ],
+  "sessionState": "session-3"
+}

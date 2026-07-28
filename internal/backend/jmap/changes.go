@@ -73,9 +73,39 @@ func (m *mailSource) Changes(ctx context.Context, kind backend.ObjectKind, token
 	}
 }
 
+// changesRoundTrip issues req, already carrying a Foo/changes call
+// plus two Foo/get calls back-referencing its created and updated
+// ids (ADR-0004 revision 2's single-request batching), and decodes
+// all three responses. It turns a cannotCalculateChanges method error
+// on the changes call into backend.ErrStateReset; messageChanges and
+// mailboxChanges share this decode path and translate the hydrated
+// lists into poplar's field vocabulary themselves, since Email and
+// Mailbox each need their own translator.
+func changesRoundTrip[C, G any](s *Session, req *jmap.Request, kind, changesCall, createdCall, updatedCall string) (changes C, created, updated G, err error) {
+	resp, err := s.do(req)
+	if err != nil {
+		return changes, created, updated, fmt.Errorf("jmap: %s/changes: %w", kind, err)
+	}
+	changes, err = findResponse[C](resp, changesCall)
+	if err != nil {
+		if isCannotCalculateChanges(err) {
+			return changes, created, updated, backend.ErrStateReset
+		}
+		return changes, created, updated, fmt.Errorf("jmap: %s/changes: %w", kind, err)
+	}
+	created, err = findResponse[G](resp, createdCall)
+	if err != nil {
+		return changes, created, updated, fmt.Errorf("jmap: %s/get created: %w", kind, err)
+	}
+	updated, err = findResponse[G](resp, updatedCall)
+	if err != nil {
+		return changes, created, updated, fmt.Errorf("jmap: %s/get updated: %w", kind, err)
+	}
+	return changes, created, updated, nil
+}
+
 // messageChanges runs Email/changes plus two Email/get calls
-// back-referencing its created and updated ids, all in one request
-// (ADR-0004 revision 2's single-request batching).
+// back-referencing its created and updated ids, all in one request.
 func (s *Session) messageChanges(ctx context.Context, token string, limit int) (backend.ChangeSet, error) {
 	req := &jmap.Request{Context: ctx}
 	changesCall := req.Invoke(&email.Changes{
@@ -94,31 +124,17 @@ func (s *Session) messageChanges(ctx context.Context, token string, limit int) (
 		ReferenceIDs: &jmap.ResultReference{ResultOf: changesCall, Name: "Email/changes", Path: "/updated"},
 	})
 
-	resp, err := s.do(req)
+	changes, created, updated, err := changesRoundTrip[*email.ChangesResponse, *email.GetResponse](
+		s, req, "email", changesCall, createdCall, updatedCall)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: email/changes: %w", err)
-	}
-	changes, err := findResponse[*email.ChangesResponse](resp, changesCall)
-	if err != nil {
-		if isCannotCalculateChanges(err) {
-			return backend.ChangeSet{}, backend.ErrStateReset
-		}
-		return backend.ChangeSet{}, fmt.Errorf("jmap: email/changes: %w", err)
-	}
-	created, err := findResponse[*email.GetResponse](resp, createdCall)
-	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: email/get created: %w", err)
-	}
-	updated, err := findResponse[*email.GetResponse](resp, updatedCall)
-	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: email/get updated: %w", err)
+		return backend.ChangeSet{}, err
 	}
 
 	out := backend.ChangeSet{
 		NewToken: changes.NewState,
 		HasMore:  changes.HasMoreChanges,
-		Created:  s.hydrateMessages(created.List),
-		Updated:  s.hydrateMessages(updated.List),
+		Created:  hydrateMessages(created.List),
+		Updated:  hydrateMessages(updated.List),
 	}
 	for _, id := range changes.Destroyed {
 		out.Destroyed = append(out.Destroyed, string(id))
@@ -126,17 +142,47 @@ func (s *Session) messageChanges(ctx context.Context, token string, limit int) (
 	return out, nil
 }
 
+// baselineToken is a baseline pull's resume marker: the query
+// position to page from next, and the queryState the position was
+// valid against. A mismatch between a resumed token's queryState and
+// the server's current one means a destroy shifted positions since
+// the last page, so baselineMessages restarts rather than risk
+// silently skipping whatever moved past the resume point.
+type baselineToken struct {
+	position   int64
+	queryState string
+}
+
+// parseBaselineToken decodes token, or the zero baselineToken for an
+// empty token (the start of a fresh baseline pull).
+func parseBaselineToken(token string) (baselineToken, error) {
+	if token == "" {
+		return baselineToken{}, nil
+	}
+	rest := strings.TrimPrefix(token, baselineTokenPrefix)
+	position, queryState, _ := strings.Cut(rest, ":")
+	pos, err := strconv.ParseInt(position, 10, 64)
+	if err != nil {
+		return baselineToken{}, fmt.Errorf("jmap: baseline token %q: %w", token, err)
+	}
+	return baselineToken{position: pos, queryState: queryState}, nil
+}
+
+func (t baselineToken) String() string {
+	return baselineTokenPrefix + strconv.FormatInt(t.position, 10) + ":" + t.queryState
+}
+
 // baselineMessages pages the account's whole mailbox via Email/query
 // plus a back-referenced Email/get, since Email/changes has no
 // from-genesis mode (RFC 8621 requires a valid sinceState). NewToken
-// carries the next query position while paging, then the real JMAP
-// state once the last page lands, so the next call switches over to
-// messageChanges automatically.
+// carries the next query position and the query's state while
+// paging, then the real JMAP state once the last page lands, so the
+// next call switches over to messageChanges automatically.
 func (s *Session) baselineMessages(ctx context.Context, token string, limit int) (backend.ChangeSet, error) {
 	if limit <= 0 {
 		limit = defaultPageSize
 	}
-	position, err := baselinePosition(token)
+	prev, err := parseBaselineToken(token)
 	if err != nil {
 		return backend.ChangeSet{}, err
 	}
@@ -145,7 +191,7 @@ func (s *Session) baselineMessages(ctx context.Context, token string, limit int)
 	queryCall := req.Invoke(&email.Query{
 		Account:        s.accountID,
 		Sort:           []*email.SortComparator{{Property: "receivedAt", IsAscending: false}},
-		Position:       position,
+		Position:       prev.position,
 		Limit:          jmapLimit(limit),
 		CalculateTotal: true,
 	})
@@ -168,26 +214,19 @@ func (s *Session) baselineMessages(ctx context.Context, token string, limit int)
 		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/get: %w", err)
 	}
 
-	out := backend.ChangeSet{Created: s.hydrateMessages(get.List)}
-	next := position + int64(len(query.IDs))
+	if prev.queryState != "" && query.QueryState != prev.queryState {
+		return s.baselineMessages(ctx, "", limit)
+	}
+
+	out := backend.ChangeSet{Created: hydrateMessages(get.List)}
+	next := prev.position + int64(len(query.IDs))
 	if len(query.IDs) == 0 || next >= toInt64(query.Total) {
 		out.NewToken = get.State
 	} else {
-		out.NewToken = baselineTokenPrefix + strconv.FormatInt(next, 10)
+		out.NewToken = baselineToken{position: next, queryState: query.QueryState}.String()
 		out.HasMore = true
 	}
 	return out, nil
-}
-
-func baselinePosition(token string) (int64, error) {
-	if token == "" {
-		return 0, nil
-	}
-	position, err := strconv.ParseInt(strings.TrimPrefix(token, baselineTokenPrefix), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("jmap: baseline token %q: %w", token, err)
-	}
-	return position, nil
 }
 
 // mailboxChanges runs Mailbox/changes plus two Mailbox/get calls
@@ -210,24 +249,10 @@ func (s *Session) mailboxChanges(ctx context.Context, token string, limit int) (
 		ReferenceIDs: &jmap.ResultReference{ResultOf: changesCall, Name: "Mailbox/changes", Path: "/updated"},
 	})
 
-	resp, err := s.do(req)
+	changes, created, updated, err := changesRoundTrip[*mailbox.ChangesResponse, *mailbox.GetResponse](
+		s, req, "mailbox", changesCall, createdCall, updatedCall)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: mailbox/changes: %w", err)
-	}
-	changes, err := findResponse[*mailbox.ChangesResponse](resp, changesCall)
-	if err != nil {
-		if isCannotCalculateChanges(err) {
-			return backend.ChangeSet{}, backend.ErrStateReset
-		}
-		return backend.ChangeSet{}, fmt.Errorf("jmap: mailbox/changes: %w", err)
-	}
-	created, err := findResponse[*mailbox.GetResponse](resp, createdCall)
-	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: mailbox/get created: %w", err)
-	}
-	updated, err := findResponse[*mailbox.GetResponse](resp, updatedCall)
-	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: mailbox/get updated: %w", err)
+		return backend.ChangeSet{}, err
 	}
 
 	out := backend.ChangeSet{
@@ -267,19 +292,11 @@ func (s *Session) baselineMailboxes(ctx context.Context) (backend.ChangeSet, err
 	return out, nil
 }
 
-// hydrateMessages translates list into Records and caches each
-// message's blobId, so FetchBodies can skip a redundant Email/get for
-// anything Changes already hydrated.
-func (s *Session) hydrateMessages(list []*email.Email) []backend.Record {
+// hydrateMessages translates list into Records.
+func hydrateMessages(list []*email.Email) []backend.Record {
 	if len(list) == 0 {
 		return nil
 	}
-	s.mu.Lock()
-	for _, e := range list {
-		s.blobIDs[string(e.ID)] = e.BlobID
-	}
-	s.mu.Unlock()
-
 	records := make([]backend.Record, 0, len(list))
 	for _, e := range list {
 		records = append(records, backend.Record{ID: string(e.ID), Fields: messageFields(e)})
@@ -336,9 +353,11 @@ func messageFields(e *email.Email) map[string]any {
 		fields["mailbox_ids"] = ids
 	}
 	for name, keyword := range messageFlagKeywords {
-		if e.Keywords[keyword] {
-			fields[name] = true
-		}
+		// A keyword absent from e.Keywords is a real "false", not
+		// "unknown": messagePatch (the inverse translation) reads a
+		// missing key as no change, so a server-side clear must
+		// still hydrate as an explicit false rather than vanish.
+		fields[name] = e.Keywords[keyword]
 	}
 	return fields
 }

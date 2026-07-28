@@ -1,0 +1,28 @@
+{
+  "methodResponses": [
+    ["Mailbox/changes", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "2",
+      "hasMoreChanges": false,
+      "created": ["mbx-new"],
+      "updated": [],
+      "destroyed": ["mbx-old"]
+    }, "0"],
+    ["Mailbox/get", {
+      "accountId": "u1",
+      "state": "2",
+      "list": [
+        {"id": "mbx-new", "name": "Projects", "sortOrder": 3, "isSubscribed": true}
+      ],
+      "notFound": []
+    }, "1"],
+    ["Mailbox/get", {
+      "accountId": "u1",
+      "state": "2",
+      "list": [],
+      "notFound": []
+    }, "2"]
+  ],
+  "sessionState": "session-2"
+}

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 func TestStaticCredentialsNeverRefresh(t *testing.T) {
@@ -99,5 +101,30 @@ func TestCredentialsRefreshError(t *testing.T) {
 	_, err := creds.Token(context.Background())
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Token error = %v, want %v", err, wantErr)
+	}
+	var ue uerr.Error
+	if !errors.As(err, &ue) {
+		t.Fatalf("Token error = %v, want a uerr.Error in the chain", err)
+	}
+	if ue.Class != uerr.ClassAuthRefreshFailed {
+		t.Errorf("Class = %v, want ClassAuthRefreshFailed", ue.Class)
+	}
+}
+
+// TestStaticCredentialsMissingTokenClassifiesAsAuth covers Token's
+// other failure path: a static credential nobody ever configured.
+func TestStaticCredentialsMissingTokenClassifiesAsAuth(t *testing.T) {
+	creds := NewStaticCredentials("")
+
+	_, err := creds.Token(context.Background())
+	if err == nil {
+		t.Fatal("Token: want an error for an unconfigured static credential")
+	}
+	var ue uerr.Error
+	if !errors.As(err, &ue) {
+		t.Fatalf("Token error = %v, want a uerr.Error in the chain", err)
+	}
+	if ue.Class != uerr.ClassAuth {
+		t.Errorf("Class = %v, want ClassAuth", ue.Class)
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"git.sr.ht/~rockorager/go-jmap/mail/email"
+
 	"github.com/glw907/poplar/internal/backend"
 )
 
@@ -176,10 +178,90 @@ func TestChangesBaselinePull(t *testing.T) {
 		t.Errorf("Email/get back-reference = %v", ref)
 	}
 
-	if cs.NewToken != baselineTokenPrefix+"1" {
-		t.Errorf("NewToken = %q, want %s1", cs.NewToken, baselineTokenPrefix)
+	if want := baselineTokenPrefix + "1:qs1"; cs.NewToken != want {
+		t.Errorf("NewToken = %q, want %s", cs.NewToken, want)
 	}
 	if !cs.HasMore {
 		t.Error("HasMore = false, want true (query total exceeds one page)")
+	}
+}
+
+// TestChangesBaselineRestartsOnQueryStateChange covers the case a
+// destroy shifts positions mid-baseline: the resumed page's
+// queryState no longer matches the one the token was issued against,
+// so the pull restarts from the top rather than silently skip
+// whatever moved past the resume point.
+func TestChangesBaselineRestartsOnQueryStateChange(t *testing.T) {
+	session, api := newTestSession(t,
+		readFixture(t, "baseline_page1.json"),
+		readFixture(t, "baseline_page2_state_changed.json"),
+		readFixture(t, "baseline_page1.json"),
+	)
+
+	page1, err := session.Mail().Changes(context.Background(), backend.ObjectKindMessage, "", 1)
+	if err != nil {
+		t.Fatalf("Changes page 1: %v", err)
+	}
+	if want := baselineTokenPrefix + "1:qs1"; page1.NewToken != want {
+		t.Fatalf("page1.NewToken = %q, want %s", page1.NewToken, want)
+	}
+
+	page2, err := session.Mail().Changes(context.Background(), backend.ObjectKindMessage, page1.NewToken, 1)
+	if err != nil {
+		t.Fatalf("Changes page 2: %v", err)
+	}
+	if got := api.callCount(); got != 3 {
+		t.Fatalf("api calls = %d, want 3 (page1, the queryState-changed page2, and the restarted pull)", got)
+	}
+	if len(page2.Created) != 1 || page2.Created[0].ID != "msg-1" {
+		t.Fatalf("page2.Created = %+v, want msg-1 from the restarted pull", page2.Created)
+	}
+	if want := baselineTokenPrefix + "1:qs1"; page2.NewToken != want {
+		t.Errorf("page2.NewToken = %q, want %s", page2.NewToken, want)
+	}
+}
+
+// TestMessageFieldsAlwaysEmitsAllFlags covers messageFields hydrating
+// every flag name, not only the ones the server's keywords set: an
+// absent keyword is a real false, and messagePatch (the inverse
+// translation) reads a missing key as no change rather than false,
+// so a server-side clear must still come through explicitly.
+func TestMessageFieldsAlwaysEmitsAllFlags(t *testing.T) {
+	e := &email.Email{ID: "msg-1", Keywords: map[string]bool{"$seen": true}}
+	fields := messageFields(e)
+	for _, name := range []string{"seen", "flagged", "answered", "draft", "forwarded"} {
+		v, ok := fields[name]
+		if !ok {
+			t.Fatalf("Fields[%s] missing, want present (absent keyword means false, not absent)", name)
+		}
+		if want := name == "seen"; v != want {
+			t.Errorf("Fields[%s] = %v, want %v", name, v, want)
+		}
+	}
+}
+
+// TestMailboxChanges covers the Mailbox/changes path
+// messageChanges's sibling shares changesRoundTrip with.
+func TestMailboxChanges(t *testing.T) {
+	session, api := newTestSession(t, readFixture(t, "mailbox_changes_response.json"))
+
+	cs, err := session.Mail().Changes(context.Background(), backend.ObjectKindMailbox, "1", 50)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	if got := api.callCount(); got != 1 {
+		t.Fatalf("api calls = %d, want 1", got)
+	}
+	if len(cs.Created) != 1 || cs.Created[0].ID != "mbx-new" {
+		t.Fatalf("Created = %+v", cs.Created)
+	}
+	if got := cs.Created[0].Fields["name"]; got != "Projects" {
+		t.Errorf("Created[0].Fields[name] = %v, want Projects", got)
+	}
+	if len(cs.Destroyed) != 1 || cs.Destroyed[0] != "mbx-old" {
+		t.Fatalf("Destroyed = %+v", cs.Destroyed)
+	}
+	if cs.NewToken != "2" {
+		t.Errorf("NewToken = %q, want 2", cs.NewToken)
 	}
 }
