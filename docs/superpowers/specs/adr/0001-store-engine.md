@@ -42,6 +42,7 @@ external-content tables. Migrations are a hand-rolled
 The concurrency discipline (ADR-0003) is load-bearing: modernc
 connections are full-mutex, so reads must never queue behind the
 writer. The measurement spike validates the discipline at the
-envelope; its relief valves (statement caching, list-path snippet
-column) are pre-planned. FTS5 is derived state and rebuildable, so
+envelope; its relief valves (statement caching, and the
+denormalized `search_text` column keeping hot reads off the body
+table) are pre-planned. FTS5 is derived state and rebuildable, so
 index corruption is a repair path, never data loss.

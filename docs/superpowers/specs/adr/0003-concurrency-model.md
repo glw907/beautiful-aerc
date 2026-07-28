@@ -20,8 +20,10 @@ worker, one outbox dispatcher, one body backfill worker. Workers
 post messages to the UI through `Program.Send`; the store is the
 only shared state. The store's write intake is the only write API;
 a vet-class analyzer keeps write calls out of `internal/ui`.
-Backfill subordinates itself by checking writer queue depth and
-recent interactive read activity before each batch.
+Backfill subordinates itself by checking the interactive lane's
+recent activity before each batch (revision 2 corrected the
+original queue-depth signal, which is empty exactly when the
+writer is busy).
 
 ## Alternatives considered
 

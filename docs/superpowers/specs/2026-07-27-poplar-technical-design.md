@@ -400,9 +400,11 @@ issues the compensating intent as a normal mutation.
 **Batches.** A bulk action (LT-3's full matching set; TH-4's
 collapsed-thread action) enqueues chunked sub-intents sized under
 the backend's maxObjectsInSet, sharing an `undo_group` and
-ordered by `chunk_seq`; the local mutation for the whole set
-commits with the first chunk (one optimistic paint), and the
-compensating group restores exact prior state per message
+ordered by `chunk_seq`; the local mutation is chunked with the
+intents (each chunk's store write fits the writer's admission
+ceiling), while the overlay carries the single whole-set
+optimistic paint from the first frame, and the compensating
+group restores exact prior state per message
 (prior-mailbox recorded per chunk, bounded per chunk rather than
 one 200 KB row). A bulk action over a search result re-runs the
 criteria query uncapped at action time; the confirmation names
@@ -792,7 +794,9 @@ LT-1 has no preview line).
    calendar build pass (ADR-0010 names the fallback); the gate
    is asked to accept the deferral with the defaults named.
 5. **Clipboard spike** on the gate box decides the in-process
-   path (section 16); OSC 52 posture ships regardless.
+   path (section 16): raw-mode coexistence, compositor coverage,
+   and whether purego's dlopen fits the project's static-binary
+   definition under C3. OSC 52 posture ships regardless.
 6. **teatest is experimental**; goldens are plain files, harness
    swap is mechanical.
 7. **The analyzer set** (import-boundary, write-call, styling,
@@ -802,7 +806,16 @@ LT-1 has no preview line).
    Phase 5's build machine owns them.
 8. **CA-3 grid views**: the named gate taste call (agenda MUST
    is designed; the gate rules whether any grid view blocks v1).
-9. **UX-3 analyzer scope**: the design language strengthens the
-   rule to all non-ASCII rune/string literals outside `theme`
-   (the requirement's block list missed four of the committed
-   glyphs); the gate ratifies the stricter rule.
+9. **UX-3 analyzer rule**: the design language restates it in
+   two dimensions, both for ratification: the character class
+   strengthens to all non-ASCII rune/string literals reaching
+   rendered output (the requirement's block list missed four of
+   the committed glyphs), at UX-3's original repo-wide scope,
+   with `internal/catkin` as the one recorded exemption (it
+   cannot import the theme package by the spinoff rule; the
+   injection contract is its gate).
+10. **CO-6 loss bound**: the writer admission policy makes the
+    honest bound "the debounce window plus the admission ceiling
+    (~50 ms)", a small amendment to CO-6's stated "at most the
+    debounce window"; the kill test measures the sum, and the
+    gate is asked to ratify the amended wording.

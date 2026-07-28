@@ -58,7 +58,7 @@ sequences, no chords.
 |---|---|---|
 | navigate | `j` / `k` | down / up one row in lists; down / up one line in the reader (arrows are synonyms) |
 | page | `Space` / `b` | forward / back one page, in lists and reading panes alike |
-| extremes | `G` | last item (advertised); `Home` / `End` are first / last synonyms |
+| extremes | `Home` / `End` | first / last item (advertised); `G` is a vim synonym of `End` |
 | open | `Enter` | open the thing under the cursor |
 | back | `Esc` | close, dismiss, or step out; never destructive |
 | message-step | `n` / `p` | next / previous message from within the reader (alpine's idiom); after a reader triage action, the reader advances to `n`'s target (LT-2) |
@@ -100,13 +100,22 @@ that).
 
 Rulings the tables encode: `g` is the unified goto verb, so first
 position belongs to `Home` (vim's `gg` is a sequence and is out)
-while `G` keeps vim's last-position instinct; `Esc` carries both
-back and leave-field because they are the same instinct at two
-depths; surface keys are direct digits because a cycle key hides
-the destination and letters would collide with triage verbs;
-thread fold and unfold ride `h` / `l` in thread views (the vim
-tree instinct), stated here so the wireframes inherit rather than
-invent them.
+while `G` keeps vim's last-position instinct as a synonym; `Esc`
+carries both back and leave-field because they are the same
+instinct at two depths; surface keys are direct digits because a
+cycle key hides the destination and letters would collide with
+triage verbs; thread fold and unfold ride `h` / `l` in thread
+views (the vim tree instinct), stated here so the wireframes
+inherit rather than invent them.
+
+**Scope rule.** The grammar tables bind browse and command
+states. Text-entry states are governed entirely by section 3's
+model (printable keys are input there; `Tab` is next-field in
+multi-field forms; the global verbs are reached through
+leave-field first), and the grammar test checks non-contradiction
+over browse and command states only. This is the rule, not an
+exemption list entry: entry states are a different mode by
+design, and the footer always shows which mode is active.
 
 Remaining per-screen verbs (link mode, the RSVP card's answer
 keys, the fallback-stack cycle) are Phase 5 wireframe decisions;
@@ -120,17 +129,22 @@ buffer-editing keymap deliberately reuses global keys for
 buffer-scoped verbs. The exemption list is closed; the grammar
 test knows exactly these two.
 
-**The switch table (UX-4).** Every registered screen outside a
-text-entry context reaches all four surfaces through the digit
-keys; the committed table is: mail list, thread view, reader,
-calendar agenda, calendar grid views (when built), event detail,
-contact list, contact card, config sections, help overlay, and
-every picker and modal in browse state. The text-entry exception
-list, which the UX-4 test asserts equals the set of screens
+**The switch table (UX-4).** Both lists enumerate states, and the
+UX-4 test resolves each screen to its active state before
+checking. States where the digit keys switch surfaces (state
+preserved per UX-4): mail list, thread view, reader, calendar
+agenda, calendar grid views (when built), event detail, contact
+list, contact card, config sections, help overlay, and compose's
+message-level command state (digits are commands there, not
+input). States where digits are input, reached and left through
+`Esc` first, which the test asserts equals the set of states
 accepting printable input: compose headers, Catkin's entry state,
-the search bar, form fields (config, event create/edit, first-run
-token form), and picker filter fields. In those, digits are
-input, and the surfaces are reached by `Esc` (leave-field) first.
+Catkin's command state (unlisted printables insert, so it accepts
+printable input by construction), the search bar, form fields
+(config, event create/edit, first-run token form), and picker
+filter fields. Modal confirms are neither: they answer `y`/`n`/
+`Esc` and everything else is a no-op, so they are left before
+switching.
 
 ## 3. The text-entry model (UX-8)
 
@@ -162,8 +176,10 @@ to single presses, no operator-motion sequences (C8):
 | `0` / `$` | line start / end |
 | `g` / `G` | buffer top / bottom |
 | `x` | delete character |
+| `c` | change word: delete the word at the cursor, return to entry |
 | `D` | delete line |
 | `J` | join lines |
+| `p` | paste the last deleted text |
 | `o` / `O` | open line below / above, returning to entry |
 | `i` / `a` / `I` / `A` | return to entry at cursor / after / line start / line end |
 | `u` / `U` | buffer undo / redo |
@@ -186,16 +202,17 @@ Alpine's mode-scoped key-hint footer, derived from the screen's
 registry entry so it cannot drift. At most two rows; hints are
 ordered grammar verbs first, then screen verbs, each as
 `key description` in two or three words. The footer renders the
-current text-entry state when one is active. `G` is advertised as
-the extremes key; `j`/`k` and `Space`/`b` advertise their
-families.
+current text-entry state when one is active. The advertised
+navigation family is `j`/`k`, `Space`/`b`, and `Home`/`End` (one
+combined first/last hint).
 
 The advertised-set exception list (UX-2 caps five, each with a
 committed reason):
 
-1. **Arrows, `Home`, `End`, `PgUp`, `PgDn`**: synonyms of the
-   advertised `j`/`k`, `G`, and `Space`/`b` bindings; advertising
-   both spellings doubles the footer for zero information.
+1. **Arrows, `PgUp`, `PgDn`, and `G`**: synonyms of the
+   advertised `j`/`k`, `Space`/`b`, and `End` bindings;
+   advertising both spellings doubles the footer for zero
+   information.
 2. **Digit surface keys `1`-`4`**: advertised permanently in the
    status line's surface indicator, which is chrome the footer
    need not repeat.
@@ -312,11 +329,11 @@ token with an ASCII fallback in the degrade profiles: `unread ●`,
 `selected ✓`, `ellipsis …`, the border sets, and the spinner
 frames. Plain Unicode only, no private-use-area or patched-font
 glyphs. The analyzer rule is stated stronger than UX-3's block
-list, which misses several of these blocks: outside
-`internal/theme`, **no rune or string literal containing any
-non-ASCII code point** is permitted in `internal/ui/...`, along
-with UX-3's lipgloss-constructor, ANSI-literal, and
-numeric-spacing rules. `internal/catkin` is the one recorded
+list, which misses several of these blocks, and at UX-3's own
+repo-wide scope: outside `internal/theme`, anywhere in the repo,
+**no rune or string literal containing any non-ASCII code point**
+that reaches rendered output, along with UX-3's
+lipgloss-constructor, ANSI-literal, and numeric-spacing rules. `internal/catkin` is the one recorded
 exemption: it defines its own style-parameter struct and poplar
 injects theme-derived values (it cannot import the theme package
 by the spinoff rule), so the analyzer skips it and the injection
