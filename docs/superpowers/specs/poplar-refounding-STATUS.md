@@ -63,6 +63,12 @@ Phase 2 outcomes:
   high-quality, idiomatic Go before the build machine is finalized.
   Pairs with the vision's current-stack posture: the tooling gets the
   same freshness audit as the dependencies.
+- Standing directive, all remaining phases (Geoff, 2026-07-27): the
+  Go, Charm, and mail-library realm evolves fast. Verify releases,
+  idioms, and best practices by live research at the point of use;
+  model priors alone are stale by assumption. This binds the Phase 3
+  survey, the Phase 4 freshness audit and design decisions, and the
+  Phase 5 tooling audit.
 
 Phase 1 outcomes:
 - Verdict: viable inside a measured boundary. Deterministic rules
