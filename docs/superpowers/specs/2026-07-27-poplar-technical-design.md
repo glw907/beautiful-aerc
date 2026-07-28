@@ -612,6 +612,11 @@ Structural decisions, revised where the review found gaps:
 - **bubbletea v2**, one root model, package-level screen
   registry; keymaps are registry data deriving footer, help,
   grammar test, and switch-table test.
+- **Layout is one `LayoutMode`** computed per `WindowSizeMsg`
+  under the design language's responsive grammar (its section 9:
+  named width and height classes, pane priority, coverage-cliff
+  column formulas, the floor state); components consume it and
+  never hardcode widths.
 - **The list is poplar's own windowed model.** bubbles/list
   holds all items in memory and filters in-process, which does
   not survive the QA-5 envelope; poplar's list model reads

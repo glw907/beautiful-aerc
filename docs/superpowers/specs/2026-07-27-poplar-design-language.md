@@ -364,7 +364,75 @@ form, and picker components, navigated with the same keys
 indicator is the C6 unification made visible: four surfaces, one
 grammar, one chrome.
 
-## 9. What Phase 5 fills in
+## 9. Responsive layout grammar
+
+(Added at the gate by Geoff's directive, 2026-07-27: a clear plan
+for accommodating the variety of terminal window sizes.) The
+method salvages the legacy client's proven responsive model
+(`docs/poplar/responsive-design.md`, reference): layout is
+formulas plus thresholds in pure Go, computed once per
+`WindowSizeMsg` into one `LayoutMode` struct every component
+consumes; no renderer hardcodes a width; no CSS-style query
+system; no user-configurable breakpoints. The evidence base
+carries too: 80×24 is the legacy floor, the usage cluster is
+100-140 columns peaking near 120, and rows run 24-30 with a tail
+to ~50.
+
+**Named width classes.** The runtime flows on formulas; the named
+classes exist for wireframes, goldens, and review language, the
+terminal equivalent of cairn's five-viewport bar:
+
+| Class | Columns | Layout identity |
+|---|---|---|
+| floor | under 60 | the too-small state: a centered notice naming the required minimum, nothing else; never garbled chrome |
+| spartan | 60-89 | one content pane, no sidebar, compact list columns; graceful, never embarrassing |
+| standard | 90-139 | sidebar plus one content pane (list and reader swap full-pane); the experience peak, polished hardest |
+| wide | 140-199 | split view: list beside reader; each pane at or above its minimum, never squeezed |
+| ultra | 200+ | measures cap and center: reader content at ~100 cells, Catkin's writing measure at ~80; surplus becomes calm margin, the iA instinct |
+
+Height classes: short (under 20 rows) collapses the footer to one
+row and demotes banners to toasts; standard (20 and up) is the
+full chrome; grid calendar views additionally require the rows
+they declare and degrade by name to the agenda below that
+(CA-3's views are never squeezed into illegibility). Below 15
+rows is the floor state.
+
+**Composition rules.**
+
+1. Panes appear whole or not at all. Every pane declares a
+   minimum usable width; the layout drops panes in priority
+   order (split reader first, then sidebar) rather than
+   squeezing any pane below its minimum. Content outranks
+   chrome; the footer and status line survive to the floor.
+2. Columns follow the coverage-cliff method: continuous slopes
+   for smoothly scaling values (sender, sidebar), discrete
+   thresholds for enums (date format, icon visibility),
+   thresholds at round numbers, boundary-tested at threshold
+   plus and minus one. The legacy formulas are the starting
+   values; Phase 5 re-derives the cliffs from the measurement
+   spike's 36k-message harvest, which is a better corpus than
+   the legacy sample.
+3. List columns degrade by priority: flags and date yield before
+   sender, sender truncates before subject, and subject never
+   drops below the ~30-cell preview-readable floor while the
+   pane meets its minimum.
+4. Resize preserves state: cursor, scroll, selection, and every
+   text-entry buffer survive relayout byte-for-byte; Catkin
+   recomputes soft wrap without touching content; relayout
+   completes within one frame (QA-2's budget applies to
+   `WindowSizeMsg` like any message).
+5. Modals and pickers clamp against the terminal and center;
+   they have natural sizes, not slopes.
+
+**Testing.** The named classes are a golden-matrix dimension:
+each screen's goldens render at one representative size per
+class whose layout differs, plus boundary sizes at each
+threshold the screen consumes, folded into the QA-7 profile
+matrix. Phase 5 wireframes are drawn per class that changes the
+screen's layout (spartan, standard, and wide at minimum for mail
+screens), and the too-small floor state is itself a golden.
+
+## 10. What Phase 5 fills in
 
 This document pins the contracts; the build fills the values
 inside them, and only inside them:

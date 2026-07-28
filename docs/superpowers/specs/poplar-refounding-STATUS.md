@@ -25,9 +25,59 @@ it. Updating this STATUS is step one and is never optional.
 
 ## Current state (2026-07-27)
 
-Phase 3 (requirements) closed with Geoff's approval the same day it
-ran. Phase 4 (technical design) is next and opens with the
-exhaustive prior-art and library survey Geoff directed.
+Phase 4 (technical design) closed with Geoff's approval the same
+day it ran. Phase 5 (build machine, then build) is next and opens
+with the directed tooling audit.
+
+Phase 4 outcomes:
+- Design approved at the gate (Geoff, 2026-07-27), with the
+  presented recommendations ratified as defaults: CA-3 grid views
+  stay SHOULD (agenda covers the switch bar); QA-2 gates at the
+  measured-informed 25 ms p95 with 20 ms as the design target;
+  QA-5's overhead criterion restates as store size at or under
+  1.6x retained body bytes; CO-6's loss bound amends to debounce
+  plus the ~50 ms writer admission ceiling; the UX-3 analyzer rule
+  strengthens to all non-ASCII literals repo-wide with
+  `internal/catkin` exempt; the deferred probes are accepted with
+  their named defaults.
+- Artifacts committed: technical design revision 2
+  (`2026-07-27-poplar-technical-design.md`), sixteen ADRs
+  (`specs/adr/`), the design language revision 2
+  (`2026-07-27-poplar-design-language.md`), the CO-5 HTML
+  allowlist (`2026-07-27-poplar-html-allowlist.md`), the C9
+  library survey and the measurement-spike report (under
+  `docs/poplar/research/`), and the `cmd/perfspike` tool.
+- Gate directive (Geoff, 2026-07-27): a clear responsive-design
+  plan for varied terminal sizes. Encoded as the design
+  language's section 9 responsive layout grammar (named width
+  and height classes, pane priority, coverage-cliff formulas,
+  floor state, golden matrix), salvaging the legacy model and
+  its terminal-size evidence.
+- Review shape that worked: three adversarial Opus lenses (~85
+  findings, 8 blockers, all folded) plus a fresh-context
+  verification pass; the blockers were real (unservable list
+  query, missing optimistic-paint mechanism, unanchored draft
+  identity, unconstructible FTS shape, homeless compose path, a
+  foreclosed ST-4).
+- Load-bearing live findings: Fastmail silently no-ops draft
+  body updates (autosave must use atomic create-and-destroy,
+  probe-verified); Identity/get is a curated list (reply
+  identity needs poplar's matcher); EventSource Bearer auth
+  works (the 2021 401 report is dead); contacts are RFC 9610
+  ContactCard only.
+- Spike numbers (35,837 real messages amplified to 100k, this
+  machine): startup ~5 ms once quick_check is event-driven
+  (14.5 s synchronous at 924 MB, moved off the launch path);
+  QA-2 22-25 ms p95 with zero SQLITE_BUSY under concurrent
+  write; search 0.9-4.5 ms p95 (20x headroom); storage overhead
+  53% of body bytes (drove the QA-5 restatement).
+- Phase 5 obligations carried: CalDAV RSVP and free/busy probes
+  when the calendar-scoped token lands (still owed; default
+  branch: poplar sends iMIP); the go-ical/golang-ical bake-off
+  and rrule DST fixtures before the calendar pass; the clipboard
+  spike on the gate box; per-class wireframes before each
+  screen's pass; column formulas re-derived from the spike
+  harvest.
 
 Phase 3 outcomes:
 - Requirements spec approved and committed:
@@ -145,46 +195,47 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 4, technical design
+## Next: Phase 5, build machine, then build
 
-Starter prompt (paste after /clear, or say "run Phase 4 of the
+Starter prompt (paste after /clear, or say "run Phase 5 of the
 re-founding"):
 
 ```
-Run Phase 4 of the poplar re-founding: technical design. Read the
-charter docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
-(Phase 4 section), the approved requirements
-docs/superpowers/specs/2026-07-27-poplar-requirements.md (its
-constraints bind every decision), and the grounding survey
-docs/poplar/research/2026-07-27-phase3-grounding-survey.md.
+Run Phase 5 of the poplar re-founding: the build machine, then the
+build. Read the charter
+docs/superpowers/specs/2026-07-19-poplar-refounding-charter.md
+(Phase 5 section), the approved technical design
+docs/superpowers/specs/2026-07-27-poplar-technical-design.md and
+its ADRs (docs/superpowers/specs/adr/), the design language
+docs/superpowers/specs/2026-07-27-poplar-design-language.md
+(responsive grammar included), the requirements' build-order spine
+(section 15), and the measurement-spike report. The standing
+live-research directive applies to every tooling and dependency
+claim.
 
-Open with the exhaustive prior-art and library survey Geoff directed
-(spec C9): for every subsystem (store engine, JMAP sync, CalDAV and
-iCalendar, recurrence, MIME, HTML-to-text, markdown rendering, the
-bubbletea/Charm ecosystem, full-text search, keyring, notifications,
-clipboard), inventory existing libraries, tools, and prior art at
-their current releases, verified live; poplar builds nothing a
-maintained dependency already does well, and no version inherits a
-legacy pin. Survey dispatches go to cheap models.
+Open with the directed tooling audit: CLAUDE.md, the
+go-conventions and elm-conventions skills, the linters and vale
+gate, make check, and the poplar implementer/reviewer agents,
+audited against current best practice for the settled stack
+(Go 1.26, bubbletea v2) before the machine is finalized. Then
+design the machine against the real architecture: implementer and
+reviewer agents tuned to it, the quality gate from day one
+(including the four design analyzers), the TDD plan format for
+build passes, and the verification harness (teatest goldens per
+responsive class, tmux checks, the QA-1/2/3 harnesses from build
+step 1, the kill harness). Settle the build-boundary mechanics:
+the legacy tree retires cleanly and the new module starts with no
+migration scars. Gate: Geoff approves the machine design; then
+the numbered build passes follow the spine, subagent-driven, with
+execution sessions conducted per the workstation model economy.
 
-Then settle the design: data model and store schema (account-keyed
-per C4), package boundaries and the backend seam, sync engine and
-concurrency model, the rendering pipeline as a first-class subsystem
-per the Phase 1 verdict, the calendar subsystem on CalDAV with the
-JMAP-calendars upgrade seam, TUI architecture, the unified design
-language artifact (UX-3, cairn-cms as the exemplar), the error and
-logging model, and the testing strategy. An ADR per major decision
-with alternatives considered. Run the spec section 16 probes: CalDAV
-RSVP behavior at Fastmail (ask Geoff for a calendar-scoped token),
-JMAP draft and Identity semantics, the CO-5 HTML allowlist, and the
-measurement spike that replaces the provisional QA numbers (a
-blocking input to Phase 5 planning). Judge the design against the
-knowable-horizon register and C11's forward-looking lean stance: it
-must foreclose nothing on the list and should land where mail,
-calendar, and contacts are heading. Adversarially review before the
-gate.
-
-End at the gate: Geoff approves the design.
+Phase 5 obligations from the Phase 4 close: the CalDAV RSVP and
+free/busy probes when the calendar-scoped token lands (default
+branch until then: poplar sends iMIP); the go-ical/golang-ical
+bake-off and rrule DST fixtures before the calendar pass; the
+clipboard spike on the gate box; text wireframes per screen per
+responsive class before each screen's pass; column formulas
+re-derived from the spike harvest.
 ```
 
 ## Superseded: Phase 1, the rendering bet
@@ -244,4 +295,4 @@ Geoff reads the verdict and sample renders and rules on the bet.
 
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
 [done] -> 2 Vision [done] -> 3 Requirements [done] ->
-4 Technical design [next] -> 5 Build machine + build.
+4 Technical design [done] -> 5 Build machine + build [next].
