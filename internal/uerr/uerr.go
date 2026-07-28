@@ -43,6 +43,10 @@ const (
 	// ClassThrottled is a rate-limited request the server asked to
 	// retry later.
 	ClassThrottled
+	// ClassSchemaVersion is a store whose on-disk schema_version
+	// exceeds this build's known maximum: a newer poplar binary
+	// migrated it forward, and this build cannot read it (SY-1).
+	ClassSchemaVersion
 )
 
 // String returns class's log key.
@@ -60,6 +64,8 @@ func (c Class) String() string {
 		return "server"
 	case ClassThrottled:
 		return "throttled"
+	case ClassSchemaVersion:
+		return "schema-version"
 	default:
 		return "unknown"
 	}
@@ -76,6 +82,7 @@ var sentence = map[Class]string{
 	ClassConnection:        "Couldn't reach the server",
 	ClassServer:            "The server reported a problem",
 	ClassThrottled:         "The server asked us to slow down",
+	ClassSchemaVersion:     "This store needs a newer version of poplar",
 }
 
 // Error is poplar's user-visible error. Op, IDs, Class, Message, and

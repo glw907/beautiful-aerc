@@ -1,0 +1,110 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/glw907/poplar/internal/uerr"
+)
+
+// TestMigrateFresh applies schema version 1 to an empty file and
+// checks the resulting schema against a committed golden dump, so an
+// unreviewed schema change fails here instead of surfacing as a
+// mismatch somewhere downstream.
+func TestMigrateFresh(t *testing.T) {
+	db := openTestDB(t)
+
+	if err := Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	var version int
+	if err := db.QueryRow(`SELECT version FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != 1 {
+		t.Errorf("schema_version = %d, want 1", version)
+	}
+
+	got := dumpSchema(t, db)
+	want := readGolden(t, "schema_v1.golden")
+	if got != want {
+		t.Errorf("schema dump does not match golden:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestMigrateRejectsNewerSchema proves Migrate refuses to run
+// against a store a newer poplar binary already migrated forward,
+// rather than silently applying migrations this build doesn't have.
+func TestMigrateRejectsNewerSchema(t *testing.T) {
+	db := openTestDB(t)
+
+	if err := Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = version + 1`); err != nil {
+		t.Fatalf("bump schema_version past known: %v", err)
+	}
+
+	err := Migrate(db)
+	if err == nil {
+		t.Fatal("Migrate returned nil error against a newer schema version")
+	}
+
+	var uerrErr uerr.Error
+	if !errors.As(err, &uerrErr) {
+		t.Fatalf("Migrate error is not a uerr.Error: %v", err)
+	}
+	if uerrErr.Class != uerr.ClassSchemaVersion {
+		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassSchemaVersion)
+	}
+
+	cause := uerrErr.Cause.Error()
+	if !strings.Contains(cause, "2") || !strings.Contains(cause, "1") {
+		t.Errorf("cause %q does not name both the on-disk version (2) and the known version (1)", cause)
+	}
+}
+
+// dumpSchema returns a deterministic text form of db's schema: every
+// sqlite_master row with a CREATE statement, sorted by type and name.
+func dumpSchema(t *testing.T, db *sql.DB) string {
+	t.Helper()
+
+	rows, err := db.Query(`SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name`)
+	if err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var b strings.Builder
+	for rows.Next() {
+		var typ, name, stmt string
+		if err := rows.Scan(&typ, &name, &stmt); err != nil {
+			t.Fatalf("scan sqlite_master row: %v", err)
+		}
+		fmt.Fprintf(&b, "-- %s %s\n%s;\n\n", typ, name, stmt)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate sqlite_master: %v", err)
+	}
+	return b.String()
+}
+
+// readGolden returns the contents of testdata/name. The caller
+// regenerates a stale golden by hand; there is no --update flag
+// because a schema golden change belongs under review, not a script.
+func readGolden(t *testing.T, name string) string {
+	t.Helper()
+
+	path := filepath.Join("testdata", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v", path, err)
+	}
+	return string(data)
+}
