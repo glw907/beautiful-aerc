@@ -42,3 +42,21 @@ every push, and `draft_meta` tracks the mapping. The 50-run
 kill-during-compose test (CO-6) exercises the local half; a
 tagged live check exercises the replacement pattern against the
 real server.
+
+## Revision 2 (2026-07-27, post-review)
+
+The rotating server id left drafts unanchored across resync and
+blind to concurrent web edits. Three additions:
+
+- **A stable anchor**: poplar mints a Message-ID header at draft
+  creation (`draft_meta.anchor_msgid`), preserved byte-identically
+  across every replacement; resync re-anchors on it.
+- **Revision accounting**: `pushed_rev` replaces the timestamp;
+  dirty is the computed comparison `local_rev > pushed_rev`, so a
+  push that raced typing leaves later revisions correctly
+  unpushed with no wall-clock reasoning (SY-3).
+- **The contended branch**: `notFound` on the destroy half means
+  another client replaced the draft; reconcile against the server
+  draft carrying the anchor instead of creating a duplicate. An
+  encrypt-on-send compose (CO-11, later) suppresses server draft
+  push entirely.

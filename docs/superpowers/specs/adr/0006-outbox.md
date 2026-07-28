@@ -45,3 +45,23 @@ mutation without its intent row and none the reverse. Failure
 handling is a closed enum with a rendered, logged outcome per
 class (C7). RSVP answers are intents too, which is what makes the
 CA-6 offline-queue and re-answer criteria uniform.
+
+## Revision 2 (2026-07-27, post-review)
+
+- **Claim discipline**: `queued → dispatching` inside a writer
+  transaction before any I/O; annihilation is legal only against
+  `queued`, decided in the same transaction, so the undo-versus-
+  in-flight race cannot exist. Undoable intents hold in `queued`
+  for the UX-9 window, making annihilation the common undo path.
+- **Batches**: bulk actions enqueue chunked sub-intents under the
+  backend's set limit, sharing an `undo_group`, per-chunk prior
+  state for exact compensation, idempotent replay per intent
+  kind, and retry of unfinished chunks only. Bulk-over-search
+  re-runs the criteria uncapped at action time.
+- **Payloads reference internal keys only**; the dispatcher
+  resolves server ids at dispatch time (offline-created referents
+  resolve through batch creation-id references).
+- **`throttled` joins the failure enum**: retry-after-aware
+  backoff surfaced as SY-5's warn state, never an error toast.
+- Series-split edits (CA-5) are one intent carrying both CalDAV
+  writes with defined partial-failure reconciliation.

@@ -55,3 +55,17 @@ envelope.
 The build machine (Phase 5) tunes gates around these harness
 shapes. Fixture corpora are the shared currency between the
 improve loop, the grading harness, and CI.
+
+## Revision 2 (2026-07-27, post-review)
+
+Added to the store suite: the three SY-8 tests (forced
+corruption, failed migration, full disk), the FTS5
+integrity-check inside the QA-6 restart assertions and at the end
+of the SR-1 randomized script (row-count equality does not detect
+term rot), and `EXPLAIN QUERY PLAN` goldens for every hot query.
+Added to the engine suite: idempotent-replay tests per intent
+kind. Added to the gate outputs: the QA-10 artifacts (conventions
+gates in CI from the first build pass, `internal/ui` package
+documentation, README and architecture map at 1.0). Named risk:
+teatest is under the experimental x/exp path; goldens are plain
+files, so a harness swap is mechanical.

@@ -42,3 +42,29 @@ columns; the JSON is hydration payload. The schema review checks
 that no query predicate reaches into JSON on a hot path. Deleting
 and re-syncing reproduces equivalent state over the SY-1 field set
 because server-derived rows are disposable by construction.
+
+## Revision 2 (2026-07-27, post-review)
+
+- **One database file for all accounts** (`store.db`), not one per
+  account: `account_id` is the isolation mechanism, the single
+  writer and lock stay true at N accounts, and cross-account
+  views stay reachable. Revision 1 stated both designs at once.
+- **The index set is a schema artifact**: the covering list index
+  `message_mailbox(mailbox_id, received_at DESC, message_id)`,
+  the thread index `message(account_id, thread_key,
+  received_at)`, the partial unread index, `outbox(state,
+  next_attempt_at)`, and the occurrence indexes. Every hot query
+  carries an `EXPLAIN QUERY PLAN` golden. Revision 1 named no
+  indexes; the review showed the list query was unservable.
+- **Reserved LATER scalars exist from migration one**
+  (`message.hidden_until`, `thread.muted`, `mailbox.visible`,
+  `message.origin`): a JSON reservation cannot back a hot-path
+  predicate under this ADR's own rule, and `origin` is what keeps
+  ST-4 import open across resync.
+- **`search_text` is denormalized onto `message`** and
+  `message_fts` has a single content source; the two-table
+  external-content shape revision 1 described is not
+  constructible. Resync reconciles by `server_id` and never
+  re-mints internal keys. The account-column test is stated as:
+  every table not reachable by FK from a scoped parent carries
+  `account_id` (covers `sent_history`).

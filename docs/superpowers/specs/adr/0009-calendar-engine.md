@@ -53,3 +53,26 @@ Grid and agenda views read the occurrence index only. Unknown
 property preservation makes poplar a good CalDAV citizen with
 other clients on the same account. The iTIP layer is pure and
 fixture-tested; its mail-side assembly is ordinary outbox work.
+
+## Revision 2 (2026-07-27, post-review)
+
+- **The queryable columns now implement the JSCalendar claim**:
+  `start_local, tzid, duration_secs, is_all_day, is_floating` on
+  the event row; occurrences carry `start_local` and `local_date`
+  beside the UTC sort instants, so all-day and floating events
+  render on the correct local date (revision 1 stored UTC
+  instants, which cannot represent either).
+- **The window is a cache with a miss path**: out-of-window
+  navigation or date-jump triggers a bounded on-demand expansion
+  with a visible progress state; the boundary is a named UI
+  state; the slide runs in the background bulk lane, never on
+  startup; a tzdata update invalidates and re-expands.
+- **The RSVP mechanism is a `Capabilities` fact** resolved by the
+  pending probe (requirements section 16 item 1), so the branch
+  survives a second backend; poplar-sends-iMIP is the default if
+  the probe stays blocked.
+- **The JMAP upgrade delta, named**: the raw ICS blob and
+  unknown-property round-trip lose their purpose, `href`/`etag`
+  go null, `uid` survives, the occurrence index and the
+  JSCalendar-shaped columns are unchanged. Named risk: JSCalendar
+  2.0 is still a draft, so the target vocabulary can move.

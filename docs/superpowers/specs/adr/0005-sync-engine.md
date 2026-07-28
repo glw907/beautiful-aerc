@@ -40,6 +40,24 @@ collection state on the SY-2 cadence with focus refresh.
 ## Consequences
 
 Sync state is two columns per object kind, trivially inspectable.
-The 30s p95 push-recovery criterion is a synctest scenario. One
-live-account check (EventSource auth behavior, an unresolved 2021
-report) runs before the sync build pass.
+The 30s p95 push-recovery criterion is a synctest scenario.
+
+## Revision 2 (2026-07-27, post-review)
+
+- **The EventSource auth risk is resolved**: a live probe
+  (2026-07-27) confirmed Bearer-header auth works (200,
+  StateChange on connect, pings on the requested cadence); the
+  2021 401 report does not reproduce. The stall detector treats
+  a missing ping past 2x the requested interval as a drop.
+- **queryChanges is dropped**: the local store is the list view;
+  revision 1 carried two mechanisms for the same job and the
+  second had no state-token home and a second resync trigger.
+- **Push coalescing is a fixed 200 ms delay from the first
+  event**, never a resetting debounce (a steady remote burst
+  must not defer sync indefinitely).
+- **Self-echo suppression**: the dispatcher records the state
+  tokens its dispatches produce and the sync worker skips
+  applying its own changes, so autosave pushes do not round-trip
+  into draft re-hydrations.
+- Thread rows derive from Email threadIds; there is no
+  Thread/changes round trip.

@@ -45,3 +45,11 @@ The SY-4 failure-class test asserts exactly one log line per
 class with operation, ids, and reason. A scripted session's log
 reconstructs the action sequence (ER-2's oracle). Debug logging
 stays on in the dogfood config, matching current practice.
+
+## Revision 2 (2026-07-27, post-review)
+
+Construction is the surfacing event, stated as a rule: retry
+loops do not construct per attempt; a failure surfaces on state
+transitions (first failure, class change, recovery). This keeps
+ER-1's one-line-per-outcome oracle true and stops a backoff loop
+from flooding the log the trace depends on.

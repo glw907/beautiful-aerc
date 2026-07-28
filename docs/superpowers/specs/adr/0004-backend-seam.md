@@ -44,3 +44,26 @@ is allowed to be the only implementation; the single-impl
 interface is justified by C4's explicit horizon obligation, and
 the interface stays minimal (one method set per source, no
 speculative surface).
+
+## Revision 2 (2026-07-27, post-review)
+
+- **Shapes, not vocabulary**: `Changes` returns hydrated
+  ChangeSets and mutations go through `ApplyBatch` with
+  creation-id references, so JMAP keeps single-request batching
+  (changes+get via back-references) and offline
+  create-folder-then-move dispatches as one request. Mailbox
+  lifecycle (create/rename/delete) and optional `ServerSearch`
+  (SR-7) are seam operations; revision 1 omitted both while the
+  outbox and search designs required them.
+- **Capabilities extended** to what the engines actually branch
+  on: thread identity is three-valued (`None` /
+  `ReferencesDerived` / `ServerHeuristic`; Gmail's subject-window
+  threading is the third case, and TH-1's no-false-merge
+  criterion binds `ReferencesDerived` backends, recorded as a
+  per-backend carve-out), plus server limits, server-search and
+  scheduled-send flags, the RSVP mechanism (probe-resolved per
+  backend), and per-capability account ids.
+- **A `Credentials` seam** (`Token(ctx)` with single-flight
+  refresh and keyring persistence) makes OAuth a backend
+  property instead of a three-worker restructure; `auth` gains
+  the `refresh-failed` sub-reason.

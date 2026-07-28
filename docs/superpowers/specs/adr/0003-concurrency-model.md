@@ -42,5 +42,24 @@ recent interactive read activity before each batch.
 All write ordering is trivially serial, which makes the outbox
 transaction guarantee and the kill harness tractable.
 `testing/synctest` can drive the entire cast deterministically.
-The writer channel is a queue with reply semantics; its depth is
-the backpressure signal backfill throttling reads.
+
+## Revision 2 (2026-07-27, post-review)
+
+- **Writer admission policy**: two lanes (interactive and bulk),
+  a ~50 ms single-transaction ceiling, bulk work chunked with the
+  interactive lane preempting at chunk boundaries. Backfill
+  subordination reads recent interactive activity, not queue
+  depth (which is empty exactly when the writer is busy). CO-6's
+  loss bound is debounce plus the admission ceiling, measured.
+- **Checkpoint policy is writer-owned**: `wal_autocheckpoint`
+  off, PASSIVE checkpoints between batches, `journal_size_limit`,
+  TRUNCATE at defined idle; WAL size is a QA-5 harness number.
+- **Optimistic paint is a named mechanism**: a pending-intent
+  overlay in the root model paints in the same Update (LT-2);
+  post-commit store-changed notifications carry a monotonic store
+  revision and stale read results are discarded, so re-query can
+  never revert a paint; the writer ack clears the overlay or
+  reverts it with an ER-1 toast. The SIGKILL window between paint
+  and commit is bounded by the admission ceiling and stated
+  honestly.
+- Workers share one request budget derived from backend limits.

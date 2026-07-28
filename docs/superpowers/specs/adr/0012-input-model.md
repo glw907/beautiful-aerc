@@ -25,12 +25,9 @@ through the registry.
 
 - **Adopting kitty enhancements where present**: enables nothing
   poplar binds (modifier combos are out by C8) and forks input
-  behavior between enhanced and legacy terminals, which QA-7's
-  determinism posture and the "same key, same verb, everywhere"
-  rule both disfavor.
-- **Esc plus a timeout for bare-Esc detection**: v2's input layer
-  handles Esc disambiguation without legacy timeout heuristics;
-  nothing to design.
+  behavior into two regimes with two golden matrices. The decline
+  is a lean-half C11 ruling (machinery no requirement needs), not
+  a forward bet; the review corrected revision 1's filing.
 - **Leader-key sequences for surface switching**: sequences are
   excluded by C8 outright; the switching idiom must be single
   keys (design language settles which).
@@ -39,5 +36,11 @@ through the registry.
 
 Input behavior is identical across kitty, foot, alacritty, tmux,
 and a bare Linux console, which keeps golden-driven UI tests
-representative everywhere. If a future feature ever genuinely
+representative everywhere. The honest residual risk is bare-Esc
+ambiguity adjacent to pastes or escape sequences, since Esc is
+the leave-field verb and the most-pressed non-printable key; the
+pre-planned relief valve is enabling the kitty protocol for
+disambiguation only (no release events, no repeat) if leave-field
+shows ambiguity defects on a gate-platform terminal. That change
+alters no binding and no golden. If a future feature genuinely
 needs key-release semantics, this ADR is the record to supersede.

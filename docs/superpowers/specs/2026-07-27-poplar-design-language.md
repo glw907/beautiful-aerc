@@ -1,20 +1,23 @@
 # Poplar design language
 
 **Date:** 2026-07-27
-**Status:** Draft for the Phase 4 gate. This is the UX-3 artifact
-C5 requires before any screen is built. Every screen derives from
-it; the `internal/theme` package (Phase 5, build step 2) compiles
-its tokens as Go values; the UX-3 analyzer enforces that no
-styling literal exists outside that package. Text wireframes
-(Phase 5) precede every screen build and cite this document.
+**Status:** Revision 2, for the Phase 4 gate (revision 1 was
+adversarially reviewed; this revision folds the findings). This is
+the UX-3 artifact C5 requires before any screen is built. Every
+screen derives from it; the `internal/theme` package (Phase 5,
+build step 2) compiles its tokens as Go values; the UX-3 analyzer
+enforces that no styling literal exists outside that package. Text
+wireframes (Phase 5) precede every screen build and cite this
+document.
 **Exemplar:** the cairn-cms design system (its charter-adjective
 method, grammar-token vocabulary, and grammar-versus-palette
 boundary), translated to a terminal.
 
 Behaviors the requirements spec defers to "the design-language
 document" land here: the interaction grammar (UX-1), the footer
-exception set (UX-2), the text-entry model (UX-8), and the
-Catkin undo boundary (CO-12).
+exception set (UX-2), the switch table and text-entry exception
+list (UX-4), the text-entry model (UX-8), and the Catkin undo
+boundary and command keymap (CO-12).
 
 ## 1. The design charter
 
@@ -46,19 +49,22 @@ the way cairn's charter grades the admin:
 ## 2. The interaction grammar (UX-1)
 
 One vocabulary of global verbs, each bound to the same key on
-every surface. Shifted letters are distinct keys; Ctrl and Alt do
-not exist (C8); no sequences, no chords.
+every surface where the verb exists; a verb bound on one surface
+and absent on another is stated, never contradicted. Shifted
+letters are distinct keys; Ctrl and Alt do not exist (C8); no
+sequences, no chords.
 
-| Verb | Key | Meaning everywhere |
+| Verb | Key | Meaning |
 |---|---|---|
-| navigate | `j` / `k` | down / up one row (arrows are synonyms) |
-| page | `Space` / `b` | forward / back one page in a reading pane |
-| extremes | `Home` / `End` | first / last (also `G` for last, vim) |
+| navigate | `j` / `k` | down / up one row in lists; down / up one line in the reader (arrows are synonyms) |
+| page | `Space` / `b` | forward / back one page, in lists and reading panes alike |
+| extremes | `G` | last item (advertised); `Home` / `End` are first / last synonyms |
 | open | `Enter` | open the thing under the cursor |
 | back | `Esc` | close, dismiss, or step out; never destructive |
+| message-step | `n` / `p` | next / previous message from within the reader (alpine's idiom); after a reader triage action, the reader advances to `n`'s target (LT-2) |
 | search | `/` | the surface's search (one grammar, SR-2) |
-| goto | `g` | the surface's jump: folder switcher in mail, date jump in calendar, letter jump in contacts, section jump in config |
-| next-unread | `Tab` | next unread message (mail surfaces; alpine) |
+| goto | `g` | the surface's jump: type-ahead folder switcher in mail, natural-language date jump in calendar, letter jump in contacts, section jump in config |
+| next-unread | `Tab` | next unread message (mail surfaces; unbound elsewhere) |
 | select | `x` | toggle mark on the cursor row |
 | select-by | `;` | select by criteria (alpine's Select model) |
 | undo | `u` | the one undo (UX-9) |
@@ -82,18 +88,49 @@ The triage verb set, identical from list, thread view, and reader
 | forward | `f` |
 | compose new | `m` |
 | yank (copy mode) | `y` |
-| today (calendar surfaces) | `t` |
+| attachments (reader) | `v` (mutt's view) |
 
-Rulings the table encodes: `g` is the unified goto verb, so
-"top of list" belongs to `Home` (vim's `gg` is a sequence and is
-out); `Esc` carries both back and leave-field because they are the
-same instinct at two depths; the surface keys are direct digits
-because a cycle key hides the destination and a letter key would
-collide with triage verbs. Per-screen keymaps (link mode, the
-RSVP card's answer keys, the fallback-stack cycle, fold verbs)
-are Phase 5 wireframe decisions; they bind inside their screen's
-registry entry, may not contradict this table, and the grammar
-test enforces the non-contradiction mechanically.
+Mail-surface folder jumps (FO-2), capitals mirroring their role
+names: `I` Inbox, `D` Drafts, `S` Sent, `A` Archive, `J` Junk,
+`T` Trash. Calendar-surface verbs: `t` jumps to today (CA-2);
+`t` is unbound on other surfaces, and the mail capitals are
+unbound on calendar, which the same-key-same-verb rule permits
+(absence is not contradiction; the grammar test enforces exactly
+that).
+
+Rulings the tables encode: `g` is the unified goto verb, so first
+position belongs to `Home` (vim's `gg` is a sequence and is out)
+while `G` keeps vim's last-position instinct; `Esc` carries both
+back and leave-field because they are the same instinct at two
+depths; surface keys are direct digits because a cycle key hides
+the destination and letters would collide with triage verbs;
+thread fold and unfold ride `h` / `l` in thread views (the vim
+tree instinct), stated here so the wireframes inherit rather than
+invent them.
+
+Remaining per-screen verbs (link mode, the RSVP card's answer
+keys, the fallback-stack cycle) are Phase 5 wireframe decisions;
+they bind inside their screen's registry entry, may not contradict
+these tables, and the grammar test enforces non-contradiction
+mechanically. Two named contexts are exempt from the
+non-contradiction check, each recorded here: the **modal confirm**
+(`y` / `n` / `Esc` answer a named question; `y` is "yes" there,
+not yank) and **Catkin's command state** (section 3), whose
+buffer-editing keymap deliberately reuses global keys for
+buffer-scoped verbs. The exemption list is closed; the grammar
+test knows exactly these two.
+
+**The switch table (UX-4).** Every registered screen outside a
+text-entry context reaches all four surfaces through the digit
+keys; the committed table is: mail list, thread view, reader,
+calendar agenda, calendar grid views (when built), event detail,
+contact list, contact card, config sections, help overlay, and
+every picker and modal in browse state. The text-entry exception
+list, which the UX-4 test asserts equals the set of screens
+accepting printable input: compose headers, Catkin's entry state,
+the search bar, form fields (config, event create/edit, first-run
+token form), and picker filter fields. In those, digits are
+input, and the surfaces are reached by `Esc` (leave-field) first.
 
 ## 3. The text-entry model (UX-8)
 
@@ -113,16 +150,35 @@ body, compose headers, search bar, forms, pickers):
   state's verbs (UX-2); the entry-state footer leads with
   `Esc commands`.
 
-Catkin follows the same model with a richer command state: typing
-inserts (the modeless iA Writer surface of CO-1); `Esc` enters
-Catkin's command state, where the vim-idiom motions and word/line
-operations of CO-12 live as single keys; any printable key that
-is not a command returns to entry by inserting. **The undo
-boundary (CO-12)**: inside Catkin's command state, `u` is the
-buffer's own vim-style undo, scoped to the compose session and
-independent of the global UX-9 undo; the global undo never
-reaches into buffer edits, and the buffer undo never reverses a
-message-level action. The boundary is this sentence.
+**Catkin's command state** is the second named grammar exemption:
+typing inserts (the modeless iA Writer surface of CO-1); `Esc`
+enters the command state, whose buffer keymap is vim-idiom bent
+to single presses, no operator-motion sequences (C8):
+
+| Key | Buffer verb |
+|---|---|
+| `h` `j` `k` `l` | character and line motion |
+| `w` / `b` | word forward / back |
+| `0` / `$` | line start / end |
+| `g` / `G` | buffer top / bottom |
+| `x` | delete character |
+| `D` | delete line |
+| `J` | join lines |
+| `o` / `O` | open line below / above, returning to entry |
+| `i` / `a` / `I` / `A` | return to entry at cursor / after / line start / line end |
+| `u` / `U` | buffer undo / redo |
+
+Any printable key not in the table returns to entry by inserting.
+Message-level verbs (send, postpone, attach, identity switch)
+live in compose's own command state per UX-8, reached the same
+way; the footer distinguishes the two command scopes. **The undo
+boundary (CO-12)**: `u` in Catkin's command state is the buffer's
+own undo, scoped to the compose session and independent of the
+global UX-9 undo; the global undo never reaches into buffer
+edits, and the buffer undo never reverses a message-level action.
+External mutations through Catkin's buffer-mutation API
+(signature materialization now, AI tidy later) land as exactly
+one buffer-undo entry each.
 
 ## 4. The footer (UX-2)
 
@@ -130,22 +186,31 @@ Alpine's mode-scoped key-hint footer, derived from the screen's
 registry entry so it cannot drift. At most two rows; hints are
 ordered grammar verbs first, then screen verbs, each as
 `key description` in two or three words. The footer renders the
-current text-entry state when one is active.
+current text-entry state when one is active. `G` is advertised as
+the extremes key; `j`/`k` and `Space`/`b` advertise their
+families.
 
-The advertised-set exception list (UX-2 caps it at five, each
-with a committed reason):
+The advertised-set exception list (UX-2 caps five, each with a
+committed reason):
 
-1. **Arrow keys, `Home`/`End`, `PgUp`/`PgDn`**: synonyms of
-   advertised vim-family keys; advertising both spellings would
-   double the footer for zero information.
-2. **`G`**: synonym of `End`, kept for vim hands; same reason.
-3. **Digit surface keys `1`-`4`**: advertised in the status
-   line's surface indicator (which shows the four surfaces and
-   highlights the active one) rather than the footer; repeating
-   them in the footer would spend a row on chrome navigation.
-4. **`q` on non-root screens**: quit is advertised only at
-   surface roots; elsewhere `Esc` is the way out and `q` still
-   works as quit-from-root semantics require.
+1. **Arrows, `Home`, `End`, `PgUp`, `PgDn`**: synonyms of the
+   advertised `j`/`k`, `G`, and `Space`/`b` bindings; advertising
+   both spellings doubles the footer for zero information.
+2. **Digit surface keys `1`-`4`**: advertised permanently in the
+   status line's surface indicator, which is chrome the footer
+   need not repeat.
+3. **`q` on non-root screens**: quit is advertised at surface
+   roots; elsewhere `Esc` is the way out and `q` retains its
+   root semantics.
+4. **The folder-jump capitals `I D S A J T`**: advertised inside
+   the goto picker (`g`) and the help overlay; six extra hints
+   would consume a footer row that teaches less than the picker
+   does.
+5. **The remote-image load key when the terminal lacks graphics
+   support**: the key is capability-gated (RD-6, technical
+   design section 16); where it would be a no-op it is neither
+   advertised nor legal, and the placeholder names
+   open-in-browser as the path.
 
 The list is closed; adding an entry requires amending this
 document (the registry test fails on an undocumented exception).
@@ -155,12 +220,13 @@ document (the registry test fails on an undocumented exception).
 One presentation on every surface that offers undo: a toast in
 the status region naming the action ("Archived 3 messages"), a
 visible 10-second countdown, `u` as the key, single-level depth.
-Undo after outbox dispatch issues the compensating mutation and
-the toast says "Undoing…" until the store reflects it. The window
-does not survive quit, and the toast's countdown makes that
-legible. Permanent deletions never show the toast; they show the
-FO-4 confirmation instead. RSVP answers show no undo (re-answer
-is the correction, section 14 of the requirements).
+The countdown window matches the outbox hold (technical design
+section 7), so undo during it is a queue annihilation; undo after
+dispatch issues the compensating mutation and the toast says
+"Undoing…" until the store reflects it. The window does not
+survive quit, and the countdown makes that legible. Permanent
+deletions never show the toast; they show the FO-4 confirmation
+instead. RSVP answers show no undo (re-answer is the correction).
 
 ## 6. Component vocabulary
 
@@ -171,13 +237,14 @@ cairn rule: a gap that forces improvisation is a defect).
 - **List**: the one-line-row scrolling list (mail list, thread
   list, agenda, contacts, config sections). Owns cursor,
   selection marks, unread/flag markers, truncation. One row is
-  always exactly one line (LT-1's density ruling).
+  always exactly one line (LT-1); the implementation is poplar's
+  windowed list model reading store pages (technical design
+  section 12), never an all-in-memory component.
 - **Sidebar**: the folder/calendar rail with counts and
   visibility toggles. Collapsible; never focused by default.
-- **Status line**: one row at the top or bottom edge carrying
+- **Status line**: one row at the top or bottom edge carrying the
   surface indicator (`1 Mail  2 Cal  3 People  4 Config`), sync
-  state (SY-5's synced/syncing/offline/backing-off), and
-  transient counts. Never scrolls, never wraps.
+  state (SY-5), and transient counts. Never scrolls, never wraps.
 - **Footer**: section 4.
 - **Toast**: the transient notice region (undo, background
   outcomes). One toast at a time; newest wins; each logged
@@ -188,25 +255,28 @@ cairn rule: a gap that forces improvisation is a defect).
   text-entry context is focused (CA-7).
 - **Modal confirm**: the y/n question box (permanent delete,
   folder delete with count, quit with pending outbox). One
-  question, named consequence, `y`/`n`/`Esc`.
-- **Picker**: the type-ahead chooser (move-to-folder, goto
-  folder, attach path, identity switch, date jump). One input
-  line plus a filtered list; `Enter` accepts, `Esc` leaves;
-  can create-in-place where the flow allows (LT-5).
+  question, named consequence, `y`/`n`/`Esc`; a grammar-exempt
+  context (section 2).
+- **Picker**: the type-ahead chooser (move-to-folder, goto,
+  attach path, identity switch, date jump). One input line plus
+  a filtered list; `Enter` accepts, `Esc` leaves; can
+  create-in-place where the flow allows (LT-5).
 - **Form**: labeled fields with inline help (config surface,
-  event create/edit, first-run token flow). Follows UX-8;
-  `Tab` moves fields; validation errors are named inline.
+  event create/edit, first-run flow). Follows UX-8; `Tab` moves
+  fields; validation errors are named inline. Built on the
+  shared focus-management helper, not a third-party form engine
+  (ADR-0011).
 - **Card**: the framed detail block (event card in the reader,
   contact card, event detail). Fields as label/value rows;
   actions in the footer, not in the card.
 - **Reader**: the message pane: header block (RD-9), rendered
-  body, attachment list, inline cards. Owns paging and copy
-  mode.
+  body, attachment list, inline cards. Owns paging, line scroll,
+  message stepping, and copy mode.
 - **Help overlay**: the full keymap view, registry-derived
-  (UX-5).
-- **Progress**: the in-place progress state for the C1
-  exceptions and initial sync (spinner plus label plus count
-  where known; a progress state always names what it waits on).
+  (UX-5); also the advertised home of the folder-jump capitals.
+- **Progress**: the in-place progress state for the C1 exceptions
+  and initial sync (spinner plus label plus count where known; a
+  progress state always names what it waits on).
 
 ## 7. Theme tokens
 
@@ -214,8 +284,8 @@ The `internal/theme` package compiles every visual decision as Go
 values (C5). The grammar-versus-palette boundary follows cairn:
 roles and relationships are the grammar and never change per
 theme; the palette values fill the roles. lipgloss v2 is pure, so
-every color role is a function of `isDark bool`, resolved once at
-startup from the terminal background query.
+every color role is a function of `isDark bool`, resolved by the
+runtime capability resolver (technical design section 12).
 
 **Color roles** (the inventory; values land with the Phase 5
 theme build): `fg`, `fgMuted`, `fgSubtle`, `accent`, `unread`,
@@ -224,9 +294,10 @@ theme build): `fg`, `fgMuted`, `fgSubtle`, `accent`, `unread`,
 `calendarSlot[8]`. Rules: text roles hold 4.5:1 against their
 background, indicator roles 3:1 (UX-7, asserted by a test over
 the values); the accent is reserved for the focused/active
-moment, never for decoration (cairn's accent reservation);
-`calendarSlot` colors are assigned by the theme, never by the
-server (CA-8).
+moment, never decoration; calendar colors are theme-assigned
+(CA-8), slots assigned in calendar sort order and cycling past
+eight, with the cycle documented in the calendar sidebar so a
+collision is legible rather than mysterious.
 
 **Degrade tables**: the theme ships an ANSI-16 profile and a
 NO_COLOR profile in which unread, selected, focused, and error
@@ -235,15 +306,22 @@ marker, selected = reverse video, focused = the heavy border
 glyph set, error = the `!` gutter marker plus reverse. The UX-7
 golden asserts no two states share a marker.
 
-**Glyph tokens**: every non-ASCII glyph the UI renders is a
-named token with an ASCII fallback in the degrade profiles:
-`unread ●`, `flagged ⚑`, `attachment ⊕`, `collapsed ▸`,
-`expanded ▾`, `selected ✓`, `ellipsis …`, the border sets (light
-for panes, heavy for focus), and the spinner frames. Plain
-Unicode only, no private-use-area or patched-font glyphs; the
-showcase must render on a stock terminal font. Exact code points
-are theme values; the UX-3 analyzer forbids glyph literals
-outside the package.
+**Glyph tokens**: every non-ASCII glyph the UI renders is a named
+token with an ASCII fallback in the degrade profiles: `unread ●`,
+`flagged ⚑`, `attachment ⊕`, `collapsed ▸`, `expanded ▾`,
+`selected ✓`, `ellipsis …`, the border sets, and the spinner
+frames. Plain Unicode only, no private-use-area or patched-font
+glyphs. The analyzer rule is stated stronger than UX-3's block
+list, which misses several of these blocks: outside
+`internal/theme`, **no rune or string literal containing any
+non-ASCII code point** is permitted in `internal/ui/...`, along
+with UX-3's lipgloss-constructor, ANSI-literal, and
+numeric-spacing rules. `internal/catkin` is the one recorded
+exemption: it defines its own style-parameter struct and poplar
+injects theme-derived values (it cannot import the theme package
+by the spinoff rule), so the analyzer skips it and the injection
+contract is its gate. The gate is asked to ratify the stricter
+rule (technical design section 18).
 
 **Spacing roles** (cells and rows, the cairn gap grammar in
 terminal units): `gapLabel 1` (label to its value),
@@ -253,10 +331,9 @@ to text), `padPane 1` (pane edge to content), `padModal 2/1`
 literals are forbidden by the analyzer; a screen reaches spacing
 only through roles.
 
-**Type roles** are trivial in a terminal (one size) but weight
-and emphasis are not: `emTitle` (bold), `emLabel` (dim),
-`emValue` (normal), `emHint` (dim italic where supported, dim
-otherwise). Roles, not per-screen choices.
+**Type roles**: `emTitle` (bold), `emLabel` (dim), `emValue`
+(normal), `emHint` (dim italic where supported, dim otherwise).
+Roles, not per-screen choices.
 
 ## 8. Surface unification (C6)
 
@@ -282,9 +359,10 @@ inside them, and only inside them:
 - Per-screen keymaps and layouts, via text wireframes citing
   this grammar, one wireframe per screen before its build pass.
 - The remaining screen-verb assignments (link mode, RSVP answer
-  keys, fallback-stack cycle, fold verbs), bound by the grammar
-  table and the registry test.
+  keys, fallback-stack cycle), bound by the grammar tables, the
+  two named exemptions, and the registry test.
 
-Amendments to the grammar, the exception list, or the component
-vocabulary go through this document first; the analyzer and
-registry tests make silent divergence a build failure.
+Amendments to the grammar, the exemption list, the exception
+list, or the component vocabulary go through this document first;
+the analyzer and registry tests make silent divergence a build
+failure.

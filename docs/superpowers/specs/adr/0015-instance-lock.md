@@ -13,11 +13,12 @@ writer by construction (ADR-0003).
 ## Decision
 
 gofrs/flock takes `LOCK_EX|LOCK_NB` on a lock file beside the
-store at startup. A second instance refuses to start, printing
-which process holds the lock (pid from the lock file's advisory
-metadata) and what to do. The kernel releases flock on any
-process death including SIGKILL, so no stale-lock heuristics
-exist.
+store at startup. The holder writes its pid into the file after
+acquiring (flock itself carries no metadata; the pid is advisory
+display data, never a liveness check). A second instance refuses
+to start, printing that pid and what to do. The kernel releases
+flock on any process death including SIGKILL, so no stale-lock
+heuristics exist.
 
 ## Alternatives considered
 

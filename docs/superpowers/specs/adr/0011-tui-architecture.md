@@ -49,3 +49,27 @@ what makes UX-2's "footer never stale" a theorem instead of a
 review item. teatest drives screens headlessly for goldens. The
 elm-conventions discipline (state in models, mutation in Update,
 I/O in Cmds) is assumed throughout and gated in Phase 5.
+
+## Revision 2 (2026-07-27, post-review)
+
+Two dependency rulings the review demanded be explicit:
+
+- **The list is poplar's own windowed model.** bubbles/list holds
+  every item in memory and filters in-process, which cannot meet
+  the QA-5 envelope; poplar's list reads keyset-paginated windows
+  from the store's read pool. Other bubbles components (viewport,
+  spinner, textinput) are used where their contracts fit.
+- **huh is ruled out for v1 forms.** The registry-derived footer
+  (UX-2) and the UX-8 leave-field model are load-bearing
+  constraints a third-party form engine does not satisfy; forms
+  are the design language's form component over the shared
+  focus-management helper.
+
+Also added: the capability-profile resolver (NO_COLOR, TERM,
+COLORTERM, the background-color query, config override) with the
+100 ms bounded first-frame wait and default-dark repaint; the
+`AccountScoped[T]` wrapper making C4's UI half mechanically
+testable; and Catkin's injection contract (its own style struct,
+poplar injects theme-derived values; the analyzer exempts
+`internal/catkin`; a buffer-mutation API lands each external
+mutation as one buffer-undo entry).
