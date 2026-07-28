@@ -89,6 +89,10 @@ func run(pass *analysis.Pass) (any, error) {
 
 // badLiteral reports whether lit is a string or rune literal
 // carrying a non-ASCII code point or an ANSI escape byte, and which.
+// It scans the whole value for the ESC byte before checking for a
+// non-ASCII code point, so a literal carrying both (an ESC byte after
+// a non-ASCII rune) still classifies as an ANSI escape rather than
+// the escapable non-ASCII kind.
 func badLiteral(lit *ast.BasicLit) (kind string, bad bool) {
 	if lit.Kind != token.STRING && lit.Kind != token.CHAR {
 		return "", false
@@ -97,10 +101,10 @@ func badLiteral(lit *ast.BasicLit) (kind string, bad bool) {
 	if err != nil {
 		return "", false
 	}
+	if strings.ContainsRune(value, 0x1b) {
+		return "ANSI escape", true
+	}
 	for _, r := range value {
-		if r == 0x1b {
-			return "ANSI escape", true
-		}
 		if r > 0x7f {
 			return "non-ASCII", true
 		}
