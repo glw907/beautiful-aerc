@@ -12,13 +12,14 @@ import (
 // consistent with message across a cascading delete, not only a
 // direct one. Deleting an account cascades straight to message
 // (message.account_id's own foreign key; message has none to
-// mailbox) inside SQLite itself, below the store-internal helper
-// that otherwise owns FTS maintenance; without
-// trg_message_fts_delete, that cascade orphans the deleted row's
-// terms in the index. An orphaned term still matches a search and,
-// once a caller reads message_fts's content columns for it, raises
-// SQLite's own "missing row from content table" corruption error,
-// which is the concrete failure this trigger prevents.
+// mailbox) inside SQLite itself, below trg_message_fts_insert and
+// trg_message_fts_update, which are scoped to writes on message
+// itself. Without trg_message_fts_delete, that cascade would orphan
+// the deleted row's terms in the index. An orphaned term still
+// matches a search and, once a caller reads message_fts's content
+// columns for it, raises SQLite's own "missing row from content
+// table" corruption error, which is the concrete failure this
+// trigger prevents.
 func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 	db := openMigratedTestDB(t)
 	db.SetMaxOpenConns(1)
@@ -28,9 +29,6 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 	}
 	if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
 		t.Fatalf("insert message: %v", err)
-	}
-	if _, err := db.Exec(`INSERT INTO message_fts(rowid, subject, search_text) VALUES (1, 'hello', 'world')`); err != nil {
-		t.Fatalf("index message: %v", err)
 	}
 	if got := matchingRowCount(t, db, "hello"); got != 1 {
 		t.Fatalf("matching rows before delete = %d, want 1", got)
@@ -53,14 +51,15 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 	}
 }
 
-// TestUnindexedMessageRowMustBeIndexed pins the reciprocal invariant
-// trg_message_fts_delete assumes: every message row carries a
-// message_fts entry. Probed against modernc.org/sqlite v1.54.0,
-// deleting a row this invariant does not hold for surfaces as
-// SQLite's own disk-image-malformed error, indistinguishable from
-// real corruption, rather than a clean no-op. This is why every
-// insert path in this package must call reindexMessage in the same
-// transaction as the message write.
+// TestUnindexedMessageRowMustBeIndexed pins trg_message_fts_delete's
+// reciprocal invariant, the one documented on the trigger itself:
+// every message row carries a message_fts entry. The test reaches the
+// one state that invariant forbids by stripping a row's own fts entry
+// by hand, with the same 'delete' command the trigger uses. Deleting
+// the row after that strip runs the trigger's own delete against an
+// entry that is already gone. Probed against modernc.org/sqlite
+// v1.54.0, the result is SQLite's disk-image-malformed error, not a
+// clean no-op.
 func TestUnindexedMessageRowMustBeIndexed(t *testing.T) {
 	db := openMigratedTestDB(t)
 	db.SetMaxOpenConns(1)
@@ -71,25 +70,25 @@ func TestUnindexedMessageRowMustBeIndexed(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
 		t.Fatalf("insert message: %v", err)
 	}
+	if _, err := db.Exec(`INSERT INTO message_fts(message_fts, rowid, subject, search_text) VALUES ('delete', 1, 'hello', 'world')`); err != nil {
+		t.Fatalf("strip fts entry: %v", err)
+	}
 
 	if _, err := db.Exec(`DELETE FROM message WHERE id = 1`); err == nil {
-		t.Fatal("delete of a never-indexed message row succeeded, want the trigger's disk-image error the reciprocal invariant predicts")
+		t.Fatal("delete of a stripped message row succeeded, want the trigger's disk-image error the reciprocal invariant predicts")
 	}
 }
 
-// TestIndexTransactional asserts reindexMessage's write lands or
-// vanishes with the message write it shares a transaction with: a
-// rolled-back write leaves no message_fts row, and a committed one
-// leaves exactly one.
+// TestIndexTransactional asserts trg_message_fts_insert's write lands
+// or vanishes with the message insert it shares a transaction with. A
+// rolled-back write leaves no message_fts row; a committed one leaves
+// exactly one.
 func TestIndexTransactional(t *testing.T) {
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 	seedAccountAndMailbox(t, w)
 
 	forcedFailure := errors.New("forced rollback")
 	err := w.submit(context.Background(), func(tx *sql.Tx) error {
-		if err := reindexMessage(tx, 1, "hello", "world"); err != nil {
-			return err
-		}
 		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
 			return err
 		}
@@ -103,9 +102,6 @@ func TestIndexTransactional(t *testing.T) {
 	}
 
 	err = w.submit(context.Background(), func(tx *sql.Tx) error {
-		if err := reindexMessage(tx, 1, "hello", "world"); err != nil {
-			return err
-		}
 		_, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`)
 		return err
 	})
@@ -118,17 +114,14 @@ func TestIndexTransactional(t *testing.T) {
 }
 
 // TestBackfillReindexes covers a message indexed before its body
-// arrives: the initial insert carries an empty search_text, so a body
-// term finds nothing until a later transaction backfills search_text
-// and reindexes the row.
+// arrives. The initial insert carries an empty search_text, so a body
+// term finds nothing. A later update lands search_text, and
+// trg_message_fts_update reindexes the row from it.
 func TestBackfillReindexes(t *testing.T) {
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 	seedAccountAndMailbox(t, w)
 
 	err := w.submit(context.Background(), func(tx *sql.Tx) error {
-		if err := reindexMessage(tx, 1, "hello", ""); err != nil {
-			return err
-		}
 		_, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', '')`)
 		return err
 	})
@@ -143,9 +136,6 @@ func TestBackfillReindexes(t *testing.T) {
 	}
 
 	err = w.submit(context.Background(), func(tx *sql.Tx) error {
-		if err := reindexMessage(tx, 1, "hello", "world arrives"); err != nil {
-			return err
-		}
 		_, err := tx.Exec(`UPDATE message SET search_text = 'world arrives' WHERE id = 1`)
 		return err
 	})
@@ -160,10 +150,13 @@ func TestBackfillReindexes(t *testing.T) {
 	}
 }
 
-// TestRebuildIndex corrupts message_fts with FTS5's own 'delete-all'
-// command, which wipes the index while leaving message untouched, and
-// asserts RebuildIndex restores every term a pre-corruption baseline
-// found.
+// TestRebuildIndex corrupts message_fts two ways and asserts
+// RebuildIndex repairs both: FTS5's own 'delete-all' command, which
+// empties the index while leaving message untouched, and a bogus
+// entry planted under an existing row's id, which leaves the index
+// non-empty but wrong. A rebuild that only appended missing rows
+// would pass the first case and miss the second; --rebuild-index
+// exists for stale terms, not only a gone index.
 func TestRebuildIndex(t *testing.T) {
 	db := openMigratedTestDB(t)
 	db.SetMaxOpenConns(1)
@@ -181,19 +174,9 @@ func TestRebuildIndex(t *testing.T) {
 		{3, "delta echo", "alpha"},
 	}
 	for _, m := range messages {
-		tx, err := db.Begin()
-		if err != nil {
-			t.Fatalf("begin: %v", err)
-		}
-		if err := reindexMessage(tx, m.id, m.subject, m.searchText); err != nil {
-			t.Fatalf("reindexMessage(%d): %v", m.id, err)
-		}
-		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (?, 1, 0, ?, ?)`,
+		if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (?, 1, 0, ?, ?)`,
 			m.id, m.subject, m.searchText); err != nil {
 			t.Fatalf("insert message %d: %v", m.id, err)
-		}
-		if err := tx.Commit(); err != nil {
-			t.Fatalf("commit message %d: %v", m.id, err)
 		}
 	}
 
@@ -213,7 +196,31 @@ func TestRebuildIndex(t *testing.T) {
 	}
 
 	if err := RebuildIndex(db); err != nil {
-		t.Fatalf("RebuildIndex: %v", err)
+		t.Fatalf("RebuildIndex after delete-all: %v", err)
+	}
+	for _, term := range terms {
+		got := searchIDs(t, db, term)
+		if !slices.Equal(got, baseline[term]) {
+			t.Fatalf("search(%q) after rebuild = %v, want the pre-corruption baseline %v", term, got, baseline[term])
+		}
+	}
+
+	// message 2's real subject is "bravo charlie", which shares no
+	// term with "zulu": planting "zulu" under its rowid is a stale
+	// term a rebuild must discard, not a row a rebuild would ever add
+	// on its own.
+	if _, err := db.Exec(`INSERT INTO message_fts(rowid, subject, search_text) VALUES (2, 'zulu', '')`); err != nil {
+		t.Fatalf("plant bogus fts entry: %v", err)
+	}
+	if got := searchIDs(t, db, "zulu"); !slices.Equal(got, []int64{2}) {
+		t.Fatalf("search(\"zulu\") after planting = %v, want [2]", got)
+	}
+
+	if err := RebuildIndex(db); err != nil {
+		t.Fatalf("RebuildIndex after planting a bogus entry: %v", err)
+	}
+	if got := searchIDs(t, db, "zulu"); len(got) != 0 {
+		t.Fatalf("search(\"zulu\") after rebuild = %v, want empty: rebuild must discard the stale term", got)
 	}
 	for _, term := range terms {
 		got := searchIDs(t, db, term)

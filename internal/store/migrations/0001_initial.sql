@@ -67,19 +67,37 @@ CREATE VIRTUAL TABLE message_fts USING fts5(
     prefix='2 3'
 );
 
--- ON DELETE CASCADE (from account) removes message rows inside
--- SQLite itself, below the store-internal helper that otherwise owns
--- FTS maintenance. This trigger is the only path a deleted message
--- row takes out of the index: it fires for every deletion regardless
--- of cause, cascade or direct, so message_fts can never hold a term
--- for a row the store no longer has.
+-- message_fts mirrors message's subject and search_text through
+-- three triggers, matching FTS5's own documented shape for an
+-- external-content table (fts5.html, "External Content Tables").
+-- Insert and targeted update keep the index current with the row's
+-- own writes, using SQLite's NEW/OLD values directly rather than a
+-- Go helper reading message back inside the transaction.
 --
--- The reciprocal invariant this trigger assumes: every message row
--- carries a message_fts entry. Every insert path in this package
--- must run reindexMessage in the same transaction as the message
--- write, because deleting a message row reindexMessage never indexed
--- fails with SQLite's own disk-image-malformed error rather than a
--- clean no-op.
+-- trg_message_fts_delete predates the other two and covers a case
+-- they cannot: an account row's ON DELETE CASCADE reaches message
+-- directly (not through mailbox) inside SQLite itself, below any
+-- trigger scoped to a specific column update. It fires for every
+-- deletion of a message row regardless of cause, cascade or direct.
+--
+-- Together the three triggers make message_fts's reciprocal
+-- invariant structural: every message row carries a message_fts
+-- entry. TestUnindexedMessageRowMustBeIndexed pins what happens if
+-- that invariant is ever broken by hand: trg_message_fts_delete's
+-- own delete command fails with SQLite's disk-image-malformed error
+-- instead of a clean no-op.
+CREATE TRIGGER trg_message_fts_insert AFTER INSERT ON message BEGIN
+    INSERT INTO message_fts(rowid, subject, search_text)
+    VALUES (NEW.id, NEW.subject, NEW.search_text);
+END;
+
+CREATE TRIGGER trg_message_fts_update AFTER UPDATE OF subject, search_text ON message BEGIN
+    INSERT INTO message_fts(message_fts, rowid, subject, search_text)
+    VALUES ('delete', OLD.id, OLD.subject, OLD.search_text);
+    INSERT INTO message_fts(rowid, subject, search_text)
+    VALUES (NEW.id, NEW.subject, NEW.search_text);
+END;
+
 CREATE TRIGGER trg_message_fts_delete AFTER DELETE ON message BEGIN
     INSERT INTO message_fts(message_fts, rowid, subject, search_text)
     VALUES ('delete', OLD.id, OLD.subject, OLD.search_text);

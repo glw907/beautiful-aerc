@@ -21,14 +21,14 @@ type messageRecord struct {
 
 // TestMutationSearchConsistency drives a seeded, randomized sequence
 // of message inserts, updates, deletes, and mailbox moves through the
-// writer, asserting after every step that message_fts's search
-// results match an independent in-memory model of what should be
-// indexed. Moves touch only message_mailbox and carry no FTS
-// maintenance of their own; they are in the mix to prove an unrelated
-// write never disturbs the index. The script closes with FTS5's own
-// 'integrity-check' command: row-count parity between message and
-// message_fts can hold while individual terms have rotted, which no
-// per-step search assertion here would catch.
+// writer. After every step it asserts message_fts's search results
+// against an independent in-memory model of what should be indexed.
+// Moves touch only message_mailbox and carry no FTS maintenance of
+// their own; they are in the mix to prove an unrelated write never
+// disturbs the index. The script closes with FTS5's own
+// 'integrity-check' command. Row-count parity between message and
+// message_fts can hold while individual terms have rotted, a
+// corruption no per-step search assertion here would catch.
 func TestMutationSearchConsistency(t *testing.T) {
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 	seedAccountAndMailbox(t, w)
@@ -67,9 +67,6 @@ func TestMutationSearchConsistency(t *testing.T) {
 			subject, searchText := randomText(2), randomText(3)
 			mailbox := int64(1 + rng.IntN(2))
 			if err := w.submit(context.Background(), func(tx *sql.Tx) error {
-				if err := reindexMessage(tx, id, subject, searchText); err != nil {
-					return err
-				}
 				if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (?, 1, ?, ?, ?)`,
 					id, id, subject, searchText); err != nil {
 					return err
@@ -85,9 +82,6 @@ func TestMutationSearchConsistency(t *testing.T) {
 			id := ids[rng.IntN(len(ids))]
 			subject, searchText := randomText(2), randomText(3)
 			if err := w.submit(context.Background(), func(tx *sql.Tx) error {
-				if err := reindexMessage(tx, id, subject, searchText); err != nil {
-					return err
-				}
 				_, err := tx.Exec(`UPDATE message SET subject = ?, search_text = ? WHERE id = ?`, subject, searchText, id)
 				return err
 			}); err != nil {

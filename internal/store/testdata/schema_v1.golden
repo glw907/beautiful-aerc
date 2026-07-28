@@ -231,3 +231,17 @@ CREATE TRIGGER trg_message_fts_delete AFTER DELETE ON message BEGIN
     VALUES ('delete', OLD.id, OLD.subject, OLD.search_text);
 END;
 
+-- trigger trg_message_fts_insert
+CREATE TRIGGER trg_message_fts_insert AFTER INSERT ON message BEGIN
+    INSERT INTO message_fts(rowid, subject, search_text)
+    VALUES (NEW.id, NEW.subject, NEW.search_text);
+END;
+
+-- trigger trg_message_fts_update
+CREATE TRIGGER trg_message_fts_update AFTER UPDATE OF subject, search_text ON message BEGIN
+    INSERT INTO message_fts(message_fts, rowid, subject, search_text)
+    VALUES ('delete', OLD.id, OLD.subject, OLD.search_text);
+    INSERT INTO message_fts(rowid, subject, search_text)
+    VALUES (NEW.id, NEW.subject, NEW.search_text);
+END;
+
