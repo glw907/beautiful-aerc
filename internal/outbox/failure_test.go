@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -208,6 +209,94 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestEachClaimedIntentGetsOneFinalizeWrite pins the other half of
+// that postcondition: one finalize write per claimed row, never two.
+// A row whose create's batch already decided it, and which the pass's
+// stopped branch then decides a second time, is written twice, and the
+// combined effect is correct only because revertRow touches state
+// alone and lands after requeueRow. The end state hides that, so this
+// counts the writes themselves.
+func TestEachClaimedIntentGetsOneFinalizeWrite(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+	filed := []int64{
+		seedMessage(t, w, accountID, src, "msg-1"),
+		seedMessage(t, w, accountID, src, "msg-2"),
+	}
+
+	be := newFakeBackend()
+	be.MailSource.ApplyBatchFunc = func(_ context.Context, _ []backend.Mutation) (backend.BatchResult, error) {
+		return backend.BatchResult{}, backend.MutationFailure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+	}
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+	claimed := []int64{createID}
+	for _, msgID := range filed {
+		_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, be, false, now)
+		if err != nil {
+			t.Fatalf("enqueue dependent move: %v", err)
+		}
+		claimed = append(claimed, ids...)
+	}
+
+	recordFinalizeWrites(t, w)
+	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	for _, id := range claimed {
+		if n := finalizeWriteCount(t, w, id); n != 1 {
+			t.Errorf("finalize writes for intent %d = %d, want 1", id, n)
+		}
+	}
+}
+
+// recordFinalizeWrites installs triggers appending one row to a
+// scratch table for every finalize write DispatchOnce makes: a delete,
+// or a state write returning a row to queued. The payload guard keeps
+// a back-reference patch, which rewrites a still-queued row's payload
+// mid-pass, out of the count.
+func recordFinalizeWrites(t *testing.T, w *store.Writer) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`CREATE TABLE finalize_write (intent_id INTEGER NOT NULL)`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`
+			CREATE TRIGGER record_finalize_state AFTER UPDATE ON outbox
+			WHEN NEW.state = 'queued' AND NEW.payload IS OLD.payload
+			BEGIN INSERT INTO finalize_write (intent_id) VALUES (NEW.id); END`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`
+			CREATE TRIGGER record_finalize_delete AFTER DELETE ON outbox
+			BEGIN INSERT INTO finalize_write (intent_id) VALUES (OLD.id); END`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("install finalize-write triggers: %v", err)
+	}
+}
+
+// finalizeWriteCount returns how many finalize writes the triggers
+// recorded for id.
+func finalizeWriteCount(t *testing.T, w *store.Writer, id int64) int {
+	t.Helper()
+	var n int
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(`SELECT COUNT(*) FROM finalize_write WHERE intent_id = ?`, id).Scan(&n)
+	})
+	if err != nil {
+		t.Fatalf("count finalize writes for %d: %v", id, err)
+	}
+	return n
 }
 
 // TestShouldLogFailure covers report's log-dedup gate (ADR-0013

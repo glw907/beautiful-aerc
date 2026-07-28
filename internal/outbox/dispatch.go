@@ -120,25 +120,25 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 	stopped := false
 
 	groups := planBatches(claimedRows, chunkSize(d.backend))
-	batched := map[int64]bool{}
-	for _, moves := range groups {
-		for _, mv := range moves {
-			batched[mv.id] = true
-		}
+
+	// A row a create's batch already decided has its action recorded
+	// here, so its own turn in the loop passes over it. One record of
+	// what has been decided covers both directions: a move whose create
+	// dispatched keeps that decision whether or not the pass later
+	// stopped, and a move whose create never ran takes the revert every
+	// other abandoned claim takes.
+	finalized := map[int64]bool{}
+	finalize := func(a finalizeAction) {
+		actions = append(actions, a)
+		finalized[a.id] = true
 	}
 
 	for _, c := range claimedRows {
-		if stopped {
-			actions = append(actions, finalizeAction{id: c.id, verb: finalizeRevert})
+		if finalized[c.id] {
 			continue
 		}
-		if batched[c.id] {
-			// Already dispatched in its create's batch, which id order
-			// guarantees came earlier in this loop: a DestRef names a
-			// row that had to exist before the move was enqueued. The
-			// stopped check comes first because a pass that stopped
-			// before the create's turn never built that batch, and the
-			// row is owed a revert like every other claim it abandoned.
+		if stopped {
+			finalize(finalizeAction{id: c.id, verb: finalizeRevert})
 			continue
 		}
 
@@ -154,12 +154,12 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 
 		for _, o := range outcomes {
 			if o.failed {
-				actions = append(actions, d.report(&result, o.c, o.class, o.detail))
+				finalize(d.report(&result, o.c, o.class, o.detail))
 				stopped = stopped || o.class == uerr.ClassConnection
 				continue
 			}
 			result.Delivered = append(result.Delivered, delivered(o.c, o.move))
-			actions = append(actions, finalizeAction{id: o.c.id, verb: finalizeDelete})
+			finalize(finalizeAction{id: o.c.id, verb: finalizeDelete})
 		}
 	}
 
