@@ -149,3 +149,10 @@ observed practice rather than invention. It exists so the
 requirements are complete before the work starts, and the requirement
 priorities then set the implementation order for the Phase 5 build
 passes.
+
+The build starts from the current stack, up to the minute. Phase 4
+runs a freshness audit and pins the latest stable Go, the current
+bubbletea and Charm ecosystem, and actively maintained mail, JMAP,
+and calendar libraries. No version is inherited from the legacy
+client by default; each dependency re-earns its place at its current
+release.
