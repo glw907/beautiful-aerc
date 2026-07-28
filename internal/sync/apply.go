@@ -2,8 +2,6 @@ package sync
 
 import (
 	"database/sql"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -112,241 +110,49 @@ func upsertRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, rec back
 func destroyRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, serverID string) error {
 	switch kind {
 	case backend.ObjectKindMessage:
-		_, err := tx.Exec(`DELETE FROM message WHERE account_id = ? AND server_id = ?`, accountID, serverID)
-		return err
+		return store.DeleteMessage(tx, accountID, serverID)
 	case backend.ObjectKindMailbox:
-		_, err := tx.Exec(`DELETE FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, serverID)
-		return err
+		return store.DeleteMailbox(tx, accountID, serverID)
 	default:
 		return fmt.Errorf("sync: destroy: unsupported kind %v", kind)
 	}
 }
 
-// upsertMailbox writes rec as accountID's mailbox, keyed by
-// rec.ID (the server id): an update if a row with that server id
-// already exists, an insert otherwise. Inserting a new row also
-// repairs any message whose mailbox_ids named this mailbox before its
-// local row existed (see repairMailboxAssociations).
+// upsertMailbox translates rec's backend field vocabulary into a
+// store.MailboxUpsert and writes it. Every mailbox column and its
+// JSON shape are store.UpsertMailbox's concern, not this package's;
+// this function's only job is the vocabulary crossing.
 func upsertMailbox(tx *sql.Tx, accountID int64, rec backend.Record) error {
 	f := rec.Fields
-	name := stringField(f, "name")
-	role := stringField(f, "role")
-	sortOrder := int64Field(f, "sort_order")
-	totalCount := int64Field(f, "total_emails")
-	unreadCount := int64Field(f, "unread_emails")
-
-	var id int64
-	err := tx.QueryRow(`SELECT id FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, rec.ID).Scan(&id)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		res, err := tx.Exec(
-			`INSERT INTO mailbox (account_id, server_id, role, name, sort_order, total_count, unread_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			accountID, rec.ID, role, name, sortOrder, totalCount, unreadCount,
-		)
-		if err != nil {
-			return err
-		}
-		newID, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		return repairMailboxAssociations(tx, accountID, newID, rec.ID)
-	case err != nil:
-		return err
-	default:
-		_, err = tx.Exec(
-			`UPDATE mailbox SET role = ?, name = ?, sort_order = ?, total_count = ?, unread_count = ? WHERE id = ?`,
-			role, name, sortOrder, totalCount, unreadCount, id,
-		)
-		return err
-	}
+	return store.UpsertMailbox(tx, accountID, store.MailboxUpsert{
+		ServerID:    rec.ID,
+		Role:        stringField(f, "role"),
+		Name:        stringField(f, "name"),
+		SortOrder:   int64Field(f, "sort_order"),
+		TotalCount:  int64Field(f, "total_emails"),
+		UnreadCount: int64Field(f, "unread_emails"),
+	})
 }
 
-// messageData is message.data's shape: the one key sync writes today
-// (mailbox_ids, so a later mailbox sync can repair an association
-// syncMessageMailboxes had to skip). internal/mail extends this with
-// its own keys from pass 3 onward.
-type messageData struct {
-	MailboxIDs []string `json:"mailbox_ids"`
-}
-
-// upsertMessage writes rec as accountID's message, keyed by rec.ID,
-// and reconciles its mailbox associations to fields["mailbox_ids"].
-// It leaves search_text at its default: a message's body, and the
-// full-text terms derived from it, are internal/mail's concern from
-// pass 3 onward. message_fts stays in step with whatever subject this
-// writes through trg_message_fts_insert and trg_message_fts_update
-// (internal/store's schema triggers), so this function never has to
-// maintain the index itself.
+// upsertMessage translates rec's backend field vocabulary into a
+// store.MessageUpsert and writes it, the message counterpart of
+// upsertMailbox.
 func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
 	f := rec.Fields
-	blobID := stringField(f, "blob_id")
-	threadKey := stringField(f, "thread_id")
-	subject := stringField(f, "subject")
-	size := int64Field(f, "size")
-	hasAttachment := boolField(f, "has_attachment")
-	receivedAt, _ := f["received_at"].(time.Time)
-	fromAddr := firstAddress(f["from"])
-	flags := flagsFromFields(f)
 	mailboxIDs, _ := f["mailbox_ids"].([]string)
-	unread := !boolField(f, "seen")
+	receivedAt, _ := f["received_at"].(time.Time)
 
-	data, err := json.Marshal(messageData{MailboxIDs: mailboxIDs})
-	if err != nil {
-		return err
-	}
-
-	var id int64
-	err = tx.QueryRow(`SELECT id FROM message WHERE account_id = ? AND server_id = ?`, accountID, rec.ID).Scan(&id)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		res, err := tx.Exec(
-			`INSERT INTO message (account_id, server_id, blob_id, thread_key, received_at, subject, from_addr, flags, size, has_attachment, data)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			accountID, rec.ID, blobID, threadKey, receivedAt.Unix(), subject, fromAddr, int64(flags), size, hasAttachment, data,
-		)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
-	case err != nil:
-		return err
-	default:
-		if _, err := tx.Exec(
-			`UPDATE message SET blob_id = ?, thread_key = ?, received_at = ?, subject = ?, from_addr = ?, flags = ?, size = ?, has_attachment = ?, data = ? WHERE id = ?`,
-			blobID, threadKey, receivedAt.Unix(), subject, fromAddr, int64(flags), size, hasAttachment, data, id,
-		); err != nil {
-			return err
-		}
-	}
-	return syncMessageMailboxes(tx, accountID, id, receivedAt.Unix(), unread, mailboxIDs)
-}
-
-// repairMailboxAssociations re-associates any message in accountID
-// whose stored mailbox_ids (message.data, written by upsertMessage)
-// names mailboxServerID but has no message_mailbox row for mailboxID
-// yet: that message's own sync page arrived before this mailbox's
-// local row existed, so syncMessageMailboxes skipped the association.
-// upsertMailbox calls this right after inserting a new mailbox row,
-// closing the ordering gap instead of waiting on a later update of
-// that same message to repair it (RunPush and pollKinds also order
-// Mailbox ahead of Message so the common case never needs this pass
-// at all).
-func repairMailboxAssociations(tx *sql.Tx, accountID, mailboxID int64, mailboxServerID string) error {
-	rows, err := tx.Query(
-		`SELECT m.id, m.received_at, m.flags, m.data FROM message m
-		 WHERE m.account_id = ?
-		 AND EXISTS (SELECT 1 FROM json_each(json_extract(m.data, '$.mailbox_ids')) je WHERE je.value = ?)
-		 AND m.id NOT IN (SELECT message_id FROM message_mailbox WHERE mailbox_id = ?)`,
-		accountID, mailboxServerID, mailboxID,
-	)
-	if err != nil {
-		return err
-	}
-
-	type orphan struct {
-		id, receivedAt int64
-		unread         bool
-		mailboxIDs     []string
-	}
-	var orphans []orphan
-	for rows.Next() {
-		var o orphan
-		var flags int64
-		var data string
-		if err := rows.Scan(&o.id, &o.receivedAt, &flags, &data); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		var md messageData
-		if err := json.Unmarshal([]byte(data), &md); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		o.unread = store.Flags(flags)&store.FlagSeen == 0 //nolint:gosec // G115: message.flags is written only through EncodeFlags's uint32 bitfield, never a value outside its range
-		o.mailboxIDs = md.MailboxIDs
-		orphans = append(orphans, o)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return err
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-
-	for _, o := range orphans {
-		if err := syncMessageMailboxes(tx, accountID, o.id, o.receivedAt, o.unread, o.mailboxIDs); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// syncMessageMailboxes reconciles message_mailbox to exactly the
-// mailboxes named by mailboxServerIDs: dropping associations no
-// longer present, refreshing the denormalized received_at and unread
-// columns on the ones that remain, and inserting new ones. A server
-// id with no matching local mailbox row yet is skipped, not failed;
-// repairMailboxAssociations revisits it once that mailbox's row
-// exists.
-func syncMessageMailboxes(tx *sql.Tx, accountID, messageID, receivedAt int64, unread bool, mailboxServerIDs []string) error {
-	want := make(map[int64]bool, len(mailboxServerIDs))
-	for _, sid := range mailboxServerIDs {
-		var mbID int64
-		err := tx.QueryRow(`SELECT id FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, sid).Scan(&mbID)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		want[mbID] = true
-	}
-
-	current, err := currentMailboxIDs(tx, messageID)
-	if err != nil {
-		return err
-	}
-
-	for _, mbID := range current {
-		if want[mbID] {
-			continue
-		}
-		if _, err := tx.Exec(`DELETE FROM message_mailbox WHERE message_id = ? AND mailbox_id = ?`, messageID, mbID); err != nil {
-			return err
-		}
-	}
-	for mbID := range want {
-		_, err := tx.Exec(
-			`INSERT INTO message_mailbox (message_id, mailbox_id, received_at, unread) VALUES (?, ?, ?, ?)
-			 ON CONFLICT(message_id, mailbox_id) DO UPDATE SET received_at = excluded.received_at, unread = excluded.unread`,
-			messageID, mbID, receivedAt, unread,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func currentMailboxIDs(tx *sql.Tx, messageID int64) ([]int64, error) {
-	rows, err := tx.Query(`SELECT mailbox_id FROM message_mailbox WHERE message_id = ?`, messageID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var ids []int64
-	for rows.Next() {
-		var mbID int64
-		if err := rows.Scan(&mbID); err != nil {
-			return nil, err
-		}
-		ids = append(ids, mbID)
-	}
-	return ids, rows.Err()
+	return store.UpsertMessage(tx, accountID, store.MessageUpsert{
+		ServerID:      rec.ID,
+		BlobID:        stringField(f, "blob_id"),
+		ThreadKey:     stringField(f, "thread_id"),
+		Subject:       stringField(f, "subject"),
+		FromAddr:      firstAddress(f["from"]),
+		Flags:         flagsFromFields(f),
+		Size:          int64Field(f, "size"),
+		HasAttachment: boolField(f, "has_attachment"),
+		ReceivedAt:    receivedAt,
+		MailboxIDs:    mailboxIDs,
+		Unread:        !boolField(f, "seen"),
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/store"
 )
 
 // fullResync rebuilds accountID's server-derived state for kind from
@@ -79,45 +80,26 @@ func deleteStale(tx *sql.Tx, accountID int64, kind backend.ObjectKind, keep map[
 
 // staleIDs returns the internal ids of accountID's kind rows whose
 // server id is absent from keep: for Message, scoped to origin =
-// 'server' rows, so a local-only draft is never considered.
+// 'server' rows, so a local-only draft is never considered. The
+// query itself is store.StaleMessageIDs/StaleMailboxIDs's concern;
+// this only picks which one kind names.
 func staleIDs(tx *sql.Tx, accountID int64, kind backend.ObjectKind, keep map[string]bool) ([]int64, error) {
-	var rows *sql.Rows
-	var err error
 	switch kind {
 	case backend.ObjectKindMessage:
-		rows, err = tx.Query(`SELECT id, server_id FROM message WHERE account_id = ? AND origin = 'server'`, accountID)
+		return store.StaleMessageIDs(tx, accountID, keep)
 	case backend.ObjectKindMailbox:
-		rows, err = tx.Query(`SELECT id, server_id FROM mailbox WHERE account_id = ?`, accountID)
+		return store.StaleMailboxIDs(tx, accountID, keep)
 	default:
 		return nil, fmt.Errorf("sync: resync: unsupported kind %v", kind)
 	}
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var stale []int64
-	for rows.Next() {
-		var id int64
-		var serverID sql.NullString
-		if err := rows.Scan(&id, &serverID); err != nil {
-			return nil, err
-		}
-		if !serverID.Valid || !keep[serverID.String] {
-			stale = append(stale, id)
-		}
-	}
-	return stale, rows.Err()
 }
 
 func deleteByID(tx *sql.Tx, kind backend.ObjectKind, id int64) error {
 	switch kind {
 	case backend.ObjectKindMessage:
-		_, err := tx.Exec(`DELETE FROM message WHERE id = ?`, id)
-		return err
+		return store.DeleteMessageByID(tx, id)
 	case backend.ObjectKindMailbox:
-		_, err := tx.Exec(`DELETE FROM mailbox WHERE id = ?`, id)
-		return err
+		return store.DeleteMailboxByID(tx, id)
 	default:
 		return fmt.Errorf("sync: resync: unsupported kind %v", kind)
 	}

@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -360,4 +361,151 @@ func TestClassifyErr(t *testing.T) {
 	if class, cause := classifyErr(wrapped); class != uerr.ClassAuth || cause != root {
 		t.Fatalf("classifyErr(wrapped) = (%v, %v), want (ClassAuth, root)", class, cause)
 	}
+}
+
+// TestSurfaceable asserts surfaceable's two exceptions to "any
+// non-nil error is worth surfacing": nil itself, and a context
+// cancellation (bare or wrapped), which reports a caller shutting
+// down, not a server problem. A different context error
+// (DeadlineExceeded, a real timeout) still surfaces.
+func TestSurfaceable(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"plain error", errors.New("boom"), true},
+		{"context canceled", context.Canceled, false},
+		{"wrapped context canceled", fmt.Errorf("dial: %w", context.Canceled), false},
+		{"context deadline exceeded", context.DeadlineExceeded, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := surfaceable(tt.err); got != tt.want {
+				t.Errorf("surfaceable(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSyncFlushStateIgnoresContextCanceled asserts report treats a
+// context cancellation as neither a failure nor a recovery: it never
+// marks kind failing (which would otherwise surface a uerr.Error
+// through classifyErr's ClassConnection default), and a real failure
+// reported afterward still surfaces normally.
+func TestSyncFlushStateIgnoresContextCanceled(t *testing.T) {
+	state := newSyncFlushState()
+	kind := backend.ObjectKindMessage
+
+	state.report(kind, context.Canceled)
+	if _, failing := state.failing[kind]; failing {
+		t.Fatal("report marked kind failing on context.Canceled, want shutdown treated as no outcome at all")
+	}
+
+	state.report(kind, errConnectionRefused)
+	if class, failing := state.failing[kind]; !failing || class != uerr.ClassConnection {
+		t.Fatalf("a real failure after a canceled report did not surface: (class, failing) = (%v, %v)", class, failing)
+	}
+}
+
+// TestReconnectReturnsPromptlyOnContextCanceled asserts reconnect
+// returns ctx.Err() as soon as ctx is already done, rather than
+// classifying the cancellation as a connectivity failure and looping
+// through a backoff wait first.
+func TestReconnectReturnsPromptlyOnContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	push := &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+		return nil, context.Canceled
+	}}
+
+	attempt := 0
+	ch, err := reconnect(ctx, push, DefaultConfig(), &attempt)
+	if ch != nil {
+		t.Fatal("reconnect returned a non-nil channel alongside an error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("reconnect() error = %v, want context.Canceled", err)
+	}
+}
+
+// TestRunPushResetsBackoffAfterHealthyConnection asserts a drop
+// following a connection that stayed up at least BackoffMax resets
+// the escalated backoff attempt counter, so the next Listen call
+// lands within BackoffMin of the drop rather than the near-BackoffMax
+// range a long run of quick prior drops would otherwise leave it at.
+// Without this, SY-2's 30s p95 recovery bound erodes over a
+// long-running process: attempt only ever grows, so a single drop
+// after an hours-long healthy stream would wait the same escalated
+// range as the sixth drop in a row.
+func TestRunPushResetsBackoffAfterHealthyConnection(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			return backend.ChangeSet{}, nil
+		}
+
+		const quickDrops = 6
+		const healthyHold = 1500 * time.Millisecond
+		start := time.Now()
+		var listenTimes []time.Duration
+		calls := 0
+		be.PushSource = &backendtest.FakePush{ListenFunc: func(ctx context.Context) (<-chan backend.Notification, error) {
+			calls++
+			listenTimes = append(listenTimes, time.Since(start))
+			ch := make(chan backend.Notification)
+			switch {
+			case calls <= quickDrops:
+				close(ch) // an immediate drop, escalating attempt each time
+			case calls == quickDrops+1:
+				// The connection right after the run of quick drops stays
+				// open long enough to prove itself healthy, then drops.
+				go func() {
+					time.Sleep(healthyHold)
+					close(ch)
+				}()
+			default:
+				// The reconnect under test: stays open until the test
+				// cancels ctx, so its own Listen time is all this
+				// assertion needs.
+				context.AfterFunc(ctx, func() { close(ch) })
+			}
+			return ch, nil
+		}}
+
+		cfg := testConfig()
+		cfg.BackoffMin = 100 * time.Millisecond
+		cfg.BackoffMax = time.Second
+		cfg.PingInterval = time.Hour // never trips the stall detector during the healthy hold
+		worker := NewWorker(accountID, &be, w, cfg)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			worker.RunPush(ctx, []backend.ObjectKind{backend.ObjectKindMessage})
+			close(done)
+		}()
+
+		time.Sleep(8 * time.Second)
+		synctest.Wait()
+		cancel()
+		<-done
+		synctest.Wait()
+
+		if len(listenTimes) <= quickDrops+1 {
+			t.Fatalf("Listen calls = %d, want more than %d (the healthy connection plus at least one reconnect after it dropped)", len(listenTimes), quickDrops+1)
+		}
+		// The gap between the healthy connection's own Listen call and
+		// the next one covers both how long it stayed open and the
+		// backoff delay after it dropped; only the latter is under test.
+		gap := listenTimes[quickDrops+1] - listenTimes[quickDrops] - healthyHold
+		if gap >= cfg.BackoffMin {
+			t.Fatalf("reconnect after a %v healthy connection waited %v, want under BackoffMin (%v): the escalated attempt counter was not reset", healthyHold, gap, cfg.BackoffMin)
+		}
+	})
 }

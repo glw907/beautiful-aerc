@@ -87,14 +87,21 @@ func newSyncFlushState() *syncFlushState {
 	return &syncFlushState{failing: make(map[backend.ObjectKind]uerr.Class)}
 }
 
-// report records the outcome of one SyncKind(kind) call.
+// report records the outcome of one SyncKind(kind) call. A context
+// cancellation (RunPush's caller shutting the worker down mid-flush)
+// is never surfaced: it is not a server problem the user needs to
+// see, and reporting it would classify shutdown itself as a dropped
+// connection.
 func (s *syncFlushState) report(kind backend.ObjectKind, err error) {
 	prevClass, wasFailing := s.failing[kind]
-	if err == nil {
+	switch {
+	case err == nil:
 		if wasFailing {
 			slog.Info("sync: push-triggered sync recovered", "kind", kindName(kind))
 			delete(s.failing, kind)
 		}
+		return
+	case !surfaceable(err):
 		return
 	}
 	class, cause := classifyErr(err)
@@ -102,6 +109,15 @@ func (s *syncFlushState) report(kind backend.ObjectKind, err error) {
 		_ = uerr.New("sync.push.flush", nil, class, cause)
 	}
 	s.failing[kind] = class
+}
+
+// surfaceable reports whether err represents a real failure worth
+// classifying and surfacing through uerr.New, as opposed to
+// context.Canceled: the caller (RunPush, through reconnect or a
+// push-triggered flush) shutting down mid-flight is not a server
+// problem, so it must never render as one.
+func surfaceable(err error) bool {
+	return err != nil && !errors.Is(err, context.Canceled)
 }
 
 // classifyErr reports the uerr.Class and root cause err already
@@ -138,6 +154,7 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	state := newSyncFlushState()
 	attempt := 0
 	for {
+		connectedAt := time.Now()
 		ch, err := reconnect(ctx, push, w.cfg, &attempt)
 		if err != nil {
 			return
@@ -147,6 +164,18 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 		})
 		if !dropped {
 			return
+		}
+		// A connection that stayed up at least BackoffMax proved
+		// itself healthy, so the next drop is a fresh problem, not a
+		// continuation of whatever run of failures escalated attempt
+		// before this connection succeeded. Without this reset, attempt
+		// only ever grows for the life of the process: it saturates at
+		// BackoffMax after a handful of drops, and a single drop after
+		// an hours-long healthy stream would then wait the same
+		// escalated range as the sixth drop in a row, eroding SY-2's
+		// 30s p95 recovery bound.
+		if time.Since(connectedAt) >= w.cfg.BackoffMax {
+			attempt = 0
 		}
 		// A drop still costs one backoff step even when Listen itself
 		// never failed: without this, a transport that connects and
@@ -190,12 +219,15 @@ func (w *Worker) flush(ctx context.Context, kinds []backend.ObjectKind, state *s
 
 // reconnect calls push.Listen, retrying with jittered exponential
 // backoff until it succeeds or ctx ends. attempt is owned by the
-// caller and only ever incremented here, never reset: RunPush carries
-// it across a whole session, including a stream that drops right
-// after connecting, so repeated reconnects always escalate rather
-// than each starting over at zero delay. A Listen failure surfaces a
-// uerr.Error once, on the first failure or a class change (ADR-0013
-// revision 2); a later success after a run of failures logs recovery.
+// caller, which carries it across a whole reconnect session (a
+// stream that drops right after connecting escalates rather than
+// starting over at zero delay) and resets it once a connection proves
+// itself healthy; reconnect itself only ever increments it. A Listen
+// failure surfaces a uerr.Error once, on the first failure or a class
+// change (ADR-0013 revision 2); a later success after a run of
+// failures logs recovery. ctx ending mid-retry (RunPush shutting the
+// worker down) is never classified or surfaced: it is not a server
+// problem.
 func reconnect(ctx context.Context, push backend.Push, cfg Config, attempt *int) (<-chan backend.Notification, error) {
 	var failClass uerr.Class
 	var failing bool
@@ -207,11 +239,13 @@ func reconnect(ctx context.Context, push backend.Push, cfg Config, attempt *int)
 			}
 			return ch, nil
 		}
-		class, cause := classifyErr(err)
-		if !failing || class != failClass {
-			_ = uerr.New("sync.push.listen", nil, class, cause)
-			failing = true
-			failClass = class
+		if surfaceable(err) {
+			class, cause := classifyErr(err)
+			if !failing || class != failClass {
+				_ = uerr.New("sync.push.listen", nil, class, cause)
+				failing = true
+				failClass = class
+			}
 		}
 		if !sleepBackoff(ctx, *attempt, cfg.BackoffMin, cfg.BackoffMax) {
 			return nil, ctx.Err()
