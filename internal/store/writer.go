@@ -71,6 +71,7 @@ type Writer struct {
 	done        chan struct{}
 
 	lastInteractive atomic.Int64 // UnixNano of the last interactive job the writer ran
+	rev             RevisionCounter
 }
 
 // NewWriter starts the writer goroutine over db, which must be the
@@ -133,6 +134,14 @@ func (w *Writer) enqueue(ctx context.Context, lane chan writeJob, fn func(*sql.T
 		return uerr.New("store.write", nil, uerr.ClassStoreLocal, errWriterClosed)
 	}
 	return <-j.done
+}
+
+// Revision returns the store's revision counter, advanced once for
+// every transaction this writer commits. A ReadPool opened over the
+// same store file shares it, so every read result carries the
+// revision it saw (SY-1's read path).
+func (w *Writer) Revision() *RevisionCounter {
+	return &w.rev
 }
 
 // RecentInteractiveActivity reports whether an interactive job ran
@@ -234,6 +243,7 @@ func (w *Writer) execute(fn func(*sql.Tx) error) error {
 	if err := tx.Commit(); err != nil {
 		return uerr.New("store.write", nil, uerr.ClassStoreLocal, err)
 	}
+	w.rev.advance()
 	return nil
 }
 

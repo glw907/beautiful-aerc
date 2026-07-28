@@ -32,4 +32,26 @@ const (
 	// queryOccurrenceByLocalDate is the day-view query: occurrences
 	// falling on a given local calendar date.
 	queryOccurrenceByLocalDate = `SELECT event_id FROM occurrence WHERE local_date = ?`
+
+	// queryMailboxListForward is the read API's keyset-paginated
+	// mailbox list, paging toward older mail: rows before a cursor in
+	// idx_message_mailbox_list's received_at DESC, message_id ASC
+	// order. The redundant "received_at <= ?" conjunct is load-bearing,
+	// not decorative: with bound parameters (rather than literal
+	// constants) SQLite cannot derive an index seek bound from
+	// "received_at < ? OR (received_at = ? AND message_id > ?)" alone,
+	// and degrades to a full scan of the mailbox filtering row by row.
+	// The plain conjunct gives it the same seek back, verified against
+	// TestExplainQueryPlan's golden. The inner OR breaks ties on
+	// message_id so two rows sharing a received_at are still a total
+	// order; the column set is scalar only, since the list path never
+	// touches message.data.
+	queryMailboxListForward = `SELECT message_id, received_at FROM message_mailbox WHERE mailbox_id = ? AND received_at <= ? AND (received_at < ? OR message_id > ?) ORDER BY received_at DESC, message_id ASC LIMIT ?`
+
+	// queryMailboxListBackward is the same window paging toward newer
+	// mail: rows after a cursor, walked ascending so the same index
+	// still covers it, with the same redundant-bound shape
+	// queryMailboxListForward's comment explains. The caller reverses
+	// the rows into display order.
+	queryMailboxListBackward = `SELECT message_id, received_at FROM message_mailbox WHERE mailbox_id = ? AND received_at >= ? AND (received_at > ? OR message_id < ?) ORDER BY received_at ASC, message_id DESC LIMIT ?`
 )

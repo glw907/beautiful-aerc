@@ -55,6 +55,18 @@ func TestExplainQueryPlan(t *testing.T) {
 			[]any{"2026-07-28"},
 			[]string{"SEARCH occurrence USING INDEX idx_occurrence_local_date (local_date=?)"},
 		},
+		{
+			"mailbox list forward",
+			queryMailboxListForward,
+			[]any{1, 100, 100, 5, 50},
+			[]string{"SEARCH message_mailbox USING COVERING INDEX idx_message_mailbox_list (mailbox_id=? AND received_at<?)"},
+		},
+		{
+			"mailbox list backward",
+			queryMailboxListBackward,
+			[]any{1, 100, 100, 5, 50},
+			[]string{"SEARCH message_mailbox USING COVERING INDEX idx_message_mailbox_list (mailbox_id=? AND received_at>?)"},
+		},
 	}
 
 	for _, tt := range tests {
