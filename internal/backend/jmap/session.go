@@ -68,7 +68,11 @@ func fetchSession(ctx context.Context, httpClient *http.Client, sessionURL strin
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("session %s: unexpected status %d", sessionURL, resp.StatusCode)
+		cause := fmt.Errorf("session %s: unexpected status %d", sessionURL, resp.StatusCode)
+		if classified := classifyStatus("jmap.dial", resp.StatusCode, cause); classified != nil {
+			return nil, classified
+		}
+		return nil, cause
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

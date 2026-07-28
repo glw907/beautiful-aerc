@@ -3,6 +3,7 @@ package jmap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // sessionTemplate is a JMAP session resource: Core and Mail
@@ -202,6 +204,28 @@ func TestDialHonorsContextTimeout(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Dial did not return within 2s of its 20ms context timeout expiring")
+	}
+}
+
+// TestDialClassifiesRejectedSession asserts a non-200 status from the
+// session endpoint itself (dial-time auth rejection, before go-jmap
+// ever builds a *jmap.RequestError) still reaches the caller as a
+// classified uerr.Error, not a bare fmt.Errorf.
+func TestDialClassifiesRejectedSession(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/session", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	_, err := Dial(context.Background(), srv.URL+"/session", NewStaticCredentials("bad-token"))
+	var ue uerr.Error
+	if !errors.As(err, &ue) {
+		t.Fatalf("Dial error = %v, want a uerr.Error in the chain", err)
+	}
+	if ue.Class != uerr.ClassAuth {
+		t.Errorf("Class = %v, want ClassAuth", ue.Class)
 	}
 }
 

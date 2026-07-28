@@ -31,32 +31,46 @@ func isStateMismatch(err error) bool {
 
 // classify wraps a transport-level failure from do() or a session
 // dial in a uerr.Error carrying the class SY-4 and ADR-0004 revision
-// 2 assign it: an HTTP 401/403 is a rejected credential, 404 is a
-// missing entity, 429 is throttling, 5xx is a server-side failure,
-// and a dead TCP connection is unreachable. A JMAP MethodError (a
-// per-call failure embedded in an otherwise-200 response) is not this
-// function's concern; isCannotCalculateChanges and isStateMismatch
-// classify those against the sync engine's own specific signals.
+// 2 assign it. A JMAP MethodError (a per-call failure embedded in an
+// otherwise-200 response) is not this function's concern;
+// isCannotCalculateChanges and isStateMismatch classify those against
+// the sync engine's own specific signals.
 func classify(op string, err error) error {
 	if err == nil {
 		return nil
 	}
 	if re, ok := errors.AsType[*jmap.RequestError](err); ok {
-		switch {
-		case re.Status == http.StatusUnauthorized || re.Status == http.StatusForbidden:
-			return uerr.New(op, nil, uerr.ClassAuth, err)
-		case re.Status == http.StatusNotFound:
-			return uerr.New(op, nil, uerr.ClassNotFound, err)
-		case re.Status == http.StatusTooManyRequests:
-			return uerr.New(op, nil, uerr.ClassThrottled, err)
-		case re.Status >= http.StatusInternalServerError:
-			return uerr.New(op, nil, uerr.ClassServer, err)
+		if classified := classifyStatus(op, re.Status, err); classified != nil {
+			return classified
 		}
 	}
 	if isConnectionDead(err) {
 		return uerr.New(op, nil, uerr.ClassConnection, err)
 	}
 	return err
+}
+
+// classifyStatus maps the HTTP status of a rejected JMAP request to
+// the uerr.Class SY-4 and ADR-0004 revision 2 assign it (401/403 a
+// rejected credential, 404 a missing entity, 429 throttling, 5xx a
+// server-side failure), wrapping cause in a uerr.Error. It reports nil
+// for a status none of those classes cover, so both classify (a
+// *jmap.RequestError from a completed round trip) and fetchSession (a
+// raw HTTP status before go-jmap ever builds one) share the same
+// mapping.
+func classifyStatus(op string, status int, cause error) error {
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return uerr.New(op, nil, uerr.ClassAuth, cause)
+	case status == http.StatusNotFound:
+		return uerr.New(op, nil, uerr.ClassNotFound, cause)
+	case status == http.StatusTooManyRequests:
+		return uerr.New(op, nil, uerr.ClassThrottled, cause)
+	case status >= http.StatusInternalServerError:
+		return uerr.New(op, nil, uerr.ClassServer, cause)
+	default:
+		return nil
+	}
 }
 
 // isConnectionDead reports whether err comes from the underlying TCP
