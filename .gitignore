@@ -2,6 +2,7 @@
 /fastmail-cli
 /tidytext
 /poplar
+/perfspike
 
 .config/aerc/signature.md
 .config/aerc/accounts.conf
