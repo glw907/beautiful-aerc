@@ -36,16 +36,19 @@ const (
 	// queryMailboxListForward is the read API's keyset-paginated
 	// mailbox list, paging toward older mail: rows before a cursor in
 	// idx_message_mailbox_list's received_at DESC, message_id ASC
-	// order. The redundant "received_at <= ?" conjunct is load-bearing,
-	// not decorative: with bound parameters (rather than literal
-	// constants) SQLite cannot derive an index seek bound from
-	// "received_at < ? OR (received_at = ? AND message_id > ?)" alone,
-	// and degrades to a full scan of the mailbox filtering row by row.
-	// The plain conjunct gives it the same seek back, verified against
-	// TestExplainQueryPlan's golden. The inner OR breaks ties on
-	// message_id so two rows sharing a received_at are still a total
-	// order; the column set is scalar only, since the list path never
-	// touches message.data.
+	// order.
+	//
+	// The redundant "received_at <= ?" conjunct is load-bearing. With
+	// bound parameters, rather than literal constants, SQLite cannot
+	// derive an index seek bound from "received_at < ? OR
+	// (received_at = ? AND message_id > ?)" alone, and degrades to a
+	// full scan of the mailbox filtering row by row. The plain
+	// conjunct restores the seek, verified against
+	// TestExplainQueryPlan's golden.
+	//
+	// The inner OR breaks ties on message_id so two rows sharing a
+	// received_at are still a total order. The column set is scalar
+	// only. The list path never touches message.data.
 	queryMailboxListForward = `SELECT message_id, received_at FROM message_mailbox WHERE mailbox_id = ? AND received_at <= ? AND (received_at < ? OR message_id > ?) ORDER BY received_at DESC, message_id ASC LIMIT ?`
 
 	// queryMailboxListBackward is the same window paging toward newer
@@ -54,4 +57,11 @@ const (
 	// queryMailboxListForward's comment explains. The caller reverses
 	// the rows into display order.
 	queryMailboxListBackward = `SELECT message_id, received_at FROM message_mailbox WHERE mailbox_id = ? AND received_at >= ? AND (received_at > ? OR message_id < ?) ORDER BY received_at ASC, message_id DESC LIMIT ?`
+
+	// queryMessageSummaryByID is the read API's companion to the
+	// mailbox list: the scalar columns LT-1's row needs beyond
+	// MailboxRow's id and date, selected by message id. The caller
+	// appends one "?" per id and closes the IN clause. The column set
+	// never selects message.data.
+	queryMessageSummaryByID = `SELECT id, subject, from_addr, flags, has_attachment, thread_key FROM message WHERE id IN (`
 )

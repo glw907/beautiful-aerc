@@ -24,9 +24,9 @@ func (c *RevisionCounter) Current() Revision {
 }
 
 // advance records one committed write and returns the new revision.
-// The writer is the only caller, and only after a transaction commits,
-// never from inside it: a result stamped with a revision must always
-// reflect data that is actually on disk.
+// Only the writer calls it, and only after a transaction commits.
+// Calling it before the commit lands would let a result claim a
+// revision the data does not yet reflect.
 func (c *RevisionCounter) advance() Revision {
 	return Revision(c.n.Add(1))
 }

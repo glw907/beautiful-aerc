@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -29,6 +30,71 @@ func TestListReadTouchesNoJSON(t *testing.T) {
 	}
 	if slices.Contains(cols, "data") {
 		t.Fatalf("mailbox list columns = %v, want no data column", cols)
+	}
+}
+
+// TestMessageSummaryTouchesNoJSON asserts the detail query's column
+// set excludes data, the same guarantee TestListReadTouchesNoJSON
+// gives the keyset list query but which the list query alone leaves
+// unchecked for the second read a page needs to paint LT-1's row.
+func TestMessageSummaryTouchesNoJSON(t *testing.T) {
+	db := openMigratedTestDB(t)
+
+	rows, err := db.QueryContext(context.Background(), queryMessageSummaryByID+"?)", int64(1))
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatalf("columns: %v", err)
+	}
+	if slices.Contains(cols, "data") {
+		t.Fatalf("message summary columns = %v, want no data column", cols)
+	}
+}
+
+// TestMailboxRowDetails proves the companion detail read returns
+// LT-1's list-painting columns (subject, sender, flags, the
+// attachment marker, and the thread key) for the ids a mailbox page
+// already returned, and that an id with no matching message is
+// simply absent from the result rather than an error.
+func TestMailboxRowDetails(t *testing.T) {
+	w, path := newTestWriter(t, DefaultWriterConfig())
+	pool, err := NewReadPool(path, DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("NewReadPool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	ctx := context.Background()
+	seedAccountAndMailbox(t, w)
+
+	err = w.submit(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, from_addr, flags, has_attachment, thread_key) VALUES
+			(1, 1, 100, 'hello', 'a@example.com', ?, 1, 'thread-1'),
+			(2, 1, 200, 'world', 'b@example.com', 0, 0, 'thread-2')`, FlagFlagged); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO message_mailbox (message_id, mailbox_id, received_at) VALUES (1, 1, 100), (2, 1, 200)`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed messages: %v", err)
+	}
+
+	got, err := pool.MailboxRowDetails(ctx, []int64{1, 2, 999})
+	if err != nil {
+		t.Fatalf("MailboxRowDetails: %v", err)
+	}
+
+	want := map[int64]MessageSummary{
+		1: {MessageID: 1, Subject: "hello", FromAddr: "a@example.com", Flags: FlagFlagged, HasAttachment: true, ThreadKey: "thread-1"},
+		2: {MessageID: 2, Subject: "world", FromAddr: "b@example.com", Flags: 0, HasAttachment: false, ThreadKey: "thread-2"},
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("MailboxRowDetails(1, 2, 999) = %+v, want %+v (999 absent)", got, want)
 	}
 }
 

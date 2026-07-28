@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/glw907/poplar/internal/uerr"
 )
@@ -63,6 +64,21 @@ type MailboxRow struct {
 	ReceivedAt int64
 }
 
+// MessageSummary is one message's list-painting columns beyond
+// MailboxRow's id and date: sender, subject, flags, the attachment
+// marker, and the thread key a caller groups rows by for LT-1's
+// thread count. It is never joined into the keyset list query, so
+// ListMailboxForward/Backward's plan and column set stay exactly
+// what TestListReadTouchesNoJSON asserts.
+type MessageSummary struct {
+	MessageID     int64
+	Subject       string
+	FromAddr      string
+	Flags         Flags
+	HasAttachment bool
+	ThreadKey     string
+}
+
 // MailboxPage is one keyset-paginated window over a mailbox, plus the
 // store revision the read saw.
 type MailboxPage struct {
@@ -102,11 +118,11 @@ func (p *ReadPool) ListMailboxBackward(ctx context.Context, mailboxID int64, cur
 // index-seek conjunct and once inside the tie-break clause), the
 // cursor's message id, and limit.
 //
-// rev is read before the query runs, not after: if a commit lands
-// while the query is in flight, stamping the result with the
-// counter's pre-query value means the result can only understate its
-// own freshness, never claim to be fresher than the data it actually
-// returned.
+// listMailbox captures rev before running the query. A commit that
+// lands mid-query would otherwise let the stamped revision claim
+// freshness the returned rows never actually saw. Capturing it early
+// means a result can undercount its own freshness but can never
+// overstate it.
 func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, receivedAt, messageID int64, limit int) (MailboxPage, error) {
 	rev := p.rev.Current()
 
@@ -128,4 +144,50 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 		return MailboxPage{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
 	}
 	return page, nil
+}
+
+// MailboxRowDetails returns a MessageSummary for each of ids, keyed
+// by message id, so a caller can paint a page ListMailboxForward or
+// ListMailboxBackward already returned. It selects only the
+// list-painting columns and never message.data. An id with no
+// matching message is simply absent from the result.
+func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (map[int64]MessageSummary, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var query strings.Builder
+	query.WriteString(queryMessageSummaryByID)
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		if i > 0 {
+			query.WriteString(",")
+		}
+		query.WriteString("?")
+		args[i] = id
+	}
+	query.WriteString(")")
+
+	rows, err := p.db.QueryContext(ctx, query.String(), args...)
+	if err != nil {
+		return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	summaries := make(map[int64]MessageSummary, len(ids))
+	for rows.Next() {
+		var s MessageSummary
+		var flags int64
+		var hasAttachment int
+		if err := rows.Scan(&s.MessageID, &s.Subject, &s.FromAddr, &flags, &hasAttachment, &s.ThreadKey); err != nil {
+			return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		}
+		s.Flags = Flags(flags) //nolint:gosec // G115: message.flags is written only through EncodeFlags's uint32 bitfield, never a value outside its range
+		s.HasAttachment = hasAttachment != 0
+		summaries[s.MessageID] = s
+	}
+	if err := rows.Err(); err != nil {
+		return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+	}
+	return summaries, nil
 }
