@@ -277,6 +277,58 @@ func TestEnqueueMoveMessagesBulkCompensatesPartialFailure(t *testing.T) {
 			t.Errorf("escaped = %v, want [%d] (already dispatched, Undo cannot catch it)", escaped, dispatched)
 		}
 	})
+
+	t.Run("EnqueueMoveMessagesBulk itself compensates a real chunk-write failure", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
+		msgIDs := []int64{
+			seedMessage(t, w, accountID, src, "msg-0"),
+			seedMessage(t, w, accountID, src, "msg-1"),
+		}
+
+		// A trigger that fails the second chunk's own insert (chunk_seq
+		// 1) is a genuine write failure from EnqueueMoveMessagesBulk's
+		// point of view, exercised through its public API rather than by
+		// calling compensateFailedChunk directly.
+		if err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				CREATE TRIGGER fail_second_chunk
+				BEFORE INSERT ON outbox
+				WHEN NEW.chunk_seq = 1 AND NEW.kind = 'move_messages'
+				BEGIN SELECT RAISE(ABORT, 'simulated chunk write failure'); END`)
+			return err
+		}); err != nil {
+			t.Fatalf("install failing trigger: %v", err)
+		}
+
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = 1
+		undoGroup, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, be, false, time.Now())
+		if err == nil {
+			t.Fatal("expected an error from the second chunk's failing insert")
+		}
+		if len(intentIDs) != 0 {
+			t.Errorf("intentIDs = %v, want none (the first chunk rolled back)", intentIDs)
+		}
+		if n := outboxCountByGroup(t, w, undoGroup); n != 0 {
+			t.Errorf("outbox rows remaining for undo_group %q = %d, want 0 (first chunk compensated)", undoGroup, n)
+		}
+	})
+}
+
+// outboxCountByGroup returns how many outbox rows carry undoGroup.
+func outboxCountByGroup(t *testing.T, w *store.Writer, undoGroup string) int {
+	t.Helper()
+	var n int
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(`SELECT COUNT(*) FROM outbox WHERE undo_group = ?`, undoGroup).Scan(&n)
+	})
+	if err != nil {
+		t.Fatalf("count outbox rows for undo_group %q: %v", undoGroup, err)
+	}
+	return n
 }
 
 func readMovePayload(t *testing.T, w *store.Writer, id int64) MoveMessagesPayload {
