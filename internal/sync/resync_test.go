@@ -70,3 +70,59 @@ func TestFullResyncPreserves(t *testing.T) {
 		t.Fatalf("watermark token = %q, want %q", wm.ServerStateToken, "resynced")
 	}
 }
+
+// TestFullResyncPagesIndependently asserts a baseline pull spanning
+// multiple pages upserts each page as its own bulk-lane transaction
+// rather than buffering every page before writing anything, while
+// still computing the stale-delete pass over the union of every
+// page's ids: a record introduced only on the second page survives,
+// and a record present in neither page is deleted only once every
+// page has been seen.
+func TestFullResyncPagesIndependently(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	seedMessage(t, w, accountID, "srv-gone", "server", "going away")
+
+	calls := 0
+	var be backendtest.Fake
+	be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+		calls++
+		if calls == 1 {
+			return backend.ChangeSet{
+				NewToken: "page-1",
+				HasMore:  true,
+				Created:  []backend.Record{{ID: "m1", Fields: map[string]any{"subject": "first page"}}},
+			}, nil
+		}
+		return backend.ChangeSet{
+			NewToken: "page-2",
+			Created:  []backend.Record{{ID: "m2", Fields: map[string]any{"subject": "second page"}}},
+		}, nil
+	}
+
+	worker := NewWorker(accountID, &be, w, testConfig())
+	if err := worker.fullResync(context.Background(), backend.ObjectKindMessage); err != nil {
+		t.Fatalf("fullResync: %v", err)
+	}
+
+	if calls != 2 {
+		t.Fatalf("Changes calls = %d, want 2", calls)
+	}
+	if !messageExistsByServerID(t, w, accountID, "m1") {
+		t.Fatal("m1 (first page) missing")
+	}
+	if !messageExistsByServerID(t, w, accountID, "m2") {
+		t.Fatal("m2 (second page) missing")
+	}
+	if messageExistsByServerID(t, w, accountID, "srv-gone") {
+		t.Fatal("srv-gone still present, want it deleted once every page has been seen")
+	}
+
+	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage)
+	if err != nil {
+		t.Fatalf("loadWatermark: %v", err)
+	}
+	if wm.ServerStateToken != "page-2" {
+		t.Fatalf("watermark token = %q, want %q (the last page's token)", wm.ServerStateToken, "page-2")
+	}
+}

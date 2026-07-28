@@ -32,14 +32,20 @@ type Config struct {
 	BackoffMin       time.Duration
 	BackoffMax       time.Duration
 	InteractiveQuiet time.Duration
+	// PollInterval is the fixed cadence RunPush falls back to for a
+	// backend whose Push() is nil (backend.PushTransportNone): with no
+	// event stream to coalesce, a plain ticker takes push's place.
+	PollInterval time.Duration
 }
 
 // DefaultConfig returns poplar's production sync timing. CoalesceWindow
 // is ADR-0005 revision 2's fixed value; the others have no document
 // specifying them, so Worker picks values proportionate to it: a
 // ping cadence generous enough that a live server's own keepalive
-// never trips the stall detector, and a backoff range bounded by
-// SY-2's 30s p95 recovery criterion.
+// never trips the stall detector, a backoff range bounded by SY-2's
+// 30s p95 recovery criterion, and a poll cadence (twice the ping
+// interval) generous for what is meant to be a degraded fallback, not
+// the norm.
 func DefaultConfig() Config {
 	return Config{
 		CoalesceWindow:   200 * time.Millisecond,
@@ -47,6 +53,7 @@ func DefaultConfig() Config {
 		BackoffMin:       500 * time.Millisecond,
 		BackoffMax:       30 * time.Second,
 		InteractiveQuiet: time.Second,
+		PollInterval:     60 * time.Second,
 	}
 }
 
@@ -68,13 +75,18 @@ func NewWorker(accountID int64, be backend.Backend, writer *store.Writer, cfg Co
 }
 
 // NoteDispatchedState records that a dispatch already produced token
-// as kind's new server state (ADR-0005 revision 2's self-echo
-// suppression): the next push-triggered sync cycle that resolves to
-// this same token skips re-applying it, so an outbox's own optimistic
-// write never round-trips into a redundant re-apply. The outbox
-// dispatcher calls this after a successful ApplyBatch.
-func (w *Worker) NoteDispatchedState(kind backend.ObjectKind, token string) {
-	w.echo.note(kind, token)
+// as kind's new server state, for the exact records named by ids
+// (ADR-0005 revision 2's self-echo suppression): the next
+// push-triggered sync cycle that resolves to this same token skips
+// re-applying only those records, so an outbox's own optimistic write
+// never round-trips into a redundant re-apply while a third-party
+// change batched into the same page still lands. The outbox
+// dispatcher calls this after a successful ApplyBatch; ApplyBatch's
+// BatchResult carries no post-dispatch state token yet, so wiring the
+// real production caller is task 10's, once BatchResult (or its
+// caller) can supply one.
+func (w *Worker) NoteDispatchedState(kind backend.ObjectKind, token string, ids []string) {
+	w.echo.note(kind, token, ids)
 }
 
 // kindName is sync_state.object_kind's value for kind.
@@ -153,13 +165,11 @@ func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
 			return err
 		}
 
-		echoed := w.echo.consume(kind, cs.NewToken)
+		skip := w.echo.consume(kind, cs.NewToken)
 		next := watermark{ServerStateToken: cs.NewToken, LocalRev: wm.LocalRev + 1}
 		err = runBulkChunks(ctx, w.writer, w.cfg.InteractiveQuiet, func(tx *sql.Tx) error {
-			if !echoed {
-				if err := applyChangeSet(tx, w.accountID, kind, cs); err != nil {
-					return err
-				}
+			if err := applyChangeSet(tx, w.accountID, kind, cs, skip); err != nil {
+				return err
 			}
 			return saveWatermark(tx, w.accountID, kind, next)
 		})

@@ -1,6 +1,9 @@
 package store
 
-import "fmt"
+import (
+	"database/sql"
+	"fmt"
+)
 
 // connKind selects the query_only pragma that tells dsn to build a
 // read-only connection string. It exists so the write connection and
@@ -51,4 +54,15 @@ func dsn(path string, kind connKind) string {
 		q += "&_pragma=query_only(1)"
 	}
 	return "file:" + path + "?" + q
+}
+
+// OpenWriteConn opens path as poplar's write connection, carrying
+// dsn's full pragma set. It is the one place outside this package
+// allowed to open a write connection directly, for storetest's
+// stand-alone Writer (ADR-0014): storetest once kept its own copy of
+// this pragma string, which had already drifted from dsn's. NewWriter
+// still owns pinning the result to one physical connection and
+// pairing it with a migrated schema.
+func OpenWriteConn(path string) (*sql.DB, error) {
+	return sql.Open("sqlite", dsn(path, connReadWrite))
 }

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -65,19 +66,31 @@ func firstAddress(v any) string {
 }
 
 // applyChangeSet writes cs's created, updated, and destroyed records
-// for kind into account accountID, inside tx.
-func applyChangeSet(tx *sql.Tx, accountID int64, kind backend.ObjectKind, cs backend.ChangeSet) error {
+// for kind into account accountID, inside tx. A record whose id is in
+// skip is left untouched: it is the dispatcher's own change, already
+// reflected locally, that this same page's self-echo suppression
+// (ADR-0005 revision 2) is skipping, not the whole page.
+func applyChangeSet(tx *sql.Tx, accountID int64, kind backend.ObjectKind, cs backend.ChangeSet, skip map[string]bool) error {
 	for _, rec := range cs.Created {
+		if skip[rec.ID] {
+			continue
+		}
 		if err := upsertRecord(tx, accountID, kind, rec); err != nil {
 			return err
 		}
 	}
 	for _, rec := range cs.Updated {
+		if skip[rec.ID] {
+			continue
+		}
 		if err := upsertRecord(tx, accountID, kind, rec); err != nil {
 			return err
 		}
 	}
 	for _, id := range cs.Destroyed {
+		if skip[id] {
+			continue
+		}
 		if err := destroyRecord(tx, accountID, kind, id); err != nil {
 			return err
 		}
@@ -111,7 +124,9 @@ func destroyRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, serverI
 
 // upsertMailbox writes rec as accountID's mailbox, keyed by
 // rec.ID (the server id): an update if a row with that server id
-// already exists, an insert otherwise.
+// already exists, an insert otherwise. Inserting a new row also
+// repairs any message whose mailbox_ids named this mailbox before its
+// local row existed (see repairMailboxAssociations).
 func upsertMailbox(tx *sql.Tx, accountID int64, rec backend.Record) error {
 	f := rec.Fields
 	name := stringField(f, "name")
@@ -124,11 +139,18 @@ func upsertMailbox(tx *sql.Tx, accountID int64, rec backend.Record) error {
 	err := tx.QueryRow(`SELECT id FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, rec.ID).Scan(&id)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		_, err = tx.Exec(
+		res, err := tx.Exec(
 			`INSERT INTO mailbox (account_id, server_id, role, name, sort_order, total_count, unread_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			accountID, rec.ID, role, name, sortOrder, totalCount, unreadCount,
 		)
-		return err
+		if err != nil {
+			return err
+		}
+		newID, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		return repairMailboxAssociations(tx, accountID, newID, rec.ID)
 	case err != nil:
 		return err
 	default:
@@ -138,6 +160,14 @@ func upsertMailbox(tx *sql.Tx, accountID int64, rec backend.Record) error {
 		)
 		return err
 	}
+}
+
+// messageData is message.data's shape: the one key sync writes today
+// (mailbox_ids, so a later mailbox sync can repair an association
+// syncMessageMailboxes had to skip). internal/mail extends this with
+// its own keys from pass 3 onward.
+type messageData struct {
+	MailboxIDs []string `json:"mailbox_ids"`
 }
 
 // upsertMessage writes rec as accountID's message, keyed by rec.ID,
@@ -161,14 +191,19 @@ func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
 	mailboxIDs, _ := f["mailbox_ids"].([]string)
 	unread := !boolField(f, "seen")
 
+	data, err := json.Marshal(messageData{MailboxIDs: mailboxIDs})
+	if err != nil {
+		return err
+	}
+
 	var id int64
-	err := tx.QueryRow(`SELECT id FROM message WHERE account_id = ? AND server_id = ?`, accountID, rec.ID).Scan(&id)
+	err = tx.QueryRow(`SELECT id FROM message WHERE account_id = ? AND server_id = ?`, accountID, rec.ID).Scan(&id)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		res, err := tx.Exec(
-			`INSERT INTO message (account_id, server_id, blob_id, thread_key, received_at, subject, from_addr, flags, size, has_attachment)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			accountID, rec.ID, blobID, threadKey, receivedAt.Unix(), subject, fromAddr, int64(flags), size, hasAttachment,
+			`INSERT INTO message (account_id, server_id, blob_id, thread_key, received_at, subject, from_addr, flags, size, has_attachment, data)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			accountID, rec.ID, blobID, threadKey, receivedAt.Unix(), subject, fromAddr, int64(flags), size, hasAttachment, data,
 		)
 		if err != nil {
 			return err
@@ -181,8 +216,8 @@ func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
 		return err
 	default:
 		if _, err := tx.Exec(
-			`UPDATE message SET blob_id = ?, thread_key = ?, received_at = ?, subject = ?, from_addr = ?, flags = ?, size = ?, has_attachment = ? WHERE id = ?`,
-			blobID, threadKey, receivedAt.Unix(), subject, fromAddr, int64(flags), size, hasAttachment, id,
+			`UPDATE message SET blob_id = ?, thread_key = ?, received_at = ?, subject = ?, from_addr = ?, flags = ?, size = ?, has_attachment = ?, data = ? WHERE id = ?`,
+			blobID, threadKey, receivedAt.Unix(), subject, fromAddr, int64(flags), size, hasAttachment, data, id,
 		); err != nil {
 			return err
 		}
@@ -190,13 +225,74 @@ func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
 	return syncMessageMailboxes(tx, accountID, id, receivedAt.Unix(), unread, mailboxIDs)
 }
 
+// repairMailboxAssociations re-associates any message in accountID
+// whose stored mailbox_ids (message.data, written by upsertMessage)
+// names mailboxServerID but has no message_mailbox row for mailboxID
+// yet: that message's own sync page arrived before this mailbox's
+// local row existed, so syncMessageMailboxes skipped the association.
+// upsertMailbox calls this right after inserting a new mailbox row,
+// closing the ordering gap instead of waiting on a later update of
+// that same message to repair it (RunPush and pollKinds also order
+// Mailbox ahead of Message so the common case never needs this pass
+// at all).
+func repairMailboxAssociations(tx *sql.Tx, accountID, mailboxID int64, mailboxServerID string) error {
+	rows, err := tx.Query(
+		`SELECT m.id, m.received_at, m.flags, m.data FROM message m
+		 WHERE m.account_id = ?
+		 AND EXISTS (SELECT 1 FROM json_each(json_extract(m.data, '$.mailbox_ids')) je WHERE je.value = ?)
+		 AND m.id NOT IN (SELECT message_id FROM message_mailbox WHERE mailbox_id = ?)`,
+		accountID, mailboxServerID, mailboxID,
+	)
+	if err != nil {
+		return err
+	}
+
+	type orphan struct {
+		id, receivedAt int64
+		unread         bool
+		mailboxIDs     []string
+	}
+	var orphans []orphan
+	for rows.Next() {
+		var o orphan
+		var flags int64
+		var data string
+		if err := rows.Scan(&o.id, &o.receivedAt, &flags, &data); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		var md messageData
+		if err := json.Unmarshal([]byte(data), &md); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		o.unread = store.Flags(flags)&store.FlagSeen == 0 //nolint:gosec // G115: message.flags is written only through EncodeFlags's uint32 bitfield, never a value outside its range
+		o.mailboxIDs = md.MailboxIDs
+		orphans = append(orphans, o)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	for _, o := range orphans {
+		if err := syncMessageMailboxes(tx, accountID, o.id, o.receivedAt, o.unread, o.mailboxIDs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // syncMessageMailboxes reconciles message_mailbox to exactly the
 // mailboxes named by mailboxServerIDs: dropping associations no
 // longer present, refreshing the denormalized received_at and unread
 // columns on the ones that remain, and inserting new ones. A server
-// id with no matching local mailbox row yet is skipped rather than
-// failed, so message and mailbox kinds never have to sync in a fixed
-// order: a later mailbox sync pass fills the association in.
+// id with no matching local mailbox row yet is skipped, not failed;
+// repairMailboxAssociations revisits it once that mailbox's row
+// exists.
 func syncMessageMailboxes(tx *sql.Tx, accountID, messageID, receivedAt int64, unread bool, mailboxServerIDs []string) error {
 	want := make(map[int64]bool, len(mailboxServerIDs))
 	for _, sid := range mailboxServerIDs {

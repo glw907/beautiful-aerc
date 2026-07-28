@@ -202,16 +202,17 @@ func countOutboxRows(t *testing.T, w *store.Writer, accountID int64) int {
 	return n
 }
 
-// mailboxIDsForServerID returns the mailbox ids serverID's message is
-// currently associated with.
-func mailboxIDsForServerID(t *testing.T, w *store.Writer, accountID int64, serverID string) []int64 {
+// mailboxIDsForServerID returns the mailbox ids "m1"'s message is
+// currently associated with; every test fixture using this helper
+// names its message "m1".
+func mailboxIDsForServerID(t *testing.T, w *store.Writer, accountID int64) []int64 {
 	t.Helper()
 
 	var ids []int64
 	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
 		rows, err := tx.Query(
 			`SELECT mm.mailbox_id FROM message_mailbox mm JOIN message m ON m.id = mm.message_id WHERE m.account_id = ? AND m.server_id = ?`,
-			accountID, serverID,
+			accountID, "m1",
 		)
 		if err != nil {
 			return err
@@ -227,7 +228,7 @@ func mailboxIDsForServerID(t *testing.T, w *store.Writer, accountID int64, serve
 		return rows.Err()
 	})
 	if err != nil {
-		t.Fatalf("mailbox ids for %q: %v", serverID, err)
+		t.Fatalf("mailbox ids for \"m1\": %v", err)
 	}
 	return ids
 }

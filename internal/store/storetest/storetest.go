@@ -7,8 +7,6 @@
 package storetest
 
 import (
-	"database/sql"
-	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -17,22 +15,16 @@ import (
 	"github.com/glw907/poplar/internal/store"
 )
 
-// dsn mirrors the pragma set internal/store's own DSN builder keeps
-// unexported: foreign keys on, WAL journaling, a busy timeout. A test
-// writer built here enforces the same cascade and locking behavior
-// production connections do.
-func dsn(path string) string {
-	return fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(wal)&_pragma=synchronous(normal)", path)
-}
-
 // OpenWriter opens a fresh migrated store file under t.TempDir and
 // returns a Writer over it running cfg's timing, closing it on
-// cleanup.
+// cleanup. The connection carries store.OpenWriteConn's pragma set,
+// the one place poplar spells it, so a test writer never drifts from
+// production's cache budget and locking behavior.
 func OpenWriter(t *testing.T, cfg store.WriterConfig) *store.Writer {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path))
+	db, err := store.OpenWriteConn(path)
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}
