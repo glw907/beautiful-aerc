@@ -128,14 +128,17 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 	}
 
 	for _, c := range claimedRows {
+		if stopped {
+			actions = append(actions, finalizeAction{id: c.id, verb: finalizeRevert})
+			continue
+		}
 		if batched[c.id] {
 			// Already dispatched in its create's batch, which id order
 			// guarantees came earlier in this loop: a DestRef names a
-			// row that had to exist before the move was enqueued.
-			continue
-		}
-		if stopped {
-			actions = append(actions, finalizeAction{id: c.id, verb: finalizeRevert})
+			// row that had to exist before the move was enqueued. The
+			// stopped check comes first because a pass that stopped
+			// before the create's turn never built that batch, and the
+			// row is owed a revert like every other claim it abandoned.
 			continue
 		}
 

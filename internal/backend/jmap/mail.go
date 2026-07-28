@@ -15,6 +15,7 @@ import (
 	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
 
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // searchResultLimit bounds Search's Email/query so a broad term
@@ -56,7 +57,10 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 			case backend.MutationDestroy:
 				messages.Destroy = append(messages.Destroy, jmap.ID(mut.ID))
 			case backend.MutationCreate:
-				result.Failed[mut.CreationID] = errors.New("jmap: message create needs compose assembly (pass 4)")
+				result.Failed[mut.CreationID] = backend.MutationFailure{
+					Class: uerr.ClassServer,
+					Cause: errors.New("jmap: message create needs compose assembly (pass 4)"),
+				}
 			default:
 				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: unsupported op %v", mut.Op)
 			}

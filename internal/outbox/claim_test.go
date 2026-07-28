@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -99,6 +100,61 @@ func TestClaimIsTransactional(t *testing.T) {
 			if !annihilated[id] && !sentSet[serverID] {
 				t.Fatalf("trial %d: intent %d neither annihilated nor sent", trial, id)
 			}
+		}
+	}
+}
+
+// TestUndoReportsNothingWhenItsTransactionRollsBack pins the other
+// half of Undo's contract: its id list names rows a committed
+// transaction deleted. A delete that aborts partway rolls the whole
+// transaction back, earlier deletes included, so a caller that read
+// an id list alongside the error would skip compensating for rows
+// that are still there.
+func TestUndoReportsNothingWhenItsTransactionRollsBack(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+	dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
+	msgIDs := []int64{
+		seedMessage(t, w, accountID, src, "msg-0"),
+		seedMessage(t, w, accountID, src, "msg-1"),
+	}
+
+	be := newFakeBackend()
+	be.Caps.Limits.MaxObjectsInSet = 1
+	_, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, be, false, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	if len(intentIDs) != 2 {
+		t.Fatalf("chunk count = %d, want 2", len(intentIDs))
+	}
+
+	// Aborting the second chunk's delete leaves the first one already
+	// deleted inside the same transaction, the shape that separates a
+	// list built inside the closure from one the commit earned.
+	err = w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		_, execErr := tx.Exec(`
+			CREATE TRIGGER fail_second_delete
+			BEFORE DELETE ON outbox
+			WHEN OLD.chunk_seq = 1
+			BEGIN SELECT RAISE(ABORT, 'simulated delete failure'); END`)
+		return execErr
+	})
+	if err != nil {
+		t.Fatalf("install failing trigger: %v", err)
+	}
+
+	annihilated, err := Undo(context.Background(), w, intentIDs)
+	if err == nil {
+		t.Fatal("expected an error from the aborted delete")
+	}
+	if len(annihilated) != 0 {
+		t.Errorf("annihilated = %v, want none: the transaction rolled back", annihilated)
+	}
+	for _, id := range intentIDs {
+		if n := outboxCount(t, w, id); n != 1 {
+			t.Errorf("intent %d is gone, want it restored by the rollback", id)
 		}
 	}
 }

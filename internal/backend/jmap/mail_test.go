@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // fakeBlobs scripts the /upload/ and /download/ endpoints Submit and
@@ -91,11 +92,33 @@ func TestApplyBatchUpdateDestroyAndUnsupportedCreate(t *testing.T) {
 		t.Errorf("destroy = %v", args["destroy"])
 	}
 
-	if _, failed := result.Failed["c1"]; !failed {
-		t.Error("MutationCreate should fail with c1 in result.Failed")
+	// Every entry in Failed carries a class the outbox dispatcher can
+	// branch on, this transport's own refusal of a message create
+	// included: a bare error there would reach the dispatcher with no
+	// class to read and fall back to ClassServer by accident rather
+	// than by decision.
+	failures := []struct {
+		name string
+		key  string
+		want uerr.Class
+	}{
+		{name: "unsupported message create", key: "c1", want: uerr.ClassServer},
+		{name: "server notUpdated", key: "msg-3", want: uerr.ClassNotFound},
 	}
-	if _, failed := result.Failed["msg-3"]; !failed {
-		t.Error("server notUpdated msg-3 should surface in result.Failed")
+	for _, f := range failures {
+		t.Run(f.name, func(t *testing.T) {
+			failure, present := result.Failed[f.key]
+			if !present {
+				t.Fatalf("result.Failed has no entry for %q", f.key)
+			}
+			mf, ok := errors.AsType[backend.MutationFailure](failure)
+			if !ok {
+				t.Fatalf("Failed[%q] = %v, want a backend.MutationFailure", f.key, failure)
+			}
+			if mf.Class != f.want {
+				t.Errorf("Class = %v, want %v", mf.Class, f.want)
+			}
+		})
 	}
 }
 

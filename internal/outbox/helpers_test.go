@@ -106,6 +106,20 @@ func outboxState(t *testing.T, w *store.Writer, id int64) (state string, attempt
 	return state, attempts
 }
 
+// dispatchingCount returns how many of accountID's outbox rows are
+// still in the dispatching state.
+func dispatchingCount(t *testing.T, w *store.Writer, accountID int64) int {
+	t.Helper()
+	var n int
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(`SELECT COUNT(*) FROM outbox WHERE account_id = ? AND state = 'dispatching'`, accountID).Scan(&n)
+	})
+	if err != nil {
+		t.Fatalf("count dispatching rows for account %d: %v", accountID, err)
+	}
+	return n
+}
+
 // readPayload returns id's raw payload column.
 func readPayload(t *testing.T, w *store.Writer, id int64) []byte {
 	t.Helper()
