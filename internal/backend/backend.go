@@ -12,6 +12,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"iter"
 )
 
 // ErrStateReset reports that a Changes token no longer names any
@@ -24,22 +25,47 @@ var ErrStateReset = errors.New("backend: state reset")
 // applied. The caller re-fetches state through Changes and retries.
 var ErrStateMismatch = errors.New("backend: state mismatch")
 
-// Record is one hydrated item a Changes call returns. Fields carries
-// whatever the collection's own package (mail, calendar, contacts)
-// decodes into its model, keyed to the server's id for the record.
+// ObjectKind names the collection a Source's Changes call pages
+// through. A backend composes several kinds behind one Mail,
+// Calendar, or Contacts source (Mail carries both Message and
+// Mailbox), so Changes takes the kind as an argument rather than
+// mixing collections into one response.
+type ObjectKind int
+
+const (
+	// ObjectKindMessage is a mail source's messages.
+	ObjectKindMessage ObjectKind = iota
+	// ObjectKindMailbox is a mail source's mailboxes (folders).
+	ObjectKindMailbox
+	// ObjectKindEvent is a calendar source's events.
+	ObjectKindEvent
+	// ObjectKindContact is a contacts source's cards.
+	ObjectKindContact
+)
+
+// Record is one hydrated item a Changes call returns. Fields is
+// keyed to poplar's own field vocabulary for its kind, the same names
+// internal/mail, internal/calendar, and internal/contacts decode. A
+// backend translates its wire protocol's property names into this
+// vocabulary before Changes returns; it never leaks a wire property
+// name (JMAP's mailboxIds, keywords, and so on) through the seam.
 type Record struct {
 	ID     string
 	Fields map[string]any
 }
 
-// ChangeSet is what Changes returns for one collection since a
-// watermark: records created or updated since Token, hydrated in the
-// same round trip, and the ids of anything destroyed.
+// ChangeSet is what Changes returns for one page of one collection:
+// records created or updated since the requested token, hydrated in
+// the same round trip, and the ids of anything destroyed. HasMore is
+// true when the collection has more changes past this page than limit
+// admitted; the caller repeats Changes with NewToken to fetch the
+// rest.
 type ChangeSet struct {
 	Created   []Record
 	Updated   []Record
 	Destroyed []string
-	Token     string
+	NewToken  string
+	HasMore   bool
 }
 
 // MutationOp names the kind of change a Mutation describes.
@@ -56,7 +82,8 @@ const (
 	MutationDestroy
 )
 
-// Mutation is one change ApplyBatch applies within a batch.
+// Mutation is one change ApplyBatch applies within a batch. Fields is
+// keyed to the same poplar field vocabulary Record.Fields uses.
 type Mutation struct {
 	Op MutationOp
 	// ID names the record Op acts on: a server id for Update or
@@ -95,13 +122,25 @@ type Notification struct {
 	Scope string
 }
 
+// BodyChunk is one message's raw source, yielded by FetchBodies'
+// iterator. Err is the failure fetching this one id; a caller ranges
+// over the iterator and checks Err per item rather than losing every
+// other body to one message's failure.
+type BodyChunk struct {
+	ID  string
+	Raw []byte
+	Err error
+}
+
 // Source is the delta-and-mutate shape every collection a backend
 // composes shares.
 type Source interface {
-	// Changes returns everything created or updated since token,
-	// hydrated in the same round trip, and the ids of anything
-	// destroyed. An empty token asks for a full initial sync.
-	Changes(ctx context.Context, token string) (ChangeSet, error)
+	// Changes returns one page of everything created or updated
+	// since token for kind, hydrated in the same round trip, and the
+	// ids of anything destroyed. An empty token asks for a full
+	// initial sync. limit bounds the page size; a limit of 0 asks for
+	// the backend's own default.
+	Changes(ctx context.Context, kind ObjectKind, token string, limit int) (ChangeSet, error)
 
 	// ApplyBatch applies mutations as one request.
 	ApplyBatch(ctx context.Context, mutations []Mutation) (BatchResult, error)
@@ -112,16 +151,22 @@ type Source interface {
 type Mail interface {
 	Source
 
-	// FetchBodies returns the raw message source for each id in
-	// ids.
-	FetchBodies(ctx context.Context, ids []string) (map[string][]byte, error)
+	// FetchBodies returns the raw message source for each id in ids,
+	// yielded lazily by the returned iterator so a multi-megabyte
+	// body never has to sit whole in memory alongside every other one
+	// requested.
+	FetchBodies(ctx context.Context, ids []string) (iter.Seq[BodyChunk], error)
 
 	// Submit hands raw outgoing message source to the backend's
 	// submission lifecycle.
 	Submit(ctx context.Context, raw []byte) (SubmitResult, error)
 
+	// CreateMailbox creates a mailbox named name under parentID (the
+	// root, if empty) and returns its server id.
 	CreateMailbox(ctx context.Context, name, parentID string) (id string, err error)
+	// RenameMailbox changes the mailbox named id's display name.
 	RenameMailbox(ctx context.Context, id, name string) error
+	// DeleteMailbox removes the mailbox named id.
 	DeleteMailbox(ctx context.Context, id string) error
 
 	// Search runs a server-side search (SR-7). A caller checks
@@ -135,6 +180,9 @@ type Mail interface {
 // names.
 type Calendar interface {
 	Source
+
+	// Respond submits id's RSVP as partstat, one of iCalendar's
+	// PARTSTAT values ("ACCEPTED", "DECLINED", "TENTATIVE").
 	Respond(ctx context.Context, id, partstat string) error
 }
 
@@ -150,13 +198,23 @@ type Push interface {
 	Listen(ctx context.Context) (<-chan Notification, error)
 }
 
+// Credentials owns a backend's auth token lifecycle. Token returns a
+// valid credential for the current request, refreshing it first if
+// needed; the seam owns single-flight refresh and persistence through
+// internal/keyring, so a caller never sees a 401-refresh-retry
+// sequence. For v1's static Fastmail token, Token is a read.
+type Credentials interface {
+	Token(ctx context.Context) (string, error)
+}
+
 // Backend composes the sources one account exposes. Calendar,
-// Contacts, and Push return nil when the account has no such
-// source; a caller checks before use.
+// Contacts, and Push return nil when the account has no such source;
+// a caller checks before use. Credentials is never nil.
 type Backend interface {
 	Mail() Mail
 	Calendar() Calendar
 	Contacts() Contacts
 	Push() Push
 	Capabilities() Capabilities
+	Credentials() Credentials
 }

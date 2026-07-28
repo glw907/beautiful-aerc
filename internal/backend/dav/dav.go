@@ -18,7 +18,7 @@ type Client struct{}
 
 var _ backend.Calendar = (*Client)(nil)
 
-func (c *Client) Changes(context.Context, string) (backend.ChangeSet, error) {
+func (c *Client) Changes(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
 	return backend.ChangeSet{}, errNotImplemented
 }
 

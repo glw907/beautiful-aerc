@@ -70,6 +70,13 @@ type ServerLimits struct {
 	// MaxObjectsInSet is the most mutations one ApplyBatch call may
 	// carry.
 	MaxObjectsInSet int
+	// MaxCallsInRequest is the most method calls one batched request
+	// may carry.
+	MaxCallsInRequest int
+	// MaxConcurrentRequests is the most requests the account's shared
+	// request budget admits in flight at once (technical design
+	// section 5).
+	MaxConcurrentRequests int
 	// MaxSizeUpload is the largest outgoing message Submit accepts,
 	// in bytes.
 	MaxSizeUpload int64
@@ -83,8 +90,11 @@ type Capabilities struct {
 	PushTransport    PushTransport
 	DeltaGranularity DeltaGranularity
 	ServerSearch     bool
-	RSVP             RSVPMechanism
-	Limits           ServerLimits
+	// ScheduledSend is whether the backend accepts a future send time
+	// on Submit rather than poplar holding the message until then.
+	ScheduledSend bool
+	RSVP          RSVPMechanism
+	Limits        ServerLimits
 	// AccountIDs maps a capability name (mail, contacts, calendars)
 	// to the account id the live session assigned it. A JMAP session
 	// can assign a different account id per capability under one
