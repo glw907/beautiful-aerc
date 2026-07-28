@@ -5,8 +5,8 @@
 // A backend composes the sources one account exposes; Calendar,
 // Contacts, and Push return nil for a source the account lacks.
 // internal/backend/jmap and internal/backend/dav implement it
-// against a live server; Fake, in this package, is the seam's second
-// implementation (ADR-0014), scripted for engine tests.
+// against a live server; internal/backend/backendtest's Fake is the
+// seam's second implementation (ADR-0014), scripted for engine tests.
 package backend
 
 import (

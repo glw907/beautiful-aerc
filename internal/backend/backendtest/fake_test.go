@@ -1,4 +1,4 @@
-package backend
+package backendtest
 
 import (
 	"context"
@@ -6,18 +6,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/uerr"
 )
 
 func TestFakeScripting(t *testing.T) {
 	t.Run("state reset", func(t *testing.T) {
 		f := &Fake{}
-		f.MailSource.ChangesFunc = func(context.Context, ObjectKind, string, int) (ChangeSet, error) {
-			return ChangeSet{}, ErrStateReset
+		f.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			return backend.ChangeSet{}, backend.ErrStateReset
 		}
 
-		_, err := f.Mail().Changes(context.Background(), ObjectKindMessage, "stale-token", 0)
-		if !errors.Is(err, ErrStateReset) {
+		_, err := f.Mail().Changes(context.Background(), backend.ObjectKindMessage, "stale-token", 0)
+		if !errors.Is(err, backend.ErrStateReset) {
 			t.Fatalf("Changes() error = %v, want ErrStateReset", err)
 		}
 		if got := f.MailSource.Calls(); len(got) != 1 || got[0] != "Changes" {
@@ -27,22 +28,22 @@ func TestFakeScripting(t *testing.T) {
 
 	t.Run("412 state mismatch", func(t *testing.T) {
 		f := &Fake{}
-		f.MailSource.ApplyBatchFunc = func(context.Context, []Mutation) (BatchResult, error) {
-			return BatchResult{}, ErrStateMismatch
+		f.MailSource.ApplyBatchFunc = func(context.Context, []backend.Mutation) (backend.BatchResult, error) {
+			return backend.BatchResult{}, backend.ErrStateMismatch
 		}
 
-		mutations := []Mutation{{Op: MutationCreate, CreationID: "c1"}}
+		mutations := []backend.Mutation{{Op: backend.MutationCreate, CreationID: "c1"}}
 		_, err := f.Mail().ApplyBatch(context.Background(), mutations)
-		if !errors.Is(err, ErrStateMismatch) {
+		if !errors.Is(err, backend.ErrStateMismatch) {
 			t.Fatalf("ApplyBatch() error = %v, want ErrStateMismatch", err)
 		}
 	})
 
 	t.Run("push drop", func(t *testing.T) {
-		dropped := make(chan Notification)
+		dropped := make(chan backend.Notification)
 		close(dropped)
 		f := &Fake{PushSource: &FakePush{
-			ListenFunc: func(context.Context) (<-chan Notification, error) {
+			ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
 				return dropped, nil
 			},
 		}}
@@ -58,14 +59,14 @@ func TestFakeScripting(t *testing.T) {
 
 	t.Run("throttled first sync", func(t *testing.T) {
 		f := &Fake{}
-		f.MailSource.ChangesFunc = func(_ context.Context, _ ObjectKind, token string, _ int) (ChangeSet, error) {
+		f.MailSource.ChangesFunc = func(_ context.Context, _ backend.ObjectKind, token string, _ int) (backend.ChangeSet, error) {
 			if token != "" {
 				t.Fatalf("Changes(token = %q), want an empty token for a first sync", token)
 			}
-			return ChangeSet{}, uerr.New("mail changes", nil, uerr.ClassThrottled, errors.New("rate limited"))
+			return backend.ChangeSet{}, uerr.New("mail changes", nil, uerr.ClassThrottled, errors.New("rate limited"))
 		}
 
-		_, err := f.Mail().Changes(context.Background(), ObjectKindMessage, "", 0)
+		_, err := f.Mail().Changes(context.Background(), backend.ObjectKindMessage, "", 0)
 		var uerrErr uerr.Error
 		if !errors.As(err, &uerrErr) || uerrErr.Class != uerr.ClassThrottled {
 			t.Fatalf("Changes() error = %v, want a uerr.Error classed ClassThrottled", err)
@@ -78,7 +79,7 @@ func TestFakeScripting(t *testing.T) {
 // backend with a scripted CalendarSource returns a non-nil Calendar()
 // whose Respond call dispatches to the script.
 func TestCapabilityDefaults(t *testing.T) {
-	var b Backend = &Fake{}
+	var b backend.Backend = &Fake{}
 
 	if cal := b.Calendar(); cal != nil {
 		t.Fatalf("Calendar() = %v, want nil for a backend with no calendar source", cal)
@@ -193,9 +194,9 @@ func TestFakeCredentials(t *testing.T) {
 // TestCapabilitiesFields asserts the server-limit and scheduled-send
 // facts a live session reports round-trip through Fake.Capabilities().
 func TestCapabilitiesFields(t *testing.T) {
-	caps := Capabilities{
+	caps := backend.Capabilities{
 		ScheduledSend: true,
-		Limits: ServerLimits{
+		Limits: backend.ServerLimits{
 			MaxCallsInRequest:     16,
 			MaxConcurrentRequests: 4,
 		},

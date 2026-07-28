@@ -1,4 +1,9 @@
-package backend
+// Package backendtest is the scriptable second implementation of
+// internal/backend's seam (ADR-0014), the net/http/httptest precedent
+// applied to the backend interface: a test double that ships beside
+// its interface rather than inside it, so it never compiles into the
+// shipped binary and no production package can reference it.
+package backendtest
 
 import (
 	"context"
@@ -6,6 +11,8 @@ import (
 	"iter"
 	"slices"
 	"sync"
+
+	"github.com/glw907/poplar/internal/backend"
 )
 
 // FakeSource scripts one collection's Changes and ApplyBatch, the
@@ -17,30 +24,30 @@ import (
 type FakeSource struct {
 	mu sync.Mutex
 
-	ChangesFunc    func(ctx context.Context, kind ObjectKind, token string, limit int) (ChangeSet, error)
-	ApplyBatchFunc func(ctx context.Context, mutations []Mutation) (BatchResult, error)
+	ChangesFunc    func(ctx context.Context, kind backend.ObjectKind, token string, limit int) (backend.ChangeSet, error)
+	ApplyBatchFunc func(ctx context.Context, mutations []backend.Mutation) (backend.BatchResult, error)
 
 	calls []string
 }
 
-// Changes implements Source, recording the call and delegating to
-// ChangesFunc.
-func (s *FakeSource) Changes(ctx context.Context, kind ObjectKind, token string, limit int) (ChangeSet, error) {
+// Changes implements backend.Source, recording the call and
+// delegating to ChangesFunc.
+func (s *FakeSource) Changes(ctx context.Context, kind backend.ObjectKind, token string, limit int) (backend.ChangeSet, error) {
 	s.record("Changes")
 	if s.ChangesFunc != nil {
 		return s.ChangesFunc(ctx, kind, token, limit)
 	}
-	return ChangeSet{NewToken: token}, nil
+	return backend.ChangeSet{NewToken: token}, nil
 }
 
-// ApplyBatch implements Source, recording the call and delegating to
-// ApplyBatchFunc.
-func (s *FakeSource) ApplyBatch(ctx context.Context, mutations []Mutation) (BatchResult, error) {
+// ApplyBatch implements backend.Source, recording the call and
+// delegating to ApplyBatchFunc.
+func (s *FakeSource) ApplyBatch(ctx context.Context, mutations []backend.Mutation) (backend.BatchResult, error) {
 	s.record("ApplyBatch")
 	if s.ApplyBatchFunc != nil {
 		return s.ApplyBatchFunc(ctx, mutations)
 	}
-	return BatchResult{}, nil
+	return backend.BatchResult{}, nil
 }
 
 func (s *FakeSource) record(name string) {
@@ -62,15 +69,15 @@ func (s *FakeSource) Calls() []string {
 // return a quiet zero-value success that could pass against an engine
 // that never made the call at all.
 func unscripted(receiver, method, field string) error {
-	return fmt.Errorf("backend: %s.%s called with no %s set", receiver, method, field)
+	return fmt.Errorf("backendtest: %s.%s called with no %s set", receiver, method, field)
 }
 
 // FakeMail is the scriptable Mail source.
 type FakeMail struct {
 	FakeSource
 
-	FetchBodiesFunc   func(ctx context.Context, ids []string) (iter.Seq[BodyChunk], error)
-	SubmitFunc        func(ctx context.Context, raw []byte) (SubmitResult, error)
+	FetchBodiesFunc   func(ctx context.Context, ids []string) (iter.Seq[backend.BodyChunk], error)
+	SubmitFunc        func(ctx context.Context, raw []byte) (backend.SubmitResult, error)
 	CreateMailboxFunc func(ctx context.Context, name, parentID string) (string, error)
 	RenameMailboxFunc func(ctx context.Context, id, name string) error
 	DeleteMailboxFunc func(ctx context.Context, id string) error
@@ -78,7 +85,7 @@ type FakeMail struct {
 }
 
 // FetchBodies delegates to FetchBodiesFunc.
-func (m *FakeMail) FetchBodies(ctx context.Context, ids []string) (iter.Seq[BodyChunk], error) {
+func (m *FakeMail) FetchBodies(ctx context.Context, ids []string) (iter.Seq[backend.BodyChunk], error) {
 	if m.FetchBodiesFunc == nil {
 		return nil, unscripted("FakeMail", "FetchBodies", "FetchBodiesFunc")
 	}
@@ -86,9 +93,9 @@ func (m *FakeMail) FetchBodies(ctx context.Context, ids []string) (iter.Seq[Body
 }
 
 // Submit delegates to SubmitFunc.
-func (m *FakeMail) Submit(ctx context.Context, raw []byte) (SubmitResult, error) {
+func (m *FakeMail) Submit(ctx context.Context, raw []byte) (backend.SubmitResult, error) {
 	if m.SubmitFunc == nil {
-		return SubmitResult{}, unscripted("FakeMail", "Submit", "SubmitFunc")
+		return backend.SubmitResult{}, unscripted("FakeMail", "Submit", "SubmitFunc")
 	}
 	return m.SubmitFunc(ctx, raw)
 }
@@ -165,30 +172,30 @@ func (c *FakeCredentials) Token(ctx context.Context) (string, error) {
 // TestFakeScripting's push-drop condition: return a channel the
 // script closes to simulate the transport dropping.
 type FakePush struct {
-	ListenFunc func(ctx context.Context) (<-chan Notification, error)
+	ListenFunc func(ctx context.Context) (<-chan backend.Notification, error)
 }
 
 // Listen delegates to ListenFunc. With ListenFunc unset, it returns a
 // channel that stays open until ctx is done, matching a live
 // transport that has not dropped, rather than one that already has.
-func (p *FakePush) Listen(ctx context.Context) (<-chan Notification, error) {
+func (p *FakePush) Listen(ctx context.Context) (<-chan backend.Notification, error) {
 	if p.ListenFunc != nil {
 		return p.ListenFunc(ctx)
 	}
-	ch := make(chan Notification)
+	ch := make(chan backend.Notification)
 	context.AfterFunc(ctx, func() { close(ch) })
 	return ch, nil
 }
 
-// Fake is a scriptable Backend, ADR-0014's second implementation of
-// the seam: the sync engine and outbox run against it under
-// testing/synctest, driven through the same interface the real
-// backends serve. MailSource and CredentialsSource are always
+// Fake is a scriptable backend.Backend, ADR-0014's second
+// implementation of the seam: the sync engine and outbox run against
+// it under testing/synctest, driven through the same interface the
+// real backends serve. MailSource and CredentialsSource are always
 // present; CalendarSource, ContactsSource, and PushSource are nil
 // until a test sets them, matching a backend that declares no such
 // source.
 type Fake struct {
-	Caps Capabilities
+	Caps backend.Capabilities
 
 	MailSource        FakeMail
 	CredentialsSource FakeCredentials
@@ -198,11 +205,11 @@ type Fake struct {
 }
 
 // Mail returns f's mail source.
-func (f *Fake) Mail() Mail { return &f.MailSource }
+func (f *Fake) Mail() backend.Mail { return &f.MailSource }
 
 // Calendar returns f's calendar source, or nil if CalendarSource is
 // unset.
-func (f *Fake) Calendar() Calendar {
+func (f *Fake) Calendar() backend.Calendar {
 	if f.CalendarSource == nil {
 		return nil
 	}
@@ -211,7 +218,7 @@ func (f *Fake) Calendar() Calendar {
 
 // Contacts returns f's contacts source, or nil if ContactsSource is
 // unset.
-func (f *Fake) Contacts() Contacts {
+func (f *Fake) Contacts() backend.Contacts {
 	if f.ContactsSource == nil {
 		return nil
 	}
@@ -219,7 +226,7 @@ func (f *Fake) Contacts() Contacts {
 }
 
 // Push returns f's push source, or nil if PushSource is unset.
-func (f *Fake) Push() Push {
+func (f *Fake) Push() backend.Push {
 	if f.PushSource == nil {
 		return nil
 	}
@@ -227,9 +234,9 @@ func (f *Fake) Push() Push {
 }
 
 // Capabilities returns f.Caps.
-func (f *Fake) Capabilities() Capabilities { return f.Caps }
+func (f *Fake) Capabilities() backend.Capabilities { return f.Caps }
 
 // Credentials returns f's credential source.
-func (f *Fake) Credentials() Credentials { return &f.CredentialsSource }
+func (f *Fake) Credentials() backend.Credentials { return &f.CredentialsSource }
 
-var _ Backend = (*Fake)(nil)
+var _ backend.Backend = (*Fake)(nil)
