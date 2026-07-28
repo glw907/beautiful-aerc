@@ -25,10 +25,52 @@ it. Updating this STATUS is step one and is never optional.
 
 ## Current state (2026-07-27)
 
-Phase 5 is in progress: the machine gate passed with Geoff's
-approval the same day it ran (all five rulings as presented).
-The next action is the execution session below: boundary ritual,
-machine assembly, then pass 1.
+Phase 5 is in progress. The machine gate passed with Geoff's
+approval the same day it ran (all five rulings as presented), and
+the boundary ritual and machine assembly have since executed. The
+next action is pass 1 execution, below.
+
+Phase 5 boundary outcomes (2026-07-27), commits 041eb32 through
+7f997ef:
+- Branch `legacy` exists at last. It was created and pushed from
+  the final pre-boundary master commit (649cd0d) before anything
+  was deleted, which makes the charter's, CLAUDE.md's, the
+  routing rule's, and this STATUS's standing citations true for
+  the first time and preserves the four spike tools the tag
+  predates. Salvage is copy-with-rewrite from it.
+- Master cleared: 1168 tracked files to 331. The three
+  PostToolUse hooks left with their settings.json registrations
+  in the same commit. Beyond the design's list, the aerc-era
+  stow package, the archived client's README and screenshot
+  assets, ROADMAP.md, and accounts.toml.example went too; none
+  had a live consumer.
+- The machine is up and `make check` is green on the empty
+  module with every step executing: one local tier, the four
+  analyzers as a multichecker binary with analysistest fixtures,
+  tools pinned through an isolated tools/go.mod, CI carrying
+  race plus the nightly jobs with the two unbuilt harnesses
+  labelled as placeholders. The audit's two silent-skip guards
+  are inverted and verified failing.
+- Requirements are at revision 4, carrying the five ratified
+  amendments that until now lived only in this STATUS while the
+  spec printed superseded numbers. ADR-0001, ADR-0011, and
+  ADR-0012 have revision blocks. Two extra defects were caught
+  and fixed in passing: ADR-0001's Decision still asserted
+  file-per-account and FTS5 external-content tables, and
+  technical design section 18 still listed the EventSource auth
+  risk as open while ADR-0005 recorded the probe closing it.
+- Both workstation fixes are committed to dotfiles (60c0aed).
+  `~/.claude/docs/go-comment-voice.md` turned out to be a
+  dangling symlink, the root of the audit's finding 1, as was
+  `prose-voice.md`; both are gone. The go-conventions Makefile
+  example also lost its skip-quietly lint guard, the pattern
+  that let poplar's linter sit broken and green for months.
+- The pass 1 plan is authored and committed
+  (`docs/superpowers/plans/2026-07-27-pass-1-foundation.md`),
+  thirteen tasks. It settles five questions the specs left open;
+  the load-bearing one is that pass 1 ships a real JMAP read
+  path rather than validating the sync engine against the fake
+  alone. Flag for the pass gate if that reading is wrong.
 
 Phase 5 machine-gate outcomes (2026-07-27):
 - Two Geoff directives arrived at phase open, both ratified at
@@ -257,41 +299,45 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 5 execution, boundary ritual then pass 1
+## Next: Phase 5 pass 1 execution (foundation)
 
-Runs in a fresh Opus 5 execution session per the model economy
-(the Fable planning sitting ended at the machine gate). Starter
-prompt (paste after /clear in ~/Projects/poplar):
+Runs in a fresh Opus 5 execution session per the model economy.
+The boundary ritual and machine assembly are done; the plan is
+committed. Starter prompt (paste after /clear in
+~/Projects/poplar):
 
 ```
-Execute the approved poplar build machine and open pass 1. The
-machine design is
+Execute poplar pass 1 (foundation). The plan is
+docs/superpowers/plans/2026-07-27-pass-1-foundation.md; read it
+first and follow it exactly, alongside the build machine design
 docs/superpowers/specs/2026-07-27-poplar-build-machine.md
-(approved at the gate 2026-07-27 with all five section-11
-rulings); read it first and follow it exactly, alongside
-ADR-0017 and the tooling audit
-docs/poplar/research/2026-07-27-phase5-tooling-audit.md. The
-standing live-research directive applies to every version claim
-at the moment of pinning.
+(section 5 for the plan format and pass structure, section 6 for
+the verification harness). The requirements are at revision 4
+and the ADRs carry revision blocks that override their bodies;
+read the revision blocks. The standing live-research directive
+applies to every version claim at the moment of pinning, and the
+pinned dependency set is machine design section 7.
 
-Execute in order: (1) the boundary ritual per machine design
-section 1 — create and push the legacy branch BEFORE any
-deletion, then the two boundary commits, the spec amendments of
-step 4 (requirements revision 4; ADR-0001/0011/0012 revision
-blocks), and the two workstation fixes of step 5. (2) Machine
-assembly per sections 2-4 and 7-8: Makefile and gate, tools
-module, the four analyzers, CI workflow, rewritten agents and
-CLAUDE.md and routing rule, the amended vale-comments guard;
-make check green on the empty module. (3) Author the pass 1
-(foundation) plan per section 5's task format from the
-requirements spine step 1, then execute it subagent-driven
-(poplar-implementer per task, poplar-reviewer plus
-poplar-go-reviewer per diff), Geoff at the pass gate. Invoke
-go-conventions before any Go, elm-conventions before any
-bubbletea code. Do not carry legacy files across the boundary
-unreviewed; salvage is copy-with-rewrite from the legacy branch
-with a named pointer in the plan task.
+Execute subagent-driven: one poplar-implementer per task, with
+poplar-reviewer and poplar-go-reviewer in parallel on each diff,
+and the main loop reviewing each diff and confirming `make check`
+green between dispatches. Task order and dependencies are in the
+plan; tasks 1 and 4 dispatch first. Invoke go-conventions before
+any Go. Salvage is copy-with-rewrite from branch `legacy` with
+the named pointer in each task; no file crosses unreviewed.
+
+Geoff is at the pass gate only. Take the pass to completion, then
+run the pass-end consolidation (simplify, reviewer fan-out,
+STATUS update, plan archival) and present the gate with the
+QA-1/2/3 numbers measured against the spike baselines in the
+plan's task 12.
 ```
+
+One open item worth raising at the pass gate: the plan reads the
+spine as putting a real JMAP read path in pass 1, on the grounds
+that ADR-0014 calls the fake the seam's second implementation and
+an engine validated only against a fake proves the fake. If that
+reading is wrong the pass narrows.
 
 Carried obligations and their scheduled homes are machine design
 section 10; the wireframe-pass watch item (digit semantics,
