@@ -13,43 +13,5 @@
     "claude-code-setup@claude-plugins-official": true,
     "hookify@claude-plugins-official": true
   },
-  "skipDangerousModePermissionPrompt": true,
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/claude-md-size.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/elm-architecture-lint.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/bubbletea-conventions-lint.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/claude-md-size.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/elm-architecture-lint.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/bubbletea-conventions-lint.sh"
-          }
-        ]
-      }
-    ]
-  }
+  "skipDangerousModePermissionPrompt": true
 }

@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-NVIM_APPNAME=nvim-mail exec nvim "$@"

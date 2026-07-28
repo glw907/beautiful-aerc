@@ -371,8 +371,9 @@ the same day: fully functional at traditional sizes, taking real
 advantage of large windows, grounded first in research on the
 sizes people actually use. Evidence:
 `docs/poplar/research/2026-07-27-terminal-size-survey.md`; the
-legacy model at `docs/poplar/responsive-design.md` is salvaged
-reference.) The method: layout is formulas plus thresholds in
+legacy model at
+`docs/poplar/research/2026-07-27-poplar-responsive-design.md` is
+salvaged reference.) The method: layout is formulas plus thresholds in
 pure Go, computed once per `WindowSizeMsg` into one `LayoutMode`
 struct every component consumes; no renderer hardcodes a width;
 no CSS-style query system; no user-configurable breakpoints.
