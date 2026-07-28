@@ -201,43 +201,12 @@ func TestInteractivePreemption(t *testing.T) {
 	}
 }
 
-// TestBackfillSubordination drives the chunk-decision loop a bulk
-// worker (the future backfill) is expected to run: check
-// RecentInteractiveActivity before each chunk and skip it if
-// interactive use is recent. ADR-0003 revision 2 requires this
-// signal specifically because the lane's queue depth is empty
-// exactly when the writer is busy, so a depth-based check would pass
-// while the worker never actually yielded.
-func TestBackfillSubordination(t *testing.T) {
-	cfg := DefaultWriterConfig()
-	cfg.InteractiveQuiet = 30 * time.Millisecond
-	w, _ := newTestWriter(t, cfg)
-
-	chunk := func() bool {
-		if w.RecentInteractiveActivity(cfg.InteractiveQuiet) {
-			return false
-		}
-		return w.submitBulk(context.Background(), func(*sql.Tx) error { return nil }) == nil
-	}
-
-	if !chunk() {
-		t.Fatal("chunk skipped with no interactive activity yet")
-	}
-
-	if err := w.submit(context.Background(), func(*sql.Tx) error { return nil }); err != nil {
-		t.Fatalf("submit: %v", err)
-	}
-
-	if chunk() {
-		t.Fatal("chunk ran immediately after interactive activity, want it to yield")
-	}
-
-	time.Sleep(cfg.InteractiveQuiet + 20*time.Millisecond)
-
-	if !chunk() {
-		t.Fatal("chunk still yielding after the quiet window elapsed")
-	}
-}
+// The backfill subordination policy (ADR-0003 revision 2: check
+// RecentInteractiveActivity before each bulk chunk rather than the
+// lane's queue depth, which is empty exactly when the writer is busy)
+// is exercised against internal/sync's production chunk loop, the
+// policy's first real caller, not a closure here. See
+// internal/sync's TestBackfillSubordination.
 
 // TestDiskFullInjection simulates SQLITE_FULL with max_page_count,
 // the standard portable stand-in for an actual full disk, and proves
