@@ -216,15 +216,20 @@ func (w *Writer) runBulk(j writeJob) {
 	}
 }
 
-// runIdleCheckpoint runs the idle-triggered TRUNCATE checkpoint.
-// TRUNCATE is the one checkpoint mode that can block on a reader's
-// open snapshot, so it runs under a busy_timeout far shorter than the
-// connection's normal 5s bound: a reader outliving that short window
-// leaves the WAL larger than its bound until the next idle window,
-// rather than delaying a queued interactive job for seconds.
+// runIdleCheckpoint runs the idle-triggered TRUNCATE checkpoint,
+// followed by a bounded incremental_vacuum step that returns freed
+// pages to the OS. TRUNCATE is the one checkpoint mode that can block
+// on a reader's open snapshot, so it runs under a busy_timeout far
+// shorter than the connection's normal 5s bound: a reader outliving
+// that short window leaves the WAL larger than its bound until the
+// next idle window, rather than delaying a queued interactive job for
+// seconds.
 func (w *Writer) runIdleCheckpoint() {
 	if err := checkpointTruncate(context.Background(), w.db); err != nil {
 		slog.Warn("store: checkpoint failed", "mode", "TRUNCATE", "error", err)
+	}
+	if err := incrementalVacuum(context.Background(), w.db, incrementalVacuumPages); err != nil {
+		slog.Warn("store: incremental vacuum failed", "error", err)
 	}
 }
 

@@ -99,9 +99,70 @@ func TestCheckpointPassiveReclaimsWithoutAReader(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	flat := walSize(t, path+"-wal")
-	if flat > 200_000 {
-		t.Errorf("wal size with no reader holding a snapshot = %d bytes, want PASSIVE to keep it well under the 500KB TestCheckpointLifecycle's blocked reader grows past", flat)
+	if flat > 600_000 {
+		t.Errorf("wal size with no reader holding a snapshot = %d bytes, want PASSIVE to keep it well under the multi-megabyte size TestCheckpointLifecycle's blocked reader grows past", flat)
 	}
+}
+
+// TestIncrementalVacuumReclaimsFreelist proves the idle path's bounded
+// incremental_vacuum step (item 3 of the pass-1 audit) actually
+// shrinks the freelist a large delete leaves behind, rather than only
+// running the pragma without effect: with auto_vacuum=INCREMENTAL, a
+// deleted row's pages sit on the freelist until reclaimed.
+func TestIncrementalVacuumReclaimsFreelist(t *testing.T) {
+	cfg := DefaultWriterConfig()
+	cfg.CheckpointIdle = 20 * time.Millisecond
+	w, path := newTestWriter(t, cfg)
+
+	// A separate read-only connection checks freelist_count: querying
+	// through the writer itself would run on the interactive lane and
+	// reset the idle timer runIdleCheckpoint depends on.
+	reader, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	if err != nil {
+		t.Fatalf("open reader: %v", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	big := strings.Repeat("x", 4096)
+	for i := range 300 {
+		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
+			_, err := tx.Exec(
+				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
+				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
+			return err
+		})
+		if err != nil {
+			t.Fatalf("submitBulk(%d): %v", i, err)
+		}
+	}
+	if err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`DELETE FROM account`)
+		return err
+	}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	if before := freelistCount(t, reader); before == 0 {
+		t.Fatal("freelist_count = 0 right after a large delete, want pages awaiting reclaim")
+	}
+
+	// Nothing touches the writer from here on, so its idle timer runs
+	// out and runIdleCheckpoint's incremental_vacuum step fires.
+	time.Sleep(4 * cfg.CheckpointIdle)
+
+	if after := freelistCount(t, reader); after != 0 {
+		t.Errorf("freelist_count after the idle window = %d, want 0: incremental_vacuum should reclaim it", after)
+	}
+}
+
+func freelistCount(t *testing.T, db *sql.DB) int {
+	t.Helper()
+
+	var n int
+	if err := db.QueryRow(`PRAGMA freelist_count`).Scan(&n); err != nil {
+		t.Fatalf("read freelist_count: %v", err)
+	}
+	return n
 }
 
 func walSize(t *testing.T, path string) int64 {

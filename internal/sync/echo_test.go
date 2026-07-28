@@ -50,7 +50,7 @@ func TestSelfEchoSuppressed(t *testing.T) {
 		t.Fatalf("message rows = %d, want 1: only the echoed record is suppressed", got)
 	}
 
-	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage)
+	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage, mailCollection)
 	if err != nil {
 		t.Fatalf("loadWatermark: %v", err)
 	}

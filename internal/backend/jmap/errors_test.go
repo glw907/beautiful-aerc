@@ -53,6 +53,37 @@ func TestClassifyPassesThroughUnrecognizedError(t *testing.T) {
 	}
 }
 
+// TestClassifyMutationFailure covers each JMAP SetError type
+// jmapSetErrorClass names a distinct class for, plus a type outside
+// that map, and proves the raw SetError type survives as Cause for
+// outbox.failure_detail.
+func TestClassifyMutationFailure(t *testing.T) {
+	cases := []struct {
+		setErrorType string
+		want         uerr.Class
+	}{
+		{"notFound", uerr.ClassNotFound},
+		{"forbidden", uerr.ClassAuth},
+		{"rateLimit", uerr.ClassThrottled},
+		{"invalidProperties", uerr.ClassServer},
+	}
+	for _, c := range cases {
+		t.Run(c.setErrorType, func(t *testing.T) {
+			got := classifyMutationFailure("jmap.test", c.setErrorType)
+			var ue uerr.Error
+			if !errors.As(got, &ue) {
+				t.Fatalf("classifyMutationFailure(%q) = %v, want a uerr.Error", c.setErrorType, got)
+			}
+			if ue.Class != c.want {
+				t.Errorf("Class = %v, want %v", ue.Class, c.want)
+			}
+			if ue.Cause == nil || ue.Cause.Error() != c.setErrorType {
+				t.Errorf("Cause = %v, want the raw SetError type %q preserved for failure_detail", ue.Cause, c.setErrorType)
+			}
+		})
+	}
+}
+
 // TestDoClassifiesTransportFailure asserts that a transport-level
 // JMAP failure reaching do() through a real round trip (a caller
 // asking Changes to build and send a request) comes back as a

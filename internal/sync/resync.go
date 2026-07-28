@@ -45,7 +45,7 @@ func (w *Worker) fullResync(ctx context.Context, kind backend.ObjectKind) error 
 		if err := deleteStale(tx, w.accountID, kind, keep); err != nil {
 			return err
 		}
-		return saveWatermark(tx, w.accountID, kind, watermark{ServerStateToken: token, LocalRev: 1})
+		return saveWatermark(tx, w.accountID, kind, mailCollection, watermark{ServerStateToken: token, LocalRev: 1})
 	})
 }
 

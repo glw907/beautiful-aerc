@@ -68,13 +68,13 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 	}
 
 	for id, se := range sr.NotUpdated {
-		result.Failed[string(id)] = errors.New(se.Type)
+		result.Failed[string(id)] = classifyMutationFailure("jmap.apply_batch.update", se.Type)
 	}
 	for id, se := range sr.NotDestroyed {
 		if se.Type == "notFound" {
 			continue
 		}
-		result.Failed[string(id)] = errors.New(se.Type)
+		result.Failed[string(id)] = classifyMutationFailure("jmap.apply_batch.destroy", se.Type)
 	}
 	return result, nil
 }

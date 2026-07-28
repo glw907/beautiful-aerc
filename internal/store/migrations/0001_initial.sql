@@ -26,6 +26,8 @@ CREATE TABLE mailbox (
 
 CREATE INDEX idx_mailbox_account ON mailbox(account_id);
 
+CREATE UNIQUE INDEX idx_mailbox_account_server ON mailbox(account_id, server_id) WHERE server_id IS NOT NULL;
+
 CREATE TABLE thread (
     id               INTEGER PRIMARY KEY,
     account_id       INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
@@ -55,6 +57,15 @@ CREATE TABLE message (
 );
 
 CREATE INDEX idx_message_thread ON message(account_id, thread_key, received_at);
+
+-- UpsertMessage and UpsertMailbox each look up their row by
+-- (account_id, server_id) on every sync page; with no index that was
+-- a full table scan, quadratic over a 100k-message baseline. UNIQUE
+-- because two rows sharing an account and a server id is corruption,
+-- not a valid state. Partial rather than plain: an origin = 'local'
+-- draft (message) or a mailbox mid-create carries no server_id yet,
+-- and a server-identity lookup never probes those rows anyway.
+CREATE UNIQUE INDEX idx_message_account_server ON message(account_id, server_id) WHERE server_id IS NOT NULL;
 
 -- A single content source (message itself), not the two-table
 -- external-content shape ADR-0001 revision 2 retracts. Every write
@@ -182,6 +193,8 @@ CREATE TABLE contact_card (
 
 CREATE INDEX idx_contact_card_account ON contact_card(account_id);
 
+CREATE UNIQUE INDEX idx_contact_card_account_server ON contact_card(account_id, server_id) WHERE server_id IS NOT NULL;
+
 CREATE TABLE contact_email (
     contact_card_id INTEGER NOT NULL REFERENCES contact_card(id) ON DELETE CASCADE,
     address         TEXT NOT NULL,
@@ -206,7 +219,10 @@ CREATE TABLE outbox (
     account_id      INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
     kind            TEXT NOT NULL,
     payload         TEXT NOT NULL,
-    state           TEXT NOT NULL DEFAULT 'pending',
+    -- 'queued' and 'dispatching' are ADR-0006 revision 2's claim-
+    -- discipline states; a CHECK here refuses anything the dispatcher
+    -- (task 10) does not itself write.
+    state           TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'dispatching')),
     undo_group      TEXT,
     chunk_seq       INTEGER NOT NULL DEFAULT 0,
     attempt_count   INTEGER NOT NULL DEFAULT 0,
@@ -225,10 +241,14 @@ CREATE TABLE draft_meta (
     anchor_msgid TEXT
 );
 
+-- collection_id lets calendar and contacts hold a token per
+-- collection (RFC 6578; ADR-0005's "poll by collection state"), while
+-- mail keeps its single row per object kind under the '' sentinel.
 CREATE TABLE sync_state (
     account_id         INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
     object_kind        TEXT NOT NULL,
+    collection_id      TEXT NOT NULL DEFAULT '',
     server_state_token TEXT,
     local_rev          INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (account_id, object_kind)
+    PRIMARY KEY (account_id, object_kind, collection_id)
 );

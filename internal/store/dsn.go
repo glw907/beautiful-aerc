@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 )
 
 // connKind selects the query_only pragma that tells dsn to build a
@@ -39,6 +40,22 @@ const (
 	// the store, while still holding the hot mailbox-list and unread
 	// indexes resident across a chunked bulk batch.
 	cacheSizeKiB = -2000
+
+	// pageSize is fixed at file creation; changing it afterward needs
+	// a full blocking VACUUM. 8192 halves the page count of SQLite's
+	// 4096 default against poplar's mostly-larger rows (message,
+	// event, contact_card) without paying WAL write-amplification on
+	// the smaller join tables.
+	pageSize = 8192
+
+	// autoVacuumMode is SQLite's numeric code for INCREMENTAL,
+	// likewise fixed at creation. FULL reclaims eagerly on every
+	// delete and rewrites the file inline, defeating the writer's own
+	// bounded, scheduled reclaim (checkpoint.go's incrementalVacuum);
+	// NONE requires a bare VACUUM to shrink the file at all, the
+	// unbounded blocking stall that wedged Geary's mailbox (issue
+	// #1017).
+	autoVacuumMode = 2
 )
 
 // dsn builds the modernc.org/sqlite connection string for the
@@ -46,14 +63,25 @@ const (
 // set, so every connection, write or read, carries the same
 // foreign-key enforcement, busy timeout, WAL journaling, and cache
 // budget.
+//
+// Every pragma rides in a single _pragma value, run as one
+// multi-statement script (modernc.org/sqlite's documented "script"
+// form for a value with trailing SQL past the first statement),
+// rather than as separate _pragma parameters: applyQueryParams
+// re-sorts separate parameters alphabetically before running them
+// (busy_timeout first, the rest lexicographic), which would run
+// journal_mode ahead of page_size and auto_vacuum. Both are fixed the
+// moment a database enters WAL mode, so that reordering would
+// silently no-op them on a fresh file. One script preserves the
+// order written here.
 func dsn(path string, kind connKind) string {
-	q := fmt.Sprintf(
-		"_pragma=foreign_keys(1)&_pragma=busy_timeout(%d)&_pragma=journal_mode(wal)&_pragma=synchronous(normal)&_pragma=cache_size(%d)",
-		busyTimeoutMS, cacheSizeKiB)
+	pragmas := fmt.Sprintf(
+		"busy_timeout(%d); PRAGMA page_size(%d); PRAGMA auto_vacuum(%d); PRAGMA journal_mode(wal); PRAGMA synchronous(normal); PRAGMA cache_size(%d); PRAGMA foreign_keys(1)",
+		busyTimeoutMS, pageSize, autoVacuumMode, cacheSizeKiB)
 	if kind == connReadOnly {
-		q += "&_pragma=query_only(1)"
+		pragmas += "; PRAGMA query_only(1)"
 	}
-	return "file:" + path + "?" + q
+	return "file:" + path + "?_pragma=" + url.QueryEscape(pragmas)
 }
 
 // OpenWriteConn opens path as poplar's write connection, carrying

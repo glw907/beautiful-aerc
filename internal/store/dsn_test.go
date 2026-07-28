@@ -55,6 +55,42 @@ func TestDSNPragmaSet(t *testing.T) {
 	}
 }
 
+// TestDSNCreationPragmas proves page_size and auto_vacuum land on a
+// freshly created store file: both are fixed at creation, so a test
+// that only checked the DSN string, rather than the pragma an opened
+// connection actually reports, would miss a value SQLite silently
+// ignored.
+func TestDSNCreationPragmas(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// A pragma read alone leaves page_size and auto_vacuum pending
+	// rather than committed; creating a table forces SQLite to apply
+	// them to the file.
+	if _, err := db.Exec(`CREATE TABLE t (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+
+	var gotPageSize, gotAutoVacuum int
+	if err := db.QueryRow(`PRAGMA page_size`).Scan(&gotPageSize); err != nil {
+		t.Fatalf("read page_size: %v", err)
+	}
+	if err := db.QueryRow(`PRAGMA auto_vacuum`).Scan(&gotAutoVacuum); err != nil {
+		t.Fatalf("read auto_vacuum: %v", err)
+	}
+
+	if gotPageSize != pageSize {
+		t.Errorf("page_size = %d, want %d", gotPageSize, pageSize)
+	}
+	if gotAutoVacuum != autoVacuumMode {
+		t.Errorf("auto_vacuum = %d, want %d (INCREMENTAL)", gotAutoVacuum, autoVacuumMode)
+	}
+}
+
 // TestDSNReadOnlyRejectsWrites proves the read-only DSN this builder
 // produces actually enforces read-only at the connection, the
 // contract task 3's read pool needs from it.

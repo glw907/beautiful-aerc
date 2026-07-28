@@ -73,6 +73,30 @@ func classifyStatus(op string, status int, cause error) error {
 	}
 }
 
+// jmapSetErrorClass maps a JMAP SetError's type (RFC 8620 section
+// 5.3) to the uerr.Class SY-4 assigns it. A type with no entry here
+// classifies as ClassServer, a rejection with no finer class to name
+// it.
+var jmapSetErrorClass = map[string]uerr.Class{
+	"notFound":  uerr.ClassNotFound,
+	"forbidden": uerr.ClassAuth,
+	"rateLimit": uerr.ClassThrottled,
+}
+
+// classifyMutationFailure wraps one Email/set mutation's raw
+// SetError type in a uerr.Error under jmapSetErrorClass's mapping, so
+// the outbox dispatcher (task 10) can branch on a closed class
+// instead of parsing a protocol string. setErrorType survives as
+// Cause, so outbox.failure_detail can still record exactly what the
+// server said.
+func classifyMutationFailure(op, setErrorType string) error {
+	class, ok := jmapSetErrorClass[setErrorType]
+	if !ok {
+		class = uerr.ClassServer
+	}
+	return uerr.New(op, nil, class, errors.New(setErrorType))
+}
+
 // isConnectionDead reports whether err comes from the underlying TCP
 // connection closing or timing out mid-call.
 func isConnectionDead(err error) bool {

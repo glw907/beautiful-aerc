@@ -35,6 +35,23 @@ func checkpoint(ctx context.Context, db *sql.DB, mode string) error {
 	return err
 }
 
+// incrementalVacuumPages bounds each idle-triggered incremental_vacuum
+// step (item 3 of the pass-1 audit): with auto_vacuum=INCREMENTAL, a
+// deleted row's pages sit on the freelist until reclaimed, and an
+// unbounded incremental_vacuum() call would walk the whole freelist
+// in one shot, the same unbounded stall a bare VACUUM causes.
+// Reclaiming a bounded slice per idle window keeps every call fast,
+// at the cost of needing more than one idle window to shrink a file
+// after a large delete.
+const incrementalVacuumPages = 500
+
+// incrementalVacuum runs a bounded incremental_vacuum pragma against
+// db, reclaiming up to pages freelist pages back to the OS.
+func incrementalVacuum(ctx context.Context, db *sql.DB, pages int) error {
+	_, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA incremental_vacuum(%d)", pages))
+	return err
+}
+
 // checkpointBusyTimeoutMS is the busy_timeout checkpointTruncate sets
 // for the duration of a TRUNCATE checkpoint, restored to
 // busyTimeoutMS immediately after. TRUNCATE is the one checkpoint

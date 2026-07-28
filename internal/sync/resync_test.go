@@ -62,7 +62,7 @@ func TestFullResyncPreserves(t *testing.T) {
 		t.Fatalf("outbox rows = %d, want 1: an undispatched outbox row must survive a resync", got)
 	}
 
-	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage)
+	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage, mailCollection)
 	if err != nil {
 		t.Fatalf("loadWatermark: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestFullResyncPagesIndependently(t *testing.T) {
 		t.Fatal("srv-gone still present, want it deleted once every page has been seen")
 	}
 
-	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage)
+	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage, mailCollection)
 	if err != nil {
 		t.Fatalf("loadWatermark: %v", err)
 	}

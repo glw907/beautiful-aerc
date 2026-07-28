@@ -105,24 +105,31 @@ func kindName(kind backend.ObjectKind) string {
 	}
 }
 
-// watermark is one account and object kind's persisted sync
-// position: the opaque server state token and a local revision
+// watermark is one account, object kind, and collection's persisted
+// sync position: the opaque server state token and a local revision
 // counting sync cycles applied (ADR-0005's two-watermark shape).
 type watermark struct {
 	ServerStateToken string
 	LocalRev         int64
 }
 
-// loadWatermark returns accountID's persisted watermark for kind, or
-// the zero watermark (an empty token, asking Changes for a full
-// initial sync) if none is recorded yet.
-func loadWatermark(ctx context.Context, w *store.Writer, accountID int64, kind backend.ObjectKind) (watermark, error) {
+// mailCollection is the collection loadWatermark and saveWatermark
+// use for mail, which ADR-0005 does not segment by collection: one
+// sync_state row per account and object kind, under this fixed
+// sentinel rather than a real collection id. Calendar and contacts
+// (pass 5) pass their calendar or address book id instead.
+const mailCollection = ""
+
+// loadWatermark returns accountID's persisted watermark for kind and
+// collection, or the zero watermark (an empty token, asking Changes
+// for a full initial sync) if none is recorded yet.
+func loadWatermark(ctx context.Context, w *store.Writer, accountID int64, kind backend.ObjectKind, collection string) (watermark, error) {
 	var wm watermark
 	var token sql.NullString
 	err := w.Apply(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRow(
-			`SELECT server_state_token, local_rev FROM sync_state WHERE account_id = ? AND object_kind = ?`,
-			accountID, kindName(kind),
+			`SELECT server_state_token, local_rev FROM sync_state WHERE account_id = ? AND object_kind = ? AND collection_id = ?`,
+			accountID, kindName(kind), collection,
 		).Scan(&token, &wm.LocalRev)
 	})
 	switch {
@@ -135,13 +142,13 @@ func loadWatermark(ctx context.Context, w *store.Writer, accountID int64, kind b
 	return wm, nil
 }
 
-// saveWatermark writes accountID's watermark for kind inside tx,
-// replacing whatever sync_state row it already holds.
-func saveWatermark(tx *sql.Tx, accountID int64, kind backend.ObjectKind, wm watermark) error {
+// saveWatermark writes accountID's watermark for kind and collection
+// inside tx, replacing whatever sync_state row it already holds.
+func saveWatermark(tx *sql.Tx, accountID int64, kind backend.ObjectKind, collection string, wm watermark) error {
 	_, err := tx.Exec(
-		`INSERT INTO sync_state (account_id, object_kind, server_state_token, local_rev) VALUES (?, ?, ?, ?)
-		 ON CONFLICT(account_id, object_kind) DO UPDATE SET server_state_token = excluded.server_state_token, local_rev = excluded.local_rev`,
-		accountID, kindName(kind), wm.ServerStateToken, wm.LocalRev,
+		`INSERT INTO sync_state (account_id, object_kind, collection_id, server_state_token, local_rev) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(account_id, object_kind, collection_id) DO UPDATE SET server_state_token = excluded.server_state_token, local_rev = excluded.local_rev`,
+		accountID, kindName(kind), collection, wm.ServerStateToken, wm.LocalRev,
 	)
 	return err
 }
@@ -151,7 +158,7 @@ func saveWatermark(tx *sql.Tx, accountID int64, kind backend.ObjectKind, wm wate
 // bulk lane, and falling back to a full resync when the backend
 // reports a state reset (an expired or unrecognized token).
 func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
-	wm, err := loadWatermark(ctx, w.writer, w.accountID, kind)
+	wm, err := loadWatermark(ctx, w.writer, w.accountID, kind, mailCollection)
 	if err != nil {
 		return err
 	}
@@ -171,7 +178,7 @@ func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
 			if err := applyChangeSet(tx, w.accountID, kind, cs, skip); err != nil {
 				return err
 			}
-			return saveWatermark(tx, w.accountID, kind, next)
+			return saveWatermark(tx, w.accountID, kind, mailCollection, next)
 		})
 		if err != nil {
 			return err
