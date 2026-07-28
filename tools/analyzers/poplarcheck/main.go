@@ -1,9 +1,9 @@
 // Command poplarcheck runs poplar's four go/analysis passes
 // (technical design section 18 item 7): import-boundary, write-call,
 // styling, and error-construction. Run standalone over a package
-// pattern, or as a go vet -vettool plugin — multichecker.Main
-// detects the .cfg argument go vet passes and switches to the
-// unitchecker protocol with no extra glue.
+// pattern, or as a go vet -vettool plugin. multichecker.Main detects
+// the .cfg argument go vet passes and switches to the unitchecker
+// protocol with no extra glue.
 package main
 
 import (

@@ -7,8 +7,8 @@
 //
 // The analyzer is syntactic, not type-based: it does not verify
 // that a call site actually reaches a write against a live
-// connection, and it does not forbid Exec on a read connection —
-// that half is not statically decidable in go/analysis and the
+// connection, and it does not forbid Exec on a read connection.
+// That half is not statically decidable in go/analysis, so the
 // store's read API owns it instead, by returning a named
 // read-only handle type with no Exec method.
 package writecall
