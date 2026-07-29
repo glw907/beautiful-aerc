@@ -78,30 +78,31 @@ type claimed struct {
 // outcome is one claimed intent's disposition after its backend call:
 // delivered, with move carrying the decoded payload for
 // KindMoveMessages, or failed with a class and detail. final marks a
-// failure no later attempt may repeat whatever its class says, because
-// the server side of the intent already landed and only the record of
-// it failed.
+// failure no later attempt may repeat whatever its class says. landed
+// narrows that to the failures whose server side already happened and
+// whose record of it is what failed.
 type outcome struct {
 	c      claimed
 	move   *MoveMessagesPayload
 	failed bool
 	final  bool
+	landed bool
 	class  uerr.Class
 	detail string
 }
 
 // finalizeAction is claim's disposition once DispatchOnce decides it,
-// applied inside finalize's one writer transaction. final marks a row
-// whose server action already landed, which finalize's recovery leaves
-// where it is rather than returning it to queued for a replay that
-// would repeat that action.
+// applied inside finalize's one writer transaction. landed marks a row
+// whose server action already happened, which finalize's recovery
+// leaves where it is rather than returning it to queued for a replay
+// that would repeat that action.
 type finalizeAction struct {
 	id      int64
 	attempt int
 	verb    finalizeVerb
 	class   string
 	detail  string
-	final   bool
+	landed  bool
 }
 
 // apply writes a's disposition inside tx.
@@ -122,10 +123,18 @@ func (a finalizeAction) apply(tx *sql.Tx, now time.Time) error {
 // state write: a row put back with its expired next_attempt_at and its
 // attempt count unchanged is eligible again immediately and grows no
 // backoff, so a finalize failure that persists spends every pass on
-// another attempt against the live backend.
+// another attempt against the live backend. That replay is best
+// effort. The recovery is one transaction over every claimed row, so a
+// store failure specific to the requeue would otherwise cost every
+// other row in it the revert, and reaching queued is worth more to a
+// row than its backoff is.
 func (a finalizeAction) revert(tx *sql.Tx, now time.Time) error {
 	if a.verb == finalizeRequeue {
-		return a.apply(tx, now)
+		err := a.apply(tx, now)
+		if err == nil {
+			return nil
+		}
+		slog.Warn("outbox: recovery reverted an intent without its backoff", "id", a.id, "requeue_error", err)
 	}
 	return revertRow(tx, a.id)
 }
@@ -214,19 +223,21 @@ const finalizeRecoveryTimeout = 5 * time.Second
 // A failure there leaves each of those rows in dispatching, which
 // selectEligible never selects again and only ReclaimOrphaned's
 // startup sweep can undo, so finalize returns them to queued in a
-// second, minimal transaction rather than costing the queue every
-// claimed intent for the rest of the run. Replay covers the delivered
-// ones: their backend calls are idempotent, and a create's resolved
-// server id is already durable in its own payload. DispatchOnce
-// reports no Result when this fails, since none of the writes such a
-// Result would describe landed.
+// second transaction rather than costing the queue every claimed
+// intent for the rest of the run. That transaction writes each row's
+// state once, replaying a requeue's backoff where the store lets it and
+// falling back to the bare state write where it does not. Replay covers
+// the delivered rows: their backend calls are idempotent, and a
+// create's resolved server id is already durable in its own payload.
+// DispatchOnce reports no Result when this fails, since none of the
+// writes such a Result would describe landed.
 //
 // The recovery drops ctx, since a deadline expiring during the backend
 // calls is the ordinary way the transaction above fails and the same
-// context would fail the recovery for the identical reason. A row
-// whose server action already landed stays in dispatching instead: it
-// waits for the startup sweep, where a replay costs one duplicate
-// mailbox at worst, rather than being requeued into that duplicate now.
+// context would fail the recovery for the identical reason. A row whose
+// server action already landed stays in dispatching instead: it waits
+// for the startup sweep, where a replay costs one duplicate mailbox at
+// worst, rather than being requeued into that duplicate now.
 func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now time.Time) error {
 	err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
 		for _, a := range actions {
@@ -242,7 +253,7 @@ func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now
 
 	var landed []int64
 	for _, a := range actions {
-		if a.final {
+		if a.landed {
 			landed = append(landed, a.id)
 		}
 	}
@@ -256,7 +267,7 @@ func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now
 
 	revertErr := d.writer.ApplyInteractive(recoveryCtx, func(tx *sql.Tx) error {
 		for _, a := range actions {
-			if a.final {
+			if a.landed {
 				continue
 			}
 			if err := a.revert(tx, now); err != nil {
@@ -306,7 +317,8 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, c claimed, resolvedCreates
 		// is final because no later pass of this build has a case for
 		// it either, so a retriable classification would retry the row
 		// every 30 seconds for the life of the store. No server was
-		// involved, so the class is a local one.
+		// involved, so the class is a local one. Nothing landed either,
+		// so a failed finalize still owes this row the ordinary revert.
 		o.failed, o.final, o.class = true, true, uerr.ClassStoreLocal
 		o.detail = fmt.Sprintf("unknown kind %q", c.kind)
 	}
@@ -477,7 +489,7 @@ func failBatch(create claimed, moves []claimed, class uerr.Class, detail string)
 func failUnresolvedBatch(create claimed, moves []claimed, err error) []outcome {
 	outcomes := failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
 	for i := range outcomes {
-		outcomes[i].final = true
+		outcomes[i].final, outcomes[i].landed = true, true
 	}
 	return outcomes
 }
@@ -497,7 +509,7 @@ func (d *Dispatcher) report(result *Result, o outcome) finalizeAction {
 		IntentID: c.id, UndoGroup: c.undoGroup, Class: o.class, Detail: o.detail, Retrying: retry, Warn: isWarn(o.class),
 	})
 	if !retry {
-		return finalizeAction{id: c.id, verb: finalizeDelete, final: o.final}
+		return finalizeAction{id: c.id, verb: finalizeDelete, landed: o.landed}
 	}
 	return finalizeAction{id: c.id, attempt: c.attemptCount, verb: finalizeRequeue, class: o.class.String(), detail: o.detail}
 }
@@ -749,7 +761,7 @@ func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resol
 // on.
 func unresolvedCreate(c claimed, err error) outcome {
 	o := failedOutcome(c, uerr.ClassStoreLocal, err.Error())
-	o.final = true
+	o.final, o.landed = true, true
 	return o
 }
 

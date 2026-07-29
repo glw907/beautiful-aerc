@@ -392,6 +392,49 @@ func TestFinalizeRecoveryKeepsTheRequeueBackoff(t *testing.T) {
 	}
 }
 
+// TestFinalizeRecoveryFallsBackWhenTheBackoffReplayFails covers what
+// the requeue replay owes the rest of the batch. The recovery is one
+// all-or-nothing transaction, so a store failure specific to the
+// requeue takes the revert of every unrelated claimed row down with it
+// and strands rows no requeue was owed. Getting a row back to queued
+// matters more than getting its backoff right.
+func TestFinalizeRecoveryFallsBackWhenTheBackoffReplayFails(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	deliveredID := seedMailbox(t, w, accountID, "Old", "mbx-1")
+	failingID := seedMailbox(t, w, accountID, "Older", "mbx-2")
+
+	be := newFakeBackend()
+	be.MailSource.RenameMailboxFunc = func(_ context.Context, id, _ string) error {
+		if id == "mbx-2" {
+			return backend.MutationFailure{Class: uerr.ClassServer, Cause: errors.New("boom")}
+		}
+		return nil
+	}
+
+	now := time.Now()
+	delivered, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, deliveredID, "Family", now)
+	if err != nil {
+		t.Fatalf("enqueue the delivered rename: %v", err)
+	}
+	failing, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, failingID, "Archive", now)
+	if err != nil {
+		t.Fatalf("enqueue the failing rename: %v", err)
+	}
+	blockDeletes(t, w)
+	blockRequeueBackoff(t, w)
+
+	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err == nil {
+		t.Fatal("DispatchOnce = nil, want the finalize failure")
+	}
+
+	for _, id := range []int64{delivered, failing} {
+		if state, _ := outboxState(t, w, id); state != "queued" {
+			t.Errorf("intent %d state = %s, want queued: the failing backoff replay stranded it", id, state)
+		}
+	}
+}
+
 // blockDeletes makes every outbox delete fail, the shape a finalize
 // transaction takes when the store refuses its write.
 func blockDeletes(t *testing.T, w *store.Writer) {
@@ -416,6 +459,21 @@ func unblockDeletes(t *testing.T, w *store.Writer) {
 	})
 	if err != nil {
 		t.Fatalf("drop the delete-blocking trigger: %v", err)
+	}
+}
+
+// blockRequeueBackoff makes the attempt-count bump requeueRow writes
+// fail, leaving revertRow's bare state write alone.
+func blockRequeueBackoff(t *testing.T, w *store.Writer) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE TRIGGER block_outbox_requeue BEFORE UPDATE OF attempt_count ON outbox
+			BEGIN SELECT RAISE(ABORT, 'simulated requeue failure'); END`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("install the requeue-blocking trigger: %v", err)
 	}
 }
 
@@ -450,6 +508,52 @@ func TestUnknownKindIsReportedAndDropped(t *testing.T) {
 	}
 	if f.Class == uerr.ClassServer {
 		t.Error("Class = server, want a local class: no server was involved")
+	}
+	if n := outboxCount(t, w, id); n != 0 {
+		t.Errorf("intent %d is still in the outbox, want it dropped after its report", id)
+	}
+}
+
+// TestUnknownKindSurvivesAFinalizeFailure separates a failure no
+// attempt may repeat from one whose server action already happened.
+// Nothing of an unknown kind reaches a server, so a failed finalize
+// owes its row the ordinary revert. Left in dispatching it is invisible
+// to selectEligible for the rest of the run, and no later pass can
+// report it.
+func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
+	log := captureSlog(t)
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	var id int64
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		var txErr error
+		id, txErr = insertRow(tx, accountID, Kind("teleport-message"), []byte(`{}`), "grp", 0, time.Now(), time.Now())
+		return txErr
+	})
+	if err != nil {
+		t.Fatalf("insert the unknown-kind row: %v", err)
+	}
+	blockDeletes(t, w)
+
+	dispatcher := NewDispatcher(accountID, newFakeBackend(), w)
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err == nil {
+		t.Fatal("DispatchOnce = nil, want the finalize failure")
+	}
+	if state, _ := outboxState(t, w, id); state != "queued" {
+		t.Fatalf("intent %d state = %s, want queued: no server action to protect from a replay", id, state)
+	}
+	if strings.Contains(log.String(), "already landed") {
+		t.Errorf("log = %q, want no landed-server claim for intent %d", log.String(), id)
+	}
+
+	unblockDeletes(t, w)
+	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("second dispatch: %v", err)
+	}
+	if len(result.Failures) != 1 {
+		t.Fatalf("Failures = %+v, want exactly one: the second pass reports what the first could not", result.Failures)
 	}
 	if n := outboxCount(t, w, id); n != 0 {
 		t.Errorf("intent %d is still in the outbox, want it dropped after its report", id)
