@@ -1,8 +1,11 @@
 package outbox
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -144,6 +147,52 @@ func readUndoGroup(t *testing.T, w *store.Writer, id int64) string {
 		t.Fatalf("read undo group %d: %v", id, err)
 	}
 	return group
+}
+
+// strandDispatching moves id to dispatching and leaves it there,
+// modelling the claim transaction a run committed before it died
+// inside the backend call that followed.
+func strandDispatching(t *testing.T, w *store.Writer, id int64) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return claimRow(tx, id)
+	})
+	if err != nil {
+		t.Fatalf("strand outbox row %d: %v", id, err)
+	}
+}
+
+// captureSlog redirects slog's process-wide default logger to an
+// in-memory buffer for the rest of the test, restoring the previous
+// default on cleanup.
+func captureSlog(t *testing.T) *logBuffer {
+	t.Helper()
+
+	buf := &logBuffer{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return buf
+}
+
+// logBuffer is captureSlog's destination, guarded because the store's
+// writer goroutine logs on its own schedule while the test goroutine
+// reads what has arrived.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // newFakeBackend returns a Fake backend with a 100-object

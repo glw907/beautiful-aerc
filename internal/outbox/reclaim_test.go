@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/store/storetest"
 )
 
 // reclaimKillDBEnv names the store TestReclaimKillChild drives when
@@ -48,12 +50,8 @@ func TestReclaimOrphanedAfterKill(t *testing.T) {
 	}
 	defer func() { _ = w.Close() }()
 
-	reclaimed, err := ReclaimOrphaned(context.Background(), w)
-	if err != nil {
+	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("ReclaimOrphaned: %v", err)
-	}
-	if reclaimed != 1 {
-		t.Errorf("reclaimed = %d, want 1", reclaimed)
 	}
 	if state, _ := outboxState(t, w, intentID); state != "queued" {
 		t.Fatalf("outbox row %d after the sweep = %q, want %q", intentID, state, "queued")
@@ -72,6 +70,42 @@ func TestReclaimOrphanedAfterKill(t *testing.T) {
 	}
 	if n := outboxCount(t, w, intentID); n != 0 {
 		t.Errorf("outbox rows for intent %d after a successful redispatch = %d, want 0", intentID, n)
+	}
+}
+
+// TestReclaimOrphanedLogs proves the sweep reports itself as the
+// informational event it is: one info line carrying the count when a
+// restart finds orphans, and silence on the ordinary restart that
+// finds none. A run recovering from a kill has failed at nothing, so
+// this line does not travel the uerr seam, which speaks in
+// user-facing failure sentences.
+func TestReclaimOrphanedLogs(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	log := captureSlog(t)
+
+	if err := ReclaimOrphaned(context.Background(), w); err != nil {
+		t.Fatalf("ReclaimOrphaned over an empty outbox: %v", err)
+	}
+	if got := log.String(); strings.Contains(got, "outbox:") {
+		t.Errorf("a sweep with nothing to reclaim logged %q, want silence", got)
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	strandDispatching(t, w, id)
+
+	if err := ReclaimOrphaned(context.Background(), w); err != nil {
+		t.Fatalf("ReclaimOrphaned: %v", err)
+	}
+	line := log.String()
+	if !strings.Contains(line, "level=INFO") || !strings.Contains(line, "count=1") {
+		t.Errorf("the sweep logged %q, want an info line carrying count=1", line)
+	}
+	if strings.Contains(line, "level=ERROR") {
+		t.Errorf("the sweep logged %q at error level, want info: nothing failed", line)
 	}
 }
 

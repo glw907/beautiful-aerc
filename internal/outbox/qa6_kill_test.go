@@ -280,7 +280,7 @@ func restartStore(t *testing.T, dbPath string) {
 	if err != nil {
 		t.Fatalf("open writer after kill: %v", err)
 	}
-	if _, err := ReclaimOrphaned(context.Background(), w); err != nil {
+	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("reclaim intents stranded by the kill: %v", err)
 	}
 	if err := w.Close(); err != nil {

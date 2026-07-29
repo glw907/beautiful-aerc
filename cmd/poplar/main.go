@@ -100,7 +100,7 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	// The lock above is what makes this sweep unambiguous, and it runs
 	// on every startup because a stranded intent fails no integrity
 	// check and triggers no recovery.
-	if _, err := outbox.ReclaimOrphaned(ctx, writer); err != nil {
+	if err := outbox.ReclaimOrphaned(ctx, writer); err != nil {
 		_ = writer.Close()
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,7 +17,11 @@ import (
 // an equivalent row (standing in for the recovery requeue a crash
 // between a successful backend call and this pass's finalize step
 // would produce) leaves the same server and store state, and does not
-// repeat a side effect the backend itself cannot absorb twice.
+// repeat a side effect the backend itself cannot absorb twice. A
+// create replays from a payload already carrying its resolved server
+// id, which is the state the transaction after the backend call
+// leaves behind; TestCreateMailboxReplayWindow holds the crash that
+// lands between the two.
 func TestIdempotentReplay(t *testing.T) {
 	t.Run("create mailbox", func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
@@ -177,4 +182,56 @@ func TestIdempotentReplay(t *testing.T) {
 			t.Fatalf("msg-1's server mailbox = %q, want %q", serverMailbox["msg-1"], "mbx-dest")
 		}
 	})
+}
+
+// TestCreateMailboxReplayWindow states the one window replay is not
+// idempotent across. A create records its resolved server id in the
+// transaction after its backend call, so a run killed between the two
+// leaves a mailbox on the server and a payload that never learned its
+// id. The startup sweep requeues that row, and the replay creates the
+// mailbox a second time: the account ends up with two folders of the
+// same name.
+//
+// Closing the window needs a mailbox lookup the backend seam does not
+// carry, plus a rule for when poplar adopts a folder it did not
+// create. Both sit outside internal/outbox. Until they exist this
+// test holds the behavior in place, so changing it is a decision
+// somebody made rather than a regression nobody saw.
+func TestCreateMailboxReplayWindow(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	var created []string
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, _ string) (string, error) {
+		created = append(created, name)
+		return fmt.Sprintf("mbx-%d", len(created)), nil
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	// The killed run, reconstructed: its claim transaction committed,
+	// its CreateMailbox call reached the server, and it died before
+	// the transaction that writes the new id into the payload.
+	strandDispatching(t, w, id)
+	if _, err := be.Mail().CreateMailbox(context.Background(), "Projects", ""); err != nil {
+		t.Fatalf("create the mailbox the killed run created: %v", err)
+	}
+
+	if err := ReclaimOrphaned(context.Background(), w); err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now()); err != nil {
+		t.Fatalf("dispatch the reclaimed intent: %v", err)
+	}
+
+	if n := outboxCount(t, w, id); n != 0 {
+		t.Fatalf("intent %d still queued after its replay", id)
+	}
+	if len(created) != 2 {
+		t.Errorf("CreateMailbox calls = %d, want 2: the replay leaves the account holding two Projects mailboxes", len(created))
+	}
 }
