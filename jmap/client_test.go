@@ -53,7 +53,7 @@ const sessionTemplate = `{
   "apiUrl": "%[1]s/api",
   "downloadUrl": "%[1]s/download/{accountId}/{blobId}/{name}?accept={type}",
   "uploadUrl": "%[1]s/upload/{accountId}/",
-  "eventSourceUrl": "%[1]s/events",
+  "eventSourceUrl": "%[1]s/events?types={types}&closeafter={closeafter}&ping={ping}",
   "state": "%[2]s"
 }`
 

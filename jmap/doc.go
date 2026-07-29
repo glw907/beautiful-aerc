@@ -4,12 +4,17 @@
 // objects a client reads out of a session.
 //
 // [Client] carries those types over HTTP: the session resource, the
-// method calls, and the blob endpoints beside them. Everything else in
-// the package is types and pure functions.
+// method calls, the blob endpoints beside them, and the push stream.
+// Everything else in the package is types and pure functions.
 //
-// The package reads no file and logs nothing, and it neither retries
-// nor backs off. Every failure comes back as an error, and the caller
-// decides what it means and whether to ask again.
+// The package reads no file and logs nothing. A method call neither
+// retries nor backs off: every failure comes back as an error, and the
+// caller decides what it means and whether to ask again.
+// [Client.Listen] is the one place a failure is retried here, because
+// the server-sent events standard makes reconnecting part of the
+// protocol rather than a policy a caller chooses. It still decides
+// nothing about when to give up or what to do while the stream is
+// down.
 //
 // # Optional Booleans
 //

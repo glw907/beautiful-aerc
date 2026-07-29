@@ -15,8 +15,8 @@ import (
 )
 
 // A Client speaks JMAP to one server: the session resource, the API
-// endpoint the session names, and the blob upload and download
-// endpoints beside it.
+// endpoint the session names, the blob upload and download endpoints
+// beside it, and the event source the server pushes on.
 //
 // Authentication belongs to the http.Client. Pass one whose Transport
 // sets the credential header, and every request a Client makes carries
@@ -26,7 +26,10 @@ import (
 // A Client returns errors and does nothing else with them. It does not
 // retry, does not back off, and does not log, because a retry that
 // looks right for a sync poll is wrong for a user waiting on a send,
-// and only the caller knows which it is.
+// and only the caller knows which it is. [Client.Listen] reconnects a
+// dropped push stream, which the server-sent events standard makes
+// part of that protocol; it is not an exception to the rule above so
+// much as a different protocol under it.
 //
 // # Session state
 //

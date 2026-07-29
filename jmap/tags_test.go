@@ -572,6 +572,11 @@ func responseTagCases() []tagCase {
 			value: &StateChange{},
 			json:  `{"@type":"StateChange","changed":{"a1":{"Email":"e1"}}}`,
 		},
+		{
+			name:  "ping",
+			value: &ping{},
+			json:  `{"interval":300}`,
+		},
 	}
 }
 
