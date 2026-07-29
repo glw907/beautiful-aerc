@@ -91,13 +91,43 @@ type outcome struct {
 }
 
 // finalizeAction is claim's disposition once DispatchOnce decides it,
-// applied inside finalize's one writer transaction.
+// applied inside finalize's one writer transaction. final marks a row
+// whose server action already landed, which finalize's recovery leaves
+// where it is rather than returning it to queued for a replay that
+// would repeat that action.
 type finalizeAction struct {
 	id      int64
 	attempt int
 	verb    finalizeVerb
 	class   string
 	detail  string
+	final   bool
+}
+
+// apply writes a's disposition inside tx.
+func (a finalizeAction) apply(tx *sql.Tx, now time.Time) error {
+	switch a.verb {
+	case finalizeDelete:
+		return deleteRow(tx, a.id)
+	case finalizeRevert:
+		return revertRow(tx, a.id)
+	case finalizeRequeue:
+		return requeueRow(tx, a.id, now.Add(backoff(a.attempt)), a.class, a.detail)
+	}
+	return nil
+}
+
+// revert returns a's row to queued after the finalize transaction
+// failed. A requeue replays as the requeue it was rather than a bare
+// state write: a row put back with its expired next_attempt_at and its
+// attempt count unchanged is eligible again immediately and grows no
+// backoff, so a finalize failure that persists spends every pass on
+// another attempt against the live backend.
+func (a finalizeAction) revert(tx *sql.Tx, now time.Time) error {
+	if a.verb == finalizeRequeue {
+		return a.apply(tx, now)
+	}
+	return revertRow(tx, a.id)
 }
 
 type finalizeVerb int
@@ -175,6 +205,11 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 	return result, nil
 }
 
+// finalizeRecoveryTimeout bounds the recovery transaction below. It
+// runs uncancelled, so it carries a bound of its own rather than
+// waiting on the writer for as long as the writer takes.
+const finalizeRecoveryTimeout = 5 * time.Second
+
 // finalize applies every claimed row's disposition in one transaction.
 // A failure there leaves each of those rows in dispatching, which
 // selectEligible never selects again and only ReclaimOrphaned's
@@ -185,19 +220,17 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 // server id is already durable in its own payload. DispatchOnce
 // reports no Result when this fails, since none of the writes such a
 // Result would describe landed.
+//
+// The recovery drops ctx, since a deadline expiring during the backend
+// calls is the ordinary way the transaction above fails and the same
+// context would fail the recovery for the identical reason. A row
+// whose server action already landed stays in dispatching instead: it
+// waits for the startup sweep, where a replay costs one duplicate
+// mailbox at worst, rather than being requeued into that duplicate now.
 func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now time.Time) error {
 	err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
 		for _, a := range actions {
-			var err error
-			switch a.verb {
-			case finalizeDelete:
-				err = deleteRow(tx, a.id)
-			case finalizeRevert:
-				err = revertRow(tx, a.id)
-			case finalizeRequeue:
-				err = requeueRow(tx, a.id, now.Add(backoff(a.attempt)), a.class, a.detail)
-			}
-			if err != nil {
+			if err := a.apply(tx, now); err != nil {
 				return err
 			}
 		}
@@ -207,9 +240,26 @@ func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now
 		return nil
 	}
 
-	revertErr := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+	var landed []int64
+	for _, a := range actions {
+		if a.final {
+			landed = append(landed, a.id)
+		}
+	}
+	if len(landed) > 0 {
+		slog.Error("outbox: intents whose server action already landed stay dispatching until the startup sweep",
+			"ids", landed, "finalize_error", err)
+	}
+
+	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeRecoveryTimeout)
+	defer cancel()
+
+	revertErr := d.writer.ApplyInteractive(recoveryCtx, func(tx *sql.Tx) error {
 		for _, a := range actions {
-			if err := revertRow(tx, a.id); err != nil {
+			if a.final {
+				continue
+			}
+			if err := a.revert(tx, now); err != nil {
 				return err
 			}
 		}
@@ -447,7 +497,7 @@ func (d *Dispatcher) report(result *Result, o outcome) finalizeAction {
 		IntentID: c.id, UndoGroup: c.undoGroup, Class: o.class, Detail: o.detail, Retrying: retry, Warn: isWarn(o.class),
 	})
 	if !retry {
-		return finalizeAction{id: c.id, verb: finalizeDelete}
+		return finalizeAction{id: c.id, verb: finalizeDelete, final: o.final}
 	}
 	return finalizeAction{id: c.id, attempt: c.attemptCount, verb: finalizeRequeue, class: o.class.String(), detail: o.detail}
 }

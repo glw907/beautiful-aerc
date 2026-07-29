@@ -39,6 +39,10 @@ func MarkCleanShutdown(dbPath string) error {
 func NeedsIntegrityCheck(dbPath string, migrated bool) bool {
 	marker := cleanShutdownMarker(dbPath)
 	if _, err := os.Stat(marker); err != nil {
+		if !os.IsNotExist(err) {
+			slog.Error("store: the clean-shutdown marker could not be read, so nothing attests to a clean shutdown; running the integrity check",
+				"marker", marker, "error", err)
+		}
 		return true
 	}
 	if err := os.Remove(marker); err != nil {
@@ -123,18 +127,19 @@ func Recover(ctx context.Context, path string) (RecoveredCounts, error) {
 			"error", err)
 	}
 
-	if err := rebuildAt(ctx, path, preserved); err != nil {
+	counts, err := rebuildAt(ctx, path, preserved)
+	if err != nil {
 		rebuildErr := fmt.Errorf("rebuild %s: %w", path, err)
 		restoreErr := unquarantine(quarantined, path, preserved)
-		return RecoveredCounts{}, localErr("store.recover.rebuild", errors.Join(rebuildErr, restoreErr))
+		// The damaged tables travel even here: the store the operator
+		// gets back is the one they started with, and what it no longer
+		// holds is the next thing they have to weigh.
+		return RecoveredCounts{DamagedTables: preserved.damagedTables},
+			localErr("store.recover.rebuild", errors.Join(rebuildErr, restoreErr))
 	}
 
-	return RecoveredCounts{
-		Outbox:        len(preserved.outbox),
-		Mailboxes:     len(preserved.mailboxes),
-		Messages:      len(preserved.messages),
-		DamagedTables: preserved.damagedTables,
-	}, nil
+	counts.DamagedTables = preserved.damagedTables
+	return counts, nil
 }
 
 // moveSidecars renames the -wal and -shm files beside a store file
@@ -155,21 +160,22 @@ func moveSidecars(from, to string) error {
 
 // rebuildAt opens a fresh, migrated store at path and writes preserved
 // into it, the half of Recover that runs after path's prior contents
-// are already quarantined.
-func rebuildAt(ctx context.Context, path string, preserved preservedData) error {
+// are already quarantined, reporting what it carried over.
+func rebuildAt(ctx context.Context, path string, preserved preservedData) (RecoveredCounts, error) {
 	db, err := OpenWriteConn(path)
 	if err != nil {
-		return fmt.Errorf("open rebuilt store: %w", err)
+		return RecoveredCounts{}, fmt.Errorf("open rebuilt store: %w", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	if err := Migrate(db); err != nil {
-		return fmt.Errorf("migrate rebuilt store: %w", err)
+		return RecoveredCounts{}, fmt.Errorf("migrate rebuilt store: %w", err)
 	}
-	if err := restorePreserved(ctx, db, preserved); err != nil {
-		return fmt.Errorf("restore preserved rows: %w", err)
+	counts, err := restorePreserved(ctx, db, preserved)
+	if err != nil {
+		return RecoveredCounts{}, fmt.Errorf("restore preserved rows: %w", err)
 	}
-	return nil
+	return counts, nil
 }
 
 // unquarantine restores quarantined back to path after a failed
@@ -463,34 +469,47 @@ func extractLocalMemberships(ctx context.Context, db *sql.DB) ([]preservedMessag
 }
 
 // restorePreserved writes preserved into db, freshly migrated, as one
-// transaction: accounts first, since every other preserved row carries
-// a foreign key to them.
-func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) error {
+// transaction, and reports how many rows of each kind it carried over.
+// Accounts go first, since every other preserved row carries a foreign
+// key to them, and a row whose account did not survive extraction is
+// dropped: its foreign key would fail and take the whole transaction
+// with it, costing the operator every table that read cleanly.
+func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) (RecoveredCounts, error) {
+	var counts RecoveredCounts
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return counts, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	restoredAccounts := make(map[int64]bool, len(preserved.accounts))
 	for _, a := range preserved.accounts {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO account (id, slug, backend_kind, address, data) VALUES (?, ?, ?, ?, ?)`,
 			a.id, a.slug, a.backendKind, a.address, a.data); err != nil {
-			return fmt.Errorf("insert account %d: %w", a.id, err)
+			return counts, fmt.Errorf("insert account %d: %w", a.id, err)
 		}
+		restoredAccounts[a.id] = true
 	}
 	restoredMailboxes := make(map[int64]bool, len(preserved.mailboxes))
 	for _, m := range preserved.mailboxes {
+		if !restoredAccounts[m.accountID] {
+			continue
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO mailbox (id, account_id, server_id, role, name, sort_order, visible, unread_count, total_count, data)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			m.id, m.accountID, m.serverID, m.role, m.name,
 			m.sortOrder, m.visible, m.unreadCount, m.totalCount, m.data); err != nil {
-			return fmt.Errorf("insert mailbox %d: %w", m.id, err)
+			return counts, fmt.Errorf("insert mailbox %d: %w", m.id, err)
 		}
 		restoredMailboxes[m.id] = true
+		counts.Mailboxes++
 	}
 	for _, o := range preserved.outbox {
+		if !restoredAccounts[o.accountID] {
+			continue
+		}
 		// state is always 'queued', regardless of what Recover
 		// extracted it as: a crashed run can leave a claimed row in
 		// 'dispatching', which the outbox's claim query never selects,
@@ -501,32 +520,37 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 			 VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)`,
 			o.id, o.accountID, o.kind, o.payload, o.undoGroup, o.chunkSeq, o.attemptCount,
 			o.nextAttemptAt, o.createdAt, o.failureClass, o.failureDetail); err != nil {
-			return fmt.Errorf("insert outbox row %d: %w", o.id, err)
+			return counts, fmt.Errorf("insert outbox row %d: %w", o.id, err)
 		}
+		counts.Outbox++
 	}
 	restoredMessages := make(map[int64]bool, len(preserved.messages))
 	for _, m := range preserved.messages {
+		if !restoredAccounts[m.accountID] {
+			continue
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO message (id, account_id, server_id, blob_id, thread_key, received_at, subject, from_addr,
 			                       flags, size, has_attachment, origin, hidden_until, search_text, data)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			m.id, m.accountID, m.serverID, m.blobID, m.threadKey, m.receivedAt, m.subject, m.fromAddr,
 			m.flags, m.size, m.hasAttachment, m.origin, m.hiddenUntil, m.searchText, m.data); err != nil {
-			return fmt.Errorf("insert message %d: %w", m.id, err)
+			return counts, fmt.Errorf("insert message %d: %w", m.id, err)
 		}
 		if m.hasBody {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO body (message_id, content, fetched_at) VALUES (?, ?, ?)`,
 				m.id, m.bodyContent, m.bodyFetchedAt); err != nil {
-				return fmt.Errorf("insert body for message %d: %w", m.id, err)
+				return counts, fmt.Errorf("insert body for message %d: %w", m.id, err)
 			}
 		}
 		if m.hasDraftMeta {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO draft_meta (message_id, local_rev, pushed_rev, anchor_msgid) VALUES (?, ?, ?, ?)`,
 				m.id, m.localRev, m.pushedRev, m.anchorMsgID); err != nil {
-				return fmt.Errorf("insert draft_meta for message %d: %w", m.id, err)
+				return counts, fmt.Errorf("insert draft_meta for message %d: %w", m.id, err)
 			}
 		}
 		restoredMessages[m.id] = true
+		counts.Messages++
 	}
 	for _, mm := range preserved.messageMailboxes {
 		// A membership whose message or mailbox did not survive
@@ -539,8 +563,8 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO message_mailbox (message_id, mailbox_id, received_at, unread) VALUES (?, ?, ?, ?)`,
 			mm.messageID, mm.mailboxID, mm.receivedAt, mm.unread); err != nil {
-			return fmt.Errorf("insert mailbox %d membership for message %d: %w", mm.mailboxID, mm.messageID, err)
+			return counts, fmt.Errorf("insert mailbox %d membership for message %d: %w", mm.mailboxID, mm.messageID, err)
 		}
 	}
-	return tx.Commit()
+	return counts, tx.Commit()
 }

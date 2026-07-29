@@ -57,7 +57,13 @@ const (
 // shapes ([]any for a list, float64 for a number) is a backend defect
 // the consumer reports rather than decodes around. An absent key means
 // the backend has nothing for it, which decodes to the type's zero
-// value. ObjectKindMessage carries:
+// value.
+//
+// The lists below are the keys poplar consumes today, not everything a
+// backend may put in Fields. A key outside them is carried and ignored
+// until a consumer pins its type here.
+//
+// ObjectKindMessage carries:
 //
 //	blob_id, thread_id, subject                string
 //	from                                       []map[string]string, each with "name" and "email"

@@ -56,9 +56,8 @@ func flagsFromFields(f *fields) store.Flags {
 // string: "Name <email>" when a name is present, the bare address
 // otherwise. internal/mail owns full envelope modeling from pass 3;
 // this is the scalar column pass 1's list view reads.
-func firstAddress(v any) string {
-	addrs, ok := v.([]map[string]string)
-	if !ok || len(addrs) == 0 {
+func firstAddress(addrs []map[string]string) string {
+	if len(addrs) == 0 {
 		return ""
 	}
 	if name := addrs[0]["name"]; name != "" {
@@ -152,7 +151,7 @@ func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
 		BlobID:        field[string](f, "blob_id"),
 		ThreadKey:     field[string](f, "thread_id"),
 		Subject:       field[string](f, "subject"),
-		FromAddr:      firstAddress(rec.Fields["from"]),
+		FromAddr:      firstAddress(field[[]map[string]string](f, "from")),
 		Flags:         flagsFromFields(f),
 		Size:          field[int64](f, "size"),
 		HasAttachment: field[bool](f, "has_attachment"),

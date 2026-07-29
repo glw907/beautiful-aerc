@@ -100,6 +100,25 @@ func strandDispatching(t *testing.T, w *store.Writer, id int64) {
 	}
 }
 
+// occupyWriter holds the store's single writer goroutine inside one
+// transaction for d and returns once that transaction has started. A
+// write enqueued during the window waits for the lane rather than
+// being admitted at once, so a caller carrying an already-cancelled
+// context loses the wait and never reaches the store.
+func occupyWriter(t *testing.T, w *store.Writer, d time.Duration) {
+	t.Helper()
+
+	started := make(chan struct{})
+	go func() {
+		_ = w.ApplyInteractive(context.Background(), func(*sql.Tx) error {
+			close(started)
+			time.Sleep(d)
+			return nil
+		})
+	}()
+	<-started
+}
+
 // captureSlog redirects slog's process-wide default logger to an
 // in-memory buffer for the rest of the test, restoring the previous
 // default on cleanup.

@@ -278,12 +278,15 @@ func offerRecovery(ctx context.Context, dbPath string, allowed bool, cause error
 
 	_, _ = fmt.Fprintf(out, "rebuilding from local data: %v\n", cause)
 	counts, err := store.Recover(context.WithoutCancel(ctx), dbPath)
-	if err != nil {
-		return err
-	}
+	// The damaged tables are named whether or not the rebuild finished:
+	// a failed rebuild hands the operator their original store back, and
+	// what it no longer holds is what they decide the next step from.
 	if len(counts.DamagedTables) > 0 {
 		_, _ = fmt.Fprintf(out, "warning: %s could not be read in full, so rows they still held are lost\n",
 			strings.Join(counts.DamagedTables, ", "))
+	}
+	if err != nil {
+		return err
 	}
 	_, _ = fmt.Fprintf(out, "rebuilt store: %d outbox intent(s), %d mailbox(es) and %d local message(s) preserved\n",
 		counts.Outbox, counts.Mailboxes, counts.Messages)

@@ -85,6 +85,31 @@ func TestIntegrityCheckRunsOnUnconsumableMarker(t *testing.T) {
 	}
 }
 
+// TestIntegrityCheckReportsAnUnreadableMarkerPath proves a marker
+// whose path cannot even be read is reported. Every later start reads
+// it the same way and runs the full quick_check, so an operator whose
+// state directory has gone unreadable is owed the reason rather than a
+// silent 14-second check on every launch.
+func TestIntegrityCheckReportsAnUnreadableMarkerPath(t *testing.T) {
+	log := captureSlog(t)
+
+	// A regular file where a directory belongs fails the stat with
+	// ENOTDIR, the same shape a permissions failure on the state
+	// directory gives it, and unlike a missing marker.
+	notADir := filepath.Join(t.TempDir(), "state")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatalf("seed a file where the state directory belongs: %v", err)
+	}
+	dbPath := filepath.Join(notADir, "store.db")
+
+	if !NeedsIntegrityCheck(dbPath, false) {
+		t.Fatal("NeedsIntegrityCheck over an unreadable marker path = false, want true")
+	}
+	if !strings.Contains(log.String(), "store.db.clean-shutdown") {
+		t.Errorf("log = %q, want it naming the marker path it could not read", log.String())
+	}
+}
+
 // TestIntegrityCheckRunsAfterMigration proves a migration forces the
 // check even over a clean-shutdown marker: a schema change is exactly
 // the case a stale index or a bad upgrade could leave undetected.
@@ -395,7 +420,7 @@ func TestUnquarantineRestoresOriginalOnFailedRebuild(t *testing.T) {
 	// a cancelled context produces mid-rebuild.
 	badPath := filepath.Join(t.TempDir(), "missing-dir", "store.db")
 	preserved := preservedData{outbox: []preservedOutboxRow{{id: 1}}}
-	if err := rebuildAt(context.Background(), badPath, preserved); err == nil {
+	if _, err := rebuildAt(context.Background(), badPath, preserved); err == nil {
 		t.Fatal("rebuildAt over an impossible path succeeded, want a failure")
 	}
 
@@ -497,6 +522,112 @@ func TestRecoverContinuesPastAnUnreadableTable(t *testing.T) {
 	}
 	if outboxCount != 1 {
 		t.Error("the outbox row was lost to a damaged message table, want it preserved")
+	}
+}
+
+// TestRestorePreservedSkipsRowsOfALostAccount proves a partially read
+// account table costs the operator only the rows hanging off the
+// accounts that did not survive. Every preserved mailbox, outbox and
+// message row carries a foreign key to account, and foreign keys are
+// on in the rebuilt store, so one unguarded insert fails the whole
+// restore transaction and takes every table that read cleanly with it.
+func TestRestorePreservedSkipsRowsOfALostAccount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	preserved := preservedData{
+		accounts: []preservedAccount{{id: 1, slug: "kept", backendKind: "jmap", address: "kept@example.com", data: "{}"}},
+		mailboxes: []preservedMailbox{
+			{id: 7, accountID: 1, role: "archive", name: "Archive", visible: 1, data: "{}"},
+			{id: 8, accountID: 2, role: "archive", name: "Lost", visible: 1, data: "{}"},
+		},
+		outbox: []preservedOutboxRow{
+			{id: 1, accountID: 1, kind: "move-messages", payload: "{}"},
+			{id: 2, accountID: 2, kind: "move-messages", payload: "{}"},
+		},
+		messages: []preservedMessage{
+			{id: 200, accountID: 1, origin: "local", data: "{}"},
+			{id: 201, accountID: 2, origin: "local", data: "{}"},
+		},
+		messageMailboxes: []preservedMessageMailbox{
+			{messageID: 200, mailboxID: 7},
+			{messageID: 201, mailboxID: 8},
+		},
+		damagedTables: []string{"account"},
+	}
+
+	counts, err := rebuildAt(context.Background(), path, preserved)
+	if err != nil {
+		t.Fatalf("rebuildAt with one account lost to a damaged table: %v", err)
+	}
+	if counts.Outbox != 1 || counts.Mailboxes != 1 || counts.Messages != 1 {
+		t.Errorf("RecoveredCounts = %+v, want one of each: the dropped rows are not preserved rows", counts)
+	}
+
+	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	if err != nil {
+		t.Fatalf("reopen rebuilt store: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	for _, q := range []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{"mailboxes of the surviving account", `SELECT COUNT(*) FROM mailbox WHERE account_id = 1`, 1},
+		{"mailboxes of the lost account", `SELECT COUNT(*) FROM mailbox WHERE account_id = 2`, 0},
+		{"outbox rows of the surviving account", `SELECT COUNT(*) FROM outbox WHERE account_id = 1`, 1},
+		{"outbox rows of the lost account", `SELECT COUNT(*) FROM outbox WHERE account_id = 2`, 0},
+		{"messages of the surviving account", `SELECT COUNT(*) FROM message WHERE account_id = 1`, 1},
+		{"messages of the lost account", `SELECT COUNT(*) FROM message WHERE account_id = 2`, 0},
+		{"memberships", `SELECT COUNT(*) FROM message_mailbox`, 1},
+	} {
+		var got int
+		if err := db.QueryRow(q.query).Scan(&got); err != nil {
+			t.Fatalf("count %s: %v", q.name, err)
+		}
+		if got != q.want {
+			t.Errorf("%s = %d, want %d", q.name, got, q.want)
+		}
+	}
+}
+
+// TestRecoverNamesDamagedTablesAfterAFailedRebuild proves the damaged
+// tables are still named when the rebuild itself fails. That report is
+// the operator's only account of what the store no longer holds, and a
+// rebuild failure is exactly the moment they need it: the original file
+// comes back, and whether it comes back whole is the next thing they
+// have to decide.
+func TestRecoverNamesDamagedTablesAfterAFailedRebuild(t *testing.T) {
+	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	seedRecoveryFixture(t, w)
+
+	// A unique index that no longer holds its constraint lets two
+	// mailboxes share a server id, which the rebuilt store's own index
+	// rejects: a restore failure sourced from the damage itself, with
+	// the message table unreadable beside it.
+	err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`DROP INDEX idx_mailbox_account_server`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO mailbox (id, account_id, server_id, name) VALUES (8, 1, 'srv-mbx-7', 'Archive again')`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`ALTER TABLE message RENAME TO message_damaged`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("damage the store: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	counts, err := Recover(context.Background(), path)
+	if err == nil {
+		t.Fatal("Recover over a store whose restore cannot commit = nil, want the rebuild failure")
+	}
+	if len(counts.DamagedTables) != 1 || counts.DamagedTables[0] != "message" {
+		t.Errorf("DamagedTables = %v, want [message] even though the rebuild failed", counts.DamagedTables)
 	}
 }
 

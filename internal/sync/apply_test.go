@@ -97,6 +97,13 @@ func TestApplyRejectsWrongFieldType(t *testing.T) {
 			wantType: "string",
 		},
 		{
+			name:     "from as []any",
+			kind:     backend.ObjectKindMessage,
+			fields:   map[string]any{"from": []any{map[string]string{"email": "ada@example.com"}}},
+			wantKey:  "from",
+			wantType: "[]interface {}",
+		},
+		{
 			name:     "size as float64",
 			kind:     backend.ObjectKindMessage,
 			fields:   map[string]any{"size": float64(2048)},
@@ -215,16 +222,15 @@ func TestFlagsFromFields(t *testing.T) {
 
 // TestFirstAddress asserts firstAddress's rendering: a named address
 // as "Name <email>", a bare address as just the email, the first
-// entry of a multi-address list, and every non-matching input shape
-// as the empty string.
+// entry of a multi-address list, and an absent or empty list as the
+// empty string.
 func TestFirstAddress(t *testing.T) {
 	tests := []struct {
 		name string
-		v    any
+		v    []map[string]string
 		want string
 	}{
 		{"nil", nil, ""},
-		{"wrong type", "not an address list", ""},
 		{"empty list", []map[string]string{}, ""},
 		{"named", []map[string]string{{"name": "Ada Lovelace", "email": "ada@example.com"}}, "Ada Lovelace <ada@example.com>"},
 		{"bare, empty name", []map[string]string{{"name": "", "email": "ada@example.com"}}, "ada@example.com"},

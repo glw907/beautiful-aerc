@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -257,6 +259,136 @@ func TestFinalizeFailureRequeuesClaimedIntents(t *testing.T) {
 	}
 	if renames != 2 {
 		t.Errorf("RenameMailbox calls = %d, want 2: the requeued intent is dispatched again", renames)
+	}
+}
+
+// TestFinalizeRecoveryOutlivesACancelledContext covers the way a
+// per-pass timeout normally expires: during the backend calls, so the
+// finalize transaction fails because its context is already done. The
+// recovery that returns each claimed row to queued must not carry that
+// same context, or it fails for the identical reason and the rows
+// strand in dispatching until the next process start, which is exactly
+// the case the recovery exists for.
+func TestFinalizeRecoveryOutlivesACancelledContext(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	mailboxID := seedMailbox(t, w, accountID, "Old", "mbx-1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	be := newFakeBackend()
+	be.MailSource.RenameMailboxFunc = func(context.Context, string, string) error {
+		cancel()
+		// The writer is busy for the whole finalize step, so the
+		// cancelled context loses the lane race deterministically
+		// rather than half the time.
+		occupyWriter(t, w, 100*time.Millisecond)
+		return nil
+	}
+
+	id, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "Family", time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(ctx, time.Now()); err == nil {
+		t.Fatal("DispatchOnce = nil, want the cancelled finalize reported")
+	}
+	if state, _ := outboxState(t, w, id); state != "queued" {
+		t.Errorf("intent %d state = %s, want queued: the recovery died with the context it was recovering from", id, state)
+	}
+}
+
+// TestFinalizeRecoveryLeavesALandedCreateAlone covers the recovery's
+// one exception. A create whose mailbox the server already made, and
+// whose resolved id the store then refused to record, is given up on
+// rather than retried into a second folder of the same name. Returning
+// it to queued alongside the rest re-opens that window inside the same
+// process, and the two store-write failures it takes are the same
+// failure: a full disk or a busy timeout produces both at once.
+func TestFinalizeRecoveryLeavesALandedCreateAlone(t *testing.T) {
+	log := captureSlog(t)
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	var created []string
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, _ string) (string, error) {
+		created = append(created, name)
+		return fmt.Sprintf("mbx-%d", len(created)), nil
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	blockPayloadWrites(t, w)
+	blockDeletes(t, w)
+
+	dispatcher := NewDispatcher(accountID, be, w)
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err == nil {
+		t.Fatal("DispatchOnce = nil, want the finalize failure")
+	}
+	if state, _ := outboxState(t, w, id); state != "dispatching" {
+		t.Errorf("intent %d state = %s, want dispatching: its mailbox already exists on the server", id, state)
+	}
+	if !strings.Contains(log.String(), strconv.FormatInt(id, 10)) {
+		t.Errorf("log = %q, want it naming intent %d, the only record of a row left dispatching", log.String(), id)
+	}
+
+	unblockDeletes(t, w)
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
+		t.Fatalf("second dispatch: %v", err)
+	}
+	if len(created) != 1 {
+		t.Errorf("CreateMailbox calls = %d, want 1: the account has a second folder named %q", len(created), "Projects")
+	}
+}
+
+// TestFinalizeRecoveryKeepsTheRequeueBackoff covers what the recovery
+// owes a row the failed finalize was going to requeue. Returning it to
+// queued with its expired next_attempt_at and its attempt count
+// untouched retries it on the next pass with no backoff at all, so a
+// finalize failure that persists turns every pass into another
+// immediate attempt against the live backend.
+func TestFinalizeRecoveryKeepsTheRequeueBackoff(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	deliveredID := seedMailbox(t, w, accountID, "Old", "mbx-1")
+	failingID := seedMailbox(t, w, accountID, "Older", "mbx-2")
+
+	be := newFakeBackend()
+	be.MailSource.RenameMailboxFunc = func(_ context.Context, id, _ string) error {
+		if id == "mbx-2" {
+			return backend.MutationFailure{Class: uerr.ClassServer, Cause: errors.New("boom")}
+		}
+		return nil
+	}
+
+	now := time.Now()
+	if _, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, deliveredID, "Family", now); err != nil {
+		t.Fatalf("enqueue the delivered rename: %v", err)
+	}
+	failing, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, failingID, "Archive", now)
+	if err != nil {
+		t.Fatalf("enqueue the failing rename: %v", err)
+	}
+	// The delivered rename's delete is what fails the finalize
+	// transaction, taking the failing rename's requeue down with it.
+	blockDeletes(t, w)
+
+	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err == nil {
+		t.Fatal("DispatchOnce = nil, want the finalize failure")
+	}
+
+	state, attempts := outboxState(t, w, failing)
+	if state != "queued" || attempts != 1 {
+		t.Errorf("intent %d state = %s attempts = %d, want queued/1", failing, state, attempts)
+	}
+	next := storetest.ScanValue[int64](t, w, `SELECT next_attempt_at FROM outbox WHERE id = ?`, failing)
+	if next <= now.Unix() {
+		t.Errorf("next_attempt_at = %d, want past %d: the recovered row retries with no backoff", next, now.Unix())
 	}
 }
 
