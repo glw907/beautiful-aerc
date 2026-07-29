@@ -1,0 +1,34 @@
+{
+  "methodResponses": [
+    [
+      "Email/set",
+      {
+        "accountId": "A13824",
+        "oldState": "778193",
+        "newState": "778194",
+        "created": {
+          "k1": {
+            "id": "M1ba2ffb0d2b7a1a4",
+            "blobId": "G1ba2ffb0d2b7a1a4",
+            "threadId": "T5e6f7a8b9c0d1e2f",
+            "size": 4127
+          }
+        },
+        "notCreated": {
+          "k2": {
+            "type": "blobNotFound",
+            "notFound": [
+              "G0000000000000000"
+            ]
+          },
+          "k3": {
+            "type": "tooManyMailboxes",
+            "description": "This account allows a message in at most 1 mailbox."
+          }
+        }
+      },
+      "0"
+    ]
+  ],
+  "sessionState": "cyrus-77;j-1;p-30c616ea00;s-69951158a7dcb38d"
+}
