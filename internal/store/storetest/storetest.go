@@ -7,6 +7,8 @@
 package storetest
 
 import (
+	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -37,4 +39,42 @@ func OpenWriter(t *testing.T, cfg store.WriterConfig) *store.Writer {
 	}
 	t.Cleanup(func() { _ = w.Close() })
 	return w
+}
+
+// Insert runs stmt on w's interactive lane and returns the id of the
+// row it inserted. An engine test seeds its fixture rows with raw SQL
+// rather than the engine under test, so a fixture never depends on the
+// code path it is there to exercise.
+func Insert(t *testing.T, w *store.Writer, stmt string, args ...any) int64 {
+	t.Helper()
+
+	var id int64
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		res, err := tx.Exec(stmt, args...)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
+	if err != nil {
+		t.Fatalf("insert (%s): %v", stmt, err)
+	}
+	return id
+}
+
+// ScanValue runs a single-row, single-column query on w's interactive
+// lane and returns the value it read. A query matching no row fails
+// the test.
+func ScanValue[T any](t *testing.T, w *store.Writer, query string, args ...any) T {
+	t.Helper()
+
+	var v T
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(query, args...).Scan(&v)
+	})
+	if err != nil {
+		t.Fatalf("query (%s): %v", query, err)
+	}
+	return v
 }

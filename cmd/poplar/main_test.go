@@ -184,6 +184,22 @@ func TestRunReclaimsOrphanedIntents(t *testing.T) {
 func seedStrandedDispatchingRow(t *testing.T, dbPath string) {
 	t.Helper()
 
+	seedStore(t, dbPath,
+		seedAccountSQL,
+		`INSERT INTO outbox (id, account_id, kind, payload, state, created_at) VALUES (1, 1, 'move-messages', '{}', 'dispatching', 0)`)
+}
+
+// seedAccountSQL is the one account row every startup fixture hangs
+// its own rows off, at id 1 so a fixture can name account_id 1
+// literally.
+const seedAccountSQL = `INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`
+
+// seedStore migrates a fresh store at dbPath, runs stmts against it in
+// order, and closes the connection, leaving dbPath ready for a run or
+// prepareStore call to open on its own.
+func seedStore(t *testing.T, dbPath string, stmts ...string) {
+	t.Helper()
+
 	seed, err := store.OpenWriteConn(dbPath)
 	if err != nil {
 		t.Fatalf("open %s: %v", dbPath, err)
@@ -191,11 +207,10 @@ func seedStrandedDispatchingRow(t *testing.T, dbPath string) {
 	if err := store.Migrate(seed); err != nil {
 		t.Fatalf("seed Migrate: %v", err)
 	}
-	if _, err := seed.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-		t.Fatalf("seed account: %v", err)
-	}
-	if _, err := seed.Exec(`INSERT INTO outbox (id, account_id, kind, payload, state, created_at) VALUES (1, 1, 'move-messages', '{}', 'dispatching', 0)`); err != nil {
-		t.Fatalf("seed stranded outbox row: %v", err)
+	for _, stmt := range stmts {
+		if _, err := seed.Exec(stmt); err != nil {
+			t.Fatalf("seed (%s): %v", stmt, err)
+		}
 	}
 	if err := seed.Close(); err != nil {
 		t.Fatalf("close seed connection: %v", err)
@@ -241,25 +256,10 @@ func TestRunRefusesSecondInstance(t *testing.T) {
 func seedStoreNeedingRecovery(t *testing.T, dbPath string) {
 	t.Helper()
 
-	seed, err := store.OpenWriteConn(dbPath)
-	if err != nil {
-		t.Fatalf("open %s: %v", dbPath, err)
-	}
-	if err := store.Migrate(seed); err != nil {
-		t.Fatalf("seed Migrate: %v", err)
-	}
-	if _, err := seed.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-		t.Fatalf("seed account: %v", err)
-	}
-	if _, err := seed.Exec(`INSERT INTO outbox (id, account_id, kind, payload, created_at) VALUES (1, 1, 'move-messages', '{}', 0)`); err != nil {
-		t.Fatalf("seed outbox row: %v", err)
-	}
-	if _, err := seed.Exec(`UPDATE schema_version SET version = 0`); err != nil {
-		t.Fatalf("force a re-migration attempt: %v", err)
-	}
-	if err := seed.Close(); err != nil {
-		t.Fatalf("close seed connection: %v", err)
-	}
+	seedStore(t, dbPath,
+		seedAccountSQL,
+		`INSERT INTO outbox (id, account_id, kind, payload, created_at) VALUES (1, 1, 'move-messages', '{}', 0)`,
+		`UPDATE schema_version SET version = 0`)
 }
 
 // TestPrepareStoreRecoversFromFailedMigration proves prepareStore

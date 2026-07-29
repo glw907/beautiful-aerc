@@ -19,6 +19,15 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
+// localErr surfaces err as op's user-visible failure. Every failure
+// this package raises is local to the store file, and none of them
+// names an entity worth correlating, so ClassStoreLocal and a nil id
+// list are the whole classification. The one exception, a store a
+// newer poplar migrated forward, calls uerr.New directly.
+func localErr(op string, err error) error {
+	return uerr.New(op, nil, uerr.ClassStoreLocal, err)
+}
+
 // Migrate brings db up to the schema version this build knows,
 // starting from whatever version it finds on disk (0 for a fresh
 // file). Each migration runs in its own transaction, so a failure
@@ -29,15 +38,15 @@ var migrationFiles embed.FS
 func Migrate(db *sql.DB) error {
 	names, err := migrationNames()
 	if err != nil {
-		return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.migrate", err)
 	}
 
 	if err := ensureSchemaVersionTable(db); err != nil {
-		return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.migrate", err)
 	}
 	current, err := readSchemaVersion(db)
 	if err != nil {
-		return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.migrate", err)
 	}
 
 	maxVersion := len(names)
@@ -49,11 +58,11 @@ func Migrate(db *sql.DB) error {
 	for current < maxVersion {
 		stmt, err := migrationFiles.ReadFile("migrations/" + names[current])
 		if err != nil {
-			return uerr.New("store.migrate", nil, uerr.ClassStoreLocal,
+			return localErr("store.migrate",
 				fmt.Errorf("read migration %s: %w", names[current], err))
 		}
 		if err := applyMigration(db, string(stmt), current+1); err != nil {
-			return uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+			return localErr("store.migrate", err)
 		}
 		current++
 	}
@@ -67,11 +76,11 @@ func Migrate(db *sql.DB) error {
 // migration" trigger for an integrity check (SY-8).
 func CurrentSchemaVersion(db *sql.DB) (int, error) {
 	if err := ensureSchemaVersionTable(db); err != nil {
-		return 0, uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+		return 0, localErr("store.migrate", err)
 	}
 	version, err := readSchemaVersion(db)
 	if err != nil {
-		return 0, uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+		return 0, localErr("store.migrate", err)
 	}
 	return version, nil
 }

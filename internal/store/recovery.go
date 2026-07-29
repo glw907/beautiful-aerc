@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"time"
-
-	"github.com/glw907/poplar/internal/uerr"
 )
 
 // cleanShutdownMarker returns the sentinel path beside the store file
@@ -23,7 +21,7 @@ func cleanShutdownMarker(dbPath string) string {
 // dbPath have closed.
 func MarkCleanShutdown(dbPath string) error {
 	if err := os.WriteFile(cleanShutdownMarker(dbPath), nil, 0o600); err != nil {
-		return uerr.New("store.shutdown", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.shutdown", err)
 	}
 	return nil
 }
@@ -60,15 +58,15 @@ func CheckIntegrity(ctx context.Context, db *sql.DB, progress func(stage string)
 	report("checking store integrity")
 	var result string
 	if err := db.QueryRowContext(ctx, `PRAGMA quick_check`).Scan(&result); err != nil {
-		return uerr.New("store.integrity", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.integrity", err)
 	}
 	if result != "ok" {
-		return uerr.New("store.integrity", nil, uerr.ClassStoreLocal, fmt.Errorf("quick_check: %s", result))
+		return localErr("store.integrity", fmt.Errorf("quick_check: %s", result))
 	}
 
 	report("checking full-text index")
 	if _, err := db.ExecContext(ctx, `INSERT INTO message_fts(message_fts) VALUES ('integrity-check')`); err != nil {
-		return uerr.New("store.integrity", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.integrity", err)
 	}
 	return nil
 }
@@ -97,13 +95,13 @@ type RecoveredCounts struct {
 func Recover(ctx context.Context, path string) (RecoveredCounts, error) {
 	preserved, err := extractPreserved(ctx, path)
 	if err != nil {
-		return RecoveredCounts{}, uerr.New("store.recover.extract", nil, uerr.ClassStoreLocal,
+		return RecoveredCounts{}, localErr("store.recover.extract",
 			fmt.Errorf("extract preserved rows: %w", err))
 	}
 
 	quarantined := fmt.Sprintf("%s.corrupt-%d", path, time.Now().UnixNano())
 	if err := os.Rename(path, quarantined); err != nil {
-		return RecoveredCounts{}, uerr.New("store.recover.quarantine", nil, uerr.ClassStoreLocal,
+		return RecoveredCounts{}, localErr("store.recover.quarantine",
 			fmt.Errorf("quarantine %s: %w", path, err))
 	}
 	for _, suffix := range [...]string{"-wal", "-shm"} {
@@ -112,7 +110,7 @@ func Recover(ctx context.Context, path string) (RecoveredCounts, error) {
 
 	if err := rebuildAt(ctx, path, preserved); err != nil {
 		unquarantine(quarantined, path, preserved)
-		return RecoveredCounts{}, uerr.New("store.recover.rebuild", nil, uerr.ClassStoreLocal,
+		return RecoveredCounts{}, localErr("store.recover.rebuild",
 			fmt.Errorf("rebuild %s: %w", path, err))
 	}
 

@@ -148,7 +148,7 @@ func seedRecoveryFixture(t *testing.T, w *Writer) {
 	t.Helper()
 
 	err := w.submit(context.Background(), func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
+		if _, err := tx.Exec(seedAccountSQL); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`INSERT INTO message (id, account_id, server_id, received_at, subject, search_text, origin)
@@ -352,7 +352,7 @@ func TestUnquarantineRestoresOriginalOnFailedRebuild(t *testing.T) {
 func TestRecoverRestoresDispatchingRowAsQueued(t *testing.T) {
 	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
 	err := w.submit(context.Background(), func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
+		if _, err := tx.Exec(seedAccountSQL); err != nil {
 			return err
 		}
 		_, err := tx.Exec(`INSERT INTO outbox (id, account_id, kind, payload, state, created_at) VALUES (1, 1, 'move-messages', '{}', 'dispatching', 0)`)

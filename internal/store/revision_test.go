@@ -57,23 +57,6 @@ func TestStoreRevisionMonotonic(t *testing.T) {
 	}
 }
 
-// seedAccountAndMailbox inserts account 1 and mailbox 1 through w, the
-// fixture every read test in this package builds a mailbox on.
-func seedAccountAndMailbox(t *testing.T, w *Writer) {
-	t.Helper()
-
-	err := w.submit(context.Background(), func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-			return err
-		}
-		_, err := tx.Exec(`INSERT INTO mailbox (id, account_id, name) VALUES (1, 1, 'Inbox')`)
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed account and mailbox: %v", err)
-	}
-}
-
 // insertMessage inserts a message with the given id and received_at
 // into mailbox 1 through w, in one committed transaction.
 func insertMessage(t *testing.T, w *Writer, id, receivedAt int64) {

@@ -6,8 +6,6 @@ import (
 	"math"
 	"slices"
 	"strings"
-
-	"github.com/glw907/poplar/internal/uerr"
 )
 
 // DefaultReadPoolSize is the read pool's connection count. A small,
@@ -35,7 +33,7 @@ type ReadPool struct {
 func NewReadPool(path string, size int, rev *RevisionCounter) (*ReadPool, error) {
 	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
 	if err != nil {
-		return nil, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return nil, localErr("store.read", err)
 	}
 	db.SetMaxOpenConns(size)
 	db.SetMaxIdleConns(size)
@@ -137,7 +135,7 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 
 	rows, err := p.db.QueryContext(ctx, query, mailboxID, receivedAt, receivedAt, messageID, limit)
 	if err != nil {
-		return MailboxPage{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return MailboxPage{}, localErr("store.read", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -145,12 +143,12 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 	for rows.Next() {
 		var row MailboxRow
 		if err := rows.Scan(&row.MessageID, &row.ReceivedAt); err != nil {
-			return MailboxPage{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+			return MailboxPage{}, localErr("store.read", err)
 		}
 		page.Rows = append(page.Rows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return MailboxPage{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return MailboxPage{}, localErr("store.read", err)
 	}
 	return page, nil
 }
@@ -161,7 +159,7 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 func (p *ReadPool) FirstMailboxID(ctx context.Context) (int64, error) {
 	var id int64
 	if err := p.db.QueryRowContext(ctx, queryMailboxFirstID).Scan(&id); err != nil {
-		return 0, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return 0, localErr("store.read", err)
 	}
 	return id, nil
 }
@@ -196,7 +194,7 @@ func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (MailboxD
 
 	rows, err := p.db.QueryContext(ctx, query.String(), args...)
 	if err != nil {
-		return MailboxDetails{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return MailboxDetails{}, localErr("store.read", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -206,14 +204,14 @@ func (p *ReadPool) MailboxRowDetails(ctx context.Context, ids []int64) (MailboxD
 		var flags int64
 		var hasAttachment int
 		if err := rows.Scan(&s.MessageID, &s.Subject, &s.FromAddr, &flags, &hasAttachment, &s.ThreadKey); err != nil {
-			return MailboxDetails{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+			return MailboxDetails{}, localErr("store.read", err)
 		}
 		s.Flags = Flags(flags) //nolint:gosec // G115: message.flags is written only through EncodeFlags's uint32 bitfield, never a value outside its range
 		s.HasAttachment = hasAttachment != 0
 		summaries[s.MessageID] = s
 	}
 	if err := rows.Err(); err != nil {
-		return MailboxDetails{}, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+		return MailboxDetails{}, localErr("store.read", err)
 	}
 	return MailboxDetails{Summaries: summaries, Revision: rev}, nil
 }

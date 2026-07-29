@@ -32,77 +32,80 @@ func newUndoGroup() string {
 	return hex.EncodeToString(b[:])
 }
 
+// enqueueSingle marshals payload and inserts one intent of kind,
+// under a fresh undo group of its own, dispatch-eligible immediately.
+// Every single-row Enqueue*Tx entry point goes through it; a bulk move
+// does not, since its chunks share one group and hold for the undo
+// window.
+func enqueueSingle(tx *sql.Tx, accountID int64, kind Kind, payload any, now time.Time) (intentID int64, undoGroup string, err error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return 0, "", err
+	}
+	undoGroup = newUndoGroup()
+	intentID, err = insertRow(tx, accountID, kind, raw, undoGroup, 0, now, now)
+	return intentID, undoGroup, err
+}
+
+// enqueueInOwnTx runs enqueue, one of the Enqueue*Tx entry points, in
+// its own interactive-lane transaction, the Writer-level shape every
+// single-intent Enqueue call shares.
+func enqueueInOwnTx(ctx context.Context, w *store.Writer, enqueue func(*sql.Tx) (int64, string, error)) (intentID int64, undoGroup string, err error) {
+	err = w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+		var txErr error
+		intentID, undoGroup, txErr = enqueue(tx)
+		return txErr
+	})
+	return intentID, undoGroup, err
+}
+
 // EnqueueCreateMailboxTx enqueues a KindCreateMailbox intent for a
 // mailbox named name under parentMailboxID (an existing mailbox row,
 // or 0 for the root) or, offline, under parentRef (another queued
 // KindCreateMailbox intent's own id) inside tx, so a caller commits it
 // alongside its own local mutation in one writer transaction.
 func EnqueueCreateMailboxTx(tx *sql.Tx, accountID int64, name string, parentMailboxID, parentRef int64, now time.Time) (intentID int64, undoGroup string, err error) {
-	payload, err := json.Marshal(CreateMailboxPayload{Name: name, ParentMailboxID: parentMailboxID, ParentRef: parentRef})
-	if err != nil {
-		return 0, "", err
-	}
-	undoGroup = newUndoGroup()
-	intentID, err = insertRow(tx, accountID, KindCreateMailbox, payload, undoGroup, 0, now, now)
-	return intentID, undoGroup, err
+	return enqueueSingle(tx, accountID, KindCreateMailbox,
+		CreateMailboxPayload{Name: name, ParentMailboxID: parentMailboxID, ParentRef: parentRef}, now)
 }
 
 // EnqueueCreateMailbox is EnqueueCreateMailboxTx's Writer-level
 // convenience for a caller with no local mutation of its own to pair
 // it with: it opens its own interactive-lane transaction.
 func EnqueueCreateMailbox(ctx context.Context, w *store.Writer, accountID int64, name string, parentMailboxID, parentRef int64, now time.Time) (intentID int64, undoGroup string, err error) {
-	err = w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
-		var txErr error
-		intentID, undoGroup, txErr = EnqueueCreateMailboxTx(tx, accountID, name, parentMailboxID, parentRef, now)
-		return txErr
+	return enqueueInOwnTx(ctx, w, func(tx *sql.Tx) (int64, string, error) {
+		return EnqueueCreateMailboxTx(tx, accountID, name, parentMailboxID, parentRef, now)
 	})
-	return intentID, undoGroup, err
 }
 
 // EnqueueRenameMailboxTx enqueues a KindRenameMailbox intent renaming
 // mailboxID (an existing mailbox row) to name inside tx.
 func EnqueueRenameMailboxTx(tx *sql.Tx, accountID, mailboxID int64, name string, now time.Time) (intentID int64, undoGroup string, err error) {
-	payload, err := json.Marshal(RenameMailboxPayload{MailboxID: mailboxID, Name: name})
-	if err != nil {
-		return 0, "", err
-	}
-	undoGroup = newUndoGroup()
-	intentID, err = insertRow(tx, accountID, KindRenameMailbox, payload, undoGroup, 0, now, now)
-	return intentID, undoGroup, err
+	return enqueueSingle(tx, accountID, KindRenameMailbox,
+		RenameMailboxPayload{MailboxID: mailboxID, Name: name}, now)
 }
 
 // EnqueueRenameMailbox is EnqueueRenameMailboxTx's Writer-level
 // convenience: it opens its own interactive-lane transaction.
 func EnqueueRenameMailbox(ctx context.Context, w *store.Writer, accountID, mailboxID int64, name string, now time.Time) (intentID int64, undoGroup string, err error) {
-	err = w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
-		var txErr error
-		intentID, undoGroup, txErr = EnqueueRenameMailboxTx(tx, accountID, mailboxID, name, now)
-		return txErr
+	return enqueueInOwnTx(ctx, w, func(tx *sql.Tx) (int64, string, error) {
+		return EnqueueRenameMailboxTx(tx, accountID, mailboxID, name, now)
 	})
-	return intentID, undoGroup, err
 }
 
 // EnqueueDeleteMailboxTx enqueues a KindDeleteMailbox intent removing
 // mailboxID inside tx.
 func EnqueueDeleteMailboxTx(tx *sql.Tx, accountID, mailboxID int64, now time.Time) (intentID int64, undoGroup string, err error) {
-	payload, err := json.Marshal(DeleteMailboxPayload{MailboxID: mailboxID})
-	if err != nil {
-		return 0, "", err
-	}
-	undoGroup = newUndoGroup()
-	intentID, err = insertRow(tx, accountID, KindDeleteMailbox, payload, undoGroup, 0, now, now)
-	return intentID, undoGroup, err
+	return enqueueSingle(tx, accountID, KindDeleteMailbox,
+		DeleteMailboxPayload{MailboxID: mailboxID}, now)
 }
 
 // EnqueueDeleteMailbox is EnqueueDeleteMailboxTx's Writer-level
 // convenience: it opens its own interactive-lane transaction.
 func EnqueueDeleteMailbox(ctx context.Context, w *store.Writer, accountID, mailboxID int64, now time.Time) (intentID int64, undoGroup string, err error) {
-	err = w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
-		var txErr error
-		intentID, undoGroup, txErr = EnqueueDeleteMailboxTx(tx, accountID, mailboxID, now)
-		return txErr
+	return enqueueInOwnTx(ctx, w, func(tx *sql.Tx) (int64, string, error) {
+		return EnqueueDeleteMailboxTx(tx, accountID, mailboxID, now)
 	})
-	return intentID, undoGroup, err
 }
 
 // EnqueueMoveMessagesChunkTx enqueues one chunk of a bulk move inside
@@ -248,8 +251,6 @@ func chunkSize(be backend.Backend) int {
 	return defaultChunkSize
 }
 
-// chunks splits ids into consecutive slices of at most size elements
-// each.
 func chunks(ids []int64, size int) [][]int64 {
 	var out [][]int64
 	for len(ids) > 0 {

@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"sync/atomic"
 	"time"
-
-	"github.com/glw907/poplar/internal/uerr"
 )
 
 // WriterConfig governs the writer's admission and checkpoint timing.
@@ -88,7 +86,7 @@ func NewWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
 	if err := configureCheckpointing(context.Background(), db, checkpointConfig{
 		JournalSizeLimit: cfg.JournalSizeLimit,
 	}); err != nil {
-		return nil, uerr.New("store.writer", nil, uerr.ClassStoreLocal, err)
+		return nil, localErr("store.writer", err)
 	}
 
 	w := &Writer{
@@ -152,9 +150,9 @@ func (w *Writer) enqueue(ctx context.Context, lane chan writeJob, fn func(*sql.T
 	select {
 	case lane <- j:
 	case <-ctx.Done():
-		return uerr.New("store.write", nil, uerr.ClassStoreLocal, ctx.Err())
+		return localErr("store.write", ctx.Err())
 	case <-w.stop:
-		return uerr.New("store.write", nil, uerr.ClassStoreLocal, errWriterClosed)
+		return localErr("store.write", errWriterClosed)
 	}
 	return <-j.done
 }
@@ -266,14 +264,14 @@ func (w *Writer) execute(fn func(*sql.Tx) error) error {
 
 	tx, err := w.db.Begin()
 	if err != nil {
-		return uerr.New("store.write", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.write", err)
 	}
 	if err := fn(tx); err != nil {
 		_ = tx.Rollback()
-		return uerr.New("store.write", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.write", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return uerr.New("store.write", nil, uerr.ClassStoreLocal, err)
+		return localErr("store.write", err)
 	}
 	w.rev.advance()
 	return nil

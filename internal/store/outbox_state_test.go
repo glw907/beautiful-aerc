@@ -7,7 +7,7 @@ import "testing"
 // 'pending' default.
 func TestOutboxStateDefault(t *testing.T) {
 	db := openMigratedTestDB(t)
-	seedTestAccount(t, db)
+	seedAccount(t, db)
 
 	res, err := db.Exec(`INSERT INTO outbox (account_id, kind, payload, created_at) VALUES (1, 'send', '{}', 1000)`)
 	if err != nil {
@@ -31,7 +31,7 @@ func TestOutboxStateDefault(t *testing.T) {
 // refuses any state outside ADR-0006 revision 2's closed vocabulary.
 func TestOutboxStateRejectsUnknownValue(t *testing.T) {
 	db := openMigratedTestDB(t)
-	seedTestAccount(t, db)
+	seedAccount(t, db)
 
 	_, err := db.Exec(`INSERT INTO outbox (account_id, kind, payload, state, created_at) VALUES (1, 'send', '{}', 'pending', 1000)`)
 	if err == nil {

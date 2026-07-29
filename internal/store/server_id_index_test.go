@@ -1,7 +1,6 @@
 package store
 
 import (
-	"database/sql"
 	"slices"
 	"testing"
 )
@@ -49,7 +48,7 @@ func TestServerIDLookupUsesIndex(t *testing.T) {
 // server_id) to coexist.
 func TestServerIDUniqueAcrossRows(t *testing.T) {
 	db := openMigratedTestDB(t)
-	seedTestAccount(t, db)
+	seedAccount(t, db)
 
 	tests := []struct {
 		name       string
@@ -90,14 +89,5 @@ func TestServerIDUniqueAcrossRows(t *testing.T) {
 	}
 	if _, err := db.Exec(`INSERT INTO message (account_id, received_at, origin) VALUES (1, 4000, 'local')`); err != nil {
 		t.Fatalf("second local draft (NULL server_id) rejected, want it to coexist with the first: %v", err)
-	}
-}
-
-// seedTestAccount inserts one account row with id 1.
-func seedTestAccount(t *testing.T, db *sql.DB) {
-	t.Helper()
-
-	if _, err := db.Exec(`INSERT INTO account (slug, backend_kind, address) VALUES ('a', 'jmap', 'user@example.com')`); err != nil {
-		t.Fatalf("seed account: %v", err)
 	}
 }

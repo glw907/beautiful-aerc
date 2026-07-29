@@ -236,10 +236,8 @@ func seedLargeMailbox(t *testing.T, n int) (path string, want []MailboxRow) {
 	if err := Migrate(db); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-		t.Fatalf("insert account: %v", err)
-	}
-	if _, err := db.Exec(`INSERT INTO mailbox (id, account_id, name) VALUES (1, 1, 'Inbox')`); err != nil {
+	seedAccount(t, db)
+	if _, err := db.Exec(seedMailboxSQL); err != nil {
 		t.Fatalf("insert mailbox: %v", err)
 	}
 

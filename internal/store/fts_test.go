@@ -24,9 +24,7 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 	db := openMigratedTestDB(t)
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-		t.Fatalf("insert account: %v", err)
-	}
+	seedAccount(t, db)
 	if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
 		t.Fatalf("insert message: %v", err)
 	}
@@ -64,9 +62,7 @@ func TestUnindexedMessageRowMustBeIndexed(t *testing.T) {
 	db := openMigratedTestDB(t)
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-		t.Fatalf("insert account: %v", err)
-	}
+	seedAccount(t, db)
 	if _, err := db.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text) VALUES (1, 1, 0, 'hello', 'world')`); err != nil {
 		t.Fatalf("insert message: %v", err)
 	}
@@ -161,9 +157,7 @@ func TestRebuildIndex(t *testing.T) {
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 	db := w.db
 
-	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
-		t.Fatalf("insert account: %v", err)
-	}
+	seedAccount(t, db)
 
 	messages := []struct {
 		id                  int64

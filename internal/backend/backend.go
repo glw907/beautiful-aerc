@@ -56,6 +56,20 @@ type Record struct {
 	Fields map[string]any
 }
 
+// MessageFlagKeywords maps the boolean flag names a message Record's
+// Fields carries to the keyword each one stands for on the wire and in
+// the store. A backend translates its own keyword set through this
+// table on the way out of Changes and back through it on the way into
+// ApplyBatch; internal/sync reads the same table to reach
+// store.EncodeFlags's keyword vocabulary.
+var MessageFlagKeywords = map[string]string{
+	"seen":      "$seen",
+	"flagged":   "$flagged",
+	"answered":  "$answered",
+	"draft":     "$draft",
+	"forwarded": "$forwarded",
+}
+
 // ChangeSet is what Changes returns for one page of one collection:
 // records created or updated since the requested token, hydrated in
 // the same round trip, and the ids of anything destroyed. HasMore is

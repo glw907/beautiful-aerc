@@ -9,21 +9,9 @@ import (
 	"github.com/glw907/poplar/internal/store"
 )
 
-// flagKeyword maps sync's Record.Fields boolean vocabulary (task 9's
-// keys: "seen", "flagged", ...) to the $-prefixed keyword
-// store.EncodeFlags expects, the same shape every backend already
-// translates its wire keywords into before Changes returns.
-var flagKeyword = map[string]string{
-	"seen":      "$seen",
-	"flagged":   "$flagged",
-	"answered":  "$answered",
-	"draft":     "$draft",
-	"forwarded": "$forwarded",
-}
-
 func flagsFromFields(fields map[string]any) store.Flags {
 	var keywords []string
-	for name, kw := range flagKeyword {
+	for name, kw := range backend.MessageFlagKeywords {
 		if v, _ := fields[name].(bool); v {
 			keywords = append(keywords, kw)
 		}

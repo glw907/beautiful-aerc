@@ -41,16 +41,6 @@ var mailboxProperties = []string{
 	"unreadEmails", "isSubscribed",
 }
 
-// messageFlagKeywords maps poplar's boolean flag vocabulary to the
-// JMAP keyword each one wire-encodes as.
-var messageFlagKeywords = map[string]string{
-	"seen":      "$seen",
-	"flagged":   "$flagged",
-	"answered":  "$answered",
-	"draft":     "$draft",
-	"forwarded": "$forwarded",
-}
-
 // Changes implements backend.Source for both Message and Mailbox,
 // the two collections a Mail source composes (ADR-0004 revision 2).
 // An empty token, or one left over from a baseline pull's own
@@ -352,7 +342,7 @@ func messageFields(e *email.Email) map[string]any {
 	if ids := mailboxIDList(e.MailboxIDs); ids != nil {
 		fields["mailbox_ids"] = ids
 	}
-	for name, keyword := range messageFlagKeywords {
+	for name, keyword := range backend.MessageFlagKeywords {
 		// A keyword absent from e.Keywords is a real "false", not
 		// "unknown": messagePatch (the inverse translation) reads a
 		// missing key as no change, so a server-side clear must

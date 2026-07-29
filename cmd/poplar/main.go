@@ -145,30 +145,12 @@ type startupTraceResult struct {
 func runStartupTrace(ctx context.Context, dbPath string, writer *store.Writer, start time.Time, out io.Writer) error {
 	opened := time.Since(start)
 
-	reads, err := store.NewReadPool(dbPath, 1, writer.Revision())
-	if err != nil {
-		_ = writer.Close()
-		return err
-	}
-
-	mailboxID, err := reads.FirstMailboxID(ctx)
-	if err != nil {
-		_ = reads.Close()
-		_ = writer.Close()
-		return err
-	}
-
-	page, err := reads.ListMailboxForward(ctx, mailboxID, store.MailboxCursor{}, 50)
-	closeErr := reads.Close()
-	if err != nil {
-		_ = writer.Close()
-		return err
-	}
-	if closeErr != nil {
-		_ = writer.Close()
-		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("close read pool: %w", closeErr))
-	}
+	rows, err := timeFirstPage(ctx, dbPath, writer.Revision())
 	total := time.Since(start)
+	if err != nil {
+		_ = writer.Close()
+		return err
+	}
 
 	if err := writer.Close(); err != nil {
 		return err
@@ -181,8 +163,35 @@ func runStartupTrace(ctx context.Context, dbPath string, writer *store.Writer, s
 		OpenNS:      opened.Nanoseconds(),
 		FirstPageNS: (total - opened).Nanoseconds(),
 		TotalNS:     total.Nanoseconds(),
-		Rows:        len(page.Rows),
+		Rows:        len(rows),
 	})
+}
+
+// timeFirstPage opens a single-connection read pool over dbPath and
+// returns a first mailbox-list page through it, closing the pool
+// before it returns so the caller's elapsed time covers the whole
+// read.
+func timeFirstPage(ctx context.Context, dbPath string, rev *store.RevisionCounter) (rows []store.MailboxRow, err error) {
+	reads, err := store.NewReadPool(dbPath, 1, rev)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		closeErr := reads.Close()
+		if err == nil && closeErr != nil {
+			err = uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("close read pool: %w", closeErr))
+		}
+	}()
+
+	mailboxID, err := reads.FirstMailboxID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, err := reads.ListMailboxForward(ctx, mailboxID, store.MailboxCursor{}, 50)
+	if err != nil {
+		return nil, err
+	}
+	return page.Rows, nil
 }
 
 // prepareStore ensures the store at dbPath is migrated and, when one

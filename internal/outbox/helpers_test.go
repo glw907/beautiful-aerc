@@ -12,88 +12,46 @@ import (
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"
 	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/store/storetest"
 )
 
 // seedAccount inserts one account row and returns its id.
 func seedAccount(t *testing.T, w *store.Writer) int64 {
 	t.Helper()
-	var id int64
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		res, err := tx.Exec(`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "acct", "jmap", "geoff@example.com")
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed account: %v", err)
-	}
-	return id
+	return storetest.Insert(t, w,
+		`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`,
+		"acct", "jmap", "geoff@example.com")
 }
 
 // seedMailbox inserts one mailbox row (with a server id, unless
 // serverID is empty) and returns its internal id.
 func seedMailbox(t *testing.T, w *store.Writer, accountID int64, name, serverID string) int64 {
 	t.Helper()
-	var id int64
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		var res sql.Result
-		var err error
-		if serverID == "" {
-			res, err = tx.Exec(`INSERT INTO mailbox (account_id, name) VALUES (?, ?)`, accountID, name)
-		} else {
-			res, err = tx.Exec(`INSERT INTO mailbox (account_id, name, server_id) VALUES (?, ?, ?)`, accountID, name, serverID)
-		}
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed mailbox: %v", err)
+	if serverID == "" {
+		return storetest.Insert(t, w, `INSERT INTO mailbox (account_id, name) VALUES (?, ?)`, accountID, name)
 	}
-	return id
+	return storetest.Insert(t, w,
+		`INSERT INTO mailbox (account_id, name, server_id) VALUES (?, ?, ?)`,
+		accountID, name, serverID)
 }
 
 // seedMessage inserts one message row with serverID and places it in
 // mailboxID, returning the message's internal id.
 func seedMessage(t *testing.T, w *store.Writer, accountID, mailboxID int64, serverID string) int64 {
 	t.Helper()
-	var id int64
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		res, err := tx.Exec(
-			`INSERT INTO message (account_id, server_id, received_at) VALUES (?, ?, ?)`,
-			accountID, serverID, time.Now().Unix(),
-		)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(`INSERT INTO message_mailbox (message_id, mailbox_id, received_at) VALUES (?, ?, ?)`, id, mailboxID, time.Now().Unix())
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed message: %v", err)
-	}
+	id := storetest.Insert(t, w,
+		`INSERT INTO message (account_id, server_id, received_at) VALUES (?, ?, ?)`,
+		accountID, serverID, time.Now().Unix())
+	storetest.Insert(t, w,
+		`INSERT INTO message_mailbox (message_id, mailbox_id, received_at) VALUES (?, ?, ?)`,
+		id, mailboxID, time.Now().Unix())
 	return id
 }
 
 // outboxCount returns how many outbox rows exist for id.
 func outboxCount(t *testing.T, w *store.Writer, id int64) int {
 	t.Helper()
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT COUNT(*) FROM outbox WHERE id = ?`, id).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("count outbox row %d: %v", id, err)
-	}
-	return n
+	return storetest.ScanValue[int](t, w, `SELECT COUNT(*) FROM outbox WHERE id = ?`, id)
 }
 
 // outboxState returns id's state and attempt_count. It fails the test
@@ -113,40 +71,20 @@ func outboxState(t *testing.T, w *store.Writer, id int64) (state string, attempt
 // still in the dispatching state.
 func dispatchingCount(t *testing.T, w *store.Writer, accountID int64) int {
 	t.Helper()
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT COUNT(*) FROM outbox WHERE account_id = ? AND state = 'dispatching'`, accountID).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("count dispatching rows for account %d: %v", accountID, err)
-	}
-	return n
+	return storetest.ScanValue[int](t, w,
+		`SELECT COUNT(*) FROM outbox WHERE account_id = ? AND state = 'dispatching'`, accountID)
 }
 
 // readPayload returns id's raw payload column.
 func readPayload(t *testing.T, w *store.Writer, id int64) []byte {
 	t.Helper()
-	var payload []byte
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT payload FROM outbox WHERE id = ?`, id).Scan(&payload)
-	})
-	if err != nil {
-		t.Fatalf("read payload %d: %v", id, err)
-	}
-	return payload
+	return storetest.ScanValue[[]byte](t, w, `SELECT payload FROM outbox WHERE id = ?`, id)
 }
 
 // readUndoGroup returns id's undo_group column.
 func readUndoGroup(t *testing.T, w *store.Writer, id int64) string {
 	t.Helper()
-	var group string
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT COALESCE(undo_group, '') FROM outbox WHERE id = ?`, id).Scan(&group)
-	})
-	if err != nil {
-		t.Fatalf("read undo group %d: %v", id, err)
-	}
-	return group
+	return storetest.ScanValue[string](t, w, `SELECT COALESCE(undo_group, '') FROM outbox WHERE id = ?`, id)
 }
 
 // strandDispatching moves id to dispatching and leaves it there,

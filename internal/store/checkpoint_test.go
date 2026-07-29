@@ -20,11 +20,7 @@ func TestCheckpointLifecycle(t *testing.T) {
 	cfg.CheckpointIdle = 30 * time.Millisecond
 	w, path := newTestWriter(t, cfg)
 
-	reader, err := sql.Open("sqlite", dsn(path, connReadOnly))
-	if err != nil {
-		t.Fatalf("open reader: %v", err)
-	}
-	defer func() { _ = reader.Close() }()
+	reader := openTestReader(t, path)
 
 	rtx, err := reader.Begin()
 	if err != nil {
@@ -35,18 +31,7 @@ func TestCheckpointLifecycle(t *testing.T) {
 		t.Fatalf("hold reader snapshot: %v", err)
 	}
 
-	big := strings.Repeat("x", 4096)
-	for i := range 200 {
-		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
-			_, err := tx.Exec(
-				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
-				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
-			return err
-		})
-		if err != nil {
-			t.Fatalf("submitBulk(%d): %v", i, err)
-		}
-	}
+	fillWithFatRows(t, w, 200, 4096)
 
 	walPath := path + "-wal"
 	grown := walSize(t, walPath)
@@ -80,18 +65,7 @@ func TestCheckpointPassiveReclaimsWithoutAReader(t *testing.T) {
 	cfg.CheckpointIdle = time.Hour
 	w, path := newTestWriter(t, cfg)
 
-	big := strings.Repeat("x", 4096)
-	for i := range 200 {
-		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
-			_, err := tx.Exec(
-				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
-				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
-			return err
-		})
-		if err != nil {
-			t.Fatalf("submitBulk(%d): %v", i, err)
-		}
-	}
+	fillWithFatRows(t, w, 200, 4096)
 
 	// runBulk's PASSIVE checkpoint runs after the job's done channel
 	// already fired, so give the last chunk's checkpoint room to
@@ -121,27 +95,9 @@ func TestIncrementalVacuumReclaimsFreelist(t *testing.T) {
 	cfg.CheckpointIdle = 20 * time.Millisecond
 	w, path := newTestWriter(t, cfg)
 
-	// A separate read-only connection checks freelist_count: querying
-	// through the writer itself would run on the interactive lane and
-	// reset the idle timer runIdleCheckpoint depends on.
-	reader, err := sql.Open("sqlite", dsn(path, connReadOnly))
-	if err != nil {
-		t.Fatalf("open reader: %v", err)
-	}
-	defer func() { _ = reader.Close() }()
+	reader := openTestReader(t, path)
 
-	big := strings.Repeat("x", 4096)
-	for i := range 300 {
-		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
-			_, err := tx.Exec(
-				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
-				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
-			return err
-		})
-		if err != nil {
-			t.Fatalf("submitBulk(%d): %v", i, err)
-		}
-	}
+	fillWithFatRows(t, w, 300, 4096)
 	if err := w.submit(context.Background(), func(tx *sql.Tx) error {
 		_, err := tx.Exec(`DELETE FROM account`)
 		return err
@@ -177,24 +133,9 @@ func TestIncrementalVacuumIsBoundedPerIdleWindow(t *testing.T) {
 	cfg.CheckpointIdle = time.Hour
 	w, path := newTestWriter(t, cfg)
 
-	reader, err := sql.Open("sqlite", dsn(path, connReadOnly))
-	if err != nil {
-		t.Fatalf("open reader: %v", err)
-	}
-	defer func() { _ = reader.Close() }()
+	reader := openTestReader(t, path)
 
-	big := strings.Repeat("x", 8192)
-	for i := range 1000 {
-		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
-			_, err := tx.Exec(
-				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
-				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
-			return err
-		})
-		if err != nil {
-			t.Fatalf("submitBulk(%d): %v", i, err)
-		}
-	}
+	fillWithFatRows(t, w, 1000, 8192)
 	if err := w.submit(context.Background(), func(tx *sql.Tx) error {
 		_, err := tx.Exec(`DELETE FROM account`)
 		return err
@@ -213,6 +154,40 @@ func TestIncrementalVacuumIsBoundedPerIdleWindow(t *testing.T) {
 	if want := before - incrementalVacuumPages; after != want {
 		t.Errorf("freelist_count after one idle window = %d, want exactly %d (%d minus the %d-page bound)", after, want, before, incrementalVacuumPages)
 	}
+}
+
+// fillWithFatRows writes rows bulk chunks, each one oversized account
+// row padded to pad bytes: the WAL-growing workload every checkpoint
+// test starts from.
+func fillWithFatRows(t *testing.T, w *Writer, rows, pad int) {
+	t.Helper()
+
+	big := strings.Repeat("x", pad)
+	for i := range rows {
+		err := w.submitBulk(context.Background(), func(tx *sql.Tx) error {
+			_, err := tx.Exec(
+				`INSERT INTO account (slug, backend_kind, address, data) VALUES (?, ?, ?, ?)`,
+				fmt.Sprintf("acct-%d", i), "jmap", "user@example.com", big)
+			return err
+		})
+		if err != nil {
+			t.Fatalf("submitBulk(%d): %v", i, err)
+		}
+	}
+}
+
+// openTestReader opens a read-only connection onto the store at path,
+// separate from the writer's own: a query through the writer would run
+// on the interactive lane and reset the idle timer these tests wait on.
+func openTestReader(t *testing.T, path string) *sql.DB {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	if err != nil {
+		t.Fatalf("open reader: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
 }
 
 func freelistCount(t *testing.T, db *sql.DB) int {

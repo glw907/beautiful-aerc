@@ -141,7 +141,7 @@ func newMailbox(fields map[string]any) *mailbox.Mailbox {
 // Patch, the inverse of messageFields.
 func messagePatch(fields map[string]any) jmap.Patch {
 	patch := jmap.Patch{}
-	for name, keyword := range messageFlagKeywords {
+	for name, keyword := range backend.MessageFlagKeywords {
 		v, ok := fields[name]
 		if !ok {
 			continue

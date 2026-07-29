@@ -8,29 +8,25 @@ import (
 // mailboxServerID returns id's server id, or "" if id names no
 // mailbox row or one still awaiting its own server assignment.
 func mailboxServerID(tx *sql.Tx, id int64) (string, error) {
-	var serverID sql.NullString
-	err := tx.QueryRow(`SELECT server_id FROM mailbox WHERE id = ?`, id).Scan(&serverID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return "", nil
-	case err != nil:
-		return "", err
-	}
-	return serverID.String, nil
+	return scanServerID(tx.QueryRow(`SELECT server_id FROM mailbox WHERE id = ?`, id))
 }
 
 // messageServerID returns id's server id, or "" if id names no
 // message row or an origin = 'local' draft with none yet.
 func messageServerID(tx *sql.Tx, id int64) (string, error) {
+	return scanServerID(tx.QueryRow(`SELECT server_id FROM message WHERE id = ?`, id))
+}
+
+// scanServerID reads row's single nullable server_id column. A missing
+// row and a NULL server id are the same answer here: whatever the
+// intent named has no server identity the dispatcher can act on.
+func scanServerID(row *sql.Row) (string, error) {
 	var serverID sql.NullString
-	err := tx.QueryRow(`SELECT server_id FROM message WHERE id = ?`, id).Scan(&serverID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	err := row.Scan(&serverID)
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
-	case err != nil:
-		return "", err
 	}
-	return serverID.String, nil
+	return serverID.String, err
 }
 
 // currentMailboxID returns messageID's mailbox, pass 1's

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/store/storetest"
 )
 
 // testConfig returns DefaultConfig with InteractiveQuiet shrunk, so a
@@ -24,22 +25,9 @@ func testConfig() Config {
 func seedAccount(t *testing.T, w *store.Writer) int64 {
 	t.Helper()
 
-	var id int64
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		res, err := tx.Exec(
-			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`,
-			"test", "jmap", "user@example.com",
-		)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed account: %v", err)
-	}
-	return id
+	return storetest.Insert(t, w,
+		`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`,
+		"test", "jmap", "user@example.com")
 }
 
 // seedMailbox inserts one mailbox row under accountID and returns its
@@ -47,22 +35,9 @@ func seedAccount(t *testing.T, w *store.Writer) int64 {
 func seedMailbox(t *testing.T, w *store.Writer, accountID int64, serverID, name string) int64 {
 	t.Helper()
 
-	var id int64
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		res, err := tx.Exec(
-			`INSERT INTO mailbox (account_id, server_id, name) VALUES (?, ?, ?)`,
-			accountID, serverID, name,
-		)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed mailbox: %v", err)
-	}
-	return id
+	return storetest.Insert(t, w,
+		`INSERT INTO mailbox (account_id, server_id, name) VALUES (?, ?, ?)`,
+		accountID, serverID, name)
 }
 
 // countRows returns the row count of table (a fixed test-owned
@@ -70,14 +45,7 @@ func seedMailbox(t *testing.T, w *store.Writer, accountID int64, serverID, name 
 func countRows(t *testing.T, w *store.Writer, table string, accountID int64) int {
 	t.Helper()
 
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT count(*) FROM `+table+` WHERE account_id = ?`, accountID).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("count %s: %v", table, err)
-	}
-	return n
+	return storetest.ScanValue[int](t, w, `SELECT count(*) FROM `+table+` WHERE account_id = ?`, accountID)
 }
 
 // seedMessage inserts one message row directly (bypassing sync's own
@@ -87,53 +55,29 @@ func countRows(t *testing.T, w *store.Writer, table string, accountID int64) int
 func seedMessage(t *testing.T, w *store.Writer, accountID int64, serverID, origin, subject string) int64 {
 	t.Helper()
 
-	var id int64
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		var sid any
-		if serverID != "" {
-			sid = serverID
-		}
-		res, err := tx.Exec(
-			`INSERT INTO message (account_id, server_id, received_at, subject, origin) VALUES (?, ?, ?, ?, ?)`,
-			accountID, sid, 1000, subject, origin,
-		)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed message: %v", err)
+	var sid any
+	if serverID != "" {
+		sid = serverID
 	}
-	return id
+	return storetest.Insert(t, w,
+		`INSERT INTO message (account_id, server_id, received_at, subject, origin) VALUES (?, ?, ?, ?, ?)`,
+		accountID, sid, 1000, subject, origin)
 }
 
 func seedBody(t *testing.T, w *store.Writer, messageID int64, content string) {
 	t.Helper()
 
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO body (message_id, content, fetched_at) VALUES (?, ?, ?)`, messageID, []byte(content), 1000)
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed body: %v", err)
-	}
+	storetest.Insert(t, w,
+		`INSERT INTO body (message_id, content, fetched_at) VALUES (?, ?, ?)`,
+		messageID, []byte(content), 1000)
 }
 
 func seedOutbox(t *testing.T, w *store.Writer, accountID, messageID int64) {
 	t.Helper()
 
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		_, err := tx.Exec(
-			`INSERT INTO outbox (account_id, kind, payload, created_at) VALUES (?, ?, ?, ?)`,
-			accountID, "send", fmt.Sprintf(`{"message_id":%d}`, messageID), 1000,
-		)
-		return err
-	})
-	if err != nil {
-		t.Fatalf("seed outbox: %v", err)
-	}
+	storetest.Insert(t, w,
+		`INSERT INTO outbox (account_id, kind, payload, created_at) VALUES (?, ?, ?, ?)`,
+		accountID, "send", fmt.Sprintf(`{"message_id":%d}`, messageID), 1000)
 }
 
 // messageByServerID returns serverID's internal id and subject within
@@ -153,53 +97,25 @@ func messageByServerID(t *testing.T, w *store.Writer, accountID int64, serverID 
 func messageExistsByServerID(t *testing.T, w *store.Writer, accountID int64, serverID string) bool {
 	t.Helper()
 
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT count(*) FROM message WHERE account_id = ? AND server_id = ?`, accountID, serverID).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("message exists by server id %q: %v", serverID, err)
-	}
-	return n > 0
+	return storetest.ScanValue[int](t, w, `SELECT count(*) FROM message WHERE account_id = ? AND server_id = ?`, accountID, serverID) > 0
 }
 
 func messageExistsByID(t *testing.T, w *store.Writer, id int64) bool {
 	t.Helper()
 
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT count(*) FROM message WHERE id = ?`, id).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("message exists by id %d: %v", id, err)
-	}
-	return n > 0
+	return storetest.ScanValue[int](t, w, `SELECT count(*) FROM message WHERE id = ?`, id) > 0
 }
 
 func bodyExistsForMessage(t *testing.T, w *store.Writer, messageID int64) bool {
 	t.Helper()
 
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT count(*) FROM body WHERE message_id = ?`, messageID).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("body exists for message %d: %v", messageID, err)
-	}
-	return n > 0
+	return storetest.ScanValue[int](t, w, `SELECT count(*) FROM body WHERE message_id = ?`, messageID) > 0
 }
 
 func countOutboxRows(t *testing.T, w *store.Writer, accountID int64) int {
 	t.Helper()
 
-	var n int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(`SELECT count(*) FROM outbox WHERE account_id = ?`, accountID).Scan(&n)
-	})
-	if err != nil {
-		t.Fatalf("count outbox: %v", err)
-	}
-	return n
+	return storetest.ScanValue[int](t, w, `SELECT count(*) FROM outbox WHERE account_id = ?`, accountID)
 }
 
 // mailboxIDsForServerID returns the mailbox ids "m1"'s message is
@@ -237,17 +153,9 @@ func mailboxIDsForServerID(t *testing.T, w *store.Writer, accountID int64) []int
 func unreadForServerID(t *testing.T, w *store.Writer, accountID int64, serverID string, mailboxID int64) bool {
 	t.Helper()
 
-	var unread int
-	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		return tx.QueryRow(
-			`SELECT mm.unread FROM message_mailbox mm JOIN message m ON m.id = mm.message_id WHERE m.account_id = ? AND m.server_id = ? AND mm.mailbox_id = ?`,
-			accountID, serverID, mailboxID,
-		).Scan(&unread)
-	})
-	if err != nil {
-		t.Fatalf("unread for %q: %v", serverID, err)
-	}
-	return unread != 0
+	return storetest.ScanValue[int](t, w,
+		`SELECT mm.unread FROM message_mailbox mm JOIN message m ON m.id = mm.message_id WHERE m.account_id = ? AND m.server_id = ? AND mm.mailbox_id = ?`,
+		accountID, serverID, mailboxID) != 0
 }
 
 // storeModel returns accountID's current message rows as a

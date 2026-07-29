@@ -286,14 +286,7 @@ func (d *Dispatcher) dispatchBatch(ctx context.Context, create claimed, moves []
 			return failBatch(create, moves, uerr.ClassServer, err.Error())
 		}
 		payloads[i] = &mp
-		for _, msgID := range mp.MessageIDs {
-			mutations = append(mutations, backend.Mutation{
-				Op:     backend.MutationUpdate,
-				Kind:   backend.ObjectKindMessage,
-				ID:     mv.messageServerIDs[msgID],
-				Fields: map[string]any{"mailbox_ids": []string{"#" + creationID}},
-			})
-		}
+		mutations = append(mutations, fileIntoMailbox(mv, mp.MessageIDs, "#"+creationID)...)
 	}
 
 	res, err := d.backend.Mail().ApplyBatch(ctx, mutations)
@@ -329,6 +322,23 @@ func (d *Dispatcher) dispatchBatch(ctx context.Context, create claimed, moves []
 		outcomes = append(outcomes, moveOutcome(mv, payloads[i], res))
 	}
 	return outcomes
+}
+
+// fileIntoMailbox returns one update mutation per message id, each
+// naming dest as the message's only mailbox: a resolved server id for
+// a move dispatching on its own, or a "#creationID" back-reference for
+// one riding in the same batch as the create that makes the mailbox.
+func fileIntoMailbox(c claimed, messageIDs []int64, dest string) []backend.Mutation {
+	mutations := make([]backend.Mutation, 0, len(messageIDs))
+	for _, msgID := range messageIDs {
+		mutations = append(mutations, backend.Mutation{
+			Op:     backend.MutationUpdate,
+			Kind:   backend.ObjectKindMessage,
+			ID:     c.messageServerIDs[msgID],
+			Fields: map[string]any{"mailbox_ids": []string{dest}},
+		})
+	}
+	return mutations
 }
 
 // moveOutcome reads mv's disposition out of a batch result: failed
@@ -688,15 +698,7 @@ func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolv
 		return nil, true, uerr.ClassNotFound, "move destination not resolved"
 	}
 
-	mutations := make([]backend.Mutation, 0, len(p.MessageIDs))
-	for _, msgID := range p.MessageIDs {
-		mutations = append(mutations, backend.Mutation{
-			Op:     backend.MutationUpdate,
-			Kind:   backend.ObjectKindMessage,
-			ID:     c.messageServerIDs[msgID],
-			Fields: map[string]any{"mailbox_ids": []string{dest}},
-		})
-	}
+	mutations := fileIntoMailbox(c, p.MessageIDs, dest)
 
 	res, err := d.backend.Mail().ApplyBatch(ctx, mutations)
 	if err != nil {

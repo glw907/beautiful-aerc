@@ -317,16 +317,9 @@ func sleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Dura
 // random between zero and minDelay doubled attempt times, capped at
 // maxDelay.
 func backoffDelay(attempt int, minDelay, maxDelay time.Duration) time.Duration {
-	bound := minDelay
+	bound := min(minDelay, maxDelay)
 	for range attempt {
-		if bound >= maxDelay {
-			bound = maxDelay
-			break
-		}
-		bound *= 2
-	}
-	if bound > maxDelay {
-		bound = maxDelay
+		bound = min(bound*2, maxDelay)
 	}
 	if bound <= 0 {
 		return 0

@@ -21,14 +21,6 @@ const (
 	FlagForwarded
 )
 
-var namedFlag = map[string]Flags{
-	"$seen":      FlagSeen,
-	"$answered":  FlagAnswered,
-	"$flagged":   FlagFlagged,
-	"$draft":     FlagDraft,
-	"$forwarded": FlagForwarded,
-}
-
 var flagKeyword = map[Flags]string{
 	FlagSeen:      "$seen",
 	FlagAnswered:  "$answered",
@@ -36,6 +28,16 @@ var flagKeyword = map[Flags]string{
 	FlagDraft:     "$draft",
 	FlagForwarded: "$forwarded",
 }
+
+// namedFlag is flagKeyword read the other way. Deriving it keeps the
+// two directions from ever disagreeing about a keyword's spelling.
+var namedFlag = func() map[string]Flags {
+	m := make(map[string]Flags, len(flagKeyword))
+	for bit, kw := range flagKeyword {
+		m[kw] = bit
+	}
+	return m
+}()
 
 // EncodeFlags splits keywords into message.flags's bitfield and the
 // keywords with no named bit, which the caller stores as message.data
