@@ -637,54 +637,86 @@ func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
 // case stays exactly as fatal as before this task and stays visible:
 // run returns immediately without retrying, the operator reads the
 // fixed ClassAuth sentence rather than the transport's raw status
-// text, and the same failure reaches the log as exactly one
-// main.connect line (ER-1's correlation between what the user sees and
-// what the log records).
+// text, and the failure reaches the log as exactly one main.connect
+// line (ER-1's correlation between what the user sees and what the log
+// records, under ADR-0013 revision 2's one-line-per-outcome rule).
 //
-// The scripted failure is the shape jmap.Dial actually returns for a
-// 401: a wrapped jmap.DialError, not a uerr.Error. fetchSession
-// classifies without constructing one so its caller's retry loop owns
-// the surfacing (ADR-0013 revision 2), which leaves run's own fatal
-// exit the only place a uerr.Error can come from on this path.
+// Both shapes a real connector produces run through it, because run's
+// fatal branch has to treat them differently to log once. jmap.Dial's
+// rejected session comes back as a wrapped jmap.DialError, classified
+// but deliberately unlogged so a retry loop can dedup it, and run's
+// exit is the only place its uerr.Error can come from. keyring.Token's
+// missing-token failure has already been through uerr.New inside
+// connectLiveJMAP, before any network reach, so constructing a second
+// one for it would log the same outcome twice.
 func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "store.db")
-	logged := uerrtest.Capture(t)
+	rejectedSession := fmt.Errorf("jmap: dial: %w", jmap.DialError{
+		Class: uerr.ClassAuth,
+		Cause: errors.New("session https://api.fastmail.com/jmap/session: unexpected status 401"),
+	})
 
-	var attempts atomic.Int64
-	connect := func(context.Context) (backend.Backend, string, error) {
-		attempts.Add(1)
-		return nil, "", fmt.Errorf("jmap: dial: %w", jmap.DialError{
-			Class: uerr.ClassAuth,
-			Cause: errors.New("session https://api.fastmail.com/jmap/session: unexpected status 401"),
+	tests := []struct {
+		name       string
+		connectErr func() error
+		wantCause  string
+	}{
+		{
+			name:       "a session the server rejected",
+			connectErr: func() error { return rejectedSession },
+			wantCause:  "unexpected status 401",
+		},
+		{
+			// uerr.New logs on construction, so this shape must be
+			// built inside the test case to land in that case's own
+			// captured buffer.
+			name: "a token poplar never found",
+			connectErr: func() error {
+				return uerr.New("main.connect", nil, uerr.ClassAuth,
+					errors.New("keyring: no fastmail token: set account config or FASTMAIL_API_TOKEN"))
+			},
+			wantCause: "set account config or FASTMAIL_API_TOKEN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbPath := filepath.Join(t.TempDir(), "store.db")
+			logged := uerrtest.Capture(t)
+
+			var attempts atomic.Int64
+			connect := func(context.Context) (backend.Backend, string, error) {
+				attempts.Add(1)
+				return nil, "", tt.connectErr()
+			}
+
+			var out bytes.Buffer
+			err := run(t.Context(), dbPath, flags{}, &out, io.Discard, connect)
+			if err == nil {
+				t.Fatal("run succeeded despite a fatal connect failure, want it returned immediately")
+			}
+			if n := attempts.Load(); n != 1 {
+				t.Errorf("connect called %d time(s), want exactly 1 (a fatal failure must not retry)", n)
+			}
+
+			var stderr bytes.Buffer
+			reportStartupFailure(&stderr, err)
+			if !strings.Contains(stderr.String(), "Sign-in was rejected") {
+				t.Errorf("stderr = %q, want the fixed ClassAuth sentence", stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tt.wantCause) {
+				t.Errorf("stderr = %q, want the cause naming %q", stderr.String(), tt.wantCause)
+			}
+
+			lines := uerrtest.Lines(t, logged)
+			if len(lines) != 1 {
+				t.Fatalf("got %d log line(s), want exactly 1 main.connect: %v", len(lines), lines)
+			}
+			if lines[0]["msg"] != "main.connect" {
+				t.Errorf("msg = %v, want %q", lines[0]["msg"], "main.connect")
+			}
+			if lines[0]["class"] != "auth" {
+				t.Errorf("class = %v, want %q", lines[0]["class"], "auth")
+			}
 		})
-	}
-
-	var out bytes.Buffer
-	err := run(t.Context(), dbPath, flags{}, &out, io.Discard, connect)
-	if err == nil {
-		t.Fatal("run succeeded despite a fatal connect failure, want it returned immediately")
-	}
-	if n := attempts.Load(); n != 1 {
-		t.Errorf("connect called %d time(s), want exactly 1 (a fatal failure must not retry)", n)
-	}
-
-	var stderr bytes.Buffer
-	reportStartupFailure(&stderr, err)
-	if !strings.Contains(stderr.String(), "Sign-in was rejected") {
-		t.Errorf("stderr = %q, want the fixed ClassAuth sentence", stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "unexpected status 401") {
-		t.Errorf("stderr = %q, want the cause naming the status the server returned", stderr.String())
-	}
-
-	lines := uerrtest.Lines(t, logged)
-	if len(lines) != 1 {
-		t.Fatalf("got %d log line(s), want exactly 1 main.connect: %v", len(lines), lines)
-	}
-	if lines[0]["msg"] != "main.connect" {
-		t.Errorf("msg = %v, want %q", lines[0]["msg"], "main.connect")
-	}
-	if lines[0]["class"] != "auth" {
-		t.Errorf("class = %v, want %q", lines[0]["class"], "auth")
 	}
 }

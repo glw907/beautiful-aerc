@@ -1,16 +1,25 @@
-// hookcheck flags a production reference to internal/uerr's
-// RedirectForTest, the test hook that swaps uerr's log destination for
-// the whole process. It has to be exported so internal/uerr/uerrtest
-// can reach it from another package, which also puts it within reach
-// of every other package; one production call would divert every ER-1
-// error line for the life of the process, the exact failure the uerr
-// seam exists to prevent.
+// hookcheck flags production access to internal/uerr's log-redirect
+// hook. RedirectForTest swaps uerr's log destination for the whole
+// process, so one production call would divert every ER-1 error line
+// for the life of that process, the exact failure the uerr seam exists
+// to prevent. It has to be exported for internal/uerr/uerrtest to
+// reach it from another package, which also puts it within reach of
+// every other package.
 //
-// Walks every .go file below the working directory that is neither a
-// _test.go file nor inside internal/uerr, prints file:line: UH1 for
-// each RedirectForTest reference, and exits 1. internal/uerr/uerrtest
-// is inside that tree by design: it is ADR-0014's test-only sibling of
-// internal/uerr, and every function it exports takes a *testing.T.
+// Two rules, both over every .go file below the working directory that
+// is not a _test.go file:
+//
+//	UH1  a reference to RedirectForTest from outside internal/uerr.
+//	UH2  an import of internal/uerr/uerrtest from outside internal/uerr.
+//
+// Files inside internal/uerr are exempt from both, since uerrtest's own
+// wrapper is a non-test file that has to call the hook. UH2 is what
+// makes that exemption sound: uerrtest is the only route into the
+// exempt tree, and nothing else in the tree stops a production file
+// importing it. Taking a *testing.T is no barrier on its own, because
+// &testing.T{} is constructible from anywhere.
+//
+// Each violation prints file:line and exits 1.
 package main
 
 import (
@@ -27,9 +36,13 @@ import (
 // hook is the identifier no production file may name.
 const hook = "RedirectForTest"
 
-// uerrDir is the one package tree allowed to reference hook, in
+// uerrDir is the one package tree exempt from both rules, in
 // slash-separated form regardless of the host's separator.
 const uerrDir = "internal/uerr"
+
+// uerrtestPath is the import path no production file may import: the
+// only package outside internal/uerr that reaches hook.
+const uerrtestPath = "internal/uerr/uerrtest"
 
 func main() {
 	root := "."
@@ -61,14 +74,21 @@ func main() {
 			fmt.Fprintf(os.Stderr, "hookcheck: %s: %v\n", path, err)
 			return nil
 		}
+		for _, imp := range f.Imports {
+			if !importsUerrtest(imp) {
+				continue
+			}
+			report(fset, imp.Pos(), "UH2 %s imported from a non-test file outside %s; it reaches %s, which redirects every error line in the process",
+				uerrtestPath, uerrDir, hook)
+			hits++
+		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			ident, ok := n.(*ast.Ident)
 			if !ok || ident.Name != hook {
 				return true
 			}
-			pos := fset.Position(ident.Pos())
-			fmt.Printf("%s:%d: UH1 %s referenced outside %s from a non-test file; it redirects every error line in the process\n",
-				pos.Filename, pos.Line, hook, uerrDir)
+			report(fset, ident.Pos(), "UH1 %s referenced from a non-test file outside %s; it redirects every error line in the process",
+				hook, uerrDir)
 			hits++
 			return true
 		})
@@ -81,4 +101,16 @@ func main() {
 	if hits > 0 {
 		os.Exit(1)
 	}
+}
+
+// importsUerrtest reports whether imp names uerrtestPath, under any
+// module prefix.
+func importsUerrtest(imp *ast.ImportSpec) bool {
+	path := strings.Trim(imp.Path.Value, `"`)
+	return path == uerrtestPath || strings.HasSuffix(path, "/"+uerrtestPath)
+}
+
+func report(fset *token.FileSet, pos token.Pos, format string, args ...any) {
+	p := fset.Position(pos)
+	fmt.Printf("%s:%d: %s\n", p.Filename, p.Line, fmt.Sprintf(format, args...))
 }

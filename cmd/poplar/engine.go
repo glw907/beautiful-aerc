@@ -98,6 +98,22 @@ func classifyConnect(err error) (uerr.Class, error) {
 	return uerr.ClassConnection, err
 }
 
+// surfaceFatalConnect returns the uerr.Error for a connect failure no
+// retry can fix, constructing one only when the failure has not been
+// through uerr.New already. connectLiveJMAP builds its missing-token
+// failure that way, before any network reach, so constructing a second
+// one here would log the same outcome twice (ADR-0013 revision 2) on
+// the most common startup failure there is. A jmap.DialError, which
+// fetchSession classifies without logging so a retry loop can dedup
+// it, is the case that still needs one built.
+func surfaceFatalConnect(err error) uerr.Error {
+	if already, ok := errors.AsType[uerr.Error](err); ok {
+		return already
+	}
+	class, cause := classifyConnect(err)
+	return uerr.New("main.connect", nil, class, cause)
+}
+
 // dialBackoffMin and dialBackoffMax bound retryConnect's delay: the
 // same range RunPush's own reconnect uses for a dropped push
 // connection (sync.DefaultConfig), so a network outage at startup
@@ -140,8 +156,7 @@ func retryConnect(ctx context.Context, connect backendConnector, firstErr error)
 			// this path has: run stays alive with no sync worker and no
 			// dispatcher behind it, so an unlogged exit here leaves mail
 			// quietly not arriving as the operator's only evidence.
-			class, cause := classifyConnect(err)
-			_ = uerr.New("main.connect", nil, class, cause)
+			_ = surfaceFatalConnect(err)
 			return nil, "", false
 		}
 		if class, cause := classifyConnect(err); class != failClass {

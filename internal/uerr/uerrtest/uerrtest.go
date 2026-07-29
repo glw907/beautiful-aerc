@@ -24,12 +24,12 @@ import (
 // duration, restoring it on cleanup, and returns the buffer: the same
 // redirection internal/uerr's own captureLog performs on itself
 // (log_test.go), through uerr.RedirectForTest.
-func Capture(t *testing.T) *bytes.Buffer {
+func Capture(t *testing.T) *Buffer {
 	t.Helper()
 
-	var buf bytes.Buffer
-	t.Cleanup(uerr.RedirectForTest(&buf))
-	return &buf
+	buf := &Buffer{}
+	t.Cleanup(uerr.RedirectForTest(buf))
+	return buf
 }
 
 // CaptureDefault redirects slog's process-wide default logger to a
@@ -47,9 +47,9 @@ func CaptureDefault(t *testing.T) *Buffer {
 	return buf
 }
 
-// Buffer is CaptureDefault's destination. It is guarded because the
-// engine goroutines under test log on their own schedule while the
-// test goroutine reads what has arrived.
+// Buffer is Capture's and CaptureDefault's destination. It is guarded
+// because the engine goroutines under test log on their own schedule
+// while the test goroutine reads what has arrived.
 type Buffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -72,7 +72,7 @@ func (b *Buffer) String() string {
 // Lines decodes buf's JSON log lines, one per uerr.New call
 // (ADR-0013 revision 2's one-line-per-outcome rule), failing t if any
 // line does not parse.
-func Lines(t *testing.T, buf *bytes.Buffer) []map[string]any {
+func Lines(t *testing.T, buf *Buffer) []map[string]any {
 	t.Helper()
 
 	text := strings.TrimSpace(buf.String())
