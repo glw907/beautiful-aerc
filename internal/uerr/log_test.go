@@ -7,27 +7,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/adrg/xdg"
 )
 
 // captureLog redirects logger to a buffer for the test's duration and
-// returns it. logger and level are unexported package state; a test
-// in this package reassigns them directly instead of exporting a hook.
+// returns it. internal/uerr/uerrtest's Capture is this same
+// redirection (through RedirectForTest) for a test outside this
+// package.
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
 	var buf bytes.Buffer
-	origLogger, origLevel := logger, level.Level()
-	logger = sync.OnceValue(func() *slog.Logger {
-		return slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: level}))
-	})
-	t.Cleanup(func() {
-		logger = origLogger
-		level.Set(origLevel)
-	})
+	t.Cleanup(RedirectForTest(&buf))
 	return &buf
 }
 

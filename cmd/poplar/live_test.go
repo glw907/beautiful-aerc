@@ -131,6 +131,21 @@ func dispatchAndVerifyCreate(t *testing.T, ctx context.Context, w *store.Writer,
 	}
 	waitForDispatch(t, w, intentID, 30*time.Second)
 
+	// Best-effort, registered before any assertion below can end the
+	// test early: a waitForDispatch timeout that follows a server-side
+	// create still strands a mailbox on the real account, and it
+	// iterates every recorded create, not just the last, since a
+	// dispatcher retry across that timeout can leave two.
+	t.Cleanup(func() {
+		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		for _, c := range rec.allCreates() {
+			if c.serverID != "" {
+				_ = rec.Mail.DeleteMailbox(cctx, c.serverID)
+			}
+		}
+	})
+
 	c, ok := rec.lastCreate()
 	if !ok {
 		t.Fatal("the outbox row disappeared but CreateMailbox was never called on the server")
@@ -141,18 +156,6 @@ func dispatchAndVerifyCreate(t *testing.T, ctx context.Context, w *store.Writer,
 	if c.name != name || c.serverID == "" {
 		t.Fatalf("CreateMailbox recorded name=%q serverID=%q, want name=%q and a non-empty server id", c.name, c.serverID, name)
 	}
-
-	// Best-effort: a failure between this create and the
-	// rename/delete round trip that normally cleans it up must not
-	// permanently strand a poplar-live-test-* mailbox on the real
-	// account. This runs even when the round trip below succeeds and
-	// already deleted it; a second delete against a gone server id is
-	// exactly the not-found outcome a best-effort cleanup ignores.
-	t.Cleanup(func() {
-		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_ = rec.Mail.DeleteMailbox(cctx, c.serverID)
-	})
 
 	return c.serverID
 }
@@ -377,6 +380,17 @@ func (r *recordingMail) lastCreate() (recordedCreate, bool) {
 		return recordedCreate{}, false
 	}
 	return r.created[len(r.created)-1], true
+}
+
+// allCreates returns every CreateMailbox call r has recorded so far,
+// not only the last: a dispatcher retry can call CreateMailbox twice
+// for the same intent (the server-side create landed but the outbox
+// row's own state never resolved before a retry fired), leaving two
+// live mailboxes to clean up, not one.
+func (r *recordingMail) allCreates() []recordedCreate {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]recordedCreate(nil), r.created...)
 }
 
 func (r *recordingMail) lastRename() (recordedRename, bool) {

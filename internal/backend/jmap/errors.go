@@ -30,12 +30,16 @@ func isStateMismatch(err error) bool {
 	return errors.As(err, &me) && me.Type == "stateMismatch"
 }
 
-// classify wraps a transport-level failure from do() or a session
-// dial in a uerr.Error carrying the class SY-4 and ADR-0004 revision
-// 2 assign it. A JMAP MethodError (a per-call failure embedded in an
-// otherwise-200 response) is not this function's concern;
-// isCannotCalculateChanges and isStateMismatch classify those against
-// the sync engine's own specific signals.
+// classify wraps a transport-level failure from do() in a uerr.Error
+// carrying the class SY-4 and ADR-0004 revision 2 assign it. do()'s
+// callers (Changes, ApplyBatch, and the rest of jmap.Mail) each run
+// once per outbox dispatch attempt or sync flush, already their own
+// surfacing event, unlike fetchSession's dial retry loop, which
+// classifies its own failures as DialError instead (below) so its
+// caller's retry loop owns the surfacing. A JMAP MethodError (a
+// per-call failure embedded in an otherwise-200 response) is not this
+// function's concern; isCannotCalculateChanges and isStateMismatch
+// classify those against the sync engine's own specific signals.
 func classify(op string, err error) error {
 	if err == nil {
 		return nil
@@ -51,28 +55,63 @@ func classify(op string, err error) error {
 	return err
 }
 
-// classifyStatus maps the HTTP status of a rejected JMAP request to
-// the uerr.Class SY-4 and ADR-0004 revision 2 assign it (401/403 a
+// classifyStatusClass maps the HTTP status of a rejected JMAP request
+// to the uerr.Class SY-4 and ADR-0004 revision 2 assign it (401/403 a
 // rejected credential, 404 a missing entity, 429 throttling, 5xx a
-// server-side failure), wrapping cause in a uerr.Error. It reports nil
-// for a status none of those classes cover, so both classify (a
-// *jmap.RequestError from a completed round trip) and fetchSession (a
-// raw HTTP status before go-jmap ever builds one) share the same
-// mapping.
-func classifyStatus(op string, status int, cause error) error {
+// server-side failure), with ok false for a status none of those
+// classes cover. classifyStatus and fetchSession's own dial-path
+// classification both call this, so the mapping lives in exactly one
+// place despite fetchSession needing it without classifyStatus's
+// uerr.New construction.
+func classifyStatusClass(status int) (class uerr.Class, ok bool) {
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return uerr.New(op, nil, uerr.ClassAuth, cause)
+		return uerr.ClassAuth, true
 	case status == http.StatusNotFound:
-		return uerr.New(op, nil, uerr.ClassNotFound, cause)
+		return uerr.ClassNotFound, true
 	case status == http.StatusTooManyRequests:
-		return uerr.New(op, nil, uerr.ClassThrottled, cause)
+		return uerr.ClassThrottled, true
 	case status >= http.StatusInternalServerError:
-		return uerr.New(op, nil, uerr.ClassServer, cause)
+		return uerr.ClassServer, true
 	default:
-		return nil
+		return 0, false
 	}
 }
+
+// classifyStatus wraps cause in a uerr.Error under classifyStatusClass's
+// mapping, or reports nil for a status none of those classes cover.
+// classify (a *jmap.RequestError from a completed round trip) is its
+// only caller: do()'s callers run once per outbox dispatch attempt or
+// sync flush, each already its own surfacing event, unlike
+// fetchSession's dial retry loop (DialError, below).
+func classifyStatus(op string, status int, cause error) error {
+	class, ok := classifyStatusClass(status)
+	if !ok {
+		return nil
+	}
+	return uerr.New(op, nil, class, cause)
+}
+
+// DialError is a session dial's classified failure, carrying the
+// uerr.Class SY-4 and ADR-0004 revision 2 assign it and the
+// underlying cause, without having constructed a uerr.Error for it.
+// fetchSession returns this instead of calling uerr.New directly, the
+// same reasoning classifyMutationFailure documents below: Dial's
+// caller retries the dial itself in its own backoff loop, and
+// constructing a uerr.Error here would write a log line on every
+// attempt rather than only on a state transition (ADR-0013 revision
+// 2). The caller that owns that retry loop is the one that decides
+// when to surface it.
+type DialError struct {
+	Class uerr.Class
+	Cause error
+}
+
+// Error returns e's cause's message.
+func (e DialError) Error() string { return e.Cause.Error() }
+
+// Unwrap returns e's cause.
+func (e DialError) Unwrap() error { return e.Cause }
 
 // jmapSetErrorClass maps a JMAP SetError's type (RFC 8620 section
 // 5.3) to the uerr.Class SY-4 assigns it. A type with no entry here

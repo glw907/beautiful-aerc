@@ -19,6 +19,7 @@ import (
 	"git.sr.ht/~rockorager/go-jmap/mail/emailsubmission"
 
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // Session is one authenticated JMAP session: the credential-backed
@@ -56,7 +57,12 @@ func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*S
 }
 
 // fetchSession GETs sessionURL with httpClient, decoding the JMAP
-// session resource ctx-bound.
+// session resource ctx-bound. Dial is retried by its own caller's
+// backoff loop, so a classified failure here comes back as a plain
+// DialError rather than a logged uerr.Error (ADR-0013 revision 2):
+// classify/classifyStatus's own uerr.New construction is for do(),
+// called once per outbox dispatch attempt or sync flush, not for a
+// dial that same caller may retry many times before it succeeds.
 func fetchSession(ctx context.Context, httpClient *http.Client, sessionURL string) (*jmap.Session, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sessionURL, nil)
 	if err != nil {
@@ -64,13 +70,16 @@ func fetchSession(ctx context.Context, httpClient *http.Client, sessionURL strin
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, classify("jmap.dial", err)
+		if isConnectionDead(err) {
+			return nil, DialError{Class: uerr.ClassConnection, Cause: err}
+		}
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		cause := fmt.Errorf("session %s: unexpected status %d", sessionURL, resp.StatusCode)
-		if classified := classifyStatus("jmap.dial", resp.StatusCode, cause); classified != nil {
-			return nil, classified
+		if class, ok := classifyStatusClass(resp.StatusCode); ok {
+			return nil, DialError{Class: class, Cause: cause}
 		}
 		return nil, cause
 	}

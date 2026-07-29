@@ -207,11 +207,15 @@ func TestDialHonorsContextTimeout(t *testing.T) {
 	}
 }
 
-// TestDialClassifiesRejectedSession asserts a non-200 status from the
-// session endpoint itself (dial-time auth rejection, before go-jmap
-// ever builds a *jmap.RequestError) still reaches the caller as a
-// classified uerr.Error, not a bare fmt.Errorf.
-func TestDialClassifiesRejectedSession(t *testing.T) {
+// TestDialClassifiesRejectedSessionWithoutLogging asserts a non-200
+// status from the session endpoint itself (dial-time auth rejection,
+// before go-jmap ever builds a *jmap.RequestError) still reaches the
+// caller classified, as a DialError, not a bare fmt.Errorf, and
+// without having logged: Dial is retried by its own caller's backoff
+// loop (cmd/poplar's retryConnect), and a uerr.Error constructed here
+// would write a log line on every attempt rather than only on a state
+// transition (ADR-0013 revision 2).
+func TestDialClassifiesRejectedSessionWithoutLogging(t *testing.T) {
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -220,12 +224,39 @@ func TestDialClassifiesRejectedSession(t *testing.T) {
 	})
 
 	_, err := Dial(context.Background(), srv.URL+"/session", NewStaticCredentials("bad-token"))
-	var ue uerr.Error
-	if !errors.As(err, &ue) {
-		t.Fatalf("Dial error = %v, want a uerr.Error in the chain", err)
+	de, ok := errors.AsType[DialError](err)
+	if !ok {
+		t.Fatalf("Dial error = %v, want a DialError in the chain", err)
 	}
-	if ue.Class != uerr.ClassAuth {
-		t.Errorf("Class = %v, want ClassAuth", ue.Class)
+	if de.Class != uerr.ClassAuth {
+		t.Errorf("Class = %v, want ClassAuth", de.Class)
+	}
+	if ue, ok := errors.AsType[uerr.Error](err); ok {
+		t.Errorf("Dial error carries a uerr.Error (%+v), want none: classification here must not log", ue)
+	}
+}
+
+// TestDialClassifiesDeadConnectionWithoutLogging asserts a session
+// endpoint that refuses the connection outright (nothing listening)
+// also classifies as a DialError rather than a bare network error,
+// and without logging, the same discipline
+// TestDialClassifiesRejectedSessionWithoutLogging proves for a
+// rejected status.
+func TestDialClassifiesDeadConnectionWithoutLogging(t *testing.T) {
+	srv := httptest.NewServer(http.NewServeMux())
+	deadURL := srv.URL + "/session"
+	srv.Close() // nothing listens on deadURL from here on
+
+	_, err := Dial(context.Background(), deadURL, NewStaticCredentials("tok"))
+	de, ok := errors.AsType[DialError](err)
+	if !ok {
+		t.Fatalf("Dial error = %v, want a DialError in the chain", err)
+	}
+	if de.Class != uerr.ClassConnection {
+		t.Errorf("Class = %v, want ClassConnection", de.Class)
+	}
+	if ue, ok := errors.AsType[uerr.Error](err); ok {
+		t.Errorf("Dial error carries a uerr.Error (%+v), want none: classification here must not log", ue)
 	}
 }
 

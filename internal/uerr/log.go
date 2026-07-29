@@ -20,11 +20,31 @@ func SetLevel(l slog.Level) {
 }
 
 // logger is uerr's log destination, built once per process. It is
-// unexported package state, not a public hook; a test needing a
-// redirected destination reassigns it directly.
+// unexported package state; a test in this package reassigns it
+// directly (log_test.go's captureLog), and RedirectForTest is the
+// same reassignment exposed to a test outside this package.
 var logger = sync.OnceValue(func() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(openLogWriter(), &slog.HandlerOptions{Level: level}))
 })
+
+// RedirectForTest points uerr's log destination at w and returns a
+// restore func that puts the prior destination back. It is the only
+// route by which a package outside internal/uerr can observe what
+// uerr.New actually wrote: New's own logger is package-private state,
+// so without this hook no ER-1 assertion anywhere else in the tree
+// (a caller's dedup discipline under ADR-0013 revision 2, most
+// notably) can tell a construction happened from one that never did.
+// internal/uerr/uerrtest wraps this for a *testing.T caller.
+func RedirectForTest(w io.Writer) (restore func()) {
+	origLogger, origLevel := logger, level.Level()
+	logger = sync.OnceValue(func() *slog.Logger {
+		return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}))
+	})
+	return func() {
+		logger = origLogger
+		level.Set(origLevel)
+	}
+}
 
 // SetDefault installs uerr's logger as slog's process-wide default.
 // Every other package logs through plain log/slog calls per

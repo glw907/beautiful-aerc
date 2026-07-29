@@ -67,22 +67,31 @@ func connectLiveJMAP(ctx context.Context) (backend.Backend, string, error) {
 // timeout, a 5xx), which SY-3's no-network resilience requires run to
 // tolerate rather than exit on.
 func isFatalConnect(err error) bool {
-	ue, ok := errors.AsType[uerr.Error](err)
-	return ok && ue.Class == uerr.ClassAuth
+	class, _ := classifyConnect(err)
+	return class == uerr.ClassAuth
 }
 
 // classifyConnect reports the uerr.Class and root cause a connect
-// failure carries. A failure jmap.classify already recognized (a
-// rejected credential, a 404, a 5xx) keeps its own class and cause.
-// One it did not is classified uerr.ClassConnection, the same
-// fallback sync's own classifyErr uses for an unclassified push
-// failure: fetchSession returns a raw error for a JSON decode
-// failure, a truncated body, or any status classifyStatus does not
-// map, and a captive portal's HTTP 200 login page is exactly that
+// failure carries, without having logged it. jmap.Dial's own dial-path
+// failures come back as a jmap.DialError (a rejected credential, a
+// 404, a 5xx, a dead connection): fetchSession classifies without
+// calling uerr.New, since retryConnect's own backoff loop, not
+// fetchSession, owns the surfacing decision (ADR-0013 revision 2). A
+// keyring.Token failure, the one connect error still built through
+// uerr.New (connectLiveJMAP fails before any network reach, so there
+// is no retry loop to defer to), keeps its own class and cause. One
+// jmap.Dial never recognized at all falls back to uerr.ClassConnection,
+// the same default sync's own classifyErr uses for an unclassified
+// push failure: fetchSession returns a raw error for a JSON decode
+// failure, a truncated body, or any status classifyStatusClass does
+// not map, and a captive portal's HTTP 200 login page is exactly that
 // case. Every connect failure classifies to something, which is what
 // keeps retryConnect's own uerr.New call from depending on a lower
 // layer having recognized the failure first.
 func classifyConnect(err error) (uerr.Class, error) {
+	if de, ok := errors.AsType[jmap.DialError](err); ok {
+		return de.Class, de.Cause
+	}
 	if ue, ok := errors.AsType[uerr.Error](err); ok {
 		return ue.Class, ue.Cause
 	}
