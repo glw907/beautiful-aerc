@@ -15,6 +15,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/backend/backendtest"
 	"github.com/glw907/poplar/internal/platform"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/uerr"
@@ -68,10 +70,10 @@ func (r *readySignal) String() string {
 	return r.buf.String()
 }
 
-// runToCompletion starts run in the background, waits for its "poplar
-// is running" line, cancels its context, and returns run's outcome
-// along with everything it printed.
-func runToCompletion(t *testing.T, dbPath string, f flags) (*readySignal, error) {
+// runToCompletion starts run in the background against connect, waits
+// for its "poplar is running" line, cancels its context, and returns
+// run's outcome along with everything it printed.
+func runToCompletion(t *testing.T, dbPath string, f flags, connect backendConnector) (*readySignal, error) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -79,7 +81,7 @@ func runToCompletion(t *testing.T, dbPath string, f flags) (*readySignal, error)
 
 	out := newReadySignal()
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, dbPath, f, out, io.Discard) }()
+	go func() { done <- run(ctx, dbPath, f, out, io.Discard, connect) }()
 
 	select {
 	case <-out.ready:
@@ -91,6 +93,35 @@ func runToCompletion(t *testing.T, dbPath string, f flags) (*readySignal, error)
 
 	cancel()
 	return out, <-done
+}
+
+// noopConnector returns a backendConnector wired to an unscripted
+// backendtest.Fake, for a startup test that is not exercising the
+// sync worker or outbox dispatcher: FakeSource's Changes and
+// ApplyBatch already default to a zero-value success, so run reaches
+// "poplar is running" and shuts down cleanly with no token and no
+// network reach.
+func noopConnector(context.Context) (backend.Backend, string, error) {
+	return &backendtest.Fake{}, "test-account", nil
+}
+
+// connectorSignalingFirstChanges returns a backendConnector whose fake
+// backend sends on called the first time its Mail Changes method
+// runs, a real sign the sync worker started that a caller can wait on
+// before stopping it, rather than racing a fresh goroutine's own
+// scheduling against an immediate cancellation.
+func connectorSignalingFirstChanges(called chan<- struct{}) backendConnector {
+	return func(context.Context) (backend.Backend, string, error) {
+		be := &backendtest.Fake{}
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			select {
+			case called <- struct{}{}:
+			default:
+			}
+			return backend.ChangeSet{}, nil
+		}
+		return be, "test-account", nil
+	}
 }
 
 // TestMainReportsStorePathFailureThroughUerr proves an xdg.DataFile
@@ -178,7 +209,7 @@ func TestRunReportsAnUnwritableLog(t *testing.T) {
 func TestRunStartsAndShutsDownCleanly(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 
-	if _, err := runToCompletion(t, dbPath, flags{}); err != nil {
+	if _, err := runToCompletion(t, dbPath, flags{}, noopConnector); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
@@ -206,7 +237,7 @@ func TestRunReclaimsOrphanedIntents(t *testing.T) {
 		t.Fatal("the seeded store owes an integrity check, want a startup that runs neither a check nor a recovery")
 	}
 
-	if _, err := runToCompletion(t, dbPath, flags{}); err != nil {
+	if _, err := runToCompletion(t, dbPath, flags{}, noopConnector); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
@@ -269,7 +300,7 @@ func seedStore(t *testing.T, dbPath string, stmts ...string) {
 func TestRunRebuildsIndexOnFlag(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 
-	out, err := runToCompletion(t, dbPath, flags{rebuildIndex: true})
+	out, err := runToCompletion(t, dbPath, flags{rebuildIndex: true}, noopConnector)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -290,7 +321,7 @@ func TestRunRefusesSecondInstance(t *testing.T) {
 	defer func() { _ = lock.Release() }()
 
 	var out bytes.Buffer
-	if err := run(context.Background(), dbPath, flags{}, &out, io.Discard); err == nil {
+	if err := run(context.Background(), dbPath, flags{}, &out, io.Discard, noopConnector); err == nil {
 		t.Fatal("run succeeded against a locked store, want refusal")
 	}
 }
@@ -463,5 +494,44 @@ func TestReportStartupFailurePrintsCause(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "pid 4242") {
 		t.Errorf("output = %q, want the cause naming the pid", out.String())
+	}
+}
+
+// TestRunEnginesStopBeforeCleanShutdown proves run's shutdown path
+// (ctx cancellation, standing in for SIGINT/SIGTERM) stops the sync
+// worker and outbox dispatcher, closes the writer, and marks a clean
+// shutdown, driven against a fake backend rather than a live network
+// reach.
+func TestRunEnginesStopBeforeCleanShutdown(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+
+	called := make(chan struct{}, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	out := newReadySignal()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, dbPath, flags{}, out, io.Discard, connectorSignalingFirstChanges(called)) }()
+
+	// The engines get a real chance to call Changes before shutdown
+	// stops them: cancelling as soon as the ready line prints races
+	// run's freshly spawned goroutines against their own first
+	// scheduling, which the writer's bulk lane can lose against an
+	// already-cancelled ctx (RunPush's immediate poll flush finds
+	// nothing left to call).
+	select {
+	case <-called:
+	case err := <-done:
+		t.Fatalf("run exited before the sync worker called Changes, output %q: %v", out.String(), err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the sync worker to call Changes")
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if _, err := os.Stat(dbPath + ".clean-shutdown"); err != nil {
+		t.Errorf("clean-shutdown marker missing after the engines stopped: %v", err)
 	}
 }

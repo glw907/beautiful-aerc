@@ -56,7 +56,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, dbPath, f, os.Stdout, os.Stderr); err != nil {
+	if err := run(ctx, dbPath, f, os.Stdout, os.Stderr, connectLiveJMAP); err != nil {
 		reportStartupFailure(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -78,12 +78,14 @@ func reportStartupFailure(w io.Writer, err error) {
 
 // run drives poplar's startup path against the store at dbPath: the
 // instance lock, store preparation (migration, integrity check,
-// recovery), the writer, the orphaned-intent sweep, and a clean
-// shutdown once ctx is done. start is run's own entry time, the
-// in-process origin QA-1's --startup-trace measures against. Status
-// and trace output go to out; a log poplar cannot write is reported
-// on errOut, which --startup-trace's caller does not parse.
-func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer) error {
+// recovery), the writer, the orphaned-intent sweep, the sync worker
+// and outbox dispatcher (connect resolves the backend they run
+// against), and a clean shutdown once ctx is done. start is run's own
+// entry time, the in-process origin QA-1's --startup-trace measures
+// against. Status and trace output go to out; a log poplar cannot
+// write is reported on errOut, which --startup-trace's caller does
+// not parse.
+func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, connect backendConnector) error {
 	start := time.Now()
 
 	lock, err := platform.AcquireInstanceLock(dbPath)
@@ -129,8 +131,21 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer) err
 		return runStartupTrace(ctx, dbPath, writer, start, out)
 	}
 
+	be, key, err := connect(ctx)
+	if err != nil {
+		_ = writer.Close()
+		return err
+	}
+	accountID, err := ensureAccount(ctx, writer, key)
+	if err != nil {
+		_ = writer.Close()
+		return err
+	}
+	wg := startEngines(ctx, accountID, be, writer)
+
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")
 	<-ctx.Done()
+	wg.Wait()
 
 	if err := writer.Close(); err != nil {
 		return err
