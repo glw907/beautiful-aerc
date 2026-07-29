@@ -151,7 +151,7 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 		_ = writer.Close()
 		return err
 	default:
-		wg = startEnginesRetrying(ctx, writer, connect)
+		wg = startEnginesRetrying(ctx, writer, connect, err)
 	}
 
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")

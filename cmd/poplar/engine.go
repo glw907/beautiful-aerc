@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"math/rand/v2"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -71,6 +71,24 @@ func isFatalConnect(err error) bool {
 	return ok && ue.Class == uerr.ClassAuth
 }
 
+// classifyConnect reports the uerr.Class and root cause a connect
+// failure carries. A failure jmap.classify already recognized (a
+// rejected credential, a 404, a 5xx) keeps its own class and cause.
+// One it did not is classified uerr.ClassConnection, the same
+// fallback sync's own classifyErr uses for an unclassified push
+// failure: fetchSession returns a raw error for a JSON decode
+// failure, a truncated body, or any status classifyStatus does not
+// map, and a captive portal's HTTP 200 login page is exactly that
+// case. Every connect failure classifies to something, which is what
+// keeps retryConnect's own uerr.New call from depending on a lower
+// layer having recognized the failure first.
+func classifyConnect(err error) (uerr.Class, error) {
+	if ue, ok := errors.AsType[uerr.Error](err); ok {
+		return ue.Class, ue.Cause
+	}
+	return uerr.ClassConnection, err
+}
+
 // dialBackoffMin and dialBackoffMax bound retryConnect's delay: the
 // same range RunPush's own reconnect uses for a dropped push
 // connection (sync.DefaultConfig), so a network outage at startup
@@ -80,45 +98,40 @@ var (
 	dialBackoffMax = syncengine.DefaultConfig().BackoffMax
 )
 
-// dialBackoffSleep sleeps a jittered exponential delay for attempt (0
-// for the first retry), bounded by dialBackoffMin/Max, and reports
-// whether it finished; false means ctx ended first.
-func dialBackoffSleep(ctx context.Context, attempt int) bool {
-	bound := min(dialBackoffMin, dialBackoffMax)
-	for range attempt {
-		bound = min(bound*2, dialBackoffMax)
-	}
-	if bound <= 0 {
-		return ctx.Err() == nil
-	}
-	t := time.NewTimer(time.Duration(rand.Int64N(int64(bound)))) //nolint:gosec // G404: jitter timing, not a security decision
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
+// retryConnect calls connect on syncengine.SleepBackoff's jittered
+// schedule until it succeeds or ctx ends, in the same shape
+// internal/sync's own reconnect uses for a dropped push connection
+// (ADR-0013 revision 2): a failure surfaces through uerr.New once, on
+// the first failure or a class change, never once per attempt, and a
+// later success after a run of failures logs recovery. firstErr is
+// the failure run's own synchronous attempt already produced; it
+// seeds that first surfacing so an unclassified error still logs
+// exactly once rather than depending on connect's caller having
+// recognized it, and retryConnect sleeps before its own first retry
+// rather than dialing again within microseconds of firstErr's own
+// failure. ok is false when ctx ends first or connect ever reports a
+// fatal (isFatalConnect) failure: a credential the operator removed
+// or that the server started rejecting mid-run does not become valid
+// by waiting.
+func retryConnect(ctx context.Context, connect backendConnector, firstErr error) (be backend.Backend, key string, ok bool) {
+	failClass, cause := classifyConnect(firstErr)
+	_ = uerr.New("main.connect", nil, failClass, cause)
 
-// retryConnect calls connect on dialBackoffSleep's jittered schedule
-// until it succeeds or ctx ends. ok is false when ctx ended first or
-// connect ever reports a fatal (isFatalConnect) failure: a credential
-// the operator removed or that the server started rejecting mid-run
-// does not become valid by waiting, so retrying it forever would just
-// mask the failure run's synchronous first attempt already surfaces
-// for the common case.
-func retryConnect(ctx context.Context, connect backendConnector) (be backend.Backend, key string, ok bool) {
 	for attempt := 0; ; attempt++ {
+		if !syncengine.SleepBackoff(ctx, attempt, dialBackoffMin, dialBackoffMax) {
+			return nil, "", false
+		}
 		be, key, err := connect(ctx)
 		if err == nil {
+			slog.Info("main: connect reconnected", "attempts", attempt+1)
 			return be, key, true
 		}
 		if isFatalConnect(err) {
 			return nil, "", false
 		}
-		if !dialBackoffSleep(ctx, attempt) {
-			return nil, "", false
+		if class, cause := classifyConnect(err); class != failClass {
+			_ = uerr.New("main.connect", nil, class, cause)
+			failClass = class
 		}
 	}
 }
@@ -133,10 +146,10 @@ func retryConnect(ctx context.Context, connect backendConnector) (be backend.Bac
 // any connect call ran); it is logged through the uerr call
 // ensureAccount already makes and the process simply never starts its
 // engines.
-func startEnginesRetrying(ctx context.Context, writer *store.Writer, connect backendConnector) *sync.WaitGroup {
+func startEnginesRetrying(ctx context.Context, writer *store.Writer, connect backendConnector, firstErr error) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		be, key, ok := retryConnect(ctx, connect)
+		be, key, ok := retryConnect(ctx, connect, firstErr)
 		if !ok {
 			return
 		}

@@ -141,6 +141,19 @@ func dispatchAndVerifyCreate(t *testing.T, ctx context.Context, w *store.Writer,
 	if c.name != name || c.serverID == "" {
 		t.Fatalf("CreateMailbox recorded name=%q serverID=%q, want name=%q and a non-empty server id", c.name, c.serverID, name)
 	}
+
+	// Best-effort: a failure between this create and the
+	// rename/delete round trip that normally cleans it up must not
+	// permanently strand a poplar-live-test-* mailbox on the real
+	// account. This runs even when the round trip below succeeds and
+	// already deleted it; a second delete against a gone server id is
+	// exactly the not-found outcome a best-effort cleanup ignores.
+	t.Cleanup(func() {
+		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = rec.Mail.DeleteMailbox(cctx, c.serverID)
+	})
+
 	return c.serverID
 }
 
@@ -217,32 +230,27 @@ func verifyServerMailboxGone(t *testing.T, ctx context.Context, be backend.Backe
 	}
 }
 
-// findServerMailbox pages a full baseline Mailbox Changes read
-// looking for serverID.
+// findServerMailbox reads a baseline Mailbox Changes page (token ""
+// always returns HasMore false per baselineMailboxes) looking for
+// serverID.
 func findServerMailbox(t *testing.T, ctx context.Context, be backend.Backend, serverID string) (backend.Record, bool) {
 	t.Helper()
 
-	token := ""
-	for {
-		cs, err := be.Mail().Changes(ctx, backend.ObjectKindMailbox, token, 0)
-		if err != nil {
-			t.Fatalf("Changes(Mailbox): %v", err)
-		}
-		for _, rec := range cs.Created {
-			if rec.ID == serverID {
-				return rec, true
-			}
-		}
-		for _, rec := range cs.Updated {
-			if rec.ID == serverID {
-				return rec, true
-			}
-		}
-		if !cs.HasMore {
-			return backend.Record{}, false
-		}
-		token = cs.NewToken
+	cs, err := be.Mail().Changes(ctx, backend.ObjectKindMailbox, "", 0)
+	if err != nil {
+		t.Fatalf("Changes(Mailbox): %v", err)
 	}
+	for _, rec := range cs.Created {
+		if rec.ID == serverID {
+			return rec, true
+		}
+	}
+	for _, rec := range cs.Updated {
+		if rec.ID == serverID {
+			return rec, true
+		}
+	}
+	return backend.Record{}, false
 }
 
 // waitForAMessage polls the store for accountID's first synced

@@ -40,6 +40,25 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 	}
 }
 
+// TestClassifyConnect asserts classifyConnect's two paths: an error
+// never classified upstream (fetchSession's raw JSON-decode failure
+// against a captive portal's HTTP 200 HTML body, most notably)
+// defaults to ClassConnection, and a uerr.Error yields its own class
+// and its original root cause rather than the fixed per-class
+// sentence uerr.Error.Error() returns.
+func TestClassifyConnect(t *testing.T) {
+	plain := errors.New("invalid character '<' looking for beginning of value")
+	if class, cause := classifyConnect(plain); class != uerr.ClassConnection || cause != plain {
+		t.Fatalf("classifyConnect(plain) = (%v, %v), want (ClassConnection, plain)", class, cause)
+	}
+
+	root := errors.New("session 401")
+	wrapped := uerr.New("test.op", nil, uerr.ClassAuth, root)
+	if class, cause := classifyConnect(wrapped); class != uerr.ClassAuth || cause != root {
+		t.Fatalf("classifyConnect(wrapped) = (%v, %v), want (ClassAuth, root)", class, cause)
+	}
+}
+
 // TestStartEnginesAppliesAPushedChange proves startEngines wires the
 // sync worker's push loop end to end: a notification on the fake
 // backend's push transport lands a mailbox row in the store, with no
@@ -129,5 +148,50 @@ func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 
 		cancel()
 		wg.Wait()
+	})
+}
+
+// TestRunDispatchLoopCallsDispatchOnceImmediately proves
+// runDispatchLoop dispatches a queued intent on entry rather than
+// waiting out its first dispatchInterval tick: it never advances
+// synctest's fake clock past t=0, so a pass here is only possible
+// through the loop's immediate call, the same call that delayed every
+// triage action by up to a full tick when a prior fix round dropped
+// it.
+func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := storetest.Insert(t, w,
+			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
+		mailboxID := storetest.Insert(t, w,
+			`INSERT INTO mailbox (account_id, name, server_id) VALUES (?, ?, ?)`, accountID, "Old Name", "mb1")
+
+		var be backendtest.Fake
+		renamed := make(chan string, 1)
+		be.MailSource.RenameMailboxFunc = func(_ context.Context, id, name string) error {
+			renamed <- name
+			return nil
+		}
+
+		if _, _, err := outbox.EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "New Name", time.Now()); err != nil {
+			t.Fatalf("EnqueueRenameMailbox: %v", err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		dispatcher := outbox.NewDispatcher(accountID, &be, w)
+		go runDispatchLoop(ctx, dispatcher)
+
+		synctest.Wait()
+
+		select {
+		case name := <-renamed:
+			if name != "New Name" {
+				t.Fatalf("RenameMailbox name = %q, want %q", name, "New Name")
+			}
+		default:
+			t.Fatal("runDispatchLoop never called RenameMailbox before its first tick, want an immediate DispatchOnce on entry")
+		}
+
+		cancel()
 	})
 }

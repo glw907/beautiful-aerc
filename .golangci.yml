@@ -29,8 +29,11 @@ linters:
     rules:
       # scripts/ holds build tooling, not product code: it walks
       # paths the operator names on its own command line, not
-      # untrusted external input.
-      - path: ^scripts/
+      # untrusted external input. Anchored on either end so it still
+      # matches from a linked git worktree, where golangci-lint emits
+      # a path relative to the worktree root rather than the repo
+      # root (e.g. ../../../../home/user/repo/scripts/foo/main.go).
+      - path: (^|/)scripts/
         linters:
           - gosec
 

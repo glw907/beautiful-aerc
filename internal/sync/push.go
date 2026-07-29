@@ -182,7 +182,7 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 		// immediately closes the stream reconnects at zero delay,
 		// spinning into an unbounded request storm (a hot loop against
 		// a live server).
-		if !sleepBackoff(ctx, attempt, w.cfg.BackoffMin, w.cfg.BackoffMax) {
+		if !SleepBackoff(ctx, attempt, w.cfg.BackoffMin, w.cfg.BackoffMax) {
 			return
 		}
 		attempt++
@@ -247,7 +247,7 @@ func reconnect(ctx context.Context, push backend.Push, cfg Config, attempt *int)
 				failClass = class
 			}
 		}
-		if !sleepBackoff(ctx, *attempt, cfg.BackoffMin, cfg.BackoffMax) {
+		if !SleepBackoff(ctx, *attempt, cfg.BackoffMin, cfg.BackoffMax) {
 			return nil, ctx.Err()
 		}
 		*attempt++
@@ -295,10 +295,13 @@ func consumePush(ctx context.Context, ch <-chan backend.Notification, window, pi
 	}
 }
 
-// sleepBackoff sleeps a jittered exponential delay for attempt (0 for
+// SleepBackoff sleeps a jittered exponential delay for attempt (0 for
 // the first retry) and reports whether it finished; false means ctx
-// ended first.
-func sleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration) bool {
+// ended first. It is exported so a caller outside this package
+// (cmd/poplar's own connect retry) can back off on the same schedule
+// as RunPush's reconnect, rather than a second, near-identical
+// implementation.
+func SleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration) bool {
 	d := backoffDelay(attempt, minDelay, maxDelay)
 	if d <= 0 {
 		return ctx.Err() == nil
