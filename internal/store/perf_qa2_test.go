@@ -1,0 +1,343 @@
+//go:build !race
+
+package store
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"math/rand/v2"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// qa2MessageCount and qa2MailboxCount hold QA-2's scripted mix to the
+// QA-5 scale envelope: 100k messages, a few mailboxes so 15% of ops
+// can genuinely switch folders.
+const (
+	qa2MessageCount = 100_000
+	qa2MailboxCount = 4
+	qa2ScriptLen    = 500
+
+	qa2P95Budget = 25 * time.Millisecond
+	qa2P99Budget = 40 * time.Millisecond
+)
+
+// qa2Op names one class of scripted interaction QA-2's 500-operation
+// mix draws from: 60% list movement, 15% folder switch, 15% reader
+// open of a cached body, 10% incremental search keystrokes.
+type qa2Op int
+
+const (
+	qa2OpList qa2Op = iota
+	qa2OpSwitch
+	qa2OpReader
+	qa2OpSearch
+)
+
+// qa2Script returns a fixed-seed shuffle of qa2ScriptLen ops in QA-2's
+// 60/15/15/10 mix, so every call replays the same scripted session.
+func qa2Script() []qa2Op {
+	listN, switchN, readerN := qa2ScriptLen*60/100, qa2ScriptLen*15/100, qa2ScriptLen*15/100
+	searchN := qa2ScriptLen - listN - switchN - readerN
+
+	// Built in a fixed order (never ranging over a map) so the fixed
+	// seed below always shuffles the same starting sequence into the
+	// same scripted session.
+	script := make([]qa2Op, 0, qa2ScriptLen)
+	for _, class := range []struct {
+		op qa2Op
+		n  int
+	}{{qa2OpList, listN}, {qa2OpSwitch, switchN}, {qa2OpReader, readerN}, {qa2OpSearch, searchN}} {
+		for range class.n {
+			script = append(script, class.op)
+		}
+	}
+	rand.New(rand.NewPCG(3, 4)).Shuffle(len(script), func(i, j int) { script[i], script[j] = script[j], script[i] }) //nolint:gosec // G404: a fixed seed makes the scripted session reproducible, not a security-sensitive use
+	return script
+}
+
+// TestQA2Interaction proves the store's read path holds QA-2's
+// interaction-latency budget (p95 under 25ms, p99 under 40ms) over a
+// scripted 500-operation session against a 100k-message store, both
+// quiescent and while a bulk backfill runs concurrently on the
+// writer's bulk lane (ADR-0003's concurrency design is what QA-2
+// requires to hold under that load).
+func TestQA2Interaction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	env := perfSeedEnvelope(t, path, qa2MessageCount, qa2MailboxCount)
+
+	writer, err := Open(path, DefaultWriterConfig())
+	if err != nil {
+		t.Fatalf("open writer: %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+
+	reads, err := NewReadPool(path, DefaultReadPoolSize, writer.Revision())
+	if err != nil {
+		t.Fatalf("open read pool: %v", err)
+	}
+	t.Cleanup(func() { _ = reads.Close() })
+
+	sess := &qa2Session{reads: reads, mailboxIDs: env.mailboxIDs, messageIDs: env.messageIDs, script: qa2Script()}
+
+	quiescent, busy := sess.run(t)
+	perfWriteArtifact(t, "QA2Interaction_quiescent", busy.line, quiescent)
+	qa2AssertBudget(t, "quiescent", quiescent)
+	if got := busy.count.Load(); got != 0 {
+		t.Errorf("quiescent SQLITE_BUSY count = %d, want 0", got)
+	}
+
+	backfill := startQA2Backfill(writer, env.messageIDs)
+	underWrite, busy := sess.run(t)
+	backfill.stop()
+	perfWriteArtifact(t, "QA2Interaction_under_write", busy.line, underWrite)
+	qa2AssertBudget(t, "under_write", underWrite)
+	if got := busy.count.Load(); got != 0 {
+		t.Errorf("under-write SQLITE_BUSY count = %d, want 0 (WAL readers must not block on the writer)", got)
+	}
+
+	// A batch under a millisecond would let this case pass even if
+	// reads blocked on the writer, the same weak-discriminator failure
+	// mode task 3's write-blocking test was flagged for: this backfill
+	// must actually cost real time on the writer for the concurrent
+	// assertion above to mean anything.
+	batches := backfill.batches.Load()
+	if batches == 0 {
+		t.Fatal("backfill ran zero batches; the under-write case measured nothing concurrent")
+	}
+	meanBatch := time.Duration(backfill.totalBatchNS.Load() / batches)
+	if meanBatch < time.Millisecond {
+		t.Errorf("mean backfill batch = %s, want at least 1ms of real write pressure per batch", meanBatch)
+	}
+	t.Logf("backfill: %d batches, %d rows mutated, mean batch %s", batches, backfill.rowsMutated.Load(), meanBatch)
+}
+
+// qa2AssertBudget checks samples against QA-2's gate: p95 under 25ms,
+// p99 under 40ms.
+func qa2AssertBudget(t *testing.T, label string, samples []time.Duration) {
+	t.Helper()
+
+	p95, p99 := perfPercentile(samples, 95), perfPercentile(samples, 99)
+	t.Logf("QA-2 %s: p50=%s p95=%s p99=%s (spike baseline 22-25ms p95)", label, perfPercentile(samples, 50), p95, p99)
+	if p95 > qa2P95Budget {
+		t.Errorf("%s p95 = %s, want under %s", label, p95, qa2P95Budget)
+	}
+	if p99 > qa2P99Budget {
+		t.Errorf("%s p99 = %s, want under %s", label, p99, qa2P99Budget)
+	}
+}
+
+// qa2Session holds the fixtures a scripted QA-2 run replays against:
+// the read pool, the mailboxes and messages perfSeedEnvelope built,
+// and the fixed script every run (quiescent and under-write) replays
+// identically.
+type qa2Session struct {
+	reads      *ReadPool
+	mailboxIDs []int64
+	messageIDs []int64
+	script     []qa2Op
+}
+
+// qa2BusyTracker counts SQLITE_BUSY / "database is locked" errors a
+// scripted run's reads hit, alongside the go-test-style benchmark
+// line perfMeasure returned for the run.
+type qa2BusyTracker struct {
+	count atomic.Int64
+	line  string
+}
+
+// run replays sess's script once through perfMeasure, returning the
+// per-operation latencies and a busy-error tracker.
+//
+// A non-busy error is recorded rather than failed on the spot:
+// perfMeasure's op runs on the goroutine testing.Benchmark launches
+// internally, not the one running t, and t.Fatalf must only be called
+// from the goroutine running the test (testing.T's own documented
+// contract). run reports the first such error itself, back on t's own
+// goroutine, once perfMeasure has returned.
+func (sess *qa2Session) run(t *testing.T) ([]time.Duration, *qa2BusyTracker) {
+	t.Helper()
+
+	busy := &qa2BusyTracker{}
+	currentMailbox := sess.mailboxIDs[0]
+	cursor := MailboxCursor{}
+	i := 0
+	var firstErr error
+
+	samples, line := perfMeasure(t, len(sess.script), func() time.Duration {
+		op := sess.script[i%len(sess.script)]
+		i++
+		start := time.Now()
+		err := sess.runOp(op, &currentMailbox, &cursor)
+		dur := time.Since(start)
+		if err != nil {
+			if isBusyError(err) {
+				busy.count.Add(1)
+			} else if firstErr == nil {
+				firstErr = fmt.Errorf("op %d: %w", i, err)
+			}
+		}
+		return dur
+	})
+	if firstErr != nil {
+		t.Fatal(firstErr)
+	}
+	busy.line = line
+	return samples, busy
+}
+
+// runOp runs one scripted op against sess.reads, threading
+// list-movement state (currentMailbox, cursor) across calls so a
+// list op continues scrolling rather than always re-fetching page one.
+func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *MailboxCursor) error {
+	ctx := context.Background()
+	switch op {
+	case qa2OpList:
+		page, err := sess.reads.ListMailboxForward(ctx, *currentMailbox, *cursor, 50)
+		if err != nil {
+			return err
+		}
+		if len(page.Rows) == 0 {
+			*cursor = MailboxCursor{}
+			return nil
+		}
+		last := page.Rows[len(page.Rows)-1]
+		*cursor = MailboxCursor{ReceivedAt: last.ReceivedAt, MessageID: last.MessageID}
+		return nil
+
+	case qa2OpSwitch:
+		*currentMailbox = sess.mailboxIDs[rand.IntN(len(sess.mailboxIDs))] //nolint:gosec // G404: folder choice, not a security-sensitive use
+		*cursor = MailboxCursor{}
+		_, err := sess.reads.ListMailboxForward(ctx, *currentMailbox, *cursor, 50)
+		return err
+
+	case qa2OpReader:
+		id := sess.messageIDs[rand.IntN(len(sess.messageIDs))] //nolint:gosec // G404: sample choice, not a security-sensitive use
+		_, err := sess.reads.perfBody(ctx, id)
+		return err
+
+	default: // qa2OpSearch
+		// Prefix lengths start at 2, matching message_fts's prefix='2
+		// 3' index: a 1-character prefix has no prefix-index entry and
+		// falls back to a full vocabulary scan, which is not the
+		// as-you-type case a 2-character minimum trigger avoids.
+		term := perfCommonWords[rand.IntN(len(perfCommonWords))] //nolint:gosec // G404: sample choice, not a security-sensitive use
+		prefixLen := 2 + rand.IntN(max(1, min(3, len(term)-2)))  //nolint:gosec // G404: sample choice, not a security-sensitive use
+		return sess.reads.perfSearch(ctx, term[:prefixLen]+"*")
+	}
+}
+
+// isBusyError reports whether err is SQLite's busy/locked error, the
+// one failure QA-2's concurrent case must never see (the spike's own
+// baseline: zero SQLITE_BUSY under concurrent write).
+func isBusyError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "SQLITE_BUSY") || strings.Contains(msg, "database is locked")
+}
+
+// perfBody fetches messageID's body content directly, standing in for
+// a body-read API pass 3 has not built yet: enough for QA-2's
+// reader-open class to exercise a real, non-scalar read.
+func (p *ReadPool) perfBody(ctx context.Context, messageID int64) ([]byte, error) {
+	var content []byte
+	err := p.db.QueryRowContext(ctx, `SELECT content FROM body WHERE message_id = ?`, messageID).Scan(&content)
+	return content, err
+}
+
+// perfSearch runs an FTS5 prefix query against message_fts, standing
+// in for the search grammar pass 3 builds: enough for QA-2's
+// incremental-search class to exercise the index under typing.
+func (p *ReadPool) perfSearch(ctx context.Context, query string) error {
+	rows, err := p.db.QueryContext(ctx, `SELECT rowid FROM message_fts WHERE message_fts MATCH ? LIMIT 50`, query)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+	}
+	return rows.Err()
+}
+
+// qa2Backfill is a bulk-lane writer loop that keeps mutating the store
+// until stopped: QA-2's "20k-body backfill runs concurrently" case
+// needs sustained write pressure for the whole scripted session, not
+// one write that finishes before the reads do.
+type qa2Backfill struct {
+	stopCh       chan struct{}
+	done         chan struct{}
+	batches      atomic.Int64
+	totalBatchNS atomic.Int64
+	rowsMutated  atomic.Int64
+}
+
+// startQA2Backfill starts the backfill goroutine over writer, cycling
+// through messageIDs.
+func startQA2Backfill(writer *Writer, messageIDs []int64) *qa2Backfill {
+	bf := &qa2Backfill{stopCh: make(chan struct{}), done: make(chan struct{})}
+	go func() {
+		defer close(bf.done)
+		rng := rand.New(rand.NewPCG(7, 8)) //nolint:gosec // G404: a fixed seed makes the backfill's own mutation order reproducible, not a security-sensitive use
+		for {
+			select {
+			case <-bf.stopCh:
+				return
+			default:
+			}
+			start := time.Now()
+			rows, err := qa2BackfillBatch(writer, messageIDs, rng)
+			if err != nil {
+				// The bulk lane closes when the test's t.Cleanup runs;
+				// a write failing after that point is the writer
+				// shutting down, not a batch to count.
+				return
+			}
+			bf.batches.Add(1)
+			bf.totalBatchNS.Add(time.Since(start).Nanoseconds())
+			bf.rowsMutated.Add(int64(rows))
+		}
+	}()
+	return bf
+}
+
+// stop signals the backfill goroutine and waits for it to exit.
+func (bf *qa2Backfill) stop() {
+	close(bf.stopCh)
+	<-bf.done
+}
+
+// qa2BackfillBatch runs one bulk-lane transaction: flagUpdates
+// individual flag updates plus bodyUpserts body upserts, one
+// statement per row rather than a single bulk UPDATE, the same
+// per-row shape a real sync backfill writes in. The row counts are
+// sized to land close to ADR-0003's ~50ms-per-chunk target on this
+// machine, real per-statement round-trip cost rather than a single
+// bulk statement fast enough to prove nothing about write pressure.
+func qa2BackfillBatch(writer *Writer, messageIDs []int64, rng *rand.Rand) (int, error) {
+	const flagUpdates, bodyUpserts = 600, 80
+	rows := 0
+	err := writer.Apply(context.Background(), func(tx *sql.Tx) error {
+		for range flagUpdates {
+			id := messageIDs[rng.IntN(len(messageIDs))]
+			if _, err := tx.Exec(`UPDATE message SET flags = (flags + 1) & 15 WHERE id = ?`, id); err != nil {
+				return err
+			}
+			rows++
+		}
+		for range bodyUpserts {
+			id := messageIDs[rng.IntN(len(messageIDs))]
+			content := "backfilled body for message " + strconv.FormatInt(id, 10)
+			if _, err := tx.Exec(`INSERT INTO body (message_id, content, fetched_at) VALUES (?, ?, ?) ON CONFLICT(message_id) DO UPDATE SET content = excluded.content, fetched_at = excluded.fetched_at`,
+				id, content, time.Now().Unix()); err != nil {
+				return err
+			}
+			rows++
+		}
+		return nil
+	})
+	return rows, err
+}

@@ -7,6 +7,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "time/tzdata"
 
@@ -29,6 +32,7 @@ import (
 type flags struct {
 	rebuildIndex bool
 	recover      bool
+	startupTrace bool
 }
 
 func main() {
@@ -37,6 +41,7 @@ func main() {
 	var f flags
 	flag.BoolVar(&f.rebuildIndex, "rebuild-index", false, "rebuild the full-text index before starting")
 	flag.BoolVar(&f.recover, "recover", false, "rebuild the store from local data after detecting corruption or a failed migration")
+	flag.BoolVar(&f.startupTrace, "startup-trace", false, "print exec-to-first-list-page phase timings as JSON and exit, for the QA-1 perf harness")
 	flag.Parse()
 
 	dbPath, err := xdg.DataFile("poplar/store.db")
@@ -70,8 +75,12 @@ func reportStartupFailure(w io.Writer, err error) {
 
 // run drives poplar's startup path against the store at dbPath: the
 // instance lock, store preparation (migration, integrity check,
-// recovery), the writer, and a clean shutdown once ctx is done.
+// recovery), the writer, and a clean shutdown once ctx is done. start
+// is run's own entry time, the in-process origin QA-1's
+// --startup-trace measures against.
 func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
+	start := time.Now()
+
 	lock, err := platform.AcquireInstanceLock(dbPath)
 	if err != nil {
 		return err
@@ -95,6 +104,10 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 		}
 	}
 
+	if f.startupTrace {
+		return runStartupTrace(ctx, dbPath, writer, start, out)
+	}
+
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")
 	<-ctx.Done()
 
@@ -102,6 +115,66 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 		return err
 	}
 	return store.MarkCleanShutdown(dbPath)
+}
+
+// startupTraceResult is the single JSON line --startup-trace prints to
+// stdout: QA-1's in-process phase timings from run's own entry to a
+// first mailbox-list page, in nanoseconds.
+type startupTraceResult struct {
+	OpenNS      int64 `json:"open_ns"`
+	FirstPageNS int64 `json:"first_page_ns"`
+	TotalNS     int64 `json:"total_ns"`
+	Rows        int   `json:"rows"`
+}
+
+// runStartupTrace times a first mailbox-list page against the store
+// writer already opened, then prints the result to out and shuts down
+// without waiting on ctx: --startup-trace is a perf-harness exec, not
+// an interactive session. It picks the lowest-id mailbox rather than
+// exposing a mailbox selector, since pass 1 has no onboarding flow to
+// name one.
+func runStartupTrace(ctx context.Context, dbPath string, writer *store.Writer, start time.Time, out io.Writer) error {
+	opened := time.Since(start)
+
+	var mailboxID int64
+	err := writer.Apply(ctx, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT id FROM mailbox ORDER BY id LIMIT 1`).Scan(&mailboxID)
+	})
+	if err != nil {
+		_ = writer.Close()
+		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("find a mailbox to list: %w", err))
+	}
+
+	reads, err := store.NewReadPool(dbPath, 1, writer.Revision())
+	if err != nil {
+		_ = writer.Close()
+		return err
+	}
+	page, err := reads.ListMailboxForward(ctx, mailboxID, store.MailboxCursor{}, 50)
+	closeErr := reads.Close()
+	if err != nil {
+		_ = writer.Close()
+		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("first list page: %w", err))
+	}
+	if closeErr != nil {
+		_ = writer.Close()
+		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("close read pool: %w", closeErr))
+	}
+	total := time.Since(start)
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	if err := store.MarkCleanShutdown(dbPath); err != nil {
+		return err
+	}
+
+	return json.NewEncoder(out).Encode(startupTraceResult{
+		OpenNS:      opened.Nanoseconds(),
+		FirstPageNS: (total - opened).Nanoseconds(),
+		TotalNS:     total.Nanoseconds(),
+		Rows:        len(page.Rows),
+	})
 }
 
 // prepareStore ensures the store at dbPath is migrated and, when one
