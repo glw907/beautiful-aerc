@@ -27,9 +27,9 @@ import (
 // retry, does not back off, and does not log, because a retry that
 // looks right for a sync poll is wrong for a user waiting on a send,
 // and only the caller knows which it is. [Client.Listen] reconnects a
-// dropped push stream, which the server-sent events standard makes
-// part of that protocol; it is not an exception to the rule above so
-// much as a different protocol under it.
+// dropped push stream, because the server-sent events standard makes
+// reconnecting part of that protocol. It still returns every other
+// failure and still logs nothing.
 //
 // # Session state
 //

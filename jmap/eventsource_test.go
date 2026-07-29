@@ -295,7 +295,10 @@ func TestListenResumesFromTheLastEventID(t *testing.T) {
 
 			var tr tracker
 			stop := listen(t, client, tr.source(EventSource{}))
-			waitFor(t, "the reconnect", func() bool { return len(requests()) > 1 })
+			// The server records a connection before it writes a byte,
+			// so waiting on the request count releases ahead of the
+			// callbacks below. Wait on the client's own signal instead.
+			waitFor(t, "the reconnect", func() bool { return tr.connectCount() > 1 })
 			waitFor(t, "the replayed changes", func() bool { return len(tr.changesSeen()) >= len(c.wantStates) })
 			_ = stop()
 
@@ -415,7 +418,7 @@ func TestPingCadence(t *testing.T) {
 		{name: "a negative interval", interval: -1},
 		{name: "an interval no Duration can hold", interval: math.MaxInt64},
 		{
-			name:     "the largest interval one can hold",
+			name:     "the largest interval a Duration can hold, whose doubling is stallWindow's to bound",
 			interval: math.MaxInt64 / int64(time.Second),
 			want:     time.Duration(math.MaxInt64/int64(time.Second)) * time.Second,
 			wantOK:   true,
@@ -432,6 +435,65 @@ func TestPingCadence(t *testing.T) {
 				t.Errorf("cadence = %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+// TestStallWindow guards the quantity the detector is actually set
+// from. Bounding the cadence alone leaves the doubling unbounded, and
+// a wrapped window is negative, which fires the timer the instant it
+// is set: every connection aborted on its first event, on a stream
+// that was working.
+func TestStallWindow(t *testing.T) {
+	cases := []struct {
+		name    string
+		cadence time.Duration
+		want    time.Duration
+	}{
+		{name: "no ping asked for", cadence: 0, want: 0},
+		{name: "a negative cadence", cadence: -time.Second, want: 0},
+		{name: "a plain cadence doubles", cadence: 30 * time.Second, want: time.Minute},
+		{name: "the largest cadence that doubles cleanly", cadence: math.MaxInt64 / 2, want: math.MaxInt64 - 1},
+		{name: "a cadence whose double overflows saturates", cadence: math.MaxInt64/2 + 1, want: math.MaxInt64},
+		{name: "the largest cadence a ping can advertise", cadence: math.MaxInt64, want: math.MaxInt64},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := stallWindow(c.cadence)
+			if got != c.want {
+				t.Errorf("stallWindow(%v) = %v, want %v", c.cadence, got, c.want)
+			}
+			if got < 0 {
+				t.Errorf("stallWindow(%v) = %v, which fires a timer at once", c.cadence, got)
+			}
+		})
+	}
+}
+
+// TestListenSurvivesAnAbsurdPingInterval is the end of the same
+// thread. The largest interval a ping can advertise and still name a
+// cadence a Duration holds is 9223372036 seconds, and doubling it
+// wraps. The server here never goes silent, so the stream must stay up
+// on one connection.
+func TestListenSurvivesAnAbsurdPingInterval(t *testing.T) {
+	client, requests := startEventFake(t, func(_ int, w *eventWriter) {
+		w.send("event: ping\ndata: {\"interval\":9223372036}\n\n")
+		w.send(stateEventBody("s1"))
+		w.hold()
+	})
+	dial(t, client)
+
+	var tr tracker
+	stop := listen(t, client, tr.source(EventSource{Ping: 300 * time.Second}))
+	waitFor(t, "the state event behind the ping", func() bool { return len(tr.changesSeen()) > 0 })
+	time.Sleep(500 * time.Millisecond)
+	_ = stop()
+
+	if got := len(requests()); got != 1 {
+		t.Errorf("made %d connections to a server that never went silent, want 1", got)
+	}
+	if got := tr.disconnectsSeen(); len(got) != 0 {
+		t.Errorf("reported %d drops, want none: %v", len(got), got)
 	}
 }
 
@@ -593,6 +655,39 @@ func TestListenStopsOnAServerRefusal(t *testing.T) {
 				t.Errorf("made %d attempts, want exactly 1; a refusal is not the protocol's to retry", attempts)
 			}
 		})
+	}
+}
+
+// TestConnectTimesTheOpenStreamOnly pins what the backoff schedule
+// measures. Timing a connection from before the dial counts a
+// black-holing server's connect timeout as time spent connected, so
+// every attempt looks healthy, the schedule resets on each one, and
+// the escalation the ceiling exists for never happens.
+func TestConnectTimesTheOpenStreamOnly(t *testing.T) {
+	const answering = 300 * time.Millisecond
+	client, mux := startFake(t)
+	mux.HandleFunc("GET /events", func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(answering)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+	})
+	session := dial(t, client)
+
+	l := &listener{
+		client: client,
+		url: expandTemplate(session.EventSourceURL,
+			"{types}", "*", "{closeafter}", "no", "{ping}", "0"),
+	}
+	uptime, retry, err := l.connect(t.Context())
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if !retry {
+		t.Fatal("a stream the server closed is not a refusal")
+	}
+	if uptime < 0 || uptime >= answering {
+		t.Errorf("uptime = %v for a stream that carried nothing, want under the %v the server spent answering",
+			uptime, answering)
 	}
 }
 

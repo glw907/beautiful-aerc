@@ -1,6 +1,7 @@
 package jmap
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"strings"
@@ -52,6 +53,21 @@ func TestEventReaderFraming(t *testing.T) {
 			name:   "multi-line data joins with newlines",
 			stream: "data: first\ndata: second\n\n",
 			want:   []event{{name: "message", data: "first\nsecond"}},
+		},
+		{
+			name:   "one leading byte order mark belongs to the encoding",
+			stream: "\ufeffevent: state\ndata: {}\n\n",
+			want:   []event{{name: "state", data: "{}"}},
+		},
+		{
+			name:   "a second byte order mark is a field name like any other",
+			stream: "\ufeff\ufeffevent: state\ndata: {}\n\n",
+			want:   []event{{name: "message", data: "{}"}},
+		},
+		{
+			name:   "a byte order mark on a later line is a field name like any other",
+			stream: "data: a\n\ufeffdata: b\n\n",
+			want:   []event{{name: "message", data: "a"}},
 		},
 		{
 			name:   "an absent event field names the event message",
@@ -218,6 +234,37 @@ func TestEventReaderCarriesALargeEvent(t *testing.T) {
 	}
 	if len(got[0].data) != size {
 		t.Errorf("event carries %d bytes, want %d", len(got[0].data), size)
+	}
+}
+
+// TestEventReaderRefusesAnOversizedEvent is the claim the ceiling
+// rests on: overrunning it is an error, never a truncation. Both
+// halves need saying, because a server can overrun a line or overrun
+// an event a legal line at a time, and only the first is
+// bufio.Scanner's to notice.
+func TestEventReaderRefusesAnOversizedEvent(t *testing.T) {
+	line := "data: " + strings.Repeat("x", maxEventBytes+1) + "\n\n"
+
+	oneLine := strings.Repeat("data: "+strings.Repeat("x", 64*1024)+"\n", maxEventBytes/(64*1024)+2)
+	cases := []struct {
+		name   string
+		stream string
+		want   error
+	}{
+		{name: "one line past the ceiling", stream: line, want: bufio.ErrTooLong},
+		{name: "legal lines accumulating past the ceiling", stream: oneLine + "\n", want: errEventTooLong},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, _, err := drain(t, strings.NewReader(c.stream))
+			if !errors.Is(err, c.want) {
+				t.Fatalf("read ended with %v, want %v", err, c.want)
+			}
+			if len(got) != 0 {
+				t.Errorf("dispatched %d events, want none; the stream was truncated rather than refused", len(got))
+			}
+		})
 	}
 }
 

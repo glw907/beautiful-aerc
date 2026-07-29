@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -19,18 +21,26 @@ type event struct {
 	data string
 }
 
-// maxEventLine bounds one line of a stream. go-jmap took
-// bufio.Scanner's 64 KB default and never read the error, so a longer
-// line ended the read and reported success. A bound stays, since the
-// alternative offers a server unbounded allocation, but it sits far
-// above any StateChange, which carries a state token per type per
-// account and no message data at all, and overrunning it is an error
-// the caller sees.
-const maxEventLine = 1 << 24
+// maxEventBytes bounds one line of a stream and the data one event
+// accumulates across its lines. go-jmap took bufio.Scanner's 64 KB
+// default for the first, never read the error, and had no notion of
+// the second, so a longer line ended the read and reported success. A
+// bound stays, since the alternative offers a server unbounded
+// allocation from either direction, but it sits far above any
+// StateChange, which carries a state token per type per account and no
+// message data at all. Overrunning it is an error the caller sees.
+const maxEventBytes = 1 << 24
+
+// errEventTooLong reports data accumulated past maxEventBytes across
+// an event's lines, the counterpart to bufio.ErrTooLong for one line.
+var errEventTooLong = errors.New("event data too long")
 
 // An eventReader assembles server-sent events from a byte stream,
 // following the WHATWG event stream interpretation that RFC 8620
 // section 7.3 defers to.
+//
+// started tracks the one place a byte order mark may be dropped, the
+// stream's first line.
 //
 // idBuffer and lastID are that specification's two id slots. An id
 // field writes idBuffer; dispatching an event copies idBuffer to
@@ -39,13 +49,14 @@ const maxEventLine = 1 << 24
 // advancing the resume point past changes the client never saw.
 type eventReader struct {
 	lines    *bufio.Scanner
+	started  bool
 	idBuffer string
 	lastID   string
 }
 
 func newEventReader(r io.Reader) *eventReader {
 	lines := bufio.NewScanner(r)
-	lines.Buffer(nil, maxEventLine)
+	lines.Buffer(nil, maxEventBytes)
 	lines.Split(scanEventLines)
 	return &eventReader{lines: lines}
 }
@@ -59,6 +70,14 @@ func (r *eventReader) next() (event, error) {
 	var data strings.Builder
 	for r.lines.Scan() {
 		line := r.lines.Text()
+		if !r.started {
+			// One leading byte order mark belongs to the encoding, not
+			// to the first field name. Left in, it makes an "event"
+			// field unrecognisable, so the stream's first event
+			// degrades to an unnamed one and the caller drops it.
+			line = strings.TrimPrefix(line, "\ufeff") //poplar:allow-unicode the byte order mark this strips has no ASCII spelling
+			r.started = true
+		}
 		if line == "" {
 			r.lastID = r.idBuffer
 			if data.Len() == 0 {
@@ -81,6 +100,9 @@ func (r *eventReader) next() (event, error) {
 		case "data":
 			data.WriteString(value)
 			data.WriteByte('\n')
+			if data.Len() > maxEventBytes {
+				return event{}, errEventTooLong
+			}
 		case "id":
 			// A NUL means the server garbled the id, and resuming from
 			// a garbled id asks for changes since nowhere.
@@ -95,7 +117,7 @@ func (r *eventReader) next() (event, error) {
 		}
 	}
 	if err := r.lines.Err(); err != nil {
-		return event{}, err
+		return event{}, fmt.Errorf("read event stream: %w", err)
 	}
 	return event{}, io.EOF
 }

@@ -76,6 +76,26 @@ func (p ping) cadence() (time.Duration, bool) {
 	return time.Duration(p.Interval) * time.Second, true
 }
 
+// stallWindow returns how long a stream may say nothing before it
+// counts as dropped, twice the ping cadence in force (ADR-0005
+// revision 2). A cadence at or below zero returns zero, which is the
+// caller asking for no liveness check.
+//
+// A cadence whose double no Duration can hold saturates instead of
+// wrapping. This is the quantity the timer is set from, so a wrapped
+// negative window fires the detector the instant it is set, and a
+// server advertising an absurd interval would then have every one of
+// its connections aborted on its first event.
+func stallWindow(cadence time.Duration) time.Duration {
+	switch {
+	case cadence <= 0:
+		return 0
+	case cadence > math.MaxInt64/2:
+		return math.MaxInt64
+	}
+	return 2 * cadence
+}
+
 const (
 	stateEvent      = "state"
 	pingEvent       = "ping"
@@ -115,8 +135,7 @@ func (c *Client) Listen(ctx context.Context, source EventSource) error {
 
 	var schedule backoff
 	for {
-		connectedAt := time.Now()
-		retry, err := l.connect(ctx)
+		uptime, retry, err := l.connect(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -126,7 +145,7 @@ func (c *Client) Listen(ctx context.Context, source EventSource) error {
 		if source.OnDisconnect != nil {
 			source.OnDisconnect(err)
 		}
-		if !sleep(ctx, jitter(schedule.bound(time.Since(connectedAt)))) {
+		if !sleep(ctx, jitter(schedule.bound(uptime))) {
 			return ctx.Err()
 		}
 	}
@@ -142,9 +161,10 @@ type listener struct {
 	lastID string
 }
 
-// connect makes one connection and reads it to its end, reporting
-// whether the failure is one a reconnect could fix.
-func (l *listener) connect(ctx context.Context) (bool, error) {
+// connect makes one connection and reads it to its end. It reports how
+// long the connection stayed open, zero when it never opened at all,
+// and whether the failure is one a reconnect could fix.
+func (l *listener) connect(ctx context.Context) (time.Duration, bool, error) {
 	// The stall detector cancels this context rather than the caller's,
 	// so a silent server drops one connection instead of ending Listen.
 	connCtx, abort := context.WithCancel(ctx)
@@ -152,7 +172,7 @@ func (l *listener) connect(ctx context.Context) (bool, error) {
 
 	req, err := http.NewRequestWithContext(connCtx, http.MethodGet, l.url, nil)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	req.Header.Set("Accept", eventStreamType)
 	if l.lastID != "" {
@@ -161,20 +181,25 @@ func (l *listener) connect(ctx context.Context) (bool, error) {
 
 	resp, err := l.client.httpClient.Do(req)
 	if err != nil {
-		return true, err
+		return 0, true, err
 	}
 	if err := refusal(resp); err != nil {
-		return false, errors.Join(err, resp.Body.Close())
+		return 0, false, errors.Join(err, resp.Body.Close())
 	}
 	if err := checkEventStream(resp.Header.Get("Content-Type")); err != nil {
-		return false, errors.Join(err, resp.Body.Close())
+		return 0, false, errors.Join(err, resp.Body.Close())
 	}
 
+	// The clock starts where the stream does. Timing from before the
+	// dial would count a black-holing server's connect timeout as time
+	// connected, which resets the backoff on every attempt and leaves
+	// the schedule flat.
+	openedAt := time.Now()
 	if l.source.OnConnect != nil {
 		l.source.OnConnect()
 	}
 	retry, err := l.consume(abort, resp.Body)
-	return retry, errors.Join(err, resp.Body.Close())
+	return time.Since(openedAt), retry, errors.Join(err, resp.Body.Close())
 }
 
 // consume reads one open connection to its end. abort is the stall
@@ -185,10 +210,10 @@ func (l *listener) consume(abort context.CancelFunc, body io.Reader) (bool, erro
 	reader.idBuffer, reader.lastID = l.lastID, l.lastID
 	defer func() { l.lastID = reader.lastID }()
 
-	interval := l.source.Ping
+	window := stallWindow(l.source.Ping)
 	var stall *time.Timer
-	if interval > 0 {
-		stall = time.NewTimer(2 * interval)
+	if window > 0 {
+		stall = time.NewTimer(window)
 		defer stall.Stop()
 		done := make(chan struct{})
 		defer close(done)
@@ -228,17 +253,17 @@ func (l *listener) consume(abort context.CancelFunc, body io.Reader) (bool, erro
 				return true, fmt.Errorf("decode ping event: %v", err)
 			}
 			if cadence, ok := p.cadence(); ok {
-				interval = cadence
+				window = stallWindow(cadence)
 			}
 		}
 
 		if stall != nil {
 			// Reset after the switch, so a ping that clamped the
-			// cadence is already in interval. Go 1.23 retired the
+			// cadence is already in window. Go 1.23 retired the
 			// drain-then-reset idiom: Stop is enough, and the old
 			// receive after a false Stop can now block forever.
 			stall.Stop()
-			stall.Reset(2 * interval)
+			stall.Reset(window)
 		}
 	}
 }

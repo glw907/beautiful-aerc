@@ -10,11 +10,10 @@
 // The package reads no file and logs nothing. A method call neither
 // retries nor backs off: every failure comes back as an error, and the
 // caller decides what it means and whether to ask again.
-// [Client.Listen] is the one place a failure is retried here, because
-// the server-sent events standard makes reconnecting part of the
-// protocol rather than a policy a caller chooses. It still decides
-// nothing about when to give up or what to do while the stream is
-// down.
+// [Client.Listen] is the one place a failure is retried here. The
+// server-sent events standard makes reconnecting part of that
+// protocol. Listen still decides nothing about when to give up or what
+// to do while the stream is down.
 //
 // # Optional Booleans
 //
