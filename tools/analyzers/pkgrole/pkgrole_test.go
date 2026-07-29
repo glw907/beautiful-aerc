@@ -32,6 +32,13 @@ func TestOf(t *testing.T) {
 			wantOK:         true,
 		},
 		{
+			name:           "external test package",
+			path:           "github.com/glw907/poplar/internal/store_test",
+			wantRole:       "store",
+			wantModuleRoot: "github.com/glw907/poplar",
+			wantOK:         true,
+		},
+		{
 			name:   "third-party package",
 			path:   "charm.land/bubbletea/v2",
 			wantOK: false,

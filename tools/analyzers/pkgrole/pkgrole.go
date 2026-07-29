@@ -22,8 +22,10 @@ func ImportPath(imp *ast.ImportSpec) string {
 
 // Of returns the role named by path's internal/ or cmd/ segment
 // (for example "ui" for ".../internal/ui/screens") and the module
-// root preceding that segment. Of reports ok false for a
-// third-party path with no internal/ or cmd/ segment.
+// root preceding that segment. A package's external test package
+// carries the package's own role, so ".../internal/store_test" is
+// the store. Of reports ok false for a third-party path with no
+// internal/ or cmd/ segment.
 func Of(path string) (role, moduleRoot string, ok bool) {
 	for _, marker := range [...]string{"/internal/", "/cmd/"} {
 		i := strings.Index(path, marker)
@@ -34,7 +36,7 @@ func Of(path string) (role, moduleRoot string, ok bool) {
 		if j := strings.Index(rest, "/"); j >= 0 {
 			rest = rest[:j]
 		}
-		return rest, path[:i], true
+		return strings.TrimSuffix(rest, "_test"), path[:i], true
 	}
 	return "", "", false
 }

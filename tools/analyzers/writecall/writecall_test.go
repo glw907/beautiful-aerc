@@ -10,5 +10,12 @@ import (
 
 func TestAnalyzer(t *testing.T) {
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, writecall.Analyzer, "a/internal/ui", "a/internal/store")
+	analysistest.Run(t, testdata, writecall.Analyzer,
+		"a/internal/ui",
+		"a/internal/mail",
+		"a/internal/store",
+		"a/internal/sync",
+		"a/internal/outbox",
+		"a/cmd/poplar",
+	)
 }

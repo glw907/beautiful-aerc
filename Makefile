@@ -48,9 +48,14 @@ fmt-check: build-golangci-lint
 lint: build-golangci-lint
 	./$(GOLANGCI) run --config .golangci.yml ./...
 
+# The analyzer tests run uncached: writecall's write-surface test
+# type-checks internal/store, which lives outside the tools module,
+# and the go test cache does not track files outside a test's own
+# module (cmd/go skips them). A cached pass over a store that has
+# since grown an export is the decay that test exists to catch.
 analyzers: build-poplarcheck
 	./$(POPLARCHECK) ./...
-	go -C tools test ./...
+	go -C tools test -count=1 ./...
 
 vale-comments:
 	./scripts/vale-comments.sh
