@@ -2,8 +2,14 @@ package jmap
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"maps"
 	"os"
-	"regexp"
+	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,9 +32,16 @@ import (
 // as the zero value and, since every response property carries
 // omitempty, vanishes from the re-marshal.
 type tagCase struct {
-	name  string
+	// name is the Go type the case marshals or decodes.
+	name string
+
 	value any
 	json  string
+
+	// covers names the types this case's JSON stands for, when the
+	// value nests others inside it. Empty means the case covers name
+	// alone.
+	covers []string
 }
 
 // requestTagCases marshals a fully populated value of every type
@@ -50,7 +63,8 @@ func requestTagCases() []tagCase {
 				`"methodCalls":[["Core/echo",{},"0"]],"createdIds":{"k1":"M1"}}`,
 		},
 		{
-			name: "MailboxGet",
+			name:   "MailboxGet",
+			covers: []string{"MailboxGet", "ResultReference"},
 			value: &MailboxGet{
 				Account:      "A1",
 				IDs:          []ID{"MA"},
@@ -66,7 +80,8 @@ func requestTagCases() []tagCase {
 			json:  `{"accountId":"A1","sinceState":"s0","maxChanges":50}`,
 		},
 		{
-			name: "MailboxQuery",
+			name:   "MailboxQuery",
+			covers: []string{"MailboxQuery", "MailboxFilterCondition", "Comparator"},
 			value: &MailboxQuery{
 				Account: "A1",
 				Filter: &MailboxFilterCondition{
@@ -133,7 +148,8 @@ func requestTagCases() []tagCase {
 			json:  `{"accountId":"A1","sinceState":"s0","maxChanges":50}`,
 		},
 		{
-			name: "EmailQuery",
+			name:   "EmailQuery",
+			covers: []string{"EmailQuery", "FilterOperator", "EmailFilterCondition"},
 			value: &EmailQuery{
 				Account: "A1",
 				Filter: &FilterOperator{
@@ -159,9 +175,9 @@ func requestTagCases() []tagCase {
 						Subject:                    "s",
 						Body:                       "y",
 						Header:                     []string{"X-A", "1"},
-						HasSMIME:                   new(true),
+						HasSMIME:                   new(false),
 						HasVerifiedSMIME:           new(false),
-						HasVerifiedSMIMEAtDelivery: new(true),
+						HasVerifiedSMIMEAtDelivery: new(false),
 					}},
 				},
 				Sort:            []*Comparator{{Property: "receivedAt"}},
@@ -179,7 +195,7 @@ func requestTagCases() []tagCase {
 				`"noneInThreadHaveKeyword":"$draft","hasKeyword":"$answered",` +
 				`"notKeyword":"$junk","hasAttachment":true,"text":"t","from":"f","to":"o",` +
 				`"cc":"c","bcc":"b","subject":"s","body":"y","header":["X-A","1"],` +
-				`"hasSmime":true,"hasVerifiedSmime":false,"hasVerifiedSmimeAtDelivery":true}]},` +
+				`"hasSmime":false,"hasVerifiedSmime":false,"hasVerifiedSmimeAtDelivery":false}]},` +
 				`"sort":[{"property":"receivedAt"}],"position":5,"anchor":"M1",` +
 				`"anchorOffset":-2,"limit":10,"calculateTotal":true,"collapseThreads":true}`,
 		},
@@ -196,7 +212,8 @@ func requestTagCases() []tagCase {
 				`"update":{"M1":{"keywords/$seen":true}},"destroy":["M2"]}`,
 		},
 		{
-			name: "EmailImport",
+			name:   "EmailImport",
+			covers: []string{"EmailImport", "EmailImportItem"},
 			value: &EmailImport{
 				Account:   "A1",
 				IfInState: "s0",
@@ -253,8 +270,9 @@ func responseTagCases() []tagCase {
 				`"sessionState":"s1"}`,
 		},
 		{
-			name:  "Session",
-			value: &Session{},
+			name:   "Session",
+			covers: []string{"Session", "Account"},
+			value:  &Session{},
 			json: `{"capabilities":{"urn:ietf:params:jmap:core":{}},` +
 				`"accounts":{"A1":{"accountCapabilities":{"urn:ietf:params:jmap:mail":{}},` +
 				`"name":"n","isPersonal":true,"isReadOnly":true}},` +
@@ -282,8 +300,9 @@ func responseTagCases() []tagCase {
 			json:  `{"maxDelayedSend":1,"submissionExtensions":{"FUTURERELEASE":["86400"]}}`,
 		},
 		{
-			name:  "MailboxGetResponse",
-			value: &MailboxGetResponse{},
+			name:   "MailboxGetResponse",
+			covers: []string{"MailboxGetResponse", "Mailbox", "Rights"},
+			value:  &MailboxGetResponse{},
 			json: `{"accountId":"A1","state":"s1","list":[{"id":"MA","name":"Inbox",` +
 				`"parentId":"MP","role":"inbox","sortOrder":10,"totalEmails":5,` +
 				`"unreadEmails":4,"totalThreads":3,"unreadThreads":2,` +
@@ -315,8 +334,9 @@ func responseTagCases() []tagCase {
 				`"notDestroyed":{"ME":{"type":"mailboxHasEmail"}}}`,
 		},
 		{
-			name:  "EmailGetResponse",
-			value: &EmailGetResponse{},
+			name:   "EmailGetResponse",
+			covers: []string{"EmailGetResponse", "Email", "Header", "Address", "BodyPart", "BodyValue"},
+			value:  &EmailGetResponse{},
 			json: `{"accountId":"A1","state":"s1","list":[{"id":"M1","blobId":"G1",` +
 				`"threadId":"T1","mailboxIds":{"MA":true},"keywords":{"$seen":true},` +
 				`"size":4127,"receivedAt":"2026-07-28T09:00:00Z",` +
@@ -364,16 +384,18 @@ func responseTagCases() []tagCase {
 				`"created":{"k1":{"id":"M1"}},"notCreated":{"k2":{"type":"invalidEmail"}}}`,
 		},
 		{
-			name:  "IdentityGetResponse",
-			value: &IdentityGetResponse{},
+			name:   "IdentityGetResponse",
+			covers: []string{"IdentityGetResponse", "Identity"},
+			value:  &IdentityGetResponse{},
 			json: `{"accountId":"A1","state":"s1","list":[{"id":"I1","name":"Ann",` +
 				`"email":"ann@x","replyTo":[{"email":"r@x"}],"bcc":[{"email":"b@x"}],` +
 				`"textSignature":"-- Ann","htmlSignature":"Ann, in HTML","mayDelete":true}],` +
 				`"notFound":["IX"]}`,
 		},
 		{
-			name:  "EmailSubmissionSetResponse",
-			value: &EmailSubmissionSetResponse{},
+			name:   "EmailSubmissionSetResponse",
+			covers: []string{"EmailSubmissionSetResponse", "EmailSubmission", "Envelope", "EnvelopeAddress", "DeliveryStatus"},
+			value:  &EmailSubmissionSetResponse{},
 			json: `{"accountId":"A1","oldState":"s0","newState":"s1","created":{"k1":{"id":"ES1",` +
 				`"identityId":"I1","emailId":"M1","threadId":"T1",` +
 				`"envelope":{"mailFrom":{"email":"f@x","parameters":{"HOLDFOR":"86400"}},` +
@@ -449,50 +471,110 @@ func TestResponseTags(t *testing.T) {
 	}
 }
 
-// tagPattern finds a JSON tag name in a struct field declaration.
-var tagPattern = regexp.MustCompile("`json:\"([^\",]+)")
-
-// TestEveryJSONTagIsObserved reads the package's own source and fails
-// on a tag neither table names. Without it the tables decay: a field
-// added to a type later is unwatched, and renaming it stays green.
-func TestEveryJSONTagIsObserved(t *testing.T) {
-	var observed strings.Builder
-	for _, c := range append(requestTagCases(), responseTagCases()...) {
-		observed.WriteString(c.json)
-	}
-	seen := observed.String()
+// packageTags reads the package's own non-test source and returns
+// each struct type's JSON tag names, in declaration order.
+func packageTags(t *testing.T) map[string][]string {
+	t.Helper()
 
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatalf("read package directory: %v", err)
 	}
 
-	tags := 0
+	tags := make(map[string][]string)
+	fset := token.NewFileSet()
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		source, err := os.ReadFile(name)
+		file, err := parser.ParseFile(fset, name, nil, 0)
 		if err != nil {
-			t.Fatalf("read %s: %v", name, err)
+			t.Fatalf("parse %s: %v", name, err)
 		}
-		for _, match := range tagPattern.FindAllStringSubmatch(string(source), -1) {
-			tag := match[1]
-			if tag == "-" {
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.TYPE {
 				continue
 			}
-			tags++
+			for _, spec := range gen.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok {
+					continue
+				}
+				for _, field := range structType.Fields.List {
+					if field.Tag == nil {
+						continue
+					}
+					raw, err := strconv.Unquote(field.Tag.Value)
+					if err != nil {
+						t.Fatalf("%s: unquote tag %s: %v", name, field.Tag.Value, err)
+					}
+					tag, _, _ := strings.Cut(reflect.StructTag(raw).Get("json"), ",")
+					if tag == "" || tag == "-" {
+						continue
+					}
+					tags[typeSpec.Name.Name] = append(tags[typeSpec.Name.Name], tag)
+				}
+			}
+		}
+	}
+	return tags
+}
+
+// TestEveryJSONTagIsObserved reads the package's own source and fails
+// on a struct no case covers or a tag its own case does not name.
+// Without it the tables decay: a field added to a type later is
+// unwatched, and renaming it stays green.
+//
+// The match is per type rather than over one concatenated string. A
+// flat search calls a tag observed when any type in the package
+// happens to carry that name, so a "name" or "state" or "accountId"
+// added to a type whose case never names it would pass, which is the
+// shape a Thread or SearchSnippet type would arrive in.
+func TestEveryJSONTagIsObserved(t *testing.T) {
+	observed := make(map[string]string)
+	for _, c := range append(requestTagCases(), responseTagCases()...) {
+		covers := c.covers
+		if len(covers) == 0 {
+			covers = []string{c.name}
+		}
+		for _, typeName := range covers {
+			observed[typeName] += c.json
+		}
+	}
+
+	tags := packageTags(t)
+
+	for _, typeName := range slices.Sorted(maps.Keys(observed)) {
+		if _, ok := tags[typeName]; !ok {
+			t.Errorf("a case covers %q, which is not a struct with JSON tags in this package", typeName)
+		}
+	}
+
+	total := 0
+	for _, typeName := range slices.Sorted(maps.Keys(tags)) {
+		seen, ok := observed[typeName]
+		if !ok {
+			t.Errorf("no case covers type %s; add one to a table in tags_test.go", typeName)
+			continue
+		}
+		for _, tag := range tags[typeName] {
+			total++
 			if !strings.Contains(seen, `"`+tag+`":`) {
-				t.Errorf("%s: no case observes the %q tag; add it to a table in tags_test.go", name, tag)
+				t.Errorf("%s: its case does not name the %q tag", typeName, tag)
 			}
 		}
 	}
 
-	// A guard against the guard: a regexp that stopped matching would
-	// pass this test by finding nothing to check.
-	if tags < 300 {
-		t.Errorf("found only %d tags in the package source, want at least 300", tags)
+	// A guard against the guard: a parser that stopped finding fields
+	// would pass this test by having nothing to check.
+	if total < 300 {
+		t.Errorf("found only %d tags in the package source, want at least 300", total)
 	}
 }
 

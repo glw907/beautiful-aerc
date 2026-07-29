@@ -195,6 +195,29 @@ func TestQueryOmitsATypedNilFilter(t *testing.T) {
 		})
 	}
 
+	// A typed nil one slot deeper, inside the conditions array, is
+	// the same hazard: the filter itself is set, so the top-level
+	// guard never sees it.
+	nested, err := json.Marshal(&EmailQuery{
+		Account: "A1",
+		Filter: &FilterOperator{
+			Operator: OperatorAND,
+			Conditions: []Filter{
+				&EmailFilterCondition{InMailbox: "MA"},
+				email,
+				operator,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"accountId":"A1","filter":{"operator":"AND",` +
+		`"conditions":[{"inMailbox":"MA"}]}}`
+	if string(nested) != want {
+		t.Errorf("Marshal = %s, want %s", nested, want)
+	}
+
 	// A filter that is actually set still travels, through the same
 	// marshaler.
 	set, err := json.Marshal(&EmailQuery{
@@ -204,8 +227,8 @@ func TestQueryOmitsATypedNilFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if want := `{"accountId":"A1","filter":{"inMailbox":"MA"}}`; string(set) != want {
-		t.Errorf("Marshal = %s, want %s", set, want)
+	if got := `{"accountId":"A1","filter":{"inMailbox":"MA"}}`; string(set) != got {
+		t.Errorf("Marshal = %s, want %s", set, got)
 	}
 }
 

@@ -36,8 +36,10 @@ func (p Patch) MarshalJSON() ([]byte, error) {
 func (p Patch) validate() error {
 	pointers := slices.Sorted(maps.Keys(p))
 	for _, pointer := range pointers {
-		if slices.ContainsFunc(strings.Split(pointer, "/"), isArrayToken) {
-			return fmt.Errorf("patch pointer %q addresses an array element; replace the whole property instead", pointer)
+		for segment := range strings.SplitSeq(pointer, "/") {
+			if err := checkSegment(pointer, segment); err != nil {
+				return err
+			}
 		}
 	}
 	for _, outer := range pointers {
@@ -50,9 +52,21 @@ func (p Patch) validate() error {
 	return nil
 }
 
-// isArrayToken reports whether segment is one of RFC 6901's array
-// tokens: a non-negative decimal index, or "-" for the position past
-// the end.
+// checkSegment reports the RFC 8620 section 5.3 pointer restrictions
+// that one segment can break.
+func checkSegment(pointer, segment string) error {
+	if segment == "" {
+		return fmt.Errorf("patch pointer %q has an empty segment", pointer)
+	}
+	if isArrayToken(segment) {
+		return fmt.Errorf("patch pointer %q addresses an array element; replace the whole property instead", pointer)
+	}
+	return nil
+}
+
+// isArrayToken reports whether a non-empty segment is one of RFC
+// 6901's array tokens: a non-negative decimal index, or "-" for the
+// position past the end.
 //
 // RFC 8620 section 5.3 forbids a pointer that reaches into an array,
 // and whether a property holds an array is a fact about the record

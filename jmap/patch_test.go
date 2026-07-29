@@ -132,6 +132,19 @@ func TestPatchRefusesIllegalPointer(t *testing.T) {
 			},
 			want: "overlap",
 		},
+		{
+			// Both empty forms are reachable: a bare Patch{"": v}, and
+			// Pointer with a trailing empty segment. Neither addresses
+			// a property of any record, so neither reaches the wire.
+			name:  "an empty pointer",
+			patch: Patch{"": true},
+			want:  "empty segment",
+		},
+		{
+			name:  "a trailing empty segment",
+			patch: Patch{"keywords/": true},
+			want:  "empty segment",
+		},
 	}
 
 	for _, c := range cases {

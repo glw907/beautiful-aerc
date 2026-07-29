@@ -33,6 +33,27 @@ type FilterOperator struct {
 
 func (*FilterOperator) isFilter() {}
 
+// MarshalJSON implements json.Marshaler. It drops a condition holding
+// a typed nil for the same reason [EmailQuery] drops a null filter,
+// one slot deeper: a null in the conditions array is a form RFC 8620
+// never blesses, and a server within its rights to reject it says so
+// about the whole query rather than about the slot.
+func (o FilterOperator) MarshalJSON() ([]byte, error) {
+	type filterOperator FilterOperator
+	out := filterOperator(o)
+	out.Conditions = nil
+	for _, condition := range o.Conditions {
+		kept, err := omitNullFilter(condition)
+		if err != nil {
+			return nil, err
+		}
+		if kept != nil {
+			out.Conditions = append(out.Conditions, kept)
+		}
+	}
+	return json.Marshal(out)
+}
+
 // omitNullFilter returns nil when f marshals to JSON null, which is
 // what a typed nil produces: a nil *EmailFilterCondition held in a
 // Filter interface is non-nil to Go and null on the wire. RFC 8620

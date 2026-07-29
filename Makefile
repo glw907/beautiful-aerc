@@ -63,12 +63,14 @@ analyzers: build-poplarcheck
 # see this: pkgrole classifies by an internal/ or cmd/ segment and
 # jmap has neither, so all four analyzers skip it. The dependency
 # list is the gate instead, over the test files too, since a fixture
-# helper reaching into poplar travels with the package.
+# helper reaching into poplar travels with the package, and over
+# ./jmap/... rather than ./jmap so a package added beside it is
+# covered on the day it appears.
 jmap-boundary:
-	@bad=$$( { go list -deps ./jmap; \
-	          go list -f '{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./jmap; } \
+	@bad=$$( { go list -deps ./jmap/...; \
+	          go list -f '{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./jmap/...; } \
 	        | grep '^github.com/glw907/poplar' \
-	        | grep -v '^github.com/glw907/poplar/jmap$$' | sort -u ); \
+	        | grep -Ev '^github.com/glw907/poplar/jmap(/|$$)' | sort -u ); \
 	if [ -n "$$bad" ]; then \
 	  echo "jmap must import no poplar package, found:" >&2; \
 	  echo "$$bad" >&2; exit 1; \
