@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,7 +79,7 @@ func runToCompletion(t *testing.T, dbPath string, f flags) (*readySignal, error)
 
 	out := newReadySignal()
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, dbPath, f, out) }()
+	go func() { done <- run(ctx, dbPath, f, out, io.Discard) }()
 
 	select {
 	case <-out.ready:
@@ -122,6 +123,52 @@ func TestMainReportsStorePathFailureThroughUerr(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "resolve store path") {
 		t.Errorf("output = %q, want the wrapped cause naming what failed", out)
+	}
+}
+
+// TestRunReportsAnUnwritableLog proves a poplar whose log cannot be
+// written says so on a channel that does not depend on the log. slog
+// discards a handler's write error, so on a full disk or a read-only
+// state directory every error the run reports afterward is dropped
+// with no trace anywhere, which is the one failure the log itself
+// cannot report (SY-8, ADR-0013). The subprocess runs the real main
+// with the log path occupied by a directory: the state directory
+// resolves happily and no write can ever open it.
+func TestRunReportsAnUnwritableLog(t *testing.T) {
+	home := t.TempDir()
+	stateHome := filepath.Join(home, "state")
+	if err := os.MkdirAll(filepath.Join(stateHome, "poplar", "poplar.log"), 0o700); err != nil {
+		t.Fatalf("occupy the log path with a directory: %v", err)
+	}
+
+	dataHome := filepath.Join(home, "data")
+	if err := os.MkdirAll(filepath.Join(dataHome, "poplar"), 0o750); err != nil {
+		t.Fatalf("create the data directory: %v", err)
+	}
+	seedStore(t, filepath.Join(dataHome, "poplar", "store.db"),
+		seedAccountSQL,
+		`INSERT INTO mailbox (id, account_id, name) VALUES (1, 1, 'Inbox')`)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// --startup-trace runs the whole startup path and exits on its own,
+	// so the subprocess needs no signal to finish.
+	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its own subprocess
+	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_STATE_HOME="+stateHome)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("startup-trace run: %v (stderr: %s)", err, stderr.String())
+	}
+
+	if !strings.Contains(stderr.String(), "cannot write its log") {
+		t.Errorf("stderr = %q, want poplar reporting the log it cannot write", stderr.String())
+	}
+	// The report keeps off stdout, which the QA-1 harness parses.
+	if strings.Contains(stdout.String(), "cannot write its log") {
+		t.Errorf("stdout = %q, want the log report on stderr alone", stdout.String())
 	}
 }
 
@@ -243,7 +290,7 @@ func TestRunRefusesSecondInstance(t *testing.T) {
 	defer func() { _ = lock.Release() }()
 
 	var out bytes.Buffer
-	if err := run(context.Background(), dbPath, flags{}, &out); err == nil {
+	if err := run(context.Background(), dbPath, flags{}, &out, io.Discard); err == nil {
 		t.Fatal("run succeeded against a locked store, want refusal")
 	}
 }

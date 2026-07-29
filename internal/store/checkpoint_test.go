@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -154,6 +157,80 @@ func TestIncrementalVacuumIsBoundedPerIdleWindow(t *testing.T) {
 	if want := before - incrementalVacuumPages; after != want {
 		t.Errorf("freelist_count after one idle window = %d, want exactly %d (%d minus the %d-page bound)", after, want, before, incrementalVacuumPages)
 	}
+}
+
+// TestCheckpointTruncateSurfacesTimeoutRestoreFailure proves a failed
+// busy_timeout restore reaches the caller. The writer's pool holds
+// exactly one physical connection, so a restore that fails unnoticed
+// leaves every later transaction in the process giving up after
+// checkpointBusyTimeoutMS instead of busyTimeoutMS, turning ordinary
+// lock waits into a rash of store failures with no visible cause.
+func TestCheckpointTruncateSurfacesTimeoutRestoreFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	probe, err := OpenWriteConn(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	if err := Migrate(probe); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	base := probe.Driver()
+	if err := probe.Close(); err != nil {
+		t.Fatalf("close probe connection: %v", err)
+	}
+
+	db := sql.OpenDB(rejectingConnector{
+		base:   base,
+		dsn:    dsn(path, connReadWrite),
+		reject: fmt.Sprintf("busy_timeout = %d", busyTimeoutMS),
+	})
+	db.SetMaxOpenConns(1)
+	defer func() { _ = db.Close() }()
+
+	err = checkpointTruncate(context.Background(), db)
+	if err == nil {
+		t.Fatal("checkpointTruncate whose busy_timeout restore failed = nil, want the failure surfaced")
+	}
+	if !strings.Contains(err.Error(), "busy_timeout") {
+		t.Errorf("err = %v, want it naming the busy_timeout restore", err)
+	}
+}
+
+// rejectingConnector opens the real sqlite driver and refuses the one
+// statement whose text contains reject, so a test can fail a single
+// step of a multi-statement sequence while every other step runs for
+// real. checkpointTruncate's restore step is only reachable this way:
+// it runs after a checkpoint the same connection has to have
+// executed successfully.
+type rejectingConnector struct {
+	base        driver.Driver
+	dsn, reject string
+}
+
+func (c rejectingConnector) Connect(context.Context) (driver.Conn, error) {
+	conn, err := c.base.Open(c.dsn)
+	if err != nil {
+		return nil, err
+	}
+	return rejectingConn{Conn: conn, reject: c.reject}, nil
+}
+
+func (c rejectingConnector) Driver() driver.Driver { return c.base }
+
+// rejectingConn embeds driver.Conn as an interface on purpose: the
+// wrapper's method set is then Prepare, Begin and Close alone, so
+// database/sql routes every statement through Prepare rather than an
+// optional Execer the underlying connection implements.
+type rejectingConn struct {
+	driver.Conn
+	reject string
+}
+
+func (c rejectingConn) Prepare(query string) (driver.Stmt, error) {
+	if strings.Contains(query, c.reject) {
+		return nil, errors.New("statement rejected by the test connector")
+	}
+	return c.Conn.Prepare(query)
 }
 
 // fillWithFatRows writes rows bulk chunks, each one oversized account

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,15 +33,20 @@ func MarkCleanShutdown(dbPath string) error {
 // marker means the prior run never reached a clean shutdown, whether
 // this is the store's first launch or it crashed. A found marker is
 // consumed, since it attests to the run that just ended, not the one
-// about to start.
+// about to start; a marker that cannot be consumed is not trusted,
+// because a marker still on disk reads as a clean shutdown on every
+// later start, including the one after a crash.
 func NeedsIntegrityCheck(dbPath string, migrated bool) bool {
 	marker := cleanShutdownMarker(dbPath)
-	_, err := os.Stat(marker)
-	clean := err == nil
-	if clean {
-		_ = os.Remove(marker)
+	if _, err := os.Stat(marker); err != nil {
+		return true
 	}
-	return migrated || !clean
+	if err := os.Remove(marker); err != nil {
+		slog.Error("store: the clean-shutdown marker could not be consumed, so it no longer attests to anything; running the integrity check",
+			"marker", marker, "error", err)
+		return true
+	}
+	return migrated
 }
 
 // CheckIntegrity runs SQLite's quick_check followed by FTS5's
@@ -72,11 +78,14 @@ func CheckIntegrity(ctx context.Context, db *sql.DB, progress func(stage string)
 }
 
 // RecoveredCounts reports what Recover carried over from the store it
-// rebuilt, for a caller to report to the operator.
+// rebuilt, for a caller to report to the operator. DamagedTables
+// names every table whose read stopped early, so a caller reports a
+// partial recovery as one.
 type RecoveredCounts struct {
-	Outbox    int
-	Mailboxes int
-	Messages  int
+	Outbox        int
+	Mailboxes     int
+	Messages      int
+	DamagedTables []string
 }
 
 // Recover rebuilds the store at path from nothing but its
@@ -109,21 +118,39 @@ func Recover(ctx context.Context, path string) (RecoveredCounts, error) {
 		return RecoveredCounts{}, localErr("store.recover.quarantine",
 			fmt.Errorf("quarantine %s: %w", path, err))
 	}
-	for _, suffix := range [...]string{"-wal", "-shm"} {
-		_ = os.Rename(path+suffix, quarantined+suffix)
+	if err := moveSidecars(path, quarantined); err != nil {
+		slog.Error("store: a sidecar of the quarantined store stayed behind, where the next open will read it against a different database file",
+			"error", err)
 	}
 
 	if err := rebuildAt(ctx, path, preserved); err != nil {
-		unquarantine(quarantined, path, preserved)
-		return RecoveredCounts{}, localErr("store.recover.rebuild",
-			fmt.Errorf("rebuild %s: %w", path, err))
+		rebuildErr := fmt.Errorf("rebuild %s: %w", path, err)
+		restoreErr := unquarantine(quarantined, path, preserved)
+		return RecoveredCounts{}, localErr("store.recover.rebuild", errors.Join(rebuildErr, restoreErr))
 	}
 
 	return RecoveredCounts{
-		Outbox:    len(preserved.outbox),
-		Mailboxes: len(preserved.mailboxes),
-		Messages:  len(preserved.messages),
+		Outbox:        len(preserved.outbox),
+		Mailboxes:     len(preserved.mailboxes),
+		Messages:      len(preserved.messages),
+		DamagedTables: preserved.damagedTables,
 	}, nil
+}
+
+// moveSidecars renames the -wal and -shm files beside a store file
+// that has just moved from one path to the other. A missing sidecar is
+// normal, since a checkpointed store has neither and SQLite recreates
+// both on the next open. Any other failure strands a write-ahead log
+// holding committed transactions away from the database file they
+// belong to, so it is reported rather than assumed harmless.
+func moveSidecars(from, to string) error {
+	var errs []error
+	for _, suffix := range [...]string{"-wal", "-shm"} {
+		if err := os.Rename(from+suffix, to+suffix); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, fmt.Errorf("rename %s to %s: %w", from+suffix, to+suffix, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // rebuildAt opens a fresh, migrated store at path and writes preserved
@@ -150,17 +177,23 @@ func rebuildAt(ctx context.Context, path string, preserved preservedData) error 
 // where the operator's data used to be. If the rename back itself
 // fails, the preserved rows are still sitting in quarantined; that
 // path and what it holds is logged, since nothing else names it
-// again.
-func unquarantine(quarantined, path string, preserved preservedData) {
+// again. What stopped a full restore is returned as well as logged,
+// so the caller reports a partial restore as one: a write-ahead log
+// left in the quarantine holds committed transactions the restored
+// file does not.
+func unquarantine(quarantined, path string, preserved preservedData) error {
 	if err := os.Rename(quarantined, path); err != nil {
 		slog.Error("store: recovery failed and the quarantined store could not be restored; preserved rows survive only in the quarantined file",
 			"quarantine_path", quarantined, "outbox_rows", len(preserved.outbox),
 			"mailbox_rows", len(preserved.mailboxes), "message_rows", len(preserved.messages), "error", err)
-		return
+		return fmt.Errorf("restore %s to %s: %w", quarantined, path, err)
 	}
-	for _, suffix := range [...]string{"-wal", "-shm"} {
-		_ = os.Rename(quarantined+suffix, path+suffix)
+	if err := moveSidecars(quarantined, path); err != nil {
+		slog.Error("store: a sidecar did not come back with the restored store, so commits it still holds are missing from the file at path",
+			"path", path, "quarantine_path", quarantined, "error", err)
+		return err
 	}
+	return nil
 }
 
 // preservedAccount is one account row Recover carries into the
@@ -228,18 +261,36 @@ type preservedMessage struct {
 	anchorMsgID         sql.NullString
 }
 
+// preservedMessageMailbox is one message_mailbox row Recover carries
+// with the local message it belongs to. Without it a preserved draft
+// comes back in no folder, which is every list an operator could
+// reach it from.
+type preservedMessageMailbox struct {
+	messageID, mailboxID int64
+	receivedAt, unread   int64
+}
+
 // preservedData is everything Recover extracts from a store before
-// discarding it.
+// discarding it. damagedTables names the tables whose read stopped
+// early, the rows past the failure being unreadable.
 type preservedData struct {
-	accounts  []preservedAccount
-	mailboxes []preservedMailbox
-	outbox    []preservedOutboxRow
-	messages  []preservedMessage
+	accounts         []preservedAccount
+	mailboxes        []preservedMailbox
+	outbox           []preservedOutboxRow
+	messages         []preservedMessage
+	messageMailboxes []preservedMessageMailbox
+	damagedTables    []string
 }
 
 // extractPreserved reads path's non-rebuildable rows through a
 // dedicated read-only connection, closed before Recover's caller
 // quarantines the file.
+//
+// Every table is read on its own terms, and each read keeps whatever
+// it had before it stopped. An operator reaches for recovery because
+// the store is already damaged, and the largest, most
+// corruption-prone table is read last: one unreadable table must not
+// cost them the queued intents and mailboxes that read cleanly.
 func extractPreserved(ctx context.Context, path string) (preservedData, error) {
 	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
 	if err != nil {
@@ -247,23 +298,42 @@ func extractPreserved(ctx context.Context, path string) (preservedData, error) {
 	}
 	defer func() { _ = db.Close() }()
 
+	var damaged []string
+	note := func(table string, recovered int, err error) {
+		if err == nil {
+			return
+		}
+		slog.Error("store: recovery could not read a table in full, so the rows past the failure are lost",
+			"table", table, "rows_recovered", recovered, "error", err)
+		damaged = append(damaged, table)
+	}
+
 	accounts, err := extractAccounts(ctx, db)
-	if err != nil {
-		return preservedData{}, fmt.Errorf("read accounts: %w", err)
-	}
+	note("account", len(accounts), err)
 	mailboxes, err := extractMailboxes(ctx, db)
-	if err != nil {
-		return preservedData{}, fmt.Errorf("read mailboxes: %w", err)
-	}
+	note("mailbox", len(mailboxes), err)
 	outboxRows, err := extractOutbox(ctx, db)
-	if err != nil {
-		return preservedData{}, fmt.Errorf("read outbox: %w", err)
-	}
+	note("outbox", len(outboxRows), err)
 	messages, err := extractLocalMessages(ctx, db)
-	if err != nil {
-		return preservedData{}, fmt.Errorf("read local messages: %w", err)
+	note("message", len(messages), err)
+
+	// The membership read joins the message table, so it is worth
+	// running only once that table has yielded a message to attach a
+	// membership to.
+	var memberships []preservedMessageMailbox
+	if len(messages) > 0 {
+		memberships, err = extractLocalMemberships(ctx, db)
+		note("message_mailbox", len(memberships), err)
 	}
-	return preservedData{accounts: accounts, mailboxes: mailboxes, outbox: outboxRows, messages: messages}, nil
+
+	return preservedData{
+		accounts:         accounts,
+		mailboxes:        mailboxes,
+		outbox:           outboxRows,
+		messages:         messages,
+		messageMailboxes: memberships,
+		damagedTables:    damaged,
+	}, nil
 }
 
 func extractAccounts(ctx context.Context, db *sql.DB) ([]preservedAccount, error) {
@@ -277,7 +347,7 @@ func extractAccounts(ctx context.Context, db *sql.DB) ([]preservedAccount, error
 	for rows.Next() {
 		var a preservedAccount
 		if err := rows.Scan(&a.id, &a.slug, &a.backendKind, &a.address, &a.data); err != nil {
-			return nil, err
+			return out, err
 		}
 		out = append(out, a)
 	}
@@ -300,7 +370,7 @@ func extractMailboxes(ctx context.Context, db *sql.DB) ([]preservedMailbox, erro
 			&m.id, &m.accountID, &m.serverID, &m.role, &m.name,
 			&m.sortOrder, &m.visible, &m.unreadCount, &m.totalCount, &m.data,
 		); err != nil {
-			return nil, err
+			return out, err
 		}
 		out = append(out, m)
 	}
@@ -324,7 +394,7 @@ func extractOutbox(ctx context.Context, db *sql.DB) ([]preservedOutboxRow, error
 			&o.id, &o.accountID, &o.kind, &o.payload, &o.undoGroup, &o.chunkSeq, &o.attemptCount,
 			&o.nextAttemptAt, &o.createdAt, &o.failureClass, &o.failureDetail,
 		); err != nil {
-			return nil, err
+			return out, err
 		}
 		out = append(out, o)
 	}
@@ -357,7 +427,7 @@ func extractLocalMessages(ctx context.Context, db *sql.DB) ([]preservedMessage, 
 			&bodyContent, &bodyFetchedAt,
 			&localRev, &pushedRev, &m.anchorMsgID,
 		); err != nil {
-			return nil, err
+			return out, err
 		}
 		if bodyFetchedAt.Valid {
 			m.hasBody, m.bodyContent, m.bodyFetchedAt = true, bodyContent, bodyFetchedAt.Int64
@@ -366,6 +436,28 @@ func extractLocalMessages(ctx context.Context, db *sql.DB) ([]preservedMessage, 
 			m.hasDraftMeta, m.localRev, m.pushedRev = true, localRev.Int64, pushedRev.Int64
 		}
 		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func extractLocalMemberships(ctx context.Context, db *sql.DB) ([]preservedMessageMailbox, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT mm.message_id, mm.mailbox_id, mm.received_at, mm.unread
+		FROM message_mailbox mm
+		JOIN message m ON m.id = mm.message_id
+		WHERE m.origin = 'local'`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []preservedMessageMailbox
+	for rows.Next() {
+		var mm preservedMessageMailbox
+		if err := rows.Scan(&mm.messageID, &mm.mailboxID, &mm.receivedAt, &mm.unread); err != nil {
+			return out, err
+		}
+		out = append(out, mm)
 	}
 	return out, rows.Err()
 }
@@ -387,6 +479,7 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 			return fmt.Errorf("insert account %d: %w", a.id, err)
 		}
 	}
+	restoredMailboxes := make(map[int64]bool, len(preserved.mailboxes))
 	for _, m := range preserved.mailboxes {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO mailbox (id, account_id, server_id, role, name, sort_order, visible, unread_count, total_count, data)
@@ -395,6 +488,7 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 			m.sortOrder, m.visible, m.unreadCount, m.totalCount, m.data); err != nil {
 			return fmt.Errorf("insert mailbox %d: %w", m.id, err)
 		}
+		restoredMailboxes[m.id] = true
 	}
 	for _, o := range preserved.outbox {
 		// state is always 'queued', regardless of what Recover
@@ -410,6 +504,7 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 			return fmt.Errorf("insert outbox row %d: %w", o.id, err)
 		}
 	}
+	restoredMessages := make(map[int64]bool, len(preserved.messages))
 	for _, m := range preserved.messages {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO message (id, account_id, server_id, blob_id, thread_key, received_at, subject, from_addr,
@@ -430,6 +525,21 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 				m.id, m.localRev, m.pushedRev, m.anchorMsgID); err != nil {
 				return fmt.Errorf("insert draft_meta for message %d: %w", m.id, err)
 			}
+		}
+		restoredMessages[m.id] = true
+	}
+	for _, mm := range preserved.messageMailboxes {
+		// A membership whose message or mailbox did not survive
+		// extraction is dropped rather than attempted: its foreign key
+		// would fail and take the whole restore transaction with it,
+		// costing the operator every row that did survive.
+		if !restoredMessages[mm.messageID] || !restoredMailboxes[mm.mailboxID] {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO message_mailbox (message_id, mailbox_id, received_at, unread) VALUES (?, ?, ?, ?)`,
+			mm.messageID, mm.mailboxID, mm.receivedAt, mm.unread); err != nil {
+			return fmt.Errorf("insert mailbox %d membership for message %d: %w", mm.mailboxID, mm.messageID, err)
 		}
 	}
 	return tx.Commit()

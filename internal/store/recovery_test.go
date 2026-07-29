@@ -60,6 +60,31 @@ func TestIntegrityCheckSkipped(t *testing.T) {
 	}
 }
 
+// TestIntegrityCheckRunsOnUnconsumableMarker proves a marker that
+// survives its own read forces the check instead of being trusted. A
+// marker attests to the run that just ended, so one that cannot be
+// consumed reads as a clean shutdown on every later start, including
+// the start after a real crash, disabling SY-8's corruption gate for
+// the life of the store.
+func TestIntegrityCheckRunsOnUnconsumableMarker(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+
+	// A non-empty directory at the marker path stats like a marker and
+	// refuses os.Remove, the same shape a read-only store directory
+	// gives a marker file.
+	marker := cleanShutdownMarker(dbPath)
+	if err := os.Mkdir(marker, 0o700); err != nil {
+		t.Fatalf("seed an unremovable marker: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(marker, "child"), nil, 0o600); err != nil {
+		t.Fatalf("fill the marker directory: %v", err)
+	}
+
+	if !NeedsIntegrityCheck(dbPath, false) {
+		t.Fatal("NeedsIntegrityCheck over a marker that could not be consumed = false, want true")
+	}
+}
+
 // TestIntegrityCheckRunsAfterMigration proves a migration forces the
 // check even over a clean-shutdown marker: a schema change is exactly
 // the case a stale index or a bad upgrade could leave undetected.
@@ -161,6 +186,9 @@ func seedRecoveryFixture(t *testing.T, w *Writer) {
 			VALUES (100, 1, 'srv-100', 0, 'server subject', 'server body', 'server')`); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(`INSERT INTO message_mailbox (message_id, mailbox_id, received_at, unread) VALUES (100, 7, 0, 1)`); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`INSERT INTO outbox (id, account_id, kind, payload, created_at) VALUES (1, 1, 'move-messages', '{}', 0)`); err != nil {
 			return err
 		}
@@ -172,6 +200,9 @@ func seedRecoveryFixture(t *testing.T, w *Writer) {
 			return err
 		}
 		if _, err := tx.Exec(`INSERT INTO draft_meta (message_id, local_rev, pushed_rev, anchor_msgid) VALUES (200, 3, 1, 'anchor@x')`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO message_mailbox (message_id, mailbox_id, received_at, unread) VALUES (200, 7, 11, 1)`); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, search_text, origin)
@@ -232,6 +263,25 @@ func assertRecoveryPreservedFixture(t *testing.T, path string) {
 	}
 	if err := db.QueryRow(`SELECT content FROM body WHERE message_id = 300`).Scan(&localBody); err != nil {
 		t.Errorf("local message body missing after recovery: %v", err)
+	}
+
+	// A preserved draft that comes back in no folder is invisible to
+	// every list the operator has: the membership row is as
+	// non-rebuildable as the message itself.
+	var draftMailbox, draftReceivedAt, draftUnread int64
+	if err := db.QueryRow(`SELECT mailbox_id, received_at, unread FROM message_mailbox WHERE message_id = 200`).
+		Scan(&draftMailbox, &draftReceivedAt, &draftUnread); err != nil {
+		t.Errorf("the preserved draft came back in no folder: %v", err)
+	} else if draftMailbox != 7 || draftReceivedAt != 11 || draftUnread != 1 {
+		t.Errorf("draft membership = (%d, %d, %d), want (7, 11, 1)", draftMailbox, draftReceivedAt, draftUnread)
+	}
+
+	var disposableMembership int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM message_mailbox WHERE message_id = 100`).Scan(&disposableMembership); err != nil {
+		t.Fatalf("count the disposable message's membership: %v", err)
+	}
+	if disposableMembership != 0 {
+		t.Error("the disposable server-origin message kept a folder membership, want it dropped with the message")
 	}
 
 	var disposableCount int
@@ -349,7 +399,9 @@ func TestUnquarantineRestoresOriginalOnFailedRebuild(t *testing.T) {
 		t.Fatal("rebuildAt over an impossible path succeeded, want a failure")
 	}
 
-	unquarantine(quarantined, path, preserved)
+	if err := unquarantine(quarantined, path, preserved); err != nil {
+		t.Fatalf("unquarantine: %v", err)
+	}
 
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -360,6 +412,91 @@ func TestUnquarantineRestoresOriginalOnFailedRebuild(t *testing.T) {
 	}
 	if _, err := os.Stat(quarantined); !os.IsNotExist(err) {
 		t.Error("quarantined file still present after a successful restore")
+	}
+}
+
+// TestUnquarantineReportsAStrandedWAL proves a rollback that leaves
+// the quarantined write-ahead log behind is reported rather than
+// treated as a full restore: that file holds committed transactions
+// the restored database file does not, so a caller printing success
+// over it tells the operator their data came back when the newest
+// commits did not.
+func TestUnquarantineReportsAStrandedWAL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	quarantined := path + ".corrupt-test"
+
+	if err := os.WriteFile(quarantined, []byte("original store bytes"), 0o600); err != nil {
+		t.Fatalf("seed quarantined file: %v", err)
+	}
+	if err := os.WriteFile(quarantined+"-wal", []byte("uncheckpointed commits"), 0o600); err != nil {
+		t.Fatalf("seed quarantined wal: %v", err)
+	}
+	// A directory at the destination makes the rename fail with EISDIR,
+	// the same shape a permissions or cross-device failure gives it.
+	if err := os.Mkdir(path+"-wal", 0o700); err != nil {
+		t.Fatalf("block the wal destination: %v", err)
+	}
+
+	err := unquarantine(quarantined, path, preservedData{})
+	if err == nil {
+		t.Fatal("unquarantine over a wal that could not move = nil, want the stranded wal reported")
+	}
+	if !strings.Contains(err.Error(), "-wal") {
+		t.Errorf("err = %v, want it naming the -wal sidecar", err)
+	}
+	if _, statErr := os.Stat(quarantined + "-wal"); statErr != nil {
+		t.Errorf("the stranded wal is gone from the quarantine path: %v", statErr)
+	}
+}
+
+// TestRecoverContinuesPastAnUnreadableTable proves extraction is
+// per-table: the largest and most corruption-prone table is the last
+// one read, so aborting the whole recovery on it would cost an
+// operator every outbox intent and mailbox that read cleanly. The
+// damaged table is named back to the caller so the summary it prints
+// is not a lie about what survived.
+func TestRecoverContinuesPastAnUnreadableTable(t *testing.T) {
+	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	seedRecoveryFixture(t, w)
+
+	// Renaming the table away leaves every other table intact and gives
+	// its read the same error shape an unreadable page does.
+	if err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`ALTER TABLE message RENAME TO message_damaged`)
+		return err
+	}); err != nil {
+		t.Fatalf("damage the message table: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	counts, err := Recover(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Recover over a damaged message table: %v", err)
+	}
+	if len(counts.DamagedTables) != 1 || counts.DamagedTables[0] != "message" {
+		t.Errorf("DamagedTables = %v, want [message]", counts.DamagedTables)
+	}
+	if counts.Outbox != 1 || counts.Mailboxes != 1 {
+		t.Errorf("RecoveredCounts = %+v, want the outbox and mailbox rows preserved anyway", counts)
+	}
+	if counts.Messages != 0 {
+		t.Errorf("Messages = %d, want 0: the damaged table yielded nothing", counts.Messages)
+	}
+
+	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	if err != nil {
+		t.Fatalf("reopen rebuilt store: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var outboxCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE id = 1`).Scan(&outboxCount); err != nil {
+		t.Fatalf("count outbox row: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Error("the outbox row was lost to a damaged message table, want it preserved")
 	}
 }
 

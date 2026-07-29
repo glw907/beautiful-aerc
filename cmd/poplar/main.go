@@ -13,8 +13,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -54,7 +56,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, dbPath, f, os.Stdout); err != nil {
+	if err := run(ctx, dbPath, f, os.Stdout, os.Stderr); err != nil {
 		reportStartupFailure(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -78,8 +80,10 @@ func reportStartupFailure(w io.Writer, err error) {
 // instance lock, store preparation (migration, integrity check,
 // recovery), the writer, the orphaned-intent sweep, and a clean
 // shutdown once ctx is done. start is run's own entry time, the
-// in-process origin QA-1's --startup-trace measures against.
-func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
+// in-process origin QA-1's --startup-trace measures against. Status
+// and trace output go to out; a log poplar cannot write is reported
+// on errOut, which --startup-trace's caller does not parse.
+func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer) error {
 	start := time.Now()
 
 	lock, err := platform.AcquireInstanceLock(dbPath)
@@ -113,6 +117,14 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 		}
 	}
 
+	// A log writer reports a failure only after something asks it to
+	// write, so this line is what gives the health check below
+	// anything to have failed on. Without it a session that logged
+	// nothing else would reach its own first error with the log
+	// already broken and silent.
+	slog.Info("poplar: store ready", "path", dbPath)
+	reportLogHealth(errOut)
+
 	if f.startupTrace {
 		return runStartupTrace(ctx, dbPath, writer, start, out)
 	}
@@ -123,7 +135,21 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	if err := writer.Close(); err != nil {
 		return err
 	}
+	reportLogHealth(errOut)
 	return store.MarkCleanShutdown(dbPath)
+}
+
+// reportLogHealth prints uerr's log-writer health to w when the log is
+// dropping lines. slog discards whatever error its handler's writer
+// returns, so a log poplar cannot write takes every error line in the
+// process down with it, silently. Its own report cannot travel through
+// the log, which is why it goes to w (SY-8, ADR-0013).
+func reportLogHealth(w io.Writer) {
+	dropped, err := uerr.LogHealth()
+	if dropped == 0 && err == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "poplar cannot write its log: %v (%d line(s) dropped so far)\n", err, dropped)
 }
 
 // startupTraceResult is the single JSON line --startup-trace prints to
@@ -254,6 +280,10 @@ func offerRecovery(ctx context.Context, dbPath string, allowed bool, cause error
 	counts, err := store.Recover(context.WithoutCancel(ctx), dbPath)
 	if err != nil {
 		return err
+	}
+	if len(counts.DamagedTables) > 0 {
+		_, _ = fmt.Fprintf(out, "warning: %s could not be read in full, so rows they still held are lost\n",
+			strings.Join(counts.DamagedTables, ", "))
 	}
 	_, _ = fmt.Fprintf(out, "rebuilt store: %d outbox intent(s), %d mailbox(es) and %d local message(s) preserved\n",
 		counts.Outbox, counts.Mailboxes, counts.Messages)

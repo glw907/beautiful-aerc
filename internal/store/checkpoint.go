@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
 )
 
 // checkpointConfig governs the writer-owned checkpoint policy
@@ -63,13 +65,21 @@ const checkpointBusyTimeoutMS = 50
 // checkpointTruncate runs a TRUNCATE checkpoint against db under
 // checkpointBusyTimeoutMS rather than db's normal busy_timeout,
 // restoring the normal timeout before returning whether or not the
-// checkpoint succeeded.
-func checkpointTruncate(ctx context.Context, db *sql.DB) error {
+// checkpoint succeeded. A failed restore joins the returned error:
+// the writer's pool holds one physical connection, so a connection
+// left at the checkpoint's short timeout stays there for the life of
+// the process, and every transaction after it gives up on
+// SQLITE_BUSY in a hundredth of the time it should.
+func checkpointTruncate(ctx context.Context, db *sql.DB) (err error) {
 	if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", checkpointBusyTimeoutMS)); err != nil {
 		return fmt.Errorf("lower busy_timeout for checkpoint: %w", err)
 	}
 	defer func() {
-		_, _ = db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", busyTimeoutMS))
+		if _, restoreErr := db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", busyTimeoutMS)); restoreErr != nil {
+			slog.Error("store: the write connection is stuck at the checkpoint's short busy_timeout, where later transactions give up on a lock early",
+				"timeout_ms", checkpointBusyTimeoutMS, "error", restoreErr)
+			err = errors.Join(err, fmt.Errorf("restore busy_timeout: %w", restoreErr))
+		}
 	}()
 	return checkpoint(ctx, db, "TRUNCATE")
 }
