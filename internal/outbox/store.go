@@ -105,6 +105,22 @@ func revertRow(tx *sql.Tx, id int64) error {
 	return err
 }
 
+// requeueDispatching returns every row still in dispatching to
+// queued, reporting how many it moved. It is not scoped to one
+// account: ReclaimOrphaned sweeps the whole store once at startup,
+// before any account's dispatcher runs.
+func requeueDispatching(tx *sql.Tx) (int, error) {
+	res, err := tx.Exec(`UPDATE outbox SET state = 'queued' WHERE state = 'dispatching'`)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
 // requeueRow returns id to queued after a retriable failure,
 // recording the failure for a caller to surface and bumping the
 // backoff and attempt count.

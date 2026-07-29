@@ -143,6 +143,65 @@ func TestRunStartsAndShutsDownCleanly(t *testing.T) {
 	}
 }
 
+// TestRunReclaimsOrphanedIntents proves every startup sweeps outbox
+// rows a previous run left in dispatching back to queued, where the
+// dispatcher can see them again. The seeded store is marked cleanly
+// shut down, so this run owes no integrity check and runs no
+// recovery: a stranded row causes neither, which is why the sweep is
+// unconditional rather than a step inside one of them.
+func TestRunReclaimsOrphanedIntents(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	seedStrandedDispatchingRow(t, dbPath)
+	if err := store.MarkCleanShutdown(dbPath); err != nil {
+		t.Fatalf("mark clean shutdown: %v", err)
+	}
+	if store.NeedsIntegrityCheck(dbPath, false) {
+		t.Fatal("the seeded store owes an integrity check, want a startup that runs neither a check nor a recovery")
+	}
+
+	if _, err := runToCompletion(t, dbPath, flags{}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	db, err := store.OpenWriteConn(dbPath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var state string
+	if err := db.QueryRow(`SELECT state FROM outbox WHERE id = 1`).Scan(&state); err != nil {
+		t.Fatalf("read the stranded outbox row: %v", err)
+	}
+	if state != "queued" {
+		t.Errorf("outbox row state after a startup = %q, want %q", state, "queued")
+	}
+}
+
+// seedStrandedDispatchingRow migrates a fresh store at dbPath holding
+// one outbox row in the state a process killed between DispatchOnce's
+// claim and finalize transactions leaves behind.
+func seedStrandedDispatchingRow(t *testing.T, dbPath string) {
+	t.Helper()
+
+	seed, err := store.OpenWriteConn(dbPath)
+	if err != nil {
+		t.Fatalf("open %s: %v", dbPath, err)
+	}
+	if err := store.Migrate(seed); err != nil {
+		t.Fatalf("seed Migrate: %v", err)
+	}
+	if _, err := seed.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+	if _, err := seed.Exec(`INSERT INTO outbox (id, account_id, kind, payload, state, created_at) VALUES (1, 1, 'move-messages', '{}', 'dispatching', 0)`); err != nil {
+		t.Fatalf("seed stranded outbox row: %v", err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatalf("close seed connection: %v", err)
+	}
+}
+
 // TestRunRebuildsIndexOnFlag proves the --rebuild-index flag reaches
 // store.RebuildIndex through the writer.
 func TestRunRebuildsIndexOnFlag(t *testing.T) {

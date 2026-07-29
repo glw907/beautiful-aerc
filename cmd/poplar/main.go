@@ -2,7 +2,8 @@
 // has no screen yet, so this binary's job is the startup path: take
 // the instance lock, open and migrate the store, run an integrity
 // check when one is owed, offer a rebuild-from-server recovery on
-// failure, and shut down cleanly.
+// failure, reclaim whatever a previous run left mid-dispatch, and
+// shut down cleanly.
 package main
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/adrg/xdg"
 	_ "modernc.org/sqlite"
 
+	"github.com/glw907/poplar/internal/outbox"
 	"github.com/glw907/poplar/internal/platform"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/uerr"
@@ -74,9 +76,9 @@ func reportStartupFailure(w io.Writer, err error) {
 
 // run drives poplar's startup path against the store at dbPath: the
 // instance lock, store preparation (migration, integrity check,
-// recovery), the writer, and a clean shutdown once ctx is done. start
-// is run's own entry time, the in-process origin QA-1's
-// --startup-trace measures against.
+// recovery), the writer, the orphaned-intent sweep, and a clean
+// shutdown once ctx is done. start is run's own entry time, the
+// in-process origin QA-1's --startup-trace measures against.
 func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	start := time.Now()
 
@@ -92,6 +94,14 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 
 	writer, err := store.Open(dbPath, store.DefaultWriterConfig())
 	if err != nil {
+		return err
+	}
+
+	// The lock above is what makes this sweep unambiguous, and it runs
+	// on every startup because a stranded intent fails no integrity
+	// check and triggers no recovery.
+	if _, err := outbox.ReclaimOrphaned(ctx, writer); err != nil {
+		_ = writer.Close()
 		return err
 	}
 
