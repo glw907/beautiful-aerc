@@ -366,6 +366,13 @@ MUST from the spine; it discharges the ones pass 1 claimed.
 Its gate is a demonstration, not a checklist: poplar runs against
 the live Fastmail account and Geoff watches the store fill.
 
+**The plan is authored** (2026-07-28, a Fable planning sitting):
+`docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md`,
+twelve tasks. Execution runs in a fresh Opus 5 session per the
+plan-approval model boundary; the starter prompt below is the
+handoff. The scope list that follows remains the binding source
+the plan was authored from.
+
 Scope, in dependency order:
 
 1. **The headless runner.** `cmd/poplar` constructs the JMAP source
@@ -449,29 +456,26 @@ before pass 5 leans on it, and `go-keyring`, which pass 1 does not
 yet use. bubbletea is settled by owner intent (the vision names a
 bubbletea showcase as a goal) rather than inherited by default.
 
-Starter prompt (paste after /clear in ~/Projects/poplar):
+Starter prompt (paste after /clear in ~/Projects/poplar, in an
+Opus 5 session):
 
 ```
-Execute poplar pass 1b (integration and hardening). Read
-docs/superpowers/specs/poplar-refounding-STATUS.md first for the
-scope and the pass 1 outcomes it builds on, then author the plan
-under docs/superpowers/plans/ from that scope before dispatching
-anything.
+Execute the poplar pass 1b plan at
+docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md
+via superpowers:subagent-driven-development. Read the plan first,
+then the pass 1b scope and pass 1 outcomes in
+docs/superpowers/specs/poplar-refounding-STATUS.md. The binding
+research is under docs/poplar/research/ dated 2026-07-28; the
+requirements are at revision 4 and ADR revision blocks override
+ADR bodies.
 
-The binding research is under docs/poplar/research/ dated
-2026-07-28: the JMAP test inventory is the library's acceptance
-criteria, the adoption assessment and library decision hold the
-seven known defects and the abort condition, and the SQLite driver
-audit holds the benchmark design. The requirements are at revision
-4 and ADR revision blocks override ADR bodies.
-
-Execute subagent-driven: one poplar-implementer per task,
-poplar-reviewer and poplar-go-reviewer in parallel on each diff,
-the main loop reviewing each diff and confirming `make check`
-between dispatches. Every verification asks for revert-sensitivity
-proven by experiment, not by reading: pass 1 had three separate
-occasions where a reviewer reverted a fix in a scratch worktree and
-found the test still passed.
+One poplar-implementer per task in the plan's dependency order;
+poplar-reviewer and poplar-go-reviewer in parallel on each diff;
+the main loop reviews each diff and confirms `make check` between
+dispatches. Every reviewer verification proves revert-sensitivity
+by experiment in a scratch worktree, not by reading. Tasks 9 and
+10's measurements run on a quiet machine with no concurrent
+implementer dispatched.
 
 Geoff is at the pass gate only, and that gate is a demonstration:
 poplar running against the live Fastmail account with the store
