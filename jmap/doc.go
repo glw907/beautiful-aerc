@@ -3,9 +3,13 @@
 // response envelope, back-references, and the typed capability
 // objects a client reads out of a session.
 //
-// The package is types and pure functions. It opens no connection,
-// reads no file, and logs nothing. Every failure comes back as an
-// error, and the caller decides what it means.
+// [Client] carries those types over HTTP: the session resource, the
+// method calls, and the blob endpoints beside them. Everything else in
+// the package is types and pure functions.
+//
+// The package reads no file and logs nothing, and it neither retries
+// nor backs off. Every failure comes back as an error, and the caller
+// decides what it means and whether to ask again.
 //
 // # Optional Booleans
 //

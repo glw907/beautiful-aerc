@@ -176,6 +176,20 @@ func requestTagCases() []tagCase {
 				`"sortAsTree":true,"filterAsTree":true}`,
 		},
 		{
+			name: "MailboxQueryChanges",
+			value: &MailboxQueryChanges{
+				Account:         "A1",
+				Filter:          &MailboxFilterCondition{Name: "Receipts"},
+				Sort:            []*Comparator{{Property: "name"}},
+				SinceQueryState: "q0",
+				MaxChanges:      50,
+				UpToID:          "MA",
+				CalculateTotal:  true,
+			},
+			json: `{"accountId":"A1","filter":{"name":"Receipts"},"sort":[{"property":"name"}],` +
+				`"sinceQueryState":"q0","maxChanges":50,"upToId":"MA","calculateTotal":true}`,
+		},
+		{
 			name: "MailboxSet",
 			value: &MailboxSet{
 				Account:               "A1",
@@ -231,6 +245,22 @@ func requestTagCases() []tagCase {
 				`"conditions":[{"inMailbox":"MA"}]},"sort":[{"property":"receivedAt"}],` +
 				`"position":5,"anchor":"M1","anchorOffset":-2,"limit":10,` +
 				`"calculateTotal":true,"collapseThreads":true}`,
+		},
+		{
+			name: "EmailQueryChanges",
+			value: &EmailQueryChanges{
+				Account:         "A1",
+				Filter:          &EmailFilterCondition{InMailbox: "MA"},
+				Sort:            []*Comparator{{Property: "receivedAt"}},
+				SinceQueryState: "q0",
+				MaxChanges:      50,
+				UpToID:          "M1",
+				CalculateTotal:  true,
+				CollapseThreads: true,
+			},
+			json: `{"accountId":"A1","filter":{"inMailbox":"MA"},` +
+				`"sort":[{"property":"receivedAt"}],"sinceQueryState":"q0","maxChanges":50,` +
+				`"upToId":"M1","calculateTotal":true,"collapseThreads":true}`,
 		},
 		{
 			name: "EmailSet",
@@ -382,6 +412,22 @@ func responseTagCases() []tagCase {
 				`"notDestroyed":{"ME":{"type":"mailboxHasEmail"}}}`,
 		},
 		{
+			name:  "MailboxQueryChangesResponse",
+			value: &MailboxQueryChangesResponse{},
+			json: `{"accountId":"A1","oldQueryState":"q0","newQueryState":"q1","total":2,` +
+				`"removed":["MA"],"added":[{"id":"MB","index":3}]}`,
+		},
+		{
+			name:  "AddedItem",
+			value: &AddedItem{},
+			json:  `{"id":"MB","index":3}`,
+		},
+		{
+			name:  "UploadResponse",
+			value: &UploadResponse{},
+			json:  `{"accountId":"A1","blobId":"B1","type":"text/plain","size":5}`,
+		},
+		{
 			name:  "Address",
 			value: &Address{},
 			json:  `{"name":"Ann","email":"ann@x"}`,
@@ -436,6 +482,12 @@ func responseTagCases() []tagCase {
 			value: &EmailQueryResponse{},
 			json: `{"accountId":"A1","queryState":"q1","canCalculateChanges":true,` +
 				`"position":1,"ids":["M1"],"total":2,"limit":3}`,
+		},
+		{
+			name:  "EmailQueryChangesResponse",
+			value: &EmailQueryChangesResponse{},
+			json: `{"accountId":"A1","oldQueryState":"q0","newQueryState":"q1","total":2,` +
+				`"removed":["M1"],"added":[{"id":"M2","index":3}]}`,
 		},
 		{
 			name:  "EmailSetResponse",

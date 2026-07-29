@@ -57,6 +57,18 @@ func methodCases() []methodCase {
 			wantArgs: `{"accountId":"A13824","filter":{"role":"sent"},"sort":[{"property":"name"}],"limit":10}`,
 		},
 		{
+			name: "Mailbox/queryChanges",
+			method: &MailboxQueryChanges{
+				Account:         "A13824",
+				Filter:          &MailboxFilterCondition{Role: RoleSent},
+				SinceQueryState: "q1",
+				UpToID:          "MA",
+			},
+			wantUsed: mail,
+			wantArgs: `{"accountId":"A13824","filter":{"role":"sent"},` +
+				`"sinceQueryState":"q1","upToId":"MA"}`,
+		},
+		{
 			name: "Mailbox/set",
 			method: &MailboxSet{
 				Account: "A13824",
@@ -99,6 +111,18 @@ func methodCases() []methodCase {
 			wantUsed: mail,
 			wantArgs: `{"accountId":"A13824","filter":{"inMailbox":"MA"},` +
 				`"sort":[{"property":"receivedAt","isAscending":false}],"limit":10,"collapseThreads":true}`,
+		},
+		{
+			name: "Email/queryChanges",
+			method: &EmailQueryChanges{
+				Account:         "A13824",
+				SinceQueryState: "q1",
+				MaxChanges:      50,
+				CollapseThreads: true,
+			},
+			wantUsed: mail,
+			wantArgs: `{"accountId":"A13824","sinceQueryState":"q1","maxChanges":50,` +
+				`"collapseThreads":true}`,
 		},
 		{
 			name: "Email/set",

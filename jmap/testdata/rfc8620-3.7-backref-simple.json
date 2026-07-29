@@ -1,0 +1,9 @@
+[[ "Foo/changes", {
+    "accountId": "A1",
+    "oldState": "abcdef",
+    "newState": "123456",
+    "hasMoreChanges": false,
+    "created": [ "f1", "f4" ],
+    "updated": [],
+    "destroyed": []
+}, "t0" ]]

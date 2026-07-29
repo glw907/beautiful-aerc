@@ -31,13 +31,17 @@ var methodResponses = map[string]func() any{
 	"Mailbox/get":     func() any { return &MailboxGetResponse{} },
 	"Mailbox/changes": func() any { return &MailboxChangesResponse{} },
 	"Mailbox/query":   func() any { return &MailboxQueryResponse{} },
-	"Mailbox/set":     func() any { return &MailboxSetResponse{} },
+
+	"Mailbox/queryChanges": func() any { return &MailboxQueryChangesResponse{} },
+	"Mailbox/set":          func() any { return &MailboxSetResponse{} },
 
 	"Email/get":     func() any { return &EmailGetResponse{} },
 	"Email/changes": func() any { return &EmailChangesResponse{} },
 	"Email/query":   func() any { return &EmailQueryResponse{} },
-	"Email/set":     func() any { return &EmailSetResponse{} },
-	"Email/import":  func() any { return &EmailImportResponse{} },
+
+	"Email/queryChanges": func() any { return &EmailQueryChangesResponse{} },
+	"Email/set":          func() any { return &EmailSetResponse{} },
+	"Email/import":       func() any { return &EmailImportResponse{} },
 
 	"Identity/get": func() any { return &IdentityGetResponse{} },
 
