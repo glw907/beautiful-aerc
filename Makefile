@@ -9,7 +9,7 @@ GOLANGCI := tools/bin/golangci-lint
 POPLARCHECK := tools/bin/poplarcheck
 
 .PHONY: all build test install fmt check \
-	tidy-check check-build fmt-check lint analyzers vale-comments skipcheck hookcheck perf \
+	tidy-check check-build fmt-check lint analyzers jmap-boundary vale-comments skipcheck hookcheck perf \
 	build-golangci-lint build-poplarcheck
 
 all: check
@@ -26,7 +26,7 @@ install: build
 fmt: build-golangci-lint
 	./$(GOLANGCI) fmt --config .golangci.yml ./...
 
-check: tidy-check check-build fmt-check lint analyzers vale-comments skipcheck hookcheck test perf
+check: tidy-check check-build fmt-check lint analyzers jmap-boundary vale-comments skipcheck hookcheck test perf
 
 tidy-check:
 	go mod tidy
@@ -56,6 +56,23 @@ lint: build-golangci-lint
 analyzers: build-poplarcheck
 	./$(POPLARCHECK) ./...
 	go -C tools test -count=1 ./...
+
+# jmap ships as a standalone library, so importing a poplar package
+# would end its portability and, because it cannot reach
+# internal/uerr, its promise to log nothing. The multichecker cannot
+# see this: pkgrole classifies by an internal/ or cmd/ segment and
+# jmap has neither, so all four analyzers skip it. The dependency
+# list is the gate instead, over the test files too, since a fixture
+# helper reaching into poplar travels with the package.
+jmap-boundary:
+	@bad=$$( { go list -deps ./jmap; \
+	          go list -f '{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./jmap; } \
+	        | grep '^github.com/glw907/poplar' \
+	        | grep -v '^github.com/glw907/poplar/jmap$$' | sort -u ); \
+	if [ -n "$$bad" ]; then \
+	  echo "jmap must import no poplar package, found:" >&2; \
+	  echo "$$bad" >&2; exit 1; \
+	fi
 
 vale-comments:
 	./scripts/vale-comments.sh

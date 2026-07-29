@@ -3,6 +3,7 @@ package jmap
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -22,6 +23,13 @@ type Invocation struct {
 	// CallID is the client's label for the call. It need not be
 	// unique: one call can produce more than one response under it.
 	CallID string
+
+	// Raw is the arguments object exactly as the server sent it, set
+	// on decode and empty on a call the client built. Every response
+	// property in this package carries omitempty, so re-marshaling
+	// Args loses one the server sent as an empty array, and an RFC
+	// 8620 section 3.7 pointer has to resolve against what arrived.
+	Raw json.RawMessage
 }
 
 // MarshalJSON implements json.Marshaler.
@@ -31,7 +39,7 @@ func (i Invocation) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	if err := checkReferenceCollision(args); err != nil {
-		return nil, fmt.Errorf("%s: %v", i.Name, err)
+		return nil, fmt.Errorf("%s: %w", i.Name, err)
 	}
 	return json.Marshal([3]any{i.Name, json.RawMessage(args), i.CallID})
 }
@@ -60,6 +68,7 @@ func (i *Invocation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	i.Args = args
+	i.Raw = slices.Clone(tuple[1])
 	return nil
 }
 

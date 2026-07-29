@@ -75,6 +75,49 @@ func TestInvocationUnmarshalRejectsWrongArity(t *testing.T) {
 	}
 }
 
+// TestInvocationKeepsRawArguments proves the arguments object is kept
+// as it arrived. Every response property in this package carries
+// omitempty, so re-marshaling Args drops one the server sent as an
+// empty array, and an RFC 8620 section 3.7 pointer resolves against
+// what arrived rather than against what survives a round trip.
+func TestInvocationKeepsRawArguments(t *testing.T) {
+	const raw = `["Mailbox/changes",{"accountId":"A1","newState":"s1","created":[],` +
+		`"updated":[],"destroyed":[]},"c1"]`
+
+	var inv Invocation
+	if err := json.Unmarshal([]byte(raw), &inv); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	want := `{"accountId":"A1","newState":"s1","created":[],"updated":[],"destroyed":[]}`
+	if string(inv.Raw) != want {
+		t.Errorf("Raw = %s, want %s", inv.Raw, want)
+	}
+
+	// The decoded value cannot answer the same question: the three
+	// empty arrays are gone from it, so a pointer into /created finds
+	// nothing where the server sent an empty list.
+	changes, ok := inv.Args.(*MailboxChangesResponse)
+	if !ok {
+		t.Fatalf("Args is %T, want *MailboxChangesResponse", inv.Args)
+	}
+	reMarshalled, err := json.Marshal(changes)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(reMarshalled), `"created"`) {
+		t.Errorf("re-marshal = %s; the test's premise is stale, so Raw may no longer be needed",
+			reMarshalled)
+	}
+
+	// A call the client built carries no raw form: nothing arrived.
+	var req Request
+	req.Invoke(&MailboxChanges{Account: "A1"})
+	if req.MethodCalls[0].Raw != nil {
+		t.Errorf("Raw = %s on an outgoing call, want nil", req.MethodCalls[0].Raw)
+	}
+}
+
 // TestInvocationRefusesReferenceCollision covers JT-07. RFC 8620
 // section 3.7 makes an arguments object holding both "foo" and "#foo"
 // an invalidArguments error, so the server picks one of the two and

@@ -39,8 +39,6 @@ type IdentityGet struct {
 	// ReferenceIDs takes the ids from an earlier call's result instead
 	// of IDs. Setting both is an invalidArguments error.
 	ReferenceIDs *ResultReference `json:"#ids,omitempty"`
-
-	ReferenceProperties *ResultReference `json:"#properties,omitempty"`
 }
 
 func (*IdentityGet) Name() string { return "Identity/get" }

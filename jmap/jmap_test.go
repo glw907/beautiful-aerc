@@ -156,9 +156,10 @@ func TestDateUnmarshal(t *testing.T) {
 	}
 }
 
-// TestBool proves the optional-Boolean helper distinguishes the three
-// states the pointer fields exist to carry.
-func TestBool(t *testing.T) {
+// TestOptionalBooleanStates proves a *bool field carries the three
+// states the plain bool it replaced could not: absent, explicitly
+// false, and explicitly true.
+func TestOptionalBooleanStates(t *testing.T) {
 	cases := []struct {
 		name string
 		in   *bool

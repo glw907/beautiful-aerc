@@ -16,6 +16,17 @@
 // HasAttachment constrains nothing, while one holding new(false)
 // matches only messages carrying no attachment.
 //
+// # What a downstream cannot extend
+//
+// Two seams are closed on purpose, and both matter to a project
+// importing this package for a server with vendor extensions. The
+// method registry is a build-time table with no registration call, so
+// one unmodelled method name in a response fails the whole [Response]
+// decode rather than that one entry. [Filter] seals its
+// implementations, so a vendor filter condition cannot be expressed,
+// nested in a [FilterOperator] or otherwise. Opening either is the
+// work of the task that needs it.
+//
 // # Provenance
 //
 // The data model derives from go-jmap v0.5.3, which is MIT licensed.

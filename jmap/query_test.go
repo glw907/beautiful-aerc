@@ -165,6 +165,50 @@ func TestQueryOmitsANilFilter(t *testing.T) {
 	}
 }
 
+// TestQueryOmitsATypedNilFilter is the other half of DV-03. The
+// idiom below is ordinary Go, and the interface it produces is
+// non-nil to the language and null on the wire.
+func TestQueryOmitsATypedNilFilter(t *testing.T) {
+	var email *EmailFilterCondition
+	var mailbox *MailboxFilterCondition
+	var operator *FilterOperator
+
+	cases := []struct {
+		name  string
+		query Method
+	}{
+		{"email query, nil condition", &EmailQuery{Account: "A1", Filter: email}},
+		{"email query, nil operator", &EmailQuery{Account: "A1", Filter: operator}},
+		{"mailbox query, nil condition", &MailboxQuery{Account: "A1", Filter: mailbox}},
+		{"mailbox query, nil operator", &MailboxQuery{Account: "A1", Filter: operator}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data, err := json.Marshal(c.query)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			if want := `{"accountId":"A1"}`; string(data) != want {
+				t.Errorf("Marshal = %s, want %s", data, want)
+			}
+		})
+	}
+
+	// A filter that is actually set still travels, through the same
+	// marshaler.
+	set, err := json.Marshal(&EmailQuery{
+		Account: "A1",
+		Filter:  &EmailFilterCondition{InMailbox: "MA"},
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if want := `{"accountId":"A1","filter":{"inMailbox":"MA"}}`; string(set) != want {
+		t.Errorf("Marshal = %s, want %s", set, want)
+	}
+}
+
 // TestQueryAnchorPaging covers JT-44. The anchor form pages from a
 // known id rather than an offset, so a concurrent change cannot shift
 // the window, and an anchor the query no longer matches is an error

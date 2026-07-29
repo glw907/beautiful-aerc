@@ -68,25 +68,42 @@ func TestEmailDecode(t *testing.T) {
 	}
 }
 
-// TestBodyValueTruncationAlwaysMarshals pins the one Boolean in the
-// package that is sent even when false. A body value that says
-// nothing about truncation reads as complete, and treating a cut-off
-// body as whole is silent data loss.
-func TestBodyValueTruncationAlwaysMarshals(t *testing.T) {
-	data, err := json.Marshal(&BodyValue{Value: "hi"})
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	if want := `{"value":"hi","isTruncated":false}`; string(data) != want {
-		t.Errorf("Marshal = %s, want %s", data, want)
+// TestBodyValueFlags reads the two flags a fetched body carries.
+// Rendering a truncated body as a whole one is silent data loss, and
+// EmailGet.MaxBodyValueBytes is what provokes it.
+func TestBodyValueFlags(t *testing.T) {
+	cases := []struct {
+		name              string
+		raw               string
+		wantTruncated     bool
+		wantEncodingIssue bool
+	}{
+		{"neither flag sent", `{"value":"hi"}`, false, false},
+		{"truncated", `{"value":"hi","isTruncated":true}`, true, false},
+		{"encoding problem", `{"value":"hi","isEncodingProblem":true}`, false, true},
+		{
+			"both", `{"value":"hi","isTruncated":true,"isEncodingProblem":true}`,
+			true, true,
+		},
 	}
 
-	truncated, err := json.Marshal(&BodyValue{Value: "hi", IsTruncated: true})
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	if want := `{"value":"hi","isTruncated":true}`; string(truncated) != want {
-		t.Errorf("Marshal = %s, want %s", truncated, want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var body BodyValue
+			if err := json.Unmarshal([]byte(c.raw), &body); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			if body.Value != "hi" {
+				t.Errorf("Value = %q, want %q", body.Value, "hi")
+			}
+			if body.IsTruncated != c.wantTruncated {
+				t.Errorf("IsTruncated = %v, want %v", body.IsTruncated, c.wantTruncated)
+			}
+			if body.IsEncodingProblem != c.wantEncodingIssue {
+				t.Errorf("IsEncodingProblem = %v, want %v",
+					body.IsEncodingProblem, c.wantEncodingIssue)
+			}
+		})
 	}
 }
 

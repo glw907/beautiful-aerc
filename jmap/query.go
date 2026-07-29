@@ -1,5 +1,7 @@
 package jmap
 
+import "encoding/json"
+
 // A Filter narrows a /query. It is either a [FilterOperator] or one
 // of the per-record condition types, and every condition in one query
 // belongs to the record type being queried.
@@ -30,6 +32,25 @@ type FilterOperator struct {
 }
 
 func (*FilterOperator) isFilter() {}
+
+// omitNullFilter returns nil when f marshals to JSON null, which is
+// what a typed nil produces: a nil *EmailFilterCondition held in a
+// Filter interface is non-nil to Go and null on the wire. RFC 8620
+// never blesses "filter": null, and Stalwart rejected the form before
+// v0.16.10, so the property is left out instead.
+func omitNullFilter(f Filter) (Filter, error) {
+	if f == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		return nil, err
+	}
+	if string(data) == "null" {
+		return nil, nil
+	}
+	return f, nil
+}
 
 // A Comparator is one term of a /query sort (RFC 8620 section 5.5).
 // Terms apply in order, each breaking the ties of the one before it.

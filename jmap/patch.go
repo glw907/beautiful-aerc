@@ -65,9 +65,6 @@ func isArrayToken(segment string) bool {
 	if segment == "-" {
 		return true
 	}
-	if segment == "" {
-		return false
-	}
 	for _, r := range segment {
 		if r < '0' || r > '9' {
 			return false

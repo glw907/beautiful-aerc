@@ -141,6 +141,19 @@ func methodCases() []methodCase {
 			wantArgs: `{"accountId":"A13824","create":{"k1490":{"identityId":"I1","emailId":"#k1"}},` +
 				`"onSuccessUpdateEmail":{"#k1490":{"keywords/$draft":null}}}`,
 		},
+		{
+			name: "EmailSubmission/set with onSuccessDestroyEmail",
+			method: &EmailSubmissionSet{
+				Account: "A13824",
+				Create: map[ID]*EmailSubmission{
+					"k1490": {IdentityID: "I1", EmailID: "#k1"},
+				},
+				OnSuccessDestroyEmail: []ID{"#k1490"},
+			},
+			wantUsed: bothMail,
+			wantArgs: `{"accountId":"A13824","create":{"k1490":{"identityId":"I1","emailId":"#k1"}},` +
+				`"onSuccessDestroyEmail":["#k1490"]}`,
+		},
 	}
 }
 
@@ -161,7 +174,8 @@ func TestMethodInvoke(t *testing.T) {
 				t.Errorf("Invoke returned call id %q, want %q", callID, "0")
 			}
 
-			want := `{"using":[` + c.wantUsed + `],"methodCalls":[["` + c.name + `",` + c.wantArgs + `,"0"]]}`
+			want := `{"using":[` + c.wantUsed + `],"methodCalls":[["` + c.method.Name() +
+				`",` + c.wantArgs + `,"0"]]}`
 			data, err := json.Marshal(req)
 			if err != nil {
 				t.Fatalf("Marshal: %v", err)

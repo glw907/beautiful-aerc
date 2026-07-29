@@ -1,5 +1,7 @@
 package jmap
 
+import "encoding/json"
+
 // An Address is a name and an email address from a header field (RFC
 // 8621 section 4.1.2).
 type Address struct {
@@ -149,11 +151,10 @@ type BodyValue struct {
 	IsEncodingProblem bool `json:"isEncodingProblem,omitempty"`
 
 	// IsTruncated reports that Value stops short of the whole part,
-	// because the request capped the bytes fetched. It marshals even
-	// when false: a body value that says nothing about truncation
-	// reads as complete, and acting on a truncated body as though it
-	// were whole is silent data loss.
-	IsTruncated bool `json:"isTruncated"`
+	// because EmailGet.MaxBodyValueBytes capped the bytes fetched.
+	// Rendering a truncated body as a whole one is silent data loss,
+	// so a caller that sets that cap reads this back.
+	IsTruncated bool `json:"isTruncated,omitempty"`
 }
 
 // EmailGet fetches messages by id (RFC 8621 section 4.2).
@@ -179,8 +180,6 @@ type EmailGet struct {
 	// ReferenceIDs takes the ids from an earlier call's result instead
 	// of IDs. Setting both is an invalidArguments error.
 	ReferenceIDs *ResultReference `json:"#ids,omitempty"`
-
-	ReferenceProperties *ResultReference `json:"#properties,omitempty"`
 }
 
 func (*EmailGet) Name() string { return "Email/get" }
@@ -260,6 +259,19 @@ type EmailQuery struct {
 func (*EmailQuery) Name() string { return "Email/query" }
 
 func (*EmailQuery) Requires() []URI { return []URI{MailURI} }
+
+// MarshalJSON implements json.Marshaler. It drops a Filter holding a
+// typed nil rather than sending "filter": null.
+func (m EmailQuery) MarshalJSON() ([]byte, error) {
+	type emailQuery EmailQuery
+	out := emailQuery(m)
+	filter, err := omitNullFilter(out.Filter)
+	if err != nil {
+		return nil, err
+	}
+	out.Filter = filter
+	return json.Marshal(out)
+}
 
 // EmailQueryResponse answers an EmailQuery. The ids arrive in the
 // server's order, which is the order to show them in.

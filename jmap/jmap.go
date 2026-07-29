@@ -58,7 +58,7 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		return fmt.Errorf("date %q: %v", s, err)
+		return fmt.Errorf("date %q: %w", s, err)
 	}
 	*d = Date(t)
 	return nil

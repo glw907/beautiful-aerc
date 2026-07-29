@@ -55,6 +55,7 @@ func TestRequestBackReferenceNamesTheRightCall(t *testing.T) {
 func TestRequestUsing(t *testing.T) {
 	cases := []struct {
 		name    string
+		seed    []URI
 		methods []Method
 		want    []URI
 	}{
@@ -93,11 +94,29 @@ func TestRequestUsing(t *testing.T) {
 			methods: []Method{&EmailSubmissionSet{}},
 			want:    []URI{CoreURI, SubmissionURI, MailURI},
 		},
+		{
+			name:    "a seeded Using still gets the core capability",
+			seed:    []URI{"urn:vendor:thing"},
+			methods: []Method{&MailboxGet{}},
+			want:    []URI{CoreURI, "urn:vendor:thing", MailURI},
+		},
+		{
+			name:    "a seeded Using already holding core is not duplicated",
+			seed:    []URI{CoreURI, "urn:vendor:thing"},
+			methods: []Method{&MailboxGet{}},
+			want:    []URI{CoreURI, "urn:vendor:thing", MailURI},
+		},
+		{
+			name:    "a seeded Using with core last keeps its position",
+			seed:    []URI{"urn:vendor:thing", CoreURI},
+			methods: []Method{&MailboxGet{}},
+			want:    []URI{"urn:vendor:thing", CoreURI, MailURI},
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var req Request
+			req := Request{Using: c.seed}
 			for _, m := range c.methods {
 				req.Invoke(m)
 			}

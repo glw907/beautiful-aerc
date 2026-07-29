@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestRequestErrorDetailIsNotAFormatString covers JT-30. go-jmap
@@ -96,6 +97,39 @@ func TestRequestErrorDecodesProblemDetails(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWrappedErrorsUnwrap proves the package wraps rather than
+// flattens, so a caller can inspect what actually went wrong instead
+// of matching on a message.
+func TestWrappedErrorsUnwrap(t *testing.T) {
+	t.Run("a malformed date", func(t *testing.T) {
+		var d Date
+		err := json.Unmarshal([]byte(`"not a date"`), &d)
+		if err == nil {
+			t.Fatal("Unmarshal returned no error")
+		}
+		if _, ok := errors.AsType[*time.ParseError](err); !ok {
+			t.Errorf("errors.AsType did not reach a *time.ParseError in %v", err)
+		}
+	})
+
+	t.Run("a malformed capability", func(t *testing.T) {
+		raw := []byte(`{"capabilities":{"urn:ietf:params:jmap:core":{"maxSizeUpload":"lots"}},` +
+			`"accounts":{},"primaryAccounts":{},"username":"","apiUrl":"","state":"1"}`)
+		var s Session
+		err := json.Unmarshal(raw, &s)
+		if err == nil {
+			t.Fatal("Unmarshal returned no error")
+		}
+		typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err)
+		if !ok {
+			t.Fatalf("errors.AsType did not reach a *json.UnmarshalTypeError in %v", err)
+		}
+		if typeErr.Field != "maxSizeUpload" {
+			t.Errorf("Field = %q, want %q", typeErr.Field, "maxSizeUpload")
+		}
+	})
 }
 
 // TestSetErrorTypedExtras covers JT-12. go-jmap's SetError carried

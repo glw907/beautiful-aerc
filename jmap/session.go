@@ -111,7 +111,7 @@ func decodeCapabilities(raw map[URI]json.RawMessage) (map[URI]Capability, error)
 		}
 		value := prototype.New()
 		if err := json.Unmarshal(object, value); err != nil {
-			return nil, fmt.Errorf("capability %s: %v", uri, err)
+			return nil, fmt.Errorf("capability %s: %w", uri, err)
 		}
 		decoded[uri] = value
 	}
