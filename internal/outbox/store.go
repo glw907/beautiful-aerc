@@ -32,13 +32,14 @@ func insertRow(tx *sql.Tx, accountID int64, kind Kind, payload []byte, undoGroup
 	return res.LastInsertId()
 }
 
-// selectEligible returns accountID's queued rows whose hold has
-// expired, oldest first: the dispatcher's claim candidates.
-func selectEligible(tx *sql.Tx, accountID int64, now time.Time) ([]row, error) {
+// selectEligible returns at most limit of accountID's queued rows
+// whose hold has expired, oldest first: the dispatcher's claim
+// candidates.
+func selectEligible(tx *sql.Tx, accountID int64, now time.Time, limit int) ([]row, error) {
 	rows, err := tx.Query(
 		`SELECT id, kind, payload, COALESCE(undo_group, ''), attempt_count, COALESCE(failure_class, '') FROM outbox
-		 WHERE account_id = ? AND state = 'queued' AND next_attempt_at <= ? ORDER BY id`,
-		accountID, now.Unix(),
+		 WHERE account_id = ? AND state = 'queued' AND next_attempt_at <= ? ORDER BY id LIMIT ?`,
+		accountID, now.Unix(), limit,
 	)
 	if err != nil {
 		return nil, err

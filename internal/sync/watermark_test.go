@@ -44,3 +44,29 @@ func TestWatermarkPerCollection(t *testing.T) {
 		t.Errorf("cal-2 watermark = %+v, want token %q rev 3", wm2, "tok-2")
 	}
 }
+
+// TestFirstSyncWatermarkIsNoStoreFailure pins the read every account's
+// first sync makes. No sync_state row exists yet, and reporting that
+// absence out of the writer's transaction function rolls the
+// transaction back and turns it into a uerr.Error at error level,
+// claiming poplar could not open its store. ADR-0013 wants one log
+// line per outcome, and a first sync is not an outcome anyone needs to
+// hear about. The store's revision counter is the observable: it
+// advances once per committed transaction and not at all on a
+// rollback.
+func TestFirstSyncWatermarkIsNoStoreFailure(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	before := w.Revision().Current()
+	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage, mailCollection)
+	if err != nil {
+		t.Fatalf("loadWatermark on a fresh account: %v", err)
+	}
+	if wm != (watermark{}) {
+		t.Errorf("watermark = %+v, want the zero value", wm)
+	}
+	if got := w.Revision().Current(); got == before {
+		t.Errorf("revision stayed at %d: the missing row rolled the transaction back and surfaced a store failure", got)
+	}
+}

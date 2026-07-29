@@ -51,6 +51,29 @@ const (
 // backend translates its wire protocol's property names into this
 // vocabulary before Changes returns; it never leaks a wire property
 // name (JMAP's mailboxIds, keywords, and so on) through the seam.
+//
+// Each key's Go type is part of the vocabulary. A consumer decodes
+// with a type assertion, so a value handed over in a JSON decoder's
+// shapes ([]any for a list, float64 for a number) is a backend defect
+// the consumer reports rather than decodes around. An absent key means
+// the backend has nothing for it, which decodes to the type's zero
+// value. ObjectKindMessage carries:
+//
+//	blob_id, thread_id, subject                string
+//	from                                       []map[string]string, each with "name" and "email"
+//	mailbox_ids                                []string, server ids
+//	received_at                                time.Time
+//	size                                       int64
+//	has_attachment                             bool
+//	seen, flagged, answered, draft, forwarded  bool, MessageFlagKeywords' names
+//
+// ObjectKindMailbox carries:
+//
+//	role, name                               string
+//	sort_order, total_emails, unread_emails  int64
+//
+// ObjectKindEvent and ObjectKindContact pin their own vocabularies
+// once internal/calendar and internal/contacts land.
 type Record struct {
 	ID     string
 	Fields map[string]any

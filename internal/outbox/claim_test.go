@@ -104,6 +104,60 @@ func TestClaimIsTransactional(t *testing.T) {
 	}
 }
 
+// TestClaimIsBounded holds ADR-0003's admission ceiling over the claim
+// transaction. The claim resolves every referent on the writer's
+// single connection before any I/O, so an unbounded claim after a bulk
+// action's hold expires runs one point query per message in the queue
+// inside one interactive transaction, blocking every other writer for
+// as long as that takes. What one pass leaves behind the next takes.
+func TestClaimIsBounded(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	// claimMessageBudget divided by the backend's per-batch limit, the
+	// largest number of messages one claimed chunk can name.
+	const limit = 10
+
+	be := newFakeBackend()
+	be.Caps.Limits.MaxObjectsInSet = 100
+	be.MailSource.RenameMailboxFunc = func(_ context.Context, _, _ string) error { return nil }
+
+	if got := claimLimit(be); got != limit {
+		t.Fatalf("claimLimit = %d, want %d", got, limit)
+	}
+
+	ids := make([]int64, 0, limit+1)
+	for i := range limit + 1 {
+		mailboxID := seedMailbox(t, w, accountID, fmt.Sprintf("Old %d", i), fmt.Sprintf("mbx-%d", i))
+		id, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "Family", time.Now())
+		if err != nil {
+			t.Fatalf("enqueue %d: %v", i, err)
+		}
+		ids = append(ids, id)
+	}
+
+	dispatcher := NewDispatcher(accountID, be, w)
+	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(result.Delivered) != limit {
+		t.Fatalf("delivered = %d, want %d (the claim's bound)", len(result.Delivered), limit)
+	}
+
+	last := ids[len(ids)-1]
+	if state, attempts := outboxState(t, w, last); state != "queued" || attempts != 0 {
+		t.Errorf("intent %d state = %s attempts = %d, want queued/0: it was never claimed", last, state, attempts)
+	}
+
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
+		t.Fatalf("second dispatch: %v", err)
+	}
+	if n := outboxCount(t, w, last); n != 0 {
+		t.Errorf("intent %d survived the second pass, want the next pass to drain it", last)
+	}
+}
+
 // TestUndoReportsNothingWhenItsTransactionRollsBack pins the other
 // half of Undo's contract: its id list names rows a committed
 // transaction deleted. A delete that aborts partway rolls the whole

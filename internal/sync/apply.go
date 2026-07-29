@@ -9,30 +9,46 @@ import (
 	"github.com/glw907/poplar/internal/store"
 )
 
-func flagsFromFields(fields map[string]any) store.Flags {
+// fields decodes one backend.Record's Fields into the Go types
+// Record's vocabulary pins per key. A key the record omits decodes to
+// the zero value; a key present under another type is a backend
+// defect, held in err until the caller reports it. Decoding the whole
+// record before consulting err keeps the crossing flat, the shape
+// database/sql uses for the same problem.
+type fields struct {
+	m   map[string]any
+	err error
+}
+
+// field returns key's value as T. A wrong-typed value would otherwise
+// decode to T's zero value and overwrite what the store already holds:
+// an id list read as nil takes the message out of every folder, and a
+// count read as 0 empties the folder's totals.
+func field[T any](f *fields, key string) T {
+	var want T
+	v, ok := f.m[key]
+	if !ok {
+		return want
+	}
+	got, ok := v.(T)
+	if !ok {
+		if f.err == nil {
+			f.err = fmt.Errorf("field %q has type %T, want %T", key, v, want)
+		}
+		return want
+	}
+	return got
+}
+
+func flagsFromFields(f *fields) store.Flags {
 	var keywords []string
 	for name, kw := range backend.MessageFlagKeywords {
-		if v, _ := fields[name].(bool); v {
+		if field[bool](f, name) {
 			keywords = append(keywords, kw)
 		}
 	}
 	bits, _ := store.EncodeFlags(keywords)
 	return bits
-}
-
-func stringField(f map[string]any, key string) string {
-	s, _ := f[key].(string)
-	return s
-}
-
-func int64Field(f map[string]any, key string) int64 {
-	n, _ := f[key].(int64)
-	return n
-}
-
-func boolField(f map[string]any, key string) bool {
-	b, _ := f[key].(bool)
-	return b
 }
 
 // firstAddress renders the first entry of an address-list field
@@ -111,36 +127,41 @@ func destroyRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, serverI
 // JSON shape are store.UpsertMailbox's concern, not this package's;
 // this function's only job is the vocabulary crossing.
 func upsertMailbox(tx *sql.Tx, accountID int64, rec backend.Record) error {
-	f := rec.Fields
-	return store.UpsertMailbox(tx, accountID, store.MailboxUpsert{
+	f := &fields{m: rec.Fields}
+	up := store.MailboxUpsert{
 		ServerID:    rec.ID,
-		Role:        stringField(f, "role"),
-		Name:        stringField(f, "name"),
-		SortOrder:   int64Field(f, "sort_order"),
-		TotalCount:  int64Field(f, "total_emails"),
-		UnreadCount: int64Field(f, "unread_emails"),
-	})
+		Role:        field[string](f, "role"),
+		Name:        field[string](f, "name"),
+		SortOrder:   field[int64](f, "sort_order"),
+		TotalCount:  field[int64](f, "total_emails"),
+		UnreadCount: field[int64](f, "unread_emails"),
+	}
+	if f.err != nil {
+		return fmt.Errorf("sync: apply mailbox %s: %v", rec.ID, f.err)
+	}
+	return store.UpsertMailbox(tx, accountID, up)
 }
 
 // upsertMessage translates rec's backend field vocabulary into a
 // store.MessageUpsert and writes it, the message counterpart of
 // upsertMailbox.
 func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
-	f := rec.Fields
-	mailboxIDs, _ := f["mailbox_ids"].([]string)
-	receivedAt, _ := f["received_at"].(time.Time)
-
-	return store.UpsertMessage(tx, accountID, store.MessageUpsert{
+	f := &fields{m: rec.Fields}
+	up := store.MessageUpsert{
 		ServerID:      rec.ID,
-		BlobID:        stringField(f, "blob_id"),
-		ThreadKey:     stringField(f, "thread_id"),
-		Subject:       stringField(f, "subject"),
-		FromAddr:      firstAddress(f["from"]),
+		BlobID:        field[string](f, "blob_id"),
+		ThreadKey:     field[string](f, "thread_id"),
+		Subject:       field[string](f, "subject"),
+		FromAddr:      firstAddress(rec.Fields["from"]),
 		Flags:         flagsFromFields(f),
-		Size:          int64Field(f, "size"),
-		HasAttachment: boolField(f, "has_attachment"),
-		ReceivedAt:    receivedAt,
-		MailboxIDs:    mailboxIDs,
-		Unread:        !boolField(f, "seen"),
-	})
+		Size:          field[int64](f, "size"),
+		HasAttachment: field[bool](f, "has_attachment"),
+		ReceivedAt:    field[time.Time](f, "received_at"),
+		MailboxIDs:    field[[]string](f, "mailbox_ids"),
+		Unread:        !field[bool](f, "seen"),
+	}
+	if f.err != nil {
+		return fmt.Errorf("sync: apply message %s: %v", rec.ID, f.err)
+	}
+	return store.UpsertMessage(tx, accountID, up)
 }

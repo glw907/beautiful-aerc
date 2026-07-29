@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -209,6 +210,180 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestFinalizeFailureRequeuesClaimedIntents covers the finalize
+// transaction failing outright. Every claimed row is in dispatching,
+// where selectEligible never looks again, and ReclaimOrphaned runs
+// once at startup, so without a recovery inside the pass a single
+// failed commit costs the queue every claimed intent for the rest of
+// the process run.
+func TestFinalizeFailureRequeuesClaimedIntents(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	mailboxID := seedMailbox(t, w, accountID, "Old", "mbx-1")
+
+	renames := 0
+	be := newFakeBackend()
+	be.MailSource.RenameMailboxFunc = func(_ context.Context, _, _ string) error {
+		renames++
+		return nil
+	}
+
+	id, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "Family", time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	blockDeletes(t, w)
+
+	dispatcher := NewDispatcher(accountID, be, w)
+	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
+	if err == nil {
+		t.Fatal("dispatch = nil, want the finalize failure")
+	}
+	if len(result.Delivered) != 0 || len(result.Failures) != 0 {
+		t.Errorf("result = %+v, want it empty: none of its writes landed", result)
+	}
+	if state, _ := outboxState(t, w, id); state != "queued" {
+		t.Fatalf("intent %d state = %s, want queued: it is unreachable in dispatching", id, state)
+	}
+
+	unblockDeletes(t, w)
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
+		t.Fatalf("second dispatch: %v", err)
+	}
+	if n := outboxCount(t, w, id); n != 0 {
+		t.Errorf("intent %d survived its second dispatch, want it delivered", id)
+	}
+	if renames != 2 {
+		t.Errorf("RenameMailbox calls = %d, want 2: the requeued intent is dispatched again", renames)
+	}
+}
+
+// blockDeletes makes every outbox delete fail, the shape a finalize
+// transaction takes when the store refuses its write.
+func blockDeletes(t *testing.T, w *store.Writer) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE TRIGGER block_outbox_delete BEFORE DELETE ON outbox
+			BEGIN SELECT RAISE(ABORT, 'simulated finalize failure'); END`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("install the delete-blocking trigger: %v", err)
+	}
+}
+
+// unblockDeletes drops blockDeletes's trigger.
+func unblockDeletes(t *testing.T, w *store.Writer) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`DROP TRIGGER block_outbox_delete`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("drop the delete-blocking trigger: %v", err)
+	}
+}
+
+// TestUnknownKindIsReportedAndDropped covers an intent whose kind this
+// build cannot dispatch. Nothing can ever deliver it, so a retriable
+// classification retries it every 30 seconds for the life of the
+// store, logged once and then silent.
+func TestUnknownKindIsReportedAndDropped(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	var id int64
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		var txErr error
+		id, txErr = insertRow(tx, accountID, Kind("teleport-message"), []byte(`{}`), "grp", 0, time.Now(), time.Now())
+		return txErr
+	})
+	if err != nil {
+		t.Fatalf("insert the unknown-kind row: %v", err)
+	}
+
+	result, err := NewDispatcher(accountID, newFakeBackend(), w).DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(result.Failures) != 1 {
+		t.Fatalf("Failures = %+v, want exactly one", result.Failures)
+	}
+	f := result.Failures[0]
+	if f.Retrying {
+		t.Error("Retrying = true, want false: no later pass can dispatch a kind this build has no case for")
+	}
+	if f.Class == uerr.ClassServer {
+		t.Error("Class = server, want a local class: no server was involved")
+	}
+	if n := outboxCount(t, w, id); n != 0 {
+		t.Errorf("intent %d is still in the outbox, want it dropped after its report", id)
+	}
+}
+
+// TestCreateMailboxPersistFailureIsLocalAndFinal covers the window
+// between a mailbox the server has already made and the transaction
+// that records its id. The store write is what failed, so classifying
+// it as a server failure both misnames it and marks it retriable, and
+// the retry asks the server for a second folder of the same name.
+func TestCreateMailboxPersistFailureIsLocalAndFinal(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	var created []string
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, _ string) (string, error) {
+		created = append(created, name)
+		return fmt.Sprintf("mbx-%d", len(created)), nil
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	blockPayloadWrites(t, w)
+
+	dispatcher := NewDispatcher(accountID, be, w)
+	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(result.Failures) != 1 {
+		t.Fatalf("Failures = %+v, want exactly one", result.Failures)
+	}
+	f := result.Failures[0]
+	if f.Class != uerr.ClassStoreLocal {
+		t.Errorf("Class = %v, want %v: the store write failed, not the server", f.Class, uerr.ClassStoreLocal)
+	}
+	if f.Retrying {
+		t.Error("Retrying = true, want false: the server already made the mailbox")
+	}
+	if n := outboxCount(t, w, id); n != 0 {
+		t.Errorf("intent %d is still queued, want it dropped: another attempt makes a second folder", id)
+	}
+	if len(created) != 1 {
+		t.Errorf("CreateMailbox calls = %d, want 1", len(created))
+	}
+}
+
+// blockPayloadWrites makes the payload update a create persists its
+// resolved server id through fail, leaving every other outbox write
+// alone.
+func blockPayloadWrites(t *testing.T, w *store.Writer) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE TRIGGER block_outbox_payload BEFORE UPDATE ON outbox
+			WHEN NEW.payload IS NOT OLD.payload
+			BEGIN SELECT RAISE(ABORT, 'simulated payload write failure'); END`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("install the payload-blocking trigger: %v", err)
+	}
 }
 
 // TestEachClaimedIntentGetsOneFinalizeWrite pins the other half of

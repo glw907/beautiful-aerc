@@ -125,20 +125,25 @@ const mailCollection = ""
 // for a full initial sync) if none is recorded yet.
 func loadWatermark(ctx context.Context, w *store.Writer, accountID int64, kind backend.ObjectKind, collection string) (watermark, error) {
 	var wm watermark
-	var token sql.NullString
 	err := w.Apply(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRow(
+		var token sql.NullString
+		err := tx.QueryRow(
 			`SELECT server_state_token, local_rev FROM sync_state WHERE account_id = ? AND object_kind = ? AND collection_id = ?`,
 			accountID, kindName(kind), collection,
 		).Scan(&token, &wm.LocalRev)
+		// An absent row is an account's first sync. Reporting it out of
+		// here would roll the transaction back and wrap it as a store
+		// failure, logged at error level with nothing behind it for the
+		// user to see (ADR-0013's one line per outcome).
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		wm.ServerStateToken = token.String
+		return err
 	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return watermark{}, nil
-	case err != nil:
+	if err != nil {
 		return watermark{}, err
 	}
-	wm.ServerStateToken = token.String
 	return wm, nil
 }
 

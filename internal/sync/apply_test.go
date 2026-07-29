@@ -3,13 +3,16 @@ package sync
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // TestApplyMessageReconcilesMailboxes asserts upsertMessage's
@@ -59,6 +62,126 @@ func TestApplyMessageReconcilesMailboxes(t *testing.T) {
 	}
 }
 
+// TestApplyRejectsWrongFieldType proves a field present under a type
+// backend.Record's vocabulary does not pin fails the apply instead of
+// decoding to a zero value. Every case here is a plausible backend
+// defect: a JSON round trip turns an id list into []any and a count
+// into float64, and both decode silently to zero today.
+func TestApplyRejectsWrongFieldType(t *testing.T) {
+	tests := []struct {
+		name     string
+		kind     backend.ObjectKind
+		fields   map[string]any
+		wantKey  string
+		wantType string
+	}{
+		{
+			name:     "mailbox_ids as []any",
+			kind:     backend.ObjectKindMessage,
+			fields:   map[string]any{"mailbox_ids": []any{"mb-inbox"}},
+			wantKey:  "mailbox_ids",
+			wantType: "[]interface {}",
+		},
+		{
+			name:     "received_at as a unix number",
+			kind:     backend.ObjectKindMessage,
+			fields:   map[string]any{"received_at": float64(1000)},
+			wantKey:  "received_at",
+			wantType: "float64",
+		},
+		{
+			name:     "seen as a string",
+			kind:     backend.ObjectKindMessage,
+			fields:   map[string]any{"seen": "true"},
+			wantKey:  "seen",
+			wantType: "string",
+		},
+		{
+			name:     "size as float64",
+			kind:     backend.ObjectKindMessage,
+			fields:   map[string]any{"size": float64(2048)},
+			wantKey:  "size",
+			wantType: "float64",
+		},
+		{
+			name:     "sort_order as float64",
+			kind:     backend.ObjectKindMailbox,
+			fields:   map[string]any{"name": "Inbox", "sort_order": float64(3)},
+			wantKey:  "sort_order",
+			wantType: "float64",
+		},
+		{
+			name:     "name as a number",
+			kind:     backend.ObjectKindMailbox,
+			fields:   map[string]any{"name": 7},
+			wantKey:  "name",
+			wantType: "int",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+			accountID := seedAccount(t, w)
+
+			err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+				return upsertRecord(tx, accountID, tt.kind, backend.Record{ID: "rec-1", Fields: tt.fields})
+			})
+			if err == nil {
+				t.Fatalf("upsert with %s = nil, want an error naming the field", tt.name)
+			}
+			// The writer wraps whatever its transaction function
+			// returns, so the field and type ride in the cause, which
+			// is what reaches the log.
+			var ue uerr.Error
+			if !errors.As(err, &ue) {
+				t.Fatalf("error %v is not a uerr.Error", err)
+			}
+			cause := ue.Cause.Error()
+			if !strings.Contains(cause, tt.wantKey) {
+				t.Errorf("cause %q does not name the field %q", cause, tt.wantKey)
+			}
+			if !strings.Contains(cause, tt.wantType) {
+				t.Errorf("cause %q does not name the value's type %q", cause, tt.wantType)
+			}
+		})
+	}
+}
+
+// TestApplyKeepsMailboxesWhenIDsAreWrongShaped is the consequence
+// behind the type check: a nil mailbox_ids slice reaches
+// SyncMessageMailboxes as an empty want, whose first pass deletes
+// every folder membership the message has, and rewrites message.data
+// so RepairMailboxAssociations can never put it back. The message
+// disappears from every folder and nothing says so.
+func TestApplyKeepsMailboxesWhenIDsAreWrongShaped(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	inboxID := seedMailbox(t, w, accountID, "mb-inbox", "Inbox")
+
+	rec := backend.Record{ID: "m1", Fields: map[string]any{
+		"subject":     "hello",
+		"received_at": time.Unix(1000, 0),
+		"mailbox_ids": []string{"mb-inbox"},
+	}}
+	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+		return upsertMessage(tx, accountID, rec)
+	}); err != nil {
+		t.Fatalf("upsertMessage: %v", err)
+	}
+
+	rec.Fields["mailbox_ids"] = []any{"mb-inbox"}
+	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+		return upsertMessage(tx, accountID, rec)
+	}); err == nil {
+		t.Error("upsertMessage with []any mailbox_ids = nil, want an error")
+	}
+
+	if got := mailboxIDsForServerID(t, w, accountID); !slices.Equal(got, []int64{inboxID}) {
+		t.Errorf("mailboxes after the rejected update = %v, want [%d] (Inbox) untouched", got, inboxID)
+	}
+}
+
 // TestFlagsFromFields asserts each of Record.Fields' five boolean
 // keywords sets its own store.Flags bit, an absent field leaves its
 // bit clear, and every bit combines rather than the last one winning.
@@ -83,7 +206,7 @@ func TestFlagsFromFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := flagsFromFields(tt.fields); got != tt.want {
+			if got := flagsFromFields(&fields{m: tt.fields}); got != tt.want {
 				t.Errorf("flagsFromFields(%v) = %v, want %v", tt.fields, got, tt.want)
 			}
 		})

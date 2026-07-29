@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -40,8 +41,9 @@ type Delivered struct {
 }
 
 // Failure is one intent DispatchOnce could not deliver. Retrying is
-// true when the row stays queued for another attempt (every class but
-// ClassNotFound, whose referent retrying cannot fix); Warn is SY-5's
+// true when the row stays queued for another attempt: every class but
+// ClassNotFound, whose referent retrying cannot fix, and short of the
+// failures whose action already landed on the server. Warn is SY-5's
 // distinction for ClassThrottled, which a caller renders as a warn
 // state and never an error toast.
 type Failure struct {
@@ -75,11 +77,15 @@ type claimed struct {
 
 // outcome is one claimed intent's disposition after its backend call:
 // delivered, with move carrying the decoded payload for
-// KindMoveMessages, or failed with a class and detail.
+// KindMoveMessages, or failed with a class and detail. final marks a
+// failure no later attempt may repeat whatever its class says, because
+// the server side of the intent already landed and only the record of
+// it failed.
 type outcome struct {
 	c      claimed
 	move   *MoveMessagesPayload
 	failed bool
+	final  bool
 	class  uerr.Class
 	detail string
 }
@@ -154,7 +160,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 
 		for _, o := range outcomes {
 			if o.failed {
-				finalize(d.report(&result, o.c, o.class, o.detail))
+				finalize(d.report(&result, o))
 				stopped = stopped || o.class == uerr.ClassConnection
 				continue
 			}
@@ -163,7 +169,24 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		}
 	}
 
-	err = d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+	if err := d.finalize(ctx, actions, now); err != nil {
+		return Result{}, err
+	}
+	return result, nil
+}
+
+// finalize applies every claimed row's disposition in one transaction.
+// A failure there leaves each of those rows in dispatching, which
+// selectEligible never selects again and only ReclaimOrphaned's
+// startup sweep can undo, so finalize returns them to queued in a
+// second, minimal transaction rather than costing the queue every
+// claimed intent for the rest of the run. Replay covers the delivered
+// ones: their backend calls are idempotent, and a create's resolved
+// server id is already durable in its own payload. DispatchOnce
+// reports no Result when this fails, since none of the writes such a
+// Result would describe landed.
+func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now time.Time) error {
+	err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
 		for _, a := range actions {
 			var err error
 			switch a.verb {
@@ -180,7 +203,35 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		}
 		return nil
 	})
-	return result, err
+	if err == nil {
+		return nil
+	}
+
+	revertErr := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+		for _, a := range actions {
+			if err := revertRow(tx, a.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if revertErr != nil {
+		slog.Error("outbox: claimed intents stranded in dispatching",
+			"ids", actionIDs(actions), "finalize_error", err, "revert_error", revertErr)
+		return errors.Join(err, revertErr)
+	}
+	return err
+}
+
+// actionIDs returns the intent id of every action, for the log line a
+// failed revert leaves behind: those rows are unreachable until the
+// next startup sweep, and this is the only record of which ones.
+func actionIDs(actions []finalizeAction) []int64 {
+	ids := make([]int64, len(actions))
+	for i, a := range actions {
+		ids[i] = a.id
+	}
+	return ids
 }
 
 // dispatchOne executes c on its own, one backend call, recording a
@@ -190,11 +241,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, c claimed, resolvedCreates
 	o := outcome{c: c}
 	switch c.kind {
 	case KindCreateMailbox:
-		serverID, failed, class, detail := d.dispatchCreateMailbox(ctx, c, resolvedCreates)
-		if !failed {
-			resolvedCreates[c.id] = serverID
-		}
-		o.failed, o.class, o.detail = failed, class, detail
+		return d.dispatchCreateMailbox(ctx, c, resolvedCreates)
 	case KindRenameMailbox:
 		o.failed, o.class, o.detail = d.dispatchRenameMailbox(ctx, c)
 	case KindDeleteMailbox:
@@ -205,8 +252,13 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, c claimed, resolvedCreates
 		// A kind this build does not recognize (a newer poplar wrote
 		// it, or the schema grew one this dispatcher has not caught up
 		// with) fails this one intent rather than aborting the pass:
-		// every other claimed row still needs its finalize action.
-		o.failed, o.class, o.detail = true, uerr.ClassServer, fmt.Sprintf("unknown kind %q", c.kind)
+		// every other claimed row still needs its finalize action. It
+		// is final because no later pass of this build has a case for
+		// it either, so a retriable classification would retry the row
+		// every 30 seconds for the life of the store. No server was
+		// involved, so the class is a local one.
+		o.failed, o.final, o.class = true, true, uerr.ClassStoreLocal
+		o.detail = fmt.Sprintf("unknown kind %q", c.kind)
 	}
 	return o
 }
@@ -307,13 +359,13 @@ func (d *Dispatcher) dispatchBatch(ctx context.Context, create claimed, moves []
 	p.ResolvedServerID = newID
 	payload, err := json.Marshal(p)
 	if err != nil {
-		return failBatch(create, moves, uerr.ClassServer, err.Error())
+		return failUnresolvedBatch(create, moves, err)
 	}
 	if err := d.persistPayload(ctx, create.id, payload); err != nil {
-		return failBatch(create, moves, uerr.ClassServer, err.Error())
+		return failUnresolvedBatch(create, moves, err)
 	}
 	if err := d.resolveDependentRefs(ctx, create.id, newID); err != nil {
-		return failBatch(create, moves, uerr.ClassServer, err.Error())
+		return failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
 	}
 
 	outcomes := make([]outcome, 0, len(moves)+1)
@@ -361,30 +413,43 @@ func moveOutcome(mv claimed, p *MoveMessagesPayload, res backend.BatchResult) ou
 // so none of them can stand without it.
 func failBatch(create claimed, moves []claimed, class uerr.Class, detail string) []outcome {
 	outcomes := make([]outcome, 0, len(moves)+1)
-	outcomes = append(outcomes, outcome{c: create, failed: true, class: class, detail: detail})
+	outcomes = append(outcomes, failedOutcome(create, class, detail))
 	for _, mv := range moves {
-		outcomes = append(outcomes, outcome{c: mv, failed: true, class: class, detail: detail})
+		outcomes = append(outcomes, failedOutcome(mv, class, detail))
 	}
 	return outcomes
 }
 
-// report appends c's classified failure to result, logs it through
+// failUnresolvedBatch is failBatch for unresolvedCreate's window: the
+// batch's request already reached the server, so its mailbox exists and
+// its messages are filed, and every intent in it is given up on rather
+// than retried into a duplicate folder.
+func failUnresolvedBatch(create claimed, moves []claimed, err error) []outcome {
+	outcomes := failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
+	for i := range outcomes {
+		outcomes[i].final = true
+	}
+	return outcomes
+}
+
+// report appends o's classified failure to result, logs it through
 // uerr's one seam when shouldLogFailure says it is new, and returns
-// its finalize action: requeue with backoff if class is worth
+// its finalize action: requeue with backoff if the failure is worth
 // retrying, delete (give up and let the caller's report stand)
 // otherwise.
-func (d *Dispatcher) report(result *Result, c claimed, class uerr.Class, detail string) finalizeAction {
-	retry := isRetriable(class)
-	if shouldLogFailure(c.failureClass, class, retry) {
-		_ = uerr.New("outbox.dispatch", failureIDs(c), class, errors.New(detail))
+func (d *Dispatcher) report(result *Result, o outcome) finalizeAction {
+	c := o.c
+	retry := isRetriable(o.class) && !o.final
+	if shouldLogFailure(c.failureClass, o.class, retry) {
+		_ = uerr.New("outbox.dispatch", failureIDs(c), o.class, errors.New(o.detail))
 	}
 	result.Failures = append(result.Failures, Failure{
-		IntentID: c.id, UndoGroup: c.undoGroup, Class: class, Detail: detail, Retrying: retry, Warn: isWarn(class),
+		IntentID: c.id, UndoGroup: c.undoGroup, Class: o.class, Detail: o.detail, Retrying: retry, Warn: isWarn(o.class),
 	})
 	if !retry {
 		return finalizeAction{id: c.id, verb: finalizeDelete}
 	}
-	return finalizeAction{id: c.id, attempt: c.attemptCount, verb: finalizeRequeue, class: class.String(), detail: detail}
+	return finalizeAction{id: c.id, attempt: c.attemptCount, verb: finalizeRequeue, class: o.class.String(), detail: o.detail}
 }
 
 // shouldLogFailure reports whether a failure classified class, with
@@ -436,7 +501,7 @@ func delivered(c claimed, move *MoveMessagesPayload) Delivered {
 func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error) {
 	var out []claimed
 	err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
-		rows, err := selectEligible(tx, d.accountID, now)
+		rows, err := selectEligible(tx, d.accountID, now, claimLimit(d.backend))
 		if err != nil {
 			return err
 		}
@@ -453,6 +518,28 @@ func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error
 		return nil
 	})
 	return out, err
+}
+
+// claimMessageBudget and claimRowBudget bound what one claim
+// transaction costs. It runs one message point query per message a
+// claimed move chunk names, plus a fixed cost for each row it claims,
+// all on the writer's single connection. Measured against a migrated
+// store, a message lookup costs roughly 20 microseconds and a row
+// roughly 70, so both budgets are around 20ms of work, inside
+// ADR-0003's 50ms admission ceiling. Unbounded, a bulk move of 100k
+// messages becomes one claim resolving every message in the queue
+// while every other writer, interactive lane included, waits.
+const (
+	claimMessageBudget = 1000
+	claimRowBudget     = 200
+)
+
+// claimLimit returns the most intents one claim transaction moves to
+// dispatching. A backend's per-batch object limit is also the largest
+// number of messages one claimed chunk can name, so it divides the
+// message budget. Whatever a pass leaves queued the next one takes.
+func claimLimit(be backend.Backend) int {
+	return max(1, min(claimMessageBudget/chunkSize(be), claimRowBudget))
 }
 
 // resolveClaim reads r's referents from the store, marking r
@@ -554,15 +641,16 @@ func notFound(c claimed, detail string) claimed {
 }
 
 // dispatchCreateMailbox executes c, a claimed KindCreateMailbox
-// intent, returning the mailbox's resolved server id on success. A
-// payload already carrying ResolvedServerID is an idempotent replay:
-// the earlier attempt's CreateMailbox call is not repeated, though
-// resolveDependentRefs still runs every time, in case an earlier
-// attempt's own requeue happened before it reached that step.
-func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resolvedCreates map[int64]string) (string, bool, uerr.Class, string) {
+// intent, recording the mailbox's resolved server id in
+// resolvedCreates on success. A payload already carrying
+// ResolvedServerID is an idempotent replay: the earlier attempt's
+// CreateMailbox call is not repeated, though resolveDependentRefs
+// still runs every time, in case an earlier attempt's own requeue
+// happened before it reached that step.
+func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resolvedCreates map[int64]string) outcome {
 	var p CreateMailboxPayload
 	if err := json.Unmarshal(c.payload, &p); err != nil {
-		return "", true, uerr.ClassServer, err.Error()
+		return failedOutcome(c, uerr.ClassServer, err.Error())
 	}
 
 	newID := p.ResolvedServerID
@@ -575,22 +663,48 @@ func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resol
 		newID, err = d.backend.Mail().CreateMailbox(ctx, p.Name, parentID)
 		if err != nil {
 			class, detail := classifyFailure(err)
-			return "", true, class, detail
+			return failedOutcome(c, class, detail)
 		}
 
 		p.ResolvedServerID = newID
 		payload, err := json.Marshal(p)
 		if err != nil {
-			return "", true, uerr.ClassServer, err.Error()
+			return unresolvedCreate(c, err)
 		}
 		if err := d.persistPayload(ctx, c.id, payload); err != nil {
-			return "", true, uerr.ClassServer, err.Error()
+			return unresolvedCreate(c, err)
 		}
 	}
+	// The resolution is durable by here, so a retry replays the create
+	// without asking the server for a second mailbox.
 	if err := d.resolveDependentRefs(ctx, c.id, newID); err != nil {
-		return "", true, uerr.ClassServer, err.Error()
+		return failedOutcome(c, uerr.ClassStoreLocal, err.Error())
 	}
-	return newID, false, 0, ""
+	resolvedCreates[c.id] = newID
+	return outcome{c: c}
+}
+
+// unresolvedCreate is the disposition of a create whose mailbox the
+// server made and whose new id the store then refused to record.
+// Retrying is the harmful action: nothing in the payload tells the next
+// attempt the mailbox already exists, so it creates a second folder of
+// the same name. The intent is given up on instead, reported under the
+// class that names what actually failed.
+//
+// This leaves a window rather than closing it. The account keeps the
+// mailbox, and any queued move that named this create by DestRef can no
+// longer resolve its destination, so it fails as not-found on its own
+// next pass. Closing that needs a mailbox lookup the backend seam does
+// not carry, the same seam change TestCreateMailboxReplayWindow waits
+// on.
+func unresolvedCreate(c claimed, err error) outcome {
+	o := failedOutcome(c, uerr.ClassStoreLocal, err.Error())
+	o.final = true
+	return o
+}
+
+func failedOutcome(c claimed, class uerr.Class, detail string) outcome {
+	return outcome{c: c, failed: true, class: class, detail: detail}
 }
 
 // resolveDependentRefs persists newID, createID's own resolved server
