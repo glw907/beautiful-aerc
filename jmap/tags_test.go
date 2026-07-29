@@ -21,33 +21,35 @@ import (
 // names leaves the whole suite green while poplar reads that property
 // as absent against every server.
 //
+// One type, one case, one JSON string. A case's literal is checked
+// only against the tags of the type it is named for, so a tag never
+// counts as observed because a different type happens to carry that
+// name. Five names in this package are already ambiguous: blobId,
+// value, headers, name, and size.
+//
 // TestEveryJSONTagIsObserved holds the tables to the whole tag layer,
-// so a field added later without a case fails rather than slipping in
+// so a type or a field added later fails rather than slipping in
 // unwatched.
 
-// tagCase names one type and the JSON that spells every tag it
-// carries. Request types are marshalled from a fully populated value
-// and compared byte for byte. Response types round-trip a fully
-// populated literal, which fails the same way: a renamed tag decodes
-// as the zero value and, since every response property carries
-// omitempty, vanishes from the re-marshal.
+// tagCase pairs a Go type with JSON that spells every tag it carries.
+// Request types are marshalled from a fully populated value and
+// compared byte for byte. Response types round-trip a fully populated
+// literal, which fails the same way: a renamed tag decodes as the
+// zero value and, since every response property carries omitempty,
+// vanishes from the re-marshal.
 type tagCase struct {
-	// name is the Go type the case marshals or decodes.
+	// name is the Go type the case stands for, and the key the
+	// meta-test matches against. No two cases share one.
 	name string
 
 	value any
 	json  string
-
-	// covers names the types this case's JSON stands for, when the
-	// value nests others inside it. Empty means the case covers name
-	// alone.
-	covers []string
 }
 
 // requestTagCases marshals a fully populated value of every type
 // poplar sends.
 func requestTagCases() []tagCase {
-	sent := Date(mustParseDate("2026-07-28T09:00:00Z"))
+	received := Date(mustParseDate("2026-07-28T09:00:00Z"))
 	before := Date(mustParseDate("2026-07-28T00:00:00Z"))
 	after := Date(mustParseDate("2026-01-01T00:00:00Z"))
 
@@ -63,8 +65,83 @@ func requestTagCases() []tagCase {
 				`"methodCalls":[["Core/echo",{},"0"]],"createdIds":{"k1":"M1"}}`,
 		},
 		{
-			name:   "MailboxGet",
-			covers: []string{"MailboxGet", "ResultReference"},
+			name:  "ResultReference",
+			value: &ResultReference{ResultOf: "0", Name: "Email/query", Path: "/ids"},
+			json:  `{"resultOf":"0","name":"Email/query","path":"/ids"}`,
+		},
+		{
+			name: "Comparator",
+			value: &Comparator{
+				Property:    "name",
+				IsAscending: new(false),
+				Collation:   ASCIICasemap,
+				Keyword:     "$flagged",
+			},
+			json: `{"property":"name","isAscending":false,` +
+				`"collation":"i;ascii-casemap","keyword":"$flagged"}`,
+		},
+		{
+			name: "FilterOperator",
+			value: &FilterOperator{
+				Operator:   OperatorAND,
+				Conditions: []Filter{&EmailFilterCondition{InMailbox: "MA"}},
+			},
+			json: `{"operator":"AND","conditions":[{"inMailbox":"MA"}]}`,
+		},
+		{
+			name: "MailboxFilterCondition",
+			value: &MailboxFilterCondition{
+				ParentID:     "MP",
+				Name:         "Receipts",
+				Role:         RoleInbox,
+				HasAnyRole:   new(false),
+				IsSubscribed: new(false),
+			},
+			json: `{"parentId":"MP","name":"Receipts","role":"inbox",` +
+				`"hasAnyRole":false,"isSubscribed":false}`,
+		},
+		{
+			// Every optional Boolean here carries false, which is the
+			// state the pointer exists for. A true marshals identically
+			// under bool and *bool, so it leaves the field type
+			// unpinned.
+			name: "EmailFilterCondition",
+			value: &EmailFilterCondition{
+				InMailbox:                  "MA",
+				InMailboxOtherThan:         []ID{"MB"},
+				Before:                     &before,
+				After:                      &after,
+				MinSize:                    10,
+				MaxSize:                    20,
+				AllInThreadHaveKeyword:     "$seen",
+				SomeInThreadHaveKeyword:    "$flagged",
+				NoneInThreadHaveKeyword:    "$draft",
+				HasKeyword:                 "$answered",
+				NotKeyword:                 "$junk",
+				HasAttachment:              new(false),
+				Text:                       "t",
+				From:                       "f",
+				To:                         "o",
+				Cc:                         "c",
+				Bcc:                        "b",
+				Subject:                    "s",
+				Body:                       "y",
+				Header:                     []string{"X-A", "1"},
+				HasSMIME:                   new(false),
+				HasVerifiedSMIME:           new(false),
+				HasVerifiedSMIMEAtDelivery: new(false),
+			},
+			json: `{"inMailbox":"MA","inMailboxOtherThan":["MB"],` +
+				`"before":"2026-07-28T00:00:00Z","after":"2026-01-01T00:00:00Z",` +
+				`"minSize":10,"maxSize":20,"allInThreadHaveKeyword":"$seen",` +
+				`"someInThreadHaveKeyword":"$flagged","noneInThreadHaveKeyword":"$draft",` +
+				`"hasKeyword":"$answered","notKeyword":"$junk","hasAttachment":false,` +
+				`"text":"t","from":"f","to":"o","cc":"c","bcc":"b","subject":"s",` +
+				`"body":"y","header":["X-A","1"],"hasSmime":false,` +
+				`"hasVerifiedSmime":false,"hasVerifiedSmimeAtDelivery":false}`,
+		},
+		{
+			name: "MailboxGet",
 			value: &MailboxGet{
 				Account:      "A1",
 				IDs:          []ID{"MA"},
@@ -80,23 +157,11 @@ func requestTagCases() []tagCase {
 			json:  `{"accountId":"A1","sinceState":"s0","maxChanges":50}`,
 		},
 		{
-			name:   "MailboxQuery",
-			covers: []string{"MailboxQuery", "MailboxFilterCondition", "Comparator"},
+			name: "MailboxQuery",
 			value: &MailboxQuery{
-				Account: "A1",
-				Filter: &MailboxFilterCondition{
-					ParentID:     "MP",
-					Name:         "Receipts",
-					Role:         RoleInbox,
-					HasAnyRole:   new(true),
-					IsSubscribed: new(false),
-				},
-				Sort: []*Comparator{{
-					Property:    "name",
-					IsAscending: new(false),
-					Collation:   ASCIICasemap,
-					Keyword:     "$flagged",
-				}},
+				Account:        "A1",
+				Filter:         &MailboxFilterCondition{Name: "Receipts"},
+				Sort:           []*Comparator{{Property: "name"}},
 				Position:       5,
 				Anchor:         "MA",
 				AnchorOffset:   -2,
@@ -105,10 +170,9 @@ func requestTagCases() []tagCase {
 				SortAsTree:     true,
 				FilterAsTree:   true,
 			},
-			json: `{"accountId":"A1","filter":{"parentId":"MP","name":"Receipts","role":"inbox",` +
-				`"hasAnyRole":true,"isSubscribed":false},"sort":[{"property":"name",` +
-				`"isAscending":false,"collation":"i;ascii-casemap","keyword":"$flagged"}],` +
-				`"position":5,"anchor":"MA","anchorOffset":-2,"limit":10,"calculateTotal":true,` +
+			json: `{"accountId":"A1","filter":{"name":"Receipts"},` +
+				`"sort":[{"property":"name"}],"position":5,"anchor":"MA",` +
+				`"anchorOffset":-2,"limit":10,"calculateTotal":true,` +
 				`"sortAsTree":true,"filterAsTree":true}`,
 		},
 		{
@@ -148,37 +212,12 @@ func requestTagCases() []tagCase {
 			json:  `{"accountId":"A1","sinceState":"s0","maxChanges":50}`,
 		},
 		{
-			name:   "EmailQuery",
-			covers: []string{"EmailQuery", "FilterOperator", "EmailFilterCondition"},
+			name: "EmailQuery",
 			value: &EmailQuery{
 				Account: "A1",
 				Filter: &FilterOperator{
-					Operator: OperatorAND,
-					Conditions: []Filter{&EmailFilterCondition{
-						InMailbox:                  "MA",
-						InMailboxOtherThan:         []ID{"MB"},
-						Before:                     &before,
-						After:                      &after,
-						MinSize:                    10,
-						MaxSize:                    20,
-						AllInThreadHaveKeyword:     "$seen",
-						SomeInThreadHaveKeyword:    "$flagged",
-						NoneInThreadHaveKeyword:    "$draft",
-						HasKeyword:                 "$answered",
-						NotKeyword:                 "$junk",
-						HasAttachment:              new(true),
-						Text:                       "t",
-						From:                       "f",
-						To:                         "o",
-						Cc:                         "c",
-						Bcc:                        "b",
-						Subject:                    "s",
-						Body:                       "y",
-						Header:                     []string{"X-A", "1"},
-						HasSMIME:                   new(false),
-						HasVerifiedSMIME:           new(false),
-						HasVerifiedSMIMEAtDelivery: new(false),
-					}},
+					Operator:   OperatorAND,
+					Conditions: []Filter{&EmailFilterCondition{InMailbox: "MA"}},
 				},
 				Sort:            []*Comparator{{Property: "receivedAt"}},
 				Position:        5,
@@ -188,16 +227,10 @@ func requestTagCases() []tagCase {
 				CalculateTotal:  true,
 				CollapseThreads: true,
 			},
-			json: `{"accountId":"A1","filter":{"operator":"AND","conditions":[{"inMailbox":"MA",` +
-				`"inMailboxOtherThan":["MB"],"before":"2026-07-28T00:00:00Z",` +
-				`"after":"2026-01-01T00:00:00Z","minSize":10,"maxSize":20,` +
-				`"allInThreadHaveKeyword":"$seen","someInThreadHaveKeyword":"$flagged",` +
-				`"noneInThreadHaveKeyword":"$draft","hasKeyword":"$answered",` +
-				`"notKeyword":"$junk","hasAttachment":true,"text":"t","from":"f","to":"o",` +
-				`"cc":"c","bcc":"b","subject":"s","body":"y","header":["X-A","1"],` +
-				`"hasSmime":false,"hasVerifiedSmime":false,"hasVerifiedSmimeAtDelivery":false}]},` +
-				`"sort":[{"property":"receivedAt"}],"position":5,"anchor":"M1",` +
-				`"anchorOffset":-2,"limit":10,"calculateTotal":true,"collapseThreads":true}`,
+			json: `{"accountId":"A1","filter":{"operator":"AND",` +
+				`"conditions":[{"inMailbox":"MA"}]},"sort":[{"property":"receivedAt"}],` +
+				`"position":5,"anchor":"M1","anchorOffset":-2,"limit":10,` +
+				`"calculateTotal":true,"collapseThreads":true}`,
 		},
 		{
 			name: "EmailSet",
@@ -212,21 +245,24 @@ func requestTagCases() []tagCase {
 				`"update":{"M1":{"keywords/$seen":true}},"destroy":["M2"]}`,
 		},
 		{
-			name:   "EmailImport",
-			covers: []string{"EmailImport", "EmailImportItem"},
+			name: "EmailImportItem",
+			value: &EmailImportItem{
+				BlobID:     "G1",
+				MailboxIDs: map[ID]bool{"MA": true},
+				Keywords:   map[string]bool{"$seen": true},
+				ReceivedAt: &received,
+			},
+			json: `{"blobId":"G1","mailboxIds":{"MA":true},"keywords":{"$seen":true},` +
+				`"receivedAt":"2026-07-28T09:00:00Z"}`,
+		},
+		{
+			name: "EmailImport",
 			value: &EmailImport{
 				Account:   "A1",
 				IfInState: "s0",
-				Emails: map[ID]*EmailImportItem{"k1": {
-					BlobID:     "G1",
-					MailboxIDs: map[ID]bool{"MA": true},
-					Keywords:   map[string]bool{"$seen": true},
-					ReceivedAt: &sent,
-				}},
+				Emails:    map[ID]*EmailImportItem{"k1": {BlobID: "G1"}},
 			},
-			json: `{"accountId":"A1","ifInState":"s0","emails":{"k1":{"blobId":"G1",` +
-				`"mailboxIds":{"MA":true},"keywords":{"$seen":true},` +
-				`"receivedAt":"2026-07-28T09:00:00Z"}}}`,
+			json: `{"accountId":"A1","ifInState":"s0","emails":{"k1":{"blobId":"G1"}}}`,
 		},
 		{
 			name: "IdentityGet",
@@ -270,15 +306,20 @@ func responseTagCases() []tagCase {
 				`"sessionState":"s1"}`,
 		},
 		{
-			name:   "Session",
-			covers: []string{"Session", "Account"},
-			value:  &Session{},
+			name:  "Session",
+			value: &Session{},
 			json: `{"capabilities":{"urn:ietf:params:jmap:core":{}},` +
-				`"accounts":{"A1":{"accountCapabilities":{"urn:ietf:params:jmap:mail":{}},` +
-				`"name":"n","isPersonal":true,"isReadOnly":true}},` +
+				`"accounts":{"A1":{"accountCapabilities":{},"name":"n",` +
+				`"isPersonal":true,"isReadOnly":true}},` +
 				`"primaryAccounts":{"urn:ietf:params:jmap:mail":"A1"},"username":"u",` +
 				`"apiUrl":"a","downloadUrl":"d","uploadUrl":"up","eventSourceUrl":"e",` +
 				`"state":"s"}`,
+		},
+		{
+			name:  "Account",
+			value: &Account{},
+			json: `{"accountCapabilities":{"urn:ietf:params:jmap:mail":{}},"name":"n",` +
+				`"isPersonal":true,"isReadOnly":true}`,
 		},
 		{
 			name:  "Core",
@@ -300,16 +341,23 @@ func responseTagCases() []tagCase {
 			json:  `{"maxDelayedSend":1,"submissionExtensions":{"FUTURERELEASE":["86400"]}}`,
 		},
 		{
-			name:   "MailboxGetResponse",
-			covers: []string{"MailboxGetResponse", "Mailbox", "Rights"},
-			value:  &MailboxGetResponse{},
-			json: `{"accountId":"A1","state":"s1","list":[{"id":"MA","name":"Inbox",` +
-				`"parentId":"MP","role":"inbox","sortOrder":10,"totalEmails":5,` +
-				`"unreadEmails":4,"totalThreads":3,"unreadThreads":2,` +
-				`"myRights":{"mayReadItems":true,"mayAddItems":true,"mayRemoveItems":true,` +
+			name:  "Rights",
+			value: &Rights{},
+			json: `{"mayReadItems":true,"mayAddItems":true,"mayRemoveItems":true,` +
 				`"maySetSeen":true,"maySetKeywords":true,"mayCreateChild":true,` +
-				`"mayRename":true,"mayDelete":true,"maySubmit":true},"isSubscribed":true}],` +
-				`"notFound":["MX"]}`,
+				`"mayRename":true,"mayDelete":true,"maySubmit":true}`,
+		},
+		{
+			name:  "Mailbox",
+			value: &Mailbox{},
+			json: `{"id":"MA","name":"Inbox","parentId":"MP","role":"inbox","sortOrder":10,` +
+				`"totalEmails":5,"unreadEmails":4,"totalThreads":3,"unreadThreads":2,` +
+				`"myRights":{"mayReadItems":true},"isSubscribed":true}`,
+		},
+		{
+			name:  "MailboxGetResponse",
+			value: &MailboxGetResponse{},
+			json:  `{"accountId":"A1","state":"s1","list":[{"id":"MA"}],"notFound":["MX"]}`,
 		},
 		{
 			name:  "MailboxChangesResponse",
@@ -334,27 +382,48 @@ func responseTagCases() []tagCase {
 				`"notDestroyed":{"ME":{"type":"mailboxHasEmail"}}}`,
 		},
 		{
-			name:   "EmailGetResponse",
-			covers: []string{"EmailGetResponse", "Email", "Header", "Address", "BodyPart", "BodyValue"},
-			value:  &EmailGetResponse{},
-			json: `{"accountId":"A1","state":"s1","list":[{"id":"M1","blobId":"G1",` +
-				`"threadId":"T1","mailboxIds":{"MA":true},"keywords":{"$seen":true},` +
-				`"size":4127,"receivedAt":"2026-07-28T09:00:00Z",` +
-				`"headers":[{"name":"X-Spam","value":"0.1"}],"messageId":["m1@x"],` +
-				`"inReplyTo":["m0@x"],"references":["m0@x"],` +
-				`"sender":[{"name":"S","email":"s@x"}],"from":[{"name":"F","email":"f@x"}],` +
-				`"to":[{"name":"T","email":"t@x"}],"cc":[{"name":"C","email":"c@x"}],` +
-				`"bcc":[{"name":"B","email":"b@x"}],"replyTo":[{"name":"R","email":"r@x"}],` +
-				`"subject":"Lunch","sentAt":"2026-07-28T08:59:00Z",` +
-				`"bodyStructure":{"partId":"1","blobId":"G2","size":12,` +
-				`"headers":[{"name":"Content-Type","value":"text/plain"}],"name":"a.txt",` +
-				`"type":"text/plain","charset":"utf-8","disposition":"inline","cid":"c1",` +
-				`"language":["en"],"location":"http://x/","subParts":[{"partId":"2"}]},` +
-				`"bodyValues":{"1":{"value":"hi","isEncodingProblem":true,"isTruncated":true}},` +
-				`"textBody":[{"partId":"1"}],"htmlBody":[{"partId":"2"}],` +
-				`"attachments":[{"partId":"3"}],"hasAttachment":true,"preview":"hi",` +
-				`"smimeStatus":"signed","smimeStatusAtDelivery":"signed","smimeErrors":["e"],` +
-				`"smimeVerifiedAt":"2026-07-28T09:01:00Z"}],"notFound":["MX"]}`,
+			name:  "Address",
+			value: &Address{},
+			json:  `{"name":"Ann","email":"ann@x"}`,
+		},
+		{
+			name:  "Header",
+			value: &Header{},
+			json:  `{"name":"X-Spam","value":"0.1"}`,
+		},
+		{
+			name:  "BodyValue",
+			value: &BodyValue{},
+			json:  `{"value":"hi","isEncodingProblem":true,"isTruncated":true}`,
+		},
+		{
+			name:  "BodyPart",
+			value: &BodyPart{},
+			json: `{"partId":"1","blobId":"G2","size":12,` +
+				`"headers":[{"name":"Content-Type"}],"name":"a.txt","type":"text/plain",` +
+				`"charset":"utf-8","disposition":"inline","cid":"c1","language":["en"],` +
+				`"location":"http://x/","subParts":[{"partId":"2"}]}`,
+		},
+		{
+			name:  "Email",
+			value: &Email{},
+			json: `{"id":"M1","blobId":"G1","threadId":"T1","mailboxIds":{"MA":true},` +
+				`"keywords":{"$seen":true},"size":4127,"receivedAt":"2026-07-28T09:00:00Z",` +
+				`"headers":[{"name":"X-Spam"}],"messageId":["m1@x"],"inReplyTo":["m0@x"],` +
+				`"references":["m0@x"],"sender":[{"email":"s@x"}],"from":[{"email":"f@x"}],` +
+				`"to":[{"email":"t@x"}],"cc":[{"email":"c@x"}],"bcc":[{"email":"b@x"}],` +
+				`"replyTo":[{"email":"r@x"}],"subject":"Lunch",` +
+				`"sentAt":"2026-07-28T08:59:00Z","bodyStructure":{"partId":"1"},` +
+				`"bodyValues":{"1":{"value":"hi"}},"textBody":[{"partId":"1"}],` +
+				`"htmlBody":[{"partId":"2"}],"attachments":[{"partId":"3"}],` +
+				`"hasAttachment":true,"preview":"hi","smimeStatus":"signed",` +
+				`"smimeStatusAtDelivery":"signed","smimeErrors":["e"],` +
+				`"smimeVerifiedAt":"2026-07-28T09:01:00Z"}`,
+		},
+		{
+			name:  "EmailGetResponse",
+			value: &EmailGetResponse{},
+			json:  `{"accountId":"A1","state":"s1","list":[{"id":"M1"}],"notFound":["MX"]}`,
 		},
 		{
 			name:  "EmailChangesResponse",
@@ -384,26 +453,46 @@ func responseTagCases() []tagCase {
 				`"created":{"k1":{"id":"M1"}},"notCreated":{"k2":{"type":"invalidEmail"}}}`,
 		},
 		{
-			name:   "IdentityGetResponse",
-			covers: []string{"IdentityGetResponse", "Identity"},
-			value:  &IdentityGetResponse{},
-			json: `{"accountId":"A1","state":"s1","list":[{"id":"I1","name":"Ann",` +
-				`"email":"ann@x","replyTo":[{"email":"r@x"}],"bcc":[{"email":"b@x"}],` +
-				`"textSignature":"-- Ann","htmlSignature":"Ann, in HTML","mayDelete":true}],` +
-				`"notFound":["IX"]}`,
+			name:  "Identity",
+			value: &Identity{},
+			json: `{"id":"I1","name":"Ann","email":"ann@x","replyTo":[{"email":"r@x"}],` +
+				`"bcc":[{"email":"b@x"}],"textSignature":"-- Ann",` +
+				`"htmlSignature":"Ann, in HTML","mayDelete":true}`,
 		},
 		{
-			name:   "EmailSubmissionSetResponse",
-			covers: []string{"EmailSubmissionSetResponse", "EmailSubmission", "Envelope", "EnvelopeAddress", "DeliveryStatus"},
-			value:  &EmailSubmissionSetResponse{},
-			json: `{"accountId":"A1","oldState":"s0","newState":"s1","created":{"k1":{"id":"ES1",` +
-				`"identityId":"I1","emailId":"M1","threadId":"T1",` +
-				`"envelope":{"mailFrom":{"email":"f@x","parameters":{"HOLDFOR":"86400"}},` +
-				`"rcptTo":[{"email":"t@x","parameters":{"NOTIFY":"SUCCESS"}}]},` +
-				`"sendAt":"2026-07-28T09:00:00Z","undoStatus":"final",` +
-				`"deliveryStatus":{"t@x":{"smtpReply":"250 ok","delivered":"yes",` +
-				`"displayed":"unknown"}},"dsnBlobIds":["G3"],"mdnBlobIds":["G4"]}},` +
-				`"updated":{"ES2":{"id":"ES2"}},"destroyed":["ES3"],` +
+			name:  "IdentityGetResponse",
+			value: &IdentityGetResponse{},
+			json:  `{"accountId":"A1","state":"s1","list":[{"id":"I1"}],"notFound":["IX"]}`,
+		},
+		{
+			name:  "DeliveryStatus",
+			value: &DeliveryStatus{},
+			json:  `{"smtpReply":"250 ok","delivered":"yes","displayed":"unknown"}`,
+		},
+		{
+			name:  "EnvelopeAddress",
+			value: &EnvelopeAddress{},
+			json:  `{"email":"f@x","parameters":{"HOLDFOR":"86400"}}`,
+		},
+		{
+			name:  "Envelope",
+			value: &Envelope{},
+			json:  `{"mailFrom":{"email":"f@x"},"rcptTo":[{"email":"t@x"}]}`,
+		},
+		{
+			name:  "EmailSubmission",
+			value: &EmailSubmission{},
+			json: `{"id":"ES1","identityId":"I1","emailId":"M1","threadId":"T1",` +
+				`"envelope":{"mailFrom":{"email":"f@x"}},"sendAt":"2026-07-28T09:00:00Z",` +
+				`"undoStatus":"final","deliveryStatus":{"t@x":{"delivered":"yes"}},` +
+				`"dsnBlobIds":["G3"],"mdnBlobIds":["G4"]}`,
+		},
+		{
+			name:  "EmailSubmissionSetResponse",
+			value: &EmailSubmissionSetResponse{},
+			json: `{"accountId":"A1","oldState":"s0","newState":"s1",` +
+				`"created":{"k1":{"id":"ES1"}},"updated":{"ES2":{"id":"ES2"}},` +
+				`"destroyed":["ES3"],` +
 				`"notCreated":{"k2":{"type":"tooManyRecipients","maxRecipients":25}},` +
 				`"notUpdated":{"ES4":{"type":"cannotUnsend"}},` +
 				`"notDestroyed":{"ES5":{"type":"forbidden"}}}`,
@@ -527,32 +616,29 @@ func packageTags(t *testing.T) map[string][]string {
 }
 
 // TestEveryJSONTagIsObserved reads the package's own source and fails
-// on a struct no case covers or a tag its own case does not name.
-// Without it the tables decay: a field added to a type later is
-// unwatched, and renaming it stays green.
+// on a struct no case is named for, or a tag its own case does not
+// spell. Without it the tables decay: a field added to a type later
+// is unwatched, and renaming it stays green.
 //
-// The match is per type rather than over one concatenated string. A
-// flat search calls a tag observed when any type in the package
-// happens to carry that name, so a "name" or "state" or "accountId"
-// added to a type whose case never names it would pass, which is the
-// shape a Thread or SearchSnippet type would arrive in.
+// Each type is matched against its own case alone, and against that
+// case's top-level keys rather than its text. A case literal carries
+// the JSON of every type nested inside it, so searching the text
+// counts a child's key as the parent's: an "id" added to a response
+// type reads as observed because a record in its list has one.
 func TestEveryJSONTagIsObserved(t *testing.T) {
 	observed := make(map[string]string)
 	for _, c := range append(requestTagCases(), responseTagCases()...) {
-		covers := c.covers
-		if len(covers) == 0 {
-			covers = []string{c.name}
+		if _, duplicate := observed[c.name]; duplicate {
+			t.Errorf("two cases are named %s; one type takes one case, or their strings pool", c.name)
 		}
-		for _, typeName := range covers {
-			observed[typeName] += c.json
-		}
+		observed[c.name] = c.json
 	}
 
 	tags := packageTags(t)
 
 	for _, typeName := range slices.Sorted(maps.Keys(observed)) {
 		if _, ok := tags[typeName]; !ok {
-			t.Errorf("a case covers %q, which is not a struct with JSON tags in this package", typeName)
+			t.Errorf("a case is named %q, which is not a struct with JSON tags here", typeName)
 		}
 	}
 
@@ -560,12 +646,17 @@ func TestEveryJSONTagIsObserved(t *testing.T) {
 	for _, typeName := range slices.Sorted(maps.Keys(tags)) {
 		seen, ok := observed[typeName]
 		if !ok {
-			t.Errorf("no case covers type %s; add one to a table in tags_test.go", typeName)
+			t.Errorf("no case is named for type %s; add one to a table in tags_test.go", typeName)
+			continue
+		}
+		var top map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(seen), &top); err != nil {
+			t.Errorf("%s: its case JSON is not an object: %v", typeName, err)
 			continue
 		}
 		for _, tag := range tags[typeName] {
 			total++
-			if !strings.Contains(seen, `"`+tag+`":`) {
+			if _, named := top[tag]; !named {
 				t.Errorf("%s: its case does not name the %q tag", typeName, tag)
 			}
 		}

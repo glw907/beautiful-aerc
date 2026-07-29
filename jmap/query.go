@@ -38,27 +38,42 @@ func (*FilterOperator) isFilter() {}
 // one slot deeper: a null in the conditions array is a form RFC 8620
 // never blesses, and a server within its rights to reject it says so
 // about the whole query rather than about the slot.
+//
+// Each condition is marshalled exactly once, into bytes the encoder
+// then copies. Marshaling a condition to inspect it and handing the
+// value back for the encoder to marshal again costs 2^depth, which a
+// nested filter reaches long before it looks large.
+//
+// The shadow is a plain conversion of the type it stands for, so a
+// property added to FilterOperator travels without an edit here.
 func (o FilterOperator) MarshalJSON() ([]byte, error) {
 	type filterOperator FilterOperator
 	out := filterOperator(o)
-	out.Conditions = nil
+
+	// RFC 8620 types conditions as an array, so an operator with none
+	// left sends [] rather than null, which is a different type.
+	out.Conditions = []Filter{}
 	for _, condition := range o.Conditions {
-		kept, err := omitNullFilter(condition)
+		data, err := omitNullFilter(condition)
 		if err != nil {
 			return nil, err
 		}
-		if kept != nil {
-			out.Conditions = append(out.Conditions, kept)
+		if data == nil {
+			continue
 		}
+		out.Conditions = append(out.Conditions, data)
 	}
 	return json.Marshal(out)
 }
 
-// omitNullFilter returns nil when f marshals to JSON null, which is
-// what a typed nil produces: a nil *EmailFilterCondition held in a
-// Filter interface is non-nil to Go and null on the wire. RFC 8620
-// never blesses "filter": null, and Stalwart rejected the form before
+// omitNullFilter marshals f and returns the bytes, or nil when there
+// is nothing to send: a nil *EmailFilterCondition held in a Filter
+// interface is non-nil to Go and null on the wire. RFC 8620 never
+// blesses "filter": null, and Stalwart rejected the form before
 // v0.16.10, so the property is left out instead.
+//
+// Returning a rawFilter rather than f itself keeps the caller from
+// marshaling the same tree a second time to send it.
 func omitNullFilter(f Filter) (Filter, error) {
 	if f == nil {
 		return nil, nil
@@ -70,8 +85,19 @@ func omitNullFilter(f Filter) (Filter, error) {
 	if string(data) == "null" {
 		return nil, nil
 	}
-	return f, nil
+	return rawFilter(data), nil
 }
+
+// A rawFilter is an already-marshalled filter standing in a Filter
+// slot. It lets a shadow type stay a plain conversion of the type it
+// stands for, which keeps the property order and drops nothing when a
+// property is added, while still marshaling the tree once.
+type rawFilter json.RawMessage
+
+func (rawFilter) isFilter() {}
+
+// MarshalJSON implements json.Marshaler.
+func (r rawFilter) MarshalJSON() ([]byte, error) { return json.RawMessage(r), nil }
 
 // A Comparator is one term of a /query sort (RFC 8620 section 5.5).
 // Terms apply in order, each breaking the ties of the one before it.

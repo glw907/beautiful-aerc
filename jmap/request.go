@@ -56,8 +56,8 @@ func (r Request) MarshalJSON() ([]byte, error) {
 // mergeURIs adds each URI in required that using does not already
 // hold, placing CoreURI first when the caller did not already name it
 // and keeping everything else in first-seen order, so one request
-// marshals to the same bytes twice. Every request uses the core
-// capability, whatever the methods in it declare.
+// marshals to the same bytes twice. Every request that invokes a
+// method uses the core capability, whatever those methods declare.
 func mergeURIs(using, required []URI) []URI {
 	if !slices.Contains(using, CoreURI) {
 		using = append([]URI{CoreURI}, using...)

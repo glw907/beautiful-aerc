@@ -193,14 +193,16 @@ func (*MailboxQuery) Name() string { return "Mailbox/query" }
 func (*MailboxQuery) Requires() []URI { return []URI{MailURI} }
 
 // MarshalJSON implements json.Marshaler. It drops a Filter holding a
-// typed nil rather than sending "filter": null.
+// typed nil rather than sending "filter": null, and carries the
+// filter it keeps as bytes so the tree is marshalled once.
 func (m MailboxQuery) MarshalJSON() ([]byte, error) {
-	type mailboxQuery MailboxQuery
-	out := mailboxQuery(m)
-	filter, err := omitNullFilter(out.Filter)
+	filter, err := omitNullFilter(m.Filter)
 	if err != nil {
 		return nil, err
 	}
+
+	type mailboxQuery MailboxQuery
+	out := mailboxQuery(m)
 	out.Filter = filter
 	return json.Marshal(out)
 }

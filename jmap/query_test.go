@@ -3,6 +3,7 @@ package jmap
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -90,11 +91,22 @@ func TestFilterOperatorNesting(t *testing.T) {
 			want: `{"operator":"NOT","conditions":[{"hasKeyword":"$seen"}]}`,
 		},
 		{
+			// RFC 8620 types conditions as an array, so an operator
+			// carrying none sends [] and never null, which is the same
+			// reason Request emits its two mandatory arrays empty.
 			name: "an operator with no condition",
 			filter: &FilterOperator{
 				Operator: OperatorOR,
 			},
-			want: `{"operator":"OR","conditions":null}`,
+			want: `{"operator":"OR","conditions":[]}`,
+		},
+		{
+			name: "an operator whose every condition is nil",
+			filter: &FilterOperator{
+				Operator:   OperatorOR,
+				Conditions: []Filter{(*EmailFilterCondition)(nil)},
+			},
+			want: `{"operator":"OR","conditions":[]}`,
 		},
 		{
 			name: "OR nested two deep inside an AND",
@@ -309,5 +321,116 @@ func TestQueryResponseKeepsServerOrder(t *testing.T) {
 	}
 	if query.Total != 3 {
 		t.Errorf("Total = %d, want 3", query.Total)
+	}
+}
+
+// countingFilter records how often the encoder asks it for bytes.
+// Filter seals its implementations, so only a test inside the package
+// can stand in for a condition this way.
+type countingFilter struct{ marshals *int }
+
+func (*countingFilter) isFilter() {}
+
+func (c *countingFilter) MarshalJSON() ([]byte, error) {
+	*c.marshals++
+	return []byte(`{"text":"x"}`), nil
+}
+
+// TestFilterOperatorMarshalsEachConditionOnce is the guard on nesting
+// cost. Marshaling a condition to inspect it and then handing the
+// value back for the encoder to marshal again costs 2^depth: the
+// first version of this marshaler took 811ms on a chain 18 deep,
+// carrying 624 bytes.
+//
+// The assertion is a count rather than a duration because the count
+// is the property. One marshal per condition is linear in the tree
+// whatever the machine is doing.
+func TestFilterOperatorMarshalsEachConditionOnce(t *testing.T) {
+	const depth = 12
+
+	marshals := 0
+	var filter Filter = &countingFilter{marshals: &marshals}
+	for range depth {
+		filter = &FilterOperator{Operator: OperatorAND, Conditions: []Filter{filter}}
+	}
+
+	data, err := json.Marshal(filter)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if marshals != 1 {
+		t.Errorf("the innermost condition was marshalled %d times, want 1", marshals)
+	}
+
+	want := strings.Repeat(`{"operator":"AND","conditions":[`, depth) +
+		`{"text":"x"}` + strings.Repeat(`]}`, depth)
+	if string(data) != want {
+		t.Errorf("Marshal =\n%s\nwant\n%s", data, want)
+	}
+}
+
+// TestQueryMarshalsItsFilterOnce is the same guard one level up.
+// Both query types used to marshal the whole filter tree twice: once
+// to see whether it came out null, and again to send it.
+func TestQueryMarshalsItsFilterOnce(t *testing.T) {
+	cases := []struct {
+		name  string
+		build func(Filter) Method
+	}{
+		{"Email/query", func(f Filter) Method { return &EmailQuery{Account: "A1", Filter: f} }},
+		{"Mailbox/query", func(f Filter) Method { return &MailboxQuery{Account: "A1", Filter: f} }},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			marshals := 0
+			filter := &FilterOperator{
+				Operator:   OperatorAND,
+				Conditions: []Filter{&countingFilter{marshals: &marshals}},
+			}
+
+			data, err := json.Marshal(c.build(filter))
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			if marshals != 1 {
+				t.Errorf("the filter was marshalled %d times, want 1", marshals)
+			}
+			want := `{"accountId":"A1","filter":{"operator":"AND","conditions":[{"text":"x"}]}}`
+			if string(data) != want {
+				t.Errorf("Marshal = %s, want %s", data, want)
+			}
+		})
+	}
+}
+
+// TestFilterOperatorNestsSiblings pins the cost guard against a
+// marshaler that dropped everything past the first condition, which a
+// count of one would not notice on a chain.
+func TestFilterOperatorNestsSiblings(t *testing.T) {
+	first, second := 0, 0
+	filter := &FilterOperator{
+		Operator: OperatorOR,
+		Conditions: []Filter{
+			&countingFilter{marshals: &first},
+			(*EmailFilterCondition)(nil),
+			&FilterOperator{
+				Operator:   OperatorNOT,
+				Conditions: []Filter{&countingFilter{marshals: &second}},
+			},
+		},
+	}
+
+	data, err := json.Marshal(filter)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if first != 1 || second != 1 {
+		t.Errorf("conditions marshalled %d and %d times, want 1 each", first, second)
+	}
+	want := `{"operator":"OR","conditions":[{"text":"x"},` +
+		`{"operator":"NOT","conditions":[{"text":"x"}]}]}`
+	if string(data) != want {
+		t.Errorf("Marshal = %s, want %s", data, want)
 	}
 }

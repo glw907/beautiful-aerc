@@ -68,7 +68,7 @@ analyzers: build-poplarcheck
 # covered on the day it appears.
 jmap-boundary:
 	@bad=$$( { go list -deps ./jmap/...; \
-	          go list -f '{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./jmap/...; } \
+	          go list -f '{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' ./jmap/...; } \
 	        | grep '^github.com/glw907/poplar' \
 	        | grep -Ev '^github.com/glw907/poplar/jmap(/|$$)' | sort -u ); \
 	if [ -n "$$bad" ]; then \
