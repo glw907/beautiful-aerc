@@ -16,10 +16,15 @@ it. Updating this STATUS is step one and is never optional.
 
 1. Append a `Phase N outcomes` block to Current state below,
    recording the settled decisions and artifact paths.
-2. Replace the `## Next` section with the next phase's starter prompt.
-3. Mark the phase `[done]` and the next `[next]` on the roadmap line.
-4. Commit the artifacts and this STATUS, then push.
-5. Refresh the `project_poplar_refounding_initiative` memory only when
+2. Run `deadcode ./...` and record the count and every remaining
+   entry's justification in the outcomes block. A package this phase
+   composed into `cmd/poplar` (`jmap`, `sync`, `outbox`, and so on)
+   still showing an unreached entry in its own composed path is a
+   wiring gap, not a justification.
+3. Replace the `## Next` section with the next phase's starter prompt.
+4. Mark the phase `[done]` and the next `[next]` on the roadmap line.
+5. Commit the artifacts and this STATUS, then push.
+6. Refresh the `project_poplar_refounding_initiative` memory only when
    a load-bearing decision changed. The cursor lives here, not in
    memory.
 

@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -131,17 +132,27 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 		return runStartupTrace(ctx, dbPath, writer, start, out)
 	}
 
+	// A missing or rejected credential (isFatalConnect) stays a
+	// startup failure exactly as before; any other connect failure
+	// (the network unreachable, a timeout) falls to
+	// startEnginesRetrying instead of aborting run, since SY-3
+	// requires poplar to run and stay usable with no network.
+	var wg *sync.WaitGroup
 	be, key, err := connect(ctx)
-	if err != nil {
+	switch {
+	case err == nil:
+		accountID, err := ensureAccount(ctx, writer, key)
+		if err != nil {
+			_ = writer.Close()
+			return err
+		}
+		wg = startEngines(ctx, accountID, be, writer)
+	case isFatalConnect(err):
 		_ = writer.Close()
 		return err
+	default:
+		wg = startEnginesRetrying(ctx, writer, connect)
 	}
-	accountID, err := ensureAccount(ctx, writer, key)
-	if err != nil {
-		_ = writer.Close()
-		return err
-	}
-	wg := startEngines(ctx, accountID, be, writer)
 
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")
 	<-ctx.Done()

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,20 +106,22 @@ func noopConnector(context.Context) (backend.Backend, string, error) {
 	return &backendtest.Fake{}, "test-account", nil
 }
 
-// connectorSignalingFirstChanges returns a backendConnector whose fake
-// backend sends on called the first time its Mail Changes method
-// runs, a real sign the sync worker started that a caller can wait on
-// before stopping it, rather than racing a fresh goroutine's own
-// scheduling against an immediate cancellation.
-func connectorSignalingFirstChanges(called chan<- struct{}) backendConnector {
+// connectorBlockingOnFirstChanges returns a backendConnector whose
+// fake backend sends on entered the first time its Mail Changes
+// method runs, then blocks until release is closed: a real,
+// observable sign that an engine is still live inside a Changes call,
+// for a test proving run waits for it rather than merely hoping it
+// finished in time.
+func connectorBlockingOnFirstChanges(entered chan<- struct{}, release <-chan struct{}) backendConnector {
 	return func(context.Context) (backend.Backend, string, error) {
 		be := &backendtest.Fake{}
-		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+		be.MailSource.ChangesFunc = func(_ context.Context, _ backend.ObjectKind, token string, _ int) (backend.ChangeSet, error) {
 			select {
-			case called <- struct{}{}:
+			case entered <- struct{}{}:
 			default:
 			}
-			return backend.ChangeSet{}, nil
+			<-release
+			return backend.ChangeSet{NewToken: token}, nil
 		}
 		return be, "test-account", nil
 	}
@@ -497,41 +500,154 @@ func TestReportStartupFailurePrintsCause(t *testing.T) {
 	}
 }
 
-// TestRunEnginesStopBeforeCleanShutdown proves run's shutdown path
-// (ctx cancellation, standing in for SIGINT/SIGTERM) stops the sync
-// worker and outbox dispatcher, closes the writer, and marks a clean
-// shutdown, driven against a fake backend rather than a live network
-// reach.
-func TestRunEnginesStopBeforeCleanShutdown(t *testing.T) {
+// TestRunWaitsForEnginesBeforeCleanShutdown proves run's shutdown
+// path (ctx cancellation, standing in for SIGINT/SIGTERM) actually
+// waits for the sync worker and outbox dispatcher to return before
+// closing the writer and marking a clean shutdown, driven against a
+// fake backend rather than a live network reach. The fake's
+// ChangesFunc blocks on release until the test lets it go, so
+// cancelling ctx races the shutdown path against an engine
+// demonstrably still live, not one that merely might not have
+// finished yet: run must not return while release is held closed.
+func TestRunWaitsForEnginesBeforeCleanShutdown(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 
-	called := make(chan struct{}, 1)
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	connect := connectorBlockingOnFirstChanges(entered, release)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	out := newReadySignal()
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, dbPath, flags{}, out, io.Discard, connectorSignalingFirstChanges(called)) }()
+	go func() { done <- run(ctx, dbPath, flags{}, out, io.Discard, connect) }()
 
-	// The engines get a real chance to call Changes before shutdown
-	// stops them: cancelling as soon as the ready line prints races
-	// run's freshly spawned goroutines against their own first
-	// scheduling, which the writer's bulk lane can lose against an
-	// already-cancelled ctx (RunPush's immediate poll flush finds
-	// nothing left to call).
+	select {
+	case <-out.ready:
+	case err := <-done:
+		t.Fatalf("run exited before reaching startup, output %q: %v", out.String(), err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for run to start")
+	}
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the sync worker to enter Changes")
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		t.Fatalf("run returned while an engine was still blocked in Changes, want it to wait; err = %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if _, err := os.Stat(dbPath + ".clean-shutdown"); err == nil {
+		t.Fatal("clean-shutdown marker written while an engine was still blocked in Changes")
+	}
+
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for run to return after releasing the blocked engine")
+	}
+	if _, err := os.Stat(dbPath + ".clean-shutdown"); err != nil {
+		t.Errorf("clean-shutdown marker missing after the engines actually stopped: %v", err)
+	}
+}
+
+// TestRunEnsureAccountReusesExistingRowOnSecondStart proves a second
+// start against the same store finds ensureAccount's existing account
+// row rather than trying to insert another one under the same slug: a
+// find-that-fails-open-into-insert helper whose find branch is never
+// exercised is a UNIQUE constraint violation waiting for anyone who
+// restarts poplar against a store it has already run against once.
+func TestRunEnsureAccountReusesExistingRowOnSecondStart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+
+	if _, err := runToCompletion(t, dbPath, flags{}, noopConnector); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if _, err := runToCompletion(t, dbPath, flags{}, noopConnector); err != nil {
+		t.Fatalf("second run against the same store: %v", err)
+	}
+}
+
+// TestRunRetriesANonFatalConnectFailureRatherThanExiting proves SY-3's
+// no-network resilience at startup: a connect failure that is not a
+// rejected or missing credential (isFatalConnect's only fatal case)
+// does not abort run. run keeps reporting itself running and starts
+// the engines once a later attempt succeeds, rather than the process
+// making a reachable server a precondition for existing at all.
+func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+
+	var attempts atomic.Int64
+	called := make(chan struct{}, 1)
+	connect := func(context.Context) (backend.Backend, string, error) {
+		if attempts.Add(1) <= 2 {
+			return nil, "", errors.New("jmap: dial: dial tcp: connection refused")
+		}
+		be := &backendtest.Fake{}
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			select {
+			case called <- struct{}{}:
+			default:
+			}
+			return backend.ChangeSet{}, nil
+		}
+		return be, "test-account", nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	out := newReadySignal()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, dbPath, flags{}, out, io.Discard, connect) }()
+
+	select {
+	case <-out.ready:
+	case err := <-done:
+		t.Fatalf("run exited on a non-fatal connect failure instead of retrying, output %q: %v", out.String(), err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for run to report itself running")
+	}
+
 	select {
 	case <-called:
 	case err := <-done:
-		t.Fatalf("run exited before the sync worker called Changes, output %q: %v", out.String(), err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for the sync worker to call Changes")
+		t.Fatalf("run exited before the retried connect ever succeeded: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the retried connect to start the engines")
 	}
 
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("run: %v", err)
 	}
+}
 
-	if _, err := os.Stat(dbPath + ".clean-shutdown"); err != nil {
-		t.Errorf("clean-shutdown marker missing after the engines stopped: %v", err)
+// TestRunFailsFastOnAFatalConnectError proves the missing/rejected
+// credential case stays exactly as fatal as before this task: run
+// returns the error immediately, and connect is never retried.
+func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+
+	var attempts atomic.Int64
+	connect := func(context.Context) (backend.Backend, string, error) {
+		attempts.Add(1)
+		return nil, "", uerr.New("test.connect", nil, uerr.ClassAuth, errors.New("no token"))
+	}
+
+	var out bytes.Buffer
+	err := run(t.Context(), dbPath, flags{}, &out, io.Discard, connect)
+	if err == nil {
+		t.Fatal("run succeeded despite a fatal connect failure, want it returned immediately")
+	}
+	if n := attempts.Load(); n != 1 {
+		t.Errorf("connect called %d time(s), want exactly 1 (a fatal failure must not retry)", n)
 	}
 }
