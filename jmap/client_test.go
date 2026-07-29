@@ -119,10 +119,11 @@ func echoRequest(t *testing.T, response string) (http.HandlerFunc, func() string
 	}
 }
 
-// TestFetchSessionInstallsAtomically proves the session a Client holds
-// is replaced whole. Nothing reads a URL out of a half-installed
-// session, which is the shape of the go-jmap race this transport was
-// written to avoid.
+// TestFetchSessionInstallsAtomically covers the half of JT-21 that is
+// this package's: a refetched session replaces the cached one whole.
+// Nothing reads a URL out of a half-installed session, which is the
+// shape of the go-jmap race this transport was written to avoid.
+// Deciding when to refetch is policy and belongs to the caller.
 func TestFetchSessionInstallsAtomically(t *testing.T) {
 	client, _ := startFake(t)
 
@@ -176,6 +177,38 @@ func TestClientRefusesCallsWithoutASession(t *testing.T) {
 				t.Errorf("%s error = %v, want ErrNoSession", c.name, err)
 			}
 		})
+	}
+}
+
+// TestDoRefusesAnUnmarshalableRequest proves a request this package
+// will not build never reaches the wire. RFC 8620 section 5.3's
+// pointer restrictions are enforced when a Patch marshals, so the
+// failure surfaces here, at the one call in Do whose error is not the
+// network's, and it has to say which step it came from.
+func TestDoRefusesAnUnmarshalableRequest(t *testing.T) {
+	client, mux := startFake(t)
+	var calls atomic.Int64
+	mux.HandleFunc("POST /api", func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, emptyResponse)
+	})
+	dial(t, client)
+
+	req := &Request{}
+	req.Invoke(&EmailSet{Account: "A1", Update: map[ID]Patch{
+		"M1": {Pointer("mailboxIds", "0"): nil},
+	}})
+
+	resp, err := client.Do(t.Context(), req)
+	if err == nil {
+		t.Fatalf("Do = %+v, want the patch to be refused", resp)
+	}
+	if !strings.Contains(err.Error(), "marshal request") {
+		t.Errorf("Do error = %q, want it to name the step that failed", err)
+	}
+	if got := calls.Load(); got != 0 {
+		t.Errorf("the server saw %d calls, want 0; the request reached the wire", got)
 	}
 }
 
@@ -494,11 +527,12 @@ func TestUploadSendsTheCallersContentType(t *testing.T) {
 	}
 }
 
-// TestClientReadsTheSessionCoherently drives calls against a session
-// being replaced underneath them. Each call takes one snapshot and
-// works from it, so a refetch mid-flight cannot leave a call reading
-// one session's API URL and another's account. The race detector in CI
-// is what turns a regression here into a failure.
+// TestClientReadsTheSessionCoherently is JT-21's atomicity claim under
+// contention: calls run against a session being replaced underneath
+// them. Each takes one snapshot and works from it, so a refetch
+// mid-flight cannot leave a call reading one session's API URL and
+// another's account. The race detector in CI is what turns a
+// regression here into a failure.
 func TestClientReadsTheSessionCoherently(t *testing.T) {
 	client, mux := startFake(t)
 	mux.HandleFunc("POST /api", serveJSON(http.StatusOK, "application/json", emptyResponse))

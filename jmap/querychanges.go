@@ -42,7 +42,9 @@ func (*MailboxQueryChanges) Name() string { return "Mailbox/queryChanges" }
 
 func (*MailboxQueryChanges) Requires() []URI { return []URI{MailURI} }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements json.Marshaler. It drops a Filter holding a
+// typed nil rather than sending "filter": null, and carries the filter
+// it keeps as bytes so the tree is marshalled once.
 func (m MailboxQueryChanges) MarshalJSON() ([]byte, error) {
 	filter, err := omitNullFilter(m.Filter)
 	if err != nil {
@@ -86,12 +88,20 @@ type EmailQueryChanges struct {
 
 	Sort []*Comparator `json:"sort,omitempty"`
 
+	// SinceQueryState is the queryState the cached result carries.
 	SinceQueryState string `json:"sinceQueryState,omitempty"`
 
+	// MaxChanges caps one page. A query with more answers
+	// tooManyChanges rather than truncating.
 	MaxChanges uint64 `json:"maxChanges,omitempty"`
 
+	// UpToID is the highest-index id the client cached, which lets a
+	// server skip changes beyond it. A server ignores it unless the
+	// filter and sort are both on immutable properties.
 	UpToID ID `json:"upToId,omitempty"`
 
+	// CalculateTotal asks for the full match count, which a server may
+	// find expensive.
 	CalculateTotal bool `json:"calculateTotal,omitempty"`
 
 	// CollapseThreads repeats what the original query used. A value
@@ -103,7 +113,9 @@ func (*EmailQueryChanges) Name() string { return "Email/queryChanges" }
 
 func (*EmailQueryChanges) Requires() []URI { return []URI{MailURI} }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements json.Marshaler. It drops a Filter holding a
+// typed nil rather than sending "filter": null, and carries the filter
+// it keeps as bytes so the tree is marshalled once.
 func (m EmailQueryChanges) MarshalJSON() ([]byte, error) {
 	filter, err := omitNullFilter(m.Filter)
 	if err != nil {
@@ -123,10 +135,16 @@ type EmailQueryChangesResponse struct {
 	OldQueryState string `json:"oldQueryState,omitempty"`
 	NewQueryState string `json:"newQueryState,omitempty"`
 
+	// Total arrives only when the call asked for it.
 	Total uint64 `json:"total,omitempty"`
 
+	// Removed lists ids no longer in the results. A server may name
+	// ids that were not there either, and may name one that is in
+	// Added too when a mutable property moved it.
 	Removed []ID `json:"removed,omitempty"`
 
+	// Added lists ids and the index each takes in the new results,
+	// lowest index first. [Splice] applies the pair.
 	Added []AddedItem `json:"added,omitempty"`
 }
 
@@ -145,14 +163,18 @@ type AddedItem struct {
 // section 5.6). It splices out every removed id, then splices in each
 // added item in turn, each insertion shifting the rows below it down.
 //
-// A client that cached only part of the results holds a sparse list.
-// The empty id stands for a row it never fetched: RFC 8620 section
-// 1.2's alphabet has no zero-length id, so a hole cannot be mistaken
-// for a record.
+// cached must begin at the first result: cached[i] is the result at
+// absolute index i, holes included, because that is the index an
+// AddedItem counts in. A client that fetched only part of the results
+// holds a prefix with holes, and a hole is the empty id, which RFC
+// 8620 section 1.2's alphabet cannot spell and so is never mistaken
+// for a record. A slice that starts partway down the results instead
+// puts every added id in the wrong row, and only an index past the end
+// says so.
 //
 // Splice does not truncate or extend to the response's total, because
-// a cached window is shorter than the results by design and the caller
-// is the one that knows which it holds.
+// a cached prefix is shorter than the results by design and the caller
+// is the one that knows how much of them it holds.
 func Splice(cached []ID, removed []ID, added []AddedItem) ([]ID, error) {
 	// RFC 8620 section 5.6 requires the added array sorted lowest
 	// index first, and every insertion shifts the rows below it, so

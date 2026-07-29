@@ -208,6 +208,29 @@ func TestResolveFailsLoudly(t *testing.T) {
 			resp: resp,
 			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/01"},
 		},
+		// The three rows below are one bug class, not three
+		// instances. Accumulating an index digit by digit wraps a
+		// token wider than an int: 2^64+1 wraps to 1, which is a real
+		// element of this two-id array, so the reference resolved to
+		// the wrong id with no error at all. Anything past 2^63 wraps
+		// negative, which the "index >= len(array)" bound passes, so
+		// the walk indexed out of range and panicked. A panic is the
+		// one failure a package forbidden from logging cannot surface.
+		{
+			name: "index wider than a uint64",
+			resp: resp,
+			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/18446744073709551617"},
+		},
+		{
+			name: "index one past the largest int",
+			resp: resp,
+			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/9223372036854775808"},
+		},
+		{
+			name: "index of thirty-one digits",
+			resp: resp,
+			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/9999999999999999999999999999999"},
+		},
 		{
 			name: "path is not a JSON pointer",
 			resp: resp,
@@ -231,6 +254,34 @@ func TestResolveFailsLoudly(t *testing.T) {
 			}
 			if !errors.Is(err, ErrInvalidResultReference) {
 				t.Errorf("Resolve error = %v, want invalidResultReference", err)
+			}
+		})
+	}
+}
+
+// TestResolveErrorNamesTheWholePath pins what a failure says. A
+// wildcard applies the same token to every item of an array, so a
+// message naming only the token it stopped on leaves a reader of a
+// four-hop chain no way to tell which hop came apart.
+func TestResolveErrorNamesTheWholePath(t *testing.T) {
+	resp := decodeInvocations(t, "rfc8620-3.7-backref-wildcard.json")
+
+	paths := []string{
+		"/list/*/notAProperty",
+		"/list/0/id/deeper",
+		"/list/0/id/*",
+		"/list/9/id",
+		"/list/01/id",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			_, err := resp.Resolve(ResultReference{ResultOf: "t1", Name: "Email/get", Path: path})
+			if err == nil {
+				t.Fatalf("Resolve(%q) succeeded, want an error", path)
+			}
+			if !strings.Contains(err.Error(), path) {
+				t.Errorf("Resolve error %q does not name the path %q", err, path)
 			}
 		})
 	}

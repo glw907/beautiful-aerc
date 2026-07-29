@@ -132,6 +132,18 @@ func TestSpliceOrdersItsWork(t *testing.T) {
 			want:    []ID{"b", "c", "x"},
 		},
 		{
+			// RFC 8620 section 5.6 has a server report a row whose
+			// mutable sort or filter property changed in both arrays,
+			// because the row is still in the results and has only
+			// moved. Applying removed first and added second is what
+			// reinserts it where it now belongs.
+			name:    "a moved row is removed and added back at its new index",
+			cached:  []ID{"a", "b", "c"},
+			removed: []ID{"b"},
+			added:   []AddedItem{{ID: "b", Index: 2}},
+			want:    []ID{"a", "c", "b"},
+		},
+		{
 			name:    "a removal the cache never held is not an error",
 			cached:  []ID{"a"},
 			removed: []ID{"gone"},

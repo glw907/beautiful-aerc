@@ -123,16 +123,18 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 
 	// RFC 8620 section 3.3 applies the core capability to every
 	// request. Request.Invoke already merges it, but a Request
-	// assembled by hand need not have gone through Invoke. Forcing it
-	// on a copy leaves the caller's slice as they wrote it, so a
-	// Request reused across goroutines is not written to under one of
-	// them, which is what go-jmap's in-place append did.
+	// assembled by hand need not have gone through Invoke. Nothing
+	// here writes to req: the merged list lands on a struct copy, and
+	// mergeURIs either hands back the caller's slice untouched or
+	// builds a new one, never appending into the array behind it.
+	// go-jmap appended in place, which surprises a caller that reuses
+	// a Request and races two goroutines that share one.
 	out := *req
 	out.Using = mergeURIs(req.Using, nil)
 
 	body, err := json.Marshal(out)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal request: %v", err)
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, session.APIURL, bytes.NewReader(body))
 	if err != nil {

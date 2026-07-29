@@ -3,6 +3,7 @@ package jmap
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -68,7 +69,7 @@ func evalPointer(value json.RawMessage, pointer string) (json.RawMessage, error)
 	for i, token := range tokens {
 		tokens[i] = pointerUnescaper.Replace(token)
 	}
-	return evalTokens(value, tokens)
+	return evalTokens(pointer, value, tokens)
 }
 
 // pointerUnescaper reverses RFC 6901 section 3's escaping. The order
@@ -76,47 +77,51 @@ func evalPointer(value json.RawMessage, pointer string) (json.RawMessage, error)
 // "/".
 var pointerUnescaper = strings.NewReplacer("~1", "/", "~0", "~")
 
-func evalTokens(value json.RawMessage, tokens []string) (json.RawMessage, error) {
+// evalTokens carries pointer through the walk so a failure names the
+// whole path and not just the token it stopped on. A wildcard applies
+// the same token to every item, so the token alone says nothing about
+// where a four-hop chain came apart.
+func evalTokens(pointer string, value json.RawMessage, tokens []string) (json.RawMessage, error) {
 	if len(tokens) == 0 {
 		return value, nil
 	}
 	if tokens[0] == "*" {
-		return evalWildcard(value, tokens[1:])
+		return evalWildcard(pointer, value, tokens[1:])
 	}
 
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(value, &object); err == nil {
 		member, ok := object[tokens[0]]
 		if !ok {
-			return nil, referenceError("no property %q", tokens[0])
+			return nil, referenceError("path %q: no property %q", pointer, tokens[0])
 		}
-		return evalTokens(member, tokens[1:])
+		return evalTokens(pointer, member, tokens[1:])
 	}
 
 	var array []json.RawMessage
 	if err := json.Unmarshal(value, &array); err != nil {
-		return nil, referenceError("token %q applies to neither an object nor an array", tokens[0])
+		return nil, referenceError("path %q: token %q applies to neither an object nor an array", pointer, tokens[0])
 	}
 	index, ok := arrayIndex(tokens[0])
 	if !ok || index >= len(array) {
-		return nil, referenceError("array has no index %q", tokens[0])
+		return nil, referenceError("path %q: array has no index %q", pointer, tokens[0])
 	}
-	return evalTokens(array[index], tokens[1:])
+	return evalTokens(pointer, array[index], tokens[1:])
 }
 
 // evalWildcard applies the rest of the pointer to every item of an
 // array. An item that answers with an array contributes its elements
 // rather than itself, which is the flattening RFC 8620 section 3.7
 // describes and the reason a Thread/get chain yields one id list.
-func evalWildcard(value json.RawMessage, tokens []string) (json.RawMessage, error) {
+func evalWildcard(pointer string, value json.RawMessage, tokens []string) (json.RawMessage, error) {
 	var array []json.RawMessage
 	if err := json.Unmarshal(value, &array); err != nil {
-		return nil, referenceError("wildcard applied to a value that is not an array")
+		return nil, referenceError("path %q: wildcard applied to a value that is not an array", pointer)
 	}
 
 	flattened := []json.RawMessage{}
 	for _, item := range array {
-		result, err := evalTokens(item, tokens)
+		result, err := evalTokens(pointer, item, tokens)
 		if err != nil {
 			return nil, err
 		}
@@ -134,16 +139,22 @@ func evalWildcard(value json.RawMessage, tokens []string) (json.RawMessage, erro
 // section 4 admits only digits with no leading zero, so "01" is a
 // member name and never an index, and "-" points one past the end,
 // where there is nothing to evaluate.
+//
+// The digit scan and strconv.Atoi are both load-bearing. The scan
+// rejects the signs and the underscores Atoi accepts, which section 4
+// does not admit. Atoi rejects a run of digits too large for an int,
+// which accumulating the value by hand instead wraps: a token of 2^64+1
+// wraps to 1 and resolves to a real element of the array with no error,
+// and a larger one wraps negative and indexes out of range.
 func arrayIndex(token string) (int, bool) {
 	if token == "" || (len(token) > 1 && token[0] == '0') {
 		return 0, false
 	}
-	index := 0
 	for _, r := range token {
 		if r < '0' || r > '9' {
 			return 0, false
 		}
-		index = index*10 + int(r-'0')
 	}
-	return index, true
+	index, err := strconv.Atoi(token)
+	return index, err == nil
 }
