@@ -255,7 +255,8 @@ func offerRecovery(ctx context.Context, dbPath string, allowed bool, cause error
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(out, "rebuilt store: %d outbox intent(s) and %d local message(s) preserved\n", counts.Outbox, counts.Messages)
+	_, _ = fmt.Fprintf(out, "rebuilt store: %d outbox intent(s), %d mailbox(es) and %d local message(s) preserved\n",
+		counts.Outbox, counts.Mailboxes, counts.Messages)
 	return nil
 }
 

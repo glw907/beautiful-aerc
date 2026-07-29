@@ -74,19 +74,24 @@ func CheckIntegrity(ctx context.Context, db *sql.DB, progress func(stage string)
 // RecoveredCounts reports what Recover carried over from the store it
 // rebuilt, for a caller to report to the operator.
 type RecoveredCounts struct {
-	Outbox   int
-	Messages int
+	Outbox    int
+	Mailboxes int
+	Messages  int
 }
 
 // Recover rebuilds the store at path from nothing but its
 // non-rebuildable state: undispatched outbox rows, and origin =
 // 'local' messages, drafts among them, with their bodies and
-// draft_meta rows (SY-8). Every account row travels too, since pass 1
-// has no onboarding flow to recreate one; everything else, mailboxes,
-// server-origin messages, the FTS index, is disposable by construction
-// and returns from the next sync. Recover runs before the writer
-// starts, when nothing else holds path open, so it manages its own
-// short-lived connections rather than routing through a Writer.
+// draft_meta rows (SY-8). Every account and mailbox row travels too.
+// Pass 1 has no onboarding flow to recreate an account, and a mailbox
+// row carries the internal key an undispatched intent's payload names
+// (ADR-0006): drop it and the intent resolves against whatever mailbox
+// the next sync happens to mint under that id, so a queued rename
+// lands on a different folder with no error. Server-origin messages
+// and the FTS index are disposable by construction and return from the
+// next sync. Recover runs before the writer starts, when nothing else
+// holds path open, so it manages its own short-lived connections
+// rather than routing through a Writer.
 //
 // If the rebuild fails after path is quarantined, Recover renames the
 // quarantined file back to path rather than leaving a fresh, empty
@@ -114,7 +119,11 @@ func Recover(ctx context.Context, path string) (RecoveredCounts, error) {
 			fmt.Errorf("rebuild %s: %w", path, err))
 	}
 
-	return RecoveredCounts{Outbox: len(preserved.outbox), Messages: len(preserved.messages)}, nil
+	return RecoveredCounts{
+		Outbox:    len(preserved.outbox),
+		Mailboxes: len(preserved.mailboxes),
+		Messages:  len(preserved.messages),
+	}, nil
 }
 
 // rebuildAt opens a fresh, migrated store at path and writes preserved
@@ -145,7 +154,8 @@ func rebuildAt(ctx context.Context, path string, preserved preservedData) error 
 func unquarantine(quarantined, path string, preserved preservedData) {
 	if err := os.Rename(quarantined, path); err != nil {
 		slog.Error("store: recovery failed and the quarantined store could not be restored; preserved rows survive only in the quarantined file",
-			"quarantine_path", quarantined, "outbox_rows", len(preserved.outbox), "message_rows", len(preserved.messages), "error", err)
+			"quarantine_path", quarantined, "outbox_rows", len(preserved.outbox),
+			"mailbox_rows", len(preserved.mailboxes), "message_rows", len(preserved.messages), "error", err)
 		return
 	}
 	for _, suffix := range [...]string{"-wal", "-shm"} {
@@ -162,6 +172,22 @@ type preservedAccount struct {
 	slug, backendKind string
 	address           string
 	data              string
+}
+
+// preservedMailbox is one mailbox row Recover carries into the
+// rebuilt store, id included: an undispatched intent's payload names
+// its mailbox by that id, and the next sync matches the row back to
+// the same server object through the (account_id, server_id) unique
+// index rather than minting a fresh id for it. The whole row travels
+// rather than its identity alone, so a reader still sees the folder
+// list they had before the rebuild until that sync lands.
+type preservedMailbox struct {
+	id, accountID           int64
+	serverID                sql.NullString
+	role, name              string
+	sortOrder, visible      int64
+	unreadCount, totalCount int64
+	data                    string
 }
 
 // preservedOutboxRow is one outbox row Recover carries into the
@@ -205,9 +231,10 @@ type preservedMessage struct {
 // preservedData is everything Recover extracts from a store before
 // discarding it.
 type preservedData struct {
-	accounts []preservedAccount
-	outbox   []preservedOutboxRow
-	messages []preservedMessage
+	accounts  []preservedAccount
+	mailboxes []preservedMailbox
+	outbox    []preservedOutboxRow
+	messages  []preservedMessage
 }
 
 // extractPreserved reads path's non-rebuildable rows through a
@@ -224,6 +251,10 @@ func extractPreserved(ctx context.Context, path string) (preservedData, error) {
 	if err != nil {
 		return preservedData{}, fmt.Errorf("read accounts: %w", err)
 	}
+	mailboxes, err := extractMailboxes(ctx, db)
+	if err != nil {
+		return preservedData{}, fmt.Errorf("read mailboxes: %w", err)
+	}
 	outboxRows, err := extractOutbox(ctx, db)
 	if err != nil {
 		return preservedData{}, fmt.Errorf("read outbox: %w", err)
@@ -232,7 +263,7 @@ func extractPreserved(ctx context.Context, path string) (preservedData, error) {
 	if err != nil {
 		return preservedData{}, fmt.Errorf("read local messages: %w", err)
 	}
-	return preservedData{accounts: accounts, outbox: outboxRows, messages: messages}, nil
+	return preservedData{accounts: accounts, mailboxes: mailboxes, outbox: outboxRows, messages: messages}, nil
 }
 
 func extractAccounts(ctx context.Context, db *sql.DB) ([]preservedAccount, error) {
@@ -249,6 +280,29 @@ func extractAccounts(ctx context.Context, db *sql.DB) ([]preservedAccount, error
 			return nil, err
 		}
 		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func extractMailboxes(ctx context.Context, db *sql.DB) ([]preservedMailbox, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, account_id, server_id, role, name, sort_order, visible, unread_count, total_count, data
+		FROM mailbox`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []preservedMailbox
+	for rows.Next() {
+		var m preservedMailbox
+		if err := rows.Scan(
+			&m.id, &m.accountID, &m.serverID, &m.role, &m.name,
+			&m.sortOrder, &m.visible, &m.unreadCount, &m.totalCount, &m.data,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
 	}
 	return out, rows.Err()
 }
@@ -317,8 +371,8 @@ func extractLocalMessages(ctx context.Context, db *sql.DB) ([]preservedMessage, 
 }
 
 // restorePreserved writes preserved into db, freshly migrated, as one
-// transaction: accounts first, since outbox and message rows carry a
-// foreign key to them.
+// transaction: accounts first, since every other preserved row carries
+// a foreign key to them.
 func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -331,6 +385,15 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 			`INSERT INTO account (id, slug, backend_kind, address, data) VALUES (?, ?, ?, ?, ?)`,
 			a.id, a.slug, a.backendKind, a.address, a.data); err != nil {
 			return fmt.Errorf("insert account %d: %w", a.id, err)
+		}
+	}
+	for _, m := range preserved.mailboxes {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO mailbox (id, account_id, server_id, role, name, sort_order, visible, unread_count, total_count, data)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			m.id, m.accountID, m.serverID, m.role, m.name,
+			m.sortOrder, m.visible, m.unreadCount, m.totalCount, m.data); err != nil {
+			return fmt.Errorf("insert mailbox %d: %w", m.id, err)
 		}
 	}
 	for _, o := range preserved.outbox {

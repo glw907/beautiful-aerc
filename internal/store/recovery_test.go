@@ -140,15 +140,21 @@ func TestCheckIntegrityDetectsCorruption(t *testing.T) {
 	}
 }
 
-// seedRecoveryFixture writes one account, one undispatched outbox row,
-// a draft (message 200) with its local revision, a plain local message
-// (message 300) with its body, and a disposable server-origin message
-// (message 100): the mix every SY-8 recovery test rebuilds from.
+// seedRecoveryFixture writes one account, one mailbox (id 7, the
+// internal key an intent payload would name), one undispatched outbox
+// row, a draft (message 200) with its local revision, a plain local
+// message (message 300) with its body, and a disposable server-origin
+// message (message 100): the mix every SY-8 recovery test rebuilds
+// from.
 func seedRecoveryFixture(t *testing.T, w *Writer) {
 	t.Helper()
 
 	err := w.submit(context.Background(), func(tx *sql.Tx) error {
 		if _, err := tx.Exec(seedAccountSQL); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO mailbox (id, account_id, server_id, role, name, sort_order, unread_count, total_count)
+			VALUES (7, 1, 'srv-mbx-7', 'archive', 'Archive', 4, 2, 9)`); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`INSERT INTO message (id, account_id, server_id, received_at, subject, search_text, origin)
@@ -198,6 +204,19 @@ func assertRecoveryPreservedFixture(t *testing.T, path string) {
 	}
 	if outboxCount != 1 {
 		t.Error("outbox row missing after recovery, want it preserved")
+	}
+
+	// Id 7 is the assertion, not the name: a queued intent names its
+	// mailbox by that internal key, so a rebuilt store minting a fresh
+	// id for Archive would silently rebind the intent.
+	var serverID, name, role string
+	var sortOrder, unread, total int64
+	if err := db.QueryRow(`SELECT server_id, name, role, sort_order, unread_count, total_count FROM mailbox WHERE id = 7`).
+		Scan(&serverID, &name, &role, &sortOrder, &unread, &total); err != nil {
+		t.Errorf("mailbox 7 missing after recovery: %v", err)
+	} else if serverID != "srv-mbx-7" || name != "Archive" || role != "archive" || sortOrder != 4 || unread != 2 || total != 9 {
+		t.Errorf("mailbox 7 = (%q, %q, %q, %d, %d, %d), want (%q, %q, %q, 4, 2, 9)",
+			serverID, name, role, sortOrder, unread, total, "srv-mbx-7", "Archive", "archive")
 	}
 
 	var localRev int
@@ -259,8 +278,8 @@ func TestRecoverAfterCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	if counts.Outbox != 1 || counts.Messages != 2 {
-		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Messages:2}", counts)
+	if counts.Outbox != 1 || counts.Mailboxes != 1 || counts.Messages != 2 {
+		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Mailboxes:1 Messages:2}", counts)
 	}
 	assertRecoveryPreservedFixture(t, path)
 }
@@ -302,8 +321,8 @@ func TestRecoverAfterFailedMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	if counts.Outbox != 1 || counts.Messages != 2 {
-		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Messages:2}", counts)
+	if counts.Outbox != 1 || counts.Mailboxes != 1 || counts.Messages != 2 {
+		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Mailboxes:1 Messages:2}", counts)
 	}
 	assertRecoveryPreservedFixture(t, path)
 }
@@ -436,8 +455,8 @@ func TestRecoverAfterDiskFull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	if counts.Outbox != 1 || counts.Messages != 2 {
-		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Messages:2}", counts)
+	if counts.Outbox != 1 || counts.Mailboxes != 1 || counts.Messages != 2 {
+		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Mailboxes:1 Messages:2}", counts)
 	}
 	assertRecoveryPreservedFixture(t, path)
 }
