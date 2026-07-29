@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -92,28 +90,37 @@ func TestIsFatalConnectRecognizesADialErrorAuthClass(t *testing.T) {
 	}
 }
 
-// TestRetryConnectSurfacesFirstFailureOnceAndLogsRecovery pins
-// retryConnect's own three surfacing calls directly, the regression
-// guard TestClassifyConnect cannot provide on its own since it only
-// pins the pure classifier, which passes whether or not anything ever
-// calls it: firstErr and every same-class retry failure must surface
-// exactly one main.connect log line (the seed call plus the
-// class-change dedup, ADR-0013 revision 2), and a later success must
-// log recovery (the slog.Info call).
-func TestRetryConnectSurfacesFirstFailureOnceAndLogsRecovery(t *testing.T) {
+// TestRetryConnectSurfacesEachClassOnceAndLogsRecovery pins
+// retryConnect's surfacing calls along the path that ends in a
+// success, the regression guard TestClassifyConnect cannot provide
+// since it only pins the pure classifier, which passes whether or not
+// anything ever calls it (TestRetryConnectSurfacesTheCredentialItGivesUpOn
+// pins the fourth call, on the path that ends in a fatal). The
+// script walks two classes so no one call covers for another: firstErr
+// and the identically-classed retry behind it must produce exactly one
+// connection line (the seed plus the dedup), the differently-classed
+// failure after that must produce a second line (the class-change
+// call), and the success after that must log recovery (the slog.Info
+// call). A single-class script leaves the class-change call
+// unexercised, which is how deleting it stayed green.
+func TestRetryConnectSurfacesEachClassOnceAndLogsRecovery(t *testing.T) {
 	buf := uerrtest.Capture(t)
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	var attempts atomic.Int64
-	dialErr := errors.New("dial tcp: connection refused")
+	refused := errors.New("dial tcp: connection refused")
 	connect := func(context.Context) (backend.Backend, string, error) {
-		if attempts.Add(1) <= 2 {
-			return nil, "", dialErr
+		switch attempts.Add(1) {
+		case 1:
+			return nil, "", refused
+		case 2:
+			return nil, "", jmap.DialError{Class: uerr.ClassServer, Cause: errors.New("session: unexpected status 503")}
+		default:
+			return &backendtest.Fake{}, "test-account", nil
 		}
-		return &backendtest.Fake{}, "test-account", nil
 	}
 
-	be, key, ok := retryConnect(context.Background(), connect, dialErr)
+	be, key, ok := retryConnect(context.Background(), connect, refused)
 	if !ok {
 		t.Fatal("retryConnect did not succeed despite the connector eventually returning nil")
 	}
@@ -122,14 +129,17 @@ func TestRetryConnectSurfacesFirstFailureOnceAndLogsRecovery(t *testing.T) {
 	}
 
 	lines := uerrtest.Lines(t, buf)
-	if len(lines) != 1 {
-		t.Fatalf("got %d main.connect log line(s), want exactly 1 (firstErr's seed, deduped against the two identically-classed retries): %v", len(lines), lines)
+	if len(lines) != 2 {
+		t.Fatalf("got %d main.connect log line(s), want exactly 2 (the seed, deduped against the identically-classed retry, then the class change): %v", len(lines), lines)
 	}
-	if lines[0]["msg"] != "main.connect" {
-		t.Errorf("msg = %v, want %q", lines[0]["msg"], "main.connect")
-	}
-	if lines[0]["class"] != "connection" {
-		t.Errorf("class = %v, want %q", lines[0]["class"], "connection")
+	wantClasses := []string{"connection", "server"}
+	for i, line := range lines {
+		if line["msg"] != "main.connect" {
+			t.Errorf("line %d msg = %v, want %q", i, line["msg"], "main.connect")
+		}
+		if line["class"] != wantClasses[i] {
+			t.Errorf("line %d class = %v, want %q", i, line["class"], wantClasses[i])
+		}
 	}
 
 	if !strings.Contains(log.String(), "connect reconnected") {
@@ -137,40 +147,38 @@ func TestRetryConnectSurfacesFirstFailureOnceAndLogsRecovery(t *testing.T) {
 	}
 }
 
-// captureSlog redirects slog's process-wide default logger to an
-// in-memory buffer for the rest of the test, restoring the previous
-// default on cleanup. retryConnect's recovery line goes through plain
-// log/slog (uerrtest.Capture only sees uerr.New's own output), the
-// same reason internal/sync and internal/outbox each carry their own
-// copy of this helper.
-func captureSlog(t *testing.T) *logBuffer {
-	t.Helper()
+// TestRetryConnectSurfacesTheCredentialItGivesUpOn proves retryConnect
+// does not abandon its loop in silence. A credential the server starts
+// rejecting partway through an outage ends the retries for good, and
+// the process stays up with no sync worker and no dispatcher behind
+// it; without a line naming that, the operator's only evidence is mail
+// that quietly stops arriving.
+func TestRetryConnectSurfacesTheCredentialItGivesUpOn(t *testing.T) {
+	buf := uerrtest.Capture(t)
 
-	buf := &logBuffer{}
-	old := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(old) })
-	return buf
-}
+	var attempts atomic.Int64
+	refused := errors.New("dial tcp: connection refused")
+	connect := func(context.Context) (backend.Backend, string, error) {
+		if attempts.Add(1) == 1 {
+			return nil, "", refused
+		}
+		return nil, "", fmt.Errorf("jmap: dial: %w", jmap.DialError{
+			Class: uerr.ClassAuth,
+			Cause: errors.New("session: unexpected status 401"),
+		})
+	}
 
-// logBuffer is captureSlog's destination, guarded since a background
-// goroutine could in principle log concurrently with the test reading
-// what has arrived.
-type logBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
+	if _, _, ok := retryConnect(context.Background(), connect, refused); ok {
+		t.Fatal("retryConnect reported success despite the server rejecting the credential")
+	}
 
-func (b *logBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *logBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
+	lines := uerrtest.Lines(t, buf)
+	if len(lines) != 2 {
+		t.Fatalf("got %d main.connect log line(s), want 2 (firstErr's seed, then the rejected credential it gave up on): %v", len(lines), lines)
+	}
+	if lines[1]["class"] != "auth" {
+		t.Errorf("the giving-up line's class = %v, want %q", lines[1]["class"], "auth")
+	}
 }
 
 // TestStartEnginesAppliesAPushedChange proves startEngines wires the

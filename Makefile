@@ -9,7 +9,7 @@ GOLANGCI := tools/bin/golangci-lint
 POPLARCHECK := tools/bin/poplarcheck
 
 .PHONY: all build test install fmt check \
-	tidy-check check-build fmt-check lint analyzers vale-comments skipcheck perf \
+	tidy-check check-build fmt-check lint analyzers vale-comments skipcheck hookcheck perf \
 	build-golangci-lint build-poplarcheck
 
 all: check
@@ -26,7 +26,7 @@ install: build
 fmt: build-golangci-lint
 	./$(GOLANGCI) fmt --config .golangci.yml ./...
 
-check: tidy-check check-build fmt-check lint analyzers vale-comments skipcheck test perf
+check: tidy-check check-build fmt-check lint analyzers vale-comments skipcheck hookcheck test perf
 
 tidy-check:
 	go mod tidy
@@ -62,6 +62,9 @@ vale-comments:
 
 skipcheck:
 	go run ./scripts/skipcheck
+
+hookcheck:
+	go run ./scripts/hookcheck
 
 # Race instrumentation costs 2-20x time and 5-10x memory, so a p95
 # asserted under it measures the detector, not the product; race

@@ -129,13 +129,15 @@ func dispatchAndVerifyCreate(t *testing.T, ctx context.Context, w *store.Writer,
 	if err != nil {
 		t.Fatalf("EnqueueCreateMailbox: %v", err)
 	}
-	waitForDispatch(t, w, intentID, 30*time.Second)
 
-	// Best-effort, registered before any assertion below can end the
-	// test early: a waitForDispatch timeout that follows a server-side
-	// create still strands a mailbox on the real account, and it
-	// iterates every recorded create, not just the last, since a
-	// dispatcher retry across that timeout can leave two.
+	// Best-effort, and registered ahead of waitForDispatch rather than
+	// after it: a timeout there ends the test through runtime.Goexit,
+	// so a cleanup registered below it is never registered at all, and
+	// a timeout following a server-side create is exactly the case that
+	// strands a mailbox on the real account. The closure reads
+	// allCreates lazily, and it iterates every recorded create rather
+	// than the last, since a dispatcher retry across that timeout can
+	// leave two.
 	t.Cleanup(func() {
 		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -145,6 +147,8 @@ func dispatchAndVerifyCreate(t *testing.T, ctx context.Context, w *store.Writer,
 			}
 		}
 	})
+
+	waitForDispatch(t, w, intentID, 30*time.Second)
 
 	c, ok := rec.lastCreate()
 	if !ok {

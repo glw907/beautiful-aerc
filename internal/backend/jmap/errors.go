@@ -107,8 +107,15 @@ type DialError struct {
 	Cause error
 }
 
-// Error returns e's cause's message.
-func (e DialError) Error() string { return e.Cause.Error() }
+// Error returns e's cause's message, or a fixed string when e carries
+// no cause: DialError is exported, so a zero value can reach Error
+// from outside this package.
+func (e DialError) Error() string {
+	if e.Cause == nil {
+		return "jmap: dial rejected"
+	}
+	return e.Cause.Error()
+}
 
 // Unwrap returns e's cause.
 func (e DialError) Unwrap() error { return e.Cause }

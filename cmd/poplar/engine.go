@@ -121,7 +121,7 @@ var (
 // failure. ok is false when ctx ends first or connect ever reports a
 // fatal (isFatalConnect) failure: a credential the operator removed
 // or that the server started rejecting mid-run does not become valid
-// by waiting.
+// by waiting, and that terminal failure surfaces once on its way out.
 func retryConnect(ctx context.Context, connect backendConnector, firstErr error) (be backend.Backend, key string, ok bool) {
 	failClass, cause := classifyConnect(firstErr)
 	_ = uerr.New("main.connect", nil, failClass, cause)
@@ -136,6 +136,12 @@ func retryConnect(ctx context.Context, connect backendConnector, firstErr error)
 			return be, key, true
 		}
 		if isFatalConnect(err) {
+			// Giving up is its own surfacing event, and the last one
+			// this path has: run stays alive with no sync worker and no
+			// dispatcher behind it, so an unlogged exit here leaves mail
+			// quietly not arriving as the operator's only evidence.
+			class, cause := classifyConnect(err)
+			_ = uerr.New("main.connect", nil, class, cause)
 			return nil, "", false
 		}
 		if class, cause := classifyConnect(err); class != failClass {

@@ -136,7 +136,11 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// startup failure exactly as before; any other connect failure
 	// (the network unreachable, a timeout) falls to
 	// startEnginesRetrying instead of aborting run, since SY-3
-	// requires poplar to run and stay usable with no network.
+	// requires poplar to run and stay usable with no network. The
+	// fatal branch is what constructs the uerr.Error: jmap.Dial
+	// classifies its own failures without logging so a retry loop can
+	// dedup them (ADR-0013 revision 2), which leaves this exit the one
+	// surfacing event on a path that has no retry loop at all.
 	var wg *sync.WaitGroup
 	be, key, err := connect(ctx)
 	switch {
@@ -149,7 +153,8 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 		wg = startEngines(ctx, accountID, be, writer)
 	case isFatalConnect(err):
 		_ = writer.Close()
-		return err
+		class, cause := classifyConnect(err)
+		return uerr.New("main.connect", nil, class, cause)
 	default:
 		wg = startEnginesRetrying(ctx, writer, connect, err)
 	}

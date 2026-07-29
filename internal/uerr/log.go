@@ -19,29 +19,49 @@ func SetLevel(l slog.Level) {
 	level.Set(l)
 }
 
-// logger is uerr's log destination, built once per process. It is
-// unexported package state; a test in this package reassigns it
-// directly (log_test.go's captureLog), and RedirectForTest is the
-// same reassignment exposed to a test outside this package.
-var logger = sync.OnceValue(func() *slog.Logger {
+// logHandle builds uerr's log destination once per process.
+// RedirectForTest swaps it for one over a test's own buffer.
+var logHandle = sync.OnceValue(func() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(openLogWriter(), &slog.HandlerOptions{Level: level}))
 })
+
+// logMu guards logHandle. Every New call reads it and RedirectForTest
+// writes it, so a background engine goroutine logging while a test
+// redirects would otherwise race.
+var logMu sync.Mutex
+
+// logger returns uerr's log destination.
+func logger() *slog.Logger {
+	logMu.Lock()
+	defer logMu.Unlock()
+	return logHandle()
+}
 
 // RedirectForTest points uerr's log destination at w and returns a
 // restore func that puts the prior destination back. It is the only
 // route by which a package outside internal/uerr can observe what
-// uerr.New actually wrote: New's own logger is package-private state,
-// so without this hook no ER-1 assertion anywhere else in the tree
-// (a caller's dedup discipline under ADR-0013 revision 2, most
+// uerr.New actually wrote: New's own destination is package-private
+// state, so without this hook no ER-1 assertion anywhere else in the
+// tree (a caller's dedup discipline under ADR-0013 revision 2, most
 // notably) can tell a construction happened from one that never did.
 // internal/uerr/uerrtest wraps this for a *testing.T caller.
+//
+// It is a test hook, and a production call would divert every error
+// line in the process for its lifetime. scripts/hookcheck fails the
+// build on a reference to it from any non-test file outside this
+// package.
 func RedirectForTest(w io.Writer) (restore func()) {
-	origLogger, origLevel := logger, level.Level()
-	logger = sync.OnceValue(func() *slog.Logger {
+	logMu.Lock()
+	defer logMu.Unlock()
+
+	origHandle, origLevel := logHandle, level.Level()
+	logHandle = sync.OnceValue(func() *slog.Logger {
 		return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}))
 	})
 	return func() {
-		logger = origLogger
+		logMu.Lock()
+		defer logMu.Unlock()
+		logHandle = origHandle
 		level.Set(origLevel)
 	}
 }

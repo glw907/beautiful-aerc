@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -18,9 +19,11 @@ import (
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"
+	"github.com/glw907/poplar/internal/backend/jmap"
 	"github.com/glw907/poplar/internal/platform"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // runMainEnvVar names the environment variable
@@ -630,16 +633,30 @@ func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
 	}
 }
 
-// TestRunFailsFastOnAFatalConnectError proves the missing/rejected
-// credential case stays exactly as fatal as before this task: run
-// returns the error immediately, and connect is never retried.
+// TestRunFailsFastOnAFatalConnectError proves the rejected-credential
+// case stays exactly as fatal as before this task and stays visible:
+// run returns immediately without retrying, the operator reads the
+// fixed ClassAuth sentence rather than the transport's raw status
+// text, and the same failure reaches the log as exactly one
+// main.connect line (ER-1's correlation between what the user sees and
+// what the log records).
+//
+// The scripted failure is the shape jmap.Dial actually returns for a
+// 401: a wrapped jmap.DialError, not a uerr.Error. fetchSession
+// classifies without constructing one so its caller's retry loop owns
+// the surfacing (ADR-0013 revision 2), which leaves run's own fatal
+// exit the only place a uerr.Error can come from on this path.
 func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
+	logged := uerrtest.Capture(t)
 
 	var attempts atomic.Int64
 	connect := func(context.Context) (backend.Backend, string, error) {
 		attempts.Add(1)
-		return nil, "", uerr.New("test.connect", nil, uerr.ClassAuth, errors.New("no token"))
+		return nil, "", fmt.Errorf("jmap: dial: %w", jmap.DialError{
+			Class: uerr.ClassAuth,
+			Cause: errors.New("session https://api.fastmail.com/jmap/session: unexpected status 401"),
+		})
 	}
 
 	var out bytes.Buffer
@@ -649,5 +666,25 @@ func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
 	}
 	if n := attempts.Load(); n != 1 {
 		t.Errorf("connect called %d time(s), want exactly 1 (a fatal failure must not retry)", n)
+	}
+
+	var stderr bytes.Buffer
+	reportStartupFailure(&stderr, err)
+	if !strings.Contains(stderr.String(), "Sign-in was rejected") {
+		t.Errorf("stderr = %q, want the fixed ClassAuth sentence", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unexpected status 401") {
+		t.Errorf("stderr = %q, want the cause naming the status the server returned", stderr.String())
+	}
+
+	lines := uerrtest.Lines(t, logged)
+	if len(lines) != 1 {
+		t.Fatalf("got %d log line(s), want exactly 1 main.connect: %v", len(lines), lines)
+	}
+	if lines[0]["msg"] != "main.connect" {
+		t.Errorf("msg = %v, want %q", lines[0]["msg"], "main.connect")
+	}
+	if lines[0]["class"] != "auth" {
+		t.Errorf("class = %v, want %q", lines[0]["class"], "auth")
 	}
 }

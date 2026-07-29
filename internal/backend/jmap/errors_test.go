@@ -117,3 +117,19 @@ func TestDoClassifiesTransportFailure(t *testing.T) {
 		t.Errorf("Class = %v, want ClassAuth", ue.Class)
 	}
 }
+
+// TestDialErrorMessageSurvivesAZeroValue proves DialError.Error does
+// not panic on a value carrying no cause. DialError is exported, so a
+// caller outside this package can build or copy one, and an error type
+// that panics when printed takes down whatever was already reporting a
+// failure.
+func TestDialErrorMessageSurvivesAZeroValue(t *testing.T) {
+	if msg := (DialError{}).Error(); msg == "" {
+		t.Error("a zero-value DialError's message is empty, want a fixed string")
+	}
+
+	cause := errors.New("session: unexpected status 401")
+	if msg := (DialError{Class: uerr.ClassAuth, Cause: cause}).Error(); msg != cause.Error() {
+		t.Errorf("Error() = %q, want the cause's own message %q", msg, cause.Error())
+	}
+}
