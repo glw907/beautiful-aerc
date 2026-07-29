@@ -378,6 +378,52 @@ plan-approval model boundary; the starter prompt below is the
 handoff. The scope list that follows remains the binding source
 the plan was authored from.
 
+**Execution in progress (2026-07-29). Tasks 1 through 4 are done,
+reviewed, and pushed** (commits `ef0c986..767d9a4`, 16 commits on
+origin/master). The live progress ledger is
+`.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md`
+and it is the recovery map: it records every task's outcome, every
+parked and deferred finding, the routing rulings, and the defect
+patterns worth carrying. **A resuming session reads that ledger
+first**, then resumes at the first task with no `complete` line.
+
+- **Task 1, the headless runner: complete.** `cmd/poplar` starts the
+  JMAP session, sync worker, and dispatcher; clean shutdown ordering
+  is pinned; poplar now starts and stays up with no network.
+  `deadcode` fell from 203 unreachable functions to 61, each
+  remaining one enumerated and justified. Five fix rounds.
+- **Tasks 2, 3 and 4: the `jmap` library is complete** at
+  `poplar/jmap` — data model, transport, and EventSource push client,
+  standard-library-only, importing no poplar package, with a
+  `make jmap-boundary` gate enforcing that mechanically. ADR-0018
+  (push stream resumption) is committed. The adopt case held: the
+  seven go-jmap defect fixes came to ~23 lines against 1,592 adopted,
+  1.4% against the plan's 30% abort threshold, with no signature
+  changes.
+- **Task 5, Stalwart conformance, is in flight** with its work
+  uncommitted in the working tree.
+
+**Two new artifacts this pass, both owner-directed (2026-07-29):**
+- **The trim ledger** (task 5): one row per method or package
+  deliberately omitted from `poplar/jmap`, with why it is out and
+  what would bring it back. The trim boundary leaked three times
+  before it was tracked.
+- **The RFC obligations map**, 281 rows of client-binding normative
+  obligations across RFC 8620, 8621, 9219, 6901 and the WHATWG SSE
+  section, each mapped to a proving test, a `GAP`, or an `N/A`.
+  **Ruling: it is a standing input, not a work item.** It moves to
+  `docs/poplar/research/`, and each pass closes the MUST gaps for the
+  surface that pass ships — pass 2 the read path, pass 3 the eleven
+  `Email/set` create constraints, pass 5 the calendar rows. There is
+  no gap-closing task and no gap-closing pass.
+
+**Environment correction for anyone running the conformance suite:**
+Docker is not installed on this workstation. The suite runs on
+**podman** (rootless, no daemon, no sudo), and the Makefile prefers
+podman with a `CONTAINER` override. The Stalwart image was renamed
+upstream: `stalwartlabs/mail-server` stops at v0.11.8, and v0.16.15
+lives at `docker.io/stalwartlabs/stalwart:v0.16.15`.
+
 Scope, in dependency order:
 
 1. **The headless runner.** `cmd/poplar` constructs the JMAP source
