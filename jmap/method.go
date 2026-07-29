@@ -28,6 +28,8 @@ var methodResponses = map[string]func() any{
 
 	"Core/echo": func() any { return &Echo{} },
 
+	"Blob/copy": func() any { return &BlobCopyResponse{} },
+
 	"Mailbox/get":     func() any { return &MailboxGetResponse{} },
 	"Mailbox/changes": func() any { return &MailboxChangesResponse{} },
 	"Mailbox/query":   func() any { return &MailboxQueryResponse{} },

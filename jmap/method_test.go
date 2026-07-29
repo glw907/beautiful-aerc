@@ -34,6 +34,12 @@ func methodCases() []methodCase {
 			wantArgs: `{"hello":true,"high":5}`,
 		},
 		{
+			name:     "Blob/copy",
+			method:   &BlobCopy{From: "A1", Account: "A2", BlobIDs: []ID{"B1", "B2"}},
+			wantUsed: core,
+			wantArgs: `{"fromAccountId":"A1","accountId":"A2","blobIds":["B1","B2"]}`,
+		},
+		{
 			name:     "Mailbox/get",
 			method:   &MailboxGet{Account: "A13824", IDs: []ID{"MA"}},
 			wantUsed: mail,

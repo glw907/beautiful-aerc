@@ -161,6 +161,15 @@ func TestSetErrorTypedExtras(t *testing.T) {
 			},
 		},
 		{
+			name: "alreadyExists names the record that already holds it",
+			raw:  `{"type":"alreadyExists","existingId":"MB"}`,
+			check: func(t *testing.T, e *SetError) {
+				if e.ExistingID != "MB" {
+					t.Errorf("ExistingID = %q, want MB; RFC 8620 section 5.3 makes it mandatory here", e.ExistingID)
+				}
+			},
+		},
+		{
 			name: "tooManyRecipients carries maxRecipients",
 			raw:  `{"type":"tooManyRecipients","maxRecipients":25}`,
 			check: func(t *testing.T, e *SetError) {

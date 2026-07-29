@@ -1,0 +1,22 @@
+{
+  "serverHostname": "localhost",
+  "defaultDomain": "conformance.test",
+  "requestTlsCertificate": false,
+  "generateDkimKeys": false,
+  "dataStore": { "@type": "RocksDb", "path": "/var/lib/stalwart/data" },
+  "blobStore": { "@type": "Default" },
+  "searchStore": { "@type": "Default" },
+  "inMemoryStore": { "@type": "Default" },
+  "directory": { "@type": "Internal" },
+  "dnsServer": { "@type": "Manual" },
+  "tracer": {
+    "@type": "Stdout",
+    "enable": true,
+    "level": "info",
+    "ansi": false,
+    "multiline": false,
+    "lossy": false,
+    "events": {},
+    "eventsPolicy": "exclude"
+  }
+}

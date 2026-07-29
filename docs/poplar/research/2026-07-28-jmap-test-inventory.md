@@ -654,12 +654,22 @@ test coverage is one assertion that an empty `FilterCondition` marshals to
 **JT-45.** `collapseThreads` on `Email/query`. RFC 8621 §4.4. See DV-07.
 
 **JT-46.** Thread grouping expectations are treated as server-side and not
-reimplemented. RFC 8621 §3, the unnumbered prose before §3.1, describes the
-message-id plus normalized-subject heuristic as a SHOULD, not a mandated
-algorithm. Assert that poplar consumes `Thread/get` output and never recomputes
-grouping. Note for the charter: its citation of RFC 8621 §1.3.2 for Thread
-semantics is wrong. That section is the EmailSubmission capability object
-(`maxDelayedSend`, `submissionExtensions`).
+reimplemented. The governing text is RFC 8621 §3 and, specifically, the
+unnumbered prose before §3.1, which describes the message-id plus
+normalized-subject heuristic as a SHOULD rather than a mandated algorithm.
+Assert that poplar consumes the server's grouping and never recomputes it.
+
+Two corrections, both verified during task 5 (2026-07-29):
+
+- An earlier draft of this row, and the charter, cited RFC 8621 §1.3.2 for
+  Thread semantics. That is wrong. §1.3.2 is the EmailSubmission capability
+  object (`maxDelayedSend`, `submissionExtensions`). Thread is §3, and the
+  heuristic is the unnumbered prose before §3.1, where it is a SHOULD.
+- The row's original wording asked for an assertion that poplar "consumes
+  `Thread/get` output". `Thread/get` is trimmed out of `poplar/jmap`, so no
+  test can make that assertion. The assertion in force is the one the
+  conformance suite makes: the `threadId` poplar reports is byte for byte the
+  one the server sent.
 
 ---
 
@@ -744,6 +754,11 @@ Stalwart also has the lowest setup cost of the candidates and the widest RFC
 coverage, including PushSubscription webhooks and JMAP WebSocket (RFC 8887).
 Current release is v0.16.15, published 2026-07-27.
 
+The image is `docker.io/stalwartlabs/stalwart`. The older
+`stalwartlabs/mail-server` name stops at v0.11.8 and must not be used: it
+predates the v0.16 rewrite this document's setup now assumes. Any surviving
+reference to it anywhere is stale.
+
 Runner-up is Cyrus IMAP, and section 5 explains why it is still worth adding
 later.
 
@@ -756,46 +771,44 @@ mox is ruled out. JMAP appears only under "Roadmap" on `xmox.nl/features`.
 
 ### How it runs locally
 
-```toml
-# jmap/testdata/conformance/stalwart.toml
-[server.listener.http]
-protocol = "http"
-bind = "[::]:8080"
+The paragraph below was rewritten during task 5 (2026-07-29) against the real
+v0.16.15 image. The TOML configuration, the `/api/account` endpoint, and
+`stalwart-cli` that this section originally carried are all v0.11 shapes and
+none of them survives into v0.16. `make conformance` is the executable version
+of what follows.
 
-[storage]
-data = "rocksdb"
-fts = "rocksdb"
-blob = "rocksdb"
-lookup = "rocksdb"
-directory = "internal"
-
-[store.rocksdb]
-type = "rocksdb"
-path = "./data"
-compression = "lz4"
-
-[directory.internal]
-type = "internal"
-store = "rocksdb"
-
-[authentication.fallback-admin]
-user = "admin"
-secret = "conformance"
-```
+- **The configuration file is JSON, not TOML**, and it holds only the data
+  store. `crates/store/src/registry/local.rs` reads it with `serde_json` and
+  decodes it into one `DataStore` value, so an extension of `.toml` changes
+  nothing. Everything else lives in a registry inside that store.
+- **The instance boots into a setup mode** that serves nothing but its own
+  `Bootstrap` object, and leaves that mode only when it restarts against a
+  configuration file it wrote itself. The suite's configuration is therefore
+  the Bootstrap object, at `jmap/testdata/conformance/stalwart.json`.
+- **Management moved onto JMAP** under the `urn:stalwart:jmap` capability, as
+  `x:Object/method` calls with capitalised object names: `x:Bootstrap/set`,
+  `x:Domain/query`, `x:Account/set`. There is no principal REST API.
+- **The suite needs a real account.** `STALWART_RECOVERY_ADMIN` pins an
+  administrator that authenticates and holds a JMAP session, but its account id
+  is synthetic and `Email/query` against it fails inside the server. Create a
+  user through `x:Account/set` and run as that.
+- **`STALWART_PUBLIC_URL` is required.** Without it the session advertises
+  `https://<container hostname>/jmap/`, which nothing outside the container can
+  reach.
 
 ```bash
-docker run -d --name poplar-jmap-conformance \
-  -p 8080:8080 -v "$PWD/jmap/testdata/conformance:/etc/stalwart" \
-  stalwartlabs/stalwart:v0.16.15
+podman run -d --name poplar-jmap-conformance -p 19080:8080 \
+  -e STALWART_RECOVERY_ADMIN=admin:conformance \
+  -e STALWART_PUBLIC_URL=http://localhost:19080 \
+  docker.io/stalwartlabs/stalwart:v0.16.15
 
-curl -u admin:conformance http://localhost:8080/api/account \
-  -H 'Content-Type: application/json' \
-  -d '{"type":"individual","name":"user1","secrets":["password"],"emails":["user1@localhost"]}'
-
-stalwart-cli import messages -f mbox user1 jmap/testdata/conformance/seed.mbox
+go run ./scripts/conformance -step setup   -url http://localhost:19080
+podman restart poplar-jmap-conformance
+go run ./scripts/conformance -step account -url http://localhost:19080
 ```
 
-Session endpoint: `http://localhost:8080/.well-known/jmap`.
+Session endpoint: `http://localhost:19080/.well-known/jmap`. The host port is
+high because rootless podman cannot bind below 1024.
 
 The seed corpus should be license-clean. poplar already plans one as a Phase 5
 pass-3 artifact per ADR-0014. Reuse it rather than minting a second.
@@ -806,9 +819,9 @@ Add a build tag `conformance` and a single env-driven target selector, so the
 same test bodies run against Stalwart, Fastmail, or any future server:
 
 ```
-POPLAR_JMAP_SESSION_URL=http://localhost:8080/.well-known/jmap
-POPLAR_JMAP_USER=user1
-POPLAR_JMAP_PASSWORD=password
+POPLAR_JMAP_SESSION_URL=http://localhost:19080/.well-known/jmap
+POPLAR_JMAP_USER=user1@conformance.test
+POPLAR_JMAP_PASSWORD=poplar-conformance-9f2c
 POPLAR_JMAP_SERVER=stalwart     # names the expected-divergence profile
 ```
 
@@ -873,6 +886,10 @@ body. Cyrus returns 201: `imap/http_jmap.c`, function `jmap_upload`, line 1232,
 four. Stalwart returns 200: `crates/http-proto/src/lib.rs`, `JsonResponse::new`
 defaults to `StatusCode::OK`, and `crates/jmap/src/api/mod.rs` returns
 `UploadResponse` through it with no override. Fastmail returns 200.
+
+Measured during task 5 (2026-07-29): Stalwart v0.16.15 answers 200 with exactly
+the four properties. Fastmail answers 200 and sends the fifth `expires`
+property too, which this section attributed to Cyrus alone.
 
 Test: a table over `{200, 201, 202, 200-with-extra-fields}`; every 2xx with a
 valid body succeeds; the extra `expires` field is preserved or ignored without

@@ -8,9 +8,21 @@ BINARY := poplar
 GOLANGCI := tools/bin/golangci-lint
 POPLARCHECK := tools/bin/poplarcheck
 
-.PHONY: all build test install fmt check \
+.PHONY: all build test install fmt check conformance \
 	tidy-check check-build fmt-check lint analyzers jmap-boundary vale-comments skipcheck hookcheck perf \
 	build-golangci-lint build-poplarcheck
+
+# The conformance suite's server. Podman leads because this is the
+# runtime the target is actually exercised against, and because
+# running a third-party mail server rootless is the safer default when
+# a machine has both. CONTAINER=docker picks the other one
+# deliberately. The host port is high because rootless podman cannot
+# bind below 1024, so a low port would work under docker and fail here.
+CONTAINER ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
+CONFORMANCE_IMAGE := docker.io/stalwartlabs/stalwart:v0.16.15
+CONFORMANCE_NAME := poplar-jmap-conformance
+CONFORMANCE_PORT := 19080
+CONFORMANCE_URL := http://localhost:$(CONFORMANCE_PORT)
 
 all: check
 
@@ -75,6 +87,32 @@ jmap-boundary:
 	  echo "jmap must import no poplar package, found:" >&2; \
 	  echo "$$bad" >&2; exit 1; \
 	fi
+
+# The second-server validation, run by hand and never by check: check
+# must pass on a machine with no container runtime at all. Stalwart
+# boots into a setup mode that serves nothing but its own
+# configuration object, so the restart between the two provisioning
+# steps is the server leaving that mode. Teardown takes the anonymous
+# volumes with it, so a rerun starts from an empty account, and it runs
+# on the way out of a failed run too.
+conformance:
+	@test -n "$(CONTAINER)" || { echo "conformance needs podman or docker on PATH; found neither" >&2; exit 1; }
+	@set -e; \
+	$(CONTAINER) rm -f -v $(CONFORMANCE_NAME) >/dev/null 2>&1 || true; \
+	trap '$(CONTAINER) rm -f -v $(CONFORMANCE_NAME) >/dev/null 2>&1' EXIT; \
+	$(CONTAINER) run -d --name $(CONFORMANCE_NAME) \
+		-p $(CONFORMANCE_PORT):8080 \
+		-e STALWART_RECOVERY_ADMIN=admin:conformance \
+		-e STALWART_PUBLIC_URL=$(CONFORMANCE_URL) \
+		$(CONFORMANCE_IMAGE) >/dev/null; \
+	go run ./scripts/conformance -step setup -url $(CONFORMANCE_URL); \
+	$(CONTAINER) restart $(CONFORMANCE_NAME) >/dev/null; \
+	go run ./scripts/conformance -step account -url $(CONFORMANCE_URL); \
+	POPLAR_JMAP_SESSION_URL=$(CONFORMANCE_URL)/.well-known/jmap \
+	POPLAR_JMAP_USER=user1@conformance.test \
+	POPLAR_JMAP_PASSWORD=poplar-conformance-9f2c \
+	POPLAR_JMAP_SERVER=stalwart \
+	go test -tags conformance -count=1 ./jmap/...
 
 vale-comments:
 	./scripts/vale-comments.sh

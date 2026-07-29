@@ -141,6 +141,11 @@ func requestTagCases() []tagCase {
 				`"hasVerifiedSmime":false,"hasVerifiedSmimeAtDelivery":false}`,
 		},
 		{
+			name:  "BlobCopy",
+			value: &BlobCopy{From: "A1", Account: "A2", BlobIDs: []ID{"B1"}},
+			json:  `{"fromAccountId":"A1","accountId":"A2","blobIds":["B1"]}`,
+		},
+		{
 			name: "MailboxGet",
 			value: &MailboxGet{
 				Account:      "A1",
@@ -423,6 +428,12 @@ func responseTagCases() []tagCase {
 			json:  `{"id":"MB","index":3}`,
 		},
 		{
+			name:  "BlobCopyResponse",
+			value: &BlobCopyResponse{},
+			json: `{"fromAccountId":"A1","accountId":"A2","copied":{"B1":"B9"},` +
+				`"notCopied":{"B2":{"type":"blobNotFound"}}}`,
+		},
+		{
 			name:  "UploadResponse",
 			value: &UploadResponse{},
 			json:  `{"accountId":"A1","blobId":"B1","type":"text/plain","size":5}`,
@@ -553,8 +564,8 @@ func responseTagCases() []tagCase {
 			name:  "SetError",
 			value: &SetError{},
 			json: `{"type":"invalidRecipients","description":"two addresses refuse mail",` +
-				`"properties":["envelope"],"notFound":["G9"],"maxRecipients":25,` +
-				`"invalidRecipients":["a@","b@"]}`,
+				`"properties":["envelope"],"notFound":["G9"],"existingId":"MB",` +
+				`"maxRecipients":25,"invalidRecipients":["a@","b@"]}`,
 		},
 		{
 			name:  "MethodError",

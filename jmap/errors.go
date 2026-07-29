@@ -81,11 +81,37 @@ func (e *MethodError) Error() string {
 	return e.Type
 }
 
-// Is reports whether target is a MethodError naming the same type.
+// Is reports whether target is a MethodError naming the same type,
+// and additionally matches [ErrServerFail] for a type this package
+// does not name. RFC 8620 section 3.6.2 is explicit: a client that
+// receives an error type it does not understand MUST treat it the same
+// as serverFail. Type and Raw still carry what the server actually
+// said, so nothing is lost to the substitution.
 func (e *MethodError) Is(target error) bool {
 	other, ok := target.(*MethodError)
-	return ok && other.Type == e.Type
+	if !ok {
+		return false
+	}
+	if other.Type == e.Type {
+		return true
+	}
+	return other.Type == ErrServerFail.Type && !named[e.Type]
 }
+
+// named holds the error types this package understands, which is what
+// section 3.6.2's rule turns on.
+var named = func() map[string]bool {
+	types := make(map[string]bool, 12)
+	for _, err := range []*MethodError{
+		ErrServerUnavailable, ErrServerFail, ErrServerPartialFail, ErrUnknownMethod,
+		ErrInvalidArguments, ErrInvalidResultReference, ErrForbidden, ErrAccountNotFound,
+		ErrAccountNotSupportedByMethod, ErrAccountReadOnly, ErrCannotCalculateChanges,
+		ErrAnchorNotFound,
+	} {
+		types[err.Type] = true
+	}
+	return types
+}()
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (e *MethodError) UnmarshalJSON(data []byte) error {
@@ -122,6 +148,12 @@ type SetError struct {
 	// NotFound lists every blob id an EmailBodyPart referenced that
 	// the server does not hold (RFC 8621 section 4.6, blobNotFound).
 	NotFound []ID `json:"notFound,omitempty"`
+
+	// ExistingID names the record already holding what the create
+	// asked for. RFC 8620 section 5.3 makes it mandatory on
+	// alreadyExists, which is the one refusal a client can act on
+	// without asking the user anything.
+	ExistingID ID `json:"existingId,omitempty"`
 
 	// MaxRecipients is the ceiling the envelope exceeded (RFC 8621
 	// section 7.5, tooManyRecipients).

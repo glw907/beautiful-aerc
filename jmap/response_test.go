@@ -169,10 +169,21 @@ func TestResponseDecodesMethodError(t *testing.T) {
 	if unknown.Type != "vendorSpecificFailure" {
 		t.Errorf("Type = %q, want the server's own", unknown.Type)
 	}
-	for _, sentinel := range []error{ErrServerFail, ErrInvalidArguments, ErrCannotCalculateChanges} {
+	// RFC 8620 section 3.6.2 requires a client to treat an error type
+	// it does not understand as serverFail. The type it carries stays
+	// the server's own, so a caller that wants the real name still
+	// reads it.
+	if !errors.Is(unknown, ErrServerFail) {
+		t.Error("an error type this package does not name did not match ErrServerFail")
+	}
+	for _, sentinel := range []error{ErrInvalidArguments, ErrCannotCalculateChanges} {
 		if errors.Is(unknown, sentinel) {
 			t.Errorf("an unregistered error type matched %v", sentinel)
 		}
+	}
+	// A type this package does name is not swept into serverFail.
+	if errors.Is(invalidArguments, ErrServerFail) {
+		t.Error("invalidArguments matched ErrServerFail")
 	}
 	if want := `{"type":"vendorSpecificFailure","retryAfter":30}`; string(unknown.Raw) != want {
 		t.Errorf("Raw = %s, want the whole payload %s", unknown.Raw, want)
