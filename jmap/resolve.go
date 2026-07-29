@@ -141,8 +141,9 @@ func evalWildcard(pointer string, value json.RawMessage, tokens []string) (json.
 // where there is nothing to evaluate.
 //
 // The digit scan and strconv.Atoi are both load-bearing. The scan
-// rejects the signs and the underscores Atoi accepts, which section 4
-// does not admit. Atoi rejects a run of digits too large for an int,
+// rejects the leading signs Atoi reads and section 4 does not admit,
+// without which "+1" selects a real element and "-1" indexes out of
+// range. Atoi rejects a run of digits too large for an int,
 // which accumulating the value by hand instead wraps: a token of 2^64+1
 // wraps to 1 and resolves to a real element of the array with no error,
 // and a larger one wraps negative and indexes out of range.

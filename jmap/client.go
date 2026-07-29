@@ -125,10 +125,11 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 	// request. Request.Invoke already merges it, but a Request
 	// assembled by hand need not have gone through Invoke. Nothing
 	// here writes to req: the merged list lands on a struct copy, and
-	// mergeURIs either hands back the caller's slice untouched or
-	// builds a new one, never appending into the array behind it.
-	// go-jmap appended in place, which surprises a caller that reuses
-	// a Request and races two goroutines that share one.
+	// with no extra capabilities to merge mergeURIs either hands back
+	// the caller's slice untouched or builds a new one, never
+	// appending into the array behind it. go-jmap appended in place,
+	// which surprises a caller that reuses a Request and races two
+	// goroutines that share one.
 	out := *req
 	out.Using = mergeURIs(req.Using, nil)
 

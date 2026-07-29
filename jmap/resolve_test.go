@@ -231,6 +231,21 @@ func TestResolveFailsLoudly(t *testing.T) {
 			resp: resp,
 			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/9999999999999999999999999999999"},
 		},
+		// The two rows below guard the digit scan, which section 4's
+		// grammar needs and strconv.Atoi does not enforce: Atoi reads a
+		// sign, so "+1" would select the second id with no error and
+		// "-1" would index out of range. Without these the scan can be
+		// deleted with every other test still green.
+		{
+			name: "index carrying a plus sign",
+			resp: resp,
+			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/+1"},
+		},
+		{
+			name: "index carrying a minus sign",
+			resp: resp,
+			ref:  ResultReference{ResultOf: "t0", Name: "Foo/changes", Path: "/created/-1"},
+		},
 		{
 			name: "path is not a JSON pointer",
 			resp: resp,
