@@ -19,19 +19,34 @@ type MailboxUpsert struct {
 	UnreadCount int64
 }
 
+// mailboxData is mailbox.data's shape: the role the backend declared,
+// kept verbatim because duplicate resolution has to tell a declared
+// role from one the name heuristic guessed.
+type mailboxData struct {
+	ServerRole string `json:"server_role,omitempty"`
+}
+
 // UpsertMailbox writes m as accountID's mailbox, keyed by m.ServerID:
 // an update if a row with that server id already exists, an insert
-// otherwise. Inserting a new row also repairs any message whose
-// mailbox_ids named this mailbox before its local row existed (see
-// RepairMailboxAssociations).
+// otherwise. mailbox.role holds the classifier's answer rather than
+// m.Role (FO-1), and resolveAccountMailboxRoles reclassifies the
+// account on every write that can change a role. Inserting a new row
+// also repairs any message whose mailbox_ids named this mailbox before
+// its local row existed (see RepairMailboxAssociations).
 func UpsertMailbox(tx *sql.Tx, accountID int64, m MailboxUpsert) error {
+	data, err := json.Marshal(mailboxData{ServerRole: m.Role})
+	if err != nil {
+		return err
+	}
+
 	var id int64
-	err := tx.QueryRow(`SELECT id FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, m.ServerID).Scan(&id)
+	var priorName, priorData string
+	err = tx.QueryRow(`SELECT id, name, data FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, m.ServerID).Scan(&id, &priorName, &priorData)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		res, err := tx.Exec(
-			`INSERT INTO mailbox (account_id, server_id, role, name, sort_order, total_count, unread_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			accountID, m.ServerID, m.Role, m.Name, m.SortOrder, m.TotalCount, m.UnreadCount,
+			`INSERT INTO mailbox (account_id, server_id, name, sort_order, total_count, unread_count, data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			accountID, m.ServerID, m.Name, m.SortOrder, m.TotalCount, m.UnreadCount, string(data),
 		)
 		if err != nil {
 			return err
@@ -40,16 +55,77 @@ func UpsertMailbox(tx *sql.Tx, accountID int64, m MailboxUpsert) error {
 		if err != nil {
 			return err
 		}
-		return RepairMailboxAssociations(tx, accountID, newID, m.ServerID)
+		if err := RepairMailboxAssociations(tx, accountID, newID, m.ServerID); err != nil {
+			return err
+		}
 	case err != nil:
 		return err
 	default:
 		_, err = tx.Exec(
-			`UPDATE mailbox SET role = ?, name = ?, sort_order = ?, total_count = ?, unread_count = ? WHERE id = ?`,
-			m.Role, m.Name, m.SortOrder, m.TotalCount, m.UnreadCount, id,
+			`UPDATE mailbox SET name = ?, sort_order = ?, total_count = ?, unread_count = ?, data = ? WHERE id = ?`,
+			m.Name, m.SortOrder, m.TotalCount, m.UnreadCount, string(data), id,
 		)
+		if err != nil {
+			return err
+		}
+		// A role follows from the account's names and declared roles
+		// alone, so a count refresh (the common update by far) leaves
+		// every role where it stands.
+		if m.Name == priorName && string(data) == priorData {
+			return nil
+		}
+	}
+	return resolveAccountMailboxRoles(tx, accountID)
+}
+
+// resolveAccountMailboxRoles classifies every mailbox in accountID and
+// writes each resolved role whose row disagrees with it. The pass
+// covers the whole account because a sync page delivers mailboxes one
+// at a time, and resolveMailboxRoles settles a contested role only
+// while it can see every claimant.
+func resolveAccountMailboxRoles(tx *sql.Tx, accountID int64) error {
+	rows, err := tx.Query(`SELECT id, name, role, data FROM mailbox WHERE account_id = ?`, accountID)
+	if err != nil {
 		return err
 	}
+
+	var candidates []mailboxRoleCandidate
+	stored := map[int64]string{}
+	for rows.Next() {
+		c := mailboxRoleCandidate{AccountID: accountID}
+		var role, data string
+		if err := rows.Scan(&c.ID, &c.Name, &role, &data); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		var md mailboxData
+		if err := json.Unmarshal([]byte(data), &md); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		c.ServerRole = md.ServerRole
+		candidates = append(candidates, c)
+		stored[c.ID] = role
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	resolved := resolveMailboxRoles(candidates)
+	for _, c := range candidates {
+		role := string(resolved[c.ID])
+		if role == stored[c.ID] {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE mailbox SET role = ? WHERE id = ?`, role, c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DeleteMailbox removes accountID's mailbox with server id serverID,
