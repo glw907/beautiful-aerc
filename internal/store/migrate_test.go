@@ -103,6 +103,32 @@ func TestMigrateFailureReachesUerrSeam(t *testing.T) {
 	}
 }
 
+// TestCurrentSchemaVersion proves it tracks Migrate's own bookkeeping:
+// 0 on an unmigrated file, 1 once Migrate has run.
+func TestCurrentSchemaVersion(t *testing.T) {
+	db := openTestDB(t)
+
+	before, err := CurrentSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("CurrentSchemaVersion before Migrate: %v", err)
+	}
+	if before != 0 {
+		t.Errorf("version before Migrate = %d, want 0", before)
+	}
+
+	if err := Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	after, err := CurrentSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("CurrentSchemaVersion after Migrate: %v", err)
+	}
+	if after != 1 {
+		t.Errorf("version after Migrate = %d, want 1", after)
+	}
+}
+
 // dumpSchema returns a deterministic text form of db's schema: every
 // sqlite_master row with a CREATE statement, sorted by type and name.
 func dumpSchema(t *testing.T, db *sql.DB) string {

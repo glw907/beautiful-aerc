@@ -158,8 +158,8 @@ func TestBackfillReindexes(t *testing.T) {
 // would pass the first case and miss the second; --rebuild-index
 // exists for stale terms, not only a gone index.
 func TestRebuildIndex(t *testing.T) {
-	db := openMigratedTestDB(t)
-	db.SetMaxOpenConns(1)
+	w, _ := newTestWriter(t, DefaultWriterConfig())
+	db := w.db
 
 	if _, err := db.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
 		t.Fatalf("insert account: %v", err)
@@ -195,7 +195,7 @@ func TestRebuildIndex(t *testing.T) {
 		}
 	}
 
-	if err := RebuildIndex(db); err != nil {
+	if err := RebuildIndex(context.Background(), w); err != nil {
 		t.Fatalf("RebuildIndex after delete-all: %v", err)
 	}
 	for _, term := range terms {
@@ -216,7 +216,7 @@ func TestRebuildIndex(t *testing.T) {
 		t.Fatalf("search(\"zulu\") after planting = %v, want [2]", got)
 	}
 
-	if err := RebuildIndex(db); err != nil {
+	if err := RebuildIndex(context.Background(), w); err != nil {
 		t.Fatalf("RebuildIndex after planting a bogus entry: %v", err)
 	}
 	if got := searchIDs(t, db, "zulu"); len(got) != 0 {

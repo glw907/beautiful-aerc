@@ -5,6 +5,7 @@ go 1.26
 require (
 	git.sr.ht/~rockorager/go-jmap v0.5.3
 	github.com/adrg/xdg v0.5.3
+	github.com/gofrs/flock v0.12.1
 	modernc.org/sqlite v1.54.0
 )
 

@@ -103,6 +103,16 @@ func NewWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
 	return w, nil
 }
 
+// StartWriter starts poplar's single writer over db, an
+// already-opened, already-migrated connection: the one call outside
+// internal/store allowed to reach the writer's construction, so
+// NewWriter itself stays this package's own entry point (ADR-0003,
+// the write-call analyzer). cmd/poplar's startup path is its only
+// caller.
+func StartWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
+	return NewWriter(db, cfg)
+}
+
 // submit runs fn in a transaction on the interactive lane and
 // returns once it commits or fails. An error fn returns rolls back
 // the whole transaction, so a failure partway through never leaves a

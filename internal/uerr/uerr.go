@@ -52,6 +52,9 @@ const (
 	// (SY-8). It must not reuse ClassServer, which names a remote
 	// failure.
 	ClassStoreLocal
+	// ClassInstanceLocked is a second poplar process refused startup
+	// against a store another instance already holds (SY-7, ADR-0015).
+	ClassInstanceLocked
 )
 
 // String returns class's log key.
@@ -73,6 +76,8 @@ func (c Class) String() string {
 		return "schema-version"
 	case ClassStoreLocal:
 		return "store-local"
+	case ClassInstanceLocked:
+		return "instance-locked"
 	default:
 		return "unknown"
 	}
@@ -91,6 +96,7 @@ var sentence = map[Class]string{
 	ClassThrottled:         "The server asked us to slow down",
 	ClassSchemaVersion:     "This store needs a newer version of poplar",
 	ClassStoreLocal:        "Poplar could not open its store",
+	ClassInstanceLocked:    "Poplar is already running",
 }
 
 // Error is poplar's user-visible error. Op, IDs, Class, Message, and

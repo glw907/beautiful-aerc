@@ -60,6 +60,22 @@ func Migrate(db *sql.DB) error {
 	return nil
 }
 
+// CurrentSchemaVersion returns the schema version recorded on db,
+// seeding it to 0 first if Migrate has never run against db. A caller
+// compares it against a version read before a Migrate call to tell
+// whether that call actually advanced the schema, the "after a
+// migration" trigger for an integrity check (SY-8).
+func CurrentSchemaVersion(db *sql.DB) (int, error) {
+	if err := ensureSchemaVersionTable(db); err != nil {
+		return 0, uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+	}
+	version, err := readSchemaVersion(db)
+	if err != nil {
+		return 0, uerr.New("store.migrate", nil, uerr.ClassStoreLocal, err)
+	}
+	return version, nil
+}
+
 // migrationNames returns the embedded migration filenames sorted so
 // that index i is the step from schema version i to i+1.
 func migrationNames() ([]string, error) {
