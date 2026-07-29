@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -88,34 +89,70 @@ type RecoveredCounts struct {
 // and returns from the next sync. Recover runs before the writer
 // starts, when nothing else holds path open, so it manages its own
 // short-lived connections rather than routing through a Writer.
+//
+// If the rebuild fails after path is quarantined, Recover renames the
+// quarantined file back to path rather than leaving a fresh, empty
+// store in its place: the operator that ran with --recover keeps the
+// exact input they started with, to retry or hand to a human.
 func Recover(ctx context.Context, path string) (RecoveredCounts, error) {
 	preserved, err := extractPreserved(ctx, path)
 	if err != nil {
-		return RecoveredCounts{}, uerr.New("store.recover", nil, uerr.ClassStoreLocal, err)
+		return RecoveredCounts{}, uerr.New("store.recover.extract", nil, uerr.ClassStoreLocal,
+			fmt.Errorf("extract preserved rows: %w", err))
 	}
 
 	quarantined := fmt.Sprintf("%s.corrupt-%d", path, time.Now().UnixNano())
 	if err := os.Rename(path, quarantined); err != nil {
-		return RecoveredCounts{}, uerr.New("store.recover", nil, uerr.ClassStoreLocal, err)
+		return RecoveredCounts{}, uerr.New("store.recover.quarantine", nil, uerr.ClassStoreLocal,
+			fmt.Errorf("quarantine %s: %w", path, err))
 	}
 	for _, suffix := range [...]string{"-wal", "-shm"} {
 		_ = os.Rename(path+suffix, quarantined+suffix)
 	}
 
+	if err := rebuildAt(ctx, path, preserved); err != nil {
+		unquarantine(quarantined, path, preserved)
+		return RecoveredCounts{}, uerr.New("store.recover.rebuild", nil, uerr.ClassStoreLocal,
+			fmt.Errorf("rebuild %s: %w", path, err))
+	}
+
+	return RecoveredCounts{Outbox: len(preserved.outbox), Messages: len(preserved.messages)}, nil
+}
+
+// rebuildAt opens a fresh, migrated store at path and writes preserved
+// into it, the half of Recover that runs after path's prior contents
+// are already quarantined.
+func rebuildAt(ctx context.Context, path string, preserved preservedData) error {
 	db, err := OpenWriteConn(path)
 	if err != nil {
-		return RecoveredCounts{}, uerr.New("store.recover", nil, uerr.ClassStoreLocal, err)
+		return fmt.Errorf("open rebuilt store: %w", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	if err := Migrate(db); err != nil {
-		return RecoveredCounts{}, err
+		return fmt.Errorf("migrate rebuilt store: %w", err)
 	}
 	if err := restorePreserved(ctx, db, preserved); err != nil {
-		return RecoveredCounts{}, uerr.New("store.recover", nil, uerr.ClassStoreLocal, err)
+		return fmt.Errorf("restore preserved rows: %w", err)
 	}
+	return nil
+}
 
-	return RecoveredCounts{Outbox: len(preserved.outbox), Messages: len(preserved.messages)}, nil
+// unquarantine restores quarantined back to path after a failed
+// rebuild, so a partial rebuild never leaves a fresh, empty store
+// where the operator's data used to be. If the rename back itself
+// fails, the preserved rows are still sitting in quarantined; that
+// path and what it holds is logged, since nothing else names it
+// again.
+func unquarantine(quarantined, path string, preserved preservedData) {
+	if err := os.Rename(quarantined, path); err != nil {
+		slog.Error("store: recovery failed and the quarantined store could not be restored; preserved rows survive only in the quarantined file",
+			"quarantine_path", quarantined, "outbox_rows", len(preserved.outbox), "message_rows", len(preserved.messages), "error", err)
+		return
+	}
+	for _, suffix := range [...]string{"-wal", "-shm"} {
+		_ = os.Rename(quarantined+suffix, path+suffix)
+	}
 }
 
 // preservedAccount is one account row Recover carries into the
@@ -130,13 +167,17 @@ type preservedAccount struct {
 }
 
 // preservedOutboxRow is one outbox row Recover carries into the
-// rebuilt store verbatim, id included, so an outbox payload's
-// references to a preserved message's id keep resolving after
-// rebuild.
+// rebuilt store, id included, so an outbox payload's references to a
+// preserved message's id keep resolving after rebuild. Recover always
+// restores it as state 'queued' regardless of the state it was
+// extracted under: a row a crashed run had claimed sits in
+// 'dispatching', which the outbox's claim query never selects, so
+// carrying that state across would leave the intent permanently
+// undispatchable.
 type preservedOutboxRow struct {
 	id                          int64
 	accountID                   int64
-	kind, payload, state        string
+	kind, payload               string
 	undoGroup                   sql.NullString
 	chunkSeq, attemptCount      int
 	nextAttemptAt, createdAt    int64
@@ -183,15 +224,15 @@ func extractPreserved(ctx context.Context, path string) (preservedData, error) {
 
 	accounts, err := extractAccounts(ctx, db)
 	if err != nil {
-		return preservedData{}, err
+		return preservedData{}, fmt.Errorf("read accounts: %w", err)
 	}
 	outboxRows, err := extractOutbox(ctx, db)
 	if err != nil {
-		return preservedData{}, err
+		return preservedData{}, fmt.Errorf("read outbox: %w", err)
 	}
 	messages, err := extractLocalMessages(ctx, db)
 	if err != nil {
-		return preservedData{}, err
+		return preservedData{}, fmt.Errorf("read local messages: %w", err)
 	}
 	return preservedData{accounts: accounts, outbox: outboxRows, messages: messages}, nil
 }
@@ -216,7 +257,7 @@ func extractAccounts(ctx context.Context, db *sql.DB) ([]preservedAccount, error
 
 func extractOutbox(ctx context.Context, db *sql.DB) ([]preservedOutboxRow, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, account_id, kind, payload, state, undo_group, chunk_seq, attempt_count,
+		SELECT id, account_id, kind, payload, undo_group, chunk_seq, attempt_count,
 		       next_attempt_at, created_at, failure_class, failure_detail
 		FROM outbox`)
 	if err != nil {
@@ -228,7 +269,7 @@ func extractOutbox(ctx context.Context, db *sql.DB) ([]preservedOutboxRow, error
 	for rows.Next() {
 		var o preservedOutboxRow
 		if err := rows.Scan(
-			&o.id, &o.accountID, &o.kind, &o.payload, &o.state, &o.undoGroup, &o.chunkSeq, &o.attemptCount,
+			&o.id, &o.accountID, &o.kind, &o.payload, &o.undoGroup, &o.chunkSeq, &o.attemptCount,
 			&o.nextAttemptAt, &o.createdAt, &o.failureClass, &o.failureDetail,
 		); err != nil {
 			return nil, err
@@ -291,17 +332,21 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO account (id, slug, backend_kind, address, data) VALUES (?, ?, ?, ?, ?)`,
 			a.id, a.slug, a.backendKind, a.address, a.data); err != nil {
-			return err
+			return fmt.Errorf("insert account %d: %w", a.id, err)
 		}
 	}
 	for _, o := range preserved.outbox {
+		// state is always 'queued', regardless of what Recover
+		// extracted it as: a crashed run can leave a claimed row in
+		// 'dispatching', which the outbox's claim query never selects,
+		// so restoring that state verbatim would strand the intent.
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO outbox (id, account_id, kind, payload, state, undo_group, chunk_seq, attempt_count,
 			                      next_attempt_at, created_at, failure_class, failure_detail)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			o.id, o.accountID, o.kind, o.payload, o.state, o.undoGroup, o.chunkSeq, o.attemptCount,
+			 VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)`,
+			o.id, o.accountID, o.kind, o.payload, o.undoGroup, o.chunkSeq, o.attemptCount,
 			o.nextAttemptAt, o.createdAt, o.failureClass, o.failureDetail); err != nil {
-			return err
+			return fmt.Errorf("insert outbox row %d: %w", o.id, err)
 		}
 	}
 	for _, m := range preserved.messages {
@@ -311,18 +356,18 @@ func restorePreserved(ctx context.Context, db *sql.DB, preserved preservedData) 
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			m.id, m.accountID, m.serverID, m.blobID, m.threadKey, m.receivedAt, m.subject, m.fromAddr,
 			m.flags, m.size, m.hasAttachment, m.origin, m.hiddenUntil, m.searchText, m.data); err != nil {
-			return err
+			return fmt.Errorf("insert message %d: %w", m.id, err)
 		}
 		if m.hasBody {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO body (message_id, content, fetched_at) VALUES (?, ?, ?)`,
 				m.id, m.bodyContent, m.bodyFetchedAt); err != nil {
-				return err
+				return fmt.Errorf("insert body for message %d: %w", m.id, err)
 			}
 		}
 		if m.hasDraftMeta {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO draft_meta (message_id, local_rev, pushed_rev, anchor_msgid) VALUES (?, ?, ?, ?)`,
 				m.id, m.localRev, m.pushedRev, m.anchorMsgID); err != nil {
-				return err
+				return fmt.Errorf("insert draft_meta for message %d: %w", m.id, err)
 			}
 		}
 	}

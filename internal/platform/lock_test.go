@@ -71,6 +71,52 @@ func TestSecondInstanceRefused(t *testing.T) {
 	}
 }
 
+// TestAcquireInstanceLockOpenFailureIsStoreLocal proves a TryLock I/O
+// failure, distinct from lock contention, classifies as
+// ClassStoreLocal rather than ClassInstanceLocked: no second instance
+// is actually holding anything here.
+func TestAcquireInstanceLockOpenFailureIsStoreLocal(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "missing-dir", "store.db")
+
+	_, err := AcquireInstanceLock(dbPath)
+	if err == nil {
+		t.Fatal("AcquireInstanceLock over a missing parent directory succeeded, want a failure")
+	}
+
+	var uerrErr uerr.Error
+	if !errors.As(err, &uerrErr) {
+		t.Fatalf("error is not a uerr.Error: %v", err)
+	}
+	if uerrErr.Class != uerr.ClassStoreLocal {
+		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
+	}
+}
+
+// TestAcquireInstanceLockPidWriteFailureIsStoreLocal proves a failure
+// to write the pid after the lock itself is acquired also classifies
+// as ClassStoreLocal, not ClassInstanceLocked: the lock succeeded, so
+// no second instance is refused here either.
+func TestAcquireInstanceLockPidWriteFailureIsStoreLocal(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	lockPath := dbPath + ".lock"
+	if err := os.WriteFile(lockPath, nil, 0o400); err != nil {
+		t.Fatalf("seed a read-only lock file: %v", err)
+	}
+
+	_, err := AcquireInstanceLock(dbPath)
+	if err == nil {
+		t.Fatal("AcquireInstanceLock over a read-only lock file succeeded, want a failure")
+	}
+
+	var uerrErr uerr.Error
+	if !errors.As(err, &uerrErr) {
+		t.Fatalf("error is not a uerr.Error: %v", err)
+	}
+	if uerrErr.Class != uerr.ClassStoreLocal {
+		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
+	}
+}
+
 // TestLockReleasedOnKill SIGKILLs the lock's holder and proves a new
 // instance starts right after, with no stale-lock heuristic involved:
 // the kernel drops the flock on process death by itself (ADR-0015).

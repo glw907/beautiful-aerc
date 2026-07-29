@@ -34,7 +34,7 @@ func AcquireInstanceLock(dbPath string) (*InstanceLock, error) {
 
 	ok, err := fl.TryLock()
 	if err != nil {
-		return nil, uerr.New("platform.lock", nil, uerr.ClassInstanceLocked, fmt.Errorf("lock %s: %w", lockPath, err))
+		return nil, uerr.New("platform.lock", nil, uerr.ClassStoreLocal, fmt.Errorf("lock %s: %w", lockPath, err))
 	}
 	if !ok {
 		return nil, uerr.New("platform.lock", nil, uerr.ClassInstanceLocked,
@@ -43,7 +43,7 @@ func AcquireInstanceLock(dbPath string) (*InstanceLock, error) {
 
 	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil { //nolint:gosec // G703: lockPath is dbPath+".lock", built from the store path this process already trusts, never user input
 		_ = fl.Unlock()
-		return nil, uerr.New("platform.lock", nil, uerr.ClassInstanceLocked, fmt.Errorf("write pid to %s: %w", lockPath, err))
+		return nil, uerr.New("platform.lock", nil, uerr.ClassStoreLocal, fmt.Errorf("write pid to %s: %w", lockPath, err))
 	}
 	return &InstanceLock{fl: fl}, nil
 }

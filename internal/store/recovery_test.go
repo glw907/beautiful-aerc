@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -305,6 +306,82 @@ func TestRecoverAfterFailedMigration(t *testing.T) {
 		t.Errorf("RecoveredCounts = %+v, want {Outbox:1 Messages:2}", counts)
 	}
 	assertRecoveryPreservedFixture(t, path)
+}
+
+// TestUnquarantineRestoresOriginalOnFailedRebuild proves Recover's
+// rollback half: when rebuildAt fails after the original store is
+// already quarantined, unquarantine puts it back at path rather than
+// leaving whatever rebuildAt left behind (an empty or partial fresh
+// file) in its place.
+func TestUnquarantineRestoresOriginalOnFailedRebuild(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	quarantined := path + ".corrupt-test"
+
+	if err := os.WriteFile(quarantined, []byte("original store bytes"), 0o600); err != nil {
+		t.Fatalf("seed quarantined file: %v", err)
+	}
+
+	// A path with a nonexistent parent directory makes OpenWriteConn
+	// fail inside rebuildAt, the same shape of failure a full disk or
+	// a cancelled context produces mid-rebuild.
+	badPath := filepath.Join(t.TempDir(), "missing-dir", "store.db")
+	preserved := preservedData{outbox: []preservedOutboxRow{{id: 1}}}
+	if err := rebuildAt(context.Background(), badPath, preserved); err == nil {
+		t.Fatal("rebuildAt over an impossible path succeeded, want a failure")
+	}
+
+	unquarantine(quarantined, path, preserved)
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read restored path: %v", err)
+	}
+	if string(got) != "original store bytes" {
+		t.Errorf("restored content = %q, want the quarantined original", got)
+	}
+	if _, err := os.Stat(quarantined); !os.IsNotExist(err) {
+		t.Error("quarantined file still present after a successful restore")
+	}
+}
+
+// TestRecoverRestoresDispatchingRowAsQueued proves a preserved outbox
+// row a crashed run had claimed comes back as 'queued', not
+// 'dispatching': the outbox's own claim query only ever selects
+// 'queued' rows, so a row restored under 'dispatching' would sit
+// forever undispatchable.
+func TestRecoverRestoresDispatchingRowAsQueued(t *testing.T) {
+	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	err := w.submit(context.Background(), func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO outbox (id, account_id, kind, payload, state, created_at) VALUES (1, 1, 'move-messages', '{}', 'dispatching', 0)`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed a dispatching outbox row: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	if _, err := Recover(context.Background(), path); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	if err != nil {
+		t.Fatalf("reopen rebuilt store: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var state string
+	if err := db.QueryRow(`SELECT state FROM outbox WHERE id = 1`).Scan(&state); err != nil {
+		t.Fatalf("read restored outbox row: %v", err)
+	}
+	if state != "queued" {
+		t.Errorf("restored state = %q, want %q", state, "queued")
+	}
 }
 
 // TestRecoverAfterDiskFull is SY-8's full-disk test: max_page_count

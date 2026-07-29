@@ -103,14 +103,27 @@ func NewWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
 	return w, nil
 }
 
-// StartWriter starts poplar's single writer over db, an
-// already-opened, already-migrated connection: the one call outside
-// internal/store allowed to reach the writer's construction, so
-// NewWriter itself stays this package's own entry point (ADR-0003,
-// the write-call analyzer). cmd/poplar's startup path is its only
-// caller.
-func StartWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
-	return NewWriter(db, cfg)
+// Open opens the store at path, migrates it, and starts the writer
+// over the result: the one call outside internal/store allowed to
+// reach the writer's construction, since it does the open-and-migrate
+// work NewWriter's caller must already have done, rather than merely
+// relaying to NewWriter under another name (ADR-0003, the write-call
+// analyzer). cmd/poplar's startup path is its only caller.
+func Open(path string, cfg WriterConfig) (*Writer, error) {
+	db, err := OpenWriteConn(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := Migrate(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	w, err := NewWriter(db, cfg)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return w, nil
 }
 
 // submit runs fn in a transaction on the interactive lane and

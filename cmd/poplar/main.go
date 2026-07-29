@@ -7,7 +7,7 @@ package main
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,6 +28,7 @@ import (
 // flags holds poplar's command-line options.
 type flags struct {
 	rebuildIndex bool
+	recover      bool
 }
 
 func main() {
@@ -35,11 +36,12 @@ func main() {
 
 	var f flags
 	flag.BoolVar(&f.rebuildIndex, "rebuild-index", false, "rebuild the full-text index before starting")
+	flag.BoolVar(&f.recover, "recover", false, "rebuild the store from local data after detecting corruption or a failed migration")
 	flag.Parse()
 
 	dbPath, err := xdg.DataFile("poplar/store.db")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, fmt.Errorf("resolve store path: %w", err))
+		reportStartupFailure(os.Stderr, uerr.New("main.startup", nil, uerr.ClassStoreLocal, fmt.Errorf("resolve store path: %w", err)))
 		os.Exit(1)
 	}
 
@@ -47,8 +49,22 @@ func main() {
 	defer stop()
 
 	if err := run(ctx, dbPath, f, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		reportStartupFailure(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+// reportStartupFailure prints err's fixed user-facing sentence to w,
+// followed by its unwrapped cause when err is a uerr.Error. The
+// sentence is the same fixed string for every error of its class, so
+// the pid a locked instance names, or the instructions a refused
+// recovery owes, live only in the cause; printing only the sentence
+// leaves the operator with no actionable detail (SY-7, ADR-0015).
+func reportStartupFailure(w io.Writer, err error) {
+	_, _ = fmt.Fprintln(w, err)
+	var uerrErr uerr.Error
+	if errors.As(err, &uerrErr) && uerrErr.Cause != nil {
+		_, _ = fmt.Fprintln(w, uerrErr.Cause)
 	}
 }
 
@@ -62,14 +78,12 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	}
 	defer func() { _ = lock.Release() }()
 
-	db, err := prepareStore(ctx, dbPath, f.rebuildIndex, out)
-	if err != nil {
+	if err := prepareStore(ctx, dbPath, f, out); err != nil {
 		return err
 	}
 
-	writer, err := store.StartWriter(db, store.DefaultWriterConfig())
+	writer, err := store.Open(dbPath, store.DefaultWriterConfig())
 	if err != nil {
-		_ = db.Close()
 		return err
 	}
 
@@ -90,62 +104,69 @@ func run(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	return store.MarkCleanShutdown(dbPath)
 }
 
-// prepareStore opens dbPath, migrates it, and runs an integrity check
-// when NeedsIntegrityCheck or forced says one is owed, rebuilding from
-// local data on either a failed migration or a failed check (SY-8). It
-// returns a connection ready for store.StartWriter.
-func prepareStore(ctx context.Context, dbPath string, forced bool, out io.Writer) (*sql.DB, error) {
+// prepareStore ensures the store at dbPath is migrated and, when one
+// is owed, passes its integrity check, offering a rebuild-from-local
+// recovery on either failure rather than running one unasked (SY-8).
+// It holds no connection open past its own return; store.Open reopens
+// dbPath once prepareStore reports success.
+func prepareStore(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	db, err := store.OpenWriteConn(dbPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	before, err := store.CurrentSchemaVersion(db)
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return err
 	}
 	if err := store.Migrate(db); err != nil {
-		_, _ = fmt.Fprintf(out, "migration failed, rebuilding from local data: %v\n", err)
 		_ = db.Close()
-		return recoverStore(ctx, dbPath, out)
+		return offerRecovery(ctx, dbPath, f.recover, err, out)
 	}
 	after, err := store.CurrentSchemaVersion(db)
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return err
 	}
 
-	if !store.NeedsIntegrityCheck(dbPath, after != before) && !forced {
-		return db, nil
+	if !store.NeedsIntegrityCheck(dbPath, after != before) && !f.rebuildIndex {
+		return db.Close()
 	}
 	if err := store.CheckIntegrity(ctx, db, integrityProgress(out)); err != nil {
-		_, _ = fmt.Fprintf(out, "integrity check failed, rebuilding from local data: %v\n", err)
 		_ = db.Close()
-		return recoverStore(ctx, dbPath, out)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return offerRecovery(ctx, dbPath, f.recover, err, out)
 	}
-	return db, nil
+	return db.Close()
 }
 
-// recoverStore rebuilds the store at dbPath from its non-rebuildable
-// data (store.Recover) and returns a fresh, migrated connection over
-// the result.
-func recoverStore(ctx context.Context, dbPath string, out io.Writer) (*sql.DB, error) {
-	counts, err := store.Recover(ctx, dbPath)
+// offerRecovery reports cause and, when allowed, rebuilds the store
+// at dbPath from its non-rebuildable local data (SY-8). Recovery is
+// an offer the operator accepts through --recover, never an automatic
+// response to a detected failure: refused, it prints how to accept
+// and returns cause unchanged so the store is left exactly as found.
+// A cause with no ClassStoreLocal, a newer store's ClassSchemaVersion
+// most notably, is not this recovery's business and propagates as is.
+func offerRecovery(ctx context.Context, dbPath string, allowed bool, cause error, out io.Writer) error {
+	var uerrErr uerr.Error
+	if !errors.As(cause, &uerrErr) || uerrErr.Class != uerr.ClassStoreLocal {
+		return cause
+	}
+	if !allowed {
+		_, _ = fmt.Fprintf(out, "store needs recovery: %v\nrerun with --recover to rebuild from local data (the outbox and drafts are preserved)\n", cause)
+		return cause
+	}
+
+	_, _ = fmt.Fprintf(out, "rebuilding from local data: %v\n", cause)
+	counts, err := store.Recover(context.WithoutCancel(ctx), dbPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	_, _ = fmt.Fprintf(out, "rebuilt store: %d outbox intent(s) and %d local message(s) preserved\n", counts.Outbox, counts.Messages)
-
-	db, err := store.OpenWriteConn(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.Migrate(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	return db, nil
+	return nil
 }
 
 // integrityProgress returns a store.CheckIntegrity progress callback
