@@ -155,6 +155,17 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 	return page, nil
 }
 
+// FirstMailboxID returns the lowest-id mailbox in the store. A
+// startup trace with no onboarding flow yet to name a mailbox uses it
+// to pick one to list.
+func (p *ReadPool) FirstMailboxID(ctx context.Context) (int64, error) {
+	var id int64
+	if err := p.db.QueryRowContext(ctx, queryMailboxFirstID).Scan(&id); err != nil {
+		return 0, uerr.New("store.read", nil, uerr.ClassStoreLocal, err)
+	}
+	return id, nil
+}
+
 // MailboxRowDetails returns a MessageSummary for each of ids, keyed
 // by message id, so a caller can paint a page ListMailboxForward or
 // ListMailboxBackward already returned. It selects only the

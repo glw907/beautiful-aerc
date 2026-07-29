@@ -64,4 +64,9 @@ const (
 	// appends one "?" per id and closes the IN clause. The column set
 	// never selects message.data.
 	queryMessageSummaryByID = `SELECT id, subject, from_addr, flags, has_attachment, thread_key FROM message WHERE id IN (`
+
+	// queryMailboxFirstID is FirstMailboxID's lookup: the lowest-id
+	// mailbox in the store, for a caller with no onboarding flow yet to
+	// name one explicitly.
+	queryMailboxFirstID = `SELECT id FROM mailbox ORDER BY id LIMIT 1`
 )

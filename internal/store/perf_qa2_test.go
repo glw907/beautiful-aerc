@@ -1,10 +1,16 @@
 //go:build !race
 
-package store
+// The QA-1/2/3 perf harness is excluded from the race build: race
+// instrumentation costs 2-20x time and 5-10x memory, so a p95 gate
+// asserted under it would measure the detector instead of the store
+// (build machine section 2). CI's `go test -race ./...` job never
+// links this file.
+package store_test
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"path/filepath"
@@ -13,11 +19,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // qa2MessageCount and qa2MailboxCount hold QA-2's scripted mix to the
 // QA-5 scale envelope: 100k messages, a few mailboxes so 15% of ops
-// can genuinely switch folders.
+// can switch folders.
 const (
 	qa2MessageCount = 100_000
 	qa2MailboxCount = 4
@@ -69,33 +79,35 @@ func qa2Script() []qa2Op {
 // requires to hold under that load).
 func TestQA2Interaction(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	env := perfSeedEnvelope(t, path, qa2MessageCount, qa2MailboxCount)
+	env := storetest.SeedPerfEnvelope(t, path, qa2MessageCount, qa2MailboxCount)
 
-	writer, err := Open(path, DefaultWriterConfig())
+	writer, err := store.Open(path, store.DefaultWriterConfig())
 	if err != nil {
 		t.Fatalf("open writer: %v", err)
 	}
 	t.Cleanup(func() { _ = writer.Close() })
 
-	reads, err := NewReadPool(path, DefaultReadPoolSize, writer.Revision())
+	reads, err := store.NewReadPool(path, store.DefaultReadPoolSize, writer.Revision())
 	if err != nil {
 		t.Fatalf("open read pool: %v", err)
 	}
 	t.Cleanup(func() { _ = reads.Close() })
 
-	sess := &qa2Session{reads: reads, mailboxIDs: env.mailboxIDs, messageIDs: env.messageIDs, script: qa2Script()}
+	sess := &qa2Session{reads: reads, mailboxIDs: env.MailboxIDs, messageIDs: env.MessageIDs, script: qa2Script()}
 
 	quiescent, busy := sess.run(t)
-	perfWriteArtifact(t, "QA2Interaction_quiescent", busy.line, quiescent)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_quiescent", busy.line, quiescent)
 	qa2AssertBudget(t, "quiescent", quiescent)
 	if got := busy.count.Load(); got != 0 {
 		t.Errorf("quiescent SQLITE_BUSY count = %d, want 0", got)
 	}
 
-	backfill := startQA2Backfill(writer, env.messageIDs)
+	backfill := startQA2Backfill(writer, env.MessageIDs)
 	underWrite, busy := sess.run(t)
-	backfill.stop()
-	perfWriteArtifact(t, "QA2Interaction_under_write", busy.line, underWrite)
+	if err := backfill.stop(); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_under_write", busy.line, underWrite)
 	qa2AssertBudget(t, "under_write", underWrite)
 	if got := busy.count.Load(); got != 0 {
 		t.Errorf("under-write SQLITE_BUSY count = %d, want 0 (WAL readers must not block on the writer)", got)
@@ -122,8 +134,8 @@ func TestQA2Interaction(t *testing.T) {
 func qa2AssertBudget(t *testing.T, label string, samples []time.Duration) {
 	t.Helper()
 
-	p95, p99 := perfPercentile(samples, 95), perfPercentile(samples, 99)
-	t.Logf("QA-2 %s: p50=%s p95=%s p99=%s (spike baseline 22-25ms p95)", label, perfPercentile(samples, 50), p95, p99)
+	p95, p99 := storetest.Percentile(samples, 95), storetest.Percentile(samples, 99)
+	t.Logf("QA-2 %s: p50=%s p95=%s p99=%s (spike baseline 22-25ms p95)", label, storetest.Percentile(samples, 50), p95, p99)
 	if p95 > qa2P95Budget {
 		t.Errorf("%s p95 = %s, want under %s", label, p95, qa2P95Budget)
 	}
@@ -133,11 +145,11 @@ func qa2AssertBudget(t *testing.T, label string, samples []time.Duration) {
 }
 
 // qa2Session holds the fixtures a scripted QA-2 run replays against:
-// the read pool, the mailboxes and messages perfSeedEnvelope built,
-// and the fixed script every run (quiescent and under-write) replays
-// identically.
+// the read pool, the mailboxes and messages storetest.SeedPerfEnvelope
+// built, and the fixed script every run (quiescent and under-write)
+// replays identically.
 type qa2Session struct {
-	reads      *ReadPool
+	reads      *store.ReadPool
 	mailboxIDs []int64
 	messageIDs []int64
 	script     []qa2Op
@@ -145,31 +157,31 @@ type qa2Session struct {
 
 // qa2BusyTracker counts SQLITE_BUSY / "database is locked" errors a
 // scripted run's reads hit, alongside the go-test-style benchmark
-// line perfMeasure returned for the run.
+// line storetest.Measure returned for the run.
 type qa2BusyTracker struct {
 	count atomic.Int64
 	line  string
 }
 
-// run replays sess's script once through perfMeasure, returning the
-// per-operation latencies and a busy-error tracker.
+// run replays sess's script once through storetest.Measure, returning
+// the per-operation latencies and a busy-error tracker.
 //
 // A non-busy error is recorded rather than failed on the spot:
-// perfMeasure's op runs on the goroutine testing.Benchmark launches
-// internally, not the one running t, and t.Fatalf must only be called
-// from the goroutine running the test (testing.T's own documented
-// contract). run reports the first such error itself, back on t's own
-// goroutine, once perfMeasure has returned.
+// storetest.Measure's op runs on the goroutine testing.Benchmark
+// launches internally, not the one running t, and t.Fatalf must only
+// be called from the goroutine running the test (testing.T's own
+// documented contract). run reports the first such error itself, back
+// on t's own goroutine, once storetest.Measure has returned.
 func (sess *qa2Session) run(t *testing.T) ([]time.Duration, *qa2BusyTracker) {
 	t.Helper()
 
 	busy := &qa2BusyTracker{}
 	currentMailbox := sess.mailboxIDs[0]
-	cursor := MailboxCursor{}
+	cursor := store.MailboxCursor{}
 	i := 0
 	var firstErr error
 
-	samples, line := perfMeasure(t, len(sess.script), func() time.Duration {
+	samples, line := storetest.Measure(t, len(sess.script), func() time.Duration {
 		op := sess.script[i%len(sess.script)]
 		i++
 		start := time.Now()
@@ -194,7 +206,7 @@ func (sess *qa2Session) run(t *testing.T) ([]time.Duration, *qa2BusyTracker) {
 // runOp runs one scripted op against sess.reads, threading
 // list-movement state (currentMailbox, cursor) across calls so a
 // list op continues scrolling rather than always re-fetching page one.
-func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *MailboxCursor) error {
+func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *store.MailboxCursor) error {
 	ctx := context.Background()
 	switch op {
 	case qa2OpList:
@@ -203,22 +215,22 @@ func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *MailboxCu
 			return err
 		}
 		if len(page.Rows) == 0 {
-			*cursor = MailboxCursor{}
+			*cursor = store.MailboxCursor{}
 			return nil
 		}
 		last := page.Rows[len(page.Rows)-1]
-		*cursor = MailboxCursor{ReceivedAt: last.ReceivedAt, MessageID: last.MessageID}
+		*cursor = store.MailboxCursor{ReceivedAt: last.ReceivedAt, MessageID: last.MessageID}
 		return nil
 
 	case qa2OpSwitch:
 		*currentMailbox = sess.mailboxIDs[rand.IntN(len(sess.mailboxIDs))] //nolint:gosec // G404: folder choice, not a security-sensitive use
-		*cursor = MailboxCursor{}
+		*cursor = store.MailboxCursor{}
 		_, err := sess.reads.ListMailboxForward(ctx, *currentMailbox, *cursor, 50)
 		return err
 
 	case qa2OpReader:
 		id := sess.messageIDs[rand.IntN(len(sess.messageIDs))] //nolint:gosec // G404: sample choice, not a security-sensitive use
-		_, err := sess.reads.perfBody(ctx, id)
+		_, err := sess.reads.PerfBody(ctx, id)
 		return err
 
 	default: // qa2OpSearch
@@ -226,41 +238,25 @@ func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *MailboxCu
 		// 3' index: a 1-character prefix has no prefix-index entry and
 		// falls back to a full vocabulary scan, which is not the
 		// as-you-type case a 2-character minimum trigger avoids.
-		term := perfCommonWords[rand.IntN(len(perfCommonWords))] //nolint:gosec // G404: sample choice, not a security-sensitive use
-		prefixLen := 2 + rand.IntN(max(1, min(3, len(term)-2)))  //nolint:gosec // G404: sample choice, not a security-sensitive use
-		return sess.reads.perfSearch(ctx, term[:prefixLen]+"*")
+		term := storetest.CommonWords[rand.IntN(len(storetest.CommonWords))] //nolint:gosec // G404: sample choice, not a security-sensitive use
+		prefixLen := 2 + rand.IntN(max(1, min(3, len(term)-2)))              //nolint:gosec // G404: sample choice, not a security-sensitive use
+		return sess.reads.PerfSearch(ctx, term[:prefixLen]+"*")
 	}
 }
 
 // isBusyError reports whether err is SQLite's busy/locked error, the
 // one failure QA-2's concurrent case must never see (the spike's own
-// baseline: zero SQLITE_BUSY under concurrent write).
+// baseline: zero SQLITE_BUSY under concurrent write). The store's read
+// path wraps every failure in uerr.Error, whose Error() returns only
+// the fixed class sentence and drops the driver's own message, so the
+// check unwraps to the cause before matching.
 func isBusyError(err error) bool {
+	var uerrErr uerr.Error
+	if errors.As(err, &uerrErr) && uerrErr.Cause != nil {
+		err = uerrErr.Cause
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "SQLITE_BUSY") || strings.Contains(msg, "database is locked")
-}
-
-// perfBody fetches messageID's body content directly, standing in for
-// a body-read API pass 3 has not built yet: enough for QA-2's
-// reader-open class to exercise a real, non-scalar read.
-func (p *ReadPool) perfBody(ctx context.Context, messageID int64) ([]byte, error) {
-	var content []byte
-	err := p.db.QueryRowContext(ctx, `SELECT content FROM body WHERE message_id = ?`, messageID).Scan(&content)
-	return content, err
-}
-
-// perfSearch runs an FTS5 prefix query against message_fts, standing
-// in for the search grammar pass 3 builds: enough for QA-2's
-// incremental-search class to exercise the index under typing.
-func (p *ReadPool) perfSearch(ctx context.Context, query string) error {
-	rows, err := p.db.QueryContext(ctx, `SELECT rowid FROM message_fts WHERE message_fts MATCH ? LIMIT 50`, query)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-	}
-	return rows.Err()
 }
 
 // qa2Backfill is a bulk-lane writer loop that keeps mutating the store
@@ -273,11 +269,12 @@ type qa2Backfill struct {
 	batches      atomic.Int64
 	totalBatchNS atomic.Int64
 	rowsMutated  atomic.Int64
+	err          error
 }
 
 // startQA2Backfill starts the backfill goroutine over writer, cycling
 // through messageIDs.
-func startQA2Backfill(writer *Writer, messageIDs []int64) *qa2Backfill {
+func startQA2Backfill(writer *store.Writer, messageIDs []int64) *qa2Backfill {
 	bf := &qa2Backfill{stopCh: make(chan struct{}), done: make(chan struct{})}
 	go func() {
 		defer close(bf.done)
@@ -291,9 +288,7 @@ func startQA2Backfill(writer *Writer, messageIDs []int64) *qa2Backfill {
 			start := time.Now()
 			rows, err := qa2BackfillBatch(writer, messageIDs, rng)
 			if err != nil {
-				// The bulk lane closes when the test's t.Cleanup runs;
-				// a write failing after that point is the writer
-				// shutting down, not a batch to count.
+				bf.err = err
 				return
 			}
 			bf.batches.Add(1)
@@ -304,10 +299,64 @@ func startQA2Backfill(writer *Writer, messageIDs []int64) *qa2Backfill {
 	return bf
 }
 
-// stop signals the backfill goroutine and waits for it to exit.
-func (bf *qa2Backfill) stop() {
+// stop signals the backfill goroutine, waits for it to exit, and
+// returns the write error that stopped it early, if any. stop runs
+// before the caller's t.Cleanup, while the writer is still very much
+// alive, so a mid-session write failure is a real result to report,
+// not a shutdown artifact to swallow.
+func (bf *qa2Backfill) stop() error {
 	close(bf.stopCh)
 	<-bf.done
+	return bf.err
+}
+
+// TestIsBusyError proves isBusyError sees through uerr.Error's
+// wrapping to the driver's own SQLITE_BUSY message. uerr.Error.Error()
+// returns only its fixed class sentence, so a check against err.Error()
+// directly can never match a busy error ListMailboxForward or
+// ListMailboxBackward returns, which is exactly what made QA-2's
+// busy.count == 0 assertions vacuous.
+func TestIsBusyError(t *testing.T) {
+	wrapped := uerr.New("store.read", nil, uerr.ClassStoreLocal, errors.New("sqlite: SQLITE_BUSY: database is locked"))
+	if !isBusyError(wrapped) {
+		t.Error("isBusyError(wrapped busy error) = false, want true")
+	}
+	if isBusyError(errors.New("no such table: message")) {
+		t.Error("isBusyError(unrelated error) = true, want false")
+	}
+}
+
+// TestQA2BackfillSurfacesWriteError proves a mid-session write failure
+// on the backfill goroutine reaches the caller through stop(), rather
+// than the goroutine exiting silently and the under-write case
+// measuring zero real write pressure without anyone noticing.
+//
+// It opens its own writer rather than storetest.OpenWriter, closing it
+// once before starting the backfill: OpenWriter's own t.Cleanup would
+// double-close it, and Close panics on a channel already closed.
+func TestQA2BackfillSurfacesWriteError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	writer, err := store.Open(path, store.DefaultWriterConfig())
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	bf := startQA2Backfill(writer, []int64{1})
+	// The closed writer fails the backfill goroutine's very first batch
+	// attempt, so waiting for it to exit on its own, before this test
+	// ever touches bf.stopCh, is what makes the failure path
+	// deterministic rather than racing stop()'s own cooperative signal
+	// against the goroutine's first write attempt.
+	<-bf.done
+	if err := bf.stop(); err == nil {
+		t.Fatal("stop() = nil, want the write error from a closed writer")
+	}
+	if got := bf.batches.Load(); got != 0 {
+		t.Errorf("batches = %d, want 0 (the writer was closed before the first batch)", got)
+	}
 }
 
 // qa2BackfillBatch runs one bulk-lane transaction: flagUpdates
@@ -317,7 +366,7 @@ func (bf *qa2Backfill) stop() {
 // sized to land close to ADR-0003's ~50ms-per-chunk target on this
 // machine, real per-statement round-trip cost rather than a single
 // bulk statement fast enough to prove nothing about write pressure.
-func qa2BackfillBatch(writer *Writer, messageIDs []int64, rng *rand.Rand) (int, error) {
+func qa2BackfillBatch(writer *store.Writer, messageIDs []int64, rng *rand.Rand) (int, error) {
 	const flagUpdates, bodyUpserts = 600, 80
 	rows := 0
 	err := writer.Apply(context.Background(), func(tx *sql.Tx) error {

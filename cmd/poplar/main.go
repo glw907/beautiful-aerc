@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -136,25 +135,24 @@ type startupTraceResult struct {
 func runStartupTrace(ctx context.Context, dbPath string, writer *store.Writer, start time.Time, out io.Writer) error {
 	opened := time.Since(start)
 
-	var mailboxID int64
-	err := writer.Apply(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT id FROM mailbox ORDER BY id LIMIT 1`).Scan(&mailboxID)
-	})
-	if err != nil {
-		_ = writer.Close()
-		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("find a mailbox to list: %w", err))
-	}
-
 	reads, err := store.NewReadPool(dbPath, 1, writer.Revision())
 	if err != nil {
 		_ = writer.Close()
 		return err
 	}
+
+	mailboxID, err := reads.FirstMailboxID(ctx)
+	if err != nil {
+		_ = reads.Close()
+		_ = writer.Close()
+		return err
+	}
+
 	page, err := reads.ListMailboxForward(ctx, mailboxID, store.MailboxCursor{}, 50)
 	closeErr := reads.Close()
 	if err != nil {
 		_ = writer.Close()
-		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("first list page: %w", err))
+		return err
 	}
 	if closeErr != nil {
 		_ = writer.Close()

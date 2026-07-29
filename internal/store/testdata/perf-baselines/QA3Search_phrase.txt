@@ -1,0 +1,2 @@
+BenchmarkQA3Search_phrase      125	   1180238 ns/op
+n=125 p50=1.154677ms p95=1.397892ms p99=1.899527ms max=2.021706ms
