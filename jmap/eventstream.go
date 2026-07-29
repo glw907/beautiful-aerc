@@ -75,7 +75,13 @@ func (r *eventReader) next() (event, error) {
 			// to the first field name. Left in, it makes an "event"
 			// field unrecognisable, so the stream's first event
 			// degrades to an unnamed one and the caller drops it.
-			line = strings.TrimPrefix(line, "\ufeff") //poplar:allow-unicode the byte order mark this strips has no ASCII spelling
+			//
+			// The styling analyzer decodes a literal before scanning
+			// its runes, so no string spelling of the mark gets past
+			// the rule. string([]byte{0xEF, 0xBB, 0xBF}) does get
+			// past it, and a reader of that line cannot see which
+			// character is meant.
+			line = strings.TrimPrefix(line, "\ufeff") //poplar:allow-unicode the analyzer decodes the literal, and the byte-slice form that escapes it hides the character
 			r.started = true
 		}
 		if line == "" {

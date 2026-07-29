@@ -658,36 +658,85 @@ func TestListenStopsOnAServerRefusal(t *testing.T) {
 	}
 }
 
-// TestConnectTimesTheOpenStreamOnly pins what the backoff schedule
-// measures. Timing a connection from before the dial counts a
-// black-holing server's connect timeout as time spent connected, so
-// every attempt looks healthy, the schedule resets on each one, and
-// the escalation the ceiling exists for never happens.
-func TestConnectTimesTheOpenStreamOnly(t *testing.T) {
-	const answering = 300 * time.Millisecond
-	client, mux := startFake(t)
-	mux.HandleFunc("GET /events", func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(answering)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-	})
-	session := dial(t, client)
+// TestConnectTimesTheOpenStream pins what the backoff schedule
+// measures, from both ends. Timing from before the dial counts a
+// black-holing server's connect timeout as time connected, so every
+// attempt looks healthy and the schedule never escalates. Reporting
+// nothing is the same defect from the other side: no connection ever
+// looks healthy, so a drop after hours of a good stream waits the
+// fully escalated delay the reset exists to avoid.
+//
+// The two rows are the same server spending its time in the two
+// places it can: before the stream opens, and with the stream open.
+func TestConnectTimesTheOpenStream(t *testing.T) {
+	const spent = 300 * time.Millisecond
+	cases := []struct {
+		name string
 
-	l := &listener{
-		client: client,
-		url: expandTemplate(session.EventSourceURL,
-			"{types}", "*", "{closeafter}", "no", "{ping}", "0"),
+		// handler takes the test so the second case can fail loudly
+		// on a ResponseWriter it cannot flush. Without the flush the
+		// client waits for the handler to return, and the stream is
+		// never open while the server holds it.
+		handler  func(*testing.T) http.HandlerFunc
+		wantLess bool
+	}{
+		{
+			name: "time spent answering is not time connected",
+			handler: func(*testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					time.Sleep(spent)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+				}
+			},
+			wantLess: true,
+		},
+		{
+			name: "time spent with the stream open is",
+			handler: func(t *testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					flusher, ok := w.(http.Flusher)
+					if !ok {
+						t.Error("the test server's ResponseWriter cannot flush")
+						return
+					}
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					flusher.Flush()
+					time.Sleep(spent)
+				}
+			},
+		},
 	}
-	uptime, retry, err := l.connect(t.Context())
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	if !retry {
-		t.Fatal("a stream the server closed is not a refusal")
-	}
-	if uptime < 0 || uptime >= answering {
-		t.Errorf("uptime = %v for a stream that carried nothing, want under the %v the server spent answering",
-			uptime, answering)
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			client, mux := startFake(t)
+			mux.HandleFunc("GET /events", c.handler(t))
+			session := dial(t, client)
+
+			l := &listener{
+				client: client,
+				url: expandTemplate(session.EventSourceURL,
+					"{types}", "*", "{closeafter}", "no", "{ping}", "0"),
+			}
+			uptime, retry, err := l.connect(t.Context())
+			if err != nil {
+				t.Fatalf("connect: %v", err)
+			}
+			if !retry {
+				t.Fatal("a stream the server closed is not a refusal")
+			}
+			if uptime < 0 {
+				t.Fatalf("uptime = %v", uptime)
+			}
+			if c.wantLess && uptime >= spent {
+				t.Errorf("uptime = %v, want under the %v the server spent before the stream opened", uptime, spent)
+			}
+			if !c.wantLess && uptime < spent {
+				t.Errorf("uptime = %v, want at least the %v the stream stayed open", uptime, spent)
+			}
+		})
 	}
 }
 
