@@ -378,8 +378,19 @@ plan-approval model boundary; the starter prompt below is the
 handoff. The scope list that follows remains the binding source
 the plan was authored from.
 
-**Execution in progress (2026-07-29). Tasks 1 through 5 are done,
-reviewed, and pushed** (commits `ef0c986..38c8f08`). The live
+**Execution in progress (2026-07-30). Tasks 1 through 6a are done,
+reviewed, and pushed; task 6b is implemented and pushed through fix
+round 2, but that round is NOT reviewed** (master at `b6c1b00`).
+Task 6a landed the cutover to `internal/backend/jmapsource` on
+`poplar/jmap` with go-jmap and oauth2 out of `go.mod`; task 6b gave
+the running program push, collapsed reconnect ownership into the
+inner client, and closed a silent reconnect storm that hit ~5
+requests/second against a server accepting some connections and
+refusing others. **The first action next session is the re-review of
+`1cebf45..b6c1b00`**, whose implementing agent stalled during its own
+gate run; the orchestrator verified every gate on the staged tree and
+committed the code as written, so what is missing is judgment rather
+than mechanics. The live
 progress ledger is
 `.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md`
 and it is the recovery map: it records every task's outcome, every
@@ -546,19 +557,28 @@ Opus 5 session):
 ```
 Resume executing the poplar pass 1b plan at
 docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md
-via superpowers:subagent-driven-development. Tasks 1 through 5 are
-complete, reviewed and pushed (ef0c986..38c8f08).
+via superpowers:subagent-driven-development. Tasks 1 through 6a are
+complete, reviewed and pushed. Task 6b is implemented and pushed
+through fix round 2 (master b6c1b00), but round 2 is NOT reviewed.
 
 Read .superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md
-FIRST. It is the recovery map: every task outcome, every parked and
-deferred finding, the routing rulings that bind later tasks, and the
-defect patterns this pass has produced. Then read the plan, and the
-pass 1b scope in docs/superpowers/specs/poplar-refounding-STATUS.md.
+FIRST, starting with the "READ THIS FIRST" block at the top. It is the
+recovery map: every task outcome, every parked and deferred finding, the
+routing rulings that bind later tasks, and the defect patterns this pass
+has produced. Then read the plan, and the pass 1b scope in
+docs/superpowers/specs/poplar-refounding-STATUS.md.
 
-Resume at task 6a, whose brief is task-6a-brief.md in that same sdd
-directory; 6b follows it. Task 6 was split because it had grown to
-nine deliverables and the push work contradicts its own boundary.
-Do not merge them back together.
+FIRST ACTION: re-review 1cebf45..b6c1b00, task 6b's fix round 2. Its
+implementing agent stalled during its own gate run and never reported.
+The orchestrator verified the staged tree and committed the code as
+written with no orchestrator edits, so every mechanical gate is green
+(make check, jmap-boundary, tagged-vet, conformance, live, -race across
+jmap/backend/sync/outbox/cmd) and no reviewer has read the diff. Round 2
+closed four findings; the one to attack is N1, a fixed-size ring of eight
+answered sessionStates replacing a two-entry dedup, because new
+fixed-size logic is where an off-by-one or wrap bug hides and this pass's
+arrayIndex Critical was a hand-rolled scan whose author never asked what
+it did at the boundary. Then tasks 7 through 12.
 
 Binding research is under docs/poplar/research/; requirements are at
 revision 4 and ADR revision blocks override ADR bodies. The RFC
