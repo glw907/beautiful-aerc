@@ -1,4 +1,4 @@
-package jmap
+package jmapsource
 
 import (
 	"context"
@@ -7,12 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~rockorager/go-jmap"
-	jmapmail "git.sr.ht/~rockorager/go-jmap/mail"
-	"git.sr.ht/~rockorager/go-jmap/mail/email"
-	"git.sr.ht/~rockorager/go-jmap/mail/mailbox"
-
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/jmap"
 )
 
 // defaultPageSize bounds a baseline pull's page when the caller asks
@@ -71,8 +67,8 @@ func (m *mailSource) Changes(ctx context.Context, kind backend.ObjectKind, token
 // mailboxChanges share this decode path and translate the hydrated
 // lists into poplar's field vocabulary themselves, since Email and
 // Mailbox each need their own translator.
-func changesRoundTrip[C, G any](s *Session, req *jmap.Request, kind, changesCall, createdCall, updatedCall string) (changes C, created, updated G, err error) {
-	resp, err := s.do(req)
+func changesRoundTrip[C, G any](ctx context.Context, s *Session, req *jmap.Request, kind, changesCall, createdCall, updatedCall string) (changes C, created, updated G, err error) {
+	resp, err := s.do(ctx, req)
 	if err != nil {
 		return changes, created, updated, fmt.Errorf("jmap: %s/changes: %w", kind, err)
 	}
@@ -97,25 +93,25 @@ func changesRoundTrip[C, G any](s *Session, req *jmap.Request, kind, changesCall
 // messageChanges runs Email/changes plus two Email/get calls
 // back-referencing its created and updated ids, all in one request.
 func (s *Session) messageChanges(ctx context.Context, token string, limit int) (backend.ChangeSet, error) {
-	req := &jmap.Request{Context: ctx}
-	changesCall := req.Invoke(&email.Changes{
+	req := &jmap.Request{}
+	changesCall := req.Invoke(&jmap.EmailChanges{
 		Account:    s.accountID,
 		SinceState: token,
 		MaxChanges: jmapLimit(limit),
 	})
-	createdCall := req.Invoke(&email.Get{
+	createdCall := req.Invoke(&jmap.EmailGet{
 		Account:      s.accountID,
 		Properties:   messageProperties,
 		ReferenceIDs: &jmap.ResultReference{ResultOf: changesCall, Name: "Email/changes", Path: "/created"},
 	})
-	updatedCall := req.Invoke(&email.Get{
+	updatedCall := req.Invoke(&jmap.EmailGet{
 		Account:      s.accountID,
 		Properties:   messageProperties,
 		ReferenceIDs: &jmap.ResultReference{ResultOf: changesCall, Name: "Email/changes", Path: "/updated"},
 	})
 
-	changes, created, updated, err := changesRoundTrip[*email.ChangesResponse, *email.GetResponse](
-		s, req, "email", changesCall, createdCall, updatedCall)
+	changes, created, updated, err := changesRoundTrip[*jmap.EmailChangesResponse, *jmap.EmailGetResponse](
+		ctx, s, req, "email", changesCall, createdCall, updatedCall)
 	if err != nil {
 		return backend.ChangeSet{}, err
 	}
@@ -177,29 +173,29 @@ func (s *Session) baselineMessages(ctx context.Context, token string, limit int)
 		return backend.ChangeSet{}, err
 	}
 
-	req := &jmap.Request{Context: ctx}
-	queryCall := req.Invoke(&email.Query{
+	req := &jmap.Request{}
+	queryCall := req.Invoke(&jmap.EmailQuery{
 		Account:        s.accountID,
-		Sort:           []*email.SortComparator{{Property: "receivedAt", IsAscending: false}},
+		Sort:           []*jmap.Comparator{{Property: "receivedAt", IsAscending: new(false)}},
 		Position:       prev.position,
 		Limit:          jmapLimit(limit),
 		CalculateTotal: true,
 	})
-	getCall := req.Invoke(&email.Get{
+	getCall := req.Invoke(&jmap.EmailGet{
 		Account:      s.accountID,
 		Properties:   messageProperties,
 		ReferenceIDs: &jmap.ResultReference{ResultOf: queryCall, Name: "Email/query", Path: "/ids"},
 	})
 
-	resp, err := s.do(req)
+	resp, err := s.do(ctx, req)
 	if err != nil {
 		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/query: %w", err)
 	}
-	query, err := findResponse[*email.QueryResponse](resp, queryCall)
+	query, err := findResponse[*jmap.EmailQueryResponse](resp, queryCall)
 	if err != nil {
 		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/query: %w", err)
 	}
-	get, err := findResponse[*email.GetResponse](resp, getCall)
+	get, err := findResponse[*jmap.EmailGetResponse](resp, getCall)
 	if err != nil {
 		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/get: %w", err)
 	}
@@ -222,25 +218,25 @@ func (s *Session) baselineMessages(ctx context.Context, token string, limit int)
 // mailboxChanges runs Mailbox/changes plus two Mailbox/get calls
 // back-referencing its created and updated ids, all in one request.
 func (s *Session) mailboxChanges(ctx context.Context, token string, limit int) (backend.ChangeSet, error) {
-	req := &jmap.Request{Context: ctx}
-	changesCall := req.Invoke(&mailbox.Changes{
+	req := &jmap.Request{}
+	changesCall := req.Invoke(&jmap.MailboxChanges{
 		Account:    s.accountID,
 		SinceState: token,
 		MaxChanges: jmapLimit(limit),
 	})
-	createdCall := req.Invoke(&mailbox.Get{
+	createdCall := req.Invoke(&jmap.MailboxGet{
 		Account:      s.accountID,
 		Properties:   mailboxProperties,
 		ReferenceIDs: &jmap.ResultReference{ResultOf: changesCall, Name: "Mailbox/changes", Path: "/created"},
 	})
-	updatedCall := req.Invoke(&mailbox.Get{
+	updatedCall := req.Invoke(&jmap.MailboxGet{
 		Account:      s.accountID,
 		Properties:   mailboxProperties,
 		ReferenceIDs: &jmap.ResultReference{ResultOf: changesCall, Name: "Mailbox/changes", Path: "/updated"},
 	})
 
-	changes, created, updated, err := changesRoundTrip[*mailbox.ChangesResponse, *mailbox.GetResponse](
-		s, req, "mailbox", changesCall, createdCall, updatedCall)
+	changes, created, updated, err := changesRoundTrip[*jmap.MailboxChangesResponse, *jmap.MailboxGetResponse](
+		ctx, s, req, "mailbox", changesCall, createdCall, updatedCall)
 	if err != nil {
 		return backend.ChangeSet{}, err
 	}
@@ -265,13 +261,13 @@ func (s *Session) mailboxChanges(ctx context.Context, token string, limit int) (
 // Accounts carry at most a few hundred mailboxes, so unlike messages
 // this needs no pagination.
 func (s *Session) baselineMailboxes(ctx context.Context) (backend.ChangeSet, error) {
-	req := &jmap.Request{Context: ctx}
-	getCall := req.Invoke(&mailbox.Get{Account: s.accountID, Properties: mailboxProperties})
-	resp, err := s.do(req)
+	req := &jmap.Request{}
+	getCall := req.Invoke(&jmap.MailboxGet{Account: s.accountID, Properties: mailboxProperties})
+	resp, err := s.do(ctx, req)
 	if err != nil {
 		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline mailbox/get: %w", err)
 	}
-	get, err := findResponse[*mailbox.GetResponse](resp, getCall)
+	get, err := findResponse[*jmap.MailboxGetResponse](resp, getCall)
 	if err != nil {
 		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline mailbox/get: %w", err)
 	}
@@ -283,7 +279,7 @@ func (s *Session) baselineMailboxes(ctx context.Context) (backend.ChangeSet, err
 }
 
 // hydrateMessages translates list into Records.
-func hydrateMessages(list []*email.Email) []backend.Record {
+func hydrateMessages(list []*jmap.Email) []backend.Record {
 	if len(list) == 0 {
 		return nil
 	}
@@ -297,7 +293,7 @@ func hydrateMessages(list []*email.Email) []backend.Record {
 // messageFields translates e into poplar's message field vocabulary,
 // never exposing a JMAP property name through the seam (ADR-0004
 // revision 2).
-func messageFields(e *email.Email) map[string]any {
+func messageFields(e *jmap.Email) map[string]any {
 	fields := map[string]any{
 		"blob_id":        string(e.BlobID),
 		"thread_id":      string(e.ThreadID),
@@ -307,10 +303,10 @@ func messageFields(e *email.Email) map[string]any {
 		"preview":        e.Preview,
 	}
 	if e.ReceivedAt != nil {
-		fields["received_at"] = *e.ReceivedAt
+		fields["received_at"] = e.ReceivedAt.Time()
 	}
 	if e.SentAt != nil {
-		fields["sent_at"] = *e.SentAt
+		fields["sent_at"] = e.SentAt.Time()
 	}
 	if len(e.MessageID) > 0 {
 		fields["message_id"] = e.MessageID[0]
@@ -352,7 +348,7 @@ func messageFields(e *email.Email) map[string]any {
 	return fields
 }
 
-func addressList(addrs []*jmapmail.Address) []map[string]string {
+func addressList(addrs []*jmap.Address) []map[string]string {
 	if len(addrs) == 0 {
 		return nil
 	}
@@ -381,14 +377,14 @@ func mailboxIDList(ids map[jmap.ID]bool) []string {
 }
 
 // mailboxFields translates b into poplar's mailbox field vocabulary.
-func mailboxFields(b *mailbox.Mailbox) map[string]any {
+func mailboxFields(b *jmap.Mailbox) map[string]any {
 	fields := map[string]any{
 		"name":          b.Name,
 		"role":          string(b.Role),
 		"sort_order":    toInt64(b.SortOrder),
 		"total_emails":  toInt64(b.TotalEmails),
 		"unread_emails": toInt64(b.UnreadEmails),
-		"is_subscribed": b.IsSubscribed,
+		"is_subscribed": boolValue(b.IsSubscribed),
 	}
 	if b.ParentID != "" {
 		fields["parent_id"] = string(b.ParentID)

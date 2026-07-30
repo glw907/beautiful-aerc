@@ -138,13 +138,14 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// startEnginesRetrying instead of aborting run, since SY-3
 	// requires poplar to run and stay usable with no network. The
 	// fatal branch is what constructs the uerr.Error for a dial
-	// failure: jmap.Dial classifies its own failures without logging so
-	// a retry loop can dedup them (ADR-0013 revision 2), which leaves
-	// this exit the one surfacing event on a path that has no retry
-	// loop at all. A failure that arrives already carrying a uerr.Error
-	// has already logged, so it propagates rather than being
-	// reconstructed: connectLiveJMAP's missing-token case is that
-	// shape, and it is the most common startup failure there is.
+	// failure: jmapsource.Dial classifies its own failures without
+	// logging so a retry loop can dedup them (ADR-0013 revision 2),
+	// which leaves this exit the one surfacing event on a path that
+	// has no retry loop at all. A failure that arrives already
+	// carrying a uerr.Error has already logged, so it propagates
+	// rather than being reconstructed: connectLiveJMAP's missing-token
+	// case is that shape, and it is the most common startup failure
+	// there is.
 	var wg *sync.WaitGroup
 	be, key, err := connect(ctx)
 	switch {

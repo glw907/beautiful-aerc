@@ -1,4 +1,4 @@
-package jmap
+package jmapsource
 
 // toInt narrows a JMAP uint64 counter (a server limit, a mailbox
 // total) to int. Every such counter this package reads comes from a
@@ -20,3 +20,11 @@ func toInt64(u uint64) int64 { return int64(u) }
 //
 //nolint:gosec // G115: limit is caller-controlled and non-negative by convention
 func jmapLimit(limit int) uint64 { return uint64(limit) }
+
+// boolValue reports v's value, or false when the server left the
+// property unset: package jmap types an optional Boolean whose
+// absence differs from false (jmap.doc's "Optional Booleans") as
+// *bool, and Mailbox.IsSubscribed is one, but poplar's field
+// vocabulary has no room for a third state and a server that omits
+// it means the mailbox is not subscribed.
+func boolValue(v *bool) bool { return v != nil && *v }

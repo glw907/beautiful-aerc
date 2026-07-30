@@ -18,9 +18,9 @@ model types in operation vocabulary: changes-since-token,
 fetch-bodies, apply-mutation, submit-with-lifecycle. A
 `Capabilities` struct carries the facts engines branch on (server
 thread identity, push transport, delta granularity, submission
-semantics). The Fastmail v1 backend composes `backend/jmap` (mail,
-contacts) with `backend/dav` (calendar); the composition lives in
-account config. The JMAP-calendars upgrade swaps the calendar
+semantics). The Fastmail v1 backend composes `backend/jmapsource`
+(mail, contacts) with `backend/dav` (calendar); the composition
+lives in account config. The JMAP-calendars upgrade swaps the calendar
 source; a Gmail backend is a new composition behind the same
 interface.
 

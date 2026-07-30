@@ -46,6 +46,9 @@
 //
 // # Provenance
 //
-// The data model derives from go-jmap v0.5.3, which is MIT licensed.
-// THIRD-PARTY-NOTICES.md alongside this file carries the notice.
+// The data model derives from git.sr.ht/~rockorager/go-jmap v0.5.3
+// (2025-02-01), which is MIT licensed and, as of this writing, remains
+// the head of upstream's main branch. THIRD-PARTY-NOTICES.md alongside
+// this file names exactly what was read from it and rewritten, and
+// carries the license notice in full.
 package jmap

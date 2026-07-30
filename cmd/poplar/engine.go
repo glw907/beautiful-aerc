@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
-	"github.com/glw907/poplar/internal/backend/jmap"
+	"github.com/glw907/poplar/internal/backend/jmapsource"
 	"github.com/glw907/poplar/internal/keyring"
 	"github.com/glw907/poplar/internal/outbox"
 	"github.com/glw907/poplar/internal/store"
@@ -52,8 +52,8 @@ func connectLiveJMAP(ctx context.Context) (backend.Backend, string, error) {
 		return nil, "", uerr.New("main.connect", nil, uerr.ClassAuth, err)
 	}
 
-	creds := jmap.NewStaticCredentials(token)
-	session, err := jmap.Dial(ctx, fastmailSessionURL, creds)
+	creds := jmapsource.NewStaticCredentials(token)
+	session, err := jmapsource.Dial(ctx, fastmailSessionURL, creds)
 	if err != nil {
 		return nil, "", err
 	}
@@ -72,24 +72,25 @@ func isFatalConnect(err error) bool {
 }
 
 // classifyConnect reports the uerr.Class and root cause a connect
-// failure carries, without having logged it. jmap.Dial's own dial-path
-// failures come back as a jmap.DialError (a rejected credential, a
-// 404, a 5xx, a dead connection): fetchSession classifies without
-// calling uerr.New, since retryConnect's own backoff loop, not
-// fetchSession, owns the surfacing decision (ADR-0013 revision 2). A
+// failure carries, without having logged it. jmapsource.Dial's own
+// dial-path failures come back as a jmapsource.DialError (a rejected
+// credential, a 404, a 5xx, a dead connection): Dial classifies
+// without calling uerr.New, since retryConnect's own backoff loop,
+// not Dial, owns the surfacing decision (ADR-0013 revision 2). A
 // keyring.Token failure, the one connect error still built through
 // uerr.New (connectLiveJMAP fails before any network reach, so there
 // is no retry loop to defer to), keeps its own class and cause. One
-// jmap.Dial never recognized at all falls back to uerr.ClassConnection,
-// the same default sync's own classifyErr uses for an unclassified
-// push failure: fetchSession returns a raw error for a JSON decode
-// failure, a truncated body, or any status classifyStatusClass does
-// not map, and a captive portal's HTTP 200 login page is exactly that
-// case. Every connect failure classifies to something, which is what
-// keeps retryConnect's own uerr.New call from depending on a lower
-// layer having recognized the failure first.
+// jmapsource.Dial never recognized at all falls back to
+// uerr.ClassConnection, the same default sync's own classifyErr uses
+// for an unclassified push failure: Dial returns a raw error for a
+// JSON decode failure, a truncated body, or any status
+// classifyStatusClass does not map, and a captive portal's HTTP 200
+// login page is exactly that case. Every connect failure classifies
+// to something, which is what keeps retryConnect's own uerr.New call
+// from depending on a lower layer having recognized the failure
+// first.
 func classifyConnect(err error) (uerr.Class, error) {
-	if de, ok := errors.AsType[jmap.DialError](err); ok {
+	if de, ok := errors.AsType[jmapsource.DialError](err); ok {
 		return de.Class, de.Cause
 	}
 	if ue, ok := errors.AsType[uerr.Error](err); ok {
@@ -103,9 +104,9 @@ func classifyConnect(err error) (uerr.Class, error) {
 // through uerr.New already. connectLiveJMAP builds its missing-token
 // failure that way, before any network reach, so constructing a second
 // one here would log the same outcome twice (ADR-0013 revision 2) on
-// the most common startup failure there is. A jmap.DialError, which
-// fetchSession classifies without logging so a retry loop can dedup
-// it, is the case that still needs one built.
+// the most common startup failure there is. A jmapsource.DialError,
+// which Dial classifies without logging so a retry loop can dedup it,
+// is the case that still needs one built.
 func surfaceFatalConnect(err error) uerr.Error {
 	if already, ok := errors.AsType[uerr.Error](err); ok {
 		return already
@@ -192,18 +193,18 @@ func startEnginesRetrying(ctx context.Context, writer *store.Writer, connect bac
 	return &wg
 }
 
-// jmapBackend adapts jmap.Session to backend.Backend. Session composes
-// only a mail source today; Calendar, Contacts, and Push all report
-// none, matching a backend that declares no such source. Capabilities
-// forces PushTransport to PushTransportNone to match Push()'s nil:
-// Session's own Capabilities reports PushTransportEventSource
-// whenever the live server advertises one, but no Listen
-// implementation exists in this package yet (task 6's cutover adds
-// it), and a capability that promises what Push() cannot deliver
+// jmapBackend adapts jmapsource.Session to backend.Backend. Session
+// composes only a mail source today; Calendar, Contacts, and Push all
+// report none, matching a backend that declares no such source.
+// Capabilities forces PushTransport to PushTransportNone to match
+// Push()'s nil: Session's own Capabilities reports
+// PushTransportEventSource whenever the live server advertises one,
+// but no Listen implementation exists in this package yet (task 6b
+// adds it), and a capability that promises what Push() cannot deliver
 // would misrender the first consumer that reads it (SY-5's status
 // line).
 type jmapBackend struct {
-	session *jmap.Session
+	session *jmapsource.Session
 	creds   backend.Credentials
 }
 

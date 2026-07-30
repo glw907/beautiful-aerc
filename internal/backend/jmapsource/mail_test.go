@@ -1,10 +1,11 @@
-package jmap
+package jmapsource
 
 import (
 	"context"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -13,27 +14,70 @@ import (
 	"github.com/glw907/poplar/internal/uerr"
 )
 
+// downloadRequest records one Download call's own request, the three
+// values downloadBlob supplies for the download URL template's
+// {blobId}, {type}, and {name} placeholders. sessionTemplate
+// (session_test.go) carries both {type} and {name}, so a value change
+// to either reaches this recording rather than going unnoticed the
+// way a template without them would.
+type downloadRequest struct {
+	blobID, contentType, name string
+}
+
 // fakeBlobs scripts the /upload/ and /download/ endpoints Submit and
 // FetchBodies use, separate from /api's method-call batching.
 type fakeBlobs struct {
 	uploadResp []byte
 	downloads  map[string][]byte
 
-	mu       sync.Mutex
-	uploaded [][]byte
+	mu                 sync.Mutex
+	uploaded           [][]byte
+	uploadContentTypes []string
+	downloadRequests   []downloadRequest
 }
 
 func (b *fakeBlobs) handleUpload(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	b.mu.Lock()
 	b.uploaded = append(b.uploaded, body)
+	b.uploadContentTypes = append(b.uploadContentTypes, r.Header.Get("Content-Type"))
 	b.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(b.uploadResp)
 }
 
+// handleDownload parses blobID, type, and name off the request's own
+// escaped path rather than through http.ServeMux's wildcard routing:
+// FetchBodies's own downloadBlob leaves name empty, and a mux pattern
+// of {blobID}/{type}/{name} does not match a URL whose final segment
+// is empty (a trailing slash with nothing after it never reaches this
+// handler at all). Splitting the escaped path ourselves, and
+// unescaping each segment independently, also keeps the {type}
+// segment's own "/" (message%2Frfc822) from being read as a fourth
+// path separator, which splitting the already-decoded r.URL.Path
+// would do.
 func (b *fakeBlobs) handleDownload(w http.ResponseWriter, r *http.Request) {
-	blobID := strings.TrimPrefix(r.URL.Path, "/download/")
+	rest := strings.TrimPrefix(r.URL.EscapedPath(), "/download/")
+	parts := strings.Split(rest, "/")
+	if len(parts) != 3 {
+		http.NotFound(w, r)
+		return
+	}
+	blobID, err1 := url.PathUnescape(parts[0])
+	contentType, err2 := url.PathUnescape(parts[1])
+	name, err3 := url.PathUnescape(parts[2])
+	if err1 != nil || err2 != nil || err3 != nil {
+		http.Error(w, "bad path escaping", http.StatusBadRequest)
+		return
+	}
+
+	b.mu.Lock()
+	b.downloadRequests = append(b.downloadRequests, downloadRequest{
+		blobID:      blobID,
+		contentType: contentType,
+		name:        name,
+	})
+	b.mu.Unlock()
 	content, ok := b.downloads[blobID]
 	if !ok {
 		http.NotFound(w, r)
@@ -239,6 +283,14 @@ func TestSubmit(t *testing.T) {
 	if len(blobs.uploaded) != 1 || string(blobs.uploaded[0]) != "hello world" {
 		t.Errorf("uploaded bodies = %v, want [hello world]", blobs.uploaded)
 	}
+	// Upload requires a real Content-Type (jmap.Client.Upload's
+	// signature, unlike go-jmap's own Upload, which sent a hardcoded
+	// application/json regardless of what was uploaded): a raw
+	// outgoing message is message/rfc822, not the mislabel go-jmap
+	// carried forward.
+	if len(blobs.uploadContentTypes) != 1 || blobs.uploadContentTypes[0] != "message/rfc822" {
+		t.Errorf("upload Content-Type = %v, want [message/rfc822]", blobs.uploadContentTypes)
+	}
 
 	importName, importArgs, _ := methodCall(t, api.requestAt(2), 0)
 	if importName != "Email/import" {
@@ -284,6 +336,20 @@ func TestFetchBodies(t *testing.T) {
 	}
 	if string(chunks[0].Raw) != "raw message one" {
 		t.Errorf("chunk raw = %q, want %q", chunks[0].Raw, "raw message one")
+	}
+	// downloadBlob's {type} and {name} both reach the wire (RFC 8620
+	// sections 6.1 and 6.2's own template variables): message/rfc822
+	// is what a downloaded message source actually is, in place of
+	// go-jmap's own hardcoded application/octet-stream, and the empty
+	// name is this call site's own choice, in place of go-jmap's
+	// hardcoded "filename" placeholder. Neither changes the bytes
+	// FetchBodies returns above; both are the Content-Type and
+	// Content-Disposition the server would label the response with.
+	if len(blobs.downloadRequests) != 1 {
+		t.Fatalf("download requests = %d, want 1", len(blobs.downloadRequests))
+	}
+	if got := blobs.downloadRequests[0]; got.contentType != "message/rfc822" || got.name != "" {
+		t.Errorf("download request = %+v, want contentType message/rfc822, name \"\"", got)
 	}
 	// FetchBodies resolves its own blobId with no session-lifetime
 	// cache (SY-5 memory ceiling), so it costs its own Email/get call

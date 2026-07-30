@@ -1,4 +1,4 @@
-package jmap
+package jmapsource
 
 import (
 	"context"
@@ -19,7 +19,14 @@ import (
 // sessionTemplate is a JMAP session resource: Core and Mail
 // capabilities plus a submission capability with a positive
 // maxDelayedSend, so probeCapabilities has something to read for
-// every field it populates.
+// every field it populates. downloadUrl carries {type} and {name}
+// (not only {blobId}), so downloadBlob's own values for both reach
+// the wire where fakeBlobs.handleDownload (mail_test.go) can record
+// them; a URL template with no such placeholder makes a value change
+// there invisible to every test, which is exactly how the download
+// content type going from application/octet-stream to message/rfc822
+// and the download name going from "filename" to "" both landed
+// unnoticed in this package's cutover from go-jmap.
 const sessionTemplate = `{
   "capabilities": {
     "urn:ietf:params:jmap:core": {
@@ -41,7 +48,7 @@ const sessionTemplate = `{
   },
   "username": "geoff@907.life",
   "apiUrl": "%[1]s/api",
-  "downloadUrl": "%[1]s/download/{blobId}",
+  "downloadUrl": "%[1]s/download/{blobId}/{type}/{name}",
   "uploadUrl": "%[1]s/upload/{accountId}/",
   "eventSourceUrl": "%[1]s/events",
   "state": "session-1"
@@ -208,8 +215,9 @@ func TestDialHonorsContextTimeout(t *testing.T) {
 }
 
 // TestDialClassifiesRejectedSessionWithoutLogging asserts a non-200
-// status from the session endpoint itself (dial-time auth rejection,
-// before go-jmap ever builds a *jmap.RequestError) still reaches the
+// status from the session endpoint itself (a rejection with no
+// problem-details body, so package jmap's refusal builds a bare
+// *jmap.HTTPError rather than a *jmap.RequestError) still reaches the
 // caller classified, as a DialError, not a bare fmt.Errorf, and
 // without having logged: Dial is retried by its own caller's backoff
 // loop (cmd/poplar's retryConnect), and a uerr.Error constructed here

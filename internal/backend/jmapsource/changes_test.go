@@ -1,4 +1,4 @@
-package jmap
+package jmapsource
 
 import (
 	"context"
@@ -6,9 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"git.sr.ht/~rockorager/go-jmap/mail/email"
-
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/jmap"
 )
 
 func readFixture(t *testing.T, name string) []byte {
@@ -227,7 +226,7 @@ func TestChangesBaselineRestartsOnQueryStateChange(t *testing.T) {
 // translation) reads a missing key as no change rather than false,
 // so a server-side clear must still come through explicitly.
 func TestMessageFieldsAlwaysEmitsAllFlags(t *testing.T) {
-	e := &email.Email{ID: "msg-1", Keywords: map[string]bool{"$seen": true}}
+	e := &jmap.Email{ID: "msg-1", Keywords: map[string]bool{"$seen": true}}
 	fields := messageFields(e)
 	for _, name := range []string{"seen", "flagged", "answered", "draft", "forwarded"} {
 		v, ok := fields[name]

@@ -19,7 +19,7 @@ import (
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"
-	"github.com/glw907/poplar/internal/backend/jmap"
+	"github.com/glw907/poplar/internal/backend/jmapsource"
 	"github.com/glw907/poplar/internal/platform"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/uerr"
@@ -642,15 +642,16 @@ func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
 // records, under ADR-0013 revision 2's one-line-per-outcome rule).
 //
 // Both shapes a real connector produces run through it, because run's
-// fatal branch has to treat them differently to log once. jmap.Dial's
-// rejected session comes back as a wrapped jmap.DialError, classified
-// but deliberately unlogged so a retry loop can dedup it, and run's
-// exit is the only place its uerr.Error can come from. keyring.Token's
+// fatal branch has to treat them differently to log once.
+// jmapsource.Dial's rejected session comes back as a wrapped
+// jmapsource.DialError, classified but deliberately unlogged so a
+// retry loop can dedup it, and run's exit is the only place its
+// uerr.Error can come from. keyring.Token's
 // missing-token failure has already been through uerr.New inside
 // connectLiveJMAP, before any network reach, so constructing a second
 // one for it would log the same outcome twice.
 func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
-	rejectedSession := fmt.Errorf("jmap: dial: %w", jmap.DialError{
+	rejectedSession := fmt.Errorf("jmap: dial: %w", jmapsource.DialError{
 		Class: uerr.ClassAuth,
 		Cause: errors.New("session https://api.fastmail.com/jmap/session: unexpected status 401"),
 	})

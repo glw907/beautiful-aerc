@@ -12,5 +12,7 @@ func TestAnalyzer(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, importboundary.Analyzer,
 		"a/internal/ui", "a/internal/catkin", "a/internal/render",
-		"a/internal/when", "a/internal/search", "a/internal/calendar")
+		"a/internal/when", "a/internal/search", "a/internal/calendar",
+		"a/internal/backend/jmapsource", "a/internal/backend/dav",
+		"a/scripts/hookcheck", "a/jmap", "a/jmap/eventsource")
 }

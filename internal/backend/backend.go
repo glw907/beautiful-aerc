@@ -4,7 +4,7 @@
 // token feed, a batched mutation entry point, and a push transport.
 // A backend composes the sources one account exposes; Calendar,
 // Contacts, and Push return nil for a source the account lacks.
-// internal/backend/jmap and internal/backend/dav implement it
+// internal/backend/jmapsource and internal/backend/dav implement it
 // against a live server; internal/backend/backendtest's Fake is the
 // seam's second implementation (ADR-0014), scripted for engine tests.
 package backend

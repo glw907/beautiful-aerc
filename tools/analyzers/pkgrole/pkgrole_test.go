@@ -19,7 +19,7 @@ func TestOf(t *testing.T) {
 		},
 		{
 			name:           "nested internal package",
-			path:           "github.com/glw907/poplar/internal/backend/jmap",
+			path:           "github.com/glw907/poplar/internal/backend/jmapsource",
 			wantRole:       "backend",
 			wantModuleRoot: "github.com/glw907/poplar",
 			wantOK:         true,

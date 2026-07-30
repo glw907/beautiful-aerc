@@ -53,28 +53,28 @@ refuses offline with a notice).
 ## 2. Package boundaries
 
 ```
-cmd/poplar             wiring and main
-internal/store         schema, migrations, reads, the writer, FTS
-internal/backend       the seam: Backend interface + capabilities
-internal/backend/jmap  Fastmail JMAP backend (go-jmap)
-internal/backend/dav   CalDAV calendar transport (go-webdav)
-internal/sync          delta orchestration, watermarks, push, backoff
-internal/outbox        durable intent queue, dispatch, typed failures
-internal/mail          MIME parse/assembly, threading, reply seeding,
-                       identity matching, flowed decode
-internal/render        the rule engine, pipeline, fact check, traces
-internal/calendar      event model, recurrence, iTIP, occurrence index
-internal/contacts      ContactCard model, autocomplete ranking
-internal/search        query grammar, FTS query build, merge
-internal/when          the shared natural-language time parser (C6)
-internal/uerr          the error seam (ER-1)
-internal/config        the config struct, load/persist, migration
-internal/keyring       credential storage: per-account entries, the
-                       named file fallback, the refresh seam
-internal/platform      opener, clipboard, notifications, instance lock
-internal/theme         compiled tokens: colors, glyphs, spacing roles
-internal/ui            root model, screen registry, screens
-internal/catkin        the live-markdown editor; no poplar imports
+cmd/poplar                   wiring and main
+internal/store               schema, migrations, reads, the writer, FTS
+internal/backend             the seam: Backend interface + capabilities
+internal/backend/jmapsource  Fastmail JMAP backend (poplar/jmap)
+internal/backend/dav         CalDAV calendar transport (go-webdav)
+internal/sync                delta orchestration, watermarks, push, backoff
+internal/outbox              durable intent queue, dispatch, typed failures
+internal/mail                MIME parse/assembly, threading, reply seeding,
+                             identity matching, flowed decode
+internal/render              the rule engine, pipeline, fact check, traces
+internal/calendar            event model, recurrence, iTIP, occurrence index
+internal/contacts            ContactCard model, autocomplete ranking
+internal/search              query grammar, FTS query build, merge
+internal/when                the shared natural-language time parser (C6)
+internal/uerr                the error seam (ER-1)
+internal/config              the config struct, load/persist, migration
+internal/keyring             credential storage: per-account entries, the
+                             named file fallback, the refresh seam
+internal/platform            opener, clipboard, notifications, instance lock
+internal/theme               compiled tokens: colors, glyphs, spacing roles
+internal/ui                  root model, screen registry, screens
+internal/catkin              the live-markdown editor; no poplar imports
 ```
 
 Dependency rules, enforced by an import-boundary test in the gate:
@@ -301,8 +301,8 @@ request and never see a 401-refresh-retry. The `auth` failure
 class gains the `refresh-failed` sub-reason that routes to ST-5.
 For v1's static Fastmail token, `Token` is a read.
 
-The Fastmail v1 backend composes `backend/jmap` (mail, contacts)
-and `backend/dav` (calendar); composition lives in account
+The Fastmail v1 backend composes `backend/jmapsource` (mail,
+contacts) and `backend/dav` (calendar); composition lives in account
 config. The JMAP-calendars upgrade swaps the calendar source; a
 Gmail backend is a new composition behind the same seam.
 

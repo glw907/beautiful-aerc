@@ -1,6 +1,6 @@
 //go:build live
 
-package jmap_test
+package jmapsource_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
-	"github.com/glw907/poplar/internal/backend/jmap"
+	"github.com/glw907/poplar/internal/backend/jmapsource"
 	"github.com/glw907/poplar/internal/keyring"
 )
 
@@ -30,7 +30,7 @@ func TestLiveChangesAndBody(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	session, err := jmap.Dial(ctx, fastmailSessionURL, jmap.NewStaticCredentials(token))
+	session, err := jmapsource.Dial(ctx, fastmailSessionURL, jmapsource.NewStaticCredentials(token))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
