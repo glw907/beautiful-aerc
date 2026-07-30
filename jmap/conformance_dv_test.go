@@ -349,7 +349,7 @@ func TestDV06ErrorTypeSubstitution(t *testing.T) {
 		})
 	}
 	if !foldExercised {
-		t.Fatal("no row produced a type this package does not name; the serverFail fold was never exercised")
+		t.Fatal("no row reached the unnamed-type case, so the serverFail fold was never exercised; if the server now answers a different unnamed type, the case literal wants updating rather than the guard removing")
 	}
 }
 

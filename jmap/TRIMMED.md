@@ -29,4 +29,7 @@ small. Discovering the need in production is not.
 needed for the query-changes splice, and reinstated. It is the
 precedent that made the list worth keeping.
 
-`Blob/copy` is not in this list either: it is implemented, in `blob.go`.
+`Blob/copy` is not in this list either, and it is named here only
+because it nearly was. It fell between two briefs with no owner, which
+is how a method reaches this list by accident rather than by decision.
+It is implemented, in `blob.go`.

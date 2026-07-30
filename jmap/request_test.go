@@ -97,11 +97,12 @@ func TestRequestUsing(t *testing.T) {
 			want:    []URI{CoreURI, SubmissionURI, MailURI},
 		},
 		{
-			// RFC 8620 section 5.5 has a server answer unsupportedFilter
-			// for a filter condition whose capability is missing from
-			// "using", so a call that leans on RFC 9219 and stays quiet
-			// about it fails outright rather than matching every
-			// message: naming the capability is what lets it run.
+			// RFC 8620 section 1.8 has a server behave as though it does
+			// not implement a capability the request never named, so
+			// section 5.5's unsupportedFilter is what a call that leans
+			// on RFC 9219 and stays quiet about it gets. It fails
+			// outright rather than matching every message, and naming
+			// the capability is what lets it run.
 			name:    "a query filtering on S/MIME asks for the capability",
 			methods: []Method{&EmailQuery{Filter: &EmailFilterCondition{HasVerifiedSMIME: new(true)}}},
 			want:    []URI{CoreURI, MailURI, SMIMEVerifyURI},

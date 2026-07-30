@@ -58,9 +58,9 @@ func (r Request) MarshalJSON() ([]byte, error) {
 	// out.Using is a slice header copied from r.Using, which can still
 	// share a backing array with the caller's own Request: a struct
 	// copy does not copy what a slice points at. Clip drops any spare
-	// capacity so the appends below always allocate, rather than
-	// writing into memory a caller holding r is entitled to think is
-	// theirs alone.
+	// capacity so no append below can reach the caller's array: the
+	// first one is forced to allocate, and the rest land in the array
+	// it made, which is this function's own.
 	out.Using = slices.Clip(out.Using)
 	for _, call := range out.MethodCalls {
 		if m, ok := call.Args.(Method); ok {
