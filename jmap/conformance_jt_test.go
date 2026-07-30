@@ -666,8 +666,7 @@ func TestConformanceSubmissionOnSuccessEffects(t *testing.T) {
 		t.Cleanup(func() { tg.destroyEmailQuietly(message) })
 
 		submission := &jmap.EmailSubmissionSetResponse{}
-		answers := resp.Invocations(submitID)
-		assign(t, answers[0], submission)
+		assign(t, only(t, resp, submitID), submission)
 		if submission.Created["s"] != nil {
 			t.Fatalf("the server accepted a submission naming an identity the account does not hold")
 		}
@@ -688,8 +687,8 @@ func TestConformanceSubmissionOnSuccessEffects(t *testing.T) {
 		if !got.List[0].Keywords["$draft"] {
 			t.Error("the refused draft lost $draft, so it reads as sent")
 		}
-		t.Logf("%s refuses a submission naming an unknown identity with %q, and answers %d times under one call id",
-			tg.profile.name, submission.NotCreated["s"].Type, len(answers))
+		t.Logf("%s refuses a submission naming an unknown identity with %q, one response under the call id and no implicit Email/set",
+			tg.profile.name, submission.NotCreated["s"].Type)
 	})
 }
 
@@ -806,10 +805,18 @@ func TestConformanceSessionRefetch(t *testing.T) {
 // server. poplar's liveness timer is set from the interval the ping
 // carries, so a server that clamps the request has to be believed and
 // a payload in the wrong unit disables the detector outright.
+//
+// The stream subscribes to Identity rather than "*". This package
+// carries no Identity/set, so nothing in the suite, this test running
+// concurrently with another, ever produces an Identity state change,
+// and the first event on the stream can only be the ping. A "*"
+// subscription raced TestConformanceSubmissionOnSuccessEffects: its
+// asynchronous delivery lands a state event on the next types=*
+// stream this test opens, and the first event stopped being the ping.
 func TestConformancePingReportsItsOwnCadence(t *testing.T) {
 	tg := dial(t)
 
-	events := tg.readEventStream(t, "types=*&closeafter=no&ping=2", 1)
+	events := tg.readEventStream(t, "types=Identity&closeafter=no&ping=2", 1)
 	if len(events) == 0 {
 		t.Fatal("the event source sent nothing within the window; no ping means no liveness signal at all")
 	}

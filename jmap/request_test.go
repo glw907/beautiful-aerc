@@ -2,6 +2,7 @@ package jmap
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -183,6 +184,36 @@ func TestRequestUsing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestRequestMarshalRecomputesUsingForALateMutation pins that Invoke's
+// merge is not the only chance a call gets to declare a capability.
+// Requires() reads a method's current fields, and nothing stops a
+// caller from mutating one after Invoke returns. RFC 8620 section 1.8
+// has a server drop a condition whose capability is missing from
+// "using" rather than reject the request, so a caller building the
+// filter after the call, the shape a request builder naturally falls
+// into, would have the condition silently ignored: exactly the
+// failure withSMIME exists to prevent.
+func TestRequestMarshalRecomputesUsingForALateMutation(t *testing.T) {
+	q := &EmailQuery{Account: "A13824"}
+	req := &Request{}
+	req.Invoke(q)
+	q.Filter = &EmailFilterCondition{HasVerifiedSMIME: new(true)}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var wire struct {
+		Using []URI `json:"using"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !slices.Contains(wire.Using, SMIMEVerifyURI) {
+		t.Fatalf(`"using" = %v, want it to carry %q for a filter set after Invoke`, wire.Using, SMIMEVerifyURI)
 	}
 }
 

@@ -19,7 +19,6 @@ small. Discovering the need in production is not.
 | `Email/parse` | poplar parses MIME itself in `internal/mail`, which it must do for local drafts anyway. | Rendering a `message/rfc822` attachment as a message without downloading and parsing the blob. |
 | `EmailSubmission/get`, `EmailSubmission/changes` | the outbox tracks its own sends and hears the outcome through `Email/changes` on the Sent mailbox. | A delivery-status view that shows per-recipient `deliveryStatus`, or an undo-send flow that has to read `undoStatus` back. |
 | `Identity/set`, `Identity/changes` | poplar reads identities and never edits them; Fastmail's identities are managed in Fastmail. | An identity editor, or a signature-editing feature. |
-| `Blob/copy` | **no longer trimmed.** It was unowned between briefs and landed with the second-server validation, in `blob.go`. | — |
 | `SearchSnippet/get` | poplar's search highlights locally out of the body it already holds. | Server-side search over messages whose bodies are not in the local store. |
 | `VacationResponse/get`, `VacationResponse/set` | out of scope for v1. go-jmap's own implementation carries a confirmed defect here (`MarshalJson`), so it is a rewrite rather than a port. | A vacation-responder setting. |
 | `MDN/send`, `MDN/parse` | read receipts are a v1 non-goal. go-jmap's implementation also carries a confirmed tag defect (`reportinUA`). | Read-receipt support, which would need a policy decision before a type. |
@@ -29,3 +28,6 @@ small. Discovering the need in production is not.
 `Email/queryChanges` is not in this list. It was trimmed, found to be
 needed for the query-changes splice, and reinstated. It is the
 precedent that made the list worth keeping.
+
+`Blob/copy` is not in this list either, for the same reason: it was
+unowned between briefs, then implemented in `blob.go`.

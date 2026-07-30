@@ -309,20 +309,22 @@ func TestDV06ErrorTypeSubstitution(t *testing.T) {
 			}
 
 			// RFC 8620 section 3.6.2: a type the client does not
-			// understand is treated as serverFail. What that buys is
-			// the property asserted here, that whatever type a server
-			// substitutes, a caller can still classify it: it matches
-			// the sentinel for its own type, or it folds into
-			// serverFail, and every error does one or the other.
-			//
-			// The question goes to the package rather than to a list of
-			// sentinels copied into this file. A copy is what goes
-			// stale, and a stale one weakens this assertion silently
-			// instead of breaking it.
-			itself := &jmap.MethodError{Type: failed.Type}
+			// understand is treated as serverFail. unsupportedSort is
+			// the row that proves it live: it is not in
+			// jmap/errors.go's named set, so this is the fold running
+			// against a type this package does not recognise, rather
+			// than against a sentinel copied here to match itself.
 			folds := errors.Is(failed, jmap.ErrServerFail)
-			if !errors.Is(failed, itself) {
-				t.Errorf("%q does not match its own type, so no caller can act on it", failed.Type)
+			switch failed.Type {
+			case "unsupportedSort":
+				if !folds {
+					t.Errorf("%q does not fold into serverFail; section 3.6.2 requires an unnamed type to read as serverFail", failed.Type)
+				}
+			case jmap.ErrServerFail.Type:
+			default:
+				if folds {
+					t.Errorf("%q folded into serverFail, but this package names that type; the fold should only catch an unnamed one", failed.Type)
+				}
 			}
 			if folds && failed.Type != jmap.ErrServerFail.Type {
 				t.Logf("%s answers %q, which this package does not name and reads as serverFail",
