@@ -10,7 +10,9 @@ package jmapsource
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/jmap"
@@ -20,12 +22,14 @@ import (
 // HTTP transport every method call in this package shares, the
 // account id the session assigned mail, the capabilities the live
 // session reported (ADR-0004 revision 2), and do()'s own dedup state
-// for a repeated ClassAuth failure (authState's doc comment).
+// for a repeated ClassAuth failure (authState's doc comment) and for
+// the session refetch a moved sessionState asks for (refetchState's).
 type Session struct {
 	client    *jmap.Client
 	accountID jmap.ID
 	caps      backend.Capabilities
 	auth      authState
+	refetch   refetchState
 }
 
 // Dial authenticates against sessionURL, sourcing the bearer token
@@ -42,11 +46,13 @@ func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*S
 		return nil, fmt.Errorf("jmap: dial: %w", classifyDial(err))
 	}
 
-	return &Session{
+	s := &Session{
 		client:    client,
 		accountID: session.PrimaryAccounts[jmap.MailURI],
 		caps:      probeCapabilities(session),
-	}, nil
+	}
+	s.refetch.last = session.State
+	return s, nil
 }
 
 // Capabilities returns the facts s's live session reported.
@@ -61,7 +67,43 @@ func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, er
 		return resp, classify("jmap.do", err, &s.auth)
 	}
 	s.auth.clear()
+	s.refetch.follow(ctx, s.client, resp.SessionState)
 	return resp, nil
+}
+
+// refetchState holds the sessionState a refetch has already run for,
+// so the session resource is fetched once per state the server moves
+// to rather than once per response reporting the move. Every response
+// carries the state (RFC 8620 section 3.4), and section 2 recommends
+// refetching the session when it differs from the one in hand. A busy
+// account is a steady run of responses all reporting the same new
+// state, so the undeduped form is a request storm against the session
+// resource, on exactly the account least able to absorb one.
+type refetchState struct {
+	mu   sync.Mutex
+	last string
+}
+
+// follow fetches the session again when state names one no refetch has
+// run for, which installs the server's current API, upload, download,
+// and event-source URLs in place of the ones the dial resolved.
+//
+// It runs on the calling goroutine, so a call that overlaps it waits
+// rather than reaching the wire against a session poplar already knows
+// is stale. A failed fetch still counts as run: the session in hand
+// goes on working, and retrying on every response is the storm this
+// dedup exists to prevent. The next state the server reports tries
+// again.
+func (r *refetchState) follow(ctx context.Context, client *jmap.Client, state string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if state == "" || state == r.last {
+		return
+	}
+	r.last = state
+	if _, err := client.FetchSession(ctx); err != nil {
+		slog.Warn("jmap: session refetch failed, continuing on the session in hand", "error", err)
+	}
 }
 
 // authTransport resolves the bearer token from creds per request

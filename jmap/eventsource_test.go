@@ -547,6 +547,69 @@ func TestListenSurvivesAnAbsurdPingInterval(t *testing.T) {
 	}
 }
 
+// TestListenReportsAClampedPingInterval is what a caller can see of
+// the clamp. Package jmap logs nothing, so without this report a
+// server whose advertised cadence poplar overrides looks
+// indistinguishable from one poplar agreed with, and the operator
+// chasing a stream that feels dead has no evidence either way. The
+// first stream advertises Stalwart's milliseconds against a client
+// asking for 300 seconds, so the cadence in force is 300; the second
+// advertises a figure the RFC allows, so nothing is reported.
+func TestListenReportsAClampedPingInterval(t *testing.T) {
+	cases := []struct {
+		name     string
+		interval string
+		want     []clampReport
+	}{
+		{
+			name:     "an interval above what the client asked for",
+			interval: "30000",
+			want:     []clampReport{{reported: 30000 * time.Second, inForce: 300 * time.Second}},
+		},
+		{
+			name:     "an interval the RFC allows",
+			interval: "42",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			client, _ := startEventFake(t, func(_ int, w *eventWriter) {
+				w.send("event: ping\ndata: {\"interval\":" + c.interval + "}\n\n")
+				w.send(stateEventBody("s1"))
+				w.hold()
+			})
+			dial(t, client)
+
+			var mu sync.Mutex
+			var got []clampReport
+			var tr tracker
+			source := tr.source(EventSource{Ping: 300 * time.Second})
+			source.OnPingClamped = func(reported, inForce time.Duration) {
+				mu.Lock()
+				defer mu.Unlock()
+				got = append(got, clampReport{reported: reported, inForce: inForce})
+			}
+
+			stop := listen(t, client, source)
+			waitFor(t, "the state event behind the ping", func() bool { return len(tr.changesSeen()) > 0 })
+			_ = stop()
+
+			mu.Lock()
+			defer mu.Unlock()
+			if !slices.Equal(got, c.want) {
+				t.Errorf("clamp reports = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// A clampReport is one OnPingClamped call's two arguments.
+type clampReport struct {
+	reported time.Duration
+	inForce  time.Duration
+}
+
 // TestListenStopsAfterOneStateEvent covers JT-27. RFC 8620 section 7.3
 // gives closeafter=state for a client that wants one notification and
 // no connection, and a client that reconnected after it would hold the

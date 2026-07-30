@@ -22,13 +22,13 @@ import (
 	"github.com/glw907/poplar/internal/store"
 )
 
-// Config governs one Worker: the fixed push-coalescing window, the
-// server's requested EventSource ping cadence (a stall is silence
-// past twice this), jittered backoff bounds on stream loss, and the
-// bulk lane's yield window (ADR-0003 revision 2).
+// Config governs one Worker: the fixed push-coalescing window,
+// jittered backoff bounds for reopening a push transport that stopped,
+// and the bulk lane's yield window (ADR-0003 revision 2). The push
+// stream's own liveness cadence is not here. The transport negotiates
+// that one with the server and keeps it (backend.Push).
 type Config struct {
 	CoalesceWindow   time.Duration
-	PingInterval     time.Duration
 	BackoffMin       time.Duration
 	BackoffMax       time.Duration
 	InteractiveQuiet time.Duration
@@ -41,15 +41,12 @@ type Config struct {
 // DefaultConfig returns poplar's production sync timing. CoalesceWindow
 // is ADR-0005 revision 2's fixed value; the others have no document
 // specifying them, so Worker picks values proportionate to it: a
-// ping cadence generous enough that a live server's own keepalive
-// never trips the stall detector, a backoff range bounded by SY-2's
-// 30s p95 recovery criterion, and a poll cadence (twice the ping
-// interval) generous for what is meant to be a degraded fallback, not
-// the norm.
+// backoff range bounded by SY-2's 30s p95 recovery criterion, and a
+// poll cadence generous for what is meant to be a degraded fallback,
+// not the norm.
 func DefaultConfig() Config {
 	return Config{
 		CoalesceWindow:   200 * time.Millisecond,
-		PingInterval:     30 * time.Second,
 		BackoffMin:       500 * time.Millisecond,
 		BackoffMax:       30 * time.Second,
 		InteractiveQuiet: time.Second,

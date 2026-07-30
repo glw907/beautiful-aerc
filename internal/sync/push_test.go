@@ -15,6 +15,7 @@ import (
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestPushCoalescing asserts consumePush's fixed 200ms window: a
@@ -39,7 +40,7 @@ func TestPushCoalescing(t *testing.T) {
 		defer cancel()
 		done := make(chan struct{})
 		go func() {
-			consumePush(ctx, ch, window, time.Hour, flush)
+			consumePush(ctx, ch, window, flush)
 			close(done)
 		}()
 
@@ -86,79 +87,46 @@ func TestPushCoalescing(t *testing.T) {
 	})
 }
 
-// TestStallDetection asserts that silence on the notification channel
-// past twice pingInterval counts as a dropped stream, even though the
-// channel itself never closes.
-func TestStallDetection(t *testing.T) {
+// TestConsumePushHasNoStallDetector asserts silence on the
+// notification channel is never read as a drop, however long it lasts.
+// The transport owns the liveness check now, against the cadence the
+// server actually granted (JT-26); a second detector here, reading a
+// figure from local config, tears down connections the transport
+// considers healthy, which defeats JT-26 in production while its own
+// test still passes.
+func TestConsumePushHasNoStallDetector(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		const pingInterval = 100 * time.Millisecond
-		ch := make(chan backend.Notification)
-
-		result := make(chan bool, 1)
-		go func() {
-			result <- consumePush(context.Background(), ch, 200*time.Millisecond, pingInterval, func() {})
-		}()
-
-		synctest.Wait()
-		select {
-		case <-result:
-			t.Fatal("consumePush returned before any silence elapsed")
-		default:
-		}
-
-		time.Sleep(2*pingInterval + 10*time.Millisecond)
-		synctest.Wait()
-
-		select {
-		case dropped := <-result:
-			if !dropped {
-				t.Fatal("consumePush() = false, want true: silence past twice pingInterval counts as a drop")
-			}
-		default:
-			t.Fatal("consumePush did not return after silence past twice pingInterval")
-		}
-	})
-}
-
-// TestStallDetectionSurvivesLivePings asserts that traffic on the
-// channel resets the stall detector, so a live stream that keeps
-// sending (even with no state changes to coalesce, a bare ping) never
-// trips the stall timer.
-func TestStallDetectionSurvivesLivePings(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		const pingInterval = 100 * time.Millisecond
 		ch := make(chan backend.Notification)
 
 		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		result := make(chan bool, 1)
 		go func() {
-			result <- consumePush(ctx, ch, 200*time.Millisecond, pingInterval, func() {})
+			result <- consumePush(ctx, ch, 200*time.Millisecond, func() {})
 		}()
 
-		go func() {
-			ticker := time.NewTicker(pingInterval / 2)
-			defer ticker.Stop()
-			for range 10 {
-				<-ticker.C
-				select {
-				case ch <- backend.Notification{}:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		time.Sleep(10 * (pingInterval / 2))
+		// Past any window a poll- or ping-derived detector could have
+		// been set from: DefaultConfig's old figure was 30s, doubled.
+		time.Sleep(10 * time.Minute)
 		synctest.Wait()
 
 		select {
 		case <-result:
-			t.Fatal("consumePush returned while pings kept arriving inside the stall window")
+			t.Fatal("consumePush reported a drop on a silent but open channel")
 		default:
 		}
 
-		cancel()
-		<-result
+		// The one thing that still counts: the channel closing.
+		close(ch)
+		synctest.Wait()
+		select {
+		case dropped := <-result:
+			if !dropped {
+				t.Fatal("consumePush() = false on a closed channel, want true")
+			}
+		default:
+			t.Fatal("consumePush did not return after the channel closed")
+		}
 	})
 }
 
@@ -188,8 +156,7 @@ func TestBackoffRecovery(t *testing.T) {
 			}}
 
 			start := time.Now()
-			attempt := 0
-			if _, err := reconnect(context.Background(), push, cfg, &attempt); err != nil {
+			if _, err := reconnect(context.Background(), push, cfg); err != nil {
 				t.Fatalf("trial %d: reconnect: %v", i, err)
 			}
 			elapsed[i] = time.Since(start)
@@ -211,12 +178,12 @@ func percentile95(d []time.Duration) time.Duration {
 	return sorted[idx]
 }
 
-// TestRunPushBackoffsAfterImmediateDrop asserts a transport that
-// connects successfully and then immediately drops the stream still
-// costs at least one backoff step before RunPush reconnects: without
-// that, a connect-then-drop transport reconnects at zero delay and
-// spins the loop into an unbounded request storm.
-func TestRunPushBackoffsAfterImmediateDrop(t *testing.T) {
+// TestRunPushBackoffsAfterAnImmediateStop asserts a transport that
+// opens successfully and then stops at once still costs a backoff step
+// before RunPush opens it again: without one, such a transport is
+// reopened at zero delay and spins the loop into an unbounded request
+// storm.
+func TestRunPushBackoffsAfterAnImmediateStop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
@@ -231,7 +198,7 @@ func TestRunPushBackoffsAfterImmediateDrop(t *testing.T) {
 		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
 			listenTimes = append(listenTimes, time.Since(start))
 			ch := make(chan backend.Notification)
-			close(ch) // connects, then the stream immediately drops
+			close(ch) // opens, then stops at once
 			return ch, nil
 		}}
 
@@ -346,10 +313,13 @@ func TestSyncFlushStateSurfacesTransitions(t *testing.T) {
 	}
 }
 
-// TestClassifyErr asserts classifyErr's two paths: an error never
-// classified upstream defaults to ClassConnection, and a uerr.Error
-// yields its own class and its original root cause (not the fixed
-// per-class sentence uerr.Error.Error() returns).
+// TestClassifyErr asserts classifyErr's three paths: an error never
+// classified upstream defaults to ClassConnection, and a uerr.Error or
+// a backend.PushFailure each yield their own class and their original
+// root cause (not the fixed per-class sentence Error() returns). The
+// PushFailure row is what keeps a credential the server rejects on the
+// push transport from reaching the user as a connectivity problem,
+// which is the one push failure waiting cannot fix.
 func TestClassifyErr(t *testing.T) {
 	plain := errors.New("boom")
 	if class, cause := classifyErr(plain); class != uerr.ClassConnection || cause != plain {
@@ -360,6 +330,11 @@ func TestClassifyErr(t *testing.T) {
 	wrapped := uerr.New("test.op", nil, uerr.ClassAuth, root)
 	if class, cause := classifyErr(wrapped); class != uerr.ClassAuth || cause != root {
 		t.Fatalf("classifyErr(wrapped) = (%v, %v), want (ClassAuth, root)", class, cause)
+	}
+
+	refused := backend.PushFailure{Class: uerr.ClassAuth, Cause: root}
+	if class, cause := classifyErr(refused); class != uerr.ClassAuth || cause != root {
+		t.Fatalf("classifyErr(PushFailure) = (%v, %v), want (ClassAuth, root)", class, cause)
 	}
 }
 
@@ -421,8 +396,7 @@ func TestReconnectReturnsPromptlyOnContextCanceled(t *testing.T) {
 		return nil, context.Canceled
 	}}
 
-	attempt := 0
-	ch, err := reconnect(ctx, push, DefaultConfig(), &attempt)
+	ch, err := reconnect(ctx, push, DefaultConfig())
 	if ch != nil {
 		t.Fatal("reconnect returned a non-nil channel alongside an error")
 	}
@@ -431,16 +405,66 @@ func TestReconnectReturnsPromptlyOnContextCanceled(t *testing.T) {
 	}
 }
 
-// TestRunPushResetsBackoffAfterHealthyConnection asserts a drop
-// following a connection that stayed up at least BackoffMax resets
-// the escalated backoff attempt counter, so the next Listen call
-// lands within BackoffMin of the drop rather than the near-BackoffMax
-// range a long run of quick prior drops would otherwise leave it at.
-// Without this, SY-2's 30s p95 recovery bound erodes over a
-// long-running process: attempt only ever grows, so a single drop
-// after an hours-long healthy stream would wait the same escalated
-// range as the sixth drop in a row.
-func TestRunPushResetsBackoffAfterHealthyConnection(t *testing.T) {
+// TestReconnectSurfacesARefusalOnceUnderItsOwnClass asserts the two
+// halves of what a backend-classified Listen refusal owes the user: it
+// reaches the log under the class the backend assigned it, not under
+// reconnect's ClassConnection default, and it reaches it once across a
+// standing run of refusals rather than once per attempt (ADR-0013
+// revision 2). A rejected credential is the case both halves are for.
+// Nothing else pulls Changes while push is refused, so the class this
+// line carries is the only account the user gets of why mail stopped,
+// and one line per attempt is thousands a day for one standing
+// failure.
+func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		buf := uerrtest.Capture(t)
+
+		rejected := errors.New("event source: 401")
+		var calls atomic.Int64
+		push := &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+			calls.Add(1)
+			return nil, backend.PushFailure{Class: uerr.ClassAuth, Cause: rejected}
+		}}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			_, _ = reconnect(ctx, push, testConfig())
+			close(done)
+		}()
+
+		time.Sleep(5 * time.Minute)
+		synctest.Wait()
+		cancel()
+		<-done
+
+		if got := calls.Load(); got < 5 {
+			t.Fatalf("Listen called %d times, want at least 5: the dedup claim needs a run of refusals behind it", got)
+		}
+		lines := uerrtest.Lines(t, buf)
+		if len(lines) != 1 {
+			t.Fatalf("uerr lines = %d over %d refused attempts, want exactly 1", len(lines), calls.Load())
+		}
+		if got := lines[0]["class"]; got != "auth" {
+			t.Errorf("class = %v, want auth: the backend's own classification was dropped", got)
+		}
+		if got := lines[0]["cause"]; got != rejected.Error() {
+			t.Errorf("cause = %v, want %q", got, rejected)
+		}
+	})
+}
+
+// TestRunPushDoesNotEscalateAcrossConnections asserts the wait after a
+// transport stops is one flat backoff step, drawn under BackoffMin
+// however many times it has stopped before. Escalating here is the
+// second schedule the reconnect-ownership ruling removed: the
+// transport already escalates across the drops it handles itself, and
+// two schedules in series make SY-2's 30s p95 recovery bound
+// unreachable by construction. It also pins the older defect the flat
+// step replaces, where the count only ever grew for the life of the
+// process and one stop after hours of health waited the saturated
+// range.
+func TestRunPushDoesNotEscalateAcrossConnections(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
@@ -450,38 +474,18 @@ func TestRunPushResetsBackoffAfterHealthyConnection(t *testing.T) {
 			return backend.ChangeSet{}, nil
 		}
 
-		const quickDrops = 6
-		const healthyHold = 1500 * time.Millisecond
 		start := time.Now()
 		var listenTimes []time.Duration
-		calls := 0
-		be.PushSource = &backendtest.FakePush{ListenFunc: func(ctx context.Context) (<-chan backend.Notification, error) {
-			calls++
+		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
 			listenTimes = append(listenTimes, time.Since(start))
 			ch := make(chan backend.Notification)
-			switch {
-			case calls <= quickDrops:
-				close(ch) // an immediate drop, escalating attempt each time
-			case calls == quickDrops+1:
-				// The connection right after the run of quick drops stays
-				// open long enough to prove itself healthy, then drops.
-				go func() {
-					time.Sleep(healthyHold)
-					close(ch)
-				}()
-			default:
-				// The reconnect under test: stays open until the test
-				// cancels ctx, so its own Listen time is all this
-				// assertion needs.
-				context.AfterFunc(ctx, func() { close(ch) })
-			}
+			close(ch) // opens, then stops at once
 			return ch, nil
 		}}
 
 		cfg := testConfig()
 		cfg.BackoffMin = 100 * time.Millisecond
-		cfg.BackoffMax = time.Second
-		cfg.PingInterval = time.Hour // never trips the stall detector during the healthy hold
+		cfg.BackoffMax = 10 * time.Second
 		worker := NewWorker(accountID, &be, w, cfg)
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -491,21 +495,23 @@ func TestRunPushResetsBackoffAfterHealthyConnection(t *testing.T) {
 			close(done)
 		}()
 
-		time.Sleep(8 * time.Second)
+		time.Sleep(3 * time.Second)
 		synctest.Wait()
 		cancel()
 		<-done
 		synctest.Wait()
 
-		if len(listenTimes) <= quickDrops+1 {
-			t.Fatalf("Listen calls = %d, want more than %d (the healthy connection plus at least one reconnect after it dropped)", len(listenTimes), quickDrops+1)
+		// An escalating schedule reaches BackoffMax within a handful of
+		// stops, so 3s of a 100ms-bounded flat step is dozens of calls
+		// against roughly seven.
+		if len(listenTimes) < 15 {
+			t.Fatalf("Listen called %d times in 3s, want at least 15: a wait bounded by BackoffMin (%v) rather than an escalating one", len(listenTimes), cfg.BackoffMin)
 		}
-		// The gap between the healthy connection's own Listen call and
-		// the next one covers both how long it stayed open and the
-		// backoff delay after it dropped; only the latter is under test.
-		gap := listenTimes[quickDrops+1] - listenTimes[quickDrops] - healthyHold
-		if gap >= cfg.BackoffMin {
-			t.Fatalf("reconnect after a %v healthy connection waited %v, want under BackoffMin (%v): the escalated attempt counter was not reset", healthyHold, gap, cfg.BackoffMin)
+		for i := 1; i < len(listenTimes); i++ {
+			gap := listenTimes[i] - listenTimes[i-1]
+			if gap >= cfg.BackoffMin {
+				t.Fatalf("wait %d after a stop was %v, want under BackoffMin (%v): the schedule escalated across connections", i, gap, cfg.BackoffMin)
+			}
 		}
 	})
 }

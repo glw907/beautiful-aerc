@@ -4,6 +4,7 @@ package jmapsource_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -62,5 +63,72 @@ func TestLiveChangesAndBody(t *testing.T) {
 		if len(chunk.Raw) == 0 {
 			t.Fatalf("FetchBodies %s: empty body", chunk.ID)
 		}
+	}
+}
+
+// TestLivePushNotifiesOnAMailboxChange is the push transport against
+// the real server. Two things only Fastmail can answer: that its event
+// source opens and reports the connection at all, and that the account
+// id its StateChange names is the one primaryAccounts assigned mail,
+// which is what Listen filters a change on. A fake server proves the
+// filter works; only this proves poplar is filtering on the right id.
+//
+// The mailbox round trip is the same one cmd/poplar's live runner
+// uses, and for the same reason: it touches none of the real mail.
+func TestLivePushNotifiesOnAMailboxChange(t *testing.T) {
+	token, err := keyring.Token("")
+	if err != nil {
+		t.Skipf("no fastmail token: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	session, err := jmapsource.Dial(ctx, fastmailSessionURL, jmapsource.NewStaticCredentials(token))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	push := session.Push()
+	if push == nil {
+		t.Fatal("Push() = nil; the live session advertises no event source")
+	}
+
+	ch, err := push.Listen(ctx)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+
+	// ADR-0018's flush-on-connect, live: the connection itself reports,
+	// before the server has pushed anything.
+	select {
+	case n := <-ch:
+		if n.Scope == "" {
+			t.Error("the connect notification carries no scope")
+		}
+	case <-ctx.Done():
+		t.Fatal("no notification for the connection itself")
+	}
+
+	name := fmt.Sprintf("poplar-live-push-%d", time.Now().UnixNano())
+	id, err := session.Mail().CreateMailbox(ctx, name, "")
+	if err != nil {
+		t.Fatalf("CreateMailbox: %v", err)
+	}
+	t.Cleanup(func() {
+		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer ccancel()
+		if err := session.Mail().DeleteMailbox(cctx, id); err != nil {
+			t.Errorf("DeleteMailbox(%s): %v", id, err)
+		}
+	})
+
+	select {
+	case n := <-ch:
+		if n.Scope != session.Capabilities().AccountIDs["mail"] {
+			t.Errorf("notification scope = %q, want the mail account id %q",
+				n.Scope, session.Capabilities().AccountIDs["mail"])
+		}
+	case <-ctx.Done():
+		t.Fatal("the server pushed nothing for a mailbox this test just created")
 	}
 }

@@ -53,7 +53,7 @@ func TestRecordingMailCapturesAServerFailure(t *testing.T) {
 // (FASTMAIL_API_TOKEN), gated the same way jmap's own live suite is:
 // never in CI or make check, skipped where the token was never
 // sourced. It proves mailboxes and messages land in the local store
-// through the sync worker's poll path, then drives a mailbox
+// through the sync worker's push path, then drives a mailbox
 // create/rename/delete round trip through the outbox dispatcher and
 // asserts against what the live server actually did, not merely that
 // the outbox row disappeared: Dispatcher.report
@@ -94,7 +94,10 @@ func TestLiveRunnerFillsStoreAndDispatchesATriageIntent(t *testing.T) {
 	defer stop()
 
 	// Half one of the criterion: messages and mailboxes from the real
-	// account land in the store through the sync worker's poll path.
+	// account land in the store through the sync worker's push path,
+	// whose first pull is the one ADR-0018's flush-on-connect owes:
+	// the account is quiet, so nothing is pushed and the connection
+	// itself is what triggers the sync.
 	waitForAMessage(t, w, accountID, 2*time.Minute)
 
 	// Half two: a triage intent enqueued locally reaches the server,

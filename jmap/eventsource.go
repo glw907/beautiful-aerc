@@ -58,6 +58,16 @@ type EventSource struct {
 	// of the next one. A nil error means the server closed the stream
 	// without saying anything was wrong.
 	OnDisconnect func(error)
+
+	// OnPingClamped reports a ping event advertising an interval
+	// above what RFC 8620 section 7.3 permits: what the server said,
+	// and the cadence held to instead (cadence's own doc comment). A
+	// conformant server never triggers it, and a clamping one
+	// triggers it on every ping, so a caller that logs this dedups
+	// what it logs. This package logs nothing, so a stream whose
+	// liveness expectation is not the advertised one is otherwise
+	// indistinguishable from one that is.
+	OnPingClamped func(reported, inForce time.Duration)
 }
 
 // A ping is the payload of RFC 8620 section 7.3's ping event, which
@@ -274,6 +284,13 @@ func (l *listener) consume(abort context.CancelFunc, body io.Reader) (bool, erro
 				return true, fmt.Errorf("decode ping event: %v", err)
 			}
 			if cadence, ok := p.cadence(l.source.Ping); ok {
+				// cadence reporting ok is what bounds this product:
+				// it rejects an interval too large for a Duration to
+				// hold as seconds, so the only figures reaching here
+				// convert without wrapping.
+				if reported := time.Duration(p.Interval) * time.Second; reported > cadence && l.source.OnPingClamped != nil {
+					l.source.OnPingClamped(reported, cadence)
+				}
 				window = stallWindow(cadence)
 			}
 		}

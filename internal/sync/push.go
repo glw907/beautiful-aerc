@@ -121,25 +121,30 @@ func surfaceable(err error) bool {
 }
 
 // classifyErr reports the uerr.Class and root cause err already
-// carries (unwrapping a uerr.Error to its own Cause, since Error()
-// only ever returns the class's fixed sentence), or ClassConnection
-// and err itself when err was never classified: a Listen or
-// push-triggered SyncKind failure with no finer classification is,
-// by construction, a connectivity problem.
+// carries, in either of the two shapes a backend hands one over: a
+// uerr.Error it built and logged itself, or a backend.PushFailure it
+// classified and left to this package to surface. Both unwrap to their
+// own Cause, since Error() only ever returns the class's fixed
+// sentence. An err that was never classified reports ClassConnection
+// and itself: a Listen or push-triggered SyncKind failure with no
+// finer classification is, by construction, a connectivity problem.
 func classifyErr(err error) (uerr.Class, error) {
 	if ue, ok := errors.AsType[uerr.Error](err); ok {
 		return ue.Class, ue.Cause
 	}
+	if pf, ok := errors.AsType[backend.PushFailure](err); ok {
+		return pf.Class, pf.Cause
+	}
 	return uerr.ClassConnection, err
 }
 
-// RunPush drives kinds' push loop against backend: EventSource
-// notifications coalesce into SyncKind calls, and a stream drop
-// (the channel closing, or silence past twice PingInterval, counting
-// as a missing ping) reconnects through jittered backoff. A backend
-// with no push transport at all (backend.PushTransportNone) falls
-// back to polling SyncKind on a fixed cadence instead. RunPush blocks
-// until ctx is done.
+// RunPush drives kinds' push loop against backend: push notifications
+// coalesce into SyncKind calls, and a transport that stops for good
+// (the channel closing, which under backend.Push's contract is a
+// server refusal rather than a drop) is opened again through jittered
+// backoff. A backend with no push transport at all
+// (backend.PushTransportNone) falls back to polling SyncKind on a
+// fixed cadence instead. RunPush blocks until ctx is done.
 func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	kinds = orderKindsForSync(kinds)
 
@@ -152,40 +157,24 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	}
 
 	state := newSyncFlushState()
-	attempt := 0
 	for {
-		connectedAt := time.Now()
-		ch, err := reconnect(ctx, push, w.cfg, &attempt)
+		ch, err := reconnect(ctx, push, w.cfg)
 		if err != nil {
 			return
 		}
-		dropped := consumePush(ctx, ch, w.cfg.CoalesceWindow, w.cfg.PingInterval, func() {
-			w.flush(ctx, kinds, state)
-		})
-		if !dropped {
+		if !consumePush(ctx, ch, w.cfg.CoalesceWindow, func() { w.flush(ctx, kinds, state) }) {
 			return
 		}
-		// A connection that stayed up at least BackoffMax proved
-		// itself healthy, so the next drop is a fresh problem, not a
-		// continuation of whatever run of failures escalated attempt
-		// before this connection succeeded. Without this reset, attempt
-		// only ever grows for the life of the process: it saturates at
-		// BackoffMax after a handful of drops, and a single drop after
-		// an hours-long healthy stream would then wait the same
-		// escalated range as the sixth drop in a row, eroding SY-2's
-		// 30s p95 recovery bound.
-		if time.Since(connectedAt) >= w.cfg.BackoffMax {
-			attempt = 0
-		}
-		// A drop still costs one backoff step even when Listen itself
-		// never failed: without this, a transport that connects and
-		// immediately closes the stream reconnects at zero delay,
-		// spinning into an unbounded request storm (a hot loop against
-		// a live server).
-		if !SleepBackoff(ctx, attempt, w.cfg.BackoffMin, w.cfg.BackoffMax) {
+		// One step, and the same one every time. A transport that
+		// opens and stops at once would otherwise be reopened at zero
+		// delay, spinning into a request storm. Escalating across
+		// connections is the transport's own schedule to run, and
+		// running a second one here is what puts SY-2's 30s p95 bound
+		// out of reach. A server that goes on refusing still escalates,
+		// through reconnect's own loop.
+		if !SleepBackoff(ctx, 0, w.cfg.BackoffMin, w.cfg.BackoffMax) {
 			return
 		}
-		attempt++
 	}
 }
 
@@ -218,24 +207,23 @@ func (w *Worker) flush(ctx context.Context, kinds []backend.ObjectKind, state *s
 }
 
 // reconnect calls push.Listen, retrying with jittered exponential
-// backoff until it succeeds or ctx ends. attempt is owned by the
-// caller, which carries it across a whole reconnect session (a
-// stream that drops right after connecting escalates rather than
-// starting over at zero delay) and resets it once a connection proves
-// itself healthy; reconnect itself only ever increments it. A Listen
-// failure surfaces a uerr.Error once, on the first failure or a class
-// change (ADR-0013 revision 2); a later success after a run of
-// failures logs recovery. ctx ending mid-retry (RunPush shutting the
-// worker down) is never classified or surfaced: it is not a server
-// problem.
-func reconnect(ctx context.Context, push backend.Push, cfg Config, attempt *int) (<-chan backend.Notification, error) {
+// backoff until it succeeds or ctx ends. Each call starts its own
+// schedule: a transport reached at all ends whatever run of refusals
+// escalated the last one, and carrying the count forward is how a
+// process that has been up for days answers its first refusal with the
+// saturated delay. A Listen failure surfaces a uerr.Error once, on the
+// first failure or a class change (ADR-0013 revision 2); a later
+// success after a run of failures logs recovery. ctx ending mid-retry
+// (RunPush shutting the worker down) is never classified or surfaced:
+// it is not a server problem.
+func reconnect(ctx context.Context, push backend.Push, cfg Config) (<-chan backend.Notification, error) {
 	var failClass uerr.Class
 	var failing bool
-	for {
+	for attempt := 0; ; attempt++ {
 		ch, err := push.Listen(ctx)
 		if err == nil {
 			if failing {
-				slog.Info("sync: push reconnected", "attempts", *attempt)
+				slog.Info("sync: push reconnected", "attempts", attempt+1)
 			}
 			return ch, nil
 		}
@@ -247,10 +235,9 @@ func reconnect(ctx context.Context, push backend.Push, cfg Config, attempt *int)
 				failClass = class
 			}
 		}
-		if !SleepBackoff(ctx, *attempt, cfg.BackoffMin, cfg.BackoffMax) {
+		if !SleepBackoff(ctx, attempt, cfg.BackoffMin, cfg.BackoffMax) {
 			return nil, ctx.Err()
 		}
-		*attempt++
 	}
 }
 
@@ -258,13 +245,16 @@ func reconnect(ctx context.Context, push backend.Push, cfg Config, attempt *int)
 // coalescing window, measured from that window's first notification
 // and never extended by a later one (ADR-0005 revision 2: a steady
 // remote burst must not defer sync indefinitely). It reports true if
-// ch closed or fell silent past twice pingInterval (a missing ping,
-// treated the same as a dropped transport), false if ctx ended first.
-func consumePush(ctx context.Context, ch <-chan backend.Notification, window, pingInterval time.Duration, flush func()) bool {
-	stall := time.NewTimer(2 * pingInterval)
-	defer stall.Stop()
-
-	var flushTimer *time.Timer
+// ch closed, which under backend.Push's contract is the transport
+// stopping for good, and false if ctx ended first.
+//
+// Silence is not a drop here. The transport owns the liveness check,
+// since it is the only layer that knows the cadence the server granted
+// (RFC 8620 section 7.3 lets the server choose it, and JT-26 pins that
+// the granted one is what governs), and a second detector reading a
+// figure from local config tears down connections the transport
+// considers healthy.
+func consumePush(ctx context.Context, ch <-chan backend.Notification, window time.Duration, flush func()) bool {
 	var flushC <-chan time.Time
 	for {
 		select {
@@ -272,23 +262,12 @@ func consumePush(ctx context.Context, ch <-chan backend.Notification, window, pi
 			if !ok {
 				return true
 			}
-			// Go 1.23 retired the drain-then-reset idiom: the new
-			// Timer implementation makes draining unnecessary, and the
-			// old `if !stall.Stop() { <-stall.C }` pattern can now hang
-			// forever, since Stop returning false no longer guarantees
-			// a value is still there to receive.
-			stall.Stop()
-			stall.Reset(2 * pingInterval)
-			if flushTimer == nil {
-				flushTimer = time.NewTimer(window)
-				flushC = flushTimer.C
+			if flushC == nil {
+				flushC = time.NewTimer(window).C
 			}
 		case <-flushC:
 			flush()
-			flushTimer = nil
 			flushC = nil
-		case <-stall.C:
-			return true
 		case <-ctx.Done():
 			return false
 		}

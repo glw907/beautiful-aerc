@@ -263,12 +263,47 @@ type Contacts interface {
 	Source
 }
 
-// Push is the backend's push transport. Listen opens it and returns
-// a channel of notifications; the channel closes when the transport
-// drops, and the caller decides whether and how to reconnect.
+// Push is the backend's push transport. Listen opens it and returns a
+// channel of notifications, reporting an error only when the transport
+// never opened at all.
+//
+// The transport owns reconnection across a drop, and with it the
+// liveness check that decides a connection is gone: it is the only
+// layer that knows the cadence the server granted, and a second
+// backoff above it puts ADR-0005's 30s p95 recovery bound out of reach
+// by construction. So the channel survives a drop and closes only once
+// Listen has stopped for good, which is the server refusing the
+// connection or ctx ending. A caller that sees it close reconnects by
+// calling Listen again.
+//
+// Every connection the transport makes, the first and each one after,
+// produces a notification of its own. The stream says nothing about
+// what happened while it was down, so the caller pulls Changes from its
+// persisted token on each one (ADR-0018).
 type Push interface {
 	Listen(ctx context.Context) (<-chan Notification, error)
 }
+
+// PushFailure is a push transport's classified failure: the uerr.Class
+// SY-4 and ADR-0004 revision 2 assign it, and the underlying cause. A
+// backend's Listen returns this rather than calling uerr.New for the
+// same reason MutationFailure exists: the caller retries Listen in its
+// own backoff loop, so constructing a uerr.Error per attempt would
+// write a log line per attempt instead of one per state transition
+// (ADR-0013 revision 2). Without the class crossing the seam, a
+// credential the server rejects on the event source renders as a
+// connectivity problem, which is the one push failure no amount of
+// waiting fixes.
+type PushFailure struct {
+	Class uerr.Class
+	Cause error
+}
+
+// Error returns f's cause's message.
+func (f PushFailure) Error() string { return f.Cause.Error() }
+
+// Unwrap returns f's cause.
+func (f PushFailure) Unwrap() error { return f.Cause }
 
 // Credentials owns a backend's auth token lifecycle. Token returns a
 // valid credential for the current request, refreshing it first if

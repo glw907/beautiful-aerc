@@ -184,6 +184,23 @@ func classifyStatus(op string, status int, cause error, auth *authState) error {
 	return uerr.New(op, nil, class, cause)
 }
 
+// retriedClass reports the uerr.Class SY-4 and ADR-0004 revision 2
+// assign err, for the two calls this package leaves unlogged because
+// a caller retries them on its own schedule: a session dial and a push
+// Listen. ok is false for a failure neither an HTTP status nor a dead
+// connection classifies.
+func retriedClass(err error) (uerr.Class, bool) {
+	if status, ok := statusOf(err); ok {
+		if class, ok := classifyStatusClass(status); ok {
+			return class, true
+		}
+	}
+	if isConnectionDead(err) {
+		return uerr.ClassConnection, true
+	}
+	return 0, false
+}
+
 // classifyDial classifies a session dial's failure as a DialError,
 // without constructing a uerr.Error: Dial is retried by its own
 // caller's backoff loop (cmd/poplar's retryConnect), and constructing
@@ -192,13 +209,21 @@ func classifyStatus(op string, status int, cause error, auth *authState) error {
 // that owns that retry loop is the one that decides when to surface
 // it.
 func classifyDial(err error) error {
-	if status, ok := statusOf(err); ok {
-		if class, ok := classifyStatusClass(status); ok {
-			return DialError{Class: class, Cause: err}
-		}
+	if class, ok := retriedClass(err); ok {
+		return DialError{Class: class, Cause: err}
 	}
-	if isConnectionDead(err) {
-		return DialError{Class: uerr.ClassConnection, Cause: err}
+	return err
+}
+
+// classifyListen classifies a refused push stream the same way and for
+// the same reason, as the backend.PushFailure the sync engine reads
+// the class off. Without it a credential the server rejects on the
+// event source reaches the user as a connectivity problem, and while
+// push is refused nothing else pulls Changes, so that line is the only
+// account the user gets of why mail stopped.
+func classifyListen(err error) error {
+	if class, ok := retriedClass(err); ok {
+		return backend.PushFailure{Class: class, Cause: err}
 	}
 	return err
 }

@@ -194,15 +194,11 @@ func startEnginesRetrying(ctx context.Context, writer *store.Writer, connect bac
 }
 
 // jmapBackend adapts jmapsource.Session to backend.Backend. Session
-// composes only a mail source today; Calendar, Contacts, and Push all
-// report none, matching a backend that declares no such source.
-// Capabilities forces PushTransport to PushTransportNone to match
-// Push()'s nil: Session's own Capabilities reports
-// PushTransportEventSource whenever the live server advertises one,
-// but no Listen implementation exists in this package yet (task 6b
-// adds it), and a capability that promises what Push() cannot deliver
-// would misrender the first consumer that reads it (SY-5's status
-// line).
+// composes a mail source and the event-source push transport; Calendar
+// and Contacts report none, matching a backend that declares no such
+// source. Push and Capabilities both come off the live session, so a
+// server that advertises no event source reports PushTransportNone and
+// a nil Push together, and the sync worker takes its poll fallback.
 type jmapBackend struct {
 	session *jmapsource.Session
 	creds   backend.Credentials
@@ -211,15 +207,13 @@ type jmapBackend struct {
 func (b *jmapBackend) Mail() backend.Mail         { return b.session.Mail() }
 func (b *jmapBackend) Calendar() backend.Calendar { return nil }
 func (b *jmapBackend) Contacts() backend.Contacts { return nil }
-func (b *jmapBackend) Push() backend.Push         { return nil }
+func (b *jmapBackend) Push() backend.Push         { return b.session.Push() }
 func (b *jmapBackend) Credentials() backend.Credentials {
 	return b.creds
 }
 
 func (b *jmapBackend) Capabilities() backend.Capabilities {
-	caps := b.session.Capabilities()
-	caps.PushTransport = backend.PushTransportNone
-	return caps
+	return b.session.Capabilities()
 }
 
 // ensureAccount finds or creates the store's account row identified by

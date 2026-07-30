@@ -14,6 +14,7 @@ import (
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/jmap"
 )
 
 // sessionTemplate is a JMAP session resource: Core and Mail
@@ -284,5 +285,119 @@ func TestAuthTransportSendsCredentialToken(t *testing.T) {
 	}
 	if want := "Bearer s3cr3t"; gotAuth != want {
 		t.Errorf("Authorization header = %q, want %q", gotAuth, want)
+	}
+}
+
+// newStateServer serves a session resource whose state the test moves,
+// counting fetches, and an /api that answers every call with body.
+func newStateServer(t *testing.T, body func() string) (*httptest.Server, func() int) {
+	t.Helper()
+
+	var mu sync.Mutex
+	fetches := 0
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/session", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		fetches++
+		mu.Unlock()
+		_, _ = fmt.Fprintf(w, `{"capabilities":{},"accounts":{},"primaryAccounts":{"urn:ietf:params:jmap:mail":"u1"},"apiUrl":%q,"state":"session-1"}`, srv.URL+"/api")
+	})
+	mux.HandleFunc("/api", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, body())
+	})
+	return srv, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return fetches
+	}
+}
+
+// TestSessionRefetchesOncePerStateItMovesTo covers JT-21's trigger
+// half. RFC 8620 section 2 puts the session state on every response
+// and recommends refetching when it differs from the one in hand;
+// which responses that adds up to is policy, and belongs here rather
+// than in the library. Every response carries the state, so a run of
+// responses reporting the same new one must cost one refetch, not one
+// each: a refetch storm on a busy account is the failure mode.
+func TestSessionRefetchesOncePerStateItMovesTo(t *testing.T) {
+	var mu sync.Mutex
+	state := "s2"
+	srv, fetches := newStateServer(t, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return `{"methodResponses":[],"sessionState":"` + state + `"}`
+	})
+	session := dialTestSession(t, srv)
+
+	if got := fetches(); got != 1 {
+		t.Fatalf("session fetches after the dial = %d, want 1", got)
+	}
+
+	for range 3 {
+		if _, err := session.do(t.Context(), &jmap.Request{}); err != nil {
+			t.Fatalf("do: %v", err)
+		}
+	}
+	if got := fetches(); got != 2 {
+		t.Fatalf("session fetches after three responses reporting one new state = %d, want 2 (the dial and one refetch)", got)
+	}
+
+	mu.Lock()
+	state = "s3"
+	mu.Unlock()
+	if _, err := session.do(t.Context(), &jmap.Request{}); err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	if got := fetches(); got != 3 {
+		t.Errorf("session fetches after the state moved again = %d, want 3: a later move must still be followed", got)
+	}
+}
+
+// TestSessionRefetchesOnceUnderConcurrentCalls is the same claim where
+// it is load-bearing. The sync worker and the outbox dispatcher call
+// through one Session at once, so the responses that first report a
+// new state arrive together, and the count has to hold across them
+// rather than only in sequence.
+func TestSessionRefetchesOnceUnderConcurrentCalls(t *testing.T) {
+	srv, fetches := newStateServer(t, func() string {
+		return `{"methodResponses":[],"sessionState":"s2"}`
+	})
+	session := dialTestSession(t, srv)
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if _, err := session.do(t.Context(), &jmap.Request{}); err != nil {
+				t.Errorf("do: %v", err)
+			}
+		})
+	}
+	wg.Wait()
+
+	if got := fetches(); got != 2 {
+		t.Errorf("session fetches across 8 concurrent responses reporting one new state = %d, want 2 (the dial and one refetch)", got)
+	}
+}
+
+// TestSessionDoesNotRefetchOnTheStateItDialedWith keeps the trigger
+// from firing on the ordinary case. Every response carries the state,
+// so a session whose state has not moved would otherwise refetch on
+// every call poplar makes.
+func TestSessionDoesNotRefetchOnTheStateItDialedWith(t *testing.T) {
+	srv, fetches := newStateServer(t, func() string {
+		return `{"methodResponses":[],"sessionState":"session-1"}`
+	})
+	session := dialTestSession(t, srv)
+
+	for range 5 {
+		if _, err := session.do(t.Context(), &jmap.Request{}); err != nil {
+			t.Fatalf("do: %v", err)
+		}
+	}
+	if got := fetches(); got != 1 {
+		t.Errorf("session fetches = %d over five responses reporting the state the dial resolved, want 1", got)
 	}
 }
