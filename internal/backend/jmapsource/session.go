@@ -78,10 +78,12 @@ func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, er
 // refetchState keeps. The run of responses that can report an already
 // answered state is the run that was in flight when the state moved,
 // so what this has to cover is a session's concurrent request budget:
-// Fastmail's maxConcurrentRequests is 8, and a client that had more
-// than eight calls straddling a move pays one extra fetch, not a
-// storm.
-const answeredStates = 8
+// Fastmail's live maxConcurrentRequests is 10 (curled against
+// https://api.fastmail.com/jmap/session), and this carries headroom
+// above it, so a server granting more does not silently reduce this
+// to a two-entry dedup. A client with more than sixteen calls
+// straddling a move pays one extra fetch, not a storm.
+const answeredStates = 16
 
 // refetchState remembers which sessionState values a refetch has
 // already answered, so the session resource is fetched once per state
@@ -106,9 +108,10 @@ const answeredStates = 8
 // fetch at once, and the later-returning one wins, so an older session
 // resource can overwrite a newer one. A state passed over while a
 // fetch is in flight is not lost. It is not recorded as answered
-// either, so the next response carrying it claims normally, and the
-// fetch already running is reading the server's current session in any
-// case.
+// either, so the next response carrying it claims normally and pays
+// one more round trip: the fetch already running was dispatched
+// before that state existed, so it can return a session strictly
+// older than it.
 type refetchState struct {
 	mu       sync.Mutex
 	answered [answeredStates]string

@@ -579,6 +579,14 @@ func TestSessionRefetchRemembersItsWholeRing(t *testing.T) {
 			r.done()
 		}
 	}
+
+	// Every ring slot now holds a non-empty state, so an empty state
+	// reads as unclaimed by the ring scan alone: it is the state ==
+	// "" guard, not the ring, that has to refuse it.
+	if r.claim("") {
+		t.Error(`claim("") = true, want false: an empty sessionState is never a move to answer`)
+		r.done()
+	}
 }
 
 // TestSessionRefetchIsSingleFlight covers what keeping the fetch
@@ -664,6 +672,12 @@ func TestSessionRefetchIsSingleFlight(t *testing.T) {
 		t.Errorf("session fetches while one was in flight = %d, want 2 (the dial and the one in flight)", got)
 	}
 
+	// Received unconditionally, even after the select above timed out:
+	// a regression that makes the four calls dispatch their own
+	// fetches leaves them blocked on hang until release, and letting
+	// the test function return before they finish panics the binary
+	// with a t.Errorf from a goroutine after the test has completed.
 	release()
+	<-settled
 	<-stuck
 }
