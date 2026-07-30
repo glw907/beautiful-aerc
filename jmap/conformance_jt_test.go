@@ -807,28 +807,37 @@ func TestConformanceSessionRefetch(t *testing.T) {
 // a payload in the wrong unit disables the detector outright.
 //
 // The stream subscribes to Identity rather than "*". This package
-// carries no Identity/set, so nothing in the suite, this test running
-// concurrently with another, ever produces an Identity state change,
-// and the first event on the stream can only be the ping. A "*"
-// subscription raced TestConformanceSubmissionOnSuccessEffects: its
-// asynchronous delivery lands a state event on the next types=*
-// stream this test opens, and the first event stopped being the ping.
+// carries no Identity/set, so nothing in the suite writes to Identity,
+// not even a submission this test happens to run after: its delivery
+// to Email and Mailbox is asynchronous and can still be in flight, but
+// it never lands on this subscription. The assertion below also reads
+// more than the first event and takes the first ping among them,
+// rather than trusting index zero, so a future Identity write would
+// only break this test by beating every ping in the window rather
+// than by beating just the first event.
 func TestConformancePingReportsItsOwnCadence(t *testing.T) {
 	tg := dial(t)
 
-	events := tg.readEventStream(t, "types=Identity&closeafter=no&ping=2", 1)
+	events := tg.readEventStream(t, "types=Identity&closeafter=no&ping=2", 2)
 	if len(events) == 0 {
 		t.Fatal("the event source sent nothing within the window; no ping means no liveness signal at all")
 	}
-	if events[0].name != "ping" {
-		t.Fatalf("the first event was %q, want a ping for a stream that asked for one", events[0].name)
+	var ping *serverEvent
+	for i := range events {
+		if events[i].name == "ping" {
+			ping = &events[i]
+			break
+		}
+	}
+	if ping == nil {
+		t.Fatalf("no ping arrived in %d events, want at least one for a stream that asked for one", len(events))
 	}
 
 	var payload struct {
 		Interval int64 `json:"interval"`
 	}
-	if err := json.Unmarshal([]byte(events[0].data), &payload); err != nil {
-		t.Fatalf("decode the ping payload %q: %v", events[0].data, err)
+	if err := json.Unmarshal([]byte(ping.data), &payload); err != nil {
+		t.Fatalf("decode the ping payload %q: %v", ping.data, err)
 	}
 	if payload.Interval <= 0 {
 		t.Fatalf("the ping reported interval %d, which says nothing about when to expect the next one", payload.Interval)

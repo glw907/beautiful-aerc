@@ -49,14 +49,19 @@ func (r *Request) Invoke(m Method) string {
 // than trusting the value Invoke already merged in. A caller can
 // still mutate a method's fields after Invoke returns, and a filter
 // condition added that way needs a capability Invoke had no chance to
-// see. RFC 8620 section 1.8 has a server silently drop a condition
-// whose capability is missing from "using" rather than reject the
-// request, so a stale merge fails quietly instead of loudly; folding
-// again at the point the bytes are actually built closes that gap
-// regardless of what happened in between.
+// see. The wire request should declare what its calls actually need,
+// and folding again at the point the bytes are built is what keeps
+// that declaration correct regardless of what happened in between.
 func (r Request) MarshalJSON() ([]byte, error) {
 	type request Request
 	out := request(r)
+	// out.Using is a slice header copied from r.Using, which can still
+	// share a backing array with the caller's own Request: a struct
+	// copy does not copy what a slice points at. Clip drops any spare
+	// capacity so the appends below always allocate, rather than
+	// writing into memory a caller holding r is entitled to think is
+	// theirs alone.
+	out.Using = slices.Clip(out.Using)
 	for _, call := range out.MethodCalls {
 		if m, ok := call.Args.(Method); ok {
 			out.Using = mergeURIs(out.Using, m.Requires())

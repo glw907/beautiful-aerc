@@ -438,15 +438,15 @@ func (*EmailFilterCondition) isFilter() {}
 // withSMIME returns the capabilities a mail method needs, adding RFC
 // 9219's when the call depends on it.
 //
-// A server ignores an extension the request does not name (RFC 8620
-// section 1.8), so a hasVerifiedSmime condition sent without this URI
-// is not refused: it is dropped, and the query answers with every
-// message in the mailbox. Naming it on every call is the opposite
-// failure, and a worse one, because section 3.3 has the server reject
-// the whole request with unknownCapability for a URI it does not
-// advertise. Stalwart advertises sixteen capabilities and this is not
-// among them, so an unconditional mention would end every Email/get
-// against it.
+// RFC 8620 section 5.5 has a server answer unsupportedFilter for a
+// filter condition whose capability is missing from "using", so a
+// hasVerifiedSmime condition sent without this URI fails the call
+// rather than matching anything. Naming it on every call is the
+// opposite failure, and a worse one, because section 3.3 has the
+// server reject the whole request with unknownCapability for a URI it
+// does not advertise. Stalwart advertises sixteen capabilities and
+// this is not among them, so an unconditional mention would end every
+// Email/get against it.
 func withSMIME(needed bool) []URI {
 	if needed {
 		return []URI{MailURI, SMIMEVerifyURI}

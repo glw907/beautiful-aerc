@@ -130,9 +130,13 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 	// here writes to req: the merged list lands on a struct copy, and
 	// with no extra capabilities to merge mergeURIs either hands back
 	// the caller's slice untouched or builds a new one, never
-	// appending into the array behind it. go-jmap appended in place,
-	// which surprises a caller that reuses a Request and races two
-	// goroutines that share one.
+	// appending into the array behind it. The Marshal below runs
+	// Request.MarshalJSON's own fold over out, which clips out.Using
+	// before it appends for the same reason: that slice can still
+	// share a backing array with req.Using, and a caller that reuses
+	// req or shares it across goroutines must never see that array
+	// written to. go-jmap appended in place at both points, which
+	// surprised exactly that caller.
 	out := *req
 	out.Using = mergeURIs(req.Using, nil)
 

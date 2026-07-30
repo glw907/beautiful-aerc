@@ -278,6 +278,14 @@ func TestDV05SessionStateIsOpaque(t *testing.T) {
 func TestDV06ErrorTypeSubstitution(t *testing.T) {
 	tg := dial(t)
 
+	// foldExercised is set from the row that lands in the
+	// unsupportedSort case below, the one type here Stalwart is known
+	// to leave unnamed. Without it, a day Stalwart substitutes a named
+	// type for that row too (it already does for the account row)
+	// would leave every row asserting only that the fold does not
+	// apply, and the test would stay green having never proved the
+	// fold applies at all.
+	var foldExercised bool
 	for _, row := range []struct {
 		name   string
 		method jmap.Method
@@ -317,6 +325,7 @@ func TestDV06ErrorTypeSubstitution(t *testing.T) {
 			folds := errors.Is(failed, jmap.ErrServerFail)
 			switch failed.Type {
 			case "unsupportedSort":
+				foldExercised = true
 				if !folds {
 					t.Errorf("%q does not fold into serverFail; section 3.6.2 requires an unnamed type to read as serverFail", failed.Type)
 				}
@@ -338,6 +347,9 @@ func TestDV06ErrorTypeSubstitution(t *testing.T) {
 				t.Errorf("%q matches the resync sentinel", failed.Type)
 			}
 		})
+	}
+	if !foldExercised {
+		t.Fatal("no row produced a type this package does not name; the serverFail fold was never exercised")
 	}
 }
 

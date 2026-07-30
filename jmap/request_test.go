@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -96,10 +97,11 @@ func TestRequestUsing(t *testing.T) {
 			want:    []URI{CoreURI, SubmissionURI, MailURI},
 		},
 		{
-			// RFC 8620 section 1.8 has a server ignore an extension the
-			// request does not name, so a call that leans on RFC 9219
-			// and stays quiet about it is answered as though the
-			// condition were not there: every message matches.
+			// RFC 8620 section 5.5 has a server answer unsupportedFilter
+			// for a filter condition whose capability is missing from
+			// "using", so a call that leans on RFC 9219 and stays quiet
+			// about it fails outright rather than matching every
+			// message: naming the capability is what lets it run.
 			name:    "a query filtering on S/MIME asks for the capability",
 			methods: []Method{&EmailQuery{Filter: &EmailFilterCondition{HasVerifiedSMIME: new(true)}}},
 			want:    []URI{CoreURI, MailURI, SMIMEVerifyURI},
@@ -190,12 +192,11 @@ func TestRequestUsing(t *testing.T) {
 // TestRequestMarshalRecomputesUsingForALateMutation pins that Invoke's
 // merge is not the only chance a call gets to declare a capability.
 // Requires() reads a method's current fields, and nothing stops a
-// caller from mutating one after Invoke returns. RFC 8620 section 1.8
-// has a server drop a condition whose capability is missing from
-// "using" rather than reject the request, so a caller building the
-// filter after the call, the shape a request builder naturally falls
-// into, would have the condition silently ignored: exactly the
-// failure withSMIME exists to prevent.
+// caller from mutating one after Invoke returns; a filter added that
+// way needs a capability Invoke had no chance to see. A caller
+// building the filter after the call, the shape a request builder
+// naturally falls into, is exactly the case withSMIME exists to
+// cover.
 func TestRequestMarshalRecomputesUsingForALateMutation(t *testing.T) {
 	q := &EmailQuery{Account: "A13824"}
 	req := &Request{}
@@ -215,6 +216,65 @@ func TestRequestMarshalRecomputesUsingForALateMutation(t *testing.T) {
 	if !slices.Contains(wire.Using, SMIMEVerifyURI) {
 		t.Fatalf(`"using" = %v, want it to carry %q for a filter set after Invoke`, wire.Using, SMIMEVerifyURI)
 	}
+}
+
+// TestRequestMarshalDoesNotWriteBehindTheCallersUsing pins that the
+// late-mutation fold above never appends into the array behind the
+// caller's own Using. MarshalJSON has a Request by value, but Using is
+// a slice header, and a struct copy does not copy what the header
+// points at: a fold that appends within spare capacity would write
+// into memory the caller still holds. Using is built with make here,
+// rather than left to grow through append, because append's own
+// growth pattern happens to leave exactly this spare slot on the path
+// TestRequestMarshalRecomputesUsingForALateMutation takes, and a test
+// that depends on that coincidence proves nothing about the general
+// case.
+func TestRequestMarshalDoesNotWriteBehindTheCallersUsing(t *testing.T) {
+	using := make([]URI, 2, 3)
+	using[0] = CoreURI
+	using[1] = MailURI
+	backing := using[:cap(using)]
+	spare := len(backing) - 1
+
+	q := &EmailQuery{Account: "A13824", Filter: &EmailFilterCondition{HasVerifiedSMIME: new(true)}}
+	req := &Request{Using: using, MethodCalls: []*Invocation{{Name: q.Name(), Args: q, CallID: "0"}}}
+
+	if _, err := json.Marshal(req); err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	if backing[spare] != "" {
+		t.Errorf("marshal wrote into the caller's spare capacity: backing[%d] = %q, want the zero value", spare, backing[spare])
+	}
+	if len(using) != 2 {
+		t.Errorf("marshal grew the caller's own slice header: len(using) = %d, want 2", len(using))
+	}
+}
+
+// TestRequestMarshalIsRaceFreeAcrossGoroutines pins the same guarantee
+// under concurrency, where it matters: a Client shared across
+// goroutines marshals the same Request from more than one at once.
+// This test only fails under -race; make check does not run with it,
+// so it is not this package's only evidence for the guarantee, but it
+// is the one that catches a regression the sequential test above
+// cannot.
+func TestRequestMarshalIsRaceFreeAcrossGoroutines(t *testing.T) {
+	q := &EmailQuery{Account: "A13824"}
+	req := &Request{}
+	req.Invoke(&MailboxGet{Account: "A13824"})
+	req.Invoke(&EmailSubmissionSet{})
+	req.Invoke(q)
+	q.Filter = &EmailFilterCondition{HasVerifiedSMIME: new(true)}
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if _, err := json.Marshal(req); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // TestRequestShape covers JT-40 for the request half. RFC 8620
