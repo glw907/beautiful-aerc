@@ -34,8 +34,9 @@ Package map:
 cmd/poplar             wiring and main
 internal/store         schema, migrations, reads, the writer, FTS
 internal/backend       the seam: Backend interface + capabilities
-internal/backend/jmap  Fastmail JMAP backend
+internal/backend/jmapsource  Fastmail JMAP backend, on poplar/jmap
 internal/backend/dav   CalDAV calendar transport
+jmap                   the standalone JMAP protocol library
 internal/sync          delta orchestration, watermarks, push, backoff
 internal/outbox        durable intent queue, dispatch, typed failures
 internal/mail          MIME parse/assembly, threading, reply seeding
@@ -56,8 +57,10 @@ internal/catkin        the live-markdown editor; no poplar imports
 Dependency rules, enforced by the analyzers below, not just convention: `internal/ui` never
 imports `backend`, `sync`, or `outbox`. `internal/catkin` imports no poplar package.
 `render`, `when`, `search`, and `calendar` are pure logic, with no I/O and no store handles.
-Backend implementations (`internal/backend/jmap`, `internal/backend/dav`) are the only
-packages that speak a wire protocol.
+Backend implementations (`internal/backend/jmapsource`, `internal/backend/dav`) are the only
+packages that speak a wire protocol. The `jmap` library at the module root imports no poplar
+package, and only `internal/backend/jmapsource` may import it; `make jmap-boundary` and the
+`importboundary` analyzer both enforce that.
 
 **The writer/intent rule.** UI code never writes the store directly. A user action
 enqueues a typed intent. The writer goroutine applies it to the store as an optimistic local
