@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/glw907/poplar/internal/backend"
@@ -52,7 +53,7 @@ func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*S
 		accountID: session.PrimaryAccounts[jmap.MailURI],
 		caps:      probeCapabilities(session),
 	}
-	s.refetch.last = session.State
+	s.refetch.seed(session.State)
 	s.push.session = s
 	return s, nil
 }
@@ -73,6 +74,15 @@ func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, er
 	return resp, nil
 }
 
+// answeredStates is how many recently answered sessionState values
+// refetchState keeps. The run of responses that can report an already
+// answered state is the run that was in flight when the state moved,
+// so what this has to cover is a session's concurrent request budget:
+// Fastmail's maxConcurrentRequests is 8, and a client that had more
+// than eight calls straddling a move pays one extra fetch, not a
+// storm.
+const answeredStates = 8
+
 // refetchState remembers which sessionState values a refetch has
 // already answered, so the session resource is fetched once per state
 // the server moves to rather than once per response reporting the
@@ -83,16 +93,27 @@ func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, er
 // storm against the session resource, on exactly the account least
 // able to absorb one.
 //
-// It remembers a pair because concurrent calls straddle a move: a
-// response already in flight when the state changed reports the state
-// it started under, arriving after the newer ones have reported the
-// new one. Keyed on the newest state alone, every flip between the two
-// reads as fresh news and refetches. The state a refetch superseded is
-// not news either.
+// It remembers a ring of them rather than the newest, because
+// concurrent calls straddle a move: a response already in flight when
+// the state changed reports the state it started under, arriving after
+// the newer ones have reported the new one. Against the newest alone,
+// every such response reads as fresh news; against the newest and the
+// one it superseded, so does every response in a cycle of three.
+//
+// fetching is what keeps that ring bounded to one request per round
+// trip, and it is also the ordering the fetch running outside the lock
+// gave up: two goroutines claiming different states would otherwise
+// fetch at once, and the later-returning one wins, so an older session
+// resource can overwrite a newer one. A state passed over while a
+// fetch is in flight is not lost. It is not recorded as answered
+// either, so the next response carrying it claims normally, and the
+// fetch already running is reading the server's current session in any
+// case.
 type refetchState struct {
-	mu         sync.Mutex
-	last       string
-	superseded string
+	mu       sync.Mutex
+	answered [answeredStates]string
+	next     int
+	fetching bool
 }
 
 // follow fetches the session again when state is one no refetch has
@@ -114,6 +135,7 @@ func (r *refetchState) follow(ctx context.Context, client *jmap.Client, state st
 	if !r.claim(state) {
 		return
 	}
+	defer r.done()
 	// The session installs itself in the client, which is where every
 	// call reads its URLs from, so the returned value has no second
 	// consumer here. s.accountID and s.caps keep their dial-time values
@@ -125,16 +147,40 @@ func (r *refetchState) follow(ctx context.Context, client *jmap.Client, state st
 	}
 }
 
-// claim reports whether state is a move no refetch has answered,
-// recording it as answered when it is.
+// claim reports whether state is a move to answer with a fetch,
+// recording it as answered and the fetch as in flight when it is. The
+// caller runs exactly one fetch per true and calls done after it.
 func (r *refetchState) claim(state string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if state == "" || state == r.last || state == r.superseded {
+	if state == "" || r.fetching || slices.Contains(r.answered[:], state) {
 		return false
 	}
-	r.superseded, r.last = r.last, state
+	r.record(state)
+	r.fetching = true
 	return true
+}
+
+// done releases the claim, admitting the next state the server reports.
+func (r *refetchState) done() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fetching = false
+}
+
+// seed records state as answered without a fetch, which is what the
+// dial itself already did for the state it resolved.
+func (r *refetchState) seed(state string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.record(state)
+}
+
+// record writes state into the ring, dropping the oldest entry it
+// holds. The caller holds mu.
+func (r *refetchState) record(state string) {
+	r.answered[r.next] = state
+	r.next = (r.next + 1) % answeredStates
 }
 
 // authTransport resolves the bearer token from creds per request

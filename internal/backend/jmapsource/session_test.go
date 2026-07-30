@@ -442,13 +442,18 @@ func TestSessionRefetchDoesNotBlockOtherCalls(t *testing.T) {
 	hang := make(chan struct{})
 	var once sync.Once
 	release := func() { once.Do(func() { close(hang) }) }
-	t.Cleanup(release)
 
 	var mu sync.Mutex
 	fetches := 0
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
+	// Registered after the server, so it runs before it: cleanups run
+	// last in first out, and httptest.Server.Close waits out a handler
+	// still blocked on the gate. Registered the other way round, a test
+	// that fails here panics the whole binary at the package timeout
+	// instead of reporting its own failure.
+	t.Cleanup(release)
 	mux.HandleFunc("/session", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		fetches++
@@ -495,6 +500,168 @@ func TestSessionRefetchDoesNotBlockOtherCalls(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("a call made while the session refetch was in flight never returned")
+	}
+
+	release()
+	<-stuck
+}
+
+// TestSessionRefetchAnswersEachStateOnce is the acceptance criterion
+// without the depth condition the pair carried. Responses cycling
+// through three states, the shape a run of concurrent calls straddling
+// two moves produces, must cost one refetch per state the server moved
+// to and nothing for the repeats. Remembering only the newest and the
+// one it superseded, every response in such a cycle looks like fresh
+// news.
+func TestSessionRefetchAnswersEachStateOnce(t *testing.T) {
+	cycle := []string{"s2", "s3", "s4"}
+	var mu sync.Mutex
+	seen := 0
+	srv, fetches := newStateServer(t, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		state := cycle[seen%len(cycle)]
+		seen++
+		return `{"methodResponses":[],"sessionState":"` + state + `"}`
+	})
+	session := dialTestSession(t, srv)
+
+	for range 3 * len(cycle) {
+		if _, err := session.do(t.Context(), &jmap.Request{}); err != nil {
+			t.Fatalf("do: %v", err)
+		}
+	}
+
+	// The dial, and one refetch for each distinct state.
+	if want := 1 + len(cycle); fetches() != want {
+		t.Errorf("session fetches across %d responses cycling %d states = %d, want %d",
+			3*len(cycle), len(cycle), fetches(), want)
+	}
+}
+
+// TestSessionRefetchRemembersItsWholeRing walks the ring past its own
+// size, which is where a fixed-size scan hides an off-by-one. The
+// oldest answered state falls out, and everything still in it stays
+// answered.
+func TestSessionRefetchRemembersItsWholeRing(t *testing.T) {
+	var r refetchState
+	r.seed("dial")
+
+	// The dial fills one slot, so this fills the rest.
+	filled := make([]string, answeredStates-1)
+	for i := range filled {
+		filled[i] = fmt.Sprintf("s%d", i)
+		if !r.claim(filled[i]) {
+			t.Fatalf("claim(%q) = false, want true on a state never seen", filled[i])
+		}
+		r.done()
+	}
+
+	for _, state := range append([]string{"dial"}, filled...) {
+		if r.claim(state) {
+			t.Errorf("claim(%q) = true, want false: a state already answered and still in the ring", state)
+			r.done()
+		}
+	}
+
+	// One more evicts the oldest, which is the dial's own state.
+	if !r.claim("overflow") {
+		t.Fatal(`claim("overflow") = false, want true`)
+	}
+	r.done()
+	if !r.claim("dial") {
+		t.Error(`claim("dial") = false, want true: the oldest state should have fallen out of the ring`)
+	}
+	r.done()
+	for _, state := range filled[1:] {
+		if r.claim(state) {
+			t.Errorf("claim(%q) = true, want false: only the oldest entry should have been evicted", state)
+			r.done()
+		}
+	}
+}
+
+// TestSessionRefetchIsSingleFlight covers what keeping the fetch
+// outside the lock costs if nothing replaces the ordering it used to
+// give. Two goroutines can otherwise claim different states and fetch
+// at once, and the later-returning one wins, so an older session
+// overwrites a newer one and the client talks to stale URLs until the
+// state moves again. It also bounds the ring: one session request per
+// round trip, whatever the responses report.
+func TestSessionRefetchIsSingleFlight(t *testing.T) {
+	hang := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(hang) }) }
+
+	var mu sync.Mutex
+	fetches := 0
+	states := []string{"s2", "s3", "s4"}
+	responses := 0
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	t.Cleanup(release) // before the server closes; see gate's doc
+	mux.HandleFunc("/session", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		fetches++
+		first := fetches == 1
+		mu.Unlock()
+		if !first {
+			<-hang
+		}
+		_, _ = fmt.Fprintf(w, `{"capabilities":{},"accounts":{},"primaryAccounts":{"urn:ietf:params:jmap:mail":"u1"},"apiUrl":%q,"state":"session-1"}`, srv.URL+"/api")
+	})
+	mux.HandleFunc("/api", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		state := states[min(responses, len(states)-1)]
+		responses++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"methodResponses":[],"sessionState":"`+state+`"}`)
+	})
+
+	session, err := Dial(context.Background(), srv.URL+"/session", NewStaticCredentials("test-token"))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	stuck := make(chan struct{})
+	go func() {
+		defer close(stuck)
+		_, _ = session.do(context.Background(), &jmap.Request{})
+	}()
+	waitFor(t, "the first refetch to reach the server", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return fetches > 1
+	})
+
+	// Every one of these reports a state the ring has never answered,
+	// and every one must leave the session resource alone while a fetch
+	// is already in flight. They run on their own goroutines because
+	// without single-flight each blocks in its own refetch, and the
+	// count is what this test is here to read either way.
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			if _, err := session.do(context.Background(), &jmap.Request{}); err != nil {
+				t.Errorf("do: %v", err)
+			}
+		})
+	}
+	settled := make(chan struct{})
+	go func() { wg.Wait(); close(settled) }()
+	select {
+	case <-settled:
+	case <-time.After(2 * time.Second):
+		t.Error("calls made while a refetch was in flight did not return; they started refetches of their own")
+	}
+
+	mu.Lock()
+	got := fetches
+	mu.Unlock()
+	if got != 2 {
+		t.Errorf("session fetches while one was in flight = %d, want 2 (the dial and the one in flight)", got)
 	}
 
 	release()

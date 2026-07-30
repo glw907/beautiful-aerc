@@ -528,7 +528,7 @@ func TestPushReportsARefusalThatEndedAnOpenStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	for range ch { //nolint:revive // draining until the transport stops for good is the point
+	for range ch { //nolint:revive // empty-block: draining until the transport stops for good is the point
 	}
 
 	// The stream is over and the caller is about to reopen. That call
