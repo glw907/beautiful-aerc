@@ -378,9 +378,9 @@ plan-approval model boundary; the starter prompt below is the
 handoff. The scope list that follows remains the binding source
 the plan was authored from.
 
-**Execution in progress (2026-07-29). Tasks 1 through 4 are done,
-reviewed, and pushed** (commits `ef0c986..767d9a4`, 16 commits on
-origin/master). The live progress ledger is
+**Execution in progress (2026-07-29). Tasks 1 through 5 are done,
+reviewed, and pushed** (commits `ef0c986..38c8f08`). The live
+progress ledger is
 `.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md`
 and it is the recovery map: it records every task's outcome, every
 parked and deferred finding, the routing rulings, and the defect
@@ -393,29 +393,62 @@ first**, then resumes at the first task with no `complete` line.
   `deadcode` fell from 203 unreachable functions to 61, each
   remaining one enumerated and justified. Five fix rounds.
 - **Tasks 2, 3 and 4: the `jmap` library is complete** at
-  `poplar/jmap` — data model, transport, and EventSource push client,
-  standard-library-only, importing no poplar package, with a
-  `make jmap-boundary` gate enforcing that mechanically. ADR-0018
+  `poplar/jmap`. It carries the data model, transport, and
+  EventSource push client, is standard-library-only, imports no
+  poplar package, and has a `make jmap-boundary` gate enforcing that
+  mechanically. ADR-0018
   (push stream resumption) is committed. The adopt case held: the
   seven go-jmap defect fixes came to ~23 lines against 1,592 adopted,
   1.4% against the plan's 30% abort threshold, with no signature
   changes.
-- **Task 5, Stalwart conformance, is in flight** with its work
-  uncommitted in the working tree.
+- **Task 5, Stalwart conformance: complete.** The suite runs behind
+  its own build tag, DV-01 through DV-12 green against a freshly
+  provisioned Stalwart v0.16.15, and `make conformance` sits outside
+  `make check` so the default gate still needs no container runtime.
+  Three fix rounds and five review passes. The first review found a
+  Tier-1 item skipped on an impossibility claim that a probe
+  disproved, the trim ledger never reaching the repo, and the first
+  build-tagged files in `jmap/` sitting outside every gate.
+- **Two product bugs surfaced by the second server, both fixed.**
+  Stalwart advertises a push `interval` of 30000 while pinging every
+  30 seconds, sending milliseconds where RFC 8620 section 7.3 says
+  seconds; unclamped, poplar's stall window became 16h40m and a dead
+  push connection would never be noticed. And poplar refused to move
+  mail into any mailbox whose id is all digits, which Stalwart
+  generates, because a numeric pointer token was read as an array
+  index against an object. RFC 6901 section 4 reads a token as an
+  index only when the referenced value is an array.
 
-**Two new artifacts this pass, both owner-directed (2026-07-29):**
-- **The trim ledger** (task 5): one row per method or package
-  deliberately omitted from `poplar/jmap`, with why it is out and
-  what would bring it back. The trim boundary leaked three times
-  before it was tracked.
-- **The RFC obligations map**, 281 rows of client-binding normative
-  obligations across RFC 8620, 8621, 9219, 6901 and the WHATWG SSE
-  section, each mapped to a proving test, a `GAP`, or an `N/A`.
-  **Ruling: it is a standing input, not a work item.** It moves to
-  `docs/poplar/research/`, and each pass closes the MUST gaps for the
-  surface that pass ships — pass 2 the read path, pass 3 the eleven
-  `Email/set` create constraints, pass 5 the calendar rows. There is
-  no gap-closing task and no gap-closing pass.
+**Both owner-directed artifacts (2026-07-29) have landed:**
+- **The trim ledger** is `jmap/TRIMMED.md`, referenced from
+  `jmap/doc.go`: one row per method or package deliberately omitted
+  from `poplar/jmap`, with why it is out and what would bring it
+  back. The trim boundary leaked three times before it was tracked.
+- **The RFC obligations map** is
+  `docs/poplar/research/2026-07-28-jmap-rfc-obligations-map.md`,
+  client-binding normative obligations across RFC 8620, 8621, 9219,
+  6901 and the WHATWG SSE section, each mapped to a proving test, a
+  `GAP`, or an `N/A`. **Ruling: it is a standing input, not a work
+  item.** Each pass closes the MUST gaps for the surface that pass
+  ships. Pass 2 takes the read path, pass 3 the eleven `Email/set`
+  create constraints, and pass 5 the calendar rows. There is no
+  gap-closing task and no gap-closing pass. It also carries the
+  server-set-property survey that pass 3 needs when it designs
+  compose, and the interop note that naming a capability a server
+  lacks gets the whole request rejected rather than the one call.
+
+**Task 6 is split (orchestrator ruling, 2026-07-29).** It had grown
+from five deliverables to nine, and the four this pass routed to it
+are push-semantics work that contradicts its own written boundary,
+"no behavior changes to sync or outbox in this task." **6a is the
+mechanical cutover** and keeps that boundary, since its whole safety
+argument is that nothing changed and the existing adapter suite plus
+a live run is a sound net for exactly that claim. **6b is the
+push-semantics change**: the reconnect-ownership collapse,
+flush-on-connect, JT-21's trigger half, the stall-detector disable,
+and the ping-clamp log seam. Briefs for both are written in the sdd
+directory. JT-13/14/15's fixture assertions route to task 11, whose
+`/changes` paging consumer in `internal/sync` is what they protect.
 
 **Environment correction for anyone running the conformance suite:**
 Docker is not installed on this workstation. The suite runs on
@@ -511,22 +544,46 @@ Starter prompt (paste after /clear in ~/Projects/poplar, in an
 Opus 5 session):
 
 ```
-Execute the poplar pass 1b plan at
+Resume executing the poplar pass 1b plan at
 docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md
-via superpowers:subagent-driven-development. Read the plan first,
-then the pass 1b scope and pass 1 outcomes in
-docs/superpowers/specs/poplar-refounding-STATUS.md. The binding
-research is under docs/poplar/research/ dated 2026-07-28; the
-requirements are at revision 4 and ADR revision blocks override
-ADR bodies.
+via superpowers:subagent-driven-development. Tasks 1 through 5 are
+complete, reviewed and pushed (ef0c986..38c8f08).
 
-One poplar-implementer per task in the plan's dependency order;
-poplar-reviewer and poplar-go-reviewer in parallel on each diff;
-the main loop reviews each diff and confirms `make check` between
-dispatches. Every reviewer verification proves revert-sensitivity
-by experiment in a scratch worktree, not by reading. Tasks 9 and
-10's measurements run on a quiet machine with no concurrent
-implementer dispatched.
+Read .superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md
+FIRST. It is the recovery map: every task outcome, every parked and
+deferred finding, the routing rulings that bind later tasks, and the
+defect patterns this pass has produced. Then read the plan, and the
+pass 1b scope in docs/superpowers/specs/poplar-refounding-STATUS.md.
+
+Resume at task 6a, whose brief is task-6a-brief.md in that same sdd
+directory; 6b follows it. Task 6 was split because it had grown to
+nine deliverables and the push work contradicts its own boundary.
+Do not merge them back together.
+
+Binding research is under docs/poplar/research/; requirements are at
+revision 4 and ADR revision blocks override ADR bodies. The RFC
+obligations map is a standing input, not a work item.
+
+One poplar-implementer per task; poplar-reviewer and
+poplar-go-reviewer in parallel on each diff; the main loop reviews
+each diff and confirms `make check` between dispatches. Every
+reviewer verification proves revert-sensitivity by experiment, not
+by reading. Tasks 9 and 10's measurements run on a quiet machine
+with no concurrent implementer dispatched.
+
+Expect the fix round, not the clean first pass. Across tasks 1
+through 5 every fix round but the last introduced the next defect,
+usually in the guard written to close the previous finding, so tell
+each reviewer to attack the round's new guards before anything
+else. Comment defects outproduced logic defects in task 5: a
+justification comment must be literally true clause by clause.
+
+Dispatch hygiene, all learned the expensive way: tell every agent
+never to set run_in_background on a Bash call, and to give every
+scratch file a unique name. Verify any reported gate result the
+local gate does not itself run, especially -race. Measuring lint
+findings needs --max-same-issues=0, since the default truncates at
+three and makes a load-bearing suppression look dead.
 
 Geoff is at the pass gate only, and that gate is a demonstration:
 poplar running against the live Fastmail account with the store
