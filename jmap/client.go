@@ -135,8 +135,10 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 	// before it appends for the same reason: that slice can still
 	// share a backing array with req.Using, and a caller that reuses
 	// req or shares it across goroutines must never see that array
-	// written to. go-jmap appended in place at both points, which
-	// surprised exactly that caller.
+	// written to. go-jmap appended straight into the caller's Request
+	// here, which surprised exactly that caller. It had no marshal-time
+	// fold at all, so the second point is poplar's own and carries its
+	// own guard.
 	out := *req
 	out.Using = mergeURIs(req.Using, nil)
 
