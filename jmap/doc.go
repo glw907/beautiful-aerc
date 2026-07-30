@@ -24,6 +24,15 @@
 // HasAttachment constrains nothing, while one holding new(false)
 // matches only messages carrying no attachment.
 //
+// # What is not modelled
+//
+// The package covers what poplar sends, not everything the two RFCs
+// define. TRIMMED.md alongside this file lists every method left out,
+// why, and what would bring it back. Read it before assuming a method
+// is missing by accident: a method with no registered response fails
+// the whole [Response] decode, so the list is also the set of calls a
+// batch must not contain.
+//
 // # What a downstream cannot extend
 //
 // Two seams are closed on purpose, and both matter to a project

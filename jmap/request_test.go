@@ -95,6 +95,60 @@ func TestRequestUsing(t *testing.T) {
 			want:    []URI{CoreURI, SubmissionURI, MailURI},
 		},
 		{
+			// RFC 8620 section 1.8 has a server ignore an extension the
+			// request does not name, so a call that leans on RFC 9219
+			// and stays quiet about it is answered as though the
+			// condition were not there: every message matches.
+			name:    "a query filtering on S/MIME asks for the capability",
+			methods: []Method{&EmailQuery{Filter: &EmailFilterCondition{HasVerifiedSMIME: new(true)}}},
+			want:    []URI{CoreURI, MailURI, SMIMEVerifyURI},
+		},
+		{
+			name: "a filter nesting the S/MIME condition asks for it too",
+			methods: []Method{&EmailQuery{Filter: &FilterOperator{
+				Operator: OperatorAND,
+				Conditions: []Filter{
+					&EmailFilterCondition{InMailbox: "MA"},
+					&FilterOperator{Operator: OperatorNOT, Conditions: []Filter{
+						&EmailFilterCondition{HasSMIME: new(false)},
+					}},
+				},
+			}}},
+			want: []URI{CoreURI, MailURI, SMIMEVerifyURI},
+		},
+		{
+			name:    "a queryChanges repeating that filter asks for it",
+			methods: []Method{&EmailQueryChanges{Filter: &EmailFilterCondition{HasVerifiedSMIMEAtDelivery: new(true)}}},
+			want:    []URI{CoreURI, MailURI, SMIMEVerifyURI},
+		},
+		{
+			name:    "a get asking for an S/MIME property asks for the capability",
+			methods: []Method{&EmailGet{Properties: []string{"id", "smimeStatus"}}},
+			want:    []URI{CoreURI, MailURI, SMIMEVerifyURI},
+		},
+		{
+			// The other direction, and the one with more at stake:
+			// section 3.3 has a server reject the whole request with
+			// unknownCapability for a URI it does not advertise, and
+			// Stalwart advertises no S/MIME.
+			name: "a query with no S/MIME condition does not ask for it",
+			methods: []Method{&EmailQuery{Filter: &FilterOperator{
+				Operator:   OperatorAND,
+				Conditions: []Filter{&EmailFilterCondition{InMailbox: "MA"}, nil},
+			}}},
+			want: []URI{CoreURI, MailURI},
+		},
+		{
+			name:    "a get asking for ordinary properties does not ask for it",
+			methods: []Method{&EmailGet{Properties: []string{"id", "subject", "keywords"}}},
+			want:    []URI{CoreURI, MailURI},
+		},
+		{
+			name:    "a query holding a typed nil filter does not ask for it",
+			methods: []Method{&EmailQuery{Filter: (*EmailFilterCondition)(nil)}},
+			want:    []URI{CoreURI, MailURI},
+		},
+		{
 			name:    "a seeded Using still gets the core capability",
 			seed:    []URI{"urn:vendor:thing"},
 			methods: []Method{&MailboxGet{}},

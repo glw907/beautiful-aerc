@@ -5,6 +5,7 @@ package jmap_test
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -166,7 +167,7 @@ func TestConformancePatchTouchesOneLeaf(t *testing.T) {
 	if len(moved.List) != 1 {
 		t.Fatalf("after the move the server returned %d messages, want 1", len(moved.List))
 	}
-	if got := slices.Sorted(mapKeys(moved.List[0].MailboxIDs)); len(got) != 1 || got[0] != to {
+	if got := slices.Sorted(maps.Keys(moved.List[0].MailboxIDs)); len(got) != 1 || got[0] != to {
 		t.Errorf("mailboxIds = %v, want exactly [%s]", got, to)
 	}
 }
@@ -247,9 +248,9 @@ func TestConformanceBackReferences(t *testing.T) {
 		})
 		answer := only(t, tg.do(t, req), callID)
 
-		failed, ok := answer.(*jmap.MethodError)
+		failed, ok := answer.Args.(*jmap.MethodError)
 		if !ok {
-			t.Fatalf("a broken reference answered %T, want a method error", answer)
+			t.Fatalf("a broken reference answered %T, want a method error", answer.Args)
 		}
 		if !errors.Is(failed, jmap.ErrInvalidResultReference) {
 			t.Errorf("a broken reference answered %q, want invalidResultReference", failed.Type)
@@ -419,7 +420,7 @@ func TestConformanceStaleStateIsLoud(t *testing.T) {
 			callID := req.Invoke(&jmap.EmailChanges{Account: tg.account, SinceState: row.state})
 			answer := only(t, tg.do(t, req), callID)
 
-			if failed, ok := answer.(*jmap.MethodError); ok {
+			if failed, ok := answer.Args.(*jmap.MethodError); ok {
 				// Where a server does send the sentinel, errors.Is has
 				// to match it, because that match is what forces a
 				// resync. RFC 8620 section 3.6.2 folds an unnamed type
@@ -452,34 +453,59 @@ func TestConformanceStaleStateIsLoud(t *testing.T) {
 	}
 }
 
-// TestConformanceDigitOnlyIDsCannotBePatched pins what happens when a
-// server allocates an id RFC 8620 section 1.2 recommends against. A
-// patch pointer cannot tell a map key of digits from an array index,
-// section 5.3 forbids the index, and [jmap.Pointer] sees only the
-// shape. poplar therefore refuses the patch at its own boundary rather
-// than sending one a lenient server might apply to an array.
+// TestConformanceDigitOnlyKeysAreMemberNames covers JT-03's other
+// half against a real server: what the refusal of an illegal pointer
+// must not swallow.
 //
-// The test asserts the refusal and reports whether this server's ids
-// make it reachable, which on Stalwart they do: its alphabet reaches
-// the digits after the twenty-six letters.
-func TestConformanceDigitOnlyIDsCannotBePatched(t *testing.T) {
+// RFC 6901 section 4 makes a pointer segment an array index only where
+// the value under it is an array, and both maps a message is patched
+// through are objects. So "keywords/7" names a keyword and
+// "mailboxIds/7" names a mailbox, and a client that read either as an
+// index could not set the keyword or file the message at all.
+//
+// The keyword half runs everywhere, because the client chooses that
+// name. The mailbox half depends on the server handing out an id made
+// only of digits, which RFC 8620 section 1.2 recommends against and
+// only recommends: Stalwart's alphabet runs into the digits after the
+// twenty-six letters, so the case is reachable rather than
+// theoretical, and it is taken when it is.
+func TestConformanceDigitOnlyKeysAreMemberNames(t *testing.T) {
 	tg := dial(t)
 
-	mailbox := tg.newMailbox(t, scratch("digits"))
-	email := tg.newEmail(t, mailbox, scratch("digits"))
+	from := tg.newMailbox(t, scratch("digits-from"))
+	email := tg.newEmail(t, from, scratch("digits"), "$seen")
 
-	req := &jmap.Request{}
-	req.Invoke(&jmap.EmailSet{
-		Account: tg.account,
-		Update:  map[jmap.ID]jmap.Patch{email: {jmap.Pointer("mailboxIds", "3"): true}},
-	})
-	if _, err := tg.client.Do(t.Context(), req); err == nil {
-		t.Error("a patch addressing mailboxIds/3 reached the wire; RFC 8620 section 5.3 forbids the form")
+	tg.update(t, email, jmap.Patch{jmap.Pointer("keywords", "7"): true})
+	assertKeywords(t, tg.emails(t, email), email, "$seen", "7")
+
+	to, found := tg.digitOnlyMailbox(t)
+	if !found {
+		t.Logf("%s allocated no mailbox id made only of digits, so only the keyword half ran here", tg.profile.name)
+		return
 	}
+	tg.update(t, email, jmap.Patch{
+		jmap.Pointer("mailboxIds", string(from)): nil,
+		jmap.Pointer("mailboxIds", string(to)):   true,
+	})
 
-	// Whether the case is reachable is a fact about the server's id
-	// allocation, so it is measured rather than assumed: ask for
-	// mailboxes until one comes back with an id no patch can address.
+	moved := tg.emails(t, email)
+	if len(moved.List) != 1 {
+		t.Fatalf("after the move the server returned %d messages, want 1", len(moved.List))
+	}
+	if got := slices.Sorted(maps.Keys(moved.List[0].MailboxIDs)); len(got) != 1 || got[0] != to {
+		t.Errorf("mailboxIds = %v, want exactly [%s]", got, to)
+	}
+}
+
+// digitOnlyMailbox asks for mailboxes until the server allocates one
+// whose id is nothing but digits, and reports whether it did. Which
+// ids a server hands out is the server's business, and how many
+// records it takes to reach that shape depends on what the rest of the
+// suite created first, so this is measured rather than assumed and
+// never decides the test on its own.
+func (tg *target) digitOnlyMailbox(t *testing.T) (jmap.ID, bool) {
+	t.Helper()
+
 	for attempt := range 40 {
 		set := &jmap.MailboxSetResponse{}
 		tg.call(t, &jmap.MailboxSet{
@@ -493,12 +519,200 @@ func TestConformanceDigitOnlyIDsCannotBePatched(t *testing.T) {
 		t.Cleanup(func() { tg.destroyMailbox(made.ID) })
 
 		if digitsOnly(string(made.ID)) {
-			t.Logf("DIVERGENCE: %s allocated mailbox id %q after %d records, so no message can be moved into that mailbox by patch",
-				tg.profile.name, made.ID, attempt+1)
-			return
+			t.Logf("%s allocated mailbox id %q after %d records", tg.profile.name, made.ID, attempt+1)
+			return made.ID, true
 		}
 	}
-	t.Logf("%s allocated no digit-only mailbox id across forty records", tg.profile.name)
+	return "", false
+}
+
+// TestConformanceSubmissionOnSuccessEffects covers JT-10 against a
+// real server, which is where it belongs: the failure it guards
+// against is a draft marked sent after the send failed, and no fixture
+// can decide whether a server runs the effects it promised.
+//
+// RFC 8621 section 7.5 has one EmailSubmission/set answer under one
+// call id twice, with an implicit Email/set beside it, and keys the
+// on-success arguments by the submission's creation id with a leading
+// sharp. All three cases are here: the update, the destroy, and the
+// refusal that must leave the draft exactly as it was.
+func TestConformanceSubmissionOnSuccessEffects(t *testing.T) {
+	tg := dial(t)
+
+	identity := tg.identity(t)
+	drafts := tg.newMailbox(t, scratch("submit-drafts"))
+	sent := tg.newMailbox(t, scratch("submit-sent"))
+
+	t.Run("onSuccessUpdateEmail", func(t *testing.T) {
+		req := &jmap.Request{}
+		draftID := req.Invoke(&jmap.EmailSet{
+			Account: tg.account,
+			Create:  map[jmap.ID]*jmap.Email{"draft": tg.draft(drafts, scratch("submit-ok"), map[string]bool{"$draft": true})},
+		})
+		submitID := req.Invoke(&jmap.EmailSubmissionSet{
+			Account: tg.account,
+			Create: map[jmap.ID]*jmap.EmailSubmission{"s": {
+				IdentityID: identity,
+				EmailID:    "#draft",
+				Envelope:   tg.envelope(),
+			}},
+			OnSuccessUpdateEmail: map[jmap.ID]jmap.Patch{"#s": {
+				jmap.Pointer("mailboxIds", string(drafts)): nil,
+				jmap.Pointer("mailboxIds", string(sent)):   true,
+				jmap.Pointer("keywords", "$draft"):         nil,
+			}},
+		})
+		resp := tg.do(t, req)
+
+		created := &jmap.EmailSetResponse{}
+		assign(t, only(t, resp, draftID), created)
+		if created.Created["draft"] == nil {
+			t.Fatalf("create the draft: %v", created.NotCreated["draft"])
+		}
+		message := created.Created["draft"].ID
+		t.Cleanup(func() { tg.destroyEmailQuietly(message) })
+
+		// Two responses under one call id, and the second is the
+		// implicit Email/set the on-success argument asked for.
+		submission, implicit := submissionAndImplicitSet(t, resp, submitID)
+		if submission.Created["s"] == nil {
+			t.Fatalf("the submission was refused: %v", submission.NotCreated["s"])
+		}
+		if _, ok := implicit.Updated[message]; !ok {
+			t.Errorf("the implicit Email/set updated %v, not the draft %s created under #draft",
+				slices.Sorted(maps.Keys(implicit.Updated)), message)
+		}
+
+		// What the account holds is the assertion that matters: the
+		// server ran the patch keyed by #s against the message named by
+		// #draft, and a client that matched by position instead would
+		// have patched nothing here and never known.
+		got := tg.emails(t, message)
+		if len(got.List) != 1 {
+			t.Fatalf("the server returned %d messages, want the one just sent", len(got.List))
+		}
+		if boxes := slices.Sorted(maps.Keys(got.List[0].MailboxIDs)); len(boxes) != 1 || boxes[0] != sent {
+			t.Errorf("the sent message is in %v, want exactly [%s]", boxes, sent)
+		}
+		if got.List[0].Keywords["$draft"] {
+			t.Error("the sent message still carries $draft")
+		}
+	})
+
+	t.Run("onSuccessDestroyEmail", func(t *testing.T) {
+		req := &jmap.Request{}
+		draftID := req.Invoke(&jmap.EmailSet{
+			Account: tg.account,
+			Create:  map[jmap.ID]*jmap.Email{"draft": tg.draft(drafts, scratch("submit-destroy"), map[string]bool{"$draft": true})},
+		})
+		submitID := req.Invoke(&jmap.EmailSubmissionSet{
+			Account: tg.account,
+			Create: map[jmap.ID]*jmap.EmailSubmission{"s": {
+				IdentityID: identity,
+				EmailID:    "#draft",
+				Envelope:   tg.envelope(),
+			}},
+			OnSuccessDestroyEmail: []jmap.ID{"#s"},
+		})
+		resp := tg.do(t, req)
+
+		created := &jmap.EmailSetResponse{}
+		assign(t, only(t, resp, draftID), created)
+		if created.Created["draft"] == nil {
+			t.Fatalf("create the draft: %v", created.NotCreated["draft"])
+		}
+		message := created.Created["draft"].ID
+
+		submission, implicit := submissionAndImplicitSet(t, resp, submitID)
+		if submission.Created["s"] == nil {
+			t.Fatalf("the submission was refused: %v", submission.NotCreated["s"])
+		}
+		if !slices.Contains(implicit.Destroyed, message) {
+			t.Errorf("the implicit Email/set destroyed %v, not the draft %s", implicit.Destroyed, message)
+		}
+		if got := tg.emails(t, message); len(got.List) != 0 {
+			t.Errorf("the draft is still in the account after a destroy on success: %+v", got.List[0])
+		}
+	})
+
+	t.Run("a refused submission runs neither effect", func(t *testing.T) {
+		req := &jmap.Request{}
+		draftID := req.Invoke(&jmap.EmailSet{
+			Account: tg.account,
+			Create:  map[jmap.ID]*jmap.Email{"draft": tg.draft(drafts, scratch("submit-refused"), map[string]bool{"$draft": true})},
+		})
+		submitID := req.Invoke(&jmap.EmailSubmissionSet{
+			Account: tg.account,
+			Create: map[jmap.ID]*jmap.EmailSubmission{"s": {
+				IdentityID: "no-such-identity-in-this-account",
+				EmailID:    "#draft",
+				Envelope:   tg.envelope(),
+			}},
+			OnSuccessUpdateEmail: map[jmap.ID]jmap.Patch{"#s": {
+				jmap.Pointer("mailboxIds", string(drafts)): nil,
+				jmap.Pointer("mailboxIds", string(sent)):   true,
+				jmap.Pointer("keywords", "$draft"):         nil,
+			}},
+			OnSuccessDestroyEmail: []jmap.ID{"#s"},
+		})
+		resp := tg.do(t, req)
+
+		created := &jmap.EmailSetResponse{}
+		assign(t, only(t, resp, draftID), created)
+		if created.Created["draft"] == nil {
+			t.Fatalf("create the draft: %v", created.NotCreated["draft"])
+		}
+		message := created.Created["draft"].ID
+		t.Cleanup(func() { tg.destroyEmailQuietly(message) })
+
+		submission := &jmap.EmailSubmissionSetResponse{}
+		answers := resp.Invocations(submitID)
+		assign(t, answers[0], submission)
+		if submission.Created["s"] != nil {
+			t.Fatalf("the server accepted a submission naming an identity the account does not hold")
+		}
+		if submission.NotCreated["s"] == nil {
+			t.Fatal("the server neither created the submission nor said why")
+		}
+
+		// The draft is untouched, which is the whole of JT-10: a
+		// message marked sent after the send failed is silent, and the
+		// user finds out when the reply never comes.
+		got := tg.emails(t, message)
+		if len(got.List) != 1 {
+			t.Fatalf("the draft is gone after a refused submission")
+		}
+		if boxes := slices.Sorted(maps.Keys(got.List[0].MailboxIDs)); len(boxes) != 1 || boxes[0] != drafts {
+			t.Errorf("the refused draft is in %v, want exactly [%s]", boxes, drafts)
+		}
+		if !got.List[0].Keywords["$draft"] {
+			t.Error("the refused draft lost $draft, so it reads as sent")
+		}
+		t.Logf("%s refuses a submission naming an unknown identity with %q, and answers %d times under one call id",
+			tg.profile.name, submission.NotCreated["s"].Type, len(answers))
+	})
+}
+
+// submissionAndImplicitSet reads the two responses RFC 8621 section
+// 7.5.1 puts under one call id. A client indexing responses by call id
+// alone keeps one of them, and which one it keeps decides whether the
+// draft is ever cleaned up.
+func submissionAndImplicitSet(t *testing.T, resp *jmap.Response, callID string) (*jmap.EmailSubmissionSetResponse, *jmap.EmailSetResponse) {
+	t.Helper()
+
+	answers := resp.Invocations(callID)
+	if len(answers) != 2 {
+		t.Fatalf("call %s answered %d times, want the submission and the implicit Email/set", callID, len(answers))
+	}
+	if answers[0].Name != "EmailSubmission/set" || answers[1].Name != "Email/set" {
+		t.Fatalf("call %s answered %q then %q", callID, answers[0].Name, answers[1].Name)
+	}
+
+	submission := &jmap.EmailSubmissionSetResponse{}
+	assign(t, answers[0], submission)
+	implicit := &jmap.EmailSetResponse{}
+	assign(t, answers[1], implicit)
+	return submission, implicit
 }
 
 // TestConformanceQueryChangesSplice covers JT-17 against a real
@@ -613,16 +827,33 @@ func TestConformancePingReportsItsOwnCadence(t *testing.T) {
 		t.Fatalf("the ping reported interval %d, which says nothing about when to expect the next one", payload.Interval)
 	}
 
-	// RFC 8620 section 7.3 puts the interval in seconds and forbids a
-	// server from setting a maximum below 300, so a figure far above
-	// that is the server answering in another unit. poplar sets its
-	// stall window from this number, so the consequence is a detector
-	// that never fires.
-	if payload.Interval > 300 {
-		t.Logf("DIVERGENCE: %s reports a ping interval of %d, which RFC 8620 section 7.3 reads as %d seconds; "+
-			"a client that believes it sets a stall window of %s",
-			tg.profile.name, payload.Interval, payload.Interval, 2*time.Duration(payload.Interval)*time.Second)
+	// RFC 8620 section 7.3 puts the interval in seconds and lets a
+	// server raise a request only to its own minimum, which may not
+	// exceed 30. This stream asked for 2, so anything past 30 is the
+	// server answering in another unit, and a client that believed it
+	// would set a stall window of twice that.
+	//
+	// Which way it comes out is the profile's to declare, in both
+	// directions. A log line here would hide the divergence on a green
+	// run, and nothing would notice the release that fixed the unit and
+	// made poplar's clamp dead weight.
+	diverges := payload.Interval > 30
+	if diverges != tg.profile.pingIntervalIsMilliseconds {
+		t.Errorf("%s reports a ping interval of %d for a stream that asked for 2, and its profile says the interval is in %s",
+			tg.profile.name, payload.Interval, unitOfProfile(tg.profile))
 	}
+	if diverges {
+		t.Logf("DIVERGENCE: %s reports a ping interval of %d while pinging on the cadence asked for; "+
+			"read as the seconds RFC 8620 section 7.3 defines, that is a stall window of %s",
+			tg.profile.name, payload.Interval, 2*time.Duration(payload.Interval)*time.Second)
+	}
+}
+
+func unitOfProfile(p profile) string {
+	if p.pingIntervalIsMilliseconds {
+		return "milliseconds"
+	}
+	return "seconds"
 }
 
 // TestConformanceUnknownMethodIsTyped covers JT-31 against a real
@@ -695,7 +926,7 @@ func TestConformanceBlobRoundTrip(t *testing.T) {
 		BlobIDs: []jmap.ID{uploaded.BlobID, "no-such-blob-in-this-account"},
 	})
 	answer := only(t, tg.do(t, req), callID)
-	if failed, ok := answer.(*jmap.MethodError); ok {
+	if failed, ok := answer.Args.(*jmap.MethodError); ok {
 		t.Fatalf("Blob/copy: %v", failed)
 	}
 
@@ -996,9 +1227,9 @@ func TestConformanceQueryArguments(t *testing.T) {
 		})
 		answer := only(t, tg.do(t, req), callID)
 
-		failed, ok := answer.(*jmap.MethodError)
+		failed, ok := answer.Args.(*jmap.MethodError)
 		if !ok {
-			t.Fatalf("an unusable anchor answered %T, want a method error", answer)
+			t.Fatalf("an unusable anchor answered %T, want a method error", answer.Args)
 		}
 		t.Logf("%s answers an unusable anchor with %q (RFC 8620 section 5.5 names anchorNotFound)",
 			tg.profile.name, failed.Type)
@@ -1101,7 +1332,7 @@ func assertKeywords(t *testing.T, resp *jmap.EmailGetResponse, id jmap.ID, want 
 	if len(resp.List) != 1 || resp.List[0].ID != id {
 		t.Fatalf("the server returned %d messages for %s", len(resp.List), id)
 	}
-	got := slices.Sorted(mapKeys(resp.List[0].Keywords))
+	got := slices.Sorted(maps.Keys(resp.List[0].Keywords))
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Errorf("keywords = %v, want %v", got, want)

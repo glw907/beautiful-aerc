@@ -11,6 +11,7 @@ type BlobCopy struct {
 	// Account is the account the copies land in.
 	Account ID `json:"accountId,omitempty"`
 
+	// BlobIDs names the blobs to copy, as From holds them.
 	BlobIDs []ID `json:"blobIds,omitempty"`
 }
 
@@ -22,8 +23,10 @@ func (*BlobCopy) Requires() []URI { return nil }
 // independent maps keyed by the id in the source account, so a call
 // that moved one blob and refused two fills both.
 type BlobCopyResponse struct {
+	// From echoes the account the blobs were read from.
 	From ID `json:"fromAccountId,omitempty"`
 
+	// Account echoes the account the copies landed in.
 	Account ID `json:"accountId,omitempty"`
 
 	// Copied maps each source blob id to the id it took in Account.

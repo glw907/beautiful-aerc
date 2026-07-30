@@ -1,6 +1,9 @@
 package jmap
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"slices"
+)
 
 // An Address is a name and an email address from a header field (RFC
 // 8621 section 4.1.2).
@@ -184,7 +187,9 @@ type EmailGet struct {
 
 func (*EmailGet) Name() string { return "Email/get" }
 
-func (*EmailGet) Requires() []URI { return []URI{MailURI} }
+// Requires names the S/MIME capability alongside the mail one when
+// the call asks for a property that comes from it.
+func (m *EmailGet) Requires() []URI { return withSMIME(smimeProperties(m.Properties)) }
 
 // EmailGetResponse answers an EmailGet.
 type EmailGetResponse struct {
@@ -258,7 +263,9 @@ type EmailQuery struct {
 
 func (*EmailQuery) Name() string { return "Email/query" }
 
-func (*EmailQuery) Requires() []URI { return []URI{MailURI} }
+// Requires names the S/MIME capability alongside the mail one when
+// the filter constrains on a condition that comes from it.
+func (m *EmailQuery) Requires() []URI { return withSMIME(smimeFilter(m.Filter)) }
 
 // MarshalJSON implements json.Marshaler. It drops a Filter holding a
 // typed nil rather than sending "filter": null, and carries the
@@ -427,3 +434,49 @@ type EmailFilterCondition struct {
 }
 
 func (*EmailFilterCondition) isFilter() {}
+
+// withSMIME returns the capabilities a mail method needs, adding RFC
+// 9219's when the call depends on it.
+//
+// A server ignores an extension the request does not name (RFC 8620
+// section 1.8), so a hasVerifiedSmime condition sent without this URI
+// is not refused: it is dropped, and the query answers with every
+// message in the mailbox. Naming it on every call is the opposite
+// failure, and a worse one, because section 3.3 has the server reject
+// the whole request with unknownCapability for a URI it does not
+// advertise. Stalwart advertises sixteen capabilities and this is not
+// among them, so an unconditional mention would end every Email/get
+// against it.
+func withSMIME(needed bool) []URI {
+	if needed {
+		return []URI{MailURI, SMIMEVerifyURI}
+	}
+	return []URI{MailURI}
+}
+
+// smimeProperties reports whether a /get asks for one of the four
+// properties RFC 9219 adds to Email.
+func smimeProperties(properties []string) bool {
+	return slices.ContainsFunc(properties, func(property string) bool {
+		switch property {
+		case "smimeStatus", "smimeStatusAtDelivery", "smimeErrors", "smimeVerifiedAt":
+			return true
+		}
+		return false
+	})
+}
+
+// smimeFilter reports whether a filter tree constrains on one of the
+// three conditions RFC 9219 adds, at any depth: an operator nests
+// conditions, and the condition that needs the capability is as
+// likely to be inside one as at the top.
+func smimeFilter(filter Filter) bool {
+	switch f := filter.(type) {
+	case *EmailFilterCondition:
+		return f != nil &&
+			(f.HasSMIME != nil || f.HasVerifiedSMIME != nil || f.HasVerifiedSMIMEAtDelivery != nil)
+	case *FilterOperator:
+		return f != nil && slices.ContainsFunc(f.Conditions, smimeFilter)
+	}
+	return false
+}

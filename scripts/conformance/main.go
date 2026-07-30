@@ -11,10 +11,12 @@
 //
 //	conformance -step setup   -url http://localhost:19080
 //	conformance -step account -url http://localhost:19080
+//	conformance -step env
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -28,7 +30,9 @@ import (
 // public: the instance is created and destroyed by one make target and
 // holds nothing but the records the tests write. The password is long
 // enough to clear Stalwart's own strength check, which rejects
-// anything on its common-password list.
+// anything on its common-password list. They are declared here alone,
+// and `conformance -step env` is how the make target learns them: a
+// second copy in the Makefile would drift the day one of them changed.
 const (
 	adminUser    = "admin"
 	adminSecret  = "conformance"
@@ -42,7 +46,7 @@ const (
 const setupPath = "jmap/testdata/conformance/stalwart.json"
 
 func main() {
-	step := flag.String("step", "", "setup or account")
+	step := flag.String("step", "", "setup, account, or env")
 	base := flag.String("url", "", "base URL of the Stalwart instance")
 	flag.Parse()
 
@@ -53,6 +57,12 @@ func main() {
 }
 
 func run(step, base string) error {
+	// The env step describes the account this program creates, so it
+	// needs no instance to talk to.
+	if step == "env" {
+		fmt.Printf("POPLAR_JMAP_USER=%s POPLAR_JMAP_PASSWORD=%s\n", accountEmail, accountPass)
+		return nil
+	}
 	if base == "" {
 		return errors.New("no -url")
 	}
@@ -62,7 +72,7 @@ func run(step, base string) error {
 	case "account":
 		return account(base)
 	}
-	return fmt.Errorf("unknown -step %q, want setup or account", step)
+	return fmt.Errorf("unknown -step %q, want setup, account, or env", step)
 }
 
 // setup hands Stalwart its configuration. The server answers with the
@@ -215,14 +225,16 @@ func jmapCall(base, method string, args map[string]any) (json.RawMessage, error)
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, base+"/jmap/", bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/jmap/", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.SetBasicAuth(adminUser, adminSecret)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -262,25 +274,45 @@ func jmapCall(base, method string, args map[string]any) (json.RawMessage, error)
 // takes to open its listener. The ceiling is generous because a first
 // boot after configuration pulls the spam rules and the geo data
 // before it starts serving.
+//
+// The last attempt's outcome travels into the timeout message. A
+// server that answered 401 every time for three minutes and one whose
+// port never opened are different faults with different fixes, and
+// with the attempts discarded they read identically.
 func waitFor(url string) error {
-	client := &http.Client{Timeout: 5 * time.Second}
 	deadline := time.Now().Add(3 * time.Minute)
+	var last string
 	for {
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			return err
-		}
-		req.SetBasicAuth(adminUser, adminSecret)
-		resp, err := client.Do(req)
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
+		last = attempt(url)
+		if last == "" {
+			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("%s did not answer within three minutes", url)
+			return fmt.Errorf("%s did not answer within three minutes; the last attempt %s", url, last)
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+// attempt makes one request and describes what happened, or returns
+// the empty string for the answer waitFor is waiting on.
+func attempt(url string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err.Error()
+	}
+	req.SetBasicAuth(adminUser, adminSecret)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err.Error()
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		return ""
+	}
+	return "answered " + resp.Status
 }

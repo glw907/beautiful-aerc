@@ -19,8 +19,13 @@ type EmailSubmission struct {
 	// from the message's header fields.
 	Envelope *Envelope `json:"envelope,omitempty"`
 
-	// SendAt holds the message until this instant. A server accepts a
-	// delay only up to [Submission].MaxDelayedSend.
+	// SendAt is when the server released the message, or will release
+	// it. RFC 8621 section 7 marks it server-set, which RFC 8620
+	// section 1.6 defines as a property the client MUST NOT send on a
+	// create, so this reports a send rather than scheduling one.
+	// Delaying a send is the FUTURERELEASE extension (RFC 4865),
+	// asked for through Envelope.MailFrom's parameters and bounded by
+	// [Submission].MaxDelayedSend.
 	SendAt *Date `json:"sendAt,omitempty"`
 
 	// UndoStatus is "pending", "final", or "canceled". Only a pending

@@ -104,12 +104,22 @@ leaf, never its parent.**
 - Source: RFC 8620 §5.3. A PatchObject MUST NOT contain an array index in a
   pointer, and MUST NOT contain two pointers where one is a prefix of the
   other. Servers reject both with `invalidPatch`.
-- Assert: building `{"mailboxIds/0": ...}` fails at the library boundary.
-  Building `{"keywords": {...}, "keywords/$seen": null}` in one patch fails at
-  the library boundary. Neither reaches the wire.
+- Assert: building `{"keywords": {...}, "keywords/$seen": null}` in one patch
+  fails at the library boundary and does not reach the wire.
 - Protects against: a round trip that appears to succeed locally and then
   either fails opaquely at the server or, worse, is applied by a lenient server
   in an order poplar did not intend.
+- **Corrected 2026-07-29 (task 5, fix round 1).** This row first asked that
+  `{"mailboxIds/0": ...}` fail at the library boundary as well. It must not.
+  RFC 6901 §4 makes a reference token an array index only where the value it
+  applies to is an array, and a member name everywhere else; `mailboxIds` is
+  `Id[Boolean]`, an object (RFC 8621 §4.1), so `mailboxIds/0` names the
+  mailbox whose id is `0`. RFC 8620 §1.2 only recommends that servers avoid
+  ids made only of digits, and Stalwart allocates them, so refusing the shape
+  means no message can be moved into such a mailbox. The pointer that really
+  does reach into an array is the server's to refuse, which §5.3 has it do
+  with `invalidPatch`. The positive assertion belongs here instead: a
+  digit-only key reaches the wire and the server applies it to the map.
 
 ---
 

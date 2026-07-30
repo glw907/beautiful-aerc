@@ -111,7 +111,11 @@ type EmailQueryChanges struct {
 
 func (*EmailQueryChanges) Name() string { return "Email/queryChanges" }
 
-func (*EmailQueryChanges) Requires() []URI { return []URI{MailURI} }
+// Requires names the S/MIME capability alongside the mail one when
+// the filter constrains on a condition that comes from it, for the
+// reason [EmailQuery.Requires] does: this call repeats that query's
+// filter, so it depends on the same extension.
+func (m *EmailQueryChanges) Requires() []URI { return withSMIME(smimeFilter(m.Filter)) }
 
 // MarshalJSON implements json.Marshaler. It drops a Filter holding a
 // typed nil rather than sending "filter": null, and carries the filter

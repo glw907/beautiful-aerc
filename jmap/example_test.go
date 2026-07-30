@@ -57,10 +57,13 @@ func ExamplePointer() {
 // A pointer into an array never reaches the wire. RFC 8620 section
 // 5.3 requires the whole property to be replaced instead.
 func ExamplePatch_MarshalJSON_illegalPointer() {
-	_, err := json.Marshal(jmap.Patch{"mailboxIds/0": true})
+	_, err := json.Marshal(jmap.Patch{
+		"keywords":                        map[string]bool{"$flagged": true},
+		jmap.Pointer("keywords", "$seen"): nil,
+	})
 	fmt.Println(err)
 	// Output:
-	// json: error calling MarshalJSON for type jmap.Patch: patch pointer "mailboxIds/0" addresses an array element; replace the whole property instead
+	// json: error calling MarshalJSON for type jmap.Patch: patch pointers "keywords" and "keywords/$seen" overlap; one is a prefix of the other
 }
 
 // A /set answers per record. One create landed and one was refused,

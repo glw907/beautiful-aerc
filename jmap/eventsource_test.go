@@ -402,37 +402,86 @@ func TestListenAdaptsToTheServersPingInterval(t *testing.T) {
 }
 
 // TestPingCadence is JT-26's other end: what the ping payload has to
-// say before the stall detector will believe it. The overflow row is
-// the one with teeth. A figure that wraps a Duration lands as a
-// negative timeout, which fires at once, so a stream would drop and
-// reconnect on every ping it received.
+// say before the stall detector will believe it, and what the detector
+// computes from it. Every row asserts the stall window as well as the
+// cadence, because the window is what the timer is set from and a
+// cadence certified on its own is how a plausible number turns into an
+// absurd timeout.
+//
+// The overflow row is the one with teeth. A figure that wraps a
+// Duration lands as a negative timeout, which fires at once, so a
+// stream would drop and reconnect on every ping it received.
+//
+// The Stalwart row is the divergence this clamps for: it reports 30000
+// while pinging every 30 seconds, and believing that number as seconds
+// leaves a dead connection unnoticed for 16h40m.
 func TestPingCadence(t *testing.T) {
 	cases := []struct {
-		name     string
-		interval int64
-		want     time.Duration
-		wantOK   bool
+		name       string
+		requested  time.Duration
+		interval   int64
+		want       time.Duration
+		wantWindow time.Duration
+		wantOK     bool
 	}{
-		{name: "the interval the server chose", interval: 42, want: 42 * time.Second, wantOK: true},
-		{name: "no interval at all", interval: 0},
-		{name: "a negative interval", interval: -1},
-		{name: "an interval no Duration can hold", interval: math.MaxInt64},
 		{
-			name:     "the largest interval a Duration can hold, whose doubling is stallWindow's to bound",
-			interval: math.MaxInt64 / int64(time.Second),
-			want:     time.Duration(math.MaxInt64/int64(time.Second)) * time.Second,
-			wantOK:   true,
+			name:       "the interval the server chose",
+			requested:  300 * time.Second,
+			interval:   42,
+			want:       42 * time.Second,
+			wantWindow: 84 * time.Second,
+			wantOK:     true,
+		},
+		{
+			name:       "an interval the server raised to its own minimum",
+			requested:  5 * time.Second,
+			interval:   30,
+			want:       30 * time.Second,
+			wantWindow: time.Minute,
+			wantOK:     true,
+		},
+		{name: "no interval at all", requested: 300 * time.Second, interval: 0},
+		{name: "a negative interval", requested: 300 * time.Second, interval: -1},
+		{name: "an interval no Duration can hold", requested: 300 * time.Second, interval: math.MaxInt64},
+		{
+			name:       "Stalwart's milliseconds, read as the seconds the RFC defines",
+			requested:  30 * time.Second,
+			interval:   30000,
+			want:       30 * time.Second,
+			wantWindow: time.Minute,
+			wantOK:     true,
+		},
+		{
+			name:       "an interval above what the client asked for",
+			requested:  120 * time.Second,
+			interval:   3600,
+			want:       120 * time.Second,
+			wantWindow: 240 * time.Second,
+			wantOK:     true,
+		},
+		{
+			// RFC 8620 section 7.3 caps a server's minimum at 30
+			// seconds, so a client asking for less than that can still
+			// be given 30 and nothing longer.
+			name:       "an absurd interval against a client that asked for none",
+			interval:   math.MaxInt64 / int64(time.Second),
+			want:       30 * time.Second,
+			wantWindow: time.Minute,
+			wantOK:     true,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := ping{Interval: c.interval}.cadence()
+			got, ok := ping{Interval: c.interval}.cadence(c.requested)
 			if ok != c.wantOK {
 				t.Fatalf("cadence usable = %v, want %v", ok, c.wantOK)
 			}
 			if got != c.want {
 				t.Errorf("cadence = %v, want %v", got, c.want)
+			}
+			if window := stallWindow(got); window != c.wantWindow {
+				t.Errorf("the stall window this cadence sets is %v, want %v", window, c.wantWindow)
 			}
 		})
 	}
@@ -471,10 +520,11 @@ func TestStallWindow(t *testing.T) {
 }
 
 // TestListenSurvivesAnAbsurdPingInterval is the end of the same
-// thread. The largest interval a ping can advertise and still name a
-// cadence a Duration holds is 9223372036 seconds, and doubling it
-// wraps. The server here never goes silent, so the stream must stay up
-// on one connection.
+// thread, on a live stream rather than on the arithmetic. The interval
+// advertised here is the largest one a Duration can hold as seconds,
+// and the clamp brings it back to the 300 the caller asked for. The
+// server never goes silent, so the stream must stay up on one
+// connection: a clamp that overshot the other way would abort it.
 func TestListenSurvivesAnAbsurdPingInterval(t *testing.T) {
 	client, requests := startEventFake(t, func(_ int, w *eventWriter) {
 		w.send("event: ping\ndata: {\"interval\":9223372036}\n\n")

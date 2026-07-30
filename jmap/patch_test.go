@@ -92,29 +92,14 @@ func TestPatchWholePropertyIsSeparate(t *testing.T) {
 
 // TestPatchRefusesIllegalPointer covers JT-03. Neither form reaches
 // the wire: marshaling fails, so a caller cannot send a patch a
-// server would answer invalidPatch to, or that a lenient server would
-// apply in an order the caller did not intend.
+// lenient server would apply in an order the caller did not intend,
+// or one that addresses no property of any record.
 func TestPatchRefusesIllegalPointer(t *testing.T) {
 	cases := []struct {
 		name  string
 		patch Patch
 		want  string
 	}{
-		{
-			name:  "array index",
-			patch: Patch{"mailboxIds/0": true},
-			want:  "array element",
-		},
-		{
-			name:  "array append token",
-			patch: Patch{"attachments/-": true},
-			want:  "array element",
-		},
-		{
-			name:  "nested array index",
-			patch: Patch{"bodyStructure/subParts/1/name": "a.txt"},
-			want:  "array element",
-		},
 		{
 			name: "property and its own leaf",
 			patch: Patch{
@@ -168,12 +153,62 @@ func TestPatchRefusalReachesTheRequest(t *testing.T) {
 	req.Invoke(&EmailSet{
 		Account: "A13824",
 		Update: map[ID]Patch{
-			"M1": {"mailboxIds/0": true},
+			"M1": {
+				"keywords":                   map[string]bool{"$flagged": true},
+				Pointer("keywords", "$seen"): nil,
+			},
 		},
 	})
 
 	if data, err := json.Marshal(req); err == nil {
 		t.Fatalf("Marshal returned %s, want an error", data)
+	}
+}
+
+// TestPatchCarriesAnIDMadeOfDigits is the other half of JT-03: what
+// the refusal must not swallow. RFC 6901 section 4 makes a segment an
+// array index only where the value under it is an array, and
+// mailboxIds is an Id[Boolean] object (RFC 8621 section 4.1), so
+// "mailboxIds/7" names the mailbox whose id is "7". RFC 8620 section
+// 1.2 only recommends that servers avoid those ids, and Stalwart
+// allocates them, so a client that refused this pointer could not
+// move a message into such a mailbox at all.
+func TestPatchCarriesAnIDMadeOfDigits(t *testing.T) {
+	cases := []struct {
+		name  string
+		patch Patch
+		want  string
+	}{
+		{
+			name: "a move into a mailbox whose id is all digits",
+			patch: Patch{
+				Pointer("mailboxIds", "MA"): nil,
+				Pointer("mailboxIds", "7"):  true,
+			},
+			want: `{"mailboxIds/7":true,"mailboxIds/MA":null}`,
+		},
+		{
+			name:  "an id that is one digit",
+			patch: Patch{Pointer("mailboxIds", "0"): true},
+			want:  `{"mailboxIds/0":true}`,
+		},
+		{
+			name:  "an id that is a single hyphen",
+			patch: Patch{Pointer("mailboxIds", "-"): true},
+			want:  `{"mailboxIds/-":true}`,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data, err := json.Marshal(c.patch)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			if string(data) != c.want {
+				t.Errorf("Marshal = %s, want %s", data, c.want)
+			}
+		})
 	}
 }
 

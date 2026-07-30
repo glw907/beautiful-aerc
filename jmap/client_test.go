@@ -197,7 +197,10 @@ func TestDoRefusesAnUnmarshalableRequest(t *testing.T) {
 
 	req := &Request{}
 	req.Invoke(&EmailSet{Account: "A1", Update: map[ID]Patch{
-		"M1": {Pointer("mailboxIds", "0"): nil},
+		"M1": {
+			"keywords":                   map[string]bool{"$flagged": true},
+			Pointer("keywords", "$seen"): nil,
+		},
 	}})
 
 	resp, err := client.Do(t.Context(), req)

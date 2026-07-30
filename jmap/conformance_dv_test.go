@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -195,13 +196,45 @@ func TestDV04MissingNotFound(t *testing.T) {
 	// decode differently, so the distinction survives.
 	if resp.NotFound == nil {
 		t.Logf("DIVERGENCE: %s omitted notFound, which RFC 8620 section 5.1 makes mandatory", tg.profile.name)
-		return
+	} else {
+		if !slices.Contains(resp.NotFound, ghost) {
+			t.Errorf("notFound = %v, want it to name %s", resp.NotFound, ghost)
+		}
+		if slices.Contains(resp.NotFound, real) {
+			t.Errorf("notFound named %s, which the server also returned", real)
+		}
 	}
-	if !slices.Contains(resp.NotFound, ghost) {
-		t.Errorf("notFound = %v, want it to name %s", resp.NotFound, ghost)
+
+	// The other end of the same distinction, and the one that pins it:
+	// a get whose ids all exist. An empty notFound is the server saying
+	// nothing was missing, an absent one is the server saying nothing
+	// at all, and the two must not arrive as the same Go value. They do
+	// the moment anything reads the decoded response instead of the
+	// bytes: every property here carries omitempty, so an empty array
+	// re-marshals to nothing.
+	req := &jmap.Request{}
+	callID := req.Invoke(&jmap.EmailGet{
+		Account:    tg.account,
+		IDs:        []jmap.ID{real},
+		Properties: []string{"id"},
+	})
+	answer := only(t, tg.do(t, req), callID)
+
+	var properties map[string]json.RawMessage
+	if err := json.Unmarshal(answer.Raw, &properties); err != nil {
+		t.Fatalf("decode the response arguments the server sent: %v", err)
 	}
-	if slices.Contains(resp.NotFound, real) {
-		t.Errorf("notFound named %s, which the server also returned", real)
+	sent, onTheWire := properties["notFound"]
+
+	present := &jmap.EmailGetResponse{}
+	assign(t, answer, present)
+	switch {
+	case onTheWire && present.NotFound == nil:
+		t.Errorf("%s sent notFound as %s and it decoded as absent", tg.profile.name, sent)
+	case !onTheWire && present.NotFound != nil:
+		t.Errorf("%s sent no notFound and it decoded as %v", tg.profile.name, present.NotFound)
+	case onTheWire && len(present.NotFound) != 0:
+		t.Errorf("%s named %v as missing from a get whose every id exists", tg.profile.name, present.NotFound)
 	}
 }
 
@@ -264,9 +297,9 @@ func TestDV06ErrorTypeSubstitution(t *testing.T) {
 			callID := req.Invoke(row.method)
 			answer := only(t, tg.do(t, req), callID)
 
-			failed, ok := answer.(*jmap.MethodError)
+			failed, ok := answer.Args.(*jmap.MethodError)
 			if !ok {
-				t.Fatalf("%s answered %T, which a caller would read as success", row.method.Name(), answer)
+				t.Fatalf("%s answered %T, which a caller would read as success", row.method.Name(), answer.Args)
 			}
 			if failed.Type == "" {
 				t.Errorf("the error carries no type: %s", failed.Raw)
@@ -276,25 +309,34 @@ func TestDV06ErrorTypeSubstitution(t *testing.T) {
 			}
 
 			// RFC 8620 section 3.6.2: a type the client does not
-			// understand is treated as serverFail. That is what keeps a
-			// substituted type from reaching a caller as something it
-			// cannot classify at all.
-			if !named(failed.Type) && !errors.Is(failed, jmap.ErrServerFail) {
-				t.Errorf("%q is a type this package does not name and did not fold into serverFail", failed.Type)
+			// understand is treated as serverFail. What that buys is
+			// the property asserted here, that whatever type a server
+			// substitutes, a caller can still classify it: it matches
+			// the sentinel for its own type, or it folds into
+			// serverFail, and every error does one or the other.
+			//
+			// The question goes to the package rather than to a list of
+			// sentinels copied into this file. A copy is what goes
+			// stale, and a stale one weakens this assertion silently
+			// instead of breaking it.
+			itself := &jmap.MethodError{Type: failed.Type}
+			folds := errors.Is(failed, jmap.ErrServerFail)
+			if !errors.Is(failed, itself) {
+				t.Errorf("%q does not match its own type, so no caller can act on it", failed.Type)
+			}
+			if folds && failed.Type != jmap.ErrServerFail.Type {
+				t.Logf("%s answers %q, which this package does not name and reads as serverFail",
+					tg.profile.name, failed.Type)
+			}
+			// The fold reaches serverFail and stops there. poplar
+			// branches on exactly one method error, and an unrelated
+			// error that also matched it would force a full resync of
+			// the mailbox every time the server substituted a type.
+			if errors.Is(failed, jmap.ErrCannotCalculateChanges) && failed.Type != jmap.ErrCannotCalculateChanges.Type {
+				t.Errorf("%q matches the resync sentinel", failed.Type)
 			}
 		})
 	}
-}
-
-// named reports whether the package carries a sentinel for a method
-// error type, which is the set section 3.6.2's rule turns on.
-func named(errorType string) bool {
-	return slices.ContainsFunc([]*jmap.MethodError{
-		jmap.ErrServerUnavailable, jmap.ErrServerFail, jmap.ErrServerPartialFail,
-		jmap.ErrUnknownMethod, jmap.ErrInvalidArguments, jmap.ErrInvalidResultReference,
-		jmap.ErrForbidden, jmap.ErrAccountNotFound, jmap.ErrAccountNotSupportedByMethod,
-		jmap.ErrAccountReadOnly, jmap.ErrCannotCalculateChanges, jmap.ErrAnchorNotFound,
-	}, func(sentinel *jmap.MethodError) bool { return sentinel.Type == errorType })
 }
 
 // TestDV07QueryArgumentsAreNotCompensated covers DV-07. A live report
@@ -666,11 +708,11 @@ func TestDV12EventSourceDeliversStateChanges(t *testing.T) {
 	// names is the one a /get on that type reports now.
 	types, ok := change.Changed[tg.account]
 	if !ok {
-		t.Fatalf("the change names accounts %v, not %s", slices.Collect(mapKeys(change.Changed)), tg.account)
+		t.Fatalf("the change names accounts %v, not %s", slices.Collect(maps.Keys(change.Changed)), tg.account)
 	}
 	pushed, ok := types["Email"]
 	if !ok {
-		t.Fatalf("the change names types %v, not Email", slices.Collect(mapKeys(types)))
+		t.Fatalf("the change names types %v, not Email", slices.Collect(maps.Keys(types)))
 	}
 	if current := tg.emailState(t); current != pushed {
 		t.Errorf("the push named Email state %q while Email/get reports %q", pushed, current)

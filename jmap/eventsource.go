@@ -33,6 +33,10 @@ type EventSource struct {
 	// past twice the cadence in force counts as a dropped connection.
 	// Zero asks for no ping and leaves the stream with no liveness
 	// check at all.
+	//
+	// This is also the ceiling on the cadence a reported interval can
+	// establish, or 30 seconds when it is shorter than that, since a
+	// server has no room under the RFC to return anything longer.
 	Ping time.Duration
 
 	// CloseAfterState ends the stream after one state event, RFC 8620
@@ -64,16 +68,33 @@ type ping struct {
 	Interval int64 `json:"interval"`
 }
 
-// cadence returns the interval the ping reported and whether it is
-// usable. A ping carries whatever the server put in it, and neither a
-// figure at or below zero nor one too large for a Duration to hold
-// says anything about how often to expect the next one, so both leave
-// the cadence already in force alone.
-func (p ping) cadence() (time.Duration, bool) {
+// pingMinimumCeiling is the highest minimum RFC 8620 section 7.3 lets
+// a server impose on a requested ping interval, and so the highest
+// cadence a client that asked for less can be given.
+const pingMinimumCeiling = 30 * time.Second
+
+// cadence returns the interval to expect the next event within, given
+// the interval the client requested, and whether it is usable. A ping
+// carries whatever the server put in it, and neither a figure at or
+// below zero nor one too large for a Duration to hold says anything
+// about how often to expect the next one, so both leave the cadence
+// already in force alone.
+//
+// A figure above what the RFC allows is clamped rather than believed.
+// Section 7.3 lets a server hold a requested interval to its own
+// minimum and maximum and forbids a minimum above 30 seconds, so a
+// conformant server never reports more than the client asked for, or
+// 30 seconds when the client asked for less. Believing a larger one
+// costs the liveness check outright: the stall window is twice the
+// cadence, and Stalwart reports 30000 while pinging every 30 seconds,
+// which taken as seconds is a window of 16h40m. ADR-0005 puts push
+// recovery at 30 seconds p95, and a dropped connection nobody notices
+// has no recovery time at all.
+func (p ping) cadence(requested time.Duration) (time.Duration, bool) {
 	if p.Interval <= 0 || p.Interval > int64(math.MaxInt64/time.Second) {
 		return 0, false
 	}
-	return time.Duration(p.Interval) * time.Second, true
+	return min(time.Duration(p.Interval)*time.Second, max(requested, pingMinimumCeiling)), true
 }
 
 // stallWindow returns how long a stream may say nothing before it
@@ -252,7 +273,7 @@ func (l *listener) consume(abort context.CancelFunc, body io.Reader) (bool, erro
 			if err := json.Unmarshal([]byte(ev.data), &p); err != nil {
 				return true, fmt.Errorf("decode ping event: %v", err)
 			}
-			if cadence, ok := p.cadence(); ok {
+			if cadence, ok := p.cadence(l.source.Ping); ok {
 				window = stallWindow(cadence)
 			}
 		}

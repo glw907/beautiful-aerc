@@ -9,7 +9,7 @@ GOLANGCI := tools/bin/golangci-lint
 POPLARCHECK := tools/bin/poplarcheck
 
 .PHONY: all build test install fmt check conformance \
-	tidy-check check-build fmt-check lint analyzers jmap-boundary vale-comments skipcheck hookcheck perf \
+	tidy-check check-build fmt-check lint analyzers jmap-boundary tagged-vet vale-comments skipcheck hookcheck perf \
 	build-golangci-lint build-poplarcheck
 
 # The conformance suite's server. Podman leads because this is the
@@ -38,7 +38,7 @@ install: build
 fmt: build-golangci-lint
 	./$(GOLANGCI) fmt --config .golangci.yml ./...
 
-check: tidy-check check-build fmt-check lint analyzers jmap-boundary vale-comments skipcheck hookcheck test perf
+check: tidy-check check-build fmt-check lint analyzers jmap-boundary tagged-vet vale-comments skipcheck hookcheck test perf
 
 tidy-check:
 	go mod tidy
@@ -78,15 +78,31 @@ analyzers: build-poplarcheck
 # helper reaching into poplar travels with the package, and over
 # ./jmap/... rather than ./jmap so a package added beside it is
 # covered on the day it appears.
+#
+# Once per tag set, because go list reports the imports of the files
+# the tags select and nothing else. The two server suites are the
+# files most likely to reach for a poplar helper, since they are the
+# ones with a whole application's worth of context around them.
+JMAP_TAGS := "" conformance live
+
 jmap-boundary:
-	@bad=$$( { go list -deps ./jmap/...; \
-	          go list -f '{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' ./jmap/...; } \
+	@bad=$$( for tags in $(JMAP_TAGS); do \
+	          go list -tags "$$tags" -deps ./jmap/...; \
+	          go list -tags "$$tags" -f '{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' ./jmap/...; \
+	        done \
 	        | grep '^github.com/glw907/poplar' \
 	        | grep -Ev '^github.com/glw907/poplar/jmap(/|$$)' | sort -u ); \
 	if [ -n "$$bad" ]; then \
 	  echo "jmap must import no poplar package, found:" >&2; \
 	  echo "$$bad" >&2; exit 1; \
 	fi
+
+# The build-tagged suites compile under no other gate: lint, the
+# analyzers and go test all read the default tags, so a conformance
+# file that stopped compiling would be found by whoever next ran the
+# container, which is by hand. Vet type-checks them here instead.
+tagged-vet:
+	go vet -tags "conformance live" ./jmap/...
 
 # The second-server validation, run by hand and never by check: check
 # must pass on a machine with no container runtime at all. Stalwart
@@ -95,6 +111,12 @@ jmap-boundary:
 # steps is the server leaving that mode. Teardown takes the anonymous
 # volumes with it, so a rerun starts from an empty account, and it runs
 # on the way out of a failed run too.
+#
+# The account credentials come out of the provisioner that created the
+# account, rather than being written here as well. POPLAR_JMAP_REQUIRED
+# is what turns the suite's missing-server skip into a failure: without
+# it, a renamed variable leaves this target starting a container,
+# provisioning it, skipping every test and reporting ok.
 conformance:
 	@test -n "$(CONTAINER)" || { echo "conformance needs podman or docker on PATH; found neither" >&2; exit 1; }
 	@set -e; \
@@ -108,11 +130,11 @@ conformance:
 	go run ./scripts/conformance -step setup -url $(CONFORMANCE_URL); \
 	$(CONTAINER) restart $(CONFORMANCE_NAME) >/dev/null; \
 	go run ./scripts/conformance -step account -url $(CONFORMANCE_URL); \
-	POPLAR_JMAP_SESSION_URL=$(CONFORMANCE_URL)/.well-known/jmap \
-	POPLAR_JMAP_USER=user1@conformance.test \
-	POPLAR_JMAP_PASSWORD=poplar-conformance-9f2c \
-	POPLAR_JMAP_SERVER=stalwart \
-	go test -tags conformance -count=1 ./jmap/...
+	env $$(go run ./scripts/conformance -step env) \
+		POPLAR_JMAP_SESSION_URL=$(CONFORMANCE_URL)/.well-known/jmap \
+		POPLAR_JMAP_SERVER=stalwart \
+		POPLAR_JMAP_REQUIRED=1 \
+		go test -tags conformance -count=1 ./jmap/...
 
 vale-comments:
 	./scripts/vale-comments.sh

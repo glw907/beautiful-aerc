@@ -17,15 +17,14 @@
 package jmap_test
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"iter"
 	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -55,8 +54,10 @@ type target struct {
 }
 
 // A profile is what one server is known to do where the RFC leaves a
-// choice open. A server with no profile of its own gets the zero
-// value, which asserts only what the RFC requires.
+// choice open, and what it is known to get wrong. Both directions are
+// asserted rather than logged: a divergence that is only printed is
+// invisible on a green run, so nothing notices the day the server
+// fixes it and the profile row goes stale.
 type profile struct {
 	name string
 
@@ -65,12 +66,17 @@ type profile struct {
 	// nothing about the status, so servers disagree (DV-01). Zero
 	// accepts any 2xx.
 	uploadStatus int
+
+	// pingIntervalIsMilliseconds records a server whose ping payload
+	// reports the interval in milliseconds where RFC 8620 section 7.3
+	// defines seconds. It is the divergence poplar clamps for, and the
+	// clamp is dead weight the day the last server sending it stops.
+	pingIntervalIsMilliseconds bool
 }
 
 var profiles = map[string]profile{
-	"stalwart": {name: "stalwart", uploadStatus: http.StatusOK},
+	"stalwart": {name: "stalwart", uploadStatus: http.StatusOK, pingIntervalIsMilliseconds: true},
 	"fastmail": {name: "fastmail", uploadStatus: http.StatusOK},
-	"cyrus":    {name: "cyrus", uploadStatus: http.StatusCreated},
 }
 
 // basicAuth adds the credentials to every request a Client makes,
@@ -90,11 +96,19 @@ func (a basicAuth) RoundTrip(req *http.Request) (*http.Response, error) {
 // names none. The skip is the same idiom the live suite uses for a
 // missing token: a checkout with no server running still runs `go
 // test` clean.
+//
+// POPLAR_JMAP_REQUIRED turns that skip into a failure, and `make
+// conformance` sets it. Without it the target starts a container,
+// provisions it, skips every test and reports ok, so a variable
+// renamed on one side leaves a green gate that proved nothing.
 func dial(t *testing.T) *target {
 	t.Helper()
 
 	sessionURL := os.Getenv("POPLAR_JMAP_SESSION_URL")
 	if sessionURL == "" {
+		if os.Getenv("POPLAR_JMAP_REQUIRED") != "" {
+			t.Fatal("POPLAR_JMAP_REQUIRED is set and POPLAR_JMAP_SESSION_URL is not; this run reached no server")
+		}
 		t.Skip("POPLAR_JMAP_SESSION_URL is unset; run make conformance")
 	}
 
@@ -121,11 +135,21 @@ func dial(t *testing.T) *target {
 		t.Fatalf("session names no primary mail account; accounts are %v", session.PrimaryAccounts)
 	}
 
+	// A name the map does not hold ends the run rather than falling
+	// back to the zero profile, which would quietly drop every
+	// assertion a profile carries.
+	named := os.Getenv("POPLAR_JMAP_SERVER")
+	known, ok := profiles[named]
+	if named != "" && !ok {
+		t.Fatalf("POPLAR_JMAP_SERVER is %q, which has no profile; the ones this suite knows are %v",
+			named, slices.Sorted(maps.Keys(profiles)))
+	}
+
 	return &target{
 		client:     client,
 		session:    session,
 		account:    account,
-		profile:    profiles[os.Getenv("POPLAR_JMAP_SERVER")],
+		profile:    known,
 		httpClient: httpClient,
 	}
 }
@@ -153,37 +177,39 @@ func (tg *target) call(t *testing.T, method jmap.Method, want any) {
 	req := &jmap.Request{}
 	callID := req.Invoke(method)
 	answer := only(t, tg.do(t, req), callID)
-	if failed, ok := answer.(*jmap.MethodError); ok {
+	if failed, ok := answer.Args.(*jmap.MethodError); ok {
 		t.Fatalf("%s: %v", method.Name(), failed)
 	}
 	assign(t, answer, want)
 }
 
-// only returns the arguments of the single response under callID. Two
-// responses under one id is legal (RFC 8620 section 3.4.1) and none is
-// a failure, so both end the test rather than silently picking one.
-func only(t *testing.T, resp *jmap.Response, callID string) any {
+// only returns the single response under callID. Two responses under
+// one id is legal (RFC 8620 section 3.4.1) and none is a failure, so
+// both end the test rather than silently picking one.
+func only(t *testing.T, resp *jmap.Response, callID string) *jmap.Invocation {
 	t.Helper()
 
 	found := resp.Invocations(callID)
 	if len(found) != 1 {
 		t.Fatalf("call %s answered %d times, want once", callID, len(found))
 	}
-	return found[0].Args
+	return found[0]
 }
 
-// assign copies one decoded response into the caller's own variable.
-// The registry hands back an any holding a pointer to the response
-// type, and every caller wants it typed.
-func assign(t *testing.T, from, to any) {
+// assign decodes one response into the caller's own variable, out of
+// the bytes the server sent rather than out of the decoded value
+// beside them. Every response property in this package carries
+// omitempty, so re-marshalling the decoded value turns an empty array
+// the server sent into an absent one, and DV-04's whole subject is the
+// difference between those two.
+func assign(t *testing.T, from *jmap.Invocation, to any) {
 	t.Helper()
 
-	data, err := json.Marshal(from)
-	if err != nil {
-		t.Fatalf("re-marshal %T: %v", from, err)
+	if len(from.Raw) == 0 {
+		t.Fatalf("the %s response carries no raw arguments", from.Name)
 	}
-	if err := json.Unmarshal(data, to); err != nil {
-		t.Fatalf("decode %T into %T: %v", from, to, err)
+	if err := json.Unmarshal(from.Raw, to); err != nil {
+		t.Fatalf("decode %s into %T: %v", from.Name, to, err)
 	}
 }
 
@@ -263,47 +289,25 @@ func scratch(prefix string) string {
 }
 
 // newMailbox creates one mailbox and destroys it when the test ends,
-// taking any message still in it along.
-//
-// A mailbox whose id is all digits is thrown back and another asked
-// for. Such an id cannot be spelled in a patch pointer: RFC 8620
-// section 5.3 forbids an array index there, and [jmap.Pointer] can
-// only see the token's shape. RFC 8620 section 1.2 recommends servers
-// avoid allocating those ids and calls the recommendation optional,
-// and Stalwart's alphabet runs into the digits after 26 records, so
-// the case is reachable rather than theoretical. Working around it
-// here keeps the suite deterministic; the divergence itself is pinned
-// by TestConformanceDigitOnlyIDsCannotBePatched.
+// taking any message still in it along. Whatever id the server
+// allocates is the id the test uses: an id made only of digits is one
+// a patch pointer addresses like any other (RFC 6901 section 4), so
+// there is nothing here to work around.
 func (tg *target) newMailbox(t *testing.T, name string) jmap.ID {
 	t.Helper()
 
-	// Twelve attempts, because Stalwart's alphabet runs the ten digits
-	// consecutively and a run of them all lands in the unusable shape.
-	for attempt := range 12 {
-		// A retry needs its own name: the first mailbox is still there
-		// until the test ends, and a server that forbids duplicates
-		// would refuse the second.
-		attempted := fmt.Sprintf("%s-%d", name, attempt)
-		resp := &jmap.MailboxSetResponse{}
-		tg.call(t, &jmap.MailboxSet{
-			Account: tg.account,
-			Create:  map[jmap.ID]*jmap.Mailbox{"m": {Name: attempted}},
-		}, resp)
+	resp := &jmap.MailboxSetResponse{}
+	tg.call(t, &jmap.MailboxSet{
+		Account: tg.account,
+		Create:  map[jmap.ID]*jmap.Mailbox{"m": {Name: name}},
+	}, resp)
 
-		created := resp.Created["m"]
-		if created == nil {
-			t.Fatalf("create mailbox %q: %v", attempted, resp.NotCreated["m"])
-		}
-		t.Cleanup(func() { tg.destroyMailbox(created.ID) })
-
-		if !digitsOnly(string(created.ID)) {
-			return created.ID
-		}
-		t.Logf("%s allocated mailbox id %q, which no patch pointer can address; asking for another (attempt %d)",
-			tg.profile.name, created.ID, attempt+1)
+	created := resp.Created["m"]
+	if created == nil {
+		t.Fatalf("create mailbox %q: %v", name, resp.NotCreated["m"])
 	}
-	t.Fatalf("%s allocated twelve digit-only mailbox ids in a row", tg.profile.name)
-	return ""
+	t.Cleanup(func() { tg.destroyMailbox(created.ID) })
+	return created.ID
 }
 
 func digitsOnly(s string) bool {
@@ -458,6 +462,30 @@ func (tg *target) inbox(t *testing.T) jmap.ID {
 	return resp.IDs[0]
 }
 
+// identity returns an address the account may send from. Every
+// account the suite runs as has one, because a server that
+// provisioned no identity could not accept a submission at all.
+func (tg *target) identity(t *testing.T) jmap.ID {
+	t.Helper()
+
+	resp := &jmap.IdentityGetResponse{}
+	tg.call(t, &jmap.IdentityGet{Account: tg.account}, resp)
+	if len(resp.List) == 0 {
+		t.Fatal("the account holds no identity, so nothing can be submitted from it")
+	}
+	return resp.List[0].ID
+}
+
+// envelope addresses a submission at the account itself, so a send
+// stays inside the instance and needs no route off it.
+func (tg *target) envelope() *jmap.Envelope {
+	address := os.Getenv("POPLAR_JMAP_USER")
+	return &jmap.Envelope{
+		MailFrom: &jmap.EnvelopeAddress{Email: address},
+		RcptTo:   []*jmap.EnvelopeAddress{{Email: address}},
+	}
+}
+
 // upload stores a blob and fails unless the server recorded one.
 func (tg *target) upload(t *testing.T, contentType, payload string) *jmap.UploadResponse {
 	t.Helper()
@@ -517,19 +545,11 @@ func (tg *target) provoke(t *testing.T, mailbox jmap.ID) func() {
 	}
 }
 
-// A serverEvent is one server-sent event read off the wire, before
-// any type in this package sees it.
-type serverEvent struct {
-	name string
-	data string
-	id   string
-}
-
 // readEventStream opens the session's event source with the query
-// string given and returns the first count events, framed by the
-// WHATWG rules rather than by this package's own reader. Reading the
-// bytes directly is what lets a test assert whether a server sends an
-// id field at all, which decides whether Last-Event-ID resumption is
+// string given and returns the first count events, framed off the raw
+// bytes rather than by this package's own reader. Reading them
+// directly is what lets a test assert whether a server sends an id
+// field at all, which decides whether Last-Event-ID resumption is
 // available (DV-09).
 func (tg *target) readEventStream(t *testing.T, query string, count int) []serverEvent {
 	t.Helper()
@@ -555,34 +575,7 @@ func (tg *target) readEventStream(t *testing.T, query string, count int) []serve
 	if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {
 		t.Fatalf("the event source answered content type %q", got)
 	}
-
-	var events []serverEvent
-	var current serverEvent
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := strings.TrimSuffix(scanner.Text(), "\r")
-		if line == "" {
-			if current.data != "" || current.name != "" {
-				events = append(events, current)
-			}
-			current = serverEvent{}
-			if len(events) >= count {
-				return events
-			}
-			continue
-		}
-		field, value, _ := strings.Cut(line, ":")
-		value = strings.TrimPrefix(value, " ")
-		switch field {
-		case "event":
-			current.name = value
-		case "data":
-			current.data += value
-		case "id":
-			current.id = value
-		}
-	}
-	return events
+	return readServerEvents(resp.Body, count)
 }
 
 // argumentsOf pulls the arguments object out of one invocation of a
@@ -605,8 +598,3 @@ func argumentsOf(t *testing.T, body json.RawMessage, index int) json.RawMessage 
 	}
 	return invocation[1]
 }
-
-// mapKeys is the ordering-free view of a JMAP set-valued property,
-// which every one of them is: mailboxIds and keywords are objects
-// mapping an id or a keyword to true.
-func mapKeys[K comparable, V any](m map[K]V) iter.Seq[K] { return maps.Keys(m) }

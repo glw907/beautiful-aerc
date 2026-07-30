@@ -222,14 +222,15 @@ func TestLiveEventSourceResumption(t *testing.T) {
 		t.Fatalf("the event source answered content type %q", got)
 	}
 
-	name, data, id := readOneEvent(t, resp.Body)
-	if name == "" && data == "" {
+	events := readServerEvents(resp.Body, 1)
+	if len(events) == 0 {
 		t.Fatal("the live event source sent nothing within the window")
 	}
-	if id == "" {
-		t.Logf("fastmail sent a %q event with no id field; Last-Event-ID has nothing to resume from", name)
+	first := events[0]
+	if first.id == "" {
+		t.Logf("fastmail sent a %q event with no id field; Last-Event-ID has nothing to resume from", first.name)
 	} else {
-		t.Logf("fastmail sent a %q event carrying id %q, so a reconnect can ask to resume", name, id)
+		t.Logf("fastmail sent a %q event carrying id %q, so a reconnect can ask to resume", first.name, first.id)
 	}
 
 	// Whatever the answer, the contract poplar rests on is that a
@@ -259,44 +260,4 @@ func TestLiveEventSourceResumption(t *testing.T) {
 
 func errorIsContextCancelled(err error) bool {
 	return err != nil && strings.Contains(err.Error(), context.Canceled.Error())
-}
-
-// readOneEvent frames one server-sent event off the raw stream, so the
-// test sees the id field whether or not this package would.
-func readOneEvent(t *testing.T, body io.Reader) (name, data, id string) {
-	t.Helper()
-
-	buf := make([]byte, 1)
-	var line, current strings.Builder
-	for {
-		n, err := body.Read(buf)
-		if n == 0 || err != nil {
-			return name, data, id
-		}
-		if buf[0] != '\n' {
-			if buf[0] != '\r' {
-				line.WriteByte(buf[0])
-			}
-			continue
-		}
-
-		text := line.String()
-		line.Reset()
-		if text == "" {
-			if name != "" || current.Len() > 0 {
-				return name, current.String(), id
-			}
-			continue
-		}
-		field, value, _ := strings.Cut(text, ":")
-		value = strings.TrimPrefix(value, " ")
-		switch field {
-		case "event":
-			name = value
-		case "data":
-			current.WriteString(value)
-		case "id":
-			id = value
-		}
-	}
 }

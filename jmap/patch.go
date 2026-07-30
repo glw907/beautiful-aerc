@@ -21,11 +21,11 @@ import (
 // every mailbox, which hides it.
 type Patch map[string]any
 
-// MarshalJSON implements json.Marshaler. It reports the two RFC 8620
-// section 5.3 pointer restrictions rather than sending a patch that
-// breaks them: a strict server answers invalidPatch, and a lenient
-// one may apply an overlapping pair in an order the caller did not
-// intend.
+// MarshalJSON implements json.Marshaler. It reports the RFC 8620
+// section 5.3 pointer restrictions it can decide from the pointers
+// alone rather than sending a patch that breaks them: a strict server
+// answers invalidPatch, and a lenient one may apply an overlapping
+// pair in an order the caller did not intend.
 func (p Patch) MarshalJSON() ([]byte, error) {
 	if err := p.validate(); err != nil {
 		return nil, err
@@ -33,12 +33,31 @@ func (p Patch) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any(p))
 }
 
+// validate reports the two restrictions the pointers decide on their
+// own: no empty segment, and no pointer that is the prefix of another.
+// Every JMAP property is named and every id is at least one octet (RFC
+// 8620 section 1.2), so an empty segment addresses nothing on any
+// record and is a caller passing a value it never filled in.
+//
+// Section 5.3 also forbids a pointer that reaches into an array, and
+// that one is not decidable here. RFC 6901 section 4 reads a segment
+// as an array index only where the value it is applied to is an array,
+// and as a member name everywhere else; a Patch travels without the
+// record it patches, so the shape of a segment says nothing about
+// which it is. Refusing the shape refuses "mailboxIds/7", which is a
+// message filed into the mailbox whose id is "7" and which a
+// conformant server applies. Section 1.2 recommends servers avoid ids
+// made only of digits and calls the recommendation optional, so those
+// ids are real: Stalwart hands one out after about twenty mailboxes,
+// and a client that refuses them cannot move mail into them at all.
+// The pointer that really does reach into an array is the server's to
+// refuse, which section 5.3 makes it do with invalidPatch.
 func (p Patch) validate() error {
 	pointers := slices.Sorted(maps.Keys(p))
 	for _, pointer := range pointers {
 		for segment := range strings.SplitSeq(pointer, "/") {
-			if err := checkSegment(pointer, segment); err != nil {
-				return err
+			if segment == "" {
+				return fmt.Errorf("patch pointer %q has an empty segment", pointer)
 			}
 		}
 	}
@@ -50,41 +69,6 @@ func (p Patch) validate() error {
 		}
 	}
 	return nil
-}
-
-// checkSegment reports the RFC 8620 section 5.3 pointer restrictions
-// that one segment can break.
-func checkSegment(pointer, segment string) error {
-	if segment == "" {
-		return fmt.Errorf("patch pointer %q has an empty segment", pointer)
-	}
-	if isArrayToken(segment) {
-		return fmt.Errorf("patch pointer %q addresses an array element; replace the whole property instead", pointer)
-	}
-	return nil
-}
-
-// isArrayToken reports whether a non-empty segment is one of RFC
-// 6901's array tokens: a non-negative decimal index, or "-" for the
-// position past the end.
-//
-// RFC 8620 section 5.3 forbids a pointer that reaches into an array,
-// and whether a property holds an array is a fact about the record
-// schema that a patch alone does not carry. Rejecting the token shape
-// over-rejects a map key that looks like an index, which the RFC's own
-// id guidance (section 1.2) tells servers not to allocate. The trade
-// is deliberate: the over-rejection is an error at the boundary, while
-// the alternative is a silently destructive update.
-func isArrayToken(segment string) bool {
-	if segment == "-" {
-		return true
-	}
-	for _, r := range segment {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 // Pointer builds the RFC 6901 pointer that addresses one leaf under a
