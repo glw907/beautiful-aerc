@@ -13,7 +13,7 @@
       "accountId": "u1",
       "state": "2",
       "list": [
-        {"id": "mbx-new", "name": "Projects", "sortOrder": 3, "isSubscribed": true}
+        {"id": "mbx-new", "name": "Projects", "role": "archive", "sortOrder": 3, "totalEmails": 42, "unreadEmails": 5, "isSubscribed": true}
       ],
       "notFound": []
     }, "1"],

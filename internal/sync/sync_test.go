@@ -149,13 +149,15 @@ func mailboxIDsForServerID(t *testing.T, w *store.Writer, accountID int64) []int
 	return ids
 }
 
-// unreadForServerID returns serverID's unread flag within mailboxID.
-func unreadForServerID(t *testing.T, w *store.Writer, accountID int64, serverID string, mailboxID int64) bool {
+// unreadForMessage returns the unread flag "m1"'s message carries
+// within mailboxID; like mailboxIDsForServerID, every fixture using
+// this helper names its message "m1".
+func unreadForMessage(t *testing.T, w *store.Writer, accountID, mailboxID int64) bool {
 	t.Helper()
 
 	return storetest.ScanValue[int](t, w,
 		`SELECT mm.unread FROM message_mailbox mm JOIN message m ON m.id = mm.message_id WHERE m.account_id = ? AND m.server_id = ? AND mm.mailbox_id = ?`,
-		accountID, serverID, mailboxID) != 0
+		accountID, "m1", mailboxID) != 0
 }
 
 // storeModel returns accountID's current message rows as a

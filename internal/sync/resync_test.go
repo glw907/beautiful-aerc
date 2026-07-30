@@ -30,7 +30,7 @@ func TestFullResyncPreserves(t *testing.T) {
 		return backend.ChangeSet{
 			NewToken: "resynced",
 			Created: []backend.Record{
-				{ID: "srv-keep", Fields: map[string]any{"subject": "new subject"}},
+				{ID: "srv-keep", Fields: backend.MessageFields{Subject: "new subject"}},
 			},
 		}, nil
 	}
@@ -91,12 +91,12 @@ func TestFullResyncPagesIndependently(t *testing.T) {
 			return backend.ChangeSet{
 				NewToken: "page-1",
 				HasMore:  true,
-				Created:  []backend.Record{{ID: "m1", Fields: map[string]any{"subject": "first page"}}},
+				Created:  []backend.Record{{ID: "m1", Fields: backend.MessageFields{Subject: "first page"}}},
 			}, nil
 		}
 		return backend.ChangeSet{
 			NewToken: "page-2",
-			Created:  []backend.Record{{ID: "m2", Fields: map[string]any{"subject": "second page"}}},
+			Created:  []backend.Record{{ID: "m2", Fields: backend.MessageFields{Subject: "second page"}}},
 		}, nil
 	}
 

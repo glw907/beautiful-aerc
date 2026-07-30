@@ -22,6 +22,7 @@
           "receivedAt": "2026-07-01T12:00:00Z",
           "from": [{"name": "Alice", "email": "alice@example.com"}],
           "to": [{"name": "Bob", "email": "bob@example.com"}],
+          "hasAttachment": true,
           "keywords": {"$seen": true},
           "mailboxIds": {"mbx-1": true}
         }

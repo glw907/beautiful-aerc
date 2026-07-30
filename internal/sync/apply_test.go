@@ -16,8 +16,8 @@ import (
 )
 
 // TestApplyMessageReconcilesMailboxes asserts upsertMessage's
-// mailbox_ids handling: a create lands the association and the
-// seen-derived unread flag, and a later update that moves the
+// MailboxIDs handling: a create lands the association and the
+// FlagSeen-derived unread flag, and a later update that moves the
 // message to a different mailbox drops the old association and
 // inserts the new one rather than accumulating both.
 func TestApplyMessageReconcilesMailboxes(t *testing.T) {
@@ -26,15 +26,14 @@ func TestApplyMessageReconcilesMailboxes(t *testing.T) {
 	inboxID := seedMailbox(t, w, accountID, "mb-inbox", "Inbox")
 	archiveID := seedMailbox(t, w, accountID, "mb-archive", "Archive")
 
-	rec := backend.Record{ID: "m1", Fields: map[string]any{
-		"subject":     "hello",
-		"received_at": time.Unix(1000, 0),
-		"seen":        false,
-		"mailbox_ids": []string{"mb-inbox"},
-	}}
+	f := backend.MessageFields{
+		Subject:    "hello",
+		ReceivedAt: time.Unix(1000, 0),
+		MailboxIDs: []string{"mb-inbox"},
+	}
 
 	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-		return upsertMessage(tx, accountID, rec)
+		return upsertMessage(tx, accountID, "m1", f)
 	}); err != nil {
 		t.Fatalf("upsertMessage: %v", err)
 	}
@@ -42,14 +41,14 @@ func TestApplyMessageReconcilesMailboxes(t *testing.T) {
 	if got := mailboxIDsForServerID(t, w, accountID); !slices.Equal(got, []int64{inboxID}) {
 		t.Fatalf("mailboxes = %v, want [%d] (Inbox)", got, inboxID)
 	}
-	if !unreadForServerID(t, w, accountID, "m1", inboxID) {
-		t.Fatal("unread = false, want true: seen was false")
+	if !unreadForMessage(t, w, accountID, inboxID) {
+		t.Fatal("unread = false, want true: FlagSeen was clear")
 	}
 
-	rec.Fields["mailbox_ids"] = []string{"mb-archive"}
-	rec.Fields["seen"] = true
+	f.MailboxIDs = []string{"mb-archive"}
+	f.Flags = backend.FlagSeen
 	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-		return upsertMessage(tx, accountID, rec)
+		return upsertMessage(tx, accountID, "m1", f)
 	}); err != nil {
 		t.Fatalf("upsertMessage (move): %v", err)
 	}
@@ -57,164 +56,276 @@ func TestApplyMessageReconcilesMailboxes(t *testing.T) {
 	if got := mailboxIDsForServerID(t, w, accountID); !slices.Equal(got, []int64{archiveID}) {
 		t.Fatalf("mailboxes after move = %v, want [%d] (Archive)", got, archiveID)
 	}
-	if unreadForServerID(t, w, accountID, "m1", archiveID) {
-		t.Fatal("unread = true, want false: seen is now true")
+	if unreadForMessage(t, w, accountID, archiveID) {
+		t.Fatal("unread = true, want false: FlagSeen is now set")
 	}
 }
 
-// TestApplyRejectsWrongFieldType proves a field present under a type
-// backend.Record's vocabulary does not pin fails the apply instead of
-// decoding to a zero value. Every case here is a plausible backend
-// defect: a JSON round trip turns an id list into []any and a count
-// into float64, and both decode silently to zero today.
-func TestApplyRejectsWrongFieldType(t *testing.T) {
+// TestUpsertMessageWritesEveryColumn pins which store column each of
+// the message vocabulary's fields reaches. Every value here is
+// distinct, so a translation that lands the right value in the wrong
+// column fails: nothing else in this package's tests would notice
+// blob_id and thread_key swapping places.
+func TestUpsertMessageWritesEveryColumn(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	inboxID := seedMailbox(t, w, accountID, "mb-inbox", "Inbox")
+
+	f := backend.MessageFields{
+		BlobID:        "blob-1",
+		ThreadKey:     "thread-1",
+		Subject:       "Quarterly numbers",
+		From:          []backend.Address{{Name: "Ada Lovelace", Email: "ada@example.com"}},
+		MailboxIDs:    []string{"mb-inbox"},
+		ReceivedAt:    time.Unix(1700000000, 0),
+		Size:          4096,
+		HasAttachment: true,
+		Flags:         backend.FlagFlagged | backend.FlagAnswered,
+	}
+	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+		return upsertMessage(tx, accountID, "m1", f)
+	}); err != nil {
+		t.Fatalf("upsertMessage: %v", err)
+	}
+
+	var got struct {
+		serverID      string
+		blobID        string
+		threadKey     string
+		subject       string
+		fromAddr      string
+		flags         store.Flags
+		size          int64
+		hasAttachment bool
+		receivedAt    int64
+	}
+	if err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(
+			`SELECT server_id, blob_id, thread_key, subject, from_addr, flags, size, has_attachment, received_at
+			   FROM message WHERE account_id = ?`, accountID,
+		).Scan(&got.serverID, &got.blobID, &got.threadKey, &got.subject, &got.fromAddr,
+			&got.flags, &got.size, &got.hasAttachment, &got.receivedAt)
+	}); err != nil {
+		t.Fatalf("read message row: %v", err)
+	}
+
+	for _, c := range []struct {
+		column string
+		got    any
+		want   any
+	}{
+		{"server_id", got.serverID, "m1"},
+		{"blob_id", got.blobID, "blob-1"},
+		{"thread_key", got.threadKey, "thread-1"},
+		{"subject", got.subject, "Quarterly numbers"},
+		{"from_addr", got.fromAddr, "Ada Lovelace <ada@example.com>"},
+		{"flags", got.flags, store.FlagFlagged | store.FlagAnswered},
+		{"size", got.size, int64(4096)},
+		{"has_attachment", got.hasAttachment, true},
+		{"received_at", got.receivedAt, int64(1700000000)},
+	} {
+		if c.got != c.want {
+			t.Errorf("message.%s = %v, want %v", c.column, c.got, c.want)
+		}
+	}
+	if ids := mailboxIDsForServerID(t, w, accountID); !slices.Equal(ids, []int64{inboxID}) {
+		t.Errorf("message_mailbox = %v, want [%d] (Inbox)", ids, inboxID)
+	}
+	if !unreadForMessage(t, w, accountID, inboxID) {
+		t.Error("message_mailbox.unread = false, want true: FlagSeen was clear")
+	}
+}
+
+// TestUpsertMessageClearsMembershipWhenMailboxIDsIsEmpty pins whole-
+// membership-replacement as intentional: a message's MailboxIDs is
+// its whole folder membership (MessageFields's doc comment), so a
+// re-upsert that comes back with no mailboxes clears an association a
+// prior upsert set rather than leaving it in place. If the reconcile
+// ever became a merge instead of a replace, this fails.
+func TestUpsertMessageClearsMembershipWhenMailboxIDsIsEmpty(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	seedMailbox(t, w, accountID, "mb-inbox", "Inbox")
+
+	f := backend.MessageFields{
+		Subject:    "hello",
+		ReceivedAt: time.Unix(1000, 0),
+		MailboxIDs: []string{"mb-inbox"},
+	}
+	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+		return upsertMessage(tx, accountID, "m1", f)
+	}); err != nil {
+		t.Fatalf("upsertMessage: %v", err)
+	}
+	if got := mailboxIDsForServerID(t, w, accountID); len(got) != 1 {
+		t.Fatalf("mailboxes before clearing = %v, want one association", got)
+	}
+
+	f.MailboxIDs = nil
+	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+		return upsertMessage(tx, accountID, "m1", f)
+	}); err != nil {
+		t.Fatalf("upsertMessage (clear): %v", err)
+	}
+	if got := mailboxIDsForServerID(t, w, accountID); len(got) != 0 {
+		t.Fatalf("mailboxes after clearing = %v, want none", got)
+	}
+}
+
+// TestUpsertRecordRejectsMismatchedFields covers a record whose
+// payload disagrees with the kind the Changes page it arrived on
+// asked for, the sync-side counterpart of jmapsource's
+// TestApplyBatchRejectsMismatchedFields. Nothing reaches either
+// table: a wrong-table write is worse than a rejected page, since a
+// resync's stale-delete pass only reasons about the collection kind
+// names. For the two mismatched-kind cases, the cause the writer
+// wraps must name both the record and the payload type; this is what
+// caught the mismatch error once rendering its page kind as %v
+// printed an integer instead of "mailbox" or "message" (the value
+// slog.Info logs).
+func TestUpsertRecordRejectsMismatchedFields(t *testing.T) {
 	tests := []struct {
 		name     string
 		kind     backend.ObjectKind
-		fields   map[string]any
-		wantKey  string
+		rec      backend.Record
 		wantType string
 	}{
 		{
-			name:     "mailbox_ids as []any",
-			kind:     backend.ObjectKindMessage,
-			fields:   map[string]any{"mailbox_ids": []any{"mb-inbox"}},
-			wantKey:  "mailbox_ids",
-			wantType: "[]interface {}",
-		},
-		{
-			name:     "received_at as a unix number",
-			kind:     backend.ObjectKindMessage,
-			fields:   map[string]any{"received_at": float64(1000)},
-			wantKey:  "received_at",
-			wantType: "float64",
-		},
-		{
-			name:     "seen as a string",
-			kind:     backend.ObjectKindMessage,
-			fields:   map[string]any{"seen": "true"},
-			wantKey:  "seen",
-			wantType: "string",
-		},
-		{
-			name:     "from as []any",
-			kind:     backend.ObjectKindMessage,
-			fields:   map[string]any{"from": []any{map[string]string{"email": "ada@example.com"}}},
-			wantKey:  "from",
-			wantType: "[]interface {}",
-		},
-		{
-			name:     "size as float64",
-			kind:     backend.ObjectKindMessage,
-			fields:   map[string]any{"size": float64(2048)},
-			wantKey:  "size",
-			wantType: "float64",
-		},
-		{
-			name:     "sort_order as float64",
+			name:     "message fields on a mailbox page",
 			kind:     backend.ObjectKindMailbox,
-			fields:   map[string]any{"name": "Inbox", "sort_order": float64(3)},
-			wantKey:  "sort_order",
-			wantType: "float64",
+			rec:      backend.Record{ID: "m1", Fields: backend.MessageFields{Subject: "hello"}},
+			wantType: "backend.MessageFields",
 		},
 		{
-			name:     "name as a number",
-			kind:     backend.ObjectKindMailbox,
-			fields:   map[string]any{"name": 7},
-			wantKey:  "name",
-			wantType: "int",
+			name:     "mailbox fields on a message page",
+			kind:     backend.ObjectKindMessage,
+			rec:      backend.Record{ID: "mb-1", Fields: backend.MailboxFields{Name: "Inbox"}},
+			wantType: "backend.MailboxFields",
+		},
+		{
+			name: "nil fields",
+			kind: backend.ObjectKindMessage,
+			rec:  backend.Record{ID: "m1", Fields: nil},
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 			accountID := seedAccount(t, w)
 
 			err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-				return upsertRecord(tx, accountID, tt.kind, backend.Record{ID: "rec-1", Fields: tt.fields})
+				return upsertRecord(tx, accountID, tt.kind, tt.rec)
 			})
 			if err == nil {
-				t.Fatalf("upsert with %s = nil, want an error naming the field", tt.name)
+				t.Fatal("upsertRecord = nil, want an error")
 			}
-			// The writer wraps whatever its transaction function
-			// returns, so the field and type ride in the cause, which
-			// is what reaches the log.
+			if got := countRows(t, w, "message", accountID); got != 0 {
+				t.Errorf("message rows = %d, want 0", got)
+			}
+			if got := countRows(t, w, "mailbox", accountID); got != 0 {
+				t.Errorf("mailbox rows = %d, want 0", got)
+			}
+			if tt.wantType == "" {
+				return
+			}
 			var ue uerr.Error
 			if !errors.As(err, &ue) {
 				t.Fatalf("error %v is not a uerr.Error", err)
 			}
 			cause := ue.Cause.Error()
-			if !strings.Contains(cause, tt.wantKey) {
-				t.Errorf("cause %q does not name the field %q", cause, tt.wantKey)
+			if !strings.Contains(cause, tt.rec.ID) {
+				t.Errorf("cause %q does not name the record %q", cause, tt.rec.ID)
 			}
 			if !strings.Contains(cause, tt.wantType) {
-				t.Errorf("cause %q does not name the value's type %q", cause, tt.wantType)
+				t.Errorf("cause %q does not name the payload type %q", cause, tt.wantType)
+			}
+			if !strings.Contains(cause, kindName(tt.kind)) {
+				t.Errorf("cause %q does not name the page kind %q", cause, kindName(tt.kind))
 			}
 		})
 	}
 }
 
-// TestApplyKeepsMailboxesWhenIDsAreWrongShaped is the consequence
-// behind the type check: a nil mailbox_ids slice reaches
-// SyncMessageMailboxes as an empty want, whose first pass deletes
-// every folder membership the message has, and rewrites message.data
-// so RepairMailboxAssociations can never put it back. The message
-// disappears from every folder and nothing says so.
-func TestApplyKeepsMailboxesWhenIDsAreWrongShaped(t *testing.T) {
+// TestUpsertMailboxWritesEveryColumn is the mailbox counterpart of
+// TestUpsertMessageWritesEveryColumn. The two counts differ so a
+// translation that swaps total for unread fails here.
+func TestUpsertMailboxWritesEveryColumn(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
-	inboxID := seedMailbox(t, w, accountID, "mb-inbox", "Inbox")
 
-	rec := backend.Record{ID: "m1", Fields: map[string]any{
-		"subject":     "hello",
-		"received_at": time.Unix(1000, 0),
-		"mailbox_ids": []string{"mb-inbox"},
-	}}
+	f := backend.MailboxFields{
+		Role:        "archive",
+		Name:        "Old Stuff",
+		SortOrder:   7,
+		TotalCount:  42,
+		UnreadCount: 5,
+	}
 	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-		return upsertMessage(tx, accountID, rec)
+		return upsertMailbox(tx, accountID, "mb-1", f)
 	}); err != nil {
-		t.Fatalf("upsertMessage: %v", err)
+		t.Fatalf("upsertMailbox: %v", err)
 	}
 
-	rec.Fields["mailbox_ids"] = []any{"mb-inbox"}
-	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-		return upsertMessage(tx, accountID, rec)
-	}); err == nil {
-		t.Error("upsertMessage with []any mailbox_ids = nil, want an error")
+	var got struct {
+		serverID    string
+		role        string
+		name        string
+		sortOrder   int64
+		totalCount  int64
+		unreadCount int64
+	}
+	if err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(
+			`SELECT server_id, role, name, sort_order, total_count, unread_count
+			   FROM mailbox WHERE account_id = ?`, accountID,
+		).Scan(&got.serverID, &got.role, &got.name, &got.sortOrder, &got.totalCount, &got.unreadCount)
+	}); err != nil {
+		t.Fatalf("read mailbox row: %v", err)
 	}
 
-	if got := mailboxIDsForServerID(t, w, accountID); !slices.Equal(got, []int64{inboxID}) {
-		t.Errorf("mailboxes after the rejected update = %v, want [%d] (Inbox) untouched", got, inboxID)
+	for _, c := range []struct {
+		column string
+		got    any
+		want   any
+	}{
+		{"server_id", got.serverID, "mb-1"},
+		{"role", got.role, "archive"},
+		{"name", got.name, "Old Stuff"},
+		{"sort_order", got.sortOrder, int64(7)},
+		{"total_count", got.totalCount, int64(42)},
+		{"unread_count", got.unreadCount, int64(5)},
+	} {
+		if c.got != c.want {
+			t.Errorf("mailbox.%s = %v, want %v", c.column, c.got, c.want)
+		}
 	}
 }
 
-// TestFlagsFromFields asserts each of Record.Fields' five boolean
-// keywords sets its own store.Flags bit, an absent field leaves its
-// bit clear, and every bit combines rather than the last one winning.
-func TestFlagsFromFields(t *testing.T) {
+// TestStoreFlags asserts each of the seam's five flags sets its own
+// store.Flags bit, a flag left out of the set leaves its bit clear,
+// and every bit combines rather than the last one winning.
+func TestStoreFlags(t *testing.T) {
 	tests := []struct {
-		name   string
-		fields map[string]any
-		want   store.Flags
+		name string
+		set  backend.MessageFlags
+		want store.Flags
 	}{
-		{"none set", map[string]any{}, 0},
-		{"seen", map[string]any{"seen": true}, store.FlagSeen},
-		{"flagged", map[string]any{"flagged": true}, store.FlagFlagged},
-		{"answered", map[string]any{"answered": true}, store.FlagAnswered},
-		{"draft", map[string]any{"draft": true}, store.FlagDraft},
-		{"forwarded", map[string]any{"forwarded": true}, store.FlagForwarded},
+		{"none set", 0, 0},
+		{"seen", backend.FlagSeen, store.FlagSeen},
+		{"flagged", backend.FlagFlagged, store.FlagFlagged},
+		{"answered", backend.FlagAnswered, store.FlagAnswered},
+		{"draft", backend.FlagDraft, store.FlagDraft},
+		{"forwarded", backend.FlagForwarded, store.FlagForwarded},
 		{
 			"all five combine",
-			map[string]any{"seen": true, "flagged": true, "answered": true, "draft": true, "forwarded": true},
+			backend.FlagSeen | backend.FlagFlagged | backend.FlagAnswered | backend.FlagDraft | backend.FlagForwarded,
 			store.FlagSeen | store.FlagFlagged | store.FlagAnswered | store.FlagDraft | store.FlagForwarded,
 		},
-		{"false value clears", map[string]any{"seen": false, "flagged": true}, store.FlagFlagged},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := flagsFromFields(&fields{m: tt.fields}); got != tt.want {
-				t.Errorf("flagsFromFields(%v) = %v, want %v", tt.fields, got, tt.want)
+			if got := storeFlags(tt.set); got != tt.want {
+				t.Errorf("storeFlags(%v) = %v, want %v", tt.set, got, tt.want)
 			}
 		})
 	}
@@ -227,18 +338,18 @@ func TestFlagsFromFields(t *testing.T) {
 func TestFirstAddress(t *testing.T) {
 	tests := []struct {
 		name string
-		v    []map[string]string
+		v    []backend.Address
 		want string
 	}{
 		{"nil", nil, ""},
-		{"empty list", []map[string]string{}, ""},
-		{"named", []map[string]string{{"name": "Ada Lovelace", "email": "ada@example.com"}}, "Ada Lovelace <ada@example.com>"},
-		{"bare, empty name", []map[string]string{{"name": "", "email": "ada@example.com"}}, "ada@example.com"},
+		{"empty list", []backend.Address{}, ""},
+		{"named", []backend.Address{{Name: "Ada Lovelace", Email: "ada@example.com"}}, "Ada Lovelace <ada@example.com>"},
+		{"bare, empty name", []backend.Address{{Email: "ada@example.com"}}, "ada@example.com"},
 		{
 			"multiple entries take the first",
-			[]map[string]string{
-				{"name": "First", "email": "a@example.com"},
-				{"name": "Second", "email": "b@example.com"},
+			[]backend.Address{
+				{Name: "First", Email: "a@example.com"},
+				{Name: "Second", Email: "b@example.com"},
 			},
 			"First <a@example.com>",
 		},
@@ -261,14 +372,13 @@ func TestUpsertMailboxRepairsOrphanedAssociations(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
-	rec := backend.Record{ID: "m1", Fields: map[string]any{
-		"subject":     "hello",
-		"received_at": time.Unix(1000, 0),
-		"seen":        false,
-		"mailbox_ids": []string{"mb-inbox"},
-	}}
+	f := backend.MessageFields{
+		Subject:    "hello",
+		ReceivedAt: time.Unix(1000, 0),
+		MailboxIDs: []string{"mb-inbox"},
+	}
 	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-		return upsertMessage(tx, accountID, rec)
+		return upsertMessage(tx, accountID, "m1", f)
 	}); err != nil {
 		t.Fatalf("upsertMessage: %v", err)
 	}
@@ -277,9 +387,8 @@ func TestUpsertMailboxRepairsOrphanedAssociations(t *testing.T) {
 		t.Fatalf("mailboxes before the mailbox row exists = %v, want none", got)
 	}
 
-	mailboxRec := backend.Record{ID: "mb-inbox", Fields: map[string]any{"name": "Inbox"}}
 	if err := w.Apply(context.Background(), func(tx *sql.Tx) error {
-		return upsertMailbox(tx, accountID, mailboxRec)
+		return upsertMailbox(tx, accountID, "mb-inbox", backend.MailboxFields{Name: "Inbox"})
 	}); err != nil {
 		t.Fatalf("upsertMailbox: %v", err)
 	}
@@ -289,8 +398,8 @@ func TestUpsertMailboxRepairsOrphanedAssociations(t *testing.T) {
 	if !slices.Equal(got, []int64{inboxID}) {
 		t.Fatalf("mailboxes after the mailbox is created = %v, want [%d] (Inbox), repaired without another message update", got, inboxID)
 	}
-	if !unreadForServerID(t, w, accountID, "m1", inboxID) {
-		t.Fatal("unread = false, want true: seen was false")
+	if !unreadForMessage(t, w, accountID, inboxID) {
+		t.Fatal("unread = false, want true: FlagSeen was clear")
 	}
 }
 

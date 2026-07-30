@@ -22,19 +22,16 @@ const defaultPageSize = 500
 const baselineTokenPrefix = "baseline:"
 
 // messageProperties is the Email/get property set Changes hydrates
-// into a Record's Fields.
+// into a backend.MessageFields.
 var messageProperties = []string{
 	"id", "blobId", "threadId", "mailboxIds", "keywords", "size",
-	"receivedAt", "sentAt", "subject", "from", "to", "cc", "bcc",
-	"replyTo", "sender", "messageId", "inReplyTo", "references",
-	"preview", "hasAttachment",
+	"receivedAt", "subject", "from", "hasAttachment",
 }
 
 // mailboxProperties is the Mailbox/get property set Changes hydrates
-// into a Record's Fields.
+// into a backend.MailboxFields.
 var mailboxProperties = []string{
-	"id", "name", "parentId", "role", "sortOrder", "totalEmails",
-	"unreadEmails", "isSubscribed",
+	"id", "name", "role", "sortOrder", "totalEmails", "unreadEmails",
 }
 
 // Changes implements backend.Source for both Message and Mailbox,
@@ -290,74 +287,40 @@ func hydrateMessages(list []*jmap.Email) []backend.Record {
 	return records
 }
 
-// messageFields translates e into poplar's message field vocabulary,
-// never exposing a JMAP property name through the seam (ADR-0004
-// revision 2).
-func messageFields(e *jmap.Email) map[string]any {
-	fields := map[string]any{
-		"blob_id":        string(e.BlobID),
-		"thread_id":      string(e.ThreadID),
-		"subject":        e.Subject,
-		"size":           toInt64(e.Size),
-		"has_attachment": e.HasAttachment,
-		"preview":        e.Preview,
+// messageFields translates e into poplar's message vocabulary, never
+// exposing a JMAP property name through the seam (ADR-0004 revision
+// 2).
+func messageFields(e *jmap.Email) backend.MessageFields {
+	fields := backend.MessageFields{
+		BlobID:        string(e.BlobID),
+		ThreadKey:     string(e.ThreadID),
+		Subject:       e.Subject,
+		From:          addressList(e.From),
+		MailboxIDs:    mailboxIDList(e.MailboxIDs),
+		Size:          toInt64(e.Size),
+		HasAttachment: e.HasAttachment,
 	}
 	if e.ReceivedAt != nil {
-		fields["received_at"] = e.ReceivedAt.Time()
+		fields.ReceivedAt = e.ReceivedAt.Time()
 	}
-	if e.SentAt != nil {
-		fields["sent_at"] = e.SentAt.Time()
-	}
-	if len(e.MessageID) > 0 {
-		fields["message_id"] = e.MessageID[0]
-	}
-	if len(e.InReplyTo) > 0 {
-		fields["in_reply_to"] = e.InReplyTo[0]
-	}
-	if len(e.References) > 0 {
-		fields["references"] = e.References
-	}
-	if addrs := addressList(e.From); addrs != nil {
-		fields["from"] = addrs
-	}
-	if addrs := addressList(e.To); addrs != nil {
-		fields["to"] = addrs
-	}
-	if addrs := addressList(e.CC); addrs != nil {
-		fields["cc"] = addrs
-	}
-	if addrs := addressList(e.BCC); addrs != nil {
-		fields["bcc"] = addrs
-	}
-	if addrs := addressList(e.ReplyTo); addrs != nil {
-		fields["reply_to"] = addrs
-	}
-	if addrs := addressList(e.Sender); addrs != nil {
-		fields["sender"] = addrs
-	}
-	if ids := mailboxIDList(e.MailboxIDs); ids != nil {
-		fields["mailbox_ids"] = ids
-	}
-	for name, keyword := range backend.MessageFlagKeywords {
-		// A keyword absent from e.Keywords is a real "false", not
-		// "unknown": messagePatch (the inverse translation) reads a
-		// missing key as no change, so a server-side clear must
-		// still hydrate as an explicit false rather than vanish.
-		fields[name] = e.Keywords[keyword]
+	for flag, keyword := range backend.MessageFlagKeywords {
+		if e.Keywords[keyword] {
+			fields.Flags |= flag
+		}
 	}
 	return fields
 }
 
-func addressList(addrs []*jmap.Address) []map[string]string {
+func addressList(addrs []*jmap.Address) []backend.Address {
 	if len(addrs) == 0 {
 		return nil
 	}
-	out := make([]map[string]string, 0, len(addrs))
+	out := make([]backend.Address, 0, len(addrs))
 	for _, a := range addrs {
 		if a == nil {
 			continue
 		}
-		out = append(out, map[string]string{"name": a.Name, "email": a.Email})
+		out = append(out, backend.Address{Name: a.Name, Email: a.Email})
 	}
 	return out
 }
@@ -376,18 +339,13 @@ func mailboxIDList(ids map[jmap.ID]bool) []string {
 	return out
 }
 
-// mailboxFields translates b into poplar's mailbox field vocabulary.
-func mailboxFields(b *jmap.Mailbox) map[string]any {
-	fields := map[string]any{
-		"name":          b.Name,
-		"role":          string(b.Role),
-		"sort_order":    toInt64(b.SortOrder),
-		"total_emails":  toInt64(b.TotalEmails),
-		"unread_emails": toInt64(b.UnreadEmails),
-		"is_subscribed": boolValue(b.IsSubscribed),
+// mailboxFields translates b into poplar's mailbox vocabulary.
+func mailboxFields(b *jmap.Mailbox) backend.MailboxFields {
+	return backend.MailboxFields{
+		Role:        string(b.Role),
+		Name:        b.Name,
+		SortOrder:   toInt64(b.SortOrder),
+		TotalCount:  toInt64(b.TotalEmails),
+		UnreadCount: toInt64(b.UnreadEmails),
 	}
-	if b.ParentID != "" {
-		fields["parent_id"] = string(b.ParentID)
-	}
-	return fields
 }

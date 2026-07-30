@@ -49,7 +49,7 @@ func runConvergenceTrial(t *testing.T, seed int64) {
 		if token == "" {
 			cs := backend.ChangeSet{NewToken: fmt.Sprintf("tok-%d", calls)}
 			for id, subject := range model {
-				cs.Created = append(cs.Created, backend.Record{ID: id, Fields: map[string]any{"subject": subject}})
+				cs.Created = append(cs.Created, backend.Record{ID: id, Fields: backend.MessageFields{Subject: subject}})
 			}
 			return cs, nil
 		}
@@ -63,11 +63,11 @@ func runConvergenceTrial(t *testing.T, seed int64) {
 		case model[id] == "" || rng.IntN(3) == 0:
 			subject := fmt.Sprintf("created-%d-%d", seed, calls)
 			model[id] = subject
-			cs.Created = []backend.Record{{ID: id, Fields: map[string]any{"subject": subject}}}
+			cs.Created = []backend.Record{{ID: id, Fields: backend.MessageFields{Subject: subject}}}
 		case rng.IntN(2) == 0:
 			subject := fmt.Sprintf("updated-%d-%d", seed, calls)
 			model[id] = subject
-			cs.Updated = []backend.Record{{ID: id, Fields: map[string]any{"subject": subject}}}
+			cs.Updated = []backend.Record{{ID: id, Fields: backend.MessageFields{Subject: subject}}}
 		default:
 			delete(model, id)
 			cs.Destroyed = []string{id}

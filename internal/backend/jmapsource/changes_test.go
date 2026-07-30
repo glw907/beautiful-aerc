@@ -4,11 +4,35 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/jmap"
 )
+
+// stringsFromAny converts a decoded JSON array (v's dynamic type after
+// a round trip through encoding/json is []any) into a []string, the
+// shape a "properties" argument compares against.
+func stringsFromAny(t *testing.T, v any) []string {
+	t.Helper()
+
+	items, ok := v.([]any)
+	if !ok {
+		t.Fatalf("properties = %v (%T), want []any", v, v)
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			t.Fatalf("properties[%d] = %v (%T), want string", i, item, item)
+		}
+		out[i] = s
+	}
+	return out
+}
 
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
@@ -58,19 +82,40 @@ func TestChangesOneRoundTrip(t *testing.T) {
 		if ref["path"] != wantPath {
 			t.Errorf("methodCalls[%d] path = %v, want %v", i+1, ref["path"], wantPath)
 		}
+		wantProperties := []string{
+			"id", "blobId", "threadId", "mailboxIds", "keywords", "size",
+			"receivedAt", "subject", "from", "hasAttachment",
+		}
+		if got := stringsFromAny(t, args["properties"]); !slices.Equal(got, wantProperties) {
+			t.Errorf("methodCalls[%d] properties = %v, want %v", i+1, got, wantProperties)
+		}
 	}
 
 	if len(cs.Created) != 1 || cs.Created[0].ID != "msg-1" {
 		t.Fatalf("Created = %+v", cs.Created)
 	}
-	if got := cs.Created[0].Fields["subject"]; got != "Hello" {
-		t.Errorf("Created[0].Fields[subject] = %v, want Hello", got)
+	created, ok := cs.Created[0].Fields.(backend.MessageFields)
+	if !ok {
+		t.Fatalf("Created[0].Fields = %T, want backend.MessageFields", cs.Created[0].Fields)
 	}
-	if got := cs.Created[0].Fields["seen"]; got != true {
-		t.Errorf("Created[0].Fields[seen] = %v, want true", got)
+	if want := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC); !created.ReceivedAt.Equal(want) {
+		t.Errorf("Created[0] ReceivedAt = %v, want %v", created.ReceivedAt, want)
 	}
-	if got, ok := cs.Created[0].Fields["mailbox_ids"].([]string); !ok || len(got) != 1 || got[0] != "mbx-1" {
-		t.Errorf("Created[0].Fields[mailbox_ids] = %v", cs.Created[0].Fields["mailbox_ids"])
+	// Everything else compares whole, so a fixture property that stops
+	// reaching its field fails here without an assertion naming it.
+	created.ReceivedAt = time.Time{}
+	want := backend.MessageFields{
+		BlobID:        "blob-1",
+		ThreadKey:     "thread-1",
+		Subject:       "Hello",
+		From:          []backend.Address{{Name: "Alice", Email: "alice@example.com"}},
+		MailboxIDs:    []string{"mbx-1"},
+		Size:          1234,
+		HasAttachment: true,
+		Flags:         backend.FlagSeen,
+	}
+	if !reflect.DeepEqual(created, want) {
+		t.Errorf("Created[0].Fields = %+v, want %+v", created, want)
 	}
 
 	if len(cs.Updated) != 1 || cs.Updated[0].ID != "msg-2" {
@@ -176,6 +221,13 @@ func TestChangesBaselinePull(t *testing.T) {
 	if ref["resultOf"] != callID || ref["path"] != "/ids" {
 		t.Errorf("Email/get back-reference = %v", ref)
 	}
+	wantProperties := []string{
+		"id", "blobId", "threadId", "mailboxIds", "keywords", "size",
+		"receivedAt", "subject", "from", "hasAttachment",
+	}
+	if got := stringsFromAny(t, getArgs["properties"]); !slices.Equal(got, wantProperties) {
+		t.Errorf("Email/get properties = %v, want %v", got, wantProperties)
+	}
 
 	if want := baselineTokenPrefix + "1:qs1"; cs.NewToken != want {
 		t.Errorf("NewToken = %q, want %s", cs.NewToken, want)
@@ -220,22 +272,37 @@ func TestChangesBaselineRestartsOnQueryStateChange(t *testing.T) {
 	}
 }
 
-// TestMessageFieldsAlwaysEmitsAllFlags covers messageFields hydrating
-// every flag name, not only the ones the server's keywords set: an
-// absent keyword is a real false, and messagePatch (the inverse
-// translation) reads a missing key as no change rather than false,
-// so a server-side clear must still come through explicitly.
-func TestMessageFieldsAlwaysEmitsAllFlags(t *testing.T) {
-	e := &jmap.Email{ID: "msg-1", Keywords: map[string]bool{"$seen": true}}
-	fields := messageFields(e)
-	for _, name := range []string{"seen", "flagged", "answered", "draft", "forwarded"} {
-		v, ok := fields[name]
-		if !ok {
-			t.Fatalf("Fields[%s] missing, want present (absent keyword means false, not absent)", name)
-		}
-		if want := name == "seen"; v != want {
-			t.Errorf("Fields[%s] = %v, want %v", name, v, want)
-		}
+// TestMessageFieldsFlagsFromKeywords covers messageFields translating
+// the server's keyword set into the seam's flag set: each keyword
+// reaches its own flag and nothing else, and a keyword the server
+// omits or carries as false leaves its flag clear.
+func TestMessageFieldsFlagsFromKeywords(t *testing.T) {
+	tests := []struct {
+		name     string
+		keywords map[string]bool
+		want     backend.MessageFlags
+	}{
+		{"no keywords", nil, 0},
+		{"seen", map[string]bool{"$seen": true}, backend.FlagSeen},
+		{"flagged", map[string]bool{"$flagged": true}, backend.FlagFlagged},
+		{"answered", map[string]bool{"$answered": true}, backend.FlagAnswered},
+		{"draft", map[string]bool{"$draft": true}, backend.FlagDraft},
+		{"forwarded", map[string]bool{"$forwarded": true}, backend.FlagForwarded},
+		{"a false keyword stays clear", map[string]bool{"$seen": false, "$draft": true}, backend.FlagDraft},
+		{"a keyword poplar does not track", map[string]bool{"$phishing": true}, 0},
+		{
+			"all five",
+			map[string]bool{"$seen": true, "$flagged": true, "$answered": true, "$draft": true, "$forwarded": true},
+			backend.FlagSeen | backend.FlagFlagged | backend.FlagAnswered | backend.FlagDraft | backend.FlagForwarded,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := messageFields(&jmap.Email{ID: "msg-1", Keywords: tt.keywords}).Flags
+			if got != tt.want {
+				t.Errorf("Flags = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -251,16 +318,60 @@ func TestMailboxChanges(t *testing.T) {
 	if got := api.callCount(); got != 1 {
 		t.Fatalf("api calls = %d, want 1", got)
 	}
+	wantProperties := []string{"id", "name", "role", "sortOrder", "totalEmails", "unreadEmails"}
+	_, createdArgs, _ := methodCall(t, api.requestAt(0), 1)
+	if got := stringsFromAny(t, createdArgs["properties"]); !slices.Equal(got, wantProperties) {
+		t.Errorf("Mailbox/get created properties = %v, want %v", got, wantProperties)
+	}
+	_, updatedArgs, _ := methodCall(t, api.requestAt(0), 2)
+	if got := stringsFromAny(t, updatedArgs["properties"]); !slices.Equal(got, wantProperties) {
+		t.Errorf("Mailbox/get updated properties = %v, want %v", got, wantProperties)
+	}
 	if len(cs.Created) != 1 || cs.Created[0].ID != "mbx-new" {
 		t.Fatalf("Created = %+v", cs.Created)
 	}
-	if got := cs.Created[0].Fields["name"]; got != "Projects" {
-		t.Errorf("Created[0].Fields[name] = %v, want Projects", got)
+	box, ok := cs.Created[0].Fields.(backend.MailboxFields)
+	if !ok {
+		t.Fatalf("Created[0].Fields = %T, want backend.MailboxFields", cs.Created[0].Fields)
+	}
+	want := backend.MailboxFields{Role: "archive", Name: "Projects", SortOrder: 3, TotalCount: 42, UnreadCount: 5}
+	if box != want {
+		t.Errorf("Created[0].Fields = %+v, want %+v", box, want)
 	}
 	if len(cs.Destroyed) != 1 || cs.Destroyed[0] != "mbx-old" {
 		t.Fatalf("Destroyed = %+v", cs.Destroyed)
 	}
 	if cs.NewToken != "2" {
 		t.Errorf("NewToken = %q, want 2", cs.NewToken)
+	}
+}
+
+// TestChangesBaselineMailboxes covers the empty-token mailbox path:
+// one Mailbox/get call fetching every mailbox, mailboxChanges's
+// baseline counterpart.
+func TestChangesBaselineMailboxes(t *testing.T) {
+	session, api := newTestSession(t, readFixture(t, "baseline_mailboxes.json"))
+
+	cs, err := session.Mail().Changes(context.Background(), backend.ObjectKindMailbox, "", 50)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	if got := api.callCount(); got != 1 {
+		t.Fatalf("api calls = %d, want 1", got)
+	}
+	name, args, _ := methodCall(t, api.requestAt(0), 0)
+	if name != "Mailbox/get" {
+		t.Fatalf("methodCalls[0] = %q, want Mailbox/get", name)
+	}
+	wantProperties := []string{"id", "name", "role", "sortOrder", "totalEmails", "unreadEmails"}
+	if got := stringsFromAny(t, args["properties"]); !slices.Equal(got, wantProperties) {
+		t.Errorf("Mailbox/get properties = %v, want %v", got, wantProperties)
+	}
+
+	if len(cs.Created) != 1 || cs.Created[0].ID != "mbx-1" {
+		t.Fatalf("Created = %+v", cs.Created)
+	}
+	if cs.NewToken != "1" {
+		t.Errorf("NewToken = %q, want 1", cs.NewToken)
 	}
 }

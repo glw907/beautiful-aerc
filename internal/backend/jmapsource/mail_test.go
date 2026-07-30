@@ -6,12 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/jmap"
 )
 
 // downloadRequest records one Download call's own request, the three
@@ -100,9 +102,9 @@ func TestApplyBatchUpdateDestroyAndUnsupportedCreate(t *testing.T) {
 	session, api := newTestSession(t, readFixture(t, "apply_batch.json"))
 
 	mutations := []backend.Mutation{
-		{Op: backend.MutationUpdate, ID: "msg-1", Fields: map[string]any{"seen": true, "mailbox_ids": []string{"mbx-archive"}}},
+		{Op: backend.MutationUpdate, ID: "msg-1", Fields: backend.MessagePatch{SetFlags: backend.FlagSeen, MailboxIDs: []string{"mbx-archive"}}},
 		{Op: backend.MutationDestroy, ID: "msg-2"},
-		{Op: backend.MutationCreate, CreationID: "c1", Fields: map[string]any{}},
+		{Op: backend.MutationCreate, CreationID: "c1"},
 	}
 	result, err := session.Mail().ApplyBatch(context.Background(), mutations)
 	if err != nil {
@@ -166,6 +168,93 @@ func TestApplyBatchUpdateDestroyAndUnsupportedCreate(t *testing.T) {
 	}
 }
 
+// TestMessagePatchFlags covers the reverse of the keyword translation
+// TestMessageFieldsFlagsFromKeywords covers: a flag the patch sets
+// reaches the server as its keyword, one the patch clears as a null,
+// one the patch names neither way stays out of the request so the
+// server keeps whatever it holds, and one named in both sets
+// (MessagePatch's doc comment: "a flag in both resolves to set")
+// reaches the server as its keyword rather than a null. The
+// membership stays out too, since this patch carries no MailboxIDs.
+func TestMessagePatchFlags(t *testing.T) {
+	patch := messagePatch(backend.MessagePatch{
+		SetFlags:   backend.FlagSeen | backend.FlagAnswered | backend.FlagDraft,
+		ClearFlags: backend.FlagFlagged | backend.FlagDraft,
+	})
+	want := jmap.Patch{
+		"keywords/$seen":     true,
+		"keywords/$answered": true,
+		"keywords/$flagged":  nil,
+		"keywords/$draft":    true,
+	}
+	if !reflect.DeepEqual(patch, want) {
+		t.Errorf("messagePatch = %v, want %v", patch, want)
+	}
+}
+
+// TestMessagePatchMailboxIDs covers messagePatch's nil-vs-empty
+// MailboxIDs distinction: a nil slice (MessagePatch's doc comment:
+// "leaves the message's folder membership alone") stays out of the
+// patch entirely, while a non-nil empty slice ("a non-nil one
+// replaces it whole") reaches the wire as an empty mailboxIds map,
+// clearing every membership the server holds.
+func TestMessagePatchMailboxIDs(t *testing.T) {
+	tests := []struct {
+		name       string
+		mailboxIDs []string
+		want       jmap.Patch
+	}{
+		{"nil leaves membership alone", nil, jmap.Patch{}},
+		{"non-nil empty replaces with none", []string{}, jmap.Patch{"mailboxIds": map[string]bool{}}},
+		{"non-empty replaces whole", []string{"mbx-1"}, jmap.Patch{"mailboxIds": map[string]bool{"mbx-1": true}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patch := messagePatch(backend.MessagePatch{MailboxIDs: tt.mailboxIDs})
+			if !reflect.DeepEqual(patch, tt.want) {
+				t.Errorf("messagePatch = %v, want %v", patch, tt.want)
+			}
+		})
+	}
+}
+
+// TestApplyBatchRejectsMismatchedFields covers a mutation whose kind
+// and payload disagree. The batch is one request, so a mutation this
+// transport cannot translate fails the call before anything reaches
+// the server rather than dispatching a request missing part of what
+// the caller asked for.
+func TestApplyBatchRejectsMismatchedFields(t *testing.T) {
+	tests := []struct {
+		name string
+		mut  backend.Mutation
+		want string
+	}{
+		{
+			name: "mailbox create carrying a message patch",
+			mut:  backend.Mutation{Op: backend.MutationCreate, Kind: backend.ObjectKindMailbox, CreationID: "c1", Fields: backend.MessagePatch{}},
+			want: "backend.MailboxCreate",
+		},
+		{
+			name: "message update carrying a mailbox create",
+			mut:  backend.Mutation{Op: backend.MutationUpdate, Kind: backend.ObjectKindMessage, ID: "msg-1", Fields: backend.MailboxCreate{}},
+			want: "backend.MessagePatch",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			session, api := newTestSession(t)
+
+			_, err := session.Mail().ApplyBatch(context.Background(), []backend.Mutation{tt.mut})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ApplyBatch error = %v, want one naming %s", err, tt.want)
+			}
+			if got := api.callCount(); got != 0 {
+				t.Errorf("api calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
 // TestApplyBatchCreatesMailboxAndMovesInOneRequest covers the offline
 // create-folder-then-move: a mailbox create and the message updates
 // filing messages into it reach the server as one request, with the
@@ -179,13 +268,13 @@ func TestApplyBatchCreatesMailboxAndMovesInOneRequest(t *testing.T) {
 			Op:         backend.MutationCreate,
 			Kind:       backend.ObjectKindMailbox,
 			CreationID: "c1",
-			Fields:     map[string]any{"name": "Projects", "parent_id": "mbx-parent"},
+			Fields:     backend.MailboxCreate{Name: "Projects", ParentID: "mbx-parent"},
 		},
 		{
 			Op:     backend.MutationUpdate,
 			Kind:   backend.ObjectKindMessage,
 			ID:     "msg-1",
-			Fields: map[string]any{"mailbox_ids": []string{"#c1"}},
+			Fields: backend.MessagePatch{MailboxIDs: []string{"#c1"}},
 		},
 	})
 	if err != nil {

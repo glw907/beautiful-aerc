@@ -30,9 +30,9 @@ func TestSyncClassifiesMailboxRole(t *testing.T) {
 		return backend.ChangeSet{
 			NewToken: "state-1",
 			Created: []backend.Record{
-				{ID: "mb-papierkorb", Fields: map[string]any{"name": "Papierkorb"}},
-				{ID: "mb-all", Fields: map[string]any{"role": "all", "name": "Everything"}},
-				{ID: "mb-inbox", Fields: map[string]any{"role": "inbox", "name": "Inbox"}},
+				{ID: "mb-papierkorb", Fields: backend.MailboxFields{Name: "Papierkorb"}},
+				{ID: "mb-all", Fields: backend.MailboxFields{Role: "all", Name: "Everything"}},
+				{ID: "mb-inbox", Fields: backend.MailboxFields{Role: "inbox", Name: "Inbox"}},
 			},
 		}, nil
 	}
@@ -72,8 +72,8 @@ func TestSyncResolvesDuplicateMailboxRoles(t *testing.T) {
 		return backend.ChangeSet{
 			NewToken: "state-1",
 			Created: []backend.Record{
-				{ID: "mb-trash", Fields: map[string]any{"name": "Trash"}},
-				{ID: "mb-papierkorb", Fields: map[string]any{"name": "Papierkorb"}},
+				{ID: "mb-trash", Fields: backend.MailboxFields{Name: "Trash"}},
+				{ID: "mb-papierkorb", Fields: backend.MailboxFields{Name: "Papierkorb"}},
 			},
 		}, nil
 	}

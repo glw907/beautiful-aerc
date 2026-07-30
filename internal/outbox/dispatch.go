@@ -391,7 +391,7 @@ func (d *Dispatcher) dispatchBatch(ctx context.Context, create claimed, moves []
 		Op:         backend.MutationCreate,
 		Kind:       backend.ObjectKindMailbox,
 		CreationID: creationID,
-		Fields:     map[string]any{"name": p.Name, "parent_id": parentID},
+		Fields:     backend.MailboxCreate{Name: p.Name, ParentID: parentID},
 	}}
 	payloads := make([]*MoveMessagesPayload, len(moves))
 	for i, mv := range moves {
@@ -449,7 +449,7 @@ func fileIntoMailbox(c claimed, messageIDs []int64, dest string) []backend.Mutat
 			Op:     backend.MutationUpdate,
 			Kind:   backend.ObjectKindMessage,
 			ID:     c.messageServerIDs[msgID],
-			Fields: map[string]any{"mailbox_ids": []string{dest}},
+			Fields: backend.MessagePatch{MailboxIDs: []string{dest}},
 		})
 	}
 	return mutations

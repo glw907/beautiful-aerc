@@ -225,8 +225,9 @@ func verifyServerMailboxName(t *testing.T, ctx context.Context, be backend.Backe
 	if !ok {
 		t.Fatalf("server mailbox %s not found in a fresh Changes(Mailbox) read", serverID)
 	}
-	if got, _ := rec.Fields["name"].(string); got != name {
-		t.Fatalf("server mailbox %s name = %q, want %q", serverID, got, name)
+	box, _ := rec.Fields.(backend.MailboxFields)
+	if box.Name != name {
+		t.Fatalf("server mailbox %s name = %q, want %q", serverID, box.Name, name)
 	}
 }
 

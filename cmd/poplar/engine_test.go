@@ -201,7 +201,7 @@ func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 				return backend.ChangeSet{NewToken: token}, nil
 			}
 			return backend.ChangeSet{
-				Created:  []backend.Record{{ID: "mb1", Fields: map[string]any{"name": "Inbox"}}},
+				Created:  []backend.Record{{ID: "mb1", Fields: backend.MailboxFields{Name: "Inbox"}}},
 				NewToken: "tok-1",
 			}, nil
 		}

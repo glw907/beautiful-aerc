@@ -1,0 +1,13 @@
+{
+  "methodResponses": [
+    ["Mailbox/get", {
+      "accountId": "u1",
+      "state": "1",
+      "list": [
+        {"id": "mbx-1", "name": "Inbox", "role": "inbox", "sortOrder": 1, "totalEmails": 10, "unreadEmails": 2, "isSubscribed": true}
+      ],
+      "notFound": []
+    }, "0"]
+  ],
+  "sessionState": "session-1"
+}

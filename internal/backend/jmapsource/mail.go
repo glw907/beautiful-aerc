@@ -49,11 +49,19 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 			if mut.Op != backend.MutationCreate {
 				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: mailbox %v is RenameMailbox or DeleteMailbox", mut.Op)
 			}
-			mailboxes.Create[jmap.ID(mut.CreationID)] = newMailbox(mut.Fields)
+			create, ok := mut.Fields.(backend.MailboxCreate)
+			if !ok {
+				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: mailbox create carries %T, want backend.MailboxCreate", mut.Fields)
+			}
+			mailboxes.Create[jmap.ID(mut.CreationID)] = newMailbox(create)
 		case backend.ObjectKindMessage:
 			switch mut.Op {
 			case backend.MutationUpdate:
-				messages.Update[jmap.ID(mut.ID)] = messagePatch(mut.Fields)
+				patch, ok := mut.Fields.(backend.MessagePatch)
+				if !ok {
+					return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: message update carries %T, want backend.MessagePatch", mut.Fields)
+				}
+				messages.Update[jmap.ID(mut.ID)] = messagePatch(patch)
 			case backend.MutationDestroy:
 				messages.Destroy = append(messages.Destroy, jmap.ID(mut.ID))
 			case backend.MutationCreate:
@@ -126,35 +134,33 @@ func batchError(call string, err error) error {
 	return fmt.Errorf("jmap: %s: %w", call, err)
 }
 
-// newMailbox translates a mailbox create mutation's poplar-vocabulary
-// fields into the wire object, the inverse of mailboxFields.
-func newMailbox(fields map[string]any) *jmap.Mailbox {
-	box := &jmap.Mailbox{}
-	box.Name, _ = fields["name"].(string)
-	if parent, _ := fields["parent_id"].(string); parent != "" {
-		box.ParentID = jmap.ID(parent)
+// newMailbox translates a mailbox create's poplar-vocabulary fields
+// into the wire object.
+func newMailbox(create backend.MailboxCreate) *jmap.Mailbox {
+	box := &jmap.Mailbox{Name: create.Name}
+	if create.ParentID != "" {
+		box.ParentID = jmap.ID(create.ParentID)
 	}
 	return box
 }
 
-// messagePatch translates mut's poplar-vocabulary fields into a JMAP
-// Patch, the inverse of messageFields.
-func messagePatch(fields map[string]any) jmap.Patch {
+// messagePatch translates a message update's poplar-vocabulary fields
+// into a JMAP Patch. A keyword the patch says nothing about stays out
+// of it, so a flag poplar did not change keeps whatever the server
+// holds.
+func messagePatch(p backend.MessagePatch) jmap.Patch {
 	patch := jmap.Patch{}
-	for name, keyword := range backend.MessageFlagKeywords {
-		v, ok := fields[name]
-		if !ok {
-			continue
-		}
-		if set, _ := v.(bool); set {
+	for flag, keyword := range backend.MessageFlagKeywords {
+		switch {
+		case p.SetFlags&flag != 0:
 			patch[jmap.Pointer("keywords", keyword)] = true
-		} else {
+		case p.ClearFlags&flag != 0:
 			patch[jmap.Pointer("keywords", keyword)] = nil
 		}
 	}
-	if ids, ok := fields["mailbox_ids"].([]string); ok {
-		mailboxIDs := make(map[string]bool, len(ids))
-		for _, id := range ids {
+	if p.MailboxIDs != nil {
+		mailboxIDs := make(map[string]bool, len(p.MailboxIDs))
+		for _, id := range p.MailboxIDs {
 			mailboxIDs[id] = true
 		}
 		patch["mailboxIds"] = mailboxIDs

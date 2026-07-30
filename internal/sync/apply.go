@@ -3,67 +3,39 @@ package sync
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
 )
 
-// fields decodes one backend.Record's Fields into the Go types
-// Record's vocabulary pins per key. A key the record omits decodes to
-// the zero value; a key present under another type is a backend
-// defect, held in err until the caller reports it. Decoding the whole
-// record before consulting err keeps the crossing flat, the shape
-// database/sql uses for the same problem.
-type fields struct {
-	m   map[string]any
-	err error
-}
-
-// field returns key's value as T. A wrong-typed value would otherwise
-// decode to T's zero value and overwrite what the store already holds:
-// an id list read as nil takes the message out of every folder, and a
-// count read as 0 empties the folder's totals.
-func field[T any](f *fields, key string) T {
-	var want T
-	v, ok := f.m[key]
-	if !ok {
-		return want
-	}
-	got, ok := v.(T)
-	if !ok {
-		if f.err == nil {
-			f.err = fmt.Errorf("field %q has type %T, want %T", key, v, want)
-		}
-		return want
-	}
-	return got
-}
-
-func flagsFromFields(f *fields) store.Flags {
+// storeFlags encodes set as the store's flag bits. The seam and the
+// store number their bits independently, so the crossing goes through
+// the keyword both of them name rather than assuming the two layouts
+// line up.
+func storeFlags(set backend.MessageFlags) store.Flags {
 	var keywords []string
-	for name, kw := range backend.MessageFlagKeywords {
-		if field[bool](f, name) {
-			keywords = append(keywords, kw)
+	for flag, keyword := range backend.MessageFlagKeywords {
+		if set&flag != 0 {
+			keywords = append(keywords, keyword)
 		}
 	}
 	bits, _ := store.EncodeFlags(keywords)
 	return bits
 }
 
-// firstAddress renders the first entry of an address-list field
-// (Record.Fields' "from") as message.from_addr's single display
-// string: "Name <email>" when a name is present, the bare address
-// otherwise. internal/mail owns full envelope modeling from pass 3;
-// this is the scalar column pass 1's list view reads.
-func firstAddress(addrs []map[string]string) string {
+// firstAddress renders the first entry of an address list as
+// message.from_addr's single display string: "Name <email>" when a
+// name is present, the bare address otherwise. internal/mail owns full
+// envelope modeling from pass 3; this is the scalar column pass 1's
+// list view reads.
+func firstAddress(addrs []backend.Address) string {
 	if len(addrs) == 0 {
 		return ""
 	}
-	if name := addrs[0]["name"]; name != "" {
-		return name + " <" + addrs[0]["email"] + ">"
+	if addrs[0].Name != "" {
+		return addrs[0].Name + " <" + addrs[0].Email + ">"
 	}
-	return addrs[0]["email"]
+	return addrs[0].Email
 }
 
 // applyChangeSet writes cs's created, updated, and destroyed records
@@ -99,15 +71,28 @@ func applyChangeSet(tx *sql.Tx, accountID int64, kind backend.ObjectKind, cs bac
 	return nil
 }
 
+// upsertRecord writes rec by the type of its payload, checked against
+// kind, the collection the Changes call that produced rec asked for.
+// The payload type and kind are two discriminators this package
+// already relies on separately: destroyRecord and staleIDs switch on
+// kind alone, since a destroyed or stale record carries no payload to
+// check. This is where the two discriminators meet, so it is where a
+// payload that disagrees with the page it arrived on is caught
+// before it writes into the wrong table.
 func upsertRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, rec backend.Record) error {
-	switch kind {
-	case backend.ObjectKindMessage:
-		return upsertMessage(tx, accountID, rec)
-	case backend.ObjectKindMailbox:
-		return upsertMailbox(tx, accountID, rec)
+	switch f := rec.Fields.(type) {
+	case backend.MessageFields:
+		if kind == backend.ObjectKindMessage {
+			return upsertMessage(tx, accountID, rec.ID, f)
+		}
+	case backend.MailboxFields:
+		if kind == backend.ObjectKindMailbox {
+			return upsertMailbox(tx, accountID, rec.ID, f)
+		}
 	default:
-		return fmt.Errorf("sync: apply: unsupported kind %v", kind)
+		return fmt.Errorf("sync: apply: record %s carries unsupported fields %T", rec.ID, rec.Fields)
 	}
+	return fmt.Errorf("sync: apply: record %s carries %T on a %s page", rec.ID, rec.Fields, kindName(kind))
 }
 
 func destroyRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, serverID string) error {
@@ -121,46 +106,37 @@ func destroyRecord(tx *sql.Tx, accountID int64, kind backend.ObjectKind, serverI
 	}
 }
 
-// upsertMailbox translates rec's backend field vocabulary into a
-// store.MailboxUpsert and writes it. Every mailbox column and its
-// JSON shape are store.UpsertMailbox's concern, not this package's;
-// this function's only job is the vocabulary crossing.
-func upsertMailbox(tx *sql.Tx, accountID int64, rec backend.Record) error {
-	f := &fields{m: rec.Fields}
-	up := store.MailboxUpsert{
-		ServerID:    rec.ID,
-		Role:        field[string](f, "role"),
-		Name:        field[string](f, "name"),
-		SortOrder:   field[int64](f, "sort_order"),
-		TotalCount:  field[int64](f, "total_emails"),
-		UnreadCount: field[int64](f, "unread_emails"),
-	}
-	if f.err != nil {
-		return fmt.Errorf("sync: apply mailbox %s: %v", rec.ID, f.err)
-	}
-	return store.UpsertMailbox(tx, accountID, up)
+// upsertMailbox translates f's backend vocabulary into a
+// store.MailboxUpsert and writes it under serverID. Every mailbox
+// column and its JSON shape are store.UpsertMailbox's concern, not
+// this package's; this function's only job is the vocabulary
+// crossing.
+func upsertMailbox(tx *sql.Tx, accountID int64, serverID string, f backend.MailboxFields) error {
+	return store.UpsertMailbox(tx, accountID, store.MailboxUpsert{
+		ServerID:    serverID,
+		Role:        f.Role,
+		Name:        f.Name,
+		SortOrder:   f.SortOrder,
+		TotalCount:  f.TotalCount,
+		UnreadCount: f.UnreadCount,
+	})
 }
 
-// upsertMessage translates rec's backend field vocabulary into a
+// upsertMessage translates f's backend vocabulary into a
 // store.MessageUpsert and writes it, the message counterpart of
 // upsertMailbox.
-func upsertMessage(tx *sql.Tx, accountID int64, rec backend.Record) error {
-	f := &fields{m: rec.Fields}
-	up := store.MessageUpsert{
-		ServerID:      rec.ID,
-		BlobID:        field[string](f, "blob_id"),
-		ThreadKey:     field[string](f, "thread_id"),
-		Subject:       field[string](f, "subject"),
-		FromAddr:      firstAddress(field[[]map[string]string](f, "from")),
-		Flags:         flagsFromFields(f),
-		Size:          field[int64](f, "size"),
-		HasAttachment: field[bool](f, "has_attachment"),
-		ReceivedAt:    field[time.Time](f, "received_at"),
-		MailboxIDs:    field[[]string](f, "mailbox_ids"),
-		Unread:        !field[bool](f, "seen"),
-	}
-	if f.err != nil {
-		return fmt.Errorf("sync: apply message %s: %v", rec.ID, f.err)
-	}
-	return store.UpsertMessage(tx, accountID, up)
+func upsertMessage(tx *sql.Tx, accountID int64, serverID string, f backend.MessageFields) error {
+	return store.UpsertMessage(tx, accountID, store.MessageUpsert{
+		ServerID:      serverID,
+		BlobID:        f.BlobID,
+		ThreadKey:     f.ThreadKey,
+		Subject:       f.Subject,
+		FromAddr:      firstAddress(f.From),
+		Flags:         storeFlags(f.Flags),
+		Size:          f.Size,
+		HasAttachment: f.HasAttachment,
+		ReceivedAt:    f.ReceivedAt,
+		MailboxIDs:    f.MailboxIDs,
+		Unread:        f.Flags&backend.FlagSeen == 0,
+	})
 }

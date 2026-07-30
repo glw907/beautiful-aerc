@@ -76,16 +76,16 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 	if create.CreationID == "" {
 		t.Fatal("mailbox create carries no CreationID for the move to reference")
 	}
-	if create.Fields["name"] != "Projects" {
-		t.Errorf("created name = %v, want Projects", create.Fields["name"])
+	if box, _ := create.Fields.(backend.MailboxCreate); box.Name != "Projects" {
+		t.Errorf("created name = %v, want Projects", create.Fields)
 	}
 	move := muts[1]
 	if move.ID != "msg-1" {
 		t.Errorf("mutation 1 ID = %q, want %q", move.ID, "msg-1")
 	}
-	ids, _ := move.Fields["mailbox_ids"].([]string)
-	if len(ids) != 1 || ids[0] != "#"+create.CreationID {
-		t.Errorf("mailbox_ids = %v, want [#%s] (the create's back-reference)", ids, create.CreationID)
+	patch, _ := move.Fields.(backend.MessagePatch)
+	if len(patch.MailboxIDs) != 1 || patch.MailboxIDs[0] != "#"+create.CreationID {
+		t.Errorf("MailboxIDs = %v, want [#%s] (the create's back-reference)", patch.MailboxIDs, create.CreationID)
 	}
 
 	if len(result.Delivered) != 2 {

@@ -27,8 +27,8 @@ func TestSelfEchoSuppressed(t *testing.T) {
 		return backend.ChangeSet{
 			NewToken: "dispatched-1",
 			Created: []backend.Record{
-				{ID: "m1", Fields: map[string]any{"subject": "hello"}},
-				{ID: "m3", Fields: map[string]any{"subject": "third party"}},
+				{ID: "m1", Fields: backend.MessageFields{Subject: "hello"}},
+				{ID: "m3", Fields: backend.MessageFields{Subject: "third party"}},
 			},
 		}, nil
 	}
@@ -64,7 +64,7 @@ func TestSelfEchoSuppressed(t *testing.T) {
 		}
 		return backend.ChangeSet{
 			NewToken: "state-2",
-			Created:  []backend.Record{{ID: "m2", Fields: map[string]any{"subject": "world"}}},
+			Created:  []backend.Record{{ID: "m2", Fields: backend.MessageFields{Subject: "world"}}},
 		}, nil
 	}
 	if err := worker.SyncKind(context.Background(), backend.ObjectKindMessage); err != nil {

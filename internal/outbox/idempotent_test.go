@@ -154,9 +154,9 @@ func TestIdempotentReplay(t *testing.T) {
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 			applyCalls++
 			for _, m := range muts {
-				ids, _ := m.Fields["mailbox_ids"].([]string)
-				if len(ids) > 0 {
-					serverMailbox[m.ID] = ids[0]
+				patch, _ := m.Fields.(backend.MessagePatch)
+				if len(patch.MailboxIDs) > 0 {
+					serverMailbox[m.ID] = patch.MailboxIDs[0]
 				}
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil

@@ -45,58 +45,14 @@ const (
 	ObjectKindContact
 )
 
-// Record is one hydrated item a Changes call returns. Fields is
-// keyed to poplar's own field vocabulary for its kind, the same names
-// internal/mail, internal/calendar, and internal/contacts decode. A
-// backend translates its wire protocol's property names into this
-// vocabulary before Changes returns; it never leaks a wire property
-// name (JMAP's mailboxIds, keywords, and so on) through the seam.
-//
-// Each key's Go type is part of the vocabulary. A consumer decodes
-// with a type assertion, so a value handed over in a JSON decoder's
-// shapes ([]any for a list, float64 for a number) is a backend defect
-// the consumer reports rather than decodes around. An absent key means
-// the backend has nothing for it, which decodes to the type's zero
-// value.
-//
-// The lists below are the keys poplar consumes today, not everything a
-// backend may put in Fields. A key outside them is carried and ignored
-// until a consumer pins its type here.
-//
-// ObjectKindMessage carries:
-//
-//	blob_id, thread_id, subject                string
-//	from                                       []map[string]string, each with "name" and "email"
-//	mailbox_ids                                []string, server ids
-//	received_at                                time.Time
-//	size                                       int64
-//	has_attachment                             bool
-//	seen, flagged, answered, draft, forwarded  bool, MessageFlagKeywords' names
-//
-// ObjectKindMailbox carries:
-//
-//	role, name                               string
-//	sort_order, total_emails, unread_emails  int64
-//
-// ObjectKindEvent and ObjectKindContact pin their own vocabularies
-// once internal/calendar and internal/contacts land.
+// Record is one hydrated item a Changes call returns: the server's id
+// for the object, and the payload for the kind the call named. A
+// backend fills Fields from its wire protocol before Changes returns
+// and never leaks a wire property name (JMAP's mailboxIds, keywords,
+// and so on) through the seam.
 type Record struct {
 	ID     string
-	Fields map[string]any
-}
-
-// MessageFlagKeywords maps the boolean flag names a message Record's
-// Fields carries to the keyword each one stands for on the wire and in
-// the store. A backend translates its own keyword set through this
-// table on the way out of Changes and back through it on the way into
-// ApplyBatch; internal/sync reads the same table to reach
-// store.EncodeFlags's keyword vocabulary.
-var MessageFlagKeywords = map[string]string{
-	"seen":      "$seen",
-	"flagged":   "$flagged",
-	"answered":  "$answered",
-	"draft":     "$draft",
-	"forwarded": "$forwarded",
+	Fields RecordFields
 }
 
 // ChangeSet is what Changes returns for one page of one collection:
@@ -127,8 +83,7 @@ const (
 	MutationDestroy
 )
 
-// Mutation is one change ApplyBatch applies within a batch. Fields is
-// keyed to the same poplar field vocabulary Record.Fields uses.
+// Mutation is one change ApplyBatch applies within a batch.
 type Mutation struct {
 	Op MutationOp
 	// Kind names the collection the record belongs to, the same
@@ -146,7 +101,9 @@ type Mutation struct {
 	// "#"+CreationID wherever a field takes an id, and the backend
 	// resolves that reference against its own protocol.
 	CreationID string
-	Fields     map[string]any
+	// Fields carries what the mutation changes, and is nil for a
+	// destroy.
+	Fields MutationFields
 }
 
 // BatchResult is what ApplyBatch returns: the server id assigned to
