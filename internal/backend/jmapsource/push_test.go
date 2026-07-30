@@ -246,9 +246,9 @@ func TestPushReportsARefusalWithoutLoggingIt(t *testing.T) {
 	if ch != nil {
 		t.Error("Listen returned a channel alongside an error")
 	}
-	var failure backend.PushFailure
+	var failure backend.Failure
 	if !errors.As(err, &failure) {
-		t.Fatalf("Listen error = %v, want a backend.PushFailure", err)
+		t.Fatalf("Listen error = %v, want a backend.Failure", err)
 	}
 	if failure.Class != uerr.ClassAuth {
 		t.Errorf("Class = %v, want ClassAuth", failure.Class)
@@ -487,4 +487,134 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+// TestPushReportsARefusalThatEndedAnOpenStream is the refusal that had
+// nowhere to go. It arrives after Listen has already returned its
+// channel, so returning it is not available; discarding it leaves the
+// caller reopening a stream against a server that keeps refusing, at
+// whatever flat rate the caller reopens at, and with nothing in the
+// log. It is both the ground for waiting longer and the failure the
+// user is owed, so the next Listen reports it before opening anything.
+func TestPushReportsARefusalThatEndedAnOpenStream(t *testing.T) {
+	buf := uerrtest.Capture(t)
+
+	stream := &eventStream{script: func(int, func(string), func()) {}}
+	mux, srv := newFakeServer(t)
+	var mu sync.Mutex
+	requests := 0
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		first := requests == 1
+		mu.Unlock()
+		if first {
+			stream.handle(w, r) // opens, then the stream ends
+			return
+		}
+		http.Error(w, "no", http.StatusUnauthorized)
+	})
+	hits := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return requests
+	}
+	session := dialTestSession(t, srv)
+	push := session.Push()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ch, err := push.Listen(ctx)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	for range ch { //nolint:revive // draining until the transport stops for good is the point
+	}
+
+	// The stream is over and the caller is about to reopen. That call
+	// is where the refusal has to surface, and it needs no request of
+	// its own to do it.
+	before := hits()
+	next, err := push.Listen(ctx)
+	if next != nil {
+		t.Error("Listen returned a channel alongside the refusal that ended the last stream")
+	}
+	var failure backend.Failure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Listen error = %v, want the backend.Failure that ended the previous stream", err)
+	}
+	if failure.Class != uerr.ClassAuth {
+		t.Errorf("Class = %v, want ClassAuth", failure.Class)
+	}
+	if got := hits(); got != before {
+		t.Errorf("Listen made %d more requests before reporting a refusal it already held", got-before)
+	}
+	if lines := uerrtest.Lines(t, buf); len(lines) != 0 {
+		t.Errorf("the adapter logged %d uerr lines for a refusal its caller surfaces", len(lines))
+	}
+
+	// And only once: the report is consumed, so the Listen after it
+	// tries the server again rather than replaying history.
+	if _, err := push.Listen(ctx); err == nil {
+		t.Error("a Listen after the report opened a stream against a server that refuses")
+	}
+	if hits() <= before {
+		t.Error("the Listen after the report never reached the server")
+	}
+}
+
+// TestPushDropsANotificationRatherThanStallingTheStream pins the
+// policy backend.Push states: a send the caller has not kept up with
+// is dropped, not waited on. Waiting stalls the goroutine reading the
+// stream, and a reader stalled past the ping cadence trips the
+// transport's own stall detector and aborts a working connection,
+// which a sync flush taking seconds is enough to cause. Nothing is
+// lost, because the Changes call the queued notification triggers
+// reads everything since the persisted token either way.
+//
+// The evidence has to come from the reader, not the server, which can
+// write five events into a socket whether or not anyone is parsing
+// them. The clamping ping behind them is that evidence: the line it
+// produces is written by the reader itself, after it has been through
+// every event in front of it.
+func TestPushDropsANotificationRatherThanStallingTheStream(t *testing.T) {
+	logs := captureDebugLog(t)
+
+	proceed, open := gate()
+	session, _ := newPushSession(t, func(_ int, send func(string), hold func()) {
+		<-proceed
+		for i := range 5 {
+			send(stateEvent(fmt.Sprintf("s%d", i)))
+		}
+		send("event: ping\ndata: {\"interval\":30000}\n\n")
+		hold()
+	})
+	t.Cleanup(open)
+
+	// Never read the channel, so every notification after the first has
+	// nowhere to go.
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ch, err := session.Push().Listen(ctx)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	open()
+
+	waitFor(t, "the reader to get past five undeliverable notifications", func() bool {
+		return strings.Contains(logs.String(), "ping interval clamped")
+	})
+
+	// The stream is still live, and what it queued is still there.
+	if len(ch) != cap(ch) {
+		t.Errorf("queued notifications = %d, want the channel full at %d", len(ch), cap(ch))
+	}
+	select {
+	case _, ok := <-ch:
+		if !ok {
+			t.Fatal("the channel closed while the caller was not reading it")
+		}
+	default:
+		t.Fatal("nothing was queued for a caller that read nothing")
+	}
 }

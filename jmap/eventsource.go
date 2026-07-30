@@ -20,8 +20,8 @@ import (
 // 7.2's PushSubscription object, which asks a server to post to a URL
 // of the client's and which this package does not model.
 //
-// The three callbacks run on Listen's own goroutine, in the order the
-// stream produced them, so a slow one stalls the stream. A nil one is
+// The callbacks run on Listen's own goroutine, in the order the stream
+// produced them, so a slow one stalls the stream. A nil one is
 // skipped.
 type EventSource struct {
 	// Types names the record types to subscribe to. Empty subscribes
@@ -59,14 +59,15 @@ type EventSource struct {
 	// without saying anything was wrong.
 	OnDisconnect func(error)
 
-	// OnPingClamped reports a ping event advertising an interval
-	// above what RFC 8620 section 7.3 permits: what the server said,
-	// and the cadence held to instead (cadence's own doc comment). A
-	// conformant server never triggers it, and a clamping one
-	// triggers it on every ping, so a caller that logs this dedups
-	// what it logs. This package logs nothing, so a stream whose
-	// liveness expectation is not the advertised one is otherwise
-	// indistinguishable from one that is.
+	// OnPingClamped reports a ping event advertising an interval above
+	// what RFC 8620 section 7.3 permits: what the server said, and the
+	// cadence held to instead (cadence's own doc comment). A
+	// conformant server never triggers it. A clamping one clamps every
+	// ping it sends, so this reports the first and then only a change
+	// in the advertised figure, for the life of the Listen call and
+	// across the connections it makes. This package logs nothing, so a
+	// stream whose liveness expectation is not the advertised one is
+	// otherwise indistinguishable from one that is.
 	OnPingClamped func(reported, inForce time.Duration)
 }
 
@@ -184,12 +185,15 @@ func (c *Client) Listen(ctx context.Context, source EventSource) error {
 
 // A listener holds one Listen call's state across the connections it
 // makes. lastID is the resume point, which outlives the connection
-// that produced it.
+// that produced it, and clamped is the advertised ping interval last
+// reported as clamped, so a server that clamps every ping is reported
+// once rather than once a ping.
 type listener struct {
-	client *Client
-	source EventSource
-	url    string
-	lastID string
+	client  *Client
+	source  EventSource
+	url     string
+	lastID  string
+	clamped time.Duration
 }
 
 // connect makes one connection and reads it to its end. It reports how
@@ -284,12 +288,15 @@ func (l *listener) consume(abort context.CancelFunc, body io.Reader) (bool, erro
 				return true, fmt.Errorf("decode ping event: %v", err)
 			}
 			if cadence, ok := p.cadence(l.source.Ping); ok {
-				// cadence reporting ok is what bounds this product:
-				// it rejects an interval too large for a Duration to
-				// hold as seconds, so the only figures reaching here
-				// convert without wrapping.
-				if reported := time.Duration(p.Interval) * time.Second; reported > cadence && l.source.OnPingClamped != nil {
-					l.source.OnPingClamped(reported, cadence)
+				// cadence reporting ok is what bounds this product: it
+				// rejects an interval too large for a Duration to hold
+				// as seconds, so the only figures reaching here convert
+				// without wrapping.
+				if reported := time.Duration(p.Interval) * time.Second; reported > cadence && reported != l.clamped {
+					l.clamped = reported
+					if l.source.OnPingClamped != nil {
+						l.source.OnPingClamped(reported, cadence)
+					}
 				}
 				window = stallWindow(cadence)
 			}

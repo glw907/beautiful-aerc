@@ -80,7 +80,7 @@ func TestChunkedBulk(t *testing.T) {
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 			applyCalls++
 			if applyCalls == 2 {
-				return backend.BatchResult{}, backend.MutationFailure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+				return backend.BatchResult{}, backend.Failure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}

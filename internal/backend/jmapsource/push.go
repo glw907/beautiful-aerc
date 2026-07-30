@@ -39,35 +39,74 @@ const (
 // no event source: the same absence Capabilities reports as
 // backend.PushTransportNone, which is what sends the sync engine to
 // its poll fallback rather than into a stream that cannot be opened.
+//
+// One session has one transport, and successive calls return it, since
+// what stopped the last stream is what the next Listen has to report.
 func (s *Session) Push() backend.Push {
 	if s.caps.PushTransport == backend.PushTransportNone {
 		return nil
 	}
-	return &pushSource{session: s}
+	return &s.push
 }
 
 // pushSource is s's backend.Push over RFC 8620 section 7.3's event
-// source.
+// source. stopped carries why the last stream it opened ended, from
+// the goroutine that watched it end to the next Listen call.
 type pushSource struct {
 	session *Session
+
+	mu      sync.Mutex
+	stopped error
+}
+
+// noteStop records why a stream ended, classified and never nil, so
+// the next Listen has something to report even for a server that
+// closed the stream without saying anything was wrong.
+func (p *pushSource) noteStop(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stopped = fmt.Errorf("jmap: push: %w", classifyListen(cmp.Or(err, errStreamClosed)))
+}
+
+// takeStop returns why the last stream ended and forgets it, so the
+// call after the one that reported it opens a stream instead of
+// replaying a refusal that is now history.
+func (p *pushSource) takeStop() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	err := p.stopped
+	p.stopped = nil
+	return err
 }
 
 // Listen opens the event stream and reports every connection and every
 // state change on the returned channel. It returns once the stream is
-// open, or with the refusal that ended it before it ever opened,
-// classified as a backend.PushFailure but not logged: RunPush retries
-// Listen in its own backoff loop and owns the surfacing decision
-// (ADR-0013 revision 2).
+// open, or with the refusal that ended a stream, whether the one it
+// was opening or the one before it. That refusal is classified as a
+// backend.Failure and not logged: RunPush retries Listen in its own
+// backoff loop and owns the surfacing decision (ADR-0013 revision 2).
 //
-// A server that cannot be reached is not that refusal. Listen goes on
-// trying at its own bounded pace and does not return, so an outage
-// reaches its caller through the log instead (pushHealth).
+// A refusal that ends a stream already open has no other way out.
+// Listen has returned by then, so the call after it reports the
+// refusal before opening anything, which is what lets the caller both
+// wait longer before the next stream and tell the user why mail
+// stopped. Against a server refusing every other connection, throwing
+// it away instead leaves the caller reopening at its flat rate with
+// nothing in the log.
+//
+// A server that cannot be reached is neither. Listen goes on trying at
+// its own bounded pace and does not return, so an outage reaches its
+// caller through the log instead (pushHealth).
 //
 // The channel survives a drop, because the transport under it
 // reconnects on its own bounded schedule, and closes only when the
 // stream stops for good: the server refusing a connection, or ctx
 // ending.
 func (p *pushSource) Listen(ctx context.Context) (<-chan backend.Notification, error) {
+	if err := p.takeStop(); err != nil {
+		return nil, err
+	}
+
 	// One slot, and a send that gives up rather than waits. The
 	// callbacks run on the stream's own reading goroutine, so one that
 	// blocks stalls the reader behind it, and a reader that stalls past
@@ -85,7 +124,7 @@ func (p *pushSource) Listen(ctx context.Context) (<-chan backend.Notification, e
 
 	opened := make(chan struct{})
 	var once sync.Once
-	stopped := make(chan error, 1)
+	stopped := make(chan struct{})
 
 	var health pushHealth
 	source := jmap.EventSource{
@@ -104,27 +143,43 @@ func (p *pushSource) Listen(ctx context.Context) (<-chan backend.Notification, e
 				notify()
 			}
 		},
-		OnDisconnect:  health.dropped,
-		OnPingClamped: pingClampLogger(),
+		OnDisconnect: health.dropped,
+		OnPingClamped: func(reported, inForce time.Duration) {
+			// Debug rather than a uerr.Error: an overridden cadence is
+			// not a failure and the stream it protects is working. Not
+			// silence either, because package jmap logs nothing and the
+			// cadence in force is what decides how long a dead
+			// connection goes unnoticed. It reports the first clamp and
+			// then only a change in the advertised figure, so a server
+			// that clamps every ping is one line, not one a ping.
+			slog.Debug("jmap: push ping interval clamped", "reported", reported, "in_force", inForce)
+		},
 	}
 
 	go func() {
-		stopped <- p.session.client.Listen(ctx, source)
+		// The stop is recorded before either signal, so the report is
+		// in hand by the time anyone can observe the stream ending.
+		p.noteStop(p.session.client.Listen(ctx, source))
 		close(ch)
+		close(stopped)
 	}()
 
 	select {
 	case <-opened:
 		return ch, nil
-	case err := <-stopped:
-		return nil, fmt.Errorf("jmap: push: %w", classifyListen(err))
+	case <-stopped:
+		return nil, p.takeStop()
 	}
 }
 
-// errStreamClosed stands in for the cause of a drop the server made
-// without saying anything was wrong, so an outage names one either
-// way.
+// errStreamClosed stands in when a stream ended with nothing said
+// about why, so a report of it names a cause either way.
 var errStreamClosed = errors.New("event source closed the stream")
+
+// outageDrops is how many drops with no connection between them count
+// as an outage rather than a stream the transport is about to get
+// back.
+const outageDrops = 2
 
 // pushHealth counts one Listen call's consecutive drops, so an outage
 // surfaces the way ADR-0013 revision 2 asks: once, on the transition,
@@ -134,12 +189,12 @@ var errStreamClosed = errors.New("event source closed the stream")
 // it is still trying, so a server that cannot be reached at all
 // reaches a caller only through these reports, and it produces one on
 // every attempt, on a schedule that starts under 250ms and tops out at
-// 30s. The first drop is not yet
-// an outage: the transport reconnects on its own bounded schedule, and
-// a stream it gets back in one attempt cost the user nothing. A second
-// drop with no connection between them is the moment the sync engine's
-// own reconnect loop used to classify and surface, back when it owned
-// the retry, and it means the attempt to get back on failed too.
+// 30s. The first drop is not yet an outage: the transport reconnects
+// on its own bounded schedule, and a stream it gets back in one
+// attempt cost the user nothing. A second drop with no connection
+// between them is the moment the sync engine's own reconnect loop used
+// to classify and surface, back when it owned the retry, and it means
+// the attempt to get back on failed too.
 //
 // A server that keeps accepting a connection and dropping it therefore
 // never surfaces, by design: every one of those connections is a
@@ -149,8 +204,7 @@ var errStreamClosed = errors.New("event source closed the stream")
 // The callbacks all run on Listen's own reading goroutine, so this
 // needs no lock.
 type pushHealth struct {
-	drops   int
-	failing bool
+	drops int
 }
 
 // dropped records a lost connection, reporting the first at debug
@@ -160,38 +214,16 @@ func (h *pushHealth) dropped(err error) {
 	switch h.drops {
 	case 1:
 		slog.Debug("jmap: push connection lost, the transport is reconnecting", "error", err)
-	case 2:
+	case outageDrops:
 		_ = uerr.New("jmap.push", nil, uerr.ClassConnection, cmp.Or(err, errStreamClosed))
-		h.failing = true
 	}
 }
 
 // connected records a connection made, ending whatever run of drops
 // came before it and logging the recovery when that run surfaced.
 func (h *pushHealth) connected() {
-	if h.failing {
+	if h.drops >= outageDrops {
 		slog.Info("jmap: push reconnected", "drops", h.drops)
 	}
 	h.drops = 0
-	h.failing = false
-}
-
-// pingClampLogger returns the OnPingClamped callback for one Listen
-// call: one line when the server first advertises a cadence poplar
-// overrides, and another only when the advertised figure changes. A
-// clamping server clamps on every ping, so an undeduped line is one
-// per ping for as long as the stream is up. Debug rather than a
-// uerr.Error, since an overridden cadence is not a failure and the
-// stream it protects is working; but not silence either, because
-// package jmap logs nothing, and the cadence in force is what decides
-// how long a dead connection goes unnoticed.
-func pingClampLogger() func(reported, inForce time.Duration) {
-	var logged time.Duration
-	return func(reported, inForce time.Duration) {
-		if reported == logged {
-			return
-		}
-		logged = reported
-		slog.Debug("jmap: push ping interval clamped", "reported", reported, "in_force", inForce)
-	}
 }

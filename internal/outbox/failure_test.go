@@ -48,11 +48,11 @@ func TestFailureClasses(t *testing.T) {
 			be := newFakeBackend()
 			be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 				if tt.topLevel {
-					return backend.BatchResult{}, backend.MutationFailure{Class: tt.class, Cause: cause}
+					return backend.BatchResult{}, backend.Failure{Class: tt.class, Cause: cause}
 				}
 				failed := map[string]error{}
 				for _, m := range muts {
-					failed[m.ID] = backend.MutationFailure{Class: tt.class, Cause: cause}
+					failed[m.ID] = backend.Failure{Class: tt.class, Cause: cause}
 				}
 				return backend.BatchResult{Created: map[string]string{}, Failed: failed}, nil
 			}
@@ -140,7 +140,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 			failed := map[string]error{}
 			for _, m := range muts {
-				failed[m.ID] = backend.MutationFailure{Class: uerr.ClassServer, Cause: errors.New("boom")}
+				failed[m.ID] = backend.Failure{Class: uerr.ClassServer, Cause: errors.New("boom")}
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: failed}, nil
 		}
@@ -175,7 +175,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, _ []backend.Mutation) (backend.BatchResult, error) {
 			applyCalls++
 			if applyCalls == 1 {
-				return backend.BatchResult{}, backend.MutationFailure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+				return backend.BatchResult{}, backend.Failure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}
@@ -361,7 +361,7 @@ func TestFinalizeRecoveryKeepsTheRequeueBackoff(t *testing.T) {
 	be := newFakeBackend()
 	be.MailSource.RenameMailboxFunc = func(_ context.Context, id, _ string) error {
 		if id == "mbx-2" {
-			return backend.MutationFailure{Class: uerr.ClassServer, Cause: errors.New("boom")}
+			return backend.Failure{Class: uerr.ClassServer, Cause: errors.New("boom")}
 		}
 		return nil
 	}
@@ -407,7 +407,7 @@ func TestFinalizeRecoveryFallsBackWhenTheBackoffReplayFails(t *testing.T) {
 	be := newFakeBackend()
 	be.MailSource.RenameMailboxFunc = func(_ context.Context, id, _ string) error {
 		if id == "mbx-2" {
-			return backend.MutationFailure{Class: uerr.ClassServer, Cause: errors.New("boom")}
+			return backend.Failure{Class: uerr.ClassServer, Cause: errors.New("boom")}
 		}
 		return nil
 	}
@@ -640,7 +640,7 @@ func TestEachClaimedIntentGetsOneFinalizeWrite(t *testing.T) {
 
 	be := newFakeBackend()
 	be.MailSource.ApplyBatchFunc = func(_ context.Context, _ []backend.Mutation) (backend.BatchResult, error) {
-		return backend.BatchResult{}, backend.MutationFailure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+		return backend.BatchResult{}, backend.Failure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
 	}
 
 	now := time.Now()

@@ -926,12 +926,12 @@ func backoff(attempt int) time.Duration {
 }
 
 // classifyFailure recovers the uerr.Class a backend attached to err:
-// a backend.MutationFailure from a per-mutation ApplyBatch result, or
+// a backend.Failure from a per-mutation ApplyBatch result, or
 // a uerr.Error from a whole-call transport failure. A backend
 // returning neither is classified ClassServer, the same fallback
 // jmap's own classification tables use for an unrecognized failure.
 func classifyFailure(err error) (uerr.Class, string) {
-	if mf, ok := errors.AsType[backend.MutationFailure](err); ok {
+	if mf, ok := errors.AsType[backend.Failure](err); ok {
 		return mf.Class, mf.Cause.Error()
 	}
 	if ue, ok := errors.AsType[uerr.Error](err); ok {

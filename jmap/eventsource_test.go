@@ -555,6 +555,11 @@ func TestListenSurvivesAnAbsurdPingInterval(t *testing.T) {
 // first stream advertises Stalwart's milliseconds against a client
 // asking for 300 seconds, so the cadence in force is 300; the second
 // advertises a figure the RFC allows, so nothing is reported.
+//
+// Each stream advertises its figure three times. A clamping server
+// clamps every ping it sends, and the report is a fact about the
+// server's answer rather than about the ping that carried it, so
+// repeating the same figure is not news.
 func TestListenReportsAClampedPingInterval(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -575,7 +580,9 @@ func TestListenReportsAClampedPingInterval(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			client, _ := startEventFake(t, func(_ int, w *eventWriter) {
-				w.send("event: ping\ndata: {\"interval\":" + c.interval + "}\n\n")
+				for range 3 {
+					w.send("event: ping\ndata: {\"interval\":" + c.interval + "}\n\n")
+				}
 				w.send(stateEventBody("s1"))
 				w.hold()
 			})

@@ -72,14 +72,15 @@ func classify(op string, err error, auth *authState) error {
 
 // authState dedups a repeated ClassAuth failure across successive
 // do() calls on one Session, so a rejected credential logs once per
-// failure episode rather than once per call. A backend with no push
-// transport (jmapBackend.Capabilities always reports
-// PushTransportNone until 6b's Listen lands) polls Changes on every
-// kind at sync.Config's PollInterval with no backoff of its own, so a
-// token the server keeps rejecting would otherwise construct a fresh
-// uerr.Error, and write a fresh log line, on every poll: thousands a
-// day for one standing failure, the flood fixing the 401
-// classification defect reintroduced. Scope is ClassAuth alone: it is
+// failure episode rather than once per call. do()'s callers run on
+// whatever cadence their engine sets, none of which backs off for a
+// credential problem: a backend with no push transport polls Changes
+// on every kind at sync.Config's PollInterval, and the outbox
+// dispatcher retries on its own. A token the server keeps rejecting
+// would otherwise construct a fresh uerr.Error, and write a fresh log
+// line, on every one of those: thousands a day for one standing
+// failure, the flood fixing the 401 classification defect
+// reintroduced. Scope is ClassAuth alone: it is
 // the class a standing failure persists under across polls
 // unchanged, unlike ClassThrottled, ClassNotFound, ClassServer, or
 // ClassConnection, none of which showed a comparable repeat pattern
@@ -216,14 +217,14 @@ func classifyDial(err error) error {
 }
 
 // classifyListen classifies a refused push stream the same way and for
-// the same reason, as the backend.PushFailure the sync engine reads
+// the same reason, as the backend.Failure the sync engine reads
 // the class off. Without it a credential the server rejects on the
 // event source reaches the user as a connectivity problem, and while
 // push is refused nothing else pulls Changes, so that line is the only
 // account the user gets of why mail stopped.
 func classifyListen(err error) error {
 	if class, ok := retriedClass(err); ok {
-		return backend.PushFailure{Class: class, Cause: err}
+		return backend.Failure{Class: class, Cause: err}
 	}
 	return err
 }
@@ -267,19 +268,19 @@ var jmapSetErrorClass = map[string]uerr.Class{
 // classifyMutationFailure maps one Email/set mutation's raw SetError
 // type to the uerr.Class jmapSetErrorClass names for it, so the
 // outbox dispatcher (task 10) can branch on a closed class instead of
-// parsing a protocol string. It returns a backend.MutationFailure
+// parsing a protocol string. It returns a backend.Failure
 // rather than calling uerr.New: ApplyBatch runs once per outbox
 // dispatch attempt, and constructing a uerr.Error here would write a
 // log line on every retry rather than only on a state transition
 // (ADR-0013 revision 2). setErrorType survives as Cause, so
 // outbox.failure_detail can still record exactly what the server
 // said.
-func classifyMutationFailure(setErrorType string) backend.MutationFailure {
+func classifyMutationFailure(setErrorType string) backend.Failure {
 	class, ok := jmapSetErrorClass[setErrorType]
 	if !ok {
 		class = uerr.ClassServer
 	}
-	return backend.MutationFailure{Class: class, Cause: errors.New(setErrorType)}
+	return backend.Failure{Class: class, Cause: errors.New(setErrorType)}
 }
 
 // isConnectionDead reports whether err comes from the underlying TCP

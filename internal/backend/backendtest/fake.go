@@ -168,16 +168,20 @@ func (c *FakeCredentials) Token(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// FakePush is the scriptable Push source. ListenFunc drives
-// TestFakeScripting's push-drop condition: return a channel the
-// script closes to simulate the transport dropping.
+// FakePush is the scriptable Push source. ListenFunc returns one
+// stream: a channel the script closes to end it, or an error for a
+// stream the transport would not open. Under backend.Push's contract a
+// closed channel is the transport stopping for good rather than a
+// drop, and the reason comes back as the next Listen call's error, so
+// a script that models a refusal returns the channel and then that
+// error.
 type FakePush struct {
 	ListenFunc func(ctx context.Context) (<-chan backend.Notification, error)
 }
 
 // Listen delegates to ListenFunc. With ListenFunc unset, it returns a
-// channel that stays open until ctx is done, matching a live
-// transport that has not dropped, rather than one that already has.
+// channel that stays open until ctx is done, matching a live transport
+// that is connected, rather than one that has already stopped.
 func (p *FakePush) Listen(ctx context.Context) (<-chan backend.Notification, error) {
 	if p.ListenFunc != nil {
 		return p.ListenFunc(ctx)

@@ -30,6 +30,7 @@ type Session struct {
 	caps      backend.Capabilities
 	auth      authState
 	refetch   refetchState
+	push      pushSource
 }
 
 // Dial authenticates against sessionURL, sourcing the bearer token
@@ -52,6 +53,7 @@ func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*S
 		caps:      probeCapabilities(session),
 	}
 	s.refetch.last = session.State
+	s.push.session = s
 	return s, nil
 }
 
@@ -71,39 +73,68 @@ func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, er
 	return resp, nil
 }
 
-// refetchState holds the sessionState a refetch has already run for,
-// so the session resource is fetched once per state the server moves
-// to rather than once per response reporting the move. Every response
-// carries the state (RFC 8620 section 3.4), and section 2 recommends
-// refetching the session when it differs from the one in hand. A busy
-// account is a steady run of responses all reporting the same new
-// state, so the undeduped form is a request storm against the session
-// resource, on exactly the account least able to absorb one.
+// refetchState remembers which sessionState values a refetch has
+// already answered, so the session resource is fetched once per state
+// the server moves to rather than once per response reporting the
+// move. Every response carries the state (RFC 8620 section 3.4), and
+// section 2 recommends refetching the session when it differs from the
+// one in hand. A busy account is a steady run of responses all
+// reporting the same new state, so the undeduped form is a request
+// storm against the session resource, on exactly the account least
+// able to absorb one.
+//
+// It remembers a pair because concurrent calls straddle a move: a
+// response already in flight when the state changed reports the state
+// it started under, arriving after the newer ones have reported the
+// new one. Keyed on the newest state alone, every flip between the two
+// reads as fresh news and refetches. The state a refetch superseded is
+// not news either.
 type refetchState struct {
-	mu   sync.Mutex
-	last string
+	mu         sync.Mutex
+	last       string
+	superseded string
 }
 
-// follow fetches the session again when state names one no refetch has
-// run for, which installs the server's current API, upload, download,
+// follow fetches the session again when state is one no refetch has
+// answered, which installs the server's current API, upload, download,
 // and event-source URLs in place of the ones the dial resolved.
 //
-// It runs on the calling goroutine, so a call that overlaps it waits
-// rather than reaching the wire against a session poplar already knows
-// is stale. A failed fetch still counts as run: the session in hand
-// goes on working, and retrying on every response is the storm this
-// dedup exists to prevent. The next state the server reports tries
-// again.
+// The fetch runs on the calling goroutine but outside the lock: do
+// follows the state on every successful response, so holding it across
+// the wire would park every other call on this Session behind one slow
+// or black-holing session resource. Those calls are not left
+// unprotected by that, since each reads the session it runs against
+// out of the client once, and FetchSession replaces that value rather
+// than editing it.
+//
+// A failed fetch still counts as answered: the session in hand goes on
+// working, and retrying on every response is the storm this dedup
+// exists to prevent. The next state the server reports tries again.
 func (r *refetchState) follow(ctx context.Context, client *jmap.Client, state string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if state == "" || state == r.last {
+	if !r.claim(state) {
 		return
 	}
-	r.last = state
+	// The session installs itself in the client, which is where every
+	// call reads its URLs from, so the returned value has no second
+	// consumer here. s.accountID and s.caps keep their dial-time values
+	// on purpose: a primary account id or a capability set that moved
+	// under one credential is a re-dial, not a URL change, and pass 1b
+	// has no re-dial path.
 	if _, err := client.FetchSession(ctx); err != nil {
 		slog.Warn("jmap: session refetch failed, continuing on the session in hand", "error", err)
 	}
+}
+
+// claim reports whether state is a move no refetch has answered,
+// recording it as answered when it is.
+func (r *refetchState) claim(state string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if state == "" || state == r.last || state == r.superseded {
+		return false
+	}
+	r.superseded, r.last = r.last, state
+	return true
 }
 
 // authTransport resolves the bearer token from creds per request

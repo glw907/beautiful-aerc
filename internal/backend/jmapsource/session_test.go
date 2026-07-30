@@ -401,3 +401,102 @@ func TestSessionDoesNotRefetchOnTheStateItDialedWith(t *testing.T) {
 		t.Errorf("session fetches = %d over five responses reporting the state the dial resolved, want 1", got)
 	}
 }
+
+// TestSessionRefetchIgnoresAStaleStateInterleavedWithANewOne is
+// JT-21's named failure mode reached the other way. Responses to
+// concurrent calls straddle a state change, so the older ones report
+// the state they started under after the newer ones have already
+// reported the move. Keyed on the newest state alone, every flip
+// between the two looks like fresh news and refetches, which is the
+// storm on a busy account the criterion exists to rule out.
+func TestSessionRefetchIgnoresAStaleStateInterleavedWithANewOne(t *testing.T) {
+	states := []string{"s2", "session-1", "s2", "session-1", "s2"}
+	var mu sync.Mutex
+	next := 0
+	srv, fetches := newStateServer(t, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		state := states[min(next, len(states)-1)]
+		next++
+		return `{"methodResponses":[],"sessionState":"` + state + `"}`
+	})
+	session := dialTestSession(t, srv)
+
+	for range states {
+		if _, err := session.do(t.Context(), &jmap.Request{}); err != nil {
+			t.Fatalf("do: %v", err)
+		}
+	}
+
+	if got := fetches(); got != 2 {
+		t.Errorf("session fetches across %d responses flipping between two states = %d, want 2 (the dial and one refetch)", len(states), got)
+	}
+}
+
+// TestSessionRefetchDoesNotBlockOtherCalls pins the lock scope. do
+// follows the state on every successful response, so a session
+// resource that is slow or black-holing would park every other JMAP
+// call on this Session behind one fetch if the dedup held its lock
+// across the wire.
+func TestSessionRefetchDoesNotBlockOtherCalls(t *testing.T) {
+	hang := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(hang) }) }
+	t.Cleanup(release)
+
+	var mu sync.Mutex
+	fetches := 0
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/session", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		fetches++
+		first := fetches == 1
+		mu.Unlock()
+		if !first {
+			<-hang // the refetch never comes back on its own
+		}
+		_, _ = fmt.Fprintf(w, `{"capabilities":{},"accounts":{},"primaryAccounts":{"urn:ietf:params:jmap:mail":"u1"},"apiUrl":%q,"state":"session-1"}`, srv.URL+"/api")
+	})
+	mux.HandleFunc("/api", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"methodResponses":[],"sessionState":"s2"}`)
+	})
+
+	session, err := Dial(context.Background(), srv.URL+"/session", NewStaticCredentials("test-token"))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	stuck := make(chan struct{})
+	go func() {
+		defer close(stuck)
+		_, _ = session.do(context.Background(), &jmap.Request{})
+	}()
+
+	// The refetch is in flight and will not finish. Every other call
+	// runs against the session in hand meanwhile.
+	waitFor(t, "the refetch to reach the server", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return fetches > 1
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := session.do(context.Background(), &jmap.Request{})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("do while a refetch was in flight: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a call made while the session refetch was in flight never returned")
+	}
+
+	release()
+	<-stuck
+}

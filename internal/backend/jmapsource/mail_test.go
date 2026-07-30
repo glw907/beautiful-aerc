@@ -155,9 +155,9 @@ func TestApplyBatchUpdateDestroyAndUnsupportedCreate(t *testing.T) {
 			if !present {
 				t.Fatalf("result.Failed has no entry for %q", f.key)
 			}
-			mf, ok := errors.AsType[backend.MutationFailure](failure)
+			mf, ok := errors.AsType[backend.Failure](failure)
 			if !ok {
-				t.Fatalf("Failed[%q] = %v, want a backend.MutationFailure", f.key, failure)
+				t.Fatalf("Failed[%q] = %v, want a backend.Failure", f.key, failure)
 			}
 			if mf.Class != f.want {
 				t.Errorf("Class = %v, want %v", mf.Class, f.want)

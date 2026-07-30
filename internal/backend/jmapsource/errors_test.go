@@ -176,7 +176,7 @@ func TestClassifyMutationFailure(t *testing.T) {
 }
 
 // TestClassifyMutationFailureDoesNotLog proves classifyMutationFailure
-// never reaches uerr.New: it returns a plain backend.MutationFailure,
+// never reaches uerr.New: it returns a plain backend.Failure,
 // not a uerr.Error, so ApplyBatch's per-mutation classification stays
 // silent across every dispatch retry attempt and the dispatcher
 // (task 10) is the only place that writes a log line, on a state
@@ -184,7 +184,7 @@ func TestClassifyMutationFailure(t *testing.T) {
 func TestClassifyMutationFailureDoesNotLog(t *testing.T) {
 	got := classifyMutationFailure("notFound")
 	if ue, ok := errors.AsType[uerr.Error](error(got)); ok {
-		t.Fatalf("classifyMutationFailure returned a uerr.Error (%+v), want a plain backend.MutationFailure", ue)
+		t.Fatalf("classifyMutationFailure returned a uerr.Error (%+v), want a plain backend.Failure", ue)
 	}
 }
 

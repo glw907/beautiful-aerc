@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -40,7 +41,9 @@ func TestPushCoalescing(t *testing.T) {
 		defer cancel()
 		done := make(chan struct{})
 		go func() {
-			consumePush(ctx, ch, window, flush)
+			cfg := testConfig()
+			cfg.CoalesceWindow = window
+			consumePush(ctx, ch, cfg, flush, func() {})
 			close(done)
 		}()
 
@@ -102,7 +105,7 @@ func TestConsumePushHasNoStallDetector(t *testing.T) {
 		defer cancel()
 		result := make(chan bool, 1)
 		go func() {
-			result <- consumePush(ctx, ch, 200*time.Millisecond, func() {})
+			result <- consumePush(ctx, ch, testConfig(), func() {}, func() {})
 		}()
 
 		// Past any window a poll- or ping-derived detector could have
@@ -156,7 +159,7 @@ func TestBackoffRecovery(t *testing.T) {
 			}}
 
 			start := time.Now()
-			if _, err := reconnect(context.Background(), push, cfg); err != nil {
+			if _, err := reconnect(context.Background(), push, cfg, &pushState{}); err != nil {
 				t.Fatalf("trial %d: reconnect: %v", i, err)
 			}
 			elapsed[i] = time.Since(start)
@@ -315,9 +318,9 @@ func TestSyncFlushStateSurfacesTransitions(t *testing.T) {
 
 // TestClassifyErr asserts classifyErr's three paths: an error never
 // classified upstream defaults to ClassConnection, and a uerr.Error or
-// a backend.PushFailure each yield their own class and their original
+// a backend.Failure each yield their own class and their original
 // root cause (not the fixed per-class sentence Error() returns). The
-// PushFailure row is what keeps a credential the server rejects on the
+// backend.Failure row is what keeps a credential the server rejects on the
 // push transport from reaching the user as a connectivity problem,
 // which is the one push failure waiting cannot fix.
 func TestClassifyErr(t *testing.T) {
@@ -332,9 +335,9 @@ func TestClassifyErr(t *testing.T) {
 		t.Fatalf("classifyErr(wrapped) = (%v, %v), want (ClassAuth, root)", class, cause)
 	}
 
-	refused := backend.PushFailure{Class: uerr.ClassAuth, Cause: root}
+	refused := backend.Failure{Class: uerr.ClassAuth, Cause: root}
 	if class, cause := classifyErr(refused); class != uerr.ClassAuth || cause != root {
-		t.Fatalf("classifyErr(PushFailure) = (%v, %v), want (ClassAuth, root)", class, cause)
+		t.Fatalf("classifyErr(Failure) = (%v, %v), want (ClassAuth, root)", class, cause)
 	}
 }
 
@@ -396,7 +399,7 @@ func TestReconnectReturnsPromptlyOnContextCanceled(t *testing.T) {
 		return nil, context.Canceled
 	}}
 
-	ch, err := reconnect(ctx, push, DefaultConfig())
+	ch, err := reconnect(ctx, push, DefaultConfig(), &pushState{})
 	if ch != nil {
 		t.Fatal("reconnect returned a non-nil channel alongside an error")
 	}
@@ -423,13 +426,13 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 		var calls atomic.Int64
 		push := &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
 			calls.Add(1)
-			return nil, backend.PushFailure{Class: uerr.ClassAuth, Cause: rejected}
+			return nil, backend.Failure{Class: uerr.ClassAuth, Cause: rejected}
 		}}
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			_, _ = reconnect(ctx, push, testConfig())
+			_, _ = reconnect(ctx, push, testConfig(), &pushState{})
 			close(done)
 		}()
 
@@ -454,17 +457,14 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 	})
 }
 
-// TestRunPushDoesNotEscalateAcrossConnections asserts the wait after a
-// transport stops is one flat backoff step, drawn under BackoffMin
-// however many times it has stopped before. Escalating here is the
-// second schedule the reconnect-ownership ruling removed: the
-// transport already escalates across the drops it handles itself, and
-// two schedules in series make SY-2's 30s p95 recovery bound
-// unreachable by construction. It also pins the older defect the flat
-// step replaces, where the count only ever grew for the life of the
-// process and one stop after hours of health waited the saturated
-// range.
-func TestRunPushDoesNotEscalateAcrossConnections(t *testing.T) {
+// TestRunPushDoesNotEscalateOnAnUnexplainedStop asserts RunPush's own
+// wait is a floor rather than a schedule: a transport that stops
+// without reporting why is reopened after one step drawn under
+// BackoffMin, however many times it has stopped before. The schedule
+// belongs to reconnect, which runs it against the failure the next
+// Listen reports, so escalating here as well would put two delays on
+// one failure, which is what the reconnect-ownership ruling forbids.
+func TestRunPushDoesNotEscalateOnAnUnexplainedStop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
@@ -479,7 +479,7 @@ func TestRunPushDoesNotEscalateAcrossConnections(t *testing.T) {
 		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
 			listenTimes = append(listenTimes, time.Since(start))
 			ch := make(chan backend.Notification)
-			close(ch) // opens, then stops at once
+			close(ch) // opens, then stops at once, saying nothing about why
 			return ch, nil
 		}}
 
@@ -502,7 +502,7 @@ func TestRunPushDoesNotEscalateAcrossConnections(t *testing.T) {
 		synctest.Wait()
 
 		// An escalating schedule reaches BackoffMax within a handful of
-		// stops, so 3s of a 100ms-bounded flat step is dozens of calls
+		// stops, so 3s of a 100ms-bounded floor is dozens of calls
 		// against roughly seven.
 		if len(listenTimes) < 15 {
 			t.Fatalf("Listen called %d times in 3s, want at least 15: a wait bounded by BackoffMin (%v) rather than an escalating one", len(listenTimes), cfg.BackoffMin)
@@ -510,8 +510,200 @@ func TestRunPushDoesNotEscalateAcrossConnections(t *testing.T) {
 		for i := 1; i < len(listenTimes); i++ {
 			gap := listenTimes[i] - listenTimes[i-1]
 			if gap >= cfg.BackoffMin {
-				t.Fatalf("wait %d after a stop was %v, want under BackoffMin (%v): the schedule escalated across connections", i, gap, cfg.BackoffMin)
+				t.Fatalf("wait %d after a stop was %v, want under BackoffMin (%v): the floor escalated", i, gap, cfg.BackoffMin)
 			}
 		}
+	})
+}
+
+// TestConsumePushFlushesAWindowTheStopInterrupted covers the
+// notification already taken off the channel when the transport stops.
+// The coalescing window holds it for 200ms, and ADR-0018's
+// flush-on-connect rests on exactly the notification that arrives just
+// before a stream ends, so discarding it loses the /changes pull that
+// connection owed.
+func TestConsumePushFlushesAWindowTheStopInterrupted(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ch := make(chan backend.Notification, 1)
+		ch <- backend.Notification{}
+		close(ch)
+
+		flushes := 0
+		if !consumePush(context.Background(), ch, testConfig(), func() { flushes++ }, func() {}) {
+			t.Fatal("consumePush() = false on a closed channel, want true")
+		}
+		if flushes != 1 {
+			t.Fatalf("flushes = %d, want 1: the notification the stop interrupted was dropped", flushes)
+		}
+	})
+}
+
+// TestRunPushSlowsAndSurfacesAServerRefusingEveryOtherStream is the
+// shape that gets past a per-call schedule and a per-call dedup: a
+// server that opens a stream, drops it, and refuses the reconnection.
+// The transport reports that refusal as the next Listen's error, so
+// every cycle is one failure, and a schedule or a surfacing decision
+// that started over each time would neither slow the loop down nor say
+// anything. Measured against the real adapter before this held, twenty
+// seconds of it drew about a hundred requests and wrote no log line at
+// all.
+func TestRunPushSlowsAndSurfacesAServerRefusingEveryOtherStream(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		buf := uerrtest.Capture(t)
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			return backend.ChangeSet{}, nil
+		}
+
+		refused := errors.New("event source: 401")
+		calls := 0
+		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+			calls++
+			if calls%2 == 0 {
+				// The refusal that ended the stream the previous call
+				// opened, which is how the transport reports one.
+				return nil, backend.Failure{Class: uerr.ClassAuth, Cause: refused}
+			}
+			ch := make(chan backend.Notification)
+			close(ch)
+			return ch, nil
+		}}
+
+		cfg := testConfig()
+		cfg.BackoffMin = 100 * time.Millisecond
+		cfg.BackoffMax = 10 * time.Second
+		worker := NewWorker(accountID, &be, w, cfg)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			worker.RunPush(ctx, []backend.ObjectKind{backend.ObjectKindMessage})
+			close(done)
+		}()
+
+		time.Sleep(20 * time.Second)
+		synctest.Wait()
+		cancel()
+		<-done
+
+		// A schedule that never escalated would run a cycle per
+		// BackoffMin, which is 400 calls over this window; an escalating
+		// one reaches BackoffMax within about nine.
+		if calls > 40 {
+			t.Errorf("Listen called %d times over 20s, want well under 40: the schedule did not escalate", calls)
+		}
+		if calls < 4 {
+			t.Fatalf("Listen called %d times, want several: the test needs a run of refusals behind it", calls)
+		}
+		lines := uerrtest.Lines(t, buf)
+		if len(lines) != 1 {
+			t.Fatalf("uerr lines = %d over %d Listen calls, want exactly 1", len(lines), calls)
+		}
+		if got := lines[0]["class"]; got != "auth" {
+			t.Errorf("class = %v, want auth", got)
+		}
+	})
+}
+
+// TestPushStateProvedEndsTheFailureRun covers what says a run of
+// refusals is over, and what that has to unblock. Nothing else can say
+// it: a stream that opens proves nothing against a server that opens
+// one and refuses the next, so only a stream that stays open long
+// enough to be worth having does. And until something says it, the
+// next failure of that same class is silent, which is the worse half.
+func TestPushStateProvedEndsTheFailureRun(t *testing.T) {
+	logs := uerrtest.CaptureDefault(t)
+	buf := uerrtest.Capture(t)
+
+	state := pushState{}
+	state.attempt = 7
+	state.fail(backend.Failure{Class: uerr.ClassAuth, Cause: errConnectionRefused})
+	state.fail(backend.Failure{Class: uerr.ClassAuth, Cause: errConnectionRefused})
+	if got := len(uerrtest.Lines(t, buf)); got != 1 {
+		t.Fatalf("uerr lines across two same-class failures = %d, want 1", got)
+	}
+
+	state.proved()
+
+	if state.attempt != 0 {
+		t.Errorf("attempt = %d, want 0: the reopen schedule did not start over", state.attempt)
+	}
+	if !strings.Contains(logs.String(), "push recovered") {
+		t.Errorf("no recovery line for a failure run that ended; log was:\n%s", logs.String())
+	}
+
+	// The half that matters more: a failure of the same class after the
+	// recovery is news again, not a repeat of an episode long over.
+	state.fail(backend.Failure{Class: uerr.ClassAuth, Cause: errConnectionRefused})
+	if got := len(uerrtest.Lines(t, buf)); got != 2 {
+		t.Errorf("uerr lines after a failure following a recovery = %d, want 2: the new failure was swallowed as a repeat", got)
+	}
+
+	// And a proving with nothing left to recover from says nothing: the
+	// timer behind it fires once per stream, so a healthy transport
+	// must not narrate one.
+	state.proved()
+	logs2 := uerrtest.CaptureDefault(t)
+	state.proved()
+	if strings.Contains(logs2.String(), "push recovered") {
+		t.Error("a healthy stream logged a recovery with no failure run behind it")
+	}
+}
+
+// TestRunPushRecoversWhileTheStreamIsStillUp is the same claim on the
+// production path, and it is about when: the stream that proves the
+// server is serving again is normally the one still running, so
+// waiting for it to end would leave a failure as the last word on a
+// transport that has been working for days.
+func TestRunPushRecoversWhileTheStreamIsStillUp(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		_ = uerrtest.Capture(t) // the refusals surface; this test is about what follows
+		logs := uerrtest.CaptureDefault(t)
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			return backend.ChangeSet{}, nil
+		}
+
+		cfg := testConfig()
+		cfg.BackoffMin = 100 * time.Millisecond
+		cfg.BackoffMax = time.Second
+
+		calls := 0
+		be.PushSource = &backendtest.FakePush{ListenFunc: func(ctx context.Context) (<-chan backend.Notification, error) {
+			calls++
+			if calls <= 3 {
+				return nil, backend.Failure{Class: uerr.ClassServer, Cause: errConnectionRefused}
+			}
+			// The stream that proves the server is serving again, and it
+			// never ends on its own.
+			ch := make(chan backend.Notification)
+			context.AfterFunc(ctx, func() { close(ch) })
+			return ch, nil
+		}}
+
+		worker := NewWorker(accountID, &be, w, cfg)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			worker.RunPush(ctx, []backend.ObjectKind{backend.ObjectKindMessage})
+			close(done)
+		}()
+
+		time.Sleep(5 * time.Second)
+		synctest.Wait()
+
+		// Read the log with the stream still open.
+		if !strings.Contains(logs.String(), "push recovered") {
+			t.Errorf("no recovery line while a stream had been open past BackoffMax; log was:\n%s", logs.String())
+		}
+
+		cancel()
+		<-done
 	})
 }

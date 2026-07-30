@@ -122,7 +122,7 @@ func surfaceable(err error) bool {
 
 // classifyErr reports the uerr.Class and root cause err already
 // carries, in either of the two shapes a backend hands one over: a
-// uerr.Error it built and logged itself, or a backend.PushFailure it
+// uerr.Error it built and logged itself, or a backend.Failure it
 // classified and left to this package to surface. Both unwrap to their
 // own Cause, since Error() only ever returns the class's fixed
 // sentence. An err that was never classified reports ClassConnection
@@ -132,7 +132,7 @@ func classifyErr(err error) (uerr.Class, error) {
 	if ue, ok := errors.AsType[uerr.Error](err); ok {
 		return ue.Class, ue.Cause
 	}
-	if pf, ok := errors.AsType[backend.PushFailure](err); ok {
+	if pf, ok := errors.AsType[backend.Failure](err); ok {
 		return pf.Class, pf.Cause
 	}
 	return uerr.ClassConnection, err
@@ -148,34 +148,90 @@ func classifyErr(err error) (uerr.Class, error) {
 func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	kinds = orderKindsForSync(kinds)
 
-	push := w.backend.Push()
-	if push == nil {
+	transport := w.backend.Push()
+	if transport == nil {
 		slog.Info("sync: backend reports no push transport, polling instead",
 			"account_id", w.accountID, "interval", w.cfg.PollInterval)
 		w.pollKinds(ctx, kinds)
 		return
 	}
 
-	state := newSyncFlushState()
+	flushState := newSyncFlushState()
+	var push pushState
 	for {
-		ch, err := reconnect(ctx, push, w.cfg)
+		ch, err := reconnect(ctx, transport, w.cfg, &push)
 		if err != nil {
 			return
 		}
-		if !consumePush(ctx, ch, w.cfg.CoalesceWindow, func() { w.flush(ctx, kinds, state) }) {
+		if !consumePush(ctx, ch, w.cfg, func() { w.flush(ctx, kinds, flushState) }, push.proved) {
 			return
 		}
-		// One step, and the same one every time. A transport that
-		// opens and stops at once would otherwise be reopened at zero
-		// delay, spinning into a request storm. Escalating across
-		// connections is the transport's own schedule to run, and
-		// running a second one here is what puts SY-2's 30s p95 bound
-		// out of reach. A server that goes on refusing still escalates,
-		// through reconnect's own loop.
+		// A stop the transport did not explain still costs a step, or
+		// one that opens and stops at once is reopened at zero delay and
+		// spins into a request storm. It is a floor, not a schedule: a
+		// stop with a refusal behind it comes back as the next Listen's
+		// error, and escalating on that is reconnect's job, so
+		// escalating here as well would put two delays on one failure.
 		if !SleepBackoff(ctx, 0, w.cfg.BackoffMin, w.cfg.BackoffMax) {
 			return
 		}
 	}
+}
+
+// pushState is RunPush's view of the transport across every stream it
+// opens: the class of failure currently surfaced, so a standing
+// failure logs once rather than once per attempt (ADR-0013 revision
+// 2), and how far the reopen schedule has escalated.
+//
+// Both outlive a single reconnect call because the failure they track
+// does. A refusal that ends a stream already open reaches the caller
+// as the next Listen's error (backend.Push), so a server refusing
+// every other connection produces one failure per stream: a schedule
+// that started over per call would not slow that down, and a dedup
+// that did would write a line per stream. Measured against such a
+// server, the per-call form drew about a hundred requests in twenty
+// seconds.
+//
+// Only a refusal reaches this schedule. A drop never does, because the
+// transport reconnects through it without closing the channel, so this
+// and the transport's own schedule govern disjoint failures and never
+// compose on one. What ends a run of refusals is a stream that has
+// stayed open past BackoffMax, which is the only evidence available
+// that the server is serving again, and it is read while the stream is
+// still up: waiting for it to end would leave a failure as the last
+// word on a transport that has been working for days, and would keep
+// the next failure of the same class from surfacing at all.
+type pushState struct {
+	failing bool
+	class   uerr.Class
+	attempt int
+}
+
+// fail surfaces err once per failure episode, on the first failure or
+// a class change (ADR-0013 revision 2). ctx ending mid-retry (RunPush
+// shutting the worker down) is never classified or surfaced: it is not
+// a server problem.
+func (s *pushState) fail(err error) {
+	if !surfaceable(err) {
+		return
+	}
+	class, cause := classifyErr(err)
+	if !s.failing || class != s.class {
+		_ = uerr.New("sync.push.listen", nil, class, cause)
+		s.failing = true
+		s.class = class
+	}
+}
+
+// proved records a stream that has stayed open long enough to say the
+// server is serving again: the failure run is over, and the reopen
+// schedule starts from zero.
+func (s *pushState) proved() {
+	if s.failing {
+		slog.Info("sync: push recovered")
+		s.failing = false
+	}
+	s.attempt = 0
 }
 
 // pollKinds runs kinds' SyncKind on a fixed PollInterval cadence, the
@@ -207,46 +263,32 @@ func (w *Worker) flush(ctx context.Context, kinds []backend.ObjectKind, state *s
 }
 
 // reconnect calls push.Listen, retrying with jittered exponential
-// backoff until it succeeds or ctx ends. Each call starts its own
-// schedule: a transport reached at all ends whatever run of refusals
-// escalated the last one, and carrying the count forward is how a
-// process that has been up for days answers its first refusal with the
-// saturated delay. A Listen failure surfaces a uerr.Error once, on the
-// first failure or a class change (ADR-0013 revision 2); a later
-// success after a run of failures logs recovery. ctx ending mid-retry
-// (RunPush shutting the worker down) is never classified or surfaced:
-// it is not a server problem.
-func reconnect(ctx context.Context, push backend.Push, cfg Config) (<-chan backend.Notification, error) {
-	var failClass uerr.Class
-	var failing bool
-	for attempt := 0; ; attempt++ {
+// backoff until it succeeds or ctx ends. state carries the schedule
+// and the surfacing decision across calls, for the reasons its own doc
+// comment gives; reconnect only ever advances them.
+func reconnect(ctx context.Context, push backend.Push, cfg Config, state *pushState) (<-chan backend.Notification, error) {
+	for {
 		ch, err := push.Listen(ctx)
 		if err == nil {
-			if failing {
-				slog.Info("sync: push reconnected", "attempts", attempt+1)
-			}
 			return ch, nil
 		}
-		if surfaceable(err) {
-			class, cause := classifyErr(err)
-			if !failing || class != failClass {
-				_ = uerr.New("sync.push.listen", nil, class, cause)
-				failing = true
-				failClass = class
-			}
-		}
-		if !SleepBackoff(ctx, attempt, cfg.BackoffMin, cfg.BackoffMax) {
+		state.fail(err)
+		if !SleepBackoff(ctx, state.attempt, cfg.BackoffMin, cfg.BackoffMax) {
 			return nil, ctx.Err()
 		}
+		state.attempt++
 	}
 }
 
 // consumePush reads notifications from ch, invoking flush once per
 // coalescing window, measured from that window's first notification
 // and never extended by a later one (ADR-0005 revision 2: a steady
-// remote burst must not defer sync indefinitely). It reports true if
-// ch closed, which under backend.Push's contract is the transport
-// stopping for good, and false if ctx ended first.
+// remote burst must not defer sync indefinitely). It calls proved once
+// if the stream is still open past cfg.BackoffMax, which is the only
+// place that can tell: the loop is inside this call for a whole
+// stream's life. It reports true if ch closed, which under
+// backend.Push's contract is the transport stopping for good, and
+// false if ctx ended first.
 //
 // Silence is not a drop here. The transport owns the liveness check,
 // since it is the only layer that knows the cadence the server granted
@@ -254,20 +296,35 @@ func reconnect(ctx context.Context, push backend.Push, cfg Config) (<-chan backe
 // the granted one is what governs), and a second detector reading a
 // figure from local config tears down connections the transport
 // considers healthy.
-func consumePush(ctx context.Context, ch <-chan backend.Notification, window time.Duration, flush func()) bool {
+func consumePush(ctx context.Context, ch <-chan backend.Notification, cfg Config, flush, proved func()) bool {
+	proving := time.NewTimer(cfg.BackoffMax)
+	defer proving.Stop()
+	provingC := proving.C
+
 	var flushC <-chan time.Time
 	for {
 		select {
 		case _, ok := <-ch:
 			if !ok {
+				// A window still open holds a notification already taken
+				// off the channel. The connect notification ADR-0018's
+				// flush-on-connect rests on is exactly the one that
+				// arrives just before a stream stops, so leaving it here
+				// loses the pull that connection owed.
+				if flushC != nil {
+					flush()
+				}
 				return true
 			}
 			if flushC == nil {
-				flushC = time.NewTimer(window).C
+				flushC = time.NewTimer(cfg.CoalesceWindow).C
 			}
 		case <-flushC:
 			flush()
 			flushC = nil
+		case <-provingC:
+			proved()
+			provingC = nil
 		case <-ctx.Done():
 			return false
 		}

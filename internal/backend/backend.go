@@ -158,25 +158,33 @@ type BatchResult struct {
 	Failed  map[string]error
 }
 
-// MutationFailure is one mutation's classified failure: the uerr.Class
-// a backend assigns it, and the wire-level cause preserved as Cause
-// for outbox.failure_detail. A backend populates BatchResult.Failed
-// with this instead of a uerr.Error: ApplyBatch runs once per outbox
-// dispatch attempt, and ADR-0013 revision 2 reserves uerr.New for a
-// state transition (first failure, class change, recovery), not every
-// attempt. The dispatcher constructs the uerr.Error itself, once, when
-// a mutation's failure state changes, using the id BatchResult.Failed
-// already keys the result by.
-type MutationFailure struct {
+// Failure is a classified failure a backend hands over without having
+// logged it: the uerr.Class SY-4 and ADR-0004 revision 2 assign it, and
+// the wire-level cause preserved as Cause. Every call that returns one
+// is a call some caller retries on its own schedule, and ADR-0013
+// revision 2 reserves uerr.New for a state transition (first failure,
+// class change, recovery) rather than every attempt, so the layer that
+// owns the retry loop is the layer that constructs the uerr.Error.
+//
+// Two calls return one. ApplyBatch populates BatchResult.Failed with a
+// Failure per mutation, and the dispatcher surfaces it once, when that
+// mutation's failure state changes, under the id the map already keys
+// it by; Cause is what reaches outbox.failure_detail. A push
+// transport's Listen returns one for a refused stream, and RunPush's
+// reconnect loop surfaces it once per failure episode. Without the
+// class crossing the seam there, a credential the server rejects on
+// the event source reads as a connectivity problem, which is the one
+// push failure no amount of waiting fixes.
+type Failure struct {
 	Class uerr.Class
 	Cause error
 }
 
 // Error returns f's cause's message.
-func (f MutationFailure) Error() string { return f.Cause.Error() }
+func (f Failure) Error() string { return f.Cause.Error() }
 
 // Unwrap returns f's cause.
-func (f MutationFailure) Unwrap() error { return f.Cause }
+func (f Failure) Unwrap() error { return f.Cause }
 
 // SubmitResult is what Submit returns once the backend accepts an
 // outgoing message: the backend's submission id, and whether the
@@ -264,46 +272,35 @@ type Contacts interface {
 }
 
 // Push is the backend's push transport. Listen opens it and returns a
-// channel of notifications, reporting an error only when the transport
-// never opened at all.
+// channel of notifications, reporting an error when it will not open.
 //
 // The transport owns reconnection across a drop, and with it the
 // liveness check that decides a connection is gone: it is the only
 // layer that knows the cadence the server granted, and a second
 // backoff above it puts ADR-0005's 30s p95 recovery bound out of reach
 // by construction. So the channel survives a drop and closes only once
-// Listen has stopped for good, which is the server refusing the
-// connection or ctx ending. A caller that sees it close reconnects by
-// calling Listen again.
+// the transport has stopped for good, which is the server refusing the
+// connection or ctx ending. A caller that sees it close reopens by
+// calling Listen again, and that call reports what stopped the last
+// stream before it opens anything: a refusal arriving after Listen has
+// returned its channel has no other way to reach the caller, and it is
+// both the reason to wait longer and the failure the user is owed.
+// Listen's error carries a Failure when the backend classified it.
 //
 // Every connection the transport makes, the first and each one after,
 // produces a notification of its own. The stream says nothing about
 // what happened while it was down, so the caller pulls Changes from its
 // persisted token on each one (ADR-0018).
+//
+// A notification is a signal, not a delivery: the transport drops one
+// rather than waiting for a caller that has not read the last. Nothing
+// is lost by that, since the Changes call any one of them triggers
+// reads everything since the persisted token, and a transport that
+// blocked on the caller would stall the stream it is reading behind a
+// sync that can take seconds.
 type Push interface {
 	Listen(ctx context.Context) (<-chan Notification, error)
 }
-
-// PushFailure is a push transport's classified failure: the uerr.Class
-// SY-4 and ADR-0004 revision 2 assign it, and the underlying cause. A
-// backend's Listen returns this rather than calling uerr.New for the
-// same reason MutationFailure exists: the caller retries Listen in its
-// own backoff loop, so constructing a uerr.Error per attempt would
-// write a log line per attempt instead of one per state transition
-// (ADR-0013 revision 2). Without the class crossing the seam, a
-// credential the server rejects on the event source renders as a
-// connectivity problem, which is the one push failure no amount of
-// waiting fixes.
-type PushFailure struct {
-	Class uerr.Class
-	Cause error
-}
-
-// Error returns f's cause's message.
-func (f PushFailure) Error() string { return f.Cause.Error() }
-
-// Unwrap returns f's cause.
-func (f PushFailure) Unwrap() error { return f.Cause }
 
 // Credentials owns a backend's auth token lifecycle. Token returns a
 // valid credential for the current request, refreshing it first if

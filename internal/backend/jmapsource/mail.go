@@ -57,7 +57,7 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 			case backend.MutationDestroy:
 				messages.Destroy = append(messages.Destroy, jmap.ID(mut.ID))
 			case backend.MutationCreate:
-				result.Failed[mut.CreationID] = backend.MutationFailure{
+				result.Failed[mut.CreationID] = backend.Failure{
 					Class: uerr.ClassServer,
 					Cause: errors.New("jmap: message create needs compose assembly (pass 4)"),
 				}
