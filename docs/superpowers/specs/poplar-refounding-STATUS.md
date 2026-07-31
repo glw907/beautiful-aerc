@@ -378,9 +378,41 @@ plan-approval model boundary; the starter prompt below is the
 handoff. The scope list that follows remains the binding source
 the plan was authored from.
 
-**Execution in progress (2026-07-30). Tasks 1 through 7b are done,
-reviewed, and pushed** (master at `fd722bf`, clean). **Tasks 8, 9, 10,
-11 and 12 remain.** The live progress ledger is
+**PASS SPLIT RECOMMENDED (orchestrator, 2026-07-30, awaiting Geoff's
+ruling at the gate).** Pass 1b was planned as twelve tasks and is now
+fifteen, having split task 6 into 6a/6b, task 7 into 7a/7b and task 11
+into 11a/11b. Every split was individually correct and each was made
+because that task had outgrown its written boundary; three of them is
+the pass asking to be split, which the orchestrator did not propose
+until Geoff asked whether the pass had run too long. Pass 1b also exists
+because pass 1 burst its scope, so this is the second consecutive pass
+to do it.
+
+**The recommendation: close pass 1b on what it promised and open pass
+1c.** 1b's stated job was to make the foundation real and then harden
+it, and **its gate condition is already met** — poplar runs against the
+live account, fills the store, and takes push at 340ms end to end.
+Tasks 1 through 8 and 11a discharge what pass 1 claimed.
+
+- **Pass 1b closes with**: task 12's consolidation over what has landed.
+- **Pass 1c takes**: task 9 (the perf seeder's body weight and the QA-2
+  and QA-3 re-measurement), task 10 (the SQLite driver decision, which
+  needs 9's corpus), and 11b (the 135-row carry-forward harvest and the
+  two conformance rows). Task 10 in particular is a research decision
+  about an inherited dependency rather than a discharge of anything pass
+  1 claimed, and it needs a quiet machine plus a benchmark plus the kill
+  harness under two drivers. That is a pass, not a task.
+
+Task 9 is the one item with a claim on 1b's honesty: this STATUS records
+that QA-2's number is not comparable to its spike baseline, and a
+non-comparable number is not a passing gate. Either it rides 1c and the
+gate says so plainly, or it is pulled back into 1b. **That is Geoff's
+call at the gate.**
+
+**Execution paused at a clean boundary (2026-07-30). Tasks 1 through 8
+and 11a are done, reviewed, and pushed** (master at `1423b36`, clean,
+everything pushed). **Remaining: 11b, 9, 10, 12.** The live progress
+ledger is
 `.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md`
 and it is the recovery map: it records every task's outcome, every
 parked and deferred finding, the routing rulings, and the defect
@@ -573,8 +605,19 @@ Opus 5 session):
 ```
 Resume executing the poplar pass 1b plan at
 docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md
-via superpowers:subagent-driven-development. Tasks 1 through 7b are
-complete, reviewed and pushed (master fd722bf, clean). Resume at task 8.
+via superpowers:subagent-driven-development. Tasks 1 through 8 and 11a
+are complete, reviewed and pushed (master 1423b36, clean). Remaining:
+11b, 9, 10, 12.
+
+FIRST ACTION: put the pass-split recommendation to Geoff before
+dispatching anything. It is written out in the pass 1b section of
+docs/superpowers/specs/poplar-refounding-STATUS.md. The short version:
+twelve planned tasks became fifteen through three task splits, 1b's gate
+condition is already met (live push at 340ms, store filling), and the
+recommendation is that 1b closes with task 12's consolidation while pass
+1c takes tasks 9, 10 and 11b. Task 9 is the one item with a claim on
+1b's honesty, because a QA-2 number that is not comparable to its
+baseline is not a passing gate. Geoff rules; do not assume the split.
 
 Read .superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md
 FIRST, starting with the "READ THIS FIRST" block at the top. It is the
@@ -589,12 +632,34 @@ criteria: the disposition enum has three members, not four, because 7b
 deleted the landed flag once closing the create-replay window left no
 dispatch outcome unsafe to replay. Read that amendment before dispatching.
 
-Order: 8 and 11 are independent and run first. Tasks 9 and 10 must run on
-a quiet machine with NO implementer dispatched, 10 needs 9's corpus, and
-12 closes the pass. Task 11 carries two conformance-suite items routed
-from 7b (DV-11's false RFC citation, which pins a Stalwart-only existingId
-that Fastmail omits, and a DV row for the sibling-uniqueness normalization
-divergence) plus the red -race tests in internal/store.
+Order, whichever way the split ruling goes: 11b is independent and its
+input is already written. Tasks 9 and 10 must run on a quiet machine with
+NO implementer dispatched, and 10 needs 9's corpus. 12 closes whatever
+pass it ends up in.
+
+11b's triage is done and waiting as a read-only document,
+.superpowers/.../task-11b-harvest.md: all 135 deferred lines from pass 1's
+ledger, grouped by cluster, each with the file, whether the symbol still
+exists at HEAD, and a disposition. 33 are ALREADY CLOSED by pass 1b's own
+work. Its brief (task-11b-brief.md) carries the scope ruling: fix the six
+clusters task 11's brief names by hand plus the conformance cluster, and
+convert every other row from a recommendation into a decision with a
+reason rather than fixing 79 findings. VERIFY each ALREADY CLOSED claim
+rather than inheriting it; this pass had a finding wrongly declared closed
+once, and the pre-judgment suppressed the check that would have caught it.
+
+The two conformance items, both on jmap/conformance_dv_test.go: DV-11
+asserts existingId on alreadyExists citing "RFC 8620 section 5.3", but
+that error is defined in section 5.4 and Fastmail omits the field while
+Stalwart sends it, so the test passes only because make conformance runs
+Stalwart; and a DV row is owed for the sibling-uniqueness normalization
+divergence (Stalwart case-insensitive and whitespace-trimming, Fastmail
+byte-exact).
+
+CI's race job is green as of b15317f, the first time since task 6a. The
+one remaining red-gate risk in internal/store is TestInteractivePreemption,
+flaky at ~1/25 to 1/60 isolated at every tree tested, load-sensitive, and
+owned by task 9 with the perf envelope.
 
 Binding research is under docs/poplar/research/; requirements are at
 revision 4 and ADR revision blocks override ADR bodies. The RFC
