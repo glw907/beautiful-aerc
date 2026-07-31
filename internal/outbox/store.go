@@ -133,6 +133,20 @@ func requeueRow(tx *sql.Tx, id int64, nextAttemptAt time.Time, class, detail str
 	return err
 }
 
+// recoverRow returns id to queued the way requeueRow does, minus the
+// failure detail. It runs only after the transaction before it failed,
+// sometimes on the very write it is repeating, so it writes the columns
+// whose size is bounded and leaves the one that is not: a detail comes
+// from a server, and nothing here bounds how long one can be. The row
+// keeps whatever detail its last recorded failure left on it.
+func recoverRow(tx *sql.Tx, id int64, nextAttemptAt time.Time, class string) error {
+	_, err := tx.Exec(
+		`UPDATE outbox SET state = 'queued', attempt_count = attempt_count + 1, next_attempt_at = ?, failure_class = ? WHERE id = ?`,
+		nextAttemptAt.Unix(), class, id,
+	)
+	return err
+}
+
 // updatePayload overwrites id's payload: KindCreateMailbox persists
 // its resolved server id here immediately after a successful backend
 // call, before this pass's finalize step, so a crash between the two

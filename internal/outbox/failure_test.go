@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestFailureClasses covers SY-4's closed failure enum end to end
@@ -354,13 +357,17 @@ func TestFinalizeRecoveryRequeuesACreateWhoseMailboxLanded(t *testing.T) {
 	}
 }
 
-// TestFinalizeRecoveryKeepsTheRequeueBackoff covers what the recovery
-// owes a row the failed finalize was going to requeue. Returning it to
-// queued with its expired next_attempt_at and its attempt count
-// untouched retries it on the next pass with no backoff at all, so a
-// finalize failure that persists turns every pass into another
-// immediate attempt against the live backend.
-func TestFinalizeRecoveryKeepsTheRequeueBackoff(t *testing.T) {
+// TestFinalizeRecoveryReplaysTheRequeue covers what the recovery owes
+// a row the failed finalize was going to requeue, column by column.
+// Returned to queued with its expired next_attempt_at and its attempt
+// count untouched, it retries on the next pass with no backoff at all,
+// so a finalize failure that persists turns every pass into another
+// immediate attempt against the live backend; returned without its
+// failure class, it earns a fresh uerr.New on every one of them.
+// failure_detail is the one column the replay leaves alone, since the
+// recovery runs only after a transaction has already failed and a
+// detail is the one value in the statement with no bound on its size.
+func TestFinalizeRecoveryReplaysTheRequeue(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	deliveredID := seedMailbox(t, w, accountID, "Old", "mbx-1")
@@ -395,18 +402,28 @@ func TestFinalizeRecoveryKeepsTheRequeueBackoff(t *testing.T) {
 		t.Errorf("intent %d state = %s attempts = %d, want queued/1", failing, state, attempts)
 	}
 	next := storetest.ScanValue[int64](t, w, `SELECT next_attempt_at FROM outbox WHERE id = ?`, failing)
-	if next <= now.Unix() {
-		t.Errorf("next_attempt_at = %d, want past %d: the recovered row retries with no backoff", next, now.Unix())
+	if want := now.Add(backoff(0)).Unix(); next != want {
+		t.Errorf("next_attempt_at = %d, want %d: the recovered row retries without the backoff its requeue was going to write", next, want)
+	}
+	class := storetest.ScanValue[sql.NullString](t, w, `SELECT failure_class FROM outbox WHERE id = ?`, failing)
+	if class.String != uerr.ClassServer.String() {
+		t.Errorf("failure_class = %q, want %q: without it every later pass logs the same failure again", class.String, uerr.ClassServer.String())
+	}
+	detail := storetest.ScanValue[sql.NullString](t, w, `SELECT failure_detail FROM outbox WHERE id = ?`, failing)
+	if detail.Valid {
+		t.Errorf("failure_detail = %q, want it untouched: the recovery writes no unbounded value", detail.String)
 	}
 }
 
-// TestFinalizeRecoveryFallsBackWhenTheBackoffReplayFails covers what
-// the requeue replay owes the rest of the batch. The recovery is one
-// all-or-nothing transaction, so a store failure specific to the
-// requeue takes the revert of every unrelated claimed row down with it
-// and strands rows no requeue was owed. Getting a row back to queued
-// matters more than getting its backoff right.
-func TestFinalizeRecoveryFallsBackWhenTheBackoffReplayFails(t *testing.T) {
+// TestFinalizeRecoveryFailureNamesEveryStrandedIntent covers the
+// recovery failing too. It is one transaction over every claimed row,
+// so a store failure inside it costs all of them their revert: each
+// stays in dispatching, where selectEligible never looks again and only
+// the next start's sweep can reach it. DispatchOnce owes its caller
+// that error, and the log owes the operator the ids, since nothing else
+// records which intents the run lost.
+func TestFinalizeRecoveryFailureNamesEveryStrandedIntent(t *testing.T) {
+	log := uerrtest.CaptureDefault(t)
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	deliveredID := seedMailbox(t, w, accountID, "Old", "mbx-1")
@@ -429,17 +446,22 @@ func TestFinalizeRecoveryFallsBackWhenTheBackoffReplayFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enqueue the failing rename: %v", err)
 	}
+	// The delivered rename's delete fails the finalize transaction, and
+	// the failing rename's attempt-count bump then fails the recovery
+	// that was going to return both rows to queued.
 	blockDeletes(t, w)
 	blockRequeueBackoff(t, w)
 
 	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err == nil {
-		t.Fatal("DispatchOnce = nil, want the finalize failure")
+		t.Fatal("DispatchOnce = nil, want the finalize failure joined with the failed recovery")
 	}
 
-	for _, id := range []int64{delivered, failing} {
-		if state, _ := outboxState(t, w, id); state != "queued" {
-			t.Errorf("intent %d state = %s, want queued: the failing backoff replay stranded it", id, state)
-		}
+	if n := dispatchingCount(t, w, accountID); n != 2 {
+		t.Errorf("rows still dispatching = %d, want 2: the recovery is all or nothing over every claimed row", n)
+	}
+	want := fmt.Sprintf("[%d %d]", delivered, failing)
+	if !strings.Contains(log.String(), "outbox: claimed intents stranded in dispatching") || !strings.Contains(log.String(), want) {
+		t.Errorf("log = %q, want a stranded-intent line naming %s", log.String(), want)
 	}
 }
 
@@ -470,8 +492,9 @@ func unblockDeletes(t *testing.T, w *store.Writer) {
 	}
 }
 
-// blockRequeueBackoff makes the attempt-count bump requeueRow writes
-// fail, leaving revertRow's bare state write alone.
+// blockRequeueBackoff makes the attempt-count bump a requeue writes
+// fail, leaving revertRow's bare state write alone: the shape a store
+// failure specific to one row of the finalize recovery takes.
 func blockRequeueBackoff(t *testing.T, w *store.Writer) {
 	t.Helper()
 	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
@@ -522,10 +545,11 @@ func TestUnknownKindIsReportedAndDropped(t *testing.T) {
 	}
 }
 
-// TestUnknownKindSurvivesAFinalizeFailure covers what final means and
-// what it does not. It marks a failure no later attempt may repeat, and
-// it says nothing about where the row belongs when the finalize
-// transaction itself fails: every claimed row is owed the revert.
+// TestUnknownKindSurvivesAFinalizeFailure covers what a terminal
+// disposition means and what it does not. It marks a failure no later
+// attempt can answer differently, and it says nothing about where the
+// row belongs when the finalize transaction itself fails: every
+// claimed row is owed the revert.
 // Left in dispatching this one is invisible to selectEligible for the
 // rest of the run, and no later pass can report it.
 func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
@@ -760,5 +784,32 @@ func TestShouldLogFailure(t *testing.T) {
 				t.Errorf("shouldLogFailure(%q, %v, %v) = %v, want %v", tt.lastClass, tt.class, tt.retry, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestReportUnhandledDispositionLogsAndTakesTheTerminalVerb covers
+// the disposition switch's default case, reachable only by a mistake
+// this build has no name for. It has to lose loudly rather than
+// silently: a fourth disposition falling through to the retry branch
+// would requeue a row forever, and falling through to a bare
+// finalizeAction{} would delete it under a class and detail that say
+// nothing happened.
+func TestReportUnhandledDispositionLogsAndTakesTheTerminalVerb(t *testing.T) {
+	log := uerrtest.CaptureDefault(t)
+	d := &Dispatcher{}
+	c := claimed{row: row{id: 42}}
+	o := outcome{c: c, disposition: disposition(99), class: uerr.ClassServer, detail: "boom"}
+
+	var result Result
+	action := d.report(&result, o)
+
+	if action.verb != finalizeDelete {
+		t.Errorf("verb = %v, want finalizeDelete: an unnamed disposition must not requeue forever", action.verb)
+	}
+	if len(result.Failures) != 1 || result.Failures[0].Retrying {
+		t.Errorf("Failures = %+v, want one non-retrying failure", result.Failures)
+	}
+	if !strings.Contains(log.String(), "outbox: unhandled disposition") || !strings.Contains(log.String(), "intent=42") {
+		t.Errorf("log = %q, want a line naming the unhandled disposition and intent 42", log.String())
 	}
 }

@@ -484,7 +484,7 @@ func TestCreateMailboxKeepsRetryingAFailedLookup(t *testing.T) {
 // TestApplyBatchAdoptsOnlyOneMatch is
 // TestCreateMailboxAdoptsOnlyOneMatch for the batch path: a create
 // refused inside an ApplyBatch call that also carries the moves
-// destined for it. An ambiguous reconcile is final for the whole
+// destined for it. An ambiguous reconcile is terminal for the whole
 // batch, the create and every move alike, since a move whose
 // destination never resolved has nothing left to file into.
 func TestApplyBatchAdoptsOnlyOneMatch(t *testing.T) {

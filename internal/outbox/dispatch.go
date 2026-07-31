@@ -75,21 +75,38 @@ type claimed struct {
 	detail           string
 }
 
-// outcome is one claimed intent's disposition after its backend call:
-// delivered, with move carrying the decoded payload for
-// KindMoveMessages, or failed with a class and detail. final marks a
-// failure no later attempt may repeat whatever its class says.
+// disposition is what a claimed intent's dispatch decided about it,
+// and what DispatchOnce chooses that row's finalize verb from.
+type disposition int
+
+const (
+	// dispositionDelivered is a backend call that succeeded. The row's
+	// work is done, so the row goes.
+	dispositionDelivered disposition = iota
+	// dispositionRetry is a failure a later attempt may answer
+	// differently. The row goes back to queued behind a backoff.
+	dispositionRetry
+	// dispositionTerminal is a failure no later attempt can answer
+	// differently, whether because of its class or in spite of it. The
+	// row goes, this pass's report to the caller standing in for it.
+	dispositionTerminal
+)
+
+// outcome is what one claimed intent's dispatch produced: its
+// disposition, the decoded payload of a delivered KindMoveMessages in
+// move, and the class and detail of the failure behind the other two
+// dispositions.
 type outcome struct {
-	c      claimed
-	move   *MoveMessagesPayload
-	failed bool
-	final  bool
-	class  uerr.Class
-	detail string
+	c           claimed
+	move        *MoveMessagesPayload
+	disposition disposition
+	class       uerr.Class
+	detail      string
 }
 
-// finalizeAction is claim's disposition once DispatchOnce decides it,
-// applied inside finalize's one writer transaction.
+// finalizeAction is the write one claimed row is owed once
+// DispatchOnce has decided it, made inside finalize's one writer
+// transaction.
 type finalizeAction struct {
 	id      int64
 	attempt int
@@ -98,7 +115,7 @@ type finalizeAction struct {
 	detail  string
 }
 
-// apply writes a's disposition inside tx.
+// apply makes a's write inside tx.
 func (a finalizeAction) apply(tx *sql.Tx, now time.Time) error {
 	switch a.verb {
 	case finalizeDelete:
@@ -116,18 +133,15 @@ func (a finalizeAction) apply(tx *sql.Tx, now time.Time) error {
 // state write: a row put back with its expired next_attempt_at and its
 // attempt count unchanged is eligible again immediately and grows no
 // backoff, so a finalize failure that persists spends every pass on
-// another attempt against the live backend. That replay is best
-// effort. The recovery is one transaction over every claimed row, so a
-// store failure specific to the requeue would otherwise cost every
-// other row in it the revert, and reaching queued is worth more to a
-// row than its backoff is.
+// another attempt against the live backend, and one put back without
+// its failure class earns a fresh uerr.New on every one of them. The
+// replay leaves failure_detail where it is, the one value requeueRow
+// writes with no bound on its size: the recovery is one transaction
+// over every claimed row, and a store failure inside it costs all of
+// them their revert.
 func (a finalizeAction) revert(tx *sql.Tx, now time.Time) error {
 	if a.verb == finalizeRequeue {
-		err := a.apply(tx, now)
-		if err == nil {
-			return nil
-		}
-		slog.Warn("outbox: recovery reverted an intent without its backoff", "id", a.id, "requeue_error", err)
+		return recoverRow(tx, a.id, now.Add(backoff(a.attempt)), a.class)
 	}
 	return revertRow(tx, a.id)
 }
@@ -183,7 +197,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		var outcomes []outcome
 		switch {
 		case c.preFailed:
-			outcomes = []outcome{{c: c, failed: true, class: c.class, detail: c.detail}}
+			outcomes = []outcome{failedOutcome(c, c.class, c.detail)}
 		case len(groups[c.id]) > 0:
 			outcomes = d.dispatchBatch(ctx, c, groups[c.id], resolvedCreates)
 		default:
@@ -191,7 +205,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 		}
 
 		for _, o := range outcomes {
-			if o.failed {
+			if o.disposition != dispositionDelivered {
 				finalize(d.report(&result, o))
 				stopped = stopped || o.class == uerr.ClassConnection
 				continue
@@ -218,14 +232,13 @@ const finalizeRecoveryTimeout = 5 * time.Second
 // startup sweep can undo, so finalize returns them to queued in a
 // second transaction rather than costing the queue every claimed
 // intent for the rest of the run. That transaction writes each row's
-// state once, replaying a requeue's backoff where the store lets it and
-// falling back to the bare state write where it does not. Replay is
-// safe for every row it touches, delivered ones included: their
-// backend calls are idempotent, and a create whose resolved id never
-// reached its payload replays into a refusal the dispatcher reconciles
-// against the mailbox already there. DispatchOnce reports no Result
-// when this fails, since none of the writes such a Result would
-// describe landed.
+// state once, replaying a requeue with the backoff it was going to
+// write. Replay is safe for every row it touches, delivered ones
+// included: their backend calls are idempotent, and a create whose
+// resolved id never reached its payload replays into a refusal the
+// dispatcher reconciles against the mailbox already there.
+// DispatchOnce reports no Result when this fails, since none of the
+// writes such a Result would describe reached the store.
 //
 // The recovery drops ctx, since a deadline expiring during the backend
 // calls is the ordinary way the transaction above fails and the same
@@ -277,29 +290,26 @@ func actionIDs(actions []finalizeAction) []int64 {
 // create's resolved server id in resolvedCreates so a dependent
 // dispatching later in this same pass can substitute it.
 func (d *Dispatcher) dispatchOne(ctx context.Context, c claimed, resolvedCreates map[int64]string) outcome {
-	o := outcome{c: c}
 	switch c.kind {
 	case KindCreateMailbox:
 		return d.dispatchCreateMailbox(ctx, c, resolvedCreates)
 	case KindRenameMailbox:
-		o.failed, o.class, o.detail = d.dispatchRenameMailbox(ctx, c)
+		return d.dispatchRenameMailbox(ctx, c)
 	case KindDeleteMailbox:
-		o.failed, o.class, o.detail = d.dispatchDeleteMailbox(ctx, c)
+		return d.dispatchDeleteMailbox(ctx, c)
 	case KindMoveMessages:
-		o.move, o.failed, o.class, o.detail = d.dispatchMoveMessages(ctx, c, resolvedCreates)
+		return d.dispatchMoveMessages(ctx, c, resolvedCreates)
 	default:
 		// A kind this build does not recognize (a newer poplar wrote
 		// it, or the schema grew one this dispatcher has not caught up
 		// with) fails this one intent rather than aborting the pass:
 		// every other claimed row still needs its finalize action. It
-		// is final because no later pass of this build has a case for
-		// it either, so a retriable classification would retry the row
-		// every 30 seconds for the life of the store. No server was
+		// is terminal because no later pass of this build has a case
+		// for it either, so a retriable classification would retry the
+		// row every 30 seconds for the life of the store. No server was
 		// involved, so the class is a local one.
-		o.failed, o.final, o.class = true, true, uerr.ClassStoreLocal
-		o.detail = fmt.Sprintf("unknown kind %q", c.kind)
+		return terminalOutcome(c, uerr.ClassStoreLocal, fmt.Sprintf("unknown kind %q", c.kind))
 	}
-	return o
 }
 
 // planBatches groups each claimed create-mailbox intent with the
@@ -452,9 +462,8 @@ func fileIntoMailbox(c claimed, messageIDs []int64, dest string) []backend.Mutat
 	return mutations
 }
 
-// moveOutcome reads mv's disposition out of a batch result: failed
-// with the first of its messages the server rejected, delivered
-// otherwise.
+// moveOutcome reads mv's outcome out of a batch result: failed with
+// the first of its messages the server rejected, delivered otherwise.
 func moveOutcome(mv claimed, p *MoveMessagesPayload, res backend.BatchResult) outcome {
 	for _, msgID := range p.MessageIDs {
 		mutErr, bad := res.Failed[mv.messageServerIDs[msgID]]
@@ -462,7 +471,7 @@ func moveOutcome(mv claimed, p *MoveMessagesPayload, res backend.BatchResult) ou
 			continue
 		}
 		class, detail := classifyFailure(mutErr)
-		return outcome{c: mv, failed: true, class: class, detail: detail}
+		return failedOutcome(mv, class, detail)
 	}
 	return outcome{c: mv, move: p}
 }
@@ -480,7 +489,7 @@ func failBatch(create claimed, moves []claimed, class uerr.Class, detail string)
 }
 
 // failBatchAdoption is failBatch for a batch whose create the
-// reconcile could not resolve against a single mailbox. It is final
+// reconcile could not resolve against a single mailbox. It is terminal
 // for every intent in it: the refusal repeats on every attempt, and a
 // move whose destination is that create has nothing to resolve without
 // it. A lookup call that failed on its own keeps its class's ordinary
@@ -492,7 +501,7 @@ func failBatchAdoption(create claimed, moves []claimed, err error) []outcome {
 		return outcomes
 	}
 	for i := range outcomes {
-		outcomes[i].final = true
+		outcomes[i].disposition = dispositionTerminal
 	}
 	return outcomes
 }
@@ -512,12 +521,25 @@ func (d *Dispatcher) refile(ctx context.Context, moves []claimed, payloads []*Mo
 
 // report appends o's classified failure to result, logs it through
 // uerr's one seam when shouldLogFailure says it is new, and returns
-// its finalize action: requeue with backoff if the failure is worth
-// retrying, delete (give up and let the caller's report stand)
-// otherwise.
+// its finalize action: requeue with backoff for a retry, delete (give
+// up and let the caller's report stand) for a terminal failure. An
+// o.disposition this switch does not recognize takes the terminal
+// verb and logs the unnamed disposition, rather than guessing at a
+// retry: dispositionDelivered never reaches report, so the only ways
+// here are dispositionRetry, dispositionTerminal, and a mistake.
 func (d *Dispatcher) report(result *Result, o outcome) finalizeAction {
 	c := o.c
-	retry := isRetriable(o.class) && !o.final
+	var retry bool
+	switch o.disposition {
+	case dispositionRetry:
+		retry = true
+	case dispositionTerminal:
+		retry = false
+	default:
+		slog.Error("outbox: unhandled disposition, treating as terminal",
+			"intent", c.id, "disposition", o.disposition)
+		retry = false
+	}
 	if shouldLogFailure(c.failureClass, o.class, retry) {
 		_ = uerr.New("outbox.dispatch", failureIDs(c), o.class, errors.New(o.detail))
 	}
@@ -531,14 +553,15 @@ func (d *Dispatcher) report(result *Result, o outcome) finalizeAction {
 }
 
 // shouldLogFailure reports whether a failure classified class, with
-// retry as isRetriable(class), is worth a fresh uerr.New call:
-// lastClass is the class this row's failure_class column carried
-// after its last attempt, empty if it never failed before. A
-// retriable failure logs only on its first occurrence or a class
-// change from lastClass (ADR-0013 revision 2: construction is the
-// surfacing event, not the retry); an unretriable failure always
-// logs, since its row is deleted once this pass finalizes and this is
-// its only chance to reach the log.
+// retry as the caller's decision to requeue the row rather than let
+// it finalize as terminal, is worth a fresh uerr.New call: lastClass
+// is the class this row's failure_class column carried after its
+// last attempt, empty if it never failed before. A retriable failure
+// logs only on its first occurrence or a class change from lastClass
+// (ADR-0013 revision 2: construction is the surfacing event, not the
+// retry); an unretriable failure always logs, since its row is
+// deleted once this pass finalizes and this is its only chance to
+// reach the log.
 func shouldLogFailure(lastClass string, class uerr.Class, retry bool) bool {
 	return !retry || lastClass != class.String()
 }
@@ -823,8 +846,8 @@ func (d *Dispatcher) adoptMailbox(ctx context.Context, intentID int64, name, par
 	return ids[0], nil
 }
 
-// adoptionFailure is the disposition of a create the reconcile could
-// not resolve. An ambiguous match is final: the mailbox is on the
+// adoptionFailure is the outcome of a create the reconcile could not
+// resolve. An ambiguous match is terminal: the mailbox is on the
 // server, every later attempt earns the same refusal, and no candidate
 // met the exact-match contract adoptMailbox binds on, whether because
 // two did or because none did. A lookup call that failed on its own
@@ -832,13 +855,25 @@ func (d *Dispatcher) adoptMailbox(ctx context.Context, intentID int64, name, par
 // retry.
 func adoptionFailure(c claimed, err error) outcome {
 	class, detail := classifyFailure(err)
-	o := failedOutcome(c, class, detail)
-	o.final = errors.Is(err, errAmbiguousMailbox)
-	return o
+	if errors.Is(err, errAmbiguousMailbox) {
+		return terminalOutcome(c, class, detail)
+	}
+	return failedOutcome(c, class, detail)
 }
 
+// failedOutcome is c's outcome after a failure whose class alone
+// decides whether another attempt is worth making.
 func failedOutcome(c claimed, class uerr.Class, detail string) outcome {
-	return outcome{c: c, failed: true, class: class, detail: detail}
+	if !isRetriable(class) {
+		return terminalOutcome(c, class, detail)
+	}
+	return outcome{c: c, disposition: dispositionRetry, class: class, detail: detail}
+}
+
+// terminalOutcome is c's outcome after a failure no later attempt may
+// repeat, whatever its class would say about retrying on its own.
+func terminalOutcome(c claimed, class uerr.Class, detail string) outcome {
+	return outcome{c: c, disposition: dispositionTerminal, class: class, detail: detail}
 }
 
 // resolveDependentRefs persists newID, createID's own resolved server
@@ -905,37 +940,37 @@ func rewriteRef(r row, createID int64, serverID string) (patched []byte, ok bool
 	return patched, true, nil
 }
 
-func (d *Dispatcher) dispatchRenameMailbox(ctx context.Context, c claimed) (bool, uerr.Class, string) {
+func (d *Dispatcher) dispatchRenameMailbox(ctx context.Context, c claimed) outcome {
 	var p RenameMailboxPayload
 	if err := json.Unmarshal(c.payload, &p); err != nil {
-		return true, uerr.ClassServer, err.Error()
+		return failedOutcome(c, uerr.ClassServer, err.Error())
 	}
 	if err := d.backend.Mail().RenameMailbox(ctx, c.mailboxServerID, p.Name); err != nil {
 		class, detail := classifyFailure(err)
-		return true, class, detail
+		return failedOutcome(c, class, detail)
 	}
-	return false, 0, ""
+	return outcome{c: c}
 }
 
-func (d *Dispatcher) dispatchDeleteMailbox(ctx context.Context, c claimed) (bool, uerr.Class, string) {
+func (d *Dispatcher) dispatchDeleteMailbox(ctx context.Context, c claimed) outcome {
 	if err := d.backend.Mail().DeleteMailbox(ctx, c.mailboxServerID); err != nil {
 		class, detail := classifyFailure(err)
-		return true, class, detail
+		return failedOutcome(c, class, detail)
 	}
-	return false, 0, ""
+	return outcome{c: c}
 }
 
 // dispatchMoveMessages executes c, a claimed KindMoveMessages intent,
 // as one ApplyBatch call: each chunk is its own request, so the
 // backend's maxObjectsInSet bound applies per chunk rather than to
 // the whole bulk action. A chunk fails as a whole if any of its
-// messages fail, using the first failure's class. It returns the
-// decoded payload on success, so a caller building this intent's
+// messages fail, using the first failure's class. Its outcome carries
+// the decoded payload on success, so a caller building this intent's
 // Delivered entry does not have to decode c.payload a second time.
-func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolvedCreates map[int64]string) (*MoveMessagesPayload, bool, uerr.Class, string) {
+func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolvedCreates map[int64]string) outcome {
 	var p MoveMessagesPayload
 	if err := json.Unmarshal(c.payload, &p); err != nil {
-		return nil, true, uerr.ClassServer, err.Error()
+		return failedOutcome(c, uerr.ClassServer, err.Error())
 	}
 
 	dest := c.destServerID
@@ -943,7 +978,7 @@ func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolv
 		dest = resolvedCreates[p.DestRef]
 	}
 	if dest == "" {
-		return nil, true, uerr.ClassNotFound, "move destination not resolved"
+		return failedOutcome(c, uerr.ClassNotFound, "move destination not resolved")
 	}
 
 	mutations := fileIntoMailbox(c, p.MessageIDs, dest)
@@ -951,15 +986,15 @@ func (d *Dispatcher) dispatchMoveMessages(ctx context.Context, c claimed, resolv
 	res, err := d.backend.Mail().ApplyBatch(ctx, mutations)
 	if err != nil {
 		class, detail := classifyFailure(err)
-		return nil, true, class, detail
+		return failedOutcome(c, class, detail)
 	}
 	for _, mut := range mutations {
 		if mutErr, bad := res.Failed[mut.ID]; bad {
 			class, detail := classifyFailure(mutErr)
-			return nil, true, class, detail
+			return failedOutcome(c, class, detail)
 		}
 	}
-	return &p, false, 0, ""
+	return outcome{c: c, move: &p}
 }
 
 // persistPayload writes payload back into id's row in its own
