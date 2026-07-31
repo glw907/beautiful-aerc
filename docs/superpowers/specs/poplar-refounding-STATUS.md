@@ -378,25 +378,41 @@ plan-approval model boundary; the starter prompt below is the
 handoff. The scope list that follows remains the binding source
 the plan was authored from.
 
-**Execution in progress (2026-07-30). Tasks 1 through 6a are done,
-reviewed, and pushed; task 6b is implemented and pushed through fix
-round 2, but that round is NOT reviewed** (master at `b6c1b00`).
-Task 6a landed the cutover to `internal/backend/jmapsource` on
-`poplar/jmap` with go-jmap and oauth2 out of `go.mod`; task 6b gave
-the running program push, collapsed reconnect ownership into the
-inner client, and closed a silent reconnect storm that hit ~5
-requests/second against a server accepting some connections and
-refusing others. **The first action next session is the re-review of
-`1cebf45..b6c1b00`**, whose implementing agent stalled during its own
-gate run; the orchestrator verified every gate on the staged tree and
-committed the code as written, so what is missing is judgment rather
-than mechanics. The live
-progress ledger is
+**Execution in progress (2026-07-30). Tasks 1 through 7b are done,
+reviewed, and pushed** (master at `fd722bf`, clean). **Tasks 8, 9, 10,
+11 and 12 remain.** The live progress ledger is
 `.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md`
 and it is the recovery map: it records every task's outcome, every
 parked and deferred finding, the routing rulings, and the defect
 patterns worth carrying. **A resuming session reads that ledger
-first**, then resumes at the first task with no `complete` line.
+first**, then resumes at task 8.
+
+Task 6a landed the cutover to `internal/backend/jmapsource` on
+`poplar/jmap` with go-jmap and oauth2 out of `go.mod`. **Task 6b gave
+the running program push**: live inbox latency against the Fastmail
+account is 340ms end to end, from a server-side mailbox create to the
+push-triggered `/changes` pull landing the row, where it was
+`PollInterval`'s 60 seconds. Under an induced five-drop outage the
+transport made six connections on its own jittered schedule and the
+sync engine made one `Listen` call, so exactly one layer backs off.
+
+**Task 7 was split by the same reasoning that split task 6.** 7a
+replaced the seam's `map[string]any` field maps with typed models, a
+sealed-interface payload rather than per-kind methods, since
+`ObjectKind` also keys the sync-state table, the watermark, the echo
+tracker, the push loop and resync. 7b closed the create-replay window
+that duplicated a mailbox, by reconciling on the server's own
+`alreadyExists` refusal: no schema change, no new outbox state, and no
+marker distinguishing a replay from a first attempt, which is the
+obstacle that made the fix impossible in pass 1.
+
+**Two rulings from 7b bind later work.** The `landed` flag is gone, so
+**task 8's disposition enum has three members, not four**, and its
+brief carries the amendment plus the replacement acceptance criterion.
+And `internal/store`'s `TestIncrementalVacuumReclaimsFreelist` and
+`TestInteractivePreemption` fail under `-race` at master while passing
+3/3 without it, so **CI's race job is red and has been since task 6a**,
+independent of this pass; both are routed to task 11.
 
 - **Task 1, the headless runner: complete.** `cmd/poplar` starts the
   JMAP session, sync worker, and dispatcher; clean shutdown ordering
@@ -557,9 +573,8 @@ Opus 5 session):
 ```
 Resume executing the poplar pass 1b plan at
 docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md
-via superpowers:subagent-driven-development. Tasks 1 through 6a are
-complete, reviewed and pushed. Task 6b is implemented and pushed
-through fix round 2 (master b6c1b00), but round 2 is NOT reviewed.
+via superpowers:subagent-driven-development. Tasks 1 through 7b are
+complete, reviewed and pushed (master fd722bf, clean). Resume at task 8.
 
 Read .superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md
 FIRST, starting with the "READ THIS FIRST" block at the top. It is the
@@ -568,17 +583,18 @@ routing rulings that bind later tasks, and the defect patterns this pass
 has produced. Then read the plan, and the pass 1b scope in
 docs/superpowers/specs/poplar-refounding-STATUS.md.
 
-FIRST ACTION: re-review 1cebf45..b6c1b00, task 6b's fix round 2. Its
-implementing agent stalled during its own gate run and never reported.
-The orchestrator verified the staged tree and committed the code as
-written with no orchestrator edits, so every mechanical gate is green
-(make check, jmap-boundary, tagged-vet, conformance, live, -race across
-jmap/backend/sync/outbox/cmd) and no reviewer has read the diff. Round 2
-closed four findings; the one to attack is N1, a fixed-size ring of eight
-answered sessionStates replacing a two-entry dedup, because new
-fixed-size logic is where an off-by-one or wrap bug hides and this pass's
-arrayIndex Critical was a hand-rolled scan whose author never asked what
-it did at the boundary. Then tasks 7 through 12.
+Task briefs live beside the ledger. Task 8's brief carries an ORCHESTRATOR
+AMENDMENT from task 7b that changes its outcome and one of its acceptance
+criteria: the disposition enum has three members, not four, because 7b
+deleted the landed flag once closing the create-replay window left no
+dispatch outcome unsafe to replay. Read that amendment before dispatching.
+
+Order: 8 and 11 are independent and run first. Tasks 9 and 10 must run on
+a quiet machine with NO implementer dispatched, 10 needs 9's corpus, and
+12 closes the pass. Task 11 carries two conformance-suite items routed
+from 7b (DV-11's false RFC citation, which pins a Stalwart-only existingId
+that Fastmail omits, and a DV row for the sibling-uniqueness normalization
+divergence) plus the red -race tests in internal/store.
 
 Binding research is under docs/poplar/research/; requirements are at
 revision 4 and ADR revision blocks override ADR bodies. The RFC
