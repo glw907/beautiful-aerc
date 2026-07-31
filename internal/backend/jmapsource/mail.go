@@ -102,7 +102,7 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 			result.Created[string(creationID)] = string(box.ID)
 		}
 		for creationID, se := range sr.NotCreated {
-			result.Failed[string(creationID)] = classifyMutationFailure(se.Type)
+			result.Failed[string(creationID)] = classifyMailboxCreateFailure(se.Type)
 		}
 	}
 	if messageCall == "" {
@@ -334,6 +334,9 @@ func (m *mailSource) CreateMailbox(ctx context.Context, name, parentID string) (
 		return "", err
 	}
 	if se, bad := sr.NotCreated["m1"]; bad {
+		if se.Type == mailboxNameConflict {
+			return "", fmt.Errorf("jmap: create mailbox: rejected: %s: %w", se.Type, backend.ErrMailboxNameExists)
+		}
 		return "", fmt.Errorf("jmap: create mailbox: rejected: %s", se.Type)
 	}
 	created, ok := sr.Created["m1"]
@@ -371,6 +374,60 @@ func (m *mailSource) DeleteMailbox(ctx context.Context, id string) error {
 		return fmt.Errorf("jmap: delete mailbox: rejected: %s", se.Type)
 	}
 	return nil
+}
+
+// mailboxLookupProperties is what FindMailboxes needs off each
+// candidate: the id it may return, and the two properties it matches
+// exactly before returning one.
+var mailboxLookupProperties = []string{"id", "name", "parentId"}
+
+// FindMailboxes implements backend.Mail as one round trip: a
+// Mailbox/query narrowed by name, and a Mailbox/get over that query's
+// ids by back-reference. It reaches neither Mailbox/changes nor the
+// account's whole mailbox list, so nothing here touches the state
+// token the sync engine's watermark discipline owns.
+//
+// Narrowing is all the filter is trusted for. RFC 8621 section 2.3
+// defines the name condition as "The Mailbox 'name' property contains
+// the given string", and both Fastmail and Stalwart answer a query for
+// "Work" with "Workshop" as well, so the exact name and parent are
+// matched here against what Mailbox/get returned. A mailbox at the
+// root carries parentId null, which decodes to the empty id, and both
+// servers send it that way.
+func (m *mailSource) FindMailboxes(ctx context.Context, name, parentID string) ([]string, error) {
+	req := &jmap.Request{}
+	queryCall := req.Invoke(&jmap.MailboxQuery{
+		Account: m.session.accountID,
+		Filter:  &jmap.MailboxFilterCondition{Name: name},
+	})
+	getCall := req.Invoke(&jmap.MailboxGet{
+		Account:      m.session.accountID,
+		Properties:   mailboxLookupProperties,
+		ReferenceIDs: &jmap.ResultReference{ResultOf: queryCall, Name: "Mailbox/query", Path: "/ids"},
+	})
+
+	resp, err := m.session.do(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("jmap: find mailboxes: %w", err)
+	}
+	// The query is read back on its own so a failure there reports as
+	// itself. The get names it by back-reference, so a failed query
+	// reaches the get as an unresolvable reference instead.
+	if _, err := findResponse[*jmap.MailboxQueryResponse](resp, queryCall); err != nil {
+		return nil, fmt.Errorf("jmap: find mailboxes: query: %w", err)
+	}
+	get, err := findResponse[*jmap.MailboxGetResponse](resp, getCall)
+	if err != nil {
+		return nil, fmt.Errorf("jmap: find mailboxes: %w", err)
+	}
+
+	var ids []string
+	for _, box := range get.List {
+		if box.Name == name && string(box.ParentID) == parentID {
+			ids = append(ids, string(box.ID))
+		}
+	}
+	return ids, nil
 }
 
 // mailboxSet runs one Mailbox/set call and returns its response,

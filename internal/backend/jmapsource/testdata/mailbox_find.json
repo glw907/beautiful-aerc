@@ -1,0 +1,19 @@
+{
+  "methodResponses": [
+    ["Mailbox/query", {
+      "accountId": "u1",
+      "queryState": "q1",
+      "ids": ["mbx-work", "mbx-workshop", "mbx-nested"]
+    }, "0"],
+    ["Mailbox/get", {
+      "accountId": "u1",
+      "state": "2",
+      "list": [
+        {"id": "mbx-work", "name": "Work", "parentId": null},
+        {"id": "mbx-workshop", "name": "Workshop", "parentId": null},
+        {"id": "mbx-nested", "name": "Work", "parentId": "mbx-parent"}
+      ]
+    }, "1"]
+  ],
+  "sessionState": "session-2"
+}

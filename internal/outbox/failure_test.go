@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -300,49 +297,60 @@ func TestFinalizeRecoveryOutlivesACancelledContext(t *testing.T) {
 	}
 }
 
-// TestFinalizeRecoveryLeavesALandedCreateAlone covers the recovery's
-// one exception. A create whose mailbox the server already made, and
-// whose resolved id the store then refused to record, is given up on
-// rather than retried into a second folder of the same name. Returning
-// it to queued alongside the rest re-opens that window inside the same
-// process, and the two store-write failures it takes are the same
-// failure: a full disk or a busy timeout produces both at once.
-func TestFinalizeRecoveryLeavesALandedCreateAlone(t *testing.T) {
-	log := captureSlog(t)
+// TestFinalizeRecoveryRequeuesACreateWhoseMailboxLanded covers what
+// the recovery owes a create the server has already acted on. It used
+// to leave that row in dispatching, because returning it to queued
+// made the account a second folder of the same name on the very next
+// pass. Nothing is owed to it now: the replay's create is refused for
+// the mailbox already there and the dispatcher adopts it, so leaving
+// the row where selectEligible cannot see it would cost the intent for
+// the rest of the run and buy nothing.
+func TestFinalizeRecoveryRequeuesACreateWhoseMailboxLanded(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
+	renamed := seedMailbox(t, w, accountID, "Old", "mbx-old")
 
-	var created []string
 	be := newFakeBackend()
-	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, _ string) (string, error) {
-		created = append(created, name)
-		return fmt.Sprintf("mbx-%d", len(created)), nil
+	server := newMailboxServer(be)
+	be.MailSource.RenameMailboxFunc = func(context.Context, string, string) error { return nil }
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue the create: %v", err)
+	}
+	if _, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, renamed, "Family", now); err != nil {
+		t.Fatalf("enqueue the rename: %v", err)
 	}
 
-	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
-	if err != nil {
-		t.Fatalf("enqueue: %v", err)
-	}
+	// The create's payload write fails, so its own row is headed for a
+	// requeue. The delivered rename's delete is what fails the finalize
+	// transaction and takes that requeue down with it.
 	blockPayloadWrites(t, w)
 	blockDeletes(t, w)
 
 	dispatcher := NewDispatcher(accountID, be, w)
-	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err == nil {
+	if _, err := dispatcher.DispatchOnce(context.Background(), now); err == nil {
 		t.Fatal("DispatchOnce = nil, want the finalize failure")
 	}
-	if state, _ := outboxState(t, w, id); state != "dispatching" {
-		t.Errorf("intent %d state = %s, want dispatching: its mailbox already exists on the server", id, state)
+	if state, _ := outboxState(t, w, createID); state != "queued" {
+		t.Fatalf("intent %d state = %s, want queued: its replay reconciles rather than duplicating", createID, state)
 	}
-	if !strings.Contains(log.String(), strconv.FormatInt(id, 10)) {
-		t.Errorf("log = %q, want it naming intent %d, the only record of a row left dispatching", log.String(), id)
+	if n := server.mailboxes(); n != 1 {
+		t.Fatalf("the account holds %d mailboxes after the first pass, want 1", n)
 	}
 
 	unblockDeletes(t, w)
-	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
+	unblockPayloadWrites(t, w)
+	// Past the backoff the requeue wrote, so the row is eligible again.
+	if _, err := dispatcher.DispatchOnce(context.Background(), now.Add(time.Minute)); err != nil {
 		t.Fatalf("second dispatch: %v", err)
 	}
-	if len(created) != 1 {
-		t.Errorf("CreateMailbox calls = %d, want 1: the account has a second folder named %q", len(created), "Projects")
+	if n := outboxCount(t, w, createID); n != 0 {
+		t.Errorf("intent %d is still in the outbox, want it delivered", createID)
+	}
+	if n := server.mailboxes(); n != 1 {
+		t.Errorf("the account holds %d mailboxes, want 1: the replay made a second Projects folder", n)
 	}
 }
 
@@ -514,14 +522,13 @@ func TestUnknownKindIsReportedAndDropped(t *testing.T) {
 	}
 }
 
-// TestUnknownKindSurvivesAFinalizeFailure separates a failure no
-// attempt may repeat from one whose server action already happened.
-// Nothing of an unknown kind reaches a server, so a failed finalize
-// owes its row the ordinary revert. Left in dispatching it is invisible
-// to selectEligible for the rest of the run, and no later pass can
-// report it.
+// TestUnknownKindSurvivesAFinalizeFailure covers what final means and
+// what it does not. It marks a failure no later attempt may repeat, and
+// it says nothing about where the row belongs when the finalize
+// transaction itself fails: every claimed row is owed the revert.
+// Left in dispatching this one is invisible to selectEligible for the
+// rest of the run, and no later pass can report it.
 func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
-	log := captureSlog(t)
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
@@ -543,9 +550,6 @@ func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
 	if state, _ := outboxState(t, w, id); state != "queued" {
 		t.Fatalf("intent %d state = %s, want queued: no server action to protect from a replay", id, state)
 	}
-	if strings.Contains(log.String(), "already landed") {
-		t.Errorf("log = %q, want no landed-server claim for intent %d", log.String(), id)
-	}
 
 	unblockDeletes(t, w)
 	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
@@ -560,21 +564,20 @@ func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
 	}
 }
 
-// TestCreateMailboxPersistFailureIsLocalAndFinal covers the window
-// between a mailbox the server has already made and the transaction
-// that records its id. The store write is what failed, so classifying
-// it as a server failure both misnames it and marks it retriable, and
-// the retry asks the server for a second folder of the same name.
-func TestCreateMailboxPersistFailureIsLocalAndFinal(t *testing.T) {
+// TestCreateMailboxPersistFailureRetriesOntoTheSameMailbox covers the
+// window between a mailbox the server has already made and the
+// transaction that records its id, entered by a store-write failure
+// rather than by a crash. The store write is what failed, so the
+// failure is a local one, and it is worth retrying: the retry's create
+// is refused for the mailbox already there and the dispatcher adopts
+// it, so the intent completes against the folder the first attempt
+// made instead of being given up on beside it.
+func TestCreateMailboxPersistFailureRetriesOntoTheSameMailbox(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
-	var created []string
 	be := newFakeBackend()
-	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, _ string) (string, error) {
-		created = append(created, name)
-		return fmt.Sprintf("mbx-%d", len(created)), nil
-	}
+	server := newMailboxServer(be)
 
 	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
 	if err != nil {
@@ -594,14 +597,25 @@ func TestCreateMailboxPersistFailureIsLocalAndFinal(t *testing.T) {
 	if f.Class != uerr.ClassStoreLocal {
 		t.Errorf("Class = %v, want %v: the store write failed, not the server", f.Class, uerr.ClassStoreLocal)
 	}
-	if f.Retrying {
-		t.Error("Retrying = true, want false: the server already made the mailbox")
+	if !f.Retrying {
+		t.Error("Retrying = false, want true: the retry reconciles against the mailbox already made")
+	}
+	if state, _ := outboxState(t, w, id); state != "queued" {
+		t.Fatalf("intent %d state = %s, want queued", id, state)
+	}
+
+	unblockPayloadWrites(t, w)
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now().Add(time.Minute)); err != nil {
+		t.Fatalf("second dispatch: %v", err)
 	}
 	if n := outboxCount(t, w, id); n != 0 {
-		t.Errorf("intent %d is still queued, want it dropped: another attempt makes a second folder", id)
+		t.Errorf("intent %d is still in the outbox, want it delivered", id)
 	}
-	if len(created) != 1 {
-		t.Errorf("CreateMailbox calls = %d, want 1", len(created))
+	if n := server.mailboxes(); n != 1 {
+		t.Errorf("the account holds %d mailboxes, want 1: the retry made a second Projects folder", n)
+	}
+	if n := server.createCalls(); n != 2 {
+		t.Errorf("CreateMailbox calls = %d, want 2: the retry has to make the call to learn the mailbox is there", n)
 	}
 }
 
@@ -619,6 +633,18 @@ func blockPayloadWrites(t *testing.T, w *store.Writer) {
 	})
 	if err != nil {
 		t.Fatalf("install the payload-blocking trigger: %v", err)
+	}
+}
+
+// unblockPayloadWrites drops blockPayloadWrites's trigger.
+func unblockPayloadWrites(t *testing.T, w *store.Writer) {
+	t.Helper()
+	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`DROP TRIGGER block_outbox_payload`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("drop the payload-blocking trigger: %v", err)
 	}
 }
 

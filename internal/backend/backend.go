@@ -27,6 +27,19 @@ var ErrStateReset = errors.New("backend: state reset")
 // applied. The caller re-fetches state through Changes and retries.
 var ErrStateMismatch = errors.New("backend: state mismatch")
 
+// ErrMailboxNameExists reports that a mailbox create was refused
+// because the account already holds a mailbox of that name under that
+// parent. RFC 8621 section 2 states the rule the refusal enforces:
+// "There MUST NOT be two sibling Mailboxes with both the same parent
+// and the same name." A CreateMailbox call returns it, and ApplyBatch
+// puts it in the Cause of the Failure it records against a mailbox
+// create's CreationID.
+//
+// Retrying earns the same answer every time, so a caller that meant to
+// create exactly this mailbox resolves the refusal through
+// FindMailboxes instead.
+var ErrMailboxNameExists = errors.New("backend: mailbox name exists under that parent")
+
 // ObjectKind names the collection a Source's Changes call pages
 // through. A backend composes several kinds behind one Mail,
 // Calendar, or Contacts source (Mail carries both Message and
@@ -199,12 +212,31 @@ type Mail interface {
 	Submit(ctx context.Context, raw []byte) (SubmitResult, error)
 
 	// CreateMailbox creates a mailbox named name under parentID (the
-	// root, if empty) and returns its server id.
+	// root, if empty) and returns its server id. It returns an error
+	// wrapping ErrMailboxNameExists when the server refuses the name
+	// for a sibling it already holds.
 	CreateMailbox(ctx context.Context, name, parentID string) (id string, err error)
 	// RenameMailbox changes the mailbox named id's display name.
 	RenameMailbox(ctx context.Context, id, name string) error
 	// DeleteMailbox removes the mailbox named id.
 	DeleteMailbox(ctx context.Context, id string) error
+
+	// FindMailboxes returns the server id of every mailbox whose name
+	// is exactly name and whose parent is exactly parentID (the root,
+	// if empty). It is the point query that resolves an
+	// ErrMailboxNameExists refusal, and it reaches nothing the delta
+	// feed owns.
+	//
+	// Matching is exact on both, whatever the backend's own query
+	// vocabulary offers. RFC 8621 section 2.3 defines JMAP's name
+	// filter condition as "The Mailbox 'name' property contains the
+	// given string", so a backend over it narrows with that filter and
+	// confirms the exact name itself; a lookup of "Work" that answered
+	// with "Workshop" would bind a caller to a folder nobody named. A
+	// server holding section 2's sibling-uniqueness rule returns at
+	// most one id, so a caller reads two as that rule broken rather
+	// than as a choice to make.
+	FindMailboxes(ctx context.Context, name, parentID string) (ids []string, err error)
 
 	// Search runs a server-side search (SR-7). A caller checks
 	// Capabilities().ServerSearch before calling; a backend that

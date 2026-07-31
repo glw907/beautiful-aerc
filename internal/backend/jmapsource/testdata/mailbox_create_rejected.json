@@ -1,0 +1,11 @@
+{
+  "methodResponses": [
+    ["Mailbox/set", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "1",
+      "notCreated": {"m1": {"type": "invalidProperties"}}
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

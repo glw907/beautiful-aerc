@@ -21,15 +21,26 @@ import (
 // a dispatching row. Every such row is orphaned by definition, which
 // leaves no timestamp heuristic to tune and no ambiguity to resolve.
 //
-// Replay is idempotent for every kind except one window in
-// KindCreateMailbox, which TestIdempotentReplay covers on the safe
-// side and TestCreateMailboxReplayWindow pins on the unsafe one. A
-// create becomes replay-safe when the transaction after its backend
-// call records the new mailbox's server id in its payload. A run
-// killed between the two leaves a row this sweep requeues and a
-// mailbox the server has already made. Nothing on the backend seam
-// tells that row apart from one whose create never reached the
-// server, so the next dispatch creates the mailbox a second time.
+// Replay is idempotent for every kind. KindCreateMailbox is the one
+// that has to earn it. A create records the new mailbox's server id in
+// the transaction after its backend call, so a run killed between the
+// two leaves a row this sweep requeues and a mailbox the server has
+// already made, and nothing tells that row apart from one whose create
+// never reached the server. So the replay makes the call again and the
+// server refuses it, RFC 8621 section 2 forbidding two sibling
+// mailboxes with the same parent and the same name. dispatchCreateMailbox
+// adopts the mailbox that refusal is about, which leaves the account
+// with one folder either way. TestIdempotentReplay covers the replay
+// that reads its id off its own payload; TestCreateMailboxReplayWindow
+// covers the one that has to ask the server.
+//
+// That claim is scoped to the four kinds this build dispatches, not a
+// standing property of the outbox. A future kind whose server call
+// cannot be safely repeated needs its own answer before this sweep can
+// say the same of it: a send intent is the concrete case, since no
+// server refuses a second identical EmailSubmission/set the way a
+// mailbox create's own refusal gives dispatchCreateMailbox something
+// to reconcile against.
 //
 // Call it once at startup, after the instance lock is held and before
 // any Dispatcher runs.

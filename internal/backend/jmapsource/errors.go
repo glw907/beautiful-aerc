@@ -2,6 +2,7 @@ package jmapsource
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -281,6 +282,33 @@ func classifyMutationFailure(setErrorType string) backend.Failure {
 		class = uerr.ClassServer
 	}
 	return backend.Failure{Class: class, Cause: errors.New(setErrorType)}
+}
+
+// mailboxNameConflict is the SetError type a server answers a
+// duplicate sibling mailbox name with. RFC 8621 defines none for it:
+// section 2.5's extra types are mailboxHasChild and mailboxHasEmail,
+// both for destroy, so a server refusing a create under section 2's
+// sibling-uniqueness rule reaches for a type from elsewhere. Fastmail
+// and Stalwart both answer alreadyExists, which RFC 8620 section 5.4
+// defines for /copy, and that is the one type poplar reads as a name
+// conflict. A server answering anything else, invalidProperties among
+// them, leaves the caller an ordinary rejection: reading a generic
+// refusal as a name conflict would send a create looking for a mailbox
+// that was never the reason it failed.
+const mailboxNameConflict = "alreadyExists"
+
+// classifyMailboxCreateFailure is classifyMutationFailure for a
+// Mailbox/set create's refusal, wrapping backend.ErrMailboxNameExists
+// into the Cause of the one type that says the mailbox the caller
+// asked for is already there. The wire type survives as the Cause's
+// own text, so outbox.failure_detail still records what the server
+// said.
+func classifyMailboxCreateFailure(setErrorType string) backend.Failure {
+	f := classifyMutationFailure(setErrorType)
+	if setErrorType == mailboxNameConflict {
+		f.Cause = fmt.Errorf("%s: %w", setErrorType, backend.ErrMailboxNameExists)
+	}
+	return f
 }
 
 // isConnectionDead reports whether err comes from the underlying TCP

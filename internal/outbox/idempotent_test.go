@@ -4,13 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestIdempotentReplay covers every intent kind: a second dispatch of
@@ -184,29 +188,27 @@ func TestIdempotentReplay(t *testing.T) {
 	})
 }
 
-// TestCreateMailboxReplayWindow states the one window replay is not
-// idempotent across. A create records its resolved server id in the
-// transaction after its backend call, so a run killed between the two
-// leaves a mailbox on the server and a payload that never learned its
-// id. The startup sweep requeues that row, and the replay creates the
-// mailbox a second time: the account ends up with two folders of the
-// same name.
+// TestCreateMailboxReplayWindow reconstructs the window a create used
+// to duplicate a folder across, and holds it closed. A create records
+// its resolved server id in the transaction after its backend call, so
+// a run killed between the two leaves a mailbox on the server and a
+// payload that never learned its id. The startup sweep requeues that
+// row and the replay makes the call a second time, which is the one
+// thing the dispatcher cannot avoid: a reclaimed row is byte-identical
+// to a fresh one.
 //
-// Closing the window needs a mailbox lookup the backend seam does not
-// carry, plus a rule for when poplar adopts a folder it did not
-// create. Both sit outside internal/outbox. Until they exist this
-// test holds the behavior in place, so changing it is a decision
-// somebody made rather than a regression nobody saw.
+// The server is what closes it. RFC 8621 section 2 forbids two sibling
+// mailboxes with the same parent and the same name, so the replay's
+// create is refused and the dispatcher adopts the mailbox that refusal
+// is about. The account ends with one folder and the intent completes.
 func TestCreateMailboxReplayWindow(t *testing.T) {
+	log := uerrtest.CaptureDefault(t)
+	surfaced := uerrtest.Capture(t)
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
-	var created []string
 	be := newFakeBackend()
-	be.MailSource.CreateMailboxFunc = func(_ context.Context, name, _ string) (string, error) {
-		created = append(created, name)
-		return fmt.Sprintf("mbx-%d", len(created)), nil
-	}
+	server := newMailboxServer(be)
 
 	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
 	if err != nil {
@@ -220,18 +222,388 @@ func TestCreateMailboxReplayWindow(t *testing.T) {
 	if _, err := be.Mail().CreateMailbox(context.Background(), "Projects", ""); err != nil {
 		t.Fatalf("create the mailbox the killed run created: %v", err)
 	}
+	landed := server.serverID("Projects", "")
 
 	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
-	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now()); err != nil {
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	if err != nil {
 		t.Fatalf("dispatch the reclaimed intent: %v", err)
 	}
 
 	if n := outboxCount(t, w, id); n != 0 {
 		t.Fatalf("intent %d still queued after its replay", id)
 	}
-	if len(created) != 2 {
-		t.Errorf("CreateMailbox calls = %d, want 2: the replay leaves the account holding two Projects mailboxes", len(created))
+	if len(result.Failures) != 0 {
+		t.Fatalf("Failures = %+v, want none: the replay reconciled against the mailbox already there", result.Failures)
+	}
+	if n := server.mailboxes(); n != 1 {
+		t.Errorf("the account holds %d mailboxes, want 1: the replay made a second Projects folder", n)
+	}
+	if n := server.createCalls(); n != 2 {
+		t.Errorf("CreateMailbox calls = %d, want 2: the replay has to make the call to learn the mailbox is there", n)
+	}
+	// The adoption is a state transition and the only record it
+	// happened, so it is logged, at the level a recovery takes. Nothing
+	// reached the user, so nothing went through uerr's seam either.
+	adoption := "outbox: adopted the mailbox a refused create already made"
+	if !strings.Contains(log.String(), adoption) || !strings.Contains(log.String(), landed) {
+		t.Errorf("log = %q, want an %q line naming %s", log.String(), adoption, landed)
+	}
+	if strings.Contains(log.String(), "level=ERROR") {
+		t.Errorf("log = %q, want no error line: the intent completed", log.String())
+	}
+	if lines := uerrtest.Lines(t, surfaced); len(lines) != 0 {
+		t.Errorf("uerr lines = %v, want none: an adoption surfaces nothing to the user", lines)
+	}
+}
+
+// TestCreateMailboxReplayWindowInABatch holds the same window on the
+// other path a create reaches the server by. An offline create-folder-
+// then-move dispatches as one ApplyBatch request, the message updates
+// naming the mailbox by the create's creation id, so a run killed
+// after that request and before the transaction recording the new id
+// leaves the same row to replay. The server refuses the replayed
+// create, the dispatcher adopts the mailbox it names, and the moves
+// are filed against it in a second request rather than into a second
+// folder.
+func TestCreateMailboxReplayWindowInABatch(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+	msgID := seedMessage(t, w, accountID, src, "msg-1")
+
+	be := newFakeBackend()
+	server := newMailboxServer(be)
+	filed := map[string]string{}
+	applyCalls := 0
+	var refileDest string
+	be.MailSource.ApplyBatchFunc = func(ctx context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
+		applyCalls++
+		if applyCalls == 2 {
+			// The refile request: the create's own mutation is gone, so
+			// this is the message update naming msg-1's destination by
+			// resolved server id rather than the failed creation id's
+			// back-reference. Read off the request itself, not filed,
+			// since filed is pre-seeded with the killed run's own effect
+			// and would pass whether or not this request repeats it.
+			for _, mut := range muts {
+				patch, ok := mut.Fields.(backend.MessagePatch)
+				if ok && len(patch.MailboxIDs) > 0 {
+					refileDest = patch.MailboxIDs[0]
+				}
+			}
+		}
+		return applyAgainst(ctx, server, filed, muts)
+	}
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+	_, moveIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, be, false, now)
+	if err != nil {
+		t.Fatalf("enqueue move: %v", err)
+	}
+
+	// The killed run, reconstructed: its batch reached the server, so
+	// the mailbox exists and the message is filed into it, and it died
+	// before the transaction that writes the new id into the payload.
+	strandDispatching(t, w, createID)
+	for _, id := range moveIDs {
+		strandDispatching(t, w, id)
+	}
+	landed, err := server.create(context.Background(), "Projects", "")
+	if err != nil {
+		t.Fatalf("create the mailbox the killed run created: %v", err)
+	}
+	filed["msg-1"] = landed
+
+	if err := ReclaimOrphaned(context.Background(), w); err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("dispatch the reclaimed batch: %v", err)
+	}
+
+	if len(result.Failures) != 0 {
+		t.Fatalf("Failures = %+v, want none", result.Failures)
+	}
+	if len(result.Delivered) != 1+len(moveIDs) {
+		t.Fatalf("Delivered = %+v, want the create and every move", result.Delivered)
+	}
+	if n := server.mailboxes(); n != 1 {
+		t.Errorf("the account holds %d mailboxes, want 1: the replayed batch made a second Projects folder", n)
+	}
+	if applyCalls != 2 {
+		t.Fatalf("ApplyBatch calls = %d, want 2: the refused create's moves are refiled in a second request", applyCalls)
+	}
+	if refileDest != landed {
+		t.Errorf("the refile named dest = %q, want %q, the mailbox the batch was adopted onto", refileDest, landed)
+	}
+	for _, id := range append([]int64{createID}, moveIDs...) {
+		if n := outboxCount(t, w, id); n != 0 {
+			t.Errorf("intent %d is still in the outbox, want it delivered", id)
+		}
+	}
+}
+
+// applyAgainst is one ApplyBatch request against server: every mailbox
+// create in it, then every message update, each filed into the mailbox
+// its patch names. A patch naming a creation id the request did not
+// resolve fails on its own, which is what a server does with a
+// back-reference to a create it refused.
+func applyAgainst(ctx context.Context, server *mailboxServer, filed map[string]string, muts []backend.Mutation) (backend.BatchResult, error) {
+	res := backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}
+	for _, mut := range muts {
+		if mut.Kind != backend.ObjectKindMailbox {
+			continue
+		}
+		box, _ := mut.Fields.(backend.MailboxCreate)
+		id, err := server.create(ctx, box.Name, box.ParentID)
+		if err != nil {
+			res.Failed[mut.CreationID] = backend.Failure{Class: uerr.ClassServer, Cause: err}
+			continue
+		}
+		res.Created[mut.CreationID] = id
+	}
+	for _, mut := range muts {
+		if mut.Kind != backend.ObjectKindMessage {
+			continue
+		}
+		patch, _ := mut.Fields.(backend.MessagePatch)
+		dest := patch.MailboxIDs[0]
+		if ref, isRef := strings.CutPrefix(dest, "#"); isRef {
+			resolved, made := res.Created[ref]
+			if !made {
+				res.Failed[mut.ID] = backend.Failure{
+					Class: uerr.ClassServer,
+					Cause: errors.New("creation id " + ref + " never resolved"),
+				}
+				continue
+			}
+			dest = resolved
+		}
+		filed[mut.ID] = dest
+	}
+	return res, nil
+}
+
+// TestCreateMailboxAdoptsOnlyOneMatch covers the reconcile's refusal to
+// guess. A server that refuses a name as a duplicate and then reports
+// two mailboxes of that name under one parent has broken the very rule
+// it enforced, and binding the intent to either of them files the
+// user's mail into a folder nobody named. The intent fails instead,
+// terminally and through the seam every user-visible failure reaches
+// the log by, since every later attempt earns the same refusal and
+// this is its only chance to be reported.
+func TestCreateMailboxAdoptsOnlyOneMatch(t *testing.T) {
+	surfaced := uerrtest.Capture(t)
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(context.Context, string, string) (string, error) {
+		return "", fmt.Errorf("rejected: %w", backend.ErrMailboxNameExists)
+	}
+	be.MailSource.FindMailboxesFunc = func(context.Context, string, string) ([]string, error) {
+		return []string{"mbx-1", "mbx-2"}, nil
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if len(result.Failures) != 1 {
+		t.Fatalf("Failures = %+v, want exactly one", result.Failures)
+	}
+	f := result.Failures[0]
+	if f.Retrying {
+		t.Error("Retrying = true, want false: every later attempt earns the same refusal")
+	}
+	if !strings.Contains(f.Detail, "Projects") || !strings.Contains(f.Detail, "2") {
+		t.Errorf("Detail = %q, want it naming the mailbox asked for and how many matched", f.Detail)
+	}
+	if n := outboxCount(t, w, id); n != 0 {
+		t.Errorf("intent %d is still in the outbox, want it dropped after its report", id)
+	}
+
+	lines := uerrtest.Lines(t, surfaced)
+	if len(lines) != 1 {
+		t.Fatalf("uerr lines = %v, want exactly one: the row is dropped after this pass", lines)
+	}
+	if got, _ := lines[0]["cause"].(string); !strings.Contains(got, "Projects") {
+		t.Errorf("the logged cause = %q, want it naming the mailbox that could not be resolved", got)
+	}
+}
+
+// TestCreateMailboxKeepsRetryingAFailedLookup separates the lookup
+// call failing from the lookup answering ambiguously. A connection
+// that dropped during the reconcile says nothing about the account, so
+// the intent waits for another pass rather than being given up on.
+func TestCreateMailboxKeepsRetryingAFailedLookup(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(context.Context, string, string) (string, error) {
+		return "", fmt.Errorf("rejected: %w", backend.ErrMailboxNameExists)
+	}
+	be.MailSource.FindMailboxesFunc = func(context.Context, string, string) ([]string, error) {
+		return nil, backend.Failure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if len(result.Failures) != 1 {
+		t.Fatalf("Failures = %+v, want exactly one", result.Failures)
+	}
+	if f := result.Failures[0]; !f.Retrying || f.Class != uerr.ClassConnection {
+		t.Errorf("Failure = %+v, want a retrying %v", f, uerr.ClassConnection)
+	}
+	if state, _ := outboxState(t, w, id); state != "queued" {
+		t.Errorf("intent %d state = %s, want queued", id, state)
+	}
+}
+
+// TestApplyBatchAdoptsOnlyOneMatch is
+// TestCreateMailboxAdoptsOnlyOneMatch for the batch path: a create
+// refused inside an ApplyBatch call that also carries the moves
+// destined for it. An ambiguous reconcile is final for the whole
+// batch, the create and every move alike, since a move whose
+// destination never resolved has nothing left to file into.
+func TestApplyBatchAdoptsOnlyOneMatch(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+	filed := []int64{
+		seedMessage(t, w, accountID, src, "msg-1"),
+		seedMessage(t, w, accountID, src, "msg-2"),
+	}
+
+	be := newFakeBackend()
+	be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
+		res := backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}
+		for _, mut := range muts {
+			if mut.Kind == backend.ObjectKindMailbox {
+				res.Failed[mut.CreationID] = fmt.Errorf("rejected: %w", backend.ErrMailboxNameExists)
+			}
+		}
+		return res, nil
+	}
+	be.MailSource.FindMailboxesFunc = func(context.Context, string, string) ([]string, error) {
+		return []string{"mbx-1", "mbx-2"}, nil
+	}
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+	var moveIDs []int64
+	for _, msgID := range filed {
+		_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, be, false, now)
+		if err != nil {
+			t.Fatalf("enqueue dependent move: %v", err)
+		}
+		moveIDs = append(moveIDs, ids...)
+	}
+
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	claimed := append([]int64{createID}, moveIDs...)
+	if len(result.Failures) != len(claimed) {
+		t.Fatalf("Failures = %+v, want one per intent in the batch", result.Failures)
+	}
+	for _, f := range result.Failures {
+		if f.Retrying {
+			t.Errorf("intent %d Retrying = true, want false: an ambiguous match repeats on every attempt", f.IntentID)
+		}
+	}
+	for _, id := range claimed {
+		if n := outboxCount(t, w, id); n != 0 {
+			t.Errorf("intent %d is still in the outbox, want it dropped after its report", id)
+		}
+	}
+}
+
+// TestApplyBatchKeepsRetryingAFailedLookup is
+// TestCreateMailboxKeepsRetryingAFailedLookup for the batch path: a
+// connection dropped during the reconcile says nothing about the
+// account, so the create and every move destined for it wait for
+// another pass rather than being given up on.
+func TestApplyBatchKeepsRetryingAFailedLookup(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+	filed := []int64{
+		seedMessage(t, w, accountID, src, "msg-1"),
+		seedMessage(t, w, accountID, src, "msg-2"),
+	}
+
+	be := newFakeBackend()
+	be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
+		res := backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}
+		for _, mut := range muts {
+			if mut.Kind == backend.ObjectKindMailbox {
+				res.Failed[mut.CreationID] = fmt.Errorf("rejected: %w", backend.ErrMailboxNameExists)
+			}
+		}
+		return res, nil
+	}
+	be.MailSource.FindMailboxesFunc = func(context.Context, string, string) ([]string, error) {
+		return nil, backend.Failure{Class: uerr.ClassConnection, Cause: errors.New("connection dropped")}
+	}
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+	var moveIDs []int64
+	for _, msgID := range filed {
+		_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, 0, createID, be, false, now)
+		if err != nil {
+			t.Fatalf("enqueue dependent move: %v", err)
+		}
+		moveIDs = append(moveIDs, ids...)
+	}
+
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	claimed := append([]int64{createID}, moveIDs...)
+	if len(result.Failures) != len(claimed) {
+		t.Fatalf("Failures = %+v, want one per intent in the batch", result.Failures)
+	}
+	for _, f := range result.Failures {
+		if !f.Retrying || f.Class != uerr.ClassConnection {
+			t.Errorf("intent %d Failure = %+v, want a retrying %v", f.IntentID, f, uerr.ClassConnection)
+		}
+	}
+	for _, id := range claimed {
+		if state, _ := outboxState(t, w, id); state != "queued" {
+			t.Errorf("intent %d state = %s, want queued", id, state)
+		}
 	}
 }

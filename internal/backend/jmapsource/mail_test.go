@@ -476,6 +476,138 @@ func TestCreateRenameDeleteMailbox(t *testing.T) {
 	}
 }
 
+// TestCreateMailboxNameConflict covers the refusal the outbox's
+// create-replay reconcile keys off. RFC 8621 section 2 forbids two
+// sibling mailboxes with the same parent and the same name, and both
+// Fastmail and Stalwart refuse the second create with alreadyExists,
+// so that one SetError type has to reach the caller as the sentinel
+// rather than as a wire string it would have to parse.
+func TestCreateMailboxNameConflict(t *testing.T) {
+	session, _ := newTestSession(t, readFixture(t, "mailbox_create_conflict.json"))
+
+	_, err := session.Mail().CreateMailbox(context.Background(), "Projects", "")
+	if !errors.Is(err, backend.ErrMailboxNameExists) {
+		t.Fatalf("CreateMailbox error = %v, want it wrapping backend.ErrMailboxNameExists", err)
+	}
+	if !strings.Contains(err.Error(), "alreadyExists") {
+		t.Errorf("CreateMailbox error = %q, want it naming what the server said", err)
+	}
+}
+
+// TestCreateMailboxOrdinaryRejection is TestCreateMailboxNameConflict's
+// negative: a refusal for invalidProperties, not alreadyExists, stays
+// an ordinary rejection. Wrapping it in backend.ErrMailboxNameExists
+// would send the outbox's reconcile looking for a mailbox that was
+// never the reason the create failed.
+func TestCreateMailboxOrdinaryRejection(t *testing.T) {
+	session, _ := newTestSession(t, readFixture(t, "mailbox_create_rejected.json"))
+
+	_, err := session.Mail().CreateMailbox(context.Background(), "Projects", "")
+	if errors.Is(err, backend.ErrMailboxNameExists) {
+		t.Fatalf("CreateMailbox error = %v, want an ordinary rejection: it was refused for invalidProperties", err)
+	}
+	if !strings.Contains(err.Error(), "invalidProperties") {
+		t.Errorf("CreateMailbox error = %q, want it naming what the server said", err)
+	}
+}
+
+// TestApplyBatchMailboxNameConflict covers the same refusal on the
+// other path a create reaches the server by, where it arrives as a
+// per-mutation failure under the create's own creation id, plus the
+// guard's negative: a second mailbox create in the same batch refused
+// for invalidProperties, not alreadyExists, stays an ordinary
+// rejection. Reading a generic refusal as a name conflict would send a
+// create looking for a mailbox that was never the reason it failed.
+// msg-1's own refusal is a separate guard, classifyMutationFailure's,
+// which never wraps the sentinel because Email/set has no name-conflict
+// SetError type to wrap.
+func TestApplyBatchMailboxNameConflict(t *testing.T) {
+	session, _ := newTestSession(t, readFixture(t, "batch_create_conflict.json"))
+
+	result, err := session.Mail().ApplyBatch(context.Background(), []backend.Mutation{
+		{
+			Op:         backend.MutationCreate,
+			Kind:       backend.ObjectKindMailbox,
+			CreationID: "c1",
+			Fields:     backend.MailboxCreate{Name: "Projects"},
+		},
+		{
+			Op:         backend.MutationCreate,
+			Kind:       backend.ObjectKindMailbox,
+			CreationID: "c2",
+			Fields:     backend.MailboxCreate{Name: "Budget"},
+		},
+		{
+			Op:     backend.MutationUpdate,
+			Kind:   backend.ObjectKindMessage,
+			ID:     "msg-1",
+			Fields: backend.MessagePatch{MailboxIDs: []string{"#c1"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplyBatch: %v", err)
+	}
+	if !errors.Is(result.Failed["c1"], backend.ErrMailboxNameExists) {
+		t.Fatalf("Failed[c1] = %v, want it wrapping backend.ErrMailboxNameExists", result.Failed["c1"])
+	}
+	if errors.Is(result.Failed["c2"], backend.ErrMailboxNameExists) {
+		t.Errorf("Failed[c2] = %v, want an ordinary rejection: it was refused for invalidProperties, not a name conflict", result.Failed["c2"])
+	}
+	if errors.Is(result.Failed["msg-1"], backend.ErrMailboxNameExists) {
+		t.Errorf("Failed[msg-1] = %v, want an ordinary rejection", result.Failed["msg-1"])
+	}
+}
+
+// TestFindMailboxesMatchesExactly is the guard on the reconcile's
+// binding. RFC 8621 section 2.3 defines the name filter condition as
+// "The Mailbox 'name' property contains the given string", and both
+// Fastmail and Stalwart answer a query for "Work" with "Workshop" as
+// well, so a lookup that returned what the filter matched would bind
+// an intent to a folder nobody named. Nothing about that is visible
+// afterwards, which makes it worse than the duplicate folder the
+// reconcile exists to prevent.
+func TestFindMailboxesMatchesExactly(t *testing.T) {
+	session, api := newTestSession(t,
+		readFixture(t, "mailbox_find.json"),
+		readFixture(t, "mailbox_find.json"),
+	)
+
+	atRoot, err := session.Mail().FindMailboxes(context.Background(), "Work", "")
+	if err != nil {
+		t.Fatalf("FindMailboxes: %v", err)
+	}
+	if !reflect.DeepEqual(atRoot, []string{"mbx-work"}) {
+		t.Errorf("FindMailboxes(Work, root) = %v, want only mbx-work: Workshop is a substring match and mbx-nested has another parent", atRoot)
+	}
+
+	nested, err := session.Mail().FindMailboxes(context.Background(), "Work", "mbx-parent")
+	if err != nil {
+		t.Fatalf("FindMailboxes under a parent: %v", err)
+	}
+	if !reflect.DeepEqual(nested, []string{"mbx-nested"}) {
+		t.Errorf("FindMailboxes(Work, mbx-parent) = %v, want only mbx-nested", nested)
+	}
+
+	if got := api.callCount(); got != 2 {
+		t.Fatalf("api calls = %d, want 2, one round trip per lookup", got)
+	}
+	name, args, _ := methodCall(t, api.requestAt(0), 0)
+	if name != "Mailbox/query" {
+		t.Fatalf("methodCalls[0] = %q, want Mailbox/query, never a call the delta feed owns", name)
+	}
+	filter, ok := args["filter"].(map[string]any)
+	if !ok || filter["name"] != "Work" {
+		t.Errorf("Mailbox/query filter = %v, want name=Work", args["filter"])
+	}
+	name, args, _ = methodCall(t, api.requestAt(0), 1)
+	if name != "Mailbox/get" {
+		t.Fatalf("methodCalls[1] = %q, want Mailbox/get over the query's own ids", name)
+	}
+	if _, references := args["#ids"]; !references {
+		t.Errorf("Mailbox/get args = %v, want the query's ids by back-reference", args)
+	}
+}
+
 func TestSearch(t *testing.T) {
 	session, api := newTestSession(t, readFixture(t, "search_response.json"))
 

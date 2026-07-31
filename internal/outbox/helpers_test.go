@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -159,3 +160,78 @@ func (b *logBuffer) String() string {
 func newFakeBackend() *backendtest.Fake {
 	return &backendtest.Fake{Caps: backend.Capabilities{Limits: backend.ServerLimits{MaxObjectsInSet: 100}}}
 }
+
+// mailboxServer is the half of a mail server a create test has to
+// model for its assertion to mean anything: the sibling-uniqueness
+// rule of RFC 8621 section 2, "There MUST NOT be two sibling Mailboxes
+// with both the same parent and the same name", which both servers
+// poplar is exercised against enforce by refusing the second create. A
+// CreateMailboxFunc that always succeeds lets a replay pass a test the
+// account it modelled would have ended up holding two folders in.
+type mailboxServer struct {
+	mu      sync.Mutex
+	ids     map[string]string
+	creates int
+}
+
+// newMailboxServer scripts be's CreateMailbox and FindMailboxes
+// against an empty account and returns the server behind them.
+func newMailboxServer(be *backendtest.Fake) *mailboxServer {
+	s := &mailboxServer{ids: map[string]string{}}
+	be.MailSource.CreateMailboxFunc = s.create
+	be.MailSource.FindMailboxesFunc = s.find
+	return s
+}
+
+func (s *mailboxServer) create(_ context.Context, name, parentID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.creates++
+	if _, taken := s.ids[siblingKey(name, parentID)]; taken {
+		return "", fmt.Errorf("rejected: %w", backend.ErrMailboxNameExists)
+	}
+	id := fmt.Sprintf("mbx-%d", len(s.ids)+1)
+	s.ids[siblingKey(name, parentID)] = id
+	return id, nil
+}
+
+// find answers on an exact name and parent, which is what
+// backend.Mail's contract promises whatever a wire filter matches.
+func (s *mailboxServer) find(_ context.Context, name, parentID string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if id, held := s.ids[siblingKey(name, parentID)]; held {
+		return []string{id}, nil
+	}
+	return nil, nil
+}
+
+// serverID returns the id s assigned name under parentID, or the empty
+// string when it holds no such mailbox.
+func (s *mailboxServer) serverID(name, parentID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ids[siblingKey(name, parentID)]
+}
+
+// mailboxes returns how many mailboxes the account holds, which is
+// what a duplicate-folder assertion is actually about. Counting
+// CreateMailbox calls instead passes a replay that made a second
+// folder.
+func (s *mailboxServer) mailboxes() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.ids)
+}
+
+// createCalls returns how many CreateMailbox calls reached s,
+// refusals included.
+func (s *mailboxServer) createCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.creates
+}
+
+func siblingKey(name, parentID string) string { return parentID + "/" + name }

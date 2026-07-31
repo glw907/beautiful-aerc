@@ -81,6 +81,7 @@ type FakeMail struct {
 	CreateMailboxFunc func(ctx context.Context, name, parentID string) (string, error)
 	RenameMailboxFunc func(ctx context.Context, id, name string) error
 	DeleteMailboxFunc func(ctx context.Context, id string) error
+	FindMailboxesFunc func(ctx context.Context, name, parentID string) ([]string, error)
 	SearchFunc        func(ctx context.Context, query string) ([]string, error)
 }
 
@@ -122,6 +123,14 @@ func (m *FakeMail) DeleteMailbox(ctx context.Context, id string) error {
 		return unscripted("FakeMail", "DeleteMailbox", "DeleteMailboxFunc")
 	}
 	return m.DeleteMailboxFunc(ctx, id)
+}
+
+// FindMailboxes delegates to FindMailboxesFunc.
+func (m *FakeMail) FindMailboxes(ctx context.Context, name, parentID string) ([]string, error) {
+	if m.FindMailboxesFunc == nil {
+		return nil, unscripted("FakeMail", "FindMailboxes", "FindMailboxesFunc")
+	}
+	return m.FindMailboxesFunc(ctx, name, parentID)
 }
 
 // Search delegates to SearchFunc.

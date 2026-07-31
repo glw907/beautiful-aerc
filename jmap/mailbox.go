@@ -276,10 +276,17 @@ type MailboxSetResponse struct {
 // A MailboxFilterCondition matches mailboxes in a MailboxQuery (RFC
 // 8621 section 2.3).
 type MailboxFilterCondition struct {
-	// ParentID matches mailboxes directly under this one. Empty
-	// matches top-level mailboxes.
+	// ParentID matches mailboxes directly under this one. Empty leaves
+	// the condition out of the filter, which constrains nothing, so
+	// this cannot express the "parentId": null section 2.3 defines for
+	// the top level. A caller wanting the top level narrows on what it
+	// can express and reads parentId off the records it gets back.
 	ParentID ID `json:"parentId,omitempty"`
 
+	// Name matches a mailbox whose name contains the given string.
+	// Section 2.3 words it that way where it makes parentId and role
+	// match "exactly", so this is a substring condition and a caller
+	// needing an exact name confirms it itself.
 	Name string `json:"name,omitempty"`
 
 	Role Role `json:"role,omitempty"`

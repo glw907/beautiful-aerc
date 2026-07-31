@@ -1,0 +1,17 @@
+{
+  "methodResponses": [
+    ["Mailbox/set", {
+      "accountId": "u1",
+      "oldState": "1",
+      "newState": "1",
+      "notCreated": {
+        "m1": {
+          "type": "alreadyExists",
+          "description": "A mailbox with name 'Projects' already exists.",
+          "existingId": "mbx-existing"
+        }
+      }
+    }, "0"]
+  ],
+  "sessionState": "session-2"
+}

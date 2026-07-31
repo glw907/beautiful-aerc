@@ -4,7 +4,9 @@ package jmapsource_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -63,6 +65,77 @@ func TestLiveChangesAndBody(t *testing.T) {
 		if len(chunk.Raw) == 0 {
 			t.Fatalf("FetchBodies %s: empty body", chunk.ID)
 		}
+	}
+}
+
+// TestLiveMailboxNameConflictAndLookup is the outbox's create-replay
+// reconcile against the server poplar ships for. Two things only
+// Fastmail can answer, and the reconcile rests on both: that it
+// refuses a duplicate sibling name at all, RFC 8621 section 2
+// forbidding two sibling mailboxes with the same parent and the same
+// name, since a Fastmail that started allowing one would leave the
+// reconcile never firing and the duplicate folder back; and that
+// FindMailboxes compensates for section 2.3's name filter, which
+// matches a mailbox whose name "contains the given string", so a live
+// account holding both a name and a longer one built on it answers
+// with the exact one alone.
+func TestLiveMailboxNameConflictAndLookup(t *testing.T) {
+	token, err := keyring.Token("")
+	if err != nil {
+		t.Skipf("no fastmail token: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	session, err := jmapsource.Dial(ctx, fastmailSessionURL, jmapsource.NewStaticCredentials(token))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	mail := session.Mail()
+
+	// Each mailbox is destroyed when the test ends, so a run leaves the
+	// account as it found it.
+	create := func(name string) string {
+		t.Helper()
+		id, err := mail.CreateMailbox(ctx, name, "")
+		if err != nil {
+			t.Fatalf("CreateMailbox %q: %v", name, err)
+		}
+		t.Cleanup(func() {
+			cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer ccancel()
+			if err := mail.DeleteMailbox(cctx, id); err != nil {
+				t.Errorf("DeleteMailbox(%s): %v", id, err)
+			}
+		})
+		return id
+	}
+
+	name := fmt.Sprintf("poplar-live-conflict-%d", time.Now().UnixNano())
+	id := create(name)
+	create(name + "-extended")
+
+	if _, err := mail.CreateMailbox(ctx, name, ""); !errors.Is(err, backend.ErrMailboxNameExists) {
+		t.Fatalf("a second create of %q returned %v, want it wrapping backend.ErrMailboxNameExists", name, err)
+	}
+
+	found, err := mail.FindMailboxes(ctx, name, "")
+	if err != nil {
+		t.Fatalf("FindMailboxes: %v", err)
+	}
+	if !slices.Equal(found, []string{id}) {
+		t.Errorf("FindMailboxes(%q, root) = %v, want only %s: the longer name is a substring match on the wire", name, found, id)
+	}
+
+	// A name the account does not hold answers with nothing, which is
+	// what tells an ambiguous reconcile from a resolved one.
+	absent, err := mail.FindMailboxes(ctx, name+"-absent", "")
+	if err != nil {
+		t.Fatalf("FindMailboxes for a name the account lacks: %v", err)
+	}
+	if len(absent) != 0 {
+		t.Errorf("FindMailboxes for an absent name = %v, want none", absent)
 	}
 }
 

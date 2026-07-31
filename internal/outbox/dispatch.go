@@ -43,7 +43,7 @@ type Delivered struct {
 // Failure is one intent DispatchOnce could not deliver. Retrying is
 // true when the row stays queued for another attempt: every class but
 // ClassNotFound, whose referent retrying cannot fix, and short of the
-// failures whose action already landed on the server. Warn is SY-5's
+// failures no later attempt can answer differently. Warn is SY-5's
 // distinction for ClassThrottled, which a caller renders as a warn
 // state and never an error toast.
 type Failure struct {
@@ -78,31 +78,24 @@ type claimed struct {
 // outcome is one claimed intent's disposition after its backend call:
 // delivered, with move carrying the decoded payload for
 // KindMoveMessages, or failed with a class and detail. final marks a
-// failure no later attempt may repeat whatever its class says. landed
-// narrows that to the failures whose server side already happened and
-// whose record of it is what failed.
+// failure no later attempt may repeat whatever its class says.
 type outcome struct {
 	c      claimed
 	move   *MoveMessagesPayload
 	failed bool
 	final  bool
-	landed bool
 	class  uerr.Class
 	detail string
 }
 
 // finalizeAction is claim's disposition once DispatchOnce decides it,
-// applied inside finalize's one writer transaction. landed marks a row
-// whose server action already happened, which finalize's recovery
-// leaves where it is rather than returning it to queued for a replay
-// that would repeat that action.
+// applied inside finalize's one writer transaction.
 type finalizeAction struct {
 	id      int64
 	attempt int
 	verb    finalizeVerb
 	class   string
 	detail  string
-	landed  bool
 }
 
 // apply writes a's disposition inside tx.
@@ -226,18 +219,17 @@ const finalizeRecoveryTimeout = 5 * time.Second
 // second transaction rather than costing the queue every claimed
 // intent for the rest of the run. That transaction writes each row's
 // state once, replaying a requeue's backoff where the store lets it and
-// falling back to the bare state write where it does not. Replay covers
-// the delivered rows: their backend calls are idempotent, and a
-// create's resolved server id is already durable in its own payload.
-// DispatchOnce reports no Result when this fails, since none of the
-// writes such a Result would describe landed.
+// falling back to the bare state write where it does not. Replay is
+// safe for every row it touches, delivered ones included: their
+// backend calls are idempotent, and a create whose resolved id never
+// reached its payload replays into a refusal the dispatcher reconciles
+// against the mailbox already there. DispatchOnce reports no Result
+// when this fails, since none of the writes such a Result would
+// describe landed.
 //
 // The recovery drops ctx, since a deadline expiring during the backend
 // calls is the ordinary way the transaction above fails and the same
-// context would fail the recovery for the identical reason. A row whose
-// server action already landed stays in dispatching instead: it waits
-// for the startup sweep, where a replay costs one duplicate mailbox at
-// worst, rather than being requeued into that duplicate now.
+// context would fail the recovery for the identical reason.
 func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now time.Time) error {
 	err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
 		for _, a := range actions {
@@ -251,25 +243,11 @@ func (d *Dispatcher) finalize(ctx context.Context, actions []finalizeAction, now
 		return nil
 	}
 
-	var landed []int64
-	for _, a := range actions {
-		if a.landed {
-			landed = append(landed, a.id)
-		}
-	}
-	if len(landed) > 0 {
-		slog.Error("outbox: intents whose server action already landed stay dispatching until the startup sweep",
-			"ids", landed, "finalize_error", err)
-	}
-
 	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeRecoveryTimeout)
 	defer cancel()
 
 	revertErr := d.writer.ApplyInteractive(recoveryCtx, func(tx *sql.Tx) error {
 		for _, a := range actions {
-			if a.landed {
-				continue
-			}
 			if err := a.revert(tx, now); err != nil {
 				return err
 			}
@@ -317,8 +295,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, c claimed, resolvedCreates
 		// is final because no later pass of this build has a case for
 		// it either, so a retriable classification would retry the row
 		// every 30 seconds for the life of the store. No server was
-		// involved, so the class is a local one. Nothing landed either,
-		// so a failed finalize still owes this row the ordinary revert.
+		// involved, so the class is a local one.
 		o.failed, o.final, o.class = true, true, uerr.ClassStoreLocal
 		o.detail = fmt.Sprintf("unknown kind %q", c.kind)
 	}
@@ -408,23 +385,43 @@ func (d *Dispatcher) dispatchBatch(ctx context.Context, create claimed, moves []
 		class, detail := classifyFailure(err)
 		return failBatch(create, moves, class, detail)
 	}
+
+	var newID string
 	if mutErr, bad := res.Failed[creationID]; bad {
-		class, detail := classifyFailure(mutErr)
-		return failBatch(create, moves, class, detail)
-	}
-	newID, ok := res.Created[creationID]
-	if !ok {
-		return failBatch(create, moves, uerr.ClassServer, "mailbox create returned no server id")
+		if !errors.Is(mutErr, backend.ErrMailboxNameExists) {
+			class, detail := classifyFailure(mutErr)
+			return failBatch(create, moves, class, detail)
+		}
+		// The refusal took the whole batch with it: every message
+		// update named the mailbox by a creation id the server never
+		// resolved. Once the reconcile has the id, the moves are made
+		// again against it in a second request, so each one still
+		// stands or falls on its own messages below.
+		newID, err = d.adoptMailbox(ctx, create.id, p.Name, parentID)
+		if err != nil {
+			return failBatchAdoption(create, moves, err)
+		}
+		res, err = d.refile(ctx, moves, payloads, newID)
+		if err != nil {
+			class, detail := classifyFailure(err)
+			return failBatch(create, moves, class, detail)
+		}
+	} else {
+		created, ok := res.Created[creationID]
+		if !ok {
+			return failBatch(create, moves, uerr.ClassServer, "mailbox create returned no server id")
+		}
+		newID = created
 	}
 	resolvedCreates[create.id] = newID
 
 	p.ResolvedServerID = newID
 	payload, err := json.Marshal(p)
 	if err != nil {
-		return failUnresolvedBatch(create, moves, err)
+		return failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
 	}
 	if err := d.persistPayload(ctx, create.id, payload); err != nil {
-		return failUnresolvedBatch(create, moves, err)
+		return failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
 	}
 	if err := d.resolveDependentRefs(ctx, create.id, newID); err != nil {
 		return failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
@@ -482,16 +479,35 @@ func failBatch(create claimed, moves []claimed, class uerr.Class, detail string)
 	return outcomes
 }
 
-// failUnresolvedBatch is failBatch for unresolvedCreate's window: the
-// batch's request already reached the server, so its mailbox exists and
-// its messages are filed, and every intent in it is given up on rather
-// than retried into a duplicate folder.
-func failUnresolvedBatch(create claimed, moves []claimed, err error) []outcome {
-	outcomes := failBatch(create, moves, uerr.ClassStoreLocal, err.Error())
+// failBatchAdoption is failBatch for a batch whose create the
+// reconcile could not resolve against a single mailbox. It is final
+// for every intent in it: the refusal repeats on every attempt, and a
+// move whose destination is that create has nothing to resolve without
+// it. A lookup call that failed on its own keeps its class's ordinary
+// retry, the same distinction adoptionFailure draws.
+func failBatchAdoption(create claimed, moves []claimed, err error) []outcome {
+	class, detail := classifyFailure(err)
+	outcomes := failBatch(create, moves, class, detail)
+	if !errors.Is(err, errAmbiguousMailbox) {
+		return outcomes
+	}
 	for i := range outcomes {
-		outcomes[i].final, outcomes[i].landed = true, true
+		outcomes[i].final = true
 	}
 	return outcomes
+}
+
+// refile files each move's messages into dest as one more ApplyBatch
+// request. dispatchBatch's own request named the mailbox by a creation
+// id, so a create the server refuses for a mailbox it already holds
+// leaves those updates unresolved and they have to be made again
+// against the id the reconcile found.
+func (d *Dispatcher) refile(ctx context.Context, moves []claimed, payloads []*MoveMessagesPayload, dest string) (backend.BatchResult, error) {
+	var mutations []backend.Mutation
+	for i, mv := range moves {
+		mutations = append(mutations, fileIntoMailbox(mv, payloads[i].MessageIDs, dest)...)
+	}
+	return d.backend.Mail().ApplyBatch(ctx, mutations)
 }
 
 // report appends o's classified failure to result, logs it through
@@ -509,7 +525,7 @@ func (d *Dispatcher) report(result *Result, o outcome) finalizeAction {
 		IntentID: c.id, UndoGroup: c.undoGroup, Class: o.class, Detail: o.detail, Retrying: retry, Warn: isWarn(o.class),
 	})
 	if !retry {
-		return finalizeAction{id: c.id, verb: finalizeDelete, landed: o.landed}
+		return finalizeAction{id: c.id, verb: finalizeDelete}
 	}
 	return finalizeAction{id: c.id, attempt: c.attemptCount, verb: finalizeRequeue, class: o.class.String(), detail: o.detail}
 }
@@ -708,7 +724,10 @@ func notFound(c claimed, detail string) claimed {
 // ResolvedServerID is an idempotent replay: the earlier attempt's
 // CreateMailbox call is not repeated, though resolveDependentRefs
 // still runs every time, in case an earlier attempt's own requeue
-// happened before it reached that step.
+// happened before it reached that step. A payload that never learned
+// the id, because the run that made the mailbox died before recording
+// it, makes the call again and adopts whatever the server refuses it
+// for.
 func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resolvedCreates map[int64]string) outcome {
 	var p CreateMailboxPayload
 	if err := json.Unmarshal(c.payload, &p); err != nil {
@@ -724,21 +743,25 @@ func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resol
 		var err error
 		newID, err = d.backend.Mail().CreateMailbox(ctx, p.Name, parentID)
 		if err != nil {
-			class, detail := classifyFailure(err)
-			return failedOutcome(c, class, detail)
+			if !errors.Is(err, backend.ErrMailboxNameExists) {
+				class, detail := classifyFailure(err)
+				return failedOutcome(c, class, detail)
+			}
+			newID, err = d.adoptMailbox(ctx, c.id, p.Name, parentID)
+			if err != nil {
+				return adoptionFailure(c, err)
+			}
 		}
 
 		p.ResolvedServerID = newID
 		payload, err := json.Marshal(p)
 		if err != nil {
-			return unresolvedCreate(c, err)
+			return failedOutcome(c, uerr.ClassStoreLocal, err.Error())
 		}
 		if err := d.persistPayload(ctx, c.id, payload); err != nil {
-			return unresolvedCreate(c, err)
+			return failedOutcome(c, uerr.ClassStoreLocal, err.Error())
 		}
 	}
-	// The resolution is durable by here, so a retry replays the create
-	// without asking the server for a second mailbox.
 	if err := d.resolveDependentRefs(ctx, c.id, newID); err != nil {
 		return failedOutcome(c, uerr.ClassStoreLocal, err.Error())
 	}
@@ -746,22 +769,71 @@ func (d *Dispatcher) dispatchCreateMailbox(ctx context.Context, c claimed, resol
 	return outcome{c: c}
 }
 
-// unresolvedCreate is the disposition of a create whose mailbox the
-// server made and whose new id the store then refused to record.
-// Retrying is the harmful action: nothing in the payload tells the next
-// attempt the mailbox already exists, so it creates a second folder of
-// the same name. The intent is given up on instead, reported under the
-// class that names what actually failed.
+// errAmbiguousMailbox reports that a create the server refused as a
+// duplicate could not be reconciled against a single mailbox: the
+// account holds none of that name under that parent, or holds more
+// than one. More than one is a genuine contradiction: the server holds
+// two siblings its own refusal says it forbids. None is not; it is the
+// benign case adoptMailbox's own doc comment names, a server whose
+// sibling-uniqueness rule matches more loosely than FindMailboxes'
+// exact one. Either way there is nothing here to adopt.
+var errAmbiguousMailbox = errors.New("outbox: no single mailbox matches the name the server refused as a duplicate")
+
+// adoptMailbox returns the server id of the mailbox a refused create
+// says is already there, and is the whole answer to a replayed create.
+// RFC 8621 section 2 forbids two sibling mailboxes with the same
+// parent and the same name, and both servers poplar is exercised
+// against refuse the second create rather than allowing it, so an
+// alreadyExists refusal means a sibling the server itself considers
+// the same name and parent is already there, whether an earlier
+// attempt of this same intent made it (a run killed between the
+// create and the transaction recording its id) or the user made it on
+// another client. Both wanted the same folder in the same place, and
+// the alternative to converging on it is a second folder of that name
+// beside it. Nothing here has to tell a replay from a first attempt,
+// which is why closing this window costs the outbox no marker for
+// one.
 //
-// This leaves a window rather than closing it. The account keeps the
-// mailbox, and any queued move that named this create by DestRef can no
-// longer resolve its destination, so it fails as not-found on its own
-// next pass. Closing that needs a mailbox lookup the backend seam does
-// not carry, the same seam change TestCreateMailboxReplayWindow waits
-// on.
-func unresolvedCreate(c claimed, err error) outcome {
-	o := failedOutcome(c, uerr.ClassStoreLocal, err.Error())
-	o.final, o.landed = true, true
+// Binding is on an exact name and parent, which is FindMailboxes'
+// contract, and it can be narrower than the comparison a server's own
+// refusal used. Stalwart's sibling-uniqueness rule is case-insensitive
+// and trims whitespace where Fastmail's is byte-exact, so Stalwart can
+// refuse a create against a case- or whitespace-differing sibling that
+// FindMailboxes' exact comparison then finds nothing to adopt: the
+// server is perfectly self-consistent, and poplar's own match is just
+// narrower than its rule. Two matches and zero are both
+// errAmbiguousMailbox and both terminal, for different reasons. Two:
+// choosing between them would file mail into a folder nobody named,
+// worse than the duplicate this exists to prevent because nothing
+// about it is visible. Zero: a server whose rule is looser than this
+// exact match answers every retry the same way, so retrying would
+// only loop at the 30-second backoff cap forever.
+func (d *Dispatcher) adoptMailbox(ctx context.Context, intentID int64, name, parentID string) (string, error) {
+	ids, err := d.backend.Mail().FindMailboxes(ctx, name, parentID)
+	if err != nil {
+		return "", err
+	}
+	if len(ids) != 1 {
+		return "", fmt.Errorf("%w: %q matched %d", errAmbiguousMailbox, name, len(ids))
+	}
+	// A recovery rather than a failure: the intent goes on to complete
+	// against the mailbox that was already there, so nothing surfaces
+	// to the user and this line is the only record it happened.
+	slog.Info("outbox: adopted the mailbox a refused create already made", "intent", intentID, "mailbox", ids[0])
+	return ids[0], nil
+}
+
+// adoptionFailure is the disposition of a create the reconcile could
+// not resolve. An ambiguous match is final: the mailbox is on the
+// server, every later attempt earns the same refusal, and no candidate
+// met the exact-match contract adoptMailbox binds on, whether because
+// two did or because none did. A lookup call that failed on its own
+// says nothing about the account, so it keeps its class's ordinary
+// retry.
+func adoptionFailure(c claimed, err error) outcome {
+	class, detail := classifyFailure(err)
+	o := failedOutcome(c, class, detail)
+	o.final = errors.Is(err, errAmbiguousMailbox)
 	return o
 }
 
