@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -39,36 +40,31 @@ func firstAddress(addrs []backend.Address) string {
 }
 
 // applyChangeSet writes cs's created, updated, and destroyed records
-// for kind into account accountID, inside tx. A record whose id is in
-// skip is left untouched: it is the dispatcher's own change, already
-// reflected locally, that this same page's self-echo suppression
-// (ADR-0005 revision 2) is skipping, not the whole page.
-func applyChangeSet(tx *sql.Tx, accountID int64, kind backend.ObjectKind, cs backend.ChangeSet, skip map[string]bool) error {
-	for _, rec := range cs.Created {
+// for kind, each of the three lists chunked onto the bulk lane on its
+// own, so a page's size is the backend's business and a transaction's
+// is the admission ceiling's. A record whose id is in skip is left
+// untouched: it is the dispatcher's own change, already reflected
+// locally, that this same page's self-echo suppression (ADR-0005
+// revision 2) is skipping, not the whole page.
+func (w *Worker) applyChangeSet(ctx context.Context, kind backend.ObjectKind, cs backend.ChangeSet, skip map[string]bool) error {
+	upsert := func(tx *sql.Tx, rec backend.Record) error {
 		if skip[rec.ID] {
-			continue
+			return nil
 		}
-		if err := upsertRecord(tx, accountID, kind, rec); err != nil {
-			return err
-		}
+		return upsertRecord(tx, w.accountID, kind, rec)
 	}
-	for _, rec := range cs.Updated {
-		if skip[rec.ID] {
-			continue
-		}
-		if err := upsertRecord(tx, accountID, kind, rec); err != nil {
-			return err
-		}
+	if err := applyChunked(ctx, w, cs.Created, upsert); err != nil {
+		return err
 	}
-	for _, id := range cs.Destroyed {
+	if err := applyChunked(ctx, w, cs.Updated, upsert); err != nil {
+		return err
+	}
+	return applyChunked(ctx, w, cs.Destroyed, func(tx *sql.Tx, id string) error {
 		if skip[id] {
-			continue
+			return nil
 		}
-		if err := destroyRecord(tx, accountID, kind, id); err != nil {
-			return err
-		}
-	}
-	return nil
+		return destroyRecord(tx, w.accountID, kind, id)
+	})
 }
 
 // upsertRecord writes rec by the type of its payload, checked against

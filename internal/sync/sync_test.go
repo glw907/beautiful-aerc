@@ -7,9 +7,100 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/backend/backendtest"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
 )
+
+// TestSyncKindCommitsOneChunkPerTransaction asserts a changes-since
+// page reaches the store bulkChunk records per transaction rather
+// than one transaction per page, ADR-0003 revision 2's admission
+// ceiling. It measures transaction scope rather than elapsed time:
+// record 123 carries a payload that disagrees with the page it
+// arrived on, which fails the transaction it lands in and rolls that
+// one back, so what the store still holds afterwards is exactly what
+// committed before the failure. Every number here is the test's own,
+// not bulkChunk read back: a page committed whole, or a chunk grown
+// past 123 records, leaves nothing behind and fails this.
+func TestSyncKindCommitsOneChunkPerTransaction(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	page := make([]backend.Record, 0, 130)
+	for i := range cap(page) {
+		page = append(page, backend.Record{
+			ID:     fmt.Sprintf("srv-%03d", i),
+			Fields: backend.MessageFields{Subject: "changed"},
+		})
+	}
+	// A mailbox payload on a message page is what upsertRecord rejects.
+	page[123].Fields = backend.MailboxFields{}
+
+	var be backendtest.Fake
+	be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+		return backend.ChangeSet{NewToken: "page-1", Created: page}, nil
+	}
+
+	worker := NewWorker(accountID, &be, w, testConfig())
+	if err := worker.SyncKind(context.Background(), backend.ObjectKindMessage); err == nil {
+		t.Fatal("SyncKind succeeded, want the rejected payload to fail its chunk")
+	}
+
+	if got := countRows(t, w, "message", accountID); got != 100 {
+		t.Errorf("committed message rows = %d, want 100: records 0-99 commit in two transactions of their own before 123 fails a third", got)
+	}
+
+	wm, err := loadWatermark(context.Background(), w, accountID, backend.ObjectKindMessage, mailCollection)
+	if err != nil {
+		t.Fatalf("loadWatermark: %v", err)
+	}
+	if wm.ServerStateToken != "" {
+		t.Errorf("watermark token = %q, want it unset: a page that failed partway must not advance it", wm.ServerStateToken)
+	}
+}
+
+// TestSyncKindSavesTheWatermarkAfterThePage asserts the watermark
+// commits on its own after the page's chunks rather than riding with
+// the last of them, so no single transaction holds both a chunk and
+// the position that would let the next cycle skip it. The store's
+// revision counter advances once per committed transaction, so what
+// it gains over the cycle is the transaction count: scope again, not
+// elapsed time.
+func TestSyncKindSavesTheWatermarkAfterThePage(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	page := make([]backend.Record, 0, 101)
+	for i := range cap(page) {
+		page = append(page, backend.Record{
+			ID:     fmt.Sprintf("srv-%03d", i),
+			Fields: backend.MessageFields{Subject: "changed"},
+		})
+	}
+
+	var be backendtest.Fake
+	be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+		return backend.ChangeSet{NewToken: "page-1", Created: page}, nil
+	}
+
+	worker := NewWorker(accountID, &be, w, testConfig())
+	before := w.Revision().Current()
+	if err := worker.SyncKind(context.Background(), backend.ObjectKindMessage); err != nil {
+		t.Fatalf("SyncKind: %v", err)
+	}
+	committed := w.Revision().Current() - before
+
+	// One transaction loads the watermark, three write the 101 records
+	// 50 at a time, one saves the watermark.
+	const want = store.Revision(1 + 3 + 1)
+	if committed != want {
+		t.Errorf("transactions committed = %d, want %d: 101 records write 50 at a time and the watermark follows on its own", committed, want)
+	}
+	if got := countRows(t, w, "message", accountID); got != 101 {
+		t.Errorf("message rows = %d, want 101", got)
+	}
+}
 
 // testConfig returns DefaultConfig with InteractiveQuiet shrunk, so a
 // test's own fixture writes (always run on the interactive lane)

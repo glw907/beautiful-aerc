@@ -159,6 +159,15 @@ func saveWatermark(tx *sql.Tx, accountID int64, kind backend.ObjectKind, collect
 // until HasMore is false, applying each page through the writer's
 // bulk lane, and falling back to a full resync when the backend
 // reports a state reset (an expired or unrecognized token).
+//
+// A page's records commit bulkChunk at a time and its watermark
+// follows in a transaction of its own, so no single commit holds a
+// whole page. A cycle that stops between the two re-runs the page
+// from the watermark it already had: an upsert is keyed by server id
+// and a destroy names one, so a re-applied page changes nothing.
+// echoTracker.consume has dropped this page's skip set by then, so
+// the retry also re-applies the dispatcher's own records from server
+// truth, which is a redundant write rather than a divergent one.
 func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
 	wm, err := loadWatermark(ctx, w.writer, w.accountID, kind, mailCollection)
 	if err != nil {
@@ -175,11 +184,12 @@ func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
 		}
 
 		skip := w.echo.consume(kind, cs.NewToken)
+		if err := w.applyChangeSet(ctx, kind, cs, skip); err != nil {
+			return err
+		}
+
 		next := watermark{ServerStateToken: cs.NewToken, LocalRev: wm.LocalRev + 1}
 		err = runBulkChunks(ctx, w.writer, w.cfg.InteractiveQuiet, func(tx *sql.Tx) error {
-			if err := applyChangeSet(tx, w.accountID, kind, cs, skip); err != nil {
-				return err
-			}
 			return saveWatermark(tx, w.accountID, kind, mailCollection, next)
 		})
 		if err != nil {

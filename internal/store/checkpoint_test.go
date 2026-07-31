@@ -46,11 +46,17 @@ func TestCheckpointLifecycle(t *testing.T) {
 		t.Fatalf("release reader snapshot: %v", err)
 	}
 
-	// Give the writer's idle timer room to fire a TRUNCATE checkpoint
-	// now that nothing holds an old snapshot open.
-	time.Sleep(4 * cfg.CheckpointIdle)
-
+	// The writer's idle timer fires the TRUNCATE checkpoint now that
+	// nothing holds an old snapshot open, but when it lands is
+	// scheduling and IO rather than a fixed multiple of CheckpointIdle.
+	// The fixed sleep this replaces went red on a loaded machine while
+	// the subject behaved correctly. The deadline is generous because
+	// it only bounds the failing case.
 	shrunk := walSize(t, walPath)
+	for deadline := time.Now().Add(30 * time.Second); shrunk > 4096 && time.Now().Before(deadline); {
+		time.Sleep(cfg.CheckpointIdle)
+		shrunk = walSize(t, walPath)
+	}
 	if shrunk > 4096 {
 		t.Errorf("wal size after idle = %d bytes, want it back near its bound", shrunk)
 	}
@@ -92,10 +98,17 @@ func TestCheckpointPassiveReclaimsWithoutAReader(t *testing.T) {
 // incremental_vacuum step actually shrinks the freelist a large delete
 // leaves behind, rather than only running the pragma without effect:
 // with auto_vacuum=INCREMENTAL, a deleted row's pages sit on the
-// freelist until reclaimed.
+// freelist until reclaimed. CheckpointIdle is set past the test's
+// lifetime and the one idle window runs by hand, because an idle
+// window short enough to fire on its own also fires before the reader
+// gets its first look: under -race this fixture's delete alone takes
+// ~400ms, and the freelist then reads as 0 pages, already reclaimed.
+// The writer's own timer keeps its coverage in
+// TestCheckpointLifecycle, whose TRUNCATE assertion polls until that
+// timer fires.
 func TestIncrementalVacuumReclaimsFreelist(t *testing.T) {
 	cfg := DefaultWriterConfig()
-	cfg.CheckpointIdle = 20 * time.Millisecond
+	cfg.CheckpointIdle = time.Hour
 	w, path := newTestWriter(t, cfg)
 
 	reader := openTestReader(t, path)
@@ -108,13 +121,15 @@ func TestIncrementalVacuumReclaimsFreelist(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	if before := freelistCount(t, reader); before == 0 {
+	before := freelistCount(t, reader)
+	if before == 0 {
 		t.Fatal("freelist_count = 0 right after a large delete, want pages awaiting reclaim")
 	}
+	if before > incrementalVacuumPages {
+		t.Fatalf("freelist_count = %d, want it within the %d pages one idle window reclaims, so a single window can clear it", before, incrementalVacuumPages)
+	}
 
-	// Nothing touches the writer from here on, so its idle timer runs
-	// out and runIdleCheckpoint's incremental_vacuum step fires.
-	time.Sleep(4 * cfg.CheckpointIdle)
+	w.runIdleCheckpoint()
 
 	if after := freelistCount(t, reader); after != 0 {
 		t.Errorf("freelist_count after the idle window = %d, want 0: incremental_vacuum should reclaim it", after)

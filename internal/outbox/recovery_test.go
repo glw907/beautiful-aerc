@@ -166,16 +166,22 @@ func sweepStaleMailboxes(t *testing.T, w *store.Writer, accountID int64, keep ma
 	t.Helper()
 
 	err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
-		stale, err := store.StaleMailboxIDs(tx, accountID, keep)
-		if err != nil {
-			return err
-		}
-		for _, id := range stale {
-			if err := store.DeleteMailboxByID(tx, id); err != nil {
+		var after int64
+		for {
+			stale, cursor, err := store.StaleMailboxIDs(tx, accountID, keep, after, 50)
+			if err != nil {
 				return err
 			}
+			if cursor == 0 {
+				return nil
+			}
+			after = cursor
+			for _, id := range stale {
+				if err := store.DeleteMailboxByID(tx, id); err != nil {
+					return err
+				}
+			}
 		}
-		return nil
 	})
 	if err != nil {
 		t.Fatalf("sweep stale mailboxes: %v", err)

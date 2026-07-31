@@ -143,26 +143,36 @@ func DeleteMailboxByID(tx *sql.Tx, id int64) error {
 }
 
 // StaleMailboxIDs returns the internal ids of accountID's mailbox
-// rows whose server id is absent from keep.
-func StaleMailboxIDs(tx *sql.Tx, accountID int64, keep map[string]bool) ([]int64, error) {
-	rows, err := tx.Query(`SELECT id, server_id FROM mailbox WHERE account_id = ?`, accountID)
+// rows whose server id is absent from keep, paged exactly as
+// StaleMessageIDs is: among the limit rows following internal id
+// after, and the highest id that page examined, with a zero cursor
+// for the end of the scan. The account filter runs in Go for the
+// reason given there, which costs a mailbox scan nothing and keeps
+// the two halves of a resync's stale pass one shape.
+func StaleMailboxIDs(tx *sql.Tx, accountID int64, keep map[string]bool, after int64, limit int) ([]int64, int64, error) {
+	rows, err := tx.Query(`SELECT id, account_id, server_id FROM mailbox WHERE id > ? ORDER BY id LIMIT ?`, after, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() { _ = rows.Close() }()
 
 	var stale []int64
+	var cursor int64
 	for rows.Next() {
-		var id int64
+		var id, rowAccount int64
 		var serverID sql.NullString
-		if err := rows.Scan(&id, &serverID); err != nil {
-			return nil, err
+		if err := rows.Scan(&id, &rowAccount, &serverID); err != nil {
+			return nil, 0, err
+		}
+		cursor = id
+		if rowAccount != accountID {
+			continue
 		}
 		if !serverID.Valid || !keep[serverID.String] {
 			stale = append(stale, id)
 		}
 	}
-	return stale, rows.Err()
+	return stale, cursor, rows.Err()
 }
 
 // RepairMailboxAssociations re-associates any message in accountID

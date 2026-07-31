@@ -160,7 +160,14 @@ func TestWriterSerializes(t *testing.T) {
 
 // TestInteractivePreemption shows an interactive job admitted while
 // a chunked bulk job is in flight, with the wait bounded by the
-// current chunk rather than the whole queued bulk backlog.
+// current chunk rather than the whole queued bulk backlog. It asserts
+// that twice over. The chunk count is the durable one: the job runs
+// once the chunk it arrived during finishes, whatever a chunk costs.
+// The wall-clock bound is the same claim in milliseconds, and it
+// holds only where a millisecond means what the writer spent, so it
+// sits out a race build, whose instrumentation lands squarely inside
+// the window being measured (the post-chunk commit and its PASSIVE
+// checkpoint).
 func TestInteractivePreemption(t *testing.T) {
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 
@@ -168,11 +175,13 @@ func TestInteractivePreemption(t *testing.T) {
 	const chunks = 10
 	const admissionCeiling = 15 * time.Millisecond // under one chunk's remaining time
 
+	var completed atomic.Int64
 	bulkDone := make(chan error, 1)
 	go func() {
 		for range chunks {
 			err := w.submitBulk(context.Background(), func(*sql.Tx) error {
 				time.Sleep(chunkWork)
+				completed.Add(1)
 				return nil
 			})
 			if err != nil {
@@ -185,13 +194,23 @@ func TestInteractivePreemption(t *testing.T) {
 
 	time.Sleep(chunkWork / 2) // let the bulk job start its first chunk
 
+	inFlight := completed.Load()
 	start := time.Now()
-	if err := w.submit(context.Background(), func(*sql.Tx) error { return nil }); err != nil {
+	var admittedAfter int64
+	if err := w.submit(context.Background(), func(*sql.Tx) error {
+		admittedAfter = completed.Load()
+		return nil
+	}); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 	waited := time.Since(start)
 
-	if waited > admissionCeiling {
+	if crossed := admittedAfter - inFlight; crossed > 1 {
+		t.Errorf("interactive job waited out %d bulk chunks, want at most the one in flight; the backlog behind it is %d",
+			crossed, chunks)
+	}
+
+	if waited > admissionCeiling && !raceEnabled {
 		t.Errorf("interactive admission took %v, want under %v; %d queued bulk chunks would be %v",
 			waited, admissionCeiling, chunks, chunks*chunkWork)
 	}

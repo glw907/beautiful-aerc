@@ -93,28 +93,46 @@ func DeleteMessageByID(tx *sql.Tx, id int64) error {
 }
 
 // StaleMessageIDs returns the internal ids of accountID's origin =
-// 'server' message rows whose server id is absent from keep: an
+// 'server' message rows whose server id is absent from keep, among
+// the limit rows following internal id after, and the highest id that
+// page examined. A zero cursor reports that no row follows after, so
+// a caller pages by handing back the cursor until it reads zero. An
 // origin = 'local' draft is never a deletion candidate, so a resync
 // never considers it.
-func StaleMessageIDs(tx *sql.Tx, accountID int64, keep map[string]bool) ([]int64, error) {
-	rows, err := tx.Query(`SELECT id, server_id FROM message WHERE account_id = ? AND origin = 'server'`, accountID)
+//
+// The account and origin filters run here rather than in the WHERE
+// clause, which is what keeps a page bounded. With them there, SQLite
+// serves account_id from idx_message_thread, which orders an account
+// by thread_key, and runs every row of that account through a temp
+// b-tree to satisfy ORDER BY id: measured over 50k rows, the worst of
+// the 1001 pages took 52 ms, past the very ceiling the paging exists
+// to respect. Scanning the primary key instead costs the rows other
+// accounts own and holds every page to limit rows examined.
+func StaleMessageIDs(tx *sql.Tx, accountID int64, keep map[string]bool, after int64, limit int) ([]int64, int64, error) {
+	rows, err := tx.Query(`SELECT id, account_id, server_id, origin FROM message WHERE id > ? ORDER BY id LIMIT ?`, after, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() { _ = rows.Close() }()
 
 	var stale []int64
+	var cursor int64
 	for rows.Next() {
-		var id int64
+		var id, rowAccount int64
 		var serverID sql.NullString
-		if err := rows.Scan(&id, &serverID); err != nil {
-			return nil, err
+		var origin string
+		if err := rows.Scan(&id, &rowAccount, &serverID, &origin); err != nil {
+			return nil, 0, err
+		}
+		cursor = id
+		if rowAccount != accountID || origin != "server" {
+			continue
 		}
 		if !serverID.Valid || !keep[serverID.String] {
 			stale = append(stale, id)
 		}
 	}
-	return stale, rows.Err()
+	return stale, cursor, rows.Err()
 }
 
 // SyncMessageMailboxes reconciles message_mailbox to exactly the
