@@ -23,6 +23,18 @@ targets included, reviewed by Geoff before the screen's tasks
 dispatch. A pass ends with consolidation (simplify, reviewer fan-out,
 STATUS update, plan archival) and closes at a pass gate with Geoff.
 
+**A pass can be split at a logical point, and the numbered spine does
+not forbid it** (pass 1b exists because pass 1 burst). The signal to
+propose one is repeated task splits: splitting a task keeps the work
+inside the pass, and only splitting the pass lets work leave, so
+task-splitting looks like sizing discipline while changing nothing about
+the commitment. A second task split inside one pass is the prompt; a
+third means the proposal is overdue. Propose it with a named cut point,
+usually the last clean self-contained task, and give the follow-up pass
+a letter so its work has a home rather than being homeless. Geoff rules
+on the split; the orchestrator owes him the proposal unprompted, because
+he sees per-item summaries and the orchestrator holds the dispatch list.
+
 Two closed tracks remain in the repo as reference only: the dogfood
 client (tag `poplar-legacy`, branch `legacy`) and the 2026-05-29
 rebuild spec track (`docs/superpowers/specs/poplar-rebuild-STATUS.md`,
