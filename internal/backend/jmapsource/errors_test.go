@@ -289,4 +289,3 @@ func TestDoClassifiesAndLogsA401ThroughChanges(t *testing.T) {
 		t.Errorf("logged class = %v, want %q", lines[0]["class"], "auth")
 	}
 }
-

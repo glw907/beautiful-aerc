@@ -663,8 +663,9 @@ func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error
 // row budget 6.1ms, so a claim spending both is about 20ms of work,
 // well inside ADR-0003's 50ms admission ceiling and with room for a
 // machine several times slower. The message budget is three
-// moveChunkMessages chunks plus a create, so an offline
-// create-folder-then-move still reaches the server as one batch.
+// moveChunkMessages chunks, so a create claimed alongside two chunks
+// of the move that fills it keeps ADR-0006's offline
+// create-folder-then-move reaching the server as one batch.
 // Unbounded, a bulk move of 100k messages becomes one claim resolving
 // every message in the queue while every other writer, interactive
 // lane included, waits.
