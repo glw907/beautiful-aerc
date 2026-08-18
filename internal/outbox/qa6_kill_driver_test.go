@@ -195,6 +195,9 @@ func runKillHarnessDriver(dbPath string) {
 		}
 	}
 
+	if err := reads.Close(); err != nil {
+		killHarnessDriverFail("close read pool", err)
+	}
 	if err := w.Close(); err != nil {
 		killHarnessDriverFail("close writer", err)
 	}
