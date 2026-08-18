@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/glw907/poplar/internal/backend"
+	"github.com/glw907/poplar/internal/uerr"
 	"github.com/glw907/poplar/jmap"
 )
 
@@ -23,13 +24,13 @@ import (
 // HTTP transport every method call in this package shares, the
 // account id the session assigned mail, the capabilities the live
 // session reported (ADR-0004 revision 2), and do()'s own dedup state
-// for a repeated ClassAuth failure (authState's doc comment) and for
-// the session refetch a moved sessionState asks for (refetchState's).
+// for a standing failure (episodeState's doc comment) and for the
+// session refetch a moved sessionState asks for (refetchState's).
 type Session struct {
 	client    *jmap.Client
 	accountID jmap.ID
 	caps      backend.Capabilities
-	auth      authState
+	episode   episodeState
 	refetch   refetchState
 	push      pushSource
 }
@@ -67,9 +68,9 @@ func (s *Session) Mail() backend.Mail { return &mailSource{session: s} }
 func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, error) {
 	resp, err := s.client.Do(ctx, req)
 	if err != nil {
-		return resp, classify("jmapsource.do", err, &s.auth)
+		return resp, classify("jmapsource.do", err, &s.episode)
 	}
-	s.auth.clear()
+	s.episode.clear()
 	s.refetch.follow(ctx, s.client, resp.SessionState)
 	return resp, nil
 }
@@ -238,10 +239,22 @@ func probeCapabilities(session *jmap.Session) backend.Capabilities {
 }
 
 // findResponse locates the invocation in resp matching callID and
-// asserts its Args to T, the JMAP method's response type. A method
-// error in that slot (JMAP routes a per-call failure as a MethodError
-// invocation rather than a request-level error) comes back as err, so
-// a caller can errors.As it against a MethodError to classify it.
+// asserts its Args to T, the JMAP method's response type.
+//
+// A method error in that slot (RFC 8620 section 3.6.2: JMAP routes a
+// per-call failure as a MethodError invocation inside an otherwise
+// fine 200 rather than as a request-level error) comes back as a
+// classified backend.Failure. The response arrived and the server
+// answered it, so the class is ClassServer whatever the type says;
+// without one here an accountNotFound or an invalidArguments reached
+// the sync worker with no class at all and rendered as "Couldn't
+// reach the server". The failure is classified and not logged, since
+// every caller of this runs on an engine that retries on its own
+// schedule and dedups its own surfacing (ADR-0013 revision 2).
+//
+// The MethodError survives as the Cause, so the two types the engines
+// read as signals rather than failures, cannotCalculateChanges and
+// stateMismatch, still match through errors.As.
 func findResponse[T any](resp *jmap.Response, callID string) (T, error) {
 	var zero T
 	for _, inv := range resp.MethodResponses {
@@ -249,7 +262,7 @@ func findResponse[T any](resp *jmap.Response, callID string) (T, error) {
 			continue
 		}
 		if me, ok := inv.Args.(*jmap.MethodError); ok {
-			return zero, me
+			return zero, backend.Failure{Class: uerr.ClassServer, Cause: me}
 		}
 		v, ok := inv.Args.(T)
 		if !ok {

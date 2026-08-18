@@ -3,8 +3,10 @@ package jmapsource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/glw907/poplar/internal/backend"
@@ -31,13 +33,13 @@ func TestClassify(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			// A fresh authState per case: two cases above (unauthorized,
-			// forbidden) both classify ClassAuth, and authState.report
-			// dedups a second ClassAuth call against a state it already
-			// saw one for. Sharing one authState across cases would make
+			// A fresh episodeState per case: two cases above
+			// (unauthorized, forbidden) both classify ClassAuth, and
+			// episodeState.report dedups a second call of a class it is
+			// already mid-episode under. Sharing one across cases would make
 			// the second case's classify return the first case's cached
 			// value instead of classifying its own error.
-			got := classify("jmapsource.test", c.err, &authState{})
+			got := classify("jmapsource.test", c.err, &episodeState{})
 			var ue uerr.Error
 			if !errors.As(got, &ue) {
 				t.Fatalf("classify(%v) = %v, want a uerr.Error", c.err, got)
@@ -107,12 +109,152 @@ func TestRequestLevelRejectionCarriesItsClassToEveryCaller(t *testing.T) {
 	}
 }
 
+// TestMethodLevelErrorCarriesItsClassToEveryCaller is the second half
+// of the rejection story: RFC 8620 section 3.6.2 routes a per-call
+// failure as an "error" invocation inside an otherwise fine 200, so
+// accountNotFound, invalidArguments, serverFail and unknownMethod
+// never reach the status classification at all. Unclassified, they
+// took each engine's own default, and the sync worker's default made
+// a server that answered read as a server nobody could reach.
+func TestMethodLevelErrorCarriesItsClassToEveryCaller(t *testing.T) {
+	uerrtest.Capture(t)
+
+	for _, methodErrorType := range []string{"accountNotFound", "invalidArguments", "serverFail", "unknownMethod"} {
+		t.Run(methodErrorType, func(t *testing.T) {
+			body := fmt.Appendf(nil, `{"methodResponses":[["error",{"type":%q},"0"]],"sessionState":"s-1"}`, methodErrorType)
+			session, _ := newTestSession(t, body, body)
+
+			calls := []struct {
+				name string
+				call func() error
+			}{
+				{"Changes, the sync worker's flush path", func() error {
+					_, err := session.Mail().Changes(context.Background(), backend.ObjectKindMailbox, "tok-1", 0)
+					return err
+				}},
+				{"ApplyBatch, the outbox dispatcher's path", func() error {
+					_, err := session.Mail().ApplyBatch(context.Background(), []backend.Mutation{{
+						Op:     backend.MutationUpdate,
+						Kind:   backend.ObjectKindMessage,
+						ID:     "m1",
+						Fields: backend.MessagePatch{SetFlags: backend.FlagSeen},
+					}})
+					return err
+				}},
+			}
+			for _, c := range calls {
+				t.Run(c.name, func(t *testing.T) {
+					err := c.call()
+					if err == nil {
+						t.Fatalf("the call succeeded against a %s method error", methodErrorType)
+					}
+					classified, ok := uerr.Peel(err)
+					if !ok {
+						t.Fatalf("%v carries no class, so the engine's own default decides it", err)
+					}
+					if class, _ := classified.ClassCause(); class != uerr.ClassServer {
+						t.Errorf("class = %v, want ClassServer: the server answered the request", class)
+					}
+					if !strings.Contains(err.Error(), methodErrorType) {
+						t.Errorf("error = %q, want the server's own type in it", err)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestMethodLevelErrorKeepsTheSignalTypesTranslated pins what the
+// classification above must not break. Two method-error types are
+// signals rather than failures, and each engine reads its own by
+// errors.Is against a seam sentinel; wrapping the MethodError in a
+// classified failure has to leave those matches intact.
+func TestMethodLevelErrorKeepsTheSignalTypesTranslated(t *testing.T) {
+	uerrtest.Capture(t)
+
+	t.Run("cannotCalculateChanges is still a state reset", func(t *testing.T) {
+		session, _ := newTestSession(t, []byte(`{"methodResponses":[["error",{"type":"cannotCalculateChanges"},"0"]],"sessionState":"s-1"}`))
+		_, err := session.Mail().Changes(context.Background(), backend.ObjectKindMailbox, "tok-1", 0)
+		if !errors.Is(err, backend.ErrStateReset) {
+			t.Fatalf("Changes error = %v, want backend.ErrStateReset", err)
+		}
+	})
+
+	t.Run("stateMismatch is still the batch sentinel", func(t *testing.T) {
+		session, _ := newTestSession(t, []byte(`{"methodResponses":[["error",{"type":"stateMismatch"},"0"]],"sessionState":"s-1"}`))
+		_, err := session.Mail().ApplyBatch(context.Background(), []backend.Mutation{{Op: backend.MutationDestroy, ID: "msg-1"}})
+		if !errors.Is(err, backend.ErrStateMismatch) {
+			t.Fatalf("ApplyBatch error = %v, want backend.ErrStateMismatch", err)
+		}
+	})
+}
+
+// TestStandingRejectionLogsOncePerEpisode covers what widening the
+// status classification would otherwise have cost. A deterministic
+// 400 (RFC 8620 section 3.6.1's unknownCapability and limit are the
+// two a client cannot talk its way out of) now classifies, and the
+// sync worker asks for changes per kind on every poll, so a line per
+// call is roughly 2,880 a day for one standing failure. That is the
+// flood the dedup exists to prevent, and it has to hold for every
+// class rather than for the one it was first written against.
+func TestStandingRejectionLogsOncePerEpisode(t *testing.T) {
+	buf := uerrtest.Capture(t)
+
+	rejecting := true
+	mux, srv := newFakeServer(t)
+	mux.HandleFunc("/api", func(w http.ResponseWriter, _ *http.Request) {
+		if rejecting {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"type":"urn:ietf:params:jmap:error:unknownCapability","status":400}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"methodResponses":[["Mailbox/changes",{"accountId":"u1","oldState":"a","newState":"b","hasMoreChanges":false},"0"],["Mailbox/get",{"accountId":"u1","state":"b","list":[]},"1"],["Mailbox/get",{"accountId":"u1","state":"b","list":[]},"2"]],"sessionState":"s-1"}`)
+	})
+	session := dialTestSession(t, srv)
+
+	poll := func() error {
+		_, err := session.Mail().Changes(context.Background(), backend.ObjectKindMailbox, "tok-1", 0)
+		return err
+	}
+
+	// Three cycles across two kinds, the shape a standing rejection
+	// produces against the sync worker's own cadence.
+	for range 6 {
+		if err := poll(); err == nil {
+			t.Fatal("the poll succeeded against a server answering 400")
+		}
+	}
+	if lines := uerrtest.Lines(t, buf); len(lines) != 1 {
+		t.Fatalf("logged %d line(s) across 6 identical rejections, want exactly 1: %v", len(lines), lines)
+	}
+
+	rejecting = false
+	if err := poll(); err != nil {
+		t.Fatalf("the recovery poll failed: %v", err)
+	}
+
+	rejecting = true
+	if err := poll(); err == nil {
+		t.Fatal("the poll after recovery succeeded against a server answering 400")
+	}
+	lines := uerrtest.Lines(t, buf)
+	if len(lines) != 2 {
+		t.Fatalf("logged %d line(s) across two episodes, want exactly 2 (one each): %v", len(lines), lines)
+	}
+	for i, line := range lines {
+		if line["class"] != "server" {
+			t.Errorf("line %d class = %v, want server", i, line["class"])
+		}
+	}
+}
+
 func TestClassifyPassesThroughUnrecognizedError(t *testing.T) {
 	unrecognized := errors.New("something else entirely")
-	if got := classify("jmapsource.test", unrecognized, &authState{}); got != unrecognized {
+	if got := classify("jmapsource.test", unrecognized, &episodeState{}); got != unrecognized {
 		t.Errorf("classify(%v) = %v, want the same error unclassified", unrecognized, got)
 	}
-	if classify("jmapsource.test", nil, &authState{}) != nil {
+	if classify("jmapsource.test", nil, &episodeState{}) != nil {
 		t.Error("classify(nil) should return nil")
 	}
 }
@@ -129,12 +271,12 @@ func TestClassifyPassesThroughUnrecognizedError(t *testing.T) {
 // deduped.
 func TestClassifyDedupsRepeatedAuthFailures(t *testing.T) {
 	buf := uerrtest.Capture(t)
-	auth := &authState{}
+	episode := &episodeState{}
 	cause := &jmap.HTTPError{Status: http.StatusUnauthorized}
 
 	for cycle := range 3 {
 		for range 2 { // two kinds, mailbox and message
-			got := classify("jmapsource.do", cause, auth)
+			got := classify("jmapsource.do", cause, episode)
 			var ue uerr.Error
 			if !errors.As(got, &ue) {
 				t.Fatalf("cycle %d: classify = %v, want a uerr.Error on every call", cycle, got)
@@ -160,20 +302,20 @@ func TestClassifyDedupsRepeatedAuthFailures(t *testing.T) {
 // muted by the first episode's dedup.
 func TestClassifyAuthDedupResetsOnRecovery(t *testing.T) {
 	buf := uerrtest.Capture(t)
-	auth := &authState{}
+	episode := &episodeState{}
 	cause := &jmap.HTTPError{Status: http.StatusUnauthorized}
 
 	for _, got := range []error{
-		classify("jmapsource.do", cause, auth), // episode 1, call 1: logs
-		classify("jmapsource.do", cause, auth), // episode 1, call 2: deduped
+		classify("jmapsource.do", cause, episode), // episode 1, call 1: logs
+		classify("jmapsource.do", cause, episode), // episode 1, call 2: deduped
 	} {
 		var ue uerr.Error
 		if !errors.As(got, &ue) || ue.Class != uerr.ClassAuth {
 			t.Fatalf("classify = %v, want a ClassAuth uerr.Error", got)
 		}
 	}
-	auth.clear() // the recovery do() itself performs on a successful call
-	if got := classify("jmapsource.do", cause, auth); !errors.As(got, new(uerr.Error)) {
+	episode.clear() // the recovery do() itself performs on a successful call
+	if got := classify("jmapsource.do", cause, episode); !errors.As(got, new(uerr.Error)) {
 		t.Fatalf("classify after recovery = %v, want a uerr.Error", got)
 	}
 
@@ -184,16 +326,16 @@ func TestClassifyAuthDedupResetsOnRecovery(t *testing.T) {
 }
 
 // TestClassifyAuthDedupDoesNotSuppressOtherClasses proves the dedup
-// is scoped to ClassAuth: a ClassAuth failure followed by a
+// is keyed on the class: a ClassAuth failure followed by a
 // differently classified one (a server error, here) still logs the
 // second failure, so the dedup cannot be mistaken for a general "log
 // the first failure of a session and nothing else after" rule.
 func TestClassifyAuthDedupDoesNotSuppressOtherClasses(t *testing.T) {
 	buf := uerrtest.Capture(t)
-	auth := &authState{}
+	episode := &episodeState{}
 
-	_ = classify("jmapsource.do", &jmap.HTTPError{Status: http.StatusUnauthorized}, auth)
-	_ = classify("jmapsource.do", &jmap.HTTPError{Status: http.StatusInternalServerError}, auth)
+	_ = classify("jmapsource.do", &jmap.HTTPError{Status: http.StatusUnauthorized}, episode)
+	_ = classify("jmapsource.do", &jmap.HTTPError{Status: http.StatusInternalServerError}, episode)
 
 	lines := uerrtest.Lines(t, buf)
 	if len(lines) != 2 {

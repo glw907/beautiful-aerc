@@ -55,80 +55,79 @@ func isStateMismatch(err error) bool {
 // type, so a real problem-details body sent with a charset parameter,
 // or any non-JSON body such as Fastmail's, reached the caller as an
 // unrecognized error instead.
-func classify(op string, err error, auth *authState) error {
+func classify(op string, err error, episode *episodeState) error {
 	if err == nil {
 		return nil
 	}
 	if status, ok := statusOf(err); ok {
-		if classified := classifyStatus(op, status, err, auth); classified != nil {
+		if classified := classifyStatus(op, status, err, episode); classified != nil {
 			return classified
 		}
 	}
 	if isConnectionDead(err) {
-		auth.clear()
-		return uerr.New(op, nil, uerr.ClassConnection, err)
+		return episode.report(op, uerr.ClassConnection, err)
 	}
 	return err
 }
 
-// authState dedups a repeated ClassAuth failure across successive
-// do() calls on one Session, so a rejected credential logs once per
-// failure episode rather than once per call. do()'s callers run on
-// whatever cadence their engine sets, none of which backs off for a
-// credential problem: a backend with no push transport polls Changes
-// on every kind at sync.Config's PollInterval, and the outbox
-// dispatcher retries on its own. A token the server keeps rejecting
-// would otherwise construct a fresh uerr.Error, and write a fresh log
-// line, on every one of those: thousands a day for one standing
-// failure, the flood fixing the 401 classification defect
-// reintroduced. Scope is ClassAuth alone: it is
-// the class a standing failure persists under across polls
-// unchanged, unlike ClassThrottled, ClassNotFound, ClassServer, or
-// ClassConnection, none of which showed a comparable repeat pattern
-// under the same experiment.
+// episodeState dedups a standing failure across successive do() calls
+// on one Session, so a server answering the same way every time logs
+// once per episode rather than once per call. do()'s callers run on
+// whatever cadence their engine sets, and none of them backs off for
+// a failure the server repeats deterministically: the sync worker
+// polls Changes on every kind at sync.Config's PollInterval, and the
+// outbox dispatcher retries on its own. A rejected credential, a
+// standing 400 (RFC 8620 section 3.6.1's unknownCapability and limit
+// are the deterministic ones), or an unreachable host would otherwise
+// construct a fresh uerr.Error, and write a fresh log line, on every
+// one of those: thousands a day for one standing failure.
+//
+// The episode is keyed on the class rather than on one chosen class,
+// because any of them can stand. What ends an episode is a state
+// transition, which is ADR-0013 revision 2's own rule for when a
+// failure is worth a line: the class changing, or clear, which do()
+// calls on every successful call.
 //
 // uerr.Error can only be constructed through uerr.New (the
 // error-construction analyzer's own rule), which always logs as a
 // side effect of construction, so there is no "classify without
 // logging" call for a repeat the way classifyRetried gives Dial's own
 // loop. report instead reuses the single uerr.Error the first
-// occurrence's uerr.New call produced, returning that same value
-// (Class still ClassAuth, Cause still the original failure) on every
-// later call while the episode continues, rather than constructing
-// and logging a new one. This is not silencing (ADR-0013 revision
-// 2's own distinction): a caller checking errors.As(err,
-// &uerr.Error{}) still sees ClassAuth on every call, only the log
-// write itself is deduped, and clear resets the state so the next
-// distinct failure (a class change, or a fresh episode after a
-// recovery) logs again.
-type authState struct {
+// occurrence's uerr.New call produced, returning that same value on
+// every later call while the episode continues, rather than
+// constructing and logging a new one. This is not silencing (ADR-0013
+// revision 2's own distinction): a caller checking errors.As(err,
+// &uerr.Error{}) still sees the class on every call, and only the log
+// write is deduped. A repeat under one class keeps the first
+// occurrence's cause, since a class is what the episode is, and the
+// alternative is a line per call.
+type episodeState struct {
 	mu     sync.Mutex
 	active bool
+	class  uerr.Class
 	logged uerr.Error
 }
 
-// report returns the uerr.Error for a ClassAuth failure, constructing
-// and logging a new one via uerr.New only when a is not already
-// mid-episode.
-func (a *authState) report(op string, cause error) uerr.Error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if !a.active {
-		a.logged = uerr.New(op, nil, uerr.ClassAuth, cause)
-		a.active = true
+// report returns the uerr.Error for a failure of class, constructing
+// and logging a new one via uerr.New only when e is not already
+// mid-episode under that same class.
+func (e *episodeState) report(op string, class uerr.Class, cause error) uerr.Error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.active || e.class != class {
+		e.logged = uerr.New(op, nil, class, cause)
+		e.active, e.class = true, class
 	}
-	return a.logged
+	return e.logged
 }
 
-// clear ends a's current episode, so the next ClassAuth failure logs
-// again: do() calls it on every successful call, and classify calls
-// it on every failure classified to something other than ClassAuth,
-// both of which are state transitions worth their own line either
-// way (a recovery, or a different problem replacing the old one).
-func (a *authState) clear() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.active = false
+// clear ends e's current episode, so the next failure logs again:
+// do() calls it on every successful call, which is the recovery a
+// later failure of the same class has to be told apart from.
+func (e *episodeState) clear() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.active = false
 }
 
 // statusOf reports the HTTP status a rejected JMAP request carried,
@@ -178,23 +177,18 @@ func classifyStatusClass(status int) (class uerr.Class, ok bool) {
 	}
 }
 
-// classifyStatus wraps cause in a uerr.Error under classifyStatusClass's
-// mapping, or reports nil for a status none of those classes cover.
-// classify is its only caller: do()'s callers run once per outbox
-// dispatch attempt or sync flush, each already its own surfacing
-// event, unlike Dial's own retry loop (classifyRetried, below), except for
-// ClassAuth, which auth.report dedups instead of logging on every
-// call (authState's own doc comment).
-func classifyStatus(op string, status int, cause error, auth *authState) error {
+// classifyStatus wraps cause in a uerr.Error under
+// classifyStatusClass's mapping, or reports nil for a status none of
+// those classes cover. classify is its only caller, and the line is
+// written once per failure episode rather than once per call
+// (episodeState's own doc comment): a status the server keeps
+// answering with is exactly the shape that repeats.
+func classifyStatus(op string, status int, cause error, episode *episodeState) error {
 	class, ok := classifyStatusClass(status)
 	if !ok {
 		return nil
 	}
-	if class == uerr.ClassAuth {
-		return auth.report(op, cause)
-	}
-	auth.clear()
-	return uerr.New(op, nil, class, cause)
+	return episode.report(op, class, cause)
 }
 
 // classifyRetried classifies the two failures this package leaves
