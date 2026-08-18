@@ -147,11 +147,22 @@ func statusOf(err error) (status int, ok bool) {
 
 // classifyStatusClass maps the HTTP status of a rejected JMAP request
 // to the uerr.Class SY-4 and ADR-0004 revision 2 assign it (401/403 a
-// rejected credential, 404 a missing entity, 429 throttling, 5xx a
-// server-side failure), with ok false for a status none of those
-// classes cover. classifyStatus and classifyDial both call this, so
-// the mapping lives in exactly one place despite classifyDial needing
-// it without classifyStatus's uerr.New construction.
+// rejected credential, 404 a missing entity, 429 throttling, and every
+// other rejection a server-side failure), with ok false for a status
+// outside the rejection range entirely. classifyStatus and classifyDial
+// both call this, so the mapping lives in exactly one place despite
+// classifyDial needing it without classifyStatus's uerr.New
+// construction.
+//
+// The whole 4xx band classifies, rather than only the three statuses
+// named above, because the seam is where the class is decided. RFC
+// 8620 section 3.6.1's request-level errors (notRequest, notJSON,
+// limit, unknownCapability) all arrive as 400, and leaving those
+// unclassified left each engine to invent its own default: the same
+// rejection read as "Couldn't reach the server" from a sync flush and
+// "The server reported a problem" from an outbox dispatch, under two
+// log keys and two retry treatments. A request the server answered at
+// all is not a connectivity problem, whatever it answered.
 func classifyStatusClass(status int) (class uerr.Class, ok bool) {
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
@@ -160,7 +171,7 @@ func classifyStatusClass(status int) (class uerr.Class, ok bool) {
 		return uerr.ClassNotFound, true
 	case status == http.StatusTooManyRequests:
 		return uerr.ClassThrottled, true
-	case status >= http.StatusInternalServerError:
+	case status >= http.StatusBadRequest:
 		return uerr.ClassServer, true
 	default:
 		return 0, false

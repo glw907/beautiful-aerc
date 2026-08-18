@@ -23,6 +23,8 @@ func TestClassify(t *testing.T) {
 		{"forbidden", &jmap.RequestError{Status: http.StatusForbidden}, uerr.ClassAuth},
 		{"not found", &jmap.RequestError{Status: http.StatusNotFound}, uerr.ClassNotFound},
 		{"throttled", &jmap.RequestError{Status: http.StatusTooManyRequests}, uerr.ClassThrottled},
+		{"bad request", &jmap.RequestError{Status: http.StatusBadRequest}, uerr.ClassServer},
+		{"conflict", &jmap.RequestError{Status: http.StatusConflict}, uerr.ClassServer},
 		{"server error", &jmap.RequestError{Status: http.StatusInternalServerError}, uerr.ClassServer},
 		{"http error, no problem body", &jmap.HTTPError{Status: http.StatusUnauthorized}, uerr.ClassAuth},
 		{"connection dead", io.ErrUnexpectedEOF, uerr.ClassConnection},
@@ -45,6 +47,61 @@ func TestClassify(t *testing.T) {
 			}
 			if !errors.Is(got, c.err) {
 				t.Errorf("classify(%v) does not unwrap to the original error", c.err)
+			}
+		})
+	}
+}
+
+// TestRequestLevelRejectionCarriesItsClassToEveryCaller covers the
+// rejection RFC 8620 section 3.6.1 makes routine: notRequest, notJSON,
+// limit and unknownCapability all arrive as HTTP 400 with a
+// problem-details body. Leaving it unclassified here left the class to
+// whichever engine made the call, and the two chose differently, so the
+// same rejection reached the user as a connectivity problem from a sync
+// flush and a server problem from an outbox dispatch. Both engines'
+// entry points are exercised, and each error must arrive already
+// carrying its class, which is what makes the two agree.
+func TestRequestLevelRejectionCarriesItsClassToEveryCaller(t *testing.T) {
+	uerrtest.Capture(t)
+
+	mux, srv := newFakeServer(t)
+	mux.HandleFunc("/api", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"type":"urn:ietf:params:jmap:error:limit","limit":"maxCallsInRequest","status":400}`)
+	})
+	session := dialTestSession(t, srv)
+
+	calls := []struct {
+		name string
+		call func() error
+	}{
+		{"Changes, the sync engine's call", func() error {
+			_, err := session.Mail().Changes(context.Background(), backend.ObjectKindMailbox, "tok-1", 0)
+			return err
+		}},
+		{"ApplyBatch, the outbox dispatcher's call", func() error {
+			_, err := session.Mail().ApplyBatch(context.Background(), []backend.Mutation{{
+				Op:     backend.MutationUpdate,
+				Kind:   backend.ObjectKindMessage,
+				ID:     "m1",
+				Fields: backend.MessagePatch{SetFlags: backend.FlagSeen},
+			}})
+			return err
+		}},
+	}
+	for _, c := range calls {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.call()
+			if err == nil {
+				t.Fatal("the call succeeded against a server answering 400")
+			}
+			classified, ok := uerr.Peel(err)
+			if !ok {
+				t.Fatalf("%v carries no class, so the engine's own default decides it", err)
+			}
+			if class, _ := classified.ClassCause(); class != uerr.ClassServer {
+				t.Errorf("class = %v, want ClassServer: the server answered, so nothing here is a connectivity problem", class)
 			}
 		})
 	}

@@ -1117,9 +1117,14 @@ func backoff(attempt int) time.Duration {
 // failure, whichever uerr.Peel finds first in err's tree. Reading
 // both off that one match, rather than walking the tree twice, is
 // what guarantees the class and the detail describe the same failure.
-// A backend returning neither is classified ClassServer, the same
-// fallback jmap's own classification tables use for an unrecognized
-// failure, with err's own text as the detail. The detail string is
+// A backend returning neither is classified ClassServer, with err's
+// own text as the detail. The backend classifies every rejection a
+// server answered with and every connection it found dead, so what
+// reaches this default is an answer the transport could not make sense
+// of, and on the dispatch path that is characteristically a method
+// error inside an otherwise fine response: the server did answer, so
+// naming it a connectivity problem would be the one wrong thing to
+// say. The detail string is
 // otherwise the match's own Error() text: a backend.Failure's is its
 // cause's wire text (what the server said), and a uerr.Error's is its
 // fixed user sentence, since that failure already went through

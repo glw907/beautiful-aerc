@@ -124,9 +124,17 @@ func surfaceable(err error) bool {
 // carries, in either of the two uerr.Classified shapes a backend
 // hands one over: a uerr.Error it built and logged itself, or a
 // backend.Failure it classified and left to this package to surface.
+//
 // An err that was never classified reports ClassConnection and
-// itself: a Listen or push-triggered SyncKind failure with no finer
-// classification is, by construction, a connectivity problem.
+// itself. The backend classifies every rejection a server answered
+// with and every connection it found dead, so what reaches this
+// default is an answer the transport could not make sense of, and on
+// the push path that is characteristically a middlebox: a captive
+// portal answering the event source with a login page is the shape
+// this default is for. The outbox's own default is ClassServer, for
+// the failure characteristic of its path, a method error inside an
+// otherwise fine response, and the two differ only over failures
+// neither engine can name.
 func classifyErr(err error) (uerr.Class, error) {
 	return uerr.ClassifyErr(err, uerr.ClassConnection)
 }
