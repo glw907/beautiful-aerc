@@ -4,8 +4,9 @@
 // changes-since batches through the store writer's bulk lane, and
 // treats a server state reset as a normal full-resync path rather
 // than an error. Worker also consumes a backend's push transport,
-// coalescing bursts into a fixed window and reconnecting through
-// jittered backoff on drop.
+// coalescing bursts into a fixed window, reconnecting through jittered
+// backoff on drop, and polling on a fixed cadence for as long as no
+// stream is in force.
 //
 // Sync never touches the terminal and never writes the store
 // directly: every mutation runs through store.Writer.Apply, the bulk
@@ -34,9 +35,11 @@ type Config struct {
 	BackoffMin       time.Duration
 	BackoffMax       time.Duration
 	InteractiveQuiet time.Duration
-	// PollInterval is the fixed cadence RunPush falls back to for a
-	// backend whose Push() is nil (backend.PushTransportNone): with no
-	// event stream to coalesce, a plain ticker takes push's place.
+	// PollInterval is the fixed cadence RunPush falls back to whenever
+	// push is unavailable (SY-2): a backend whose Push() is nil
+	// (backend.PushTransportNone) has no stream to coalesce, and a
+	// transport whose stream the server keeps refusing has none in
+	// force. A plain ticker takes push's place either way.
 	PollInterval time.Duration
 }
 

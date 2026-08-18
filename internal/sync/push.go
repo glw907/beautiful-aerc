@@ -135,9 +135,22 @@ func classifyErr(err error) (uerr.Class, error) {
 // coalesce into SyncKind calls, and a transport that stops for good
 // (the channel closing, which under backend.Push's contract is a
 // server refusal rather than a drop) is opened again through jittered
-// backoff. A backend with no push transport at all
-// (backend.PushTransportNone) falls back to polling SyncKind on a
-// fixed cadence instead. RunPush blocks until ctx is done.
+// backoff. RunPush blocks until ctx is done.
+//
+// Whenever push is unavailable, SyncKind is called on PollInterval's
+// fixed cadence instead, which is SY-2's MUST and ADR-0005's decision:
+// a backend with no push transport at all
+// (backend.PushTransportNone) polls for its whole run, and a transport
+// whose stream the server keeps refusing polls until a stream attaches
+// again. The event source answering 401 while the JMAP API works is
+// the case that makes the second one matter, since nothing else pulls
+// Changes and the account would otherwise receive no mail for the life
+// of the process.
+//
+// The ticker is RunPush's and its ticks are read only while the stream
+// is down, so a working stream never polls. It is not restarted per
+// reconnect: a server that opens a stream and refuses the next would
+// otherwise keep resetting the cadence and never reach a tick.
 func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	kinds = orderKindsForSync(kinds)
 
@@ -150,9 +163,12 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	}
 
 	flushState := newSyncFlushState()
+	poll := time.NewTicker(w.cfg.PollInterval)
+	defer poll.Stop()
+
 	var push pushState
 	for {
-		ch, err := reconnect(ctx, transport, w.cfg, &push)
+		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, func() { w.flush(ctx, kinds, flushState) })
 		if err != nil {
 			return
 		}
@@ -259,14 +275,21 @@ func (w *Worker) flush(ctx context.Context, kinds []backend.ObjectKind, state *s
 // backoff until it succeeds or ctx ends. state carries the schedule
 // and the surfacing decision across calls, for the reasons its own doc
 // comment gives; reconnect only ever advances them.
-func reconnect(ctx context.Context, push backend.Push, cfg Config, state *pushState) (<-chan backend.Notification, error) {
+//
+// poll runs on every tick of pollC that lands while the stream is
+// still refused, which is SY-2's fallback and the only thing pulling
+// Changes during a refusal. It rides the waits the schedule is already
+// taking rather than a schedule of its own, so one failure still backs
+// off in exactly one place. A nil pollC never fires, which is the
+// no-fallback case a caller drives when it only wants the retry.
+func reconnect(ctx context.Context, push backend.Push, cfg Config, state *pushState, pollC <-chan time.Time, poll func()) (<-chan backend.Notification, error) {
 	for {
 		ch, err := push.Listen(ctx)
 		if err == nil {
 			return ch, nil
 		}
 		state.fail(err)
-		if !SleepBackoff(ctx, state.attempt, cfg.BackoffMin, cfg.BackoffMax) {
+		if !sleepBackoff(ctx, state.attempt, cfg.BackoffMin, cfg.BackoffMax, pollC, poll) {
 			return nil, ctx.Err()
 		}
 		state.attempt++
@@ -331,17 +354,29 @@ func consumePush(ctx context.Context, ch <-chan backend.Notification, cfg Config
 // as RunPush's reconnect, rather than a second, near-identical
 // implementation.
 func SleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration) bool {
+	return sleepBackoff(ctx, attempt, minDelay, maxDelay, nil, nil)
+}
+
+// sleepBackoff is SleepBackoff with reconnect's poll fallback folded
+// in: it runs poll on every tick of pollC that lands inside the delay,
+// so a refused stream's own wait is what the fallback rides. A nil
+// pollC never fires, which is SleepBackoff's plain sleep.
+func sleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration, pollC <-chan time.Time, poll func()) bool {
 	d := backoffDelay(attempt, minDelay, maxDelay)
 	if d <= 0 {
 		return ctx.Err() == nil
 	}
 	t := time.NewTimer(d)
 	defer t.Stop()
-	select {
-	case <-t.C:
-		return true
-	case <-ctx.Done():
-		return false
+	for {
+		select {
+		case <-t.C:
+			return true
+		case <-pollC:
+			poll()
+		case <-ctx.Done():
+			return false
+		}
 	}
 }
 

@@ -159,7 +159,7 @@ func TestBackoffRecovery(t *testing.T) {
 			}}
 
 			start := time.Now()
-			if _, err := reconnect(context.Background(), push, cfg, &pushState{}); err != nil {
+			if _, err := reconnect(context.Background(), push, cfg, &pushState{}, nil, nil); err != nil {
 				t.Fatalf("trial %d: reconnect: %v", i, err)
 			}
 			elapsed[i] = time.Since(start)
@@ -230,6 +230,81 @@ func TestRunPushBackoffsAfterAnImmediateStop(t *testing.T) {
 				t.Fatalf("Listen call %d landed with zero delay after the previous one, want at least one backoff step", i)
 			}
 		}
+	})
+}
+
+// TestRunPushPollsWhileTheStreamStaysRefused is SY-2's MUST against
+// the failure that makes it matter: a session advertising an event
+// source whose endpoint refuses every connection while the JMAP API
+// answers normally, which is the 401-on-EventSource case ADR-0005
+// revision 2 named as its own risk. Nothing but this pulls Changes
+// while push is down, so without it the account receives no mail for
+// the life of the process and the log holds one line about it.
+//
+// The control is the other half of the same rule: a stream that opens
+// and stays open must never poll, however quiet it is, because the
+// transport owns liveness there.
+func TestRunPushPollsWhileTheStreamStaysRefused(t *testing.T) {
+	// Long enough that a fallback pulling on PollInterval's cadence and
+	// one that never pulls at all cannot be confused.
+	const window = 30 * time.Minute
+
+	runPush := func(t *testing.T, listen func(context.Context) (<-chan backend.Notification, error)) int64 {
+		t.Helper()
+
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var calls atomic.Int64
+		var be backendtest.Fake
+		be.PushSource = &backendtest.FakePush{ListenFunc: listen}
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			calls.Add(1)
+			return backend.ChangeSet{}, nil
+		}
+
+		worker := NewWorker(accountID, &be, w, testConfig())
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			worker.RunPush(ctx, []backend.ObjectKind{backend.ObjectKindMessage})
+			close(done)
+		}()
+
+		time.Sleep(window)
+		synctest.Wait()
+		cancel()
+		<-done
+		return calls.Load()
+	}
+
+	t.Run("a refused stream falls back to polling", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			calls := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
+				return nil, backend.Failure{Class: uerr.ClassAuth, Cause: errors.New("event source: 401")}
+			})
+
+			// One pull per tick, less whatever the last, partly elapsed
+			// interval owed. A pull is only ever late, never skipped: a
+			// tick that lands while a Listen call is in flight waits out
+			// that call rather than being dropped.
+			ticks := int64(window / DefaultConfig().PollInterval)
+			if calls < ticks-2 || calls > ticks {
+				t.Errorf("Changes calls = %d over %v of refused streams, want about %d (one per %v)",
+					calls, window, ticks, DefaultConfig().PollInterval)
+			}
+		})
+	})
+
+	t.Run("an open stream never polls", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			calls := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
+				return make(chan backend.Notification), nil
+			})
+			if calls != 0 {
+				t.Errorf("Changes calls = %d over %v with the stream open and quiet, want none: the transport owns liveness while it holds one", calls, window)
+			}
+		})
 	})
 }
 
@@ -399,12 +474,45 @@ func TestReconnectReturnsPromptlyOnContextCanceled(t *testing.T) {
 		return nil, context.Canceled
 	}}
 
-	ch, err := reconnect(ctx, push, DefaultConfig(), &pushState{})
+	ch, err := reconnect(ctx, push, DefaultConfig(), &pushState{}, nil, nil)
 	if ch != nil {
 		t.Fatal("reconnect returned a non-nil channel alongside an error")
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("reconnect() error = %v, want context.Canceled", err)
+	}
+}
+
+// TestPushStateIgnoresContextCanceled is the listen half of
+// TestSyncFlushStateIgnoresContextCanceled, over the guard that keeps
+// a clean shutdown from reading as a connectivity failure. The
+// transport reports ctx ending as a Listen error like any other, and
+// reconnect hands every Listen error to pushState.fail, whose
+// classification defaults to ClassConnection: without the guard every
+// Ctrl-C writes an error-level line telling the user poplar could not
+// reach the server.
+func TestPushStateIgnoresContextCanceled(t *testing.T) {
+	buf := uerrtest.Capture(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	push := &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+		// The shape jmapsource reports a shutdown-time stop in: wrapped,
+		// and left unclassified because a cancellation is nobody's
+		// failure.
+		return nil, fmt.Errorf("jmap: push: %w", context.Canceled)
+	}}
+
+	state := &pushState{}
+	if _, err := reconnect(ctx, push, DefaultConfig(), state, nil, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("reconnect() error = %v, want context.Canceled", err)
+	}
+	if state.failing {
+		t.Error("the worker recorded a failure episode for its own shutdown")
+	}
+	if lines := uerrtest.Lines(t, buf); len(lines) != 0 {
+		t.Errorf("uerr lines = %v, want none: shutdown is not a server problem", lines)
 	}
 }
 
@@ -432,7 +540,7 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			_, _ = reconnect(ctx, push, testConfig(), &pushState{})
+			_, _ = reconnect(ctx, push, testConfig(), &pushState{}, nil, nil)
 			close(done)
 		}()
 
