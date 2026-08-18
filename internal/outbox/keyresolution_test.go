@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -96,6 +97,66 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 	}
 	if n := outboxCount(t, w, moveIDs[0]); n != 0 {
 		t.Errorf("move intent %d still queued", moveIDs[0])
+	}
+}
+
+// TestKeyResolutionAtProductionLimits is TestKeyResolutionAtDispatch
+// against the limit the backend poplar dials actually advertises. The
+// batch path is reachable only when the create and its dependent
+// moves are claimed in the same pass, so a claim bound derived from
+// MaxObjectsInSet rather than from a transaction budget disables the
+// whole create-with-back-reference machinery at Fastmail's 4096 while
+// every test at a 100-object limit goes on passing.
+func TestKeyResolutionAtProductionLimits(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+
+	const messages = 500
+	messageIDs := make([]int64, messages)
+	for i := range messageIDs {
+		messageIDs[i] = seedMessage(t, w, accountID, src, fmt.Sprintf("msg-%d", i))
+	}
+
+	var batches [][]backend.Mutation
+	be := newFakeBackend()
+	be.Caps.Limits.MaxObjectsInSet = fastmailMaxObjectsInSet
+	be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
+		batches = append(batches, muts)
+		created := map[string]string{}
+		for _, mut := range muts {
+			if mut.Op == backend.MutationCreate {
+				created[mut.CreationID] = "mbx-new-1"
+			}
+		}
+		return backend.BatchResult{Created: created, Failed: map[string]error{}}, nil
+	}
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+	_, moveIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, messageIDs, 0, createID, be, false, now)
+	if err != nil {
+		t.Fatalf("enqueue move: %v", err)
+	}
+	if len(moveIDs) != messages/moveChunkMessages {
+		t.Fatalf("chunks = %d, want %d", len(moveIDs), messages/moveChunkMessages)
+	}
+
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(batches) != 1 {
+		t.Fatalf("ApplyBatch calls = %d, want 1: the create and every chunk dispatch as one batch", len(batches))
+	}
+	if got := len(batches[0]); got != messages+1 {
+		t.Errorf("batch mutations = %d, want %d (the create plus every message)", got, messages+1)
+	}
+	if len(result.Delivered) != len(moveIDs)+1 {
+		t.Fatalf("Delivered = %d, want %d (the create and every chunk)", len(result.Delivered), len(moveIDs)+1)
 	}
 }
 

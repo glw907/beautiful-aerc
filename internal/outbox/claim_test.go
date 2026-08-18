@@ -104,58 +104,162 @@ func TestClaimIsTransactional(t *testing.T) {
 	}
 }
 
+// TestChunkSizeAtAdvertisedLimits holds the two bounds apart at the
+// limits real JMAP servers advertise. A server's MaxObjectsInSet
+// bounds one request; moveChunkMessages bounds one store transaction,
+// and it is the smaller of the two at every limit poplar has seen
+// reported, Fastmail's 4096 included.
+func TestChunkSizeAtAdvertisedLimits(t *testing.T) {
+	tests := []struct {
+		name          string
+		maxObjects    int
+		wantWireBatch int
+		wantChunk     int
+	}{
+		{"fastmail", 4096, 4096, moveChunkMessages},
+		{"stalwart", 1000, 1000, moveChunkMessages},
+		{"rfc 8620 sample session", 128, 128, 128},
+		{"unreported", 0, defaultWireBatch, defaultWireBatch},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			be := newFakeBackend()
+			be.Caps.Limits.MaxObjectsInSet = tt.maxObjects
+
+			if got := wireBatchLimit(be); got != tt.wantWireBatch {
+				t.Errorf("wireBatchLimit = %d, want %d", got, tt.wantWireBatch)
+			}
+			if got := moveChunkSize(be); got != tt.wantChunk {
+				t.Errorf("moveChunkSize = %d, want %d", got, tt.wantChunk)
+			}
+		})
+	}
+}
+
 // TestClaimIsBounded holds ADR-0003's admission ceiling over the claim
-// transaction. The claim resolves every referent on the writer's
-// single connection before any I/O, so an unbounded claim after a bulk
-// action's hold expires runs one point query per message in the queue
-// inside one interactive transaction, blocking every other writer for
-// as long as that takes. What one pass leaves behind the next takes.
+// transaction at the limit the production backend actually reports.
+// The claim resolves every referent on the writer's single connection
+// before any I/O, so an unbounded claim after a bulk action's hold
+// expires runs one point query per message in the queue inside one
+// interactive transaction, blocking every other writer for as long as
+// that takes. What one pass leaves behind the next takes.
 func TestClaimIsBounded(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
-	accountID := seedAccount(t, w)
+	t.Run("row budget", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
 
-	// claimMessageBudget divided by the backend's per-batch limit, the
-	// largest number of messages one claimed chunk can name.
-	const limit = 10
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = fastmailMaxObjectsInSet
+		be.MailSource.RenameMailboxFunc = func(_ context.Context, _, _ string) error { return nil }
 
-	be := newFakeBackend()
-	be.Caps.Limits.MaxObjectsInSet = 100
-	be.MailSource.RenameMailboxFunc = func(_ context.Context, _, _ string) error { return nil }
-
-	if got := claimLimit(be); got != limit {
-		t.Fatalf("claimLimit = %d, want %d", got, limit)
-	}
-
-	ids := make([]int64, 0, limit+1)
-	for i := range limit + 1 {
-		mailboxID := seedMailbox(t, w, accountID, fmt.Sprintf("Old %d", i), fmt.Sprintf("mbx-%d", i))
-		id, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "Family", time.Now())
-		if err != nil {
-			t.Fatalf("enqueue %d: %v", i, err)
+		ids := make([]int64, 0, claimRowBudget+1)
+		for i := range claimRowBudget + 1 {
+			mailboxID := seedMailbox(t, w, accountID, fmt.Sprintf("Old %d", i), fmt.Sprintf("mbx-%d", i))
+			id, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "Family", time.Now())
+			if err != nil {
+				t.Fatalf("enqueue %d: %v", i, err)
+			}
+			ids = append(ids, id)
 		}
-		ids = append(ids, id)
-	}
 
-	dispatcher := NewDispatcher(accountID, be, w)
-	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
-	if len(result.Delivered) != limit {
-		t.Fatalf("delivered = %d, want %d (the claim's bound)", len(result.Delivered), limit)
-	}
+		dispatcher := NewDispatcher(accountID, be, w)
+		result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
+		if err != nil {
+			t.Fatalf("dispatch: %v", err)
+		}
+		if len(result.Delivered) != claimRowBudget {
+			t.Fatalf("delivered = %d, want %d (the claim's row budget)", len(result.Delivered), claimRowBudget)
+		}
 
-	last := ids[len(ids)-1]
-	if state, attempts := outboxState(t, w, last); state != "queued" || attempts != 0 {
-		t.Errorf("intent %d state = %s attempts = %d, want queued/0: it was never claimed", last, state, attempts)
-	}
+		last := ids[len(ids)-1]
+		if state, attempts := outboxState(t, w, last); state != "queued" || attempts != 0 {
+			t.Errorf("intent %d state = %s attempts = %d, want queued/0: it was never claimed", last, state, attempts)
+		}
 
-	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
-		t.Fatalf("second dispatch: %v", err)
-	}
-	if n := outboxCount(t, w, last); n != 0 {
-		t.Errorf("intent %d survived the second pass, want the next pass to drain it", last)
-	}
+		if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
+			t.Fatalf("second dispatch: %v", err)
+		}
+		if n := outboxCount(t, w, last); n != 0 {
+			t.Errorf("intent %d survived the second pass, want the next pass to drain it", last)
+		}
+	})
+
+	t.Run("message budget", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
+
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = fastmailMaxObjectsInSet
+
+		// One chunk more than the message budget admits, so the bound
+		// under test is the messages rather than the rows.
+		total := claimMessageBudget + moveChunkSize(be)
+		messageIDs := make([]int64, total)
+		for i := range messageIDs {
+			messageIDs[i] = seedMessage(t, w, accountID, src, fmt.Sprintf("msg-%d", i))
+		}
+		_, intentIDs, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, messageIDs, dest, 0, be, false, time.Now())
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		wantChunks := total / moveChunkSize(be)
+		if len(intentIDs) != wantChunks {
+			t.Fatalf("chunks = %d, want %d", len(intentIDs), wantChunks)
+		}
+
+		claimed, err := NewDispatcher(accountID, be, w).claim(context.Background(), time.Now())
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		messages := 0
+		for _, c := range claimed {
+			messages += len(c.messageServerIDs)
+		}
+		if messages > claimMessageBudget {
+			t.Errorf("claim resolved %d messages, want at most %d", messages, claimMessageBudget)
+		}
+		if want := claimMessageBudget / moveChunkSize(be); len(claimed) != want {
+			t.Errorf("claimed rows = %d, want %d: the budget is spent on whole chunks", len(claimed), want)
+		}
+	})
+
+	t.Run("a chunk wider than the budget is still claimed", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
+		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
+
+		// The shape an older build wrote, chunked at the server's own
+		// batch limit rather than at a transaction budget. No pass may
+		// refuse it, or the queue behind it never moves.
+		oversized := claimMessageBudget + 1
+		messageIDs := make([]int64, oversized)
+		for i := range messageIDs {
+			messageIDs[i] = seedMessage(t, w, accountID, src, fmt.Sprintf("msg-%d", i))
+		}
+		now := time.Now()
+		var intentID int64
+		err := w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+			var txErr error
+			intentID, txErr = EnqueueMoveMessagesChunkTx(tx, accountID, messageIDs, dest, 0, newUndoGroup(), 0, now, now)
+			return txErr
+		})
+		if err != nil {
+			t.Fatalf("enqueue oversized chunk: %v", err)
+		}
+
+		be := newFakeBackend()
+		be.Caps.Limits.MaxObjectsInSet = fastmailMaxObjectsInSet
+		claimed, err := NewDispatcher(accountID, be, w).claim(context.Background(), now)
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if len(claimed) != 1 || claimed[0].id != intentID {
+			t.Fatalf("claimed = %d rows, want the one oversized chunk (intent %d)", len(claimed), intentID)
+		}
+	})
 }
 
 // TestUndoReportsNothingWhenItsTransactionRollsBack pins the other

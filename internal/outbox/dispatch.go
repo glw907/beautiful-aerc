@@ -171,7 +171,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, e
 	resolvedCreates := map[int64]string{}
 	stopped := false
 
-	groups := planBatches(claimedRows, chunkSize(d.backend))
+	groups := planBatches(claimedRows, wireBatchLimit(d.backend))
 
 	// A row a create's batch already decided has its action recorded
 	// here, so its own turn in the loop passes over it. One record of
@@ -599,14 +599,25 @@ func delivered(c claimed, move *MoveMessagesPayload) Delivered {
 // before the transaction commits: ADR-0006 revision 2's claim
 // discipline, queued to dispatching before any I/O, in the same
 // transaction undo's annihilation checks against.
+//
+// Rows are taken in id order until either budget is spent. The first
+// eligible row is always claimed, whatever it costs: a chunk wider
+// than the message budget (one an older build wrote at a server's own
+// batch limit) would otherwise never be claimed by any pass, and the
+// queue behind it would never move.
 func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error) {
 	var out []claimed
 	err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
-		rows, err := selectEligible(tx, d.accountID, now, claimLimit(d.backend))
+		rows, err := selectEligible(tx, d.accountID, now, claimRowBudget)
 		if err != nil {
 			return err
 		}
+		spent := 0
 		for _, r := range rows {
+			cost := claimCost(r)
+			if len(out) > 0 && spent+cost > claimMessageBudget {
+				return nil
+			}
 			if err := claimRow(tx, r.id); err != nil {
 				return err
 			}
@@ -614,6 +625,7 @@ func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error
 			if err != nil {
 				return err
 			}
+			spent += cost
 			out = append(out, c)
 		}
 		return nil
@@ -622,25 +634,41 @@ func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error
 }
 
 // claimMessageBudget and claimRowBudget bound what one claim
-// transaction costs. It runs one message point query per message a
-// claimed move chunk names, plus a fixed cost for each row it claims,
-// all on the writer's single connection. Measured against a migrated
-// store, a message lookup costs roughly 20 microseconds and a row
-// roughly 70, so both budgets are around 20ms of work, inside
-// ADR-0003's 50ms admission ceiling. Unbounded, a bulk move of 100k
-// messages becomes one claim resolving every message in the queue
-// while every other writer, interactive lane included, waits.
+// transaction costs, and they bound it in the two units the work is
+// actually charged in: one message point query per message the
+// claimed move chunks name, and a fixed cost per row claimed. Neither
+// is a server's MaxObjectsInSet, which bounds a request rather than a
+// transaction and is 4096 at the backend poplar dials.
+//
+// Measured against a migrated store on the development machine, a
+// claim spending the message budget took 13.3ms and one spending the
+// row budget 6.1ms, so a claim spending both is about 20ms of work,
+// well inside ADR-0003's 50ms admission ceiling and with room for a
+// machine several times slower. The message budget is three
+// moveChunkMessages chunks plus a create, so an offline
+// create-folder-then-move still reaches the server as one batch.
+// Unbounded, a bulk move of 100k messages becomes one claim resolving
+// every message in the queue while every other writer, interactive
+// lane included, waits.
 const (
-	claimMessageBudget = 1000
-	claimRowBudget     = 200
+	claimMessageBudget = 750
+	claimRowBudget     = 100
 )
 
-// claimLimit returns the most intents one claim transaction moves to
-// dispatching. A backend's per-batch object limit is also the largest
-// number of messages one claimed chunk can name, so it divides the
-// message budget. Whatever a pass leaves queued the next one takes.
-func claimLimit(be backend.Backend) int {
-	return max(1, min(claimMessageBudget/chunkSize(be), claimRowBudget))
+// claimCost is what claiming r spends of the message budget: the
+// number of message point queries resolveClaim runs for it. Only a
+// move names more than one message; every other kind resolves a
+// single mailbox. A payload that does not decode costs one, and
+// resolveClaim reports the decode failure itself moments later.
+func claimCost(r row) int {
+	if r.kind != KindMoveMessages {
+		return 1
+	}
+	var p MoveMessagesPayload
+	if err := json.Unmarshal(r.payload, &p); err != nil {
+		return 1
+	}
+	return len(p.MessageIDs)
 }
 
 // resolveClaim reads r's referents from the store, marking r

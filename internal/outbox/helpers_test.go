@@ -118,6 +118,14 @@ func occupyWriter(t *testing.T, w *store.Writer, d time.Duration) {
 	<-started
 }
 
+// fastmailMaxObjectsInSet is the per-request object limit the live
+// Fastmail session advertises, read off
+// https://api.fastmail.com/jmap/session. It is the figure a test at
+// production limits scripts the fake with, since it is the only one
+// poplar dials in production and it is 40 times the limit the rest of
+// this suite exercises.
+const fastmailMaxObjectsInSet = 4096
+
 // newFakeBackend returns a Fake backend with a 100-object
 // MaxObjectsInSet limit, ready for its Mail source's fields to be
 // scripted. A test wanting a different limit overrides Caps.Limits

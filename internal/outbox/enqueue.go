@@ -15,10 +15,23 @@ import (
 	"github.com/glw907/poplar/internal/uerr"
 )
 
-// defaultChunkSize is the chunk size EnqueueMoveMessagesBulk falls
-// back to when a backend reports no MaxObjectsInSet limit at all, so
-// a bulk move still chunks rather than becoming one unbounded batch.
-const defaultChunkSize = 50
+// defaultWireBatch is the per-request object limit assumed for a
+// backend that reports no MaxObjectsInSet at all, so a batch is
+// bounded even against a server that named no bound.
+const defaultWireBatch = 50
+
+// moveChunkMessages is the store-side bound on one bulk-move chunk,
+// and it is a transaction budget rather than a wire one: the chunk's
+// enqueue runs one prior-mailbox point query per message inside a
+// single interactive transaction, and its later claim runs one
+// message point query per message inside another. Measured against a
+// migrated store on the development machine, one 250-message chunk
+// cost 6.0ms to enqueue, an eighth of ADR-0003's 50ms admission
+// ceiling, which leaves room for a machine several times slower. A
+// server's MaxObjectsInSet is a bound on one request and says nothing
+// about either transaction: Fastmail reports 4096, at which one chunk
+// held the writer for 87ms.
+const moveChunkMessages = 250
 
 // newUndoGroup returns a fresh random undo_group id: every Enqueue*
 // call mints one, single intents and bulk chunks alike, so a caller
@@ -143,12 +156,12 @@ func EnqueueMoveMessagesChunkTx(tx *sql.Tx, accountID int64, messageIDs []int64,
 
 // EnqueueMoveMessagesBulk enqueues messageIDs' move to destMailboxID
 // (an existing mailbox row) or, offline, destRef (a queued
-// KindCreateMailbox intent's own id), split into chunks sized under
-// be's MaxObjectsInSet limit, sharing one undo_group and ordered by
-// chunk_seq (LT-3's bulk-action shape). Each chunk commits in its own
-// writer transaction, so one chunk's write (its prior-mailbox reads
-// plus its insert) stays within the writer's admission ceiling no
-// matter how many messages the whole action covers. undoable holds
+// KindCreateMailbox intent's own id), split into moveChunkSize
+// chunks, sharing one undo_group and ordered by chunk_seq (LT-3's
+// bulk-action shape). Each chunk commits in its own writer
+// transaction, so one chunk's write (its prior-mailbox reads plus its
+// insert) stays within the writer's admission ceiling no matter how
+// many messages the whole action covers. undoable holds
 // each chunk queued for UndoWindow before it becomes dispatch-eligible
 // (UX-9); a non-undoable move (a sync-driven or system action) is
 // eligible immediately.
@@ -170,7 +183,7 @@ func EnqueueMoveMessagesBulk(ctx context.Context, w *store.Writer, accountID int
 	holdUntil := now.Add(hold)
 	undoGroup = newUndoGroup()
 
-	for seq, chunk := range chunks(messageIDs, chunkSize(be)) {
+	for seq, chunk := range chunks(messageIDs, moveChunkSize(be)) {
 		var id int64
 		chunkErr := w.ApplyInteractive(ctx, func(tx *sql.Tx) error {
 			var txErr error
@@ -241,14 +254,21 @@ func idStrings(ids []int64) []string {
 	return out
 }
 
-// chunkSize returns the most messages one chunk carries: be's
-// MaxObjectsInSet limit, or defaultChunkSize when the backend reported
-// none.
-func chunkSize(be backend.Backend) int {
+// wireBatchLimit returns the most objects one request to be may
+// carry: its reported MaxObjectsInSet, or defaultWireBatch when it
+// reported none.
+func wireBatchLimit(be backend.Backend) int {
 	if n := be.Capabilities().Limits.MaxObjectsInSet; n > 0 {
 		return n
 	}
-	return defaultChunkSize
+	return defaultWireBatch
+}
+
+// moveChunkSize returns the most messages one bulk-move chunk
+// carries. A chunk is both one store transaction and one request, so
+// it is bounded by whichever of the two budgets is smaller.
+func moveChunkSize(be backend.Backend) int {
+	return min(moveChunkMessages, wireBatchLimit(be))
 }
 
 func chunks(ids []int64, size int) [][]int64 {
