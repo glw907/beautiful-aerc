@@ -28,11 +28,88 @@ it. Updating this STATUS is step one and is never optional.
    a load-bearing decision changed. The cursor lives here, not in
    memory.
 
-## Current state (2026-07-28)
+## Current state (2026-08-18)
 
-Phase 5 is in progress. Pass 1 (foundation) is built and at its
-gate; pass 1b (integration and hardening) is the next action,
-below.
+Phase 5 is in progress. Passes 1 (foundation) and 1b (integration
+and hardening) are done; pass 1c (measurement and the driver
+decision) is the next action, below.
+
+Pass 1b outcomes (2026-08-18), commits ef0c986 through 49b714f:
+- The split ratified at the gate (Geoff, 2026-08-18): 1b closed with
+  task 12's consolidation over tasks 1 through 8 and 11a; pass 1c
+  takes tasks 9, 10, and 11b. Geoff also ruled that Fable is the
+  default orchestrator for re-founding passes, with Opus resuming
+  for prosaic work.
+- What 1b delivered: the headless runner wiring all three engines
+  (task 1); the `poplar/jmap` library, standard-library-only with a
+  mechanical boundary gate (tasks 2-4); Stalwart conformance as a
+  second validation server, DV-01..12 green (task 5); the cutover to
+  `internal/backend/jmapsource` with live push at 340ms end to end
+  (tasks 6a/6b); typed models at the seam (7a); the create-replay
+  window closed by reconciling on the server's own alreadyExists
+  refusal (7b); the outbox disposition enum (8); and the race-green
+  gate with every sync transaction bounded (11a).
+- **QA-2's number remains non-comparable to its spike baseline.**
+  The perf seeder's bodies are a few hundred bytes against real
+  mail's ~9.2KB average. Task 9 (pass 1c) re-measures QA-2 and QA-3
+  at realistic body weight; this close does not claim the 25ms p95
+  gate against a representative corpus.
+- Task 12's consolidation: a 10-agent simplify workflow over the
+  pass diff produced 15 findings, 14 applied, 1 declined by ruling.
+  Its review loop caught a Critical of its own making: a leaked
+  pre-classified error flipping a live-path notFound create refusal
+  from retriable to terminal, now doubly pinned by revert-sensitive
+  tests, one in the real jmapsource fixture path.
+- Task 12's four-lens fan-out (a workflow: four Opus lenses, two
+  adversarial verifiers per major finding, 26 agents): 11
+  Critical/Important findings confirmed, zero refuted, 4 minors. The
+  fix wave (16 commits, three rounds) landed: the claim budget
+  redesigned after `claimLimit` degenerated to 1 at Fastmail's real
+  maxObjectsInSet=4096 (Critical: one intent per 5s pass, the
+  create-then-move batch path unreachable, 121.8ms claim
+  transactions); the ADR-0005/SY-2 poll fallback implemented for
+  refused and never-delivering push streams (it existed only for nil
+  transports; a persistently refused stream meant zero /changes
+  pulls for the life of the process); JT-14's non-advancing-state
+  guard added to poplar's own paging loops; the idle dispatcher poll
+  moved off the interactive lane (it throttled sync's bulk lane
+  ~18%); `*jmap.MethodError` and the whole >=400 band now classify
+  at the seam, with the episode dedup generalized to any standing
+  class; POPLAR_LOG=debug wired so 6b's debug lines can emit;
+  enqueue chunking and resolveDependentRefs re-bounded under
+  ADR-0003's 50ms ceiling (measured: claim 66.8->13.3ms, enqueue
+  87->6ms, dependent refs 73.8->10.9ms/page, ceiling detector quiet).
+- Routed by ruling, docs made truthful now: backend.ErrStateMismatch
+  (the transport never requests the guarantee, the dispatcher never
+  checks the sentinel) goes to pass 3, compose's ifInState design;
+  ADR-0005's self-echo suppression (inert; BatchResult carries no
+  post-dispatch state token) goes to pass 2, the first pass wiring
+  UI-driven mutations. **ADR-0005 revision 3 records the deferral
+  and awaits Geoff's ratification at this gate.** Also at the gate:
+  BACKLOG #65, the silent-stop reconnect rate (~4/s during an
+  open-and-die outage; the non-escalating floor is deliberately
+  pinned by test, so changing it is an owner ruling; the verified
+  fix shape is in the entry).
+- deadcode at close: 77 entries, all enumerated in the pass ledger
+  with justifications: test scaffolding (38), outbox enqueue and
+  undo surface awaiting the UI passes (~23), dav pass-5 stubs (3),
+  build-tag-only jmap conformance surface (10), the pass-2-routed
+  echo seam (2), read-pool UI surface (2). No wiring gaps; SetLevel
+  left the list when POPLAR_LOG wiring made it reachable.
+- Gates at the close commit: make check 0, make conformance 0,
+  -race 0, live Fastmail suites 0, all from captured exit codes.
+- Defect pattern carried forward: the pass's signature shape (a
+  value certified in isolation whose consumer computes something
+  absurd from it) reached roughly ten occurrences, and in the
+  close's own fix rounds every new defect again arrived in the
+  artifact written to close the previous finding, including one
+  false green-gate claim traced to reading a piped tail instead of
+  a captured exit code. Standing reviewer instruction: attack the
+  round's new guards first; gate evidence is a captured $?, never a
+  tail.
+- Flaky watch: internal/store's TestInteractivePreemption (15ms
+  wall-clock bound) stays owned by pass 1c task 9; 0/20 at the
+  close branch vs 3/20 at its base, pre-existing and load-sensitive.
 
 Pass 1 outcomes (2026-07-28), commits 28e2905 through a8fafb2:
 - 50 commits, 145 files, 20,699 insertions. `make check` verified
@@ -359,336 +436,61 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 5 pass 1b (integration and hardening)
+## Next: Phase 5 pass 1c (measurement and the driver decision)
 
-Pass 1 is at its gate. Pass 1b exists because pass 1's scope burst
-and because closing it on undemonstrable claims would be dishonest:
-its own stated outcome, a sync engine that converges against the
-live server, is proven by tests and not by the program. Pass 1b
-makes the foundation real, then hardens it. It discharges no new
-MUST from the spine; it discharges the ones pass 1 claimed.
+Pass 1c exists by the split ratified at 1b's gate. It carries three
+tasks from the 1b plan, unchanged in substance, in this order:
 
-Its gate is a demonstration, not a checklist: poplar runs against
-the live Fastmail account and Geoff watches the store fill.
+1. **Task 11b, the deferred-findings harvest** (independent, can run
+   first). The triage is done and waiting as a read-only document:
+   `.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/task-11b-harvest.md`,
+   135 rows grouped by cluster, 33 marked already closed by 1b's own
+   work. Its brief (task-11b-brief.md beside it) carries the scope
+   ruling: fix the named clusters plus the two conformance rows on
+   jmap/conformance_dv_test.go; convert every other row from a
+   recommendation into a decision with a reason. VERIFY each ALREADY
+   CLOSED claim rather than inheriting it.
+2. **Task 9, the perf seeder's body weight.** Realistic bodies
+   (~9.2KB average, real word distributions), then QA-2 and QA-3
+   re-measured against their spike baselines on a quiet machine with
+   no implementer dispatched. QA-5's storage-overhead bound needs the
+   same corpus. Owns the TestInteractivePreemption flake (rewrite
+   against transaction ordering, not elapsed time).
+3. **Task 10, the SQLite driver decision.** ncruces/go-sqlite3
+   against the incumbent modernc.org/sqlite, decided by the audit's
+   benchmark on task 9's corpus: whole-process peak RSS against
+   QA-5's 250MB with one writer and four readers, then the QA-6 kill
+   harness under both. Brief: task-10-brief.md in the sdd directory.
 
-**The plan is authored** (2026-07-28, a Fable planning sitting):
-`docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md`,
-twelve tasks. Execution runs in a fresh Opus 5 session per the
-plan-approval model boundary; the starter prompt below is the
-handoff. The scope list that follows remains the binding source
-the plan was authored from.
+1c closes with its own consolidation and the QA-2/QA-3 numbers in its
+outcomes block. The 1b sdd workspace
+(`.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/`)
+deliberately outlives 1b because these briefs and the ledger are 1c's
+inputs; 1c deletes it at its own close.
 
-**PASS SPLIT RECOMMENDED (orchestrator, 2026-07-30, awaiting Geoff's
-ruling at the gate).** Pass 1b was planned as twelve tasks and is now
-fifteen, having split task 6 into 6a/6b, task 7 into 7a/7b and task 11
-into 11a/11b. Every split was individually correct and each was made
-because that task had outgrown its written boundary; three of them is
-the pass asking to be split, which the orchestrator did not propose
-until Geoff asked whether the pass had run too long. Pass 1b also exists
-because pass 1 burst its scope, so this is the second consecutive pass
-to do it.
-
-**The recommendation: close pass 1b on what it promised and open pass
-1c.** 1b's stated job was to make the foundation real and then harden
-it, and **its gate condition is already met** — poplar runs against the
-live account, fills the store, and takes push at 340ms end to end.
-Tasks 1 through 8 and 11a discharge what pass 1 claimed.
-
-- **Pass 1b closes with**: task 12's consolidation over what has landed.
-- **Pass 1c takes**: task 9 (the perf seeder's body weight and the QA-2
-  and QA-3 re-measurement), task 10 (the SQLite driver decision, which
-  needs 9's corpus), and 11b (the 135-row carry-forward harvest and the
-  two conformance rows). Task 10 in particular is a research decision
-  about an inherited dependency rather than a discharge of anything pass
-  1 claimed, and it needs a quiet machine plus a benchmark plus the kill
-  harness under two drivers. That is a pass, not a task.
-
-Task 9 is the one item with a claim on 1b's honesty: this STATUS records
-that QA-2's number is not comparable to its spike baseline, and a
-non-comparable number is not a passing gate. Either it rides 1c and the
-gate says so plainly, or it is pulled back into 1b. **That is Geoff's
-call at the gate.**
-
-**Execution paused at a clean boundary (2026-07-30). Tasks 1 through 8
-and 11a are done, reviewed, and pushed** (master at `1423b36`, clean,
-everything pushed). **Remaining: 11b, 9, 10, 12.** The live progress
-ledger is
-`.superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md`
-and it is the recovery map: it records every task's outcome, every
-parked and deferred finding, the routing rulings, and the defect
-patterns worth carrying. **A resuming session reads that ledger
-first**, then resumes at task 8.
-
-Task 6a landed the cutover to `internal/backend/jmapsource` on
-`poplar/jmap` with go-jmap and oauth2 out of `go.mod`. **Task 6b gave
-the running program push**: live inbox latency against the Fastmail
-account is 340ms end to end, from a server-side mailbox create to the
-push-triggered `/changes` pull landing the row, where it was
-`PollInterval`'s 60 seconds. Under an induced five-drop outage the
-transport made six connections on its own jittered schedule and the
-sync engine made one `Listen` call, so exactly one layer backs off.
-
-**Task 7 was split by the same reasoning that split task 6.** 7a
-replaced the seam's `map[string]any` field maps with typed models, a
-sealed-interface payload rather than per-kind methods, since
-`ObjectKind` also keys the sync-state table, the watermark, the echo
-tracker, the push loop and resync. 7b closed the create-replay window
-that duplicated a mailbox, by reconciling on the server's own
-`alreadyExists` refusal: no schema change, no new outbox state, and no
-marker distinguishing a replay from a first attempt, which is the
-obstacle that made the fix impossible in pass 1.
-
-**Two rulings from 7b bind later work.** The `landed` flag is gone, so
-**task 8's disposition enum has three members, not four**, and its
-brief carries the amendment plus the replacement acceptance criterion.
-And `internal/store`'s `TestIncrementalVacuumReclaimsFreelist` and
-`TestInteractivePreemption` fail under `-race` at master while passing
-3/3 without it, so **CI's race job is red and has been since task 6a**,
-independent of this pass; both are routed to task 11.
-
-- **Task 1, the headless runner: complete.** `cmd/poplar` starts the
-  JMAP session, sync worker, and dispatcher; clean shutdown ordering
-  is pinned; poplar now starts and stays up with no network.
-  `deadcode` fell from 203 unreachable functions to 61, each
-  remaining one enumerated and justified. Five fix rounds.
-- **Tasks 2, 3 and 4: the `jmap` library is complete** at
-  `poplar/jmap`. It carries the data model, transport, and
-  EventSource push client, is standard-library-only, imports no
-  poplar package, and has a `make jmap-boundary` gate enforcing that
-  mechanically. ADR-0018
-  (push stream resumption) is committed. The adopt case held: the
-  seven go-jmap defect fixes came to ~23 lines against 1,592 adopted,
-  1.4% against the plan's 30% abort threshold, with no signature
-  changes.
-- **Task 5, Stalwart conformance: complete.** The suite runs behind
-  its own build tag, DV-01 through DV-12 green against a freshly
-  provisioned Stalwart v0.16.15, and `make conformance` sits outside
-  `make check` so the default gate still needs no container runtime.
-  Three fix rounds and five review passes. The first review found a
-  Tier-1 item skipped on an impossibility claim that a probe
-  disproved, the trim ledger never reaching the repo, and the first
-  build-tagged files in `jmap/` sitting outside every gate.
-- **Two product bugs surfaced by the second server, both fixed.**
-  Stalwart advertises a push `interval` of 30000 while pinging every
-  30 seconds, sending milliseconds where RFC 8620 section 7.3 says
-  seconds; unclamped, poplar's stall window became 16h40m and a dead
-  push connection would never be noticed. And poplar refused to move
-  mail into any mailbox whose id is all digits, which Stalwart
-  generates, because a numeric pointer token was read as an array
-  index against an object. RFC 6901 section 4 reads a token as an
-  index only when the referenced value is an array.
-
-**Both owner-directed artifacts (2026-07-29) have landed:**
-- **The trim ledger** is `jmap/TRIMMED.md`, referenced from
-  `jmap/doc.go`: one row per method or package deliberately omitted
-  from `poplar/jmap`, with why it is out and what would bring it
-  back. The trim boundary leaked three times before it was tracked.
-- **The RFC obligations map** is
-  `docs/poplar/research/2026-07-28-jmap-rfc-obligations-map.md`,
-  client-binding normative obligations across RFC 8620, 8621, 9219,
-  6901 and the WHATWG SSE section, each mapped to a proving test, a
-  `GAP`, or an `N/A`. **Ruling: it is a standing input, not a work
-  item.** Each pass closes the MUST gaps for the surface that pass
-  ships. Pass 2 takes the read path, pass 3 the eleven `Email/set`
-  create constraints, and pass 5 the calendar rows. There is no
-  gap-closing task and no gap-closing pass. It also carries the
-  server-set-property survey that pass 3 needs when it designs
-  compose, and the interop note that naming a capability a server
-  lacks gets the whole request rejected rather than the one call.
-
-**Task 6 is split (orchestrator ruling, 2026-07-29).** It had grown
-from five deliverables to nine, and the four this pass routed to it
-are push-semantics work that contradicts its own written boundary,
-"no behavior changes to sync or outbox in this task." **6a is the
-mechanical cutover** and keeps that boundary, since its whole safety
-argument is that nothing changed and the existing adapter suite plus
-a live run is a sound net for exactly that claim. **6b is the
-push-semantics change**: the reconnect-ownership collapse,
-flush-on-connect, JT-21's trigger half, the stall-detector disable,
-and the ping-clamp log seam. Briefs for both are written in the sdd
-directory. JT-13/14/15's fixture assertions route to task 11, whose
-`/changes` paging consumer in `internal/sync` is what they protect.
-
-**Environment correction for anyone running the conformance suite:**
-Docker is not installed on this workstation. The suite runs on
-**podman** (rootless, no daemon, no sudo), and the Makefile prefers
-podman with a `CONTAINER` override. The Stalwart image was renamed
-upstream: `stalwartlabs/mail-server` stops at v0.11.8, and v0.16.15
-lives at `docker.io/stalwartlabs/stalwart:v0.16.15`.
-
-Scope, in dependency order:
-
-1. **The headless runner.** `cmd/poplar` constructs the JMAP source
-   from the token, starts the sync worker and the outbox dispatcher,
-   and runs until interrupted. No UI; that is pass 2. This is what
-   makes `deadcode` a meaningful signal, and `deadcode` is promoted
-   from the nightly CI job into the pass-end ritual with it. Carry
-   the engine hazard the dispatcher review recorded: the orphan
-   sweep is startup-only, so an engine loop that recovers a panic
-   and keeps running must re-sweep or exit.
-2. **The `jmap` package**, written correctly rather than adopted
-   mechanically. go-jmap's RFC-verified types and MIT tests are the
-   starting material and the inventory; poplar writes the transport
-   itself, because the library's `Listen()` takes no context, never
-   reconnects, ignores the SSE `Last-Event-ID` resume header, caps
-   server lines at 64KB, and drops `Close()`'s error. Package
-   `jmap` at `poplar/jmap`, non-internal so another project can use
-   it, its own repo when it earns one. poplar's adapter renames to
-   `internal/backend/jmapsource`. The import-boundary analyzer gains
-   a carve-out: only that adapter may import `jmap`. MIT attribution
-   (Max Mazurov 2019, Tim Culverhouse 2022) survives the rewrite.
-   Acceptance criteria are the 46 numbered items in
-   `docs/poplar/research/2026-07-28-jmap-test-inventory.md`, ordered
-   by data-loss risk. `Last-Event-ID` resumption needs its own ADR:
-   RFC 8620 section 7.3 states it in prose with no worked example,
-   Apache James does not implement it, and go-jmap never reads an
-   SSE `id:` field, so poplar sets the policy unilaterally.
-   Abort condition: if any of the seven known defect fixes changes a
-   signature that ripples into poplar's callers, stop and
-   re-present; the adopt case rests on the defects being local.
-3. **Second-server validation, before the library ships.** Stalwart
-   v0.16.15 in Docker, session at `/.well-known/jmap`, behind a
-   `conformance` build tag beside the existing `live` suite. It is
-   the right control because Fastmail's `sessionState` shows a
-   Cyrus-derived backend, so Cyrus would have been testing one
-   lineage against itself. The 12 divergence tests are in the same
-   document.
-4. **Typed models at the backend seam**, replacing `Record.Fields
-   map[string]any`. Types live in `internal/backend`; `internal/sync`
-   translates them into the store's upsert structs. Adoption comes
-   first so the wire/domain boundary is placed against poplar's own
-   code.
-5. **The outbox dispatcher design review**, already done and
-   specified in
-   `.superpowers/sdd/2026-07-27-pass-1-foundation/` and the saved
-   review: replace `failed`/`final`/`landed` with one `disposition`
-   enum (delivered, retry, terminal, landed) end to end, which
-   closes the currently unenforced `landed implies final` invariant
-   by construction; delete the best-effort fallback and have the
-   recovery's requeue write only the non-growing columns, dropping
-   `failure_detail`; keep the detached-context recovery, which is
-   essential. Six variants of a stranded intent came out of this one
-   path, and the last three came from fixing the previous ones.
-6. **The perf seeder**, given realistic body weight, with QA-2 and
-   QA-3 re-measured. QA-5's storage-overhead bound cannot be
-   exercised by bodies of a few hundred bytes either.
-7. **The SQLite driver decision.** The audit ranks
-   `ncruces/go-sqlite3` above the incumbent `modernc.org/sqlite`,
-   whose verification apparatus was dismantled rather than merely
-   quiet: `TestTclTest` deleted, `internal/mptest` gone, no CI
-   configuration, last published Tcl pass rate June 2023 against
-   SQLite 3.42, and no `fts5*.test` file ever vendored. ADR-0001's
-   disqualifier for ncruces (a Windows WAL corruption bug) was fixed
-   2026-07-06 and never affected Unix. The decision needs the
-   benchmark the audit designed, run on a quiet machine: whole-
-   process peak RSS against QA-5's 250MB with one writer and four
-   readers at realistic body sizes, since latency has an order of
-   magnitude of headroom on both. Then the QA-6 kill harness under
-   both.
-8. **The seven Major findings** from the pass-end fan-out that were
-   not fixed in pass 1, including the EXPLAIN goldens that pin
-   queries nobody runs and `fullResync` holding one unbounded
-   transaction against ADR-0003's 50ms cap.
-
-Remaining inherited dependencies still to re-derive, per the
-owner's rule that nothing the archived client picked is assumed
-correct: the MIME stack (`go-message` plus `enmime`, and why both),
-the render stack (`goldmark`, `chroma`, `glamour`, which matters
-most since the rendering bet is the differentiator), `go-webdav`
-before pass 5 leans on it, and `go-keyring`, which pass 1 does not
-yet use. bubbletea is settled by owner intent (the vision names a
-bubbletea showcase as a goal) rather than inherited by default.
-
-Starter prompt (paste after /clear in ~/Projects/poplar, in an
-Opus 5 session):
+Starter prompt (paste after /clear in ~/Projects/poplar, in a Fable
+session per the 2026-08-18 orchestration ruling):
 
 ```
-Resume executing the poplar pass 1b plan at
-docs/superpowers/plans/2026-07-28-pass-1b-integration-hardening.md
-via superpowers:subagent-driven-development. Tasks 1 through 8 and 11a
-are complete, reviewed and pushed (master 1423b36, clean). Remaining:
-11b, 9, 10, 12.
+Run poplar pass 1c: measurement and the SQLite driver decision. Read
+docs/superpowers/specs/poplar-refounding-STATUS.md's pass 1c section
+first, then author the pass 1c plan from the three carried task briefs
+under .superpowers/sdd/2026-07-28-pass-1b-integration-hardening/
+(task-9-brief.md, task-10-brief.md, task-11b-brief.md plus
+task-11b-harvest.md, with progress.md as the pass 1b record) via
+superpowers:writing-plans, then execute via
+superpowers:subagent-driven-development.
 
-FIRST ACTION: put the pass-split recommendation to Geoff before
-dispatching anything. It is written out in the pass 1b section of
-docs/superpowers/specs/poplar-refounding-STATUS.md. The short version:
-twelve planned tasks became fifteen through three task splits, 1b's gate
-condition is already met (live push at 340ms, store filling), and the
-recommendation is that 1b closes with task 12's consolidation while pass
-1c takes tasks 9, 10 and 11b. Task 9 is the one item with a claim on
-1b's honesty, because a QA-2 number that is not comparable to its
-baseline is not a passing gate. Geoff rules; do not assume the split.
-
-Read .superpowers/sdd/2026-07-28-pass-1b-integration-hardening/progress.md
-FIRST, starting with the "READ THIS FIRST" block at the top. It is the
-recovery map: every task outcome, every parked and deferred finding, the
-routing rulings that bind later tasks, and the defect patterns this pass
-has produced. Then read the plan, and the pass 1b scope in
-docs/superpowers/specs/poplar-refounding-STATUS.md.
-
-Task briefs live beside the ledger. Task 8's brief carries an ORCHESTRATOR
-AMENDMENT from task 7b that changes its outcome and one of its acceptance
-criteria: the disposition enum has three members, not four, because 7b
-deleted the landed flag once closing the create-replay window left no
-dispatch outcome unsafe to replay. Read that amendment before dispatching.
-
-Order, whichever way the split ruling goes: 11b is independent and its
-input is already written. Tasks 9 and 10 must run on a quiet machine with
-NO implementer dispatched, and 10 needs 9's corpus. 12 closes whatever
-pass it ends up in.
-
-11b's triage is done and waiting as a read-only document,
-.superpowers/.../task-11b-harvest.md: all 135 deferred lines from pass 1's
-ledger, grouped by cluster, each with the file, whether the symbol still
-exists at HEAD, and a disposition. 33 are ALREADY CLOSED by pass 1b's own
-work. Its brief (task-11b-brief.md) carries the scope ruling: fix the six
-clusters task 11's brief names by hand plus the conformance cluster, and
-convert every other row from a recommendation into a decision with a
-reason rather than fixing 79 findings. VERIFY each ALREADY CLOSED claim
-rather than inheriting it; this pass had a finding wrongly declared closed
-once, and the pre-judgment suppressed the check that would have caught it.
-
-The two conformance items, both on jmap/conformance_dv_test.go: DV-11
-asserts existingId on alreadyExists citing "RFC 8620 section 5.3", but
-that error is defined in section 5.4 and Fastmail omits the field while
-Stalwart sends it, so the test passes only because make conformance runs
-Stalwart; and a DV row is owed for the sibling-uniqueness normalization
-divergence (Stalwart case-insensitive and whitespace-trimming, Fastmail
-byte-exact).
-
-CI's race job is green as of b15317f, the first time since task 6a. The
-one remaining red-gate risk in internal/store is TestInteractivePreemption,
-flaky at ~1/25 to 1/60 isolated at every tree tested, load-sensitive, and
-owned by task 9 with the perf envelope.
-
-Binding research is under docs/poplar/research/; requirements are at
-revision 4 and ADR revision blocks override ADR bodies. The RFC
-obligations map is a standing input, not a work item.
-
-One poplar-implementer per task; poplar-reviewer and
-poplar-go-reviewer in parallel on each diff; the main loop reviews
-each diff and confirms `make check` between dispatches. Every
-reviewer verification proves revert-sensitivity by experiment, not
-by reading. Tasks 9 and 10's measurements run on a quiet machine
-with no concurrent implementer dispatched.
-
-Expect the fix round, not the clean first pass. Across tasks 1
-through 5 every fix round but the last introduced the next defect,
-usually in the guard written to close the previous finding, so tell
-each reviewer to attack the round's new guards before anything
-else. Comment defects outproduced logic defects in task 5: a
-justification comment must be literally true clause by clause.
-
-Dispatch hygiene, all learned the expensive way: tell every agent
-never to set run_in_background on a Bash call, and to give every
-scratch file a unique name. Verify any reported gate result the
-local gate does not itself run, especially -race. Measuring lint
-findings needs --max-same-issues=0, since the default truncates at
-three and makes a load-bearing suppression look dead.
-
-Geoff is at the pass gate only, and that gate is a demonstration:
-poplar running against the live Fastmail account with the store
-filling.
+Constraints that bind: tasks 9 and 10 run on a quiet machine with NO
+implementer dispatched; 10 needs 9's corpus; 11b is independent and
+runs first. One poplar-implementer per task; poplar-reviewer and
+poplar-go-reviewer in parallel on each diff; reviewers prove
+revert-sensitivity by experiment and attack each round's new guards
+first. Verify any reported gate result from captured exit codes, never
+a tail. Never let an agent set run_in_background; unique scratch
+names. Requirements are at revision 4; ADR revision blocks override
+ADR bodies; the RFC obligations map is a standing input, not a work
+item. Geoff is at the pass gate only.
 ```
 
 ## Superseded: Phase 1, the rendering bet
@@ -749,4 +551,5 @@ Geoff reads the verdict and sample renders and rules on the bet.
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
 [done] -> 2 Vision [done] -> 3 Requirements [done] ->
 4 Technical design [done] -> 5 Build machine + build [in progress:
-pass 1 foundation done, pass 1b integration and hardening next].
+passes 1 foundation and 1b integration and hardening done, pass 1c
+measurement and driver decision next].
