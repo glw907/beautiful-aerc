@@ -139,7 +139,7 @@ type Classified interface {
 // does. Precedence is outermost-wins: err itself is checked before
 // anything its own Unwrap reaches, so a Classified error nested
 // beneath another Classified error never overrides the one closer to
-// err. A caller that needs the matched value itself, not just the
+// err. A caller that needs the matched value itself, beyond the
 // Class/Cause pair ClassifyErr returns, calls Peel once and derives
 // everything it needs from that one match, rather than walking the
 // tree twice and risking two different answers.

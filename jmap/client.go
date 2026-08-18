@@ -184,8 +184,8 @@ func (c *Client) Upload(ctx context.Context, account ID, contentType string, blo
 }
 
 // doDecode runs req and decodes a successful response's body into
-// out. FetchSession, Do, and Upload all share it. what identifies out
-// in the message a bad decode's error carries. That message formats
+// out. FetchSession, Do, and Upload all share it. The what argument
+// names out in the message a bad decode's error carries. That message formats
 // with %v, not %w: a decode failure has nothing under it worth a
 // caller unwrapping to. Download does not use this: it hands the
 // caller the raw body instead of decoding one.
