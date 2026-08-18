@@ -39,7 +39,26 @@ type flags struct {
 	startupTrace bool
 }
 
+// debugLogEnv opts a session into debug-level logging, the variable
+// the archived client used for the same thing. It is the only route to
+// it in pass 1b: the log level belongs in config (ER-2), and the
+// config surface arrives with the UI passes. Without it uerr's level
+// stays at Info for the life of the process and every slog.Debug call
+// in the tree is filtered before it reaches the file, which makes a
+// debug line an operator cannot reach the same as one nobody wrote.
+const debugLogEnv = "POPLAR_LOG"
+
+// applyLogLevel raises uerr's level when value asks for debug,
+// matching case-insensitively so an operator who typed the variable in
+// capitals is not answered with silence.
+func applyLogLevel(value string) {
+	if strings.EqualFold(value, "debug") {
+		uerr.SetLevel(slog.LevelDebug)
+	}
+}
+
 func main() {
+	applyLogLevel(os.Getenv(debugLogEnv))
 	uerr.SetDefault()
 
 	var f flags

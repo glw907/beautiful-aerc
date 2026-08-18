@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -717,6 +719,56 @@ func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
 			}
 			if lines[0]["class"] != "auth" {
 				t.Errorf("class = %v, want %q", lines[0]["class"], "auth")
+			}
+		})
+	}
+}
+
+// TestApplyLogLevelOpensTheDebugLines covers the one thing standing
+// between an operator and every slog.Debug call in the tree. uerr's
+// handler is built at Info, and this is its only lever in pass 1b, so
+// without the wiring the debug lines the engines write are filtered
+// before they reach the file, and a comment claiming one of them is
+// the operator's only record of some event is simply false.
+func TestApplyLogLevelOpensTheDebugLines(t *testing.T) {
+	tests := []struct {
+		name      string
+		env       string
+		wantDebug bool
+	}{
+		{"unset", "", false},
+		{"debug", "debug", true},
+		{"debug in capitals", "DEBUG", true},
+		{"some other level", "info", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture restores uerr's level as well as its destination,
+			// so a case that raised the level leaves none behind.
+			logged := uerrtest.Capture(t)
+			previous := slog.Default()
+			t.Cleanup(func() { slog.SetDefault(previous) })
+
+			t.Setenv(debugLogEnv, tt.env)
+			applyLogLevel(os.Getenv(debugLogEnv))
+			uerr.SetDefault()
+
+			// The line internal/backend/jmapsource writes when a push
+			// connection drops, verbatim.
+			slog.Debug("jmap: push connection lost, the transport is reconnecting")
+			slog.Info("poplar: store ready")
+
+			lines := uerrtest.Lines(t, logged)
+			var levels []any
+			for _, line := range lines {
+				levels = append(levels, line["level"])
+			}
+			want := []any{"INFO"}
+			if tt.wantDebug {
+				want = []any{"DEBUG", "INFO"}
+			}
+			if !slices.Equal(levels, want) {
+				t.Errorf("%s=%q logged levels %v, want %v", debugLogEnv, tt.env, levels, want)
 			}
 		})
 	}
