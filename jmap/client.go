@@ -184,11 +184,11 @@ func (c *Client) Upload(ctx context.Context, account ID, contentType string, blo
 }
 
 // doDecode runs req and decodes a successful response's body into
-// out. FetchSession, Do, and Upload all share it; what is the name
-// out gets in the message a bad decode's error carries. That message
-// formats with %v, not %w: a decode failure has nothing under it
-// worth a caller unwrapping to. Download does not use this: it hands
-// the caller the raw body instead of decoding one.
+// out. FetchSession, Do, and Upload all share it. what identifies out
+// in the message a bad decode's error carries. That message formats
+// with %v, not %w: a decode failure has nothing under it worth a
+// caller unwrapping to. Download does not use this: it hands the
+// caller the raw body instead of decoding one.
 func (c *Client) doDecode(req *http.Request, out any, what string) error {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

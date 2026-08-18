@@ -139,10 +139,9 @@ type Classified interface {
 // does. Precedence is outermost-wins: err itself is checked before
 // anything its own Unwrap reaches, so a Classified error nested
 // beneath another Classified error never overrides the one closer to
-// err. A caller that needs both the Class/Cause pair and the matched
-// value itself (classifyFailure's detail string, which reads
-// differently off a uerr.Error than off a backend.Failure) calls Peel
-// once and derives both from the same match, rather than walking the
+// err. A caller that needs the matched value itself, not just the
+// Class/Cause pair ClassifyErr returns, calls Peel once and derives
+// everything it needs from that one match, rather than walking the
 // tree twice and risking two different answers.
 func Peel(err error) (Classified, bool) {
 	return errors.AsType[Classified](err)
@@ -150,7 +149,8 @@ func Peel(err error) (Classified, bool) {
 
 // ClassifyErr reports the Class/Cause pair the first Classified error
 // in err's tree carries, or fallback and err itself when nothing in
-// the tree implements Classified.
+// the tree implements Classified. Precedence is outermost-wins; see
+// Peel.
 func ClassifyErr(err error, fallback Class) (Class, error) {
 	if c, ok := Peel(err); ok {
 		return c.ClassCause()

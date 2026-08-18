@@ -14,9 +14,9 @@ import (
 // Classified error closest to err itself wins, whatever a Classified
 // error nested deeper beneath it carries. No current producer builds
 // a tree with two Classified errors, but both nestings below are
-// constructible, and the walk order errors.AsType documents —
-// depth-first from err itself, not from the leaves up — means the
-// outer one is always the one ClassifyErr reports.
+// constructible, and the walk order errors.AsType documents,
+// depth-first from err itself rather than from the leaves up, means
+// the outer one is always the one ClassifyErr reports.
 func TestClassifyErrPrecedence(t *testing.T) {
 	uerrtest.Capture(t)
 

@@ -499,6 +499,17 @@ func TestCreateMailboxNameConflict(t *testing.T) {
 // an ordinary rejection. Wrapping it in backend.ErrMailboxNameExists
 // would send the outbox's reconcile looking for a mailbox that was
 // never the reason the create failed.
+//
+// It also pins CreateMailbox's error against carrying a
+// uerr.Classified: classifyMailboxCreateFailure returns a
+// backend.Failure, which is uerr.Classified, and CreateMailbox must
+// unwrap to its Cause rather than returning that value itself.
+// invalidProperties classifies to ClassServer internally
+// (jmapSetErrorClass has no finer entry for it), so a leak here would
+// not even change the outbox's retry decision the way a finer class
+// like notFound's does; the assertion still belongs on every refusal
+// CreateMailbox returns, not only the one whose leak is externally
+// visible.
 func TestCreateMailboxOrdinaryRejection(t *testing.T) {
 	session, _ := newTestSession(t, readFixture(t, "mailbox_create_rejected.json"))
 
@@ -508,6 +519,9 @@ func TestCreateMailboxOrdinaryRejection(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalidProperties") {
 		t.Errorf("CreateMailbox error = %q, want it naming what the server said", err)
+	}
+	if c, ok := errors.AsType[uerr.Classified](err); ok {
+		t.Errorf("CreateMailbox error carries a Classified: %#v", c)
 	}
 }
 

@@ -102,15 +102,16 @@ func TestFailureClasses(t *testing.T) {
 
 // TestCreateMailboxNotFoundRefusalClassifiesAsServer pins the exact
 // shape jmapsource's CreateMailbox now returns for a create the
-// server refused with a SetError type it does not name a finer class
-// for ("notFound", among them): a plain wrapped string, never a
-// backend.Failure. classifyFailure must not read a class off it by
-// any means but uerr.Peel's Classified walk, which finds nothing here
-// and falls back to ClassServer; a class of ClassNotFound would make
-// the intent terminal, and would be wrong, since nothing in
-// dispatchCreateMailbox's own SetError decoding fed classifyFailure a
-// Classified value to have found in the first place. This is the
-// shape TestFailureClasses does not cover: every case there scripts
+// server refused with notFound: a plain wrapped string, never a
+// backend.Failure. jmapsource classifies notFound to uerr.ClassNotFound
+// internally (jmapSetErrorClass), but CreateMailbox deliberately drops
+// that class before the error reaches this caller, unwrapping to its
+// Cause alone, so a create refusal stays retriable server-side rather
+// than the terminal disposition a leaked backend.Failure would force.
+// classifyFailure must not recover a class here by any means but
+// uerr.Peel's Classified walk, which finds nothing in this plain
+// string and falls back to ClassServer. This is the shape
+// TestFailureClasses does not cover: every case there scripts
 // ApplyBatchFunc to hand classifyFailure a backend.Failure directly,
 // never a create refusal's plain wrapped string.
 func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
@@ -119,11 +120,11 @@ func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
 
 	be := newFakeBackend()
 	be.MailSource.CreateMailboxFunc = func(context.Context, string, string) (string, error) {
-		// Mirrors what CreateMailbox now returns for a SetError type
-		// jmapSetErrorClass has no entry for other than
-		// mailboxNameConflict: the classification is unwrapped down
-		// to its Cause before this reaches the caller, so nothing
-		// Classified is in the tree.
+		// Mirrors what CreateMailbox now returns for a notFound
+		// refusal: it discards the uerr.ClassNotFound
+		// classifyMailboxCreateFailure computes internally and
+		// returns only that classification's Cause, so nothing
+		// Classified is in this string.
 		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", errors.New("notFound"))
 	}
 
