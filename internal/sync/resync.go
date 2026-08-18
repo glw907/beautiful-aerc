@@ -32,6 +32,9 @@ func (w *Worker) fullResync(ctx context.Context, kind backend.ObjectKind) error 
 		if err != nil {
 			return err
 		}
+		if err := checkStateAdvanced(kind, token, cs); err != nil {
+			return err
+		}
 		for _, rec := range cs.Created {
 			keep[rec.ID] = true
 		}

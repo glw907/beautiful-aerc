@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/glw907/poplar/internal/backend/backendtest"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // TestSyncKindCommitsOneChunkPerTransaction asserts a changes-since
@@ -100,6 +102,108 @@ func TestSyncKindSavesTheWatermarkAfterThePage(t *testing.T) {
 	if got := countRows(t, w, "message", accountID); got != 101 {
 		t.Errorf("message rows = %d, want 101", got)
 	}
+}
+
+// TestPagingStopsOnANonAdvancingState is JT-14 against poplar's own
+// consumer of the paging contract rather than against a server. A
+// page claiming more changes carries the token the next request will
+// send, so a server answering with the token it was just given puts
+// the loop in a tight round trip re-fetching and re-applying that same
+// page, writing a watermark every turn, for as long as the process
+// lives. Both loops that page Changes are covered: the ordinary cycle
+// and the resync.
+func TestPagingStopsOnANonAdvancingState(t *testing.T) {
+	// A page of one, so what the assertions below count is round trips
+	// rather than records.
+	page := []backend.Record{{ID: "srv-1", Fields: backend.MessageFields{Subject: "changed"}}}
+
+	// The malicious fixture's own escape hatch: a guard that regressed
+	// would otherwise hang the suite rather than fail it.
+	const runaway = 20
+	stuck := func(calls *int) func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+		return func(_ context.Context, _ backend.ObjectKind, token string, _ int) (backend.ChangeSet, error) {
+			*calls++
+			if *calls > runaway {
+				return backend.ChangeSet{}, fmt.Errorf("the paging loop made %d calls with token %q", *calls, token)
+			}
+			return backend.ChangeSet{NewToken: "stuck", HasMore: true, Created: page}, nil
+		}
+	}
+
+	t.Run("three pages drive the loop to completion", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		calls := 0
+		be.MailSource.ChangesFunc = func(_ context.Context, _ backend.ObjectKind, _ string, _ int) (backend.ChangeSet, error) {
+			calls++
+			return backend.ChangeSet{
+				NewToken: fmt.Sprintf("page-%d", calls),
+				HasMore:  calls < 3,
+				Created:  []backend.Record{{ID: fmt.Sprintf("srv-%d", calls), Fields: backend.MessageFields{Subject: "changed"}}},
+			}, nil
+		}
+
+		worker := NewWorker(accountID, &be, w, testConfig())
+		if err := worker.SyncKind(context.Background(), backend.ObjectKindMessage); err != nil {
+			t.Fatalf("SyncKind over three advancing pages: %v", err)
+		}
+		if calls != 3 {
+			t.Errorf("Changes calls = %d, want 3: the loop stopped short of the last page", calls)
+		}
+		if got := countRows(t, w, "message", accountID); got != 3 {
+			t.Errorf("message rows = %d, want 3 (one per page)", got)
+		}
+	})
+
+	t.Run("the same token forever is terminal for the cycle", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		calls := 0
+		be.MailSource.ChangesFunc = stuck(&calls)
+
+		worker := NewWorker(accountID, &be, w, testConfig())
+		err := worker.SyncKind(context.Background(), backend.ObjectKindMessage)
+		if !errors.Is(err, errStateNotAdvancing) {
+			t.Fatalf("SyncKind() error = %v, want it to report the non-advancing state", err)
+		}
+		if class, _ := classifyErr(err); class != uerr.ClassServer {
+			t.Errorf("class = %v, want ClassServer: the server is the one contradicting itself", class)
+		}
+		// The first page's token is what the second call would send.
+		if calls != 2 {
+			t.Errorf("Changes calls = %d, want 2: the repeat is what proves the token did not move", calls)
+		}
+	})
+
+	t.Run("a resync's paging loop too", func(t *testing.T) {
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		calls := 0
+		next := stuck(&calls)
+		be.MailSource.ChangesFunc = func(ctx context.Context, kind backend.ObjectKind, token string, limit int) (backend.ChangeSet, error) {
+			// The first call sends the cycle down the resync path, which
+			// starts its own paging loop from an empty token.
+			if calls == 0 {
+				calls++
+				return backend.ChangeSet{}, backend.ErrStateReset
+			}
+			return next(ctx, kind, token, limit)
+		}
+
+		worker := NewWorker(accountID, &be, w, testConfig())
+		if err := worker.SyncKind(context.Background(), backend.ObjectKindMessage); !errors.Is(err, errStateNotAdvancing) {
+			t.Fatalf("SyncKind() error = %v, want the resync to report the non-advancing state", err)
+		}
+		if calls != 3 {
+			t.Errorf("Changes calls = %d, want 3 (the reset, then the repeat)", calls)
+		}
+	})
 }
 
 // testConfig returns DefaultConfig with InteractiveQuiet shrunk, so a

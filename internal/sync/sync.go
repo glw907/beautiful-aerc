@@ -16,10 +16,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // Config governs one Worker: the fixed push-coalescing window,
@@ -155,6 +157,29 @@ func saveWatermark(tx *sql.Tx, accountID int64, kind backend.ObjectKind, collect
 	return err
 }
 
+// errStateNotAdvancing reports a server answering a changes-since
+// page with both more changes to come and the very token the page was
+// requested from. The next request would ask the identical question,
+// so paging on it re-fetches and re-applies one page forever, writing
+// a watermark per turn (JT-14).
+var errStateNotAdvancing = errors.New("sync: the server reported more changes without advancing its state token")
+
+// checkStateAdvanced reports whether a paging loop may continue from
+// cs, which it may not when the server left its state where it was
+// with more changes still to come. That ends the cycle as a server
+// failure, classified here so it reaches the user through the same
+// path any other backend refusal does, and the next cycle starts from
+// the watermark this one already holds.
+func checkStateAdvanced(kind backend.ObjectKind, requested string, cs backend.ChangeSet) error {
+	if !cs.HasMore || cs.NewToken != requested {
+		return nil
+	}
+	return backend.Failure{
+		Class: uerr.ClassServer,
+		Cause: fmt.Errorf("%w (%s)", errStateNotAdvancing, kindName(kind)),
+	}
+}
+
 // SyncKind runs one changes-since cycle for kind: paging Changes
 // until HasMore is false, applying each page through the writer's
 // bulk lane, and falling back to a full resync when the backend
@@ -180,6 +205,9 @@ func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
 			if errors.Is(err, backend.ErrStateReset) {
 				return w.fullResync(ctx, kind)
 			}
+			return err
+		}
+		if err := checkStateAdvanced(kind, wm.ServerStateToken, cs); err != nil {
 			return err
 		}
 
