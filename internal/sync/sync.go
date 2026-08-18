@@ -82,11 +82,13 @@ func NewWorker(accountID int64, be backend.Backend, writer *store.Writer, cfg Co
 // push-triggered sync cycle that resolves to this same token skips
 // re-applying only those records, so an outbox's own optimistic write
 // never round-trips into a redundant re-apply while a third-party
-// change batched into the same page still lands. The outbox
-// dispatcher calls this after a successful ApplyBatch; ApplyBatch's
-// BatchResult carries no post-dispatch state token yet, so wiring the
-// real production caller is task 10's, once BatchResult (or its
-// caller) can supply one.
+// change batched into the same page still lands.
+//
+// Nothing calls this yet. The caller is the outbox dispatcher, after
+// a successful ApplyBatch, and BatchResult carries no post-dispatch
+// state token for it to pass: ADR-0005 revision 3 gives that seam
+// change and the wiring to pass 2, the first pass with UI-driven
+// mutations and so the first with echoes worth suppressing.
 func (w *Worker) NoteDispatchedState(kind backend.ObjectKind, token string, ids []string) {
 	w.echo.note(kind, token, ids)
 }

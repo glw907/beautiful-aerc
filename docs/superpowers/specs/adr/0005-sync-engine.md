@@ -61,3 +61,32 @@ The 30s p95 push-recovery criterion is a synctest scenario.
   into draft re-hydrations.
 - Thread rows derive from Email threadIds; there is no
   Thread/changes round trip.
+
+## Revision 3 (2026-08-18, pass 1b review)
+
+Self-echo suppression is built and unwired, and this records why
+so no later pass reads its presence as its use. **Flagged for
+ratification at the pass 1b gate.**
+
+`internal/sync` holds the whole mechanism revision 2 decided: an
+echo tracker keyed by the state token a dispatch produced,
+`Worker.NoteDispatchedState` to record one, and a skip that
+applies to those record ids alone so a third-party change batched
+into the same page still lands. It is unit-tested and it has no
+production caller, because the seam cannot carry what it needs:
+`backend.BatchResult` reports the ids a batch created and the
+mutations it failed, and nothing about the state the account
+reached. Neither `cmd/poplar` nor the dispatcher has a token to
+hand it.
+
+**Pass 2 owns the wiring**, being the first pass with UI-driven
+mutations and so the first with echoes worth suppressing.
+`BatchResult` gains the post-dispatch state token, the JMAP
+adapter fills it from the `newState` a `Set` response already
+carries and currently discards, and `cmd/poplar` connects the
+dispatcher's result to the worker.
+
+Until then every dispatched mutation round-trips through
+`/changes` and is re-applied from server truth. That is a
+redundant write rather than a divergent one, since an upsert is
+keyed by server id, so the cost is work rather than correctness.

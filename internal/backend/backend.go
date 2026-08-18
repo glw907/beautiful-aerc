@@ -22,9 +22,19 @@ import (
 // unknown to this session). The caller resyncs from an empty token.
 var ErrStateReset = errors.New("backend: state reset")
 
-// ErrStateMismatch reports that ApplyBatch's mutations assumed a
-// server state that has since moved on: nothing in the batch was
-// applied. The caller re-fetches state through Changes and retries.
+// ErrStateMismatch is reserved for the all-or-nothing batch
+// guarantee, and nothing requests that guarantee yet. RFC 8620
+// section 5.3 lets a server answer stateMismatch only to a Set that
+// supplied ifInState, and no backend here supplies one, so a backend
+// that translates the refusal (jmapsource does) cannot currently
+// produce this sentinel and no caller checks for it.
+//
+// Pass 3 owns the policy, being the first with a batch whose parts
+// must not land separately: which mutations request the guarantee,
+// and what a caller does with the refusal (re-fetch state through
+// Changes and retry is the shape, but nothing has ruled on the retry
+// bound). Until then a batch is applied per mutation, and
+// BatchResult.Failed is the whole account of what did not land.
 var ErrStateMismatch = errors.New("backend: state mismatch")
 
 // ErrMailboxNameExists reports that a mailbox create was refused
