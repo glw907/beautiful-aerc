@@ -25,9 +25,9 @@ var ErrStateReset = errors.New("backend: state reset")
 // ErrStateMismatch is reserved for the all-or-nothing batch
 // guarantee, and nothing requests that guarantee yet. RFC 8620
 // section 5.3 lets a server answer stateMismatch only to a Set that
-// supplied ifInState, and no backend here supplies one, so a backend
-// that translates the refusal (jmapsource does) cannot currently
-// produce this sentinel and no caller checks for it.
+// supplied ifInState, and no backend here supplies one, so no
+// conforming server can answer with the refusal a backend would
+// translate into this sentinel, and no caller checks for it.
 //
 // Pass 3 owns the policy, being the first with a batch whose parts
 // must not land separately: which mutations request the guarantee,

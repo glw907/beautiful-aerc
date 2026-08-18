@@ -234,24 +234,30 @@ func TestRunPushBackoffsAfterAnImmediateStop(t *testing.T) {
 }
 
 // TestRunPushPollsWhileTheStreamStaysRefused is SY-2's MUST against
-// the failure that makes it matter: a session advertising an event
-// source whose endpoint refuses every connection while the JMAP API
-// answers normally, which is the 401-on-EventSource case ADR-0005
-// revision 2 named as its own risk. Nothing but this pulls Changes
+// the two failures that make it matter, and against the case it must
+// not fire on. Both failures leave the worker holding no stream while
+// the JMAP API answers normally, and nothing but this pulls Changes
 // while push is down, so without it the account receives no mail for
-// the life of the process and the log holds one line about it.
+// the life of the process.
 //
-// The control is the other half of the same rule: a stream that opens
-// and stays open must never poll, however quiet it is, because the
+// A server refusing every connection is the 401-on-EventSource case
+// ADR-0005 revision 2 named as its own risk. A server opening a stream
+// and dropping it at once is the same outage with no error in it: every
+// Listen succeeds, so no failure is ever reported, and the run is
+// silent as well as dry unless the stops themselves are counted.
+//
+// The control is the other half of the rule: a stream that opens and
+// stays open must never poll, however quiet it is, because the
 // transport owns liveness there.
 func TestRunPushPollsWhileTheStreamStaysRefused(t *testing.T) {
 	// Long enough that a fallback pulling on PollInterval's cadence and
 	// one that never pulls at all cannot be confused.
 	const window = 30 * time.Minute
 
-	runPush := func(t *testing.T, listen func(context.Context) (<-chan backend.Notification, error)) int64 {
+	runPush := func(t *testing.T, listen func(context.Context) (<-chan backend.Notification, error)) (int64, *uerrtest.Buffer) {
 		t.Helper()
 
+		buf := uerrtest.Capture(t)
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 
@@ -275,34 +281,62 @@ func TestRunPushPollsWhileTheStreamStaysRefused(t *testing.T) {
 		synctest.Wait()
 		cancel()
 		<-done
-		return calls.Load()
+		return calls.Load(), buf
+	}
+
+	// One pull per tick, less whatever the last, partly elapsed interval
+	// owed. A pull is only ever late, never skipped: a tick that lands
+	// while a Listen call is in flight waits out that call rather than
+	// being dropped.
+	ticks := int64(window / DefaultConfig().PollInterval)
+	wantPolls := func(t *testing.T, calls int64) {
+		t.Helper()
+		if calls < ticks-2 || calls > ticks {
+			t.Errorf("Changes calls = %d over %v with no stream in force, want about %d (one per %v)",
+				calls, window, ticks, DefaultConfig().PollInterval)
+		}
 	}
 
 	t.Run("a refused stream falls back to polling", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			calls := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
+			calls, _ := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
 				return nil, backend.Failure{Class: uerr.ClassAuth, Cause: errors.New("event source: 401")}
 			})
+			wantPolls(t, calls)
+		})
+	})
 
-			// One pull per tick, less whatever the last, partly elapsed
-			// interval owed. A pull is only ever late, never skipped: a
-			// tick that lands while a Listen call is in flight waits out
-			// that call rather than being dropped.
-			ticks := int64(window / DefaultConfig().PollInterval)
-			if calls < ticks-2 || calls > ticks {
-				t.Errorf("Changes calls = %d over %v of refused streams, want about %d (one per %v)",
-					calls, window, ticks, DefaultConfig().PollInterval)
+	t.Run("a stream that opens and stops at once falls back to polling", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			calls, buf := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
+				ch := make(chan backend.Notification)
+				close(ch) // opens, then stops at once, saying nothing about why
+				return ch, nil
+			})
+			wantPolls(t, calls)
+
+			// Thousands of streams over the window, and the user is owed
+			// one account of the outage rather than one per stream.
+			lines := uerrtest.Lines(t, buf)
+			if len(lines) != 1 {
+				t.Fatalf("uerr lines = %d over %v of streams that never delivered, want exactly 1", len(lines), window)
+			}
+			if got := lines[0]["class"]; got != "connection" {
+				t.Errorf("class = %v, want connection", got)
 			}
 		})
 	})
 
 	t.Run("an open stream never polls", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			calls := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
+			calls, buf := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
 				return make(chan backend.Notification), nil
 			})
 			if calls != 0 {
 				t.Errorf("Changes calls = %d over %v with the stream open and quiet, want none: the transport owns liveness while it holds one", calls, window)
+			}
+			if lines := uerrtest.Lines(t, buf); len(lines) != 0 {
+				t.Errorf("uerr lines = %v over a stream that was up the whole time, want none", lines)
 			}
 		})
 	})

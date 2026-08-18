@@ -35,11 +35,12 @@ type Config struct {
 	BackoffMin       time.Duration
 	BackoffMax       time.Duration
 	InteractiveQuiet time.Duration
-	// PollInterval is the fixed cadence RunPush falls back to whenever
-	// push is unavailable (SY-2): a backend whose Push() is nil
-	// (backend.PushTransportNone) has no stream to coalesce, and a
-	// transport whose stream the server keeps refusing has none in
-	// force. A plain ticker takes push's place either way.
+	// PollInterval is the fixed cadence RunPush falls back to through
+	// every window where no stream is in force (SY-2): a backend whose
+	// Push() is nil (backend.PushTransportNone) has no stream at all,
+	// and a transport whose stream the server keeps refusing, or keeps
+	// dropping the moment it opens, holds none for as long as that
+	// lasts. A plain ticker takes push's place in each of them.
 	PollInterval time.Duration
 }
 
@@ -169,12 +170,12 @@ func saveWatermark(tx *sql.Tx, accountID int64, kind backend.ObjectKind, collect
 // a watermark per turn (JT-14).
 var errStateNotAdvancing = errors.New("sync: the server reported more changes without advancing its state token")
 
-// checkStateAdvanced reports whether a paging loop may continue from
-// cs, which it may not when the server left its state where it was
-// with more changes still to come. That ends the cycle as a server
-// failure, classified here so it reaches the user through the same
-// path any other backend refusal does, and the next cycle starts from
-// the watermark this one already holds.
+// checkStateAdvanced returns the failure that ends a paging loop when
+// the server left its state where it was with more changes still to
+// come, and nil for a page the loop may continue from. It is
+// classified as a server failure here, so it reaches the user through
+// the same path any other backend refusal does, and the next cycle
+// starts from the watermark this one already holds.
 func checkStateAdvanced(kind backend.ObjectKind, requested string, cs backend.ChangeSet) error {
 	if !cs.HasMore || cs.NewToken != requested {
 		return nil

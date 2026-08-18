@@ -145,19 +145,21 @@ func classifyErr(err error) (uerr.Class, error) {
 // server refusal rather than a drop) is opened again through jittered
 // backoff. RunPush blocks until ctx is done.
 //
-// Whenever push is unavailable, SyncKind is called on PollInterval's
-// fixed cadence instead, which is SY-2's MUST and ADR-0005's decision:
-// a backend with no push transport at all
-// (backend.PushTransportNone) polls for its whole run, and a transport
-// whose stream the server keeps refusing polls until a stream attaches
-// again. The event source answering 401 while the JMAP API works is
-// the case that makes the second one matter, since nothing else pulls
-// Changes and the account would otherwise receive no mail for the life
-// of the process.
+// While no stream is in force, SyncKind is called on PollInterval's
+// fixed cadence instead, which is SY-2's MUST and ADR-0005's decision.
+// A backend with no push transport at all
+// (backend.PushTransportNone) polls for its whole run; a transport
+// with one polls through every window where it holds no open stream,
+// whether the server is refusing to open one or opening and dropping
+// them. Both windows are the same to the user: nothing else pulls
+// Changes, so without this the account receives no mail for the life
+// of the process. The event source answering 401 while the JMAP API
+// works is the case that makes it concrete.
 //
-// The ticker is RunPush's and its ticks are read only while the stream
-// is down, so a working stream never polls. It is not restarted per
-// reconnect: a server that opens a stream and refuses the next would
+// The ticker is RunPush's and its ticks are read only in those
+// windows, so a stream that is up and quiet never polls: the transport
+// owns liveness while it holds one. It is not restarted per reconnect,
+// since a server that opens a stream and refuses the next would
 // otherwise keep resetting the cadence and never reach a tick.
 func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	kinds = orderKindsForSync(kinds)
@@ -176,20 +178,29 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 
 	var push pushState
 	for {
-		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, func() { w.flush(ctx, kinds, flushState) })
+		flush := func() { w.flush(ctx, kinds, flushState) }
+		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, flush)
 		if err != nil {
 			return
 		}
-		if !consumePush(ctx, ch, w.cfg, func() { w.flush(ctx, kinds, flushState) }, push.proved) {
+
+		delivered := 0
+		if !consumePush(ctx, ch, w.cfg, func() { delivered++; flush() }, push.proved) {
 			return
 		}
+		push.stopped(delivered > 0)
+
 		// A stop the transport did not explain still costs a step, or
 		// one that opens and stops at once is reopened at zero delay and
 		// spins into a request storm. It is a floor, not a schedule: a
 		// stop with a refusal behind it comes back as the next Listen's
 		// error, and escalating on that is reconnect's job, so
 		// escalating here as well would put two delays on one failure.
-		if !SleepBackoff(ctx, 0, w.cfg.BackoffMin, w.cfg.BackoffMax) {
+		// The wait drains poll ticks like every other wait between
+		// streams: a server that opens a stream and drops it at once,
+		// forever, never reaches a Listen error and so would otherwise
+		// spend its whole run here pulling nothing.
+		if !sleepBackoff(ctx, 0, w.cfg.BackoffMin, w.cfg.BackoffMax, poll.C, flush) {
 			return
 		}
 	}
@@ -222,6 +233,7 @@ type pushState struct {
 	failing bool
 	class   uerr.Class
 	attempt int
+	silent  int
 }
 
 // fail surfaces err once per failure episode, on the first failure or
@@ -232,11 +244,45 @@ func (s *pushState) fail(err error) {
 	if !surfaceable(err) {
 		return
 	}
+	// A failure explains whatever stopped the last stream, so the run
+	// of stops nothing explained ends here.
+	s.silent = 0
 	class, cause := classifyErr(err)
 	if !s.failing || class != s.class {
 		_ = uerr.New("sync.push.listen", nil, class, cause)
 		s.failing = true
 		s.class = class
+	}
+}
+
+// silentStops is how many streams may stop without ever delivering
+// before the run of them counts as an outage rather than a server
+// closing an idle connection. Two consecutive, the same threshold the
+// JMAP transport uses for a drop it did not get back.
+const silentStops = 2
+
+// errStreamNeverDelivered stands for a stream that opened, said
+// nothing, and stopped. No other report covers it: Listen succeeded
+// every time, so the refusal a stop usually carries never arrived, and
+// the failure a user sees is mail that only ever arrives on the poll
+// cadence.
+var errStreamNeverDelivered = errors.New("sync: the push stream keeps opening and stopping without delivering anything")
+
+// stopped records a stream ending, delivered reporting whether it ever
+// produced a notification, and surfaces a run of streams that never
+// did. One stop that delivered nothing is not yet news, since a server
+// is allowed to close an idle connection and the next one ordinarily
+// opens and reports its connect; a second in a row with no failure
+// between them is the transport getting nowhere. Surfacing runs
+// through fail, so its once-per-episode rule holds here too.
+func (s *pushState) stopped(delivered bool) {
+	if delivered {
+		s.silent = 0
+		return
+	}
+	s.silent++
+	if s.silent >= silentStops {
+		s.fail(errStreamNeverDelivered)
 	}
 }
 
@@ -249,6 +295,7 @@ func (s *pushState) proved() {
 		s.failing = false
 	}
 	s.attempt = 0
+	s.silent = 0
 }
 
 // pollKinds runs kinds' SyncKind on a fixed PollInterval cadence, the

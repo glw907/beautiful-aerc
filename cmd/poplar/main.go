@@ -199,14 +199,18 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	<-ctx.Done()
 	wg.Wait()
 
-	if err := reads.Close(); err != nil {
-		return err
-	}
+	// The read pool's close is reported alongside the rest of the
+	// shutdown rather than in place of it: closing read connections is
+	// the one step here that owns no durable state, and returning early
+	// on it would skip the writer's close, the log-health report, and
+	// the clean-shutdown marker whose absence costs the next start a
+	// full integrity check.
+	closeErr := reads.Close()
 	if err := writer.Close(); err != nil {
-		return err
+		return errors.Join(closeErr, err)
 	}
 	reportLogHealth(errOut)
-	return store.MarkCleanShutdown(dbPath)
+	return errors.Join(closeErr, store.MarkCleanShutdown(dbPath))
 }
 
 // reportLogHealth prints uerr's log-writer health to w when the log is
