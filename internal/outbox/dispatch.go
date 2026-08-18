@@ -21,12 +21,13 @@ type Dispatcher struct {
 	accountID int64
 	backend   backend.Backend
 	writer    *store.Writer
+	reads     *store.ReadPool
 }
 
 // NewDispatcher returns a Dispatcher draining accountID's intents
-// against be, reaching the store through w.
-func NewDispatcher(accountID int64, be backend.Backend, w *store.Writer) *Dispatcher {
-	return &Dispatcher{accountID: accountID, backend: be, writer: w}
+// against be, writing through w and probing for work through reads.
+func NewDispatcher(accountID int64, be backend.Backend, w *store.Writer, reads *store.ReadPool) *Dispatcher {
+	return &Dispatcher{accountID: accountID, backend: be, writer: w, reads: reads}
 }
 
 // Delivered is one intent DispatchOnce dispatched successfully. Move
@@ -160,10 +161,27 @@ const (
 // claimed but never attempted back to queued untouched. A create whose
 // dependent moves were claimed in the same pass dispatches with them
 // as one batch.
+//
+// A pass with nothing to claim writes nothing at all, which is what
+// its caller's fixed polling cadence makes matter: the claim runs on
+// the writer's interactive lane, ADR-0003 reserves that lane for
+// user-facing intents, and the sync engine's bulk lane yields for a
+// full quiet window after every use of it. So the pass asks a read
+// connection whether any intent is eligible before it opens anything.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, error) {
+	eligible, err := d.reads.HasEligibleIntents(ctx, d.accountID, now)
+	if err != nil || !eligible {
+		return Result{}, err
+	}
+
 	claimedRows, err := d.claim(ctx, now)
 	if err != nil {
 		return Result{}, err
+	}
+	// An Undo that annihilated the last eligible intent between the
+	// probe and the claim leaves nothing to finalize either.
+	if len(claimedRows) == 0 {
+		return Result{}, nil
 	}
 
 	var result Result

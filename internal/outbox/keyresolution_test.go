@@ -23,7 +23,7 @@ import (
 // create's creation id so the server resolves the back-reference
 // itself.
 func TestKeyResolutionAtDispatch(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	msgID := seedMessage(t, w, accountID, src, "msg-1")
@@ -45,7 +45,7 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 		}
 		return backend.BatchResult{Created: created, Failed: map[string]error{}}, nil
 	}
-	dispatcher := NewDispatcher(accountID, be, w)
+	dispatcher := NewDispatcher(accountID, be, w, reads)
 
 	now := time.Now()
 	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
@@ -110,7 +110,7 @@ func TestKeyResolutionAtDispatch(t *testing.T) {
 // whole create-with-back-reference machinery at Fastmail's 4096 while
 // every test at a 100-object limit goes on passing.
 func TestKeyResolutionAtProductionLimits(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 
@@ -147,7 +147,7 @@ func TestKeyResolutionAtProductionLimits(t *testing.T) {
 		t.Fatalf("chunks = %d, want %d", len(moveIDs), messages/moveChunkMessages)
 	}
 
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestKeyResolutionAtProductionLimits(t *testing.T) {
 // both halves: every dependent is patched wherever it sits in the
 // scan, and no page is the whole outbox.
 func TestResolveDependentRefsPagesTheOutbox(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	otherID := storetest.Insert(t, w,
 		`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "other", "jmap", "other@example.com")
@@ -212,7 +212,7 @@ func TestResolveDependentRefsPagesTheOutbox(t *testing.T) {
 	}
 
 	before := w.Revision().Current()
-	if err := NewDispatcher(accountID, newFakeBackend(), w).resolveDependentRefs(context.Background(), createID, "mbx-new"); err != nil {
+	if err := NewDispatcher(accountID, newFakeBackend(), w, reads).resolveDependentRefs(context.Background(), createID, "mbx-new"); err != nil {
 		t.Fatalf("resolveDependentRefs: %v", err)
 	}
 	transactions := w.Revision().Current() - before
@@ -247,7 +247,7 @@ func TestResolveDependentRefsPagesTheOutbox(t *testing.T) {
 // mutation exhausts the batch's budget, so the move cannot ride it and
 // takes the separate-call path this test needs.
 func TestKeyResolutionSurvivesRequeue(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	msgID := seedMessage(t, w, accountID, src, "msg-1")
@@ -265,7 +265,7 @@ func TestKeyResolutionSurvivesRequeue(t *testing.T) {
 		}
 		return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 	}
-	dispatcher := NewDispatcher(accountID, be, w)
+	dispatcher := NewDispatcher(accountID, be, w, reads)
 
 	now := time.Now()
 	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)

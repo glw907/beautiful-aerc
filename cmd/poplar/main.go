@@ -146,27 +146,43 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// rather than being reconstructed: connectLiveJMAP's missing-token
 	// case is that shape, and it is the most common startup failure
 	// there is.
+	// The engines' read handle, opened after the startup trace above so
+	// its connections stay out of QA-1's measured window. The outbox
+	// dispatcher probes for eligible work through it on every tick,
+	// which is what keeps an idle poll off the writer's interactive
+	// lane.
+	reads, err := store.NewReadPool(dbPath, store.DefaultReadPoolSize, writer.Revision())
+	if err != nil {
+		_ = writer.Close()
+		return err
+	}
+
 	var wg *sync.WaitGroup
 	be, key, err := connect(ctx)
 	switch {
 	case err == nil:
 		accountID, err := ensureAccount(ctx, writer, key)
 		if err != nil {
+			_ = reads.Close()
 			_ = writer.Close()
 			return err
 		}
-		wg = startEngines(ctx, accountID, be, writer)
+		wg = startEngines(ctx, accountID, be, writer, reads)
 	case isFatalConnect(err):
+		_ = reads.Close()
 		_ = writer.Close()
 		return surfaceFatalConnect(err)
 	default:
-		wg = startEnginesRetrying(ctx, writer, connect, err)
+		wg = startEnginesRetrying(ctx, writer, reads, connect, err)
 	}
 
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")
 	<-ctx.Done()
 	wg.Wait()
 
+	if err := reads.Close(); err != nil {
+		return err
+	}
 	if err := writer.Close(); err != nil {
 		return err
 	}

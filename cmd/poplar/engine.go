@@ -171,7 +171,7 @@ func retryConnect(ctx context.Context, connect backendConnector, firstErr error)
 // any connect call ran); it is logged through the uerr call
 // ensureAccount already makes and the process simply never starts its
 // engines.
-func startEnginesRetrying(ctx context.Context, writer *store.Writer, connect backendConnector, firstErr error) *sync.WaitGroup {
+func startEnginesRetrying(ctx context.Context, writer *store.Writer, reads *store.ReadPool, connect backendConnector, firstErr error) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		be, key, ok := retryConnect(ctx, connect, firstErr)
@@ -182,7 +182,7 @@ func startEnginesRetrying(ctx context.Context, writer *store.Writer, connect bac
 		if err != nil {
 			return
 		}
-		startEngines(ctx, accountID, be, writer).Wait()
+		startEngines(ctx, accountID, be, writer, reads).Wait()
 	})
 	return &wg
 }
@@ -247,10 +247,10 @@ func ensureAccount(ctx context.Context, writer *store.Writer, key string) (int64
 // transport) and outbox dispatch loop against be, both driven by ctx
 // and both stopped by its cancellation. The returned WaitGroup is done
 // once both have actually returned; run waits on it before closing the
-// writer they still hold.
-func startEngines(ctx context.Context, accountID int64, be backend.Backend, writer *store.Writer) *sync.WaitGroup {
+// store handles they still hold.
+func startEngines(ctx context.Context, accountID int64, be backend.Backend, writer *store.Writer, reads *store.ReadPool) *sync.WaitGroup {
 	worker := syncengine.NewWorker(accountID, be, writer, syncengine.DefaultConfig())
-	dispatcher := outbox.NewDispatcher(accountID, be, writer)
+	dispatcher := outbox.NewDispatcher(accountID, be, writer, reads)
 
 	var wg sync.WaitGroup
 	wg.Go(func() {

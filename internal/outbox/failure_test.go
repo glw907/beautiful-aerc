@@ -38,7 +38,7 @@ func TestFailureClasses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+			w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 			accountID := seedAccount(t, w)
 			src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 			dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -56,7 +56,7 @@ func TestFailureClasses(t *testing.T) {
 				}
 				return backend.BatchResult{Created: map[string]string{}, Failed: failed}, nil
 			}
-			dispatcher := NewDispatcher(accountID, be, w)
+			dispatcher := NewDispatcher(accountID, be, w, reads)
 
 			_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, be, false, time.Now())
 			if err != nil {
@@ -115,7 +115,7 @@ func TestFailureClasses(t *testing.T) {
 // ApplyBatchFunc to hand classifyFailure a backend.Failure directly,
 // never a create refusal's plain wrapped string.
 func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	be := newFakeBackend()
@@ -132,7 +132,7 @@ func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
 // never dispatched, never reverted, never retried, never surfaced.
 func TestNoIntentStrandsInDispatching(t *testing.T) {
 	t.Run("every intent delivered", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -180,7 +180,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 		if _, _, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, be, false, time.Now()); err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
-		if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now()); err != nil {
+		if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now()); err != nil {
 			t.Fatalf("dispatch: %v", err)
 		}
 		if n := dispatchingCount(t, w, accountID); n != 0 {
@@ -189,7 +189,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 	})
 
 	t.Run("retriable failure requeues", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -206,7 +206,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 		if _, _, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, be, false, time.Now()); err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
-		if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now()); err != nil {
+		if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now()); err != nil {
 			t.Fatalf("dispatch: %v", err)
 		}
 		if n := dispatchingCount(t, w, accountID); n != 0 {
@@ -219,7 +219,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 	// but never attempted, so the pass owes them a revert like every
 	// other row it claimed and never reached.
 	t.Run("connection failure with a pending batch", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -256,7 +256,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 			batchedMoves = append(batchedMoves, ids...)
 		}
 
-		if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err != nil {
+		if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now); err != nil {
 			t.Fatalf("dispatch: %v", err)
 		}
 		if applyCalls != 1 {
@@ -280,7 +280,7 @@ func TestNoIntentStrandsInDispatching(t *testing.T) {
 // failed commit costs the queue every claimed intent for the rest of
 // the process run.
 func TestFinalizeFailureRequeuesClaimedIntents(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	mailboxID := seedMailbox(t, w, accountID, "Old", "mbx-1")
 
@@ -297,7 +297,7 @@ func TestFinalizeFailureRequeuesClaimedIntents(t *testing.T) {
 	}
 	blockDeletes(t, w)
 
-	dispatcher := NewDispatcher(accountID, be, w)
+	dispatcher := NewDispatcher(accountID, be, w, reads)
 	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
 	if err == nil {
 		t.Fatal("dispatch = nil, want the finalize failure")
@@ -329,7 +329,7 @@ func TestFinalizeFailureRequeuesClaimedIntents(t *testing.T) {
 // strand in dispatching until the next process start, which is exactly
 // the case the recovery exists for.
 func TestFinalizeRecoveryOutlivesACancelledContext(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	mailboxID := seedMailbox(t, w, accountID, "Old", "mbx-1")
 
@@ -351,7 +351,7 @@ func TestFinalizeRecoveryOutlivesACancelledContext(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(ctx, time.Now()); err == nil {
+	if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(ctx, time.Now()); err == nil {
 		t.Fatal("DispatchOnce = nil, want the cancelled finalize reported")
 	}
 	if state, _ := outboxState(t, w, id); state != "queued" {
@@ -368,7 +368,7 @@ func TestFinalizeRecoveryOutlivesACancelledContext(t *testing.T) {
 // the row where selectEligible cannot see it would cost the intent for
 // the rest of the run and buy nothing.
 func TestFinalizeRecoveryRequeuesACreateWhoseMailboxLanded(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	renamed := seedMailbox(t, w, accountID, "Old", "mbx-old")
 
@@ -391,7 +391,7 @@ func TestFinalizeRecoveryRequeuesACreateWhoseMailboxLanded(t *testing.T) {
 	blockPayloadWrites(t, w)
 	blockDeletes(t, w)
 
-	dispatcher := NewDispatcher(accountID, be, w)
+	dispatcher := NewDispatcher(accountID, be, w, reads)
 	if _, err := dispatcher.DispatchOnce(context.Background(), now); err == nil {
 		t.Fatal("DispatchOnce = nil, want the finalize failure")
 	}
@@ -427,7 +427,7 @@ func TestFinalizeRecoveryRequeuesACreateWhoseMailboxLanded(t *testing.T) {
 // recovery runs only after a transaction has already failed and a
 // detail is the one value in the statement with no bound on its size.
 func TestFinalizeRecoveryReplaysTheRequeue(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	deliveredID := seedMailbox(t, w, accountID, "Old", "mbx-1")
 	failingID := seedMailbox(t, w, accountID, "Older", "mbx-2")
@@ -452,7 +452,7 @@ func TestFinalizeRecoveryReplaysTheRequeue(t *testing.T) {
 	// transaction, taking the failing rename's requeue down with it.
 	blockDeletes(t, w)
 
-	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err == nil {
+	if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now); err == nil {
 		t.Fatal("DispatchOnce = nil, want the finalize failure")
 	}
 
@@ -483,7 +483,7 @@ func TestFinalizeRecoveryReplaysTheRequeue(t *testing.T) {
 // records which intents the run lost.
 func TestFinalizeRecoveryFailureNamesEveryStrandedIntent(t *testing.T) {
 	log := uerrtest.CaptureDefault(t)
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	deliveredID := seedMailbox(t, w, accountID, "Old", "mbx-1")
 	failingID := seedMailbox(t, w, accountID, "Older", "mbx-2")
@@ -511,7 +511,7 @@ func TestFinalizeRecoveryFailureNamesEveryStrandedIntent(t *testing.T) {
 	blockDeletes(t, w)
 	blockRequeueBackoff(t, w)
 
-	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err == nil {
+	if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now); err == nil {
 		t.Fatal("DispatchOnce = nil, want the finalize failure joined with the failed recovery")
 	}
 
@@ -572,7 +572,7 @@ func blockRequeueBackoff(t *testing.T, w *store.Writer) {
 // classification retries it every 30 seconds for the life of the
 // store, logged once and then silent.
 func TestUnknownKindIsReportedAndDropped(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	var id int64
@@ -585,7 +585,7 @@ func TestUnknownKindIsReportedAndDropped(t *testing.T) {
 		t.Fatalf("insert the unknown-kind row: %v", err)
 	}
 
-	result, err := NewDispatcher(accountID, newFakeBackend(), w).DispatchOnce(context.Background(), time.Now())
+	result, err := NewDispatcher(accountID, newFakeBackend(), w, reads).DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -612,7 +612,7 @@ func TestUnknownKindIsReportedAndDropped(t *testing.T) {
 // Left in dispatching this one is invisible to selectEligible for the
 // rest of the run, and no later pass can report it.
 func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	var id int64
@@ -626,7 +626,7 @@ func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
 	}
 	blockDeletes(t, w)
 
-	dispatcher := NewDispatcher(accountID, newFakeBackend(), w)
+	dispatcher := NewDispatcher(accountID, newFakeBackend(), w, reads)
 	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err == nil {
 		t.Fatal("DispatchOnce = nil, want the finalize failure")
 	}
@@ -656,7 +656,7 @@ func TestUnknownKindSurvivesAFinalizeFailure(t *testing.T) {
 // it, so the intent completes against the folder the first attempt
 // made instead of being given up on beside it.
 func TestCreateMailboxPersistFailureRetriesOntoTheSameMailbox(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	be := newFakeBackend()
@@ -668,7 +668,7 @@ func TestCreateMailboxPersistFailureRetriesOntoTheSameMailbox(t *testing.T) {
 	}
 	blockPayloadWrites(t, w)
 
-	dispatcher := NewDispatcher(accountID, be, w)
+	dispatcher := NewDispatcher(accountID, be, w, reads)
 	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -739,7 +739,7 @@ func unblockPayloadWrites(t *testing.T, w *store.Writer) {
 // alone and lands after requeueRow. The end state hides that, so this
 // counts the writes themselves.
 func TestEachClaimedIntentGetsOneFinalizeWrite(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	filed := []int64{
@@ -767,7 +767,7 @@ func TestEachClaimedIntentGetsOneFinalizeWrite(t *testing.T) {
 	}
 
 	recordFinalizeWrites(t, w)
-	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now); err != nil {
+	if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 

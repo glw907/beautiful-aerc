@@ -44,6 +44,16 @@ func TestExplainQueryPlan(t *testing.T) {
 			[]string{"SEARCH outbox USING COVERING INDEX idx_outbox_dispatch (state=? AND next_attempt_at<?)"},
 		},
 		{
+			"outbox eligibility probe",
+			queryOutboxEligible,
+			[]any{100, 1},
+			[]string{
+				"SCAN CONSTANT ROW",
+				"SCALAR SUBQUERY 1",
+				"SEARCH outbox USING INDEX idx_outbox_dispatch (state=? AND next_attempt_at<?)",
+			},
+		},
+		{
 			"occurrence by range",
 			queryOccurrenceByRange,
 			[]any{1, 2},

@@ -69,7 +69,7 @@ func TestLiveRunnerFillsStoreAndDispatchesATriageIntent(t *testing.T) {
 		t.Skipf("no fastmail token: %v", err)
 	}
 
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
@@ -86,7 +86,7 @@ func TestLiveRunnerFillsStoreAndDispatchesATriageIntent(t *testing.T) {
 		t.Fatalf("ensureAccount: %v", err)
 	}
 
-	wg := startEngines(ctx, accountID, be, w)
+	wg := startEngines(ctx, accountID, be, w, reads)
 	stop := func() {
 		cancel()
 		wg.Wait()

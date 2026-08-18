@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"time"
 )
 
 // DefaultReadPoolSize is the read pool's connection count. A small,
@@ -151,6 +152,24 @@ func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, rec
 		return MailboxPage{}, localErr("store.read", err)
 	}
 	return page, nil
+}
+
+// HasEligibleIntents reports whether accountID holds an outbox intent
+// ready to dispatch as of now: a queued row whose hold has expired.
+//
+// It is a read because of what it costs not to be one. The outbox
+// dispatcher polls on a fixed cadence whether or not anything is
+// queued, and every interactive transaction it opens makes the sync
+// engine's bulk lane yield for a full quiet window (ADR-0003 revision
+// 2), so an idle poll on the writer would throttle background sync for
+// the life of the process. A read connection never queues behind the
+// writer, so the probe costs the writer nothing at all.
+func (p *ReadPool) HasEligibleIntents(ctx context.Context, accountID int64, now time.Time) (bool, error) {
+	var eligible bool
+	if err := p.db.QueryRowContext(ctx, queryOutboxEligible, now.Unix(), accountID).Scan(&eligible); err != nil {
+		return false, localErr("store.read", err)
+	}
+	return eligible, nil
 }
 
 // FirstMailboxID returns the lowest-id mailbox in the store. A

@@ -143,6 +143,10 @@ func runKillHarnessDriver(dbPath string) {
 	if err != nil {
 		killHarnessDriverFail("open store", err)
 	}
+	reads, err := store.NewReadPool(dbPath, store.DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		killHarnessDriverFail("open read pool", err)
+	}
 
 	be := newFakeBackend()
 	// Sleeping inside the fake's own backend calls widens the real
@@ -179,7 +183,7 @@ func runKillHarnessDriver(dbPath string) {
 
 	h := &killHarnessDriverState{
 		w:          w,
-		d:          NewDispatcher(killHarnessAccountID, be, w),
+		d:          NewDispatcher(killHarnessAccountID, be, w, reads),
 		archiveID:  killHarnessArchiveID,
 		projectsID: killHarnessProjectsID,
 		now:        now,

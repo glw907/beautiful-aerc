@@ -50,6 +50,7 @@ func TestReclaimOrphanedAfterKill(t *testing.T) {
 		t.Fatalf("reopen store after the kill: %v", err)
 	}
 	defer func() { _ = w.Close() }()
+	reads := openReads(t, dbPath, w)
 
 	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("ReclaimOrphaned: %v", err)
@@ -62,7 +63,7 @@ func TestReclaimOrphanedAfterKill(t *testing.T) {
 	be.MailSource.ApplyBatchFunc = func(context.Context, []backend.Mutation) (backend.BatchResult, error) {
 		return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 	}
-	result, err := NewDispatcher(reclaimKillAccountID, be, w).DispatchOnce(context.Background(), time.Now())
+	result, err := NewDispatcher(reclaimKillAccountID, be, w, reads).DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch after the sweep: %v", err)
 	}
@@ -129,6 +130,7 @@ func TestReclaimKillChild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open %s: %v", dbPath, err)
 	}
+	reads := openReads(t, dbPath, w)
 
 	accountID := seedAccount(t, w)
 	if accountID != reclaimKillAccountID {
@@ -153,7 +155,7 @@ func TestReclaimKillChild(t *testing.T) {
 	if _, _, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{messageID}, dest, 0, be, false, time.Now()); err != nil {
 		t.Fatalf("enqueue move: %v", err)
 	}
-	if _, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now()); err != nil {
+	if _, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now()); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	t.Fatal("dispatch returned; the backend call was supposed to end this process")

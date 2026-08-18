@@ -82,6 +82,7 @@ func TestRecoveredRenameReachesItsOwnMailbox(t *testing.T) {
 
 	w = openWriterAt(t, path)
 	defer func() { _ = w.Close() }()
+	reads := openReads(t, path, w)
 
 	resyncMailboxes(t, w, accountID,
 		store.MailboxUpsert{ServerID: "mbx-travel", Name: "Travel"},
@@ -96,7 +97,7 @@ func TestRecoveredRenameReachesItsOwnMailbox(t *testing.T) {
 		return nil
 	}
 
-	res, err := NewDispatcher(accountID, be, w).DispatchOnce(ctx, now)
+	res, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(ctx, now)
 	if err != nil {
 		t.Fatalf("DispatchOnce: %v", err)
 	}
@@ -138,6 +139,7 @@ func TestRecoveredRenameOfDeletedMailboxFails(t *testing.T) {
 
 	w = openWriterAt(t, path)
 	defer func() { _ = w.Close() }()
+	reads := openReads(t, path, w)
 
 	resyncMailboxes(t, w, accountID, store.MailboxUpsert{ServerID: "mbx-archive", Name: "Archive"})
 	sweepStaleMailboxes(t, w, accountID, map[string]bool{"mbx-archive": true})
@@ -148,7 +150,7 @@ func TestRecoveredRenameOfDeletedMailboxFails(t *testing.T) {
 		return nil
 	}
 
-	res, err := NewDispatcher(accountID, be, w).DispatchOnce(ctx, now)
+	res, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(ctx, now)
 	if err != nil {
 		t.Fatalf("DispatchOnce: %v", err)
 	}

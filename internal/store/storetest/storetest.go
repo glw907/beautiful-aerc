@@ -25,6 +25,22 @@ import (
 func OpenWriter(t *testing.T, cfg store.WriterConfig) *store.Writer {
 	t.Helper()
 
+	w, _ := open(t, cfg, false)
+	return w
+}
+
+// OpenStore is OpenWriter plus a read pool over the same file, the
+// pair an engine holding both a write and a read handle needs (the
+// outbox dispatcher, whose eligibility probe reads).
+func OpenStore(t *testing.T, cfg store.WriterConfig) (*store.Writer, *store.ReadPool) {
+	t.Helper()
+
+	return open(t, cfg, true)
+}
+
+func open(t *testing.T, cfg store.WriterConfig, withReads bool) (*store.Writer, *store.ReadPool) {
+	t.Helper()
+
 	path := filepath.Join(t.TempDir(), "store.db")
 	db, err := store.OpenWriteConn(path)
 	if err != nil {
@@ -38,7 +54,16 @@ func OpenWriter(t *testing.T, cfg store.WriterConfig) *store.Writer {
 		t.Fatalf("NewWriter: %v", err)
 	}
 	t.Cleanup(func() { _ = w.Close() })
-	return w
+	if !withReads {
+		return w, nil
+	}
+
+	reads, err := store.NewReadPool(path, store.DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("NewReadPool: %v", err)
+	}
+	t.Cleanup(func() { _ = reads.Close() })
+	return w, reads
 }
 
 // Insert runs stmt on w's interactive lane and returns the id of the

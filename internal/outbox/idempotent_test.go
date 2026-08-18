@@ -28,7 +28,7 @@ import (
 // lands between the two.
 func TestIdempotentReplay(t *testing.T) {
 	t.Run("create mailbox", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 
 		createCalls := 0
@@ -37,7 +37,7 @@ func TestIdempotentReplay(t *testing.T) {
 			createCalls++
 			return "mbx-1", nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		id1, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
 		if err != nil {
@@ -81,7 +81,7 @@ func TestIdempotentReplay(t *testing.T) {
 	})
 
 	t.Run("rename mailbox", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		mailboxID := seedMailbox(t, w, accountID, "Old", "mbx-1")
 
@@ -93,7 +93,7 @@ func TestIdempotentReplay(t *testing.T) {
 			lastName = name
 			return nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		for i := range 2 {
 			id, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "Family", time.Now())
@@ -116,7 +116,7 @@ func TestIdempotentReplay(t *testing.T) {
 	})
 
 	t.Run("delete mailbox", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		mailboxID := seedMailbox(t, w, accountID, "Spam", "mbx-1")
 
@@ -126,7 +126,7 @@ func TestIdempotentReplay(t *testing.T) {
 			deleteCalls++
 			return nil // a real backend absorbs a repeat delete as notFound-is-success; the seam already returns nil for it
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		for i := range 2 {
 			id, _, err := EnqueueDeleteMailbox(context.Background(), w, accountID, mailboxID, time.Now())
@@ -146,7 +146,7 @@ func TestIdempotentReplay(t *testing.T) {
 	})
 
 	t.Run("move messages", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -165,7 +165,7 @@ func TestIdempotentReplay(t *testing.T) {
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		for i := range 2 {
 			_, ids, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, []int64{msgID}, dest, 0, be, false, time.Now())
@@ -204,7 +204,7 @@ func TestIdempotentReplay(t *testing.T) {
 func TestCreateMailboxReplayWindow(t *testing.T) {
 	log := uerrtest.CaptureDefault(t)
 	surfaced := uerrtest.Capture(t)
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	be := newFakeBackend()
@@ -227,7 +227,7 @@ func TestCreateMailboxReplayWindow(t *testing.T) {
 	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch the reclaimed intent: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestCreateMailboxReplayWindow(t *testing.T) {
 // are filed against it in a second request rather than into a second
 // folder.
 func TestCreateMailboxReplayWindowInABatch(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	msgID := seedMessage(t, w, accountID, src, "msg-1")
@@ -324,7 +324,7 @@ func TestCreateMailboxReplayWindowInABatch(t *testing.T) {
 	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now)
 	if err != nil {
 		t.Fatalf("dispatch the reclaimed batch: %v", err)
 	}
@@ -402,7 +402,7 @@ func applyAgainst(ctx context.Context, server *mailboxServer, filed map[string]s
 // this is its only chance to be reported.
 func TestCreateMailboxAdoptsOnlyOneMatch(t *testing.T) {
 	surfaced := uerrtest.Capture(t)
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	be := newFakeBackend()
@@ -417,7 +417,7 @@ func TestCreateMailboxAdoptsOnlyOneMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestCreateMailboxAdoptsOnlyOneMatch(t *testing.T) {
 // that dropped during the reconcile says nothing about the account, so
 // the intent waits for another pass rather than being given up on.
 func TestCreateMailboxKeepsRetryingAFailedLookup(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 
 	be := newFakeBackend()
@@ -465,7 +465,7 @@ func TestCreateMailboxKeepsRetryingAFailedLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -488,7 +488,7 @@ func TestCreateMailboxKeepsRetryingAFailedLookup(t *testing.T) {
 // batch, the create and every move alike, since a move whose
 // destination never resolved has nothing left to file into.
 func TestApplyBatchAdoptsOnlyOneMatch(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	filed := []int64{
@@ -524,7 +524,7 @@ func TestApplyBatchAdoptsOnlyOneMatch(t *testing.T) {
 		moveIDs = append(moveIDs, ids...)
 	}
 
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -551,7 +551,7 @@ func TestApplyBatchAdoptsOnlyOneMatch(t *testing.T) {
 // account, so the create and every move destined for it wait for
 // another pass rather than being given up on.
 func TestApplyBatchKeepsRetryingAFailedLookup(t *testing.T) {
-	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
 	src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 	filed := []int64{
@@ -587,7 +587,7 @@ func TestApplyBatchKeepsRetryingAFailedLookup(t *testing.T) {
 		moveIDs = append(moveIDs, ids...)
 	}
 
-	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), now)
+	result, err := NewDispatcher(accountID, be, w, reads).DispatchOnce(context.Background(), now)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}

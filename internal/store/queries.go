@@ -25,6 +25,15 @@ const (
 	// dispatchable rows in a given state, earliest attempt first.
 	queryOutboxDispatch = `SELECT id FROM outbox WHERE state = ? AND next_attempt_at <= ? ORDER BY next_attempt_at`
 
+	// queryOutboxEligible is the dispatcher's eligibility probe:
+	// whether one account holds any intent ready to dispatch. It reads
+	// the same rows the drainer's own claim selects, so a pass with
+	// nothing to do learns that from a read connection instead of the
+	// writer's interactive lane. idx_outbox_dispatch covers the state
+	// and next_attempt_at conjuncts; account_id is checked per row,
+	// which is what EXISTS stops doing at the first match.
+	queryOutboxEligible = `SELECT EXISTS (SELECT 1 FROM outbox WHERE state = 'queued' AND next_attempt_at <= ? AND account_id = ?)`
+
 	// queryOccurrenceByRange is the calendar view's window query:
 	// occurrences starting within [from, to).
 	queryOccurrenceByRange = `SELECT event_id FROM occurrence WHERE start_utc >= ? AND start_utc < ?`

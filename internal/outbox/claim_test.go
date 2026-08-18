@@ -27,7 +27,7 @@ func TestClaimIsTransactional(t *testing.T) {
 	const trials = 20
 
 	for trial := range trials {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -54,7 +54,7 @@ func TestClaimIsTransactional(t *testing.T) {
 			mu.Unlock()
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		start := make(chan struct{})
 		var wg sync.WaitGroup
@@ -136,6 +136,58 @@ func TestChunkSizeAtAdvertisedLimits(t *testing.T) {
 	}
 }
 
+// TestIdleDispatchLeavesTheInteractiveLaneAlone holds the other half
+// of ADR-0003's lane discipline over the dispatch pass. Its caller
+// polls on a fixed cadence whether or not anything is queued, and the
+// sync engine's bulk lane yields for a whole quiet window after every
+// interactive commit, so a pass that opened a transaction to find
+// nothing to do would throttle background sync for the life of the
+// process. The account row is seeded on the bulk lane so the only
+// interactive activity this can observe is the pass itself.
+func TestIdleDispatchLeavesTheInteractiveLaneAlone(t *testing.T) {
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
+
+	var accountID int64
+	err := w.Apply(context.Background(), func(tx *sql.Tx) error {
+		res, err := tx.Exec(`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "acct", "jmap", "geoff@example.com")
+		if err != nil {
+			return err
+		}
+		accountID, err = res.LastInsertId()
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed the account on the bulk lane: %v", err)
+	}
+	if w.RecentInteractiveActivity(time.Hour) {
+		t.Fatal("the fixture itself used the interactive lane, so this test could not tell")
+	}
+
+	be := newFakeBackend()
+	be.MailSource.RenameMailboxFunc = func(_ context.Context, _, _ string) error { return nil }
+	dispatcher := NewDispatcher(accountID, be, w, reads)
+
+	if _, err := dispatcher.DispatchOnce(context.Background(), time.Now()); err != nil {
+		t.Fatalf("idle dispatch: %v", err)
+	}
+	if w.RecentInteractiveActivity(time.Hour) {
+		t.Error("a pass with nothing eligible opened an interactive transaction")
+	}
+
+	// The same probe must not talk a pass out of real work.
+	mailboxID := seedMailbox(t, w, accountID, "Old", "mbx-1")
+	if _, _, err := EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "New", time.Now()); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(result.Delivered) != 1 {
+		t.Fatalf("Delivered = %+v, want the one queued intent", result.Delivered)
+	}
+}
+
 // TestClaimIsBounded holds ADR-0003's admission ceiling over the claim
 // transaction at the limit the production backend actually reports.
 // The claim resolves every referent on the writer's single connection
@@ -145,7 +197,7 @@ func TestChunkSizeAtAdvertisedLimits(t *testing.T) {
 // that takes. What one pass leaves behind the next takes.
 func TestClaimIsBounded(t *testing.T) {
 	t.Run("row budget", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 
 		be := newFakeBackend()
@@ -162,7 +214,7 @@ func TestClaimIsBounded(t *testing.T) {
 			ids = append(ids, id)
 		}
 
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 		result, err := dispatcher.DispatchOnce(context.Background(), time.Now())
 		if err != nil {
 			t.Fatalf("dispatch: %v", err)
@@ -185,7 +237,7 @@ func TestClaimIsBounded(t *testing.T) {
 	})
 
 	t.Run("message budget", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -209,7 +261,7 @@ func TestClaimIsBounded(t *testing.T) {
 			t.Fatalf("chunks = %d, want %d", len(intentIDs), wantChunks)
 		}
 
-		claimed, err := NewDispatcher(accountID, be, w).claim(context.Background(), time.Now())
+		claimed, err := NewDispatcher(accountID, be, w, reads).claim(context.Background(), time.Now())
 		if err != nil {
 			t.Fatalf("claim: %v", err)
 		}
@@ -226,7 +278,7 @@ func TestClaimIsBounded(t *testing.T) {
 	})
 
 	t.Run("a chunk wider than the budget is still claimed", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -252,7 +304,7 @@ func TestClaimIsBounded(t *testing.T) {
 
 		be := newFakeBackend()
 		be.Caps.Limits.MaxObjectsInSet = fastmailMaxObjectsInSet
-		claimed, err := NewDispatcher(accountID, be, w).claim(context.Background(), now)
+		claimed, err := NewDispatcher(accountID, be, w, reads).claim(context.Background(), now)
 		if err != nil {
 			t.Fatalf("claim: %v", err)
 		}

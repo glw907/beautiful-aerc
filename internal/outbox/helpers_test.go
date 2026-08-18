@@ -118,6 +118,21 @@ func occupyWriter(t *testing.T, w *store.Writer, d time.Duration) {
 	<-started
 }
 
+// openReads returns a read pool over the store at path, closed on
+// cleanup: the handle a Dispatcher probes for eligible work through,
+// for a test that opened its own writer rather than taking the pair
+// from storetest.
+func openReads(t *testing.T, path string, w *store.Writer) *store.ReadPool {
+	t.Helper()
+
+	reads, err := store.NewReadPool(path, store.DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("open a read pool over %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = reads.Close() })
+	return reads
+}
+
 // fastmailMaxObjectsInSet is the per-request object limit the live
 // Fastmail session advertises, read off
 // https://api.fastmail.com/jmap/session. It is the figure a test at

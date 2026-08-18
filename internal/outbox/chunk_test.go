@@ -56,7 +56,7 @@ func TestChunkedBulk(t *testing.T) {
 	})
 
 	t.Run("partial dispatch retries only unfinished chunks", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -84,7 +84,7 @@ func TestChunkedBulk(t *testing.T) {
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		pass1 := time.Now()
 		if _, err := dispatcher.DispatchOnce(context.Background(), pass1); err != nil {
@@ -122,7 +122,7 @@ func TestChunkedBulk(t *testing.T) {
 	})
 
 	t.Run("compensating group restores exact prior state per message", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -143,7 +143,7 @@ func TestChunkedBulk(t *testing.T) {
 			}
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 
 		_, _, err := EnqueueMoveMessagesBulk(context.Background(), w, accountID, msgIDs, dest, 0, be, false, time.Now())
 		if err != nil {
@@ -231,7 +231,7 @@ func TestEnqueueMoveMessagesBulkCompensatesPartialFailure(t *testing.T) {
 	})
 
 	t.Run("chunk already dispatched escapes rollback", func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
 		src := seedMailbox(t, w, accountID, "Inbox", "mbx-src")
 		dest := seedMailbox(t, w, accountID, "Archive", "mbx-dest")
@@ -253,7 +253,7 @@ func TestEnqueueMoveMessagesBulkCompensatesPartialFailure(t *testing.T) {
 		be.MailSource.ApplyBatchFunc = func(_ context.Context, muts []backend.Mutation) (backend.BatchResult, error) {
 			return backend.BatchResult{Created: map[string]string{}, Failed: map[string]error{}}, nil
 		}
-		dispatcher := NewDispatcher(accountID, be, w)
+		dispatcher := NewDispatcher(accountID, be, w, reads)
 		if _, err := dispatcher.DispatchOnce(context.Background(), now); err != nil {
 			t.Fatalf("dispatch chunk 0: %v", err)
 		}

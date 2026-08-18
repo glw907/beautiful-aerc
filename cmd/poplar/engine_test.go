@@ -188,7 +188,7 @@ func TestRetryConnectSurfacesTheCredentialItGivesUpOn(t *testing.T) {
 // test-driven SyncKind call in between.
 func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := storetest.Insert(t, w,
 			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
 
@@ -208,7 +208,7 @@ func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEngines(ctx, accountID, &be, w)
+		wg := startEngines(ctx, accountID, &be, w, reads)
 
 		notify <- backend.Notification{}
 		// The bulk lane's InteractiveQuiet subordination (ADR-0003
@@ -237,7 +237,7 @@ func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 // DispatchOnce call in between.
 func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := storetest.Insert(t, w,
 			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
 		mailboxID := storetest.Insert(t, w,
@@ -251,7 +251,7 @@ func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEngines(ctx, accountID, &be, w)
+		wg := startEngines(ctx, accountID, &be, w, reads)
 
 		if _, _, err := outbox.EnqueueRenameMailbox(ctx, w, accountID, mailboxID, "New Name", time.Now()); err != nil {
 			t.Fatalf("EnqueueRenameMailbox: %v", err)
@@ -282,7 +282,7 @@ func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 // delays every triage action by up to a full tick.
 func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 		accountID := storetest.Insert(t, w,
 			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
 		mailboxID := storetest.Insert(t, w,
@@ -300,7 +300,7 @@ func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		dispatcher := outbox.NewDispatcher(accountID, &be, w)
+		dispatcher := outbox.NewDispatcher(accountID, &be, w, reads)
 		go runDispatchLoop(ctx, dispatcher)
 
 		synctest.Wait()
