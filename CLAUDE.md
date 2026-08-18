@@ -41,6 +41,13 @@ Invoke the relevant skill before writing code, including spike code.
 
 - **`go-conventions`**, mandatory for every Go file.
 - **`elm-conventions`**, mandatory before touching bubbletea UI code.
+- **`bubbletea-design`**, mandatory alongside `elm-conventions` for
+  layout, alignment, icon, and theming work.
+- **`tui-design:tui-design`**, optional, an installed third-party
+  plugin covering general TUI patterns, exemplar-app case studies,
+  and testing recipes. Its keybinding defaults assume palettes,
+  leader keys, and multi-key sequences; poplar's bindings are
+  modifier-free single keys (ADR-0012), so skip that section.
 
 ## Human voice
 

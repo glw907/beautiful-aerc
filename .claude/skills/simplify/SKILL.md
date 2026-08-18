@@ -23,19 +23,19 @@ For each change:
 
 1. **Search for existing utilities and helpers** that could replace newly written code. Look for similar patterns elsewhere in the codebase; common locations are utility directories, shared modules, and files adjacent to the changed ones.
 2. **Flag any new function that duplicates existing functionality.** Suggest the existing function to use instead.
-3. **Flag any inline logic that could use an existing utility.** Hand-rolled string manipulation, manual path handling, custom environment checks, and ad-hoc type guards are common candidates.
+3. **Flag any inline logic that could use an existing utility.** Hand-rolled string manipulation, manual path handling, custom environment checks, and ad-hoc type assertions are common candidates.
 
 ### Agent 2: Code Quality Review
 
 Review the same changes for hacky patterns:
 
-1. **Redundant state**: state that duplicates existing state, cached values that could be derived, observers/effects that could be direct calls
+1. **Redundant state**: state that duplicates existing state, cached values that could be derived, observers/callbacks that could be direct calls
 2. **Parameter sprawl**: adding new parameters to a function instead of generalizing or restructuring existing ones
 3. **Copy-paste with slight variation**: near-duplicate code blocks that should be unified with a shared abstraction
 4. **Leaky abstractions**: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries
-5. **Stringly-typed code**: using raw strings where constants, enums (string unions), or branded types already exist in the codebase
-6. **Unnecessary JSX nesting**: wrapper Boxes/elements that add no layout value; check if inner component props (flexShrink, alignItems, etc.) already provide the needed behavior
-7. **Nested conditionals**: ternary chains (`a ? x : b ? y : ...`), nested if/else, or nested switch 3+ levels deep; flatten with early returns, guard clauses, a lookup table, or an if/else-if cascade
+5. **Stringly-typed code**: using raw strings where the codebase already defines named constants or a string/iota-based type
+6. **Unnecessary wrapper layers**: lipgloss style wrappers or `JoinHorizontal`/`JoinVertical` nesting that add no layout value; check whether the inner component's own size contract already provides the behavior
+7. **Nested conditionals**: nested if/else or nested switch 3+ levels deep; flatten with early returns, guard clauses, a lookup table, or an if/else-if cascade
 8. **Unnecessary comments**: comments explaining WHAT the code does (well-named identifiers already do that), narrating the change, or referencing the task/caller; delete these, and keep only non-obvious WHY comments (hidden constraints, subtle invariants, workarounds)
 
 ### Agent 3: Efficiency Review
@@ -45,9 +45,9 @@ Review the same changes for efficiency:
 1. **Unnecessary work**: redundant computations, repeated file reads, duplicate network/API calls, N+1 patterns
 2. **Missed concurrency**: independent operations run sequentially when they could run in parallel
 3. **Hot-path bloat**: new blocking work added to startup or per-request/per-render hot paths
-4. **Recurring no-op updates**: state/store updates inside polling loops, intervals, or event handlers that fire unconditionally; add a change-detection guard so downstream consumers aren't notified when nothing changed. Also, if a wrapper function takes an updater/reducer callback, verify it honors same-reference returns (or whatever the "no change" signal is); otherwise callers' early-return no-ops are silently defeated.
+4. **Recurring no-op updates**: state/store updates inside polling loops, intervals, or event handlers that fire unconditionally; add a change-detection guard so downstream consumers aren't notified when nothing changed. Also, if a wrapper function takes an update/merge callback, verify it honors a no-change signal (a false ok, or a returned value equal to the input); otherwise callers' early-return no-ops are silently defeated.
 5. **Unnecessary existence checks**: pre-checking file/resource existence before operating (TOCTOU anti-pattern); operate directly and handle the error
-6. **Memory**: unbounded data structures, missing cleanup, event listener leaks
+6. **Memory**: unbounded data structures, missing cleanup, goroutine leaks
 7. **Overly broad operations**: reading entire files when only a portion is needed, loading all items when filtering for one
 8. **Pre-modern Go stdlib idioms not yet caught by `modernize`** (Go diffs only, when `go.mod` is `>= 1.21`): `make check`'s `lint` step runs golangci-lint with the `modernize` linter enabled, which catches most stdlib-modernization candidates mechanically. Spend this pass on the semantic idioms `modernize` does not reach:
    - `sync.Once` + package-level result var that `sync.OnceValue[T]` / `sync.OnceFunc` would collapse to one declaration, where the shape is non-trivial enough that the linter misses it.
