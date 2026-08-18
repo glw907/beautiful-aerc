@@ -321,15 +321,11 @@ func digitsOnly(s string) bool {
 // already failed leaves records behind either way, and the container
 // goes when the run does.
 func (tg *target) destroyMailbox(id jmap.ID) {
-	req := &jmap.Request{}
-	req.Invoke(&jmap.MailboxSet{
+	tg.quietly(&jmap.MailboxSet{
 		Account:               tg.account,
 		Destroy:               []jmap.ID{id},
 		OnDestroyRemoveEmails: true,
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	_, _ = tg.client.Do(ctx, req)
 }
 
 // newEmail files one message into mailbox and returns its id. The
@@ -400,8 +396,15 @@ func (tg *target) destroyEmail(t *testing.T, id jmap.ID) {
 // destroyEmailQuietly is cleanup for a record a test did not expect
 // the server to create.
 func (tg *target) destroyEmailQuietly(id jmap.ID) {
+	tg.quietly(&jmap.EmailSet{Account: tg.account, Destroy: []jmap.ID{id}})
+}
+
+// quietly invokes method and discards the result, so destroyMailbox
+// and destroyEmailQuietly share the fire-and-forget cleanup skeleton
+// instead of each opening their own context and request.
+func (tg *target) quietly(method jmap.Method) {
 	req := &jmap.Request{}
-	req.Invoke(&jmap.EmailSet{Account: tg.account, Destroy: []jmap.ID{id}})
+	req.Invoke(method)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_, _ = tg.client.Do(ctx, req)

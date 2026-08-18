@@ -15,6 +15,7 @@ import (
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // reclaimKillDBEnv names the store TestReclaimKillChild drives when
@@ -82,7 +83,7 @@ func TestReclaimOrphanedAfterKill(t *testing.T) {
 func TestReclaimOrphanedLogs(t *testing.T) {
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	if err := ReclaimOrphaned(context.Background(), w); err != nil {
 		t.Fatalf("ReclaimOrphaned over an empty outbox: %v", err)

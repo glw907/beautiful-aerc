@@ -248,17 +248,8 @@ func (l *listener) consume(abort context.CancelFunc, body io.Reader) (bool, erro
 	window := stallWindow(l.source.Ping)
 	var stall *time.Timer
 	if window > 0 {
-		stall = time.NewTimer(window)
+		stall = time.AfterFunc(window, abort)
 		defer stall.Stop()
-		done := make(chan struct{})
-		defer close(done)
-		go func() {
-			select {
-			case <-stall.C:
-				abort()
-			case <-done:
-			}
-		}()
 	}
 
 	for {

@@ -1,7 +1,5 @@
 package jmap
 
-import "encoding/json"
-
 // A Mailbox is a named set of messages, presented as a folder or a
 // label (RFC 8621 section 2). Every message belongs to at least one.
 type Mailbox struct {
@@ -192,19 +190,14 @@ func (*MailboxQuery) Name() string { return "Mailbox/query" }
 
 func (*MailboxQuery) Requires() []URI { return []URI{MailURI} }
 
-// MarshalJSON implements json.Marshaler. It drops a Filter holding a
-// typed nil rather than sending "filter": null, and carries the
-// filter it keeps as bytes so the tree is marshalled once.
+// MarshalJSON implements json.Marshaler; see [marshalFiltered].
 func (m MailboxQuery) MarshalJSON() ([]byte, error) {
-	filter, err := omitNullFilter(m.Filter)
-	if err != nil {
-		return nil, err
-	}
-
 	type mailboxQuery MailboxQuery
-	out := mailboxQuery(m)
-	out.Filter = filter
-	return json.Marshal(out)
+	return marshalFiltered(m.Filter, func(f Filter) mailboxQuery {
+		out := mailboxQuery(m)
+		out.Filter = f
+		return out
+	})
 }
 
 // MailboxQueryResponse answers a MailboxQuery.

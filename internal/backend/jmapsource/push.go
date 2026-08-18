@@ -207,8 +207,6 @@ type pushHealth struct {
 	drops int
 }
 
-// dropped records a lost connection, reporting the first at debug
-// level and the second, which is the outage, through uerr.
 func (h *pushHealth) dropped(err error) {
 	h.drops++
 	switch h.drops {
@@ -219,8 +217,6 @@ func (h *pushHealth) dropped(err error) {
 	}
 }
 
-// connected records a connection made, ending whatever run of drops
-// came before it and logging the recovery when that run surfaced.
 func (h *pushHealth) connected() {
 	if h.drops >= outageDrops {
 		slog.Info("jmap: push reconnected", "drops", h.drops)

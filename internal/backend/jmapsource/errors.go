@@ -256,6 +256,9 @@ func (e DialError) Error() string {
 // Unwrap returns e's cause.
 func (e DialError) Unwrap() error { return e.Cause }
 
+// ClassCause returns e's Class and Cause, satisfying uerr.Classified.
+func (e DialError) ClassCause() (uerr.Class, error) { return e.Class, e.Cause }
+
 // jmapSetErrorClass maps a JMAP SetError's type (RFC 8620 section
 // 5.3) to the uerr.Class SY-4 assigns it. A type with no entry here
 // classifies as ClassServer, a rejection with no finer class to name

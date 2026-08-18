@@ -3,6 +3,8 @@ package store
 import (
 	"strings"
 	"testing"
+
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestRoleTable proves classifyMailboxRole's name-heuristic fallback
@@ -86,7 +88,7 @@ func TestServerRoleWins(t *testing.T) {
 // the first-created one (the lower ID), drops the role from the rest
 // without an error, and logs the collision.
 func TestDuplicateRoleResolution(t *testing.T) {
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	candidates := []mailboxRoleCandidate{
 		{ID: 1, AccountID: 1, Name: "Trash"},
@@ -111,7 +113,7 @@ func TestDuplicateRoleResolution(t *testing.T) {
 // higher, since a server's own classification must never lose to a
 // guess about a display name.
 func TestDuplicateRoleResolutionPrefersDeclared(t *testing.T) {
-	captureSlog(t)
+	uerrtest.CaptureDefault(t)
 
 	candidates := []mailboxRoleCandidate{
 		{ID: 1, AccountID: 1, Name: "Trash"},
@@ -131,7 +133,7 @@ func TestDuplicateRoleResolutionPrefersDeclared(t *testing.T) {
 // each claiming the trash role keep their own mailbox, since role
 // collisions resolve per account, not globally across the store.
 func TestDuplicateRoleResolutionScopedToAccount(t *testing.T) {
-	captureSlog(t)
+	uerrtest.CaptureDefault(t)
 
 	candidates := []mailboxRoleCandidate{
 		{ID: 1, AccountID: 1, Name: "Trash"},

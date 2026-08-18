@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // newRecoverableTestWriter is newTestWriter without the automatic
@@ -91,7 +92,7 @@ func TestIntegrityCheckRunsOnUnconsumableMarker(t *testing.T) {
 // state directory has gone unreadable is owed the reason rather than a
 // silent 14-second check on every launch.
 func TestIntegrityCheckReportsAnUnreadableMarkerPath(t *testing.T) {
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	// A regular file where a directory belongs fails the stat with
 	// ENOTDIR, the same shape a permissions failure on the state

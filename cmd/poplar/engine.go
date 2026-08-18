@@ -79,24 +79,18 @@ func isFatalConnect(err error) bool {
 // not Dial, owns the surfacing decision (ADR-0013 revision 2). A
 // keyring.Token failure, the one connect error still built through
 // uerr.New (connectLiveJMAP fails before any network reach, so there
-// is no retry loop to defer to), keeps its own class and cause. One
-// jmapsource.Dial never recognized at all falls back to
-// uerr.ClassConnection, the same default sync's own classifyErr uses
-// for an unclassified push failure: Dial returns a raw error for a
-// JSON decode failure, a truncated body, or any status
-// classifyStatusClass does not map, and a captive portal's HTTP 200
-// login page is exactly that case. Every connect failure classifies
-// to something, which is what keeps retryConnect's own uerr.New call
-// from depending on a lower layer having recognized the failure
-// first.
+// is no retry loop to defer to), keeps its own class and cause
+// through the same uerr.Classified peel. One jmapsource.Dial never
+// recognized at all falls back to uerr.ClassConnection, the same
+// default sync's own classifyErr uses for an unclassified push
+// failure: Dial returns a raw error for a JSON decode failure, a
+// truncated body, or any status classifyStatusClass does not map, and
+// a captive portal's HTTP 200 login page is exactly that case. Every
+// connect failure classifies to something, which is what keeps
+// retryConnect's own uerr.New call from depending on a lower layer
+// having recognized the failure first.
 func classifyConnect(err error) (uerr.Class, error) {
-	if de, ok := errors.AsType[jmapsource.DialError](err); ok {
-		return de.Class, de.Cause
-	}
-	if ue, ok := errors.AsType[uerr.Error](err); ok {
-		return ue.Class, ue.Cause
-	}
-	return uerr.ClassConnection, err
+	return uerr.ClassifyErr(err, uerr.ClassConnection)
 }
 
 // surfaceFatalConnect returns the uerr.Error for a connect failure no

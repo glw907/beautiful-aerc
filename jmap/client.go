@@ -85,18 +85,9 @@ func (c *Client) FetchSession(ctx context.Context) (*Session, error) {
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := refusal(resp); err != nil {
-		return nil, err
-	}
-
 	session := &Session{}
-	if err := json.NewDecoder(resp.Body).Decode(session); err != nil {
-		return nil, fmt.Errorf("decode session: %v", err)
+	if err := c.doDecode(req, session, "session"); err != nil {
+		return nil, err
 	}
 
 	c.mu.Lock()
@@ -153,18 +144,9 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := refusal(resp); err != nil {
-		return nil, err
-	}
-
 	decoded := &Response{}
-	if err := json.NewDecoder(resp.Body).Decode(decoded); err != nil {
-		return nil, fmt.Errorf("decode response: %v", err)
+	if err := c.doDecode(httpReq, decoded, "response"); err != nil {
+		return nil, err
 	}
 	return decoded, nil
 }
@@ -194,20 +176,30 @@ func (c *Client) Upload(ctx context.Context, account ID, contentType string, blo
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 
+	uploaded := &UploadResponse{}
+	if err := c.doDecode(req, uploaded, "upload response"); err != nil {
+		return nil, err
+	}
+	return uploaded, nil
+}
+
+// doDecode runs req and decodes a successful response's body into out,
+// which FetchSession, Do, and Upload all share; what names out in the
+// wrapped error a bad decode returns. Download does not use this: it
+// hands the caller the raw body instead of decoding one.
+func (c *Client) doDecode(req *http.Request, out any, what string) error {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if err := refusal(resp); err != nil {
-		return nil, err
+		return err
 	}
-
-	uploaded := &UploadResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(uploaded); err != nil {
-		return nil, fmt.Errorf("decode upload response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode %s: %v", what, err)
 	}
-	return uploaded, nil
+	return nil
 }
 
 // Download opens the data behind a blob id (RFC 8620 section 6.2). The

@@ -60,16 +60,16 @@ func TestClassifyPassesThroughUnrecognizedError(t *testing.T) {
 	}
 }
 
-// TestClassifyDedupsRepeatedAuthFailures pins F4's fix: three sync
-// poll cycles across two kinds (six do()-shaped classify calls, the
-// shape the finding's own experiment used) against a session whose
-// credential stays rejected the whole time must log the ClassAuth
-// failure once, not six times: a persisted revoked token otherwise
-// floods the log at PollInterval's cadence (about 2,880 lines a day
-// at ADR-0005's default), which is what fixing the 401-classification
-// defect reintroduced. Every call still classifies ClassAuth, so a
-// caller checking errors.As(err, &uerr.Error{}) never silently stops
-// seeing the failure; only the repeated log write is deduped.
+// TestClassifyDedupsRepeatedAuthFailures proves that three sync poll
+// cycles across two kinds (six do()-shaped classify calls, the repeat-
+// call shape a persisted revoked token produces) against a session
+// whose credential stays rejected the whole time must log the
+// ClassAuth failure once, not six times: a persisted revoked token
+// otherwise floods the log at PollInterval's cadence (about 2,880
+// lines a day at ADR-0005's default). Every call still classifies
+// ClassAuth, so a caller checking errors.As(err, &uerr.Error{}) never
+// silently stops seeing the failure; only the repeated log write is
+// deduped.
 func TestClassifyDedupsRepeatedAuthFailures(t *testing.T) {
 	buf := uerrtest.Capture(t)
 	auth := &authState{}
@@ -127,11 +127,10 @@ func TestClassifyAuthDedupResetsOnRecovery(t *testing.T) {
 }
 
 // TestClassifyAuthDedupDoesNotSuppressOtherClasses proves the dedup
-// is scoped to ClassAuth, per the finding's own instruction: a
-// ClassAuth failure followed by a differently classified one (a
-// server error, here) still logs the second failure, so the dedup
-// cannot be mistaken for a general "log the first failure of a
-// session and nothing else after" rule.
+// is scoped to ClassAuth: a ClassAuth failure followed by a
+// differently classified one (a server error, here) still logs the
+// second failure, so the dedup cannot be mistaken for a general "log
+// the first failure of a session and nothing else after" rule.
 func TestClassifyAuthDedupDoesNotSuppressOtherClasses(t *testing.T) {
 	buf := uerrtest.Capture(t)
 	auth := &authState{}

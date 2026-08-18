@@ -74,9 +74,10 @@ func TestClassifyConnect(t *testing.T) {
 
 // TestIsFatalConnectRecognizesADialErrorAuthClass proves
 // isFatalConnect's fatal case still fires for a rejected credential
-// that now arrives as a jmapsource.DialError rather than a uerr.Error, the
-// regression this round's MAJOR B fix (fetchSession classifying
-// without logging) risked: isFatalConnect previously checked only
+// that arrives as a jmapsource.DialError rather than a uerr.Error, the
+// regression risked when Dial started classifying a session-fetch
+// failure into a DialError instead of constructing and logging a
+// uerr.Error for it: isFatalConnect previously checked only
 // errors.AsType[uerr.Error].
 func TestIsFatalConnectRecognizesADialErrorAuthClass(t *testing.T) {
 	rejected := jmapsource.DialError{Class: uerr.ClassAuth, Cause: errors.New("session 401")}
@@ -277,9 +278,8 @@ func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 // runDispatchLoop dispatches a queued intent on entry rather than
 // waiting out its first dispatchInterval tick: it never advances
 // synctest's fake clock past t=0, so a pass here is only possible
-// through the loop's immediate call, the same call that delayed every
-// triage action by up to a full tick when a prior fix round dropped
-// it.
+// through the loop's immediate call, the same call whose absence
+// delays every triage action by up to a full tick.
 func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())

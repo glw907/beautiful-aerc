@@ -72,9 +72,11 @@ func evalPointer(value json.RawMessage, pointer string) (json.RawMessage, error)
 	return evalTokens(pointer, value, tokens)
 }
 
-// pointerUnescaper reverses RFC 6901 section 3's escaping. The order
-// matters: "~01" is the escaped form of "~1" and must not decode to
-// "/".
+// pointerUnescaper reverses RFC 6901 section 3's escaping: "~01" is
+// the escaped form of "~1" and must not decode to "/". Do not split
+// this into two sequential ReplaceAll passes: doing the "~0" pass
+// before the "~1" pass turns "~01" into "~1" and then into "/",
+// which is wrong.
 var pointerUnescaper = strings.NewReplacer("~1", "/", "~0", "~")
 
 // evalTokens carries pointer through the walk so a failure names the

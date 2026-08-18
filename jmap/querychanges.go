@@ -2,7 +2,6 @@ package jmap
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -42,19 +41,14 @@ func (*MailboxQueryChanges) Name() string { return "Mailbox/queryChanges" }
 
 func (*MailboxQueryChanges) Requires() []URI { return []URI{MailURI} }
 
-// MarshalJSON implements json.Marshaler. It drops a Filter holding a
-// typed nil rather than sending "filter": null, and carries the filter
-// it keeps as bytes so the tree is marshalled once.
+// MarshalJSON implements json.Marshaler; see [marshalFiltered].
 func (m MailboxQueryChanges) MarshalJSON() ([]byte, error) {
-	filter, err := omitNullFilter(m.Filter)
-	if err != nil {
-		return nil, err
-	}
-
 	type mailboxQueryChanges MailboxQueryChanges
-	out := mailboxQueryChanges(m)
-	out.Filter = filter
-	return json.Marshal(out)
+	return marshalFiltered(m.Filter, func(f Filter) mailboxQueryChanges {
+		out := mailboxQueryChanges(m)
+		out.Filter = f
+		return out
+	})
 }
 
 // MailboxQueryChangesResponse answers a MailboxQueryChanges.
@@ -117,19 +111,14 @@ func (*EmailQueryChanges) Name() string { return "Email/queryChanges" }
 // filter, so it depends on the same extension.
 func (m *EmailQueryChanges) Requires() []URI { return withSMIME(smimeFilter(m.Filter)) }
 
-// MarshalJSON implements json.Marshaler. It drops a Filter holding a
-// typed nil rather than sending "filter": null, and carries the filter
-// it keeps as bytes so the tree is marshalled once.
+// MarshalJSON implements json.Marshaler; see [marshalFiltered].
 func (m EmailQueryChanges) MarshalJSON() ([]byte, error) {
-	filter, err := omitNullFilter(m.Filter)
-	if err != nil {
-		return nil, err
-	}
-
 	type emailQueryChanges EmailQueryChanges
-	out := emailQueryChanges(m)
-	out.Filter = filter
-	return json.Marshal(out)
+	return marshalFiltered(m.Filter, func(f Filter) emailQueryChanges {
+		out := emailQueryChanges(m)
+		out.Filter = f
+		return out
+	})
 }
 
 // EmailQueryChangesResponse answers an EmailQueryChanges.

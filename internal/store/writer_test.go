@@ -1,12 +1,10 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,46 +13,13 @@ import (
 	"time"
 
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
-
-// syncBuffer is a bytes.Buffer safe for the writer goroutine's
-// concurrent slog calls and the test goroutine's reads of the same
-// log: the writer can still be logging a checkpoint's outcome after
-// the job that triggered it has already returned to its caller.
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
-
-// captureSlog redirects slog's process-wide default logger to an
-// in-memory buffer for the rest of the test, restoring the previous
-// default on cleanup.
-func captureSlog(t *testing.T) *syncBuffer {
-	t.Helper()
-
-	buf := &syncBuffer{}
-	old := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(old) })
-	return buf
-}
 
 // waitForLog polls log for substr up to a short timeout, since a
 // checkpoint's outcome can log after the job that triggered it has
 // already returned to its caller.
-func waitForLog(t *testing.T, log *syncBuffer, substr string) {
+func waitForLog(t *testing.T, log *uerrtest.Buffer, substr string) {
 	t.Helper()
 
 	deadline := time.Now().Add(time.Second)
@@ -317,7 +282,7 @@ func TestSubmitWaitsAfterAdmission(t *testing.T) {
 // ceiling CO-6's kill harness and ADR-0003 revision 2 name, even
 // though the writer does not cancel the transaction itself.
 func TestWriteCeilingWarning(t *testing.T) {
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	cfg := DefaultWriterConfig()
 	cfg.WriteCeiling = 5 * time.Millisecond
@@ -338,7 +303,7 @@ func TestWriteCeilingWarning(t *testing.T) {
 // checkpoint failure means unbounded WAL growth ending in a disk-full
 // the user does see, with nothing tracing back to the cause.
 func TestCheckpointFailureLogged(t *testing.T) {
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 	// Closing the connection out from under the running writer makes

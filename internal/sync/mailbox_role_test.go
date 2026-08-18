@@ -1,17 +1,15 @@
 package sync
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestSyncClassifiesMailboxRole is FO-1's wiring gate: a mailbox that
@@ -62,7 +60,7 @@ func TestSyncClassifiesMailboxRole(t *testing.T) {
 // succeeds, the first-created mailbox keeps the role, the second
 // drops it, and the collision is logged.
 func TestSyncResolvesDuplicateMailboxRoles(t *testing.T) {
-	log := captureSlog(t)
+	log := uerrtest.CaptureDefault(t)
 
 	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 	accountID := seedAccount(t, w)
@@ -101,36 +99,4 @@ func mailboxRoleForServerID(t *testing.T, w *store.Writer, accountID int64, serv
 
 	return storetest.ScanValue[string](t, w,
 		`SELECT role FROM mailbox WHERE account_id = ? AND server_id = ?`, accountID, serverID)
-}
-
-// captureSlog routes the default logger into a buffer for the rest of
-// the test.
-func captureSlog(t *testing.T) *logBuffer {
-	t.Helper()
-
-	buf := &logBuffer{}
-	old := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(old) })
-	return buf
-}
-
-// logBuffer is captureSlog's destination, guarded because the store's
-// writer goroutine logs on its own schedule while the test goroutine
-// reads what has arrived.
-type logBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *logBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *logBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
 }

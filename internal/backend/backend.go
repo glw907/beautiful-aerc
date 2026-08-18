@@ -156,6 +156,9 @@ func (f Failure) Error() string { return f.Cause.Error() }
 // Unwrap returns f's cause.
 func (f Failure) Unwrap() error { return f.Cause }
 
+// ClassCause returns f's Class and Cause, satisfying uerr.Classified.
+func (f Failure) ClassCause() (uerr.Class, error) { return f.Class, f.Cause }
+
 // SubmitResult is what Submit returns once the backend accepts an
 // outgoing message: the backend's submission id, and whether the
 // message is already Sent, for a backend whose accept and deliver

@@ -1,7 +1,6 @@
 package jmap
 
 import (
-	"encoding/json"
 	"slices"
 )
 
@@ -267,19 +266,14 @@ func (*EmailQuery) Name() string { return "Email/query" }
 // the filter constrains on a condition that comes from it.
 func (m *EmailQuery) Requires() []URI { return withSMIME(smimeFilter(m.Filter)) }
 
-// MarshalJSON implements json.Marshaler. It drops a Filter holding a
-// typed nil rather than sending "filter": null, and carries the
-// filter it keeps as bytes so the tree is marshalled once.
+// MarshalJSON implements json.Marshaler; see [marshalFiltered].
 func (m EmailQuery) MarshalJSON() ([]byte, error) {
-	filter, err := omitNullFilter(m.Filter)
-	if err != nil {
-		return nil, err
-	}
-
 	type emailQuery EmailQuery
-	out := emailQuery(m)
-	out.Filter = filter
-	return json.Marshal(out)
+	return marshalFiltered(m.Filter, func(f Filter) emailQuery {
+		out := emailQuery(m)
+		out.Filter = f
+		return out
+	})
 }
 
 // EmailQueryResponse answers an EmailQuery. The ids arrive in the

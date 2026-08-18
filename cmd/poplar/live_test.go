@@ -381,14 +381,7 @@ func (r *recordingMail) DeleteMailbox(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *recordingMail) lastCreate() (recordedCreate, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.created) == 0 {
-		return recordedCreate{}, false
-	}
-	return r.created[len(r.created)-1], true
-}
+func (r *recordingMail) lastCreate() (recordedCreate, bool) { return last(&r.mu, &r.created) }
 
 // allCreates returns every CreateMailbox call r has recorded so far,
 // not only the last: a dispatcher retry can call CreateMailbox twice
@@ -401,22 +394,22 @@ func (r *recordingMail) allCreates() []recordedCreate {
 	return append([]recordedCreate(nil), r.created...)
 }
 
-func (r *recordingMail) lastRename() (recordedRename, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.renamed) == 0 {
-		return recordedRename{}, false
-	}
-	return r.renamed[len(r.renamed)-1], true
-}
+func (r *recordingMail) lastRename() (recordedRename, bool) { return last(&r.mu, &r.renamed) }
 
-func (r *recordingMail) lastDelete() (recordedDelete, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.deleted) == 0 {
-		return recordedDelete{}, false
+func (r *recordingMail) lastDelete() (recordedDelete, bool) { return last(&r.mu, &r.deleted) }
+
+// last returns the final element of *s and true, or the zero value
+// and false when *s is empty, locking mu for the read: lastCreate,
+// lastRename, and lastDelete share it over recordingMail's three
+// captured-call slices, each guarded by the same mutex.
+func last[T any](mu *sync.Mutex, s *[]T) (T, bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	if len(*s) == 0 {
+		var zero T
+		return zero, false
 	}
-	return r.deleted[len(r.deleted)-1], true
+	return (*s)[len(*s)-1], true
 }
 
 // recordingBackend wraps a live backend.Backend, substituting mail

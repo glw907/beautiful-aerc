@@ -334,10 +334,7 @@ func (m *mailSource) CreateMailbox(ctx context.Context, name, parentID string) (
 		return "", err
 	}
 	if se, bad := sr.NotCreated["m1"]; bad {
-		if se.Type == mailboxNameConflict {
-			return "", fmt.Errorf("jmap: create mailbox: rejected: %s: %w", se.Type, backend.ErrMailboxNameExists)
-		}
-		return "", fmt.Errorf("jmap: create mailbox: rejected: %s", se.Type)
+		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", classifyMailboxCreateFailure(se.Type))
 	}
 	created, ok := sr.Created["m1"]
 	if !ok {

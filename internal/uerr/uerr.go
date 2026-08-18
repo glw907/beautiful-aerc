@@ -13,6 +13,8 @@
 // subject outside a debug-level type, and never a credential.
 package uerr
 
+import "errors"
+
 // Class classifies a user-visible failure (SY-4, ER-1). The outbox
 // and sync engine branch retry and surfacing behavior on it.
 //
@@ -117,6 +119,29 @@ func (e Error) Error() string { return e.Message }
 
 // Unwrap returns e's cause.
 func (e Error) Unwrap() error { return e.Cause }
+
+// ClassCause returns e's Class and Cause, satisfying Classified.
+func (e Error) ClassCause() (Class, error) { return e.Class, e.Cause }
+
+// Classified is a typed failure that carries the Class/Cause pair a
+// caller peels off it to decide whether to retry, wrap, or surface
+// it: the shape Error, backend.Failure, and jmapsource.DialError all
+// share. ClassifyErr is the one place that checks for it, instead of
+// each caller repeating its own per-type errors.AsType chain.
+type Classified interface {
+	error
+	ClassCause() (Class, error)
+}
+
+// ClassifyErr walks err's tree for the first Classified error and
+// returns its Class/Cause pair, or fallback and err itself when
+// nothing in the tree implements Classified.
+func ClassifyErr(err error, fallback Class) (Class, error) {
+	if c, ok := errors.AsType[Classified](err); ok {
+		return c.ClassCause()
+	}
+	return fallback, err
+}
 
 // New builds the Error for op, classifies it under class, writes the
 // log line, and returns the view value. ids names the entities op

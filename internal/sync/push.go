@@ -121,21 +121,14 @@ func surfaceable(err error) bool {
 }
 
 // classifyErr reports the uerr.Class and root cause err already
-// carries, in either of the two shapes a backend hands one over: a
-// uerr.Error it built and logged itself, or a backend.Failure it
-// classified and left to this package to surface. Both unwrap to their
-// own Cause, since Error() only ever returns the class's fixed
-// sentence. An err that was never classified reports ClassConnection
-// and itself: a Listen or push-triggered SyncKind failure with no
-// finer classification is, by construction, a connectivity problem.
+// carries, in either of the two uerr.Classified shapes a backend
+// hands one over: a uerr.Error it built and logged itself, or a
+// backend.Failure it classified and left to this package to surface.
+// An err that was never classified reports ClassConnection and
+// itself: a Listen or push-triggered SyncKind failure with no finer
+// classification is, by construction, a connectivity problem.
 func classifyErr(err error) (uerr.Class, error) {
-	if ue, ok := errors.AsType[uerr.Error](err); ok {
-		return ue.Class, ue.Cause
-	}
-	if pf, ok := errors.AsType[backend.Failure](err); ok {
-		return pf.Class, pf.Cause
-	}
-	return uerr.ClassConnection, err
+	return uerr.ClassifyErr(err, uerr.ClassConnection)
 }
 
 // RunPush drives kinds' push loop against backend: push notifications

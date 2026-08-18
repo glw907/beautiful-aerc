@@ -88,6 +88,21 @@ func omitNullFilter(f Filter) (Filter, error) {
 	return rawFilter(data), nil
 }
 
+// marshalFiltered runs omitNullFilter on filter and hands the result to
+// build, which returns the shadow type json.Marshal then encodes. It
+// is the MarshalJSON body [EmailQuery], [MailboxQuery],
+// [MailboxQueryChanges], and [EmailQueryChanges] share: each drops a
+// Filter holding a typed nil rather than sending "filter": null, and
+// carries the filter it keeps as bytes so the tree is marshalled
+// once.
+func marshalFiltered[T any](filter Filter, build func(Filter) T) ([]byte, error) {
+	f, err := omitNullFilter(filter)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(build(f))
+}
+
 // A rawFilter is an already-marshalled filter standing in a Filter
 // slot. It lets a shadow type stay a plain conversion of the type it
 // stands for, which keeps the property order and drops nothing when a
