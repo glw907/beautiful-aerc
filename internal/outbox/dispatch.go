@@ -170,8 +170,11 @@ const (
 // connection whether any intent is eligible before it opens anything.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, now time.Time) (Result, error) {
 	eligible, err := d.reads.HasEligibleIntents(ctx, d.accountID, now)
-	if err != nil || !eligible {
+	if err != nil {
 		return Result{}, err
+	}
+	if !eligible {
+		return Result{}, nil
 	}
 
 	claimedRows, err := d.claim(ctx, now)
@@ -634,7 +637,7 @@ func (d *Dispatcher) claim(ctx context.Context, now time.Time) ([]claimed, error
 		for _, r := range rows {
 			cost := claimCost(r)
 			if len(out) > 0 && spent+cost > claimMessageBudget {
-				return nil
+				break
 			}
 			if err := claimRow(tx, r.id); err != nil {
 				return err
