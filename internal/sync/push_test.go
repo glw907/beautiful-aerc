@@ -299,10 +299,21 @@ func TestRunPushPollsWhileTheStreamStaysRefused(t *testing.T) {
 
 	t.Run("a refused stream falls back to polling", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			calls, _ := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
+			calls, buf := runPush(t, func(context.Context) (<-chan backend.Notification, error) {
 				return nil, backend.Failure{Class: uerr.ClassAuth, Cause: errors.New("event source: 401")}
 			})
 			wantPolls(t, calls)
+
+			// Thousands of refused Listen calls over the window, and the
+			// user is owed one account of the outage rather than one per
+			// attempt (episode dedup, ADR-0013 revision 2).
+			lines := uerrtest.Lines(t, buf)
+			if len(lines) != 1 {
+				t.Fatalf("uerr lines = %d over %v of a refused stream, want exactly 1", len(lines), window)
+			}
+			if got := lines[0]["class"]; got != "auth" {
+				t.Errorf("class = %v, want auth", got)
+			}
 		})
 	})
 

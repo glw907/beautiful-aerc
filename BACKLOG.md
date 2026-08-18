@@ -4,6 +4,12 @@
 
 ## High
 
+- [ ] **#65** `RunPush` silent-stop reconnect never backs off `#bug` `#poplar` `#sync` *(2026-08-18, pass 1b round-3 re-review)*
+  A push stream that opens and dies immediately reopens at `pushState`'s zero-delay floor (`internal/sync/push.go`'s `RunPush`) indefinitely: `pushState.attempt` only advances on a `Listen` failure, and a stream that opens cleanly and then closes at once never produces one, so `reconnect`'s backoff schedule never engages. Measured at ~4 Listen calls/s over a 30-simulated-minute run, ~343k/day for one such server. `TestRunPushDoesNotEscalateOnAnUnexplainedStop` (`internal/sync/push_test.go`) deliberately pins this as the non-escalating floor, so changing it is an owner ruling, not a mechanical fix. Verified fix shape from a scratch experiment: `pushState.stopped` advances `attempt` on a silent stop (not only `fail`), the tail `sleepBackoff` call in `RunPush` takes `push.attempt` instead of a fixed `0`, and both reset on a delivered notification and in `proved()`; this dropped the rate to ~0.1/s. Flagged for the pass 1b gate.
+
+- [ ] **#64** `reportStartupFailure` prints raw shutdown/startup errors to stderr with no log line `#bug` `#poplar` *(2026-08-18, pass 1b round-3 re-review)*
+  `cmd/poplar/main.go`'s `reportStartupFailure` writes `err` (and a `uerr.Error`'s unwrapped cause) straight to `os.Stderr` via `fmt.Fprintln`, with no corresponding `slog`/`uerr` log write. A `reads.Close()` or `store.MarkCleanShutdown` failure on the shutdown path (`run`'s tail, `main.go:208-213`) reaches this function as a plain `errors.Join` value, never a `uerr.Error`, so it is user-visible on the terminal but leaves no trace in `~/.local/state/poplar/poplar.log`. Violates the log-every-visible-error rule. Fix needs an owner call on whether the shutdown-path errors get wrapped in `uerr.New` before reaching `reportStartupFailure`, or whether `reportStartupFailure` itself gains a log side effect for the non-`uerr.Error` case.
+
 - [x] ~~**#58** Defensive-clamp cleanup sweep across `internal/cache/` + `internal/ui/status_bar.go`~~ `#cleanup` `#poplar` `#cache` `#ui` *(2026-05-11, Audit A)* (closed 2026-05-11)
   Resolved by Pass 26.1 (ADR-0211). Eight internal-to-internal guards deleted; `ContactsWriter == nil` kept with a one-line rationale. Drainer `default` arm picks up an inline note about `mail.ErrConnection` riding the backoff curve.
   Surfaced by Pass 26 (Audit A focus #3). Seven internal-to-internal nil-checks and arithmetic clamps that the no-defensive-checks rule forbids:

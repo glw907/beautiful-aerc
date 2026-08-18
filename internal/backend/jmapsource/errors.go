@@ -76,7 +76,11 @@ func classify(op string, err error, episode *episodeState) error {
 // whatever cadence their engine sets, and none of them backs off for
 // a failure the server repeats deterministically: the sync worker
 // polls Changes on every kind at sync.Config's PollInterval, and the
-// outbox dispatcher retries on its own. A rejected credential, a
+// outbox dispatcher retries on its own. The episode is Session-wide
+// rather than per engine, so the two share one: a call from either
+// engine can be the one that opens or extends an episode, and the
+// deduped uerr.Error a later call of the other engine's gets back may
+// carry a cause its own call never produced. A rejected credential, a
 // standing 400 (RFC 8620 section 3.6.1's unknownCapability and limit
 // are the deterministic ones), or an unreachable host would otherwise
 // construct a fresh uerr.Error, and write a fresh log line, on every

@@ -175,20 +175,20 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	flushState := newSyncFlushState()
 	poll := time.NewTicker(w.cfg.PollInterval)
 	defer poll.Stop()
+	flush := func() { w.flush(ctx, kinds, flushState) }
 
 	var push pushState
 	for {
-		flush := func() { w.flush(ctx, kinds, flushState) }
 		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, flush)
 		if err != nil {
 			return
 		}
 
-		delivered := 0
-		if !consumePush(ctx, ch, w.cfg, func() { delivered++; flush() }, push.proved) {
+		delivered := false
+		if !consumePush(ctx, ch, w.cfg, func() { delivered = true; flush() }, push.proved) {
 			return
 		}
-		push.stopped(delivered > 0)
+		push.stopped(delivered)
 
 		// A stop the transport did not explain still costs a step, or
 		// one that opens and stops at once is reopened at zero delay and
@@ -265,8 +265,13 @@ const silentStops = 2
 // nothing, and stopped. No other report covers it: Listen succeeded
 // every time, so the refusal a stop usually carries never arrived, and
 // the failure a user sees is mail that only ever arrives on the poll
-// cadence.
-var errStreamNeverDelivered = errors.New("sync: the push stream keeps opening and stopping without delivering anything")
+// cadence, a connectivity problem rather than anything the server
+// refused, which is why the class is stated here rather than left to
+// classifyErr's fallback.
+var errStreamNeverDelivered = backend.Failure{
+	Class: uerr.ClassConnection,
+	Cause: errors.New("sync: the push stream keeps opening and stopping without delivering anything"),
+}
 
 // stopped records a stream ending, delivered reporting whether it ever
 // produced a notification, and surfaces a run of streams that never
