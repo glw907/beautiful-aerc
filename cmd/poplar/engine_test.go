@@ -12,7 +12,6 @@ import (
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"
-	"github.com/glw907/poplar/internal/backend/jmapsource"
 	"github.com/glw907/poplar/internal/keyring"
 	"github.com/glw907/poplar/internal/outbox"
 	"github.com/glw907/poplar/internal/store"
@@ -45,7 +44,7 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 }
 
 // TestClassifyConnect asserts classifyConnect's three paths: a
-// jmapsource.DialError (jmapsource.Dial's own classified-but-unlogged
+// backend.Failure (jmapsource.Dial's own classified-but-unlogged
 // dial failure) yields its own class and cause; an error never
 // classified at all (Dial's raw JSON-decode failure against a
 // captive portal's HTTP 200 HTML body, most notably) defaults to
@@ -55,7 +54,7 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 // than the fixed per-class sentence uerr.Error.Error() returns.
 func TestClassifyConnect(t *testing.T) {
 	dialCause := errors.New("dial tcp: connection refused")
-	dialErr := jmapsource.DialError{Class: uerr.ClassConnection, Cause: dialCause}
+	dialErr := backend.Failure{Class: uerr.ClassConnection, Cause: dialCause}
 	if class, cause := classifyConnect(dialErr); class != uerr.ClassConnection || cause != dialCause {
 		t.Fatalf("classifyConnect(dialErr) = (%v, %v), want (ClassConnection, dialCause)", class, cause)
 	}
@@ -72,22 +71,22 @@ func TestClassifyConnect(t *testing.T) {
 	}
 }
 
-// TestIsFatalConnectRecognizesADialErrorAuthClass proves
+// TestIsFatalConnectRecognizesAClassifiedAuthFailure proves
 // isFatalConnect's fatal case still fires for a rejected credential
-// that arrives as a jmapsource.DialError rather than a uerr.Error, the
+// that arrives as a backend.Failure rather than a uerr.Error, the
 // regression risked when Dial started classifying a session-fetch
-// failure into a DialError instead of constructing and logging a
+// failure into a backend.Failure instead of constructing and logging a
 // uerr.Error for it: isFatalConnect previously checked only
 // errors.AsType[uerr.Error].
-func TestIsFatalConnectRecognizesADialErrorAuthClass(t *testing.T) {
-	rejected := jmapsource.DialError{Class: uerr.ClassAuth, Cause: errors.New("session 401")}
+func TestIsFatalConnectRecognizesAClassifiedAuthFailure(t *testing.T) {
+	rejected := backend.Failure{Class: uerr.ClassAuth, Cause: errors.New("session 401")}
 	if !isFatalConnect(rejected) {
-		t.Error("isFatalConnect(a ClassAuth DialError) = false, want true")
+		t.Error("isFatalConnect(a ClassAuth backend.Failure) = false, want true")
 	}
 
-	refused := jmapsource.DialError{Class: uerr.ClassConnection, Cause: errors.New("connection refused")}
+	refused := backend.Failure{Class: uerr.ClassConnection, Cause: errors.New("connection refused")}
 	if isFatalConnect(refused) {
-		t.Error("isFatalConnect(a ClassConnection DialError) = true, want false")
+		t.Error("isFatalConnect(a ClassConnection backend.Failure) = true, want false")
 	}
 }
 
@@ -115,7 +114,7 @@ func TestRetryConnectSurfacesEachClassOnceAndLogsRecovery(t *testing.T) {
 		case 1:
 			return nil, "", refused
 		case 2:
-			return nil, "", jmapsource.DialError{Class: uerr.ClassServer, Cause: errors.New("session: unexpected status 503")}
+			return nil, "", backend.Failure{Class: uerr.ClassServer, Cause: errors.New("session: unexpected status 503")}
 		default:
 			return &backendtest.Fake{}, "test-account", nil
 		}
@@ -163,7 +162,7 @@ func TestRetryConnectSurfacesTheCredentialItGivesUpOn(t *testing.T) {
 		if attempts.Add(1) == 1 {
 			return nil, "", refused
 		}
-		return nil, "", fmt.Errorf("jmap: dial: %w", jmapsource.DialError{
+		return nil, "", fmt.Errorf("jmap: dial: %w", backend.Failure{
 			Class: uerr.ClassAuth,
 			Cause: errors.New("session: unexpected status 401"),
 		})

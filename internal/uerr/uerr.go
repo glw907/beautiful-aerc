@@ -125,8 +125,8 @@ func (e Error) ClassCause() (Class, error) { return e.Class, e.Cause }
 
 // Classified is a typed failure that carries the Class/Cause pair a
 // caller peels off it to decide whether to retry, wrap, or surface
-// it: the shape Error, backend.Failure, and jmapsource.DialError all
-// share. Peel and ClassifyErr are the two places that check for it,
+// it: the shape Error and backend.Failure both share. Peel and
+// ClassifyErr are the two places that check for it,
 // instead of each caller repeating its own per-type errors.AsType
 // chain.
 type Classified interface {

@@ -36,7 +36,7 @@ func isStateMismatch(err error) bool {
 // callers (Changes, ApplyBatch, and the rest of jmap.Mail) each run
 // once per outbox dispatch attempt or sync flush, already their own
 // surfacing event, unlike Dial's own retry loop, which classifies its
-// own failures as DialError instead (below) so its caller's retry
+// own failures as a backend.Failure instead (below) so its caller's
 // loop owns the surfacing. A JMAP MethodError (a per-call failure
 // embedded in an otherwise-200 response) is not this function's
 // concern; isCannotCalculateChanges and isStateMismatch classify
@@ -90,7 +90,7 @@ func classify(op string, err error, auth *authState) error {
 // uerr.Error can only be constructed through uerr.New (the
 // error-construction analyzer's own rule), which always logs as a
 // side effect of construction, so there is no "classify without
-// logging" call for a repeat the way DialError gives Dial's own retry
+// logging" call for a repeat the way classifyRetried gives Dial's own
 // loop. report instead reuses the single uerr.Error the first
 // occurrence's uerr.New call produced, returning that same value
 // (Class still ClassAuth, Cause still the original failure) on every
@@ -149,9 +149,9 @@ func statusOf(err error) (status int, ok bool) {
 // to the uerr.Class SY-4 and ADR-0004 revision 2 assign it (401/403 a
 // rejected credential, 404 a missing entity, 429 throttling, and every
 // other rejection a server-side failure), with ok false for a status
-// outside the rejection range entirely. classifyStatus and classifyDial
+// outside the rejection range entirely. classifyStatus and classifyRetried
 // both call this, so the mapping lives in exactly one place despite
-// classifyDial needing it without classifyStatus's uerr.New
+// classifyRetried needing it without classifyStatus's uerr.New
 // construction.
 //
 // The whole 4xx band classifies, rather than only the three statuses
@@ -182,7 +182,7 @@ func classifyStatusClass(status int) (class uerr.Class, ok bool) {
 // mapping, or reports nil for a status none of those classes cover.
 // classify is its only caller: do()'s callers run once per outbox
 // dispatch attempt or sync flush, each already its own surfacing
-// event, unlike Dial's own retry loop (DialError, below), except for
+// event, unlike Dial's own retry loop (classifyRetried, below), except for
 // ClassAuth, which auth.report dedups instead of logging on every
 // call (authState's own doc comment).
 func classifyStatus(op string, status int, cause error, auth *authState) error {
@@ -197,78 +197,31 @@ func classifyStatus(op string, status int, cause error, auth *authState) error {
 	return uerr.New(op, nil, class, cause)
 }
 
-// retriedClass reports the uerr.Class SY-4 and ADR-0004 revision 2
-// assign err, for the two calls this package leaves unlogged because
-// a caller retries them on its own schedule: a session dial and a push
-// Listen. ok is false for a failure neither an HTTP status nor a dead
-// connection classifies.
-func retriedClass(err error) (uerr.Class, bool) {
+// classifyRetried classifies the two failures this package leaves
+// unlogged because their caller retries them on its own schedule: a
+// session dial (cmd/poplar's retryConnect) and a push Listen
+// (RunPush's reconnect). It returns the backend.Failure that carries
+// the class across the seam, or err untouched when neither an HTTP
+// status nor a dead connection classifies it.
+//
+// Constructing a uerr.Error here would write a log line on every
+// attempt rather than only on a state transition (ADR-0013 revision
+// 2), so the layer that owns the retry loop is the layer that decides
+// when to surface it. Without the class crossing the seam at all, a
+// credential the server rejects on the event source reaches the user
+// as a connectivity problem, which is the one push failure no amount
+// of waiting fixes.
+func classifyRetried(err error) error {
 	if status, ok := statusOf(err); ok {
 		if class, ok := classifyStatusClass(status); ok {
-			return class, true
+			return backend.Failure{Class: class, Cause: err}
 		}
 	}
 	if isConnectionDead(err) {
-		return uerr.ClassConnection, true
-	}
-	return 0, false
-}
-
-// classifyDial classifies a session dial's failure as a DialError,
-// without constructing a uerr.Error: Dial is retried by its own
-// caller's backoff loop (cmd/poplar's retryConnect), and constructing
-// a uerr.Error here would write a log line on every attempt rather
-// than only on a state transition (ADR-0013 revision 2). The caller
-// that owns that retry loop is the one that decides when to surface
-// it.
-func classifyDial(err error) error {
-	if class, ok := retriedClass(err); ok {
-		return DialError{Class: class, Cause: err}
+		return backend.Failure{Class: uerr.ClassConnection, Cause: err}
 	}
 	return err
 }
-
-// classifyListen classifies a refused push stream the same way and for
-// the same reason, as the backend.Failure the sync engine reads
-// the class off. Without it a credential the server rejects on the
-// event source reaches the user as a connectivity problem, and while
-// push is refused nothing else pulls Changes, so that line is the only
-// account the user gets of why mail stopped.
-func classifyListen(err error) error {
-	if class, ok := retriedClass(err); ok {
-		return backend.Failure{Class: class, Cause: err}
-	}
-	return err
-}
-
-// DialError is a session dial's classified failure, carrying the
-// uerr.Class SY-4 and ADR-0004 revision 2 assign it and the
-// underlying cause, without having constructed a uerr.Error for it.
-// classifyDial returns this instead of calling uerr.New directly, the
-// same reasoning classifyMutationFailure documents below: Dial's
-// caller retries the dial itself in its own backoff loop. The caller
-// that owns that retry loop is the one that decides when to surface
-// it.
-type DialError struct {
-	Class uerr.Class
-	Cause error
-}
-
-// Error returns e's cause's message, or a fixed string when e carries
-// no cause: DialError is exported, so a zero value can reach Error
-// from outside this package.
-func (e DialError) Error() string {
-	if e.Cause == nil {
-		return "jmap: dial rejected"
-	}
-	return e.Cause.Error()
-}
-
-// Unwrap returns e's cause.
-func (e DialError) Unwrap() error { return e.Cause }
-
-// ClassCause returns e's Class and Cause, satisfying uerr.Classified.
-func (e DialError) ClassCause() (uerr.Class, error) { return e.Class, e.Cause }
 
 // jmapSetErrorClass maps a JMAP SetError's type (RFC 8620 section
 // 5.3) to the uerr.Class SY-4 assigns it. A type with no entry here

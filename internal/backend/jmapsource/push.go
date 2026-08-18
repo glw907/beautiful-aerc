@@ -65,7 +65,7 @@ type pushSource struct {
 func (p *pushSource) noteStop(err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.stopped = fmt.Errorf("jmap: push: %w", classifyListen(cmp.Or(err, errStreamClosed)))
+	p.stopped = fmt.Errorf("jmap: push: %w", classifyRetried(cmp.Or(err, errStreamClosed)))
 }
 
 // takeStop returns why the last stream ended and forgets it, so the

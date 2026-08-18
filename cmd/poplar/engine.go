@@ -73,7 +73,7 @@ func isFatalConnect(err error) bool {
 
 // classifyConnect reports the uerr.Class and root cause a connect
 // failure carries, without having logged it. jmapsource.Dial's own
-// dial-path failures come back as a jmapsource.DialError (a rejected
+// dial-path failures come back as a backend.Failure (a rejected
 // credential, a 404, a 5xx, a dead connection): Dial classifies
 // without calling uerr.New, since retryConnect's own backoff loop,
 // not Dial, owns the surfacing decision (ADR-0013 revision 2). A
@@ -98,7 +98,7 @@ func classifyConnect(err error) (uerr.Class, error) {
 // through uerr.New already. connectLiveJMAP builds its missing-token
 // failure that way, before any network reach, so constructing a second
 // one here would log the same outcome twice (ADR-0013 revision 2) on
-// the most common startup failure there is. A jmapsource.DialError,
+// the most common startup failure there is. A backend.Failure,
 // which Dial classifies without logging so a retry loop can dedup it,
 // is the case that still needs one built.
 func surfaceFatalConnect(err error) uerr.Error {

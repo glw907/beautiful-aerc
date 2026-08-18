@@ -219,7 +219,7 @@ func TestDialHonorsContextTimeout(t *testing.T) {
 // status from the session endpoint itself (a rejection with no
 // problem-details body, so package jmap's refusal builds a bare
 // *jmap.HTTPError rather than a *jmap.RequestError) still reaches the
-// caller classified, as a DialError, not a bare fmt.Errorf, and
+// caller classified, as a backend.Failure, not a bare fmt.Errorf, and
 // without having logged: Dial is retried by its own caller's backoff
 // loop (cmd/poplar's retryConnect), and a uerr.Error constructed here
 // would write a log line on every attempt rather than only on a state
@@ -233,12 +233,12 @@ func TestDialClassifiesRejectedSessionWithoutLogging(t *testing.T) {
 	})
 
 	_, err := Dial(context.Background(), srv.URL+"/session", NewStaticCredentials("bad-token"))
-	de, ok := errors.AsType[DialError](err)
+	failure, ok := errors.AsType[backend.Failure](err)
 	if !ok {
-		t.Fatalf("Dial error = %v, want a DialError in the chain", err)
+		t.Fatalf("Dial error = %v, want a backend.Failure in the chain", err)
 	}
-	if de.Class != uerr.ClassAuth {
-		t.Errorf("Class = %v, want ClassAuth", de.Class)
+	if failure.Class != uerr.ClassAuth {
+		t.Errorf("Class = %v, want ClassAuth", failure.Class)
 	}
 	if ue, ok := errors.AsType[uerr.Error](err); ok {
 		t.Errorf("Dial error carries a uerr.Error (%+v), want none: classification here must not log", ue)
@@ -247,7 +247,7 @@ func TestDialClassifiesRejectedSessionWithoutLogging(t *testing.T) {
 
 // TestDialClassifiesDeadConnectionWithoutLogging asserts a session
 // endpoint that refuses the connection outright (nothing listening)
-// also classifies as a DialError rather than a bare network error,
+// also classifies as a backend.Failure rather than a bare network error,
 // and without logging, the same discipline
 // TestDialClassifiesRejectedSessionWithoutLogging proves for a
 // rejected status.
@@ -257,12 +257,12 @@ func TestDialClassifiesDeadConnectionWithoutLogging(t *testing.T) {
 	srv.Close() // nothing listens on deadURL from here on
 
 	_, err := Dial(context.Background(), deadURL, NewStaticCredentials("tok"))
-	de, ok := errors.AsType[DialError](err)
+	failure, ok := errors.AsType[backend.Failure](err)
 	if !ok {
-		t.Fatalf("Dial error = %v, want a DialError in the chain", err)
+		t.Fatalf("Dial error = %v, want a backend.Failure in the chain", err)
 	}
-	if de.Class != uerr.ClassConnection {
-		t.Errorf("Class = %v, want ClassConnection", de.Class)
+	if failure.Class != uerr.ClassConnection {
+		t.Errorf("Class = %v, want ClassConnection", failure.Class)
 	}
 	if ue, ok := errors.AsType[uerr.Error](err); ok {
 		t.Errorf("Dial error carries a uerr.Error (%+v), want none: classification here must not log", ue)

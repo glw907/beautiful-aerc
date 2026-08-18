@@ -45,7 +45,7 @@ func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*S
 
 	session, err := client.FetchSession(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: dial: %w", classifyDial(err))
+		return nil, fmt.Errorf("jmap: dial: %w", classifyRetried(err))
 	}
 
 	s := &Session{
