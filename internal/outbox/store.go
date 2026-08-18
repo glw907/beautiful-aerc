@@ -47,20 +47,46 @@ func selectEligible(tx *sql.Tx, accountID int64, now time.Time, limit int) ([]ro
 	return scanRows(rows)
 }
 
-// selectByAccount returns every accountID row other than exclude,
-// regardless of state: DispatchOnce's key-resolution patch needs to
-// reach a dependent row whether it is still queued or already
-// claimed for this same pass.
-func selectByAccount(tx *sql.Tx, accountID, exclude int64) ([]row, error) {
+// pageRow is one row of selectPage's scan: the row itself, plus the
+// account it belongs to, which that scan does not filter on.
+type pageRow struct {
+	row
+	accountID int64
+}
+
+// selectPage returns at most limit rows following internal id after,
+// in id order, whatever account or state they belong to:
+// DispatchOnce's key-resolution patch needs to reach a dependent row
+// whether it is still queued or already claimed for this same pass.
+//
+// Neither filter its caller wants is in the query. poplar never runs
+// ANALYZE, so a keyset scan carrying a WHERE clause is exactly the
+// shape SQLite plans badly, and filtering on an unindexed account_id
+// would bound the rows the query returns rather than the rows it
+// examines. Reading the account back and dropping the non-matches in
+// Go is what makes limit a bound on the work.
+func selectPage(tx *sql.Tx, after int64, limit int) ([]pageRow, error) {
 	rows, err := tx.Query(
-		`SELECT id, kind, payload, COALESCE(undo_group, ''), attempt_count, COALESCE(failure_class, '') FROM outbox
-		 WHERE account_id = ? AND id != ?`,
-		accountID, exclude,
+		`SELECT id, kind, payload, COALESCE(undo_group, ''), attempt_count, COALESCE(failure_class, ''), account_id FROM outbox
+		 WHERE id > ? ORDER BY id LIMIT ?`,
+		after, limit,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return scanRows(rows)
+	defer func() { _ = rows.Close() }()
+
+	var out []pageRow
+	for rows.Next() {
+		var p pageRow
+		var kind string
+		if err := rows.Scan(&p.id, &kind, &p.payload, &p.undoGroup, &p.attemptCount, &p.failureClass, &p.accountID); err != nil {
+			return nil, err
+		}
+		p.kind = Kind(kind)
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 // scanRows drains rows into row values, closing rows once done.

@@ -904,6 +904,16 @@ func terminalOutcome(c claimed, class uerr.Class, detail string) outcome {
 	return outcome{c: c, disposition: dispositionTerminal, class: class, detail: detail}
 }
 
+// dependentRefPage is how many outbox rows one resolveDependentRefs
+// transaction examines. Each row costs a payload read, a decode, and,
+// for one naming the create, a re-encode and an UPDATE. Measured
+// against a migrated store on the development machine, a page of 100
+// rows each naming moveChunkMessages messages took 10.9ms, a fifth of
+// ADR-0003's 50ms admission ceiling; the unpaged scan this replaces
+// took 73.8ms over 2000 such rows and tripped the writer's own
+// ceiling detector.
+const dependentRefPage = 100
+
 // resolveDependentRefs persists newID, createID's own resolved server
 // id, into every other row of this account's outbox whose payload
 // still names createID by DestRef (a move) or ParentRef (a nested
@@ -912,26 +922,49 @@ func terminalOutcome(c claimed, class uerr.Class, detail string) outcome {
 // same pass, whether it was never claimed this pass or was claimed
 // and then requeued after a failure, finds nothing left in the store
 // to resolve its back-reference against on its next attempt.
+//
+// The outbox is walked a page at a time, each page its own
+// transaction, since a folder created offline and then filled is the
+// designed shape here and leaves one dependent row per chunk of the
+// move. A page that fails leaves the pages before it patched, which
+// costs nothing: every rewrite is idempotent, and the create that
+// failed here requeues and runs the whole walk again on its next
+// attempt.
 func (d *Dispatcher) resolveDependentRefs(ctx context.Context, createID int64, newID string) error {
-	return d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
-		rows, err := selectByAccount(tx, d.accountID, createID)
-		if err != nil {
-			return err
-		}
-		for _, r := range rows {
-			patched, ok, err := rewriteRef(r, createID, newID)
+	var after int64
+	for {
+		var examined int
+		err := d.writer.ApplyInteractive(ctx, func(tx *sql.Tx) error {
+			rows, err := selectPage(tx, after, dependentRefPage)
 			if err != nil {
 				return err
 			}
-			if !ok {
-				continue
+			examined = len(rows)
+			for _, r := range rows {
+				after = r.id
+				if r.accountID != d.accountID || r.id == createID {
+					continue
+				}
+				patched, ok, err := rewriteRef(r.row, createID, newID)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					continue
+				}
+				if err := updatePayload(tx, r.id, patched); err != nil {
+					return err
+				}
 			}
-			if err := updatePayload(tx, r.id, patched); err != nil {
-				return err
-			}
+			return nil
+		})
+		if err != nil {
+			return err
 		}
-		return nil
-	})
+		if examined == 0 {
+			return nil
+		}
+	}
 }
 
 // rewriteRef reports whether r's payload names createID by DestRef or

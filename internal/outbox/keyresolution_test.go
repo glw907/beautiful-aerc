@@ -2,6 +2,8 @@ package outbox
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -157,6 +159,79 @@ func TestKeyResolutionAtProductionLimits(t *testing.T) {
 	}
 	if len(result.Delivered) != len(moveIDs)+1 {
 		t.Fatalf("Delivered = %d, want %d (the create and every chunk)", len(result.Delivered), len(moveIDs)+1)
+	}
+}
+
+// TestResolveDependentRefsPagesTheOutbox covers the walk a create
+// makes over the rows depending on it. Filling a folder created
+// offline leaves one dependent row per chunk of the move, so the walk
+// is over a set the user's own action sizes, and doing it in one
+// transaction held the interactive lane for 73.8ms at 2000 rows.
+// Paging it is only correct if the pages compose, so this asserts
+// both halves: every dependent is patched wherever it sits in the
+// scan, and no page is the whole outbox.
+func TestResolveDependentRefsPagesTheOutbox(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+	otherID := storetest.Insert(t, w,
+		`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "other", "jmap", "other@example.com")
+
+	now := time.Now()
+	createID, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, now)
+	if err != nil {
+		t.Fatalf("enqueue create: %v", err)
+	}
+
+	dependents := 2*dependentRefPage + 10
+	var ids []int64
+	var strayID int64
+	err = w.ApplyInteractive(context.Background(), func(tx *sql.Tx) error {
+		for seq := range dependents {
+			payload, err := json.Marshal(MoveMessagesPayload{MessageIDs: []int64{int64(seq)}, DestRef: createID})
+			if err != nil {
+				return err
+			}
+			id, err := insertRow(tx, accountID, KindMoveMessages, payload, "g", seq, now, now)
+			if err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		// Another account's row naming the same intent id: the scan
+		// itself is unfiltered, so this is what proves the ownership
+		// filter still holds.
+		payload, err := json.Marshal(MoveMessagesPayload{MessageIDs: []int64{1}, DestRef: createID})
+		if err != nil {
+			return err
+		}
+		strayID, err = insertRow(tx, otherID, KindMoveMessages, payload, "g", 0, now, now)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed dependents: %v", err)
+	}
+
+	before := w.Revision().Current()
+	if err := NewDispatcher(accountID, newFakeBackend(), w).resolveDependentRefs(context.Background(), createID, "mbx-new"); err != nil {
+		t.Fatalf("resolveDependentRefs: %v", err)
+	}
+	transactions := w.Revision().Current() - before
+
+	for i, id := range ids {
+		p := readMovePayload(t, w, id)
+		if p.DestRef != 0 || p.DestServerID != "mbx-new" {
+			t.Fatalf("dependent %d of %d (intent %d): DestRef = %d DestServerID = %q, want 0 and the resolved id",
+				i, dependents, id, p.DestRef, p.DestServerID)
+		}
+	}
+	if p := readMovePayload(t, w, strayID); p.DestRef != createID || p.DestServerID != "" {
+		t.Errorf("another account's row was rewritten: DestRef = %d DestServerID = %q", p.DestRef, p.DestServerID)
+	}
+
+	// One transaction per page plus the empty page that ends the walk,
+	// against exactly one for a scan of the whole outbox.
+	if want := store.Revision(dependents/dependentRefPage + 2); transactions != want {
+		t.Errorf("writer transactions = %d over %d rows, want %d (pages of %d)", transactions, dependents, want, dependentRefPage)
 	}
 }
 
