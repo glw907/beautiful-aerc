@@ -41,7 +41,9 @@ func (*MailboxQueryChanges) Name() string { return "Mailbox/queryChanges" }
 
 func (*MailboxQueryChanges) Requires() []URI { return []URI{MailURI} }
 
-// MarshalJSON implements json.Marshaler; see [marshalFiltered].
+// MarshalJSON implements json.Marshaler. A nil or typed-nil Filter
+// is left out of the wire form entirely, never sent as "filter":
+// null; marshalFiltered carries the mechanics.
 func (m MailboxQueryChanges) MarshalJSON() ([]byte, error) {
 	type mailboxQueryChanges MailboxQueryChanges
 	return marshalFiltered(m.Filter, func(f Filter) mailboxQueryChanges {
@@ -111,7 +113,9 @@ func (*EmailQueryChanges) Name() string { return "Email/queryChanges" }
 // filter, so it depends on the same extension.
 func (m *EmailQueryChanges) Requires() []URI { return withSMIME(smimeFilter(m.Filter)) }
 
-// MarshalJSON implements json.Marshaler; see [marshalFiltered].
+// MarshalJSON implements json.Marshaler. A nil or typed-nil Filter
+// is left out of the wire form entirely, never sent as "filter":
+// null; marshalFiltered carries the mechanics.
 func (m EmailQueryChanges) MarshalJSON() ([]byte, error) {
 	type emailQueryChanges EmailQueryChanges
 	return marshalFiltered(m.Filter, func(f Filter) emailQueryChanges {

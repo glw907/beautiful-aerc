@@ -334,7 +334,15 @@ func (m *mailSource) CreateMailbox(ctx context.Context, name, parentID string) (
 		return "", err
 	}
 	if se, bad := sr.NotCreated["m1"]; bad {
-		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", classifyMailboxCreateFailure(se.Type))
+		// .Cause only: classifyMailboxCreateFailure returns a
+		// backend.Failure, and a backend.Failure is uerr.Classified.
+		// Returning the Failure itself here would let outbox's
+		// classifyFailure read a Class off a create-path error that
+		// was never meant to reach the dispatcher pre-classified,
+		// which flips its retry/terminal decision. The Cause alone
+		// carries the same text and the same errors.Is chain to
+		// backend.ErrMailboxNameExists.
+		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", classifyMailboxCreateFailure(se.Type).Cause)
 	}
 	created, ok := sr.Created["m1"]
 	if !ok {

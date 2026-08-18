@@ -634,13 +634,12 @@ func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
 }
 
 // TestRunFailsFastOnAFatalConnectError proves the rejected-credential
-// case stays exactly as fatal as a rejected credential always has and
-// stays visible: run returns immediately without retrying, the
-// operator reads the fixed ClassAuth sentence rather than the
-// transport's raw status text, and the failure reaches the log as
-// exactly one main.connect line (ER-1's correlation between what the
-// user sees and what the log records, under ADR-0013 revision 2's
-// one-line-per-outcome rule).
+// case stays fatal and stays visible: run returns immediately without
+// retrying, the operator reads the fixed ClassAuth sentence rather
+// than the transport's raw status text, and the failure reaches the
+// log as exactly one main.connect line (ER-1's correlation between
+// what the user sees and what the log records, under ADR-0013
+// revision 2's one-line-per-outcome rule).
 //
 // Both shapes a real connector produces run through it, because run's
 // fatal branch has to treat them differently to log once.

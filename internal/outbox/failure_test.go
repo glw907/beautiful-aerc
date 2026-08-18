@@ -100,6 +100,64 @@ func TestFailureClasses(t *testing.T) {
 	}
 }
 
+// TestCreateMailboxNotFoundRefusalClassifiesAsServer pins the exact
+// shape jmapsource's CreateMailbox now returns for a create the
+// server refused with a SetError type it does not name a finer class
+// for ("notFound", among them): a plain wrapped string, never a
+// backend.Failure. classifyFailure must not read a class off it by
+// any means but uerr.Peel's Classified walk, which finds nothing here
+// and falls back to ClassServer; a class of ClassNotFound would make
+// the intent terminal, and would be wrong, since nothing in
+// dispatchCreateMailbox's own SetError decoding fed classifyFailure a
+// Classified value to have found in the first place. This is the
+// shape TestFailureClasses does not cover: every case there scripts
+// ApplyBatchFunc to hand classifyFailure a backend.Failure directly,
+// never a create refusal's plain wrapped string.
+func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	be := newFakeBackend()
+	be.MailSource.CreateMailboxFunc = func(context.Context, string, string) (string, error) {
+		// Mirrors what CreateMailbox now returns for a SetError type
+		// jmapSetErrorClass has no entry for other than
+		// mailboxNameConflict: the classification is unwrapped down
+		// to its Cause before this reaches the caller, so nothing
+		// Classified is in the tree.
+		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", errors.New("notFound"))
+	}
+
+	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	result, err := NewDispatcher(accountID, be, w).DispatchOnce(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if len(result.Failures) != 1 {
+		t.Fatalf("Failures = %+v, want exactly one", result.Failures)
+	}
+	f := result.Failures[0]
+	if f.Class != uerr.ClassServer {
+		t.Errorf("Class = %v, want ClassServer: nothing in the error tree is uerr.Classified", f.Class)
+	}
+	const wantDetail = "jmap: create mailbox: rejected: notFound"
+	if f.Detail != wantDetail {
+		t.Errorf("Detail = %q, want %q", f.Detail, wantDetail)
+	}
+	if !f.Retrying {
+		t.Error("Retrying = false, want true: ClassServer retries, unlike ClassNotFound")
+	}
+	if f.Warn {
+		t.Error("Warn = true, want false: ClassServer is not ClassThrottled")
+	}
+	if state, attempts := outboxState(t, w, id); state != "queued" || attempts != 1 {
+		t.Errorf("state = %s attempts = %d, want queued/1: a retriable failure stays in the outbox", state, attempts)
+	}
+}
+
 // TestNoIntentStrandsInDispatching covers DispatchOnce's
 // postcondition, whatever the pass decides for each claimed row: no
 // row is left in dispatching once it returns. selectEligible reads

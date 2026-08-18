@@ -1032,19 +1032,24 @@ func backoff(attempt int) time.Duration {
 	return d
 }
 
-// classifyFailure recovers the uerr.Class a backend attached to err
-// through either uerr.Classified shape: a backend.Failure from a
-// per-mutation ApplyBatch result, or a uerr.Error from a whole-call
-// transport failure. A backend returning neither is classified
-// ClassServer, the same fallback jmap's own classification tables use
-// for an unrecognized failure. The detail string is the cause's own
-// text for a backend.Failure (what the server said), but the fixed
-// user sentence for a uerr.Error: that failure already went through
-// uerr.New, so its Message is the one already chosen to describe it.
+// classifyFailure recovers the uerr.Class and detail string off the
+// same uerr.Peel match: a backend.Failure from a per-mutation
+// ApplyBatch result, or a uerr.Error from a whole-call transport
+// failure, whichever uerr.Peel finds first in err's tree. Reading
+// both off that one match, rather than walking the tree twice, is
+// what guarantees the class and the detail describe the same failure.
+// A backend returning neither is classified ClassServer, the same
+// fallback jmap's own classification tables use for an unrecognized
+// failure, with err's own text as the detail. The detail string is
+// otherwise the match's own Error() text: a backend.Failure's is its
+// cause's wire text (what the server said), and a uerr.Error's is its
+// fixed user sentence, since that failure already went through
+// uerr.New, which chose the sentence once.
 func classifyFailure(err error) (uerr.Class, string) {
-	class, cause := uerr.ClassifyErr(err, uerr.ClassServer)
-	if ue, ok := errors.AsType[uerr.Error](err); ok {
-		return class, ue.Error()
+	c, ok := uerr.Peel(err)
+	if !ok {
+		return uerr.ClassServer, err.Error()
 	}
-	return class, cause.Error()
+	class, _ := c.ClassCause()
+	return class, c.Error()
 }

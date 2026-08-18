@@ -190,7 +190,9 @@ func (*MailboxQuery) Name() string { return "Mailbox/query" }
 
 func (*MailboxQuery) Requires() []URI { return []URI{MailURI} }
 
-// MarshalJSON implements json.Marshaler; see [marshalFiltered].
+// MarshalJSON implements json.Marshaler. A nil or typed-nil Filter
+// is left out of the wire form entirely, never sent as "filter":
+// null; marshalFiltered carries the mechanics.
 func (m MailboxQuery) MarshalJSON() ([]byte, error) {
 	type mailboxQuery MailboxQuery
 	return marshalFiltered(m.Filter, func(f Filter) mailboxQuery {

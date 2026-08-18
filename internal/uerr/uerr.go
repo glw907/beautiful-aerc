@@ -126,18 +126,33 @@ func (e Error) ClassCause() (Class, error) { return e.Class, e.Cause }
 // Classified is a typed failure that carries the Class/Cause pair a
 // caller peels off it to decide whether to retry, wrap, or surface
 // it: the shape Error, backend.Failure, and jmapsource.DialError all
-// share. ClassifyErr is the one place that checks for it, instead of
-// each caller repeating its own per-type errors.AsType chain.
+// share. Peel and ClassifyErr are the two places that check for it,
+// instead of each caller repeating its own per-type errors.AsType
+// chain.
 type Classified interface {
 	error
 	ClassCause() (Class, error)
 }
 
-// ClassifyErr walks err's tree for the first Classified error and
-// returns its Class/Cause pair, or fallback and err itself when
-// nothing in the tree implements Classified.
+// Peel returns the first error in err's tree that implements
+// Classified, and true, or nil and false when nothing in the tree
+// does. Precedence is outermost-wins: err itself is checked before
+// anything its own Unwrap reaches, so a Classified error nested
+// beneath another Classified error never overrides the one closer to
+// err. A caller that needs both the Class/Cause pair and the matched
+// value itself (classifyFailure's detail string, which reads
+// differently off a uerr.Error than off a backend.Failure) calls Peel
+// once and derives both from the same match, rather than walking the
+// tree twice and risking two different answers.
+func Peel(err error) (Classified, bool) {
+	return errors.AsType[Classified](err)
+}
+
+// ClassifyErr reports the Class/Cause pair the first Classified error
+// in err's tree carries, or fallback and err itself when nothing in
+// the tree implements Classified.
 func ClassifyErr(err error, fallback Class) (Class, error) {
-	if c, ok := errors.AsType[Classified](err); ok {
+	if c, ok := Peel(err); ok {
 		return c.ClassCause()
 	}
 	return fallback, err

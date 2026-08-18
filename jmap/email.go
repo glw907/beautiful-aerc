@@ -266,7 +266,9 @@ func (*EmailQuery) Name() string { return "Email/query" }
 // the filter constrains on a condition that comes from it.
 func (m *EmailQuery) Requires() []URI { return withSMIME(smimeFilter(m.Filter)) }
 
-// MarshalJSON implements json.Marshaler; see [marshalFiltered].
+// MarshalJSON implements json.Marshaler. A nil or typed-nil Filter
+// is left out of the wire form entirely, never sent as "filter":
+// null; marshalFiltered carries the mechanics.
 func (m EmailQuery) MarshalJSON() ([]byte, error) {
 	type emailQuery EmailQuery
 	return marshalFiltered(m.Filter, func(f Filter) emailQuery {
