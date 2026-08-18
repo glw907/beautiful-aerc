@@ -65,7 +65,7 @@ type pushSource struct {
 func (p *pushSource) noteStop(err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.stopped = fmt.Errorf("jmap: push: %w", classifyRetried(cmp.Or(err, errStreamClosed)))
+	p.stopped = fmt.Errorf("jmapsource: push: %w", classifyRetried(cmp.Or(err, errStreamClosed)))
 }
 
 // takeStop returns why the last stream ended and forgets it, so the
@@ -152,7 +152,7 @@ func (p *pushSource) Listen(ctx context.Context) (<-chan backend.Notification, e
 			// connection goes unnoticed. It reports the first clamp and
 			// then only a change in the advertised figure, so a server
 			// that clamps every ping is one line, not one a ping.
-			slog.Debug("jmap: push ping interval clamped", "reported", reported, "in_force", inForce)
+			slog.Debug("jmapsource: push ping interval clamped", "reported", reported, "in_force", inForce)
 		},
 	}
 
@@ -211,15 +211,15 @@ func (h *pushHealth) dropped(err error) {
 	h.drops++
 	switch h.drops {
 	case 1:
-		slog.Debug("jmap: push connection lost, the transport is reconnecting", "error", err)
+		slog.Debug("jmapsource: push connection lost, the transport is reconnecting", "error", err)
 	case outageDrops:
-		_ = uerr.New("jmap.push", nil, uerr.ClassConnection, cmp.Or(err, errStreamClosed))
+		_ = uerr.New("jmapsource.push", nil, uerr.ClassConnection, cmp.Or(err, errStreamClosed))
 	}
 }
 
 func (h *pushHealth) connected() {
 	if h.drops >= outageDrops {
-		slog.Info("jmap: push reconnected", "drops", h.drops)
+		slog.Info("jmapsource: push reconnected", "drops", h.drops)
 	}
 	h.drops = 0
 }

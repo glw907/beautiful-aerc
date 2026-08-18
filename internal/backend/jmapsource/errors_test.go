@@ -37,7 +37,7 @@ func TestClassify(t *testing.T) {
 			// saw one for. Sharing one authState across cases would make
 			// the second case's classify return the first case's cached
 			// value instead of classifying its own error.
-			got := classify("jmap.test", c.err, &authState{})
+			got := classify("jmapsource.test", c.err, &authState{})
 			var ue uerr.Error
 			if !errors.As(got, &ue) {
 				t.Fatalf("classify(%v) = %v, want a uerr.Error", c.err, got)
@@ -109,10 +109,10 @@ func TestRequestLevelRejectionCarriesItsClassToEveryCaller(t *testing.T) {
 
 func TestClassifyPassesThroughUnrecognizedError(t *testing.T) {
 	unrecognized := errors.New("something else entirely")
-	if got := classify("jmap.test", unrecognized, &authState{}); got != unrecognized {
+	if got := classify("jmapsource.test", unrecognized, &authState{}); got != unrecognized {
 		t.Errorf("classify(%v) = %v, want the same error unclassified", unrecognized, got)
 	}
-	if classify("jmap.test", nil, &authState{}) != nil {
+	if classify("jmapsource.test", nil, &authState{}) != nil {
 		t.Error("classify(nil) should return nil")
 	}
 }
@@ -134,7 +134,7 @@ func TestClassifyDedupsRepeatedAuthFailures(t *testing.T) {
 
 	for cycle := range 3 {
 		for range 2 { // two kinds, mailbox and message
-			got := classify("jmap.do", cause, auth)
+			got := classify("jmapsource.do", cause, auth)
 			var ue uerr.Error
 			if !errors.As(got, &ue) {
 				t.Fatalf("cycle %d: classify = %v, want a uerr.Error on every call", cycle, got)
@@ -164,8 +164,8 @@ func TestClassifyAuthDedupResetsOnRecovery(t *testing.T) {
 	cause := &jmap.HTTPError{Status: http.StatusUnauthorized}
 
 	for _, got := range []error{
-		classify("jmap.do", cause, auth), // episode 1, call 1: logs
-		classify("jmap.do", cause, auth), // episode 1, call 2: deduped
+		classify("jmapsource.do", cause, auth), // episode 1, call 1: logs
+		classify("jmapsource.do", cause, auth), // episode 1, call 2: deduped
 	} {
 		var ue uerr.Error
 		if !errors.As(got, &ue) || ue.Class != uerr.ClassAuth {
@@ -173,7 +173,7 @@ func TestClassifyAuthDedupResetsOnRecovery(t *testing.T) {
 		}
 	}
 	auth.clear() // the recovery do() itself performs on a successful call
-	if got := classify("jmap.do", cause, auth); !errors.As(got, new(uerr.Error)) {
+	if got := classify("jmapsource.do", cause, auth); !errors.As(got, new(uerr.Error)) {
 		t.Fatalf("classify after recovery = %v, want a uerr.Error", got)
 	}
 
@@ -192,8 +192,8 @@ func TestClassifyAuthDedupDoesNotSuppressOtherClasses(t *testing.T) {
 	buf := uerrtest.Capture(t)
 	auth := &authState{}
 
-	_ = classify("jmap.do", &jmap.HTTPError{Status: http.StatusUnauthorized}, auth)
-	_ = classify("jmap.do", &jmap.HTTPError{Status: http.StatusInternalServerError}, auth)
+	_ = classify("jmapsource.do", &jmap.HTTPError{Status: http.StatusUnauthorized}, auth)
+	_ = classify("jmapsource.do", &jmap.HTTPError{Status: http.StatusInternalServerError}, auth)
 
 	lines := uerrtest.Lines(t, buf)
 	if len(lines) != 2 {

@@ -52,7 +52,7 @@ func (m *mailSource) Changes(ctx context.Context, kind backend.ObjectKind, token
 		}
 		return m.session.mailboxChanges(ctx, token, limit)
 	default:
-		return backend.ChangeSet{}, fmt.Errorf("jmap: changes: unsupported kind %v", kind)
+		return backend.ChangeSet{}, fmt.Errorf("jmapsource: changes: unsupported kind %v", kind)
 	}
 }
 
@@ -67,22 +67,22 @@ func (m *mailSource) Changes(ctx context.Context, kind backend.ObjectKind, token
 func changesRoundTrip[C, G any](ctx context.Context, s *Session, req *jmap.Request, kind, changesCall, createdCall, updatedCall string) (changes C, created, updated G, err error) {
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return changes, created, updated, fmt.Errorf("jmap: %s/changes: %w", kind, err)
+		return changes, created, updated, fmt.Errorf("jmapsource: %s/changes: %w", kind, err)
 	}
 	changes, err = findResponse[C](resp, changesCall)
 	if err != nil {
 		if isCannotCalculateChanges(err) {
 			return changes, created, updated, backend.ErrStateReset
 		}
-		return changes, created, updated, fmt.Errorf("jmap: %s/changes: %w", kind, err)
+		return changes, created, updated, fmt.Errorf("jmapsource: %s/changes: %w", kind, err)
 	}
 	created, err = findResponse[G](resp, createdCall)
 	if err != nil {
-		return changes, created, updated, fmt.Errorf("jmap: %s/get created: %w", kind, err)
+		return changes, created, updated, fmt.Errorf("jmapsource: %s/get created: %w", kind, err)
 	}
 	updated, err = findResponse[G](resp, updatedCall)
 	if err != nil {
-		return changes, created, updated, fmt.Errorf("jmap: %s/get updated: %w", kind, err)
+		return changes, created, updated, fmt.Errorf("jmapsource: %s/get updated: %w", kind, err)
 	}
 	return changes, created, updated, nil
 }
@@ -146,7 +146,7 @@ func parseBaselineToken(token string) (baselineToken, error) {
 	position, queryState, _ := strings.Cut(rest, ":")
 	pos, err := strconv.ParseInt(position, 10, 64)
 	if err != nil {
-		return baselineToken{}, fmt.Errorf("jmap: baseline token %q: %w", token, err)
+		return baselineToken{}, fmt.Errorf("jmapsource: baseline token %q: %w", token, err)
 	}
 	return baselineToken{position: pos, queryState: queryState}, nil
 }
@@ -186,15 +186,15 @@ func (s *Session) baselineMessages(ctx context.Context, token string, limit int)
 
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/query: %w", err)
+		return backend.ChangeSet{}, fmt.Errorf("jmapsource: baseline email/query: %w", err)
 	}
 	query, err := findResponse[*jmap.EmailQueryResponse](resp, queryCall)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/query: %w", err)
+		return backend.ChangeSet{}, fmt.Errorf("jmapsource: baseline email/query: %w", err)
 	}
 	get, err := findResponse[*jmap.EmailGetResponse](resp, getCall)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline email/get: %w", err)
+		return backend.ChangeSet{}, fmt.Errorf("jmapsource: baseline email/get: %w", err)
 	}
 
 	if prev.queryState != "" && query.QueryState != prev.queryState {
@@ -262,11 +262,11 @@ func (s *Session) baselineMailboxes(ctx context.Context) (backend.ChangeSet, err
 	getCall := req.Invoke(&jmap.MailboxGet{Account: s.accountID, Properties: mailboxProperties})
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline mailbox/get: %w", err)
+		return backend.ChangeSet{}, fmt.Errorf("jmapsource: baseline mailbox/get: %w", err)
 	}
 	get, err := findResponse[*jmap.MailboxGetResponse](resp, getCall)
 	if err != nil {
-		return backend.ChangeSet{}, fmt.Errorf("jmap: baseline mailbox/get: %w", err)
+		return backend.ChangeSet{}, fmt.Errorf("jmapsource: baseline mailbox/get: %w", err)
 	}
 	out := backend.ChangeSet{NewToken: get.State}
 	for _, b := range get.List {

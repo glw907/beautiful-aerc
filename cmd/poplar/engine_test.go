@@ -162,7 +162,7 @@ func TestRetryConnectSurfacesTheCredentialItGivesUpOn(t *testing.T) {
 		if attempts.Add(1) == 1 {
 			return nil, "", refused
 		}
-		return nil, "", fmt.Errorf("jmap: dial: %w", backend.Failure{
+		return nil, "", fmt.Errorf("jmapsource: dial: %w", backend.Failure{
 			Class: uerr.ClassAuth,
 			Cause: errors.New("session: unexpected status 401"),
 		})

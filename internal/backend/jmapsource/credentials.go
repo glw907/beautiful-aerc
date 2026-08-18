@@ -11,7 +11,7 @@ import (
 
 // errNoStaticToken is Token's cause when a static credential (v1's
 // non-expiring Fastmail app token) was never configured.
-var errNoStaticToken = errors.New("jmap: credentials: no token configured")
+var errNoStaticToken = errors.New("jmapsource: credentials: no token configured")
 
 // Credentials owns a JMAP backend's token lifecycle (ADR-0004
 // revision 2): Token returns a valid credential, running RefreshFunc
@@ -62,7 +62,7 @@ func (c *Credentials) Token(ctx context.Context) (string, error) {
 		token := c.token
 		c.mu.Unlock()
 		if token == "" {
-			return "", uerr.New("jmap.credentials", nil, uerr.ClassAuth, errNoStaticToken)
+			return "", uerr.New("jmapsource.credentials", nil, uerr.ClassAuth, errNoStaticToken)
 		}
 		return token, nil
 	}
@@ -72,7 +72,7 @@ func (c *Credentials) Token(ctx context.Context) (string, error) {
 
 	token, expiresAt, err := c.RefreshFunc(ctx)
 	if err != nil {
-		err = uerr.New("jmap.credentials", nil, uerr.ClassAuthRefreshFailed, err)
+		err = uerr.New("jmapsource.credentials", nil, uerr.ClassAuthRefreshFailed, err)
 	}
 
 	c.mu.Lock()

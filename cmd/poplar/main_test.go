@@ -594,7 +594,7 @@ func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
 	called := make(chan struct{}, 1)
 	connect := func(context.Context) (backend.Backend, string, error) {
 		if attempts.Add(1) <= 2 {
-			return nil, "", errors.New("jmap: dial: dial tcp: connection refused")
+			return nil, "", errors.New("jmapsource: dial: dial tcp: connection refused")
 		}
 		be := &backendtest.Fake{}
 		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
@@ -652,7 +652,7 @@ func TestRunRetriesANonFatalConnectFailureRatherThanExiting(t *testing.T) {
 // connectLiveJMAP, before any network reach, so constructing a second
 // one for it would log the same outcome twice.
 func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
-	rejectedSession := fmt.Errorf("jmap: dial: %w", backend.Failure{
+	rejectedSession := fmt.Errorf("jmapsource: dial: %w", backend.Failure{
 		Class: uerr.ClassAuth,
 		Cause: errors.New("session https://api.fastmail.com/jmap/session: unexpected status 401"),
 	})
@@ -754,7 +754,7 @@ func TestApplyLogLevelOpensTheDebugLines(t *testing.T) {
 
 			// The line internal/backend/jmapsource writes when a push
 			// connection drops, verbatim.
-			slog.Debug("jmap: push connection lost, the transport is reconnecting")
+			slog.Debug("jmapsource: push connection lost, the transport is reconnecting")
 			slog.Info("poplar: store ready")
 
 			lines := uerrtest.Lines(t, logged)

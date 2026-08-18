@@ -501,7 +501,7 @@ func TestPushStateIgnoresContextCanceled(t *testing.T) {
 		// The shape jmapsource reports a shutdown-time stop in: wrapped,
 		// and left unclassified because a cancellation is nobody's
 		// failure.
-		return nil, fmt.Errorf("jmap: push: %w", context.Canceled)
+		return nil, fmt.Errorf("jmapsource: push: %w", context.Canceled)
 	}}
 
 	state := &pushState{}

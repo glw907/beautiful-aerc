@@ -45,7 +45,7 @@ func Dial(ctx context.Context, sessionURL string, creds backend.Credentials) (*S
 
 	session, err := client.FetchSession(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: dial: %w", classifyRetried(err))
+		return nil, fmt.Errorf("jmapsource: dial: %w", classifyRetried(err))
 	}
 
 	s := &Session{
@@ -67,7 +67,7 @@ func (s *Session) Mail() backend.Mail { return &mailSource{session: s} }
 func (s *Session) do(ctx context.Context, req *jmap.Request) (*jmap.Response, error) {
 	resp, err := s.client.Do(ctx, req)
 	if err != nil {
-		return resp, classify("jmap.do", err, &s.auth)
+		return resp, classify("jmapsource.do", err, &s.auth)
 	}
 	s.auth.clear()
 	s.refetch.follow(ctx, s.client, resp.SessionState)
@@ -146,7 +146,7 @@ func (r *refetchState) follow(ctx context.Context, client *jmap.Client, state st
 	// under one credential is a re-dial, not a URL change, and pass 1b
 	// has no re-dial path.
 	if _, err := client.FetchSession(ctx); err != nil {
-		slog.Warn("jmap: session refetch failed, continuing on the session in hand", "error", err)
+		slog.Warn("jmapsource: session refetch failed, continuing on the session in hand", "error", err)
 	}
 }
 
@@ -197,7 +197,7 @@ type authTransport struct {
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	token, err := t.creds.Token(req.Context())
 	if err != nil {
-		return nil, fmt.Errorf("jmap: credential: %w", err)
+		return nil, fmt.Errorf("jmapsource: credential: %w", err)
 	}
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -253,9 +253,9 @@ func findResponse[T any](resp *jmap.Response, callID string) (T, error) {
 		}
 		v, ok := inv.Args.(T)
 		if !ok {
-			return zero, fmt.Errorf("jmap: unexpected response type for call %s", callID)
+			return zero, fmt.Errorf("jmapsource: unexpected response type for call %s", callID)
 		}
 		return v, nil
 	}
-	return zero, fmt.Errorf("jmap: no response for call %s", callID)
+	return zero, fmt.Errorf("jmapsource: no response for call %s", callID)
 }

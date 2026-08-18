@@ -125,7 +125,7 @@ func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
 		// classifyMailboxCreateFailure computes internally and
 		// returns only that classification's Cause, so nothing
 		// Classified is in this string.
-		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", errors.New("notFound"))
+		return "", fmt.Errorf("jmapsource: create mailbox: rejected: %w", errors.New("notFound"))
 	}
 
 	id, _, err := EnqueueCreateMailbox(context.Background(), w, accountID, "Projects", 0, 0, time.Now())
@@ -144,7 +144,7 @@ func TestCreateMailboxNotFoundRefusalClassifiesAsServer(t *testing.T) {
 	if f.Class != uerr.ClassServer {
 		t.Errorf("Class = %v, want ClassServer: nothing in the error tree is uerr.Classified", f.Class)
 	}
-	const wantDetail = "jmap: create mailbox: rejected: notFound"
+	const wantDetail = "jmapsource: create mailbox: rejected: notFound"
 	if f.Detail != wantDetail {
 		t.Errorf("Detail = %q, want %q", f.Detail, wantDetail)
 	}

@@ -47,11 +47,11 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 		switch mut.Kind {
 		case backend.ObjectKindMailbox:
 			if mut.Op != backend.MutationCreate {
-				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: mailbox %v is RenameMailbox or DeleteMailbox", mut.Op)
+				return backend.BatchResult{}, fmt.Errorf("jmapsource: apply batch: mailbox %v is RenameMailbox or DeleteMailbox", mut.Op)
 			}
 			create, ok := mut.Fields.(backend.MailboxCreate)
 			if !ok {
-				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: mailbox create carries %T, want backend.MailboxCreate", mut.Fields)
+				return backend.BatchResult{}, fmt.Errorf("jmapsource: apply batch: mailbox create carries %T, want backend.MailboxCreate", mut.Fields)
 			}
 			mailboxes.Create[jmap.ID(mut.CreationID)] = newMailbox(create)
 		case backend.ObjectKindMessage:
@@ -59,7 +59,7 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 			case backend.MutationUpdate:
 				patch, ok := mut.Fields.(backend.MessagePatch)
 				if !ok {
-					return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: message update carries %T, want backend.MessagePatch", mut.Fields)
+					return backend.BatchResult{}, fmt.Errorf("jmapsource: apply batch: message update carries %T, want backend.MessagePatch", mut.Fields)
 				}
 				messages.Update[jmap.ID(mut.ID)] = messagePatch(patch)
 			case backend.MutationDestroy:
@@ -67,13 +67,13 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 			case backend.MutationCreate:
 				result.Failed[mut.CreationID] = backend.Failure{
 					Class: uerr.ClassServer,
-					Cause: errors.New("jmap: message create needs compose assembly (pass 4)"),
+					Cause: errors.New("jmapsource: message create needs compose assembly (pass 4)"),
 				}
 			default:
-				return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: unsupported op %v", mut.Op)
+				return backend.BatchResult{}, fmt.Errorf("jmapsource: apply batch: unsupported op %v", mut.Op)
 			}
 		default:
-			return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: unsupported kind %v", mut.Kind)
+			return backend.BatchResult{}, fmt.Errorf("jmapsource: apply batch: unsupported kind %v", mut.Kind)
 		}
 	}
 
@@ -90,7 +90,7 @@ func (m *mailSource) ApplyBatch(ctx context.Context, mutations []backend.Mutatio
 	}
 	resp, err := m.session.do(ctx, req)
 	if err != nil {
-		return backend.BatchResult{}, fmt.Errorf("jmap: apply batch: %w", err)
+		return backend.BatchResult{}, fmt.Errorf("jmapsource: apply batch: %w", err)
 	}
 
 	if mailboxCall != "" {
@@ -131,7 +131,7 @@ func batchError(call string, err error) error {
 	if isStateMismatch(err) {
 		return backend.ErrStateMismatch
 	}
-	return fmt.Errorf("jmap: %s: %w", call, err)
+	return fmt.Errorf("jmapsource: %s: %w", call, err)
 }
 
 // newMailbox translates a mailbox create's poplar-vocabulary fields
@@ -179,7 +179,7 @@ func (m *mailSource) FetchBodies(ctx context.Context, ids []string) (iter.Seq[ba
 		for _, id := range ids {
 			blobID, ok := blobIDs[id]
 			if !ok {
-				if !yield(backend.BodyChunk{ID: id, Err: fmt.Errorf("jmap: fetch bodies: %s: no blob", id)}) {
+				if !yield(backend.BodyChunk{ID: id, Err: fmt.Errorf("jmapsource: fetch bodies: %s: no blob", id)}) {
 					return
 				}
 				continue
@@ -207,11 +207,11 @@ func (s *Session) resolveBlobIDs(ctx context.Context, ids []string) (map[string]
 	callID := req.Invoke(&jmap.EmailGet{Account: s.accountID, IDs: wireIDs, Properties: []string{"id", "blobId"}})
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: email/get blobid: %w", err)
+		return nil, fmt.Errorf("jmapsource: email/get blobid: %w", err)
 	}
 	get, err := findResponse[*jmap.EmailGetResponse](resp, callID)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: email/get blobid: %w", err)
+		return nil, fmt.Errorf("jmapsource: email/get blobid: %w", err)
 	}
 
 	out := make(map[string]jmap.ID, len(get.List))
@@ -224,7 +224,7 @@ func (s *Session) resolveBlobIDs(ctx context.Context, ids []string) (map[string]
 func (s *Session) downloadBlob(ctx context.Context, blobID jmap.ID) ([]byte, error) {
 	rc, err := s.client.Download(ctx, s.accountID, blobID, rawMessageType, "")
 	if err != nil {
-		return nil, fmt.Errorf("jmap: download: %w", err)
+		return nil, fmt.Errorf("jmapsource: download: %w", err)
 	}
 	defer func() { _ = rc.Close() }()
 	return io.ReadAll(rc)
@@ -245,7 +245,7 @@ func (m *mailSource) Submit(ctx context.Context, raw []byte) (backend.SubmitResu
 	}
 	upload, err := m.session.client.Upload(ctx, m.session.accountID, rawMessageType, bytes.NewReader(raw))
 	if err != nil {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: upload: %w", err)
+		return backend.SubmitResult{}, fmt.Errorf("jmapsource: submit: upload: %w", err)
 	}
 
 	req := &jmap.Request{}
@@ -267,21 +267,21 @@ func (m *mailSource) Submit(ctx context.Context, raw []byte) (backend.SubmitResu
 	})
 	resp, err := m.session.do(ctx, req)
 	if err != nil {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: %w", err)
+		return backend.SubmitResult{}, fmt.Errorf("jmapsource: submit: %w", err)
 	}
 	if _, err := findResponse[*jmap.EmailImportResponse](resp, importCall); err != nil {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: import: %w", err)
+		return backend.SubmitResult{}, fmt.Errorf("jmapsource: submit: import: %w", err)
 	}
 	sr, err := findResponse[*jmap.EmailSubmissionSetResponse](resp, submitCall)
 	if err != nil {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: %w", err)
+		return backend.SubmitResult{}, fmt.Errorf("jmapsource: submit: %w", err)
 	}
 	if se, bad := sr.NotCreated["s1"]; bad {
-		return backend.SubmitResult{}, fmt.Errorf("jmap: submit: rejected: %s", se.Type)
+		return backend.SubmitResult{}, fmt.Errorf("jmapsource: submit: rejected: %s", se.Type)
 	}
 	created, ok := sr.Created["s1"]
 	if !ok {
-		return backend.SubmitResult{}, errors.New("jmap: submit: no submission created")
+		return backend.SubmitResult{}, errors.New("jmapsource: submit: no submission created")
 	}
 	return backend.SubmitResult{ID: string(created.ID), Sent: true}, nil
 }
@@ -291,14 +291,14 @@ func (s *Session) mailboxIDByRole(ctx context.Context, role jmap.Role) (jmap.ID,
 	callID := req.Invoke(&jmap.MailboxQuery{Account: s.accountID, Filter: &jmap.MailboxFilterCondition{Role: role}})
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("jmap: mailbox/query role %s: %w", role, err)
+		return "", fmt.Errorf("jmapsource: mailbox/query role %s: %w", role, err)
 	}
 	qr, err := findResponse[*jmap.MailboxQueryResponse](resp, callID)
 	if err != nil {
-		return "", fmt.Errorf("jmap: mailbox/query role %s: %w", role, err)
+		return "", fmt.Errorf("jmapsource: mailbox/query role %s: %w", role, err)
 	}
 	if len(qr.IDs) == 0 {
-		return "", fmt.Errorf("jmap: no mailbox with role %s", role)
+		return "", fmt.Errorf("jmapsource: no mailbox with role %s", role)
 	}
 	return qr.IDs[0], nil
 }
@@ -308,14 +308,14 @@ func (s *Session) defaultIdentityID(ctx context.Context) (jmap.ID, error) {
 	callID := req.Invoke(&jmap.IdentityGet{Account: s.accountID})
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("jmap: identity/get: %w", err)
+		return "", fmt.Errorf("jmapsource: identity/get: %w", err)
 	}
 	gr, err := findResponse[*jmap.IdentityGetResponse](resp, callID)
 	if err != nil {
-		return "", fmt.Errorf("jmap: identity/get: %w", err)
+		return "", fmt.Errorf("jmapsource: identity/get: %w", err)
 	}
 	if len(gr.List) == 0 {
-		return "", errors.New("jmap: account has no identities")
+		return "", errors.New("jmapsource: account has no identities")
 	}
 	return gr.List[0].ID, nil
 }
@@ -342,11 +342,11 @@ func (m *mailSource) CreateMailbox(ctx context.Context, name, parentID string) (
 		// which flips its retry/terminal decision. The Cause alone
 		// carries the same text and the same errors.Is chain to
 		// backend.ErrMailboxNameExists.
-		return "", fmt.Errorf("jmap: create mailbox: rejected: %w", classifyMailboxCreateFailure(se.Type).Cause)
+		return "", fmt.Errorf("jmapsource: create mailbox: rejected: %w", classifyMailboxCreateFailure(se.Type).Cause)
 	}
 	created, ok := sr.Created["m1"]
 	if !ok {
-		return "", errors.New("jmap: create mailbox: no created entry")
+		return "", errors.New("jmapsource: create mailbox: no created entry")
 	}
 	return string(created.ID), nil
 }
@@ -361,7 +361,7 @@ func (m *mailSource) RenameMailbox(ctx context.Context, id, name string) error {
 		return err
 	}
 	if se, bad := sr.NotUpdated[jmap.ID(id)]; bad {
-		return fmt.Errorf("jmap: rename mailbox: rejected: %s", se.Type)
+		return fmt.Errorf("jmapsource: rename mailbox: rejected: %s", se.Type)
 	}
 	return nil
 }
@@ -376,7 +376,7 @@ func (m *mailSource) DeleteMailbox(ctx context.Context, id string) error {
 		return err
 	}
 	if se, bad := sr.NotDestroyed[jmap.ID(id)]; bad && se.Type != "notFound" {
-		return fmt.Errorf("jmap: delete mailbox: rejected: %s", se.Type)
+		return fmt.Errorf("jmapsource: delete mailbox: rejected: %s", se.Type)
 	}
 	return nil
 }
@@ -413,17 +413,17 @@ func (m *mailSource) FindMailboxes(ctx context.Context, name, parentID string) (
 
 	resp, err := m.session.do(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: find mailboxes: %w", err)
+		return nil, fmt.Errorf("jmapsource: find mailboxes: %w", err)
 	}
 	// The query is read back on its own so a failure there reports as
 	// itself. The get names it by back-reference, so a failed query
 	// reaches the get as an unresolvable reference instead.
 	if _, err := findResponse[*jmap.MailboxQueryResponse](resp, queryCall); err != nil {
-		return nil, fmt.Errorf("jmap: find mailboxes: query: %w", err)
+		return nil, fmt.Errorf("jmapsource: find mailboxes: query: %w", err)
 	}
 	get, err := findResponse[*jmap.MailboxGetResponse](resp, getCall)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: find mailboxes: %w", err)
+		return nil, fmt.Errorf("jmapsource: find mailboxes: %w", err)
 	}
 
 	var ids []string
@@ -445,11 +445,11 @@ func (s *Session) mailboxSet(ctx context.Context, op string, set *jmap.MailboxSe
 	callID := req.Invoke(set)
 	resp, err := s.do(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: %s: %w", op, err)
+		return nil, fmt.Errorf("jmapsource: %s: %w", op, err)
 	}
 	sr, err := findResponse[*jmap.MailboxSetResponse](resp, callID)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: %s: %w", op, err)
+		return nil, fmt.Errorf("jmapsource: %s: %w", op, err)
 	}
 	return sr, nil
 }
@@ -466,11 +466,11 @@ func (m *mailSource) Search(ctx context.Context, query string) ([]string, error)
 	})
 	resp, err := m.session.do(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: search: %w", err)
+		return nil, fmt.Errorf("jmapsource: search: %w", err)
 	}
 	qr, err := findResponse[*jmap.EmailQueryResponse](resp, callID)
 	if err != nil {
-		return nil, fmt.Errorf("jmap: search: %w", err)
+		return nil, fmt.Errorf("jmapsource: search: %w", err)
 	}
 	ids := make([]string, len(qr.IDs))
 	for i, id := range qr.IDs {
