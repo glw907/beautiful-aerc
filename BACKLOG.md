@@ -116,6 +116,9 @@
 
 ## Someday
 
+- [ ] **#70** Terminal-background transparency escape hatch (`background: none` theme option) `#feature` `#poplar` `#ui` *(2026-08-19, pass 2 design research)*
+  Poplar paints its own `bg` token by design (QA-7 determinism and the UX-7 contrast assertions need a known ground; crush does the same with no transparency option). The pane-background research found a real, moderately sized user ask on the other side: people running transparent/blurred terminals resent an opaque paint-over (OpenCode #11866 with 22 reactions plus follow-ons; similar Codex CLI, Windows Terminal, and Warp threads). The fix users converge on is an escape hatch, not transparent-by-default. v1 ships no user configurability (vision), so this waits; when the config surface can carry it, a single theme option that skips painting `bg`/`bgPanel` (contrast assertions then degrade by name) covers the ask. Evidence: docs/poplar/research/2026-08-19-tui-pane-background-research.md part 2.
+
 - [ ] **#63** Flag-a-bad-render: user-submitted problem corpus for the rendering loop `#feature` `#poplar` *(2026-07-19)*
   A keybinding in the reader to flag a message whose markdown render failed, saving the raw
   MIME locally into a known-problems corpus. That corpus feeds the same offline

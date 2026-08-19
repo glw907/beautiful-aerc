@@ -539,8 +539,12 @@ via `Theme.Glyphs()`, spacing constants (`GapLabel=1`,
 `GapControl=2`, `Gutter=1`, `PadPane=1`, `PadModalX=2`,
 `PadModalY=1`, `GapSection=1`).
 
-**Salvage:** none (legacy theme predates the token grammar; the
-palette is new).
+**Salvage:** crush's three-layer token architecture, verified from
+source 2026-08-19 (semantic token opts a la quickstyle, theme
+functions, one central Styles struct; padding never margin; paired
+Focused/Blurred styles) is the shape exemplar, per the
+pane-background research doc part 2. The legacy theme predates the
+token grammar; the palette is new.
 
 - [ ] Task 1 complete
 

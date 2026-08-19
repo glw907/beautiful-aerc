@@ -86,3 +86,57 @@ theme and chrome rulings and every later screen pass.
 The ruling this feeds: flat panes, chrome-band ground, or raised
 sidebar, decided by eye in the pass 2 preview with this brief as
 the weight behind each option.
+
+## Part 2: user preference and the Charm flagships (same day)
+
+A second dispatch, triggered by two follow-up questions (what do
+users prefer; how are flagship bubbletea apps designed) and by the
+audience ambition Geoff stated at the review: attractive enough to
+tempt GUI mail users.
+
+**User preference (adoption data, GitHub stars verified via API):**
+Catppuccin dominates (org ~19.7k stars; its nvim port alone 7.6k),
+then Gruvbox 15.7k, Tokyo Night 8.2k, Nord 6.9k, Rosé Pine 3.1k
+(Dracula is federated across ~200 repos, so its star count
+understates reach). The winners share no hue temperature but do
+share desaturated, muted grounds with soft contrast and restrained
+pastel accents. Poplar's slate palette sits squarely in that
+taste profile.
+
+**Demand signals:** unfocused-pane dimming demand is LOW (zellij
+#3373 has 3 reactions after a year; tmux ships it natively).
+Terminal-background transparency demand is MODERATE-HIGH and
+well-evidenced (OpenCode #11866 with 22 reactions plus two
+follow-on requests; a Codex CLI issue; long-standing Windows
+Terminal and Warp threads): users who run transparent terminals
+resent an opaque paint-over and want an escape hatch, not a rule
+that apps never paint. BACKLOG #70 records the escape hatch as a
+post-v1 candidate (v1 ships no user configurability by vision).
+No aesthetic survey data exists anywhere; absence noted.
+
+**Charm flagships, verified from source:** CharmTone
+(charmbracelet/x/exp/charmtone) is 69 named colors: a
+near-neon saturated spectrum plus a 12-step neutral ramp. Crush
+paints a full opaque app background (`bgBase` set directly),
+gives panels and dialogs their own distinct opaque layered
+grounds (`bgLessVisible`), runs everything through one central
+token-driven `Styles` struct (its quickstyle layer is forbidden
+from hardcoding palette colors), insets with padding never
+margin, and styles focus as paired Focused/Blurred styles per
+component. No transparency option exists in its theming code.
+glow/gum/soft-serve ground behavior could not be source-verified
+and is left open. Charm's stated philosophy: modern product
+thinking in the terminal.
+
+**Synthesis, with the GUI-switcher ambition applied:** the genre
+splits into two wings. The infra-tool wing (k9s, lazygit, btop)
+is flat and terminal-deferential; the Charm wing, poplar's actual
+lineage and showcase target, paints opaque layered grounds on a
+token system. Crush's practice plus the GUI-switcher ambition
+plus common-region doctrine align: layered opaque grounds are the
+right call for poplar, with the broader user taste governing the
+palette (desaturated grounds, sparing accents, which slate
+already is) rather than CharmTone's neon brand look. Engineering
+echo for task 1: crush's three-layer token architecture (semantic
+token opts, theme functions, one Styles struct) is the verified
+shape exemplar for `internal/theme`.
