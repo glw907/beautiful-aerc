@@ -39,7 +39,7 @@ v0.12.1 (v0.13.0 is a minor bump nothing needs).
   `docs/superpowers/specs/2026-07-27-poplar-design-language.md`
   (revision 2): the grammar, footer, undo presentation, component
   vocabulary, theme tokens, and section 9's responsive grammar. This
-  plan's wireframes cite it; two token amendments to it are task 1
+  plan's wireframes cite it; its amendments (decision 3) are task 1
   deliverables.
 - ADR-0011 (root model, registry, LayoutMode rectangles), ADR-0012
   (input model), ADR-0017 (pointer vocabulary), ADR-0013 (error
@@ -129,20 +129,31 @@ config path (`~/.local/secrets` token), untouched by this pass.
 Values the design language left to Phase 5, settled here so no
 implementer invents taste. Each cites its constraint.
 
-1. **Status line at the top edge; footer at the bottom.** The
-   surface indicator is a tab-like element and reads as chrome-above
-   (pine's title bar; every tabbed exemplar); the footer teaches
-   from the bottom (alpine). Toasts render in the status line's
-   right segment, so no layout shifts for a transient notice
-   (charter: calm).
+1. **Status line at the top edge; footer at the bottom; the
+   compact-cluster top bar** (ruled by Geoff at the wireframe
+   review, 2026-08-19). The top row's origin holds the surface
+   cluster: the active surface named in accent + bold (`1 Mail`),
+   siblings as bare dim digits (`2 3 4`); the rest of the left
+   segment belongs to the active surface's context (pine's
+   title-bar instinct: 98% of time is spent in mail, and the row
+   is high-value space); sync state right. The cluster's segment
+   divider aligns exactly with the sidebar's divider column
+   whenever a sidebar is present, and is dropped when none is.
+   Sibling surface names live in the help overlay and appear on
+   visit. Toasts render in the status line's right segment, so no
+   layout shifts for a transient notice (charter: calm).
 2. **Banners are a row directly under the status line.** Persistent,
    non-focus-stealing, push content down one row while present.
    `Esc` dismisses the topmost banner before acting as back (one
    instinct, two depths, matching the design language's own Esc
    reasoning); the banner states its key inline. Pointer: click the
    banner's dismiss glyph.
-3. **Two design-language token amendments** (the doc allows
-   amendment through itself; task 1 commits both edits):
+3. **Design-language amendments** (the doc allows amendment
+   through itself; task 1 commits all of them): the section 6
+   status-line wording changes from the four-full-names indicator
+   to the compact cluster of decision 1, and footer exception 2's
+   committed reason restates accordingly (digits advertised by the
+   cluster; names in help and on visit). Plus two token additions:
    `bg` joins the color roles (contrast tests need a ground truth
    value per theme, and QA-7 determinism needs the painted
    background to be a token, not the terminal's guess), and
@@ -157,32 +168,35 @@ implementer invents taste. Each cites its constraint.
    `warn`, `success`, `link`, `quote`, `accent` are text roles
    (4.5:1); `fgSubtle`, `focusedBorder`, `flag`, `diffAdd`,
    `diffDel`, and `calendarSlot[*]` are indicator roles (3:1).
-6. **The palette** (poplar's own; Warm Stone is the craft exemplar,
-   not the hue source): a warm-neutral ground with one amber accent,
-   hue spent only where attention is demanded (the hue-budget rule).
-   Starting values below; the UX-7 contrast test is the oracle, and
-   the theme task may nudge lightness only, never hue intent.
+6. **The palette: cool slate** (ruled by Geoff at the wireframe
+   review, 2026-08-19, over graphite-teal and the original warm
+   stone, which read Ubuntu-adjacent). A cool-neutral ground with
+   one steel-blue accent; amber appears only on the flag and warn
+   roles, the single warm pop on a cool ground (the hue-budget
+   rule). Values below are contrast-verified against both bg and
+   selectedBg; the UX-7 contrast test is the oracle, and the theme
+   task may nudge lightness only, never hue intent.
 
    | Role | Dark | Light |
    |---|---|---|
-   | bg | `#1A1816` | `#FAF7F2` |
-   | fg | `#D8D3CA` | `#33302A` |
-   | fgMuted | `#9A948A` | `#68614F` |
-   | fgSubtle | `#7A7469` | `#847D6F` |
-   | accent | `#D29A57` | `#8F5A1A` |
-   | unread | `#EFEBE4` (with bold) | `#1E1B16` (with bold) |
-   | selectedBg | `#2E2B26` | `#ECE6DB` |
-   | focusedBorder | `#C89055` | `#A66A21` |
-   | error | `#E08573` | `#A83E2C` |
-   | warn | `#D6B36A` | `#7E5C0F` |
-   | success | `#A3B87E` | `#4E6B2D` |
-   | link | `#8FB4CE` | `#35688C` |
-   | codeBg | `#221F1A` | `#F1EBE1` |
-   | quote | `#A79E8F` | `#6E6759` |
-   | diffAdd | `#A3B87E` | `#4E6B2D` |
-   | diffDel | `#E08573` | `#A83E2C` |
-   | flag | `#D29A57` | `#A66A21` |
-   | calendarSlot[8] | muted 8-hue cycle from the same saturation band; slot 1 = link's hue, slot 2 = success's, then warn, `#C99BC0`, `#7FBFB2`, error's, `#B0A1E0`, `#C0A98F` | derived per-role at light lightness, same hue order |
+   | bg | `#16181D` | `#F2F4F7` |
+   | fg | `#D4D8DF` | `#2B3038` |
+   | fgMuted | `#939AA6` | `#59616D` |
+   | fgSubtle | `#737A86` | `#79828F` |
+   | accent | `#85B3D1` | `#336A8F` |
+   | unread | `#ECEEF2` (with bold) | `#161B22` (with bold) |
+   | selectedBg | `#262A32` | `#E0E4EA` |
+   | focusedBorder | `#6E9FBD` | `#40749A` |
+   | error | `#DF8484` | `#A8413B` |
+   | warn | `#D4B36A` | `#82600E` |
+   | success | `#97BE8C` | `#44683A` |
+   | link | `#85B3D1` | `#2E6389` |
+   | codeBg | `#1D2026` | `#E7EAEF` |
+   | quote | `#A0A5AE` | `#5B6470` |
+   | diffAdd | `#97BE8C` | `#44683A` |
+   | diffDel | `#DF8484` | `#A8413B` |
+   | flag | `#D4B36A` | `#82600E` |
+   | calendarSlot[8] | muted 8-hue cycle in the same saturation band: accent blue, success, warn, `#C99BC0`, `#7FBFB2`, error, `#B0A1E0`, `#C0A98F` | derived per-role at light lightness, same hue order |
 
 7. **SY-5's four states, rendered:** `synced` (dim, fgMuted),
    `⠹ syncing 4,312/36,102` (spinner + progress where a total is
@@ -190,11 +204,16 @@ implementer invents taste. Each cites its constraint.
    Backfill progress rides the same segment
    (`⠹ bodies 18,204/36,102`). A nonzero outbox shows `2 queued`
    beside the sync state. All through theme tokens.
-8. **Placeholder surfaces state store facts, not apologies or
+8. **The footer's hints distribute across the width** (Geoff,
+   2026-08-19): the gap between hints is computed from the surplus
+   width and even across the row, flooring at two cells; below the
+   floor, descriptions compress before any hint drops. Task 7
+   carries the formula and its goldens at two widths.
+9. **Placeholder surfaces state store facts, not apologies or
    roadmap talk.** Surface name plus live store counts, centered,
    composed (charter: empty states are composed). They are
    throwaway; pass 3 replaces the mail one.
-9. **The prototyping and review medium is the terminal itself,
+10. **The prototyping and review medium is the terminal itself,
    never an HTML mock.** The design-iteration survey's field
    finding: no surveyed project prototypes TUI design outside the
    terminal; the loop is run-and-look plus committed text renders.
@@ -216,91 +235,157 @@ implementer invents taste. Each cites its constraint.
 ## Wireframes (the design ritual)
 
 One frame per screen per responsive class that changes its layout
-(design language section 9's rule). The pass-2 screen set has no
-panes yet, so width rungs change little; the frames that differ are
-drawn, and sameness is stated rather than redrawn. Pointer targets
-are annotated per frame (ADR-0017). Glyphs shown are the truecolor
+(design language section 9's rule). **The review lens is the
+standard rung first** (100-139 columns, 120 representative), per
+Geoff's ruling and the design language's own polish-center clause;
+spartan 80 is a completeness check, not the design center. Frames
+F9 and F10 carry representative pass-3 mail content, seeded from
+the legacy client's refined layout (its cursor gutter bar, dim-read
+rows, sidebar counts, thread connectors), because the shell's
+chrome cannot be judged against empty placeholders; they bind the
+shell's composition only, never pass 3's tasks. Pointer targets are
+annotated per frame (ADR-0017). Glyphs shown are the truecolor
 profile; degrade profiles substitute per the theme's tables.
 
-### F1. Shell frame, mail placeholder, spartan 80×24
+Rulings folded from the wireframe review (Geoff, 2026-08-19): the
+slate palette (decision 6); the compact-cluster top bar (decision
+1); the wide rung stays list-beside-reader, with the line-length
+evidence recorded at
+`docs/poplar/research/2026-08-19-reading-pane-line-length-research.md`;
+marker columns render with a separating cell (`● ⚑`, never `●⚑`);
+the top bar's segment divider aligns with the sidebar's divider
+column whenever a sidebar is present.
+
+### F9. Standard rung 120, mail surface (pass-3 content preview)
 
 ```
- 1 Mail   2 Cal   3 People   4 Config                ⠹ syncing 4,312/36,102
-────────────────────────────────────────────────────────────────────────────────
+ 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                            ⠹ syncing 4,312/36,102
+────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────
+┃ Inbox          14 │ ●   Ada Lovelace          Analytical engine notes                                           09:41
+  Drafts          2 │▐    Charles Babbage       Re: difference engine budget                                      09:12
+  Sent              │ ● ⚑ Grace Hopper          COBOL committee minutes                                           Yest.
+  Archive           │   ⊕ Katherine Johnson     Trajectory review, Friday                                         Yest.
+  Junk            1 │     Fastmail              Your receipt for August                                           08-17
+  Trash             │ ●   Frank Lee             Server migration plan                                             08-16
+  Lists          98 │ ●   Grace Kim             ├─ Re: Server migration plan                                      08-16
+                    │     Henry Park            └─ Re: Server migration plan                                      08-16
+                    │     Donald Knuth          TAOCP errata, volume 4                                            08-15
+                    │   ⊕ GitHub                Code review: sync engine PR #42                                   08-14
+                    │
+                    │
+  / search          │
+────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+```
 
+- The top bar: active surface named in accent + bold (`1 Mail`),
+  siblings as bare dim digits, padded so the segment divider sits
+  exactly over the sidebar's divider column; the rest of the row is
+  the active surface's context; sync segment right (decision 7).
+- Sidebar: active folder carries the accent bar `┃` and bright
+  text, unread folders bright, others dim; counts right-aligned;
+  the dim `/ search` hint at the rail's foot (legacy pattern).
+- List rows: cursor = accent gutter bar `▐` plus raised row
+  background; unread = `●` plus bold bright text, read rows fully
+  dim (hue by brightness); attribute column (`⚑` flag in the one
+  warm accent, `⊕` attachment dim) one cell clear of the unread
+  marker; thread connectors dim in the subject column; dates
+  right-aligned, fgSubtle.
+- Pointer targets: surface digits, sidebar rows (goto), list rows
+  (cursor; double-click opens), footer hints, wheel.
+
+### F10. Wide rung 150, split (pass-3 content preview)
+
+```
+ 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                                                          ⠹ syncing 4,312/36,102
+────────────────────┼──────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────
+┃ Inbox          14 │ ●   Ada Lovelace          Analytical engine notes      09:41 │ From    Ada Lovelace <ada@analytical.example>
+  Drafts          2 │▐    Charles Babbage       Re: difference engine budget 09:12 │ To      geoff@907.life
+  Sent              │ ● ⚑ Grace Hopper          COBOL committee minutes      Yest. │ Subject Analytical engine notes
+  Archive           │   ⊕ Katherine Johnson     Trajectory review, Friday    Yest. │ ────────────────────────────────────────────────────────────────
+  Junk            1 │     Fastmail              Your receipt for August      08-17 │ The engine weaves algebraic patterns just as the
+  Trash             │ ●   Frank Lee             Server migration plan        08-16 │ Jacquard loom weaves flowers and leaves. Numbers
+  Lists          98 │ ●   Grace Kim             ├─ Re: Server migration plan 08-16 │ are one instance; symbols the general case.
+                    │     Henry Park            └─ Re: Server migration plan 08-16 │
+                    │     Donald Knuth          TAOCP errata, volume 4       08-15 │ > earlier: see the enclosed tables
+                    │   ⊕ GitHub                Code review: sync engine PR  08-14 │
+                    │                                                              │ https://example.org/engine-notes
+                    │                                                              │
+                    │                                                              │   for i, card := range deck {
+                    │                                                              │       punch(card)
+                    │                                                              │   }
+                    │                                                              │
+                    │                                                              │ ⊕ engine-tables.pdf · 184 KB
+────────────────────┴──────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────
+```
+
+- List beside reader (the ratified wide rung). At 150 columns the
+  reader's prose measure lands near 65 cells, inside the 50-75 CPL
+  evidence band; the divider between list and reader renders in
+  focusedBorder for the focused pane. The bottom-pane alternative
+  was rendered and considered at the review; the evidence note
+  records why beside won (width past ~80 cells buys no prose
+  readability; height is the scarce axis).
+- Reader block shows the role set: dim header labels, body fg,
+  quote, link, code lines on codeBg, attachment line dim.
+- Pointer targets add: click a pane to focus it, drag in the
+  reader (SHOULD, copy mode).
+
+### F1. Shell frame, mail placeholder, spartan 80×24 (completeness check)
+
+```
+ 1 Mail  2 3 4                                           ⠹ syncing 4,312/36,102
+────────────────────────────────────────────────────────────────────────────────
 
 
                                      Mail
 
-                       36,102 messages in 14 folders
+                        36,102 messages in 14 folders
 
-                              synced just now
-
-
+                               synced just now
 
 
 ────────────────────────────────────────────────────────────────────────────────
  q quit   ? help
 ```
 
-- Row 1 is the status line: surface indicator left (active surface
-  in accent + bold; inactive in fgMuted), sync segment right
-  (decision 7). The rule row under it is fgSubtle.
+- With no sidebar present (placeholder, and any spartan screen),
+  the top bar drops the segment divider; the cluster keeps its
+  origin position.
 - The footer advertises exactly the placeholder's legal keys: `q`
-  (surface root) and `?`. Digits are exception 2 (advertised by the
-  indicator itself); `j/k` and friends are not legal here (nothing
-  scrolls), so advertising them would violate UX-2's no-no-op rule.
-- Pointer targets: each `N Name` cell in the indicator
-  (surface-switch, UX-4 state rules), each footer hint (its verb).
-- Standard 100×N and wide 140×N: identical composition; the content
-  block stays centered; no sidebar or split exists on a placeholder
-  surface, so no rung boundary changes this screen's layout. Stated
-  here, not redrawn.
+  (surface root) and `?`. Digits are exception 2; `j/k` and
+  friends are not legal here (nothing scrolls).
+- Pointer targets: the cluster's digit cells, footer hints.
 
-### F2. Shell frame with a banner and an undo toast, standard 100×30
+### F2. Status line with an undo toast, plus a banner, standard 120
 
 ```
- 1 Mail   2 Cal   3 People   4 Config                       Archived 3 · u undo · 9s │ synced
-────────────────────────────────────────────────────────────────────────────────────────────────────
- ! Token stored in a plain file: no keyring service found.                          Esc dismiss  ✕
-────────────────────────────────────────────────────────────────────────────────────────────────────
-
-                                              Mail
-
-                                36,102 messages in 14 folders
+ 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                 Archived 3 · u undo · 9s │ synced
+────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+ ! Token stored in a plain file: no keyring service found.                                               Esc dismiss  ✕
 ```
 
 - The toast occupies the status line's right segment for its 10 s
-  window, countdown visible (UX-9); the sync state compresses to its
-  bare word beside it and yields entirely below 100 columns. Newest
-  toast wins; every toast also logs through the ER-1 seam.
-- The banner row (warn `!` gutter marker, message, key hint, dismiss
+  window, countdown visible (UX-9); the sync state compresses to
+  its bare word beside it and yields entirely below 100 columns.
+  Newest toast wins; every toast also logs through the ER-1 seam.
+- The banner row (warn `!` gutter, message, key hint, dismiss
   glyph) pushes content down one row. `Esc` dismisses it first;
-  click on `✕` is the pointer path. It never steals focus (CA-7's
-  rule generalized).
-- Pointer targets: banner `✕` (dismiss), toast's `u` region is not a
-  target (undo is a key verb; ADR-0017 has no toast row and v1 adds
-  none).
+  click on `✕` is the pointer path. It never steals focus.
 
-### F3. Short-height compression, 100×18
+### F3. Short-height compression, 120×18
 
 ```
- 1 Mail   2 Cal   3 People   4 Config                                              ⠹ syncing 4,312
-────────────────────────────────────────────────────────────────────────────────────────────────────
-
-                                              Mail
-
-                                36,102 messages in 14 folders
-
-────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                                    ⠹ syncing 4,312
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ (content)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   ? help
 ```
 
-- Under 20 rows: the footer holds one row (its hint set is already
-  one row on every pass-2 screen; screens with more verbs compress
-  descriptions before dropping any hint, from pass 3 on), banners
-  demote to toasts, the sync segment drops its total. Chrome
-  compresses before content (composition rule 1).
+- Under 20 rows: the footer holds one row (screens with more verbs
+  compress descriptions before dropping any hint), banners demote
+  to toasts, the sync segment drops its total. Chrome compresses
+  before content (composition rule 1).
 
 ### F4. Floor state, 48×12
 
@@ -311,14 +396,14 @@ profile; degrade profiles substitute per the theme's tables.
 
 ```
 
-- Centered, nothing else, never garbled chrome (design language
-  section 9). Below 60 columns or below 15 rows. Its own golden.
+- Centered, nothing else, never garbled chrome. Below 60 columns
+  or below 15 rows. Its own golden.
 
-### F5. Help overlay, spartan 80×24
+### F5. Help overlay, spartan 80×24 (one column)
 
 ```
- 1 Mail   2 Cal   3 People   4 Config                                      synced
-────────────────────────────────────────────────────────────────────────────────────────
+ 1 Mail  2 3 4                                                            synced
+────────────────────────────────────────────────────────────────────────────────
  Help · Mail
 
  Global
@@ -334,43 +419,21 @@ profile; degrade profiles substitute per the theme's tables.
 
  This screen
    q              quit
-────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────
  j/k move   Space/b page   Esc close
 ```
 
 - A full-content-region overlay on the screen stack (Esc pops),
-  registry-derived (UX-5): the Global section renders the grammar
-  registry, the screen section renders the underlying screen's
-  entry. From pass 3 it also carries the folder-jump capitals
-  (exception 4 names it their advertised home).
-- Scrollable when taller than the region; wheel scrolls (ADR-0017
-  row 8). Pointer targets: status digits and footer hints as
-  everywhere; help rows are not click targets.
+  registry-derived (UX-5); the surface-digit names live here (the
+  cluster shows bare digits, so help is where siblings are named,
+  along with the folder-jump capitals from pass 3 on).
+- Scrollable when taller than the region; wheel scrolls.
 
-### F6. Help overlay, standard-and-up 100×30
+### F6. Help overlay, standard-and-up (two columns)
 
-```
- 1 Mail   2 Cal   3 People   4 Config                                                    synced
-────────────────────────────────────────────────────────────────────────────────────────────────────
- Help · Mail
-
- Global                                            This screen
-   j / k          down / up                          q              quit
-   Space / b      page forward / back
-   Home / End     first / last (G works too)
-   Enter          open
-   Esc            back · dismiss banner
-   1 2 3 4        mail · calendar · people · config
-   u              undo
-   ?              help
-   q              quit (at a surface root)
-────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k move   Space/b page   Esc close
-```
-
-- At 100 columns and up the overlay uses two columns (the one layout
-  boundary any pass-2 screen consumes). Column split is
-  Global | screen-specific; within a column, rows never wrap.
+As F5 with the Global and This-screen sections side by side at 100
+columns and up (the one layout boundary any pass-2 screen
+consumes). Within a column, rows never wrap.
 
 ### F7. Modal confirm (quit with pending outbox), natural size, centered
 
@@ -387,10 +450,9 @@ profile; degrade profiles substitute per the theme's tables.
 
 - One question, named consequence, `y`/`n`/`Esc` (grammar-exempt
   context 1). Rounded border set, padModal 2/1, clamped and
-  centered against the terminal (composition rule 5). The dimmed
-  screen behind it stays rendered.
-- Pointer targets: the `y quit` and `n stay` answer cells
-  (ADR-0017 row 10). Everything else is a no-op, exactly as keys.
+  centered. The dimmed screen behind it stays rendered.
+- Pointer targets: the answer cells. Everything else is a no-op,
+  exactly as keys.
 
 ### F8. Calendar / People / Config placeholders
 
@@ -401,6 +463,7 @@ with pass 5` (contacts count once the store row exists) /
 registered screen so UX-4's round trip and the grammar test cover
 all four surfaces from this pass on. Layout identical at every
 rung; floor and short-height behavior inherited from the shell.
+
 
 ## File structure
 
@@ -741,8 +804,10 @@ per-screen conformance run).
 
 **Outcome:** The registry-derived footer per F1/F3: at most two
 rows, grammar verbs first then screen verbs, `key description`
-hints, one-row compression under 20 rows (descriptions compress
-before any hint drops; the pass-2 screens fit one row outright),
+hints, dynamic spacing (decision 8: the inter-hint gap computes
+from surplus width, even across the row, flooring at two cells),
+one-row compression under 20 rows (descriptions compress before
+any hint drops; the pass-2 screens fit one row outright),
 text-entry state display deferred to 2b (no entry contexts exist).
 
 **Acceptance criteria:**
@@ -752,8 +817,11 @@ text-entry state display deferred to 2b (no entry contexts exist).
   registry.
 - Hint text derives from `key.Binding.Help()`, never a literal
   (BACKLOG #62's defect class, pinned by test).
-- Goldens: F1 footer at 80 and 100 columns; short-height one-row
-  form at 100×18.
+- Dynamic spacing: goldens at two widths show the gap widening;
+  a property test asserts gaps are even within one cell, floor at
+  two cells, and that compression engages below the floor.
+- Goldens: F1 footer at 80 and 120 columns; short-height one-row
+  form at 120×18.
 - Hit spans registered per hint; span text equals the rendered
   hint (character grain).
 
