@@ -10,5 +10,5 @@ file_bytes=228089856
 page_size=8192
 page_count=27843
 freelist_count=0
-fts_index_bytes=35807232
+fts_index_bytes=35010109
 file_over_body=1.62

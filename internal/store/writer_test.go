@@ -40,7 +40,7 @@ func newTestWriter(t *testing.T, cfg WriterConfig) (*Writer, string) {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}
@@ -282,7 +282,7 @@ func perfGoroutineDump() string {
 // full disk.
 func TestDiskFullInjection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}

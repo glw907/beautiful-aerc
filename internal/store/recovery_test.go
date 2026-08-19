@@ -135,7 +135,7 @@ func TestCheckIntegrityReportsProgress(t *testing.T) {
 // corruptFTSShadowTable forces a real, detectable corruption by
 // deleting message_fts's own shadow-table rows out from under it,
 // leaving the index unable to read back its own segments. Probed
-// against modernc.org/sqlite v1.54.0, this trips both quick_check and
+// against ncruces/go-sqlite3 v0.35.3, this trips both quick_check and
 // FTS5's own integrity-check with a "corruption found" SQLite error.
 func corruptFTSShadowTable(t *testing.T, db *sql.DB) {
 	t.Helper()
@@ -219,7 +219,7 @@ func seedRecoveryFixture(t *testing.T, w *Writer) {
 func assertRecoveryPreservedFixture(t *testing.T, path string) {
 	t.Helper()
 
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("reopen rebuilt store: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestRecoverAfterCorruption(t *testing.T) {
 		t.Fatalf("close writer: %v", err)
 	}
 
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("reopen store: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestRecoverAfterFailedMigration(t *testing.T) {
 		t.Fatalf("close writer: %v", err)
 	}
 
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("reopen store: %v", err)
 	}
@@ -469,7 +469,7 @@ func TestRecoverContinuesPastAnUnreadableTable(t *testing.T) {
 		t.Errorf("Messages = %d, want 0: the damaged table yielded nothing", counts.Messages)
 	}
 
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("reopen rebuilt store: %v", err)
 	}
@@ -521,7 +521,7 @@ func TestRestorePreservedSkipsRowsOfALostAccount(t *testing.T) {
 		t.Errorf("RecoveredCounts = %+v, want one of each: the dropped rows are not preserved rows", counts)
 	}
 
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("reopen rebuilt store: %v", err)
 	}
@@ -615,7 +615,7 @@ func TestRecoverRestoresDispatchingRowAsQueued(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("reopen rebuilt store: %v", err)
 	}

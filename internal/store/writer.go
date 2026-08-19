@@ -78,11 +78,10 @@ type Writer struct {
 
 // NewWriter starts the writer goroutine over db, which must be the
 // store's single write connection (opened through dsn with
-// connReadWrite). NewWriter pins db to one physical connection,
-// since modernc's connections are full-mutex and a second one would
-// only queue behind the first, and disables db's automatic WAL
-// checkpoint: from here on every checkpoint is one this Writer runs
-// itself.
+// connReadWrite). NewWriter pins db to one physical connection, since
+// a second one would only queue behind the first for the same file
+// lock, and disables db's automatic WAL checkpoint: from here on
+// every checkpoint is one this Writer runs itself.
 func NewWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)

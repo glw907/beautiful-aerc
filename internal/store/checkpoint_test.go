@@ -274,7 +274,7 @@ func fillWithFatRows(t *testing.T, w *Writer, rows, pad int) {
 func openTestReader(t *testing.T, path string) *sql.DB {
 	t.Helper()
 
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("open reader: %v", err)
 	}

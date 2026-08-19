@@ -4,7 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+
+	"github.com/ncruces/go-sqlite3"
+	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
+
+// FTS5 is not compiled into the driver by default; the extension must
+// be registered once before the first Open, or the first connection
+// any binary in this module opens links no full-text support at all.
+// This file is the one every consumer of package store compiles,
+// production and test alike, so it is the seam that registration
+// belongs in.
+func init() {
+	sqlite3.AutoExtension(fts5.Register)
+}
 
 // connKind selects the query_only pragma that tells dsn to build a
 // read-only connection string. It exists so the write connection and
@@ -58,22 +71,18 @@ const (
 	autoVacuumMode = 2
 )
 
-// dsn builds the modernc.org/sqlite connection string for the
-// database at path. It is the only place poplar spells its pragma
-// set, so every connection, write or read, carries the same
-// foreign-key enforcement, busy timeout, WAL journaling, and cache
-// budget.
+// dsn builds the go-sqlite3 connection string for the database at
+// path. It is the only place poplar spells its pragma set, so every
+// connection, write or read, carries the same foreign-key
+// enforcement, busy timeout, WAL journaling, and cache budget.
 //
 // Every pragma rides in a single _pragma value, run as one
-// multi-statement script (modernc.org/sqlite's documented "script"
-// form for a value with trailing SQL past the first statement),
-// rather than as separate _pragma parameters: applyQueryParams
-// re-sorts separate parameters alphabetically before running them
-// (busy_timeout first, the rest lexicographic), which would run
-// journal_mode ahead of page_size and auto_vacuum. Both are fixed the
-// moment a database enters WAL mode, so that reordering would
-// silently no-op them on a fresh file. One script preserves the
-// order written here.
+// multi-statement script, rather than as separate _pragma parameters:
+// page_size and auto_vacuum are fixed the moment a database enters
+// WAL mode, so journal_mode must run after them, and the driver's own
+// documentation warns that pragma order matters. One script pins the
+// order written here rather than trusting a repeated query
+// parameter's iteration order.
 func dsn(path string, kind connKind) string {
 	pragmas := fmt.Sprintf(
 		"busy_timeout(%d); PRAGMA page_size(%d); PRAGMA auto_vacuum(%d); PRAGMA journal_mode(wal); PRAGMA synchronous(normal); PRAGMA cache_size(%d); PRAGMA foreign_keys(1)",
@@ -92,5 +101,5 @@ func dsn(path string, kind connKind) string {
 // still owns pinning the result to one physical connection and
 // pairing it with a migrated schema.
 func OpenWriteConn(path string) (*sql.DB, error) {
-	return sql.Open("sqlite", dsn(path, connReadWrite))
+	return sql.Open("sqlite3", dsn(path, connReadWrite))
 }

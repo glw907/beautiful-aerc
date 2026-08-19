@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
 )
 
 // The fixture rows every test in this package hangs its own rows off:
@@ -52,7 +52,7 @@ func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}

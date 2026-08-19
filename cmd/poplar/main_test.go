@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"

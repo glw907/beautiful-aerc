@@ -32,7 +32,7 @@ type ReadPool struct {
 // every commit; sharing the same counter is what lets a read result
 // carry the revision it saw (SY-1's read path).
 func NewReadPool(path string, size int, rev *RevisionCounter) (*ReadPool, error) {
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		return nil, localErr("store.read", err)
 	}

@@ -303,7 +303,7 @@ type preservedData struct {
 // corruption-prone table is read last: one unreadable table must not
 // cost them the queued intents and mailboxes that read cleanly.
 func extractPreserved(ctx context.Context, path string) (preservedData, error) {
-	db, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	db, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		return preservedData{}, err
 	}

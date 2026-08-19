@@ -888,7 +888,15 @@ func perfReadStats(db *sql.DB, corpus *perfCorpus) error {
 		{`PRAGMA page_count`, &corpus.pageCount},
 		{`PRAGMA freelist_count`, &corpus.freelistCount},
 		{`SELECT COALESCE(SUM(LENGTH(content)), 0) FROM body`, &corpus.bodyBytes},
-		{`SELECT COALESCE(SUM(pgsize), 0) FROM dbstat WHERE name LIKE 'message_fts%'`, &corpus.ftsIndexBytes},
+		// dbstat is not compiled into the store's driver, so the index
+		// size comes from summing the compressed b-tree segment blobs
+		// FTS5 itself stores in message_fts_data (the shadow table
+		// every write and merge lands in) rather than from dbstat's
+		// page-aligned accounting. It runs smaller than a page-based
+		// sum would, since a block's stored length is its compressed
+		// size rather than a whole page, but it is the same query
+		// every run, which is what the fingerprint needs.
+		{`SELECT COALESCE(SUM(LENGTH(block)), 0) FROM message_fts_data`, &corpus.ftsIndexBytes},
 	} {
 		if err := db.QueryRow(stat.query).Scan(stat.dest); err != nil {
 			return fmt.Errorf("%s: %w", stat.query, err)

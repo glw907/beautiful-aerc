@@ -58,8 +58,8 @@ func TestMessageFTSSurvivesCascadeDelete(t *testing.T) {
 // one state that invariant forbids by stripping a row's own fts entry
 // by hand, with the same 'delete' command the trigger uses. Deleting
 // the row after that strip runs the trigger's own delete against an
-// entry that is already gone. Probed against modernc.org/sqlite
-// v1.54.0, the result is SQLite's disk-image-malformed error, not a
+// entry that is already gone. Probed against ncruces/go-sqlite3
+// v0.35.3, the result is SQLite's disk-image-malformed error, not a
 // clean no-op.
 func TestUnindexedMessageRowMustBeIndexed(t *testing.T) {
 	db := openMigratedTestDB(t)

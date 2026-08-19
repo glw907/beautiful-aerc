@@ -228,7 +228,7 @@ func seedLargeMailbox(t *testing.T, n int) (path string, want []MailboxRow) {
 	}
 
 	path = filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}

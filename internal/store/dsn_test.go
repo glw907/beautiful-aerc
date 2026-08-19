@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
 )
 
 // TestDSNPragmaSet proves the five pragmas the DSN builder is
@@ -14,7 +14,7 @@ import (
 // opened connection, rather than merely appearing in the string.
 func TestDSNPragmaSet(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestDSNPragmaSet(t *testing.T) {
 // ignored.
 func TestDSNCreationPragmas(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	db, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestDSNCreationPragmas(t *testing.T) {
 func TestDSNReadOnlyRejectsWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
 
-	rw, err := sql.Open("sqlite", dsn(path, connReadWrite))
+	rw, err := sql.Open("sqlite3", dsn(path, connReadWrite))
 	if err != nil {
 		t.Fatalf("open read-write: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestDSNReadOnlyRejectsWrites(t *testing.T) {
 		t.Fatalf("close read-write: %v", err)
 	}
 
-	ro, err := sql.Open("sqlite", dsn(path, connReadOnly))
+	ro, err := sql.Open("sqlite3", dsn(path, connReadOnly))
 	if err != nil {
 		t.Fatalf("open read-only: %v", err)
 	}
