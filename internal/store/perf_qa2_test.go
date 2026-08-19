@@ -92,13 +92,9 @@ func TestQA2Interaction(t *testing.T) {
 	t.Cleanup(func() { _ = reads.Close() })
 
 	sess := &qa2Session{reads: reads, mailboxIDs: env.MailboxIDs, messageIDs: env.MessageIDs, script: qa2Script()}
-	// The baseline file names carry the corpus scale, so the gate
-	// corpus's numbers and the full envelope's certification numbers
-	// are separate reference points rather than whichever ran first.
-	scale := strconv.Itoa(len(env.MessageIDs))
 
 	quiescent, busy := sess.run(t)
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_quiescent_"+scale, busy.line, quiescent)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", env.BaselineName("QA2Interaction_quiescent"), busy.line, quiescent)
 	qa2AssertBudget(t, "quiescent", quiescent)
 	if got := busy.count.Load(); got != 0 {
 		t.Errorf("quiescent SQLITE_BUSY count = %d, want 0", got)
@@ -109,7 +105,7 @@ func TestQA2Interaction(t *testing.T) {
 	if err := backfill.stop(); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_under_write_"+scale, busy.line, underWrite)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", env.BaselineName("QA2Interaction_under_write"), busy.line, underWrite)
 	qa2AssertBudget(t, "under_write", underWrite)
 	if got := busy.count.Load(); got != 0 {
 		t.Errorf("under-write SQLITE_BUSY count = %d, want 0 (WAL readers must not block on the writer)", got)

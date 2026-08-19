@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -153,6 +154,11 @@ func TestInteractivePreemption(t *testing.T) {
 	drain := sync.OnceFunc(func() { close(quiet); close(release) })
 	t.Cleanup(drain)
 
+	// The chunk errors are collected rather than reported on the spot:
+	// a t.Errorf from one of these goroutines after the test goroutine
+	// has left panics the whole package binary, and every other test in
+	// internal/store then reports nothing at all.
+	chunkErrs := make(chan error, bulkChunks)
 	var wg sync.WaitGroup
 	for range bulkChunks {
 		wg.Go(func() {
@@ -164,7 +170,7 @@ func TestInteractivePreemption(t *testing.T) {
 				<-release
 				return nil
 			}); err != nil {
-				t.Errorf("submitBulk: %v", err)
+				chunkErrs <- err
 			}
 		})
 	}
@@ -195,6 +201,14 @@ func TestInteractivePreemption(t *testing.T) {
 
 	drain()
 	wg.Wait()
+	close(chunkErrs)
+	for err := range chunkErrs {
+		// A chunk still queued when the writer closes is the shape of a
+		// torn-down round, not a failure of the lane under test.
+		if !errors.Is(err, errWriterClosed) {
+			t.Errorf("submitBulk: %v", err)
+		}
+	}
 }
 
 // submitOnInteractiveLane submits a job that announces itself on
@@ -223,12 +237,13 @@ func submitOnInteractiveLane(w *Writer, admitted chan<- string, result chan<- er
 func awaitParkedSubmit(t *testing.T) {
 	t.Helper()
 
-	buf := make([]byte, 1<<20)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		for g := range strings.SplitSeq(string(buf[:runtime.Stack(buf, true)]), "\n\ngoroutine ") {
+		for g := range strings.SplitSeq(perfGoroutineDump(), "\n\ngoroutine ") {
 			parked := strings.Contains(g, "[select") || strings.Contains(g, "[chan send")
-			if parked && strings.Contains(g, "store.submitOnInteractiveLane") {
+			// The trailing paren pins the frame to the function itself:
+			// its own closure would show as submitOnInteractiveLane.func1.
+			if parked && strings.Contains(g, "store.submitOnInteractiveLane(") {
 				return
 			}
 		}
@@ -245,6 +260,20 @@ func awaitParkedSubmit(t *testing.T) {
 // is exercised against internal/sync's production chunk loop, the
 // policy's first real caller, not a closure here. See
 // internal/sync's TestBackfillSubordination.
+
+// perfGoroutineDump returns every goroutine's stack, growing the
+// buffer until runtime.Stack reports it had room to finish: a fixed
+// buffer silently truncates, and a truncated dump reads as a submitter
+// that never parked.
+func perfGoroutineDump() string {
+	buf := make([]byte, 1<<16)
+	for {
+		if n := runtime.Stack(buf, true); n < len(buf) {
+			return string(buf[:n])
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
 
 // TestDiskFullInjection simulates SQLITE_FULL with max_page_count,
 // the standard portable stand-in for an actual full disk, and proves

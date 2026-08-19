@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -41,10 +40,6 @@ const (
 func TestQA1Startup(t *testing.T) {
 	warmHome := t.TempDir()
 	env := seedQA1Store(t, warmHome)
-	// The baseline file names carry the corpus scale, so the gate
-	// corpus's numbers and the full envelope's certification numbers
-	// are separate reference points rather than whichever ran first.
-	scale := strconv.Itoa(len(env.MessageIDs))
 
 	if _, _, err := qa1Trace(warmHome); err != nil {
 		t.Fatalf("warm-up run: %v", err)
@@ -68,7 +63,7 @@ func TestQA1Startup(t *testing.T) {
 	if firstErr != nil {
 		t.Fatalf("startup-trace run: %v", firstErr)
 	}
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA1Startup_warm_"+scale, line, samples)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", env.BaselineName("QA1Startup_warm"), line, samples)
 	p95 := storetest.Percentile(samples, 95)
 	t.Logf("QA-1 warm: p50=%s p95=%s (gate 200ms; spike baseline ~5ms with quick_check off the launch path)",
 		storetest.Percentile(samples, 50), p95)
@@ -96,7 +91,7 @@ func TestQA1Startup(t *testing.T) {
 	if firstErr != nil {
 		t.Fatalf("cold startup-trace run: %v", firstErr)
 	}
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA1Startup_cold_"+scale, coldLine, coldSamples)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", env.BaselineName("QA1Startup_cold"), coldLine, coldSamples)
 	cold := coldSamples[0]
 	t.Logf("QA-1 cold (page cache evicted before exec): %s (gate 500ms)", cold)
 	if cold > qa1ColdBudget {

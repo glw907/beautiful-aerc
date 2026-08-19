@@ -1,0 +1,14 @@
+# poplar perf corpus fingerprint (SQLite driver audit section 4.1).
+# Regenerate by seeding the corpus with POPLAR_PERF_FULL=1 and copying
+# the .fingerprint.txt file the seeder writes beside the cached master.
+messages=10000
+mailboxes=4
+events=500
+occurrences=5000
+body_bytes=140474355
+file_bytes=219488256
+page_size=8192
+page_count=26793
+freelist_count=0
+fts_index_bytes=27205632
+file_over_body=1.56

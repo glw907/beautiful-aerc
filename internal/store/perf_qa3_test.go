@@ -132,7 +132,7 @@ func TestQA3Search(t *testing.T) {
 				t.Fatal(firstErr)
 			}
 
-			storetest.WriteBaseline(t, "testdata/perf-baselines", fmt.Sprintf("QA3Search_%s_%d", class.name, len(env.MessageIDs)), line, samples)
+			storetest.WriteBaseline(t, "testdata/perf-baselines", env.BaselineName("QA3Search_"+class.name), line, samples)
 			p95 := storetest.Percentile(samples, 95)
 			t.Logf("QA-3 %s: p50=%s p95=%s (budget %s; spike baseline 0.9-4.5ms p95 across all classes)",
 				class.name, storetest.Percentile(samples, 50), p95, class.budget)
