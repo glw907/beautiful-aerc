@@ -31,11 +31,7 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 		t.Fatal("connectLiveJMAP with no token succeeded, want a typed startup error")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("err = %v, not a uerr.Error", err)
-	}
-	uerrtest.AssertClass(t, err, uerr.ClassAuth)
+	uerrErr := uerrtest.AssertClass(t, err, uerr.ClassAuth)
 	if !strings.Contains(uerrErr.Cause.Error(), keyring.EnvFastmailToken) {
 		t.Errorf("cause = %q, want it naming %s", uerrErr.Cause, keyring.EnvFastmailToken)
 	}

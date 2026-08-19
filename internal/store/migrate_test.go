@@ -2,7 +2,6 @@ package store
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,11 +56,7 @@ func TestMigrateRejectsNewerSchema(t *testing.T) {
 		t.Fatal("Migrate returned nil error against a newer schema version")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("Migrate error is not a uerr.Error: %v", err)
-	}
-	uerrtest.AssertClass(t, err, uerr.ClassSchemaVersion)
+	uerrErr := uerrtest.AssertClass(t, err, uerr.ClassSchemaVersion)
 
 	cause := uerrErr.Cause.Error()
 	if !strings.Contains(cause, "2") || !strings.Contains(cause, "1") {
@@ -90,11 +85,7 @@ func TestMigrateFailureReachesUerrSeam(t *testing.T) {
 		t.Fatal("Migrate against a colliding table returned nil error")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("Migrate error is not a uerr.Error: %v", err)
-	}
-	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
+	uerrErr := uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 	if uerrErr.Cause == nil {
 		t.Error("Cause is nil, want the underlying CREATE TABLE failure")
 	}

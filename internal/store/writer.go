@@ -48,6 +48,7 @@ func DefaultWriterConfig() WriterConfig {
 var errWriterClosed = errors.New("store: writer is closed")
 
 type writeJob struct {
+	op   string
 	fn   func(*sql.Tx) error
 	done chan error
 }
@@ -132,7 +133,7 @@ func Open(path string, cfg WriterConfig) (*Writer, error) {
 // the whole transaction, so a failure partway through never leaves a
 // partial write.
 func (w *Writer) submit(ctx context.Context, fn func(*sql.Tx) error) error {
-	return w.enqueue(ctx, w.interactive, fn)
+	return w.enqueue(ctx, w.interactive, "store.write", fn)
 }
 
 // submitBulk runs fn as one chunk on the bulk lane, with the same
@@ -140,7 +141,16 @@ func (w *Writer) submit(ctx context.Context, fn func(*sql.Tx) error) error {
 // (roughly 50ms per call) and consults RecentInteractiveActivity
 // between chunks so a long bulk job yields to interactive use.
 func (w *Writer) submitBulk(ctx context.Context, fn func(*sql.Tx) error) error {
-	return w.enqueue(ctx, w.bulk, fn)
+	return w.enqueue(ctx, w.bulk, "store.write", fn)
+}
+
+// submitBulkTagged is submitBulk with a caller-chosen op in place of
+// the generic store.write, for a same-package bulk caller whose own
+// failure needs a more specific tag (RebuildIndex's
+// store.rebuild-index, most notably) so a log line can tell it apart
+// from an ordinary write failure without a second uerr.New call.
+func (w *Writer) submitBulkTagged(ctx context.Context, op string, fn func(*sql.Tx) error) error {
+	return w.enqueue(ctx, w.bulk, op, fn)
 }
 
 // enqueue hands fn to lane and waits for it to run. Once fn is
@@ -148,14 +158,14 @@ func (w *Writer) submitBulk(ctx context.Context, fn func(*sql.Tx) error) error {
 // than racing ctx.Done(): a caller whose context is cancelled after
 // admission still learns the true result instead of seeing a
 // cancellation error for a write that lands anyway.
-func (w *Writer) enqueue(ctx context.Context, lane chan writeJob, fn func(*sql.Tx) error) error {
-	j := writeJob{fn: fn, done: make(chan error, 1)}
+func (w *Writer) enqueue(ctx context.Context, lane chan writeJob, op string, fn func(*sql.Tx) error) error {
+	j := writeJob{op: op, fn: fn, done: make(chan error, 1)}
 	select {
 	case lane <- j:
 	case <-ctx.Done():
-		return localErr("store.write", ctx.Err())
+		return localErr(op, ctx.Err())
 	case <-w.stop:
-		return localErr("store.write", errWriterClosed)
+		return localErr(op, errWriterClosed)
 	}
 	return <-j.done
 }
@@ -232,11 +242,11 @@ func (w *Writer) run() {
 
 func (w *Writer) runInteractive(j writeJob) {
 	w.lastInteractive.Store(time.Now().UnixNano())
-	j.done <- w.execute(j.fn)
+	j.done <- w.execute(j.op, j.fn)
 }
 
 func (w *Writer) runBulk(j writeJob) {
-	j.done <- w.execute(j.fn)
+	j.done <- w.execute(j.op, j.fn)
 	// A failed checkpoint only misses this chunk's reclaim; the next
 	// chunk or the idle TRUNCATE tries again, so the writer logs and
 	// moves on rather than surfacing it to the caller whose job
@@ -267,20 +277,20 @@ func (w *Writer) runIdleCheckpoint() {
 	}
 }
 
-func (w *Writer) execute(fn func(*sql.Tx) error) error {
+func (w *Writer) execute(op string, fn func(*sql.Tx) error) error {
 	start := time.Now()
 	defer w.warnIfOverCeiling(start)
 
 	tx, err := w.db.Begin()
 	if err != nil {
-		return localErr("store.write", err)
+		return localErr(op, err)
 	}
 	if err := fn(tx); err != nil {
 		_ = tx.Rollback()
-		return localErr("store.write", err)
+		return localErr(op, err)
 	}
 	if err := tx.Commit(); err != nil {
-		return localErr("store.write", err)
+		return localErr(op, err)
 	}
 	w.rev.advance()
 	return nil

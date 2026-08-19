@@ -2,7 +2,6 @@ package platform
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -58,11 +57,7 @@ func TestSecondInstanceRefused(t *testing.T) {
 		t.Fatal("AcquireInstanceLock (second) succeeded, want refusal")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", err)
-	}
-	uerrtest.AssertClass(t, err, uerr.ClassInstanceLocked)
+	uerrErr := uerrtest.AssertClass(t, err, uerr.ClassInstanceLocked)
 
 	wantPID := strconv.Itoa(os.Getpid())
 	if !strings.Contains(uerrErr.Cause.Error(), wantPID) {
@@ -82,7 +77,7 @@ func TestAcquireInstanceLockOpenFailureIsStoreLocal(t *testing.T) {
 		t.Fatal("AcquireInstanceLock over a missing parent directory succeeded, want a failure")
 	}
 
-	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 }
 
 // TestAcquireInstanceLockPidWriteFailureIsStoreLocal proves a failure
@@ -101,7 +96,7 @@ func TestAcquireInstanceLockPidWriteFailureIsStoreLocal(t *testing.T) {
 		t.Fatal("AcquireInstanceLock over a read-only lock file succeeded, want a failure")
 	}
 
-	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 }
 
 // TestLockReleasedOnKill SIGKILLs the lock's holder and proves a new

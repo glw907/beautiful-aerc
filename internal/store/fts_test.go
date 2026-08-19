@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestMessageFTSSurvivesCascadeDelete proves message_fts stays
@@ -229,13 +230,18 @@ func TestRebuildIndex(t *testing.T) {
 // TestRebuildIndexTagsItsOwnFailure proves a RebuildIndex failure
 // carries op store.rebuild-index, not the writer's generic
 // store.write, so a log line can tell a rebuild failure from an
-// ordinary write failure.
+// ordinary write failure. It also proves the failure logs once: a
+// re-tag built by wrapping an already-constructed uerr.Error would
+// call uerr.New twice for one outcome, against ADR-0013 revision 2's
+// one-line-per-outcome rule.
 func TestRebuildIndexTagsItsOwnFailure(t *testing.T) {
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 
 	if _, err := w.db.Exec(`DROP TABLE message_fts`); err != nil {
 		t.Fatalf("drop message_fts: %v", err)
 	}
+
+	logged := uerrtest.Capture(t)
 
 	err := RebuildIndex(context.Background(), w)
 	if err == nil {
@@ -247,6 +253,9 @@ func TestRebuildIndexTagsItsOwnFailure(t *testing.T) {
 	}
 	if uerrErr.Op != "store.rebuild-index" {
 		t.Errorf("RebuildIndex error op = %q, want store.rebuild-index", uerrErr.Op)
+	}
+	if lines := uerrtest.Lines(t, logged); len(lines) != 1 {
+		t.Errorf("logged %d line(s) for one failure, want 1: %v", len(lines), lines)
 	}
 }
 

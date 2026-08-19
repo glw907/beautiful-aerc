@@ -158,7 +158,7 @@ func TestCheckIntegrityDetectsCorruption(t *testing.T) {
 	if err == nil {
 		t.Fatal("CheckIntegrity over a corrupted index succeeded, want a failure")
 	}
-	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 }
 
 // seedRecoveryFixture writes one account, one mailbox (id 7, the
@@ -312,7 +312,7 @@ func TestRecoverAfterCorruption(t *testing.T) {
 	if checkErr == nil {
 		t.Fatal("CheckIntegrity over the corrupted index succeeded, want a failure")
 	}
-	uerrtest.AssertClass(t, checkErr, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, checkErr, uerr.ClassStoreLocal)
 
 	counts, err := Recover(context.Background(), path)
 	if err != nil {
@@ -349,7 +349,7 @@ func TestRecoverAfterFailedMigration(t *testing.T) {
 	if migrateErr == nil {
 		t.Fatal("Migrate against a colliding schema succeeded, want a failure")
 	}
-	uerrtest.AssertClass(t, migrateErr, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, migrateErr, uerr.ClassStoreLocal)
 
 	counts, err := Recover(context.Background(), path)
 	if err != nil {
@@ -658,7 +658,7 @@ func TestRecoverAfterDiskFull(t *testing.T) {
 	if writeErr == nil {
 		t.Fatal("submit succeeded past max_page_count, want a disk-full failure")
 	}
-	uerrtest.AssertClass(t, writeErr, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, writeErr, uerr.ClassStoreLocal)
 
 	var count int
 	if err := w.db.QueryRow(`SELECT COUNT(*) FROM message WHERE id = 999`).Scan(&count); err != nil {

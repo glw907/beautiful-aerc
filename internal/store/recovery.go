@@ -21,11 +21,10 @@ func cleanShutdownMarker(dbPath string) string {
 // QA-1). Call it only after the writer and every read connection over
 // dbPath have closed.
 //
-// The write is a bare os.WriteFile rather than a temp-file-and-rename
-// swap: the marker is empty, so a write a crash tears mid-flight
-// leaves either no file (read as an unclean shutdown, the safe
-// default) or a whole one, never a partial file ShouldRunIntegrityCheck
-// could mistake for present.
+// The marker is empty. A crash mid-write leaves either no file or a
+// whole one, never a partial one that ShouldRunIntegrityCheck could
+// mistake for present. Nothing here needs a temp-file-and-rename
+// swap to guard against a partial write that cannot happen.
 func MarkCleanShutdown(dbPath string) error {
 	if err := os.WriteFile(cleanShutdownMarker(dbPath), nil, 0o600); err != nil {
 		return localErr("store.shutdown", err)

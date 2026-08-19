@@ -230,7 +230,7 @@ func TestDiskFullInjection(t *testing.T) {
 		t.Fatal("submit succeeded past max_page_count, want a disk-full failure")
 	}
 
-	uerrtest.AssertClass(t, writeErr, uerr.ClassStoreLocal)
+	_ = uerrtest.AssertClass(t, writeErr, uerr.ClassStoreLocal)
 
 	var rows int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM account`).Scan(&rows); err != nil {

@@ -743,20 +743,19 @@ func TestDV12EventSourceDeliversStateChanges(t *testing.T) {
 }
 
 // TestDV13SiblingUniquenessNormalization covers the sibling-uniqueness
-// divergence task 7b found live: Stalwart's sibling-uniqueness rule is
-// case-insensitive and trims whitespace, Fastmail's is byte-exact, so
-// a name that differs from an existing sibling only by case is a
-// duplicate to one server and a distinct mailbox to the other. DV-11
-// already covers a byte-identical duplicate, which both servers
-// refuse the same way.
+// divergence task 7b found live. Stalwart's sibling-uniqueness rule is
+// case-insensitive and trims whitespace. Fastmail's is byte-exact. A
+// name that differs from an existing sibling only by case is
+// therefore a duplicate to one server and a distinct mailbox to the
+// other. DV-11 already covers a byte-identical duplicate, which both
+// servers refuse the same way.
 //
-// This asserts poplar's own mechanism rather than either server's
-// answer: adoptMailbox's FindMailboxes contract
-// (internal/outbox/dispatch.go) binds on an exact string match over a
-// query the RFC only promises as substring-narrowed, so poplar's own
-// lookup for the original name finds only the original mailbox,
-// whether or not the server also holds a case-variant sibling beside
-// it.
+// This asserts poplar's own mechanism, not either server's answer.
+// adoptMailbox's FindMailboxes contract (internal/outbox/dispatch.go)
+// binds on an exact string match. The RFC itself only promises the
+// query as substring-narrowed. Poplar's own lookup for the original
+// name therefore finds only the original mailbox, whether or not the
+// server also holds a case-variant sibling beside it.
 func TestDV13SiblingUniquenessNormalization(t *testing.T) {
 	tg := dial(t)
 

@@ -94,8 +94,11 @@ func Lines(t *testing.T, buf *Buffer) []map[string]any {
 
 // AssertClass fails t unless err is a uerr.Error under want, the
 // errors.As-plus-Class-equality check every engine and store package
-// repeats to prove a failure was classified rather than raw.
-func AssertClass(t *testing.T, err error, want uerr.Class) {
+// repeats to prove a failure was classified rather than raw, and
+// returns the extracted uerr.Error so a caller needing its Op or
+// Cause afterward reuses this one extraction rather than running its
+// own second errors.As over the same err.
+func AssertClass(t *testing.T, err error, want uerr.Class) uerr.Error {
 	t.Helper()
 
 	var uerrErr uerr.Error
@@ -105,4 +108,5 @@ func AssertClass(t *testing.T, err error, want uerr.Class) {
 	if uerrErr.Class != want {
 		t.Errorf("Class = %v, want %v", uerrErr.Class, want)
 	}
+	return uerrErr
 }

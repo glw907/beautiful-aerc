@@ -57,6 +57,11 @@ const (
 	// ClassInstanceLocked is a second poplar process refused startup
 	// against a store another instance already holds (SY-7, ADR-0015).
 	ClassInstanceLocked
+	// ClassLocalIO is a local I/O failure with no server and no store
+	// involved: --startup-trace failing to write its own diagnostic
+	// output, most notably. It must not reuse ClassStoreLocal, which
+	// names a store failure specifically.
+	ClassLocalIO
 )
 
 // String returns class's log key.
@@ -80,6 +85,8 @@ func (c Class) String() string {
 		return "store-local"
 	case ClassInstanceLocked:
 		return "instance-locked"
+	case ClassLocalIO:
+		return "local-io"
 	default:
 		return "unknown"
 	}
@@ -99,6 +106,7 @@ var sentence = map[Class]string{
 	ClassSchemaVersion:     "This store needs a newer version of poplar",
 	ClassStoreLocal:        "Poplar could not open its store",
 	ClassInstanceLocked:    "Poplar is already running",
+	ClassLocalIO:           "Poplar could not write its output",
 }
 
 // Error is poplar's user-visible error. Op, IDs, Class, Message, and

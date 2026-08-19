@@ -265,7 +265,7 @@ func runStartupTrace(ctx context.Context, dbPath string, writer *store.Writer, s
 		TotalNS:     total.Nanoseconds(),
 		Rows:        len(rows),
 	}); err != nil {
-		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("write trace result: %w", err))
+		return uerr.New("main.startup-trace", nil, uerr.ClassLocalIO, fmt.Errorf("write trace result: %w", err))
 	}
 	return nil
 }

@@ -324,9 +324,10 @@ func (brokenWriter) Write([]byte) (int, error) { return 0, errors.New("broken pi
 
 // TestRunStartupTraceEncodeFailureReachesUerr proves a
 // --startup-trace run that cannot write its JSON result classifies
-// the failure through uerr, so it reaches the log the same way every
-// other startup failure does, rather than surfacing only as a bare
-// error string on stderr.
+// the failure through uerr under ClassLocalIO, a local I/O failure
+// distinct from a store failure, so it reaches the log the same way
+// every other startup failure does, rather than surfacing only as a
+// bare error string on stderr.
 func TestRunStartupTraceEncodeFailureReachesUerr(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 	seedStore(t, dbPath, seedAccountSQL,
@@ -338,11 +339,21 @@ func TestRunStartupTraceEncodeFailureReachesUerr(t *testing.T) {
 	if err == nil {
 		t.Fatal("run --startup-trace with an unwritable out succeeded, want a failure")
 	}
-	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
+	uerrErr := uerrtest.AssertClass(t, err, uerr.ClassLocalIO)
+	if uerrErr.Op != "main.startup-trace" {
+		t.Errorf("Op = %q, want main.startup-trace", uerrErr.Op)
+	}
 
 	lines := uerrtest.Lines(t, logged)
 	if len(lines) == 0 {
 		t.Fatal("the encode failure logged nothing through uerr")
+	}
+	last := lines[len(lines)-1]
+	if last["msg"] != "main.startup-trace" {
+		t.Errorf("logged msg = %v, want main.startup-trace", last["msg"])
+	}
+	if cause, _ := last["cause"].(string); !strings.Contains(cause, "write trace result") {
+		t.Errorf("logged cause = %v, want it naming the trace write", last["cause"])
 	}
 }
 
@@ -472,7 +483,7 @@ func TestPrepareStorePropagatesSchemaVersion(t *testing.T) {
 		t.Fatal("prepareStore over a newer schema version succeeded, want a refusal")
 	}
 	// A newer store must not be routed into recovery.
-	uerrtest.AssertClass(t, err, uerr.ClassSchemaVersion)
+	_ = uerrtest.AssertClass(t, err, uerr.ClassSchemaVersion)
 
 	matches, globErr := filepath.Glob(dbPath + ".corrupt-*")
 	if globErr != nil {
