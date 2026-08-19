@@ -152,7 +152,7 @@ CREATE TABLE message (
 CREATE VIRTUAL TABLE message_fts USING fts5(
     subject, search_text,
     content='message', content_rowid='id',
-    prefix='2 3'
+    prefix='2 3 4'
 );
 
 -- table message_fts_config

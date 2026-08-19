@@ -85,7 +85,7 @@ const (
 	// perfCorpusVersion invalidates cached master corpora: a change to
 	// anything the generator below writes gets a bump, or machines that
 	// already hold a master keep measuring the old corpus.
-	perfCorpusVersion = 2
+	perfCorpusVersion = 3
 
 	perfFullEnvVar = "POPLAR_PERF_FULL"
 )

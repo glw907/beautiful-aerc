@@ -75,7 +75,7 @@ CREATE UNIQUE INDEX idx_message_account_server ON message(account_id, server_id)
 CREATE VIRTUAL TABLE message_fts USING fts5(
     subject, search_text,
     content='message', content_rowid='id',
-    prefix='2 3'
+    prefix='2 3 4'
 );
 
 -- message_fts mirrors message's subject and search_text through

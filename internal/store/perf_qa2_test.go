@@ -233,8 +233,8 @@ func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *store.Mai
 
 	default: // qa2OpSearch
 		// Prefix lengths start at 2, matching message_fts's prefix='2
-		// 3' index: a 1-character prefix has no prefix-index entry and
-		// falls back to a full vocabulary scan, which is not the
+		// 3 4' index: a 1-character prefix has no prefix-index entry
+		// and falls back to a full vocabulary scan, which is not the
 		// as-you-type case a 2-character minimum trigger avoids.
 		term := storetest.CommonWords[rand.IntN(len(storetest.CommonWords))] //nolint:gosec // G404: sample choice, not a security-sensitive use
 		prefixLen := 2 + rand.IntN(max(1, min(3, len(term)-2)))              //nolint:gosec // G404: sample choice, not a security-sensitive use
@@ -361,11 +361,13 @@ func TestQA2BackfillSurfacesWriteError(t *testing.T) {
 // individual flag updates plus bodyUpserts body upserts, one
 // statement per row rather than a single bulk UPDATE, the same
 // per-row shape a real sync backfill writes in. The row counts are
-// sized to land close to ADR-0003's ~50ms-per-chunk target on this
-// machine, real per-statement round-trip cost rather than a single
-// bulk statement fast enough to prove nothing about write pressure.
+// sized to stay comfortably under ADR-0003's 50ms admission ceiling at
+// the full-envelope corpus, the same conforming-client shape a real
+// bulk sync chunks its own writes to, while still costing real
+// per-statement round-trip time rather than a single bulk statement
+// fast enough to prove nothing about write pressure.
 func qa2BackfillBatch(writer *store.Writer, messageIDs []int64, rng *rand.Rand) (int, error) {
-	const flagUpdates, bodyUpserts = 600, 80
+	const flagUpdates, bodyUpserts = 300, 40
 	rows := 0
 	err := writer.Apply(context.Background(), func(tx *sql.Tx) error {
 		for range flagUpdates {

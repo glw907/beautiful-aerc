@@ -13,9 +13,9 @@ INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('mailbox', 'idx_mailbox_accoun
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message', 'idx_message_account_server', '0 0 0');
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message', 'idx_message_thread', '100000 100000 4 1');
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_fts_config', 'message_fts_config', '1 1');
-INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_fts_data', NULL, '66207');
+INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_fts_data', NULL, '87552');
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_fts_docsize', NULL, '100000');
-INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_fts_idx', 'message_fts_idx', '12304 586 1');
+INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_fts_idx', 'message_fts_idx', '17343 1335 1');
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_mailbox', 'idx_message_mailbox_list', '100000 25000 1 1');
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_mailbox', 'idx_message_mailbox_unread', '19616 4904 1 1');
 INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES ('message_mailbox', 'sqlite_autoindex_message_mailbox_1', '100000 1 1');
