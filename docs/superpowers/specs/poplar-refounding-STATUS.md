@@ -84,12 +84,10 @@ Pass 1b outcomes (2026-08-18), commits ef0c986 through 49b714f:
   checks the sentinel) goes to pass 3, compose's ifInState design;
   ADR-0005's self-echo suppression (inert; BatchResult carries no
   post-dispatch state token) goes to pass 2, the first pass wiring
-  UI-driven mutations. **ADR-0005 revision 3 records the deferral
-  and awaits Geoff's ratification at this gate.** Also at the gate:
-  BACKLOG #65, the silent-stop reconnect rate (~4/s during an
-  open-and-die outage; the non-escalating floor is deliberately
-  pinned by test, so changing it is an owner ruling; the verified
-  fix shape is in the entry).
+  UI-driven mutations. **ADR-0005 revision 3 was ratified at the
+  gate (Geoff, 2026-08-18).** Also ruled at the gate: BACKLOG #65,
+  the silent-stop reconnect rate, lands in pass 1c with its pinning
+  test rewritten to the new escalation curve.
 - deadcode at close: 77 entries, all enumerated in the pass ledger
   with justifications: test scaffolding (38), outbox enqueue and
   undo surface awaiting the UI passes (~23), dav pass-5 stubs (3),
@@ -461,6 +459,13 @@ tasks from the 1b plan, unchanged in substance, in this order:
    benchmark on task 9's corpus: whole-process peak RSS against
    QA-5's 250MB with one writer and four readers, then the QA-6 kill
    harness under both. Brief: task-10-brief.md in the sdd directory.
+4. **BACKLOG #65, the silent-stop reconnect backoff** (ruled in at
+   the 1b gate). Small task: pushState.stopped advances attempt on a
+   silent stop, the tail sleepBackoff takes push.attempt, both reset
+   on delivery and in proved(); the pinning test
+   TestRunPushDoesNotEscalateOnAnUnexplainedStop is rewritten to
+   assert the new escalation curve. The verified shape is in the
+   backlog entry.
 
 1c closes with its own consolidation and the QA-2/QA-3 numbers in its
 outcomes block. The 1b sdd workspace
