@@ -106,7 +106,7 @@ and you must paste the evidence:
    vale-comments  the Vale comment gate over Go comment prose
    skipcheck      the unconditional-skip AST gate
    test           go test ./...
-   perf           go test -run 'QA[123]' -count=1, never under -race
+   perf           go test -tags perf -p 1 -run 'QA[123]' -count=1, serial packages, never under -race
    ```
 
    Check the exit code, not just the summary: a non-zero exit means you are not done. Race

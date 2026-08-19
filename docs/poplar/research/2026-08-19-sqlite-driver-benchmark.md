@@ -214,13 +214,17 @@ disqualifier, the audit's stated one-failure-is-enough bar.
 | | p99 | 0.572..1.063..1.168 | 0.550..1.023..1.029 | 0.96 | overlap |
 
 The read-path separation is real. modernc runs roughly 1.2-1.4x faster
-than ncruces on every row-shaped read except R5, and the ratio holds in
-the same direction in all five repetitions. Rep-ranges overlap only
+than ncruces on 15 of the 17 read operations, and on those the ratio
+holds in the same direction in all five repetitions. R5 reverses
+consistently, roughly 2x in ncruces's favor in every repetition.
+R6_search_common and R8_thread_across_folders reverse in repetition 1
+alone, the one repetition run under the performance governor. Rep-ranges overlap only
 because the governor drift (section 15) moved both drivers together
 across reps, which is exactly what the paired design controls for: the
 comparison that matters is modernc against ncruces within a rep, not
 one driver's range against the other's. The separation is nevertheless
-non-decisive, because every budgeted operation clears its budget with
+non-decisive, because every budgeted operation except R7's length-5
+prefix clears its budget with
 15-70x headroom on both drivers (section 13). That matches audit 4.5's
 own prediction that nothing in sub-millisecond point-read latency alone
 should move the ranking. R5 (body BLOB read)
@@ -312,9 +316,14 @@ than a fast checkpoint. Nothing here distinguishes the drivers.
 
 The answer condition 4 needs comes from a controlled in-tree
 measurement instead, run at commit `64260cd` against poplar's own
-store. Under a live reader snapshot with a non-empty WAL, ncruces
-blocks 50.5-51.6ms and returns `busy=1`, the same profile modernc
-showed in this table. Both drivers block roughly the full 50ms
+store: the writer's pinned connection, a read-pool snapshot held open
+over a WAL grown through the bulk lane, and `checkpointTruncate`'s own
+50ms `busy_timeout`, sampled three times plus one `runIdleCheckpoint`
+pass. Under that shape ncruces blocks 50.5-51.6ms and returns
+`busy=1`, the same profile modernc showed in this table.
+`TestCheckpointTruncateWarnsWhenTheWALWillNotDrain`
+(`internal/store/checkpoint_test.go`) reproduces the same profile as a
+standing test, so the measurement is re-derivable from the tree. Both drivers block roughly the full 50ms
 `busy_timeout` and return a structurally well-formed row (`busy` in
 {0,1}, `checkpointed <= log`). The roughly 1ms overshoot is symmetric
 across the two drivers, not a property of either one.
@@ -478,9 +487,12 @@ driver difference. Length 4 (n=5000, hits no declared prefix index but
 stays fast): both comfortably under budget. Length 5 (n=100, section
 15) blows the budget on both drivers by roughly 10-20x: modernc p95
 218.9-459.2ms / p99 252.4-509.7ms; ncruces p95 317.0-716.9ms / p99
-343.1-760.6ms. Per audit 4.5, a shared miss at length 5 is an argument
-for extending the FTS5 prefix index declaration (`prefix='2 3'` to
-`'2 3 4'`) in `0001_initial.sql`, not a driver-selection signal.
+343.1-760.6ms. Per audit 4.5, a shared miss is an argument for
+widening the FTS5 prefix index declaration, not a driver-selection
+signal. `0001_initial.sql` already declares `prefix='2 3 4'` (pass 1c
+landed that for the length-4 miss before this benchmark ran); the
+length-5 remainder is BACKLOG #67's `'2 3 4 5'` question, pending the
+pass gate.
 
 **M7 optimize effect on R6/R7 (upstream tax, report only).** Both
 drivers move together after `PRAGMA optimize`, roughly 4-8% on both.

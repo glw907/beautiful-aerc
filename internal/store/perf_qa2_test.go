@@ -344,7 +344,7 @@ func (bf *qa2Backfill) stop() error {
 // directly can never match a busy error ListMailboxForward or
 // ListMailboxBackward returns, which is exactly what made QA-2's
 // busy.count == 0 assertions vacuous.
-func TestIsBusyError(t *testing.T) {
+func TestQA2IsBusyError(t *testing.T) {
 	wrapped := uerr.New("store.read", nil, uerr.ClassStoreLocal, errors.New("sqlite: SQLITE_BUSY: database is locked"))
 	if !isBusyError(wrapped) {
 		t.Error("isBusyError(wrapped busy error) = false, want true")
@@ -399,7 +399,7 @@ func TestQA2BackfillSurfacesWriteError(t *testing.T) {
 //
 // The gate corpus is what binds the sizing, not the full envelope. A
 // first batch at the full envelope sits around 21ms run to run, where
-// gate scale is both larger and far more variable: 20-35ms on a quiet
+// gate scale is no smaller, and far more variable: 20-35ms on a quiet
 // machine and past 70ms under load. So a row count chosen against the
 // envelope's steady figure would trip the ceiling on the corpus every
 // commit actually runs.

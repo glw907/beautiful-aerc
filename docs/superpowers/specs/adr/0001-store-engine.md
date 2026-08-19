@@ -177,13 +177,17 @@ T0 section. Audit 4.5 treats a rotted suite as weakening the
 incumbent, not as neutral.
 
 **Latency separates the drivers on the read path, and decides
-nothing.** modernc runs roughly 1.2-1.4x faster than ncruces across
-the row-shaped reads, in the same direction in every one of the five
-repetitions. The separation is real rather than noise, because the
-repetitions are paired: both drivers ran under the same governor state
-in each one, so the within-rep ratio is what the design controls for.
-It decides nothing because every budgeted operation clears its budget
-with 15-70x headroom on both drivers. R10's QA-2
+nothing.** modernc runs roughly 1.2-1.4x faster than ncruces on 15 of
+the 17 read operations, in the same direction in every one of the five
+repetitions. The two exceptions: R5's body read reverses consistently,
+roughly 2x in ncruces's favor in all five repetitions, and
+R6_search_common and R8_thread_across_folders reverse in repetition 1
+alone, the one repetition that ran under the performance governor. The
+separation is real rather than noise, because the repetitions are
+paired: both drivers ran under the same governor state in each one, so
+the within-rep ratio is what the design controls for. It decides
+nothing because every budgeted operation except R7's length-5 prefix
+clears its budget with 15-70x headroom on both drivers. R10's QA-2
 composite budget (25ms p95 / 40ms p99) holds on both drivers by a
 30-70x margin, quiescent and under concurrent write. R7's length-5
 FTS5 prefix probe blows its own budget by 10-20x on both drivers

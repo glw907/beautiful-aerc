@@ -103,6 +103,7 @@ jmap-boundary:
 # container, which is by hand. Vet type-checks them here instead.
 tagged-vet:
 	go vet -tags "conformance live" ./jmap/...
+	go vet -tags perf ./cmd/poplar/... ./internal/store/...
 
 # The second-server validation, run by hand and never by check: check
 # must pass on a machine with no container runtime at all. Stalwart
