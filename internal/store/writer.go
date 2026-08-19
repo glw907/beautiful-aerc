@@ -69,8 +69,7 @@ type Writer struct {
 	bulk        chan writeJob
 	stop        chan struct{}
 	done        chan struct{}
-	closeOnce   sync.Once
-	closeErr    error
+	close       func() error
 
 	lastInteractive atomic.Int64 // UnixNano of the last interactive job the writer ran
 	rev             RevisionCounter
@@ -100,6 +99,11 @@ func NewWriter(db *sql.DB, cfg WriterConfig) (*Writer, error) {
 		stop:        make(chan struct{}),
 		done:        make(chan struct{}),
 	}
+	w.close = sync.OnceValue(func() error {
+		close(w.stop)
+		<-w.done
+		return w.db.Close()
+	})
 	go w.run()
 	return w, nil
 }
@@ -196,12 +200,7 @@ func (w *Writer) RecentInteractiveActivity(quiet time.Duration) bool {
 // release the file for a recovery rebuild still wants its t.Cleanup
 // close to run without a double-close panic on w.stop.
 func (w *Writer) Close() error {
-	w.closeOnce.Do(func() {
-		close(w.stop)
-		<-w.done
-		w.closeErr = w.db.Close()
-	})
-	return w.closeErr
+	return w.close()
 }
 
 func (w *Writer) run() {

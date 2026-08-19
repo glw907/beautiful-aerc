@@ -239,7 +239,7 @@ func awaitParkedSubmit(t *testing.T) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		for g := range strings.SplitSeq(perfGoroutineDump(), "\n\ngoroutine ") {
+		for g := range strings.SplitSeq(goroutineDump(), "\n\ngoroutine ") {
 			parked := strings.Contains(g, "[select") || strings.Contains(g, "[chan send")
 			// The trailing paren pins the frame to the function itself:
 			// its own closure would show as submitOnInteractiveLane.func1.
@@ -261,11 +261,11 @@ func awaitParkedSubmit(t *testing.T) {
 // policy's first real caller, not a closure here. See
 // internal/sync's TestBackfillSubordination.
 
-// perfGoroutineDump returns every goroutine's stack, growing the
+// goroutineDump returns every goroutine's stack, growing the
 // buffer until runtime.Stack reports it had room to finish: a fixed
 // buffer silently truncates, and a truncated dump reads as a submitter
 // that never parked.
-func perfGoroutineDump() string {
+func goroutineDump() string {
 	buf := make([]byte, 1<<16)
 	for {
 		if n := runtime.Stack(buf, true); n < len(buf) {
