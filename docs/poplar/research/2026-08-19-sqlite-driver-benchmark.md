@@ -213,11 +213,17 @@ disqualifier, the audit's stated one-failure-is-enough bar.
 | R10 qa2_composite_under_write | p95 | 0.399..0.784..0.789 | 0.466..0.901..0.907 | 1.15 | overlap |
 | | p99 | 0.572..1.063..1.168 | 0.550..1.023..1.029 | 0.96 | overlap |
 
-Every rep-range in the read path overlaps between drivers: the noise
-band across five reps is wider than the roughly 1.2-1.5x median gap
-almost everywhere, so none of these differences is a clean separation.
-This matches audit 4.5's own prediction that nothing in sub-millisecond
-point-read latency alone should move the ranking. R5 (body BLOB read)
+The read-path separation is real. modernc runs roughly 1.2-1.4x faster
+than ncruces on every row-shaped read except R5, and the ratio holds in
+the same direction in all five repetitions. Rep-ranges overlap only
+because the governor drift (section 15) moved both drivers together
+across reps, which is exactly what the paired design controls for: the
+comparison that matters is modernc against ncruces within a rep, not
+one driver's range against the other's. The separation is nevertheless
+non-decisive, because every budgeted operation clears its budget with
+15-70x headroom on both drivers (section 13). That matches audit 4.5's
+own prediction that nothing in sub-millisecond point-read latency alone
+should move the ranking. R5 (body BLOB read)
 is the one qualitatively different row: ncruces's p95/p99 run roughly
 half of modernc's. Allocs/op are close (18-19 versus 17) but bytes/op
 diverge sharply, modernc 29,889-29,890 B/op versus ncruces
@@ -286,25 +292,32 @@ sub-10ms on both.
 
 ### M2, TRUNCATE checkpoint, with and without a live reader snapshot (20/rep/mode, 100 total/driver/mode)
 
-| mode | driver | duration ms min/med/max | busy | log | checkpointed | rows > 50ms |
-|---|---|---|---|---|---|---|
-| without reader | modernc | 0.009 / 0.030 / 4926.19 | {0} | {0} | {0} | 5/100 |
-| without reader | ncruces | 0.009 / 0.032 / 8587.87 | {0} | {0} | {0} | 5/100 |
-| with reader | modernc | 49.79 / 51.10 / 52.20 | {1} | {1} | {1} | 98/100 |
-| with reader | ncruces | 0.009 / 0.029 / 1.43 | {0} | {0} | {0} | 0/100 |
+| mode | driver | duration ms min/med/max | busy | log | checkpointed | wal bytes after | rows > 50ms |
+|---|---|---|---|---|---|---|---|
+| without reader | modernc | 0.009 / 0.030 / 4926.19 | {0} | {0} | {0} | 0 | 5/100 |
+| without reader | ncruces | 0.009 / 0.032 / 8587.87 | {0} | {0} | {0} | 0 | 5/100 |
+| with reader | modernc | 49.79 / 51.10 / 52.20 | {1} | {1} | {1} | 8248 | 98/100 |
+| with reader | ncruces | 0.009 / 0.029 / 1.43 | {0} | {0} | {0} | 0 | 0/100 |
 
-This is the sharpest, cleanest divergence in the whole dataset, and it
-sits entirely on the incumbent's own arm. Under a live reader
-snapshot, modernc's TRUNCATE checkpoint returns `busy=1` on 100/100
-samples across all 5 reps, taking 49.8-52.2ms every time, consistently
-at or fractionally over the 50ms `busy_timeout` (median 51.10ms,
-roughly 1.1ms over the nominal cap; 98/100 samples exceed 50.000ms).
-ncruces's TRUNCATE checkpoint under the identical live-reader setup
-returns `busy=0` on 100/100 samples, completing in 0.009-1.43ms
-(median 0.029ms, one outlier at 1.43ms), never approaching the
-timeout. Both result rows are structurally well-formed in both cases
-(`busy` in {0,1}, `checkpointed <= log`), no non-conforming row on
-either driver.
+**The with-reader contrast in this table is a harness artifact, and
+this document's earlier reading of it was wrong.** The two arms did not
+measure the same thing. modernc's arm ran against a WAL holding one
+8KB frame, and ncruces's arm ran against an empty WAL: the raw rows
+record `(busy, log, checkpointed)` as `(1, 1, 1)` with
+`wal_bytes_after=8248` on modernc, and `(0, 0, 0)` with
+`wal_bytes_after=0` on all 100 ncruces samples across all 5 reps. A
+TRUNCATE checkpoint with no frames to copy returns immediately on any
+driver, so ncruces's sub-millisecond arm records an empty WAL rather
+than a fast checkpoint. Nothing here distinguishes the drivers.
+
+The answer condition 4 needs comes from a controlled in-tree
+measurement instead, run at commit `64260cd` against poplar's own
+store. Under a live reader snapshot with a non-empty WAL, ncruces
+blocks 50.5-51.6ms and returns `busy=1`, the same profile modernc
+showed in this table. Both drivers block roughly the full 50ms
+`busy_timeout` and return a structurally well-formed row (`busy` in
+{0,1}, `checkpointed <= log`). The roughly 1ms overshoot is symmetric
+across the two drivers, not a property of either one.
 
 ### M3, incremental_vacuum(500) to the step cap (24 steps/rep, both drivers)
 
@@ -437,16 +450,19 @@ modernc's outright-win condition (ncruces above 250MB, modernc
 comfortably below) fires.
 
 **Condition 4, M2 TRUNCATE under a live reader: blocks past the 50ms
-`busy_timeout`, or a non-conforming row.** modernc blocks at
-essentially the full 50ms budget on every sample (98/100 samples
-exceed 50.000ms, median overshoot ~1.1ms); ncruces never blocks at all
-(section 9's M2 table). Neither driver returns a structurally
-non-conforming row. Whether modernc's roughly 1ms overshoot on a
-timeout it is, by design, supposed to return from around 50ms counts
-as "blocking past" the bound in the audit's disqualifying sense, or as
-simply returning when the timeout says it should, is a judgment call
-this document does not resolve; the numbers are reported precisely so
-that call can be made on the measurement itself.
+`busy_timeout`, or a non-conforming row.** This condition is answered
+by the in-tree controlled measurement, not by the benchmark. The
+benchmark's ncruces arm ran against an empty WAL and so measured
+nothing about a blocked checkpoint (section 9). Under a live reader
+snapshot with a non-empty WAL, both drivers block roughly the full
+50ms budget and return `busy=1`: modernc at 49.8-52.2ms in the
+benchmark, ncruces at 50.5-51.6ms in the in-tree measurement at
+`64260cd`. Neither driver returns a structurally non-conforming row.
+Whether a roughly 1ms overshoot on a timeout a driver is, by design,
+supposed to return from around 50ms counts as "blocking past" the
+bound in the audit's disqualifying sense is a judgment call this
+document does not resolve. It is symmetric across both drivers either
+way, so it fires no disqualifier against either one.
 
 **QA-2 budget on R10 (25ms p95 / 40ms p99): does either driver miss
 where the other holds?** Neither misses. R10 quiescent: modernc p95
@@ -481,11 +497,13 @@ this weakens the incumbent's position rather than leaving it neutral.
 
 - **M2's ~51ms-versus-50ms overshoot is measured but not adjudicated.**
   The audit's condition 4 text does not specify a tolerance for "blocks
-  past" the bound; modernc's 98/100 samples exceed 50.000ms by amounts
-  up to roughly 2.2ms (52.20ms max). Whether that counts as the
-  disqualifying case the audit intends is outside this document's
-  scope. Flagged in ADR-0001 revision 3 as a `checkpoint.go` policy
-  follow-up regardless of which driver won.
+  past" the bound. modernc's 98/100 benchmark samples exceed 50.000ms
+  by amounts up to roughly 2.2ms (52.20ms max), and the in-tree ncruces
+  measurement lands in the same band at 50.5-51.6ms. Whether that
+  counts as the disqualifying case the audit intends is outside this
+  document's scope. It is symmetric across the two drivers, so it does
+  not separate them. Flagged in ADR-0001 revision 3 as a
+  `checkpoint.go` policy follow-up regardless of which driver won.
 - **R5's roughly 2x bytes/op gap** (modernc ~29.9KB versus ncruces
   ~15.3KB for the same BLOB read) is measured but not explained by
   this artifact set; it may reflect a genuine copy-count difference in
@@ -539,15 +557,18 @@ and perf tooling today, not production store code: poplar's own
 block bytes rather than reading `dbstat`, documented at the query site
 and in ADR-0001 revision 3.
 
-**M2's 49.8-52.2ms overshoot sits on the incumbent, not the
-challenger.** modernc's own TRUNCATE checkpoint, under its own
-`busy_timeout=50`, against its own drained WAL and its own live-reader
-snapshot, returns busy at essentially the full timeout on 98 of 100
-samples. This is not a comparative regression measured against
-ncruces; it is the incumbent's behavior against its own bound,
-reported because audit 4.5's condition 4 asks for it directly, and
-flagged as a `checkpoint.go` policy question independent of the driver
-decision.
+**M2's with-reader arm did not measure ncruces at all.** The harness
+left ncruces's WAL empty on all 100 with-reader samples
+(`wal_bytes_after=0`, `log=0`), while modernc's held one 8KB frame, so
+the two arms are not comparable and the sub-millisecond ncruces figure
+records an empty WAL rather than a fast checkpoint. This document's
+first version read that contrast as a real divergence on the
+incumbent's arm, and that reading was wrong. Section 9 carries the raw
+rows and the correction; condition 4's answer comes from the in-tree
+controlled measurement at `64260cd`, where both drivers block roughly
+the full `busy_timeout` and return `busy=1`. The remaining question is
+whether a 50ms bound is the right policy at all, flagged as a
+`checkpoint.go` follow-up independent of the driver decision.
 
 ## 16. Raw artifacts
 

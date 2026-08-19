@@ -1,4 +1,4 @@
-# ADR-0001: modernc.org/sqlite is the store engine
+# ADR-0001: SQLite is the store engine
 
 Date 2026-07-27. Status: accepted (Phase 4). Survey:
 `docs/poplar/research/2026-07-27-phase4-library-survey.md`.
@@ -105,10 +105,12 @@ audit), section 1's "Correction to ADR-0001".
 
 The ruling itself is the benchmark's, applying audit 4.5's criteria as
 written over four measured fidelity checks (T1-T4) and the full
-latency/memory/storage suite: every one of ncruces's four
-disqualifying conditions was measured and none fired, and modernc's
-own outright-win condition on peak RSS did not fire either. Full
-method, numbers, and raw artifacts:
+latency/memory/storage suite. Conditions 1 through 3 were measured by
+the benchmark. Condition 4 was measured in-tree, after the benchmark's
+own ncruces arm proved vacuous; the M2 paragraph below carries that
+correction. None of the four disqualifying conditions fires, and
+modernc's own outright-win condition on peak RSS did not fire either.
+Full method, numbers, and raw artifacts:
 `docs/poplar/research/2026-08-19-sqlite-driver-benchmark.md`.
 
 **The QA-6 kill harness found no corruption on either driver.** 600
@@ -147,17 +149,21 @@ ncruces at 35.3MB (7.1x under). Neither the ncruces-disqualifying
 condition nor modernc's outright-win condition fires here; both
 drivers are comfortably under budget.
 
-**M2's TRUNCATE checkpoint under a live reader is the sharpest
-divergence in the whole dataset, and it sits on the incumbent's own
-arm.** Under a live reader snapshot, modernc's TRUNCATE checkpoint
-returns `busy=1` on 100 of 100 samples, at 49.8-52.2ms (median
-51.10ms), essentially the full 50ms `busy_timeout` on every sample.
-ncruces's TRUNCATE checkpoint under the identical setup returns
-`busy=0` on 100 of 100 samples, at 0.009-1.43ms (median 0.029ms, one
-outlier at 1.43ms), never approaching the timeout. This is modernc
-against its own timeout on its own drained WAL, not a comparative
-regression measured against ncruces, and it is flagged here as a
-`checkpoint.go` policy follow-up independent of which driver won.
+**M2's TRUNCATE checkpoint under a live reader behaves the same way on
+both drivers.** Under a live reader snapshot with a non-empty WAL,
+each driver blocks roughly the full 50ms `busy_timeout` and returns
+`busy=1` with a structurally conforming row. modernc measured
+49.8-52.2ms in the benchmark. ncruces measured 50.5-51.6ms in an
+in-tree controlled measurement at commit `64260cd`, which is where
+condition 4's answer comes from, because the benchmark's own ncruces
+arm was vacuous: it ran against an empty WAL, recording
+`(busy, log, checkpointed)` as `(0, 0, 0)` and `wal_bytes_after=0` on
+all 100 samples, while modernc's arm held one 8KB frame `(1, 1, 1)`.
+A checkpoint with no frames to copy returns immediately on any driver.
+The roughly 1ms overshoot is therefore symmetric, it is unadjudicated
+against audit condition 4's undefined tolerance, and it fires no
+disqualifier against either driver. It remains a `checkpoint.go`
+policy follow-up independent of which driver won.
 
 **T0, modernc's own Tcl conformance suite, is rotted rather than
 merely unrun.** `TestTclTest`, its generator, and the pregenerated
@@ -170,7 +176,14 @@ current libc pin. Full evidence is in the driver benchmark document's
 T0 section. Audit 4.5 treats a rotted suite as weakening the
 incumbent, not as neutral.
 
-**Latency is non-decisive everywhere it was measured.** R10's QA-2
+**Latency separates the drivers on the read path, and decides
+nothing.** modernc runs roughly 1.2-1.4x faster than ncruces across
+the row-shaped reads, in the same direction in every one of the five
+repetitions. The separation is real rather than noise, because the
+repetitions are paired: both drivers ran under the same governor state
+in each one, so the within-rep ratio is what the design controls for.
+It decides nothing because every budgeted operation clears its budget
+with 15-70x headroom on both drivers. R10's QA-2
 composite budget (25ms p95 / 40ms p99) holds on both drivers by a
 30-70x margin, quiescent and under concurrent write. R7's length-5
 FTS5 prefix probe blows its own budget by 10-20x on both drivers
