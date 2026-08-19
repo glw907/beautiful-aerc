@@ -191,8 +191,11 @@ growth is SR-7's visible state. `INSERT INTO
 message_fts(message_fts) VALUES('integrity-check')` runs in the
 QA-6 restart assertions and at the end of the SR-1 randomized
 script, because row-count equality does not detect term rot. The
-FTS table declares `prefix='2 3'` for search-as-you-type. The
-index is derived state: `--rebuild-index` regenerates it.
+FTS table declares `prefix='2 3 4'` for search-as-you-type: without a
+length-4 entry, a 4-character keystroke falls through to a full
+posting-list merge (measured 60-980ms, against ~170µs indexed, at a 4%
+file-size cost). The index is derived state: `--rebuild-index`
+regenerates it.
 
 **The index set** is a schema artifact in ADR-0002, not an
 implementation detail. The hot ones: `message_mailbox(mailbox_id,

@@ -23,6 +23,7 @@ import (
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // qa2ScriptLen is the length of QA-2's scripted session; the store it
@@ -76,6 +77,8 @@ func qa2Script() []qa2Op {
 // writer's bulk lane (ADR-0003's concurrency design is what QA-2
 // requires to hold under that load).
 func TestQA2Interaction(t *testing.T) {
+	log := uerrtest.CaptureDefault(t)
+
 	path := filepath.Join(t.TempDir(), "store.db")
 	env := storetest.SeedPerfEnvelope(t, path)
 
@@ -115,16 +118,31 @@ func TestQA2Interaction(t *testing.T) {
 	// reads blocked on the writer, the same weak-discriminator failure
 	// mode task 3's write-blocking test was flagged for: this backfill
 	// must actually cost real time on the writer for the concurrent
-	// assertion above to mean anything.
+	// assertion above to mean anything. The first batch, not the mean,
+	// is what proves that: it queues behind nothing (no prior batch's
+	// post-commit checkpoint to wait out), so its wall time approximates
+	// the transaction's own execute time. The mean includes that
+	// checkpoint wait and would clear a 1ms floor even for a
+	// near-instant batch.
 	batches := backfill.batches.Load()
 	if batches == 0 {
 		t.Fatal("backfill ran zero batches; the under-write case measured nothing concurrent")
 	}
-	meanBatch := time.Duration(backfill.totalBatchNS.Load() / batches)
-	if meanBatch < time.Millisecond {
-		t.Errorf("mean backfill batch = %s, want at least 1ms of real write pressure per batch", meanBatch)
+	firstBatch := time.Duration(backfill.firstBatchNS.Load())
+	if firstBatch < time.Millisecond {
+		t.Errorf("first backfill batch = %s, want at least 1ms of real write pressure", firstBatch)
 	}
-	t.Logf("backfill: %d batches, %d rows mutated, mean batch %s", batches, backfill.rowsMutated.Load(), meanBatch)
+
+	// qa2BackfillBatch is sized to keep the writer's own transaction
+	// (what the admission ceiling gates) under WriteCeiling; the log
+	// capture above is that claim's proof, not this Logf line.
+	if strings.Contains(log.String(), "admission ceiling") {
+		t.Errorf("backfill logged an admission ceiling warning; qa2BackfillBatch's row counts are too large for this corpus:\n%s", log.String())
+	}
+
+	meanBatch := time.Duration(backfill.totalBatchNS.Load() / batches)
+	t.Logf("backfill: %d batches, %d rows mutated, first batch %s (execute time, unqueued), mean batch %s (wall time, includes queueing behind the prior batch's post-commit checkpoint)",
+		batches, backfill.rowsMutated.Load(), firstBatch, meanBatch)
 }
 
 // qa2AssertBudget checks samples against QA-2's gate: p95 under 25ms,
@@ -235,7 +253,10 @@ func (sess *qa2Session) runOp(op qa2Op, currentMailbox *int64, cursor *store.Mai
 		// Prefix lengths start at 2, matching message_fts's prefix='2
 		// 3 4' index: a 1-character prefix has no prefix-index entry
 		// and falls back to a full vocabulary scan, which is not the
-		// as-you-type case a 2-character minimum trigger avoids.
+		// as-you-type case a 2-character minimum trigger avoids. The
+		// draw caps at 4 deliberately, matching the index rather than
+		// by coincidence: length-5 coverage is an open pass-gate
+		// question (measured 972ms unindexed), not settled here.
 		term := storetest.CommonWords[rand.IntN(len(storetest.CommonWords))] //nolint:gosec // G404: sample choice, not a security-sensitive use
 		prefixLen := 2 + rand.IntN(max(1, min(3, len(term)-2)))              //nolint:gosec // G404: sample choice, not a security-sensitive use
 		return sess.reads.PerfSearch(ctx, term[:prefixLen]+"*")
@@ -266,6 +287,7 @@ type qa2Backfill struct {
 	done         chan struct{}
 	batches      atomic.Int64
 	totalBatchNS atomic.Int64
+	firstBatchNS atomic.Int64 // set once, from the batch that queued behind no prior checkpoint
 	rowsMutated  atomic.Int64
 	err          error
 }
@@ -289,8 +311,12 @@ func startQA2Backfill(writer *store.Writer, messageIDs []int64) *qa2Backfill {
 				bf.err = err
 				return
 			}
+			elapsed := time.Since(start)
+			if bf.batches.Load() == 0 {
+				bf.firstBatchNS.Store(elapsed.Nanoseconds())
+			}
 			bf.batches.Add(1)
-			bf.totalBatchNS.Add(time.Since(start).Nanoseconds())
+			bf.totalBatchNS.Add(elapsed.Nanoseconds())
 			bf.rowsMutated.Add(int64(rows))
 		}
 	}()
@@ -360,12 +386,13 @@ func TestQA2BackfillSurfacesWriteError(t *testing.T) {
 // qa2BackfillBatch runs one bulk-lane transaction: flagUpdates
 // individual flag updates plus bodyUpserts body upserts, one
 // statement per row rather than a single bulk UPDATE, the same
-// per-row shape a real sync backfill writes in. The row counts are
-// sized to stay comfortably under ADR-0003's 50ms admission ceiling at
-// the full-envelope corpus, the same conforming-client shape a real
-// bulk sync chunks its own writes to, while still costing real
-// per-statement round-trip time rather than a single bulk statement
-// fast enough to prove nothing about write pressure.
+// per-row shape a real sync backfill writes in. That per-statement
+// shape is also what keeps the batch's cost real: a single bulk
+// statement would run fast enough to prove nothing about write
+// pressure. The row counts are sized to stay comfortably under
+// ADR-0003's 50ms admission ceiling at the full-envelope corpus, the
+// same conforming-client shape a real bulk sync chunks its own writes
+// to.
 func qa2BackfillBatch(writer *store.Writer, messageIDs []int64, rng *rand.Rand) (int, error) {
 	const flagUpdates, bodyUpserts = 300, 40
 	rows := 0

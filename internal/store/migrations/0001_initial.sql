@@ -72,6 +72,10 @@ CREATE UNIQUE INDEX idx_message_account_server ON message(account_id, server_id)
 -- to message.subject or message.search_text must delete the old
 -- message_fts row (by prior column values) before writing the new
 -- one; FTS5 external content cannot look that up on its own.
+--
+-- prefix='2 3 4' joined length 4 after measurement: an unindexed
+-- 4-character keystroke cost 60-980ms against ~170µs indexed, a
+-- trade worth the resulting file's 4% growth.
 CREATE VIRTUAL TABLE message_fts USING fts5(
     subject, search_text,
     content='message', content_rowid='id',

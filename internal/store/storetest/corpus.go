@@ -83,8 +83,11 @@ const (
 	perfSpread              = 2 * 365 * 24 * time.Hour
 
 	// perfCorpusVersion invalidates cached master corpora: a change to
-	// anything the generator below writes gets a bump, or machines that
-	// already hold a master keep measuring the old corpus.
+	// anything the generator below writes, or to the migrated schema a
+	// master is seeded against, gets a bump, or machines that already
+	// hold a master keep measuring the old corpus. v3: message_fts's
+	// prefix widened to '2 3 4' in 0001_initial.sql; the generator
+	// itself is unchanged.
 	perfCorpusVersion = 3
 
 	perfFullEnvVar = "POPLAR_PERF_FULL"
