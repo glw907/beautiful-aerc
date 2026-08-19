@@ -21,12 +21,15 @@ computed once per `WindowSizeMsg` into one `LayoutMode` struct.
 
 **Tech Stack:** Go 1.26, charm.land/bubbletea/v2 v2.0.9,
 charm.land/bubbles/v2 v2.1.1, charm.land/lipgloss/v2 v2.0.6,
-teatest/v2 + x/exp/golden (pseudo-versions). Versions verified live
-2026-08-19; bubbletea v2.0.9 and lipgloss v2.0.6 are the pass-start
-patch bumps over the build machine's pins (both patch-only:
-keyboard-stack restore on exit, renderer artifact fix, width
-measurement improvements). glamour v2 waits for pass 3 (the reader);
-gofrs/flock stays at v0.12.1 (v0.13.0 is a minor bump nothing needs).
+x/exp/golden as the golden library over one pure render seam,
+teatest/v2 demoted to a small flow suite (both ride x/exp
+pseudo-versions), charmbracelet/freeze as an on-demand CLI for
+color-fidelity stills. Versions verified live 2026-08-19; bubbletea
+v2.0.9 and lipgloss v2.0.6 are the pass-start patch bumps over the
+build machine's pins (both patch-only: keyboard-stack restore on
+exit, renderer artifact fix, width measurement improvements).
+glamour v2 waits for pass 3 (the reader); gofrs/flock stays at
+v0.12.1 (v0.13.0 is a minor bump nothing needs).
 
 **Specs and inputs:**
 - Pass cursor: `docs/superpowers/specs/poplar-refounding-STATUS.md`
@@ -44,6 +47,17 @@ gofrs/flock stays at v0.12.1 (v0.13.0 is a minor bump nothing needs).
   QA-7, QA-10).
 - Build machine sections 5 (pass structure), 6 (verification
   harness), 7 (pins), 8 (input machinery).
+- The design-iteration survey
+  (`docs/poplar/research/2026-07-28-tui-design-iteration-survey.md`),
+  whose recommendation section addresses this plan by name. Its
+  amendments A through G are folded here: one pure render seam with
+  x/exp/golden on its output and teatest demoted to a small flow
+  suite (A), the committed text gallery first with `cmd/sketch` as
+  a thin wrapper over the same seam (B), three-tier size
+  verification (C), fixtures as Go values with pinned
+  clock/TZ/IDs (D), no VHS and nothing recorded this pass (E),
+  freeze for color-fidelity stills (F), and the golden churn
+  policy (G).
 - Routed input: dispositions doc row 24
   (`docs/poplar/research/2026-08-18-pass-1-deferred-findings-dispositions.md`),
   uerr's stderr log fallback must be resolved before a full-screen
@@ -153,20 +167,20 @@ implementer invents taste. Each cites its constraint.
    |---|---|---|
    | bg | `#1A1816` | `#FAF7F2` |
    | fg | `#D8D3CA` | `#33302A` |
-   | fgMuted | `#9A948A` | `#6E675C` |
-   | fgSubtle | `#6B665D` | `#8F887C` |
+   | fgMuted | `#9A948A` | `#68614F` |
+   | fgSubtle | `#7A7469` | `#847D6F` |
    | accent | `#D29A57` | `#8F5A1A` |
    | unread | `#EFEBE4` (with bold) | `#1E1B16` (with bold) |
    | selectedBg | `#2E2B26` | `#ECE6DB` |
    | focusedBorder | `#C89055` | `#A66A21` |
-   | error | `#E08573` | `#B04A38` |
-   | warn | `#D6B36A` | `#8F6A14` |
-   | success | `#A3B87E` | `#5A7A34` |
+   | error | `#E08573` | `#A83E2C` |
+   | warn | `#D6B36A` | `#7E5C0F` |
+   | success | `#A3B87E` | `#4E6B2D` |
    | link | `#8FB4CE` | `#35688C` |
    | codeBg | `#221F1A` | `#F1EBE1` |
-   | quote | `#A79E8F` | `#7A7264` |
-   | diffAdd | `#A3B87E` | `#5A7A34` |
-   | diffDel | `#E08573` | `#B04A38` |
+   | quote | `#A79E8F` | `#6E6759` |
+   | diffAdd | `#A3B87E` | `#4E6B2D` |
+   | diffDel | `#E08573` | `#A83E2C` |
    | flag | `#D29A57` | `#A66A21` |
    | calendarSlot[8] | muted 8-hue cycle from the same saturation band; slot 1 = link's hue, slot 2 = success's, then warn, `#C99BC0`, `#7FBFB2`, error's, `#B0A1E0`, `#C0A98F` | derived per-role at light lightness, same hue order |
 
@@ -180,6 +194,24 @@ implementer invents taste. Each cites its constraint.
    roadmap talk.** Surface name plus live store counts, centered,
    composed (charter: empty states are composed). They are
    throwaway; pass 3 replaces the mail one.
+9. **The prototyping and review medium is the terminal itself,
+   never an HTML mock.** The design-iteration survey's field
+   finding: no surveyed project prototypes TUI design outside the
+   terminal; the loop is run-and-look plus committed text renders.
+   Poplar's mechanism, from the survey: every screen renders
+   through one pure seam, a gallery target sweeps fixtures ×
+   profiles × sizes through that seam into committed text files
+   (the artifact both Geoff and an agent can read), `cmd/sketch`
+   wraps the same seam interactively for feeling a screen in
+   kitty, and freeze turns gallery text into color-accurate stills
+   where color is the subject (theme review). Because the styling
+   analyzer bans styling outside `internal/theme`, the gallery
+   cannot drift from the product: whatever it renders is what the
+   app renders. Pre-build mockups need no tool, only ordering:
+   theme, LayoutMode, and chrome land first, then approved
+   wireframes are composed from real primitives with fixture
+   content, and that composed render becomes the screen's first
+   golden.
 
 ## Wireframes (the design ritual)
 
@@ -378,14 +410,20 @@ internal/theme/            theme.go (roles, profiles), glyphs.go,
                            degrade tables
 internal/ui/               app.go (root model), layout.go
                            (LayoutMode), registry.go (Screen,
-                           entries, tests), statusline.go,
-                           footer.go, banner.go, toast.go,
-                           confirm.go, help.go, placeholder.go,
-                           mouse.go (dispatch, hit spans),
-                           messages.go (engine-state msg types),
-                           wheel.go (the WithFilter coalescer)
-internal/ui/uitest/        golden harness helpers (profile + size
-                           matrix runner over teatest)
+                           entries, tests), render.go (the pure
+                           seam), statusline.go, footer.go,
+                           banner.go, toast.go, confirm.go,
+                           help.go, placeholder.go, mouse.go
+                           (dispatch, hit spans), messages.go
+                           (engine-state msg types), wheel.go
+                           (the WithFilter coalescer)
+internal/ui/fixtures/      named fixture states as exported Go
+                           values, clock/TZ/IDs pinned in-package
+internal/ui/testdata/      x/exp/golden files and the committed
+                           gallery renders
+cmd/sketch/                dev-only interactive gallery viewer, a
+                           thin bubbletea wrapper over the seam;
+                           never in a release artifact
 cmd/poplar/                main.go grows the TUI default path and
                            the message bridge; headless mode stays
                            behind --headless for the harnesses
@@ -568,12 +606,12 @@ the tooling audit) as the shape exemplar; no code copies.
 
 - [ ] Task 4 complete
 
-## Task 5: Root model, surface switching, placeholders, golden harness
+## Task 5: Root model, the render seam, placeholders, the gallery
 
 **Requirement IDs:** UX-1 (shared list-nav test seeds), UX-4
-(round trip), QA-7 (harness). **Deliverables:** 5 (root model,
-four placeholder screens, wheel filter, golden harness, screen
-stack).
+(round trip), QA-7 (seam and gallery). **Deliverables:** 6 (root
+model, pure render seam, fixtures package, gallery target, four
+placeholder screens, wheel filter).
 
 **Outcome:** `internal/ui.App`: the root model owning the active
 surface, the screen stack (help and modals push onto it),
@@ -584,9 +622,18 @@ placeholder surface screens per wireframe F1/F8, reading live
 counts from the store's read pool as commands (elm-conventions
 rule 3). The wheel-coalescing `tea.WithFilter` (16 ms window,
 signed accumulation, direction reset) at program construction.
-The golden harness: `internal/ui/uitest` running a model through
-teatest v2 at a (profile × size) matrix, goldens via
-`x/exp/golden`, profile and size always explicit inputs.
+The render seam (survey amendment A): every static render flows
+through one pure function of the shape
+`Render(screen, state, LayoutMode, theme) string`, no program, no
+I/O; static goldens call `x/exp/golden.RequireEqual` on its
+output, profile and size always explicit inputs. The fixtures
+package (amendment D): named screen states as exported Go values,
+clock, timezone, and IDs pinned in-package. The gallery target
+(amendment B): `make gallery` sweeps fixtures × profiles × rungs
+and boundary sizes through the seam into committed text files
+under `internal/ui/testdata/`, regenerated by the same flag
+convention as the goldens; where the gallery covers a case, no
+separate golden duplicates it.
 
 **Acceptance criteria:**
 - UX-4 round trip: switch 1→3→1 preserves surface state
@@ -601,23 +648,30 @@ teatest v2 at a (profile × size) matrix, goldens via
   `Update` as one message with the summed delta; a direction flip
   resets; recorded as the elm-conventions exception it is (pure,
   stateless).
-- Golden: F1 at 80×24 and 100×30, truecolor dark, byte-identical
-  across two runs (QA-7's core assertion, run twice in-process).
+- Seam purity: two calls with the same fixture, LayoutMode, and
+  theme return byte-identical strings (QA-7's core assertion, in
+  one test); gallery renders of F1 at 80×24 and 100×30 in
+  truecolor dark are committed and stable across regeneration.
 - Resize preserves state: a 100×30 → 80×24 → 100×30 round trip
   leaves placeholder state intact (composition rule 4's mechanism,
   full coverage as content arrives).
 
-**Boundaries:** `internal/ui` (app.go, placeholder.go, wheel.go,
-uitest/). Store access through the read pool only; no engine
-imports. Placeholder store reads go through one `tea.Cmd` per
-refresh, triggered by store-changed messages (task 6's bridge
-defines the message; this task stubs the trigger with Init-time
-load).
+**Boundaries:** `internal/ui` (app.go, render.go, placeholder.go,
+wheel.go), `internal/ui/fixtures`, the gallery make target. Store
+access through the read pool only; no engine imports. Placeholder
+store reads go through one `tea.Cmd` per refresh, triggered by
+store-changed messages (task 6's bridge defines the message; this
+task stubs the trigger with Init-time load). Fixture content never
+reaches the seam from a data file (Go values only), and the
+styling analyzer covers the fixtures package like any other.
 
 **Produces:** `ui.NewApp(deps) App` (deps: read pool handle, theme,
 profile), `App` as the program's root model; `PlaceholderScreen`
-registered per surface; `uitest.RunGolden(t, model, profile, w, h)`
-(name indicative). Consumed by every later task.
+registered per surface; `ui.Render(screen, state, LayoutMode,
+theme) string` as the one static-render seam; `fixtures.<Name>`
+values; `make gallery`. Consumed by every later task: chrome tasks
+6 through 9 add their fixtures and gallery entries in the same
+commit as their component.
 
 **Salvage:** legacy `internal/ui/app.go` root-model shape is
 copy-with-rewrite reference only; the registry and LayoutMode
@@ -731,8 +785,10 @@ The UX-9 undo presentation rides the toast: action name, visible
 **Acceptance criteria:**
 - Toast: newest-wins under two rapid offers; every toast write
   produces exactly one ER-1 log line (asserted against a captured
-  log); countdown ticks render 9→0 deterministically under
-  teatest's virtual time.
+  log); countdown ticks render 9→0 deterministically as
+  message-level tests with an injected fake clock (survey
+  amendment E: timing behavior asserts at the message layer,
+  never through a recording or a real timer).
 - Undo: `u` inside the window emits the offer's undo message; `u`
   after expiry is a no-op; the window does not survive quit
   (asserted: quit during countdown discards the offer and the
@@ -883,45 +939,67 @@ the harnesses (documented in the flag's help text).
 
 - [ ] Task 11 complete
 
-## Task 12: The golden matrix and QA-7
+## Task 12: The gallery matrix, cmd/sketch, the flow suite, QA-7
 
-**Requirement IDs:** QA-7, UX-7 (degrade goldens), design language
-section 9 (testing clause). **Deliverables:** 3 (matrix, degrade
-goldens, tmux smoke).
+**Requirement IDs:** QA-7, UX-7 (degrade renders), design language
+section 9 (testing clause). **Deliverables:** 5 (gallery matrix
+completion, cmd/sketch, teatest flow suite, churn policy, tmux
+smoke).
 
-**Outcome:** The full pass-2 golden matrix: every registered
-screen at one representative size per class it renders distinctly
-at, plus boundary sizes it consumes, floor state, short height,
+**Outcome:** The three-tier size verification completed (survey
+amendment C): tier 1 is task 3's LayoutMode boundary table (no
+rendering; named cases at 59/60, 79/80, 99/100, 139/140 columns
+and 14/15, 19/20 rows); tier 2 is the gallery completed to every
+registered screen at each rung it renders distinctly at, boundary
+sizes it consumes, floor state, short height, 80×24 explicitly,
 per capability profile (truecolor dark, truecolor light, ANSI-16,
-NO_COLOR); QA-7's determinism assertion (byte-identical across
-two uncached runs, profile and size as explicit inputs); the
-UX-7 degrade golden proving unread/selected/focused/error carry
-distinct non-color channels in ANSI-16 and NO_COLOR renders (the
-shell exercises focused and error this pass; unread and selected
-join with pass 3's list, and the theme-level channel test from
-task 1 already covers all four at token level); the tmux smoke
-script updated for the TUI (launch, switch all four surfaces,
-open help, quit).
+NO_COLOR); tier 3 is real resize through `scripts/tmux-check` on
+the gate platform plus the manual pointer checklist. `cmd/sketch`
+lands as the thin interactive wrapper over the seam (keys cycle
+fixture, profile, and rung; its help text states it does not
+verify pointer coordinates or glyph widths). The teatest flow
+suite stays deliberately small: the quit path, the surface-switch
+round trip, task 2's never-answering-terminal case, and task 11's
+ST-2 startup, and nothing the seam or gallery already covers.
+The UX-7 degrade renders prove focused and error carry distinct
+non-color channels in ANSI-16 and NO_COLOR (unread and selected
+join with pass 3's list; task 1's token-level test already covers
+all four). freeze stills of the F1 and F2 gallery renders in both
+themes are committed for the design record (survey amendment F).
 
 **Acceptance criteria:**
-- The matrix runs in `make check`'s test step and CI verbatim;
-  golden regeneration is a named make target; a stray-diff run
-  fails.
-- Two full in-process renders of the whole matrix are
-  byte-identical (QA-7).
-- Locale/TZ pinned in the harness (QA-7's tuple), asserted by a
-  test that flips TZ and expects the harness to pin it back.
+- The gallery check runs in `make check`'s test step and CI
+  verbatim: a stray diff between committed renders and a fresh
+  sweep fails; regeneration is a named make target.
+- Two full in-process sweeps are byte-identical (QA-7), locale
+  and TZ pinned by the fixtures package, asserted by a test that
+  flips TZ and expects pinned output.
+- The teatest swap path is written into this plan's record as
+  one paragraph when the suite lands: what replaces teatest if it
+  lags a bubbletea bump, and exactly which tests are affected
+  (survey amendment A's closing requirement).
+- Churn policy (survey amendment G), stated in the Makefile
+  target's help and this plan: the regeneration command, the rule
+  that a regenerated diff is read before commit rather than waved
+  through, and the expectation that a chrome task's churn stays
+  inside the screens it touched; the pass-end reviewer reads
+  gallery churn explicitly.
 - `scripts/tmux-check` drives the built binary through the smoke
-  flow on the gate platform, keyboard-only, captured exit code.
+  flow (launch, switch all four surfaces, open help, quit) on the
+  gate platform, keyboard-only, captured exit code.
 
-**Boundaries:** `internal/ui/uitest`, golden files, `scripts/`,
-Makefile target. No component changes except defects the matrix
-exposes (each lands as its own fix commit).
+**Boundaries:** gallery files, `cmd/sketch`, the flow-suite test
+file, `scripts/`, Makefile targets. No component changes except
+defects the matrix exposes (each lands as its own fix commit).
+`cmd/sketch` is excluded from release artifacts and `make install`.
 
-**Produces:** the golden baseline every later screen pass extends.
+**Produces:** the committed render baseline every later screen
+pass extends; the composition path pass 3 uses to turn its
+approved wireframes into first goldens.
 
 **Salvage:** the QA-7 profile-matrix concept from the build
-machine; no code exists yet.
+machine; the survey's gallery and sketch shape; no code exists
+yet.
 
 - [ ] Task 12 complete
 
@@ -931,7 +1009,8 @@ machine; no code exists yet.
 
 Simplify over the pass diff, reviewer fan-out (three lenses
 minimum; attack the pass's new guards first: the grammar test, the
-UX-2 conformance check, the contrast test, the golden matrix),
+UX-2 conformance check, the contrast test, the gallery check, and
+the gallery churn of the round under review),
 deadcode run with justifications, STATUS outcomes block, plan
 archival, the manual pointer checklist on kitty, and the pass gate
 with Geoff: the shell demoed live on the gate terminal, both
