@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	_ "github.com/ncruces/go-sqlite3/driver"
 )
 
 // TestDSNPragmaSet proves the five pragmas the DSN builder is

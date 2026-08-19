@@ -65,3 +65,11 @@ transaction guarantee and the kill harness tractable.
   and commit is bounded by the admission ceiling and stated
   honestly.
 - Workers share one request budget derived from backend limits.
+
+## Revision 3 (2026-08-19, driver decision)
+
+Context's "modernc/sqlite wants one writer" is stale: the store's
+engine changed under ADR-0001 revision 3. The discipline itself does
+not move: SQLite's own single-writer WAL semantics plus this ADR's
+own design put one writer goroutine on one physical connection
+regardless of driver.

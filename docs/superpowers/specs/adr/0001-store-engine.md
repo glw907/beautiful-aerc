@@ -78,16 +78,37 @@ same transaction as the message write.
 ## Revision 3 (2026-08-19, driver decision)
 
 The Decision's engine choice is superseded. **poplar's store is now
-github.com/ncruces/go-sqlite3 v0.35.3**, a pure-Go WASM build run
-through wazero, keeping C3's `CGO_ENABLED=0` constraint intact. The
-Alternatives section's ncruces entry, which named an open WAL
-corruption bug and a pre-1.0 FTS5 module as disqualifying, is
-superseded by this revision: pass 1c's driver audit (section 4.5)
-re-measured both drivers against the same 100,000-message envelope
-and neither defect reproduced. The ruling applies audit 4.5 as
-written: every one of ncruces's four disqualifying conditions was
-measured and none fired, and modernc's own outright-win condition on
-peak RSS did not fire either.
+github.com/ncruces/go-sqlite3 v0.35.3.** SQLite's own C source is
+machine-translated ahead of time to plain Go by `wasm2go`
+(`github.com/ncruces/go-sqlite3-wasm/v3`), not run through a WASM
+interpreter or JIT at runtime (the driver dropped wazero at v0.33.0),
+keeping C3's `CGO_ENABLED=0` constraint intact.
+
+The Alternatives section's ncruces entry named two disqualifying
+grounds: an open WAL corruption bug (Windows) and a pre-1.0 FTS5
+module. Neither holds up on inspection, corrected by the driver audit's
+own reading rather than by this pass's benchmark: the WAL bug (issue
+#404) was root-caused to Windows-only shared-memory copying and fixed
+in v0.35.2, three days after the report and before poplar's own
+v0.35.3 pin, and it required a multi-connection concurrent-**write**
+pool that poplar's single-writer design cannot produce; the kill
+harness below runs on Linux against poplar's actual write shape and
+never probed a Windows WAL bug at all. FTS5 is real `fts5.c`, shipped
+in `ext/fts5` and linked through SQLite's own dynamic-extension ABI,
+not a from-scratch reimplementation; poplar's `content='message'`
+external-content table, its prefix declaration, and its
+integrity-check and rebuild calls are ordinary SQL against unmodified
+FTS5 internals. Both corrections, and their citations, are in
+`docs/poplar/research/2026-07-28-sqlite-driver-audit.md` (the driver
+audit), section 1's "Correction to ADR-0001".
+
+The ruling itself is the benchmark's, applying audit 4.5's criteria as
+written over four measured fidelity checks (T1-T4) and the full
+latency/memory/storage suite: every one of ncruces's four
+disqualifying conditions was measured and none fired, and modernc's
+own outright-win condition on peak RSS did not fire either. Full
+method, numbers, and raw artifacts:
+`docs/poplar/research/2026-08-19-sqlite-driver-benchmark.md`.
 
 **The QA-6 kill harness found no corruption on either driver.** 600
 SIGKILL trials per driver (200 kill points across 3 seeds), run
@@ -104,16 +125,18 @@ poplar's own DSN builder (`store/dsn.go`) already used the
 single-script form that avoids this defect, and that form carries
 forward unchanged under ncruces, which holds the correct pragmas
 under either DSN spelling. T2's EXPLAIN QUERY PLAN showed zero
-difference between the two drivers across all eight queries probed,
-matching this repository's own committed goldens exactly. T3's
-identical-statement-order replay produced byte-identical database
-files across modernc, ncruces, and the stock sqlite3 CLI (3.50.1).
+difference between the two drivers across all eight queries probed;
+the six the repository's own test covers match its committed goldens
+exactly. T3's identical-statement-order replay produced byte-identical
+database files (after zeroing the header's file-change-counter and
+SQLite-version fields, the documented, expected-to-differ bytes)
+across modernc, ncruces, and the stock sqlite3 CLI (3.50.1).
 
-**Peak RSS clears QA-5's 250MB ceiling by roughly 7x on both
-drivers**, at the ~2.25GB corpus scale and across all four
-checkpoints (pool warm-up, concurrent backfill, immediately after an
-FTS5 rebuild, and a real 10-minute idle wait): modernc peaks at
-28.6MB, ncruces at 35.3MB. Neither the ncruces-disqualifying
+**Peak RSS clears QA-5's 250MB ceiling by at least 7x on both
+drivers**, at the ~2.25GB corpus scale and across all four checkpoints
+(pool warm-up, concurrent backfill, immediately after an FTS5 rebuild,
+and a real 10-minute idle wait): modernc peaks at 28.6MB (8.7x under),
+ncruces at 35.3MB (7.1x under). Neither the ncruces-disqualifying
 condition nor modernc's outright-win condition fires here; both
 drivers are comfortably under budget.
 
@@ -123,20 +146,22 @@ arm.** Under a live reader snapshot, modernc's TRUNCATE checkpoint
 returns `busy=1` on 100 of 100 samples, at 49.8-52.2ms (median
 51.10ms), essentially the full 50ms `busy_timeout` on every sample.
 ncruces's TRUNCATE checkpoint under the identical setup returns
-`busy=0` on 100 of 100 samples, completing in single-digit-to-low-
-hundreds of microseconds. This is modernc against its own timeout on
-its own drained WAL, not a comparative regression measured against
-ncruces, and it is flagged here as a `checkpoint.go` policy
-follow-up independent of which driver won.
+`busy=0` on 100 of 100 samples, at 0.009-1.43ms (median 0.029ms, one
+outlier at 1.43ms), never approaching the timeout. This is modernc
+against its own timeout on its own drained WAL, not a comparative
+regression measured against ncruces, and it is flagged here as a
+`checkpoint.go` policy follow-up independent of which driver won.
 
 **T0, modernc's own Tcl conformance suite, is rotted rather than
 merely unrun.** `TestTclTest`, its generator, and the pregenerated
-fixtures were deleted upstream in modernc.org/sqlite v1.29.0
-(2024-02); there is no public rebuild path, and the dependency a
-rebuild would need, modernc.org/tcl@v1.15.3, fails to compile
-against modernc's own current libc pin. Full evidence is in the
-driver-decision dispatch's T0 report (`task-4-t0-report.md`). Audit
-4.5 treats a rotted suite as weakening the incumbent, not as neutral.
+fixtures were deleted upstream in a single commit, `11df50c`
+("upgrade supported targets to SQLite 3.45.1"), released as
+modernc.org/sqlite v1.29.0 on 2024-02-13; there is no public rebuild
+path, and the dependency a rebuild would need,
+modernc.org/tcl@v1.15.3, fails to compile against modernc's own
+current libc pin. Full evidence is in the driver benchmark document's
+T0 section. Audit 4.5 treats a rotted suite as weakening the
+incumbent, not as neutral.
 
 **Latency is non-decisive everywhere it was measured.** R10's QA-2
 composite budget (25ms p95 / 40ms p99) holds on both drivers by a
@@ -146,7 +171,7 @@ alike, a shared miss rather than a driver difference, which routes
 to the QA gate as a schema question (widening the prefix index
 declaration) rather than to this decision.
 
-Three measurement caveats carry forward so a future reader does not
+Four measurement caveats carry forward so a future reader does not
 mistake this data for a clean benchmark. The CPU governor drifted off
 `performance` for 4 of the 5 alternating repetitions (only repetition
 1, both drivers, ran under `performance`; repetitions 2-5 ran under
@@ -155,26 +180,37 @@ modernc-versus-ncruces ratios above hold, but every absolute latency
 figure in the underlying data over-weights powersave conditions 4-to-1
 against the audit's own preflight intent. R7's length-5 class ran at
 100 iterations, not the audit's specified 5,000, an orchestrator
-ruling made after the realistic corpus put a single length-5 query at
-0.6-1s (roughly 80 minutes per repetition at full count on this one
-non-decisive operation); 100 samples still resolve p95/p99, and
-lengths 2-4 stayed at 5,000. R5's body BLOB read shows a roughly 2x
-bytes-per-op gap (modernc ~29.9KB versus ncruces ~15.3KB for the same
-read) that this data does not explain; it favors ncruces, it is not
-gating, and it is worth a targeted look if R5 ever becomes gating.
-
-`dbstat` is unavailable on ncruces's default build, which affects
-only test and perf tooling, not production store code. The perf
-corpus fingerprint's FTS-index-size field (`storetest/corpus.go`)
-now sums `message_fts_data`'s stored block bytes rather than
-`dbstat`'s page-aligned accounting; the two committed fingerprints
+ruling made after a preliminary probe (ahead of the full benchmark)
+put a single length-5 query at 0.6-1s; the benchmark's own measured
+p50 at n=100 came in lower, 144.7ms (modernc) and 215.1ms (ncruces),
+consistent with the earlier figure being a rough single-query
+observation rather than a percentile. 100 samples still resolve
+p95/p99, and lengths 2-4 stayed at 5,000. R5's body BLOB read shows a
+roughly 2x bytes-per-op gap (modernc ~29.9KB versus ncruces ~15.3KB
+for the same read) that this data does not explain; it favors ncruces,
+it is not gating, and it is worth a targeted look if R5 ever becomes
+gating. `dbstat` is unavailable on ncruces's default build, which
+affects only test and perf tooling, not production store code: the
+perf corpus fingerprint's FTS-index-size field
+(`storetest/corpus.go`) now sums `message_fts_data`'s stored block
+bytes rather than `dbstat`'s page-aligned accounting across every
+`message_fts_*` shadow table; the two committed fingerprints
 (`storetest/testdata/perf-corpus-fingerprint-10000.txt` and
 `-100000.txt`) were regenerated against the unchanged corpus bytes,
 and every other field held identical to the modernc-seeded values.
 
-Every raw artifact behind this revision (all ten JSON repetitions, the
-T0-T4 reports, and the section 4.5 analysis) lives in the driver
-decision dispatch's sdd workspace snapshot,
-`2026-08-18-pass-1c-measurement-and-driver-decision/`. The scratchpad
-harness module and its results directory are session-scoped and are
-not preserved past the pass.
+The Consequences section's "modernc connections are full-mutex, so
+reads must never queue behind the writer" clause is superseded. The
+one-writer discipline (ADR-0003) holds under ncruces for a different
+reason: SQLite's own single-writer WAL semantics (one write
+transaction at a time, any number of concurrent readers) and
+ADR-0003's own design, which serializes every write through one
+goroutine on one pinned physical connection regardless of what either
+driver's connection object does internally. Nothing about the
+concurrency discipline depends on a driver's internal locking
+behavior.
+
+Every raw artifact behind this revision (all ten JSON repetitions, T0
+through T4, and the section 4.5 analysis) is committed at
+`docs/poplar/research/2026-08-19-sqlite-driver-benchmark.md` and
+`docs/poplar/research/captures/2026-08-19-sqlite-driver-benchmark-results.tar.xz`.

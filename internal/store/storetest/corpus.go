@@ -888,14 +888,18 @@ func perfReadStats(db *sql.DB, corpus *perfCorpus) error {
 		{`PRAGMA page_count`, &corpus.pageCount},
 		{`PRAGMA freelist_count`, &corpus.freelistCount},
 		{`SELECT COALESCE(SUM(LENGTH(content)), 0) FROM body`, &corpus.bodyBytes},
-		// dbstat is not compiled into the store's driver, so the index
-		// size comes from summing the compressed b-tree segment blobs
-		// FTS5 itself stores in message_fts_data (the shadow table
-		// every write and merge lands in) rather than from dbstat's
-		// page-aligned accounting. It runs smaller than a page-based
-		// sum would, since a block's stored length is its compressed
-		// size rather than a whole page, but it is the same query
-		// every run, which is what the fingerprint needs.
+		// dbstat is not compiled into ncruces/go-sqlite3's default
+		// build, so the index size comes from summing the compressed
+		// b-tree segment blobs FTS5 itself stores in message_fts_data
+		// (the shadow table every write and merge lands in), not from
+		// dbstat's page-aligned accounting across every message_fts_*
+		// shadow table (message_fts_data, message_fts_idx,
+		// message_fts_docsize, message_fts_config together). The
+		// result runs smaller for two reasons: message_fts_idx and
+		// message_fts_docsize's own bytes are no longer counted, and a
+		// block's stored length is its compressed size rather than a
+		// whole page. It is still the same query every run, which is
+		// what the fingerprint needs.
 		{`SELECT COALESCE(SUM(LENGTH(block)), 0) FROM message_fts_data`, &corpus.ftsIndexBytes},
 	} {
 		if err := db.QueryRow(stat.query).Scan(stat.dest); err != nil {

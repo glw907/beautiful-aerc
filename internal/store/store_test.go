@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
-
-	_ "github.com/ncruces/go-sqlite3/driver"
 )
 
 // The fixture rows every test in this package hangs its own rows off:

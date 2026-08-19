@@ -6,15 +6,17 @@ import (
 	"net/url"
 
 	"github.com/ncruces/go-sqlite3"
+	_ "github.com/ncruces/go-sqlite3/driver" // registers the "sqlite3" database/sql driver
 	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
 
-// FTS5 is not compiled into the driver by default; the extension must
-// be registered once before the first Open, or the first connection
-// any binary in this module opens links no full-text support at all.
 // This file is the one every consumer of package store compiles,
-// production and test alike, so it is the seam that registration
-// belongs in.
+// production and test alike, so it carries both the driver's blank
+// import and FTS5's registration: neither belongs at each caller's
+// own import list. FTS5 is not compiled into the driver by default;
+// the extension must be registered once before the first Open, or the
+// first connection any binary in this module opens has no full-text
+// support at all.
 func init() {
 	sqlite3.AutoExtension(fts5.Register)
 }
@@ -81,8 +83,10 @@ const (
 // page_size and auto_vacuum are fixed the moment a database enters
 // WAL mode, so journal_mode must run after them, and the driver's own
 // documentation warns that pragma order matters. One script pins the
-// order written here rather than trusting a repeated query
-// parameter's iteration order.
+// order written here explicitly; the driver audit's T1 probe found
+// ncruces honors query-string order correctly under the separate-
+// parameter form too, so this is belt and suspenders, not a
+// workaround for a defect.
 func dsn(path string, kind connKind) string {
 	pragmas := fmt.Sprintf(
 		"busy_timeout(%d); PRAGMA page_size(%d); PRAGMA auto_vacuum(%d); PRAGMA journal_mode(wal); PRAGMA synchronous(normal); PRAGMA cache_size(%d); PRAGMA foreign_keys(1)",
