@@ -1,2 +1,2 @@
-BenchmarkQA2Interaction_quiescent_100000      500	    236556 ns/op
-n=500 p50=180.338µs p95=648.439µs p99=1.037501ms max=4.786199ms
+BenchmarkQA2Interaction_quiescent_100000      500	    551667 ns/op
+n=500 p50=402.836µs p95=1.468747ms p99=2.415288ms max=8.02744ms
