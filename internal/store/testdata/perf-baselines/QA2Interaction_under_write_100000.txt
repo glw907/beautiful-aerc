@@ -1,2 +1,0 @@
-BenchmarkQA2Interaction_under_write_100000      500	    501039 ns/op
-n=500 p50=417.047µs p95=1.567989ms p99=2.081255ms max=4.167599ms

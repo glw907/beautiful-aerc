@@ -22,12 +22,3 @@ func (w *Writer) Apply(ctx context.Context, fn func(*sql.Tx) error) error {
 func (w *Writer) ApplyInteractive(ctx context.Context, fn func(*sql.Tx) error) error {
 	return w.submit(ctx, fn)
 }
-
-// applyTagged is Apply with a caller-chosen op in place of the
-// generic store.write. It stays unexported: RebuildIndex is package
-// store's only caller, tagging its own failure so a log line can
-// tell it apart from an ordinary write failure without a second
-// uerr.New call over the same outcome (ADR-0013 revision 2).
-func (w *Writer) applyTagged(ctx context.Context, op string, fn func(*sql.Tx) error) error {
-	return w.submitBulkTagged(ctx, op, fn)
-}

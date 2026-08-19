@@ -81,6 +81,7 @@ func WriteBaseline(t *testing.T, dir, name, benchLine string, samples []time.Dur
 
 	path := filepath.Join(dir, name+".txt")
 	if _, err := os.Stat(path); err == nil {
+		t.Logf("perf baseline: %s already exists and was left alone; delete it to rebase", path)
 		return
 	}
 
@@ -88,7 +89,7 @@ func WriteBaseline(t *testing.T, dir, name, benchLine string, samples []time.Dur
 		name, benchLine, len(samples),
 		Percentile(samples, 50), Percentile(samples, 95), Percentile(samples, 99),
 		Percentile(samples, 100))
-	if err := os.WriteFile(path, []byte(summary), 0o644); err != nil { //nolint:gosec // G306: a perf baseline is diagnostic output alongside the test binary, not sensitive data
+	if err := os.WriteFile(path, []byte(summary), 0o600); err != nil {
 		t.Fatalf("write baseline %s: %v", path, err)
 	}
 }

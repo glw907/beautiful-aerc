@@ -62,6 +62,12 @@ const (
 	// output, most notably. It must not reuse ClassStoreLocal, which
 	// names a store failure specifically.
 	ClassLocalIO
+
+	// classCount is one past the last class. A class lives in three
+	// tables that nothing links: this block, sentence, and String.
+	// TestEveryClassIsComplete iterates to here and holds them against
+	// each other.
+	classCount
 )
 
 // String returns class's log key.

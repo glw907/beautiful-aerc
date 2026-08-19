@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestCheckpointLifecycle proves the writer's own checkpoint
@@ -209,6 +212,91 @@ func TestCheckpointTruncateSurfacesTimeoutRestoreFailure(t *testing.T) {
 	if !strings.Contains(err.Error(), "busy_timeout") {
 		t.Errorf("err = %v, want it naming the busy_timeout restore", err)
 	}
+}
+
+// TestCheckpointTruncateWarnsWhenTheWALWillNotDrain proves a TRUNCATE
+// checkpoint that SQLite refused to complete leaves a log line. SQLite
+// reports that refusal in the pragma's own result row rather than as
+// an error, so a checkpoint call that reads only the error learns
+// nothing: the WAL keeps growing past its bound and the writer reports
+// a clean run. The driver swap is what made this reachable to test at
+// all, since both drivers block the full busy_timeout and return
+// busy=1 here (ADR-0001 revision 3's corrected condition 4).
+func TestCheckpointTruncateWarnsWhenTheWALWillNotDrain(t *testing.T) {
+	log := uerrtest.CaptureDefault(t)
+
+	cfg := DefaultWriterConfig()
+	cfg.CheckpointIdle = time.Hour
+	w, path := newTestWriter(t, cfg)
+
+	reader := openTestReader(t, path)
+	rtx, err := reader.Begin()
+	if err != nil {
+		t.Fatalf("begin reader tx: %v", err)
+	}
+	defer func() { _ = rtx.Rollback() }()
+	var accounts int
+	if err := rtx.QueryRow(`SELECT COUNT(*) FROM account`).Scan(&accounts); err != nil {
+		t.Fatalf("hold reader snapshot: %v", err)
+	}
+
+	fillWithFatRows(t, w, 50, 4096)
+
+	if err := checkpointTruncate(context.Background(), w.db); err != nil {
+		t.Fatalf("checkpointTruncate against a reader-pinned WAL = %v, want nil: a refused checkpoint is not a failed one", err)
+	}
+
+	line := lastLogLine(t, log.String(), "checkpoint")
+	if !strings.Contains(line, "mode=TRUNCATE") {
+		t.Errorf("checkpoint warning = %q, want it naming the TRUNCATE mode", line)
+	}
+	// An empty WAL warns about nothing a reader did, which is how a
+	// vacuous version of this test would pass with the snapshot never
+	// pinning anything. The frame counts are what rule that out: the
+	// WAL held frames, and the checkpoint stopped short of them at the
+	// reader's mark.
+	logFrames := logAttrInt(t, line, "log_frames")
+	checkpointed := logAttrInt(t, line, "checkpointed_frames")
+	if logFrames == 0 {
+		t.Errorf("checkpoint warning = %q, want a non-zero log_frames: an empty WAL proves nothing about a blocked checkpoint", line)
+	}
+	if checkpointed >= logFrames {
+		t.Errorf("checkpointed_frames = %d, log_frames = %d, want the checkpoint stopped short while the reader held its snapshot", checkpointed, logFrames)
+	}
+}
+
+// lastLogLine returns the final captured log line containing want,
+// failing t when nothing captured does.
+func lastLogLine(t *testing.T, captured, want string) string {
+	t.Helper()
+
+	var found string
+	for line := range strings.SplitSeq(strings.TrimSpace(captured), "\n") {
+		if strings.Contains(line, want) {
+			found = line
+		}
+	}
+	if found == "" {
+		t.Fatalf("no log line mentions %q; captured:\n%s", want, captured)
+	}
+	return found
+}
+
+// logAttrInt returns the integer value slog's text handler wrote for
+// key in line.
+func logAttrInt(t *testing.T, line, key string) int {
+	t.Helper()
+
+	_, rest, ok := strings.Cut(line, key+"=")
+	if !ok {
+		t.Fatalf("log line %q carries no %s attribute", line, key)
+	}
+	value, _, _ := strings.Cut(rest, " ")
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		t.Fatalf("parse %s from %q: %v", key, line, err)
+	}
+	return n
 }
 
 // rejectingConnector opens the real sqlite driver and refuses the one

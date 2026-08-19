@@ -47,6 +47,10 @@ func DefaultWriterConfig() WriterConfig {
 // with Close.
 var errWriterClosed = errors.New("store: writer is closed")
 
+// opWrite tags a write whose caller did not name one of its own
+// through submitBulkTagged.
+const opWrite = "store.write"
+
 type writeJob struct {
 	op   string
 	fn   func(*sql.Tx) error
@@ -136,7 +140,7 @@ func Open(path string, cfg WriterConfig) (*Writer, error) {
 // the whole transaction, so a failure partway through never leaves a
 // partial write.
 func (w *Writer) submit(ctx context.Context, fn func(*sql.Tx) error) error {
-	return w.enqueue(ctx, w.interactive, "store.write", fn)
+	return w.enqueue(ctx, w.interactive, opWrite, fn)
 }
 
 // submitBulk runs fn as one chunk on the bulk lane, with the same
@@ -144,14 +148,15 @@ func (w *Writer) submit(ctx context.Context, fn func(*sql.Tx) error) error {
 // (roughly 50ms per call) and consults RecentInteractiveActivity
 // between chunks so a long bulk job yields to interactive use.
 func (w *Writer) submitBulk(ctx context.Context, fn func(*sql.Tx) error) error {
-	return w.enqueue(ctx, w.bulk, "store.write", fn)
+	return w.enqueue(ctx, w.bulk, opWrite, fn)
 }
 
 // submitBulkTagged is submitBulk with a caller-chosen op in place of
-// the generic store.write, for a same-package bulk caller whose own
-// failure needs a more specific tag (RebuildIndex's
-// store.rebuild-index, most notably) so a log line can tell it apart
-// from an ordinary write failure without a second uerr.New call.
+// opWrite, for a same-package bulk caller whose own failure needs a
+// more specific tag (RebuildIndex's store.rebuild-index, most
+// notably). The op reaches the writer's single uerr.New call, so a log
+// line tells that failure apart from an ordinary write failure without
+// a second construction over the same outcome (ADR-0013 revision 2).
 func (w *Writer) submitBulkTagged(ctx context.Context, op string, fn func(*sql.Tx) error) error {
 	return w.enqueue(ctx, w.bulk, op, fn)
 }
@@ -195,10 +200,10 @@ func (w *Writer) RecentInteractiveActivity(quiet time.Duration) bool {
 }
 
 // Close stops the writer goroutine, waits for it to exit, and closes
-// db. A job already admitted runs to completion first. It is safe to
-// call more than once: a test that closes the writer mid-test to
-// release the file for a recovery rebuild still wants its t.Cleanup
-// close to run without a double-close panic on w.stop.
+// db. A job already admitted runs to completion first. Close is safe
+// to call more than once, from any number of goroutines: every call
+// after the first returns the first call's result without stopping or
+// closing anything again.
 func (w *Writer) Close() error {
 	return w.close()
 }

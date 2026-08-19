@@ -1,2 +1,0 @@
-BenchmarkQA3Search_phrase_100000      125	   3874046 ns/op
-n=125 p50=3.635177ms p95=5.472576ms p99=7.050662ms max=7.623325ms

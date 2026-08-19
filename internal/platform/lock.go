@@ -43,8 +43,8 @@ func AcquireInstanceLock(dbPath string) (*InstanceLock, error) {
 
 	// flock, not this file's contents, is what makes the lock
 	// exclusive (ADR-0015). The pid below is advisory display data
-	// for a refusal message. A write a crash tears mid-flight costs
-	// that message its pid detail, nothing more.
+	// for a refusal message. A write a crash tears mid-flight leaves
+	// the message with a missing or wrong pid, and nothing else.
 	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil { //nolint:gosec // G703: lockPath is dbPath+".lock", built from the store path this process already trusts, never user input
 		_ = fl.Unlock()
 		return nil, uerr.New("platform.lock", nil, uerr.ClassStoreLocal, fmt.Errorf("write pid to %s: %w", lockPath, err))

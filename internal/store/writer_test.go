@@ -183,7 +183,7 @@ func TestInteractivePreemption(t *testing.T) {
 
 	interactive := make(chan error, 1)
 	for round := range preemptionRounds {
-		go submitOnInteractiveLane(w, admitted, interactive)
+		go submitOnInteractiveLane(w, admitted, quiet, interactive)
 		awaitParkedSubmit(t)
 
 		release <- struct{}{}
@@ -216,9 +216,17 @@ func TestInteractivePreemption(t *testing.T) {
 // named function rather than a closure so that awaitParkedSubmit can
 // find its frame in a stack dump: a bulk submitter parked on the other
 // lane is otherwise identical.
-func submitOnInteractiveLane(w *Writer, admitted chan<- string, result chan<- error) {
+//
+// The announcement takes quiet as its escape hatch, the same one the
+// bulk chunks take. A round that fails leaves the test goroutine gone
+// and nothing receiving from admitted, and the writer would then hold
+// this job open forever inside its own transaction.
+func submitOnInteractiveLane(w *Writer, admitted chan<- string, quiet <-chan struct{}, result chan<- error) {
 	result <- w.submit(context.Background(), func(*sql.Tx) error {
-		admitted <- "interactive"
+		select {
+		case admitted <- "interactive":
+		case <-quiet:
+		}
 		return nil
 	})
 }

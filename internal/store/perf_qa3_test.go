@@ -1,10 +1,14 @@
-//go:build !race
+//go:build perf && !race
 
-// The QA-1/2/3 perf harness is excluded from the race build: race
-// instrumentation costs 2-20x time and 5-10x memory, so a p95 gate
-// asserted under it would measure the detector instead of the store
-// (build machine section 2). CI's `go test -race ./...` job never
-// links this file.
+// The QA-1/2/3 perf harness builds only under the perf tag, and never
+// under race. The tag keeps the harness out of `go test ./...`, which
+// schedules packages in parallel: under that load QA-1's single-sample
+// cold-start gate measured 907ms against its 500ms budget, where it
+// measures 26-42ms alone. `make perf` runs the harness by itself under
+// -p 1 instead (build machine section 2). Race instrumentation costs
+// 2-20x time and 5-10x memory, so a p95 asserted under it would measure
+// the detector rather than the store, and CI's `go test -race ./...`
+// job never links this file either.
 package store_test
 
 import (
@@ -134,7 +138,7 @@ func TestQA3Search(t *testing.T) {
 
 			storetest.WriteBaseline(t, "testdata/perf-baselines", env.BaselineName("QA3Search_"+class.name), line, samples)
 			p95 := storetest.Percentile(samples, 95)
-			t.Logf("QA-3 %s: p50=%s p95=%s (budget %s; spike baseline 0.9-4.5ms p95 across all classes)",
+			t.Logf("QA-3 %s: p50=%s p95=%s (budget %s; spike reference 0.9-4.5ms p95 across all classes, measured at the full envelope on a quiet machine)",
 				class.name, storetest.Percentile(samples, 50), p95, class.budget)
 			if p95 > class.budget {
 				t.Errorf("%s p95 = %s, want under %s", class.name, p95, class.budget)

@@ -756,6 +756,10 @@ func TestDV12EventSourceDeliversStateChanges(t *testing.T) {
 // query as substring-narrowed. Poplar's own lookup for the original
 // name therefore finds only the original mailbox, whether or not the
 // server also holds a case-variant sibling beside it.
+//
+// FindMailboxes binds on name and parentId together. The replica below
+// binds on name alone, a wider net than production casts, so a
+// mismatch this test misses is not one production would hit.
 func TestDV13SiblingUniquenessNormalization(t *testing.T) {
 	tg := dial(t)
 
@@ -774,6 +778,9 @@ func TestDV13SiblingUniquenessNormalization(t *testing.T) {
 		t.Logf("%s created a case-variant sibling %q beside %q", tg.profile.name, variant, name)
 	} else {
 		refused := resp.NotCreated["variant"]
+		if refused == nil {
+			t.Fatal("the server neither created the mailbox nor said why")
+		}
 		t.Logf("DIVERGENCE: %s refused a case-variant sibling %q as a duplicate of %q: %q",
 			tg.profile.name, variant, name, refused.Type)
 	}

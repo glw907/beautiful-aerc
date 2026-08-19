@@ -73,6 +73,22 @@ func TestConstructorIsTheOnlyPath(t *testing.T) {
 	}
 }
 
+// TestEveryClassIsComplete holds the three tables a class lives in
+// against each other. A class added to the constant block alone
+// compiles: it then logs as "unknown" and shows the user an empty
+// banner, and no other test in this package sees either.
+func TestEveryClassIsComplete(t *testing.T) {
+	for i := range int(classCount) {
+		class := Class(i)
+		if got := class.String(); got == "unknown" {
+			t.Errorf("Class(%d).String() = %q, want a log key of its own", i, got)
+		}
+		if sentence[class] == "" {
+			t.Errorf("Class(%d) (%s) has no sentence, so its banner renders empty", i, class)
+		}
+	}
+}
+
 func TestEveryClassLogs(t *testing.T) {
 	buf := captureLog(t)
 	cause := errors.New("dial tcp: connection refused")

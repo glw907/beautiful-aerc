@@ -1,10 +1,14 @@
-//go:build !race
+//go:build perf && !race
 
-// The QA-1/2/3 perf harness is excluded from the race build: race
-// instrumentation costs 2-20x time and 5-10x memory, so a p95 gate
-// asserted under it would measure the detector instead of the store
-// (build machine section 2). CI's `go test -race ./...` job never
-// links this file.
+// The QA-1/2/3 perf harness builds only under the perf tag, and never
+// under race. The tag keeps the harness out of `go test ./...`, which
+// schedules packages in parallel: under that load QA-1's single-sample
+// cold-start gate measured 907ms against its 500ms budget, where it
+// measures 26-42ms alone. `make perf` runs the harness by itself under
+// -p 1 instead (build machine section 2). Race instrumentation costs
+// 2-20x time and 5-10x memory, so a p95 asserted under it would measure
+// the detector rather than the store, and CI's `go test -race ./...`
+// job never links this file either.
 package store_test
 
 import (
@@ -389,10 +393,16 @@ func TestQA2BackfillSurfacesWriteError(t *testing.T) {
 // per-row shape a real sync backfill writes in. That per-statement
 // shape is also what keeps the batch's cost real: a single bulk
 // statement would run fast enough to prove nothing about write
-// pressure. The row counts are sized to stay comfortably under
-// ADR-0003's 50ms admission ceiling at the full-envelope corpus, the
-// same conforming-client shape a real bulk sync chunks its own writes
-// to.
+// pressure. The row counts are sized to stay under ADR-0003's 50ms
+// admission ceiling, the same conforming-client shape a real bulk sync
+// chunks its own writes to.
+//
+// The gate corpus is what binds the sizing, not the full envelope. A
+// first batch at the full envelope sits around 21ms run to run, where
+// gate scale is both larger and far more variable: 20-35ms on a quiet
+// machine and past 70ms under load. So a row count chosen against the
+// envelope's steady figure would trip the ceiling on the corpus every
+// commit actually runs.
 func qa2BackfillBatch(writer *store.Writer, messageIDs []int64, rng *rand.Rand) (int, error) {
 	const flagUpdates, bodyUpserts = 300, 40
 	rows := 0

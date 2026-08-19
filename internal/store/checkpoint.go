@@ -32,9 +32,22 @@ func configureCheckpointing(ctx context.Context, db *sql.DB, cfg checkpointConfi
 
 // checkpoint runs a wal_checkpoint pragma in the given mode
 // (PASSIVE or TRUNCATE) against db.
+//
+// SQLite reports a checkpoint it could not finish in the pragma's own
+// result row, never as an error: busy is 1 and the checkpointed frame
+// count falls short of the log's. A caller reading only the error sees
+// a clean run while the WAL grows past its bound, so checkpoint reads
+// the row and logs the refusal instead.
 func checkpoint(ctx context.Context, db *sql.DB, mode string) error {
-	_, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint("+mode+")")
-	return err
+	var busy, logFrames, checkpointed int
+	if err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint("+mode+")").Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return err
+	}
+	if busy != 0 {
+		slog.Warn("store: checkpoint could not drain the write-ahead log",
+			"mode", mode, "log_frames", logFrames, "checkpointed_frames", checkpointed)
+	}
+	return nil
 }
 
 // incrementalVacuumPages bounds each idle-triggered incremental_vacuum

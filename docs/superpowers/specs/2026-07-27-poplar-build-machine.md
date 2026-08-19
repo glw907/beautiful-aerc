@@ -154,14 +154,21 @@ check:  tidy-check     go mod tidy leaves go.mod/go.sum unchanged
         skipcheck      the unconditional-skip AST gate (salvaged)
         test           go test ./... — goldens, EXPLAIN QUERY PLAN,
                        grammar/registry/switch, contrast, unit and
-                       synctest suites
-        perf           go test -run 'QA[123]' -count=1, never under
-                       -race: race instrumentation costs 2-20x time
-                       and 5-10x memory, so a p95 asserted under it
-                       measures the detector (review finding);
-                       CI-tolerant thresholds gate here, gate-platform
-                       numbers are recorded per pass by the same
-                       harness run directly
+                       synctest suites; the perf tag is off here, so
+                       the QA-1/2/3 certification tests do not run
+                       under this step's parallel package scheduling
+        perf           go test -tags perf -p 1 -run 'QA[123]'
+                       -count=1, never under -race: race
+                       instrumentation costs 2-20x time and 5-10x
+                       memory, so a p95 asserted under it measures the
+                       detector (review finding). The perf tag and
+                       -p 1 give a latency gate the isolation it needs;
+                       under the parallel test step above, QA-1's
+                       single-sample cold start measured 907ms against
+                       its 500ms budget, and 26-42ms alone (pass 1c
+                       final review). CI-tolerant thresholds gate here,
+                       gate-platform numbers are recorded per pass by
+                       the same harness run directly
 ```
 
 The enable list is explicit because v2's `default: none` drops
@@ -373,7 +380,8 @@ From the C9 survey (versions verified 2026-07-27) and audit
 verification: `charm.land/bubbletea/v2` v2.0.8,
 `charm.land/bubbles/v2` v2.1.1, `charm.land/lipgloss/v2` v2.0.5,
 `charm.land/glamour/v2` v2.0.1, goldmark v1.8.5 (v1 line;
-glamour agrees), modernc.org/sqlite v1.54.0,
+glamour agrees), github.com/ncruces/go-sqlite3 v0.35.3
+(ADR-0001 revision 3 replaced the original modernc.org/sqlite pin),
 git.sr.ht/~rockorager/go-jmap v0.5.3, emersion/go-webdav v0.7.0,
 jhillyerd/enmime/v2 v2.4.1, emersion/go-message v0.18.2,
 emersion/go-msgauth v0.7.0, x/net v0.57.0, chroma/v2 v2.27.0,

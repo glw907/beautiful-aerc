@@ -16,12 +16,12 @@ import (
 // doubt it, poplar's --rebuild-index flag or a failed integrity check,
 // rebuilds the whole index rather than reconciling term by term.
 //
-// It tags its own failure through applyTagged rather than Apply, so
-// the writer's one uerr.New call for this transaction carries op
+// It tags its own failure through submitBulkTagged rather than Apply,
+// so the writer's one uerr.New call for this transaction carries op
 // store.rebuild-index instead of the generic store.write, and a log
 // line can tell a rebuild failure from an ordinary write failure.
 func RebuildIndex(ctx context.Context, w *Writer) error {
-	return w.applyTagged(ctx, "store.rebuild-index", func(tx *sql.Tx) error {
+	return w.submitBulkTagged(ctx, "store.rebuild-index", func(tx *sql.Tx) error {
 		_, err := tx.Exec(`INSERT INTO message_fts(message_fts) VALUES ('rebuild')`)
 		return err
 	})

@@ -1,10 +1,14 @@
-//go:build !race
+//go:build perf && !race
 
-// The QA-1/2/3 perf harness is excluded from the race build: race
-// instrumentation costs 2-20x time and 5-10x memory, so a p95 gate
-// asserted under it would measure the detector instead of the store
-// (build machine section 2). CI's `go test -race ./...` job never
-// links this file.
+// The QA-1/2/3 perf harness builds only under the perf tag, and never
+// under race. The tag keeps the harness out of `go test ./...`, which
+// schedules packages in parallel: under that load QA-1's single-sample
+// cold-start gate measured 907ms against its 500ms budget, where it
+// measures 26-42ms alone. `make perf` runs the harness by itself under
+// -p 1 instead (build machine section 2). Race instrumentation costs
+// 2-20x time and 5-10x memory, so a p95 asserted under it would measure
+// the detector rather than the store, and CI's `go test -race ./...`
+// job never links this file either.
 package main
 
 import (

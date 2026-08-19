@@ -233,11 +233,11 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 // days, and would keep the next failure of the same class from
 // surfacing at all.
 type pushState struct {
-	failing  bool
-	class    uerr.Class
-	attempt  int
-	unproved int
-	proven   bool
+	failing    bool
+	class      uerr.Class
+	attempt    int
+	unproved   int
+	justProved bool
 }
 
 // fail surfaces err once per failure episode, on the first failure or
@@ -281,21 +281,27 @@ var errStreamNeverProved = backend.Failure{
 // stopped records a stream ending. A stream that stopped without ever
 // proving itself (proved was never called for it) advances attempt by
 // one, the same increment reconnect's own loop applies after a Listen
-// failure, so RunPush's tail wait escalates on the same curve a run of
-// refusals does: a stop with no failure behind it never reaches
-// reconnect to advance the schedule itself. Two such stops in a row is
-// a run worth surfacing (through fail, so its once-per-episode rule
-// holds here too), whether or not either stream ever delivered
-// anything: a notification queued on connect (ADR-0018) proves nothing
-// about whether the stream can stay open.
+// failure, so RunPush's tail wait rides the same escalating schedule a
+// run of refusals does: a stop with no failure behind it never reaches
+// reconnect to advance the schedule itself.
+//
+// The two paths draw from that schedule one notch apart. reconnect
+// waits first and increments after, so its first wait after a failure
+// draws at attempt 0. This path increments first and RunPush waits
+// after, so a stop's first wait draws at attempt 1.
+//
+// Two such stops in a row is a run worth surfacing (through fail, so
+// its once-per-episode rule holds here too), whether or not either
+// stream ever delivered anything: a notification queued on connect
+// (ADR-0018) proves nothing about whether the stream can stay open.
 //
 // A stream that did prove itself resets the run instead: it consumes
 // the mark proved left, leaving attempt where proved set it (zero)
 // rather than advancing it again, so the very next reopen draws from
 // the same low band a healthy run starts from.
 func (s *pushState) stopped() {
-	if s.proven {
-		s.proven = false
+	if s.justProved {
+		s.justProved = false
 		s.unproved = 0
 		return
 	}
@@ -318,7 +324,7 @@ func (s *pushState) proved() {
 	}
 	s.attempt = 0
 	s.unproved = 0
-	s.proven = true
+	s.justProved = true
 }
 
 // pollKinds runs kinds' SyncKind on a fixed PollInterval cadence, the

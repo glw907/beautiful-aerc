@@ -1,4 +1,4 @@
-//go:build !race && !(linux && (amd64 || arm64))
+//go:build perf && !race && !(linux && (amd64 || arm64))
 
 package main
 

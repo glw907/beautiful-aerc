@@ -67,8 +67,10 @@ var perfNames = []string{
 // the model the audit itself names.
 //
 // The full 100,000-message envelope is what QA-2, QA-3, and QA-5 are
-// certified against, and it costs minutes to build and around two
-// gigabytes on disk. The perf step runs on every commit, so the
+// certified against, and it costs minutes to build. Disk cost is the
+// bigger surprise: the master is around two gigabytes, and a full-run
+// peak of ~8.6GB was measured with three per-test copies live beside
+// it. The perf step runs on every commit, so the
 // default corpus is a tenth of that envelope at the same
 // distributions: a regression gate, not the certification. Set
 // POPLAR_PERF_FULL to seed the full envelope.
@@ -96,6 +98,11 @@ const (
 // perfEpoch anchors the corpus's arrival clock. A wall-clock base
 // would put a different received_at in every seeded file, and the
 // committed fingerprints could then never be more than approximate.
+//
+// The corpus therefore spans 2024-01-01 to 2026-01-01 and stays there
+// as the calendar advances. A date-ranged probe derives its bounds
+// from the corpus, never from time.Now, which walks out of the corpus
+// and measures an empty range.
 var perfEpoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // Body sizes are a two-component draw, which is what the audit's own
@@ -182,10 +189,13 @@ type PerfEnvelope struct {
 // it (QA-2's concurrent backfill) leaves the master untouched, and
 // every run measures byte-identical starting state.
 //
-// The master's fingerprint is checked against the committed one for
-// its scale on every call, so a stale cache or a generator change
-// without a perfCorpusVersion bump fails the measurement instead of
-// quietly moving what it measured.
+// perfCorpusVersion is the guard against a generator change: bumping
+// it renames the master, so the next run seeds a fresh one. The
+// fingerprint check on every call is the backstop for a cold cache,
+// where it catches a master seeded from a different generator or a
+// different schema. It is not a second guard on a warm cache, where a
+// generator change with no version bump reuses the old master and
+// passes its own committed fingerprint unchanged.
 func SeedPerfEnvelope(t *testing.T, path string) PerfEnvelope {
 	t.Helper()
 
@@ -282,7 +292,7 @@ func perfVerifyFingerprint(t *testing.T, master string, messages int) {
 	}
 	got, err := os.ReadFile(master + ".fingerprint.txt")
 	if err != nil {
-		t.Fatalf("read corpus fingerprint: %v", err)
+		t.Fatalf("read corpus fingerprint: %v.\nDelete the master at %s to reseed it, which writes the sidecar back.", err, master)
 	}
 	if string(got) != string(want) {
 		t.Fatalf("the corpus at %s does not match %s.\ngot:\n%s\nwant:\n%s\nDelete the master to reseed it, and bump perfCorpusVersion if the generator changed.",

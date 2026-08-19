@@ -145,11 +145,18 @@ skipcheck:
 hookcheck:
 	go run ./scripts/hookcheck
 
+# The perf tag is what keeps the QA-1/2/3 certification tests out of
+# the `test` step above, whose parallel package scheduling loads the
+# machine enough to fail a latency gate the product passes: QA-1's
+# single-sample cold start measured 907ms against its 500ms budget
+# there, and 26-42ms alone. -p 1 completes the isolation by running the
+# two perf packages one after the other rather than together.
+#
 # Race instrumentation costs 2-20x time and 5-10x memory, so a p95
 # asserted under it measures the detector, not the product; race
 # coverage runs in CI instead (section 2).
 perf:
-	go test -run 'QA[123]' -count=1 ./...
+	go test -tags perf -p 1 -run 'QA[123]' -count=1 ./...
 
 build-golangci-lint:
 	go build -C tools -o bin/golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
