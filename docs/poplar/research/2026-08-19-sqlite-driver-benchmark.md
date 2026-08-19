@@ -135,15 +135,22 @@ spelling, matching the driver's own documentation, which states that
 
 ## 4. T2: EXPLAIN QUERY PLAN, both drivers versus the repo's goldens
 
-Eight queries probed: the six `internal/store/queries_test.go`'s
-`TestExplainQueryPlan` covers, plus `SearchRanked` (R6) and
-`SearchPrefix` (R7), which that test does not.
+`internal/store/queries_test.go`'s `TestExplainQueryPlan` carries
+eight committed golden cases. The harness's cross-driver diff probed
+eight queries too, but not the same eight: six of the golden cases,
+plus `SearchRanked` (R6) and `SearchPrefix` (R7), which that test does
+not cover. The two golden cases the cross-driver diff omitted are the
+outbox queries, `outbox_dispatch` and `outbox_eligibility_probe`.
 
-**Zero difference between the two drivers' plans across all eight
-queries.** The six the repository's own test covers match its
-committed golden strings exactly, for example `SEARCH message_mailbox
-USING COVERING INDEX idx_message_mailbox_list (mailbox_id=? AND
-received_at<?)`. No T2 disqualifier.
+**Zero difference between modernc and ncruces across the six golden
+queries plus R6/R7 that the harness's cross-driver diff probed,** for
+example `SEARCH message_mailbox USING COVERING INDEX
+idx_message_mailbox_list (mailbox_id=? AND received_at<?)`. Separately,
+the repository's own `TestExplainQueryPlan` proves all eight committed
+goldens, including the two outbox plans the cross-driver diff never
+touched, hold under ncruces: 8/8 pass in-repo. Those two were verified
+against ncruces alone, not cross-diffed against modernc's plan. No T2
+disqualifier.
 
 ## 5. T3: identical-statement-order corpus fidelity
 

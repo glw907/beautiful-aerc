@@ -79,7 +79,8 @@ same transaction as the message write.
 
 The Decision's engine choice is superseded. **poplar's store is now
 github.com/ncruces/go-sqlite3 v0.35.3.** SQLite's own C source is
-machine-translated ahead of time to plain Go by `wasm2go`
+first compiled to a WASM binary, and that binary is machine-translated
+ahead of time to plain Go by `wasm2go`
 (`github.com/ncruces/go-sqlite3-wasm/v3`), not run through a WASM
 interpreter or JIT at runtime (the driver dropped wazero at v0.33.0),
 keeping C3's `CGO_ENABLED=0` constraint intact.
@@ -124,10 +125,16 @@ parameters alphabetically, which runs `journal_mode` ahead of
 poplar's own DSN builder (`store/dsn.go`) already used the
 single-script form that avoids this defect, and that form carries
 forward unchanged under ncruces, which holds the correct pragmas
-under either DSN spelling. T2's EXPLAIN QUERY PLAN showed zero
-difference between the two drivers across all eight queries probed;
-the six the repository's own test covers match its committed goldens
-exactly. T3's identical-statement-order replay produced byte-identical
+under either DSN spelling. T2's cross-driver EXPLAIN QUERY PLAN diff
+showed zero difference between modernc and ncruces across the eight
+queries it probed: six of the repository's eight committed goldens,
+plus the two FTS5 queries (R6, R7) that golden test does not cover.
+The repository's own `TestExplainQueryPlan` separately proves all
+eight committed goldens, including the two outbox plans
+(`outbox_dispatch`, `outbox_eligibility_probe`) the harness's
+cross-driver diff omitted, hold under ncruces; those two were verified
+against ncruces alone, not cross-diffed against modernc's plan. T3's
+identical-statement-order replay produced byte-identical
 database files (after zeroing the header's file-change-counter and
 SQLite-version fields, the documented, expected-to-differ bytes)
 across modernc, ncruces, and the stock sqlite3 CLI (3.50.1).
