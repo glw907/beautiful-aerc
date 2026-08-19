@@ -118,12 +118,34 @@ No aesthetic survey data exists anywhere; absence noted.
 (charmbracelet/x/exp/charmtone) is 69 named colors: a
 near-neon saturated spectrum plus a 12-step neutral ramp. Crush
 paints a full opaque app background (`bgBase` set directly),
-gives panels and dialogs their own distinct opaque layered
-grounds (`bgLessVisible`), runs everything through one central
-token-driven `Styles` struct (its quickstyle layer is forbidden
-from hardcoding palette colors), insets with padding never
-margin, and styles focus as paired Focused/Blurred styles per
-component. No transparency option exists in its theming code.
+runs everything through one central token-driven `Styles` struct
+(its quickstyle layer is forbidden from hardcoding palette
+colors), insets with padding never margin, and styles focus as
+paired Focused/Blurred styles per component. No transparency
+option exists in its theming code.
+
+*Correction (2026-08-19, adversarial review of the pass 2 design
+draft):* this section's first draft said crush gives "panels"
+layered grounds, and a design ruling was taken partly on that
+reading. Verified deeper: crush's structural panes (sidebar,
+chat) share ONE ground and are separated by whitespace gutters
+(a 2-cell gap plus 1-cell app insets) and content alignment; its
+`bgLessVisible`-family grounds appear only on inline blocks —
+dialogs, tool output, popups, buttons. Crush's dialogs are
+rounded-bordered in the accent; its selected rows are
+accent-backgrounded, not neutral-raised; its help bar carries no
+ground; transient status renders as colored pills; pane focus is
+a left edge bar that changes glyph weight (`▌` focused, `│`
+blurred), always present. Crush is flatter than a ground-ladder
+design, not more layered. A layered-ground shell remains
+defensible via helix/k9s chrome bands, common-region doctrine,
+and the GUI-switcher ambition, but it is poplar's own choice,
+not crush's pattern. A second physics fact from the same review:
+dark-theme ground steps BELOW a near-black base are compressed
+into invisibility (a rail darker than #16181D cannot exceed
+roughly 1.1:1 against it), so a dark ladder's legible steps only
+go upward from base; downward separation needs whitespace or a
+line.
 glow/gum/soft-serve ground behavior could not be source-verified
 and is left open. Charm's stated philosophy: modern product
 thinking in the terminal.
