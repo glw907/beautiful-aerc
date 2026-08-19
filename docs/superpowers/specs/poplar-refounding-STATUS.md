@@ -31,9 +31,23 @@ it. Updating this STATUS is step one and is never optional.
 ## Current state (2026-08-19)
 
 Phase 5 is in progress. Passes 1 (foundation), 1b (integration and
-hardening), and 1c (measurement and the driver decision) are done;
-pass 1c's gate items await Geoff's ruling, and pass 2 (design
-language and shell) is the next action, below.
+hardening), and 1c (measurement and the driver decision) are done
+and 1c's gate is ruled; pass 2 (design language and shell) is the
+next action, below.
+
+Pass 1c gate rulings (Geoff, 2026-08-19, at pass 2 start):
+- QA-5's storage bound re-ratified at 1.7x retained body bytes
+  (requirements revision 5). Metric and denominator stand; the
+  record names the prefix='2 3 4' index as a deliberate
+  storage-for-latency trade (0.06 of the 1.63 measured, buying
+  QA-2's prefix p99 down from 256 ms to ~1.1 ms).
+- Prefix length 5 deferred to real-corpus evidence; BACKLOG #67
+  stays open and carries the ruling. Re-measure when pass 3's
+  real corpus exists; the UI-bound option stays on pass 3's table.
+- The four rulings taken in Geoff's name ratified as recorded:
+  the #65 proved-only health model, corpus quantiles-over-mean,
+  the R7 100-iteration cap, and DV-11/DV-13 via t.Logf.
+- The 1c sdd workspace is deleted per the standing instruction.
 
 Pass 1c outcomes (2026-08-19), commits 0091fb0 through 1be9e86:
 - **The SQLite driver is now github.com/ncruces/go-sqlite3 v0.35.3**,
@@ -542,9 +556,9 @@ Phase 0 outcomes:
 ## Next: Phase 5 pass 2 (design language and shell)
 
 Pass 1c closed on 2026-08-19; its three gate items (the QA-5 storage
-ruling, the prefix-length-5 question, and the ratification list) are
-in the outcomes block above and Geoff rules on them at the 1c gate
-before or alongside pass 2's start. Pass 2 is the spine's second
+ruling, the prefix-length-5 question, and the ratification list)
+were ruled at pass 2's start, recorded in the gate-rulings block
+above. Pass 2 is the spine's second
 numbered pass: the design language made real, and the application
 shell. It is the first screen pass, so the wireframe ritual binds: a
 text wireframe per screen per responsive class that changes its

@@ -11,7 +11,9 @@ this document still printed the superseded ones: QA-2's 25 ms p95
 gate, QA-5's storage criterion as a ratio against retained body
 bytes, CO-6's writer-admission term, the strengthened UX-3
 analyzer rule, and UX-6's raise from SHOULD to MUST with
-ADR-0017 as its design. Each amended clause carries its own
+ADR-0017 as its design. Revision 5 (2026-08-19, the pass 1c gate)
+re-ratifies QA-5's storage bound at 1.7x after the honest
+full-envelope measurement. Each amended clause carries its own
 revision note.
 **Charter:** `2026-07-19-poplar-refounding-charter.md`
 **Vision:** `2026-07-27-poplar-vision.md` (binding). Directives from
@@ -919,12 +921,18 @@ Phase 4 spike.
   account). Steady-state RSS under 250 MB after scrolling the full
   list, opening 50 threads, and visiting all four surfaces; RSS
   growth under 5% across a 30-minute scripted soak. Store size at
-  or under 1.6x retained body bytes, counting the index and all
+  or under 1.7x retained body bytes, counting the index and all
   metadata. *Revision 4 restates the storage criterion, which read
   "overhead under 15%" through revision 3. The Phase 4 spike
   measured 53% overhead on a real 35,837-message archive amplified
   to 100k, so the old number was unmeetable by any schema and the
-  ratio against retained bodies is the honest form.*
+  ratio against retained bodies is the honest form. Revision 5
+  (pass 1c gate, Geoff, 2026-08-19) re-ratifies the bound at 1.7x:
+  the corrected full-envelope measurement read 1.63x, of which the
+  prefix='2 3 4' index is the marginal 0.06, a deliberate
+  storage-for-latency trade that took QA-2's prefix-search p99
+  from 256 ms to ~1.1 ms. The metric and denominator stand; the
+  ruling records the trade rather than redefining the measure.*
 - **QA-6 (MUST, switch-bar). Data safety.** A seeded kill harness
   runs a fixed 30-action script (triage, bulk, compose, send,
   RSVP, event edit, folder rename) and SIGKILLs at 200
