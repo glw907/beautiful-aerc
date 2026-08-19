@@ -1,2 +1,0 @@
-BenchmarkQA1Startup_cold        1	  17463567 ns/op
-n=1 p50=17.394441ms p95=17.394441ms p99=17.394441ms max=17.394441ms

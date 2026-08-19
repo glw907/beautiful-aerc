@@ -25,13 +25,11 @@ import (
 	"github.com/glw907/poplar/internal/uerr"
 )
 
-// qa2MessageCount and qa2MailboxCount hold QA-2's scripted mix to the
-// QA-5 scale envelope: 100k messages, a few mailboxes so 15% of ops
-// can switch folders.
+// qa2ScriptLen is the length of QA-2's scripted session; the store it
+// replays against is storetest's perf corpus, whose scale the
+// POPLAR_PERF_FULL environment variable selects.
 const (
-	qa2MessageCount = 100_000
-	qa2MailboxCount = 4
-	qa2ScriptLen    = 500
+	qa2ScriptLen = 500
 
 	qa2P95Budget = 25 * time.Millisecond
 	qa2P99Budget = 40 * time.Millisecond
@@ -73,13 +71,13 @@ func qa2Script() []qa2Op {
 
 // TestQA2Interaction proves the store's read path holds QA-2's
 // interaction-latency budget (p95 under 25ms, p99 under 40ms) over a
-// scripted 500-operation session against a 100k-message store, both
+// scripted 500-operation session against the seeded perf corpus, both
 // quiescent and while a bulk backfill runs concurrently on the
 // writer's bulk lane (ADR-0003's concurrency design is what QA-2
 // requires to hold under that load).
 func TestQA2Interaction(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	env := storetest.SeedPerfEnvelope(t, path, qa2MessageCount, qa2MailboxCount)
+	env := storetest.SeedPerfEnvelope(t, path)
 
 	writer, err := store.Open(path, store.DefaultWriterConfig())
 	if err != nil {
@@ -94,9 +92,13 @@ func TestQA2Interaction(t *testing.T) {
 	t.Cleanup(func() { _ = reads.Close() })
 
 	sess := &qa2Session{reads: reads, mailboxIDs: env.MailboxIDs, messageIDs: env.MessageIDs, script: qa2Script()}
+	// The baseline file names carry the corpus scale, so the gate
+	// corpus's numbers and the full envelope's certification numbers
+	// are separate reference points rather than whichever ran first.
+	scale := strconv.Itoa(len(env.MessageIDs))
 
 	quiescent, busy := sess.run(t)
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_quiescent", busy.line, quiescent)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_quiescent_"+scale, busy.line, quiescent)
 	qa2AssertBudget(t, "quiescent", quiescent)
 	if got := busy.count.Load(); got != 0 {
 		t.Errorf("quiescent SQLITE_BUSY count = %d, want 0", got)
@@ -107,7 +109,7 @@ func TestQA2Interaction(t *testing.T) {
 	if err := backfill.stop(); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_under_write", busy.line, underWrite)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA2Interaction_under_write_"+scale, busy.line, underWrite)
 	qa2AssertBudget(t, "under_write", underWrite)
 	if got := busy.count.Load(); got != 0 {
 		t.Errorf("under-write SQLITE_BUSY count = %d, want 0 (WAL readers must not block on the writer)", got)

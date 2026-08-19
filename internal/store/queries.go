@@ -6,11 +6,6 @@ package store
 // schema change that breaks one of these plans fails here instead of
 // at QA-2 or QA-3.
 const (
-	// queryMailboxList is the folder list query: message ids in a
-	// mailbox, newest first. idx_message_mailbox_list covers it, so
-	// it never touches the message table.
-	queryMailboxList = `SELECT message_id FROM message_mailbox WHERE mailbox_id = ? ORDER BY received_at DESC, message_id`
-
 	// queryThreadAcrossFolders is TH-2's cross-folder thread query:
 	// every message sharing a thread_key within an account, in
 	// arrival order.

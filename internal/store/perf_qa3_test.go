@@ -18,13 +18,9 @@ import (
 	"github.com/glw907/poplar/internal/store/storetest"
 )
 
-// qa3MessageCount and qa3MailboxCount hold QA-3's committed query set
-// to the QA-5 scale envelope: a 100k-message index.
-const (
-	qa3MessageCount    = 100_000
-	qa3MailboxCount    = 4
-	qa3RepeatsPerQuery = 25
-)
+// qa3RepeatsPerQuery is how many times each committed query runs
+// against the seeded perf corpus.
+const qa3RepeatsPerQuery = 25
 
 // qa3Query is one committed benchmark query: an FTS5 MATCH expression,
 // plus a mailbox id for the operator-filtered class (0 elsewhere).
@@ -89,7 +85,7 @@ func qa3Classes(mailboxID int64) []qa3Class {
 }
 
 // TestQA3Search proves each of QA-3's four query classes holds its
-// per-class p95 budget against a 100k-message index: single term and
+// per-class p95 budget against the seeded index: single term and
 // phrase under 100ms, operator-filtered under 200ms, boolean and
 // negation under 500ms.
 //
@@ -99,7 +95,7 @@ func qa3Classes(mailboxID int64) []qa3Class {
 // internal/search, not yet built.
 func TestQA3Search(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	env := storetest.SeedPerfEnvelope(t, path, qa3MessageCount, qa3MailboxCount)
+	env := storetest.SeedPerfEnvelope(t, path)
 
 	writer, err := store.Open(path, store.DefaultWriterConfig())
 	if err != nil {
@@ -136,7 +132,7 @@ func TestQA3Search(t *testing.T) {
 				t.Fatal(firstErr)
 			}
 
-			storetest.WriteBaseline(t, "testdata/perf-baselines", "QA3Search_"+class.name, line, samples)
+			storetest.WriteBaseline(t, "testdata/perf-baselines", fmt.Sprintf("QA3Search_%s_%d", class.name, len(env.MessageIDs)), line, samples)
 			p95 := storetest.Percentile(samples, 95)
 			t.Logf("QA-3 %s: p50=%s p95=%s (budget %s; spike baseline 0.9-4.5ms p95 across all classes)",
 				class.name, storetest.Percentile(samples, 50), p95, class.budget)

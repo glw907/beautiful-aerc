@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"os"
 	"slices"
 	"testing"
 )
@@ -12,6 +13,7 @@ import (
 // assertion below.
 func TestExplainQueryPlan(t *testing.T) {
 	db := openMigratedTestDB(t)
+	loadPerfCorpusStats(t, db)
 
 	tests := []struct {
 		name  string
@@ -19,12 +21,6 @@ func TestExplainQueryPlan(t *testing.T) {
 		args  []any
 		want  []string
 	}{
-		{
-			"mailbox list",
-			queryMailboxList,
-			[]any{1},
-			[]string{"SEARCH message_mailbox USING COVERING INDEX idx_message_mailbox_list (mailbox_id=?)"},
-		},
 		{
 			"cross-folder thread",
 			queryThreadAcrossFolders,
@@ -86,6 +82,32 @@ func TestExplainQueryPlan(t *testing.T) {
 				t.Errorf("plan = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// loadPerfCorpusStats gives db the ANALYZE statistics of the
+// 100,000-message perf corpus, so the plans below are the ones SQLite
+// chooses at the QA envelope rather than the ones it guesses for a
+// schema it believes is empty. Seeding the corpus here instead would
+// cost minutes and a gigabyte per run, and storetest, which seeds it,
+// imports this package.
+func loadPerfCorpusStats(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	stats, err := os.ReadFile("testdata/perf-corpus-stat1.sql")
+	if err != nil {
+		t.Fatalf("read corpus statistics: %v", err)
+	}
+	if _, err := db.Exec(string(stats)); err != nil {
+		t.Fatalf("load corpus statistics: %v", err)
+	}
+
+	var loaded int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_stat1 WHERE stat LIKE '100000 %'`).Scan(&loaded); err != nil {
+		t.Fatalf("count loaded statistics: %v", err)
+	}
+	if loaded == 0 {
+		t.Fatal("no 100,000-row table in the loaded statistics; the goldens below would be pinning plans against an empty database")
 	}
 }
 

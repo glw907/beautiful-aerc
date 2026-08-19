@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -22,25 +23,28 @@ import (
 )
 
 const (
-	qa1MessageCount = 100_000
-	qa1WarmRuns     = 20
-	qa1WarmBudget   = 200 * time.Millisecond
-	qa1ColdBudget   = 500 * time.Millisecond
+	qa1WarmRuns   = 20
+	qa1WarmBudget = 200 * time.Millisecond
+	qa1ColdBudget = 500 * time.Millisecond
 
-	// qa1ExpectedRows is the first page size --startup-trace lists: a
-	// 100k-message single mailbox always fills a 50-row page, so a
+	// qa1ExpectedRows is the first page size --startup-trace lists: the
+	// perf corpus's inbox always holds far more than one page, so a
 	// warm or cold run returning fewer rows is a broken seed or a
 	// wrong mailbox, not a fast one.
 	qa1ExpectedRows = 50
 )
 
 // TestQA1Startup proves exec-to-first-list-page holds QA-1's budget
-// against a 100k-message store: p95 under 200ms warm (page cache
+// against the seeded perf corpus: p95 under 200ms warm (page cache
 // warmed by one prior run), and under 500ms on the first exec against
 // a store whose page cache this test evicts first.
 func TestQA1Startup(t *testing.T) {
 	warmHome := t.TempDir()
-	seedQA1Store(t, warmHome)
+	env := seedQA1Store(t, warmHome)
+	// The baseline file names carry the corpus scale, so the gate
+	// corpus's numbers and the full envelope's certification numbers
+	// are separate reference points rather than whichever ran first.
+	scale := strconv.Itoa(len(env.MessageIDs))
 
 	if _, _, err := qa1Trace(warmHome); err != nil {
 		t.Fatalf("warm-up run: %v", err)
@@ -64,7 +68,7 @@ func TestQA1Startup(t *testing.T) {
 	if firstErr != nil {
 		t.Fatalf("startup-trace run: %v", firstErr)
 	}
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA1Startup_warm", line, samples)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA1Startup_warm_"+scale, line, samples)
 	p95 := storetest.Percentile(samples, 95)
 	t.Logf("QA-1 warm: p50=%s p95=%s (gate 200ms; spike baseline ~5ms with quick_check off the launch path)",
 		storetest.Percentile(samples, 50), p95)
@@ -92,7 +96,7 @@ func TestQA1Startup(t *testing.T) {
 	if firstErr != nil {
 		t.Fatalf("cold startup-trace run: %v", firstErr)
 	}
-	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA1Startup_cold", coldLine, coldSamples)
+	storetest.WriteBaseline(t, "testdata/perf-baselines", "QA1Startup_cold_"+scale, coldLine, coldSamples)
 	cold := coldSamples[0]
 	t.Logf("QA-1 cold (page cache evicted before exec): %s (gate 500ms)", cold)
 	if cold > qa1ColdBudget {
@@ -123,16 +127,14 @@ func qa1Trace(dataHome string) (startupTraceResult, time.Duration, error) {
 	return trace, elapsed, nil
 }
 
-// seedQA1Store migrates a fresh store under dataHome/poplar/store.db
-// and fills it with qa1MessageCount messages in one mailbox,
-// amplifying storetest's small committed vocabulary rather than
-// requiring the private mail corpus (QA-5's 100k-message envelope).
-func seedQA1Store(t *testing.T, dataHome string) {
+// seedQA1Store places storetest's perf corpus under
+// dataHome/poplar/store.db, where poplar's own startup path finds it.
+func seedQA1Store(t *testing.T, dataHome string) storetest.PerfEnvelope {
 	t.Helper()
 
 	dbDir := filepath.Join(dataHome, "poplar")
 	if err := os.MkdirAll(dbDir, 0o750); err != nil {
 		t.Fatalf("create %s: %v", dbDir, err)
 	}
-	storetest.SeedPerfEnvelope(t, filepath.Join(dbDir, "store.db"), qa1MessageCount, 1)
+	return storetest.SeedPerfEnvelope(t, filepath.Join(dbDir, "store.db"))
 }

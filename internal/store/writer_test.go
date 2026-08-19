@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -122,65 +123,119 @@ func TestWriterSerializes(t *testing.T) {
 	}
 }
 
-// TestInteractivePreemption shows an interactive job admitted while
-// a chunked bulk job is in flight, with the wait bounded by the
-// current chunk rather than the whole queued bulk backlog. It asserts
-// that twice over. The chunk count is the durable one: the job runs
-// once the chunk it arrived during finishes, whatever a chunk costs.
-// The wall-clock bound is the same claim in milliseconds, and it
-// holds only where a millisecond means what the writer spent, so it
-// sits out a race build, whose instrumentation lands squarely inside
-// the window being measured (the post-chunk commit and its PASSIVE
-// checkpoint).
+// TestInteractivePreemption proves an interactive job runs at the
+// first chunk boundary after it queues, however deep the bulk backlog
+// sitting behind it. Each round parks an interactive submit on the
+// writer's lane while one bulk chunk is in flight and dozens more wait
+// their turn, releases that chunk, and requires the interactive job to
+// be the very next thing the writer runs.
+//
+// The claim is admission order, not elapsed time: a wall-clock bound
+// measures the machine's load as much as the writer's policy, which is
+// what made an earlier form of this test fail roughly one full-module
+// run in three. Repeating the round is what keeps it sensitive to a
+// revert. Without run's non-blocking interactive check the writer's
+// select picks between two ready lanes at random, so one round passes
+// half the time and preemptionRounds of them do not.
 func TestInteractivePreemption(t *testing.T) {
+	const preemptionRounds = 20
+	const bulkChunks = 2 * preemptionRounds
+
 	w, _ := newTestWriter(t, DefaultWriterConfig())
 
-	const chunkWork = 20 * time.Millisecond
-	const chunks = 10
-	const admissionCeiling = 15 * time.Millisecond // under one chunk's remaining time
+	admitted := make(chan string)
+	release := make(chan struct{})
+	quiet := make(chan struct{})
+	// A failed round leaves the writer parked inside a bulk chunk,
+	// where newTestWriter's own Close would wait on it forever. This
+	// cleanup was registered later, so it runs first and lets the
+	// backlog drain.
+	drain := sync.OnceFunc(func() { close(quiet); close(release) })
+	t.Cleanup(drain)
 
-	var completed atomic.Int64
-	bulkDone := make(chan error, 1)
-	go func() {
-		for range chunks {
-			err := w.submitBulk(context.Background(), func(*sql.Tx) error {
-				time.Sleep(chunkWork)
-				completed.Add(1)
+	var wg sync.WaitGroup
+	for range bulkChunks {
+		wg.Go(func() {
+			if err := w.submitBulk(context.Background(), func(*sql.Tx) error {
+				select {
+				case admitted <- "bulk":
+				case <-quiet:
+				}
+				<-release
 				return nil
-			})
-			if err != nil {
-				bulkDone <- err
+			}); err != nil {
+				t.Errorf("submitBulk: %v", err)
+			}
+		})
+	}
+
+	// One chunk admitted, the rest queued behind it: the state every
+	// round below starts from and returns the writer to.
+	if got := <-admitted; got != "bulk" {
+		t.Fatalf("first admission = %q, want a bulk chunk", got)
+	}
+
+	interactive := make(chan error, 1)
+	for round := range preemptionRounds {
+		go submitOnInteractiveLane(w, admitted, interactive)
+		awaitParkedSubmit(t)
+
+		release <- struct{}{}
+		if got := <-admitted; got != "interactive" {
+			t.Fatalf("round %d: the writer admitted a %s chunk with an interactive job already queued and %d more chunks behind it",
+				round, got, bulkChunks-round-2)
+		}
+		if err := <-interactive; err != nil {
+			t.Fatalf("round %d: submit: %v", round, err)
+		}
+		if got := <-admitted; got != "bulk" {
+			t.Fatalf("round %d: the writer admitted %q instead of resuming its backlog", round, got)
+		}
+	}
+
+	drain()
+	wg.Wait()
+}
+
+// submitOnInteractiveLane submits a job that announces itself on
+// admitted, and reports the submit's own outcome on result. It is a
+// named function rather than a closure so that awaitParkedSubmit can
+// find its frame in a stack dump: a bulk submitter parked on the other
+// lane is otherwise identical.
+func submitOnInteractiveLane(w *Writer, admitted chan<- string, result chan<- error) {
+	result <- w.submit(context.Background(), func(*sql.Tx) error {
+		admitted <- "interactive"
+		return nil
+	})
+}
+
+// awaitParkedSubmit blocks until a submitOnInteractiveLane goroutine
+// is parked offering its job to the writer's interactive lane. A
+// submitter that has not reached that offer yet leaves the lane empty,
+// and the writer then picks the next bulk chunk quite correctly;
+// waiting for the park is what separates that scheduling artifact from
+// a real preemption failure. The state is stable rather than raced:
+// the writer is inside a bulk transaction, receiving from nothing, so
+// a parked submitter stays parked until the test releases the chunk.
+//
+// enqueue offers the job inside a select, which parks the goroutine in
+// select rather than chan send; both spellings are the same fact.
+func awaitParkedSubmit(t *testing.T) {
+	t.Helper()
+
+	buf := make([]byte, 1<<20)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		for g := range strings.SplitSeq(string(buf[:runtime.Stack(buf, true)]), "\n\ngoroutine ") {
+			parked := strings.Contains(g, "[select") || strings.Contains(g, "[chan send")
+			if parked && strings.Contains(g, "store.submitOnInteractiveLane") {
 				return
 			}
 		}
-		bulkDone <- nil
-	}()
-
-	time.Sleep(chunkWork / 2) // let the bulk job start its first chunk
-
-	inFlight := completed.Load()
-	start := time.Now()
-	var admittedAfter int64
-	if err := w.submit(context.Background(), func(*sql.Tx) error {
-		admittedAfter = completed.Load()
-		return nil
-	}); err != nil {
-		t.Fatalf("submit: %v", err)
-	}
-	waited := time.Since(start)
-
-	if crossed := admittedAfter - inFlight; crossed > 1 {
-		t.Errorf("interactive job waited out %d bulk chunks, want at most the one in flight; the backlog behind it is %d",
-			crossed, chunks)
-	}
-
-	if waited > admissionCeiling && !raceEnabled {
-		t.Errorf("interactive admission took %v, want under %v; %d queued bulk chunks would be %v",
-			waited, admissionCeiling, chunks, chunks*chunkWork)
-	}
-
-	if err := <-bulkDone; err != nil {
-		t.Fatalf("bulk chunk failed: %v", err)
+		if time.Now().After(deadline) {
+			t.Fatal("no interactive submit parked on the writer's lane")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
