@@ -1,0 +1,2 @@
+BenchmarkQA3Search_single_term_100000      350	    304857 ns/op
+n=350 p50=297.294µs p95=351.2µs p99=422.937µs max=2.212334ms

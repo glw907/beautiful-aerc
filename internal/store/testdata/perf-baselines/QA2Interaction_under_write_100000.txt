@@ -1,0 +1,2 @@
+BenchmarkQA2Interaction_under_write_100000      500	    105682 ns/op
+n=500 p50=77.318µs p95=288.016µs p99=450.338µs max=587.242µs

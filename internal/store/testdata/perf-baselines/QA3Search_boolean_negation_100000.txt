@@ -1,0 +1,2 @@
+BenchmarkQA3Search_boolean_negation_100000      150	    575048 ns/op
+n=150 p50=570.524µs p95=619.28µs p99=766.29µs max=1.095296ms

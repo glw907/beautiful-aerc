@@ -1,0 +1,2 @@
+BenchmarkQA1Startup_warm_100000       20	   9584543 ns/op
+n=20 p50=9.55816ms p95=9.930635ms p99=9.930635ms max=9.946687ms
