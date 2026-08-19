@@ -28,11 +28,116 @@ it. Updating this STATUS is step one and is never optional.
    a load-bearing decision changed. The cursor lives here, not in
    memory.
 
-## Current state (2026-08-18)
+## Current state (2026-08-19)
 
-Phase 5 is in progress. Passes 1 (foundation) and 1b (integration
-and hardening) are done; pass 1c (measurement and the driver
-decision) is the next action, below.
+Phase 5 is in progress. Passes 1 (foundation), 1b (integration and
+hardening), and 1c (measurement and the driver decision) are done;
+pass 1c's gate items await Geoff's ruling, and pass 2 (design
+language and shell) is the next action, below.
+
+Pass 1c outcomes (2026-08-19), commits 0091fb0 through 1be9e86:
+- **The SQLite driver is now github.com/ncruces/go-sqlite3 v0.35.3**,
+  ruled by the driver audit's section 4.5 criteria applied to a
+  ten-repetition benchmark and migrated on master. Evidence: zero
+  corruption in 600 SIGKILL trials per driver; T1/T2/T3 fidelity
+  clean (the one DSN divergence found is modernc's own); peak RSS
+  35.3MB against the 250MB ceiling; modernc's Tcl conformance
+  harness proven rotted (deleted upstream in v1.29.0 with its
+  generator, no rebuild path). Condition 4 (TRUNCATE under a live
+  reader) needs the disclosure below. ADR-0001 revision 3 and an
+  ADR-0003 revision carry the ruling; the method, numbers, and raw
+  artifacts are committed at
+  docs/poplar/research/2026-08-19-sqlite-driver-benchmark.md and
+  captures/2026-08-19-sqlite-driver-benchmark-results.tar.xz.
+- Disclosure bound for the gate: the benchmark's M2 arm for ncruces
+  ran against an empty WAL and measured nothing. The corrected
+  in-tree measurement shows both drivers block the full 50ms
+  busy_timeout and return busy=1 under a live reader with WAL
+  frames, a symmetric non-event that fires no disqualifier; the
+  ruling stands on conditions 1-3 plus T0, and the record says so
+  plainly. checkpoint() now surfaces the busy row it used to
+  discard (a silent-failure fix), with escalation policy in
+  BACKLOG #69.
+- The perf corpus is realistic at last: corpus v3, 100k messages,
+  lognormal bodies hitting the audit's exact quantiles (p50 4.3KB,
+  p90 22.7KB, p99 183.6KB, cap exercised), real prefix-expanding
+  vocabulary, byte-reproducible from a fixed seed with committed,
+  load-bearing fingerprints. Ruling recorded in corpus.go: the
+  audit table's quantiles and its ~8KB mean are mutually
+  inconsistent; the exact quantiles won (mean lands at 13.8KB, file
+  at ~2.25GB).
+- Re-measured numbers at the full envelope under the shipping
+  driver, quiet machine, performance governor (committed baselines
+  carry them): QA-1 warm p95 9.9ms (gate 200ms), cold min-of-3
+  10.5ms (gate 500ms); QA-2 quiescent p95 298us / p99 under 1.5ms
+  against 25ms/40ms, under-write similar; QA-3 all four classes
+  0.9-1.1ms p95 against the spike's 0.9-4.5ms; QA-5's RSS
+  criterion passes at ~21-35MB against 250MB.
+- **Gate item 1: QA-5's storage criterion is MISSED at 1.63x against
+  the 1.6x bound** (fingerprint-recorded, not smoothed). The
+  measurement chain: at realistic weight the ratio was 1.57; fixing
+  QA-2's real p99 failure (256ms, entirely length-4 prefix searches
+  missing the prefix index) required prefix='2 3 4', whose index
+  pushed the ratio to 1.63. Options for the ruling: re-ratify the
+  bound (the audit called the criterion near-meaningless at
+  realistic search_text weight); read "retained body bytes" as
+  retained mail text (ratio 1.37); or narrow the prefix set and
+  re-accept 256ms-class keystroke latency. QA-2's p99 sits at
+  ~1.1ms with the index in place.
+- **Gate item 2: prefix length 5 remains unindexed** (~972ms per
+  keystroke at full envelope, a shared driver-independent miss;
+  QA-2's script deliberately caps at length 4). BACKLOG #67 carries
+  the '2 3 4 5' question; the corpus's non-narrowing term density
+  inflates the measured number, so the ruling may also wait for
+  real-corpus evidence.
+- **Gate item 3, rulings taken in Geoff's name, for ratification:**
+  the #65 push fix amended the gate-ruled mechanism to a proved-only
+  health model (ADR-0018's flush-on-connect made "delivered" true
+  for every jmapsource stream, so the ruled shape was inert; the
+  amended model is pinned by a transport-shaped test and recorded in
+  the BACKLOG closure); the corpus quantiles-over-mean ruling above;
+  the R7 length-5 benchmark cap at 100 iterations; DV-11/DV-13
+  divergences recorded via t.Logf only (a green run hides them).
+- Pass 1's 135 deferred findings all carry decisions: seven clusters
+  fixed (plus DV-11's false RFC citation corrected and DV-13 added),
+  the rest dispositioned with reasons and promoted to
+  docs/poplar/research/2026-08-18-pass-1-deferred-findings-dispositions.md.
+  BACKLOG #66-#69 opened (R5 bytes/op gap; prefix length 5; driver
+  literal const; checkpoint policy).
+- The perf machine restructured: QA-1/2/3 live behind a `perf` build
+  tag, run serially (-p 1) by the perf step only, after both
+  single-sample wall-clock gates proved deterministic failures under
+  parallel load (QA-1 cold 907ms; the ceiling assertion 10/10). What
+  the per-commit gate now protects: compilation, query success,
+  fingerprint match, zero SQLITE_BUSY, real backfill pressure, and
+  latency regressions larger than roughly 15x. It does not protect
+  the 1.6x storage bound (unasserted) or length-5 latency.
+- Review shape that worked, again: the three-lens final fan-out
+  found the pass's two headline record errors (the stale QA-5 PASS
+  carried across the schema change that invalidated it, and the
+  vacuous M2 arm), both instances of the standing signature defect,
+  both in the orchestrator's own artifacts; per-task reviews caught
+  a wrong-premise suppression change, an inert gate-ruled fix
+  shape, and a corpus whose tail understated spec by 66%. Captured
+  exit codes and attack-the-new-guards remain standing reviewer
+  instructions.
+- deadcode at close: 105 entries, all in 1b's justified classes
+  (test scaffolding including the now-tagged perf surface, outbox
+  enqueue/undo awaiting UI passes, jmap conformance-tag surface,
+  dav pass-5 stubs, read-pool UI surface, the pass-2-routed echo
+  seam). No wiring gaps.
+- Gates at the close commit: make check green repeatedly (including
+  twice consecutively post-fix-wave), make conformance green, full
+  uncached -race green, all from captured exit codes.
+- Budget note: roughly 4M subagent output tokens across ~30
+  dispatches plus the Fable main loop (exact figures from /cost at
+  the gate); Geoff interaction points mid-pass: two (a status check
+  and a findings summary, neither changing an outcome).
+- The 1b sdd workspace is deleted (its dispositions live in the
+  promoted research doc). The 1c workspace
+  (.superpowers/sdd/2026-08-18-pass-1c-measurement-and-driver-decision/)
+  is retained until the gate ruling lands, then pass 2's session
+  deletes it; its ledger holds the full ruling trail.
 
 Pass 1b outcomes (2026-08-18), commits ef0c986 through 49b714f:
 - The split ratified at the gate (Geoff, 2026-08-18): 1b closed with
@@ -434,10 +539,66 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 5 pass 1c (measurement and the driver decision)
+## Next: Phase 5 pass 2 (design language and shell)
 
-Pass 1c exists by the split ratified at 1b's gate. It carries three
-tasks from the 1b plan, unchanged in substance, in this order:
+Pass 1c closed on 2026-08-19; its three gate items (the QA-5 storage
+ruling, the prefix-length-5 question, and the ratification list) are
+in the outcomes block above and Geoff rules on them at the 1c gate
+before or alongside pass 2's start. Pass 2 is the spine's second
+numbered pass: the design language made real, and the application
+shell. It is the first screen pass, so the wireframe ritual binds: a
+text wireframe per screen per responsive class that changes its
+layout, pointer targets included, reviewed by Geoff before the
+screen's tasks dispatch.
+
+What pass 2 builds, from the binding docs (the design language
+revision 2, ADR-0011 layout/registry, ADR-0012 keys, ADR-0017 mouse,
+requirements revision 4): the bubbletea root model and message
+routing, the three-rung responsive ladder plus floor state, the
+compiled theme, the keybinding registry with registry-derived help,
+mouse vocabulary, and the shell chrome (status bar, switch bar)
+against the headless engines pass 1b wired. Routed inputs waiting in
+this pass: ADR-0005's self-echo suppression lands with the first
+UI-driven mutation wiring; uerr's stderr fallback must be revisited
+before a full-screen TUI renders (dispositions doc, row 24); the
+contacts-sidebar micro-highlight stays post-1.0.
+
+Starter prompt (paste after /clear in ~/Projects/poplar, in a Fable
+session per the standing orchestration ruling):
+
+```
+Run poplar pass 2: design language and shell. Read
+docs/superpowers/specs/poplar-refounding-STATUS.md's pass 2 section
+and the pass 1c outcomes block first (the gate items may carry
+rulings that bind this pass), then the design language
+(docs/superpowers/specs/2026-07-27-poplar-design-language.md),
+ADR-0011, ADR-0012, ADR-0017, and requirements revision 4 sections
+on the shell. Author the pass 2 plan via superpowers:writing-plans:
+wireframes first (every screen, every responsive class, pointer
+targets), Geoff reviews them before any screen task dispatches; then
+execute via superpowers:subagent-driven-development.
+
+Constraints that bind: elm-conventions and bubbletea-design are
+mandatory before any UI code; one poplar-implementer per task;
+poplar-reviewer and poplar-go-reviewer in parallel on each diff;
+reviewers attack each round's new guards first and prove
+revert-sensitivity by experiment; gate evidence is a captured exit
+code, never a tail. The perf suite runs behind the `perf` build tag
+via make perf only. Never let an agent set run_in_background; unique
+scratch names. Geoff is at the wireframe review and the pass gate.
+The pass 1c sdd workspace
+(.superpowers/sdd/2026-08-18-pass-1c-measurement-and-driver-decision/)
+is deletable once the 1c gate items are ruled.
+```
+
+## Superseded: Phase 5 pass 1c task list (closed 2026-08-19)
+
+The original pass 1c section follows as the record of its moment;
+three of its instruction lines were amended by the pass's own
+rulings (the reset-on-delivery wording, the ~9.2KB mean target, and
+the open driver question), all per the outcomes block above.
+
+Pass 1c carried three tasks from the 1b plan, in this order:
 
 1. **Task 11b, the deferred-findings harvest** (independent, can run
    first). The triage is done and waiting as a read-only document:
@@ -556,5 +717,5 @@ Geoff reads the verdict and sample renders and rules on the bet.
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
 [done] -> 2 Vision [done] -> 3 Requirements [done] ->
 4 Technical design [done] -> 5 Build machine + build [in progress:
-passes 1 foundation and 1b integration and hardening done, pass 1c
-measurement and driver decision next].
+passes 1 foundation, 1b integration and hardening, and 1c measurement
+and driver decision done; pass 2 design language and shell next].
