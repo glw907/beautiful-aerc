@@ -610,14 +610,48 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 	})
 }
 
-// TestRunPushDoesNotEscalateOnAnUnexplainedStop asserts RunPush's own
-// wait is a floor rather than a schedule: a transport that stops
-// without reporting why is reopened after one step drawn under
-// BackoffMin, however many times it has stopped before. The schedule
-// belongs to reconnect, which runs it against the failure the next
-// Listen reports, so escalating here as well would put two delays on
-// one failure, which is what the reconnect-ownership ruling forbids.
-func TestRunPushDoesNotEscalateOnAnUnexplainedStop(t *testing.T) {
+// TestPushStateStoppedAdvancesOnSilence asserts pushState.stopped's
+// escalation curve directly (BACKLOG #65): a stop that delivered
+// nothing advances attempt exactly as a Listen failure does, and a stop
+// that did deliver resets it, since a stream that has already proved
+// the server can serve mail failing to stay open says nothing about the
+// server the way a run of silent stops does.
+func TestPushStateStoppedAdvancesOnSilence(t *testing.T) {
+	_ = uerrtest.Capture(t)
+	_ = uerrtest.CaptureDefault(t)
+
+	state := pushState{}
+	state.stopped(false)
+	if state.attempt != 1 {
+		t.Fatalf("attempt after one silent stop = %d, want 1", state.attempt)
+	}
+	state.stopped(false)
+	if state.attempt != 2 {
+		t.Fatalf("attempt after two silent stops = %d, want 2", state.attempt)
+	}
+
+	state.stopped(true)
+	if state.attempt != 0 {
+		t.Fatalf("attempt after a delivering stop = %d, want 0: delivery resets the schedule", state.attempt)
+	}
+	if state.silent != 0 {
+		t.Fatalf("silent after a delivering stop = %d, want 0", state.silent)
+	}
+
+	state.attempt = 5
+	state.proved()
+	if state.attempt != 0 {
+		t.Fatalf("attempt after proved = %d, want 0: proved resets the schedule too", state.attempt)
+	}
+}
+
+// TestRunPushEscalatesOnASilentStop asserts RunPush's own wait against a
+// stream that stops without delivering anything rides pushState's
+// escalating schedule, the same curve reconnect runs against a Listen
+// failure, rather than reopening at the BackoffMin floor forever
+// (BACKLOG #65: measured ~4 Listen calls/s against a server shaped this
+// way, ~343k/day for one account).
+func TestRunPushEscalatesOnASilentStop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
@@ -648,23 +682,23 @@ func TestRunPushDoesNotEscalateOnAnUnexplainedStop(t *testing.T) {
 			close(done)
 		}()
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(20 * time.Second)
 		synctest.Wait()
 		cancel()
 		<-done
-		synctest.Wait()
 
-		// An escalating schedule reaches BackoffMax within a handful of
-		// stops, so 3s of a 100ms-bounded floor is dozens of calls
-		// against roughly seven.
-		if len(listenTimes) < 15 {
-			t.Fatalf("Listen called %d times in 3s, want at least 15: a wait bounded by BackoffMin (%v) rather than an escalating one", len(listenTimes), cfg.BackoffMin)
+		// A floor pinned at BackoffMin draws on the order of 200 calls
+		// over 20s (the measured ~4/s rate); an escalating schedule
+		// reaches BackoffMax within a handful of stops and settles near
+		// one call every ~BackoffMax, well under 40 over the same window.
+		if got := len(listenTimes); got > 40 {
+			t.Fatalf("Listen called %d times over 20s, want well under 40: the wait did not escalate", got)
 		}
-		for i := 1; i < len(listenTimes); i++ {
-			gap := listenTimes[i] - listenTimes[i-1]
-			if gap >= cfg.BackoffMin {
-				t.Fatalf("wait %d after a stop was %v, want under BackoffMin (%v): the floor escalated", i, gap, cfg.BackoffMin)
-			}
+		if got := len(listenTimes); got < 4 {
+			t.Fatalf("Listen called %d times, want several: the test needs a run of silent stops behind it", got)
+		}
+		if gap := listenTimes[len(listenTimes)-1] - listenTimes[len(listenTimes)-2]; gap < cfg.BackoffMin {
+			t.Fatalf("wait before the last Listen call was %v, want at least BackoffMin (%v): the schedule stayed at the floor", gap, cfg.BackoffMin)
 		}
 	})
 }

@@ -190,17 +190,17 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 		}
 		push.stopped(delivered)
 
-		// A stop the transport did not explain still costs a step, or
-		// one that opens and stops at once is reopened at zero delay and
-		// spins into a request storm. It is a floor, not a schedule: a
-		// stop with a refusal behind it comes back as the next Listen's
-		// error, and escalating on that is reconnect's job, so
-		// escalating here as well would put two delays on one failure.
+		// A stop with a refusal behind it comes back as the next Listen's
+		// error, and reconnect runs the schedule against that. A stop the
+		// transport did not explain gets nothing from reconnect to
+		// escalate on, so pushState.stopped advances the same schedule
+		// here instead: without it, a stream that opens and stops at once
+		// is reopened at BackoffMin's floor forever (BACKLOG #65,
+		// measured ~4 Listen calls/s against a server shaped that way).
 		// The wait drains poll ticks like every other wait between
-		// streams: a server that opens a stream and drops it at once,
-		// forever, never reaches a Listen error and so would otherwise
-		// spend its whole run here pulling nothing.
-		if !sleepBackoff(ctx, 0, w.cfg.BackoffMin, w.cfg.BackoffMax, poll.C, flush) {
+		// streams, so a server that never reaches a Listen error still
+		// falls back to the poll cadence.
+		if !sleepBackoff(ctx, push.attempt, w.cfg.BackoffMin, w.cfg.BackoffMax, poll.C, flush) {
 			return
 		}
 	}
@@ -220,15 +220,18 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 // server, the per-call form drew about a hundred requests in twenty
 // seconds.
 //
-// Only a refusal reaches this schedule. A drop never does, because the
-// transport reconnects through it without closing the channel, so this
-// and the transport's own schedule govern disjoint failures and never
-// compose on one. What ends a run of refusals is a stream that has
-// stayed open past BackoffMax, which is the only evidence available
-// that the server is serving again, and it is read while the stream is
-// still up: waiting for it to end would leave a failure as the last
-// word on a transport that has been working for days, and would keep
-// the next failure of the same class from surfacing at all.
+// A drop never reaches this schedule, because the transport reconnects
+// through it without closing the channel, so this and the transport's
+// own schedule govern disjoint failures and never compose on one. A
+// refusal and a stop that delivered nothing both do, since to the user
+// they are the same outage: mail stops arriving either way, and a
+// silent stop escalating no schedule at all was BACKLOG #65. What ends
+// a run of either is a stream that has stayed open past BackoffMax,
+// which is the only evidence available that the server is serving
+// again, and it is read while the stream is still up: waiting for it to
+// end would leave a failure as the last word on a transport that has
+// been working for days, and would keep the next failure of the same
+// class from surfacing at all.
 type pushState struct {
 	failing bool
 	class   uerr.Class
@@ -274,18 +277,25 @@ var errStreamNeverDelivered = backend.Failure{
 }
 
 // stopped records a stream ending, delivered reporting whether it ever
-// produced a notification, and surfaces a run of streams that never
-// did. One stop that delivered nothing is not yet news, since a server
-// is allowed to close an idle connection and the next one ordinarily
-// opens and reports its connect; a second in a row with no failure
-// between them is the transport getting nowhere. Surfacing runs
-// through fail, so its once-per-episode rule holds here too.
+// produced a notification, and advances the reopen schedule on a silent
+// stop exactly as fail does on a Listen error (BACKLOG #65): the two
+// are the same outage from the user's side, and a stop with no failure
+// behind it never reached reconnect's own schedule to escalate on. A
+// stop that delivered resets the schedule instead, since that stream
+// already proved the server can serve mail. One silent stop is not yet
+// news, since a server is allowed to close an idle connection and the
+// next one ordinarily opens and reports its connect; a second in a row
+// with no delivery between them is the transport getting nowhere, and
+// surfacing that runs through fail, so its once-per-episode rule holds
+// here too.
 func (s *pushState) stopped(delivered bool) {
 	if delivered {
 		s.silent = 0
+		s.attempt = 0
 		return
 	}
 	s.silent++
+	s.attempt++
 	if s.silent >= silentStops {
 		s.fail(errStreamNeverDelivered)
 	}
