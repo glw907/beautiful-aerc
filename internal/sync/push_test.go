@@ -610,48 +610,57 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 	})
 }
 
-// TestPushStateStoppedAdvancesOnSilence asserts pushState.stopped's
-// escalation curve directly (BACKLOG #65): a stop that delivered
-// nothing advances attempt exactly as a Listen failure does, and a stop
-// that did deliver resets it, since a stream that has already proved
-// the server can serve mail failing to stay open says nothing about the
-// server the way a run of silent stops does.
-func TestPushStateStoppedAdvancesOnSilence(t *testing.T) {
+// TestPushStateStoppedAdvancesUntilProved asserts pushState.stopped's
+// escalation curve directly: a stream that stops before ever proving
+// itself advances attempt the same way reconnect advances it after a
+// Listen failure, and proved is the only reset. The stop that ends the
+// very stream proved just fired for must not advance attempt again,
+// since otherwise a healthy stream's own routine close would still
+// nudge the schedule up, and the next reopen would draw from a higher
+// band than a stream that just proved the server is serving should
+// leave behind.
+func TestPushStateStoppedAdvancesUntilProved(t *testing.T) {
 	_ = uerrtest.Capture(t)
 	_ = uerrtest.CaptureDefault(t)
 
 	state := pushState{}
-	state.stopped(false)
+	state.stopped()
 	if state.attempt != 1 {
-		t.Fatalf("attempt after one silent stop = %d, want 1", state.attempt)
+		t.Fatalf("attempt after one unproved stop = %d, want 1", state.attempt)
 	}
-	state.stopped(false)
+	state.stopped()
 	if state.attempt != 2 {
-		t.Fatalf("attempt after two silent stops = %d, want 2", state.attempt)
+		t.Fatalf("attempt after two unproved stops = %d, want 2", state.attempt)
 	}
 
-	state.stopped(true)
-	if state.attempt != 0 {
-		t.Fatalf("attempt after a delivering stop = %d, want 0: delivery resets the schedule", state.attempt)
-	}
-	if state.silent != 0 {
-		t.Fatalf("silent after a delivering stop = %d, want 0", state.silent)
-	}
-
-	state.attempt = 5
 	state.proved()
 	if state.attempt != 0 {
-		t.Fatalf("attempt after proved = %d, want 0: proved resets the schedule too", state.attempt)
+		t.Fatalf("attempt after proved = %d, want 0", state.attempt)
+	}
+
+	// The stop that ends the stream proved just fired for consumes that
+	// mark rather than advancing the schedule again.
+	state.stopped()
+	if state.attempt != 0 {
+		t.Fatalf("attempt after the proved stream's own stop = %d, want 0: a stop right after proving inherited escalation", state.attempt)
+	}
+	if state.unproved != 0 {
+		t.Fatalf("unproved after the proved stream's own stop = %d, want 0", state.unproved)
+	}
+
+	// The next stream, which never proved, resumes counting from zero.
+	state.stopped()
+	if state.attempt != 1 {
+		t.Fatalf("attempt after the following unproved stop = %d, want 1", state.attempt)
 	}
 }
 
-// TestRunPushEscalatesOnASilentStop asserts RunPush's own wait against a
-// stream that stops without delivering anything rides pushState's
-// escalating schedule, the same curve reconnect runs against a Listen
-// failure, rather than reopening at the BackoffMin floor forever
-// (BACKLOG #65: measured ~4 Listen calls/s against a server shaped this
-// way, ~343k/day for one account).
-func TestRunPushEscalatesOnASilentStop(t *testing.T) {
+// TestRunPushEscalatesOnAnUnprovedStop asserts RunPush's own wait
+// against a stream that stops before ever proving itself rides
+// pushState's escalating schedule, the same curve reconnect runs
+// against a Listen failure, rather than reopening at the BackoffMin
+// floor forever.
+func TestRunPushEscalatesOnAnUnprovedStop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
 		accountID := seedAccount(t, w)
@@ -688,17 +697,110 @@ func TestRunPushEscalatesOnASilentStop(t *testing.T) {
 		<-done
 
 		// A floor pinned at BackoffMin draws on the order of 200 calls
-		// over 20s (the measured ~4/s rate); an escalating schedule
-		// reaches BackoffMax within a handful of stops and settles near
-		// one call every ~BackoffMax, well under 40 over the same window.
+		// over 20s; an escalating schedule reaches BackoffMax within a
+		// handful of stops and settles near one call every ~BackoffMax,
+		// well under 40 over the same window.
 		if got := len(listenTimes); got > 40 {
 			t.Fatalf("Listen called %d times over 20s, want well under 40: the wait did not escalate", got)
 		}
 		if got := len(listenTimes); got < 4 {
-			t.Fatalf("Listen called %d times, want several: the test needs a run of silent stops behind it", got)
+			t.Fatalf("Listen called %d times, want several: the test needs a run of unproved stops behind it", got)
 		}
-		if gap := listenTimes[len(listenTimes)-1] - listenTimes[len(listenTimes)-2]; gap < cfg.BackoffMin {
-			t.Fatalf("wait before the last Listen call was %v, want at least BackoffMin (%v): the schedule stayed at the floor", gap, cfg.BackoffMin)
+
+		// The maximum gap must clear BackoffMin. Pinning the *last* gap
+		// instead flakes: full jitter draws each gap independently and
+		// uniformly, so once the schedule saturates near BackoffMax, about
+		// 1% of runs still draw under 100ms for that one gap even though
+		// the schedule escalated correctly throughout.
+		maxGap := time.Duration(0)
+		for i := 1; i < len(listenTimes); i++ {
+			if gap := listenTimes[i] - listenTimes[i-1]; gap > maxGap {
+				maxGap = gap
+			}
+		}
+		if maxGap < cfg.BackoffMin {
+			t.Fatalf("max gap between Listen calls = %v, want at least BackoffMin (%v): the schedule stayed at the floor", maxGap, cfg.BackoffMin)
+		}
+
+		// Each gap is also bounded above by the schedule's own curve:
+		// full jitter draws it uniformly under min(BackoffMin<<i,
+		// BackoffMax) for the i-th gap, a hard ceiling a schedule that
+		// jumped straight to BackoffMax would blow on the very first one.
+		bound := cfg.BackoffMin
+		for i := 1; i < len(listenTimes); i++ {
+			bound = min(bound*2, cfg.BackoffMax)
+			if gap := listenTimes[i] - listenTimes[i-1]; gap >= bound {
+				t.Fatalf("gap %d between Listen calls = %v, want under %v (the schedule's own bound at that attempt)", i, gap, bound)
+			}
+		}
+	})
+}
+
+// TestRunPushEscalatesOnAConnectFlushDeath is the shape a real
+// transport actually produces, and the one a delivery-keyed schedule
+// misses entirely (BACKLOG #65): jmapsource's OnConnect always queues
+// one notification before Listen returns (ADR-0018's flush-on-connect),
+// so a stream that opens and dies at once still arrives with a
+// notification already buffered on the channel. Keying the schedule on
+// delivery reads that connect flush as proof of health and resets
+// attempt on every single stop, leaving the reopen rate pinned at the
+// floor as if pushState.stopped never ran at all. Proving has to be
+// the bar instead, and the run still has to surface: no other report
+// covers a server that never refuses a connection, only opens and
+// drops it.
+func TestRunPushEscalatesOnAConnectFlushDeath(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		buf := uerrtest.Capture(t)
+		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+		accountID := seedAccount(t, w)
+
+		var be backendtest.Fake
+		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+			return backend.ChangeSet{}, nil
+		}
+
+		start := time.Now()
+		var listenTimes []time.Duration
+		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+			listenTimes = append(listenTimes, time.Since(start))
+			// The ADR-0018 shape: OnConnect's flush is already queued by
+			// the time Listen returns, and the stream dies right after.
+			ch := make(chan backend.Notification, 1)
+			ch <- backend.Notification{}
+			close(ch)
+			return ch, nil
+		}}
+
+		cfg := testConfig()
+		cfg.BackoffMin = 100 * time.Millisecond
+		cfg.BackoffMax = 10 * time.Second
+		worker := NewWorker(accountID, &be, w, cfg)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			worker.RunPush(ctx, []backend.ObjectKind{backend.ObjectKindMessage})
+			close(done)
+		}()
+
+		time.Sleep(20 * time.Second)
+		synctest.Wait()
+		cancel()
+		<-done
+
+		if got := len(listenTimes); got > 40 {
+			t.Fatalf("Listen called %d times over 20s, want well under 40: the connect flush was read as health and the schedule never escalated", got)
+		}
+		if got := len(listenTimes); got < 4 {
+			t.Fatalf("Listen called %d times, want several: the test needs a run of connect-flush-then-die streams behind it", got)
+		}
+
+		lines := uerrtest.Lines(t, buf)
+		if len(lines) != 1 {
+			t.Fatalf("uerr lines = %d over %d Listen calls, want exactly 1: the run of stops never surfaced", len(lines), len(listenTimes))
+		}
+		if got := lines[0]["class"]; got != "connection" {
+			t.Errorf("class = %v, want connection", got)
 		}
 	})
 }

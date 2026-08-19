@@ -184,22 +184,20 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 			return
 		}
 
-		delivered := false
-		if !consumePush(ctx, ch, w.cfg, func() { delivered = true; flush() }, push.proved) {
+		if !consumePush(ctx, ch, w.cfg, flush, push.proved) {
 			return
 		}
-		push.stopped(delivered)
+		push.stopped()
 
 		// A stop with a refusal behind it comes back as the next Listen's
 		// error, and reconnect runs the schedule against that. A stop the
 		// transport did not explain gets nothing from reconnect to
-		// escalate on, so pushState.stopped advances the same schedule
+		// escalate on, so pushState.stopped advances the same attempt
 		// here instead: without it, a stream that opens and stops at once
-		// is reopened at BackoffMin's floor forever (BACKLOG #65,
-		// measured ~4 Listen calls/s against a server shaped that way).
-		// The wait drains poll ticks like every other wait between
-		// streams, so a server that never reaches a Listen error still
-		// falls back to the poll cadence.
+		// is reopened at BackoffMin's floor forever. The wait drains poll
+		// ticks like every other wait between streams, so a server that
+		// never reaches a Listen error still falls back to the poll
+		// cadence.
 		if !sleepBackoff(ctx, push.attempt, w.cfg.BackoffMin, w.cfg.BackoffMax, poll.C, flush) {
 			return
 		}
@@ -223,20 +221,23 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 // A drop never reaches this schedule, because the transport reconnects
 // through it without closing the channel, so this and the transport's
 // own schedule govern disjoint failures and never compose on one. A
-// refusal and a stop that delivered nothing both do, since to the user
-// they are the same outage: mail stops arriving either way, and a
-// silent stop escalating no schedule at all was BACKLOG #65. What ends
-// a run of either is a stream that has stayed open past BackoffMax,
-// which is the only evidence available that the server is serving
-// again, and it is read while the stream is still up: waiting for it to
-// end would leave a failure as the last word on a transport that has
-// been working for days, and would keep the next failure of the same
-// class from surfacing at all.
+// refusal and a stop that never proved the stream both do, since to the
+// user they are the same outage: mail stops arriving either way, and a
+// notification queued on connect (ADR-0018) is not proof, since a
+// server that opens a stream, flushes it, and closes it before
+// BackoffMax is still failing to hold one. What ends a run of either is
+// a stream that has stayed open past BackoffMax, which is the only
+// evidence available that the server is serving again, and it is read
+// while the stream is still up: waiting for it to end would leave a
+// failure as the last word on a transport that has been working for
+// days, and would keep the next failure of the same class from
+// surfacing at all.
 type pushState struct {
-	failing bool
-	class   uerr.Class
-	attempt int
-	silent  int
+	failing  bool
+	class    uerr.Class
+	attempt  int
+	unproved int
+	proven   bool
 }
 
 // fail surfaces err once per failure episode, on the first failure or
@@ -248,8 +249,8 @@ func (s *pushState) fail(err error) {
 		return
 	}
 	// A failure explains whatever stopped the last stream, so the run
-	// of stops nothing explained ends here.
-	s.silent = 0
+	// of unproved stops ends here.
+	s.unproved = 0
 	class, cause := classifyErr(err)
 	if !s.failing || class != s.class {
 		_ = uerr.New("sync.push.listen", nil, class, cause)
@@ -258,59 +259,66 @@ func (s *pushState) fail(err error) {
 	}
 }
 
-// silentStops is how many streams may stop without ever delivering
-// before the run of them counts as an outage rather than a server
-// closing an idle connection. Two consecutive, the same threshold the
-// JMAP transport uses for a drop it did not get back.
-const silentStops = 2
+// unprovedStops is how many streams may stop without ever proving
+// themselves before the run of them counts as an outage rather than a
+// server closing an idle connection. Two consecutive, the same
+// threshold the JMAP transport uses for a drop it did not get back.
+const unprovedStops = 2
 
-// errStreamNeverDelivered stands for a stream that opened, said
-// nothing, and stopped. No other report covers it: Listen succeeded
-// every time, so the refusal a stop usually carries never arrived, and
-// the failure a user sees is mail that only ever arrives on the poll
+// errStreamNeverProved stands for a run of streams that opened and
+// stopped, none of them staying open long enough to prove the server
+// is serving again. No other report covers it: Listen succeeded every
+// time, so the refusal a stop usually carries never arrived, and the
+// failure a user sees is mail that only ever arrives on the poll
 // cadence, a connectivity problem rather than anything the server
 // refused, which is why the class is stated here rather than left to
 // classifyErr's fallback.
-var errStreamNeverDelivered = backend.Failure{
+var errStreamNeverProved = backend.Failure{
 	Class: uerr.ClassConnection,
-	Cause: errors.New("sync: the push stream keeps opening and stopping without delivering anything"),
+	Cause: errors.New("sync: the push stream keeps opening and stopping before it can prove the connection is healthy"),
 }
 
-// stopped records a stream ending, delivered reporting whether it ever
-// produced a notification, and advances the reopen schedule on a silent
-// stop exactly as fail does on a Listen error (BACKLOG #65): the two
-// are the same outage from the user's side, and a stop with no failure
-// behind it never reached reconnect's own schedule to escalate on. A
-// stop that delivered resets the schedule instead, since that stream
-// already proved the server can serve mail. One silent stop is not yet
-// news, since a server is allowed to close an idle connection and the
-// next one ordinarily opens and reports its connect; a second in a row
-// with no delivery between them is the transport getting nowhere, and
-// surfacing that runs through fail, so its once-per-episode rule holds
-// here too.
-func (s *pushState) stopped(delivered bool) {
-	if delivered {
-		s.silent = 0
-		s.attempt = 0
+// stopped records a stream ending. A stream that stopped without ever
+// proving itself (proved was never called for it) advances attempt by
+// one, the same increment reconnect's own loop applies after a Listen
+// failure, so RunPush's tail wait escalates on the same curve a run of
+// refusals does: a stop with no failure behind it never reaches
+// reconnect to advance the schedule itself. Two such stops in a row is
+// a run worth surfacing (through fail, so its once-per-episode rule
+// holds here too), whether or not either stream ever delivered
+// anything: a notification queued on connect (ADR-0018) proves nothing
+// about whether the stream can stay open.
+//
+// A stream that did prove itself resets the run instead: it consumes
+// the mark proved left, leaving attempt where proved set it (zero)
+// rather than advancing it again, so the very next reopen draws from
+// the same low band a healthy run starts from.
+func (s *pushState) stopped() {
+	if s.proven {
+		s.proven = false
+		s.unproved = 0
 		return
 	}
-	s.silent++
+	s.unproved++
 	s.attempt++
-	if s.silent >= silentStops {
-		s.fail(errStreamNeverDelivered)
+	if s.unproved >= unprovedStops {
+		s.fail(errStreamNeverProved)
 	}
 }
 
-// proved records a stream that has stayed open long enough to say the
-// server is serving again: the failure run is over, and the reopen
-// schedule starts from zero.
+// proved records that the stream currently open has stayed open long
+// enough to say the server is serving again: the failure run is over,
+// the reopen schedule starts from zero, and the mark it leaves keeps
+// this same stream's own eventual stop from advancing that schedule
+// again.
 func (s *pushState) proved() {
 	if s.failing {
 		slog.Info("sync: push recovered")
 		s.failing = false
 	}
 	s.attempt = 0
-	s.silent = 0
+	s.unproved = 0
+	s.proven = true
 }
 
 // pollKinds runs kinds' SyncKind on a fixed PollInterval cadence, the
