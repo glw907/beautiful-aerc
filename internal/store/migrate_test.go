@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // TestMigrateFresh applies schema version 1 to an empty file and
@@ -60,9 +61,7 @@ func TestMigrateRejectsNewerSchema(t *testing.T) {
 	if !errors.As(err, &uerrErr) {
 		t.Fatalf("Migrate error is not a uerr.Error: %v", err)
 	}
-	if uerrErr.Class != uerr.ClassSchemaVersion {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassSchemaVersion)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassSchemaVersion)
 
 	cause := uerrErr.Cause.Error()
 	if !strings.Contains(cause, "2") || !strings.Contains(cause, "1") {
@@ -95,9 +94,7 @@ func TestMigrateFailureReachesUerrSeam(t *testing.T) {
 	if !errors.As(err, &uerrErr) {
 		t.Fatalf("Migrate error is not a uerr.Error: %v", err)
 	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 	if uerrErr.Cause == nil {
 		t.Error("Cause is nil, want the underlying CREATE TABLE failure")
 	}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
 // holderEnvVar names the environment variable TestLockReleasedOnKill
@@ -61,9 +62,7 @@ func TestSecondInstanceRefused(t *testing.T) {
 	if !errors.As(err, &uerrErr) {
 		t.Fatalf("error is not a uerr.Error: %v", err)
 	}
-	if uerrErr.Class != uerr.ClassInstanceLocked {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassInstanceLocked)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassInstanceLocked)
 
 	wantPID := strconv.Itoa(os.Getpid())
 	if !strings.Contains(uerrErr.Cause.Error(), wantPID) {
@@ -83,13 +82,7 @@ func TestAcquireInstanceLockOpenFailureIsStoreLocal(t *testing.T) {
 		t.Fatal("AcquireInstanceLock over a missing parent directory succeeded, want a failure")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", err)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 }
 
 // TestAcquireInstanceLockPidWriteFailureIsStoreLocal proves a failure
@@ -108,13 +101,7 @@ func TestAcquireInstanceLockPidWriteFailureIsStoreLocal(t *testing.T) {
 		t.Fatal("AcquireInstanceLock over a read-only lock file succeeded, want a failure")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", err)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 }
 
 // TestLockReleasedOnKill SIGKILLs the lock's holder and proves a new

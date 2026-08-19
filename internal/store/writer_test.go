@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -231,13 +230,7 @@ func TestDiskFullInjection(t *testing.T) {
 		t.Fatal("submit succeeded past max_page_count, want a disk-full failure")
 	}
 
-	var uerrErr uerr.Error
-	if !errors.As(writeErr, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", writeErr)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, writeErr, uerr.ClassStoreLocal)
 
 	var rows int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM account`).Scan(&rows); err != nil {

@@ -61,7 +61,7 @@ var readSurface = []string{
 	"MarkCleanShutdown",
 	"MessageSummary",
 	"MessageUpsert",
-	"NeedsIntegrityCheck",
+	"ShouldRunIntegrityCheck",
 	"NewReadPool",
 	"ReadPool",
 	"RecoveredCounts",

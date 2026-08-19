@@ -253,18 +253,21 @@ func runStartupTrace(ctx context.Context, dbPath string, writer *store.Writer, s
 	}
 
 	if err := writer.Close(); err != nil {
-		return err
+		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("close writer: %w", err))
 	}
 	if err := store.MarkCleanShutdown(dbPath); err != nil {
 		return err
 	}
 
-	return json.NewEncoder(out).Encode(startupTraceResult{
+	if err := json.NewEncoder(out).Encode(startupTraceResult{
 		OpenNS:      opened.Nanoseconds(),
 		FirstPageNS: (total - opened).Nanoseconds(),
 		TotalNS:     total.Nanoseconds(),
 		Rows:        len(rows),
-	})
+	}); err != nil {
+		return uerr.New("main.startup-trace", nil, uerr.ClassStoreLocal, fmt.Errorf("write trace result: %w", err))
+	}
+	return nil
 }
 
 // timeFirstPage opens a single-connection read pool over dbPath and
@@ -320,7 +323,7 @@ func prepareStore(ctx context.Context, dbPath string, f flags, out io.Writer) er
 		return err
 	}
 
-	if !store.NeedsIntegrityCheck(dbPath, after != before) && !f.rebuildIndex {
+	if !store.ShouldRunIntegrityCheck(dbPath, after != before) && !f.rebuildIndex {
 		return db.Close()
 	}
 	if err := store.CheckIntegrity(ctx, db, integrityProgress(out)); err != nil {

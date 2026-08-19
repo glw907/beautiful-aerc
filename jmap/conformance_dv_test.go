@@ -1,6 +1,6 @@
 //go:build conformance
 
-// The twelve divergence tests. Each pins poplar's behaviour where two
+// The thirteen divergence tests. Each pins poplar's behaviour where two
 // conformant servers may differ, so a future server cannot change one
 // of these silently. Where a divergence is a fact about the server
 // rather than a choice poplar makes, the test records it and asserts
@@ -659,11 +659,20 @@ func TestDV11DuplicateMailboxName(t *testing.T) {
 	if refused.Error() == "" {
 		t.Error("the refusal renders as nothing, so a user would be told only that something failed")
 	}
-	// RFC 8620 section 5.3 makes existingId mandatory on
-	// alreadyExists, and it is the one refusal a client can act on
-	// without asking the user anything.
-	if refused.Type == "alreadyExists" && refused.ExistingID != first {
-		t.Errorf("alreadyExists names existing record %q, want %q", refused.ExistingID, first)
+	// alreadyExists is RFC 8620 section 5.4's /copy error, not a
+	// documented Mailbox/set create refusal; RFC 8621 section 2.5
+	// defines mailboxHasChild and mailboxHasEmail for Mailbox/set, and
+	// both are destroy-only. No RFC makes existingId mandatory here.
+	// Stalwart sends it; Fastmail does not (verified live). This is a
+	// server-conditional divergence to record, not an obligation to
+	// assert.
+	if refused.Type == "alreadyExists" {
+		if refused.ExistingID == first {
+			t.Logf("%s sends existingId on a duplicate-name refusal", tg.profile.name)
+		} else {
+			t.Logf("DIVERGENCE: %s sends alreadyExists with no existingId (or one naming the wrong record: %q, want %q), which no RFC requires it to carry here",
+				tg.profile.name, refused.ExistingID, first)
+		}
 	}
 
 	query := &jmap.MailboxQueryResponse{}
@@ -730,5 +739,70 @@ func TestDV12EventSourceDeliversStateChanges(t *testing.T) {
 	}
 	if current := tg.emailState(t); current != pushed {
 		t.Errorf("the push named Email state %q while Email/get reports %q", pushed, current)
+	}
+}
+
+// TestDV13SiblingUniquenessNormalization covers the sibling-uniqueness
+// divergence task 7b found live: Stalwart's sibling-uniqueness rule is
+// case-insensitive and trims whitespace, Fastmail's is byte-exact, so
+// a name that differs from an existing sibling only by case is a
+// duplicate to one server and a distinct mailbox to the other. DV-11
+// already covers a byte-identical duplicate, which both servers
+// refuse the same way.
+//
+// This asserts poplar's own mechanism rather than either server's
+// answer: adoptMailbox's FindMailboxes contract
+// (internal/outbox/dispatch.go) binds on an exact string match over a
+// query the RFC only promises as substring-narrowed, so poplar's own
+// lookup for the original name finds only the original mailbox,
+// whether or not the server also holds a case-variant sibling beside
+// it.
+func TestDV13SiblingUniquenessNormalization(t *testing.T) {
+	tg := dial(t)
+
+	name := scratch("dv13")
+	first := tg.newMailbox(t, name)
+	variant := strings.ToUpper(name)
+
+	resp := &jmap.MailboxSetResponse{}
+	tg.call(t, &jmap.MailboxSet{
+		Account: tg.account,
+		Create:  map[jmap.ID]*jmap.Mailbox{"variant": {Name: variant}},
+	}, resp)
+
+	if created := resp.Created["variant"]; created != nil {
+		t.Cleanup(func() { tg.destroyMailbox(created.ID) })
+		t.Logf("%s created a case-variant sibling %q beside %q", tg.profile.name, variant, name)
+	} else {
+		refused := resp.NotCreated["variant"]
+		t.Logf("DIVERGENCE: %s refused a case-variant sibling %q as a duplicate of %q: %q",
+			tg.profile.name, variant, name, refused.Type)
+	}
+
+	// The same narrow-then-confirm shape FindMailboxes uses: a
+	// Mailbox/query filter is a substring match (RFC 8621 section
+	// 2.3), so the exact comparison runs here, in Go, over what
+	// Mailbox/get returns for the query's ids.
+	query := &jmap.MailboxQueryResponse{}
+	tg.call(t, &jmap.MailboxQuery{
+		Account: tg.account,
+		Filter:  &jmap.MailboxFilterCondition{Name: name},
+	}, query)
+
+	get := &jmap.MailboxGetResponse{}
+	tg.call(t, &jmap.MailboxGet{
+		Account:    tg.account,
+		IDs:        query.IDs,
+		Properties: []string{"id", "name"},
+	}, get)
+
+	var found []jmap.ID
+	for _, box := range get.List {
+		if box.Name == name {
+			found = append(found, box.ID)
+		}
+	}
+	if !slices.Equal(found, []jmap.ID{first}) {
+		t.Errorf("an exact match on %q found %v, want only %s", name, found, first)
 	}
 }

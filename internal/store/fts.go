@@ -3,6 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
+
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // RebuildIndex regenerates message_fts from message's current rows,
@@ -16,8 +19,18 @@ import (
 // doubt it, poplar's --rebuild-index flag or a failed integrity check,
 // rebuilds the whole index rather than reconciling term by term.
 func RebuildIndex(ctx context.Context, w *Writer) error {
-	return w.Apply(ctx, func(tx *sql.Tx) error {
+	err := w.Apply(ctx, func(tx *sql.Tx) error {
 		_, err := tx.Exec(`INSERT INTO message_fts(message_fts) VALUES ('rebuild')`)
 		return err
 	})
+	if err == nil {
+		return nil
+	}
+	// Apply's failure carries op store.write, the writer's generic
+	// tag for every bulk-lane transaction; re-tag it here so a log
+	// line can tell a rebuild failure from an ordinary write failure.
+	if uerrErr, ok := errors.AsType[uerr.Error](err); ok {
+		return localErr("store.rebuild-index", uerrErr.Cause)
+	}
+	return localErr("store.rebuild-index", err)
 }

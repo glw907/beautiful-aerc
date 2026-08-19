@@ -267,7 +267,7 @@ func restartStore(t *testing.T, dbPath string) {
 	if err != nil {
 		t.Fatalf("read schema version after migrate: %v", err)
 	}
-	if store.NeedsIntegrityCheck(dbPath, after != before) {
+	if store.ShouldRunIntegrityCheck(dbPath, after != before) {
 		if err := store.CheckIntegrity(context.Background(), db, nil); err != nil {
 			t.Fatalf("CheckIntegrity after a kill (QA-6 corruption): %v", err)
 		}

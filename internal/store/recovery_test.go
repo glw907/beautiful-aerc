@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,50 +13,27 @@ import (
 	"github.com/glw907/poplar/internal/uerr/uerrtest"
 )
 
-// newRecoverableTestWriter is newTestWriter without the automatic
-// Close on cleanup: every SY-8 recovery test below closes its writer
-// explicitly, mid-test, to release the file before Recover rebuilds
-// it, and a second, cleanup-driven Close would double-close the
-// writer's stop channel.
-func newRecoverableTestWriter(t *testing.T, cfg WriterConfig) (*Writer, string) {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "store.db")
-	db, err := sql.Open("sqlite", dsn(path, connReadWrite))
-	if err != nil {
-		t.Fatalf("open %s: %v", path, err)
-	}
-	if err := Migrate(db); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-	w, err := NewWriter(db, cfg)
-	if err != nil {
-		t.Fatalf("NewWriter: %v", err)
-	}
-	return w, path
-}
-
 // TestIntegrityCheckSkipped is the QA-1 gate: a clean shutdown must
 // skip the next startup's integrity check entirely, since the spike
 // measured quick_check at 14.5s on a 924MB store.
 func TestIntegrityCheckSkipped(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 
-	if !NeedsIntegrityCheck(dbPath, false) {
-		t.Fatal("NeedsIntegrityCheck with no marker and no migration = false, want true: a first launch owes a check")
+	if !ShouldRunIntegrityCheck(dbPath, false) {
+		t.Fatal("ShouldRunIntegrityCheck with no marker and no migration = false, want true: a first launch owes a check")
 	}
 
 	if err := MarkCleanShutdown(dbPath); err != nil {
 		t.Fatalf("MarkCleanShutdown: %v", err)
 	}
-	if NeedsIntegrityCheck(dbPath, false) {
-		t.Fatal("NeedsIntegrityCheck after a clean shutdown = true, want false: quick_check must not run")
+	if ShouldRunIntegrityCheck(dbPath, false) {
+		t.Fatal("ShouldRunIntegrityCheck after a clean shutdown = true, want false: quick_check must not run")
 	}
 
 	// The marker is consumed by the read above: a second read without
 	// an intervening clean shutdown owes another check.
-	if !NeedsIntegrityCheck(dbPath, false) {
-		t.Fatal("NeedsIntegrityCheck after consuming the marker = false, want true")
+	if !ShouldRunIntegrityCheck(dbPath, false) {
+		t.Fatal("ShouldRunIntegrityCheck after consuming the marker = false, want true")
 	}
 }
 
@@ -81,8 +57,8 @@ func TestIntegrityCheckRunsOnUnconsumableMarker(t *testing.T) {
 		t.Fatalf("fill the marker directory: %v", err)
 	}
 
-	if !NeedsIntegrityCheck(dbPath, false) {
-		t.Fatal("NeedsIntegrityCheck over a marker that could not be consumed = false, want true")
+	if !ShouldRunIntegrityCheck(dbPath, false) {
+		t.Fatal("ShouldRunIntegrityCheck over a marker that could not be consumed = false, want true")
 	}
 }
 
@@ -103,8 +79,8 @@ func TestIntegrityCheckReportsAnUnreadableMarkerPath(t *testing.T) {
 	}
 	dbPath := filepath.Join(notADir, "store.db")
 
-	if !NeedsIntegrityCheck(dbPath, false) {
-		t.Fatal("NeedsIntegrityCheck over an unreadable marker path = false, want true")
+	if !ShouldRunIntegrityCheck(dbPath, false) {
+		t.Fatal("ShouldRunIntegrityCheck over an unreadable marker path = false, want true")
 	}
 	if !strings.Contains(log.String(), "store.db.clean-shutdown") {
 		t.Errorf("log = %q, want it naming the marker path it could not read", log.String())
@@ -119,8 +95,8 @@ func TestIntegrityCheckRunsAfterMigration(t *testing.T) {
 	if err := MarkCleanShutdown(dbPath); err != nil {
 		t.Fatalf("MarkCleanShutdown: %v", err)
 	}
-	if !NeedsIntegrityCheck(dbPath, true) {
-		t.Fatal("NeedsIntegrityCheck after a migration = false, want true even with a clean marker present")
+	if !ShouldRunIntegrityCheck(dbPath, true) {
+		t.Fatal("ShouldRunIntegrityCheck after a migration = false, want true even with a clean marker present")
 	}
 }
 
@@ -182,13 +158,7 @@ func TestCheckIntegrityDetectsCorruption(t *testing.T) {
 	if err == nil {
 		t.Fatal("CheckIntegrity over a corrupted index succeeded, want a failure")
 	}
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", err)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
 }
 
 // seedRecoveryFixture writes one account, one mailbox (id 7, the
@@ -324,7 +294,7 @@ func assertRecoveryPreservedFixture(t *testing.T, path string) {
 // Recover rebuilds the store, preserving the outbox row and both local
 // messages while dropping the disposable server-origin one.
 func TestRecoverAfterCorruption(t *testing.T) {
-	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	w, path := newTestWriter(t, DefaultWriterConfig())
 	seedRecoveryFixture(t, w)
 	corruptFTSShadowTable(t, w.db)
 
@@ -342,13 +312,7 @@ func TestRecoverAfterCorruption(t *testing.T) {
 	if checkErr == nil {
 		t.Fatal("CheckIntegrity over the corrupted index succeeded, want a failure")
 	}
-	var uerrErr uerr.Error
-	if !errors.As(checkErr, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", checkErr)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, checkErr, uerr.ClassStoreLocal)
 
 	counts, err := Recover(context.Background(), path)
 	if err != nil {
@@ -366,7 +330,7 @@ func TestRecoverAfterCorruption(t *testing.T) {
 // TestMigrateFailureReachesUerrSeam uses, now against a store already
 // holding real preserved data), and Recover rebuilds from it.
 func TestRecoverAfterFailedMigration(t *testing.T) {
-	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	w, path := newTestWriter(t, DefaultWriterConfig())
 	seedRecoveryFixture(t, w)
 	if err := w.Close(); err != nil {
 		t.Fatalf("close writer: %v", err)
@@ -385,13 +349,7 @@ func TestRecoverAfterFailedMigration(t *testing.T) {
 	if migrateErr == nil {
 		t.Fatal("Migrate against a colliding schema succeeded, want a failure")
 	}
-	var uerrErr uerr.Error
-	if !errors.As(migrateErr, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", migrateErr)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, migrateErr, uerr.ClassStoreLocal)
 
 	counts, err := Recover(context.Background(), path)
 	if err != nil {
@@ -482,7 +440,7 @@ func TestUnquarantineReportsAStrandedWAL(t *testing.T) {
 // damaged table is named back to the caller so the summary it prints
 // is not a lie about what survived.
 func TestRecoverContinuesPastAnUnreadableTable(t *testing.T) {
-	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	w, path := newTestWriter(t, DefaultWriterConfig())
 	seedRecoveryFixture(t, w)
 
 	// Renaming the table away leaves every other table intact and gives
@@ -599,7 +557,7 @@ func TestRestorePreservedSkipsRowsOfALostAccount(t *testing.T) {
 // comes back, and whether it comes back whole is the next thing they
 // have to decide.
 func TestRecoverNamesDamagedTablesAfterAFailedRebuild(t *testing.T) {
-	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	w, path := newTestWriter(t, DefaultWriterConfig())
 	seedRecoveryFixture(t, w)
 
 	// A unique index that no longer holds its constraint lets two
@@ -638,7 +596,7 @@ func TestRecoverNamesDamagedTablesAfterAFailedRebuild(t *testing.T) {
 // 'queued' rows, so a row restored under 'dispatching' would sit
 // forever undispatchable.
 func TestRecoverRestoresDispatchingRowAsQueued(t *testing.T) {
-	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	w, path := newTestWriter(t, DefaultWriterConfig())
 	err := w.submit(context.Background(), func(tx *sql.Tx) error {
 		if _, err := tx.Exec(seedAccountSQL); err != nil {
 			return err
@@ -679,7 +637,7 @@ func TestRecoverRestoresDispatchingRowAsQueued(t *testing.T) {
 // anything on its own; Recover still runs cleanly against the capped
 // file, since the fresh file it rebuilds carries no such cap.
 func TestRecoverAfterDiskFull(t *testing.T) {
-	w, path := newRecoverableTestWriter(t, DefaultWriterConfig())
+	w, path := newTestWriter(t, DefaultWriterConfig())
 	seedRecoveryFixture(t, w)
 
 	var pageCount int
@@ -700,13 +658,7 @@ func TestRecoverAfterDiskFull(t *testing.T) {
 	if writeErr == nil {
 		t.Fatal("submit succeeded past max_page_count, want a disk-full failure")
 	}
-	var uerrErr uerr.Error
-	if !errors.As(writeErr, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", writeErr)
-	}
-	if uerrErr.Class != uerr.ClassStoreLocal {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassStoreLocal)
-	}
+	uerrtest.AssertClass(t, writeErr, uerr.ClassStoreLocal)
 
 	var count int
 	if err := w.db.QueryRow(`SELECT COUNT(*) FROM message WHERE id = 999`).Scan(&count); err != nil {

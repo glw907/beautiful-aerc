@@ -35,9 +35,7 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 	if !errors.As(err, &uerrErr) {
 		t.Fatalf("err = %v, not a uerr.Error", err)
 	}
-	if uerrErr.Class != uerr.ClassAuth {
-		t.Errorf("Class = %v, want %v", uerrErr.Class, uerr.ClassAuth)
-	}
+	uerrtest.AssertClass(t, err, uerr.ClassAuth)
 	if !strings.Contains(uerrErr.Cause.Error(), keyring.EnvFastmailToken) {
 		t.Errorf("cause = %q, want it naming %s", uerrErr.Cause, keyring.EnvFastmailToken)
 	}

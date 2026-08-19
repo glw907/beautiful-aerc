@@ -212,7 +212,7 @@ func TestRunReportsAnUnwritableLog(t *testing.T) {
 
 // TestRunStartsAndShutsDownCleanly proves a normal run opens and
 // migrates the store, then marks a clean shutdown on the way out, so
-// the next run's NeedsIntegrityCheck skips its check.
+// the next run's ShouldRunIntegrityCheck skips its check.
 func TestRunStartsAndShutsDownCleanly(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 
@@ -223,8 +223,8 @@ func TestRunStartsAndShutsDownCleanly(t *testing.T) {
 	if _, err := os.Stat(dbPath + ".clean-shutdown"); err != nil {
 		t.Errorf("clean-shutdown marker missing after a graceful run: %v", err)
 	}
-	if store.NeedsIntegrityCheck(dbPath, false) {
-		t.Error("NeedsIntegrityCheck after a clean run = true, want false")
+	if store.ShouldRunIntegrityCheck(dbPath, false) {
+		t.Error("ShouldRunIntegrityCheck after a clean run = true, want false")
 	}
 }
 
@@ -240,7 +240,7 @@ func TestRunReclaimsOrphanedIntents(t *testing.T) {
 	if err := store.MarkCleanShutdown(dbPath); err != nil {
 		t.Fatalf("mark clean shutdown: %v", err)
 	}
-	if store.NeedsIntegrityCheck(dbPath, false) {
+	if store.ShouldRunIntegrityCheck(dbPath, false) {
 		t.Fatal("the seeded store owes an integrity check, want a startup that runs neither a check nor a recovery")
 	}
 
@@ -313,6 +313,36 @@ func TestRunRebuildsIndexOnFlag(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "rebuilding full-text index") {
 		t.Errorf("output = %q, want a rebuild-index status line", out.String())
+	}
+}
+
+// brokenWriter fails every Write, standing in for a stdout a
+// --startup-trace exec cannot reach (a closed pipe, most commonly).
+type brokenWriter struct{}
+
+func (brokenWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+// TestRunStartupTraceEncodeFailureReachesUerr proves a
+// --startup-trace run that cannot write its JSON result classifies
+// the failure through uerr, so it reaches the log the same way every
+// other startup failure does, rather than surfacing only as a bare
+// error string on stderr.
+func TestRunStartupTraceEncodeFailureReachesUerr(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	seedStore(t, dbPath, seedAccountSQL,
+		`INSERT INTO mailbox (id, account_id, server_id, role, name, sort_order, unread_count, total_count) VALUES (1, 1, 'm1', '', 'Inbox', 0, 0, 0)`)
+
+	logged := uerrtest.Capture(t)
+
+	err := run(context.Background(), dbPath, flags{startupTrace: true}, brokenWriter{}, io.Discard, noopConnector)
+	if err == nil {
+		t.Fatal("run --startup-trace with an unwritable out succeeded, want a failure")
+	}
+	uerrtest.AssertClass(t, err, uerr.ClassStoreLocal)
+
+	lines := uerrtest.Lines(t, logged)
+	if len(lines) == 0 {
+		t.Fatal("the encode failure logged nothing through uerr")
 	}
 }
 
@@ -441,13 +471,8 @@ func TestPrepareStorePropagatesSchemaVersion(t *testing.T) {
 	if err == nil {
 		t.Fatal("prepareStore over a newer schema version succeeded, want a refusal")
 	}
-	var uerrErr uerr.Error
-	if !errors.As(err, &uerrErr) {
-		t.Fatalf("error is not a uerr.Error: %v", err)
-	}
-	if uerrErr.Class != uerr.ClassSchemaVersion {
-		t.Errorf("Class = %v, want %v; a newer store must not be routed into recovery", uerrErr.Class, uerr.ClassSchemaVersion)
-	}
+	// A newer store must not be routed into recovery.
+	uerrtest.AssertClass(t, err, uerr.ClassSchemaVersion)
 
 	matches, globErr := filepath.Glob(dbPath + ".corrupt-*")
 	if globErr != nil {

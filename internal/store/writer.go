@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -67,6 +68,8 @@ type Writer struct {
 	bulk        chan writeJob
 	stop        chan struct{}
 	done        chan struct{}
+	closeOnce   sync.Once
+	closeErr    error
 
 	lastInteractive atomic.Int64 // UnixNano of the last interactive job the writer ran
 	rev             RevisionCounter
@@ -179,11 +182,17 @@ func (w *Writer) RecentInteractiveActivity(quiet time.Duration) bool {
 }
 
 // Close stops the writer goroutine, waits for it to exit, and closes
-// db. A job already admitted runs to completion first.
+// db. A job already admitted runs to completion first. It is safe to
+// call more than once: a test that closes the writer mid-test to
+// release the file for a recovery rebuild still wants its t.Cleanup
+// close to run without a double-close panic on w.stop.
 func (w *Writer) Close() error {
-	close(w.stop)
-	<-w.done
-	return w.db.Close()
+	w.closeOnce.Do(func() {
+		close(w.stop)
+		<-w.done
+		w.closeErr = w.db.Close()
+	})
+	return w.closeErr
 }
 
 func (w *Writer) run() {

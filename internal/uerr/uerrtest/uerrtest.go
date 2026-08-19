@@ -12,6 +12,7 @@ package uerrtest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -89,4 +90,19 @@ func Lines(t *testing.T, buf *Buffer) []map[string]any {
 		lines[i] = rec
 	}
 	return lines
+}
+
+// AssertClass fails t unless err is a uerr.Error under want, the
+// errors.As-plus-Class-equality check every engine and store package
+// repeats to prove a failure was classified rather than raw.
+func AssertClass(t *testing.T, err error, want uerr.Class) {
+	t.Helper()
+
+	var uerrErr uerr.Error
+	if !errors.As(err, &uerrErr) {
+		t.Fatalf("error is not a uerr.Error: %v", err)
+	}
+	if uerrErr.Class != want {
+		t.Errorf("Class = %v, want %v", uerrErr.Class, want)
+	}
 }

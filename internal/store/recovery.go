@@ -20,6 +20,12 @@ func cleanShutdownMarker(dbPath string) string {
 // cleanly, so the next startup can skip its integrity check (SY-8,
 // QA-1). Call it only after the writer and every read connection over
 // dbPath have closed.
+//
+// The write is a bare os.WriteFile rather than a temp-file-and-rename
+// swap: the marker is empty, so a write a crash tears mid-flight
+// leaves either no file (read as an unclean shutdown, the safe
+// default) or a whole one, never a partial file ShouldRunIntegrityCheck
+// could mistake for present.
 func MarkCleanShutdown(dbPath string) error {
 	if err := os.WriteFile(cleanShutdownMarker(dbPath), nil, 0o600); err != nil {
 		return localErr("store.shutdown", err)
@@ -27,7 +33,7 @@ func MarkCleanShutdown(dbPath string) error {
 	return nil
 }
 
-// NeedsIntegrityCheck reports whether the store at dbPath owes an
+// ShouldRunIntegrityCheck reports whether the store at dbPath owes an
 // integrity check before startup continues: migrated is true right
 // after a Migrate call advanced the schema version, and a missing
 // marker means the prior run never reached a clean shutdown, whether
@@ -36,7 +42,7 @@ func MarkCleanShutdown(dbPath string) error {
 // about to start; a marker that cannot be consumed is not trusted,
 // because a marker still on disk reads as a clean shutdown on every
 // later start, including the one after a crash.
-func NeedsIntegrityCheck(dbPath string, migrated bool) bool {
+func ShouldRunIntegrityCheck(dbPath string, migrated bool) bool {
 	marker := cleanShutdownMarker(dbPath)
 	if _, err := os.Stat(marker); err != nil {
 		if !os.IsNotExist(err) {

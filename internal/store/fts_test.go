@@ -6,6 +6,8 @@ import (
 	"errors"
 	"slices"
 	"testing"
+
+	"github.com/glw907/poplar/internal/uerr"
 )
 
 // TestMessageFTSSurvivesCascadeDelete proves message_fts stays
@@ -221,6 +223,30 @@ func TestRebuildIndex(t *testing.T) {
 		if !slices.Equal(got, baseline[term]) {
 			t.Fatalf("search(%q) after rebuild = %v, want the pre-corruption baseline %v", term, got, baseline[term])
 		}
+	}
+}
+
+// TestRebuildIndexTagsItsOwnFailure proves a RebuildIndex failure
+// carries op store.rebuild-index, not the writer's generic
+// store.write, so a log line can tell a rebuild failure from an
+// ordinary write failure.
+func TestRebuildIndexTagsItsOwnFailure(t *testing.T) {
+	w, _ := newTestWriter(t, DefaultWriterConfig())
+
+	if _, err := w.db.Exec(`DROP TABLE message_fts`); err != nil {
+		t.Fatalf("drop message_fts: %v", err)
+	}
+
+	err := RebuildIndex(context.Background(), w)
+	if err == nil {
+		t.Fatal("RebuildIndex over a dropped message_fts = nil, want an error")
+	}
+	var uerrErr uerr.Error
+	if !errors.As(err, &uerrErr) {
+		t.Fatalf("RebuildIndex error = %v, want a uerr.Error", err)
+	}
+	if uerrErr.Op != "store.rebuild-index" {
+		t.Errorf("RebuildIndex error op = %q, want store.rebuild-index", uerrErr.Op)
 	}
 }
 
