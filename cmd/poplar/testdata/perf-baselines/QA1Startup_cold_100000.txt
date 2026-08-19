@@ -1,0 +1,2 @@
+BenchmarkQA1Startup_cold_100000        1	  25633088 ns/op
+n=1 p50=25.549966ms p95=25.549966ms p99=25.549966ms max=25.549966ms

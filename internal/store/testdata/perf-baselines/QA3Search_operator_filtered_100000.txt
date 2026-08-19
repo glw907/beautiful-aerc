@@ -1,0 +1,2 @@
+BenchmarkQA3Search_operator_filtered_100000      125	    787864 ns/op
+n=125 p50=772.617µs p95=882.591µs p99=983.511µs max=1.420157ms
