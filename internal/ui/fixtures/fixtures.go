@@ -57,6 +57,7 @@ var (
 	MailToast      = Fixture{Name: "mail-toast", Build: mailBuild, Status: toastStatus}
 	MailBanner     = Fixture{Name: "mail-banner", Build: mailBuild, Banner: bannerState}
 	ModalConfirm   = Fixture{Name: "modal-confirm", Build: confirmBuild}
+	Help           = Fixture{Name: "help", Build: helpBuild}
 	Calendar       = Fixture{Name: "calendar", Build: calendarBuild, Status: ui.StatusLine{Active: ui.SurfaceCalendar}}
 	Contacts       = Fixture{Name: "contacts", Build: contactsBuild, Status: ui.StatusLine{Active: ui.SurfaceContacts}}
 	Config         = Fixture{Name: "config", Build: configBuild, Status: ui.StatusLine{Active: ui.SurfaceConfig}}
@@ -137,6 +138,13 @@ func confirmBuild(th theme.Theme) ui.Screen {
 		YesLabel:    "quit",
 		NoLabel:     "stay",
 	}, th)
+}
+
+// helpBuild pins the help overlay fixture: opened over the mail
+// placeholder's own registered entry, the pinned exemplar's own
+// primary surface (decision 1).
+func helpBuild(th theme.Theme) ui.Screen {
+	return themed(ui.HelpScreen{Covered: ui.MailPlaceholder{}.Entry()}, th)
 }
 
 // themed applies a ThemeMsg to a placeholder that carries no facts of

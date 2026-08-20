@@ -131,13 +131,15 @@ func TestApp_EscDismissesBannerAtSurfaceRoot(t *testing.T) {
 }
 
 // TestApp_EscDoesNotDismissAnInvisibleBanner proves F3, CRITICAL
-// (task-8-findings-r1.md): a banner is invisible under any stack
-// screen (App.View's own stack-top branch never composites it), so
-// Esc there must not dismiss it: a silent dead keypress otherwise.
-// The stack front is StateDigitsSwitch (fakeScreen), not modal, so
-// the ordinary Back branch runs and its own len(a.stack) == 0 gate is
-// what is under test here, isolated from StateModal's own
-// Esc-forwarding rule (TestApp_EscForwardsToStateModalFront).
+// (task-8-findings-r1.md): Esc must never dismiss a banner while any
+// screen sits on the stack, so a front that renders through its own
+// composition rather than through Render's chrome (a StateModal
+// front, most notably) never leaves the banner an untouchable dead
+// keypress. The stack front here is StateDigitsSwitch (fakeScreen),
+// not modal, so the ordinary Back branch runs and its own
+// len(a.stack) == 0 gate is what is under test, isolated from
+// StateModal's own Esc-forwarding rule
+// (TestApp_EscForwardsToStateModalFront).
 func TestApp_EscDoesNotDismissAnInvisibleBanner(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))

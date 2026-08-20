@@ -1,0 +1,30 @@
+  \x1b[1m1 Mail\x1b[m  \x1b[2m2\x1b[m \x1b[2m3\x1b[m \x1b[2m4\x1b[m                                                                            \x1b[2mSynced\x1b[m
+  \x1b[1mHelp - mail list\x1b[m
+
+  \x1b[1mGlobal\x1b[m
+  j/k       \x1b[2mnavigate\x1b[m
+  space/b   \x1b[2mpage\x1b[m
+  home/end  \x1b[2mextremes\x1b[m
+  enter     \x1b[2mopen\x1b[m
+  esc       \x1b[2mback\x1b[m
+  1-4       \x1b[2msurface switch\x1b[m
+  u         \x1b[2mundo\x1b[m
+  ?         \x1b[2mhelp\x1b[m
+  q         \x1b[2mquit\x1b[m
+
+  \x1b[1mThis screen\x1b[m
+  q  \x1b[2mquit\x1b[m
+
+
+
+
+
+
+
+
+
+
+
+
+
+  j/k\x1b[2m navigate\x1b[m   space/b\x1b[2m page\x1b[m   esc\x1b[2m back\x1b[m                                                   ?\x1b[2m help\x1b[m

@@ -144,17 +144,32 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a.updateChildren(msg)
 }
 
-// View implements tea.Model. It renders the top of the screen stack
-// directly when one is pushed (the 5a ruling: a plain stack-top
-// render, no dimmed backdrop behind it this pass); otherwise it runs
-// the active surface through Render, the same seam the gallery
-// renders through, so the product never drifts from what the gallery
-// pins.
+// View implements tea.Model. A StateModal stack top (Confirm, the 5a
+// ruling) renders itself directly: a plain stack-top render, no dimmed
+// backdrop, since a modal owns the whole terminal itself rather than
+// landing in a named LayoutMode pane. Every other front, the active
+// surface with an empty stack or a non-modal screen pushed onto it
+// (the help overlay, first of its kind, task 9), runs through Render,
+// the same seam the gallery renders through, so the product never
+// drifts from what the gallery pins: a pushed screen's own content
+// fills the whole Main band (RenderInput.FullRegion) rather than the
+// narrower Content pane a surface's own sidebar reservation would
+// otherwise squeeze it against, since it owns no sidebar of its own,
+// and its own Entry, not the surface underneath it, is what the
+// footer follows (task 9's carry fix from task 7's review).
 func (a App) View() tea.View {
+	screen := a.activeScreen()
+	entry := screen.Entry()
+	fullRegion := false
 	if len(a.stack) > 0 {
-		return a.stack[len(a.stack)-1].View()
+		top := a.stack[len(a.stack)-1]
+		topEntry := top.Entry()
+		if topEntry.SwitchState == StateModal {
+			return top.View()
+		}
+		screen, entry, fullRegion = top, topEntry, true
 	}
-	frame := Render(RenderInput{Screen: a.activeScreen(), Layout: a.layout, Theme: a.theme, Status: a.statusLine(), Banner: a.banner})
+	frame := Render(RenderInput{Screen: screen, Entry: entry, FullRegion: fullRegion, Layout: a.layout, Theme: a.theme, Status: a.statusLine(), Banner: a.banner})
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
 	return view
@@ -318,32 +333,38 @@ func armToastTick(gen int) tea.Cmd {
 	})
 }
 
-// handleKey applies the interaction grammar's back/quit/surface-switch
-// precedence (design language section 2) before anything else sees
-// the key: a StateModal front (a modal confirm, most notably) owns
-// Esc itself as one of its own y/n/Esc answers, so the generic Back
-// branch below skips it entirely and lets the final fallback forward
-// the key to the modal's own Update (Confirm.Update emits
-// ConfirmAnsweredMsg, App's own Update case pops the stack and runs
-// the answer's Cmd: task-8-findings-r1.md's conventions ruling, the
-// template every future modal copies); every other front's Esc pops
-// the stack (or no-ops at a surface root, this pass), dismissing a
-// showing banner first only when the stack is empty (F3, CRITICAL:
-// the banner is invisible under a stack screen, so dismissing it
-// there would be a silent dead keypress) and the front context is not
-// text entry (design decision 2: a banner never steals focus); `u`
-// inside an open UX-9 undo window emits the offer's Cmd, gated to a
-// surface root in StateDigitsSwitch (F2, CRITICAL: the same gate the
-// surface digits themselves already hold to, so a text-entry or modal
-// front never treats a stray `u` as an answer); a digit switches
-// surfaces only when the state currently in front (the stack's top,
-// or the active surface's own root state when the stack is empty) is
+// handleKey applies the interaction grammar's back/help/undo/quit/
+// surface-switch precedence (design language section 2) before
+// anything else sees the key: a StateModal front (a modal confirm,
+// most notably) owns Esc itself as one of its own y/n/Esc answers, so
+// the generic Back branch below skips it entirely and lets the final
+// fallback forward the key to the modal's own Update (Confirm.Update
+// emits ConfirmAnsweredMsg, App's own Update case pops the stack and
+// runs the answer's Cmd: task-8-findings-r1.md's conventions ruling,
+// the template every future modal copies); every other front's Esc
+// pops the stack (or no-ops at a surface root, this pass), dismissing
+// a showing banner first only when the stack is empty (F3, CRITICAL:
+// the banner is invisible under a StateModal stack front, so
+// dismissing it there would be a silent dead keypress; a non-modal
+// front, the help overlay included, composites the banner alongside
+// its own content instead, task 9) and the front context is not text
+// entry (design decision 2: a banner never steals focus); `?` pushes
+// the help overlay over whichever front is showing, unless that front
+// is already the overlay itself or a modal (UX-5: help never covers
+// or is covered by a StateModal front); `u` inside an open UX-9 undo
+// window emits the offer's Cmd, gated to a surface root in
+// StateDigitsSwitch (F2, CRITICAL: the same gate the surface digits
+// themselves already hold to, so a text-entry or modal front never
+// treats a stray `u` as an answer); a digit switches surfaces only
+// when the state currently in front (the stack's top, or the active
+// surface's own root state when the stack is empty) is
 // StateDigitsSwitch, so a modal on the stack eats a digit instead
-// (UX-4's acceptance criterion); q quits only at a surface root and
-// discards any open undo window (UX-9: the window does not survive
-// quit; BACKLOG #71 tracks q's own missing StateDigitsSwitch gate);
-// anything else at a surface root reaches the active screen's own
-// Update.
+// (UX-4's acceptance criterion), and pops a non-modal stack front
+// along with the switch (task 9: digits switch surfaces from help,
+// and pop it); q quits only at a surface root and discards any open
+// undo window (UX-9: the window does not survive quit; BACKLOG #71
+// tracks q's own missing StateDigitsSwitch gate); anything else at a
+// surface root reaches the active screen's own Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	front := a.activeScreen().Entry()
 	if len(a.stack) > 0 {
@@ -362,6 +383,11 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
+	if key.Matches(msg, GrammarKeys.Help) && front.SwitchState != StateModal && front.Name != helpScreenName {
+		a.stack = append(a.stack, HelpScreen{theme: a.theme, layout: a.layout, Covered: front})
+		return a, nil
+	}
+
 	if a.undoEligible(front) && key.Matches(msg, GrammarKeys.Undo) {
 		undo := a.toastOffer.Undo
 		a.toastActive = false
@@ -370,6 +396,9 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if s, ok := matchDigit(msg, front.SwitchState); ok {
 		a.active.Set(a.account, s)
+		if len(a.stack) > 0 {
+			a.stack = a.stack[:len(a.stack)-1]
+		}
 		return a, nil
 	}
 

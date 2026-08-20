@@ -47,14 +47,19 @@ var galleryProfiles = []galleryProfile{
 // narrowProfiles means every galleryProfiles entry, this type's own
 // profiles method's default. stackTop renders the fixture's own
 // View() directly, bypassing ui.Render entirely: the same branch
-// App.View takes for a screen pushed onto its stack (the 5a ruling),
+// App.View takes for a StateModal screen pushed onto its stack,
 // Confirm's own case, since a modal owns the whole terminal itself
-// rather than landing in a named LayoutMode pane.
+// rather than landing in a named LayoutMode pane. fullRegion instead
+// runs the fixture through ui.Render with RenderInput.FullRegion set:
+// the help overlay's own case, a non-modal stacked screen composed
+// with the surrounding chrome but no sidebar or split of its own
+// (task 9).
 type galleryCase struct {
 	fixture        fixtures.Fixture
 	sizes          []gallerySize
 	narrowProfiles []galleryProfile
 	stackTop       bool
+	fullRegion     bool
 }
 
 // profiles returns c's own narrowed profile list, or every
@@ -103,6 +108,10 @@ var galleryCases = []galleryCase{
 	{fixture: fixtures.MailToast, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
 	{fixture: fixtures.MailBanner, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
 	{fixture: fixtures.ModalConfirm, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles, stackTop: true},
+	// The help overlay sweeps F5 (80x24, one column), F6 (100x30, two
+	// columns), and the 99/100 boundary pair at a shared height, the
+	// one layout boundary the overlay itself consumes.
+	{fixture: fixtures.Help, sizes: []gallerySize{{80, 24}, {99, 30}, {100, 30}}, narrowProfiles: chromeStateProfiles, fullRegion: true},
 	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}}},
 	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}}},
 	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}}},
@@ -141,9 +150,10 @@ func TestGallery(t *testing.T) {
 }
 
 // galleryRender renders c's own fixture at sz through the seam,
-// themed th: ui.Render's ordinary chrome compositing, or, when
+// themed th: ui.Render's ordinary chrome compositing, c.fullRegion set
+// for a non-modal stacked screen's own compositing, or, when
 // c.stackTop is set, the fixture's own View() directly (the same
-// branch App.View takes for a stacked screen).
+// branch App.View takes for a StateModal stacked screen).
 func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
 	lm := ui.ComputeLayout(sz.width, sz.height, c.fixture.Banner.Active)
 	screen := c.fixture.Build(th)
@@ -152,7 +162,8 @@ func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
 	if c.stackTop {
 		return scr.View().Content
 	}
-	return ui.Render(ui.RenderInput{Screen: scr, Layout: lm, Theme: th, Status: c.fixture.Status, Banner: c.fixture.Banner}).Content
+	in := ui.RenderInput{Screen: scr, Entry: scr.Entry(), FullRegion: c.fullRegion, Layout: lm, Theme: th, Status: c.fixture.Status, Banner: c.fixture.Banner}
+	return ui.Render(in).Content
 }
 
 // checkGallery compares got against testdata/gallery/<name>.txt,

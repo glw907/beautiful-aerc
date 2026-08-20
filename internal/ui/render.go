@@ -33,13 +33,25 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // sixth positional parameter). Screen, Layout, and Theme are every
 // screen's own three inputs; Status and Banner are the two chrome
 // bands' own render state, App's whole answer to "what the top band
-// and the banner row show this frame."
+// and the banner row show this frame." Entry is the footer's own
+// input, a field of its own rather than Render reaching for
+// Screen.Entry() itself (task 9's carry fix from task 7's review): a
+// caller states explicitly which screen's keymap the footer follows,
+// so a screen stacked over another (the help overlay, first of its
+// kind) can never leave the footer advertising the covered screen's
+// verbs by omission. FullRegion is task 9's own second addition: a
+// screen pushed onto App's own stack owns no sidebar or split of its
+// own, so its content spans the whole Main band rather than landing
+// in the narrower Content pane a surface's own sidebar reservation
+// would otherwise leave it squeezed against.
 type RenderInput struct {
-	Screen Screen
-	Layout LayoutMode
-	Theme  theme.Theme
-	Status StatusLine
-	Banner Banner
+	Screen     Screen
+	Entry      ScreenEntry
+	FullRegion bool
+	Layout     LayoutMode
+	Theme      theme.Theme
+	Status     StatusLine
+	Banner     Banner
 }
 
 // Render is poplar's pure render seam (survey amendment A): it
@@ -60,10 +72,11 @@ type RenderInput struct {
 // pass 2 plan's task 5b findings grew a fourth at task 6: Status,
 // App's own chrome state, is what the seam paints into StatusRow
 // rather than a blank fill. Task 7 stops treating Footer as a blank
-// fill too: it paints in.Screen.Entry()'s own registry-derived hints
-// instead. Task 8 grows a fifth, Banner, painted into LayoutMode's own
-// Banner band whenever in.Layout.BannerRow is set; its own fix round
-// folds all five into this struct ahead of a sixth parameter.
+// fill too: it paints in.Entry's own registry-derived hints instead.
+// Task 8 grows a fifth, Banner, painted into LayoutMode's own Banner
+// band whenever in.Layout.BannerRow is set; its own fix round folds
+// all five into this struct ahead of a sixth parameter. Task 9 adds
+// two more, Entry and FullRegion.
 func Render(in RenderInput) Frame {
 	view := in.Screen.View()
 	lm, th := in.Layout, in.Theme
@@ -79,29 +92,35 @@ func Render(in RenderInput) Frame {
 		canvas.Paint(lm.Banner.Rect, renderBanner(in.Banner, th, lm.Banner.Rect.Dx()))
 	}
 	canvas.Paint(lm.Main.Rect, th.Blank(lm.Main.Ground, lm.Main.Rect.Dx(), lm.Main.Rect.Dy()))
-	canvas.Paint(lm.Footer.Rect, renderFooter(in.Screen.Entry(), th, lm.Footer.Rect.Dx()))
+	canvas.Paint(lm.Footer.Rect, renderFooter(in.Entry, th, lm.Footer.Rect.Dx()))
 
-	for _, id := range paneRenderOrder {
-		pr, ok := lm.Panes[id]
-		if !ok {
-			continue
+	origin := lm.Content().Rect.Min
+	if in.FullRegion {
+		origin = lm.Main.Rect.Min
+		canvas.Paint(lm.Main.Rect, view.Content)
+	} else {
+		for _, id := range paneRenderOrder {
+			pr, ok := lm.Panes[id]
+			if !ok {
+				continue
+			}
+			if id == PaneContent {
+				canvas.Paint(pr.Rect, view.Content)
+				continue
+			}
+			canvas.Paint(pr.Rect, th.Blank(pr.Ground, pr.Rect.Dx(), pr.Rect.Dy()))
 		}
-		if id == PaneContent {
-			canvas.Paint(pr.Rect, view.Content)
-			continue
+
+		for _, d := range lm.Dividers {
+			if d.Degrade && !th.DrawsDividers() {
+				continue // a true-color gutter: Main's own blank fill already covers it
+			}
+			rect := image.Rect(d.X, d.Y0, d.X+1, d.Y1)
+			canvas.Paint(rect, dividerColumn(th, rect.Dy()))
 		}
-		canvas.Paint(pr.Rect, th.Blank(pr.Ground, pr.Rect.Dx(), pr.Rect.Dy()))
 	}
 
-	for _, d := range lm.Dividers {
-		if d.Degrade && !th.DrawsDividers() {
-			continue // a true-color gutter: Main's own blank fill already covers it
-		}
-		rect := image.Rect(d.X, d.Y0, d.X+1, d.Y1)
-		canvas.Paint(rect, dividerColumn(th, rect.Dy()))
-	}
-
-	return Frame{Content: canvas.Render(), Cursor: translateCursor(view.Cursor, lm.Content().Rect.Min)}
+	return Frame{Content: canvas.Render(), Cursor: translateCursor(view.Cursor, origin)}
 }
 
 // translateCursor offsets c's position by origin, the content pane's
