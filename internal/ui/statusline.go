@@ -281,7 +281,11 @@ func truncateLastSeg(th theme.Theme, segs []rowSeg, maxWidth int) []rowSeg {
 	return out
 }
 
-func writeSegs(out *strings.Builder, th theme.Theme, ground theme.Ground, segs []rowSeg) {
+// writeSegs writes segs to out, each styled against GroundPanel: both
+// of this package's chrome bands, the status line and the footer,
+// paint on it.
+func writeSegs(out *strings.Builder, th theme.Theme, segs []rowSeg) {
+	const ground = theme.GroundPanel
 	for _, s := range segs {
 		style := th.Style(s.role, ground)
 		if s.bold {
@@ -314,9 +318,9 @@ func renderStatusLine(sl StatusLine, th theme.Theme, width int, dropTotal bool) 
 	gap := max(0, width-leftWidth-rightWidth-theme.PadBand)
 
 	var out strings.Builder
-	writeSegs(&out, th, ground, leftSegs)
+	writeSegs(&out, th, leftSegs)
 	out.WriteString(th.Style(theme.RoleFg, ground).Render(strings.Repeat(" ", gap)))
-	writeSegs(&out, th, ground, rightSegs)
+	writeSegs(&out, th, rightSegs)
 	out.WriteString(th.Style(theme.RoleFg, ground).Render(strings.Repeat(" ", theme.PadBand)))
 	return out.String()
 }

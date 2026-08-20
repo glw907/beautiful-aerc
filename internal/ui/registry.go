@@ -219,10 +219,11 @@ func hintText(b key.Binding) string {
 	return b.Help().Key + " " + b.Help().Desc
 }
 
-// footerHelpHint is the pinned "help" hint every footer reserves
-// space for at every width (decision 8); it never comes from a
-// screen's own FooterPriority.
-const footerHelpHint = "? help"
+// footerHelpHint is the pinned help hint's own rendered text, derived
+// from GrammarKeys.Help rather than a literal (BACKLOG #62's defect
+// class): every footer reserves space for it at every width (decision
+// 8), and it never comes from a screen's own FooterPriority.
+var footerHelpHint = hintText(GrammarKeys.Help)
 
 // footerHints returns the width-maximal prefix of entry's committed
 // FooterPriority that fits within width columns alongside the

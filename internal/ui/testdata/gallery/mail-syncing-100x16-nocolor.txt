@@ -13,3 +13,4 @@
                       |
                       |
                       |
+  q\x1b[2m quit\x1b[m                                                                                    ?\x1b[2m help\x1b[m

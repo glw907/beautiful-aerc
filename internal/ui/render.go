@@ -45,6 +45,8 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // The three-argument shape recorded in the pass 2 plan's task 5b
 // findings grew a fourth at task 6: status, App's own chrome state,
 // is what the seam paints into StatusRow rather than a blank fill.
+// Task 7 stops treating Footer as a blank fill too: it paints
+// screen.Entry()'s own registry-derived hints instead.
 func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine) Frame {
 	view := screen.View()
 
@@ -59,7 +61,7 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine) Fra
 		canvas.Paint(lm.Banner.Rect, th.Blank(lm.Banner.Ground, lm.Banner.Rect.Dx(), lm.Banner.Rect.Dy()))
 	}
 	canvas.Paint(lm.Main.Rect, th.Blank(lm.Main.Ground, lm.Main.Rect.Dx(), lm.Main.Rect.Dy()))
-	canvas.Paint(lm.Footer.Rect, th.Blank(lm.Footer.Ground, lm.Footer.Rect.Dx(), lm.Footer.Rect.Dy()))
+	canvas.Paint(lm.Footer.Rect, renderFooter(screen.Entry(), th, lm.Footer.Rect.Dx()))
 
 	for _, id := range paneRenderOrder {
 		pr, ok := lm.Panes[id]
