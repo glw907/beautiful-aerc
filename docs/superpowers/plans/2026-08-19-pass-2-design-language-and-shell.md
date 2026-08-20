@@ -365,6 +365,7 @@ column whenever a sidebar is present.
                       │
                       │                                                                                                                     ≡ 34%
                       │
+  Enter open   a archive   d delete   r reply   m compose   / search   u undo   g goto   * flag   s move   Tab unread   j/k move              ? help
 ```
 
 - List beside reader (the ratified wide rung, evidence note in
