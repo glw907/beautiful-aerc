@@ -267,11 +267,14 @@ implementer invents taste. Each cites its constraint.
    from the review's GUI-switcher findings): edge bar, unread `●`,
    attribute column (`⚑` flag in the warm accent, attachment
    glyph dim), sender 17 cells, thread-count column (`▸ N`,
-   threads collapsed by default per TH-3), subject in fg, then a
-   snippet in fgSubtle filling remaining width (Gmail's row
-   anatomy; the review measured 32-42 dead cells without it),
-   date right-aligned in fgMuted (time today, `Mon D` otherwise),
-   all truncation marked with the ellipsis token. The attachment
+   threads collapsed by default per TH-3), subject in fg, then the
+   `·` separator token and a snippet in fgSubtle italic (the
+   emHint type role; Geoff, 2026-08-19: color alone left subject
+   and snippet reading as one line) filling remaining width
+   (Gmail's row anatomy; the review measured 32-42 dead cells
+   without it), a guaranteed three-cell gap, then the date
+   right-aligned in fgMuted (time today, `Mon D` otherwise), all
+   truncation marked with the ellipsis token. The attachment
    glyph is an open taste item: `⊕` has no field precedent and
    reads as "add"; candidates at the gate are a letter (aerc's
    `a`), a count, or keeping `⊕`.
@@ -305,14 +308,14 @@ column whenever a sidebar is present.
 ```
   1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                         ⠹ syncing 4,312/36,102
                       │
-▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes  The engine weaves algebraic patt…   09:41
-   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget  The Treasury insists on ite…   09:12
-   Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes  Attached are the minutes from Th…   08:55
-   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday  Can you check my numbers for t…  Aug 18
-   Junk            1  │        Fastmail              Your receipt for August  Thanks for your payment. This mo…  Aug 17
-   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan  I propose we move the primary on S…  Aug 16
-   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #42  poplar/sync: 3 comments …  Aug 14
-                      │        Donald Knuth          TAOCP errata, volume 4  A reader reports an off-by-one in…  Aug 13
+▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes · The engine weaves algebraic pa…    09:41
+   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget · The Treasury insists on i…    09:12
+   Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes · Attached are the minutes from …    08:55
+   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday · Can you check my numbers for…   Aug 18
+   Junk            1  │        Fastmail              Your receipt for August · Thanks for your payment. This …   Aug 17
+   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan · I propose we move the primary on…   Aug 16
+   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #42 · poplar/sync: 3 comment…   Aug 14
+                      │        Donald Knuth          TAOCP errata, volume 4 · A reader reports an off-by-one …   Aug 13
                       │
                       │
    /  filter folders  │
@@ -344,12 +347,12 @@ column whenever a sidebar is present.
   1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                                                       ⠹ syncing 4,312/36,102
                       │
 ▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes        09:41     From     Ada Lovelace <ada@analytical.example>
-   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget   09:12     Date     Today 09:41
+   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budg…    09:12     Date     Today 09:41
    Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes        08:55     Subject  Analytical engine notes
    Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday     Aug 18     ─────────────────────────────────────────────────────
    Junk            1  │        Fastmail              Your receipt for August       Aug 17
    Trash              │   ●    Frank Lee         ▸ 4 Server migration plan         Aug 16     The engine weaves algebraic patterns just
-   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #…Aug 14     as the Jacquard loom weaves flowers and
+   Lists          98  │     ⊕  GitHub                Code review: sync engine P…   Aug 14     as the Jacquard loom weaves flowers and
                       │        Donald Knuth          TAOCP errata, volume 4        Aug 13     leaves. Numbers are one instance; symbols
                       │                                                                       the general case.
                       │
@@ -386,14 +389,14 @@ column whenever a sidebar is present.
 ```
   1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread ⠹ syncing 4,312/36,102
 
-  ●    Ada Lovelace          Analytical engine notes  The engine weave…   09:41
-▌      Charles Babbage       Re: difference engine budget  The Treasur…   09:12
-  ● ⚑  Grace Hopper          COBOL committee minutes  Attached are the…   08:55
-    ⊕  Katherine Johnson     Trajectory review, Friday  Can you check …  Aug 18
-       Fastmail              Your receipt for August  Thanks for your …  Aug 17
-  ●    Frank Lee         ▸ 4 Server migration plan  I propose we move …  Aug 16
-    ⊕  GitHub                Code review: sync engine PR #42  poplar/s…  Aug 14
-       Donald Knuth          TAOCP errata, volume 4  A reader reports …  Aug 13
+  ●    Ada Lovelace          Analytical engine notes · The engine wea…    09:41
+▌      Charles Babbage       Re: difference engine budget · The Treas…    09:12
+  ● ⚑  Grace Hopper          COBOL committee minutes · Attached are t…    08:55
+    ⊕  Katherine Johnson     Trajectory review, Friday · Can you chec…   Aug 18
+       Fastmail              Your receipt for August · Thanks for you…   Aug 17
+  ●    Frank Lee         ▸ 4 Server migration plan · I propose we mov…   Aug 16
+    ⊕  GitHub                Code review: sync engine PR #42             Aug 14
+       Donald Knuth          TAOCP errata, volume 4 · A reader report…   Aug 13
 ```
 
 - The composition must stand without the rail: chrome bands,
