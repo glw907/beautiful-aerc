@@ -352,13 +352,25 @@ marker, selected = reverse video, focused = the edge bar's glyph
 weight (`▌` focused, `▏` unfocused: a channel that survives
 NO_COLOR because the two states are different glyphs, not
 different colors, unlike a border color), error = the `!` gutter
-marker plus reverse. The UX-7 golden asserts no two states share
-a marker. Amended by pass 2 decision 3: the ANSI-16, NO_COLOR,
-and text-gallery profiles additionally substitute a drawn
-single-line divider for the ground-color steps that separate
-panes at full color, since neither profile can render those steps
-legibly; the ladder is the truecolor expression of pane
-separation, never the only one.
+marker alone. The UX-7 golden asserts no two states share a
+marker. Amended by the pass 2 review's ruling I1
+(`docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`):
+reverse video is selection's exclusive channel; the original
+wording also assigned it to error, an internal contradiction the
+review caught (a row that is both selected and in error would
+have carried the same reverse cue for two different reasons, and
+error alone would have been indistinguishable from selected alone
+at the reverse channel). Error's channel is the gutter marker by
+itself. Amended by pass 2 decision 3: the ANSI-16, NO_COLOR, and
+text-gallery profiles additionally substitute a drawn single-line
+divider, the `divider │` glyph token, for the ground-color steps
+that separate panes at full color, since neither profile can
+render those steps legibly; the ladder is the truecolor expression
+of pane separation, never the only one. At those two profiles
+every border weight (single-line, rounded, heavy) also collapses
+to the same plain ASCII frame, since box-drawing weight is not a
+channel either profile carries reliably; the focused state's own
+channel stays the edge bar's glyph weight, never the border.
 
 **Glyph tokens**: every non-ASCII glyph the UI renders is a named
 token with an ASCII fallback in the degrade profiles: `unread ●`,
@@ -367,8 +379,17 @@ token with an ASCII fallback in the degrade profiles: `unread ●`,
 frames. Pass 2 decision 3 adds: `dismiss ✕` (`x`), `edgeBarFocused
 ▌` U+258C (`>`), `edgeBarBlurred ▏` U+258F (`|`), `separator ·`
 U+00B7 (`-`), `scrollPos ≡` U+2261 (`=`), `treeBranch ├─` (`|-`),
-and `treeLast └─` (`+-`). Plain Unicode only, no private-use-area
-or patched-font glyphs. The analyzer rule is stated stronger than
+and `treeLast └─` (`+-`). The pass 2 review's ruling C3c adds one
+more: `divider │` U+2502 (`|`), the drawn structural line the
+degrade profiles substitute for a ground step (above); the same
+token also serves the reader's quote-bar prefix, one glyph and one
+`border`-role styling for both uses rather than two tokens that
+would otherwise differ only in name. Every fallback occupies the
+same terminal-cell width as its full glyph (`ellipsis …`'s
+fallback is `~`, not `...`, for exactly this reason), so a degrade
+substitution never shifts a column budget decision 12 fixed at
+full color. Plain Unicode only, no private-use-area or
+patched-font glyphs. The analyzer rule is stated stronger than
 UX-3's block list, which misses several of these blocks, and at
 UX-3's own repo-wide scope: outside `internal/theme`, anywhere in
 the repo, **no rune or string literal containing any non-ASCII
