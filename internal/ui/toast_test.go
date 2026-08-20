@@ -18,7 +18,7 @@ func TestRenderStatusLine_ToastRidesTheRightSegment(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	sl := StatusLine{
 		Sync:  SyncStateMsg{State: SyncStateSyncing, Done: 4312, Total: 36102},
-		Toast: Toast{Active: true, Label: "3 messages archived", Remaining: 9},
+		Toast: Toast{Active: true, Label: "3 messages archived", Remaining: 9, Undoable: true},
 	}
 
 	got := plainStatusLine(sl, th)
@@ -57,6 +57,36 @@ func TestRenderStatusLine_ToastYieldsSyncBelowStandardWidth(t *testing.T) {
 	}
 	if !strings.Contains(narrow, "archived") {
 		t.Errorf("renderStatusLine(%d) = %q, want the toast itself to survive", widthStandardMin-1, narrow)
+	}
+}
+
+// TestRenderStatusLine_ToastReservesGapAndCountdownSurvives is F1,
+// CRITICAL (task-8-findings-r1.md): at 60 columns with a label too
+// long to fit whole, the gap between the cluster and the toast's own
+// content is never squeezed to zero (the cluster must not run into
+// the label), and truncation falls on the label: the countdown
+// survives.
+func TestRenderStatusLine_ToastReservesGapAndCountdownSurvives(t *testing.T) {
+	th := theme.New(true, theme.ProfileTrueColor)
+	sl := StatusLine{
+		Toast: Toast{Active: true, Label: strings.Repeat("a very long archived-message toast label ", 3), Remaining: 9, Undoable: true},
+	}
+
+	const width = 60
+	plain := ansi.Strip(renderStatusLine(sl, th, width, false))
+	if got := ansi.StringWidth(plain); got != width {
+		t.Fatalf("renderStatusLine(%d) display width = %d, want %d", width, got, width)
+	}
+	if !strings.Contains(plain, "9s") {
+		t.Errorf("renderStatusLine(%d) = %q, want the countdown to survive", width, plain)
+	}
+
+	leftWidth := ansi.StringWidth(segsPlainText(clusterSegs(sl.Active)))
+	budget := max(0, width-leftWidth-theme.PadBand)
+	rightSegs := rightSegments(th, sl, false, width, budget)
+	rightWidth := ansi.StringWidth(segsPlainText(rightSegs))
+	if gap := width - leftWidth - rightWidth - theme.PadBand; gap <= 0 {
+		t.Errorf("gap between the cluster and the toast content = %d, want > 0", gap)
 	}
 }
 
@@ -268,5 +298,72 @@ func TestApp_ToastLogsOneLine(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], "3 messages archived") {
 		t.Errorf("log line = %q, want it to carry the toast's own label", lines[0])
+	}
+}
+
+// TestApp_UndoEligible_GatesOnStackAndSwitchState is F2, CRITICAL
+// (task-8-findings-r1.md): both probe cases against the extracted
+// gate directly, a front outside StateDigitsSwitch and a non-empty
+// stack, each independently disqualify `u` from answering the open
+// undo window, even though an offer is open.
+func TestApp_UndoEligible_GatesOnStackAndSwitchState(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app.toastActive = true
+
+	digitsFront := ScreenEntry{SwitchState: StateDigitsSwitch}
+	if !app.undoEligible(digitsFront) {
+		t.Error("undoEligible() at a surface root, StateDigitsSwitch front, open toast = false, want true")
+	}
+
+	entryFront := ScreenEntry{SwitchState: StatePrintableEntry}
+	if app.undoEligible(entryFront) {
+		t.Error("undoEligible() with a StatePrintableEntry front = true, want false (F2 probe: the front gate)")
+	}
+
+	app.stack = append(app.stack, &fakeModal{})
+	if app.undoEligible(digitsFront) {
+		t.Error("undoEligible() with a non-empty stack = true, want false (F2 probe: the stack gate)")
+	}
+}
+
+// TestApp_Undo_NoOpWithModalOnStack is F2's own end-to-end case: `u`
+// with an open undo window but a modal on the stack reaches the
+// modal's own Update (a no-op, since 'u' answers none of Confirm's
+// own y/n/Esc grammar) rather than the open offer's Undo.
+func TestApp_Undo_NoOpWithModalOnStack(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	fired := false
+	offer := UndoOffer{Label: "archived", Undo: func() tea.Msg { fired = true; return nil }}
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: offer})))
+	app.stack = append(app.stack, testConfirm(t, nil, nil))
+
+	updated, cmd := app.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	app = mustApp(t, updated)
+	if cmd != nil {
+		t.Error("'u' with a modal on the stack returned a non-nil Cmd, want a no-op")
+	}
+	if fired {
+		t.Error("'u' with a modal on the stack fired the open offer's own Undo, want the gate to block it")
+	}
+	if !app.toastActive {
+		t.Error("toastActive cleared by 'u' with a modal on the stack, want the window left open")
+	}
+}
+
+// TestApp_ToastTickMsg_ReachesUpdate is F12 (task-8-findings-r1.md):
+// at least one test drives toastTickMsg through App.Update itself,
+// not App.tickToast directly, so deleting Update's own switch case
+// fails the suite.
+func TestApp_ToastTickMsg_ReachesUpdate(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: UndoOffer{Label: "archived"}})))
+	gen := app.toastGen
+
+	updated, _ := app.Update(toastTickMsg{gen: gen})
+	app = mustApp(t, updated)
+
+	if got := app.statusLine().Toast.Remaining; got != 8 {
+		t.Errorf("Remaining after one toastTickMsg through App.Update = %d, want 8", got)
 	}
 }

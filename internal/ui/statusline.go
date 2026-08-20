@@ -156,11 +156,29 @@ func progressText(label string, done, total int64) string {
 	}
 }
 
+// syncWord returns state's own bare label and role (SY-5's four
+// states): the one place the four copy strings live, shared by
+// syncStateSeg's own richer per-state text and bareSyncWord's
+// compressed form (task-8-findings-r1.md F5).
+func syncWord(state SyncState) (string, theme.Role) {
+	switch state {
+	case SyncStateSyncing:
+		return "Syncing", theme.RoleFgMuted
+	case SyncStateOffline:
+		return "Offline", theme.RoleWarn
+	case SyncStateBackingOff:
+		return "Backing off", theme.RoleWarn
+	default:
+		return "Synced", theme.RoleFgMuted
+	}
+}
+
 // backingOffText renders the backing-off state's own text (decision
 // 7, sentence case per task-6-findings-r1.md F15): "Backing off ·
-// retry Ns".
-func backingOffText(th theme.Theme, retrySeconds int) string {
-	return "Backing off " + th.Glyphs().Separator + " retry " + strconv.Itoa(retrySeconds) + "s"
+// retry Ns", built from label rather than its own copy of the word
+// (F5).
+func backingOffText(th theme.Theme, label string, retrySeconds int) string {
+	return label + " " + th.Glyphs().Separator + " retry " + strconv.Itoa(retrySeconds) + "s"
 }
 
 // syncStateSeg returns the sync segment's own single styled run for
@@ -172,16 +190,15 @@ func syncStateSeg(th theme.Theme, sl StatusLine, dropTotal bool) rowSeg {
 	if sl.Backfill.Active {
 		return backfillSeg(th, sl, dropTotal)
 	}
+	label, role := syncWord(sl.Sync.State)
 	switch sl.Sync.State {
 	case SyncStateSyncing:
 		spinner := th.Spinner()[sl.Spinner%len(th.Spinner())]
-		return rowSeg{text: spinner + " " + progressText("Syncing", sl.Sync.Done, syncTotal(sl.Sync.Total, dropTotal)), role: theme.RoleFgMuted}
-	case SyncStateOffline:
-		return rowSeg{text: "Offline", role: theme.RoleWarn}
+		return rowSeg{text: spinner + " " + progressText(label, sl.Sync.Done, syncTotal(sl.Sync.Total, dropTotal)), role: role}
 	case SyncStateBackingOff:
-		return rowSeg{text: backingOffText(th, sl.Sync.Retry), role: theme.RoleWarn}
+		return rowSeg{text: backingOffText(th, label, sl.Sync.Retry), role: role}
 	default:
-		return rowSeg{text: "Synced", role: theme.RoleFgMuted}
+		return rowSeg{text: label, role: role}
 	}
 }
 

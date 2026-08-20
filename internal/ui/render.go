@@ -28,29 +28,45 @@ type Frame struct {
 // gets the screen's own already-rendered View.
 var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 
+// RenderInput is Render's own parameter set (conventions ruling,
+// task-8-findings-r1.md: folded into a struct now rather than at a
+// sixth positional parameter). Screen, Layout, and Theme are every
+// screen's own three inputs; Status and Banner are the two chrome
+// bands' own render state, App's whole answer to "what the top band
+// and the banner row show this frame."
+type RenderInput struct {
+	Screen Screen
+	Layout LayoutMode
+	Theme  theme.Theme
+	Status StatusLine
+	Banner Banner
+}
+
 // Render is poplar's pure render seam (survey amendment A): it
-// composes screen's own View (already rendered against lm and th,
-// since a caller applies both via LayoutMsg and ThemeMsg before
-// calling Render) into the full frame lm describes, painting every
-// band's own ground before a named pane's content overlays it, so
-// every row LayoutMode allocates is accounted for (LayoutMode's own
-// row-tiling and pane-containment guarantees). Below ProfileTrueColor
-// a ground carries no distinguishing color (decision 11), so a
-// blank, uncolored row's trailing cells render as trimmed whitespace
-// rather than styled spaces. The coverage invariant's content half,
-// every cell explicitly painted, holds at ProfileTrueColor, where
-// every ground, including a blank one, sets an explicit background.
-// Render runs no tea.Program and does no I/O; it returns the same
-// Frame for the same five inputs every time (QA-7's purity contract).
-// The three-argument shape recorded in the pass 2 plan's task 5b
-// findings grew a fourth at task 6: status, App's own chrome state,
-// is what the seam paints into StatusRow rather than a blank fill.
-// Task 7 stops treating Footer as a blank fill too: it paints
-// screen.Entry()'s own registry-derived hints instead. Task 8 grows a
-// fifth, banner, painted into LayoutMode's own Banner band whenever
-// lm.BannerRow is set.
-func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine, banner Banner) Frame {
-	view := screen.View()
+// composes in.Screen's own View (already rendered against in.Layout
+// and in.Theme, since a caller applies both via LayoutMsg and
+// ThemeMsg before calling Render) into the full frame in.Layout
+// describes, painting every band's own ground before a named pane's
+// content overlays it, so every row LayoutMode allocates is accounted
+// for (LayoutMode's own row-tiling and pane-containment guarantees).
+// Below ProfileTrueColor a ground carries no distinguishing color
+// (decision 11), so a blank, uncolored row's trailing cells render as
+// trimmed whitespace rather than styled spaces. The coverage
+// invariant's content half, every cell explicitly painted, holds at
+// ProfileTrueColor, where every ground, including a blank one, sets
+// an explicit background. Render runs no tea.Program and does no I/O;
+// it returns the same Frame for the same RenderInput every time
+// (QA-7's purity contract). The three-argument shape recorded in the
+// pass 2 plan's task 5b findings grew a fourth at task 6: Status,
+// App's own chrome state, is what the seam paints into StatusRow
+// rather than a blank fill. Task 7 stops treating Footer as a blank
+// fill too: it paints in.Screen.Entry()'s own registry-derived hints
+// instead. Task 8 grows a fifth, Banner, painted into LayoutMode's own
+// Banner band whenever in.Layout.BannerRow is set; its own fix round
+// folds all five into this struct ahead of a sixth parameter.
+func Render(in RenderInput) Frame {
+	view := in.Screen.View()
+	lm, th := in.Layout, in.Theme
 
 	if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
 		return Frame{Content: view.Content, Cursor: view.Cursor}
@@ -58,12 +74,12 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine, ban
 
 	canvas := theme.NewCanvas(lm.Width, lm.Height)
 	dropTotal := lm.HeightClass != HeightFull
-	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(status, th, lm.StatusRow.Rect.Dx(), dropTotal))
+	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(in.Status, th, lm.StatusRow.Rect.Dx(), dropTotal))
 	if lm.BannerRow {
-		canvas.Paint(lm.Banner.Rect, renderBanner(banner, th, lm.Banner.Rect.Dx()))
+		canvas.Paint(lm.Banner.Rect, renderBanner(in.Banner, th, lm.Banner.Rect.Dx()))
 	}
 	canvas.Paint(lm.Main.Rect, th.Blank(lm.Main.Ground, lm.Main.Rect.Dx(), lm.Main.Rect.Dy()))
-	canvas.Paint(lm.Footer.Rect, renderFooter(screen.Entry(), th, lm.Footer.Rect.Dx()))
+	canvas.Paint(lm.Footer.Rect, renderFooter(in.Screen.Entry(), th, lm.Footer.Rect.Dx()))
 
 	for _, id := range paneRenderOrder {
 		pr, ok := lm.Panes[id]

@@ -135,6 +135,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.banner = Banner{Active: true, Message: msg.Message}
 		a = a.recomputeLayout()
 		return a.updateChildren(LayoutMsg{Layout: a.layout})
+	case ConfirmAnsweredMsg:
+		if len(a.stack) > 0 {
+			a.stack = a.stack[:len(a.stack)-1]
+		}
+		return a, msg.Next
 	}
 	return a.updateChildren(msg)
 }
@@ -149,7 +154,7 @@ func (a App) View() tea.View {
 	if len(a.stack) > 0 {
 		return a.stack[len(a.stack)-1].View()
 	}
-	frame := Render(a.activeScreen(), a.layout, a.theme, a.statusLine(), a.banner)
+	frame := Render(RenderInput{Screen: a.activeScreen(), Layout: a.layout, Theme: a.theme, Status: a.statusLine(), Banner: a.banner})
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
 	return view
@@ -172,11 +177,19 @@ func (a App) statusLine() StatusLine {
 // toast builds the status line's own Toast value from a's undo-offer
 // state: a zero Toast (Active false) once no offer is open, otherwise
 // its label and the countdown's own current remaining seconds.
+// Undoable reports whether the open offer actually has an Undo Cmd to
+// run (task-8-findings-r1.md F8): a toast with none renders its label
+// alone, never a hint advertising a dead `u`.
 func (a App) toast() Toast {
 	if !a.toastActive {
 		return Toast{}
 	}
-	return Toast{Active: true, Label: a.toastOffer.Label, Remaining: a.toastRemaining}
+	return Toast{
+		Active:    true,
+		Label:     a.toastOffer.Label,
+		Remaining: a.toastRemaining,
+		Undoable:  a.toastOffer.Undo != nil,
+	}
 }
 
 // recomputeLayout rebuilds a.layout from its own current Width/Height
@@ -284,6 +297,19 @@ func (a App) tickToast(msg toastTickMsg) (tea.Model, tea.Cmd) {
 	return a, armToastTick(a.toastGen)
 }
 
+// undoEligible reports whether handleKey may treat `u` as answering
+// the open undo window (task-8-findings-r1.md F2, CRITICAL): only at
+// a surface root (an empty stack, so a modal or any other stacked
+// screen never sees a stray `u` reinterpreted as an answer), with
+// front in StateDigitsSwitch (the same gate the surface digits
+// themselves already hold to, matchDigit), and an undo window
+// actually open. Extracted as its own predicate so both of F2's probe
+// cases test it directly, without needing a StatePrintableEntry root
+// screen this pass registers none of.
+func (a App) undoEligible(front ScreenEntry) bool {
+	return len(a.stack) == 0 && front.SwitchState == StateDigitsSwitch && a.toastActive
+}
+
 // armToastTick returns the Cmd that ticks gen's countdown after one
 // second.
 func armToastTick(gen int) tea.Cmd {
@@ -294,35 +320,38 @@ func armToastTick(gen int) tea.Cmd {
 
 // handleKey applies the interaction grammar's back/quit/surface-switch
 // precedence (design language section 2) before anything else sees
-// the key: a modal confirm on the stack answers or no-ops a key
-// itself, ahead of every other rule; Esc dismisses a showing banner
-// before acting as back, unless the front context is text entry
-// (design decision 2: a banner never steals focus); Esc otherwise
-// pops the stack (or no-ops at a surface root, this pass); `u` inside
-// an open UX-9 undo window emits the offer's Cmd; a digit switches
+// the key: a StateModal front (a modal confirm, most notably) owns
+// Esc itself as one of its own y/n/Esc answers, so the generic Back
+// branch below skips it entirely and lets the final fallback forward
+// the key to the modal's own Update (Confirm.Update emits
+// ConfirmAnsweredMsg, App's own Update case pops the stack and runs
+// the answer's Cmd: task-8-findings-r1.md's conventions ruling, the
+// template every future modal copies); every other front's Esc pops
+// the stack (or no-ops at a surface root, this pass), dismissing a
+// showing banner first only when the stack is empty (F3, CRITICAL:
+// the banner is invisible under a stack screen, so dismissing it
+// there would be a silent dead keypress) and the front context is not
+// text entry (design decision 2: a banner never steals focus); `u`
+// inside an open UX-9 undo window emits the offer's Cmd, gated to a
+// surface root in StateDigitsSwitch (F2, CRITICAL: the same gate the
+// surface digits themselves already hold to, so a text-entry or modal
+// front never treats a stray `u` as an answer); a digit switches
 // surfaces only when the state currently in front (the stack's top,
 // or the active surface's own root state when the stack is empty) is
 // StateDigitsSwitch, so a modal on the stack eats a digit instead
 // (UX-4's acceptance criterion); q quits only at a surface root and
 // discards any open undo window (UX-9: the window does not survive
-// quit); anything else at a surface root reaches the active screen's
-// own Update.
+// quit; BACKLOG #71 tracks q's own missing StateDigitsSwitch gate);
+// anything else at a surface root reaches the active screen's own
+// Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	front := a.activeScreen().Entry()
 	if len(a.stack) > 0 {
 		front = a.stack[len(a.stack)-1].Entry()
-		if c, ok := a.stack[len(a.stack)-1].(Confirm); ok {
-			next, answered := c.answer(msg)
-			if !answered {
-				return a, nil
-			}
-			a.stack = a.stack[:len(a.stack)-1]
-			return a, next
-		}
 	}
 
-	if key.Matches(msg, GrammarKeys.Back) {
-		if a.banner.Active && front.SwitchState != StatePrintableEntry {
+	if key.Matches(msg, GrammarKeys.Back) && front.SwitchState != StateModal {
+		if a.banner.Active && len(a.stack) == 0 && front.SwitchState != StatePrintableEntry {
 			a.banner.Active = false
 			a = a.recomputeLayout()
 			return a.updateChildren(LayoutMsg{Layout: a.layout})
@@ -333,7 +362,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	if a.toastActive && key.Matches(msg, GrammarKeys.Undo) {
+	if a.undoEligible(front) && key.Matches(msg, GrammarKeys.Undo) {
 		undo := a.toastOffer.Undo
 		a.toastActive = false
 		return a, undo
@@ -461,6 +490,12 @@ func (a App) updateActive(msg tea.Msg) (tea.Model, tea.Cmd) {
 // which is active, so a screen off-screen this frame still absorbs a
 // layout or theme change and a load result addressed to it (UX-4's
 // round-trip: switching away and back must not have missed anything).
+// It also forwards to every a.stack entry (task-8-findings-r1.md
+// ruling F4 promoted): a pushed screen must keep fitting the viewport
+// across a resize and keep matching the live theme across a repaint,
+// the same contract every surface screen already holds to. Task 9
+// starts pushing screens routinely, so this cannot wait on task 9's
+// own dispatch.
 func (a App) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
@@ -473,6 +508,15 @@ func (a App) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	a.config, cmd = a.config.update(msg)
 	cmds = append(cmds, cmd)
+
+	for i, screen := range a.stack {
+		var updated tea.Model
+		updated, cmd = screen.Update(msg)
+		if s, ok := updated.(Screen); ok {
+			a.stack[i] = s
+		}
+		cmds = append(cmds, cmd)
+	}
 
 	return a, tea.Batch(cmds...)
 }

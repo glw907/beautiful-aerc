@@ -383,7 +383,11 @@ more: `divider │` U+2502 (`|`), the drawn structural line the
 degrade profiles substitute for a ground step (above); the same
 token also serves the reader's quote-bar prefix, one glyph and one
 `border`-role styling for both uses rather than two tokens that
-would otherwise differ only in name. Every fallback occupies the
+would otherwise differ only in name. Task 8's fix round (findings
+r1) adds `warnMarker ▲` U+25B2 (`^`), the banner's own leading
+glyph; its first fallback, `!`, collided with `errorGutter`'s own
+fallback exactly where color cannot tell the two apart, so the
+fallback is `^` instead. Every fallback occupies the
 same terminal-cell width as its full glyph (`ellipsis …`'s
 fallback is `~`, not `...`, for exactly this reason), so a degrade
 substitution never shifts a column budget decision 12 fixed at

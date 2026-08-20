@@ -32,8 +32,14 @@ type BannerMsg struct {
 // the dismiss glyph right-aligned (the ratified exemplar's own
 // banner_strip composition). A message too long for width is
 // truncated with the ellipsis token, the same BACKLOG #61 discipline
-// every chrome band holds to.
+// every chrome band holds to. An inactive banner (task-8-findings-r1.md
+// F7) renders blank: the seam must not paint a strip, warn glyph
+// included, from a zero Banner, regardless of what lm.BannerRow says.
 func renderBanner(banner Banner, th theme.Theme, width int) string {
+	if !banner.Active {
+		return th.Blank(chromeGround, width, 1)
+	}
+
 	right := []rowSeg{
 		{text: "Esc", role: theme.RoleFg},
 		{text: " dismiss  ", role: theme.RoleFgMuted},

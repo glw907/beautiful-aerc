@@ -152,7 +152,7 @@ func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
 	if c.stackTop {
 		return scr.View().Content
 	}
-	return ui.Render(scr, lm, th, c.fixture.Status, c.fixture.Banner).Content
+	return ui.Render(ui.RenderInput{Screen: scr, Layout: lm, Theme: th, Status: c.fixture.Status, Banner: c.fixture.Banner}).Content
 }
 
 // checkGallery compares got against testdata/gallery/<name>.txt,

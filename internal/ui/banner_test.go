@@ -109,30 +109,48 @@ func TestApp_BannerMsgShowsBanner(t *testing.T) {
 	}
 }
 
-// TestApp_EscDismissesBannerBeforeBack proves design decision 2: the
-// first Esc with a banner showing dismisses it without popping the
-// stack; the next Esc behaves normally.
-func TestApp_EscDismissesBannerBeforeBack(t *testing.T) {
-	resetRegistry(t)
-	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
-
+// TestApp_EscDismissesBannerAtSurfaceRoot proves design decision 2's
+// surface-root case: Esc dismisses a showing banner before it would
+// otherwise no-op; a second Esc then no-ops normally (an empty
+// stack).
+func TestApp_EscDismissesBannerAtSurfaceRoot(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
 	app = mustApp(t, first(app.Update(BannerMsg{Message: "No keyring found."})))
-	app.stack = append(app.stack, &fakeModal{})
 
 	esc := tea.KeyPressMsg{Code: tea.KeyEscape}
 	app = mustApp(t, first(app.Update(esc)))
 	if app.banner.Active {
-		t.Fatal("banner still active after the first Esc, want it dismissed")
-	}
-	if len(app.stack) != 1 {
-		t.Fatalf("stack length after the first Esc = %d, want 1 (the banner dismiss must not pop it)", len(app.stack))
+		t.Fatal("banner still active after Esc at a surface root, want it dismissed")
 	}
 
 	app = mustApp(t, first(app.Update(esc)))
 	if len(app.stack) != 0 {
-		t.Errorf("stack length after the second Esc = %d, want 0 (ordinary back)", len(app.stack))
+		t.Errorf("stack length after a second Esc = %d, want 0 (a no-op at an empty stack)", len(app.stack))
+	}
+}
+
+// TestApp_EscDoesNotDismissAnInvisibleBanner proves F3, CRITICAL
+// (task-8-findings-r1.md): a banner is invisible under any stack
+// screen (App.View's own stack-top branch never composites it), so
+// Esc there must not dismiss it: a silent dead keypress otherwise.
+// The stack front is StateDigitsSwitch (fakeScreen), not modal, so
+// the ordinary Back branch runs and its own len(a.stack) == 0 gate is
+// what is under test here, isolated from StateModal's own
+// Esc-forwarding rule (TestApp_EscForwardsToStateModalFront).
+func TestApp_EscDoesNotDismissAnInvisibleBanner(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+	app = mustApp(t, first(app.Update(BannerMsg{Message: "No keyring found."})))
+	app.stack = append(app.stack, &fakeScreen{})
+
+	app = mustApp(t, first(app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})))
+
+	if !app.banner.Active {
+		t.Error("banner dismissed by Esc while invisible under a stack screen, want it left showing")
+	}
+	if len(app.stack) != 0 {
+		t.Errorf("stack length after Esc = %d, want 0 (the ordinary pop still ran)", len(app.stack))
 	}
 }
 

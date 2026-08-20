@@ -78,6 +78,27 @@ func TestConfirm_AnswerYesNoEsc(t *testing.T) {
 	}
 }
 
+// answerConfirm drives msg through app.Update and, when the result
+// carries a ConfirmAnsweredMsg-yielding Cmd (Confirm's own
+// elm-conventions rule-4 signal), feeds that Msg back through
+// app.Update too: the two-step protocol a running program's own event
+// loop performs for free, reproduced here since no test in this
+// package runs one.
+func answerConfirm(t *testing.T, app App, msg tea.Msg) (App, tea.Cmd) {
+	t.Helper()
+	updated, cmd := app.Update(msg)
+	app = mustApp(t, updated)
+	if cmd == nil {
+		return app, nil
+	}
+	answered, ok := cmd().(ConfirmAnsweredMsg)
+	if !ok {
+		return app, cmd
+	}
+	updated, cmd = app.Update(answered)
+	return mustApp(t, updated), cmd
+}
+
 // TestApp_ConfirmOnStack_AnswersYesNoAndPops proves the App-level
 // wiring: 'y' pops the stack and returns YesCmd; digits are no-ops
 // that leave the modal in place.
@@ -97,13 +118,12 @@ func TestApp_ConfirmOnStack_AnswersYesNoAndPops(t *testing.T) {
 		t.Error("a digit at a modal confirm returned a non-nil Cmd, want none")
 	}
 
-	updated, cmd = app.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	app = mustApp(t, updated)
+	app, cmd = answerConfirm(t, app, tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if len(app.stack) != 0 {
-		t.Fatalf("stack length after 'y' = %d, want 0 (the modal pops on answer)", len(app.stack))
+		t.Fatalf("stack length after 'y' answers = %d, want 0 (the modal pops on answer)", len(app.stack))
 	}
 	if cmd == nil {
-		t.Fatal("'y' returned a nil Cmd, want YesCmd")
+		t.Fatal("'y' answered with a nil Cmd, want YesCmd")
 	}
 	cmd()
 	if !yesCalled {
@@ -121,10 +141,9 @@ func TestApp_ConfirmOnStack_EscAnswersNo(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app.stack = append(app.stack, c)
 
-	updated, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	app = mustApp(t, updated)
+	app, cmd := answerConfirm(t, app, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if len(app.stack) != 0 {
-		t.Fatalf("stack length after Esc = %d, want 0", len(app.stack))
+		t.Fatalf("stack length after Esc answers = %d, want 0", len(app.stack))
 	}
 	if cmd == nil {
 		t.Fatal("Esc returned a nil Cmd, want NoCmd")
@@ -201,5 +220,54 @@ func TestConfirmHitSpans_TargetTheAnswerKeys(t *testing.T) {
 		if x < 0 || x >= len(cells) || cells[x] != wantRunes[i] {
 			t.Errorf("span %d: rendered cell at (%d,%d) = %q, want %q\nrow: %q", i, x, span.Rect.Min.Y, string(cells[min(x, len(cells)-1)]), wantRunes[i], plain[span.Rect.Min.Y])
 		}
+	}
+}
+
+// TestApp_ConfirmOnStack_ResizeFitsAndStaysCentered proves the F4
+// ruling (task-8-findings-r1.md, promoted): App.updateChildren now
+// forwards tea.WindowSizeMsg's own LayoutMsg to a.stack, so a pushed
+// Confirm fits the new viewport and stays centered across a resize,
+// rather than staying sized to whatever terminal it was pushed onto.
+// Task 9 starts pushing screens routinely, so this could not wait.
+func TestApp_ConfirmOnStack_ResizeFitsAndStaysCentered(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+	app.stack = append(app.stack, testConfirm(t, nil, nil))
+
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 150, Height: 40})))
+
+	c, ok := app.stack[len(app.stack)-1].(Confirm)
+	if !ok {
+		t.Fatalf("stack top is %T, want Confirm", app.stack[len(app.stack)-1])
+	}
+	lines := strings.Split(c.View().Content, "\n")
+	if len(lines) != 40 {
+		t.Fatalf("View() after resize rendered %d lines, want 40 (the new viewport)", len(lines))
+	}
+	g := c.geometry()
+	if g.x <= 0 || g.x+g.width >= 150 {
+		t.Errorf("geometry() after resize = %+v, want the box clear of both edges at the new width 150", g)
+	}
+}
+
+// TestApp_ConfirmOnStack_ThemeRepaintReachesTheModal proves the same
+// F4 ruling's other half: delivering tea.BackgroundColorMsg rebuilds
+// a pushed Confirm's own theme too, not only the surface screens.
+func TestApp_ConfirmOnStack_ThemeRepaintReachesTheModal(t *testing.T) {
+	app := NewApp(testDeps(t))
+	before := app.theme
+	app.stack = append(app.stack, testConfirm(t, nil, nil))
+
+	app = mustApp(t, first(app.Update(tea.BackgroundColorMsg{Color: whiteColor{}})))
+
+	c, ok := app.stack[len(app.stack)-1].(Confirm)
+	if !ok {
+		t.Fatalf("stack top is %T, want Confirm", app.stack[len(app.stack)-1])
+	}
+	if c.theme == before {
+		t.Error("the pushed Confirm's own theme did not change across a BackgroundColorMsg repaint")
+	}
+	if c.theme != app.theme {
+		t.Errorf("the pushed Confirm's own theme = %v, want it to match App's own rebuilt theme %v", c.theme, app.theme)
 	}
 }

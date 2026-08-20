@@ -8,7 +8,9 @@ package theme
 // step (DrawsDividers), and the reader's quote-bar prefix. WarnMarker
 // is pass 2 task 8's own addition (the banner's leading glyph), added
 // under decision 3's own allowance for a design-language token the
-// build discovers it needs.
+// build discovers it needs; its fallback is "^", not "!", since "!"
+// collided with ErrorGutter's own fallback exactly where color cannot
+// tell the two apart (task-8-findings-r1.md F9).
 type GlyphSet struct {
 	Unread         string
 	Flagged        string
@@ -73,7 +75,7 @@ var asciiGlyphs = GlyphSet{
 	TreeLast:       "+-",
 	Divider:        "|",
 	ErrorGutter:    "!",
-	WarnMarker:     "!",
+	WarnMarker:     "^",
 }
 
 // Glyphs returns t's glyph token set: fullGlyphs at

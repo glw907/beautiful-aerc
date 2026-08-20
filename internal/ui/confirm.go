@@ -43,27 +43,40 @@ type Confirm struct {
 // Init implements Screen.
 func (c Confirm) Init() tea.Cmd { return nil }
 
-// Update implements Screen. Confirm's own y/n/Esc answer is App's
-// concern, not Update's: only App can pop the stack, and
-// App.handleKey reads YesCmd/NoCmd off the stack top directly before
-// forwarding a key here (the same centralized precedent Back and the
-// surface digits already hold to, matchDigit's own doc comment).
-// Update absorbs only LayoutMsg and ThemeMsg, the two every screen
-// carries.
+// ConfirmAnsweredMsg is Confirm's own answer signal (elm-conventions
+// rule 4, children signal parents via Msg types; task-8-findings-r1.md
+// conventions ruling): Next is the Cmd the y/n/Esc key named. App's
+// own Update catches it, pops the stack, and runs Next: the template
+// every future modal follows, rather than a concrete type assertion
+// in handleKey.
+type ConfirmAnsweredMsg struct {
+	Next tea.Cmd
+}
+
+// Update implements Screen: LayoutMsg and ThemeMsg, the two every
+// screen carries, plus Confirm's own y/n/Esc answer
+// (GrammarExemptModalConfirm: y is not yank here). A key that answers
+// emits ConfirmAnsweredMsg for App to catch; every other key,
+// including digits, is a no-op (UX-4's modal no-op rule), which
+// App.handleKey guarantees reaches here at all only once its own
+// Back/digit/quit precedence has found nothing else to do with it.
 func (c Confirm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
 		c.layout = msg.Layout
 	case ThemeMsg:
 		c.theme = msg.Theme
+	case tea.KeyPressMsg:
+		if next, answered := c.answer(msg); answered {
+			return c, func() tea.Msg { return ConfirmAnsweredMsg{Next: next} }
+		}
 	}
 	return c, nil
 }
 
 // answer reports the Cmd msg names under Confirm's own y/n/Esc
-// grammar (GrammarExemptModalConfirm: y is not yank here) and whether
-// msg named an answer at all. Every other key, digits included, names
-// no answer (UX-4's modal no-op rule).
+// grammar and whether msg named an answer at all. Every other key,
+// digits included, names no answer.
 func (c Confirm) answer(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	switch {
 	case key.Matches(msg, c.yesBinding()):
@@ -142,11 +155,19 @@ func (c Confirm) geometry() confirmGeometry {
 	}
 }
 
+// confirmPillInset is the default answer's own selectedBg pill inset
+// (task-8-findings-r1.md F6): two cells before the key, two after the
+// label, named once rather than a raw "  " literal repeated at each
+// of its two call sites.
+const confirmPillInset = 2
+
 // confirmAnswerText is the answer row's own plain-text pieces: yes
-// ("y quit") and no ("  n stay  ", the selectedBg pill's own padding
-// included), used both to size the box and to compose the row.
+// ("y quit") and no ("  n stay  ", the selectedBg pill's own
+// confirmPillInset padding included), used both to size the box and
+// to compose the row.
 func confirmAnswerText(c Confirm) (yes, no string) {
-	return "y " + c.YesLabel, "  n " + c.NoLabel + "  "
+	inset := strings.Repeat(" ", confirmPillInset)
+	return "y " + c.YesLabel, inset + "n " + c.NoLabel + inset
 }
 
 // confirmBoxWidth returns the modal's own natural width, clamped
@@ -235,7 +256,7 @@ func confirmAnswerOffsets(c Confirm, boxWidth int) (yesX, noX int) {
 	contentWidth := ansi.StringWidth(yes) + theme.GapControl + ansi.StringWidth(no)
 	leftPad := max(0, (interior-contentWidth)/2)
 	yesX = 1 + leftPad
-	noX = yesX + ansi.StringWidth(yes) + theme.GapControl + 2 // "  n": n is the pill's third cell
+	noX = yesX + ansi.StringWidth(yes) + theme.GapControl + confirmPillInset // the pill's own inset precedes "n"
 	return yesX, noX
 }
 
@@ -250,11 +271,12 @@ func confirmAnswerRow(c Confirm, left, right string, width int) string {
 	leftPad := max(0, (interior-contentWidth)/2)
 	rightPad := max(0, interior-contentWidth-leftPad)
 
+	inset := strings.Repeat(" ", confirmPillInset)
 	content := th.Style(theme.RoleFg, chromeGround).Render("y") +
 		th.Style(theme.RoleFgMuted, chromeGround).Render(" "+c.YesLabel) +
 		th.Style(theme.RoleFg, chromeGround).Render(strings.Repeat(" ", theme.GapControl)) +
-		th.Style(theme.RoleFg, theme.GroundSelected).Render("  n") +
-		th.Style(theme.RoleFgMuted, theme.GroundSelected).Render(" "+c.NoLabel+"  ")
+		th.Style(theme.RoleFg, theme.GroundSelected).Render(inset+"n") +
+		th.Style(theme.RoleFgMuted, theme.GroundSelected).Render(" "+c.NoLabel+inset)
 
 	var out strings.Builder
 	out.WriteString(th.Style(theme.RoleBorder, chromeGround).Render(left))

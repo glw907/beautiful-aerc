@@ -159,8 +159,11 @@ func (m *fakeModal) Entry() ScreenEntry {
 	return ScreenEntry{SwitchState: StateModal}
 }
 
-// TestApp_EscPopsStack proves Esc pops the topmost stack entry and
-// no-ops at a surface root (an empty stack), this pass.
+// TestApp_EscPopsStack proves Esc no-ops at a surface root (an empty
+// stack), and pops a non-modal stack entry, this pass. A StateModal
+// front owns Esc itself instead (TestApp_EscForwardsToStateModalFront,
+// the template task-8-findings-r1.md's conventions ruling
+// establishes), so it is no longer this test's own concern.
 func TestApp_EscPopsStack(t *testing.T) {
 	app := NewApp(testDeps(t))
 
@@ -169,10 +172,37 @@ func TestApp_EscPopsStack(t *testing.T) {
 		t.Errorf("Esc at a surface root changed the stack: %v", app.stack)
 	}
 
-	app.stack = append(app.stack, &fakeModal{})
+	app.stack = append(app.stack, &fakeScreen{})
 	app = mustApp(t, first(app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})))
 	if len(app.stack) != 0 {
-		t.Errorf("Esc with one entry on the stack left %d, want 0", len(app.stack))
+		t.Errorf("Esc with one non-modal entry on the stack left %d, want 0", len(app.stack))
+	}
+}
+
+// TestApp_EscForwardsToStateModalFront proves a StateModal stack
+// front owns Esc itself now (task-8-findings-r1.md's conventions
+// ruling): App forwards the key rather than bare-popping, and a modal
+// that does not itself answer (fakeModal's own Update never does)
+// leaves the stack exactly as it found it.
+func TestApp_EscForwardsToStateModalFront(t *testing.T) {
+	resetRegistry(t)
+	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
+
+	app := NewApp(testDeps(t))
+	app.stack = append(app.stack, &fakeModal{})
+
+	esc := tea.KeyPressMsg{Code: tea.KeyEscape}
+	app = mustApp(t, first(app.Update(esc)))
+
+	modal, ok := app.stack[len(app.stack)-1].(*fakeModal)
+	if !ok {
+		t.Fatalf("stack top is %T, want *fakeModal", app.stack[len(app.stack)-1])
+	}
+	if modal.seenDigit != esc.String() {
+		t.Errorf("fakeModal.seenDigit = %q, want %q (Esc forwarded to the modal's own Update)", modal.seenDigit, esc.String())
+	}
+	if len(app.stack) != 1 {
+		t.Errorf("stack length = %d, want 1 (fakeModal does not answer, so nothing pops it)", len(app.stack))
 	}
 }
 
@@ -331,7 +361,7 @@ func TestApp_ViewMatchesRenderSeam(t *testing.T) {
 	updated, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app = mustApp(t, updated)
 
-	want := Render(app.activeScreen(), app.layout, app.theme, app.statusLine(), app.banner).Content
+	want := Render(RenderInput{Screen: app.activeScreen(), Layout: app.layout, Theme: app.theme, Status: app.statusLine(), Banner: app.banner}).Content
 	if got := app.View().Content; got != want {
 		t.Errorf("App.View().Content = %q, want Render(...)'s own content %q", got, want)
 	}

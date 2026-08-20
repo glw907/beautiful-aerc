@@ -77,7 +77,10 @@ var (
 
 // toastStatus pins task 8's own toast fixture: the UX-9 undo
 // presentation mid-countdown, over an otherwise-idle synced band.
-var toastStatus = ui.StatusLine{Toast: ui.Toast{Active: true, Label: "3 messages archived", Remaining: 9}}
+// Undoable is true (task-8-findings-r1.md F8): the fixture's own
+// offer actually has an undo to advertise, so the golden shows the
+// hint rather than a dead `u`.
+var toastStatus = ui.StatusLine{Toast: ui.Toast{Active: true, Label: "3 messages archived", Remaining: 9, Undoable: true}}
 
 // bannerState pins task 8's own banner fixture: the design language's
 // pinned exemplar copy (banner_strip), a warning with no keyring
