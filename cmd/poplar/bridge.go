@@ -38,8 +38,8 @@ func bridgeSyncHealth(worker *syncengine.Worker, send func(tea.Msg)) {
 
 // bridgeSyncState maps sync.State to its ui.SyncState counterpart.
 // sync.StateOffline does not exist: Worker's own loop always retries
-// through backoff rather than giving up, so "offline" is never a
-// state it can honestly report; that state belongs to run's own
+// through backoff rather than giving up, so it never reaches a state
+// "offline" would describe; that state belongs to run's own
 // connect-retry path instead (ST-2).
 func bridgeSyncState(s syncengine.State) ui.SyncState {
 	switch s {

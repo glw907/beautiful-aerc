@@ -9,9 +9,9 @@ import (
 
 // State is Worker's own high-level condition (SY-5): the value the
 // UI's status line renders. Worker reports only what its own push/poll
-// loop can honestly know; Offline, the fourth SY-5 state, names a
-// connection that was never established at all and is a cmd/poplar
-// concern (its own connect-retry path), never Worker's.
+// loop can observe; Offline, the fourth SY-5 state, names a connection
+// that was never established at all and is a cmd/poplar concern (its
+// own connect-retry path), never Worker's.
 type State int
 
 // The three states Worker's own loop can report.
