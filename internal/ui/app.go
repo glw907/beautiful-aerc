@@ -22,6 +22,17 @@ type Deps struct {
 	Account string
 }
 
+// wheelGesture is App's own open wheel-coalescing gesture (ADR-0017
+// revision 3): the running signed sum, the coordinates of its opening
+// tick, and a generation counter that tells a stale flush timer (one
+// whose gesture a direction flip already closed) from the live one.
+type wheelGesture struct {
+	open bool
+	gen  int
+	x, y int
+	sum  int
+}
+
 // App is poplar's root bubbletea model (technical design section 12):
 // the active surface, the screen stack help and modals push onto, and
 // the one LayoutMode every child consumes, recomputed once per
@@ -29,13 +40,15 @@ type Deps struct {
 // every user action beyond surface switching and the screen stack
 // enqueues an intent for a later task to carry.
 type App struct {
-	theme   theme.Theme
-	profile theme.Profile
-	account string
+	theme      theme.Theme
+	profile    theme.Profile
+	account    string
+	bgAnswered bool
 
 	active AccountScoped[Surface]
 	stack  []Screen
 	layout LayoutMode
+	wheel  wheelGesture
 
 	mail     MailPlaceholder
 	calendar CalendarPlaceholder
@@ -56,11 +69,8 @@ func NewApp(deps Deps) App {
 	}
 }
 
-// NewProgram returns a *tea.Program running app, with the wheel
-// coalescer (ADR-0017, machine design section 8) installed as the
-// program-construction tea.WithFilter option.
+// NewProgram returns a *tea.Program running app.
 func NewProgram(app App, opts ...tea.ProgramOption) *tea.Program {
-	opts = append([]tea.ProgramOption{tea.WithFilter(newWheelFilter(time.Now))}, opts...)
 	return tea.NewProgram(app, opts...)
 }
 
@@ -76,31 +86,47 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.layout = ComputeLayout(msg.Width, msg.Height, false)
 		return a.updateChildren(LayoutMsg{Layout: a.layout})
 	case BackgroundColorTimeoutMsg:
-		slog.Debug("background-color query unanswered; staying on the default dark theme")
+		// DefaultDark already governs every frame rendered so far; an
+		// answer that arrived first (a.bgAnswered) means this timeout
+		// fired after the fact and carries nothing worth logging.
+		if !a.bgAnswered {
+			slog.Debug("background-color query unanswered; staying on the default dark theme")
+		}
 		return a, nil
 	case tea.BackgroundColorMsg:
+		a.bgAnswered = true
 		a.theme = theme.New(msg.IsDark(), a.profile)
 		return a.updateChildren(ThemeMsg{Theme: a.theme})
 	case tea.KeyPressMsg:
 		return a.handleKey(msg)
+	case tea.MouseWheelMsg:
+		return a.handleWheel(msg)
+	case wheelFlushMsg:
+		return a.flushWheelTimer(msg)
 	}
 	return a.updateChildren(msg)
 }
 
-// View implements tea.Model.
+// View implements tea.Model. It renders the top of the screen stack
+// when one is pushed, else the active surface: the minimal correct
+// behavior until task 8 adds compositing the dimmed surface behind a
+// stacked screen.
 func (a App) View() tea.View {
+	if len(a.stack) > 0 {
+		return a.stack[len(a.stack)-1].View()
+	}
 	return a.activeScreen().View()
 }
 
 // handleKey applies the interaction grammar's back/quit/surface-switch
-// precedence (design language section 2) before anything on the
-// screen stack sees the key: Esc always pops the stack first (or
-// no-ops at a surface root, this pass); a digit switches surfaces
-// only when the state currently in front (the stack's top, or the
-// active surface's own root state when the stack is empty) is
-// StateDigitsSwitch, so a modal on the stack answers or eats a digit
-// instead (UX-4's acceptance criterion); q quits only at a surface
-// root.
+// precedence (design language section 2) before anything else sees
+// the key: Esc always pops the stack first (or no-ops at a surface
+// root, this pass); a digit switches surfaces only when the state
+// currently in front (the stack's top, or the active surface's own
+// root state when the stack is empty) is StateDigitsSwitch, so a
+// modal on the stack answers or eats a digit instead (UX-4's
+// acceptance criterion); q quits only at a surface root; anything
+// else at a surface root reaches the active screen's own Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, GrammarKeys.Back) {
 		if len(a.stack) > 0 {
@@ -122,7 +148,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, GrammarKeys.Quit) {
 			return a, tea.Quit
 		}
-		return a, nil
+		return a.updateActive(msg)
 	}
 
 	top := a.stack[len(a.stack)-1]
@@ -133,16 +159,121 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
+// handleWheel folds msg into the open wheel gesture, or opens a new
+// one (ADR-0017 revision 3): the coalescing decision lives on the
+// root model rather than a program-construction filter, so a flush
+// is never stranded waiting on a tick that may not arrive. Opening a
+// gesture arms a tea.Tick(wheelWindow) flush timer (armWheelFlush); a
+// same-direction tick within the window folds into the running sum;
+// an opposite-direction tick flushes the open gesture immediately as
+// a WheelMsg and opens a fresh one carrying the flipping tick,
+// batched with that gesture's own flush timer.
+func (a App) handleWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	delta := wheelDelta(msg.Button)
+	if delta == 0 {
+		return a, nil
+	}
+
+	if !a.wheel.open {
+		a.wheel = openWheelGesture(a.wheel.gen, msg, delta)
+		return a, armWheelFlush(a.wheel.gen)
+	}
+
+	if wheelSign(delta) == wheelSign(a.wheel.sum) {
+		a.wheel.sum += delta
+		return a, nil
+	}
+
+	flush := flushWheelCmd(a.wheel)
+	a.wheel = openWheelGesture(a.wheel.gen, msg, delta)
+	return a, tea.Batch(flush, armWheelFlush(a.wheel.gen))
+}
+
+// flushWheelTimer absorbs a wheelFlushMsg: the flush timer armed when
+// a.wheel's gesture opened. A stale timer, one whose gen no longer
+// matches a.wheel.gen because a direction flip already flushed and
+// replaced that gesture, is silently ignored; otherwise the gesture
+// flushes as one WheelMsg carrying its own opening tick's
+// coordinates.
+func (a App) flushWheelTimer(msg wheelFlushMsg) (tea.Model, tea.Cmd) {
+	if !a.wheel.open || msg.gen != a.wheel.gen {
+		return a, nil
+	}
+	flush := flushWheelCmd(a.wheel)
+	a.wheel = wheelGesture{}
+	return a, flush
+}
+
+// wheelFlushMsg is the flush timer's own tick, armed once per gesture
+// at open time (ADR-0017 revision 3). gen names which gesture it
+// closes, so a stale timer from a gesture a direction flip already
+// flushed is recognizable and ignored.
+type wheelFlushMsg struct {
+	gen int
+}
+
+// openWheelGesture starts a new gesture from msg's first tick,
+// generation prevGen+1 so a still-pending flush timer from whatever
+// gesture prevGen named reads as stale against it.
+func openWheelGesture(prevGen int, msg tea.MouseWheelMsg, delta int) wheelGesture {
+	return wheelGesture{open: true, gen: prevGen + 1, x: msg.X, y: msg.Y, sum: delta}
+}
+
+// armWheelFlush returns the Cmd that closes gen's gesture after
+// wheelWindow, unconditionally: the mechanism that guarantees no
+// gesture, including a single isolated detent, is ever stranded
+// waiting for a tick that never arrives.
+func armWheelFlush(gen int) tea.Cmd {
+	return tea.Tick(wheelWindow, func(time.Time) tea.Msg {
+		return wheelFlushMsg{gen: gen}
+	})
+}
+
+// flushWheelCmd returns g's accumulated sum as one WheelMsg, at the
+// coordinates of g's own opening tick.
+func flushWheelCmd(g wheelGesture) tea.Cmd {
+	return func() tea.Msg {
+		return WheelMsg{X: g.x, Y: g.y, Delta: g.sum}
+	}
+}
+
+// updateActive delegates msg to whichever surface screen
+// a.activeSurface names (an ordinary key at a surface root previously
+// had nowhere to go once back/digit/quit handling found nothing to
+// do with it).
+func (a App) updateActive(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch a.activeSurface() {
+	case SurfaceCalendar:
+		a.calendar, cmd = a.calendar.update(msg)
+	case SurfaceContacts:
+		a.contacts, cmd = a.contacts.update(msg)
+	case SurfaceConfig:
+		a.config, cmd = a.config.update(msg)
+	default:
+		a.mail, cmd = a.mail.update(msg)
+	}
+	return a, cmd
+}
+
 // updateChildren delegates msg to every surface screen, regardless of
 // which is active, so a screen off-screen this frame still absorbs a
 // layout or theme change and a load result addressed to it (UX-4's
 // round-trip: switching away and back must not have missed anything).
 func (a App) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
-	a.mail = a.mail.update(msg)
-	a.calendar = a.calendar.update(msg)
-	a.contacts = a.contacts.update(msg)
-	a.config = a.config.update(msg)
-	return a, nil
+	var cmds []tea.Cmd
+	var cmd tea.Cmd
+
+	a.mail, cmd = a.mail.update(msg)
+	cmds = append(cmds, cmd)
+	a.calendar, cmd = a.calendar.update(msg)
+	cmds = append(cmds, cmd)
+	a.contacts, cmd = a.contacts.update(msg)
+	cmds = append(cmds, cmd)
+	a.config, cmd = a.config.update(msg)
+	cmds = append(cmds, cmd)
+
+	return a, tea.Batch(cmds...)
 }
 
 // activeSurface returns the surface currently in front for a.account.
@@ -165,45 +296,31 @@ func (a App) activeScreen() Screen {
 	}
 }
 
-// digitSurfaceKeys is the surface-switch digit keymap, one
-// key.Binding per digit so a match also names the Surface it
-// switches to; GrammarKeys.SurfaceSwitch bundles the same four keys
-// under one Binding for advertisement, which cannot report which
-// digit fired.
-type digitSurfaceKeys struct {
-	Mail, Calendar, Contacts, Config key.Binding
-}
-
-var digitKeys = digitSurfaceKeys{
-	Mail:     key.NewBinding(key.WithKeys("1")),
-	Calendar: key.NewBinding(key.WithKeys("2")),
-	Contacts: key.NewBinding(key.WithKeys("3")),
-	Config:   key.NewBinding(key.WithKeys("4")),
-}
-
-// matchDigit reports the Surface msg names among digitKeys. It gates
-// legality through SetEnabled rather than an inline SwitchState
-// check, mirroring GrammarKeys.Back and GrammarKeys.Quit's own
-// key.Matches dispatch above: state != StateDigitsSwitch disables the
-// whole set before key.Matches ever runs, so key.Matches itself is
-// what turns a digit into a no-op in a StateModal front (UX-4's
-// acceptance criterion) rather than a second, hand-checked condition.
+// matchDigit reports the Surface msg names, derived from
+// GrammarKeys.SurfaceSwitch itself rather than a parallel keymap that
+// could drift from the grammar's own binding: key.Matches gates
+// legality (state other than StateDigitsSwitch disables the whole
+// binding before matching runs), and surfaceForDigit resolves which
+// of the bundled keys actually matched.
 func matchDigit(msg tea.KeyPressMsg, state StateClass) (Surface, bool) {
-	keys := digitKeys
-	enabled := state == StateDigitsSwitch
-	keys.Mail.SetEnabled(enabled)
-	keys.Calendar.SetEnabled(enabled)
-	keys.Contacts.SetEnabled(enabled)
-	keys.Config.SetEnabled(enabled)
+	binding := GrammarKeys.SurfaceSwitch
+	binding.SetEnabled(state == StateDigitsSwitch)
+	if !key.Matches(msg, binding) {
+		return 0, false
+	}
+	return surfaceForDigit(msg.String())
+}
 
-	switch {
-	case key.Matches(msg, keys.Mail):
+// surfaceForDigit reports the Surface a surface-switch digit names.
+func surfaceForDigit(s string) (Surface, bool) {
+	switch s {
+	case "1":
 		return SurfaceMail, true
-	case key.Matches(msg, keys.Calendar):
+	case "2":
 		return SurfaceCalendar, true
-	case key.Matches(msg, keys.Contacts):
+	case "3":
 		return SurfaceContacts, true
-	case key.Matches(msg, keys.Config):
+	case "4":
 		return SurfaceConfig, true
 	default:
 		return 0, false

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -152,7 +153,7 @@ func (m *fakeModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *fakeModal) View() tea.View { return tea.NewView("") }
+func (m *fakeModal) View() tea.View { return tea.NewView("modal") }
 
 func (m *fakeModal) Entry() ScreenEntry {
 	return ScreenEntry{SwitchState: StateModal}
@@ -243,8 +244,85 @@ func TestApp_BackgroundColorTimeoutLogsOneDebugLine(t *testing.T) {
 	}
 }
 
-// TestNewProgram proves the wheel coalescer is installed at program
-// construction (ADR-0017): NewProgram returns a non-nil *tea.Program
+// TestApp_BackgroundColorAnsweredThenTimeoutLogsNothing is F3: once
+// tea.BackgroundColorMsg has answered, a BackgroundColorTimeoutMsg
+// that arrives after it (the bounded wait firing after the answer
+// already landed) must not log the unanswered-query line, which
+// would misstate what happened.
+func TestApp_BackgroundColorAnsweredThenTimeoutLogsNothing(t *testing.T) {
+	buf := captureDebugLog(t)
+	app := NewApp(testDeps(t))
+
+	app = mustApp(t, first(app.Update(tea.BackgroundColorMsg{Color: whiteColor{}})))
+	_, cmd := app.Update(BackgroundColorTimeoutMsg{})
+	if cmd != nil {
+		t.Errorf("BackgroundColorTimeoutMsg after an answer returned a non-nil Cmd, want nil")
+	}
+
+	if got := buf.String(); got != "" {
+		t.Errorf("log after an answered query then its timeout = %q, want no lines", got)
+	}
+}
+
+// TestApp_OrdinaryKeyReachesActiveScreen is F4: a key that is neither
+// Esc, a legal surface digit, nor q at a surface root now reaches the
+// active screen's own Update (through updateActive) instead of being
+// silently dropped, which is what handleKey's fallthrough did before
+// this fix. Verified as a delegation contract, since no placeholder
+// yet reacts to a key differently from any other unhandled message:
+// handleKey's fallthrough for an ordinary key must produce exactly
+// what calling updateActive directly produces.
+func TestApp_OrdinaryKeyReachesActiveScreen(t *testing.T) {
+	app := NewApp(testDeps(t))
+	ordinary := tea.KeyPressMsg{Code: 'j', Text: "j"}
+
+	viaKey, cmdKey := app.handleKey(ordinary)
+	viaActive, cmdActive := app.updateActive(ordinary)
+
+	gotKey, ok := viaKey.(App)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want App", viaKey)
+	}
+	gotActive, ok := viaActive.(App)
+	if !ok {
+		t.Fatalf("updateActive returned %T, want App", viaActive)
+	}
+	if !reflect.DeepEqual(gotKey, gotActive) {
+		t.Errorf("handleKey's fallthrough did not delegate to updateActive:\nhandleKey:     %+v\nupdateActive:  %+v", gotKey, gotActive)
+	}
+	if (cmdKey == nil) != (cmdActive == nil) {
+		t.Errorf("handleKey's Cmd nilness = %v, updateActive's = %v, want equal", cmdKey == nil, cmdActive == nil)
+	}
+}
+
+// TestApp_ViewRendersStackTopWhenPresent is F5: View renders the top
+// of the screen stack when one is pushed, not the active surface
+// underneath it.
+func TestApp_ViewRendersStackTopWhenPresent(t *testing.T) {
+	resetRegistry(t)
+	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
+
+	app := NewApp(testDeps(t))
+	app.stack = append(app.stack, &fakeModal{})
+
+	if got := app.View().Content; got != "modal" {
+		t.Errorf("View() with a stacked screen = %q, want the stack top's own view %q", got, "modal")
+	}
+}
+
+// TestApp_ViewRendersActiveSurfaceWhenStackEmpty is F5's other half:
+// an empty stack falls back to the active surface.
+func TestApp_ViewRendersActiveSurfaceWhenStackEmpty(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	got := app.View().Content
+	want := app.mail.View().Content
+	if got != want {
+		t.Errorf("View() with an empty stack = %q, want the active surface's own view %q", got, want)
+	}
+}
+
+// TestNewProgram proves NewProgram returns a non-nil *tea.Program
 // wrapping app, with the caller's own options layered on top of it.
 func TestNewProgram(t *testing.T) {
 	app := NewApp(testDeps(t))

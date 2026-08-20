@@ -44,8 +44,8 @@ func TestMailPlaceholder_InitLoadsStoreCounts(t *testing.T) {
 		t.Fatalf("mailStatsMsg.err = %v, want nil", msg.err)
 	}
 
-	m = m.update(msg)
-	m = m.update(testLayoutMsg())
+	m, _ = m.update(msg)
+	m, _ = m.update(testLayoutMsg())
 	if !m.loaded {
 		t.Fatal("mail placeholder did not mark itself loaded")
 	}
@@ -65,7 +65,7 @@ func TestMailPlaceholder_InitLoadsStoreCounts(t *testing.T) {
 func TestMailPlaceholder_ViewBeforeLoadOmitsFacts(t *testing.T) {
 	reads := storetest.OpenReadPool(t, store.DefaultWriterConfig())
 	m := newMailPlaceholder(reads, testTheme())
-	m = m.update(testLayoutMsg())
+	m, _ = m.update(testLayoutMsg())
 
 	got := m.View().Content
 	if !strings.Contains(got, "Mail") {
@@ -90,8 +90,8 @@ func TestCalendarPlaceholder_InitLoadsEventCount(t *testing.T) {
 		t.Fatalf("eventCountMsg.err = %v, want nil", msg.err)
 	}
 
-	c = c.update(msg)
-	c = c.update(testLayoutMsg())
+	c, _ = c.update(msg)
+	c, _ = c.update(testLayoutMsg())
 	got := c.View().Content
 	if !strings.Contains(got, "Calendar") || !strings.Contains(got, "0 events") {
 		t.Errorf("view = %q, want the surface name and the empty store's event count", got)
@@ -103,11 +103,11 @@ func TestCalendarPlaceholder_InitLoadsEventCount(t *testing.T) {
 // contacts read surface rather than growing one.
 func TestContactsPlaceholder_StatesNoStoreSurfacePlainly(t *testing.T) {
 	c := newContactsPlaceholder(testTheme())
-	c = c.update(testLayoutMsg())
+	c, _ = c.update(testLayoutMsg())
 
 	got := c.View().Content
-	if !strings.Contains(got, "Contacts") {
-		t.Errorf("view = %q, want it to contain the surface name %q", got, "Contacts")
+	if !strings.Contains(got, "People") {
+		t.Errorf("view = %q, want it to contain wireframe F8's own display title %q", got, "People")
 	}
 	if !strings.Contains(got, "pass 5") {
 		t.Errorf("view = %q, want it to name when contacts sync lands", got)
@@ -118,7 +118,7 @@ func TestContactsPlaceholder_StatesNoStoreSurfacePlainly(t *testing.T) {
 // the config surface's own 2b non-goal.
 func TestConfigPlaceholder_NamesWhenItLands(t *testing.T) {
 	c := newConfigPlaceholder(testTheme())
-	c = c.update(testLayoutMsg())
+	c, _ = c.update(testLayoutMsg())
 
 	got := c.View().Content
 	if !strings.Contains(got, "Config") {
@@ -126,6 +126,41 @@ func TestConfigPlaceholder_NamesWhenItLands(t *testing.T) {
 	}
 	if !strings.Contains(got, "pass 2b") {
 		t.Errorf("view = %q, want it to name when the config surface lands", got)
+	}
+}
+
+// TestFormatCount proves the shared count formatter's grouping (F11):
+// used by every placeholder now, and the status line next.
+func TestFormatCount(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0"},
+		{3, "3"},
+		{999, "999"},
+		{1000, "1,000"},
+		{36102, "36,102"},
+		{1000000, "1,000,000"},
+		{-1234, "-1,234"},
+	}
+	for _, tt := range tests {
+		if got := formatCount(tt.n); got != tt.want {
+			t.Errorf("formatCount(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+// TestMailPlaceholder_ViewGroupsCounts proves the mail placeholder's
+// facts line renders through the shared formatter rather than a bare
+// fmt.Sprintf("%d", ...).
+func TestMailPlaceholder_ViewGroupsCounts(t *testing.T) {
+	m := MailPlaceholder{theme: testTheme(), loaded: true, stats: store.MailStats{Messages: 36102, Mailboxes: 14}}
+	m, _ = m.update(testLayoutMsg())
+
+	got := m.View().Content
+	if !strings.Contains(got, "36,102 messages in 14 folders") {
+		t.Errorf("view = %q, want grouped counts %q", got, "36,102 messages in 14 folders")
 	}
 }
 

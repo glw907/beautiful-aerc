@@ -145,3 +145,44 @@ behind a per-terminal bypass, a trade every mouse-enabled TUI
 makes; poplar's answer is its own copy mode plus the help note.
 If a future feature needs hover (all-motion), it must pass the
 grammar rule's accelerator test or supersede this record.
+
+## Revision 3 (2026-08-19, pass 2 task 5a round 2)
+
+**Wheel coalescing moves out of the program-construction filter and
+into the root model.** The filter design this record originally
+specified strands input: `tea.WithFilter` can only suppress or
+transform a message as it arrives, so a coalesced message can be
+emitted only in reaction to a *later* tick. A gesture's tail, the
+ticks accumulated since the last emitted message, sits pending
+forever once scrolling stops with no further tick to trigger a
+flush; a single, isolated detent never scrolls at all, since nothing
+ever arrives after it to close its own sum. This was found during
+task 5a's spec review over the implemented filter, not predicted at
+authoring time.
+
+The fix: the coalescing decision, the running signed sum, the
+gesture's opening tick, and the direction it opened in, moves onto
+the root model, and a `tea.Tick(wheelWindow)` flush timer arms itself
+the moment a gesture opens (one tick, not renewed per further tick in
+the same gesture). A gesture flushes into one `WheelMsg`, carrying
+the coordinates of its first tick, on whichever comes first: that
+timer firing, or a later tick reversing the running sum's direction.
+Because the timer is armed unconditionally at open time and fires
+regardless of what else happens, every gesture flushes eventually:
+a single detent flushes after one `wheelWindow`; a continuous scroll
+still emits at most one message per `wheelWindow` (the budget this
+record priced against QA-2 is unchanged); no gesture's tail is ever
+stranded.
+
+This keeps the coalescing state Rule-1-conformant (elm-conventions:
+all state in models) rather than Rule-2-exempt: the mutable window
+state that previously lived in the filter closure, the one recorded
+exception to "mutation only in Update", now lives in the root
+model's own fields and mutates only inside its Update, the ordinary
+case every other piece of App state already follows. The
+program-construction filter is no longer necessary for wheel input at
+all; `tea.MouseWheelMsg` reaches `Update` through the normal message
+path like everything else, and `Update`'s own dispatch is what "tags"
+it into the gesture. A future coalescing need (motion sampling, most
+plausibly) may still want a `tea.WithFilter` seam, evaluated on its
+own evidence rather than by wheel's example.

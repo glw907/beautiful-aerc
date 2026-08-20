@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -80,6 +82,30 @@ func composePlaceholder(th theme.Theme, layout LayoutMode, title, facts string) 
 	return tea.NewView(block)
 }
 
+// formatCount renders n grouped by thousands ("36,102"): the one
+// formatter every screen that shows a raw store count uses (F11), so
+// a grouped count never drifts screen to screen. The wireframes
+// render every count grouped; the placeholders are its first callers,
+// and the status line (a later task) is its next.
+func formatCount(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	neg := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(s, "-")
+
+	var grouped strings.Builder
+	for i, r := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			grouped.WriteByte(',')
+		}
+		grouped.WriteRune(r)
+	}
+
+	if neg {
+		return "-" + grouped.String()
+	}
+	return grouped.String()
+}
+
 // MailPlaceholder is the mail surface's pass-2 placeholder (wireframe
 // F1): the surface name and live message/mailbox counts, read
 // through the store's read pool. Pass 3 replaces it with the real
@@ -110,10 +136,16 @@ func (m MailPlaceholder) Init() tea.Cmd {
 }
 
 func (m MailPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m.update(msg), nil
+	next, cmd := m.update(msg)
+	return next, cmd
 }
 
-func (m MailPlaceholder) update(msg tea.Msg) MailPlaceholder {
+// update's Cmd result is always nil until task 6's StoreChangedMsg
+// refresh gives it one to return; the signature carries the contract
+// now so that task's change is additive.
+//
+//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+func (m MailPlaceholder) update(msg tea.Msg) (MailPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
 		m.layout = msg.Layout
@@ -122,17 +154,17 @@ func (m MailPlaceholder) update(msg tea.Msg) MailPlaceholder {
 	case mailStatsMsg:
 		if msg.err != nil {
 			slog.Warn("mail placeholder: load store counts", "error", msg.err)
-			return m
+			return m, nil
 		}
 		m.stats, m.loaded = msg.stats, true
 	}
-	return m
+	return m, nil
 }
 
 func (m MailPlaceholder) View() tea.View {
 	facts := ""
 	if m.loaded {
-		facts = fmt.Sprintf("%d messages in %d folders", m.stats.Messages, m.stats.Mailboxes)
+		facts = fmt.Sprintf("%s messages in %s folders", formatCount(m.stats.Messages), formatCount(m.stats.Mailboxes))
 	}
 	return composePlaceholder(m.theme, m.layout, "Mail", facts)
 }
@@ -182,10 +214,12 @@ func (c CalendarPlaceholder) Init() tea.Cmd {
 }
 
 func (c CalendarPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return c.update(msg), nil
+	next, cmd := c.update(msg)
+	return next, cmd
 }
 
-func (c CalendarPlaceholder) update(msg tea.Msg) CalendarPlaceholder {
+//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+func (c CalendarPlaceholder) update(msg tea.Msg) (CalendarPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
 		c.layout = msg.Layout
@@ -193,18 +227,18 @@ func (c CalendarPlaceholder) update(msg tea.Msg) CalendarPlaceholder {
 		c.theme = msg.Theme
 	case eventCountMsg:
 		if msg.err != nil {
-			slog.Warn("calendar placeholder: load store counts", "error", msg.err)
-			return c
+			slog.Warn("calendar placeholder: load event count", "error", msg.err)
+			return c, nil
 		}
 		c.events, c.loaded = msg.count, true
 	}
-	return c
+	return c, nil
 }
 
 func (c CalendarPlaceholder) View() tea.View {
 	facts := ""
 	if c.loaded {
-		facts = fmt.Sprintf("%d events", c.events)
+		facts = fmt.Sprintf("%s events", formatCount(c.events))
 	}
 	return composePlaceholder(c.theme, c.layout, "Calendar", facts)
 }
@@ -226,9 +260,9 @@ func init() {
 }
 
 // ContactsPlaceholder is the contacts surface's pass-2 placeholder
-// (wireframe F8). It states plainly that no contacts read surface
-// exists yet (a plan non-goal) rather than growing one; pass 5 wires
-// the real store surface.
+// (wireframe F8, "People"). It states plainly that no contacts read
+// surface exists yet (a plan non-goal) rather than growing one; pass
+// 5 wires the real store surface.
 type ContactsPlaceholder struct {
 	theme  theme.Theme
 	layout LayoutMode
@@ -241,21 +275,26 @@ func newContactsPlaceholder(th theme.Theme) ContactsPlaceholder {
 func (c ContactsPlaceholder) Init() tea.Cmd { return nil }
 
 func (c ContactsPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return c.update(msg), nil
+	next, cmd := c.update(msg)
+	return next, cmd
 }
 
-func (c ContactsPlaceholder) update(msg tea.Msg) ContactsPlaceholder {
+//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+func (c ContactsPlaceholder) update(msg tea.Msg) (ContactsPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
 		c.layout = msg.Layout
 	case ThemeMsg:
 		c.theme = msg.Theme
 	}
-	return c
+	return c, nil
 }
 
 func (c ContactsPlaceholder) View() tea.View {
-	return composePlaceholder(c.theme, c.layout, "Contacts", "contacts sync lands with pass 5")
+	// "People" is wireframe F8's own reviewed copy: the state name
+	// ("contact list", ScreenEntry.Name below) and the display title
+	// are deliberately different fields.
+	return composePlaceholder(c.theme, c.layout, "People", "contacts sync lands with pass 5")
 }
 
 // Entry implements Screen.
@@ -289,17 +328,19 @@ func newConfigPlaceholder(th theme.Theme) ConfigPlaceholder {
 func (c ConfigPlaceholder) Init() tea.Cmd { return nil }
 
 func (c ConfigPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return c.update(msg), nil
+	next, cmd := c.update(msg)
+	return next, cmd
 }
 
-func (c ConfigPlaceholder) update(msg tea.Msg) ConfigPlaceholder {
+//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+func (c ConfigPlaceholder) update(msg tea.Msg) (ConfigPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
 		c.layout = msg.Layout
 	case ThemeMsg:
 		c.theme = msg.Theme
 	}
-	return c
+	return c, nil
 }
 
 func (c ConfigPlaceholder) View() tea.View {

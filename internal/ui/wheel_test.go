@@ -2,99 +2,195 @@ package ui
 
 import (
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
 
-// manualClock is newWheelFilter's now func, driven by hand so a test
-// can place each tick at an exact instant without a real sleep.
-type manualClock struct {
-	t time.Time
+// wheelTick builds a tea.MouseWheelMsg for the given button, at the
+// given cell.
+func wheelTick(button tea.MouseButton, x, y int) tea.MouseWheelMsg {
+	return tea.MouseWheelMsg{Button: button, X: x, Y: y}
 }
 
-func (c *manualClock) now() time.Time { return c.t }
-
-func wheelTick(button tea.MouseButton) tea.Msg {
-	return tea.MouseWheelMsg{Button: button}
-}
-
-// TestWheelFilter_BurstInsideWindowReachesUpdateAsOneMessage proves
-// the coalescing half of ADR-0017's filter: 30 same-direction ticks
-// arriving at the same instant all suppress (return nil), and a 31st
-// tick arriving wheelWindow later flushes the 30-tick sum as exactly
-// one WheelMsg.
-func TestWheelFilter_BurstInsideWindowReachesUpdateAsOneMessage(t *testing.T) {
-	clock := &manualClock{t: time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)}
-	filter := newWheelFilter(clock.now)
-
-	for i := range 30 {
-		if got := filter(nil, wheelTick(tea.MouseWheelDown)); got != nil {
-			t.Fatalf("tick %d of the burst returned %#v, want nil (suppressed)", i, got)
+func TestWheelDelta(t *testing.T) {
+	tests := []struct {
+		button tea.MouseButton
+		want   int
+	}{
+		{tea.MouseWheelUp, -1},
+		{tea.MouseWheelDown, 1},
+		{tea.MouseWheelLeft, 0},
+		{tea.MouseWheelRight, 0},
+	}
+	for _, tt := range tests {
+		if got := wheelDelta(tt.button); got != tt.want {
+			t.Errorf("wheelDelta(%v) = %d, want %d", tt.button, got, tt.want)
 		}
 	}
+}
 
-	clock.t = clock.t.Add(wheelWindow)
-	got := filter(nil, wheelTick(tea.MouseWheelDown))
-	msg, ok := got.(WheelMsg)
+func TestWheelSign(t *testing.T) {
+	if wheelSign(-3) != -1 {
+		t.Error("wheelSign(-3) != -1")
+	}
+	if wheelSign(3) != 1 {
+		t.Error("wheelSign(3) != 1")
+	}
+	if wheelSign(0) != 1 {
+		t.Error("wheelSign(0) != 1 (zero has no accumulated direction yet)")
+	}
+}
+
+// TestApp_WheelSingleDetentFlushesAfterWindow proves ADR-0017
+// revision 3's core guarantee over the filter design it replaces: an
+// isolated tick, with no follow-up tick ever arriving, still reaches
+// Update as one WheelMsg once its flush timer fires, at the tick's
+// own coordinates.
+func TestApp_WheelSingleDetentFlushesAfterWindow(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	updated, cmd := app.Update(wheelTick(tea.MouseWheelDown, 5, 7))
+	app = mustApp(t, updated)
+	if !app.wheel.open {
+		t.Fatal("a single tick did not open a gesture")
+	}
+	if cmd == nil {
+		t.Fatal("opening a gesture returned a nil Cmd, want the armed flush timer")
+	}
+
+	flush, ok := cmd().(wheelFlushMsg)
 	if !ok {
-		t.Fatalf("flushing tick returned %#v, want a WheelMsg", got)
+		t.Fatalf("the armed timer yielded %#v, want wheelFlushMsg", flush)
+	}
+
+	updated, cmd = app.Update(flush)
+	app = mustApp(t, updated)
+	if app.wheel.open {
+		t.Error("the flush timer left the gesture open")
+	}
+	if cmd == nil {
+		t.Fatal("the flush timer's Cmd was nil, want the flushed WheelMsg")
+	}
+	msg, ok := cmd().(WheelMsg)
+	if !ok {
+		t.Fatalf("flush Cmd yielded %#v, want WheelMsg", msg)
+	}
+	if msg.Delta != 1 {
+		t.Errorf("WheelMsg.Delta = %d, want 1 (one detent)", msg.Delta)
+	}
+	if msg.X != 5 || msg.Y != 7 {
+		t.Errorf("WheelMsg coords = (%d,%d), want the gesture's first tick (5,7)", msg.X, msg.Y)
+	}
+}
+
+// TestApp_WheelBurstCollapsesToOne proves a same-direction burst,
+// including one that outlasts wheelWindow, still reaches Update as
+// exactly one WheelMsg: every tick after the first accumulates
+// silently onto the gesture the first tick opened, and the same
+// flush timer that gesture armed at open time is what eventually
+// delivers the whole sum.
+func TestApp_WheelBurstCollapsesToOne(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	var flushTimer tea.Cmd
+	for i := range 30 {
+		updated, cmd := app.Update(wheelTick(tea.MouseWheelDown, 1, 1))
+		app = mustApp(t, updated)
+		if i == 0 {
+			flushTimer = cmd
+			continue
+		}
+		if cmd != nil {
+			t.Fatalf("tick %d returned a non-nil Cmd, want nil (accumulating)", i)
+		}
+	}
+	if app.wheel.sum != 30 {
+		t.Fatalf("gesture sum = %d, want 30", app.wheel.sum)
+	}
+
+	flush, ok := flushTimer().(wheelFlushMsg)
+	if !ok {
+		t.Fatalf("flush timer yielded %#v, want wheelFlushMsg", flush)
+	}
+	updated, flushCmd := app.Update(flush)
+	app = mustApp(t, updated)
+	if flushCmd == nil {
+		t.Fatal("flushing the gesture returned a nil Cmd")
+	}
+	msg, ok := flushCmd().(WheelMsg)
+	if !ok {
+		t.Fatalf("flush Cmd yielded %#v, want WheelMsg", msg)
 	}
 	if msg.Delta != 30 {
-		t.Errorf("flushing WheelMsg.Delta = %d, want 30 (the burst's summed delta)", msg.Delta)
+		t.Errorf("WheelMsg.Delta = %d, want 30 (the burst's summed delta)", msg.Delta)
 	}
 }
 
-// TestWheelFilter_DirectionFlipResets proves the direction-reset half
-// of ADR-0017's filter: an opposite-direction tick flushes the
-// pending sum immediately, without netting the new tick into it, and
-// the new tick opens its own sum rather than joining the old one.
-func TestWheelFilter_DirectionFlipResets(t *testing.T) {
-	clock := &manualClock{t: time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)}
-	filter := newWheelFilter(clock.now)
+// TestApp_WheelDirectionFlipFlushesImmediately proves a
+// direction-reversing tick flushes the open gesture right away,
+// unmixed with the flip tick's own delta, and opens a fresh gesture
+// carrying just the flip tick.
+func TestApp_WheelDirectionFlipFlushesImmediately(t *testing.T) {
+	app := NewApp(testDeps(t))
 
 	for i := range 5 {
-		if got := filter(nil, wheelTick(tea.MouseWheelUp)); got != nil {
-			t.Fatalf("up-tick %d returned %#v, want nil (suppressed)", i, got)
+		updated, cmd := app.Update(wheelTick(tea.MouseWheelUp, 2, 3))
+		app = mustApp(t, updated)
+		if i > 0 && cmd != nil {
+			t.Fatalf("tick %d returned a non-nil Cmd, want nil (accumulating)", i)
 		}
 	}
+	if app.wheel.sum != -5 {
+		t.Fatalf("gesture sum = %d, want -5", app.wheel.sum)
+	}
 
-	// Still inside the window, but the opposite direction: the flip
-	// must flush the up-sum now rather than waiting out the window.
-	got := filter(nil, wheelTick(tea.MouseWheelDown))
-	msg, ok := got.(WheelMsg)
+	updated, cmd := app.Update(wheelTick(tea.MouseWheelDown, 9, 9))
+	app = mustApp(t, updated)
+	if cmd == nil {
+		t.Fatal("a direction flip returned a nil Cmd, want an immediate flush plus the new gesture's flush timer")
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || len(batch) != 2 {
+		t.Fatalf("direction-flip Cmd yielded %#v, want a two-command batch", batch)
+	}
+	msg, ok := batch[0]().(WheelMsg)
 	if !ok {
-		t.Fatalf("direction-flip tick returned %#v, want a WheelMsg", got)
+		t.Fatalf("the flip's first batched Cmd yielded %#v, want the flushed WheelMsg", msg)
 	}
 	if msg.Delta != -5 {
 		t.Errorf("flushed WheelMsg.Delta = %d, want -5 (the up-sum, unmixed with the flip tick)", msg.Delta)
 	}
-
-	// The flip tick opened a fresh sum of its own; one more down-tick
-	// accumulates onto it rather than the discarded up-sum.
-	if got := filter(nil, wheelTick(tea.MouseWheelDown)); got != nil {
-		t.Fatalf("tick after the flip returned %#v, want nil (suppressed, accumulating the new sum)", got)
-	}
-	clock.t = clock.t.Add(wheelWindow)
-	got = filter(nil, wheelTick(tea.MouseWheelDown))
-	msg, ok = got.(WheelMsg)
-	if !ok {
-		t.Fatalf("final flush returned %#v, want a WheelMsg", got)
-	}
-	if msg.Delta != 2 {
-		t.Errorf("final flushed WheelMsg.Delta = %d, want 2 (the flip tick plus the one after it)", msg.Delta)
+	if !app.wheel.open || app.wheel.sum != 1 {
+		t.Errorf("gesture after the flip = %+v, want an open gesture summing 1 (just the flip tick)", app.wheel)
 	}
 }
 
-// TestWheelFilter_PassesNonWheelMessagesUnchanged proves the filter
-// only intercepts tea.MouseWheelMsg: any other message reaches Update
-// untouched.
-func TestWheelFilter_PassesNonWheelMessagesUnchanged(t *testing.T) {
-	clock := &manualClock{t: time.Now()}
-	filter := newWheelFilter(clock.now)
+// TestApp_WheelStaleFlushTimerIgnored proves a flush timer armed for
+// a gesture a direction flip already closed is recognized as stale
+// (by generation) and ignored, rather than prematurely flushing or
+// corrupting the gesture that replaced it.
+func TestApp_WheelStaleFlushTimerIgnored(t *testing.T) {
+	app := NewApp(testDeps(t))
 
-	msg := tea.WindowSizeMsg{Width: 80, Height: 24}
-	if got := filter(nil, msg); got != msg {
-		t.Errorf("filter(WindowSizeMsg) = %#v, want it passed through unchanged", got)
+	updated, staleTimer := app.Update(wheelTick(tea.MouseWheelUp, 1, 1))
+	app = mustApp(t, updated)
+
+	updated, _ = app.Update(wheelTick(tea.MouseWheelDown, 2, 2)) // flips, opens a new gesture
+	app = mustApp(t, updated)
+	if app.wheel.gen != 2 {
+		t.Fatalf("gen after the flip = %d, want 2", app.wheel.gen)
+	}
+
+	stale, ok := staleTimer().(wheelFlushMsg)
+	if !ok {
+		t.Fatalf("stale timer yielded %#v, want wheelFlushMsg", stale)
+	}
+	updated, cmd := app.Update(stale)
+	app = mustApp(t, updated)
+	if cmd != nil {
+		t.Error("a stale flush timer produced a non-nil Cmd, want it ignored")
+	}
+	if !app.wheel.open || app.wheel.gen != 2 || app.wheel.sum != 1 {
+		t.Errorf("gesture after a stale flush = %+v, want the live gen-2 gesture untouched", app.wheel)
 	}
 }
