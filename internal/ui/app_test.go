@@ -352,6 +352,25 @@ func TestApp_ViewRendersActiveSurfaceWhenStackEmpty(t *testing.T) {
 	}
 }
 
+// TestApp_ViewSetsMouseModeOnBothPaths proves task 11's carried review
+// finding: mouse cell-motion reporting is a per-frame tea.View
+// declaration, and both of View's return paths (the StateModal stack
+// top, and the ordinary Render seam) set it, so a modal never
+// silently toggles mouse reporting off.
+func TestApp_ViewSetsMouseModeOnBothPaths(t *testing.T) {
+	app := NewApp(testDeps(t))
+	if got := app.View().MouseMode; got != tea.MouseModeCellMotion {
+		t.Errorf("View() with an empty stack MouseMode = %v, want MouseModeCellMotion", got)
+	}
+
+	resetRegistry(t)
+	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
+	app.stack = append(app.stack, &fakeModal{})
+	if got := app.View().MouseMode; got != tea.MouseModeCellMotion {
+		t.Errorf("View() with a StateModal stack top MouseMode = %v, want MouseModeCellMotion", got)
+	}
+}
+
 // TestApp_ViewMatchesRenderSeam is CR1: after a WindowSizeMsg, the
 // product's own View().Content is exactly what Render produces from
 // the same active screen, layout, and theme App itself holds, so the

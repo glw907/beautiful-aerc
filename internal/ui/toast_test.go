@@ -256,11 +256,14 @@ func TestApp_UndoAfterExpiryIsNoop(t *testing.T) {
 	}
 }
 
-// TestApp_QuitDiscardsOpenUndoWindow proves UX-9's own lifecycle rule:
-// the window does not survive quit. q at a surface root still quits,
-// and discards the open toast rather than leaving it to answer a
-// later stray 'u'.
-func TestApp_QuitDiscardsOpenUndoWindow(t *testing.T) {
+// TestApp_QuitWithOpenUndoWindowConfirms proves UX-9's own lifecycle
+// rule, carried from task 8's review to task 11: the window does not
+// survive quit, and the toast says so. q at a surface root with an
+// open undo window and an empty outbox pushes F7's modal confirm
+// naming the offer rather than quitting straight through; 'n' leaves
+// the window open and invokes nothing; 'y' logs one debug line,
+// discards the window without invoking its own Undo, and quits.
+func TestApp_QuitWithOpenUndoWindowConfirms(t *testing.T) {
 	app := NewApp(testDeps(t))
 
 	fired := false
@@ -269,18 +272,92 @@ func TestApp_QuitDiscardsOpenUndoWindow(t *testing.T) {
 
 	updated, cmd := app.Update(digitKey("q"))
 	app = mustApp(t, updated)
+	if cmd != nil {
+		t.Fatal("q with an open undo window returned a non-nil Cmd, want it to push a confirm instead of quitting")
+	}
+	if len(app.stack) != 1 {
+		t.Fatalf("stack length after q with an open undo window = %d, want 1", len(app.stack))
+	}
+	confirm, ok := app.stack[0].(Confirm)
+	if !ok {
+		t.Fatalf("stack top is %T, want Confirm", app.stack[0])
+	}
+	if !strings.Contains(confirm.Consequence, "archived") {
+		t.Errorf("Consequence = %q, want it naming the open offer's label", confirm.Consequence)
+	}
 
-	if cmd == nil {
-		t.Fatal("q with an open undo window returned a nil Cmd, want tea.Quit")
+	// 'n' (or Esc) leaves the window open and fires nothing.
+	stayed, cmd := answerConfirm(t, app, tea.KeyPressMsg{Code: 'n', Text: "n"})
+	if len(stayed.stack) != 0 {
+		t.Fatalf("stack length after 'n' = %d, want 0 (the modal pops on answer)", len(stayed.stack))
 	}
-	if msg := cmd(); msg != (tea.QuitMsg{}) {
-		t.Errorf("q with an open undo window yielded %#v, want tea.QuitMsg", msg)
+	if cmd != nil {
+		cmd()
 	}
-	if app.statusLine().Toast.Active {
-		t.Error("Toast.Active still true after quit, want the window discarded")
+	if !stayed.statusLine().Toast.Active {
+		t.Error("Toast.Active false after 'n', want the window still open")
 	}
 	if fired {
-		t.Error("quit invoked the open offer's own Undo, want it merely discarded")
+		t.Error("'n' invoked the open offer's own Undo")
+	}
+
+	// 'y' discards the window, logs once, and quits.
+	buf := captureDebugLog(t)
+	_, cmd = answerConfirm(t, app, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if cmd == nil {
+		t.Fatal("'y' returned a nil Cmd, want tea.Quit")
+	}
+	if msg := cmd(); msg != (tea.QuitMsg{}) {
+		t.Errorf("'y' yielded %#v, want tea.QuitMsg", msg)
+	}
+	if fired {
+		t.Error("'y' invoked the open offer's own Undo, want it merely discarded")
+	}
+	if !strings.Contains(buf.String(), "quit discarded the open undo window") {
+		t.Errorf("log = %q, want the one discard line", buf.String())
+	}
+}
+
+// TestApp_QuitWithEmptyOutboxAndNoUndoQuitsStraightThrough proves
+// handleQuit's happy path stays a plain tea.Quit: no outbox work and
+// no open undo window means nothing to confirm.
+func TestApp_QuitWithEmptyOutboxAndNoUndoQuitsStraightThrough(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	_, cmd := app.Update(digitKey("q"))
+	if cmd == nil {
+		t.Fatal("q with an empty outbox and no undo window returned a nil Cmd, want tea.Quit")
+	}
+	if msg := cmd(); msg != (tea.QuitMsg{}) {
+		t.Errorf("q yielded %#v, want tea.QuitMsg", msg)
+	}
+}
+
+// TestApp_QuitWithQueuedOutboxConfirms proves the outbox half of
+// CARRY 3: a nonzero outbox count at quit pushes F7's own modal
+// confirm ("Quit with N unsent messages?"), even with no undo window
+// open.
+func TestApp_QuitWithQueuedOutboxConfirms(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(OutboxCountMsg{Queued: 2})))
+
+	updated, cmd := app.Update(digitKey("q"))
+	app = mustApp(t, updated)
+	if cmd != nil {
+		t.Fatal("q with a queued outbox returned a non-nil Cmd, want it to push a confirm instead of quitting")
+	}
+	if len(app.stack) != 1 {
+		t.Fatalf("stack length after q with a queued outbox = %d, want 1", len(app.stack))
+	}
+	confirm, ok := app.stack[0].(Confirm)
+	if !ok {
+		t.Fatalf("stack top is %T, want Confirm", app.stack[0])
+	}
+	if confirm.Question != "Quit with 2 unsent messages?" {
+		t.Errorf("Question = %q, want it naming the queued count", confirm.Question)
+	}
+	if !strings.Contains(confirm.Consequence, "next time you open poplar") {
+		t.Errorf("Consequence = %q, want the outbox's own consequence line", confirm.Consequence)
 	}
 }
 

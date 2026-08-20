@@ -1,9 +1,13 @@
-// Command poplar starts poplar's store and background writer. Pass 1
-// has no screen yet, so this binary's job is the startup path: take
-// the instance lock, open and migrate the store, run an integrity
-// check when one is owed, offer a rebuild-from-server recovery on
-// failure, reclaim whatever a previous run left mid-dispatch, and
-// shut down cleanly.
+// Command poplar starts poplar's store, background writer, and
+// bubbletea UI. Every run takes the same startup path first: the
+// instance lock, open and migrate the store, run an integrity check
+// when one is owed, offer a rebuild-from-server recovery on failure,
+// and reclaim whatever a previous run left mid-dispatch. By default it
+// then hands off to the TUI (runInteractive, cmd/poplar/tui.go);
+// --headless keeps the engine-only loop the perf and QA harnesses and
+// the live suites run against (run, cmd/poplar/main.go), and
+// --startup-trace, QA-1's own harness flag, always runs headless
+// regardless of --headless.
 package main
 
 import (
@@ -36,6 +40,7 @@ type flags struct {
 	rebuildIndex bool
 	recover      bool
 	startupTrace bool
+	headless     bool
 }
 
 // debugLogEnv opts a session into debug-level logging, the variable
@@ -64,6 +69,7 @@ func main() {
 	flag.BoolVar(&f.rebuildIndex, "rebuild-index", false, "rebuild the full-text index before starting")
 	flag.BoolVar(&f.recover, "recover", false, "rebuild the store from local data after detecting corruption or a failed migration")
 	flag.BoolVar(&f.startupTrace, "startup-trace", false, "print exec-to-first-list-page phase timings as JSON and exit, for the QA-1 perf harness")
+	flag.BoolVar(&f.headless, "headless", false, "run the sync worker and outbox dispatcher with no TUI, for the perf/QA harnesses and the live suites; implied by --startup-trace")
 	flag.Parse()
 
 	dbPath, err := xdg.DataFile("poplar/store.db")
@@ -75,10 +81,24 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, dbPath, f, os.Stdout, os.Stderr, connectLiveJMAP); err != nil {
+	entry := runInteractive
+	if headlessEntry(f) {
+		entry = run
+	}
+	if err := entry(ctx, dbPath, f, os.Stdout, os.Stderr, connectLiveJMAP); err != nil {
 		reportStartupFailure(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// headlessEntry reports whether f routes main to run's headless
+// engine loop instead of runInteractive's TUI: --headless, the
+// perf/QA harnesses' and the live suites' own flag, or --startup-trace,
+// which keeps its current headless semantics unchanged this pass
+// (QA-1's first-screenful-of-rows form arrives with pass 3's list) even
+// without --headless alongside it.
+func headlessEntry(f flags) bool {
+	return f.headless || f.startupTrace
 }
 
 // reportStartupFailure prints err's fixed user-facing sentence to w,
@@ -95,15 +115,18 @@ func reportStartupFailure(w io.Writer, err error) {
 	}
 }
 
-// run drives poplar's startup path against the store at dbPath: the
-// instance lock, store preparation (migration, integrity check,
-// recovery), the writer, the orphaned-intent sweep, the sync worker
-// and outbox dispatcher (connect resolves the backend they run
-// against), and a clean shutdown once ctx is done. start is run's own
-// entry time, the in-process origin QA-1's --startup-trace measures
-// against. Status and trace output go to out; a log poplar cannot
-// write is reported on errOut, which --startup-trace's caller does
-// not parse.
+// run drives poplar's headless engine loop against the store at
+// dbPath, no TUI attached: the instance lock, store preparation
+// (migration, integrity check, recovery), the writer, the
+// orphaned-intent sweep, the sync worker and outbox dispatcher
+// (connect resolves the backend they run against), and a clean
+// shutdown once ctx is done. main reaches it through --headless or
+// --startup-trace; every other invocation runs runInteractive
+// (tui.go) instead, which shares this same preamble. start is run's
+// own entry time, the in-process origin QA-1's --startup-trace
+// measures against. Status and trace output go to out; a log poplar
+// cannot write is reported on errOut, which --startup-trace's caller
+// does not parse.
 func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, connect backendConnector) error {
 	start := time.Now()
 

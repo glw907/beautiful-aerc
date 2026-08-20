@@ -60,6 +60,94 @@ func TestLogDefaultLocation(t *testing.T) {
 	}
 }
 
+// TestLogFallsBackToTempDirWhenStateDirUnavailable proves row 24's
+// rework: when $XDG_STATE_HOME's own poplar.log can't be resolved,
+// openLogWriter falls back to a file in the process's own temp
+// directory instead of stderr, and LogFallbackPath reports it, so a
+// caller can warn the operator (ER-3) rather than a JSON log line
+// landing on a terminal a TUI may already own.
+func TestLogFallsBackToTempDirWhenStateDirUnavailable(t *testing.T) {
+	origPath, origWriter := logFallbackPath, logWriter
+	t.Cleanup(func() { logFallbackPath, logWriter = origPath, origWriter })
+
+	home := t.TempDir()
+	// A file where $XDG_STATE_HOME/poplar would need to be a
+	// directory: every candidate xdg.StateFile tries fails the same
+	// way an unwritable or missing state directory would.
+	if err := os.MkdirAll(filepath.Join(home, ".local"), 0o750); err != nil {
+		t.Fatalf("create the .local directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".local", "state"), nil, 0o600); err != nil {
+		t.Fatalf("seed a file where the state directory should be: %v", err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+	xdg.Reload()
+	t.Cleanup(xdg.Reload)
+
+	w, ok := openLogWriter().(*rotatingWriter)
+	if !ok {
+		t.Fatalf("openLogWriter() = %T, want *rotatingWriter", openLogWriter())
+	}
+
+	wantPath := filepath.Join(os.TempDir(), "poplar.log")
+	if w.path != wantPath {
+		t.Errorf("fallback log path = %q, want %q", w.path, wantPath)
+	}
+
+	path, ok := LogFallbackPath()
+	if !ok || path != wantPath {
+		t.Errorf("LogFallbackPath() = (%q, %v), want (%q, true)", path, ok, wantPath)
+	}
+
+	if _, err := w.Write([]byte(`{"msg":"probe"}` + "\n")); err != nil {
+		t.Fatalf("write to the temp-dir fallback: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(wantPath) })
+}
+
+// TestLogHealthReportsDropsWhenBothDestinationsFail proves row 24's
+// remaining half: when the temp-dir fallback itself can't be written
+// either (a bare TMPDIR that does not exist, standing in for a fully
+// unwritable temp directory), the write is never retried against a
+// third destination; it is only counted through LogHealth, exactly as
+// any other rotatingWriter write failure is.
+func TestLogHealthReportsDropsWhenBothDestinationsFail(t *testing.T) {
+	origPath, origWriter := logFallbackPath, logWriter
+	t.Cleanup(func() { logFallbackPath, logWriter = origPath, origWriter })
+
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".local"), 0o750); err != nil {
+		t.Fatalf("create the .local directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".local", "state"), nil, 0o600); err != nil {
+		t.Fatalf("seed a file where the state directory should be: %v", err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
+	xdg.Reload()
+	t.Cleanup(xdg.Reload)
+
+	w, ok := openLogWriter().(*rotatingWriter)
+	if !ok {
+		t.Fatalf("openLogWriter() = %T, want *rotatingWriter", openLogWriter())
+	}
+	logWriter = w
+
+	if _, err := w.Write([]byte(`{"msg":"probe"}` + "\n")); err == nil {
+		t.Fatal("Write against a temp-dir fallback with no parent directory succeeded, want an error")
+	}
+
+	dropped, err := LogHealth()
+	if err == nil {
+		t.Error("LogHealth() err = nil, want the write failure both destinations left behind")
+	}
+	if dropped != 1 {
+		t.Errorf("LogHealth() dropped = %d, want 1", dropped)
+	}
+}
+
 func TestDebugIsOptIn(t *testing.T) {
 	buf := captureLog(t)
 

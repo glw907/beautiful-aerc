@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/adrg/xdg"
@@ -79,24 +80,50 @@ func SetDefault() {
 
 // openLogWriter resolves ADR-0013's log destination,
 // $XDG_STATE_HOME/poplar/poplar.log (the existing
-// ~/.local/state/poplar/ home per ER-4), falling back to stderr if
-// the state directory can't be created. It records the writer so
-// LogHealth can report a write failure later.
+// ~/.local/state/poplar/ home per ER-4). When the state directory
+// can't be resolved, the fallback is a file in the process's own temp
+// directory, never stderr (dispositions row 24): a bubbletea UI may
+// already own the terminal by the time this runs, and a JSON log line
+// scribbled into it is exactly the corruption row 24 declined to fix
+// while poplar shipped no screen. If the temp-dir file can't be
+// written either, rotatingWriter's own fail path counts the drop
+// through LogHealth rather than trying a third destination. It
+// records the writer so LogHealth can report a write failure later,
+// and the fallback path so a caller can warn about the degradation
+// once (LogFallbackPath, ER-3).
 func openLogWriter() io.Writer {
 	path, err := xdg.StateFile("poplar/poplar.log")
 	if err != nil {
-		return os.Stderr
+		path = filepath.Join(os.TempDir(), "poplar.log")
+		logFallbackPath = path
 	}
 	w := &rotatingWriter{path: path, maxSize: 10 << 20, keep: 2}
 	logWriter = w
 	return w
 }
 
-// logWriter is the process's rotatingWriter, set by openLogWriter
-// when the log destination is a file. LogHealth reads it. It stays
-// nil when the log falls back to stderr, which never fails silently
-// on its own.
+// logWriter is the process's rotatingWriter, set by openLogWriter.
+// LogHealth reads it.
 var logWriter *rotatingWriter
+
+// logFallbackPath holds the temp-dir path openLogWriter chose when
+// $XDG_STATE_HOME's own poplar.log could not be resolved, or "" when
+// the log is at its normal state-dir home. LogFallbackPath reads it.
+var logFallbackPath string
+
+// LogFallbackPath reports the temp-dir path uerr's log fell back to
+// when the state directory's own log file could not be resolved, and
+// whether that fallback is in effect (dispositions row 24, ER-3): a
+// caller uses this to warn the operator once, since the fallback
+// itself writes silently otherwise.
+//
+// LogFallbackPath forces logger's one-time build to run first, so its
+// read of logFallbackPath is ordered after openLogWriter's write to
+// it by sync.OnceValue rather than racing it.
+func LogFallbackPath() (path string, ok bool) {
+	logger()
+	return logFallbackPath, logFallbackPath != ""
+}
 
 // LogHealth reports uerr's log writer's most recent write failure,
 // if any, and the number of log lines dropped because of it. slog
@@ -167,7 +194,7 @@ func (w *rotatingWriter) Write(p []byte) (int, error) {
 		}
 	}
 
-	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // G304: w.path comes from xdg.StateFile or a test fixture, never user input
+	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // G304: w.path comes from xdg.StateFile, its temp-dir fallback, or a test fixture, never user input
 	if err != nil {
 		return w.fail(err)
 	}

@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -161,20 +163,28 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // otherwise squeeze it against, since it owns no sidebar of its own.
 // The footer follows whichever Screen Render composes, the stack
 // top's own Entry included, since Render always reaches for
-// Screen.Entry() itself.
+// Screen.Entry() itself. Every returned tea.View carries
+// MouseMode: mouse cell-motion reporting is a per-frame View
+// declaration in bubbletea v2, not a program-construction option, so
+// both return paths set it (task 11's carried review finding: the
+// modal path missing it would toggle reporting off whenever a modal
+// shows).
 func (a App) View() tea.View {
 	screen := a.activeScreen()
 	fullRegion := false
 	if len(a.stack) > 0 {
 		top := a.stack[len(a.stack)-1]
 		if top.Entry().SwitchState == StateModal {
-			return top.View()
+			view := top.View()
+			view.MouseMode = tea.MouseModeCellMotion
+			return view
 		}
 		screen, fullRegion = top, true
 	}
 	frame := Render(RenderInput{Screen: screen, FullRegion: fullRegion, Layout: a.layout, Theme: a.theme, Status: a.statusLine(), Banner: a.banner})
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
 }
 
@@ -366,10 +376,13 @@ func armToastTick(gen int) tea.Cmd {
 // is empty) is StateDigitsSwitch, so a modal on the stack eats a digit
 // instead (UX-4's acceptance criterion), and pops a non-modal stack
 // front along with the switch (task 9: digits switch surfaces from
-// help, and pop it); q quits only at a surface root and discards any
-// open undo window (UX-9: the window does not survive quit; BACKLOG
-// #71 tracks q's own missing StateDigitsSwitch gate); anything else at
-// a surface root reaches the active screen's own Update.
+// help, and pop it); q quits only at a surface root, straight through
+// when the outbox is empty and no undo window is open, otherwise
+// through F7's modal confirm naming what quitting costs (UX-9: the
+// window does not survive quit, and the toast says so; BACKLOG #71
+// tracks q's own missing StateDigitsSwitch gate; task 11 carried this
+// from task 8's review); anything else at a surface root reaches the
+// active screen's own Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	front := a.frontEntry()
 
@@ -412,13 +425,88 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if len(a.stack) == 0 {
 		if key.Matches(msg, GrammarKeys.Quit) {
-			a.toastActive = false
-			return a, tea.Quit
+			return a.handleQuit()
 		}
 		return a.updateActive(msg)
 	}
 
 	return a.updateStackTop(msg)
+}
+
+// handleQuit answers q at a surface root: an empty outbox and no open
+// undo window quits straight through, and otherwise pushes F7's modal
+// confirm naming whichever of the queued outbox and the open undo
+// window are in play, so quitting never discards either in silence
+// (UX-9's "the window does not survive quit, and the toast says so";
+// task 11 carried this from task 8's review, since task 8 built the
+// modal but not this wiring).
+func (a App) handleQuit() (tea.Model, tea.Cmd) {
+	if a.outbox == 0 && !a.toastActive {
+		return a, tea.Quit
+	}
+	a.stack = append(a.stack, a.quitConfirm())
+	return a, nil
+}
+
+// quitConfirm returns F7's modal confirm for a quit handleQuit did not
+// answer directly, carrying a's own current theme and layout the same
+// way App's other stack pushes (HelpScreen, most notably) do: Confirm
+// gets neither from anywhere else, and pushing one without them
+// renders against a zero-size layout.
+func (a App) quitConfirm() Confirm {
+	return Confirm{
+		theme:       a.theme,
+		layout:      a.layout,
+		Question:    quitQuestion(a.outbox),
+		Consequence: quitConsequence(a.outbox, a.toastActive, a.toastOffer.Label),
+		YesLabel:    "quit",
+		NoLabel:     "stay",
+		YesCmd:      quitYesCmd(a.toastActive),
+	}
+}
+
+// quitQuestion names what quitting would leave unsent (wireframe F7's
+// own "Quit with 2 unsent messages?"), or a bare "Quit now?" when the
+// outbox holds nothing and the confirm exists only for the open undo
+// window.
+func quitQuestion(outbox int) string {
+	switch outbox {
+	case 0:
+		return "Quit now?"
+	case 1:
+		return "Quit with 1 unsent message?"
+	default:
+		return fmt.Sprintf("Quit with %d unsent messages?", outbox)
+	}
+}
+
+// quitConsequence names each cost quitting carries: the outbox's own
+// "they'll send the next time you open poplar" (wireframe F7) when it
+// holds work, and the open undo window's own label when one is open,
+// so an operator who only has one of the two never reads a sentence
+// about the other.
+func quitConsequence(outbox int, undoOpen bool, undoLabel string) string {
+	var parts []string
+	if outbox > 0 {
+		parts = append(parts, "They'll send the next time you open poplar.")
+	}
+	if undoOpen {
+		parts = append(parts, fmt.Sprintf("The undo for %s will be lost.", undoLabel))
+	}
+	return strings.Join(parts, " ")
+}
+
+// quitYesCmd returns F7's own Yes answer: tea.Quit, preceded by one
+// debug log line when an open undo window is what quitting discards
+// (CARRY 3, task 11: the toast says so, in the log as well as the
+// confirm's own consequence line).
+func quitYesCmd(undoOpen bool) tea.Cmd {
+	return func() tea.Msg {
+		if undoOpen {
+			slog.Debug("quit discarded the open undo window")
+		}
+		return tea.Quit()
+	}
 }
 
 // handleWheel folds msg into the open wheel gesture, or opens a new
