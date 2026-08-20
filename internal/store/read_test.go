@@ -351,3 +351,74 @@ func TestReadsDoNotBlockOnWriter(t *testing.T) {
 		t.Fatalf("read p95 = %v while the writer bulk-writes concurrently, want <= %v", p95, budget)
 	}
 }
+
+// TestMailStats proves the mail placeholder's live-fact read: message
+// and mailbox counts across two mailboxes and three messages.
+func TestMailStats(t *testing.T) {
+	w, path := newTestWriter(t, DefaultWriterConfig())
+	pool, err := NewReadPool(path, DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("NewReadPool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	ctx := context.Background()
+	seedAccountAndMailbox(t, w)
+
+	err = w.submit(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`INSERT INTO mailbox (id, account_id, name) VALUES (2, 1, 'Archive')`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO message (id, account_id, received_at, subject, from_addr, thread_key) VALUES
+			(1, 1, 100, 'a', 'a@example.com', 't1'),
+			(2, 1, 200, 'b', 'b@example.com', 't2'),
+			(3, 1, 300, 'c', 'c@example.com', 't3')`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed mailbox and messages: %v", err)
+	}
+
+	got, err := pool.MailStats(ctx)
+	if err != nil {
+		t.Fatalf("MailStats: %v", err)
+	}
+	if want := (MailStats{Messages: 3, Mailboxes: 2}); got != want {
+		t.Errorf("MailStats() = %+v, want %+v", got, want)
+	}
+}
+
+// TestEventCount proves the calendar placeholder's live-fact read:
+// event count across two events on one calendar.
+func TestEventCount(t *testing.T) {
+	w, path := newTestWriter(t, DefaultWriterConfig())
+	pool, err := NewReadPool(path, DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("NewReadPool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	ctx := context.Background()
+	seedAccountAndMailbox(t, w)
+
+	err = w.submit(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`INSERT INTO calendar (id, account_id, name) VALUES (1, 1, 'Home')`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO event (id, account_id, calendar_id, uid, summary, start_local) VALUES
+			(1, 1, 1, 'uid-1', 'first', 1000),
+			(2, 1, 1, 'uid-2', 'second', 2000)`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed calendar and events: %v", err)
+	}
+
+	got, err := pool.EventCount(ctx)
+	if err != nil {
+		t.Fatalf("EventCount: %v", err)
+	}
+	if got != 2 {
+		t.Errorf("EventCount() = %d, want 2", got)
+	}
+}

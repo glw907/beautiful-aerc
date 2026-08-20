@@ -58,6 +58,7 @@ var readSurface = []string{
 	"MailboxPage",
 	"MailboxRow",
 	"MailboxUpsert",
+	"MailStats",
 	"MarkCleanShutdown",
 	"MessageSummary",
 	"MessageUpsert",

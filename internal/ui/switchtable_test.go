@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -73,6 +75,82 @@ func TestValidSwitchStates_LiveRegistry(t *testing.T) {
 func TestPrintableEntryScreens_IsEmptyThisPass(t *testing.T) {
 	if got := printableEntryScreens(Registered()); len(got) != 0 {
 		t.Errorf("printableEntryScreens(Registered()) = %v, want none this pass", got)
+	}
+}
+
+func TestSwitchTableNamesMatch(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []ScreenEntry
+		wantLen int
+	}{
+		{
+			name:    "a digits-switch entry named from the authority list passes",
+			entries: []ScreenEntry{{Type: reflect.TypeOf(struct{}{}), SwitchState: StateDigitsSwitch, Name: "mail list"}},
+			wantLen: 0,
+		},
+		{
+			name:    "a digits-switch entry named outside the authority list fails",
+			entries: []ScreenEntry{{Type: reflect.TypeOf(struct{}{}), SwitchState: StateDigitsSwitch, Name: "not a real state"}},
+			wantLen: 1,
+		},
+		{
+			name:    "a printable-entry entry named from its own authority list passes",
+			entries: []ScreenEntry{{Type: reflect.TypeOf(struct{}{}), SwitchState: StatePrintableEntry, Name: "compose headers"}},
+			wantLen: 0,
+		},
+		{
+			name:    "a printable-entry entry checked against the digits-switch list, not its own, fails",
+			entries: []ScreenEntry{{Type: reflect.TypeOf(struct{}{}), SwitchState: StatePrintableEntry, Name: "mail list"}},
+			wantLen: 1,
+		},
+		{
+			name:    "a modal entry carries no named-list requirement",
+			entries: []ScreenEntry{{Type: reflect.TypeOf(struct{}{}), SwitchState: StateModal, Name: "anything at all"}},
+			wantLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := switchTableNamesMatch(tt.entries); len(got) != tt.wantLen {
+				t.Errorf("switchTableNamesMatch() = %v, want %d violation(s)", got, tt.wantLen)
+			}
+		})
+	}
+}
+
+// switchTableNamesMatch reports every entry, by Name, whose
+// SwitchState carries a named-list membership requirement (section
+// 2's own two lists) but whose Name is absent from it: the M10
+// remainder, cross-referencing a registered screen against the
+// authority lists above rather than merely checking SwitchState's
+// own validity (validSwitchStates's job). StateModal carries no
+// named-list requirement (section 2 names neither modal by name), so
+// a modal entry is skipped.
+func switchTableNamesMatch(entries []ScreenEntry) []string {
+	var bad []string
+	for _, e := range entries {
+		switch e.SwitchState {
+		case StateDigitsSwitch:
+			if !slices.Contains(digitsSwitchStates, e.Name) {
+				bad = append(bad, fmt.Sprintf("%s: name %q is not one of section 2's eleven digits-switch states", e.Type, e.Name))
+			}
+		case StatePrintableEntry:
+			if !slices.Contains(printableEntryStates, e.Name) {
+				bad = append(bad, fmt.Sprintf("%s: name %q is not one of section 2's six printable-entry states", e.Type, e.Name))
+			}
+		}
+	}
+	return bad
+}
+
+// TestSwitchTable_LiveRegistryNames is M10's remainder: every
+// currently registered screen's Name is a member of the authority
+// list its SwitchState implies.
+func TestSwitchTable_LiveRegistryNames(t *testing.T) {
+	if got := switchTableNamesMatch(Registered()); len(got) != 0 {
+		t.Errorf("switchTableNamesMatch(Registered()) = %v, want none", got)
 	}
 }
 

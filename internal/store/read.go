@@ -172,6 +172,32 @@ func (p *ReadPool) HasEligibleIntents(ctx context.Context, accountID int64, now 
 	return eligible, nil
 }
 
+// MailStats is the mail surface placeholder's live facts (design
+// decision 9): total message and mailbox counts across every account
+// the store holds.
+type MailStats struct {
+	Messages  int64
+	Mailboxes int64
+}
+
+// MailStats returns the store's current message and mailbox counts.
+func (p *ReadPool) MailStats(ctx context.Context) (MailStats, error) {
+	var stats MailStats
+	if err := p.db.QueryRowContext(ctx, queryMailStats).Scan(&stats.Messages, &stats.Mailboxes); err != nil {
+		return MailStats{}, localErr("store.read", err)
+	}
+	return stats, nil
+}
+
+// EventCount returns the store's current calendar event count.
+func (p *ReadPool) EventCount(ctx context.Context) (int64, error) {
+	var n int64
+	if err := p.db.QueryRowContext(ctx, queryEventCount).Scan(&n); err != nil {
+		return 0, localErr("store.read", err)
+	}
+	return n, nil
+}
+
 // FirstMailboxID returns the lowest-id mailbox in the store. A
 // startup trace with no onboarding flow yet to name a mailbox uses it
 // to pick one to list.

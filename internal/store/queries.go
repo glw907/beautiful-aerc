@@ -73,4 +73,13 @@ const (
 	// mailbox in the store, for a caller with no onboarding flow yet to
 	// name one explicitly.
 	queryMailboxFirstID = `SELECT id FROM mailbox ORDER BY id LIMIT 1`
+
+	// queryMailStats is the mail surface placeholder's live facts
+	// (design decision 9): total message and mailbox counts across
+	// every account the store holds.
+	queryMailStats = `SELECT (SELECT COUNT(*) FROM message), (SELECT COUNT(*) FROM mailbox)`
+
+	// queryEventCount is the calendar surface placeholder's live fact:
+	// total event count across every account the store holds.
+	queryEventCount = `SELECT COUNT(*) FROM event`
 )

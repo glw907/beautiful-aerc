@@ -121,8 +121,13 @@ var pointerLegalStates = map[PointerTarget][]StateClass{
 // footer renders its hints in (decision 8). Type identifies the
 // screen's own Go type; Register derives it from the type parameter
 // passed to Register, so a ScreenEntry literal never sets it by hand.
+// Name is the entry's own state name from the design language section
+// 2's switch table (e.g. "mail list", "config sections"); the
+// switch-table test cross-references it against the digits-switch and
+// printable-entry authority lists by SwitchState.
 type ScreenEntry struct {
 	Type           reflect.Type
+	Name           string
 	Keys           help.KeyMap
 	Pointer        []PointerBinding
 	SwitchState    StateClass
