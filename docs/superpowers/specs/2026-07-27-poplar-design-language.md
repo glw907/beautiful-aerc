@@ -213,9 +213,11 @@ committed reason):
    advertised `j`/`k`, `Space`/`b`, and `End` bindings;
    advertising both spellings doubles the footer for zero
    information.
-2. **Digit surface keys `1`-`4`**: advertised permanently in the
-   status line's surface indicator, which is chrome the footer
-   need not repeat.
+2. **Digit surface keys `1`-`4`**: the active digit is advertised
+   permanently by the status line's compact cluster (section 6,
+   amended by pass 2 decision 1); the sibling digits are bare in
+   the cluster but named in the help overlay and on visit, which
+   the footer need not repeat.
 3. **`q` on non-root screens**: quit is advertised at surface
    roots; elsewhere `Esc` is the way out and `q` retains its
    root semantics.
@@ -259,9 +261,24 @@ cairn rule: a gap that forces improvisation is a defect).
   section 12), never an all-in-memory component.
 - **Sidebar**: the folder/calendar rail with counts and
   visibility toggles. Collapsible; never focused by default.
-- **Status line**: one row at the top or bottom edge carrying the
-  surface indicator (`1 Mail  2 Cal  3 People  4 Config`), sync
-  state (SY-5), and transient counts. Never scrolls, never wraps.
+- **Status line**: one row at the top edge (amended by the pass 2
+  plan's decision 1,
+  `docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`,
+  ruled by Geoff at the wireframe review: pine's title-bar instinct,
+  since 98% of time is spent in mail and the row is high-value
+  space). The origin holds the compact surface cluster: the active
+  surface named in accent and bold (`1 Mail`), siblings as bare dim
+  digits (`2 3 4`); sibling names live in the help overlay and
+  appear on visit, never spelled out in the status line itself. The
+  rest of the left segment carries the active surface's context;
+  sync state (SY-5) and transient counts sit right, and toasts
+  render in that same right segment so a transient notice never
+  shifts the layout (charter: calm). The cluster's segment divider
+  aligns with the sidebar's divider column when a sidebar is
+  present, and drops when none is. Never scrolls, never wraps. The
+  footer (section 4) is the bottom edge; banners are the row
+  directly under the status line (decision 2), pushing content down
+  one row while present.
 - **Footer**: section 4.
 - **Toast**: the transient notice region (undo, background
   outcomes). One toast at a time; newest wins; each logged
@@ -305,34 +322,57 @@ every color role is a function of `isDark bool`, resolved by the
 runtime capability resolver (technical design section 12).
 
 **Color roles** (the inventory; values land with the Phase 5
-theme build): `fg`, `fgMuted`, `fgSubtle`, `accent`, `unread`,
-`selectedBg`, `focusedBorder`, `error`, `warn`, `success`,
-`link`, `codeBg`, `quote`, `diffAdd`, `diffDel`, `flag`, and
-`calendarSlot[8]`. Rules: text roles hold 4.5:1 against their
-background, indicator roles 3:1 (UX-7, asserted by a test over
-the values); the accent is reserved for the focused/active
-moment, never decoration; calendar colors are theme-assigned
-(CA-8), slots assigned in calendar sort order and cycling past
-eight, with the cycle documented in the calendar sidebar so a
-collision is legible rather than mysterious.
+theme build, amended by pass 2 decision 6,
+`docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`):
+`bg`, `bgPanel`, `fg`, `fgMuted`, `fgSubtle`, `accent`, `unread`,
+`selectedBg`, `border`, `focusedBorder`, `error`, `warn`,
+`success`, `link`, `codeBg`, `quote`, `diffAdd`, `diffDel`,
+`flag`, and `calendarSlot[8]`. `bg` and `bgPanel` join the
+inventory as the two grounds content and chrome step between
+(`bgDeep`, a third dark step below `bg`, was tried and rejected:
+the review found the extra step illegible against poplar's dark
+palette); `selectedBg` is accent-tinted, never a plain gray step;
+`border` joins as a structural role, deliberately sub-contrast
+and exempt from the floors below, carrying pane dividers, the
+reader's header rule, and modal frames; `focusedBorder` repurposes
+as the degrade profiles' focused-divider color rather than a
+truecolor border tint. Rules: text roles hold 4.5:1 against all
+four grounds (`bg`, `bgPanel`, `selectedBg`, `codeBg`), indicator
+roles 3:1 against the same four (UX-7, asserted by a test over
+the values, `border` exempted); the accent is reserved for the
+focused/active moment, never decoration; calendar colors are
+theme-assigned (CA-8), slots assigned in calendar sort order and
+cycling past eight, with the cycle documented in the calendar
+sidebar so a collision is legible rather than mysterious.
 
 **Degrade tables**: the theme ships an ANSI-16 profile and a
 NO_COLOR profile in which unread, selected, focused, and error
 each map to a distinct non-color channel: unread = the `●`
-marker, selected = reverse video, focused = the heavy border
-glyph set, error = the `!` gutter marker plus reverse. The UX-7
-golden asserts no two states share a marker.
+marker, selected = reverse video, focused = the edge bar's glyph
+weight (`▌` focused, `▏` unfocused: a channel that survives
+NO_COLOR because the two states are different glyphs, not
+different colors, unlike a border color), error = the `!` gutter
+marker plus reverse. The UX-7 golden asserts no two states share
+a marker. Amended by pass 2 decision 3: the ANSI-16, NO_COLOR,
+and text-gallery profiles additionally substitute a drawn
+single-line divider for the ground-color steps that separate
+panes at full color, since neither profile can render those steps
+legibly; the ladder is the truecolor expression of pane
+separation, never the only one.
 
 **Glyph tokens**: every non-ASCII glyph the UI renders is a named
 token with an ASCII fallback in the degrade profiles: `unread ●`,
 `flagged ⚑`, `attachment ⊕`, `collapsed ▸`, `expanded ▾`,
 `selected ✓`, `ellipsis …`, the border sets, and the spinner
-frames. Plain Unicode only, no private-use-area or patched-font
-glyphs. The analyzer rule is stated stronger than UX-3's block
-list, which misses several of these blocks, and at UX-3's own
-repo-wide scope: outside `internal/theme`, anywhere in the repo,
-**no rune or string literal containing any non-ASCII code point**
-that reaches rendered output, along with UX-3's
+frames. Pass 2 decision 3 adds: `dismiss ✕` (`x`), `edgeBarFocused
+▌` U+258C (`>`), `edgeBarBlurred ▏` U+258F (`|`), `separator ·`
+U+00B7 (`-`), `scrollPos ≡` U+2261 (`=`), `treeBranch ├─` (`|-`),
+and `treeLast └─` (`+-`). Plain Unicode only, no private-use-area
+or patched-font glyphs. The analyzer rule is stated stronger than
+UX-3's block list, which misses several of these blocks, and at
+UX-3's own repo-wide scope: outside `internal/theme`, anywhere in
+the repo, **no rune or string literal containing any non-ASCII
+code point** that reaches rendered output, along with UX-3's
 lipgloss-constructor, ANSI-literal, and numeric-spacing rules. `internal/catkin` is the one recorded
 exemption: it defines its own style-parameter struct and poplar
 injects theme-derived values (it cannot import the theme package
@@ -344,9 +384,10 @@ rule (technical design section 18).
 terminal units): `gapLabel 1` (label to its value),
 `gapControl 2` (control to neighbor), `gutter 1` (marker column
 to text), `padPane 1` (pane edge to content), `padModal 2/1`
-(modal horizontal/vertical), `gapSection 1 row`. Markup-level
-literals are forbidden by the analyzer; a screen reaches spacing
-only through roles.
+(modal horizontal/vertical), `gapSection 1 row`. Pass 2 decision 3
+adds `padBand 2` (chrome band inset) and `padCard 2` (card inset).
+Markup-level literals are forbidden by the analyzer; a screen
+reaches spacing only through roles.
 
 **Type roles**: `emTitle` (bold), `emLabel` (dim), `emValue`
 (normal), `emHint` (dim italic where supported, dim otherwise).
@@ -470,6 +511,17 @@ inside them, and only inside them:
 - The remaining screen-verb assignments (link mode, RSVP answer
   keys, fallback-stack cycle), bound by the grammar tables, the
   two named exemptions, and the registry test.
+
+**The visual exemplar.** Pass 2 ratifies and pins the shell
+composition at
+`docs/poplar/design/2026-08-19-shell-exemplar/` (generator, ANSI
+render, stripped render, README): the design language's visual
+reference for every later screen. Help, config, calendar,
+contacts, and compose design from its ground grammar, hint atom,
+edge-bar vocabulary, card anatomy, and copy register before
+consulting the rules above, the way a cairn site designs from the
+cairn system (`docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`,
+decision 13).
 
 Amendments to the grammar, the exemption list, the exception
 list, or the component vocabulary go through this document first;
