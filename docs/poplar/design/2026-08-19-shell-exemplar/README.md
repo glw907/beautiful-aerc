@@ -34,9 +34,10 @@ sender 17, fixed thread-count field, subject `·` italic snippet,
 2-inset 8-cell date column); the subject-first reader card with
 symmetric margins and padded interior.
 
-Open items at pin time, carried to the pass gate: the toast
-countdown's form (UX-9 mandates visibility; rendered as a dim
-`9s`) and the attachment glyph (`⊕` vs a letter vs a count).
+Both pin-time items were ruled the same day (Geoff): the toast
+keeps its dim `9s` countdown (satisfying UX-9 as written) and the
+attachment glyph stays `⊕`. The exemplar is fully ratified with no
+open items.
 
 The gallery and freeze stills replace this artifact's role once
 pass 2's theme and render seam exist; until then this directory is

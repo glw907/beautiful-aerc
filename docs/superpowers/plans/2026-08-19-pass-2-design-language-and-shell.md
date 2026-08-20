@@ -72,8 +72,8 @@ v0.12.1 (v0.13.0 is a minor bump nothing needs).
 The requirements' build-order step 2 assigns UX-1 through UX-5, UX-7
 through UX-9, and ST-1 through ST-3 plus ST-5 to this pass. That is
 two passes' work, and the sizing doctrine says to cut before the
-burst rather than after. The proposed cut, for ratification at the
-wireframe review:
+burst rather than after. The cut, **ratified by Geoff at the
+wireframe review (2026-08-19)**:
 
 - **Pass 2 (this plan): the design language made real, and the
   shell.** Theme, resolver, layout, registry, root model, chrome,
@@ -278,9 +278,9 @@ implementer invents taste. Each cites its constraint.
    without it), a guaranteed three-cell gap, then the date
    right-aligned in fgMuted (time today, `Mon D` otherwise), all
    truncation marked with the ellipsis token. The attachment
-   glyph is an open taste item: `⊕` has no field precedent and
-   reads as "add"; candidates at the gate are a letter (aerc's
-   `a`), a count, or keeping `⊕`.
+   glyph is ruled: `⊕` stays (Geoff, 2026-08-19), the design
+   language's existing token, chosen over a letter or a count with
+   the field-precedent finding on record.
 
 13. **The pinned exemplar** (Geoff, 2026-08-19): composition v4
    is ratified and committed at
@@ -291,10 +291,10 @@ implementer invents taste. Each cites its constraint.
    atom, edge-bar vocabulary, card anatomy, and copy register are
    the reference a new screen imitates before consulting rules.
    Task 1's design-language amendment adds the exemplar pointer to
-   the design language's section 10. Open at pin time, carried to
-   the pass gate: the toast countdown's form (UX-9 mandates a
-   visible countdown; the exemplar shows a dim `9s`) and the
-   attachment glyph.
+   the design language's section 10. Both pin-time items are ruled
+   (Geoff, 2026-08-19): the toast keeps the dim `9s` countdown,
+   which satisfies UX-9's visible-countdown MUST as written, and
+   the attachment glyph stays `⊕`.
 
 ## Wireframes (the design ritual)
 
