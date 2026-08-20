@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"testing"
@@ -35,11 +36,15 @@ func (o *observerLog) snapshot() []Health {
 }
 
 // TestWorkerObserver_ReportsTransitionsOnly proves the bridge's own
-// no-polling contract end to end against a real Worker: one flush
-// cycle reports exactly Syncing then Synced, a long quiet stretch
-// with the stream still open reports nothing further (steady state
-// emits nothing), and the stream stopping reports BackingOff carrying
-// the exact delay RunPush is about to sleep.
+// no-polling contract end to end against a real Worker, scripted
+// through a full stop -> recover -> quiet sequence
+// (task-6-findings-r1.md F1): one flush cycle reports exactly Syncing
+// then Synced; a quiet stretch under BackoffMax with the stream still
+// open reports nothing further (steady state emits nothing); the
+// stream stopping reports BackingOff carrying the exact delay RunPush
+// is about to sleep; the next stream staying open long enough to
+// prove itself reports Synced again, clearing backing-off; and a
+// quiet stretch after that recovery again reports nothing.
 func TestWorkerObserver_ReportsTransitionsOnly(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
@@ -50,16 +55,15 @@ func TestWorkerObserver_ReportsTransitionsOnly(t *testing.T) {
 			return backend.ChangeSet{}, nil
 		}
 
-		notify := make(chan backend.Notification)
+		first := make(chan backend.Notification)
+		second := make(chan backend.Notification)
 		listens := 0
 		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
 			listens++
 			if listens == 1 {
-				return notify, nil
+				return first, nil
 			}
-			ch := make(chan backend.Notification)
-			close(ch) // every later stream opens and stops at once
-			return ch, nil
+			return second, nil // stays open for the rest of the test, long enough to prove itself
 		}}
 
 		cfg := testConfig()
@@ -78,7 +82,7 @@ func TestWorkerObserver_ReportsTransitionsOnly(t *testing.T) {
 		}()
 		synctest.Wait()
 
-		notify <- backend.Notification{}
+		first <- backend.Notification{}
 		time.Sleep(cfg.CoalesceWindow + 50*time.Millisecond)
 		synctest.Wait()
 
@@ -87,30 +91,71 @@ func TestWorkerObserver_ReportsTransitionsOnly(t *testing.T) {
 			t.Fatalf("after one flush cycle, events = %+v, want exactly [Syncing, Synced]", afterFlush)
 		}
 
-		// Steady state, stream still open and quiet: no further Health
-		// values, however long the wait, since nothing here is driven by
-		// a timer of its own (the bridge's own no-polling contract).
-		time.Sleep(2 * time.Second)
+		// A quiet stretch under BackoffMax, stream still open: nothing
+		// further, since the stream has not yet proved itself and
+		// nothing here is driven by a timer of its own.
+		time.Sleep(cfg.BackoffMax / 2)
 		synctest.Wait()
 		if steady := log.snapshot(); len(steady) != len(afterFlush) {
-			t.Fatalf("a quiet stretch with the stream open produced %d event(s), want the same %d as after the flush (steady state must emit nothing)", len(steady), len(afterFlush))
+			t.Fatalf("a quiet stretch under BackoffMax produced %d event(s), want the same %d as after the flush (steady state must emit nothing)", len(steady), len(afterFlush))
 		}
 
-		close(notify) // the stream stops for good
-		time.Sleep(cfg.BackoffMax + time.Second)
+		close(first) // the stream stops for good
 		synctest.Wait()
+
+		afterStop := log.snapshot()
+		if len(afterStop) != 3 || afterStop[2].State != StateBackingOff {
+			t.Fatalf("after the stream stopped, events = %+v, want exactly one StateBackingOff transition appended", afterStop)
+		}
+		if afterStop[2].Retry <= 0 || afterStop[2].Retry > cfg.BackoffMax {
+			t.Errorf("BackingOff Retry = %v, want it within (0, %v]", afterStop[2].Retry, cfg.BackoffMax)
+		}
+
+		// The backoff wait ends (bounded by BackoffMax), second's own
+		// stream opens, and stays open past BackoffMax: proved fires,
+		// clearing backing-off.
+		time.Sleep(2*cfg.BackoffMax + cfg.BackoffMin)
+		synctest.Wait()
+
+		afterRecover := log.snapshot()
+		if len(afterRecover) != 4 || afterRecover[3].State != StateSynced {
+			t.Fatalf("after the second stream proved itself, events = %+v, want exactly one StateSynced transition appended", afterRecover)
+		}
+
+		// Quiet again, second's stream still open: nothing further.
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		if final := log.snapshot(); len(final) != len(afterRecover) {
+			t.Fatalf("a quiet stretch after recovery produced %d event(s), want the same %d", len(final), len(afterRecover))
+		}
 
 		cancel()
 		<-done
-
-		final := log.snapshot()
-		if len(final) < 3 || final[2].State != StateBackingOff {
-			t.Fatalf("after the stream stopped, events = %+v, want a StateBackingOff transition next", final)
-		}
-		if final[2].Retry <= 0 || final[2].Retry > cfg.BackoffMax {
-			t.Errorf("BackingOff Retry = %v, want it within (0, %v]", final[2].Retry, cfg.BackoffMax)
-		}
 	})
+}
+
+// TestRunFlush_FailedCycleEmitsNoSynced proves F3: a flush cycle that
+// leaves a kind still failing emits Syncing but never a dishonest
+// Synced after it.
+func TestRunFlush_FailedCycleEmitsNoSynced(t *testing.T) {
+	w := storetest.OpenWriter(t, store.DefaultWriterConfig())
+	accountID := seedAccount(t, w)
+
+	var be backendtest.Fake
+	be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+		return backend.ChangeSet{}, errors.New("boom")
+	}
+
+	worker := NewWorker(accountID, &be, w, testConfig())
+	var log observerLog
+	worker.SetObserver(log.observe)
+
+	worker.runFlush(context.Background(), []backend.ObjectKind{backend.ObjectKindMessage}, newSyncFlushState())
+
+	got := log.snapshot()
+	if len(got) != 1 || got[0].State != StateSyncing {
+		t.Fatalf("a failed cycle logged %+v, want exactly [Syncing] (no Synced, an honest read of the failure)", got)
+	}
 }
 
 // TestWorkerObserver_NilByDefault proves a Worker with no Observer set

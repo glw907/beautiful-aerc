@@ -128,6 +128,18 @@ func (t Theme) Style(role Role, ground Ground) lipgloss.Style {
 	return t.paintGround(s, ground)
 }
 
+// EmphasizeRole returns role's style resolved against ground with
+// Bold added, the seam a caller reaches for instead of calling
+// lipgloss's own Bold on a Style Style already returned (the UX-3
+// styling analyzer's own blind spot on a method call chained off a
+// theme-returned value; this method is the honest route around it
+// rather than a caller taking the shortcut itself): the status line's
+// active-surface cluster label is its first caller
+// (task-6-findings-r1.md F5).
+func (t Theme) EmphasizeRole(role Role, ground Ground) lipgloss.Style {
+	return t.Style(role, ground).Bold(true)
+}
+
 // paintGround applies ground's background at ProfileTrueColor. At
 // ProfileANSI16 and ProfileNoColor, where the ground steps that
 // carry pane and selection separation at full color are not

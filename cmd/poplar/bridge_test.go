@@ -40,11 +40,13 @@ func (l *msgLog) snapshot() []tea.Msg {
 }
 
 // TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence is task
-// 6's own bridge test: a scripted engine-state transition sequence
-// (one flush cycle, a quiet stretch, then the push stream stopping)
-// against a real sync.Worker produces exactly the ui.Msg sequence the
-// status line expects, and a steady state between transitions
-// produces nothing at all (no polling).
+// 6's own bridge test, scripted through a full stop -> recover ->
+// quiet sequence (task-6-findings-r1.md F1): a scripted engine-state
+// transition sequence against a real sync.Worker produces exactly the
+// ui.Msg sequence the status line expects, a steady state between
+// transitions produces nothing at all (no polling), and a stream that
+// recovers and proves itself clears backing-off with a further
+// SyncStateMsg{State: SyncStateSynced}.
 func TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := storetest.OpenWriter(t, store.DefaultWriterConfig())
@@ -55,9 +57,15 @@ func TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence(t *testing.T) {
 		be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
 			return backend.ChangeSet{}, nil
 		}
-		notify := make(chan backend.Notification)
+		first := make(chan backend.Notification)
+		second := make(chan backend.Notification)
+		listens := 0
 		be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
-			return notify, nil
+			listens++
+			if listens == 1 {
+				return first, nil
+			}
+			return second, nil // stays open for the rest of the test, long enough to prove itself
 		}}
 
 		cfg := syncengine.DefaultConfig()
@@ -82,7 +90,7 @@ func TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence(t *testing.T) {
 		}()
 		synctest.Wait()
 
-		notify <- backend.Notification{}
+		first <- backend.Notification{}
 		time.Sleep(cfg.CoalesceWindow + 50*time.Millisecond)
 		synctest.Wait()
 
@@ -95,31 +103,47 @@ func TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence(t *testing.T) {
 			t.Fatalf("after one flush cycle, messages = %#v, want %#v", got, want)
 		}
 
-		// Steady state: the stream stays open and quiet. No further
-		// message, however long the wait (the bridge itself polls
-		// nothing; every message rides a real transition).
-		time.Sleep(2 * time.Second)
+		// A quiet stretch under BackoffMax, stream still open: no
+		// further message (the stream has not yet proved itself, and
+		// nothing here polls).
+		time.Sleep(cfg.BackoffMax / 2)
 		synctest.Wait()
 		if got := log.snapshot(); len(got) != len(want) {
-			t.Fatalf("a quiet stretch produced %d message(s), want the same %d as after the flush cycle", len(got), len(want))
+			t.Fatalf("a quiet stretch under BackoffMax produced %d message(s), want the same %d as after the flush cycle", len(got), len(want))
 		}
 
-		close(notify)
-		time.Sleep(cfg.BackoffMin)
+		close(first) // the stream stops for good
 		synctest.Wait()
+
+		afterStop := log.snapshot()
+		if len(afterStop) != len(want)+1 {
+			t.Fatalf("after the stream stopped, messages = %#v, want exactly one more than %#v", afterStop, want)
+		}
+		state, ok := afterStop[len(want)].(ui.SyncStateMsg)
+		if !ok || state.State != ui.SyncStateBackingOff || state.Retry <= 0 {
+			t.Fatalf("first message after the stop = %#v, want a ui.SyncStateMsg{State: SyncStateBackingOff} with a positive Retry", afterStop[len(want)])
+		}
+
+		// The backoff wait ends, second's own stream opens and stays
+		// open past BackoffMax: proved fires, clearing backing-off.
+		time.Sleep(2*cfg.BackoffMax + cfg.BackoffMin)
+		synctest.Wait()
+
+		afterRecover := log.snapshot()
+		wantRecovered := []tea.Msg{ui.SyncStateMsg{State: ui.SyncStateSynced}, ui.StoreChangedMsg{}}
+		if got := afterRecover[len(afterStop):]; !slices.Equal(got, wantRecovered) {
+			t.Fatalf("after the second stream proved itself, the appended messages = %#v, want %#v", got, wantRecovered)
+		}
+
+		// Quiet again: no further message.
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		if got := log.snapshot(); len(got) != len(afterRecover) {
+			t.Fatalf("a quiet stretch after recovery produced %d message(s), want the same %d", len(got), len(afterRecover))
+		}
 
 		cancel()
 		<-done
-
-		got := log.snapshot()
-		if len(got) <= len(want) {
-			t.Fatalf("after the stream stopped, messages = %#v, want a StateBackingOff transition appended", got)
-		}
-		last := got[len(want)]
-		state, ok := last.(ui.SyncStateMsg)
-		if !ok || state.State != ui.SyncStateBackingOff || state.Retry <= 0 {
-			t.Errorf("first message after the stop = %#v, want a ui.SyncStateMsg{State: SyncStateBackingOff} with a positive Retry", last)
-		}
 	})
 }
 

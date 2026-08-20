@@ -54,7 +54,7 @@ func bridgeSyncState(s syncengine.State) ui.SyncState {
 
 // bridgeRetrySeconds rounds d up to whole seconds: a sub-second retry
 // still reports "1s" rather than the misleadingly-immediate "0s"
-// (UX-9's visible-countdown MUST).
+// (SY-5's backing-off state carries a visible countdown).
 func bridgeRetrySeconds(d time.Duration) int {
 	return int(math.Ceil(d.Seconds()))
 }

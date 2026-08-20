@@ -53,7 +53,8 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine) Fra
 	}
 
 	canvas := theme.NewCanvas(lm.Width, lm.Height)
-	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(status, th, lm.StatusRow.Rect.Dx()))
+	dropTotal := lm.HeightClass != HeightFull
+	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(status, th, lm.StatusRow.Rect.Dx(), dropTotal))
 	if lm.BannerRow {
 		canvas.Paint(lm.Banner.Rect, th.Blank(lm.Banner.Ground, lm.Banner.Rect.Dx(), lm.Banner.Rect.Dy()))
 	}

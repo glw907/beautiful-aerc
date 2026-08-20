@@ -295,7 +295,7 @@ func (c ContactsPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+//nolint:unparam // Cmd stays nil: this screen owns no store-backed state to reload (its own non-goal, above)
 func (c ContactsPlaceholder) update(msg tea.Msg) (ContactsPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
@@ -348,7 +348,7 @@ func (c ConfigPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+//nolint:unparam // Cmd stays nil: the config surface lands with pass 2b, so there is no store-backed state to reload yet
 func (c ConfigPlaceholder) update(msg tea.Msg) (ConfigPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:

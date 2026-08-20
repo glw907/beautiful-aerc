@@ -178,13 +178,25 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	flush := func() { w.runFlush(ctx, kinds, flushState) }
 
 	var push pushState
+	// proved wraps push's own proved mark with a Synced transition
+	// (task-6-findings-r1.md F1): proved is the schedule's own
+	// evidence that the server is serving again (a stream that has
+	// stayed open past cfg.BackoffMax), so it is the seam a
+	// backing-off status line clears through, rather than every
+	// successful Listen (a stream that opens and stops again at once
+	// proves nothing, per pushState's own doc comment, and would
+	// flicker the status line between backing-off and recovered).
+	proved := func() {
+		push.proved()
+		w.emit(Health{State: StateSynced})
+	}
 	for {
 		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, flush, w.emitBackoff)
 		if err != nil {
 			return
 		}
 
-		if !consumePush(ctx, ch, w.cfg, flush, push.proved) {
+		if !consumePush(ctx, ch, w.cfg, flush, proved) {
 			return
 		}
 		push.stopped()

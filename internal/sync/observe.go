@@ -39,7 +39,10 @@ type Observer func(Health)
 // SetObserver installs o as w's own Observer, replacing whatever was
 // set before. A nil Observer, the zero value every Worker starts
 // with, disables reporting: w.emit and w.emitBackoff no-op rather
-// than requiring every call site to check first.
+// than requiring every call site to check first. SetObserver is not
+// safe to call concurrently with RunPush or pollKinds: a caller sets
+// it once, before starting either, the same one-time wiring
+// NewWorker's own caller already does for every other field.
 func (w *Worker) SetObserver(o Observer) {
 	w.observer = o
 }
@@ -60,14 +63,18 @@ func (w *Worker) emitBackoff(d time.Duration) {
 }
 
 // runFlush wraps flush (SyncKind for each of kinds) with a Syncing
-// transition before it runs and a Synced transition after: the one
-// place both RunPush's push-triggered cycles and pollKinds' fallback
-// cycles report progress through, so the status line's syncing state
-// reflects a flush cycle in progress, whether or not this particular
-// cycle's own per-kind failures escalated to the push transport's
-// separate backing-off state.
+// transition before it runs, and a Synced transition after only when
+// state.failing is empty once it returns: the one place both
+// RunPush's push-triggered cycles and pollKinds' fallback cycles
+// report progress through. A cycle that leaves any kind still failing
+// emits nothing further this pass rather than a dishonest Synced
+// (task-6-findings-r1.md F3); state.report has already surfaced the
+// failure through uerr, and task 8's banner is the fuller channel a
+// later pass gives it in the status line itself.
 func (w *Worker) runFlush(ctx context.Context, kinds []backend.ObjectKind, state *syncFlushState) {
 	w.emit(Health{State: StateSyncing})
 	w.flush(ctx, kinds, state)
-	w.emit(Health{State: StateSynced})
+	if len(state.failing) == 0 {
+		w.emit(Health{State: StateSynced})
+	}
 }

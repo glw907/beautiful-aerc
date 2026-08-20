@@ -1,4 +1,4 @@
-  \x1b[1m1 Mail\x1b[m  \x1b[2m2\x1b[m \x1b[2m3\x1b[m \x1b[2m4\x1b[m                                                         \x1b[2msynced\x1b[m
+  \x1b[1m1 Mail\x1b[m  \x1b[2m2\x1b[m \x1b[2m3\x1b[m \x1b[2m4\x1b[m                                                         \x1b[2mSynced\x1b[m
 
 
 

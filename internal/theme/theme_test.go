@@ -77,6 +77,26 @@ func TestStyleTrueColor(t *testing.T) {
 	}
 }
 
+// TestEmphasizeRole proves the Bold-adding seam (task-6-findings-r1.md
+// F5): the same color/ground resolution Style itself produces, plus
+// Bold, so a caller never reaches for lipgloss's own Bold on a
+// Style-returned value.
+func TestEmphasizeRole(t *testing.T) {
+	th := New(true, ProfileTrueColor)
+	plain := th.Style(RoleAccent, GroundPanel)
+	emphasized := th.EmphasizeRole(RoleAccent, GroundPanel)
+
+	if emphasized.GetBold() != true {
+		t.Error("EmphasizeRole().GetBold() = false, want true")
+	}
+	if !sameColor(emphasized.GetForeground(), plain.GetForeground()) {
+		t.Errorf("EmphasizeRole() foreground = %v, want the same as Style() %v", emphasized.GetForeground(), plain.GetForeground())
+	}
+	if !sameColor(emphasized.GetBackground(), plain.GetBackground()) {
+		t.Errorf("EmphasizeRole() background = %v, want the same as Style() %v", emphasized.GetBackground(), plain.GetBackground())
+	}
+}
+
 func TestTypeStyle(t *testing.T) {
 	th := New(true, ProfileTrueColor)
 	tests := []struct {

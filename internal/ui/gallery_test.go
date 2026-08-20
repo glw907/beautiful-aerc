@@ -83,7 +83,10 @@ var syncStateProfiles = []galleryProfile{galleryProfiles[0], galleryProfiles[3]}
 var galleryCases = []galleryCase{
 	{fixture: fixtures.Mail, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
 	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
-	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
+	// The second size point, 100×16, is HeightShort: F6's own gallery
+	// proof that the sync segment drops its known total there
+	// (wireframe F3).
+	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}, {100, 16}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.MailOffline, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}}},

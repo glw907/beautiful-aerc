@@ -140,8 +140,45 @@ func TestApp_SpinnerTicksOnlyWhileSyncingOrBackfilling(t *testing.T) {
 	}
 
 	updated, cmd = app.tickSpinner(statusSpinnerTickMsg{gen: gen})
-	mustApp(t, updated)
+	app = mustApp(t, updated)
 	if cmd != nil {
 		t.Fatal("tickSpinner after leaving the syncing state armed a Cmd, want QA-8's idle posture: no further timer wakeups")
+	}
+
+	// Restart: spinnerTicking is true again, on a fresh gen. A tick
+	// carrying the OLD (pre-stop) gen must still be ignored here: this
+	// is what the gen guard alone catches, and what makes the guard
+	// falsifiable (task-6-findings-r1.md F13). spinnerTicking alone
+	// would wrongly accept it, since it is true again by this point.
+	staleGen := gen
+	updated, cmd = app.Update(SyncStateMsg{State: SyncStateSyncing, Done: 3, Total: 10})
+	app = mustApp(t, updated)
+	if cmd == nil {
+		t.Fatal("restarting Syncing armed no Cmd, want a fresh tick chain")
+	}
+	restarted, ok := cmd().(statusSpinnerTickMsg)
+	if !ok {
+		t.Fatalf("the restarted Cmd yielded %#v, want statusSpinnerTickMsg", restarted)
+	}
+	if restarted.gen == staleGen {
+		t.Fatal("restarting Syncing reused the old gen, want a fresh one so a stale tick from before the stop is distinguishable")
+	}
+
+	updated, cmd = app.tickSpinner(statusSpinnerTickMsg{gen: staleGen})
+	app = mustApp(t, updated)
+	if cmd != nil {
+		t.Fatal("a stale tick from before the restart armed a Cmd, want it ignored despite spinnerTicking being true again")
+	}
+	if app.statusLine().Spinner != 1 {
+		t.Errorf("a stale tick from before the restart advanced Spinner to %d, want it unchanged at 1", app.statusLine().Spinner)
+	}
+
+	updated, cmd = app.tickSpinner(statusSpinnerTickMsg{gen: restarted.gen})
+	app = mustApp(t, updated)
+	if cmd == nil {
+		t.Fatal("the current gen's tick armed no Cmd, want the chain to continue")
+	}
+	if app.statusLine().Spinner != 2 {
+		t.Errorf("Spinner = %d, want 2 after the current gen's tick", app.statusLine().Spinner)
 	}
 }
