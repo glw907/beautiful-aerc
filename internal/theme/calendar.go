@@ -19,6 +19,15 @@ var calendarSlotHex = [2][8]string{
 	},
 }
 
+// calendarSlotANSI16 names each slot's ANSI-16 approximation
+// directly, the same reasoning as ansi16SlotDark/Light: a
+// nearest-hex downsample cannot be trusted to keep 8 slots
+// distinguishable at 4-bit depth.
+var calendarSlotANSI16 = [2][8]int{
+	{12, 10, 11, 13, 14, 9, 5, 3}, // dark
+	{4, 2, 3, 5, 6, 1, 5, 3},      // light
+}
+
 // CalendarSlot returns the style for the i'th slot in the calendar's
 // theme-assigned color cycle (CA-8), resolved against ground. The
 // cycle has 8 hues and i wraps past it.
@@ -27,9 +36,17 @@ func (t Theme) CalendarSlot(i int, ground Ground) lipgloss.Style {
 	if !t.isDark {
 		row = 1
 	}
-	slot := i % len(calendarSlotHex[row])
+	slot := i % 8
 	if slot < 0 {
-		slot += len(calendarSlotHex[row])
+		slot += 8
 	}
-	return t.paint(lipgloss.NewStyle(), calendarSlotHex[row][slot], ground, false)
+
+	s := lipgloss.NewStyle()
+	switch t.profile {
+	case ProfileTrueColor:
+		s = s.Foreground(hexColor(calendarSlotHex[row][slot]))
+	case ProfileANSI16:
+		s = s.Foreground(ansi16(calendarSlotANSI16[row][slot]))
+	}
+	return t.paintGround(s, ground)
 }

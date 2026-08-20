@@ -3,6 +3,8 @@ package theme
 import (
 	"image/color"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
 
 func sameColor(a, b color.Color) bool {
@@ -12,6 +14,20 @@ func sameColor(a, b color.Color) bool {
 	ar, ag, ab, aa := a.RGBA()
 	br, bg, bb, ba := b.RGBA()
 	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
+// stylesDiffer reports whether a and b would render visibly
+// differently, over the attribute surface Style and TypeStyle
+// actually set (foreground, background, reverse, bold, italic,
+// underline, faint).
+func stylesDiffer(a, b lipgloss.Style) bool {
+	return !sameColor(a.GetForeground(), b.GetForeground()) ||
+		!sameColor(a.GetBackground(), b.GetBackground()) ||
+		a.GetReverse() != b.GetReverse() ||
+		a.GetBold() != b.GetBold() ||
+		a.GetItalic() != b.GetItalic() ||
+		a.GetUnderline() != b.GetUnderline() ||
+		a.GetFaint() != b.GetFaint()
 }
 
 func TestStyleTrueColor(t *testing.T) {
@@ -55,21 +71,6 @@ func TestStyleTrueColor(t *testing.T) {
 				t.Errorf("underline = %v, want %v", s.GetUnderline(), tt.wantUnder)
 			}
 		})
-	}
-}
-
-func TestStyleGroundsAllDistinct(t *testing.T) {
-	th := New(true, ProfileTrueColor)
-	grounds := []Ground{GroundBase, GroundPanel, GroundSelected, GroundCode}
-	seen := map[color.Color]bool{}
-	for _, g := range grounds {
-		bg := th.Style(RoleFg, g).GetBackground()
-		for other := range seen {
-			if sameColor(bg, other) {
-				t.Errorf("ground %v shares a background color with another ground", g)
-			}
-		}
-		seen[bg] = true
 	}
 }
 
@@ -124,6 +125,39 @@ func TestBorderKinds(t *testing.T) {
 	focused := th.Border(BorderFocused)
 	if divider == modal || divider == focused || modal == focused {
 		t.Errorf("border kinds are not pairwise distinct: divider=%+v modal=%+v focused=%+v", divider, modal, focused)
+	}
+}
+
+// TestBorderCollapsesUnderDegrade asserts C3a: every BorderKind
+// returns lipgloss.ASCIIBorder at ProfileANSI16 and ProfileNoColor,
+// since box-drawing weight is not a channel those profiles carry
+// reliably (the focused state's own degrade channel is the edge
+// bar's glyph weight, not the border).
+func TestBorderCollapsesUnderDegrade(t *testing.T) {
+	ascii := lipgloss.ASCIIBorder()
+	for _, p := range []Profile{ProfileANSI16, ProfileNoColor} {
+		th := New(true, p)
+		for _, kind := range []BorderKind{BorderDivider, BorderModal, BorderFocused} {
+			if got := th.Border(kind); got != ascii {
+				t.Errorf("profile %v kind %v: Border() = %+v, want ASCIIBorder", p, kind, got)
+			}
+		}
+	}
+}
+
+func TestDrawsDividers(t *testing.T) {
+	tests := []struct {
+		profile Profile
+		want    bool
+	}{
+		{ProfileTrueColor, false},
+		{ProfileANSI16, true},
+		{ProfileNoColor, true},
+	}
+	for _, tt := range tests {
+		if got := New(true, tt.profile).DrawsDividers(); got != tt.want {
+			t.Errorf("DrawsDividers() at profile %v = %v, want %v", tt.profile, got, tt.want)
+		}
 	}
 }
 

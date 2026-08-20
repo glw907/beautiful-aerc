@@ -9,6 +9,7 @@ package theme
 
 import (
 	"image/color"
+	"strconv"
 
 	"charm.land/lipgloss/v2"
 )
@@ -82,15 +83,25 @@ func New(isDark bool, profile Profile) Theme {
 	return Theme{isDark: isDark, profile: profile}
 }
 
+// DrawsDividers reports whether ground steps stop carrying pane
+// separation and a caller must draw the structural divider glyph
+// instead (design decision 3): true at ProfileANSI16 and
+// ProfileNoColor, false at ProfileTrueColor.
+func (t Theme) DrawsDividers() bool {
+	return t.profile != ProfileTrueColor
+}
+
 // Style returns role's style resolved against ground. Role-intrinsic
 // channels apply regardless of profile: RoleUnread is bold, RoleQuote
-// is italic, RoleLink is underlined (decision 6's table). Under
-// ProfileTrueColor, ground supplies a real background color; under
-// ProfileANSI16 and ProfileNoColor the ground color drops in favor
-// of the caller's own structural divider (decision 3's degrade
-// substitution) except that GroundSelected and RoleError switch to
-// reverse video instead, the design language's degrade-table
-// channels for the selected and error states.
+// is italic, RoleLink is underlined (decision 6's table). At
+// ProfileANSI16 and ProfileNoColor, RoleFgMuted and RoleFgSubtle also
+// gain Faint, the non-color expression of "dim" the design language's
+// type roles name. Foreground resolves per profile: a true hex color
+// at ProfileTrueColor, an explicit ANSI-16 slot at ProfileANSI16 (a
+// nearest-match downsample collapses distinct roles onto the same
+// slot, so the palette names one directly per role), and no color at
+// all at ProfileNoColor. Background and the selection/reverse channel
+// come from paintGround.
 func (t Theme) Style(role Role, ground Ground) lipgloss.Style {
 	s := lipgloss.NewStyle()
 	switch role {
@@ -101,20 +112,35 @@ func (t Theme) Style(role Role, ground Ground) lipgloss.Style {
 	case RoleLink:
 		s = s.Underline(true)
 	}
-	return t.paint(s, roleHex(role, t.isDark), ground, role == RoleError)
-}
-
-// paint applies fgHex and ground to s per t's profile. forceReverse
-// asks for reverse video regardless of ground, RoleError's half of
-// the degrade table.
-func (t Theme) paint(s lipgloss.Style, fgHex string, ground Ground, forceReverse bool) lipgloss.Style {
+	if t.profile != ProfileTrueColor {
+		switch role {
+		case RoleFgMuted, RoleFgSubtle:
+			s = s.Faint(true)
+		}
+	}
 	switch t.profile {
 	case ProfileTrueColor:
-		return s.Foreground(hexColor(fgHex)).Background(hexColor(groundHex(ground, t.isDark)))
+		s = s.Foreground(hexColor(roleHex(role, t.isDark)))
 	case ProfileANSI16:
-		s = s.Foreground(ansi16Color(fgHex))
+		s = s.Foreground(ansi16(ansi16Slot(role, t.isDark)))
 	}
-	if ground == GroundSelected || forceReverse {
+	return t.paintGround(s, ground)
+}
+
+// paintGround applies ground's background at ProfileTrueColor. At
+// ProfileANSI16 and ProfileNoColor, where the ground steps that
+// carry pane and selection separation at full color are not
+// reliably visible, GroundSelected switches to reverse video
+// instead: selection's exclusive non-color channel (design language
+// degrade table, ruling I1 of the pass 2 review). No other role or
+// state adds reverse, so a role's Style never collides with
+// selection's cue, and ProfileTrueColor never uses reverse at all
+// since the background color already carries the cue.
+func (t Theme) paintGround(s lipgloss.Style, ground Ground) lipgloss.Style {
+	if t.profile == ProfileTrueColor {
+		return s.Background(hexColor(groundHex(ground, t.isDark)))
+	}
+	if ground == GroundSelected {
 		s = s.Reverse(true)
 	}
 	return s
@@ -122,4 +148,9 @@ func (t Theme) paint(s lipgloss.Style, fgHex string, ground Ground, forceReverse
 
 func hexColor(h string) color.Color {
 	return lipgloss.Color("#" + h)
+}
+
+// ansi16 returns the lipgloss ANSI-16 color for slot (0-15).
+func ansi16(slot int) color.Color {
+	return lipgloss.Color(strconv.Itoa(slot))
 }

@@ -3,6 +3,8 @@ package theme
 import (
 	"reflect"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // TestGlyphsProfileSelection asserts Glyphs resolves to the full
@@ -73,6 +75,26 @@ func TestFullGlyphsCarryUnicode(t *testing.T) {
 		}
 		if !hasNonASCII {
 			t.Errorf("field %s: full glyph %q carries no non-ASCII rune despite differing from its fallback", name, full)
+		}
+	}
+}
+
+// TestGlyphWidthParity asserts pass 2 review finding I5: every
+// ASCII fallback occupies exactly as many terminal cells as its
+// Unicode counterpart, so a degrade substitution never shifts a
+// column budget decision 12 fixed at full color. The prior "..."
+// ellipsis fallback (3 cells for a 1-cell "…") broke this; "~"
+// fixes it.
+func TestGlyphWidthParity(t *testing.T) {
+	full := reflect.ValueOf(fullGlyphs)
+	rt := full.Type()
+	asciiRV := reflect.ValueOf(asciiGlyphs)
+	for i := range full.NumField() {
+		name := rt.Field(i).Name
+		fullWidth := ansi.StringWidth(full.Field(i).String())
+		asciiWidth := ansi.StringWidth(asciiRV.Field(i).String())
+		if fullWidth != asciiWidth {
+			t.Errorf("field %s: full width %d, ASCII fallback width %d", name, fullWidth, asciiWidth)
 		}
 	}
 }

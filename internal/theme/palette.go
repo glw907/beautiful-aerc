@@ -1,11 +1,5 @@
 package theme
 
-import (
-	"image/color"
-
-	"github.com/charmbracelet/colorprofile"
-)
-
 // paletteDark and paletteLight hold the hex values for the roles
 // with a direct palette entry (design decision 6, the "cool slate,
 // v3 values" table). RoleLink, RoleFlag, RoleDiffAdd, RoleDiffDel,
@@ -51,22 +45,95 @@ var groundLight = map[Ground]string{
 	GroundCode:     "D9DDE4",
 }
 
-// roleHex returns role's hex color for isDark, resolving the five
-// alias roles to the entry they borrow (design decision 6: link is
+// ansi16SlotDark and ansi16SlotLight name each role's ANSI-16 (4-bit)
+// slot directly, one per named role (pass 2 review finding C1): a
+// nearest-hex downsample collapses distinct roles onto the same
+// slot (warn and error both land on bright red in the dark theme,
+// for one measured case), which loses the role semantics the
+// truecolor palette carries. Naming the slot keeps error, warn, and
+// success on three distinct ANSI colors instead.
+var ansi16SlotDark = map[Role]int{
+	RoleFg:       7,
+	RoleFgMuted:  8,
+	RoleFgSubtle: 8,
+	RoleAccent:   12,
+	RoleUnread:   15,
+	RoleError:    9,
+	RoleWarn:     11,
+	RoleSuccess:  10,
+	RoleQuote:    7,
+	RoleBorder:   8,
+}
+
+var ansi16SlotLight = map[Role]int{
+	RoleFg:       0,
+	RoleFgMuted:  8,
+	RoleFgSubtle: 8,
+	RoleAccent:   4,
+	RoleUnread:   0,
+	RoleError:    1,
+	RoleWarn:     3,
+	RoleSuccess:  2,
+	RoleQuote:    8,
+	RoleBorder:   8,
+}
+
+// roleClass groups a Role by the contrast floor it must clear
+// (design decision 5): classText roles hold 4.5:1, classIndicator
+// roles 3:1, and classStructural is border's own contrast-exempt
+// class.
+type roleClass int
+
+const (
+	classText roleClass = iota
+	classIndicator
+	classStructural
+)
+
+// roleClassOf classifies every declared Role (design decision 5's
+// partition), so a role that gains no palette entry or no class
+// fails TestRoleCompleteness rather than rendering unstyled text
+// silently (pass 2 review finding I2).
+var roleClassOf = map[Role]roleClass{
+	RoleFg:            classText,
+	RoleFgMuted:       classText,
+	RoleUnread:        classText,
+	RoleError:         classText,
+	RoleWarn:          classText,
+	RoleSuccess:       classText,
+	RoleLink:          classText,
+	RoleQuote:         classText,
+	RoleAccent:        classText,
+	RoleFgSubtle:      classIndicator,
+	RoleFocusedBorder: classIndicator,
+	RoleFlag:          classIndicator,
+	RoleDiffAdd:       classIndicator,
+	RoleDiffDel:       classIndicator,
+	RoleBorder:        classStructural,
+}
+
+// baseRole resolves role's five aliases (design decision 6: link is
 // an accent alias, flag a warn alias, diffAdd/diffDel the
 // success/error values, and focusedBorder repurposes accent as the
-// degrade profiles' focused-divider color).
-func roleHex(role Role, isDark bool) string {
+// degrade profiles' focused-divider color) to the role whose palette
+// and ANSI-16 slot they borrow. A non-alias role resolves to itself.
+func baseRole(role Role) Role {
 	switch role {
 	case RoleLink, RoleFocusedBorder:
-		role = RoleAccent
+		return RoleAccent
 	case RoleFlag:
-		role = RoleWarn
+		return RoleWarn
 	case RoleDiffAdd:
-		role = RoleSuccess
+		return RoleSuccess
 	case RoleDiffDel:
-		role = RoleError
+		return RoleError
+	default:
+		return role
 	}
+}
+
+func roleHex(role Role, isDark bool) string {
+	role = baseRole(role)
 	if isDark {
 		return paletteDark[role]
 	}
@@ -80,8 +147,10 @@ func groundHex(g Ground, isDark bool) string {
 	return groundLight[g]
 }
 
-// ansi16Color downsamples h to its nearest 4-bit ANSI approximation,
-// the ProfileANSI16 half of Style's profile switch.
-func ansi16Color(h string) color.Color {
-	return colorprofile.ANSI.Convert(hexColor(h))
+func ansi16Slot(role Role, isDark bool) int {
+	role = baseRole(role)
+	if isDark {
+		return ansi16SlotDark[role]
+	}
+	return ansi16SlotLight[role]
 }

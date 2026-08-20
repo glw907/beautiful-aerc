@@ -1,8 +1,11 @@
 package theme
 
 // GlyphSet is the theme's compiled glyph tokens (design language
-// section 7; decision 3 adds Dismiss through ErrorGutter), resolved
-// to the profile's fallback by Glyphs.
+// section 7; decision 3 adds Dismiss through Divider), resolved to
+// the profile's fallback by Glyphs. Divider serves two uses that
+// share one glyph and one RoleBorder styling: the structural
+// pane-separator line ANSI-16/NO_COLOR draw in place of a ground
+// step (DrawsDividers), and the reader's quote-bar prefix.
 type GlyphSet struct {
 	Unread         string
 	Flagged        string
@@ -18,7 +21,7 @@ type GlyphSet struct {
 	ScrollPos      string
 	TreeBranch     string
 	TreeLast       string
-	QuoteBar       string
+	Divider        string
 	ErrorGutter    string
 }
 
@@ -38,12 +41,16 @@ var fullGlyphs = GlyphSet{
 	ScrollPos:      "≡",
 	TreeBranch:     "├─",
 	TreeLast:       "└─",
-	QuoteBar:       "│",
+	Divider:        "│",
 	ErrorGutter:    "!",
 }
 
 // asciiGlyphs is the ASCII fallback set, ProfileANSI16 and
 // ProfileNoColor's tier (design decision 3's substitution list).
+// Every field is exactly as wide, in terminal cells, as its
+// fullGlyphs counterpart (TestGlyphWidthParity), so a degrade
+// substitution never shifts a column budget decision 12 fixed at
+// full color.
 var asciiGlyphs = GlyphSet{
 	Unread:         "*",
 	Flagged:        "!",
@@ -51,7 +58,7 @@ var asciiGlyphs = GlyphSet{
 	Collapsed:      ">",
 	Expanded:       "v",
 	Selected:       "X",
-	Ellipsis:       "...",
+	Ellipsis:       "~",
 	Dismiss:        "x",
 	EdgeBarFocused: ">",
 	EdgeBarBlurred: "|",
@@ -59,7 +66,7 @@ var asciiGlyphs = GlyphSet{
 	ScrollPos:      "=",
 	TreeBranch:     "|-",
 	TreeLast:       "+-",
-	QuoteBar:       "|",
+	Divider:        "|",
 	ErrorGutter:    "!",
 }
 
