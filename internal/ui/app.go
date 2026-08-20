@@ -116,6 +116,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleWheel(msg)
 	case wheelFlushMsg:
 		return a.flushWheelTimer(msg)
+	case WheelMsg:
+		return a.dispatchWheel(msg)
+	case tea.MouseClickMsg:
+		return a.dispatchClick(msg)
 	case SyncStateMsg:
 		a.sync = msg
 		return a.reconcileSpinner()
@@ -367,10 +371,7 @@ func armToastTick(gen int) tea.Cmd {
 // #71 tracks q's own missing StateDigitsSwitch gate); anything else at
 // a surface root reaches the active screen's own Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	front := a.activeScreen().Entry()
-	if len(a.stack) > 0 {
-		front = a.stack[len(a.stack)-1].Entry()
-	}
+	front := a.frontEntry()
 
 	if key.Matches(msg, GrammarKeys.Back) && front.SwitchState != StateModal {
 		if a.banner.Active && front.SwitchState != StatePrintableEntry {
@@ -417,12 +418,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a.updateActive(msg)
 	}
 
-	top := a.stack[len(a.stack)-1]
-	updated, cmd := top.Update(msg)
-	if screen, ok := updated.(Screen); ok {
-		a.stack[len(a.stack)-1] = screen
-	}
-	return a, cmd
+	return a.updateStackTop(msg)
 }
 
 // handleWheel folds msg into the open wheel gesture, or opens a new

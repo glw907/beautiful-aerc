@@ -310,15 +310,17 @@ func TestHelpScreen_WheelScrolls(t *testing.T) {
 }
 
 // TestApp_WheelScrollsHelpWhileStacked proves the coalesced WheelMsg
-// App's own wheel gesture flushes reaches a stacked HelpScreen through
-// the generic updateChildren forwarding (task-8-findings-r1.md ruling
-// F4), the same path a resize or theme change already takes.
+// App's own dispatchWheel routes to a stacked HelpScreen (task 10)
+// when the gesture's own coordinates land within the Main band the
+// overlay fills (FullRegion): the position-aware routing that
+// replaced the old coordinate-blind updateChildren broadcast
+// (task-8-findings-r1.md ruling F4).
 func TestApp_WheelScrollsHelpWhileStacked(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 80, Height: 15})))
 	app = mustApp(t, first(app.Update(helpKey())))
 
-	app = mustApp(t, first(app.Update(WheelMsg{Delta: 2})))
+	app = mustApp(t, first(app.Update(WheelMsg{X: 5, Y: 5, Delta: 2})))
 
 	help, ok := app.stack[0].(HelpScreen)
 	if !ok {
