@@ -10,7 +10,7 @@ POPLARCHECK := tools/bin/poplarcheck
 
 .PHONY: all build test install fmt check conformance \
 	tidy-check check-build fmt-check lint analyzers jmap-boundary tagged-vet vale-comments skipcheck hookcheck perf \
-	build-golangci-lint build-poplarcheck
+	build-golangci-lint build-poplarcheck gallery
 
 # The conformance suite's server. Podman leads because this is the
 # runtime the target is actually exercised against, and because
@@ -31,6 +31,19 @@ build:
 
 test:
 	go test ./...
+
+# gallery regenerates internal/ui/testdata/gallery/ (design decision
+# 10, pass 2 amendment B): the render seam's own committed sweep of
+# every fixture × profile × size point, the review medium the design
+# language's prototyping loop runs on instead of an HTML mock. Plain
+# `go test ./internal/ui/...`, part of the test step above, already
+# fails on any drift between a fresh sweep and these files; this
+# target reruns the same sweep with -update to accept a deliberate
+# change. Scoped to the internal/ui package alone, not ./..., since
+# -update is a flag internal/ui/fixtures' own test binary does not
+# register.
+gallery:
+	go test ./internal/ui/ -run TestGallery -update -count=1
 
 install: build
 	install -m 0755 $(BINARY) "$(HOME)/.local/bin/$(BINARY)"

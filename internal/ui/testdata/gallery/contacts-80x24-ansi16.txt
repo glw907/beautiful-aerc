@@ -1,0 +1,23 @@
+
+
+
+
+
+
+
+
+
+
+                                     \x1b[37;1mPeople\x1b[m
+
+                        \x1b[37mcontacts sync lands with pass 5\x1b[m
+
+
+
+
+
+
+
+
+
+

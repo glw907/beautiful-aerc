@@ -10,6 +10,7 @@ package theme
 import (
 	"image/color"
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 )
@@ -148,6 +149,33 @@ func (t Theme) paintGround(s lipgloss.Style, ground Ground) lipgloss.Style {
 
 func hexColor(h string) color.Color {
 	return lipgloss.Color("#" + h)
+}
+
+// Blank returns ground's background painted across width×height
+// blank cells: a chrome band or pane the render seam has no content
+// for yet (decision 11's grounds-tile-first rule: Main and its bands
+// paint before a pane's own content lands on top). It carries no
+// foreground role, since a ground alone never implies a text color.
+func (t Theme) Blank(ground Ground, width, height int) string {
+	return t.paintGround(lipgloss.NewStyle(), ground).Render(blankBlock(width, height))
+}
+
+func blankBlock(width, height int) string {
+	row := strings.Repeat(" ", width)
+	rows := make([]string, height)
+	for i := range rows {
+		rows[i] = row
+	}
+	return strings.Join(rows, "\n")
+}
+
+// Center centers s's content both horizontally and vertically within
+// whatever Width and Height s already carries: the one place
+// lipgloss's Center alignment constant is named, so a caller
+// composing a centered block (the placeholder composition, the
+// floor state's notice) never imports lipgloss itself.
+func (t Theme) Center(s lipgloss.Style) lipgloss.Style {
+	return s.Align(lipgloss.Center, lipgloss.Center)
 }
 
 // ansi16 returns the lipgloss ANSI-16 color for slot (0-15).

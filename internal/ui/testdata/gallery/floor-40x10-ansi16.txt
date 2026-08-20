@@ -1,0 +1,10 @@
+                                        
+                                        
+                                        
+                  \x1b[37m\x1b[1;37mMail\x1b[m\x1b[m                  
+                    \x1b[37m\x1b[m                    
+      \x1b[37m\x1b[37m12,406 messages in 8 folders\x1b[m\x1b[m      
+                                        
+                                        
+                                        
+                                        

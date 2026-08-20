@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"charm.land/bubbles/v2/key"
 
@@ -75,10 +74,7 @@ func composePlaceholder(th theme.Theme, layout LayoutMode, title, facts string) 
 		body += "\n\n" + th.TypeStyle(theme.TypeValue, theme.GroundBase).Render(facts)
 	}
 
-	block := th.Style(theme.RoleFg, theme.GroundBase).
-		Width(width).Height(height).
-		Align(lipgloss.Center, lipgloss.Center).
-		Render(body)
+	block := th.Center(th.Style(theme.RoleFg, theme.GroundBase).Width(width).Height(height)).Render(body)
 	return tea.NewView(block)
 }
 
@@ -120,6 +116,15 @@ type MailPlaceholder struct {
 
 func newMailPlaceholder(reads *store.ReadPool, th theme.Theme) MailPlaceholder {
 	return MailPlaceholder{store: reads, theme: th}
+}
+
+// NewMailPlaceholder returns a MailPlaceholder already carrying
+// stats, as if its own store load had already returned. It is the
+// fixtures package's own entry point: a fixture has no
+// store.ReadPool to load from (amendment D's no-I/O rule), so it
+// pins its facts here instead of through Init's Cmd.
+func NewMailPlaceholder(th theme.Theme, stats store.MailStats) MailPlaceholder {
+	return MailPlaceholder{theme: th, stats: stats, loaded: true}
 }
 
 type mailStatsMsg struct {
@@ -198,6 +203,12 @@ type CalendarPlaceholder struct {
 
 func newCalendarPlaceholder(reads *store.ReadPool, th theme.Theme) CalendarPlaceholder {
 	return CalendarPlaceholder{store: reads, theme: th}
+}
+
+// NewCalendarPlaceholder mirrors NewMailPlaceholder for the calendar
+// surface's own fact.
+func NewCalendarPlaceholder(th theme.Theme, events int64) CalendarPlaceholder {
+	return CalendarPlaceholder{theme: th, events: events, loaded: true}
 }
 
 type eventCountMsg struct {
