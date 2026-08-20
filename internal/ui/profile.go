@@ -1,11 +1,12 @@
-// Package ui is poplar's bubbletea v2 UI layer: the root model, the
-// screen registry, and the screens (technical design section 12).
-// It reads the store through commands and mutates only by
-// enqueueing intents; it performs no network I/O and no store
-// writes.
+// Package ui is poplar's bubbletea v2 UI layer (technical design
+// section 12), built out across pass 2. So far it holds the runtime
+// capability-profile resolver and the background-color query pieces
+// a root model's Init and Update absorb.
 package ui
 
 import (
+	"strings"
+
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -39,12 +40,15 @@ func WithProfileOverride(p theme.Profile) Option {
 // test passes a literal table: QA-7 takes profiles as inputs, never
 // sniffed from the running process.
 //
-// Precedence: an override wins outright. Otherwise NO_COLOR's mere
-// presence forces ProfileNoColor. TERM unset or "dumb" also forces
-// ProfileNoColor, since neither promises any color support.
-// COLORTERM of "truecolor" or "24bit" upgrades to ProfileTrueColor.
-// Anything else resolves to ProfileANSI16, the baseline poplar
-// assumes for a named, non-dumb terminal.
+// Precedence: an override wins outright. Otherwise NO_COLOR set to a
+// non-empty value forces ProfileNoColor (no-color.org: present AND
+// non-empty; a variable exported but left empty does not count).
+// TERM unset or "dumb" also forces ProfileNoColor, since neither
+// promises any color support. COLORTERM of "truecolor" or "24bit",
+// matched case-insensitively as bubbletea's own detector does,
+// upgrades to ProfileTrueColor. Anything else resolves to
+// ProfileANSI16, the baseline poplar assumes for a named, non-dumb
+// terminal.
 func ResolveProfile(env func(string) (string, bool), opts ...Option) (theme.Profile, bool) {
 	var cfg resolveConfig
 	for _, opt := range opts {
@@ -54,7 +58,7 @@ func ResolveProfile(env func(string) (string, bool), opts ...Option) (theme.Prof
 		return cfg.override, DefaultDark
 	}
 
-	if _, ok := env("NO_COLOR"); ok {
+	if v, ok := env("NO_COLOR"); ok && v != "" {
 		return theme.ProfileNoColor, DefaultDark
 	}
 
@@ -63,7 +67,9 @@ func ResolveProfile(env func(string) (string, bool), opts ...Option) (theme.Prof
 		return theme.ProfileNoColor, DefaultDark
 	}
 
-	if colorterm, _ := env("COLORTERM"); colorterm == "truecolor" || colorterm == "24bit" {
+	colorterm, _ := env("COLORTERM")
+	switch strings.ToLower(colorterm) {
+	case "truecolor", "24bit":
 		return theme.ProfileTrueColor, DefaultDark
 	}
 

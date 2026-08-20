@@ -42,6 +42,11 @@ func TestResolveProfile(t *testing.T) {
 			want: theme.ProfileTrueColor,
 		},
 		{
+			name: "COLORTERM=TrueColor upgrades case-insensitively",
+			env:  map[string]string{"TERM": "xterm", "COLORTERM": "TrueColor"},
+			want: theme.ProfileTrueColor,
+		},
+		{
 			name: "COLORTERM with an unrecognized value does not upgrade",
 			env:  map[string]string{"TERM": "xterm", "COLORTERM": "yes"},
 			want: theme.ProfileANSI16,
@@ -52,8 +57,13 @@ func TestResolveProfile(t *testing.T) {
 			want: theme.ProfileNoColor,
 		},
 		{
-			name: "NO_COLOR wins even when its value is empty",
+			name: "NO_COLOR set but empty does not disable color",
 			env:  map[string]string{"TERM": "xterm", "NO_COLOR": ""},
+			want: theme.ProfileANSI16,
+		},
+		{
+			name: "NO_COLOR=0 still disables color",
+			env:  map[string]string{"TERM": "xterm", "NO_COLOR": "0"},
 			want: theme.ProfileNoColor,
 		},
 		{
