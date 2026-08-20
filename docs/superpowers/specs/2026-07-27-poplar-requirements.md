@@ -13,7 +13,9 @@ bytes, CO-6's writer-admission term, the strengthened UX-3
 analyzer rule, and UX-6's raise from SHOULD to MUST with
 ADR-0017 as its design. Revision 5 (2026-08-19, the pass 1c gate)
 re-ratifies QA-5's storage bound at 1.7x after the honest
-full-envelope measurement. Each amended clause carries its own
+full-envelope measurement. Revision 6 (2026-08-19, the pass 2
+wireframe review) restates UX-2's footer as a prioritized
+single row with the help overlay as the completeness surface. Each amended clause carries its own
 revision note.
 **Charter:** `2026-07-19-poplar-refounding-charter.md`
 **Vision:** `2026-07-27-poplar-vision.md` (binding). Directives from
@@ -143,15 +145,23 @@ These bind every requirement and every Phase 4 decision.
   keys behave identically in mail list, thread list, calendar
   agenda, contact list, and config, asserted by one shared test.
 - **UX-2 (MUST, vision differentiator 5). Mode-scoped key-hint
-  footer.** Every screen shows a footer of currently legal keys,
-  alpine-style: no advertised key is a no-op, no legal key goes
-  unadvertised except a listed exception set, and the footer never
-  goes stale. In a text-entry context the footer shows the
-  leave-field verb and the context's own verbs. Acceptance: a
-  registry-driven test proves footer set equals advertised keymap
-  per screen; the exception set is capped at five entries, each
-  with a committed reason in the design-language document, and the
-  test fails on an undocumented exception.
+  footer.** Every screen shows a one-row footer of currently legal
+  keys in a committed priority order, expanding with terminal
+  width; `? help` is always present, and the help overlay is the
+  completeness surface where every legal key is advertised. No
+  advertised key is a no-op, and the footer never goes stale. In a
+  text-entry context the footer shows the leave-field verb and the
+  context's own verbs. Acceptance: a registry-driven test proves
+  the footer renders a width-maximal prefix of the screen's
+  committed priority list plus the help hint, every rendered hint
+  is legal, and the help overlay's content equals the full keymap;
+  priority lists are registry data with a committed order per
+  screen. *Revision 6 (Geoff, 2026-08-19, pass 2 wireframe review)
+  replaces the advertise-everything footer and its five-entry
+  exception list with the prioritized single row: the review found
+  the exhaustive footer overflowed real widths, and the field's
+  teachable clients advertise a curated subset with help as the
+  complete reference.*
 - **UX-3 (MUST, C5). Design language artifact.** The design language
   (charter adjectives, tokens, component vocabulary, interaction
   grammar, and the default values this spec assigns to it) exists as

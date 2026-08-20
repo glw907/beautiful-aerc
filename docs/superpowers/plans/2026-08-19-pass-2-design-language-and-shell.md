@@ -219,11 +219,16 @@ implementer invents taste. Each cites its constraint.
    Backfill progress rides the same segment
    (`⠹ bodies 18,204/36,102`). A nonzero outbox shows `2 queued`
    beside the sync state. All through theme tokens.
-8. **The footer's hints distribute across the width** (Geoff,
-   2026-08-19): the gap between hints is computed from the surplus
-   width and even across the row, flooring at two cells; below the
-   floor, descriptions compress before any hint drops. Task 7
-   carries the formula and its goldens at two widths.
+8. **The footer is one prioritized row** (Geoff, 2026-08-19,
+   superseding the same-day distribute-across-width ruling and the
+   two-row form): each screen's registry entry carries a committed
+   hint priority order; the footer renders the width-maximal
+   prefix of that order with a three-cell gap, and `? help` is
+   pinned right at every width as the pointer to the complete
+   keymap. The help overlay is the completeness surface
+   (requirements revision 6 amends UX-2 accordingly; the
+   five-entry exception list retires). Width changes what is
+   shown, never what is legal, matching the ladder principle.
 9. **Placeholder surfaces state store facts, not apologies or
    roadmap talk.** Surface name plus live store counts, centered,
    composed (charter: empty states are composed). They are
@@ -311,7 +316,6 @@ column whenever a sidebar is present.
                       │
                       │
    /  filter folders  │
-  j/k move     Space/b page     Home/End ends     Enter open     u undo     / search     g goto     ? help     q quit
 ```
 
 - Ground grammar (v3, adversarial review folded, plus two Geoff
@@ -359,7 +363,6 @@ column whenever a sidebar is present.
                       │                                                                       ⊕ engine-tables.pdf · 184 KB
                       │
                       │                                                                                                                     ≡ 34%
-  j/k move        Space/b page        Home/End ends        Enter open        u undo        / search        g goto        ? help        q quit
 ```
 
 - List beside reader (the ratified wide rung, evidence note in
@@ -384,7 +387,6 @@ column whenever a sidebar is present.
   ●    Frank Lee         ▸ 4 Server migration plan  I propose we move …  Aug 16
     ⊕  GitHub                Code review: sync engine PR #42  poplar/s…  Aug 14
        Donald Knuth          TAOCP errata, volume 4  A reader reports …  Aug 13
-  j/k      Space/b      Home/End      Enter      u      /      g      ?      q
 ```
 
 - The composition must stand without the rail: chrome bands,
@@ -875,13 +877,10 @@ entry, citing the two tests, once they pass.
 **Requirement IDs:** UX-2. **Deliverables:** 2 (component,
 per-screen conformance run).
 
-**Outcome:** The registry-derived footer per F1/F9: two rows on
-content screens (grammar verbs row, screen verbs row), `key
-description` hints, dynamic spacing (decision 8, gap floor three
-cells), compression ladder: descriptions drop to key-only before
-any hint drops (review finding: the naive form overflowed and
-silently dropped advertised keys, a UX-2 failure); one-row form
-under 20 rows; text-entry state display deferred to 2b.
+**Outcome:** The registry-derived footer per F1/F9 and decision 8:
+one row, the width-maximal prefix of the screen's committed
+priority list, three-cell gaps, `? help` pinned right at every
+width; text-entry state display deferred to 2b.
 
 **Acceptance criteria:**
 - UX-2 conformance (task 4's machinery) passes for every
@@ -890,11 +889,14 @@ under 20 rows; text-entry state display deferred to 2b.
   registry.
 - Hint text derives from `key.Binding.Help()`, never a literal
   (BACKLOG #62's defect class, pinned by test).
-- Dynamic spacing: goldens at two widths show the gap widening;
-  a property test asserts gaps are even within one cell, floor at
-  two cells, and that compression engages below the floor.
-- Goldens: F1 footer at 80 and 120 columns; short-height one-row
-  form at 120×18.
+- Priority-prefix property test: at every width the rendered set
+  is exactly the longest prefix of the priority list that fits
+  with the help hint; every rendered hint is legal in the active
+  state; widening never removes a hint (monotone growth).
+- Help completeness: the UX-2 revision-6 test asserts the help
+  overlay equals the full keymap for every registered screen.
+- Goldens: the footer at 80, 120, and 150 columns showing the
+  prefix growing.
 - Hit spans registered per hint; span text equals the rendered
   hint (character grain).
 
