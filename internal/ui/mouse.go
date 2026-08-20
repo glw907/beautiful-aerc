@@ -12,7 +12,7 @@ import (
 
 // dispatchClick resolves one mouse click against ADR-0017's two priced
 // grains, in resolution order: character grain first (the chrome's
-// own registered hit spans — status digits, footer hints, a showing
+// own registered hit spans: status digits, footer hints, a showing
 // banner's dismiss glyph, a modal's own y/n answers), then pane grain
 // (LayoutMode's own rectangles). A resolved span's action is its own
 // Binding, dispatched through the same key path the keyboard uses
@@ -59,7 +59,7 @@ func (a App) dispatchClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 // otherwise. A gesture over a chrome band (the status row, the
 // banner, the footer), or over a front the pointer table does not
 // permit PointerWheel to fire in (a modal, most notably), is a
-// no-op — the same rule the j/k keys themselves already obey.
+// no-op, the same rule the j/k keys themselves already obey.
 func (a App) dispatchWheel(msg WheelMsg) (tea.Model, tea.Cmd) {
 	front := a.frontEntry()
 	if !slices.Contains(pointerLegalStates[PointerWheel], front.SwitchState) {
@@ -203,8 +203,8 @@ type pendingClick struct {
 // caller's own select action already ran by the time this is
 // consulted), so this only ever decides whether the click also
 // upgrades to the open path: the same target within the window
-// upgrades and closes the window; anything else — no window open, a
-// different target, or the window already elapsed — opens a fresh
+// upgrades and closes the window; anything else (no window open, a
+// different target, or the window already elapsed) opens a fresh
 // window over target and reports no upgrade.
 func resolveDoubleClick(prev pendingClick, target any, now time.Time) (pendingClick, bool) {
 	if prev.open && prev.target == target && now.Before(prev.deadline) {

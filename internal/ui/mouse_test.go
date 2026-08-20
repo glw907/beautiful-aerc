@@ -153,7 +153,7 @@ func TestApp_ClickStatusDigit_SwitchesSurfaceInDigitsSwitchState(t *testing.T) {
 
 // TestApp_ClickStatusDigit_NoOpsOverModal proves the state rule's
 // other direction: the same coordinates, with a StateModal screen on
-// the stack, leave the active surface and the modal both untouched —
+// the stack, leave the active surface and the modal both untouched,
 // exactly as the keyboard digit already does (TestApp_ModalEatsDigits).
 func TestApp_ClickStatusDigit_NoOpsOverModal(t *testing.T) {
 	app := NewApp(testDeps(t))
