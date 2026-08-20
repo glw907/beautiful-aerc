@@ -4,8 +4,21 @@ import (
 	"image"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/glw907/poplar/internal/theme"
 )
+
+// Frame is Render's own result: the composed frame content, plus a
+// cursor translated into the frame's coordinate space when screen's
+// own View supplied one. Cursor is nil for every pass-2 screen (none
+// accepts text entry yet); pass 4's first text-entry screen is the
+// first to set one, which is why the translation exists now rather
+// than as a signature break later.
+type Frame struct {
+	Content string
+	Cursor  *tea.Cursor
+}
 
 // paneRenderOrder is the order Render composes LayoutMode's named
 // panes in, after Main's own ground has already painted the whole
@@ -28,20 +41,14 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // every cell explicitly painted, holds at ProfileTrueColor, where
 // every ground, including a blank one, sets an explicit background.
 // Render runs no tea.Program and does no I/O; it returns the same
-// string for the same three inputs every time (QA-7's purity
-// contract).
-//
-// The signature departs from the survey's abstract shape (screen,
-// state, LayoutMode, theme): a Screen is already its own state (elm-
-// conventions rule 1), so a fourth "state" parameter would just be
-// screen's own fields read back out from outside it. Passing lm and
-// th explicitly, rather than reading them off screen, keeps every
-// input to the frame's own compositing an argument a caller can see
-// and vary, the same "fixture, LayoutMode, theme" triple the seam-
-// purity acceptance criterion names.
-func Render(screen Screen, lm LayoutMode, th theme.Theme) string {
+// Frame for the same three inputs every time (QA-7's purity
+// contract). The three-argument shape, rather than the survey's own
+// draft signature, is recorded in the pass 2 plan's task 5b findings.
+func Render(screen Screen, lm LayoutMode, th theme.Theme) Frame {
+	view := screen.View()
+
 	if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
-		return screen.View().Content
+		return Frame{Content: view.Content, Cursor: view.Cursor}
 	}
 
 	canvas := theme.NewCanvas(lm.Width, lm.Height)
@@ -58,7 +65,7 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme) string {
 			continue
 		}
 		if id == PaneContent {
-			canvas.Paint(pr.Rect, screen.View().Content)
+			canvas.Paint(pr.Rect, view.Content)
 			continue
 		}
 		canvas.Paint(pr.Rect, th.Blank(pr.Ground, pr.Rect.Dx(), pr.Rect.Dy()))
@@ -72,7 +79,21 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme) string {
 		canvas.Paint(rect, dividerColumn(th, rect.Dy()))
 	}
 
-	return canvas.Render()
+	return Frame{Content: canvas.Render(), Cursor: translateCursor(view.Cursor, lm.Content().Rect.Min)}
+}
+
+// translateCursor offsets c's position by origin, the content pane's
+// own top-left corner: a screen's View reports its cursor in its own
+// pane-relative coordinates, and Render's caller needs it in the
+// full frame's. Every other Cursor field carries over unchanged. A
+// nil c (every pass-2 screen) returns nil.
+func translateCursor(c *tea.Cursor, origin image.Point) *tea.Cursor {
+	if c == nil {
+		return nil
+	}
+	translated := *c
+	translated.Position = tea.Position{X: c.X + origin.X, Y: c.Y + origin.Y}
+	return &translated
 }
 
 // dividerColumn renders a rows-tall column of th's divider glyph,

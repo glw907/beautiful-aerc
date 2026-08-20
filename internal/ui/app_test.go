@@ -322,6 +322,21 @@ func TestApp_ViewRendersActiveSurfaceWhenStackEmpty(t *testing.T) {
 	}
 }
 
+// TestApp_ViewMatchesRenderSeam is CR1: after a WindowSizeMsg, the
+// product's own View().Content is exactly what Render produces from
+// the same active screen, layout, and theme App itself holds, so the
+// running program never drifts from what the gallery pins.
+func TestApp_ViewMatchesRenderSeam(t *testing.T) {
+	app := NewApp(testDeps(t))
+	updated, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	app = mustApp(t, updated)
+
+	want := Render(app.activeScreen(), app.layout, app.theme).Content
+	if got := app.View().Content; got != want {
+		t.Errorf("App.View().Content = %q, want Render(...)'s own content %q", got, want)
+	}
+}
+
 // TestNewProgram proves NewProgram returns a non-nil *tea.Program
 // wrapping app, with the caller's own options layered on top of it.
 func TestNewProgram(t *testing.T) {

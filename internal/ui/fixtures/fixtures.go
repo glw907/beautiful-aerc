@@ -10,7 +10,6 @@
 package fixtures
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/glw907/poplar/internal/store"
@@ -52,8 +51,11 @@ var (
 )
 
 // mailStats is the mail placeholder fixture's pinned store facts:
-// round, obviously-fabricated numbers, never a real account's.
-var mailStats = store.MailStats{Messages: 12406, Mailboxes: 8}
+// zero, matching a freshly opened, unsynced storetest pool exactly,
+// so the render seam's App-driven tests (repaint_test.go) can compare
+// a real App's own empty-store render against this fixture's
+// gallery-committed file byte for byte.
+var mailStats = store.MailStats{Messages: 0, Mailboxes: 0}
 
 // calendarEvents is the calendar placeholder fixture's pinned event
 // count.
@@ -80,9 +82,5 @@ func configBuild(th theme.Theme) ui.Screen {
 // state.
 func themed(screen ui.Screen, th theme.Theme) ui.Screen {
 	updated, _ := screen.Update(ui.ThemeMsg{Theme: th})
-	scr, ok := updated.(ui.Screen)
-	if !ok {
-		panic(fmt.Sprintf("fixtures: %T's own Update returned a non-Screen tea.Model", screen))
-	}
-	return scr
+	return updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
 }

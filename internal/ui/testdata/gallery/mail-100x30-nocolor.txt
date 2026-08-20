@@ -13,7 +13,7 @@
                       |
                       |                                     \x1b[1mMail\x1b[m
                       |
-                      |                         12,406 messages in 8 folders
+                      |                            0 messages in 0 folders
                       |
                       |
                       |

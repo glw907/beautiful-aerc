@@ -108,14 +108,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model. It renders the top of the screen stack
-// when one is pushed, else the active surface: the minimal correct
-// behavior until task 8 adds compositing the dimmed surface behind a
-// stacked screen.
+// directly when one is pushed (the minimal correct behavior until
+// task 8 adds compositing the dimmed surface behind a stacked
+// screen); otherwise it runs the active surface through Render, the
+// same seam the gallery renders through, so the product never drifts
+// from what the gallery pins.
 func (a App) View() tea.View {
 	if len(a.stack) > 0 {
 		return a.stack[len(a.stack)-1].View()
 	}
-	return a.activeScreen().View()
+	frame := Render(a.activeScreen(), a.layout, a.theme)
+	view := tea.NewView(frame.Content)
+	view.Cursor = frame.Cursor
+	return view
 }
 
 // handleKey applies the interaction grammar's back/quit/surface-switch

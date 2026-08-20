@@ -37,13 +37,17 @@ test:
 # every fixture × profile × size point, the review medium the design
 # language's prototyping loop runs on instead of an HTML mock. Plain
 # `go test ./internal/ui/...`, part of the test step above, already
-# fails on any drift between a fresh sweep and these files; this
-# target reruns the same sweep with -update to accept a deliberate
-# change. Scoped to the internal/ui package alone, not ./..., since
-# -update is a flag internal/ui/fixtures' own test binary does not
-# register.
+# fails on any drift (or an orphan file the current sweep no longer
+# produces) between a fresh sweep and these files; this target reruns
+# the same sweep with -update to accept a deliberate change. The
+# -run pattern is anchored to TestGallery exactly, not a prefix
+# match, so it does not also pull in TestGallery_TwoSweepsByteIdentical
+# (a determinism check, not a file writer, that -update would not
+# change the behavior of anyway, but running it here is pure waste).
+# Scoped to the internal/ui package alone, not ./..., since -update
+# is a flag internal/ui/fixtures' own test binary does not register.
 gallery:
-	go test ./internal/ui/ -run TestGallery -update -count=1
+	go test ./internal/ui/ -run '^TestGallery$$' -update -count=1
 
 install: build
 	install -m 0755 $(BINARY) "$(HOME)/.local/bin/$(BINARY)"

@@ -11,7 +11,7 @@
                       \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
                       \x1b[90m|\x1b[m                               \x1b[37;1mMail\x1b[m                             \x1b[90m|\x1b[m
                       \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                   \x1b[37m12,406 messages in 8 folders\x1b[m                 \x1b[90m|\x1b[m
+                      \x1b[90m|\x1b[m                     \x1b[37m0 messages in 0 folders\x1b[m                    \x1b[90m|\x1b[m
                       \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
                       \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
                       \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m

@@ -8,13 +8,11 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f
 	github.com/gofrs/flock v0.12.1
 	github.com/ncruces/go-sqlite3 v0.35.3
 )
 
 require (
-	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

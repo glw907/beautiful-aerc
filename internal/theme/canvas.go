@@ -25,7 +25,10 @@ func NewCanvas(width, height int) *Canvas {
 }
 
 // Paint composes content, whose own rendered width and height must
-// already equal rect's, at rect's origin.
+// already equal rect's, at rect's origin. Paint trusts the caller on
+// this: content wider or taller than rect is never clipped to rect,
+// only to the canvas's own edge, so it silently overlaps whatever
+// neighboring pane a later Paint call has not yet overlaid it with.
 func (c *Canvas) Paint(rect image.Rectangle, content string) {
 	c.canvas.Compose(lipgloss.NewCompositor(lipgloss.NewLayer(content).X(rect.Min.X).Y(rect.Min.Y)))
 }

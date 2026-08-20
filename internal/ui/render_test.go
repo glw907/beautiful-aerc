@@ -22,7 +22,7 @@ func renderTestScreen(t *testing.T, th theme.Theme, lm LayoutMode) MailPlacehold
 }
 
 // TestRender_Purity proves QA-7's core contract: two calls with the
-// same fixture, LayoutMode, and theme return byte-identical strings.
+// same fixture, LayoutMode, and theme return a byte-identical Frame.
 func TestRender_Purity(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	lm := ComputeLayout(100, 30, false)
@@ -37,25 +37,29 @@ func TestRender_Purity(t *testing.T) {
 
 // TestRender_FloorStateReturnsScreenViewVerbatim proves the floor
 // state carries no chrome to compose (section 9): Render returns
-// screen.View().Content unchanged rather than running it through the
-// canvas.
+// screen.View()'s own content and cursor unchanged rather than
+// running it through the canvas.
 func TestRender_FloorStateReturnsScreenViewVerbatim(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	lm := ComputeLayout(40, 10, false)
 	m := renderTestScreen(t, th, lm)
 
 	got := Render(m, lm, th)
-	want := m.View().Content
-	if got != want {
-		t.Errorf("floor render = %q, want screen.View().Content verbatim %q", got, want)
+	view := m.View()
+	if got.Content != view.Content {
+		t.Errorf("floor render content = %q, want screen.View().Content verbatim %q", got.Content, view.Content)
+	}
+	if got.Cursor != view.Cursor {
+		t.Errorf("floor render cursor = %v, want screen.View().Cursor verbatim %v", got.Cursor, view.Cursor)
 	}
 }
 
 // TestRender_CoversEveryRow proves the seam always emits exactly
-// LayoutMode's own row count, at every profile: the geometric half
-// of the coverage invariant LayoutMode's own row-tiling test already
-// proves (TestComputeLayout_RowTiling). A row's rendered width is
-// checked separately, at ProfileTrueColor only
+// LayoutMode's own row count, at every profile and with a banner row
+// both present and absent: the geometric half of the coverage
+// invariant LayoutMode's own row-tiling test already proves
+// (TestComputeLayout_RowTiling). A row's rendered width is checked
+// separately, at ProfileTrueColor only
 // (TestRender_TrueColorRowsFillTheirWidth): a blank, uncolored row at
 // ANSI-16 or NO_COLOR is legitimately trailing-space-trimmed by the
 // canvas (decision 11: a ground carries no distinguishing color
@@ -66,36 +70,41 @@ func TestRender_CoversEveryRow(t *testing.T) {
 	profiles := []theme.Profile{theme.ProfileTrueColor, theme.ProfileANSI16, theme.ProfileNoColor}
 
 	for _, sz := range sizes {
-		for _, p := range profiles {
-			th := theme.New(true, p)
-			lm := ComputeLayout(sz.w, sz.h, false)
-			m := renderTestScreen(t, th, lm)
-			got := Render(m, lm, th)
+		for _, banner := range []bool{false, true} {
+			for _, p := range profiles {
+				th := theme.New(true, p)
+				lm := ComputeLayout(sz.w, sz.h, banner)
+				m := renderTestScreen(t, th, lm)
+				got := Render(m, lm, th)
 
-			if lines := strings.Split(got, "\n"); len(lines) != sz.h {
-				t.Errorf("%dx%d profile=%v: %d rows, want %d", sz.w, sz.h, p, len(lines), sz.h)
+				if lines := strings.Split(got.Content, "\n"); len(lines) != sz.h {
+					t.Errorf("%dx%d banner=%v profile=%v: %d rows, want %d", sz.w, sz.h, banner, p, len(lines), sz.h)
+				}
 			}
 		}
 	}
 }
 
 // TestRender_TrueColorRowsFillTheirWidth proves the coverage
-// invariant's content half at ProfileTrueColor, where every ground
-// (including a blank one) paints an explicit background that
-// survives trailing-space trimming: every row renders at exactly
-// LayoutMode's width, so no cell escapes uncovered.
+// invariant's content half at ProfileTrueColor, with a banner row
+// both present and absent: every ground (including a blank one)
+// paints an explicit background that survives trailing-space
+// trimming, so every row renders at exactly LayoutMode's width and
+// no cell escapes uncovered.
 func TestRender_TrueColorRowsFillTheirWidth(t *testing.T) {
 	sizes := []struct{ w, h int }{{80, 24}, {100, 30}, {150, 26}}
 	th := theme.New(true, theme.ProfileTrueColor)
 
 	for _, sz := range sizes {
-		lm := ComputeLayout(sz.w, sz.h, false)
-		m := renderTestScreen(t, th, lm)
-		got := Render(m, lm, th)
+		for _, banner := range []bool{false, true} {
+			lm := ComputeLayout(sz.w, sz.h, banner)
+			m := renderTestScreen(t, th, lm)
+			got := Render(m, lm, th)
 
-		for y, line := range strings.Split(got, "\n") {
-			if w := ansi.StringWidth(line); w != sz.w {
-				t.Errorf("%dx%d: row %d display width %d, want %d", sz.w, sz.h, y, w, sz.w)
+			for y, line := range strings.Split(got.Content, "\n") {
+				if w := ansi.StringWidth(line); w != sz.w {
+					t.Errorf("%dx%d banner=%v: row %d display width %d, want %d", sz.w, sz.h, banner, y, w, sz.w)
+				}
 			}
 		}
 	}
@@ -131,14 +140,14 @@ func TestRender_DividerDegradeSubstitution(t *testing.T) {
 
 	trueColor := theme.New(true, theme.ProfileTrueColor)
 	m := renderTestScreen(t, trueColor, lm)
-	row := strings.Split(Render(m, lm, trueColor), "\n")[glyphRow]
+	row := strings.Split(Render(m, lm, trueColor).Content, "\n")[glyphRow]
 	if got := columnAt(t, row, degradeDivider.X); got == []rune(trueColor.Glyphs().Divider)[0] {
 		t.Errorf("true-color row %d column %d = %q, want the gutter left blank", glyphRow, degradeDivider.X, got)
 	}
 
 	ansi16 := theme.New(true, theme.ProfileANSI16)
 	m = renderTestScreen(t, ansi16, lm)
-	row = strings.Split(Render(m, lm, ansi16), "\n")[glyphRow]
+	row = strings.Split(Render(m, lm, ansi16).Content, "\n")[glyphRow]
 	want := []rune(ansi16.Glyphs().Divider)[0]
 	if got := columnAt(t, row, degradeDivider.X); got != want {
 		t.Errorf("ANSI-16 row %d column %d = %q, want the divider glyph %q", glyphRow, degradeDivider.X, got, want)

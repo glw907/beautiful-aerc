@@ -44,14 +44,17 @@ var galleryProfiles = []galleryProfile{
 
 // galleryCases pairs each fixture with the size points it renders
 // distinctly at: the four placeholders sweep a spartan and a
-// standard rung (the acceptance criterion's own 80×24 and 100×30),
-// while Floor and Short each pin the one size that names their own
-// layout state.
+// standard rung (the acceptance criterion's own 80×24 and 100×30);
+// Mail also sweeps the wide rung (150×26), the only size that
+// exercises PaneSplit's compositing path (degrade divider vs. blank
+// gutter), so that path lands in the gallery itself rather than a
+// second, separate golden mechanism. Floor and Short each pin the
+// one size that names their own layout state.
 var galleryCases = []struct {
 	fixture fixtures.Fixture
 	sizes   []gallerySize
 }{
-	{fixtures.Mail, []gallerySize{{80, 24}, {100, 30}}},
+	{fixtures.Mail, []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
 	{fixtures.Calendar, []gallerySize{{80, 24}, {100, 30}}},
 	{fixtures.Contacts, []gallerySize{{80, 24}, {100, 30}}},
 	{fixtures.Config, []gallerySize{{80, 24}, {100, 30}}},
@@ -59,36 +62,34 @@ var galleryCases = []struct {
 	{fixtures.Short, []gallerySize{{100, 16}}},
 }
 
-// galleryUpdate reads the "-update" flag: the same flag x/exp/golden
-// registers for the seam's own static goldens (repaint_test.go,
-// static_golden_test.go), so `go test ./internal/ui/... -update`
-// regenerates both mechanisms in one pass. It is read via
-// flag.Lookup, never a second flag.Bool("update", ...) registration,
-// since a package-level golden import already owns that flag name
-// and a duplicate registration panics.
-func galleryUpdate() bool {
-	f := flag.Lookup("update")
-	return f != nil && f.Value.String() == "true"
-}
+// update is the gallery's own regeneration flag: internal/ui's test
+// binary owns it directly (no other file in this package persists a
+// golden through a shared import), so `go test ./internal/ui/
+// -run '^TestGallery$' -update` is the whole regeneration contract.
+var update = flag.Bool("update", false, "update committed gallery renders")
 
 // TestGallery sweeps every fixture × profile × size point through
-// the render seam (design decision 10, amendment B). Run
-// `go test ./internal/ui/... -update` to accept a deliberate change;
-// without it, a stray diff between a fresh sweep and the committed
-// file fails the case.
+// the render seam (design decision 10, amendment B), then fails on
+// any committed file under galleryDir the sweep did not just produce
+// (an orphan left behind by a since-removed or renamed case). Run
+// `go test ./internal/ui/ -run '^TestGallery$' -update` to accept a
+// deliberate change; without it, a stray diff or an orphan fails the
+// case.
 func TestGallery(t *testing.T) {
-	update := galleryUpdate()
+	expected := make(map[string]bool)
 	for _, c := range galleryCases {
 		for _, sz := range c.sizes {
 			for _, p := range galleryProfiles {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
+				expected[name+".txt"] = true
 				t.Run(name, func(t *testing.T) {
 					got := galleryRender(c.fixture, sz, p.theme)
-					checkGallery(t, name, got, update)
+					checkGallery(t, name, got, *update)
 				})
 			}
 		}
 	}
+	checkNoOrphans(t, expected)
 }
 
 // galleryRender renders fixture at sz through the seam, themed th.
@@ -96,28 +97,25 @@ func galleryRender(fixture fixtures.Fixture, sz gallerySize, th theme.Theme) str
 	lm := ui.ComputeLayout(sz.width, sz.height, false)
 	screen := fixture.Build(th)
 	updated, _ := screen.Update(ui.LayoutMsg{Layout: lm})
-	scr, ok := updated.(ui.Screen)
-	if !ok {
-		panic(fmt.Sprintf("gallery: %T's own Update returned a non-Screen tea.Model", screen))
-	}
-	return ui.Render(scr, lm, th)
+	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
+	return ui.Render(scr, lm, th).Content
 }
 
 // checkGallery compares got against testdata/gallery/<name>.txt,
 // escaped the same way x/exp/golden escapes its own files (control
-// codes quoted, one line at a time), so both mechanisms commit
-// equally readable, diffable text. update writes got as the new
-// committed file instead of comparing.
-func checkGallery(t *testing.T, name, got string, update bool) {
+// codes quoted, one line at a time), so a committed render stays
+// plain, reviewable text. updateFile writes got as the new committed
+// file instead of comparing.
+func checkGallery(t *testing.T, name, got string, updateFile bool) {
 	t.Helper()
 	path := filepath.Join(galleryDir, name+".txt")
 	escaped := escapeGalleryOutput(got)
 
-	if update {
+	if updateFile {
 		if err := os.MkdirAll(galleryDir, 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(escaped), 0o644); err != nil { //nolint:gosec // a committed gallery render is not sensitive
+		if err := os.WriteFile(path, []byte(escaped), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -125,10 +123,28 @@ func checkGallery(t *testing.T, name, got string, update bool) {
 
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read committed gallery render %s: %v (run `go test ./internal/ui/... -update` to create it)", path, err)
+		t.Fatalf("read committed gallery render %s: %v (run `go test ./internal/ui/ -run '^TestGallery$' -update` to create it)", path, err)
 	}
 	if escaped != string(want) {
-		t.Errorf("gallery render %s drifted from the committed file; run `go test ./internal/ui/... -update` to accept", path)
+		t.Errorf("gallery render %s drifted from the committed file; run `go test ./internal/ui/ -run '^TestGallery$' -update` to accept", path)
+	}
+}
+
+// checkNoOrphans fails on any file under galleryDir whose basename is
+// not in expected: a stale committed render the current sweep no
+// longer produces, left over from a removed or renamed fixture, size,
+// or profile.
+func checkNoOrphans(t *testing.T, expected map[string]bool) {
+	t.Helper()
+	entries, err := os.ReadDir(galleryDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", galleryDir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || expected[e.Name()] {
+			continue
+		}
+		t.Errorf("orphan gallery file %s: no case in the current sweep produces it, remove it", filepath.Join(galleryDir, e.Name()))
 	}
 }
 

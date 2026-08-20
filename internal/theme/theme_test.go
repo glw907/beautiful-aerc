@@ -2,9 +2,12 @@ package theme
 
 import (
 	"image/color"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func sameColor(a, b color.Color) bool {
@@ -101,6 +104,73 @@ func TestTypeStyle(t *testing.T) {
 				t.Errorf("italic = %v, want %v", s.GetItalic(), tt.wantItalic)
 			}
 		})
+	}
+}
+
+// TestBlank proves the render seam's ground-only fill: an exact
+// width×height blank block, resolved per profile the same way
+// paintGround resolves any other role's background (true color: an
+// explicit background; ANSI-16/NO_COLOR: reverse for GroundSelected
+// only, nothing otherwise), built independently of Blank's own
+// implementation.
+func TestBlank(t *testing.T) {
+	tests := []struct {
+		name    string
+		ground  Ground
+		isDark  bool
+		profile Profile
+	}{
+		{"panel, dark, true color", GroundPanel, true, ProfileTrueColor},
+		{"base, light, true color", GroundBase, false, ProfileTrueColor},
+		{"selected reverses under ANSI-16", GroundSelected, true, ProfileANSI16},
+		{"panel carries no background under NO_COLOR", GroundPanel, true, ProfileNoColor},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			th := New(tt.isDark, tt.profile)
+			got := th.Blank(tt.ground, 3, 2)
+
+			lines := strings.Split(got, "\n")
+			if len(lines) != 2 {
+				t.Fatalf("Blank(...) has %d lines, want 2", len(lines))
+			}
+			for _, l := range lines {
+				if w := ansi.StringWidth(l); w != 3 {
+					t.Errorf("line %q: display width %d, want 3", l, w)
+				}
+			}
+
+			var want lipgloss.Style
+			switch {
+			case tt.profile == ProfileTrueColor:
+				want = lipgloss.NewStyle().Background(hexColor(groundHex(tt.ground, tt.isDark)))
+			case tt.ground == GroundSelected:
+				want = lipgloss.NewStyle().Reverse(true)
+			default:
+				want = lipgloss.NewStyle()
+			}
+			if wantOut := want.Render(blankBlock(3, 2)); got != wantOut {
+				t.Errorf("Blank(%v) = %q, want %q", tt.ground, got, wantOut)
+			}
+		})
+	}
+}
+
+// TestCenter proves Center resolves both axes to Position's center
+// value, over whatever role style it is handed.
+func TestCenter(t *testing.T) {
+	th := New(true, ProfileTrueColor)
+	s := th.Style(RoleFg, GroundBase).Width(10).Height(3)
+
+	centered := th.Center(s)
+	if got := centered.GetAlignHorizontal(); got != lipgloss.Center {
+		t.Errorf("GetAlignHorizontal() = %v, want lipgloss.Center", got)
+	}
+	if got := centered.GetAlignVertical(); got != lipgloss.Center {
+		t.Errorf("GetAlignVertical() = %v, want lipgloss.Center", got)
+	}
+	if got, want := centered.GetWidth(), s.GetWidth(); got != want {
+		t.Errorf("Center changed Width: %d, want %d unchanged", got, want)
 	}
 }
 
