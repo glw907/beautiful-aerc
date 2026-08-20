@@ -26,7 +26,7 @@ type WheelMsg struct {
 // state). Each tick folds its signed unit delta into a running sum
 // while the filter suppresses it (returns nil); the sum flushes as
 // one WheelMsg the moment a further tick arrives wheelWindow or more
-// after the sum opened, or reverses the sum's direction — either way
+// after the sum opened, or reverses the sum's direction. Either way
 // the flushing tick itself opens the next sum rather than joining the
 // one it closes, so a burst collapses to exactly one message instead
 // of one store round trip per physical detent.

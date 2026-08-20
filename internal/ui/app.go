@@ -109,11 +109,16 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
+	front := a.activeScreen().Entry()
+	if len(a.stack) > 0 {
+		front = a.stack[len(a.stack)-1].Entry()
+	}
+	if s, ok := matchDigit(msg, front.SwitchState); ok {
+		a.active.Set(a.account, s)
+		return a, nil
+	}
+
 	if len(a.stack) == 0 {
-		if s, ok := surfaceForDigit(msg.String()); ok && a.activeScreen().Entry().SwitchState == StateDigitsSwitch {
-			a.active.Set(a.account, s)
-			return a, nil
-		}
 		if key.Matches(msg, GrammarKeys.Quit) {
 			return a, tea.Quit
 		}
@@ -121,11 +126,6 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	top := a.stack[len(a.stack)-1]
-	if s, ok := surfaceForDigit(msg.String()); ok && top.Entry().SwitchState == StateDigitsSwitch {
-		a.active.Set(a.account, s)
-		return a, nil
-	}
-
 	updated, cmd := top.Update(msg)
 	if screen, ok := updated.(Screen); ok {
 		a.stack[len(a.stack)-1] = screen
@@ -165,16 +165,45 @@ func (a App) activeScreen() Screen {
 	}
 }
 
-// surfaceForDigit reports the Surface a surface-switch digit names.
-func surfaceForDigit(s string) (Surface, bool) {
-	switch s {
-	case "1":
+// digitSurfaceKeys is the surface-switch digit keymap, one
+// key.Binding per digit so a match also names the Surface it
+// switches to; GrammarKeys.SurfaceSwitch bundles the same four keys
+// under one Binding for advertisement, which cannot report which
+// digit fired.
+type digitSurfaceKeys struct {
+	Mail, Calendar, Contacts, Config key.Binding
+}
+
+var digitKeys = digitSurfaceKeys{
+	Mail:     key.NewBinding(key.WithKeys("1")),
+	Calendar: key.NewBinding(key.WithKeys("2")),
+	Contacts: key.NewBinding(key.WithKeys("3")),
+	Config:   key.NewBinding(key.WithKeys("4")),
+}
+
+// matchDigit reports the Surface msg names among digitKeys. It gates
+// legality through SetEnabled rather than an inline SwitchState
+// check, mirroring GrammarKeys.Back and GrammarKeys.Quit's own
+// key.Matches dispatch above: state != StateDigitsSwitch disables the
+// whole set before key.Matches ever runs, so key.Matches itself is
+// what turns a digit into a no-op in a StateModal front (UX-4's
+// acceptance criterion) rather than a second, hand-checked condition.
+func matchDigit(msg tea.KeyPressMsg, state StateClass) (Surface, bool) {
+	keys := digitKeys
+	enabled := state == StateDigitsSwitch
+	keys.Mail.SetEnabled(enabled)
+	keys.Calendar.SetEnabled(enabled)
+	keys.Contacts.SetEnabled(enabled)
+	keys.Config.SetEnabled(enabled)
+
+	switch {
+	case key.Matches(msg, keys.Mail):
 		return SurfaceMail, true
-	case "2":
+	case key.Matches(msg, keys.Calendar):
 		return SurfaceCalendar, true
-	case "3":
+	case key.Matches(msg, keys.Contacts):
 		return SurfaceContacts, true
-	case "4":
+	case key.Matches(msg, keys.Config):
 		return SurfaceConfig, true
 	default:
 		return 0, false

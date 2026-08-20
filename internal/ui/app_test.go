@@ -37,6 +37,40 @@ func mustApp(t *testing.T, model tea.Model) App {
 	return app
 }
 
+// TestMatchDigit proves matchDigit's key.Matches dispatch: each digit
+// names its own Surface at StateDigitsSwitch, and the whole set
+// disables (SetEnabled false, so key.Matches itself reports no match)
+// at any other state.
+func TestMatchDigit(t *testing.T) {
+	tests := []struct {
+		digit string
+		want  Surface
+	}{
+		{"1", SurfaceMail},
+		{"2", SurfaceCalendar},
+		{"3", SurfaceContacts},
+		{"4", SurfaceConfig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.digit, func(t *testing.T) {
+			got, ok := matchDigit(digitKey(tt.digit), StateDigitsSwitch)
+			if !ok || got != tt.want {
+				t.Errorf("matchDigit(%q, StateDigitsSwitch) = (%v, %v), want (%v, true)", tt.digit, got, ok, tt.want)
+			}
+		})
+	}
+
+	for _, state := range []StateClass{StateModal, StatePrintableEntry} {
+		if _, ok := matchDigit(digitKey("1"), state); ok {
+			t.Errorf("matchDigit(%q, %v) matched, want disabled", "1", state)
+		}
+	}
+
+	if _, ok := matchDigit(tea.KeyPressMsg{Code: 'q', Text: "q"}, StateDigitsSwitch); ok {
+		t.Error("matchDigit on a non-digit key matched, want no match")
+	}
+}
+
 // TestApp_DigitSurfaceSwitchRoundTrip is UX-4's round-trip
 // acceptance criterion: 1->3->1 lands back on mail with its state
 // (here, its already-loaded store counts) intact, byte-for-byte in
