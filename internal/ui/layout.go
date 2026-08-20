@@ -83,13 +83,12 @@ type LayoutMode struct {
 
 	// Main is the GroundBase backdrop spanning the full main band
 	// (every column, between the status/banner rows and the
-	// footer). It is painted first so a gutter or margin cell a
-	// pane rectangle does not individually name still carries a
-	// ground; Content, Panes, and the reader card overlay it.
+	// footer). It is painted first so a divider column, a clearance
+	// cell, or a gutter cell no named pane claims still carries a
+	// ground; every entry in Panes overlays it.
 	Main PaneRect
 
-	Content PaneRect
-	Panes   map[PaneID]PaneRect
+	Panes map[PaneID]PaneRect
 
 	Footer     PaneRect
 	FooterRows int
@@ -97,23 +96,30 @@ type LayoutMode struct {
 	Dividers []Divider
 }
 
-// Geometry constants. railWidth, paneX, listWidth, and cardGutter are
-// pinned values from the ratified shell exemplar
+// Content returns the screen's single content pane this pass
+// consumes: Panes[PaneContent]. It is a method, not a stored field,
+// so LayoutMode never carries two copies of the same rectangle that
+// a caller could let drift apart.
+func (lm LayoutMode) Content() PaneRect {
+	return lm.Panes[PaneContent]
+}
+
+// Geometry constants. railWidth and listWidth are pinned values from
+// the ratified shell exemplar
 // (docs/poplar/design/2026-08-19-shell-exemplar/shell-exemplar.py),
 // not spacing roles: they size a pane grid, the way a terminal
-// width itself is not a spacing role. theme.PadCard, by contrast,
-// is a spacing role (a card's own interior inset) and is used
+// width itself is not a spacing role. theme.GapPane and
+// theme.PadCard, by contrast, are spacing roles and are used
 // directly from the theme package below. That is the boundary this
 // file holds: a value that names a role in the design language's
 // spacing table comes from theme; a value that is this file's own
 // grid arithmetic is a local constant.
 const (
 	railWidth = 22 // the rail pane's width
-	paneX     = railWidth + 3
+	paneX     = railWidth + 1 + theme.GapPane
 	listWidth = 62 // the wide rung's practical list width
 
-	cardGutter = 2 // list-to-reader gutter; a divider only under Theme.DrawsDividers
-	cardMargin = 2 // base-ground margin mirroring cardGutter on the card's far side
+	cardGutter = theme.GapPane // list-to-reader gutter; a divider only under Theme.DrawsDividers
 
 	readerContentCap = 100 // section 9's reader content cap, in content cells
 
@@ -126,7 +132,7 @@ const (
 
 	sidebarMin = paneX // dropping the sidebar frees exactly this much
 	contentMin = 30    // composition rule 3's preview-readable floor
-	splitMin   = cardGutter + 40
+	splitMin   = theme.GapPane + 40
 
 	readerCardCap = readerContentCap + 2*theme.PadCard
 )
@@ -136,6 +142,12 @@ const (
 // show; ComputeLayout grants it a row only at HeightFull, since under
 // 20 rows a banner demotes to a toast instead (section 9). The
 // result depends only on its three inputs.
+//
+// Below the width floor (60 columns) or the height floor (15 rows),
+// ComputeLayout returns the floor state: one full-terminal pane and
+// no chrome at all, the centered notice's canvas (section 9). The
+// two floors share this behavior because neither leaves room for a
+// status line and a footer to mean anything.
 func ComputeLayout(width, height int, bannerRow bool) LayoutMode {
 	lm := LayoutMode{
 		Width:       width,
@@ -144,10 +156,9 @@ func ComputeLayout(width, height int, bannerRow bool) LayoutMode {
 		HeightClass: classifyHeight(height),
 	}
 
-	if lm.Class == WidthFloor {
+	if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
 		lm.Main = PaneRect{Rect: image.Rect(0, 0, width, height), Ground: theme.GroundBase}
-		lm.Content = lm.Main
-		lm.Panes = map[PaneID]PaneRect{PaneContent: lm.Content}
+		lm.Panes = map[PaneID]PaneRect{PaneContent: lm.Main}
 		return lm
 	}
 
@@ -176,9 +187,14 @@ func ComputeLayout(width, height int, bannerRow bool) LayoutMode {
 	}
 	kept := dropPanes(width, specs)
 
+	// The divider column and the clearance/gutter cells that flank it
+	// belong to Main alone (decision 11's grammar): Sidebar's rect
+	// stops at the rail's own width, and Content's rect (when a split
+	// follows it) stops at the list's own width, so a ground painted
+	// across either rect never bleeds into the separating cells.
 	contentX0 := 0
 	if hasPane(kept, PaneSidebar) {
-		lm.Panes[PaneSidebar] = PaneRect{Rect: image.Rect(0, y, paneX, bottom), Ground: theme.GroundBase}
+		lm.Panes[PaneSidebar] = PaneRect{Rect: image.Rect(0, y, railWidth, bottom), Ground: theme.GroundBase}
 		lm.Dividers = append(lm.Dividers, Divider{X: railWidth, Y0: y, Y1: bottom})
 		contentX0 = paneX
 	}
@@ -186,13 +202,12 @@ func ComputeLayout(width, height int, bannerRow bool) LayoutMode {
 	if hasPane(kept, PaneSplit) {
 		listEnd := contentX0 + listWidth
 		splitStart := listEnd + cardGutter
-		lm.Panes[PaneContent] = PaneRect{Rect: image.Rect(contentX0, y, splitStart, bottom), Ground: theme.GroundBase}
+		lm.Panes[PaneContent] = PaneRect{Rect: image.Rect(contentX0, y, listEnd, bottom), Ground: theme.GroundBase}
 		lm.Panes[PaneSplit] = readerCard(splitStart, width, y, bottom)
 		lm.Dividers = append(lm.Dividers, Divider{X: listEnd, Y0: y, Y1: bottom, Degrade: true})
 	} else {
 		lm.Panes[PaneContent] = PaneRect{Rect: image.Rect(contentX0, y, width, bottom), Ground: theme.GroundBase}
 	}
-	lm.Content = lm.Panes[PaneContent]
 
 	return lm
 }
@@ -228,12 +243,12 @@ func statusBand(width, y int) PaneRect {
 // readerCard sizes the wide rung's floating reader card between x0
 // and right, inset one row top and bottom for its base-ground
 // margin. Its width is the lesser of the space available (less
-// cardMargin, mirroring the gutter on its near side) and
+// theme.GapPane, mirroring the gutter on its near side) and
 // readerCardCap; the design language's surplus-becomes-margin rule
 // (section 9) then centers the card in whatever width it did not
 // need.
 func readerCard(x0, right, y, bottom int) PaneRect {
-	avail := right - x0 - cardMargin
+	avail := right - x0 - theme.GapPane
 	width := min(avail, readerCardCap)
 	left := x0 + (avail-width)/2
 	return PaneRect{

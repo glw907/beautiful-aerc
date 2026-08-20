@@ -27,6 +27,32 @@ func TestComputeLayout_WidthBoundaries(t *testing.T) {
 		}
 	})
 
+	t.Run("79 spartan, 80 spartan: only content width grows", func(t *testing.T) {
+		w79 := ComputeLayout(79, 24, false)
+		w80 := ComputeLayout(80, 24, false)
+
+		if w79.Class != WidthSpartan || w80.Class != WidthSpartan {
+			t.Fatalf("both sides of this boundary must stay WidthSpartan: got %v, %v", w79.Class, w80.Class)
+		}
+		if _, ok := w79.Panes[PaneSidebar]; ok {
+			t.Error("width 79: sidebar present inside spartan")
+		}
+		if _, ok := w80.Panes[PaneSidebar]; ok {
+			t.Error("width 80: sidebar present inside spartan")
+		}
+		if w79.FooterRows != w80.FooterRows {
+			t.Error("width 79->80 changed footer rows; spartan has no internal boundary")
+		}
+		if got, want := w80.Content().Rect.Dx()-w79.Content().Rect.Dx(), 1; got != want {
+			t.Errorf("content width grew by %d cells across 79->80, want %d", got, want)
+		}
+		// 80x24 is section 9's completeness size: fully functional,
+		// single content pane, no sidebar.
+		if w80.Content().Rect != image.Rect(0, 1, 80, 23) {
+			t.Errorf("80x24 Content = %v, want (0,1)-(80,23)", w80.Content().Rect)
+		}
+	})
+
 	t.Run("99 spartan, 100 standard: sidebar appears", func(t *testing.T) {
 		spartan := ComputeLayout(99, 24, false)
 		standard := ComputeLayout(100, 24, false)
@@ -43,11 +69,11 @@ func TestComputeLayout_WidthBoundaries(t *testing.T) {
 		if _, ok := standard.Panes[PaneSidebar]; !ok {
 			t.Error("width 100: sidebar absent at its rung")
 		}
-		if spartan.Content.Rect.Min.X != 0 {
-			t.Errorf("width 99: Content.Min.X = %d, want 0", spartan.Content.Rect.Min.X)
+		if spartan.Content().Rect.Min.X != 0 {
+			t.Errorf("width 99: Content.Min.X = %d, want 0", spartan.Content().Rect.Min.X)
 		}
-		if standard.Content.Rect.Min.X != paneX {
-			t.Errorf("width 100: Content.Min.X = %d, want %d", standard.Content.Rect.Min.X, paneX)
+		if standard.Content().Rect.Min.X != paneX {
+			t.Errorf("width 100: Content.Min.X = %d, want %d", standard.Content().Rect.Min.X, paneX)
 		}
 		if spartan.FooterRows != standard.FooterRows {
 			t.Error("sidebar boundary changed footer rows too")
@@ -79,11 +105,17 @@ func TestComputeLayout_WidthBoundaries(t *testing.T) {
 		if _, ok := standard.Panes[PaneSidebar]; !ok {
 			t.Error("width 139->140 boundary should not touch the sidebar")
 		}
+		if standard.Content().Rect.Max.X != 139 {
+			t.Errorf("width 139: Content.Max.X = %d, want the full remainder 139", standard.Content().Rect.Max.X)
+		}
+		if wide.Content().Rect.Max.X != paneX+listWidth {
+			t.Errorf("width 140: Content.Max.X = %d, want listEnd %d", wide.Content().Rect.Max.X, paneX+listWidth)
+		}
 	})
 }
 
 func TestComputeLayout_HeightBoundaries(t *testing.T) {
-	t.Run("14 floor, 15 short: chrome unchanged, content grows one row", func(t *testing.T) {
+	t.Run("14 floor, 15 short: the floor notice becomes the app", func(t *testing.T) {
 		floor := ComputeLayout(100, 14, true)
 		short := ComputeLayout(100, 15, true)
 
@@ -93,14 +125,21 @@ func TestComputeLayout_HeightBoundaries(t *testing.T) {
 		if short.HeightClass != HeightShort {
 			t.Errorf("height 15: HeightClass = %v, want HeightShort", short.HeightClass)
 		}
-		if floor.BannerRow || short.BannerRow {
-			t.Error("banner requested under 20 rows must demote to a toast, never a row")
+		// Below the height floor: nothing but the notice, the one
+		// capability this boundary changes (C1).
+		if floor.FooterRows != 0 || floor.StatusRow.Rect != (image.Rectangle{}) {
+			t.Errorf("height 14: chrome present at the floor: %+v", floor)
 		}
-		if floor.FooterRows != 1 || short.FooterRows != 1 {
-			t.Error("footer must survive to the height floor")
+		want := image.Rect(0, 0, 100, 14)
+		if floor.Main.Rect != want || floor.Content().Rect != want {
+			t.Errorf("height 14: Main/Content = %v, want the full terminal %v", floor.Main.Rect, want)
 		}
-		if got, want := short.Main.Rect.Dy()-floor.Main.Rect.Dy(), 1; got != want {
-			t.Errorf("content height grew by %d rows across the boundary, want %d", got, want)
+		if len(floor.Panes) != 1 {
+			t.Errorf("height 14: Panes = %v, want exactly PaneContent", floor.Panes)
+		}
+		// Above it: full chrome returns.
+		if short.FooterRows != 1 || short.StatusRow.Rect == (image.Rectangle{}) {
+			t.Errorf("height 15: chrome absent above the floor: %+v", short)
 		}
 	})
 
@@ -126,12 +165,26 @@ func TestComputeLayout_HeightBoundaries(t *testing.T) {
 	})
 }
 
-func TestComputeLayout_Floor(t *testing.T) {
+func TestComputeLayout_WidthFloor(t *testing.T) {
 	lm := ComputeLayout(40, 24, true)
 
 	if lm.Class != WidthFloor {
 		t.Fatalf("Class = %v, want WidthFloor", lm.Class)
 	}
+	assertFloorState(t, lm, image.Rect(0, 0, 40, 24))
+}
+
+func TestComputeLayout_HeightFloor(t *testing.T) {
+	lm := ComputeLayout(100, 14, true)
+
+	if lm.HeightClass != HeightFloor {
+		t.Fatalf("HeightClass = %v, want HeightFloor", lm.HeightClass)
+	}
+	assertFloorState(t, lm, image.Rect(0, 0, 100, 14))
+}
+
+func assertFloorState(t *testing.T, lm LayoutMode, want image.Rectangle) {
+	t.Helper()
 	if lm.BannerRow {
 		t.Error("floor state must never show a banner")
 	}
@@ -141,13 +194,92 @@ func TestComputeLayout_Floor(t *testing.T) {
 	if lm.StatusRow.Rect != (image.Rectangle{}) || lm.Footer.Rect != (image.Rectangle{}) {
 		t.Error("floor state must carry no chrome bands")
 	}
-	want := image.Rect(0, 0, 40, 24)
-	if lm.Content.Rect != want || lm.Main.Rect != want {
-		t.Errorf("floor Content/Main = %v, want the full terminal %v", lm.Content.Rect, want)
+	if lm.Content().Rect != want || lm.Main.Rect != want {
+		t.Errorf("floor Content/Main = %v, want the full terminal %v", lm.Content().Rect, want)
 	}
 	if len(lm.Panes) != 1 {
 		t.Errorf("floor Panes = %v, want exactly PaneContent", lm.Panes)
 	}
+}
+
+// TestComputeLayout_DegenerateHeights covers C1: a window so short it
+// cannot fit even one row of chrome must still yield sane, non-negative
+// geometry, not an overlapping status/footer row or a negative rectangle.
+func TestComputeLayout_DegenerateHeights(t *testing.T) {
+	cases := []struct{ w, h int }{
+		{60, 0}, {60, 1}, {100, 0}, {100, 1},
+	}
+	for _, c := range cases {
+		lm := ComputeLayout(c.w, c.h, true)
+		if lm.HeightClass != HeightFloor {
+			t.Errorf("%dx%d: HeightClass = %v, want HeightFloor", c.w, c.h, lm.HeightClass)
+		}
+		want := image.Rect(0, 0, c.w, c.h)
+		assertFloorState(t, lm, want)
+		if lm.Main.Rect.Min.Y > lm.Main.Rect.Max.Y || lm.Main.Rect.Min.X > lm.Main.Rect.Max.X {
+			t.Errorf("%dx%d: negative-area Main rect %v", c.w, c.h, lm.Main.Rect)
+		}
+	}
+}
+
+// TestComputeLayout_RowTiling is C2's coverage guard: every row belongs
+// to exactly one chrome band or Main, never zero (a gap) and never more
+// than one (an overlap).
+func TestComputeLayout_RowTiling(t *testing.T) {
+	sizes := []struct{ w, h int }{
+		{60, 24},
+		{80, 24},
+		{100, 24},
+		{139, 24},
+		{140, 24},
+		{200, 40},
+		{100, 15},
+		{100, 19},
+		{100, 20},
+		{100, 30},
+	}
+	for _, sz := range sizes {
+		for _, banner := range []bool{false, true} {
+			lm := ComputeLayout(sz.w, sz.h, banner)
+			if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
+				continue // the floor state is one rect, not banded chrome
+			}
+
+			bannerRows := 0
+			if lm.BannerRow {
+				bannerRows = 1
+			}
+			if got, want := lm.Main.Rect.Min.Y, 1+bannerRows; got != want {
+				t.Errorf("%dx%d banner=%v: Main.Min.Y = %d, want statusRows+bannerRows = %d", sz.w, sz.h, banner, got, want)
+			}
+			if got, want := lm.Main.Rect.Max.Y, sz.h-lm.FooterRows; got != want {
+				t.Errorf("%dx%d banner=%v: Main.Max.Y = %d, want height-FooterRows = %d", sz.w, sz.h, banner, got, want)
+			}
+
+			for y := range sz.h {
+				bands := 0
+				if rowIn(lm.StatusRow, y) {
+					bands++
+				}
+				if lm.BannerRow && rowIn(lm.Banner, y) {
+					bands++
+				}
+				if rowIn(lm.Main, y) {
+					bands++
+				}
+				if rowIn(lm.Footer, y) {
+					bands++
+				}
+				if bands != 1 {
+					t.Errorf("%dx%d banner=%v: row %d belongs to %d bands, want exactly 1", sz.w, sz.h, banner, y, bands)
+				}
+			}
+		}
+	}
+}
+
+func rowIn(pr PaneRect, y int) bool {
+	return y >= pr.Rect.Min.Y && y < pr.Rect.Max.Y
 }
 
 func TestComputeLayout_Coverage(t *testing.T) {
@@ -156,7 +288,7 @@ func TestComputeLayout_Coverage(t *testing.T) {
 	}
 	for _, sz := range sizes {
 		lm := ComputeLayout(sz.w, sz.h, true)
-		if lm.Class == WidthFloor {
+		if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
 			continue
 		}
 		for id, pr := range lm.Panes {
@@ -167,6 +299,56 @@ func TestComputeLayout_Coverage(t *testing.T) {
 		if lm.Main.Rect.Min.X != 0 || lm.Main.Rect.Max.X != sz.w {
 			t.Errorf("%dx%d: Main does not span the full width: %v", sz.w, sz.h, lm.Main.Rect)
 		}
+	}
+}
+
+// TestComputeLayout_PinnedRectangles is M1: full image.Rectangle values
+// pinned against the ratified shell exemplar's literal numbers, so a
+// constant change cannot silently abandon that geometry.
+func TestComputeLayout_PinnedRectangles(t *testing.T) {
+	t.Run("120x26 standard, citing frame_standard(width=120)", func(t *testing.T) {
+		lm := ComputeLayout(120, 26, false)
+		checkRect(t, "StatusRow", lm.StatusRow.Rect, image.Rect(0, 0, 120, 1))
+		checkRect(t, "Sidebar", lm.Panes[PaneSidebar].Rect, image.Rect(0, 1, 22, 25))
+		checkRect(t, "Content", lm.Content().Rect, image.Rect(25, 1, 120, 25))
+		checkRect(t, "Footer", lm.Footer.Rect, image.Rect(0, 25, 120, 26))
+		if len(lm.Dividers) != 1 || lm.Dividers[0].X != 22 {
+			t.Errorf("Dividers = %+v, want one at X=22", lm.Dividers)
+		}
+	})
+
+	t.Run("150x26 wide, citing frame_wide(width=150)", func(t *testing.T) {
+		lm := ComputeLayout(150, 26, false)
+		checkRect(t, "Sidebar", lm.Panes[PaneSidebar].Rect, image.Rect(0, 1, 22, 25))
+		checkRect(t, "Content", lm.Content().Rect, image.Rect(25, 1, 87, 25))
+		if got, want := lm.Content().Rect.Dx(), listWidth; got != want {
+			t.Errorf("Content width = %d, want listWidth %d", got, want)
+		}
+		// The list/reader gutter (87-89) belongs to Main alone: Content
+		// stops at listEnd, not splitStart, so a selected-row ground
+		// painted across Content.Rect cannot bleed into it (C3).
+		checkRect(t, "Split", lm.Panes[PaneSplit].Rect, image.Rect(89, 2, 148, 24))
+		if len(lm.Dividers) != 2 || lm.Dividers[1].X != 87 || !lm.Dividers[1].Degrade {
+			t.Errorf("Dividers = %+v, want a second degrade divider at X=87", lm.Dividers)
+		}
+	})
+
+	t.Run("80x24 spartan, citing frame_spartan(width=80)", func(t *testing.T) {
+		lm := ComputeLayout(80, 24, false)
+		checkRect(t, "Content", lm.Content().Rect, image.Rect(0, 1, 80, 23))
+		if _, ok := lm.Panes[PaneSidebar]; ok {
+			t.Error("80x24 spartan must carry no sidebar")
+		}
+		if len(lm.Dividers) != 0 {
+			t.Errorf("80x24 spartan must carry no dividers, got %+v", lm.Dividers)
+		}
+	})
+}
+
+func checkRect(t *testing.T, name string, got, want image.Rectangle) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %v, want %v", name, got, want)
 	}
 }
 
@@ -189,10 +371,10 @@ func TestComputeLayout_ReaderCard(t *testing.T) {
 			t.Errorf("card width = %d, want the cap %d", card.Rect.Dx(), readerCardCap)
 		}
 		leftSlack := card.Rect.Min.X - lm.Dividers[1].X - cardGutter
-		// rightExtra excludes cardMargin, the fixed margin the card
+		// rightExtra excludes theme.GapPane, the fixed margin the card
 		// always carries on its far side mirroring cardGutter on its
 		// near side; what remains should split evenly with leftSlack.
-		rightExtra := 400 - card.Rect.Max.X - cardMargin
+		rightExtra := 400 - card.Rect.Max.X - theme.GapPane
 		if leftSlack < 0 || rightExtra < 0 {
 			t.Fatalf("negative slack: left %d right %d", leftSlack, rightExtra)
 		}

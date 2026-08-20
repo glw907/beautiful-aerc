@@ -14,4 +14,5 @@ const (
 	GapSection = 1 // row between sections
 	PadBand    = 2 // chrome band inset
 	PadCard    = 2 // card inset
+	GapPane    = 2 // pane to neighboring pane
 )

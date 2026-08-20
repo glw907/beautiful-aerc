@@ -407,8 +407,13 @@ terminal units): `gapLabel 1` (label to its value),
 to text), `padPane 1` (pane edge to content), `padModal 2/1`
 (modal horizontal/vertical), `gapSection 1 row`. Pass 2 decision 3
 adds `padBand 2` (chrome band inset) and `padCard 2` (card inset).
-Markup-level literals are forbidden by the analyzer; a screen
-reaches spacing only through roles.
+Task 3's fix round 1 adds `gapPane 2` (pane to neighboring pane),
+the same plan-defect class as the divider token (ruling M3,
+`docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`):
+LayoutMode's rail-clearance and list/reader gutter are both this
+role, not a locally reinvented literal. Markup-level literals are
+forbidden by the analyzer; a screen reaches spacing only through
+roles.
 
 **Type roles**: `emTitle` (bold), `emLabel` (dim), `emValue`
 (normal), `emHint` (dim italic where supported, dim otherwise).
