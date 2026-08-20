@@ -69,20 +69,24 @@ func renderFooter(entry ScreenEntry, th theme.Theme, width int) string {
 }
 
 // FooterHitSpans returns one HitSpan per rendered footer hint,
-// entry's own committed prefix at width columns plus the pinned help
-// hint (ADR-0017's character grain: each span covers exactly the
-// hint's own rendered cells, from its key's first column through its
+// entry's committed prefix at footerRow's own width plus the pinned
+// help hint (ADR-0017's character grain: each span covers exactly the
+// hint's rendered cells, from its key's first column through its
 // description's last), positioned within footerRow. state gates the
 // whole set through registry.go's pointerLegalStates the same way
-// StatusLineHitSpans does; PointerFooterHint is legal in every
-// StateClass (a footer hint accelerates its own key, which is itself
-// legal in whatever state offers it), so this returns spans in every
-// state rather than gating any of them out.
-func FooterHitSpans(entry ScreenEntry, state StateClass, width int, footerRow image.Rectangle) []HitSpan {
-	if !slices.Contains(pointerLegalStates[PointerFooterHint], state) {
+// StatusLineHitSpans does: PointerFooterHint is legal in every
+// StateClass except StateModal (task-10-findings-r2.md's F2 corollary
+// ruling: the modal renders full-terminal, App.View's own StateModal
+// branch, so no footer band exists there to click), and an empty
+// footerRow (the floor rung, which paints no chrome at all) also
+// returns none, belt-and-braces against a caller that resolves spans
+// without checking the rung first.
+func FooterHitSpans(entry ScreenEntry, state StateClass, footerRow image.Rectangle) []HitSpan {
+	if footerRow.Empty() || !slices.Contains(pointerLegalStates[PointerFooterHint], state) {
 		return nil
 	}
 
+	width := footerRow.Dx()
 	contentWidth := max(0, width-2*theme.PadBand)
 	hints := footerHints(entry, contentWidth)
 

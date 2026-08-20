@@ -442,7 +442,7 @@ func TestFooterHitSpans_MatchesTheRenderedColumns(t *testing.T) {
 		for _, width := range footerBoundaryWidths {
 			row := ansi.Strip(renderFooter(entry, th, width))
 			footerRow := image.Rect(0, 7, width, 8) // a non-zero origin, proving translation
-			spans := FooterHitSpans(entry, StateDigitsSwitch, width, footerRow)
+			spans := FooterHitSpans(entry, StateDigitsSwitch, footerRow)
 
 			hints := footerHints(entry, width-2*theme.PadBand)
 			if len(spans) != len(hints)+1 {
@@ -587,17 +587,23 @@ func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
 }
 
 // TestFooterHitSpans_OfferedInEveryLegalState proves PointerFooterHint
-// is legal in every StateClass (registry.go's pointerLegalStates): a
-// footer hint accelerates its own key, which is itself legal in
-// whatever state offers it, so spans are never withheld the way a
-// surface-digit click is outside StateDigitsSwitch.
+// is legal in every StateClass except StateModal (registry.go's
+// pointerLegalStates, corrected by task-10-findings-r2.md's F2
+// corollary ruling): a footer hint accelerates its own key, which is
+// itself legal in whatever state offers it, so spans are never
+// withheld the way a surface-digit click is outside StateDigitsSwitch;
+// StateModal is the one exception, since the modal renders
+// full-terminal and no footer band exists there to click.
 func TestFooterHitSpans_OfferedInEveryLegalState(t *testing.T) {
 	entry := footerFixture()
 	footerRow := image.Rect(0, 0, 80, 1)
 
-	for _, state := range []StateClass{StateDigitsSwitch, StatePrintableEntry, StateModal} {
-		if got := FooterHitSpans(entry, state, 80, footerRow); len(got) == 0 {
-			t.Errorf("FooterHitSpans(state=%v) returned none, want spans (PointerFooterHint is legal in every state)", state)
+	for _, state := range []StateClass{StateDigitsSwitch, StatePrintableEntry} {
+		if got := FooterHitSpans(entry, state, footerRow); len(got) == 0 {
+			t.Errorf("FooterHitSpans(state=%v) returned none, want spans", state)
 		}
+	}
+	if got := FooterHitSpans(entry, StateModal, footerRow); got != nil {
+		t.Errorf("FooterHitSpans(StateModal) = %v, want none (the modal renders full-terminal)", got)
 	}
 }

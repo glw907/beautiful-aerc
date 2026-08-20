@@ -120,9 +120,12 @@ func clusterDigitX(active Surface) [len(surfaceNames)]int {
 // pointerLegalStates) allows PointerSurfaceDigit to fire in. Every
 // other state, a modal most notably, returns none: a digit click is
 // never offered where the keyboard equivalent would be illegal too
-// (task-6-findings-r1.md F8/RULING).
+// (task-6-findings-r1.md F8/RULING). An empty statusRow (the floor
+// rung, which paints no chrome at all) also returns none,
+// belt-and-braces against a caller that resolves spans without
+// checking the rung first (task-10-findings-r2.md F2).
 func StatusLineHitSpans(active Surface, state StateClass, statusRow image.Rectangle) []HitSpan {
-	if !slices.Contains(pointerLegalStates[PointerSurfaceDigit], state) {
+	if statusRow.Empty() || !slices.Contains(pointerLegalStates[PointerSurfaceDigit], state) {
 		return nil
 	}
 	xs := clusterDigitX(active)

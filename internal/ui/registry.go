@@ -101,15 +101,21 @@ type PointerBinding struct {
 // filtered list scrolls too) but never a modal. PointerPane and
 // PointerModalAnswer are each the other's complement: a pane click
 // focuses content, which a modal has none of to focus, so it is
-// illegal there; a modal answer is legal nowhere else.
+// illegal there; a modal answer is legal nowhere else. PointerFooterHint
+// and PointerBannerDismiss both drop StateModal too
+// (task-10-findings-r2.md's F2 corollary ruling): App.View renders a
+// StateModal front full-terminal, bypassing the footer and banner
+// bands entirely, so neither exists there for a click to land on,
+// the same render-composition fact PointerPane's own illegal-in-modal
+// row already reflects.
 var pointerLegalStates = map[PointerTarget][]StateClass{
 	PointerRow:           {StateDigitsSwitch, StatePrintableEntry},
 	PointerRowOpen:       {StateDigitsSwitch},
 	PointerSidebarEntry:  {StateDigitsSwitch},
 	PointerPane:          {StateDigitsSwitch, StatePrintableEntry},
 	PointerSurfaceDigit:  {StateDigitsSwitch},
-	PointerFooterHint:    {StateDigitsSwitch, StatePrintableEntry, StateModal},
-	PointerBannerDismiss: {StateDigitsSwitch, StatePrintableEntry, StateModal},
+	PointerFooterHint:    {StateDigitsSwitch, StatePrintableEntry},
+	PointerBannerDismiss: {StateDigitsSwitch, StatePrintableEntry},
 	PointerWheel:         {StateDigitsSwitch, StatePrintableEntry},
 	PointerFieldCursor:   {StatePrintableEntry},
 	PointerModalAnswer:   {StateModal},

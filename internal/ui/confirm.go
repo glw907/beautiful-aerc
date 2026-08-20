@@ -301,3 +301,9 @@ func ConfirmHitSpans(c Confirm) []HitSpan {
 		{Target: PointerModalAnswer, Verb: c.noBinding(), Rect: image.Rect(g.x+noX, rowY, g.x+noX+1, rowY+1)},
 	}
 }
+
+// HitSpans implements the inline interface mouse.go's dispatchClick
+// resolves a StateModal stack top through (task-10-findings-r2.md's
+// F5 ruling: an anonymous interface{ HitSpans() []HitSpan }, never a
+// named single-impl interface or a concrete Confirm type assertion).
+func (c Confirm) HitSpans() []HitSpan { return ConfirmHitSpans(c) }
