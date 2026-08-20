@@ -1,0 +1,128 @@
+
+  poplar · composition v4 · four-lens polish review folded
+
+  Standard rung 120 · dark
+
+    1 Mail  2 3 4          Inbox · 12,406 messages · 14 unread                                 ⠹ Syncing 4,312 of 36,102  
+                        │                                                                                                 
+  ▏ Inbox           14  │    ●    Ada Lovelace            Analytical engine notes · The engine weaves algebrai…    09:41  
+    Drafts              │  ▌      Charles Babbage         Re: difference engine budget · The Treasury insists …    09:12  
+    Sent                │    ● ⚑  Grace Hopper            COBOL committee minutes · Attached are the minutes f…    08:55  
+    Archive             │      ⊕  Katherine Johnson       Trajectory review, Friday · Can you check my numbers…   Aug 18  
+    Junk             1  │         Fastmail                Your receipt for August · Thanks for your payment. T…   Aug 17  
+    Trash               │    ●    Frank Lee           ▸ 4 Server migration plan · I propose we move the primar…   Aug 16  
+    Lists           98  │      ⊕  GitHub                  Code review: sync engine PR #42 · poplar/sync: 3 com…   Aug 14  
+                        │         Donald Knuth            TAOCP errata, volume 4 · A reader reports an off-by-…   Aug 13  
+                        │                                                                                                 
+                        │                                                                                                 
+                        │                                                                                                 
+    Enter open   a archive   d delete   r reply   m compose   / search   u undo   g go to   * flag   s move       ? help  
+
+  Wide rung 150 · dark (subject-first reader, promoted cursor row)
+
+    1 Mail  2 3 4          Inbox · 12,406 messages · 14 unread                                                               ⠹ Syncing 4,312 of 36,102  
+                        │                                                                                                                               
+  ▏ Inbox           14  │    ●    Ada Lovelace            Analytical engine n…    09:41                                                                 
+    Drafts              │  ▌      Charles Babbage         Re: difference engi…    09:12      Re: difference engine budget                               
+    Sent                │    ● ⚑  Grace Hopper            COBOL committee min…    08:55                                                                 
+    Archive             │      ⊕  Katherine Johnson       Trajectory review, …   Aug 18      From   Charles Babbage <charles@difference.example>        
+    Junk             1  │         Fastmail                Your receipt for Au…   Aug 17      To     geoff@907.life                                      
+    Trash               │    ●    Frank Lee           ▸ 4 Server migration pl…   Aug 16      Date   Tue 19 Aug 2026, 09:12                              
+    Lists           98  │      ⊕  GitHub                  Code review: sync e…   Aug 14      ───────────────────────────────────────────────────────    
+                        │         Donald Knuth            TAOCP errata, volum…   Aug 13                                                                 
+                        │                                                                    The Treasury insists on itemized brasswork                 
+                        │                                                                    before any further disbursement. I enclose                 
+                        │                                                                    the schedule of parts.                                     
+                        │                                                                                                                               
+                        │                                                                    │ your estimate of the mill assembly                       
+                        │                                                                                                                               
+                        │                                                                    https://example.org/engine-budget                          
+                        │                                                                                                                               
+                        │                                                                      mill:   4,102 gears                                      
+                        │                                                                      store:  1,000 columns of 40 wheels                       
+                        │                                                                                                                               
+                        │                                                                    ⊕ parts-schedule.pdf · 96 KB                               
+                        │                                                                                                                        34%    
+                        │                                                                                                                               
+                        │                                                                                                                               
+    Enter open   a archive   d delete   r reply   m compose   / search   u undo   g go to   * flag   s move   Tab unread   j/k select           ? help  
+
+  Toast and banner placement · 120 · dark
+
+    1 Mail  2 3 4          Inbox · 12,406 messages                                      3 messages archived   u undo  9s  
+    ▲ No keyring found, so your token is stored in a plain file.                          Enter details   Esc dismiss  ✕  
+
+  Modal confirm · dark (border role, default answer grounded)
+
+                                       ╭────────────────────────────────────────────╮                                     
+                                       │                                            │                                     
+                                       │  Quit with 2 unsent messages?              │                                     
+                                       │  They'll send the next time you open poplar.│                                    
+                                       │                                            │                                     
+                                       │            y quit     n stay               │                                     
+                                       │                                            │                                     
+                                       ╰────────────────────────────────────────────╯                                     
+
+  Spartan 80 · single pane
+
+    1 Mail  2 3 4                                                  ⠹ Syncing 12%  
+                                                                                  
+    ●    Ada Lovelace            Analytical engine notes · The engine …    09:41  
+  ▌      Charles Babbage         Re: difference engine budget · The Tr…    09:12  
+    ● ⚑  Grace Hopper            COBOL committee minutes · Attached ar…    08:55  
+      ⊕  Katherine Johnson       Trajectory review, Friday · Can you c…   Aug 18  
+         Fastmail                Your receipt for August · Thanks for …   Aug 17  
+    ●    Frank Lee           ▸ 4 Server migration plan · I propose we …   Aug 16  
+      ⊕  GitHub                  Code review: sync engine PR #42 · pop…   Aug 14  
+         Donald Knuth            TAOCP errata, volume 4 · A reader rep…   Aug 13  
+    Enter open   a archive   d delete   r reply   m compose               ? help  
+
+  Standard rung 120 · light (deepened grounds)
+
+    1 Mail  2 3 4          Inbox · 12,406 messages · 14 unread                                 ⠹ Syncing 4,312 of 36,102  
+                        │                                                                                                 
+  ▏ Inbox           14  │    ●    Ada Lovelace            Analytical engine notes · The engine weaves algebrai…    09:41  
+    Drafts              │  ▌      Charles Babbage         Re: difference engine budget · The Treasury insists …    09:12  
+    Sent                │    ● ⚑  Grace Hopper            COBOL committee minutes · Attached are the minutes f…    08:55  
+    Archive             │      ⊕  Katherine Johnson       Trajectory review, Friday · Can you check my numbers…   Aug 18  
+    Junk             1  │         Fastmail                Your receipt for August · Thanks for your payment. T…   Aug 17  
+    Trash               │    ●    Frank Lee           ▸ 4 Server migration plan · I propose we move the primar…   Aug 16  
+    Lists           98  │      ⊕  GitHub                  Code review: sync engine PR #42 · poplar/sync: 3 com…   Aug 14  
+                        │         Donald Knuth            TAOCP errata, volume 4 · A reader reports an off-by-…   Aug 13  
+                        │                                                                                                 
+                        │                                                                                                 
+                        │                                                                                                 
+    Enter open   a archive   d delete   r reply   m compose   / search   u undo   g go to   * flag   s move       ? help  
+
+  SLATE dark  (base #16181D · panel #262B36 · selection #2A3441 · code #1D2026 · border #3A414D, structural, exempt)
+
+  fg        #D4D8DF    Aa    Aa    Aa    Aa    worst  8.82 (need 4.5)
+  fgMuted   #969DA9    Aa    Aa    Aa    Aa    worst  4.62 (need 4.5)
+  fgSubtle  #7A8290    Aa    Aa    Aa    Aa    worst  3.26 (need 3.0)
+  accent    #85B3D1    Aa    Aa    Aa    Aa    worst  5.62 (need 4.5)
+  unread    #ECEEF2    Aa    Aa    Aa    Aa    worst 10.85 (need 4.5)
+  error     #DF8484    Aa    Aa    Aa    Aa    worst  4.66 (need 4.5)
+  warn      #D4B36A    Aa    Aa    Aa    Aa    worst  6.28 (need 4.5)
+  success   #97BE8C    Aa    Aa    Aa    Aa    worst  6.04 (need 4.5)
+  link      #85B3D1    Aa    Aa    Aa    Aa    worst  5.62 (need 4.5)
+  quote     #A0A5AE    Aa    Aa    Aa    Aa    worst  5.09 (need 4.5)
+  flag      #D4B36A    Aa    Aa    Aa    Aa    worst  6.28 (need 3.0)
+
+  SLATE light v4  (base #E4E7EC · panel #FFFFFF · selection #C4CDDB · code #D9DDE4 · border #B4BCC9, structural, exempt)
+
+  fg        #262B33    Aa    Aa    Aa    Aa    worst  8.88 (need 4.5)
+  fgMuted   #4C545F    Aa    Aa    Aa    Aa    worst  4.78 (need 4.5)
+  fgSubtle  #646D79    Aa    Aa    Aa    Aa    worst  3.27 (need 3.0)
+  accent    #285370    Aa    Aa    Aa    Aa    worst  5.12 (need 4.5)
+  unread    #12161C    Aa    Aa    Aa    Aa    worst 11.32 (need 4.5)
+  error     #90342E    Aa    Aa    Aa    Aa    worst  4.82 (need 4.5)
+  warn      #6A4E0A    Aa    Aa    Aa    Aa    worst  4.84 (need 4.5)
+  success   #3A5A32    Aa    Aa    Aa    Aa    worst  4.87 (need 4.5)
+  link      #285370    Aa    Aa    Aa    Aa    worst  5.12 (need 4.5)
+  quote     #4A525D    Aa    Aa    Aa    Aa    worst  4.93 (need 4.5)
+  flag      #6A4E0A    Aa    Aa    Aa    Aa    worst  4.84 (need 3.0)
+
+  Flagged for Geoff: toast countdown form (UX-9 mandates a visible countdown; shown as dim '9s'),
+  and the attachment glyph (⊕ vs a letter vs a count).
+
+  q + Enter (or Ctrl-C) to close

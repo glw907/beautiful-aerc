@@ -189,26 +189,29 @@ implementer invents taste. Each cites its constraint.
 
    | Role | Dark | Light |
    |---|---|---|
-   | bg | `#16181D` | `#F2F4F7` |
+   | bg | `#16181D` | `#E4E7EC` |
    | bgPanel | `#262B36` | `#FFFFFF` |
-   | selectedBg | `#2A3441` | `#D8DEE7` |
-   | codeBg | `#1D2026` | `#E7EBF0` |
-   | fg | `#D4D8DF` | `#2B3038` |
-   | fgMuted | `#969DA9` | `#59616D` |
-   | fgSubtle | `#7A8290` | `#747D8A` |
-   | accent | `#85B3D1` | `#2F6284` |
-   | unread | `#ECEEF2` (with bold) | `#161B22` (with bold) |
-   | error | `#DF8484` | `#A53E38` |
-   | warn | `#D4B36A` | `#7B5A0D` |
-   | success | `#97BE8C` | `#44683A` |
-   | link | `#85B3D1` (underlined) | `#2E6389` (underlined) |
-   | quote | `#A0A5AE` | `#575F6B` |
-   | flag | `#D4B36A` | `#7B5A0D` |
-   | focusedBorder | `#6E9FBD` (degrade dividers) | `#40749A` |
+   | selectedBg | `#2A3441` | `#C4CDDB` |
+   | codeBg | `#1D2026` | `#D9DDE4` |
+   | border | `#3A414D` (structural, deliberately sub-contrast, exempt from the role floors) | `#B4BCC9` |
+   | fg | `#D4D8DF` | `#262B33` |
+   | fgMuted | `#969DA9` | `#4C545F` |
+   | fgSubtle | `#7A8290` | `#646D79` |
+   | accent | `#85B3D1` | `#285370` |
+   | unread | `#ECEEF2` (with bold) | `#12161C` (with bold) |
+   | error | `#DF8484` | `#90342E` |
+   | warn | `#D4B36A` | `#6A4E0A` |
+   | success | `#97BE8C` | `#3A5A32` |
+   | link | accent alias, underlined (both themes) | accent alias, underlined |
+   | quote | `#A0A5AE` (italic, with the `│` bar) | `#4A525D` |
+   | flag | warn alias | warn alias |
    | diffAdd / diffDel | success / error values | success / error values |
    | calendarSlot[8] | muted 8-hue cycle in the same saturation band: accent blue, success, warn, `#C99BC0`, `#7FBFB2`, error, `#B0A1E0`, `#C0A98F` | derived per-role at light lightness, same hue order |
 
-   fgSubtle is an indicator role and never carries reading text:
+   The v4 light grounds are deepened from the first light draft so
+   the card's panel step survives without lines (the polish review
+   measured the original at 1.10:1, near the perceptual floor).
+      fgSubtle is an indicator role and never carries reading text:
    dates and tree connectors render in fgMuted; snippets are the
    one fgSubtle text use, deliberately sub-reading-weight
    (review finding 1's resolution).
@@ -279,6 +282,20 @@ implementer invents taste. Each cites its constraint.
    reads as "add"; candidates at the gate are a letter (aerc's
    `a`), a count, or keeping `⊕`.
 
+13. **The pinned exemplar** (Geoff, 2026-08-19): composition v4
+   is ratified and committed at
+   `docs/poplar/design/2026-08-19-shell-exemplar/` (generator,
+   ANSI render, stripped render, README). **It is the design
+   language's visual exemplar: help, config, calendar, contacts,
+   and compose all design from it** — its ground grammar, hint
+   atom, edge-bar vocabulary, card anatomy, and copy register are
+   the reference a new screen imitates before consulting rules.
+   Task 1's design-language amendment adds the exemplar pointer to
+   the design language's section 10. Open at pin time, carried to
+   the pass gate: the toast countdown's form (UX-9 mandates a
+   visible countdown; the exemplar shows a dim `9s`) and the
+   attachment glyph.
+
 ## Wireframes (the design ritual)
 
 One frame per screen per responsive class that changes its layout
@@ -306,19 +323,19 @@ column whenever a sidebar is present.
 ### F9. Standard rung 120, mail surface (pass-3 content preview)
 
 ```
-  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                         ⠹ syncing 4,312/36,102
+  1 Mail  2 3 4          Inbox · 12,406 messages · 14 unread                                 ⠹ Syncing 4,312 of 36,102
                       │
-▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes · The engine weaves algebraic pa…    09:41
-   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget · The Treasury insists on i…    09:12
-   Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes · Attached are the minutes from …    08:55
-   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday · Can you check my numbers for…   Aug 18
-   Junk            1  │        Fastmail              Your receipt for August · Thanks for your payment. This …   Aug 17
-   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan · I propose we move the primary on…   Aug 16
-   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #42 · poplar/sync: 3 comment…   Aug 14
-                      │        Donald Knuth          TAOCP errata, volume 4 · A reader reports an off-by-one …   Aug 13
+▏ Inbox           14  │    ●    Ada Lovelace            Analytical engine notes · The engine weaves algebrai…    09:41
+  Drafts              │  ▌      Charles Babbage         Re: difference engine budget · The Treasury insists …    09:12
+  Sent                │    ● ⚑  Grace Hopper            COBOL committee minutes · Attached are the minutes f…    08:55
+  Archive             │      ⊕  Katherine Johnson       Trajectory review, Friday · Can you check my numbers…   Aug 18
+  Junk             1  │         Fastmail                Your receipt for August · Thanks for your payment. T…   Aug 17
+  Trash               │    ●    Frank Lee           ▸ 4 Server migration plan · I propose we move the primar…   Aug 16
+  Lists           98  │      ⊕  GitHub                  Code review: sync engine PR #42 · poplar/sync: 3 com…   Aug 14
+                      │         Donald Knuth            TAOCP errata, volume 4 · A reader reports an off-by-…   Aug 13
                       │
                       │
-   /  filter folders  │
+                      │
 ```
 
 - Ground grammar (v3, adversarial review folded, plus two Geoff
@@ -344,31 +361,31 @@ column whenever a sidebar is present.
 ### F10. Wide rung 150, split (pass-3 content preview)
 
 ```
-  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                                                       ⠹ syncing 4,312/36,102
+  1 Mail  2 3 4          Inbox · 12,406 messages · 14 unread                                                               ⠹ Syncing 4,312 of 36,102
                       │
-▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes        09:41     From     Ada Lovelace <ada@analytical.example>
-   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budg…    09:12     Date     Today 09:41
-   Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes        08:55     Subject  Analytical engine notes
-   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday     Aug 18     ─────────────────────────────────────────────────────
-   Junk            1  │        Fastmail              Your receipt for August       Aug 17
-   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan         Aug 16     The engine weaves algebraic patterns just
-   Lists          98  │     ⊕  GitHub                Code review: sync engine P…   Aug 14     as the Jacquard loom weaves flowers and
-                      │        Donald Knuth          TAOCP errata, volume 4        Aug 13     leaves. Numbers are one instance; symbols
-                      │                                                                       the general case.
+▏ Inbox           14  │    ●    Ada Lovelace            Analytical engine n…    09:41
+  Drafts              │  ▌      Charles Babbage         Re: difference engi…    09:12      Re: difference engine budget
+  Sent                │    ● ⚑  Grace Hopper            COBOL committee min…    08:55
+  Archive             │      ⊕  Katherine Johnson       Trajectory review, …   Aug 18      From   Charles Babbage <charles@difference.example>
+  Junk             1  │         Fastmail                Your receipt for Au…   Aug 17      To     geoff@907.life
+  Trash               │    ●    Frank Lee           ▸ 4 Server migration pl…   Aug 16      Date   Tue 19 Aug 2026, 09:12
+  Lists           98  │      ⊕  GitHub                  Code review: sync e…   Aug 14      ───────────────────────────────────────────────────────
+                      │         Donald Knuth            TAOCP errata, volum…   Aug 13
+                      │                                                                    The Treasury insists on itemized brasswork
+                      │                                                                    before any further disbursement. I enclose
+                      │                                                                    the schedule of parts.
                       │
-                      │                                                                       ▏ earlier: see the enclosed tables
+                      │                                                                    │ your estimate of the mill assembly
                       │
-                      │                                                                       https://example.org/engine-notes
+                      │                                                                    https://example.org/engine-budget
                       │
-                      │                                                                        for i, card := range deck {
-                      │                                                                            punch(card)
-                      │                                                                        }
+                      │                                                                      mill:   4,102 gears
+                      │                                                                      store:  1,000 columns of 40 wheels
                       │
-                      │                                                                       ⊕ engine-tables.pdf · 184 KB
+                      │                                                                    ⊕ parts-schedule.pdf · 96 KB
+                      │                                                                                                                        34%
                       │
-                      │                                                                                                                     ≡ 34%
                       │
-  Enter open   a archive   d delete   r reply   m compose   / search   u undo   g goto   * flag   s move   Tab unread   j/k move              ? help
 ```
 
 - List beside reader (the ratified wide rung, evidence note in
@@ -387,16 +404,16 @@ column whenever a sidebar is present.
 ### F11. Spartan 80, mail list single pane (pass-3 content preview)
 
 ```
-  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread ⠹ syncing 4,312/36,102
+  1 Mail  2 3 4                                                  ⠹ Syncing 12%
 
-  ●    Ada Lovelace          Analytical engine notes · The engine wea…    09:41
-▌      Charles Babbage       Re: difference engine budget · The Treas…    09:12
-  ● ⚑  Grace Hopper          COBOL committee minutes · Attached are t…    08:55
-    ⊕  Katherine Johnson     Trajectory review, Friday · Can you chec…   Aug 18
-       Fastmail              Your receipt for August · Thanks for you…   Aug 17
-  ●    Frank Lee         ▸ 4 Server migration plan · I propose we mov…   Aug 16
-    ⊕  GitHub                Code review: sync engine PR #42             Aug 14
-       Donald Knuth          TAOCP errata, volume 4 · A reader report…   Aug 13
+  ●    Ada Lovelace            Analytical engine notes · The engine …    09:41
+▌      Charles Babbage         Re: difference engine budget · The Tr…    09:12
+  ● ⚑  Grace Hopper            COBOL committee minutes · Attached ar…    08:55
+    ⊕  Katherine Johnson       Trajectory review, Friday · Can you c…   Aug 18
+       Fastmail                Your receipt for August · Thanks for …   Aug 17
+  ●    Frank Lee           ▸ 4 Server migration plan · I propose we …   Aug 16
+    ⊕  GitHub                  Code review: sync engine PR #42 · pop…   Aug 14
+       Donald Knuth            TAOCP errata, volume 4 · A reader rep…   Aug 13
 ```
 
 - The composition must stand without the rail: chrome bands,
@@ -433,7 +450,7 @@ column whenever a sidebar is present.
 ### F2. Status line with an undo toast, plus a banner, standard 120
 
 ```
-  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                       Archived 3 · u undo · 9s
+  1 Mail  2 3 4          Inbox · 12,406 messages                                      3 messages archived   u undo  9s
 ```
 
 - The toast occupies the status line's right segment for its 10 s
@@ -510,14 +527,13 @@ consumes). Within a column, rows never wrap.
 ### F7. Modal confirm (quit with pending outbox), natural size, centered
 
 ```
-                    ╭──────────────────────────────────────────╮
-                    │                                          │
-                    │  Quit with 2 unsent messages?            │
-                    │  They stay queued and send next launch.  │
-                    │                                          │
-                    │            y quit    n stay              │
-                    │                                          │
-                    ╰──────────────────────────────────────────╯
+                                     ╭────────────────────────────────────────────╮
+                                     │                                            │
+                                     │  Quit with 2 unsent messages?              │
+                                     │  They'll send the next time you open poplar.│
+                                     │                                            │
+                                     │            y quit     n stay               │
+                                     │                                            │
 ```
 
 - One question, named consequence, `y`/`n`/`Esc` (grammar-exempt
