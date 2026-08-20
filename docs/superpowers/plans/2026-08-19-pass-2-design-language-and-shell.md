@@ -346,11 +346,12 @@ column whenever a sidebar is present.
 ▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes        09:41     From     Ada Lovelace <ada@analytical.example>
    Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget   09:12     Date     Today 09:41
    Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes        08:55     Subject  Analytical engine notes
-   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday     Aug 18
-   Junk            1  │        Fastmail              Your receipt for August       Aug 17     The engine weaves algebraic patterns just
-   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan         Aug 16     as the Jacquard loom weaves flowers and
-   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #…Aug 14     leaves. Numbers are one instance; symbols
-                      │        Donald Knuth          TAOCP errata, volume 4        Aug 13     the general case.
+   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday     Aug 18     ─────────────────────────────────────────────────────
+   Junk            1  │        Fastmail              Your receipt for August       Aug 17
+   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan         Aug 16     The engine weaves algebraic patterns just
+   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #…Aug 14     as the Jacquard loom weaves flowers and
+                      │        Donald Knuth          TAOCP errata, volume 4        Aug 13     leaves. Numbers are one instance; symbols
+                      │                                                                       the general case.
                       │
                       │                                                                       ▏ earlier: see the enclosed tables
                       │
@@ -363,14 +364,19 @@ column whenever a sidebar is present.
                       │                                                                       ⊕ engine-tables.pdf · 184 KB
                       │
                       │                                                                                                                     ≡ 34%
+                      │
 ```
 
 - List beside reader (the ratified wide rung, evidence note in
   the line-length research doc). The reader is a floating card on
-  the panel ground with a base gutter each side, a Date header
-  row, a quote bar `▏`, underlined links, code inset on codeBg,
-  and a `≡ 34%` scroll readout (the field's converged alternative
-  to a drawn scrollbar).
+  the panel ground with base-ground margins above and below and a
+  base gutter each side (Geoff, 2026-08-19: the margins are
+  deliberate and symmetric); the header block ends in a light
+  fgSubtle rule inside the card (ruled over a second header
+  ground, which would stack three surfaces in ten cells); a Date
+  header row, a quote bar `▏`, underlined links, code inset on
+  codeBg, and a `≡ 34%` scroll readout (the field's converged
+  alternative to a drawn scrollbar).
 - Pointer targets add: click a pane to focus it, drag in the
   reader (SHOULD, copy mode).
 
