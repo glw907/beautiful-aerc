@@ -18,6 +18,12 @@
 #
 # Exit 1 on any error-level finding, a missing Vale, or (with
 # --check-vendor) a drifted overlay; 0 otherwise.
+#
+# The file list unions tracked and untracked-but-not-ignored .go files: a
+# brand-new file is invisible to `git ls-files` alone until it is staged, so
+# a gate run before `git add` silently skips it and reports a false clean
+# (the mechanical cause behind two false green claims in the pass 2 sweep,
+# task 5a and task 10).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -46,7 +52,9 @@ if [ "$check_vendor" -eq 1 ]; then
   "$vendor" "$PWD" || exit 1
 fi
 
-mapfile -t files < <(git ls-files '*.go')
+mapfile -t files < <(
+  { git ls-files '*.go'; git ls-files --others --exclude-standard '*.go'; } | sort -u
+)
 [ "${#files[@]}" -gt 0 ] || { echo "vale-comments: no Go files"; exit 0; }
 
 if vale --minAlertLevel=error --output=line "${files[@]}"; then
