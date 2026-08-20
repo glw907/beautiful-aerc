@@ -17,7 +17,7 @@ func renderMail(t *testing.T) string {
 	scr := Mail.Build(th)
 	updated, _ := scr.Update(ui.LayoutMsg{Layout: lm})
 	scr = updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
-	return ui.Render(ui.RenderInput{Screen: scr, Entry: scr.Entry(), Layout: lm, Theme: th, Status: Mail.Status, Banner: Mail.Banner}).Content
+	return ui.Render(ui.RenderInput{Screen: scr, Layout: lm, Theme: th, Status: Mail.Status, Banner: Mail.Banner}).Content
 }
 
 // TestClockPinnedAgainstProcessTZ proves amendment D's clock/TZ pin

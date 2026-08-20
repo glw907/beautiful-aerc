@@ -7,7 +7,7 @@
   home/end  \x1b[2mextremes\x1b[m
   enter     \x1b[2mopen\x1b[m
   esc       \x1b[2mback\x1b[m
-  1-4       \x1b[2msurface switch\x1b[m
+  1-4       \x1b[2mMail - Calendar - People - Config\x1b[m
   u         \x1b[2mundo\x1b[m
   ?         \x1b[2mhelp\x1b[m
   q         \x1b[2mquit\x1b[m

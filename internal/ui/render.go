@@ -33,20 +33,18 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // sixth positional parameter). Screen, Layout, and Theme are every
 // screen's own three inputs; Status and Banner are the two chrome
 // bands' own render state, App's whole answer to "what the top band
-// and the banner row show this frame." Entry is the footer's own
-// input, a field of its own rather than Render reaching for
-// Screen.Entry() itself (task 9's carry fix from task 7's review): a
-// caller states explicitly which screen's keymap the footer follows,
-// so a screen stacked over another (the help overlay, first of its
-// kind) can never leave the footer advertising the covered screen's
-// verbs by omission. FullRegion is task 9's own second addition: a
-// screen pushed onto App's own stack owns no sidebar or split of its
-// own, so its content spans the whole Main band rather than landing
-// in the narrower Content pane a surface's own sidebar reservation
-// would otherwise leave it squeezed against.
+// and the banner row show this frame." FullRegion is task 9's own
+// addition: a screen pushed onto App's own stack (the help overlay,
+// first of its kind) owns no sidebar or split of its own, so its
+// content spans the whole Main band rather than landing in the
+// narrower Content pane a surface's own sidebar reservation would
+// otherwise leave it squeezed against. The footer always follows
+// Screen.Entry() itself (task 9's own fix round: a caller sets Screen
+// to whichever screen is actually in front, App's stack top included,
+// so a separate Entry field would only ever restate what Screen
+// already answers).
 type RenderInput struct {
 	Screen     Screen
-	Entry      ScreenEntry
 	FullRegion bool
 	Layout     LayoutMode
 	Theme      theme.Theme
@@ -72,11 +70,11 @@ type RenderInput struct {
 // pass 2 plan's task 5b findings grew a fourth at task 6: Status,
 // App's own chrome state, is what the seam paints into StatusRow
 // rather than a blank fill. Task 7 stops treating Footer as a blank
-// fill too: it paints in.Entry's own registry-derived hints instead.
-// Task 8 grows a fifth, Banner, painted into LayoutMode's own Banner
-// band whenever in.Layout.BannerRow is set; its own fix round folds
-// all five into this struct ahead of a sixth parameter. Task 9 adds
-// two more, Entry and FullRegion.
+// fill too: it paints in.Screen.Entry()'s own registry-derived hints
+// instead. Task 8 grows a fifth, Banner, painted into LayoutMode's own
+// Banner band whenever in.Layout.BannerRow is set; its own fix round
+// folds all five into this struct ahead of a sixth parameter, which
+// task 9 adds as FullRegion.
 func Render(in RenderInput) Frame {
 	view := in.Screen.View()
 	lm, th := in.Layout, in.Theme
@@ -92,7 +90,7 @@ func Render(in RenderInput) Frame {
 		canvas.Paint(lm.Banner.Rect, renderBanner(in.Banner, th, lm.Banner.Rect.Dx()))
 	}
 	canvas.Paint(lm.Main.Rect, th.Blank(lm.Main.Ground, lm.Main.Rect.Dx(), lm.Main.Rect.Dy()))
-	canvas.Paint(lm.Footer.Rect, renderFooter(in.Entry, th, lm.Footer.Rect.Dx()))
+	canvas.Paint(lm.Footer.Rect, renderFooter(in.Screen.Entry(), th, lm.Footer.Rect.Dx()))
 
 	origin := lm.Content().Rect.Min
 	if in.FullRegion {

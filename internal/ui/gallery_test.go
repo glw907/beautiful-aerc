@@ -162,7 +162,7 @@ func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
 	if c.stackTop {
 		return scr.View().Content
 	}
-	in := ui.RenderInput{Screen: scr, Entry: scr.Entry(), FullRegion: c.fullRegion, Layout: lm, Theme: th, Status: c.fixture.Status, Banner: c.fixture.Banner}
+	in := ui.RenderInput{Screen: scr, FullRegion: c.fullRegion, Layout: lm, Theme: th, Status: c.fixture.Status, Banner: c.fixture.Banner}
 	return ui.Render(in).Content
 }
 

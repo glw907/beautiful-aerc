@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/glw907/poplar/internal/store"
@@ -28,8 +29,8 @@ func TestRender_Purity(t *testing.T) {
 	lm := ComputeLayout(100, 30, false)
 	m := renderTestScreen(t, th, lm)
 
-	a := Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: th})
-	b := Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: th})
+	a := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
+	b := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
 	if a != b {
 		t.Error("Render is not pure: two calls with identical inputs diverged")
 	}
@@ -44,7 +45,7 @@ func TestRender_FloorStateReturnsScreenViewVerbatim(t *testing.T) {
 	lm := ComputeLayout(40, 10, false)
 	m := renderTestScreen(t, th, lm)
 
-	got := Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: th})
+	got := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
 	view := m.View()
 	if got.Content != view.Content {
 		t.Errorf("floor render content = %q, want screen.View().Content verbatim %q", got.Content, view.Content)
@@ -75,7 +76,7 @@ func TestRender_CoversEveryRow(t *testing.T) {
 				th := theme.New(true, p)
 				lm := ComputeLayout(sz.w, sz.h, banner)
 				m := renderTestScreen(t, th, lm)
-				got := Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: th})
+				got := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
 
 				if lines := strings.Split(got.Content, "\n"); len(lines) != sz.h {
 					t.Errorf("%dx%d banner=%v profile=%v: %d rows, want %d", sz.w, sz.h, banner, p, len(lines), sz.h)
@@ -99,7 +100,7 @@ func TestRender_TrueColorRowsFillTheirWidth(t *testing.T) {
 		for _, banner := range []bool{false, true} {
 			lm := ComputeLayout(sz.w, sz.h, banner)
 			m := renderTestScreen(t, th, lm)
-			got := Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: th})
+			got := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
 
 			for y, line := range strings.Split(got.Content, "\n") {
 				if w := ansi.StringWidth(line); w != sz.w {
@@ -140,16 +141,62 @@ func TestRender_DividerDegradeSubstitution(t *testing.T) {
 
 	trueColor := theme.New(true, theme.ProfileTrueColor)
 	m := renderTestScreen(t, trueColor, lm)
-	row := strings.Split(Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: trueColor}).Content, "\n")[glyphRow]
+	row := strings.Split(Render(RenderInput{Screen: m, Layout: lm, Theme: trueColor}).Content, "\n")[glyphRow]
 	if got := columnAt(t, row, degradeDivider.X); got == []rune(trueColor.Glyphs().Divider)[0] {
 		t.Errorf("true-color row %d column %d = %q, want the gutter left blank", glyphRow, degradeDivider.X, got)
 	}
 
 	ansi16 := theme.New(true, theme.ProfileANSI16)
 	m = renderTestScreen(t, ansi16, lm)
-	row = strings.Split(Render(RenderInput{Screen: m, Entry: m.Entry(), Layout: lm, Theme: ansi16}).Content, "\n")[glyphRow]
+	row = strings.Split(Render(RenderInput{Screen: m, Layout: lm, Theme: ansi16}).Content, "\n")[glyphRow]
 	want := []rune(ansi16.Glyphs().Divider)[0]
 	if got := columnAt(t, row, degradeDivider.X); got != want {
 		t.Errorf("ANSI-16 row %d column %d = %q, want the divider glyph %q", glyphRow, degradeDivider.X, got, want)
+	}
+}
+
+// fullRegionTestScreen is a minimal Screen whose View() reports
+// whatever content its own field carries: F9's own fixture, proving
+// RenderInput.FullRegion against a screen with no sidebar or split
+// composition of its own, independent of HelpScreen's own body logic.
+type fullRegionTestScreen struct {
+	content string
+}
+
+func (f fullRegionTestScreen) Init() tea.Cmd                       { return nil }
+func (f fullRegionTestScreen) Update(tea.Msg) (tea.Model, tea.Cmd) { return f, nil }
+func (f fullRegionTestScreen) View() tea.View                      { return tea.NewView(f.content) }
+func (f fullRegionTestScreen) Entry() ScreenEntry                  { return ScreenEntry{} }
+
+// TestRender_FullRegionSpansMainWithNoPanesOrDividers is F9: a
+// FullRegion render paints Screen's own content across the whole Main
+// band, covers exactly LayoutMode's own row count, and skips the
+// sidebar/split panes and their dividers a surface's own composition
+// would otherwise draw. The wide rung (150x26) normally carries a
+// rail divider, which a screen with no sidebar of its own never
+// composed. The ordinary, non-FullRegion branch this test's own
+// sibling tests exercise (TestRender_DividerDegradeSubstitution among
+// them) is untouched by this addition.
+func TestRender_FullRegionSpansMainWithNoPanesOrDividers(t *testing.T) {
+	resetRegistry(t)
+	Register[fullRegionTestScreen](ScreenEntry{})
+
+	th := theme.New(true, theme.ProfileANSI16) // ANSI-16 draws the rail divider FullRegion must still suppress
+	lm := ComputeLayout(150, 26, false)
+	content := th.Blank(theme.GroundPanel, lm.Main.Rect.Dx(), lm.Main.Rect.Dy())
+	screen := fullRegionTestScreen{content: content}
+
+	got := Render(RenderInput{Screen: screen, FullRegion: true, Layout: lm, Theme: th})
+
+	lines := strings.Split(got.Content, "\n")
+	if len(lines) != lm.Height {
+		t.Fatalf("FullRegion render = %d rows, want %d", len(lines), lm.Height)
+	}
+
+	rail := lm.Dividers[0]
+	row := lines[rail.Y0]
+	want := []rune(th.Glyphs().Divider)[0]
+	if got := columnAt(t, row, rail.X); got == want {
+		t.Errorf("FullRegion row %d column %d = %q, the rail divider glyph; want it suppressed (the screen owns no sidebar of its own)", rail.Y0, rail.X, got)
 	}
 }

@@ -16,6 +16,18 @@ import (
 // 2's eleven-entry digits-switch authority list).
 const helpScreenName = "help overlay"
 
+// helpOpenEligible reports whether front may toggle the help overlay
+// (open it, or close it again when front already is the overlay):
+// StateDigitsSwitch only, mirroring App.undoEligible's own front gate
+// (app.go), so a StatePrintableEntry front, a search bar or a picker
+// filter field, keeps its own `?` character rather than surrendering
+// it to a global shortcut, and a StateModal front stays exempt too
+// (subsumed by the same check, since a modal is never
+// StateDigitsSwitch).
+func helpOpenEligible(front ScreenEntry) bool {
+	return front.SwitchState == StateDigitsSwitch
+}
+
 // helpGlobalKeys is the Global section's own curated set of
 // GrammarKeys fields (UX-5, wireframe F5): the app-wide verbs every
 // screen honors, regardless of which screen help was opened over.
@@ -25,6 +37,29 @@ var helpGlobalKeys = []key.Binding{
 	GrammarKeys.Navigate, GrammarKeys.Page, GrammarKeys.Extremes,
 	GrammarKeys.Open, GrammarKeys.Back, GrammarKeys.SurfaceSwitch,
 	GrammarKeys.Undo, GrammarKeys.Help, GrammarKeys.Quit,
+}
+
+// helpSurfaceNamesDesc returns the sibling-surface-names row's own
+// description: every surfaceNames entry (statusline.go, the same
+// array the status line's own cluster renders) joined by th's own
+// separator glyph, so the row can never retype a surface's name or
+// drift from the cluster's own order (decision 1: the cluster shows
+// bare digits, so help is where sibling names live: the row this
+// package's own product was entirely missing until this fix round).
+func helpSurfaceNamesDesc(th theme.Theme) string {
+	return strings.Join(surfaceNames[:], " "+th.Glyphs().Separator+" ")
+}
+
+// helpGlobalDesc returns b's own Global-section row description:
+// SurfaceSwitch's own row names every sibling surface
+// (helpSurfaceNamesDesc) rather than rendering its generic "surface
+// switch" text; every other binding renders its own canonical
+// Help().Desc unchanged.
+func helpGlobalDesc(th theme.Theme, b key.Binding) string {
+	if b.Help().Desc == GrammarKeys.SurfaceSwitch.Help().Desc {
+		return helpSurfaceNamesDesc(th)
+	}
+	return b.Help().Desc
 }
 
 // HelpScreen is poplar's registry-derived help overlay (UX-5,
@@ -178,28 +213,45 @@ func helpKeyColWidth(bindings []key.Binding) int {
 	return width
 }
 
-// helpKeyRowSegs returns one binding's own row: its key in RoleFg,
-// padded to keyColWidth plus GapControl, then its description in
-// RoleFgMuted (the same key/desc atom hintSegs renders for the
-// footer, realigned to a shared column since the overlay lists many
-// rows at once rather than one hint among neighbors).
-func helpKeyRowSegs(b key.Binding, keyColWidth int) []rowSeg {
-	k := b.Help().Key
+// helpKeyRowSegs returns one row: k in RoleFg, padded to keyColWidth
+// plus GapControl, then desc in RoleFgMuted (the same key/desc atom
+// hintSegs renders for the footer, realigned to a shared column since
+// the overlay lists many rows at once rather than one hint among
+// neighbors). It takes plain strings, not a key.Binding, since the
+// Global section's own SurfaceSwitch row renders a description a
+// binding's Help() never carries (helpGlobalDesc).
+func helpKeyRowSegs(k, desc string, keyColWidth int) []rowSeg {
 	pad := keyColWidth - ansi.StringWidth(k) + theme.GapControl
 	return []rowSeg{
 		{text: k, role: theme.RoleFg},
 		{text: strings.Repeat(" ", pad), role: theme.RoleFg},
-		{text: b.Help().Desc, role: theme.RoleFgMuted},
+		{text: desc, role: theme.RoleFgMuted},
 	}
 }
 
 // helpSectionLines returns one section's own lines: a bold header row
-// named title, then one row per binding.
+// named title, then one row per binding, each rendering its own
+// canonical Help(). The This-screen section is this function's only
+// caller; the Global section's own SurfaceSwitch row needs th to
+// build its description, so it has its own builder (helpGlobalLines).
 func helpSectionLines(title string, bindings []key.Binding) [][]rowSeg {
 	lines := [][]rowSeg{{{text: title, role: theme.RoleFg, bold: true}}}
 	keyColWidth := helpKeyColWidth(bindings)
 	for _, b := range bindings {
-		lines = append(lines, helpKeyRowSegs(b, keyColWidth))
+		lines = append(lines, helpKeyRowSegs(b.Help().Key, b.Help().Desc, keyColWidth))
+	}
+	return lines
+}
+
+// helpGlobalLines returns the Global section's own lines: a bold
+// header, then one row per helpGlobalKeys binding, its own key
+// aligned to the section's shared column and its own description from
+// helpGlobalDesc (the sibling-surface-names row, C1's own fix).
+func helpGlobalLines(th theme.Theme) [][]rowSeg {
+	lines := [][]rowSeg{{{text: "Global", role: theme.RoleFg, bold: true}}}
+	keyColWidth := helpKeyColWidth(helpGlobalKeys)
+	for _, b := range helpGlobalKeys {
+		lines = append(lines, helpKeyRowSegs(b.Help().Key, helpGlobalDesc(th, b), keyColWidth))
 	}
 	return lines
 }
@@ -209,7 +261,7 @@ func helpSectionLines(title string, bindings []key.Binding) [][]rowSeg {
 // This-screen section, each stacked in reading order.
 func helpLinesOneColumn(h HelpScreen) [][]rowSeg {
 	lines := [][]rowSeg{helpTitleSegs(h.theme, h.Covered), helpBlankLine}
-	lines = append(lines, helpSectionLines("Global", helpGlobalKeys)...)
+	lines = append(lines, helpGlobalLines(h.theme)...)
 	lines = append(lines, helpBlankLine)
 	lines = append(lines, helpSectionLines("This screen", helpContent(h.Covered))...)
 	return lines
@@ -220,14 +272,14 @@ func helpLinesOneColumn(h HelpScreen) [][]rowSeg {
 // side by side, the shorter section padded with blank rows so both
 // columns share the same row count.
 func helpLinesTwoColumn(h HelpScreen) [][]rowSeg {
-	global := helpSectionLines("Global", helpGlobalKeys)
+	global := helpGlobalLines(h.theme)
 	screen := helpSectionLines("This screen", helpContent(h.Covered))
 	colWidth := (h.layout.Main.Rect.Dx() - 2*theme.PadBand - theme.GapPane) / 2
 
 	rows := max(len(global), len(screen))
 	lines := [][]rowSeg{helpTitleSegs(h.theme, h.Covered), helpBlankLine}
 	for i := range rows {
-		lines = append(lines, joinHelpColumns(helpLineAt(global, i), helpLineAt(screen, i), colWidth))
+		lines = append(lines, joinHelpColumns(h.theme, helpLineAt(global, i), helpLineAt(screen, i), colWidth))
 	}
 	return lines
 }
@@ -241,9 +293,12 @@ func helpLineAt(lines [][]rowSeg, i int) []rowSeg {
 	return helpBlankLine
 }
 
-// joinHelpColumns returns one two-column row: left padded out to
-// colWidth plus a GapPane gutter, then right.
-func joinHelpColumns(left, right []rowSeg, colWidth int) []rowSeg {
+// joinHelpColumns returns one two-column row: left, truncated with
+// th's own ellipsis token (truncateLastSeg, decision 12) when it would
+// overflow colWidth, padded out to colWidth plus a GapPane gutter,
+// then right.
+func joinHelpColumns(th theme.Theme, left, right []rowSeg, colWidth int) []rowSeg {
+	left = truncateLastSeg(th, left, colWidth)
 	pad := max(0, colWidth-ansi.StringWidth(segsPlainText(left))) + theme.GapPane
 	out := append(append([]rowSeg{}, left...), rowSeg{text: strings.Repeat(" ", pad), role: theme.RoleFg})
 	return append(out, right...)

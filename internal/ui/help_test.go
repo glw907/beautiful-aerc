@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,40 +13,46 @@ import (
 
 func helpKey() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '?', Text: "?"} }
 
-// TestApp_HelpOpensFromEverySurface is UX-5's own acceptance
-// criterion: `?` opens the help overlay from every registered surface
-// screen, carrying that surface's own registered entry as Covered
-// (the section the overlay's own This-screen listing derives from).
+// TestApp_HelpOpensFromEverySurface is UX-5's own acceptance criterion
+// and F6: it drives off the Surface enum itself (range over
+// Surface(len(surfaceNames)), never a hand-typed count), takes want
+// from the live app.activeScreen().Entry() rather than a
+// separately-constructed placeholder literal, and then cross-checks
+// coverage against the registry directly: every Registered()
+// digits-switch entry except help itself must have been reached by
+// some iteration above, so a future fifth surface can never silently
+// go untested.
 func TestApp_HelpOpensFromEverySurface(t *testing.T) {
-	tests := []struct {
-		name    string
-		surface Surface
-		want    ScreenEntry
-	}{
-		{"mail", SurfaceMail, MailPlaceholder{}.Entry()},
-		{"calendar", SurfaceCalendar, CalendarPlaceholder{}.Entry()},
-		{"contacts", SurfaceContacts, ContactsPlaceholder{}.Entry()},
-		{"config", SurfaceConfig, ConfigPlaceholder{}.Entry()},
+	reached := make(map[string]bool)
+
+	for s := range Surface(len(surfaceNames)) {
+		app := NewApp(testDeps(t))
+		app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+		app.active.Set(app.account, s)
+		want := app.activeScreen().Entry()
+
+		app = mustApp(t, first(app.Update(helpKey())))
+
+		if len(app.stack) != 1 {
+			t.Fatalf("surface %v: stack length after ? = %d, want 1", s, len(app.stack))
+		}
+		help, ok := app.stack[0].(HelpScreen)
+		if !ok {
+			t.Fatalf("surface %v: stack[0] is %T, want HelpScreen", s, app.stack[0])
+		}
+		if help.Covered.Name != want.Name {
+			t.Errorf("surface %v: Covered.Name = %q, want %q (the surface help was opened over)", s, help.Covered.Name, want.Name)
+		}
+		reached[want.Name] = true
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			app := NewApp(testDeps(t))
-			app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
-			app.active.Set(app.account, tt.surface)
 
-			app = mustApp(t, first(app.Update(helpKey())))
-
-			if len(app.stack) != 1 {
-				t.Fatalf("stack length after ? = %d, want 1", len(app.stack))
-			}
-			help, ok := app.stack[0].(HelpScreen)
-			if !ok {
-				t.Fatalf("stack[0] is %T, want HelpScreen", app.stack[0])
-			}
-			if help.Covered.Name != tt.want.Name {
-				t.Errorf("HelpScreen.Covered.Name = %q, want %q (the surface help was opened over)", help.Covered.Name, tt.want.Name)
-			}
-		})
+	for _, e := range Registered() {
+		if e.SwitchState != StateDigitsSwitch || e.Name == helpScreenName {
+			continue
+		}
+		if !reached[e.Name] {
+			t.Errorf("registered digits-switch entry %q was never reached by the surface loop above", e.Name)
+		}
 	}
 }
 
@@ -70,19 +77,64 @@ func TestApp_HelpDoesNotOpenOverAModal(t *testing.T) {
 	}
 }
 
-// TestApp_HelpDoesNotDoublePush proves `?` while help is already the
-// front is a no-op rather than pushing a second overlay: `?` is absent
-// from HelpScreen's own keymap, so this also exercises App's own
-// re-entry guard ahead of that absence.
-func TestApp_HelpDoesNotDoublePush(t *testing.T) {
+// TestApp_HelpTogglesOpenAndClosed is C3's own ruling: `?` is a
+// toggle (the mutt/aerc/less idiom), not a one-way open with a
+// re-entry guard. A second `?` while help is already the front pops
+// it, tested in both directions.
+func TestApp_HelpTogglesOpenAndClosed(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
 
 	app = mustApp(t, first(app.Update(helpKey())))
+	if len(app.stack) != 1 {
+		t.Fatalf("stack length after the first ? = %d, want 1 (open)", len(app.stack))
+	}
+	if _, ok := app.stack[0].(HelpScreen); !ok {
+		t.Fatalf("stack[0] is %T, want HelpScreen", app.stack[0])
+	}
+
+	app = mustApp(t, first(app.Update(helpKey())))
+	if len(app.stack) != 0 {
+		t.Errorf("stack length after the second ? = %d, want 0 (close)", len(app.stack))
+	}
+}
+
+// TestHelpOpenEligible_GatesOnSwitchState is C2, CRITICAL: the toggle
+// gate is StateDigitsSwitch only, mirroring undoEligible's own front
+// gate (TestApp_UndoEligible_GatesOnStackAndSwitchState's shape).
+// A StatePrintableEntry front must disqualify `?` from opening help,
+// the same way it disqualifies `u` from answering an undo window, so
+// a search bar or a picker filter field keeps its own `?` character.
+func TestHelpOpenEligible_GatesOnSwitchState(t *testing.T) {
+	if !helpOpenEligible(ScreenEntry{SwitchState: StateDigitsSwitch}) {
+		t.Error("helpOpenEligible() with a StateDigitsSwitch front = false, want true")
+	}
+	if helpOpenEligible(ScreenEntry{SwitchState: StatePrintableEntry}) {
+		t.Error("helpOpenEligible() with a StatePrintableEntry front = true, want false (C2 probe: ? stays that front's own character)")
+	}
+	if helpOpenEligible(ScreenEntry{SwitchState: StateModal}) {
+		t.Error("helpOpenEligible() with a StateModal front = true, want false")
+	}
+}
+
+// TestApp_HelpDoesNotInterceptAPrintableEntryQuestionMark is C2's own
+// end-to-end case: `?` reaches a StatePrintableEntry front's normal
+// Update untouched, rather than being intercepted as the help toggle.
+func TestApp_HelpDoesNotInterceptAPrintableEntryQuestionMark(t *testing.T) {
+	resetRegistry(t)
+	Register[*fakeEntryScreen](ScreenEntry{SwitchState: StatePrintableEntry})
+
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+	app.stack = append(app.stack, &fakeEntryScreen{})
+
 	app = mustApp(t, first(app.Update(helpKey())))
 
 	if len(app.stack) != 1 {
-		t.Errorf("stack length after a second ? = %d, want 1 (no double push)", len(app.stack))
+		t.Fatalf("stack length after ? over a printable-entry front = %d, want 1 (no help pushed)", len(app.stack))
+	}
+	if _, ok := app.stack[0].(*fakeEntryScreen); !ok {
+		t.Fatalf("stack[0] is %T, want the entry screen unchanged (? stays that front's own character)", app.stack[0])
 	}
 }
 
@@ -169,15 +221,24 @@ func TestHelpScreen_ContentDerivesFromCoveredEntry(t *testing.T) {
 
 // TestHelpScreen_GlobalSectionDerivesFromGrammarKeys proves the
 // Global section's own rows come from GrammarKeys, never a re-typed
-// literal: every helpGlobalKeys binding's key and description appear
-// in the rendered body.
+// literal: every helpGlobalKeys binding's own key appears in the
+// rendered body, and so does its own description, except
+// SurfaceSwitch's, which TestHelpScreen_GlobalSectionNamesSiblingSurfaces
+// covers on its own (its row names every sibling surface instead of
+// rendering "surface switch" verbatim, C1's own fix).
 func TestHelpScreen_GlobalSectionDerivesFromGrammarKeys(t *testing.T) {
 	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}
 	body := ansi.Strip(h.View().Content)
 
 	for _, b := range helpGlobalKeys {
-		if !strings.Contains(body, b.Help().Key) || !strings.Contains(body, b.Help().Desc) {
-			t.Errorf("help body missing Global row for %v", b.Help())
+		if !strings.Contains(body, b.Help().Key) {
+			t.Errorf("help body missing Global row's key for %v", b.Help())
+		}
+		if b.Help().Desc == GrammarKeys.SurfaceSwitch.Help().Desc {
+			continue
+		}
+		if !strings.Contains(body, b.Help().Desc) {
+			t.Errorf("help body missing Global row's description for %v", b.Help())
 		}
 	}
 }
@@ -296,5 +357,121 @@ func TestHelpScreen_NavigateAndPageKeysScroll(t *testing.T) {
 	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
 	if h.scroll != 0 {
 		t.Errorf("scroll after Home = %d, want 0", h.scroll)
+	}
+}
+
+// keyPressNamed builds a tea.KeyPressMsg whose String() equals name,
+// for a name one of GrammarKeys' own bindings carries: a special
+// key's String() derives from Code (the decoder's own table), never
+// Text, unlike a plain letter's, so this resolves each name to the
+// right one.
+func keyPressNamed(name string) tea.KeyPressMsg {
+	switch name {
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "home":
+		return tea.KeyPressMsg{Code: tea.KeyHome}
+	case "end":
+		return tea.KeyPressMsg{Code: tea.KeyEnd}
+	case "space":
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	default:
+		return tea.KeyPressMsg{Code: rune(name[0]), Text: name}
+	}
+}
+
+// TestHelpNavigateUpPartitionsNavigateKeys and
+// TestHelpPageBackPartitionsPageKeys are F7: the two helpers must
+// classify every one of GrammarKeys' own bound keys, and only those.
+// A grammar amendment that adds, removes, or renames a key here must
+// fail this test loudly rather than leave applyKey silently
+// misreading a key it no longer recognizes.
+func TestHelpNavigateUpPartitionsNavigateKeys(t *testing.T) {
+	up := map[string]bool{"k": true, "up": true, "j": false, "down": false}
+	keys := GrammarKeys.Navigate.Keys()
+	if len(keys) != len(up) {
+		t.Fatalf("GrammarKeys.Navigate.Keys() = %v, want exactly %d keys (helpNavigateUp's own partition)", keys, len(up))
+	}
+	for _, k := range keys {
+		want, known := up[k]
+		if !known {
+			t.Fatalf("GrammarKeys.Navigate carries key %q, unknown to helpNavigateUp's own partition", k)
+		}
+		if got := helpNavigateUp(keyPressNamed(k)); got != want {
+			t.Errorf("helpNavigateUp(%q) = %v, want %v", k, got, want)
+		}
+	}
+}
+
+func TestHelpPageBackPartitionsPageKeys(t *testing.T) {
+	back := map[string]bool{"b": true, "pgup": true, "space": false, "pgdown": false}
+	keys := GrammarKeys.Page.Keys()
+	if len(keys) != len(back) {
+		t.Fatalf("GrammarKeys.Page.Keys() = %v, want exactly %d keys (helpPageBack's own partition)", keys, len(back))
+	}
+	for _, k := range keys {
+		want, known := back[k]
+		if !known {
+			t.Fatalf("GrammarKeys.Page carries key %q, unknown to helpPageBack's own partition", k)
+		}
+		if got := helpPageBack(keyPressNamed(k)); got != want {
+			t.Errorf("helpPageBack(%q) = %v, want %v", k, got, want)
+		}
+	}
+}
+
+// TestHelpScreen_HomeLiteralIsBoundToExtremes is F7's own third leg:
+// applyKey's "home" literal, the jump-to-top branch, must actually
+// name one of GrammarKeys.Extremes' own bound keys, so a grammar
+// amendment renaming it fails this test loudly rather than leaving
+// Home silently falling through to the jump-to-bottom branch.
+func TestHelpScreen_HomeLiteralIsBoundToExtremes(t *testing.T) {
+	if !slices.Contains(GrammarKeys.Extremes.Keys(), "home") {
+		t.Errorf("GrammarKeys.Extremes.Keys() = %v, want \"home\" among them (applyKey's own literal)", GrammarKeys.Extremes.Keys())
+	}
+}
+
+// TestJoinHelpColumns_TruncatesAWideLeftColumn is F8: a left column
+// wider than colWidth is truncated with th's own ellipsis token
+// (decision 12) rather than overflowing into the right column's own
+// gutter.
+func TestJoinHelpColumns_TruncatesAWideLeftColumn(t *testing.T) {
+	th := helpTestTheme()
+	left := []rowSeg{{text: strings.Repeat("x", 50), role: theme.RoleFg}}
+	right := []rowSeg{{text: "y", role: theme.RoleFg}}
+
+	got := joinHelpColumns(th, left, right, 10)
+	plain := segsPlainText(got)
+
+	if !strings.Contains(plain, th.Glyphs().Ellipsis) {
+		t.Errorf("joinHelpColumns over-width left column = %q, want the ellipsis token marking the cut", plain)
+	}
+	if !strings.HasSuffix(plain, "y") {
+		t.Errorf("joinHelpColumns = %q, want the right column intact after the truncated left one", plain)
+	}
+}
+
+// TestHelpScreen_GlobalSectionNamesSiblingSurfaces is C1, CRITICAL:
+// the SurfaceSwitch row names every sibling surface, derived from
+// surfaceNames itself (the same array the status line's own cluster
+// renders), never a re-typed literal: the row this package's own
+// product was entirely missing before this fix round.
+func TestHelpScreen_GlobalSectionNamesSiblingSurfaces(t *testing.T) {
+	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}
+	body := ansi.Strip(h.View().Content)
+
+	for _, name := range surfaceNames {
+		if !strings.Contains(body, name) {
+			t.Errorf("help body missing sibling surface name %q", name)
+		}
+	}
+	if strings.Contains(body, GrammarKeys.SurfaceSwitch.Help().Desc) {
+		t.Errorf("help body still carries SurfaceSwitch's generic %q description, want the sibling-names row instead", GrammarKeys.SurfaceSwitch.Help().Desc)
 	}
 }
