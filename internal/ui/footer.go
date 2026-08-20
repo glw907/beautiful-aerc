@@ -39,28 +39,30 @@ func footerLeftSegs(entry ScreenEntry, contentWidth int) []rowSeg {
 
 // renderFooter renders entry's footer band exactly width cells wide
 // (decision 8): the width-maximal prefix footerHints computes, inset
-// padBand from each edge, and GrammarKeys.Help pinned right as the
+// PadBand from each edge, and GrammarKeys.Help pinned right as the
 // constant pointer to the help overlay. footerHints's own reserve for
-// the pinned hint (footerHelpHint's width plus GapHint) is what
+// the pinned hint (footerHelpHint's width plus GapPin) is what
 // guarantees the gap between the last rendered hint and the pinned
-// one never falls below GapHint, so this never has to clamp for room.
+// one never falls below GapPin, so this never has to clamp for room.
+// width is renderFooter's own precondition: its only caller, Render,
+// always passes lm.Footer.Rect.Dx(), and ComputeLayout (layout.go)
+// never allocates a Footer band narrower than widthSpartanMin, so
+// this never defends against a width no caller actually supplies.
 func renderFooter(entry ScreenEntry, th theme.Theme, width int) string {
-	const ground = theme.GroundPanel
-
-	contentWidth := max(0, width-2*theme.PadBand)
+	contentWidth := width - 2*theme.PadBand
 	leftSegs := footerLeftSegs(entry, contentWidth)
 	leftWidth := ansi.StringWidth(segsPlainText(leftSegs))
 
 	rightSegs := hintSegs(GrammarKeys.Help)
 	rightWidth := ansi.StringWidth(segsPlainText(rightSegs))
 
-	gap := max(0, contentWidth-leftWidth-rightWidth)
+	gap := contentWidth - leftWidth - rightWidth
 
 	var out strings.Builder
-	pad := th.Style(theme.RoleFg, ground).Render(strings.Repeat(" ", theme.PadBand))
+	pad := th.Style(theme.RoleFg, chromeGround).Render(strings.Repeat(" ", theme.PadBand))
 	out.WriteString(pad)
 	writeSegs(&out, th, leftSegs)
-	out.WriteString(th.Style(theme.RoleFg, ground).Render(strings.Repeat(" ", gap)))
+	out.WriteString(th.Style(theme.RoleFg, chromeGround).Render(strings.Repeat(" ", gap)))
 	writeSegs(&out, th, rightSegs)
 	out.WriteString(pad)
 	return out.String()

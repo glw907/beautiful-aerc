@@ -206,7 +206,9 @@ hint priority order, derived from the screen's own keymap so it
 cannot drift; the footer renders the width-maximal prefix of that
 order, each hint as `key description` in two or three words, joined
 by a three-cell gap (`gapHint`, section 7). `? help` is pinned right
-at every width, the constant pointer to the help overlay, which is
+at every width, held off the last shown hint by its own six-cell
+reserve (`gapPin`, section 7, the pinned exemplar's own value), the
+constant pointer to the help overlay, which is
 the completeness surface: it lists every legal key regardless of
 what the footer's width-limited prefix shows. Width changes what
 the footer shows, never what is legal — the ladder principle applied
@@ -412,8 +414,14 @@ role, not a locally reinvented literal. Task 4's fix round 1 adds
 `gapHint 3` (footer hint to its neighbor, and to the pinned help
 hint), the same plan-defect class again (ruling CR5, same plan
 doc): the footer's hint-spacing arithmetic is a spacing role, not a
-locally reinvented literal. Markup-level literals are forbidden by
-the analyzer; a screen reaches spacing only through roles.
+locally reinvented literal. Task 7's fix round 1 adds `gapPin 6`
+(the footer's own reserve before the pinned help hint) and narrows
+`gapHint`'s scope to the inter-hint gap alone: the pinned exemplar's
+own `PIN_GAP` won the conflict between the two values (ruling F1,
+`docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`),
+so `gapHint` no longer also governs the pinned hint's own gap.
+Markup-level literals are forbidden by the analyzer; a screen
+reaches spacing only through roles.
 
 **Type roles**: `emTitle` (bold), `emLabel` (dim), `emValue`
 (normal), `emHint` (dim italic where supported, dim otherwise).

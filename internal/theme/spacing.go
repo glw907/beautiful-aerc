@@ -15,5 +15,6 @@ const (
 	PadBand    = 2 // chrome band inset
 	PadCard    = 2 // card inset
 	GapPane    = 2 // pane to neighboring pane
-	GapHint    = 3 // footer hint to its neighbor, and to the pinned help hint
+	GapHint    = 3 // footer hint to its own neighbor hint
+	GapPin     = 6 // footer's last shown hint to the pinned help hint
 )

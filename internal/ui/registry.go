@@ -216,7 +216,7 @@ func shortHelpWithinFullHelp(entries []ScreenEntry) []string {
 // (design language section 4): the key label, a space, and the
 // description.
 func hintText(b key.Binding) string {
-	return b.Help().Key + " " + b.Help().Desc
+	return segsPlainText(hintSegs(b))
 }
 
 // footerHelpHint is the pinned help hint's own rendered text, derived
@@ -231,11 +231,12 @@ var footerHelpHint = hintText(GrammarKeys.Help)
 // rendered display width (ansi.StringWidth, never len, since a hint
 // carries no guarantee of staying single-byte-per-cell) plus
 // theme.GapHint from its neighbor, and the pinned help hint's own
-// width is reserved at every call so the returned prefix never
-// crowds it out. A disabled hint is skipped rather than stopping the
-// scan, matching UX-2's no-advertised-no-op MUST.
+// width plus theme.GapPin (the pinned exemplar's own reserve, F1) is
+// held back at every call so the returned prefix never crowds it
+// out. A disabled hint is skipped rather than stopping the scan,
+// matching UX-2's no-advertised-no-op MUST.
 func footerHints(entry ScreenEntry, width int) []key.Binding {
-	avail := width - ansi.StringWidth(footerHelpHint) - theme.GapHint
+	avail := width - ansi.StringWidth(footerHelpHint) - theme.GapPin
 	var kept []key.Binding
 	used := 0
 	for _, b := range entry.FooterPriority {

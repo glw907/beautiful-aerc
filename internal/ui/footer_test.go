@@ -21,12 +21,14 @@ import (
 //	"enter open"         10 columns
 //	"a archive message"  17 columns
 //
-// footerHelpHint ("? help") is 6 columns and theme.GapHint is 3, so
-// footerHints(entry, width) reserves 9 columns before it ever spends
-// any on a priority hint. The boundary widths below are computed by
-// hand from these fixed numbers, not from calling ansi.StringWidth
-// on the fixture strings at test time, so a bug in footerHints's own
-// arithmetic cannot cancel out against the same bug in the test.
+// footerHelpHint ("? help") is 6 columns and theme.GapPin is 6 (F1's
+// ruling: the pinned exemplar's own reserve before the pinned help
+// hint), so footerHints(entry, width) reserves 12 columns before it
+// ever spends any on a priority hint. The boundary widths below are
+// computed by hand from these fixed numbers, not from calling
+// ansi.StringWidth on the fixture strings at test time, so a bug in
+// footerHints's own arithmetic cannot cancel out against the same bug
+// in the test.
 func footerFixture() ScreenEntry {
 	navigate := bind("j", "j/k", "navigate")
 	openMsg := bind("enter", "enter", "open")
@@ -49,12 +51,12 @@ func TestFooterHints_LiteralWidthBoundaries(t *testing.T) {
 	}{
 		{"width 0: nothing fits", 0, 0},
 		{"width 12: the reserve is load-bearing (hint 1 alone is 12 wide)", 12, 0},
-		{"width 20: one column short of hint 1's boundary", 20, 0},
-		{"width 21: hint 1 exactly fits (12 + 6 help + 3 gap)", 21, 1},
-		{"width 33: one column short of hint 2's boundary", 33, 1},
-		{"width 34: hint 2 exactly fits (12 + 3 + 10 + 6 + 3)", 34, 2},
-		{"width 53: one column short of hint 3's boundary", 53, 2},
-		{"width 54: hint 3 exactly fits (12 + 3 + 10 + 3 + 17 + 6 + 3)", 54, 3},
+		{"width 23: one column short of hint 1's boundary", 23, 0},
+		{"width 24: hint 1 exactly fits (12 + 6 help + 6 pin)", 24, 1},
+		{"width 36: one column short of hint 2's boundary", 36, 1},
+		{"width 37: hint 2 exactly fits (12 + 3 + 10 + 6 + 6)", 37, 2},
+		{"width 56: one column short of hint 3's boundary", 56, 2},
+		{"width 57: hint 3 exactly fits (12 + 3 + 10 + 3 + 17 + 6 + 6)", 57, 3},
 		{"width 200: every hint fits with room to spare", 200, 3},
 	}
 
@@ -190,6 +192,13 @@ func TestFooterPriorityWithinKeymap_LiveRegistry(t *testing.T) {
 	}
 }
 
+// footerCompletenessWidths is the width sweep UX-2 revision 6's
+// help-completeness tests exercise footerHints across
+// (task-7-findings-r1.md F2): narrow enough that nothing fits,
+// through the design language's own column rungs, to generous enough
+// that a modest priority list always shows in full.
+var footerCompletenessWidths = []int{0, 20, 60, 80, 120, 200}
+
 // TestFooterHints_LiveRegistry_EveryRenderedHintIsLegal and its
 // sibling below are UX-2 revision 6's own "only mechanical claims"
 // (design language section 4), run against Registered() rather than
@@ -198,7 +207,7 @@ func TestFooterPriorityWithinKeymap_LiveRegistry(t *testing.T) {
 func TestFooterHints_LiveRegistry_EveryRenderedHintIsLegal(t *testing.T) {
 	for _, e := range Registered() {
 		legal := flattenKeys(e.Keys)
-		for _, width := range []int{0, 20, 60, 80, 120, 200} {
+		for _, width := range footerCompletenessWidths {
 			for _, b := range footerHints(e, width) {
 				if !slices.ContainsFunc(legal, func(l key.Binding) bool { return bindingsEqual(l, b) }) {
 					t.Errorf("%s: footerHints(%d) rendered %v, not present in its own keymap", e.Type, width, b)
@@ -219,16 +228,41 @@ func TestFooterHints_LiveRegistry_IsAPrefixOfFooterPriority(t *testing.T) {
 	}
 }
 
-// TestHelpContent_EqualsFullKeymap_LiveRegistry is UX-2 revision 6's
-// other mechanical claim: the help overlay's content is always the
-// registered screen's complete keymap, regardless of what its
-// footer's width-limited prefix shows.
+// TestHelpContent_EqualsFullKeymap_LiveRegistry proves UX-2 revision
+// 6's completeness claim as an actual oracle rather than helpContent
+// compared against its own definition (task-7-findings-r1.md F2:
+// flattenKeys(x) == flattenKeys(x) can never fail). The subset half
+// runs against every registered screen: every hint footerHints ever
+// renders across footerCompletenessWidths is present in that screen's
+// own helpContent. Pass 2's currently registered screens are all
+// one-hint placeholder keymaps (placeholder.go), so footer and help
+// coincide exactly for every one of them today. The strictness half
+// (help carries something the footer never shows at any width) is
+// proved instead against footerFixture, this file's own fixture built
+// with exactly that shape: its "quit" binding sits in Keys but never
+// in FooterPriority.
 func TestHelpContent_EqualsFullKeymap_LiveRegistry(t *testing.T) {
 	for _, e := range Registered() {
-		got, want := helpContent(e), flattenKeys(e.Keys)
-		if !slices.EqualFunc(got, want, bindingsEqual) {
-			t.Errorf("%s: helpContent() = %v, want the full keymap %v", e.Type, got, want)
+		help := helpContent(e)
+		for _, width := range footerCompletenessWidths {
+			for _, b := range footerHints(e, width) {
+				if !slices.ContainsFunc(help, func(h key.Binding) bool { return bindingsEqual(h, b) }) {
+					t.Errorf("%s: footerHints(%d) rendered %v, absent from helpContent()", e.Type, width, b)
+				}
+			}
 		}
+	}
+
+	entry := footerFixture()
+	help := helpContent(entry)
+	shown := make(map[string]bool)
+	for _, width := range footerCompletenessWidths {
+		for _, b := range footerHints(entry, width) {
+			shown[b.Help().Desc] = true
+		}
+	}
+	if !slices.ContainsFunc(help, func(h key.Binding) bool { return !shown[h.Help().Desc] }) {
+		t.Errorf("footerFixture: helpContent() = %v shows nothing beyond what footerHints renders across %v, want at least one binding the footer never shows", help, footerCompletenessWidths)
 	}
 }
 
@@ -296,41 +330,63 @@ func footerRowFields(row string) []string {
 	return fields
 }
 
+// footerBoundaryWidths is the width sweep footerFixture's own boundary
+// crossings sit on (24/37/57, TestFooterHints_LiteralWidthBoundaries),
+// plus the design language's own column rungs: shared by the render-
+// and hit-span-layer tests below (task-7-findings-r1.md F4/F5), each
+// of which also ranges over Registered() so a real registered screen's
+// own (currently one-hint) priority list gets the same proof.
+var footerBoundaryWidths = []int{25, 37, 57, 60, 80, 120, 200}
+
+// footerLoopEntries returns footerFixture, footerGrowthFixture, and
+// every currently registered screen's own entry: the shared input set
+// F4 and F5 range the render- and hit-span-layer tests over.
+func footerLoopEntries() []ScreenEntry {
+	entries := []ScreenEntry{footerFixture(), footerGrowthFixture()}
+	return append(entries, Registered()...)
+}
+
 // TestRenderFooter_ContainsComputedPrefixInOrder closes the loop
 // between footerHints's own computed prefix and what renderFooter
-// actually paints (the plan's task 7 criterion): at every width, the
+// actually paints (the plan's task 7 criterion): at every width, for
+// footerFixture, footerGrowthFixture, and every registered screen, the
 // row's own fields are exactly footerHints's rendered set, in order,
 // plus the pinned help hint last.
 func TestRenderFooter_ContainsComputedPrefixInOrder(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
-	entry := footerFixture()
 
-	for _, width := range []int{25, 34, 54, 60, 80, 120, 200} {
-		row := renderFooter(entry, th, width)
-		fields := footerRowFields(row)
+	for _, entry := range footerLoopEntries() {
+		for _, width := range footerBoundaryWidths {
+			row := renderFooter(entry, th, width)
+			fields := footerRowFields(row)
 
-		hints := footerHints(entry, max(0, width-2*theme.PadBand))
-		want := make([]string, 0, len(hints)+1)
-		for _, b := range hints {
-			want = append(want, hintText(b))
-		}
-		want = append(want, footerHelpHint)
+			hints := footerHints(entry, width-2*theme.PadBand)
+			want := make([]string, 0, len(hints)+1)
+			for _, b := range hints {
+				want = append(want, hintText(b))
+			}
+			want = append(want, footerHelpHint)
 
-		if !slices.Equal(fields, want) {
-			t.Errorf("renderFooter(%d) fields = %v, want %v", width, fields, want)
+			if !slices.Equal(fields, want) {
+				t.Errorf("%v renderFooter(%d) fields = %v, want %v", entry.Type, width, fields, want)
+			}
 		}
 	}
 }
 
 // TestRenderFooter_HelpAlwaysPinnedRight proves decision 8's "at
 // every width": the pinned help hint's fields end the row at every
-// tested width, including the narrowest one that fits no priority
-// hint at all.
+// tested width, including one (60, widthSpartanMin, layout.go) that
+// fits no priority hint at all. 60 replaces the original narrow case
+// of 9 (task-7-findings-r1.md F3): 9 exercised renderFooter's own
+// defensive clamp for a width no caller ever supplies, and renderFooter
+// no longer carries one, since its documented precondition is that
+// Render never calls it below the width floor.
 func TestRenderFooter_HelpAlwaysPinnedRight(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	entry := footerFixture()
 
-	for _, width := range []int{9, 20, 60, 200} {
+	for _, width := range []int{20, 60, 200} {
 		fields := footerRowFields(renderFooter(entry, th, width))
 		if len(fields) == 0 || fields[len(fields)-1] != footerHelpHint {
 			t.Errorf("renderFooter(%d) fields = %v, want the last field to be %q", width, fields, footerHelpHint)
@@ -381,50 +437,64 @@ func TestRenderFooter_ExactWidth(t *testing.T) {
 // per rendered hint plus the pinned help hint last.
 func TestFooterHitSpans_MatchesTheRenderedColumns(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
-	entry := footerFixture()
-	const width = 80
 
-	row := ansi.Strip(renderFooter(entry, th, width))
-	footerRow := image.Rect(0, 7, width, 8) // a non-zero origin, proving translation
-	spans := FooterHitSpans(entry, StateDigitsSwitch, width, footerRow)
+	for _, entry := range footerLoopEntries() {
+		for _, width := range footerBoundaryWidths {
+			row := ansi.Strip(renderFooter(entry, th, width))
+			footerRow := image.Rect(0, 7, width, 8) // a non-zero origin, proving translation
+			spans := FooterHitSpans(entry, StateDigitsSwitch, width, footerRow)
 
-	hints := footerHints(entry, width-2*theme.PadBand)
-	if len(spans) != len(hints)+1 {
-		t.Fatalf("FooterHitSpans() returned %d spans, want %d (%d hints plus the pinned help hint)", len(spans), len(hints)+1, len(hints))
-	}
+			hints := footerHints(entry, width-2*theme.PadBand)
+			if len(spans) != len(hints)+1 {
+				t.Fatalf("%v width %d: FooterHitSpans() returned %d spans, want %d (%d hints plus the pinned help hint)",
+					entry.Type, width, len(spans), len(hints)+1, len(hints))
+			}
 
-	for i, span := range spans {
-		if span.Target != PointerFooterHint {
-			t.Errorf("span %d: Target = %v, want PointerFooterHint", i, span.Target)
+			for i, span := range spans {
+				if span.Target != PointerFooterHint {
+					t.Errorf("%v width %d: span %d: Target = %v, want PointerFooterHint", entry.Type, width, i, span.Target)
+				}
+				if span.Rect.Min.Y != footerRow.Min.Y || span.Rect.Max.Y != footerRow.Min.Y+1 {
+					t.Errorf("%v width %d: span %d: Rect = %v, want a 1-row span at Y=%d", entry.Type, width, i, span.Rect, footerRow.Min.Y)
+				}
+				x0, x1 := span.Rect.Min.X-footerRow.Min.X, span.Rect.Max.X-footerRow.Min.X
+				if x0 < 0 || x1 > len(row) || x0 > x1 {
+					t.Fatalf("%v width %d: span %d: Rect columns [%d,%d) out of bounds for row %q", entry.Type, width, i, x0, x1, row)
+				}
+				if got, want := row[x0:x1], hintText(span.Verb); got != want {
+					t.Errorf("%v width %d: span %d: row columns [%d,%d) = %q, want the bound hint text %q", entry.Type, width, i, x0, x1, got, want)
+				}
+			}
+
+			// The pin's own column: the last span is always the pinned
+			// help hint, and its Rect lands on the row's own trailing
+			// "? help" text, not merely on some final span.
+			pin := spans[len(spans)-1]
+			if pin.Verb.Help().Desc != GrammarKeys.Help.Help().Desc {
+				t.Errorf("%v width %d: last span's Verb = %v, want GrammarKeys.Help", entry.Type, width, pin.Verb)
+			}
+			px0, px1 := pin.Rect.Min.X-footerRow.Min.X, pin.Rect.Max.X-footerRow.Min.X
+			if got, want := row[px0:px1], footerHelpHint; got != want {
+				t.Errorf("%v width %d: pin columns [%d,%d) = %q, want %q", entry.Type, width, px0, px1, got, want)
+			}
 		}
-		if span.Rect.Min.Y != footerRow.Min.Y || span.Rect.Max.Y != footerRow.Min.Y+1 {
-			t.Errorf("span %d: Rect = %v, want a 1-row span at Y=%d", i, span.Rect, footerRow.Min.Y)
-		}
-		x0, x1 := span.Rect.Min.X-footerRow.Min.X, span.Rect.Max.X-footerRow.Min.X
-		if x0 < 0 || x1 > len(row) || x0 > x1 {
-			t.Fatalf("span %d: Rect columns [%d,%d) out of bounds for row %q", i, x0, x1, row)
-		}
-		if got, want := row[x0:x1], hintText(span.Verb); got != want {
-			t.Errorf("span %d: row columns [%d,%d) = %q, want the bound hint text %q", i, x0, x1, got, want)
-		}
-	}
-	if spans[len(spans)-1].Verb.Help().Desc != GrammarKeys.Help.Help().Desc {
-		t.Errorf("last span's Verb = %v, want GrammarKeys.Help", spans[len(spans)-1].Verb)
 	}
 }
 
 // footerGrowthFixture is a ScreenEntry whose FooterPriority carries
-// 11 hints, each rendering at a uniform 9 columns (one key, one
+// 13 hints, each rendering at a uniform 9 columns (one key, one
 // space, a seven-letter description): TestRenderFooter_GrowsAcrossGoldenWidths's
 // own fixture, sized so the design language's own three golden column
 // rungs (spartan 80, standard 120, wide 150) each land on a different
-// hint count.
+// hint count, and 150 (11 of 13) still truncates rather than showing
+// every hint whole (task-7-findings-r1.md F7).
 func footerGrowthFixture() ScreenEntry {
 	words := []string{
 		"archive", "compose", "forward", "message", "reverse",
 		"request", "respond", "confirm", "dismiss", "clarify", "acquire",
+		"execute", "attempt",
 	}
-	keys := "abcdefghijk"
+	keys := "abcdefghijklm"
 	bindings := make([]key.Binding, len(words))
 	for i, w := range words {
 		k := string(keys[i])
@@ -438,38 +508,81 @@ func footerGrowthFixture() ScreenEntry {
 }
 
 // TestRenderFooter_GrowsAcrossGoldenWidths pins the footer's own
-// growth goldens at the design language's three column rungs
-// (spartan 80, standard 120, wide 150): the rendered hint count
-// strictly grows from 80 to 120 and from 120 to 150, and the pinned
-// help hint still ends every row (decision 8: "? help" at every
-// width).
+// growth goldens at the design language's three column rungs (spartan
+// 80, standard 120, wide 150), literal expected rows rather than a
+// field count (task-7-findings-r1.md F7's own golden: PadBand's
+// leading and trailing two cells, GapHint's three-cell inter-hint gap,
+// and GapPin's own six-cell-or-wider reserve before the pin all show
+// in the exact text). 150 renders 11 of the fixture's 13 hints, so the
+// golden also proves the wide rung still truncates rather than always
+// showing everything whole.
 func TestRenderFooter_GrowsAcrossGoldenWidths(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	entry := footerGrowthFixture()
 
 	tests := []struct {
-		width     int
-		wantHints int
+		width int
+		want  string
 	}{
-		{80, 5},
-		{120, 9},
-		{150, 11},
+		{80, "  a archive   b compose   c forward   d message   e reverse             ? help  "},
+		{120, "  a archive   b compose   c forward   d message   e reverse   f request   g respond   h confirm                 ? help  "},
+		{150, "  a archive   b compose   c forward   d message   e reverse   f request   g respond   h confirm   i dismiss   j clarify   k acquire           ? help  "},
 	}
 
-	prev := -1
 	for _, tt := range tests {
-		fields := footerRowFields(renderFooter(entry, th, tt.width))
-		hints := fields[:len(fields)-1]
-		if len(hints) != tt.wantHints {
-			t.Errorf("renderFooter(%d) rendered %d hints, want %d: %v", tt.width, len(hints), tt.wantHints, hints)
+		if got := ansi.Strip(renderFooter(entry, th, tt.width)); got != tt.want {
+			t.Errorf("renderFooter(%d) = %q, want %q", tt.width, got, tt.want)
 		}
-		if len(hints) <= prev {
-			t.Errorf("width %d: hint count %d did not grow past the narrower width's %d", tt.width, len(hints), prev)
-		}
-		prev = len(hints)
-		if got := fields[len(fields)-1]; got != footerHelpHint {
-			t.Errorf("renderFooter(%d) last field = %q, want the pinned help hint %q", tt.width, got, footerHelpHint)
-		}
+	}
+}
+
+// exemplarFooterPriority transcribes the pinned shell exemplar's own
+// FOOTER_PRIORITY
+// (docs/poplar/design/2026-08-19-shell-exemplar/shell-exemplar.py),
+// in its own order: TestRenderFooter_MatchesPinnedExemplarAt80's own
+// fixture, so the byte-for-byte comparison below is against the exact
+// hint set the exemplar itself renders, never a hand-picked stand-in.
+func exemplarFooterPriority() []key.Binding {
+	pairs := [][2]string{
+		{"Enter", "open"},
+		{"a", "archive"},
+		{"d", "delete"},
+		{"r", "reply"},
+		{"m", "compose"},
+		{"/", "search"},
+		{"u", "undo"},
+		{"g", "go to"},
+		{"*", "flag"},
+		{"s", "move"},
+		{"Tab", "unread"},
+		{"j/k", "select"},
+	}
+	bindings := make([]key.Binding, len(pairs))
+	for i, p := range pairs {
+		bindings[i] = bind(p[0], p[0], p[1])
+	}
+	return bindings
+}
+
+// TestRenderFooter_MatchesPinnedExemplarAt80 verifies the pin-reserve
+// ruling (task-7-findings-r1.md F1): rendering the exemplar's own
+// FOOTER_PRIORITY at 80 columns reproduces the exemplar's own
+// "Spartan 80" row
+// (docs/poplar/design/2026-08-19-shell-exemplar/render.txt, line 78)
+// byte for byte, once its own two-cell print indent is stripped
+// (show()'s own "  " prefix, never part of the row itself).
+func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
+	th := theme.New(true, theme.ProfileTrueColor)
+	bindings := exemplarFooterPriority()
+	entry := ScreenEntry{
+		Type:           reflect.TypeOf(struct{}{}),
+		FooterPriority: bindings,
+		Keys:           flatKeyMap(bindings...),
+	}
+
+	want := "  Enter open   a archive   d delete   r reply   m compose               ? help  "
+	if got := ansi.Strip(renderFooter(entry, th, 80)); got != want {
+		t.Errorf("renderFooter(80) = %q, want the exemplar's own row %q", got, want)
 	}
 }
 

@@ -55,6 +55,12 @@ type rowSeg struct {
 	bold bool
 }
 
+// chromeGround is the ground both of this package's chrome bands, the
+// status line and the footer, paint their rowSeg runs against: the
+// one statement task-7-findings-r1.md's F8 collapsed three separately
+// declared GroundPanel constants into.
+const chromeGround = theme.GroundPanel
+
 // clusterSegs returns the surface cluster's own segments (decision
 // 1): a leading padBand inset, then each surface's digit in order,
 // the active one named in accent+bold with a wider gap after it, every
@@ -281,15 +287,12 @@ func truncateLastSeg(th theme.Theme, segs []rowSeg, maxWidth int) []rowSeg {
 	return out
 }
 
-// writeSegs writes segs to out, each styled against GroundPanel: both
-// of this package's chrome bands, the status line and the footer,
-// paint on it.
+// writeSegs writes segs to out, each styled against chromeGround.
 func writeSegs(out *strings.Builder, th theme.Theme, segs []rowSeg) {
-	const ground = theme.GroundPanel
 	for _, s := range segs {
-		style := th.Style(s.role, ground)
+		style := th.Style(s.role, chromeGround)
 		if s.bold {
-			style = th.EmphasizeRole(s.role, ground)
+			style = th.EmphasizeRole(s.role, chromeGround)
 		}
 		out.WriteString(style.Render(s.text))
 	}
@@ -306,8 +309,6 @@ func writeSegs(out *strings.Builder, th theme.Theme, segs []rowSeg) {
 // a GrammarKeys binding, a theme glyph, or the message the bridge
 // delivered, never a literal that binding or state could drift from).
 func renderStatusLine(sl StatusLine, th theme.Theme, width int, dropTotal bool) string {
-	const ground = theme.GroundPanel
-
 	leftSegs := clusterSegs(sl.Active)
 	leftWidth := ansi.StringWidth(segsPlainText(leftSegs))
 	budget := max(0, width-leftWidth-theme.PadBand)
@@ -319,8 +320,8 @@ func renderStatusLine(sl StatusLine, th theme.Theme, width int, dropTotal bool) 
 
 	var out strings.Builder
 	writeSegs(&out, th, leftSegs)
-	out.WriteString(th.Style(theme.RoleFg, ground).Render(strings.Repeat(" ", gap)))
+	out.WriteString(th.Style(theme.RoleFg, chromeGround).Render(strings.Repeat(" ", gap)))
 	writeSegs(&out, th, rightSegs)
-	out.WriteString(th.Style(theme.RoleFg, ground).Render(strings.Repeat(" ", theme.PadBand)))
+	out.WriteString(th.Style(theme.RoleFg, chromeGround).Render(strings.Repeat(" ", theme.PadBand)))
 	return out.String()
 }
