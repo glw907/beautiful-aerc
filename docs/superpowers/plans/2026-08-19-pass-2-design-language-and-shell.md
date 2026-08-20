@@ -149,17 +149,27 @@ implementer invents taste. Each cites its constraint.
    reasoning); the banner states its key inline. Pointer: click the
    banner's dismiss glyph.
 3. **Design-language amendments** (the doc allows amendment
-   through itself; task 1 commits all of them): the section 6
-   status-line wording changes from the four-full-names indicator
-   to the compact cluster of decision 1, and footer exception 2's
-   committed reason restates accordingly (digits advertised by the
-   cluster; names in help and on visit). Plus two token additions:
-   `bg` joins the color roles (contrast tests need a ground truth
-   value per theme, and QA-7 determinism needs the painted
-   background to be a token, not the terminal's guess), and
-   `dismiss ✕` joins the glyph tokens (ASCII fallback `x`; ADR-0017
-   binds a banner-dismiss click target, so the glyph must exist as
-   a token).
+   through itself; task 1 commits all of them, each citing this
+   plan and the adversarial-review fold):
+   - Section 6 status-line wording moves to the compact cluster
+     (decision 1); footer exception 2's reason restates (digits
+     advertised by the cluster; names in help and on visit).
+   - Color roles: `bg` and `bgPanel` join the roles (`bgDeep` was
+     tried and rejected: dark steps below base are illegible);
+     `selectedBg` is defined as accent-tinted; `focusedBorder`
+     repurposes as the degrade profiles' focused-divider color.
+   - Glyph tokens join with ASCII fallbacks: `dismiss ✕` (x),
+     `edgeBarFocused ▌` U+258C (>), `edgeBarBlurred ▏` U+258F
+     (|), `separator ·` U+00B7 (-), `scrollPos ≡` U+2261 (=),
+     `treeBranch ├─` and `treeLast └─` (|- and `+-`).
+   - Section 7 degrade tables amend: focused is carried by the
+     edge bar's glyph weight (▌ vs ▏), which survives NO_COLOR;
+     and the ANSI-16, NO_COLOR, and text-gallery profiles
+     substitute single-line pane dividers for the ground steps
+     (the ladder is the truecolor expression, never the only
+     one).
+   - Spacing roles gain `padBand 2` (chrome band inset) and
+     `padCard 2` (card inset); markup literals stay banned.
 4. **Border sets:** single-line for pane dividers, rounded for
    modals and cards, heavy for the focused pane's border (the
    degrade tables already assign heavy to focus). Spinner frames:
@@ -168,35 +178,40 @@ implementer invents taste. Each cites its constraint.
    `warn`, `success`, `link`, `quote`, `accent` are text roles
    (4.5:1); `fgSubtle`, `focusedBorder`, `flag`, `diffAdd`,
    `diffDel`, and `calendarSlot[*]` are indicator roles (3:1).
-6. **The palette: cool slate** (ruled by Geoff at the wireframe
-   review, 2026-08-19, over graphite-teal and the original warm
-   stone, which read Ubuntu-adjacent). A cool-neutral ground with
-   one steel-blue accent; amber appears only on the flag and warn
-   roles, the single warm pop on a cool ground (the hue-budget
-   rule). Values below are contrast-verified against both bg and
-   selectedBg; the UX-7 contrast test is the oracle, and the theme
-   task may nudge lightness only, never hue intent.
+6. **The palette: cool slate, v3 values** (ruled by Geoff; the
+   adversarial review's contrast findings folded). Grounds are a
+   grammar of their own: base carries content, panel elevates
+   chrome and cards, selection is accent-tinted, code insets on
+   its ratified value. Every role below is verified at 4.5:1
+   (text) / 3:1 (indicator) against ALL FOUR grounds, both
+   themes; the UX-7 test asserts exactly that matrix, and the
+   theme task may nudge lightness only.
 
    | Role | Dark | Light |
    |---|---|---|
    | bg | `#16181D` | `#F2F4F7` |
+   | bgPanel | `#262B36` | `#FFFFFF` |
+   | selectedBg | `#2A3441` | `#D8DEE7` |
+   | codeBg | `#1D2026` | `#E7EBF0` |
    | fg | `#D4D8DF` | `#2B3038` |
-   | fgMuted | `#939AA6` | `#59616D` |
-   | fgSubtle | `#737A86` | `#79828F` |
-   | accent | `#85B3D1` | `#336A8F` |
+   | fgMuted | `#969DA9` | `#59616D` |
+   | fgSubtle | `#7A8290` | `#747D8A` |
+   | accent | `#85B3D1` | `#2F6284` |
    | unread | `#ECEEF2` (with bold) | `#161B22` (with bold) |
-   | selectedBg | `#262A32` | `#E0E4EA` |
-   | focusedBorder | `#6E9FBD` | `#40749A` |
-   | error | `#DF8484` | `#A8413B` |
-   | warn | `#D4B36A` | `#82600E` |
+   | error | `#DF8484` | `#A53E38` |
+   | warn | `#D4B36A` | `#7B5A0D` |
    | success | `#97BE8C` | `#44683A` |
-   | link | `#85B3D1` | `#2E6389` |
-   | codeBg | `#1D2026` | `#E7EAEF` |
-   | quote | `#A0A5AE` | `#5B6470` |
-   | diffAdd | `#97BE8C` | `#44683A` |
-   | diffDel | `#DF8484` | `#A8413B` |
-   | flag | `#D4B36A` | `#82600E` |
+   | link | `#85B3D1` (underlined) | `#2E6389` (underlined) |
+   | quote | `#A0A5AE` | `#575F6B` |
+   | flag | `#D4B36A` | `#7B5A0D` |
+   | focusedBorder | `#6E9FBD` (degrade dividers) | `#40749A` |
+   | diffAdd / diffDel | success / error values | success / error values |
    | calendarSlot[8] | muted 8-hue cycle in the same saturation band: accent blue, success, warn, `#C99BC0`, `#7FBFB2`, error, `#B0A1E0`, `#C0A98F` | derived per-role at light lightness, same hue order |
+
+   fgSubtle is an indicator role and never carries reading text:
+   dates and tree connectors render in fgMuted; snippets are the
+   one fgSubtle text use, deliberately sub-reading-weight
+   (review finding 1's resolution).
 
 7. **SY-5's four states, rendered:** `synced` (dim, fgMuted),
    `⠹ syncing 4,312/36,102` (spinner + progress where a total is
@@ -232,6 +247,30 @@ implementer invents taste. Each cites its constraint.
    content, and that composed render becomes the screen's first
    golden.
 
+11. **The ground grammar** (v3, post-review): grounds step upward
+   only. Base carries every content pane including the rail; the
+   panel ground elevates chrome bands, the reader card, the help
+   overlay, and modals; selection is the accent-tinted ground plus
+   the edge bar. Pane separation is whitespace gutters and
+   alignment, plus exactly one structural line (the rail/list
+   divider in fgSubtle). Focus is carried by edge-bar glyph
+   weight (`▌` focused, `▏` unfocused), never by border color
+   alone, and never two active-state signals of equal weight at
+   once. In degrade profiles the ground steps substitute to
+   single-line dividers (decision 3's amendment).
+12. **Mail list row anatomy** (binds pass 3's wireframes; folded
+   from the review's GUI-switcher findings): edge bar, unread `●`,
+   attribute column (`⚑` flag in the warm accent, attachment
+   glyph dim), sender 17 cells, thread-count column (`▸ N`,
+   threads collapsed by default per TH-3), subject in fg, then a
+   snippet in fgSubtle filling remaining width (Gmail's row
+   anatomy; the review measured 32-42 dead cells without it),
+   date right-aligned in fgMuted (time today, `Mon D` otherwise),
+   all truncation marked with the ellipsis token. The attachment
+   glyph is an open taste item: `⊕` has no field precedent and
+   reads as "add"; candidates at the gate are a letter (aerc's
+   `a`), a count, or keeping `⊕`.
+
 ## Wireframes (the design ritual)
 
 One frame per screen per responsive class that changes its layout
@@ -259,76 +298,99 @@ column whenever a sidebar is present.
 ### F9. Standard rung 120, mail surface (pass-3 content preview)
 
 ```
- 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                            ⠹ syncing 4,312/36,102
-────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────
-┃ Inbox          14 │ ●   Ada Lovelace          Analytical engine notes                                           09:41
-  Drafts          2 │▐    Charles Babbage       Re: difference engine budget                                      09:12
-  Sent              │ ● ⚑ Grace Hopper          COBOL committee minutes                                           Yest.
-  Archive           │   ⊕ Katherine Johnson     Trajectory review, Friday                                         Yest.
-  Junk            1 │     Fastmail              Your receipt for August                                           08-17
-  Trash             │ ●   Frank Lee             Server migration plan                                             08-16
-  Lists          98 │ ●   Grace Kim             ├─ Re: Server migration plan                                      08-16
-                    │     Henry Park            └─ Re: Server migration plan                                      08-16
-                    │     Donald Knuth          TAOCP errata, volume 4                                            08-15
-                    │   ⊕ GitHub                Code review: sync engine PR #42                                   08-14
-                    │
-                    │
-  / search          │
-────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                         ⠹ syncing 4,312/36,102
+                      │
+▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes  The engine weaves algebraic patt…   09:41
+   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget  The Treasury insists on ite…   09:12
+   Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes  Attached are the minutes from Th…   08:55
+   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday  Can you check my numbers for t…  Aug 18
+   Junk            1  │        Fastmail              Your receipt for August  Thanks for your payment. This mo…  Aug 17
+   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan  I propose we move the primary on S…  Aug 16
+   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #42  poplar/sync: 3 comments …  Aug 14
+                      │        Donald Knuth          TAOCP errata, volume 4  A reader reports an off-by-one in…  Aug 13
+                      │
+                      │
+   /  filter folders  │
+  j/k move     Space/b page     Home/End ends     Enter open     u undo     / search     g goto     ? help     q quit
 ```
 
-- The top bar: active surface named in accent + bold (`1 Mail`),
-  siblings as bare dim digits, padded so the segment divider sits
-  exactly over the sidebar's divider column; the rest of the row is
-  the active surface's context; sync segment right (decision 7).
-- Sidebar: active folder carries the accent bar `┃` and bright
-  text, unread folders bright, others dim; counts right-aligned;
-  the dim `/ search` hint at the rail's foot (legacy pattern).
-- List rows: cursor = accent gutter bar `▐` plus raised row
-  background; unread = `●` plus bold bright text, read rows fully
-  dim (hue by brightness); attribute column (`⚑` flag in the one
-  warm accent, `⊕` attachment dim) one cell clear of the unread
-  marker; thread connectors dim in the subject column; dates
-  right-aligned, fgSubtle.
-- Pointer targets: surface digits, sidebar rows (goto), list rows
+- Ground grammar (v3, adversarial review folded, plus two Geoff
+  iterations): chrome bands (top, footer), the reader card, and
+  modals sit on the elevated panel ground; every content pane,
+  the rail included, sits on base (dark ground steps below a
+  near-black base are physically illegible, and a panel-ground
+  rail spotlit the center pane). The rail/list boundary is one
+  quiet vertical line in fgSubtle, the composition's single
+  structural line (aerc's pattern), which is also the degrade
+  profiles' pane channel, so every profile shares one bone
+  structure.
+- List rows: cursor = thick accent edge bar `▌` (thin `▏` when the
+  pane is unfocused) plus the accent-tinted selection ground;
+  unread = `●` plus bold bright; read rows dim; thread-collapsed
+  by default with a `▸ N` count column (TH-3, LT-1); subject then
+  a fgSubtle snippet fills the row (the GUI-mail anatomy); marked
+  `…` truncation everywhere; dates right-aligned in fgMuted, time
+  today and `Mon D` otherwise.
+- Pointer targets: cluster digits, rail rows (goto), list rows
   (cursor; double-click opens), footer hints, wheel.
 
 ### F10. Wide rung 150, split (pass-3 content preview)
 
 ```
- 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                                                          ⠹ syncing 4,312/36,102
-────────────────────┼──────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────
-┃ Inbox          14 │ ●   Ada Lovelace          Analytical engine notes      09:41 │ From    Ada Lovelace <ada@analytical.example>
-  Drafts          2 │▐    Charles Babbage       Re: difference engine budget 09:12 │ To      geoff@907.life
-  Sent              │ ● ⚑ Grace Hopper          COBOL committee minutes      Yest. │ Subject Analytical engine notes
-  Archive           │   ⊕ Katherine Johnson     Trajectory review, Friday    Yest. │ ────────────────────────────────────────────────────────────────
-  Junk            1 │     Fastmail              Your receipt for August      08-17 │ The engine weaves algebraic patterns just as the
-  Trash             │ ●   Frank Lee             Server migration plan        08-16 │ Jacquard loom weaves flowers and leaves. Numbers
-  Lists          98 │ ●   Grace Kim             ├─ Re: Server migration plan 08-16 │ are one instance; symbols the general case.
-                    │     Henry Park            └─ Re: Server migration plan 08-16 │
-                    │     Donald Knuth          TAOCP errata, volume 4       08-15 │ > earlier: see the enclosed tables
-                    │   ⊕ GitHub                Code review: sync engine PR  08-14 │
-                    │                                                              │ https://example.org/engine-notes
-                    │                                                              │
-                    │                                                              │   for i, card := range deck {
-                    │                                                              │       punch(card)
-                    │                                                              │   }
-                    │                                                              │
-                    │                                                              │ ⊕ engine-tables.pdf · 184 KB
-────────────────────┴──────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────
+  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                                                       ⠹ syncing 4,312/36,102
+                      │
+▏  Inbox          14  │   ●    Ada Lovelace          Analytical engine notes        09:41     From     Ada Lovelace <ada@analytical.example>
+   Drafts          2  │ ▌      Charles Babbage       Re: difference engine budget   09:12     Date     Today 09:41
+   Sent               │   ● ⚑  Grace Hopper          COBOL committee minutes        08:55     Subject  Analytical engine notes
+   Archive            │     ⊕  Katherine Johnson     Trajectory review, Friday     Aug 18
+   Junk            1  │        Fastmail              Your receipt for August       Aug 17     The engine weaves algebraic patterns just
+   Trash              │   ●    Frank Lee         ▸ 4 Server migration plan         Aug 16     as the Jacquard loom weaves flowers and
+   Lists          98  │     ⊕  GitHub                Code review: sync engine PR #…Aug 14     leaves. Numbers are one instance; symbols
+                      │        Donald Knuth          TAOCP errata, volume 4        Aug 13     the general case.
+                      │
+                      │                                                                       ▏ earlier: see the enclosed tables
+                      │
+                      │                                                                       https://example.org/engine-notes
+                      │
+                      │                                                                        for i, card := range deck {
+                      │                                                                            punch(card)
+                      │                                                                        }
+                      │
+                      │                                                                       ⊕ engine-tables.pdf · 184 KB
+                      │
+                      │                                                                                                                     ≡ 34%
+  j/k move        Space/b page        Home/End ends        Enter open        u undo        / search        g goto        ? help        q quit
 ```
 
-- List beside reader (the ratified wide rung). At 150 columns the
-  reader's prose measure lands near 65 cells, inside the 50-75 CPL
-  evidence band; the divider between list and reader renders in
-  focusedBorder for the focused pane. The bottom-pane alternative
-  was rendered and considered at the review; the evidence note
-  records why beside won (width past ~80 cells buys no prose
-  readability; height is the scarce axis).
-- Reader block shows the role set: dim header labels, body fg,
-  quote, link, code lines on codeBg, attachment line dim.
+- List beside reader (the ratified wide rung, evidence note in
+  the line-length research doc). The reader is a floating card on
+  the panel ground with a base gutter each side, a Date header
+  row, a quote bar `▏`, underlined links, code inset on codeBg,
+  and a `≡ 34%` scroll readout (the field's converged alternative
+  to a drawn scrollbar).
 - Pointer targets add: click a pane to focus it, drag in the
   reader (SHOULD, copy mode).
+
+### F11. Spartan 80, mail list single pane (pass-3 content preview)
+
+```
+  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread ⠹ syncing 4,312/36,102
+
+  ●    Ada Lovelace          Analytical engine notes  The engine weave…   09:41
+▌      Charles Babbage       Re: difference engine budget  The Treasur…   09:12
+  ● ⚑  Grace Hopper          COBOL committee minutes  Attached are the…   08:55
+    ⊕  Katherine Johnson     Trajectory review, Friday  Can you check …  Aug 18
+       Fastmail              Your receipt for August  Thanks for your …  Aug 17
+  ●    Frank Lee         ▸ 4 Server migration plan  I propose we move …  Aug 16
+    ⊕  GitHub                Code review: sync engine PR #42  poplar/s…  Aug 14
+       Donald Knuth          TAOCP errata, volume 4  A reader reports …  Aug 13
+  j/k      Space/b      Home/End      Enter      u      /      g      ?      q
+```
+
+- The composition must stand without the rail: chrome bands,
+  selection ground, edge bar, and marked truncation carry it
+  (review finding: the 80-column case was previously untested).
+  Footer rows compress to key-only before dropping anything.
 
 ### F1. Shell frame, mail placeholder, spartan 80×24 (completeness check)
 
@@ -359,9 +421,7 @@ column whenever a sidebar is present.
 ### F2. Status line with an undo toast, plus a banner, standard 120
 
 ```
- 1 Mail  2 3 4      │ Inbox · 3 of 12,406 · 14 unread                                 Archived 3 · u undo · 9s │ synced
-────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
- ! Token stored in a plain file: no keyring service found.                                               Esc dismiss  ✕
+  1 Mail  2 3 4         Inbox · 3 of 12,406 · 14 unread                                       Archived 3 · u undo · 9s
 ```
 
 - The toast occupies the status line's right segment for its 10 s
@@ -510,11 +570,17 @@ color role and the `dismiss ✕` glyph token via committed amendment
 edits citing this plan.
 
 **Acceptance criteria:**
-- A contrast test computes WCAG ratios over the compiled values for
-  both themes: every text role at or above 4.5:1 against `bg` (and
-  `selectedBg` where the role renders on it), every indicator role
-  at or above 3:1, per decision 5's role assignment. Fails on any
-  miss.
+- A contrast test computes WCAG ratios over the compiled values
+  for both themes: every text role at or above 4.5:1 and every
+  indicator role at or above 3:1 against ALL FOUR grounds (bg,
+  bgPanel, selectedBg, codeBg), per decisions 5 and 6. Fails on
+  any miss.
+- The style API is ground-parameterized (crush's Focused/Blurred
+  pairing generalized): a role resolves against the ground it
+  renders on, so no caller can pair a role with an unverified
+  ground. The degrade substitution tables (decision 3) compile
+  here: ANSI-16 and NO_COLOR profiles carry the divider set and
+  the edge-bar weight channel.
 - Degrade-table test: under ANSI-16 and NO_COLOR profiles, unread,
   selected, focused, and error resolve to the distinct non-color
   channels the design language names (marker, reverse, heavy
@@ -590,7 +656,10 @@ grammar), ADR-0011 revision 3 (pane rectangles). **Deliverables:**
 1 (the layout package surface with its tests).
 
 **Outcome:** `ui.ComputeLayout(width, height int) LayoutMode`: pure
-formulas mapping a terminal size to width class (floor / spartan /
+formulas mapping a terminal size to width class, gutter and
+divider columns (decision 11: the rail/list divider column, the
+2-cell card gutters), and a ground per pane rectangle (every cell
+carries a ground; unpainted cells are a defect), (floor / spartan /
 standard / wide at <60 / 60-99 / 100-139 / 140+), height class
 (floor <15 / short 15-19 / full 20+), chrome allocation (status
 row, banner row when present, footer rows per height class), the
@@ -806,13 +875,13 @@ entry, citing the two tests, once they pass.
 **Requirement IDs:** UX-2. **Deliverables:** 2 (component,
 per-screen conformance run).
 
-**Outcome:** The registry-derived footer per F1/F3: at most two
-rows, grammar verbs first then screen verbs, `key description`
-hints, dynamic spacing (decision 8: the inter-hint gap computes
-from surplus width, even across the row, flooring at two cells),
-one-row compression under 20 rows (descriptions compress before
-any hint drops; the pass-2 screens fit one row outright),
-text-entry state display deferred to 2b (no entry contexts exist).
+**Outcome:** The registry-derived footer per F1/F9: two rows on
+content screens (grammar verbs row, screen verbs row), `key
+description` hints, dynamic spacing (decision 8, gap floor three
+cells), compression ladder: descriptions drop to key-only before
+any hint drops (review finding: the naive form overflowed and
+silently dropped advertised keys, a UX-2 failure); one-row form
+under 20 rows; text-entry state display deferred to 2b.
 
 **Acceptance criteria:**
 - UX-2 conformance (task 4's machinery) passes for every
@@ -1043,6 +1112,12 @@ themes are committed for the design record (survey amendment F).
 - The gallery check runs in `make check`'s test step and CI
   verbatim: a stray diff between committed renders and a fresh
   sweep fails; regeneration is a named make target.
+- Each gallery render commits with a ground-map sidecar (one
+  character per cell naming its ground), because the ANSI-
+  stripped text of a ground-structured design is whitespace and
+  a text-only lane would be blind to pane regressions (review
+  finding). The spinner frame index is a fixture input, never
+  wall-clock.
 - Two full in-process sweeps are byte-identical (QA-7), locale
   and TZ pinned by the fixtures package, asserted by a test that
   flips TZ and expects pinned output.
