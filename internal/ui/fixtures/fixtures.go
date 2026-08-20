@@ -28,27 +28,46 @@ var (
 )
 
 // Fixture is one named, deterministic screen: a Build closure over
-// facts pinned in this package. Build takes the theme rather than
-// baking one in, so the gallery sweep can theme and lay out the same
-// starting state however many profiles it needs, with no I/O and no
-// mutation of anything package-level.
+// facts pinned in this package, plus the status line's own state
+// (task 6) the render seam paints into the top band alongside it.
+// Status defaults to its zero value, SurfaceMail active and synced,
+// so every fixture that does not name a sync state renders the same
+// idle band F1 pins.
 type Fixture struct {
-	Name  string
-	Build func(th theme.Theme) ui.Screen
+	Name   string
+	Build  func(th theme.Theme) ui.Screen
+	Status ui.StatusLine
 }
 
-// The seven pass-2 screen-state fixtures: the four surface
-// placeholders (F1/F8), the floor and short-height layout edge cases
-// (both the mail placeholder rendered at a size that triggers them),
-// and MailLoaded, a second mail state with realistic pinned counts.
+// The pass-2 screen-state fixtures: the four surface placeholders
+// (F1/F8), the floor and short-height layout edge cases (both the
+// mail placeholder rendered at a size that triggers them), MailLoaded
+// (a second mail state with realistic pinned counts), and the SY-5
+// sync-state fixtures (task 6): every status the sync segment renders
+// distinctly, each swept at truecolor and NO_COLOR only, since the
+// content pane beneath them never varies.
 var (
-	Mail       = Fixture{Name: "mail", Build: mailBuild}
-	MailLoaded = Fixture{Name: "mail-loaded", Build: mailLoadedBuild}
-	Calendar   = Fixture{Name: "calendar", Build: calendarBuild}
-	Contacts   = Fixture{Name: "contacts", Build: contactsBuild}
-	Config     = Fixture{Name: "config", Build: configBuild}
-	Floor      = Fixture{Name: "floor", Build: mailBuild}
-	Short      = Fixture{Name: "short", Build: mailBuild}
+	Mail           = Fixture{Name: "mail", Build: mailBuild}
+	MailLoaded     = Fixture{Name: "mail-loaded", Build: mailLoadedBuild}
+	MailSyncing    = Fixture{Name: "mail-syncing", Build: mailBuild, Status: syncingStatus}
+	MailOffline    = Fixture{Name: "mail-offline", Build: mailBuild, Status: offlineStatus}
+	MailBackingOff = Fixture{Name: "mail-backing-off", Build: mailBuild, Status: backingOffStatus}
+	Calendar       = Fixture{Name: "calendar", Build: calendarBuild, Status: ui.StatusLine{Active: ui.SurfaceCalendar}}
+	Contacts       = Fixture{Name: "contacts", Build: contactsBuild, Status: ui.StatusLine{Active: ui.SurfaceContacts}}
+	Config         = Fixture{Name: "config", Build: configBuild, Status: ui.StatusLine{Active: ui.SurfaceConfig}}
+	Floor          = Fixture{Name: "floor", Build: mailBuild}
+	Short          = Fixture{Name: "short", Build: mailBuild}
+)
+
+// syncingStatus, offlineStatus, and backingOffStatus pin the sync
+// segment's three non-idle SY-5 states (Mail's own zero-value Status
+// already pins the fourth, synced): a syncing state with both a
+// spinner frame and a known total, an offline state, and a
+// backing-off state with its own retry countdown.
+var (
+	syncingStatus    = ui.StatusLine{Sync: ui.SyncStateMsg{State: ui.SyncStateSyncing, Done: 4312, Total: 36102}, Spinner: 2}
+	offlineStatus    = ui.StatusLine{Sync: ui.SyncStateMsg{State: ui.SyncStateOffline}}
+	backingOffStatus = ui.StatusLine{Sync: ui.SyncStateMsg{State: ui.SyncStateBackingOff, Retry: 12}}
 )
 
 // mailStats is the mail placeholder fixture's pinned store facts:

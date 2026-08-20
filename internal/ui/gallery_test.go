@@ -73,9 +73,19 @@ func (c galleryCase) profiles() []galleryProfile {
 // "36,102"-style grouped count (decision 12); a profile variant on
 // an already-swept fixture doesn't need the full four-profile matrix
 // again, so it sweeps only truecolor dark and light.
+// syncStateProfiles narrows the SY-5 sync-state fixtures to truecolor
+// dark and NO_COLOR (task 6's acceptance criterion: "golden per state
+// (truecolor + NO_COLOR profiles)"), since the content pane beneath
+// them never varies and ANSI-16 adds no distinct sync-segment
+// rendering path of its own.
+var syncStateProfiles = []galleryProfile{galleryProfiles[0], galleryProfiles[3]}
+
 var galleryCases = []galleryCase{
 	{fixture: fixtures.Mail, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
 	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
+	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
+	{fixture: fixtures.MailOffline, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
+	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}}},
 	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}}},
 	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}}},
@@ -119,7 +129,7 @@ func galleryRender(fixture fixtures.Fixture, sz gallerySize, th theme.Theme) str
 	screen := fixture.Build(th)
 	updated, _ := screen.Update(ui.LayoutMsg{Layout: lm})
 	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
-	return ui.Render(scr, lm, th).Content
+	return ui.Render(scr, lm, th, fixture.Status).Content
 }
 
 // checkGallery compares got against testdata/gallery/<name>.txt,

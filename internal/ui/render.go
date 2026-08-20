@@ -41,10 +41,11 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // every cell explicitly painted, holds at ProfileTrueColor, where
 // every ground, including a blank one, sets an explicit background.
 // Render runs no tea.Program and does no I/O; it returns the same
-// Frame for the same three inputs every time (QA-7's purity
-// contract). The three-argument shape, rather than the survey's own
-// draft signature, is recorded in the pass 2 plan's task 5b findings.
-func Render(screen Screen, lm LayoutMode, th theme.Theme) Frame {
+// Frame for the same four inputs every time (QA-7's purity contract).
+// The three-argument shape recorded in the pass 2 plan's task 5b
+// findings grew a fourth at task 6: status, App's own chrome state,
+// is what the seam paints into StatusRow rather than a blank fill.
+func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine) Frame {
 	view := screen.View()
 
 	if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
@@ -52,7 +53,7 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme) Frame {
 	}
 
 	canvas := theme.NewCanvas(lm.Width, lm.Height)
-	canvas.Paint(lm.StatusRow.Rect, th.Blank(lm.StatusRow.Ground, lm.StatusRow.Rect.Dx(), lm.StatusRow.Rect.Dy()))
+	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(status, th, lm.StatusRow.Rect.Dx()))
 	if lm.BannerRow {
 		canvas.Paint(lm.Banner.Rect, th.Blank(lm.Banner.Ground, lm.Banner.Rect.Dx(), lm.Banner.Rect.Dy()))
 	}

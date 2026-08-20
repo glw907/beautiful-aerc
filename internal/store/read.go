@@ -198,6 +198,17 @@ func (p *ReadPool) EventCount(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
+// OutboxQueuedCount returns the store's current count of outbox rows
+// still in 'queued' state: the status line's own live fact (decision
+// 7's "2 queued").
+func (p *ReadPool) OutboxQueuedCount(ctx context.Context) (int, error) {
+	var n int
+	if err := p.db.QueryRowContext(ctx, queryOutboxQueuedCount).Scan(&n); err != nil {
+		return 0, localErr("store.read", err)
+	}
+	return n, nil
+}
+
 // FirstMailboxID returns the lowest-id mailbox in the store. A
 // startup trace with no onboarding flow yet to name a mailbox uses it
 // to pick one to list.

@@ -145,11 +145,11 @@ func (m MailPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// update's Cmd result is always nil until task 6's StoreChangedMsg
-// refresh gives it one to return; the signature carries the contract
-// now so that task's change is additive.
-//
-//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+// update absorbs a StoreChangedMsg by re-issuing Init's own load: the
+// engines' route back to a placeholder that already returned from
+// Init once, so a count a background sync just changed reaches the
+// view on its next paint rather than staying stuck at whatever Init
+// first read.
 func (m MailPlaceholder) update(msg tea.Msg) (MailPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
@@ -162,6 +162,8 @@ func (m MailPlaceholder) update(msg tea.Msg) (MailPlaceholder, tea.Cmd) {
 			return m, nil
 		}
 		m.stats, m.loaded = msg.stats, true
+	case StoreChangedMsg:
+		return m, m.Init()
 	}
 	return m, nil
 }
@@ -229,7 +231,8 @@ func (c CalendarPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-//nolint:unparam // Cmd stays nil until task 6's StoreChangedMsg refresh
+// update absorbs a StoreChangedMsg the same way MailPlaceholder does:
+// by re-issuing Init's own load.
 func (c CalendarPlaceholder) update(msg tea.Msg) (CalendarPlaceholder, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LayoutMsg:
@@ -242,6 +245,8 @@ func (c CalendarPlaceholder) update(msg tea.Msg) (CalendarPlaceholder, tea.Cmd) 
 			return c, nil
 		}
 		c.events, c.loaded = msg.count, true
+	case StoreChangedMsg:
+		return c, c.Init()
 	}
 	return c, nil
 }

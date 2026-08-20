@@ -388,6 +388,39 @@ func TestMailStats(t *testing.T) {
 	}
 }
 
+// TestOutboxQueuedCount proves the status line's live-fact read: only
+// 'queued' rows count, a 'dispatching' row does not.
+func TestOutboxQueuedCount(t *testing.T) {
+	w, path := newTestWriter(t, DefaultWriterConfig())
+	pool, err := NewReadPool(path, DefaultReadPoolSize, w.Revision())
+	if err != nil {
+		t.Fatalf("NewReadPool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	ctx := context.Background()
+	seedAccountAndMailbox(t, w)
+
+	err = w.submit(ctx, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO outbox (account_id, kind, payload, state, created_at) VALUES
+			(1, 'send', '{}', 'queued', 1000),
+			(1, 'send', '{}', 'queued', 2000),
+			(1, 'send', '{}', 'dispatching', 3000)`)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed outbox rows: %v", err)
+	}
+
+	got, err := pool.OutboxQueuedCount(ctx)
+	if err != nil {
+		t.Fatalf("OutboxQueuedCount: %v", err)
+	}
+	if got != 2 {
+		t.Errorf("OutboxQueuedCount() = %d, want 2", got)
+	}
+}
+
 // TestEventCount proves the calendar placeholder's live-fact read:
 // event count across two events on one calendar.
 func TestEventCount(t *testing.T) {

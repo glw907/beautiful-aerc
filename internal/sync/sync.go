@@ -69,6 +69,7 @@ type Worker struct {
 	writer    *store.Writer
 	cfg       Config
 	echo      *echoTracker
+	observer  Observer
 }
 
 // NewWorker returns a Worker for accountID, syncing be against writer

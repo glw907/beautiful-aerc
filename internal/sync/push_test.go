@@ -159,7 +159,7 @@ func TestBackoffRecovery(t *testing.T) {
 			}}
 
 			start := time.Now()
-			if _, err := reconnect(context.Background(), push, cfg, &pushState{}, nil, nil); err != nil {
+			if _, err := reconnect(context.Background(), push, cfg, &pushState{}, nil, nil, nil); err != nil {
 				t.Fatalf("trial %d: reconnect: %v", i, err)
 			}
 			elapsed[i] = time.Since(start)
@@ -519,7 +519,7 @@ func TestReconnectReturnsPromptlyOnContextCanceled(t *testing.T) {
 		return nil, context.Canceled
 	}}
 
-	ch, err := reconnect(ctx, push, DefaultConfig(), &pushState{}, nil, nil)
+	ch, err := reconnect(ctx, push, DefaultConfig(), &pushState{}, nil, nil, nil)
 	if ch != nil {
 		t.Fatal("reconnect returned a non-nil channel alongside an error")
 	}
@@ -550,7 +550,7 @@ func TestPushStateIgnoresContextCanceled(t *testing.T) {
 	}}
 
 	state := &pushState{}
-	if _, err := reconnect(ctx, push, DefaultConfig(), state, nil, nil); !errors.Is(err, context.Canceled) {
+	if _, err := reconnect(ctx, push, DefaultConfig(), state, nil, nil, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("reconnect() error = %v, want context.Canceled", err)
 	}
 	if state.failing {
@@ -585,7 +585,7 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			_, _ = reconnect(ctx, push, testConfig(), &pushState{}, nil, nil)
+			_, _ = reconnect(ctx, push, testConfig(), &pushState{}, nil, nil, nil)
 			close(done)
 		}()
 

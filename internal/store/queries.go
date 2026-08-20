@@ -82,4 +82,10 @@ const (
 	// queryEventCount is the calendar surface placeholder's live fact:
 	// total event count across every account the store holds.
 	queryEventCount = `SELECT COUNT(*) FROM event`
+
+	// queryOutboxQueuedCount is the status line's own live fact
+	// (decision 7's "2 queued"): the count of outbox rows still in
+	// 'queued' state, across every account the store holds, matching
+	// queryOutboxEligible's own state filter.
+	queryOutboxQueuedCount = `SELECT COUNT(*) FROM outbox WHERE state = 'queued'`
 )

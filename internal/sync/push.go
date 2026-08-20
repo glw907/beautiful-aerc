@@ -175,11 +175,11 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	flushState := newSyncFlushState()
 	poll := time.NewTicker(w.cfg.PollInterval)
 	defer poll.Stop()
-	flush := func() { w.flush(ctx, kinds, flushState) }
+	flush := func() { w.runFlush(ctx, kinds, flushState) }
 
 	var push pushState
 	for {
-		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, flush)
+		ch, err := reconnect(ctx, transport, w.cfg, &push, poll.C, flush, w.emitBackoff)
 		if err != nil {
 			return
 		}
@@ -198,7 +198,7 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 		// ticks like every other wait between streams, so a server that
 		// never reaches a Listen error still falls back to the poll
 		// cadence.
-		if !sleepBackoff(ctx, push.attempt, w.cfg.BackoffMin, w.cfg.BackoffMax, poll.C, flush) {
+		if !sleepBackoff(ctx, push.attempt, w.cfg.BackoffMin, w.cfg.BackoffMax, poll.C, flush, w.emitBackoff) {
 			return
 		}
 	}
@@ -333,14 +333,14 @@ func (s *pushState) proved() {
 // blocks until ctx is done.
 func (w *Worker) pollKinds(ctx context.Context, kinds []backend.ObjectKind) {
 	state := newSyncFlushState()
-	w.flush(ctx, kinds, state)
+	w.runFlush(ctx, kinds, state)
 
 	ticker := time.NewTicker(w.cfg.PollInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			w.flush(ctx, kinds, state)
+			w.runFlush(ctx, kinds, state)
 		case <-ctx.Done():
 			return
 		}
@@ -366,14 +366,19 @@ func (w *Worker) flush(ctx context.Context, kinds []backend.ObjectKind, state *s
 // taking rather than a schedule of its own, so one failure still backs
 // off in exactly one place. A nil pollC never fires, which is the
 // no-fallback case a caller drives when it only wants the retry.
-func reconnect(ctx context.Context, push backend.Push, cfg Config, state *pushState, pollC <-chan time.Time, poll func()) (<-chan backend.Notification, error) {
+//
+// onWait, when non-nil, is sleepBackoff's own onWait: reconnect's
+// caller finds out about a reopen wait through it rather than a second
+// call to backoffDelay, whose own jitter would draw a different value
+// than the one actually about to run.
+func reconnect(ctx context.Context, push backend.Push, cfg Config, state *pushState, pollC <-chan time.Time, poll func(), onWait func(time.Duration)) (<-chan backend.Notification, error) {
 	for {
 		ch, err := push.Listen(ctx)
 		if err == nil {
 			return ch, nil
 		}
 		state.fail(err)
-		if !sleepBackoff(ctx, state.attempt, cfg.BackoffMin, cfg.BackoffMax, pollC, poll) {
+		if !sleepBackoff(ctx, state.attempt, cfg.BackoffMin, cfg.BackoffMax, pollC, poll, onWait) {
 			return nil, ctx.Err()
 		}
 		state.attempt++
@@ -438,15 +443,21 @@ func consumePush(ctx context.Context, ch <-chan backend.Notification, cfg Config
 // as RunPush's reconnect, rather than a second, near-identical
 // implementation.
 func SleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration) bool {
-	return sleepBackoff(ctx, attempt, minDelay, maxDelay, nil, nil)
+	return sleepBackoff(ctx, attempt, minDelay, maxDelay, nil, nil, nil)
 }
 
 // sleepBackoff is SleepBackoff with reconnect's poll fallback folded
 // in: it runs poll on every tick of pollC that lands inside the delay,
 // so a refused stream's own wait is what the fallback rides. A nil
-// pollC never fires, which is SleepBackoff's plain sleep.
-func sleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration, pollC <-chan time.Time, poll func()) bool {
+// pollC never fires, which is SleepBackoff's plain sleep. onWait, when
+// non-nil, is called once with the exact delay about to be slept,
+// before the wait itself begins (Worker.emitBackoff's own report of
+// the backing-off state); a nil onWait reports nothing.
+func sleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration, pollC <-chan time.Time, poll func(), onWait func(time.Duration)) bool {
 	d := backoffDelay(attempt, minDelay, maxDelay)
+	if onWait != nil && d > 0 {
+		onWait(d)
+	}
 	if d <= 0 {
 		return ctx.Err() == nil
 	}

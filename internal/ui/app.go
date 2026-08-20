@@ -50,6 +50,13 @@ type App struct {
 	layout LayoutMode
 	wheel  wheelGesture
 
+	sync           SyncStateMsg
+	backfill       BackfillProgressMsg
+	outbox         int
+	spinnerFrame   int
+	spinnerGen     int
+	spinnerTicking bool
+
 	mail     MailPlaceholder
 	calendar CalendarPlaceholder
 	contacts ContactsPlaceholder
@@ -103,6 +110,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleWheel(msg)
 	case wheelFlushMsg:
 		return a.flushWheelTimer(msg)
+	case SyncStateMsg:
+		a.sync = msg
+		return a.reconcileSpinner()
+	case BackfillProgressMsg:
+		a.backfill = msg
+		return a.reconcileSpinner()
+	case OutboxCountMsg:
+		a.outbox = msg.Queued
+		return a, nil
+	case statusSpinnerTickMsg:
+		return a.tickSpinner(msg)
 	}
 	return a.updateChildren(msg)
 }
@@ -117,10 +135,76 @@ func (a App) View() tea.View {
 	if len(a.stack) > 0 {
 		return a.stack[len(a.stack)-1].View()
 	}
-	frame := Render(a.activeScreen(), a.layout, a.theme)
+	frame := Render(a.activeScreen(), a.layout, a.theme, a.statusLine())
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
 	return view
+}
+
+// statusLine builds the top band's own render state from a's current
+// model state, App's whole answer to "StatusLine consumed by
+// App.View": every field View hands to Render.
+func (a App) statusLine() StatusLine {
+	return StatusLine{
+		Active:   a.activeSurface(),
+		Sync:     a.sync,
+		Backfill: a.backfill,
+		Outbox:   a.outbox,
+		Spinner:  a.spinnerFrame,
+	}
+}
+
+// statusSpinnerInterval is the sync segment's own spinner cadence:
+// bubbles/spinner's braille "Dot" preset FPS, the same frame set
+// theme.Theme.Spinner returns.
+const statusSpinnerInterval = 100 * time.Millisecond
+
+// statusSpinnerTickMsg is the sync segment's spinner tick, armed once
+// per active run (mirroring wheelFlushMsg's gen convention): gen
+// names which run it belongs to, so a tick from a run reconcileSpinner
+// already ended is recognizable and ignored, and QA-8's idle posture
+// holds (no timer wakeup once the state is synced or offline).
+type statusSpinnerTickMsg struct {
+	gen int
+}
+
+// reconcileSpinner arms or stops the spinner tick on a transition into
+// or out of an active sync or backfill state: it only ever starts a
+// new tick chain on the false-to-true edge, never on every progress
+// message a run in progress delivers, so a burst of SyncStateMsg
+// updates cannot starve the spinner by repeatedly replacing its own
+// pending tick.
+func (a App) reconcileSpinner() (App, tea.Cmd) {
+	active := a.sync.State == SyncStateSyncing || a.backfill.Active
+	if active == a.spinnerTicking {
+		return a, nil
+	}
+	a.spinnerTicking = active
+	if !active {
+		return a, nil
+	}
+	a.spinnerGen++
+	return a, armSpinnerTick(a.spinnerGen)
+}
+
+// tickSpinner absorbs one statusSpinnerTickMsg: a stale tick (msg.gen
+// no longer matches a.spinnerGen) or one that arrived after
+// reconcileSpinner already stopped ticking is silently ignored;
+// otherwise the frame advances and the next tick is armed.
+func (a App) tickSpinner(msg statusSpinnerTickMsg) (tea.Model, tea.Cmd) {
+	if !a.spinnerTicking || msg.gen != a.spinnerGen {
+		return a, nil
+	}
+	a.spinnerFrame++
+	return a, armSpinnerTick(a.spinnerGen)
+}
+
+// armSpinnerTick returns the Cmd that ticks gen's spinner run after
+// statusSpinnerInterval.
+func armSpinnerTick(gen int) tea.Cmd {
+	return tea.Tick(statusSpinnerInterval, func(time.Time) tea.Msg {
+		return statusSpinnerTickMsg{gen: gen}
+	})
 }
 
 // handleKey applies the interaction grammar's back/quit/surface-switch
