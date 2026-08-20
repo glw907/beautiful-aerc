@@ -1,0 +1,272 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/glw907/poplar/internal/theme"
+)
+
+// TestRenderStatusLine_ToastRidesTheRightSegment proves design
+// decision 1: a showing toast renders its own label and undo hint in
+// the status line's right segment, and the sync state compresses to
+// its bare word beside it at widthStandardMin and up.
+func TestRenderStatusLine_ToastRidesTheRightSegment(t *testing.T) {
+	th := theme.New(true, theme.ProfileTrueColor)
+	sl := StatusLine{
+		Sync:  SyncStateMsg{State: SyncStateSyncing, Done: 4312, Total: 36102},
+		Toast: Toast{Active: true, Label: "3 messages archived", Remaining: 9},
+	}
+
+	got := plainStatusLine(sl, th)
+	if !strings.Contains(got, "3 messages archived") {
+		t.Errorf("renderStatusLine() = %q, want the toast's own label", got)
+	}
+	if !strings.Contains(got, "u undo") {
+		t.Errorf("renderStatusLine() = %q, want the undo hint, derived from GrammarKeys.Undo", got)
+	}
+	if !strings.Contains(got, "9s") {
+		t.Errorf("renderStatusLine() = %q, want the visible countdown", got)
+	}
+	if !strings.Contains(got, "Syncing") || strings.Contains(got, "4,312") {
+		t.Errorf("renderStatusLine() = %q, want the sync state compressed to its bare word, no progress count", got)
+	}
+}
+
+// TestRenderStatusLine_ToastYieldsSyncBelowStandardWidth proves the
+// dispatch's own ruling: below widthStandardMin the sync state yields
+// entirely rather than compressing, so the toast alone survives.
+func TestRenderStatusLine_ToastYieldsSyncBelowStandardWidth(t *testing.T) {
+	th := theme.New(true, theme.ProfileTrueColor)
+	sl := StatusLine{
+		Sync:  SyncStateMsg{State: SyncStateSyncing, Done: 1, Total: 2},
+		Toast: Toast{Active: true, Label: "archived", Remaining: 9},
+	}
+
+	wide := ansi.Strip(renderStatusLine(sl, th, widthStandardMin, false))
+	if !strings.Contains(wide, "Syncing") {
+		t.Errorf("renderStatusLine(%d) = %q, want the sync state's bare word at widthStandardMin", widthStandardMin, wide)
+	}
+
+	narrow := ansi.Strip(renderStatusLine(sl, th, widthStandardMin-1, false))
+	if strings.Contains(narrow, "Syncing") {
+		t.Errorf("renderStatusLine(%d) = %q, want the sync state to yield entirely below widthStandardMin", widthStandardMin-1, narrow)
+	}
+	if !strings.Contains(narrow, "archived") {
+		t.Errorf("renderStatusLine(%d) = %q, want the toast itself to survive", widthStandardMin-1, narrow)
+	}
+}
+
+// TestBareSyncWord_DropsProgressForEveryState proves every SY-5 state
+// compresses to its own bare label, with no count, spinner, or retry
+// text riding along.
+func TestBareSyncWord_DropsProgressForEveryState(t *testing.T) {
+	tests := []struct {
+		sync SyncStateMsg
+		want string
+	}{
+		{SyncStateMsg{State: SyncStateSynced}, "Synced"},
+		{SyncStateMsg{State: SyncStateSyncing, Done: 1, Total: 2}, "Syncing"},
+		{SyncStateMsg{State: SyncStateOffline}, "Offline"},
+		{SyncStateMsg{State: SyncStateBackingOff, Retry: 12}, "Backing off"},
+	}
+	for _, tt := range tests {
+		seg := bareSyncWord(StatusLine{Sync: tt.sync})
+		if seg.text != tt.want {
+			t.Errorf("bareSyncWord(%+v).text = %q, want %q", tt.sync, seg.text, tt.want)
+		}
+	}
+}
+
+// TestApp_ToastMsg_NewestWins proves design decision 1: a second
+// ToastMsg while one is still showing replaces it outright, and bumps
+// the countdown's own gen so a tick from the replaced window is
+// recognizable as stale.
+func TestApp_ToastMsg_NewestWins(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: UndoOffer{Label: "3 messages archived"}})))
+	firstGen := app.toastGen
+
+	updated, cmd := app.Update(ToastMsg{Offer: UndoOffer{Label: "1 message deleted"}})
+	app = mustApp(t, updated)
+
+	if app.statusLine().Toast.Label != "1 message deleted" {
+		t.Errorf("Toast.Label = %q after a second ToastMsg, want the newest offer's own label", app.statusLine().Toast.Label)
+	}
+	if app.toastGen == firstGen {
+		t.Error("toastGen unchanged across a second ToastMsg, want a fresh gen so the replaced window's own tick is stale")
+	}
+	if cmd == nil {
+		t.Fatal("ToastMsg armed no Cmd, want the countdown's own tick chain to start")
+	}
+}
+
+// TestApp_ToastCountdown_TicksNineToZero is survey amendment E's own
+// discipline: the countdown's visible sequence, driven by injected
+// toastTickMsg values at the message layer, never a real timer.
+func TestApp_ToastCountdown_TicksNineToZero(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	updated, cmd := app.Update(ToastMsg{Offer: UndoOffer{Label: "archived"}})
+	app = mustApp(t, updated)
+	if app.statusLine().Toast.Remaining != 9 {
+		t.Fatalf("Remaining after ToastMsg = %d, want 9 (the pinned exemplar's own dim \"9s\")", app.statusLine().Toast.Remaining)
+	}
+	if cmd == nil {
+		t.Fatal("ToastMsg armed no Cmd, want the countdown's own tick chain to start")
+	}
+	// gen comes from App's own field, never from invoking the armed
+	// Cmd (a real tea.Tick(time.Second, ...) that would block this
+	// test for a second): survey amendment E asserts at the message
+	// layer only.
+	gen := app.toastGen
+
+	for want := 8; want >= 0; want-- {
+		updated, cmd = app.tickToast(toastTickMsg{gen: gen})
+		app = mustApp(t, updated)
+		if got := app.statusLine().Toast.Remaining; got != want {
+			t.Fatalf("Remaining = %d, want %d", got, want)
+		}
+		if !app.statusLine().Toast.Active {
+			t.Fatalf("Toast.Active = false at Remaining=%d, want it still showing", want)
+		}
+		if want > 0 && cmd == nil {
+			t.Fatalf("tickToast at Remaining=%d armed no Cmd, want the chain to continue", want)
+		}
+	}
+
+	// The tick past zero closes the window.
+	updated, cmd = app.tickToast(toastTickMsg{gen: gen})
+	app = mustApp(t, updated)
+	if app.statusLine().Toast.Active {
+		t.Error("Toast.Active still true after the countdown's own final tick, want the window closed")
+	}
+	if cmd != nil {
+		t.Error("tickToast after closing the window armed a Cmd, want none")
+	}
+}
+
+// TestApp_ToastTick_StaleGenIgnored mirrors
+// TestApp_SpinnerTicksOnlyWhileSyncingOrBackfilling's own stale-gen
+// case: a tick from a window a newer toast already replaced changes
+// nothing.
+func TestApp_ToastTick_StaleGenIgnored(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: UndoOffer{Label: "first"}})))
+	staleGen := app.toastGen
+
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: UndoOffer{Label: "second"}})))
+
+	updated, cmd := app.tickToast(toastTickMsg{gen: staleGen})
+	app = mustApp(t, updated)
+	if cmd != nil {
+		t.Error("a stale-gen tick armed a Cmd, want it ignored")
+	}
+	if app.statusLine().Toast.Remaining != 9 || app.statusLine().Toast.Label != "second" {
+		t.Errorf("a stale-gen tick changed the current toast: %+v", app.statusLine().Toast)
+	}
+}
+
+// TestApp_UndoWithinWindowEmitsOfferCmd proves `u` inside the
+// countdown window emits the offer's own Undo Cmd and closes the
+// window.
+func TestApp_UndoWithinWindowEmitsOfferCmd(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	fired := false
+	offer := UndoOffer{Label: "archived", Undo: func() tea.Msg { fired = true; return nil }}
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: offer})))
+
+	updated, cmd := app.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	app = mustApp(t, updated)
+
+	if cmd == nil {
+		t.Fatal("'u' within the window returned a nil Cmd, want the offer's own Undo")
+	}
+	cmd()
+	if !fired {
+		t.Error("the returned Cmd did not invoke the offer's own Undo")
+	}
+	if app.statusLine().Toast.Active {
+		t.Error("Toast.Active still true after 'u' answered it, want the window closed")
+	}
+}
+
+// TestApp_UndoAfterExpiryIsNoop proves `u` after the window closes
+// (Toast.Active already false) is a no-op: no Cmd, and the offer is
+// never invoked.
+func TestApp_UndoAfterExpiryIsNoop(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	fired := false
+	offer := UndoOffer{Label: "archived", Undo: func() tea.Msg { fired = true; return nil }}
+	updated, _ := app.Update(ToastMsg{Offer: offer})
+	app = mustApp(t, updated)
+	gen := app.toastGen
+
+	for range undoWindowSeconds {
+		updated, _ = app.tickToast(toastTickMsg{gen: gen})
+		app = mustApp(t, updated)
+	}
+	if app.statusLine().Toast.Active {
+		t.Fatal("Toast.Active still true after the whole window ticked out")
+	}
+
+	_, cmd := app.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Error("'u' after expiry returned a non-nil Cmd, want a no-op")
+	}
+	if fired {
+		t.Error("'u' after expiry invoked the expired offer's own Undo")
+	}
+}
+
+// TestApp_QuitDiscardsOpenUndoWindow proves UX-9's own lifecycle rule:
+// the window does not survive quit. q at a surface root still quits,
+// and discards the open toast rather than leaving it to answer a
+// later stray 'u'.
+func TestApp_QuitDiscardsOpenUndoWindow(t *testing.T) {
+	app := NewApp(testDeps(t))
+
+	fired := false
+	offer := UndoOffer{Label: "archived", Undo: func() tea.Msg { fired = true; return nil }}
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: offer})))
+
+	updated, cmd := app.Update(digitKey("q"))
+	app = mustApp(t, updated)
+
+	if cmd == nil {
+		t.Fatal("q with an open undo window returned a nil Cmd, want tea.Quit")
+	}
+	if msg := cmd(); msg != (tea.QuitMsg{}) {
+		t.Errorf("q with an open undo window yielded %#v, want tea.QuitMsg", msg)
+	}
+	if app.statusLine().Toast.Active {
+		t.Error("Toast.Active still true after quit, want the window discarded")
+	}
+	if fired {
+		t.Error("quit invoked the open offer's own Undo, want it merely discarded")
+	}
+}
+
+// TestApp_ToastLogsOneLine is ER-1's own seam: every toast App
+// absorbs produces exactly one log line, carrying the offer's label.
+func TestApp_ToastLogsOneLine(t *testing.T) {
+	buf := captureDebugLog(t)
+	app := NewApp(testDeps(t))
+
+	_, _ = app.Update(ToastMsg{Offer: UndoOffer{Label: "3 messages archived"}})
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("log lines = %d, want exactly 1:\n%s", len(lines), buf.String())
+	}
+	if !strings.Contains(lines[0], "3 messages archived") {
+		t.Errorf("log line = %q, want it to carry the toast's own label", lines[0])
+	}
+}

@@ -16,7 +16,7 @@ func renderMail(t *testing.T) string {
 	lm := ui.ComputeLayout(100, 30, false)
 	scr := Mail.Build(th)
 	updated, _ := scr.Update(ui.LayoutMsg{Layout: lm})
-	return ui.Render(updated.(ui.Screen), lm, th, Mail.Status).Content //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
+	return ui.Render(updated.(ui.Screen), lm, th, Mail.Status, Mail.Banner).Content //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
 }
 
 // TestClockPinnedAgainstProcessTZ proves amendment D's clock/TZ pin
@@ -52,6 +52,7 @@ func TestClockPinnedAgainstProcessTZ(t *testing.T) {
 func TestFixturesHaveDistinctNames(t *testing.T) {
 	all := []Fixture{
 		Mail, MailLoaded, MailSyncing, MailOffline, MailBackingOff,
+		MailToast, MailBanner, ModalConfirm,
 		Calendar, Contacts, Config, Floor, Short,
 	}
 	seen := make(map[string]bool)

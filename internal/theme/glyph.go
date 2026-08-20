@@ -5,7 +5,10 @@ package theme
 // the profile's fallback by Glyphs. Divider serves two uses that
 // share one glyph and one RoleBorder styling: the structural
 // pane-separator line ANSI-16/NO_COLOR draw in place of a ground
-// step (DrawsDividers), and the reader's quote-bar prefix.
+// step (DrawsDividers), and the reader's quote-bar prefix. WarnMarker
+// is pass 2 task 8's own addition (the banner's leading glyph), added
+// under decision 3's own allowance for a design-language token the
+// build discovers it needs.
 type GlyphSet struct {
 	Unread         string
 	Flagged        string
@@ -23,6 +26,7 @@ type GlyphSet struct {
 	TreeLast       string
 	Divider        string
 	ErrorGutter    string
+	WarnMarker     string
 }
 
 // fullGlyphs is the Unicode glyph set, ProfileTrueColor's tier.
@@ -43,6 +47,7 @@ var fullGlyphs = GlyphSet{
 	TreeLast:       "└─",
 	Divider:        "│",
 	ErrorGutter:    "!",
+	WarnMarker:     "▲",
 }
 
 // asciiGlyphs is the ASCII fallback set, ProfileANSI16 and
@@ -68,6 +73,7 @@ var asciiGlyphs = GlyphSet{
 	TreeLast:       "+-",
 	Divider:        "|",
 	ErrorGutter:    "!",
+	WarnMarker:     "!",
 }
 
 // Glyphs returns t's glyph token set: fullGlyphs at

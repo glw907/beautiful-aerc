@@ -41,13 +41,15 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // every cell explicitly painted, holds at ProfileTrueColor, where
 // every ground, including a blank one, sets an explicit background.
 // Render runs no tea.Program and does no I/O; it returns the same
-// Frame for the same four inputs every time (QA-7's purity contract).
+// Frame for the same five inputs every time (QA-7's purity contract).
 // The three-argument shape recorded in the pass 2 plan's task 5b
 // findings grew a fourth at task 6: status, App's own chrome state,
 // is what the seam paints into StatusRow rather than a blank fill.
 // Task 7 stops treating Footer as a blank fill too: it paints
-// screen.Entry()'s own registry-derived hints instead.
-func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine) Frame {
+// screen.Entry()'s own registry-derived hints instead. Task 8 grows a
+// fifth, banner, painted into LayoutMode's own Banner band whenever
+// lm.BannerRow is set.
+func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine, banner Banner) Frame {
 	view := screen.View()
 
 	if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
@@ -58,7 +60,7 @@ func Render(screen Screen, lm LayoutMode, th theme.Theme, status StatusLine) Fra
 	dropTotal := lm.HeightClass != HeightFull
 	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(status, th, lm.StatusRow.Rect.Dx(), dropTotal))
 	if lm.BannerRow {
-		canvas.Paint(lm.Banner.Rect, th.Blank(lm.Banner.Ground, lm.Banner.Rect.Dx(), lm.Banner.Rect.Dy()))
+		canvas.Paint(lm.Banner.Rect, renderBanner(banner, th, lm.Banner.Rect.Dx()))
 	}
 	canvas.Paint(lm.Main.Rect, th.Blank(lm.Main.Ground, lm.Main.Rect.Dx(), lm.Main.Rect.Dy()))
 	canvas.Paint(lm.Footer.Rect, renderFooter(screen.Entry(), th, lm.Footer.Rect.Dx()))

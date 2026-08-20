@@ -37,6 +37,7 @@ type StatusLine struct {
 	Backfill BackfillProgressMsg
 	Outbox   int
 	Spinner  int
+	Toast    Toast
 }
 
 // surfaceNames names each Surface's cluster label, in
@@ -308,12 +309,15 @@ func writeSegs(out *strings.Builder, th theme.Theme, segs []rowSeg) {
 // practice (BACKLOG #62: every word here comes from a Surface name,
 // a GrammarKeys binding, a theme glyph, or the message the bridge
 // delivered, never a literal that binding or state could drift from).
+// A showing toast (sl.Toast.Active) takes over the right segment
+// instead (rightSegments): the sync state compresses to its bare word
+// beside it, or yields entirely below widthStandardMin.
 func renderStatusLine(sl StatusLine, th theme.Theme, width int, dropTotal bool) string {
 	leftSegs := clusterSegs(sl.Active)
 	leftWidth := ansi.StringWidth(segsPlainText(leftSegs))
 	budget := max(0, width-leftWidth-theme.PadBand)
 
-	rightSegs := fitRightSegments(th, sl, dropTotal, budget)
+	rightSegs := rightSegments(th, sl, dropTotal, width, budget)
 	rightWidth := ansi.StringWidth(segsPlainText(rightSegs))
 
 	gap := max(0, width-leftWidth-rightWidth-theme.PadBand)

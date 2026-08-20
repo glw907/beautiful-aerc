@@ -45,11 +45,16 @@ var galleryProfiles = []galleryProfile{
 // galleryCase pairs one fixture with the size points it renders
 // distinctly at, and (rarely) a narrowed profile list: a nil
 // narrowProfiles means every galleryProfiles entry, this type's own
-// profiles method's default.
+// profiles method's default. stackTop renders the fixture's own
+// View() directly, bypassing ui.Render entirely: the same branch
+// App.View takes for a screen pushed onto its stack (the 5a ruling),
+// Confirm's own case, since a modal owns the whole terminal itself
+// rather than landing in a named LayoutMode pane.
 type galleryCase struct {
 	fixture        fixtures.Fixture
 	sizes          []gallerySize
 	narrowProfiles []galleryProfile
+	stackTop       bool
 }
 
 // profiles returns c's own narrowed profile list, or every
@@ -80,6 +85,12 @@ func (c galleryCase) profiles() []galleryProfile {
 // rendering path of its own.
 var syncStateProfiles = []galleryProfile{galleryProfiles[0], galleryProfiles[3]}
 
+// chromeStateProfiles narrows task 8's own toast, banner, and modal
+// fixtures to truecolor dark and NO_COLOR, the same pairing
+// syncStateProfiles uses: the content pane beneath them never varies,
+// and ANSI-16 adds no distinct rendering path of its own.
+var chromeStateProfiles = syncStateProfiles
+
 var galleryCases = []galleryCase{
 	{fixture: fixtures.Mail, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
 	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
@@ -89,6 +100,9 @@ var galleryCases = []galleryCase{
 	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}, {100, 16}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.MailOffline, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
+	{fixture: fixtures.MailToast, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
+	{fixture: fixtures.MailBanner, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
+	{fixture: fixtures.ModalConfirm, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles, stackTop: true},
 	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}}},
 	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}}},
 	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}}},
@@ -117,7 +131,7 @@ func TestGallery(t *testing.T) {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
 				expected[name+".txt"] = true
 				t.Run(name, func(t *testing.T) {
-					got := galleryRender(c.fixture, sz, p.theme)
+					got := galleryRender(c, sz, p.theme)
 					checkGallery(t, name, got, *update)
 				})
 			}
@@ -126,13 +140,19 @@ func TestGallery(t *testing.T) {
 	checkNoOrphans(t, expected)
 }
 
-// galleryRender renders fixture at sz through the seam, themed th.
-func galleryRender(fixture fixtures.Fixture, sz gallerySize, th theme.Theme) string {
-	lm := ui.ComputeLayout(sz.width, sz.height, false)
-	screen := fixture.Build(th)
+// galleryRender renders c's own fixture at sz through the seam,
+// themed th: ui.Render's ordinary chrome compositing, or, when
+// c.stackTop is set, the fixture's own View() directly (the same
+// branch App.View takes for a stacked screen).
+func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
+	lm := ui.ComputeLayout(sz.width, sz.height, c.fixture.Banner.Active)
+	screen := c.fixture.Build(th)
 	updated, _ := screen.Update(ui.LayoutMsg{Layout: lm})
 	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
-	return ui.Render(scr, lm, th, fixture.Status).Content
+	if c.stackTop {
+		return scr.View().Content
+	}
+	return ui.Render(scr, lm, th, c.fixture.Status, c.fixture.Banner).Content
 }
 
 // checkGallery compares got against testdata/gallery/<name>.txt,

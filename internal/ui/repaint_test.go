@@ -118,7 +118,7 @@ func sweepGallery() map[string]string {
 		for _, sz := range c.sizes {
 			for _, p := range c.profiles() {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
-				out[name] = galleryRender(c.fixture, sz, p.theme)
+				out[name] = galleryRender(c, sz, p.theme)
 			}
 		}
 	}

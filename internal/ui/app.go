@@ -49,6 +49,7 @@ type App struct {
 	stack  []Screen
 	layout LayoutMode
 	wheel  wheelGesture
+	banner Banner
 
 	sync           SyncStateMsg
 	backfill       BackfillProgressMsg
@@ -56,6 +57,11 @@ type App struct {
 	spinnerFrame   int
 	spinnerGen     int
 	spinnerTicking bool
+
+	toastOffer     UndoOffer
+	toastActive    bool
+	toastRemaining int
+	toastGen       int
 
 	mail     MailPlaceholder
 	calendar CalendarPlaceholder
@@ -90,7 +96,7 @@ func (a App) Init() tea.Cmd {
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		a.layout = ComputeLayout(msg.Width, msg.Height, false)
+		a.layout = ComputeLayout(msg.Width, msg.Height, a.banner.Active)
 		return a.updateChildren(LayoutMsg{Layout: a.layout})
 	case BackgroundColorTimeoutMsg:
 		// DefaultDark already governs every frame rendered so far; an
@@ -121,21 +127,29 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case statusSpinnerTickMsg:
 		return a.tickSpinner(msg)
+	case ToastMsg:
+		return a.showToast(msg)
+	case toastTickMsg:
+		return a.tickToast(msg)
+	case BannerMsg:
+		a.banner = Banner{Active: true, Message: msg.Message}
+		a = a.recomputeLayout()
+		return a.updateChildren(LayoutMsg{Layout: a.layout})
 	}
 	return a.updateChildren(msg)
 }
 
 // View implements tea.Model. It renders the top of the screen stack
-// directly when one is pushed (the minimal correct behavior until
-// task 8 adds compositing the dimmed surface behind a stacked
-// screen); otherwise it runs the active surface through Render, the
-// same seam the gallery renders through, so the product never drifts
-// from what the gallery pins.
+// directly when one is pushed (the 5a ruling: a plain stack-top
+// render, no dimmed backdrop behind it this pass); otherwise it runs
+// the active surface through Render, the same seam the gallery
+// renders through, so the product never drifts from what the gallery
+// pins.
 func (a App) View() tea.View {
 	if len(a.stack) > 0 {
 		return a.stack[len(a.stack)-1].View()
 	}
-	frame := Render(a.activeScreen(), a.layout, a.theme, a.statusLine())
+	frame := Render(a.activeScreen(), a.layout, a.theme, a.statusLine(), a.banner)
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
 	return view
@@ -151,7 +165,29 @@ func (a App) statusLine() StatusLine {
 		Backfill: a.backfill,
 		Outbox:   a.outbox,
 		Spinner:  a.spinnerFrame,
+		Toast:    a.toast(),
 	}
+}
+
+// toast builds the status line's own Toast value from a's undo-offer
+// state: a zero Toast (Active false) once no offer is open, otherwise
+// its label and the countdown's own current remaining seconds.
+func (a App) toast() Toast {
+	if !a.toastActive {
+		return Toast{}
+	}
+	return Toast{Active: true, Label: a.toastOffer.Label, Remaining: a.toastRemaining}
+}
+
+// recomputeLayout rebuilds a.layout from its own current Width/Height
+// with a.banner's current Active state (ComputeLayout's bannerRow
+// input): the route back to a correct BannerRow after a banner shows
+// or dismisses between tea.WindowSizeMsg events, since ComputeLayout
+// is a pure function of all three inputs together, never incrementally
+// patched.
+func (a App) recomputeLayout() App {
+	a.layout = ComputeLayout(a.layout.Width, a.layout.Height, a.banner.Active)
+	return a
 }
 
 // statusSpinnerInterval is the sync segment's own spinner cadence:
@@ -207,27 +243,102 @@ func armSpinnerTick(gen int) tea.Cmd {
 	})
 }
 
+// toastTickMsg is the toast countdown's own tick (UX-9), armed once
+// per open window and mirroring statusSpinnerTickMsg's own gen
+// convention: gen names which window it belongs to, so a tick from a
+// window a newer toast already replaced, or quit already discarded,
+// is recognizable and ignored.
+type toastTickMsg struct {
+	gen int
+}
+
+// showToast absorbs a ToastMsg: newest wins over a toast already
+// showing (design decision 1), and every toast logs exactly one ER-1
+// line through the same seam app.go's own background-color timeout
+// line reaches (a plain slog call, routed to uerr's destination once
+// cmd/poplar's startup path installs it as slog's default). The
+// countdown starts at undoWindowSeconds-1, the pinned exemplar's own
+// dim "9s".
+func (a App) showToast(msg ToastMsg) (App, tea.Cmd) {
+	slog.Info("toast shown", "label", msg.Offer.Label)
+	a.toastGen++
+	a.toastOffer = msg.Offer
+	a.toastActive = true
+	a.toastRemaining = undoWindowSeconds - 1
+	return a, armToastTick(a.toastGen)
+}
+
+// tickToast absorbs one toastTickMsg: a stale tick (msg.gen no longer
+// matches a.toastGen) is silently ignored; otherwise the countdown
+// steps down one second, closing the window at zero (UX-9's own 10s
+// visible countdown) rather than arming a further tick.
+func (a App) tickToast(msg toastTickMsg) (tea.Model, tea.Cmd) {
+	if !a.toastActive || msg.gen != a.toastGen {
+		return a, nil
+	}
+	if a.toastRemaining == 0 {
+		a.toastActive = false
+		return a, nil
+	}
+	a.toastRemaining--
+	return a, armToastTick(a.toastGen)
+}
+
+// armToastTick returns the Cmd that ticks gen's countdown after one
+// second.
+func armToastTick(gen int) tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return toastTickMsg{gen: gen}
+	})
+}
+
 // handleKey applies the interaction grammar's back/quit/surface-switch
 // precedence (design language section 2) before anything else sees
-// the key: Esc always pops the stack first (or no-ops at a surface
-// root, this pass); a digit switches surfaces only when the state
-// currently in front (the stack's top, or the active surface's own
-// root state when the stack is empty) is StateDigitsSwitch, so a
-// modal on the stack answers or eats a digit instead (UX-4's
-// acceptance criterion); q quits only at a surface root; anything
-// else at a surface root reaches the active screen's own Update.
+// the key: a modal confirm on the stack answers or no-ops a key
+// itself, ahead of every other rule; Esc dismisses a showing banner
+// before acting as back, unless the front context is text entry
+// (design decision 2: a banner never steals focus); Esc otherwise
+// pops the stack (or no-ops at a surface root, this pass); `u` inside
+// an open UX-9 undo window emits the offer's Cmd; a digit switches
+// surfaces only when the state currently in front (the stack's top,
+// or the active surface's own root state when the stack is empty) is
+// StateDigitsSwitch, so a modal on the stack eats a digit instead
+// (UX-4's acceptance criterion); q quits only at a surface root and
+// discards any open undo window (UX-9: the window does not survive
+// quit); anything else at a surface root reaches the active screen's
+// own Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	front := a.activeScreen().Entry()
+	if len(a.stack) > 0 {
+		front = a.stack[len(a.stack)-1].Entry()
+		if c, ok := a.stack[len(a.stack)-1].(Confirm); ok {
+			next, answered := c.answer(msg)
+			if !answered {
+				return a, nil
+			}
+			a.stack = a.stack[:len(a.stack)-1]
+			return a, next
+		}
+	}
+
 	if key.Matches(msg, GrammarKeys.Back) {
+		if a.banner.Active && front.SwitchState != StatePrintableEntry {
+			a.banner.Active = false
+			a = a.recomputeLayout()
+			return a.updateChildren(LayoutMsg{Layout: a.layout})
+		}
 		if len(a.stack) > 0 {
 			a.stack = a.stack[:len(a.stack)-1]
 		}
 		return a, nil
 	}
 
-	front := a.activeScreen().Entry()
-	if len(a.stack) > 0 {
-		front = a.stack[len(a.stack)-1].Entry()
+	if a.toastActive && key.Matches(msg, GrammarKeys.Undo) {
+		undo := a.toastOffer.Undo
+		a.toastActive = false
+		return a, undo
 	}
+
 	if s, ok := matchDigit(msg, front.SwitchState); ok {
 		a.active.Set(a.account, s)
 		return a, nil
@@ -235,6 +346,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if len(a.stack) == 0 {
 		if key.Matches(msg, GrammarKeys.Quit) {
+			a.toastActive = false
 			return a, tea.Quit
 		}
 		return a.updateActive(msg)

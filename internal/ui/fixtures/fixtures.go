@@ -29,14 +29,16 @@ var (
 
 // Fixture is one named, deterministic screen: a Build closure over
 // facts pinned in this package, plus the status line's own state
-// (task 6) the render seam paints into the top band alongside it.
-// Status defaults to its zero value, SurfaceMail active and synced,
-// so every fixture that does not name a sync state renders the same
-// idle band F1 pins.
+// (task 6) and the banner state (task 8) the render seam paints into
+// the top bands alongside it. Status and Banner both default to their
+// zero values, SurfaceMail active and synced with no banner showing,
+// so every fixture that does not name either renders the same idle
+// band F1 pins.
 type Fixture struct {
 	Name   string
 	Build  func(th theme.Theme) ui.Screen
 	Status ui.StatusLine
+	Banner ui.Banner
 }
 
 // The pass-2 screen-state fixtures: the four surface placeholders
@@ -52,6 +54,9 @@ var (
 	MailSyncing    = Fixture{Name: "mail-syncing", Build: mailBuild, Status: syncingStatus}
 	MailOffline    = Fixture{Name: "mail-offline", Build: mailBuild, Status: offlineStatus}
 	MailBackingOff = Fixture{Name: "mail-backing-off", Build: mailBuild, Status: backingOffStatus}
+	MailToast      = Fixture{Name: "mail-toast", Build: mailBuild, Status: toastStatus}
+	MailBanner     = Fixture{Name: "mail-banner", Build: mailBuild, Banner: bannerState}
+	ModalConfirm   = Fixture{Name: "modal-confirm", Build: confirmBuild}
 	Calendar       = Fixture{Name: "calendar", Build: calendarBuild, Status: ui.StatusLine{Active: ui.SurfaceCalendar}}
 	Contacts       = Fixture{Name: "contacts", Build: contactsBuild, Status: ui.StatusLine{Active: ui.SurfaceContacts}}
 	Config         = Fixture{Name: "config", Build: configBuild, Status: ui.StatusLine{Active: ui.SurfaceConfig}}
@@ -69,6 +74,15 @@ var (
 	offlineStatus    = ui.StatusLine{Sync: ui.SyncStateMsg{State: ui.SyncStateOffline}}
 	backingOffStatus = ui.StatusLine{Sync: ui.SyncStateMsg{State: ui.SyncStateBackingOff, Retry: 12}}
 )
+
+// toastStatus pins task 8's own toast fixture: the UX-9 undo
+// presentation mid-countdown, over an otherwise-idle synced band.
+var toastStatus = ui.StatusLine{Toast: ui.Toast{Active: true, Label: "3 messages archived", Remaining: 9}}
+
+// bannerState pins task 8's own banner fixture: the design language's
+// pinned exemplar copy (banner_strip), a warning with no keyring
+// backing the credential store.
+var bannerState = ui.Banner{Active: true, Message: "No keyring found, so your token is stored in a plain file."}
 
 // mailStats is the mail placeholder fixture's pinned store facts:
 // zero, matching a freshly opened, unsynced storetest pool exactly,
@@ -107,6 +121,19 @@ func contactsBuild(th theme.Theme) ui.Screen {
 
 func configBuild(th theme.Theme) ui.Screen {
 	return themed(ui.ConfigPlaceholder{}, th)
+}
+
+// confirmBuild pins task 8's own modal fixture: the design language's
+// pinned exemplar copy (modal()), a quit confirm over unsent
+// messages. YesCmd/NoCmd stay nil; the gallery renders Confirm's own
+// composition, not its answer behavior.
+func confirmBuild(th theme.Theme) ui.Screen {
+	return themed(ui.Confirm{
+		Question:    "Quit with 2 unsent messages?",
+		Consequence: "They'll send the next time you open poplar.",
+		YesLabel:    "quit",
+		NoLabel:     "stay",
+	}, th)
 }
 
 // themed applies a ThemeMsg to a placeholder that carries no facts of

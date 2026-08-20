@@ -331,7 +331,7 @@ func TestApp_ViewMatchesRenderSeam(t *testing.T) {
 	updated, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app = mustApp(t, updated)
 
-	want := Render(app.activeScreen(), app.layout, app.theme, app.statusLine()).Content
+	want := Render(app.activeScreen(), app.layout, app.theme, app.statusLine(), app.banner).Content
 	if got := app.View().Content; got != want {
 		t.Errorf("App.View().Content = %q, want Render(...)'s own content %q", got, want)
 	}

@@ -28,8 +28,8 @@ func TestRender_Purity(t *testing.T) {
 	lm := ComputeLayout(100, 30, false)
 	m := renderTestScreen(t, th, lm)
 
-	a := Render(m, lm, th, StatusLine{})
-	b := Render(m, lm, th, StatusLine{})
+	a := Render(m, lm, th, StatusLine{}, Banner{})
+	b := Render(m, lm, th, StatusLine{}, Banner{})
 	if a != b {
 		t.Error("Render is not pure: two calls with identical inputs diverged")
 	}
@@ -44,7 +44,7 @@ func TestRender_FloorStateReturnsScreenViewVerbatim(t *testing.T) {
 	lm := ComputeLayout(40, 10, false)
 	m := renderTestScreen(t, th, lm)
 
-	got := Render(m, lm, th, StatusLine{})
+	got := Render(m, lm, th, StatusLine{}, Banner{})
 	view := m.View()
 	if got.Content != view.Content {
 		t.Errorf("floor render content = %q, want screen.View().Content verbatim %q", got.Content, view.Content)
@@ -75,7 +75,7 @@ func TestRender_CoversEveryRow(t *testing.T) {
 				th := theme.New(true, p)
 				lm := ComputeLayout(sz.w, sz.h, banner)
 				m := renderTestScreen(t, th, lm)
-				got := Render(m, lm, th, StatusLine{})
+				got := Render(m, lm, th, StatusLine{}, Banner{})
 
 				if lines := strings.Split(got.Content, "\n"); len(lines) != sz.h {
 					t.Errorf("%dx%d banner=%v profile=%v: %d rows, want %d", sz.w, sz.h, banner, p, len(lines), sz.h)
@@ -99,7 +99,7 @@ func TestRender_TrueColorRowsFillTheirWidth(t *testing.T) {
 		for _, banner := range []bool{false, true} {
 			lm := ComputeLayout(sz.w, sz.h, banner)
 			m := renderTestScreen(t, th, lm)
-			got := Render(m, lm, th, StatusLine{})
+			got := Render(m, lm, th, StatusLine{}, Banner{})
 
 			for y, line := range strings.Split(got.Content, "\n") {
 				if w := ansi.StringWidth(line); w != sz.w {
@@ -140,14 +140,14 @@ func TestRender_DividerDegradeSubstitution(t *testing.T) {
 
 	trueColor := theme.New(true, theme.ProfileTrueColor)
 	m := renderTestScreen(t, trueColor, lm)
-	row := strings.Split(Render(m, lm, trueColor, StatusLine{}).Content, "\n")[glyphRow]
+	row := strings.Split(Render(m, lm, trueColor, StatusLine{}, Banner{}).Content, "\n")[glyphRow]
 	if got := columnAt(t, row, degradeDivider.X); got == []rune(trueColor.Glyphs().Divider)[0] {
 		t.Errorf("true-color row %d column %d = %q, want the gutter left blank", glyphRow, degradeDivider.X, got)
 	}
 
 	ansi16 := theme.New(true, theme.ProfileANSI16)
 	m = renderTestScreen(t, ansi16, lm)
-	row = strings.Split(Render(m, lm, ansi16, StatusLine{}).Content, "\n")[glyphRow]
+	row = strings.Split(Render(m, lm, ansi16, StatusLine{}, Banner{}).Content, "\n")[glyphRow]
 	want := []rune(ansi16.Glyphs().Divider)[0]
 	if got := columnAt(t, row, degradeDivider.X); got != want {
 		t.Errorf("ANSI-16 row %d column %d = %q, want the divider glyph %q", glyphRow, degradeDivider.X, got, want)
