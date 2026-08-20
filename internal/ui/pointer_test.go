@@ -5,71 +5,102 @@ import (
 	"testing"
 )
 
-func TestCheckPointerGrammar_LegalBindingPasses(t *testing.T) {
+// TestCheckPointerGrammar exercises checkPointerGrammar against
+// ADR-0017's pointer vocabulary.
+func TestCheckPointerGrammar(t *testing.T) {
 	openMsg := bind("enter", "enter", "open")
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(openMsg),
-		SwitchState: StateDigitsSwitch,
-		Pointer: []PointerBinding{
-			{Target: PointerRowOpen, Key: openMsg},
-		},
-	}
-
-	if got := CheckPointerGrammar([]ScreenEntry{entry}); len(got) != 0 {
-		t.Errorf("CheckPointerGrammar on a legal binding = %v, want none", got)
-	}
-}
-
-func TestCheckPointerGrammar_AbsentVerbFails(t *testing.T) {
-	// The screen's keymap never binds "enter"; the pointer target
-	// names a verb the screen does not itself offer.
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(bind("q", "q", "quit")),
-		SwitchState: StateDigitsSwitch,
-		Pointer: []PointerBinding{
-			{Target: PointerRowOpen, Key: bind("enter", "enter", "open")},
-		},
-	}
-
-	got := CheckPointerGrammar([]ScreenEntry{entry})
-	if len(got) != 1 {
-		t.Fatalf("CheckPointerGrammar with an absent verb = %v, want exactly one violation", got)
-	}
-}
-
-func TestCheckPointerGrammar_IllegalStateFails(t *testing.T) {
-	// A surface-digit click only switches surfaces in
-	// StateDigitsSwitch (ADR-0017); a modal claiming it is illegal.
 	digitSwitch := bind("1", "1-4", "surface switch")
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(digitSwitch),
-		SwitchState: StateModal,
-		Pointer: []PointerBinding{
-			{Target: PointerSurfaceDigit, Key: digitSwitch},
+	yes := bind("y", "y", "yes")
+
+	tests := []struct {
+		name    string
+		entry   ScreenEntry
+		wantLen int
+	}{
+		{
+			name: "legal binding passes",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(openMsg),
+				SwitchState: StateDigitsSwitch,
+				Pointer:     []PointerBinding{{Target: PointerRowOpen, Key: openMsg}},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "verb absent from the screen's own keymap fails",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("q", "q", "quit")), // never binds "enter"/"open"
+				SwitchState: StateDigitsSwitch,
+				Pointer:     []PointerBinding{{Target: PointerRowOpen, Key: openMsg}},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "surface-digit click illegal outside StateDigitsSwitch (ADR-0017)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(digitSwitch),
+				SwitchState: StateModal,
+				Pointer:     []PointerBinding{{Target: PointerSurfaceDigit, Key: digitSwitch}},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "modal answer legal only in StateModal",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(yes),
+				SwitchState: StateModal,
+				Pointer:     []PointerBinding{{Target: PointerModalAnswer, Key: yes}},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "pane click illegal in a modal (M14)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("tab", "tab", "focus pane")),
+				SwitchState: StateModal,
+				Pointer:     []PointerBinding{{Target: PointerPane, Key: bind("tab", "tab", "focus pane")}},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "wheel legal in a picker's filtered list, not only digits-switch (M15)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("j", "j/k", "navigate")),
+				SwitchState: StatePrintableEntry,
+				Pointer:     []PointerBinding{{Target: PointerWheel, Key: bind("j", "j/k", "navigate")}},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "drag-in-reader select target legal in StateDigitsSwitch (M16)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("y", "y", "yank")),
+				SwitchState: StateDigitsSwitch,
+				Pointer:     []PointerBinding{{Target: PointerDragSelect, Key: bind("y", "y", "yank")}},
+			},
+			wantLen: 0,
 		},
 	}
 
-	got := CheckPointerGrammar([]ScreenEntry{entry})
-	if len(got) != 1 {
-		t.Fatalf("CheckPointerGrammar with an illegal-state target = %v, want exactly one violation", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := checkPointerGrammar([]ScreenEntry{tt.entry}); len(got) != tt.wantLen {
+				t.Errorf("checkPointerGrammar() = %v, want %d violation(s)", got, tt.wantLen)
+			}
+		})
 	}
 }
 
-func TestCheckPointerGrammar_ModalAnswerLegalOnlyInModal(t *testing.T) {
-	yes := bind("y", "y", "yes")
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(yes),
-		SwitchState: StateModal,
-		Pointer: []PointerBinding{
-			{Target: PointerModalAnswer, Key: yes},
-		},
-	}
-
-	if got := CheckPointerGrammar([]ScreenEntry{entry}); len(got) != 0 {
-		t.Errorf("CheckPointerGrammar for a modal answer inside a modal = %v, want none", got)
+// TestCheckPointerGrammar_LiveRegistry is CR1's live check.
+func TestCheckPointerGrammar_LiveRegistry(t *testing.T) {
+	if got := checkPointerGrammar(Registered()); len(got) != 0 {
+		t.Errorf("checkPointerGrammar(Registered()) = %v, want none", got)
 	}
 }

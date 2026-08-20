@@ -7,200 +7,317 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// grammarTable is the interaction grammar's canonical key-to-verb
-// mapping (design language, 2026-07-27, section 2), transcribed as
-// test data: the global verb table, the triage verb set (identical
-// from list, thread view, and reader per LT-2), the folder-jump
-// capitals, calendar's `t`, and thread fold/unfold. CheckGrammar
-// checks every registered, non-exempt screen's bindings against it.
-var grammarTable = map[string]key.Binding{
-	// The global verb table.
-	"j":     bind("j", "j/k", "navigate"),
-	"k":     bind("k", "j/k", "navigate"),
-	"down":  bind("down", "j/k", "navigate"),
-	"up":    bind("up", "j/k", "navigate"),
-	"space": bind("space", "space/b", "page"),
-	"b":     bind("b", "space/b", "page"),
-	"home":  bind("home", "home/end", "extremes"),
-	"end":   bind("end", "home/end", "extremes"),
-	"G":     bind("G", "home/end", "extremes"),
-	"enter": bind("enter", "enter", "open"),
-	"esc":   bind("esc", "esc", "back"),
-	"n":     bind("n", "n/p", "message step"),
-	"p":     bind("p", "n/p", "message step"),
-	"/":     bind("/", "/", "search"),
-	"g":     bind("g", "g", "goto"),
-	"tab":   bind("tab", "tab", "next unread"),
-	"x":     bind("x", "x", "select"),
-	";":     bind(";", ";", "select by"),
-	"u":     bind("u", "u", "undo"),
-	"?":     bind("?", "?", "help"),
-	"q":     bind("q", "q", "quit"),
-	"1":     bind("1", "1-4", "surface switch"),
-	"2":     bind("2", "1-4", "surface switch"),
-	"3":     bind("3", "1-4", "surface switch"),
-	"4":     bind("4", "1-4", "surface switch"),
+// TestCheckGrammar exercises checkGrammar against the interaction
+// grammar's non-contradiction rule (design language section 2).
+func TestCheckGrammar(t *testing.T) {
+	tests := []struct {
+		name    string
+		entry   ScreenEntry
+		wantLen int
+	}{
+		{
+			name: "conforming screen passes",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("j", "j/k", "navigate"), bind("q", "q", "quit")),
+				SwitchState: StateDigitsSwitch,
+			},
+			wantLen: 0,
+		},
+		{
+			name: "multi-key binding for one verb passes (CR3: verb identity, not whole-binding equality)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("j", "j/k/up/down", "navigate")),
+				SwitchState: StateDigitsSwitch,
+			},
+			wantLen: 0,
+		},
+		{
+			name: "absence is not contradiction (a calendar screen leaves the mail capitals unbound)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("t", "t", "today")),
+				SwitchState: StateDigitsSwitch,
+			},
+			wantLen: 0,
+		},
+		{
+			name: "contradicting binding fails",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("j", "j", "yank")), // j means navigate, not yank
+				SwitchState: StateDigitsSwitch,
+			},
+			wantLen: 1,
+		},
+		{
+			name: "disabled binding is not checked (CR4)",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(key.NewBinding(key.WithKeys("j"), key.WithHelp("j", "yank"), key.WithDisabled())),
+				SwitchState: StateDigitsSwitch,
+			},
+			wantLen: 0,
+		},
+		{
+			name: "modal confirm exemption",
+			entry: ScreenEntry{
+				Type:          reflect.TypeOf(struct{}{}),
+				Keys:          flatKeyMap(bind("y", "y", "yes")), // y means yank elsewhere; legal here
+				SwitchState:   StateModal,
+				GrammarExempt: GrammarExemptModalConfirm,
+			},
+			wantLen: 0,
+		},
+		{
+			name: "Catkin command-state exemption",
+			entry: ScreenEntry{
+				Type:          reflect.TypeOf(struct{}{}),
+				Keys:          flatKeyMap(bind("j", "j", "char right")), // Catkin's h/j/k/l are motion, not navigate
+				SwitchState:   StateDigitsSwitch,
+				GrammarExempt: GrammarExemptCatkinCommand,
+			},
+			wantLen: 0,
+		},
+		{
+			name: "an unrecognized exemption value is still checked (the list is exactly two)",
+			entry: ScreenEntry{
+				Type:          reflect.TypeOf(struct{}{}),
+				Keys:          flatKeyMap(bind("j", "j", "yank")),
+				SwitchState:   StateDigitsSwitch,
+				GrammarExempt: GrammarExemption(99),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "printable-entry screens are out of scope",
+			entry: ScreenEntry{
+				Type:        reflect.TypeOf(struct{}{}),
+				Keys:        flatKeyMap(bind("j", "j", "type the letter j")),
+				SwitchState: StatePrintableEntry,
+			},
+			wantLen: 0,
+		},
+	}
 
-	// The triage verb set (LT-2).
-	"a": bind("a", "a", "archive"),
-	"d": bind("d", "d", "delete"),
-	"*": bind("*", "*", "flag toggle"),
-	"e": bind("e", "e", "read toggle"),
-	"s": bind("s", "s", "move"),
-	"!": bind("!", "!", "junk toggle"),
-	"r": bind("r", "r/R", "reply"),
-	"R": bind("R", "r/R", "reply all"),
-	"f": bind("f", "f", "forward"),
-	"m": bind("m", "m", "compose"),
-	"y": bind("y", "y", "yank"),
-	"v": bind("v", "v", "attachments"),
-
-	// Mail-surface folder jumps (FO-2).
-	"I": bind("I", "I", "inbox"),
-	"D": bind("D", "D", "drafts"),
-	"S": bind("S", "S", "sent"),
-	"A": bind("A", "A", "archive folder"),
-	"J": bind("J", "J", "junk folder"),
-	"T": bind("T", "T", "trash"),
-
-	// Calendar-surface today jump.
-	"t": bind("t", "t", "today"),
-
-	// Thread fold/unfold in thread views.
-	"h": bind("h", "h/l", "thread fold"),
-	"l": bind("l", "h/l", "thread unfold"),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := checkGrammar([]ScreenEntry{tt.entry}); len(got) != tt.wantLen {
+				t.Errorf("checkGrammar() = %v, want %d violation(s)", got, tt.wantLen)
+			}
+		})
+	}
 }
 
-func TestCheckGrammar_ConformingScreenPasses(t *testing.T) {
+// TestCheckGrammar_ComposedFromGrammarKeys proves M9's claim: a
+// screen that composes its own bindings directly from GrammarKeys,
+// bundling several verbs under one screen keymap, never contradicts
+// itself.
+func TestCheckGrammar_ComposedFromGrammarKeys(t *testing.T) {
 	entry := ScreenEntry{
 		Type: reflect.TypeOf(struct{}{}),
 		Keys: flatKeyMap(
-			bind("j", "j/k", "navigate"),
-			bind("q", "q", "quit"),
+			GrammarKeys.Navigate, GrammarKeys.Open, GrammarKeys.Back,
+			GrammarKeys.Archive, GrammarKeys.Delete, GrammarKeys.Quit,
 		),
 		SwitchState: StateDigitsSwitch,
 	}
 
-	if got := CheckGrammar([]ScreenEntry{entry}, grammarTable); len(got) != 0 {
-		t.Errorf("CheckGrammar on a conforming screen = %v, want none", got)
+	if got := checkGrammar([]ScreenEntry{entry}); len(got) != 0 {
+		t.Errorf("checkGrammar() on bindings composed from GrammarKeys = %v, want none", got)
 	}
 }
 
-func TestCheckGrammar_AbsenceIsNotContradiction(t *testing.T) {
-	// A calendar screen leaves the mail folder capitals unbound; the
-	// grammar's own preamble states absence is not contradiction.
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(bind("t", "t", "today")),
-		SwitchState: StateDigitsSwitch,
-	}
-
-	if got := CheckGrammar([]ScreenEntry{entry}, grammarTable); len(got) != 0 {
-		t.Errorf("CheckGrammar on a screen that only binds a subset of the grammar = %v, want none", got)
+// TestCheckGrammar_LiveRegistry is CR1's live check: every currently
+// registered screen's bindings conform to the grammar. It is
+// vacuous until task 5 registers real screens, and live from then on.
+func TestCheckGrammar_LiveRegistry(t *testing.T) {
+	if got := checkGrammar(Registered()); len(got) != 0 {
+		t.Errorf("checkGrammar(Registered()) = %v, want none", got)
 	}
 }
 
-func TestCheckGrammar_ContradictingBindingFails(t *testing.T) {
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(bind("j", "j", "yank")), // j means navigate, not yank
-		SwitchState: StateDigitsSwitch,
-	}
+// grammarSectionTwoRows transcribes the design language's section 2
+// tables (2026-07-27) as test data: the global verb table, the
+// triage verb set (LT-2), the folder-jump capitals, calendar's `t`,
+// and thread fold/unfold. It is M9's authority: GrammarKeys must
+// carry exactly this key set and verb text.
+var grammarSectionTwoRows = []struct {
+	field key.Binding
+	keys  []string
+	desc  string
+}{
+	{GrammarKeys.Navigate, []string{"j", "k", "up", "down"}, "navigate"},
+	{GrammarKeys.Page, []string{"space", "b", "pgup", "pgdown"}, "page"},
+	{GrammarKeys.Extremes, []string{"home", "end", "G"}, "extremes"},
+	{GrammarKeys.Open, []string{"enter"}, "open"},
+	{GrammarKeys.Back, []string{"esc"}, "back"},
+	{GrammarKeys.MessageStep, []string{"n", "p"}, "message step"},
+	{GrammarKeys.Search, []string{"/"}, "search"},
+	{GrammarKeys.Goto, []string{"g"}, "goto"},
+	{GrammarKeys.NextUnread, []string{"tab"}, "next unread"},
+	{GrammarKeys.Select, []string{"x"}, "select"},
+	{GrammarKeys.SelectBy, []string{";"}, "select by"},
+	{GrammarKeys.Undo, []string{"u"}, "undo"},
+	{GrammarKeys.Help, []string{"?"}, "help"},
+	{GrammarKeys.Quit, []string{"q"}, "quit"},
+	{GrammarKeys.SurfaceSwitch, []string{"1", "2", "3", "4"}, "surface switch"},
 
-	got := CheckGrammar([]ScreenEntry{entry}, grammarTable)
-	if len(got) != 1 {
-		t.Fatalf("CheckGrammar on a contradicting binding = %v, want exactly one violation", got)
+	{GrammarKeys.Archive, []string{"a"}, "archive"},
+	{GrammarKeys.Delete, []string{"d"}, "delete"},
+	{GrammarKeys.FlagToggle, []string{"*"}, "flag toggle"},
+	{GrammarKeys.ReadToggle, []string{"e"}, "read toggle"},
+	{GrammarKeys.Move, []string{"s"}, "move"},
+	{GrammarKeys.JunkToggle, []string{"!"}, "junk toggle"},
+	{GrammarKeys.Reply, []string{"r"}, "reply"},
+	{GrammarKeys.ReplyAll, []string{"R"}, "reply all"},
+	{GrammarKeys.Forward, []string{"f"}, "forward"},
+	{GrammarKeys.Compose, []string{"m"}, "compose"},
+	{GrammarKeys.Yank, []string{"y"}, "yank"},
+	{GrammarKeys.Attachments, []string{"v"}, "attachments"},
+
+	{GrammarKeys.GotoInbox, []string{"I"}, "inbox"},
+	{GrammarKeys.GotoDrafts, []string{"D"}, "drafts"},
+	{GrammarKeys.GotoSent, []string{"S"}, "sent"},
+	{GrammarKeys.GotoArchive, []string{"A"}, "archive folder"},
+	{GrammarKeys.GotoJunk, []string{"J"}, "junk folder"},
+	{GrammarKeys.GotoTrash, []string{"T"}, "trash"},
+
+	{GrammarKeys.Today, []string{"t"}, "today"},
+
+	{GrammarKeys.ThreadFold, []string{"h"}, "thread fold"},
+	{GrammarKeys.ThreadUnfold, []string{"l"}, "thread unfold"},
+}
+
+func TestGrammarKeys_MatchesDesignLanguageSectionTwo(t *testing.T) {
+	for _, row := range grammarSectionTwoRows {
+		t.Run(row.desc, func(t *testing.T) {
+			if got := row.field.Help().Desc; got != row.desc {
+				t.Errorf("Desc = %q, want %q", got, row.desc)
+			}
+			if got := row.field.Keys(); !keySetEqual(got, row.keys) {
+				t.Errorf("Keys() = %v, want %v", got, row.keys)
+			}
+		})
+	}
+	if len(grammarSectionTwoRows) != len(GrammarKeys.fields()) {
+		t.Errorf("grammarSectionTwoRows has %d rows, GrammarKeys has %d fields; every field must be transcribed",
+			len(grammarSectionTwoRows), len(GrammarKeys.fields()))
 	}
 }
 
-func TestCheckGrammar_ModalConfirmExempt(t *testing.T) {
-	entry := ScreenEntry{
-		Type:          reflect.TypeOf(struct{}{}),
-		Keys:          flatKeyMap(bind("y", "y", "yes")), // y means yank elsewhere; legal here
-		SwitchState:   StateModal,
-		GrammarExempt: GrammarExemptModalConfirm,
+func keySetEqual(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
 	}
+	seen := make(map[string]bool, len(got))
+	for _, k := range got {
+		seen[k] = true
+	}
+	for _, k := range want {
+		if !seen[k] {
+			return false
+		}
+	}
+	return true
+}
 
-	if got := CheckGrammar([]ScreenEntry{entry}, grammarTable); len(got) != 0 {
-		t.Errorf("CheckGrammar on the modal-confirm exemption = %v, want none", got)
+// TestGrammarExemptions_IsExactlyTwo is M8: the exemption list is
+// closed at exactly the two named in design language section 2, the
+// modal confirm and Catkin's command state.
+func TestGrammarExemptions_IsExactlyTwo(t *testing.T) {
+	if len(grammarExemptions) != 2 {
+		t.Fatalf("grammarExemptions has %d entries, want exactly 2 (design language section 2)", len(grammarExemptions))
+	}
+	if !grammarExemptions[GrammarExemptModalConfirm] {
+		t.Error("grammarExemptions is missing GrammarExemptModalConfirm")
+	}
+	if !grammarExemptions[GrammarExemptCatkinCommand] {
+		t.Error("grammarExemptions is missing GrammarExemptCatkinCommand")
 	}
 }
 
-func TestCheckGrammar_CatkinCommandExempt(t *testing.T) {
-	entry := ScreenEntry{
-		Type:          reflect.TypeOf(struct{}{}),
-		Keys:          flatKeyMap(bind("j", "j", "char right")), // Catkin's h/j/k/l are motion, not navigate
-		SwitchState:   StateDigitsSwitch,
-		GrammarExempt: GrammarExemptCatkinCommand,
+// TestShortHelpWithinFullHelp exercises M11's registry-driven
+// assertion: ShortHelp is always a subset of FullHelp.
+func TestShortHelpWithinFullHelp(t *testing.T) {
+	navigate := bind("j", "j/k", "navigate")
+	openMsg := bind("enter", "enter", "open")
+
+	tests := []struct {
+		name    string
+		entry   ScreenEntry
+		wantLen int
+	}{
+		{
+			name: "ShortHelp subset of FullHelp passes",
+			entry: ScreenEntry{
+				Type: reflect.TypeOf(struct{}{}),
+				Keys: fakeKeyMap{
+					short: []key.Binding{navigate},
+					full:  [][]key.Binding{{navigate, openMsg}},
+				},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "ShortHelp binding absent from FullHelp fails",
+			entry: ScreenEntry{
+				Type: reflect.TypeOf(struct{}{}),
+				Keys: fakeKeyMap{
+					short: []key.Binding{navigate},
+					full:  [][]key.Binding{{openMsg}},
+				},
+			},
+			wantLen: 1,
+		},
 	}
 
-	if got := CheckGrammar([]ScreenEntry{entry}, grammarTable); len(got) != 0 {
-		t.Errorf("CheckGrammar on the Catkin command-state exemption = %v, want none", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shortHelpWithinFullHelp([]ScreenEntry{tt.entry}); len(got) != tt.wantLen {
+				t.Errorf("shortHelpWithinFullHelp() = %v, want %d violation(s)", got, tt.wantLen)
+			}
+		})
 	}
 }
 
-// TestCheckGrammar_UnrecognizedExemptionStillChecked proves the
-// exemption list is exactly two entries: a GrammarExemption value
-// outside the two named constants is not recognized, so a
-// contradicting binding under it is still reported.
-func TestCheckGrammar_UnrecognizedExemptionStillChecked(t *testing.T) {
-	entry := ScreenEntry{
-		Type:          reflect.TypeOf(struct{}{}),
-		Keys:          flatKeyMap(bind("j", "j", "yank")),
-		SwitchState:   StateDigitsSwitch,
-		GrammarExempt: GrammarExemption(99),
-	}
-
-	got := CheckGrammar([]ScreenEntry{entry}, grammarTable)
-	if len(got) != 1 {
-		t.Fatalf("CheckGrammar under an unrecognized exemption value = %v, want exactly one violation", got)
-	}
-}
-
-func TestCheckGrammar_PrintableEntryOutOfScope(t *testing.T) {
-	// The scope rule: text-entry states are governed by section 3,
-	// not the browse/command grammar, so a printable-entry screen is
-	// never checked even without claiming an exemption.
-	entry := ScreenEntry{
-		Type:        reflect.TypeOf(struct{}{}),
-		Keys:        flatKeyMap(bind("j", "j", "type the letter j")),
-		SwitchState: StatePrintableEntry,
-	}
-
-	if got := CheckGrammar([]ScreenEntry{entry}, grammarTable); len(got) != 0 {
-		t.Errorf("CheckGrammar on a printable-entry screen = %v, want none (out of scope)", got)
+// TestShortHelpWithinFullHelp_LiveRegistry is CR1's live check.
+func TestShortHelpWithinFullHelp_LiveRegistry(t *testing.T) {
+	if got := shortHelpWithinFullHelp(Registered()); len(got) != 0 {
+		t.Errorf("shortHelpWithinFullHelp(Registered()) = %v, want none", got)
 	}
 }
 
 func TestRegisterAndRegistered(t *testing.T) {
 	resetRegistry(t)
 
-	entry := ScreenEntry{
-		Type: reflect.TypeOf(struct{ x int }{}),
-		Keys: flatKeyMap(bind("q", "q", "quit")),
-	}
-	Register(entry)
+	Register[valueScreen](ScreenEntry{Keys: flatKeyMap(bind("q", "q", "quit"))})
 
 	got := Registered()
-	if len(got) != 1 || got[0].Type != entry.Type {
-		t.Fatalf("Registered() = %v, want one entry for %v", got, entry.Type)
+	want := reflect.TypeFor[valueScreen]()
+	if len(got) != 1 || got[0].Type != want {
+		t.Fatalf("Registered() = %v, want one entry for %v", got, want)
 	}
 
 	// Registered returns a copy: mutating it must not reach back into
 	// the package's own registered slice.
 	got[0] = ScreenEntry{}
-	if Registered()[0].Type != entry.Type {
+	if Registered()[0].Type != want {
 		t.Error("Registered() returned a slice aliasing the internal registry")
 	}
 }
 
-func TestRegisterPanicsOnNilType(t *testing.T) {
+// TestRegisterNormalizesPointerType is M13: a pointer-receiver
+// screen registers under its named type, not the pointer type.
+func TestRegisterNormalizesPointerType(t *testing.T) {
 	resetRegistry(t)
 
-	defer func() {
-		if recover() == nil {
-			t.Error("Register with a nil Type did not panic")
-		}
-	}()
-	Register(ScreenEntry{})
+	Register[*fakeScreen](ScreenEntry{})
+
+	got := Registered()
+	want := reflect.TypeFor[fakeScreen]()
+	if len(got) != 1 || got[0].Type != want {
+		t.Fatalf("Register[*fakeScreen] registered under %v, want %v", got, want)
+	}
 }

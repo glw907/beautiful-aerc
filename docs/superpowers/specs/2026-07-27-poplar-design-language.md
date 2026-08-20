@@ -198,41 +198,38 @@ one buffer-undo entry each.
 
 ## 4. The footer (UX-2)
 
-Alpine's mode-scoped key-hint footer, derived from the screen's
-registry entry so it cannot drift. At most two rows; hints are
-ordered grammar verbs first, then screen verbs, each as
-`key description` in two or three words. The footer renders the
-current text-entry state when one is active. The advertised
-navigation family is `j`/`k`, `Space`/`b`, and `Home`/`End` (one
-combined first/last hint).
+**One prioritized row** (decision 8, Geoff 2026-08-19, superseding
+the same-day distribute-across-width ruling and the earlier
+two-row, advertise-everything form; requirements revision 6 amends
+UX-2 to match). Each screen's registry entry carries a committed
+hint priority order, derived from the screen's own keymap so it
+cannot drift; the footer renders the width-maximal prefix of that
+order, each hint as `key description` in two or three words, joined
+by a three-cell gap (`gapHint`, section 7). `? help` is pinned right
+at every width, the constant pointer to the help overlay, which is
+the completeness surface: it lists every legal key regardless of
+what the footer's width-limited prefix shows. Width changes what
+the footer shows, never what is legal — the ladder principle applied
+to the footer's own row. The footer renders the current text-entry
+state when one is active, leading with the leave-field verb (`Esc
+commands`, section 3).
 
-The advertised-set exception list (UX-2 caps five, each with a
-committed reason):
-
-1. **Arrows, `PgUp`, `PgDn`, and `G`**: synonyms of the
-   advertised `j`/`k`, `Space`/`b`, and `End` bindings;
-   advertising both spellings doubles the footer for zero
-   information.
-2. **Digit surface keys `1`-`4`**: the active digit is advertised
-   permanently by the status line's compact cluster (section 6,
-   amended by pass 2 decision 1); the sibling digits are bare in
-   the cluster but named in the help overlay and on visit, which
-   the footer need not repeat.
-3. **`q` on non-root screens**: quit is advertised at surface
-   roots; elsewhere `Esc` is the way out and `q` retains its
-   root semantics.
-4. **The folder-jump capitals `I D S A J T`**: advertised inside
-   the goto picker (`g`) and the help overlay; six extra hints
-   would consume a footer row that teaches less than the picker
-   does.
-5. **The remote-image load key when the terminal lacks graphics
-   support**: the key is capability-gated (RD-6, technical
-   design section 16); where it would be a no-op it is neither
-   advertised nor legal, and the placeholder names
-   open-in-browser as the path.
-
-The list is closed; adding an entry requires amending this
-document (the registry test fails on an undocumented exception).
+A screen's committed priority order naturally omits some legal keys
+at every width a real terminal reaches, and that is by design, not
+an exception list to close: the active surface digit is advertised
+permanently by the status line's compact cluster (section 6, amended
+by pass 2 decision 1), so a screen's own priority list has no reason
+to spend a slot on `1`-`4`; `q` retains its root semantics and a
+non-root screen's priority list leads with `Esc` instead; the
+folder-jump capitals `I D S A J T` are taught by the goto picker
+(`g`) and the help overlay rather than by six footer slots; a
+capability-gated key (the remote-image load key when the terminal
+lacks graphics support, RD-6) is simply absent from the priority
+list on that terminal, since decision 8 already promises an absent
+key is never legal either. None of this needs its own registry rule:
+the UX-2 test's only mechanical claims are that the footer is always
+a legal prefix of the committed order, and that the help overlay's
+content is always the complete keymap.
 
 ## 5. Undo presentation (UX-9)
 
@@ -411,9 +408,12 @@ Task 3's fix round 1 adds `gapPane 2` (pane to neighboring pane),
 the same plan-defect class as the divider token (ruling M3,
 `docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`):
 LayoutMode's rail-clearance and list/reader gutter are both this
-role, not a locally reinvented literal. Markup-level literals are
-forbidden by the analyzer; a screen reaches spacing only through
-roles.
+role, not a locally reinvented literal. Task 4's fix round 1 adds
+`gapHint 3` (footer hint to its neighbor, and to the pinned help
+hint), the same plan-defect class again (ruling CR5, same plan
+doc): the footer's hint-spacing arithmetic is a spacing role, not a
+locally reinvented literal. Markup-level literals are forbidden by
+the analyzer; a screen reaches spacing only through roles.
 
 **Type roles**: `emTitle` (bold), `emLabel` (dim), `emValue`
 (normal), `emHint` (dim italic where supported, dim otherwise).
