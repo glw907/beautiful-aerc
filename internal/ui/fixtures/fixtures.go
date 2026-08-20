@@ -37,17 +37,18 @@ type Fixture struct {
 	Build func(th theme.Theme) ui.Screen
 }
 
-// The six pass-2 screen-state fixtures: the four surface
-// placeholders (F1/F8), and the floor and short-height layout edge
-// cases, both the mail placeholder rendered at a size that triggers
-// them.
+// The seven pass-2 screen-state fixtures: the four surface
+// placeholders (F1/F8), the floor and short-height layout edge cases
+// (both the mail placeholder rendered at a size that triggers them),
+// and MailLoaded, a second mail state with realistic pinned counts.
 var (
-	Mail     = Fixture{Name: "mail", Build: mailBuild}
-	Calendar = Fixture{Name: "calendar", Build: calendarBuild}
-	Contacts = Fixture{Name: "contacts", Build: contactsBuild}
-	Config   = Fixture{Name: "config", Build: configBuild}
-	Floor    = Fixture{Name: "floor", Build: mailBuild}
-	Short    = Fixture{Name: "short", Build: mailBuild}
+	Mail       = Fixture{Name: "mail", Build: mailBuild}
+	MailLoaded = Fixture{Name: "mail-loaded", Build: mailLoadedBuild}
+	Calendar   = Fixture{Name: "calendar", Build: calendarBuild}
+	Contacts   = Fixture{Name: "contacts", Build: contactsBuild}
+	Config     = Fixture{Name: "config", Build: configBuild}
+	Floor      = Fixture{Name: "floor", Build: mailBuild}
+	Short      = Fixture{Name: "short", Build: mailBuild}
 )
 
 // mailStats is the mail placeholder fixture's pinned store facts:
@@ -57,12 +58,24 @@ var (
 // gallery-committed file byte for byte.
 var mailStats = store.MailStats{Messages: 0, Mailboxes: 0}
 
+// mailLoadedStats is MailLoaded's own pinned store facts: a
+// realistic loaded account, not the empty one Mail pins, so the
+// gallery still commits at least one rendered instance of a grouped
+// count (decision 12's "36,102"-style anatomy, formatCount's own
+// reason to exist). Built without a store, the same NewMailPlaceholder
+// path Mail itself uses.
+var mailLoadedStats = store.MailStats{Messages: 36102, Mailboxes: 14}
+
 // calendarEvents is the calendar placeholder fixture's pinned event
 // count.
 const calendarEvents = 42
 
 func mailBuild(th theme.Theme) ui.Screen {
 	return ui.NewMailPlaceholder(th, mailStats)
+}
+
+func mailLoadedBuild(th theme.Theme) ui.Screen {
+	return ui.NewMailPlaceholder(th, mailLoadedStats)
 }
 
 func calendarBuild(th theme.Theme) ui.Screen {

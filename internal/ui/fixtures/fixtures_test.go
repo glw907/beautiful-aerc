@@ -50,7 +50,7 @@ func TestClockPinnedAgainstProcessTZ(t *testing.T) {
 // committed file off Name, so a collision would silently overwrite
 // one fixture's render with another's.
 func TestFixturesHaveDistinctNames(t *testing.T) {
-	all := []Fixture{Mail, Calendar, Contacts, Config, Floor, Short}
+	all := []Fixture{Mail, MailLoaded, Calendar, Contacts, Config, Floor, Short}
 	seen := make(map[string]bool)
 	for _, fx := range all {
 		if seen[fx.Name] {

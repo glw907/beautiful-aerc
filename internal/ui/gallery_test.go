@@ -42,24 +42,45 @@ var galleryProfiles = []galleryProfile{
 	{"nocolor", theme.New(true, theme.ProfileNoColor)},
 }
 
-// galleryCases pairs each fixture with the size points it renders
-// distinctly at: the four placeholders sweep a spartan and a
-// standard rung (the acceptance criterion's own 80×24 and 100×30);
-// Mail also sweeps the wide rung (150×26), the only size that
-// exercises PaneSplit's compositing path (degrade divider vs. blank
-// gutter), so that path lands in the gallery itself rather than a
-// second, separate golden mechanism. Floor and Short each pin the
-// one size that names their own layout state.
-var galleryCases = []struct {
-	fixture fixtures.Fixture
-	sizes   []gallerySize
-}{
-	{fixtures.Mail, []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
-	{fixtures.Calendar, []gallerySize{{80, 24}, {100, 30}}},
-	{fixtures.Contacts, []gallerySize{{80, 24}, {100, 30}}},
-	{fixtures.Config, []gallerySize{{80, 24}, {100, 30}}},
-	{fixtures.Floor, []gallerySize{{40, 10}}},
-	{fixtures.Short, []gallerySize{{100, 16}}},
+// galleryCase pairs one fixture with the size points it renders
+// distinctly at, and (rarely) a narrowed profile list: a nil
+// narrowProfiles means every galleryProfiles entry, this type's own
+// profiles method's default.
+type galleryCase struct {
+	fixture        fixtures.Fixture
+	sizes          []gallerySize
+	narrowProfiles []galleryProfile
+}
+
+// profiles returns c's own narrowed profile list, or every
+// galleryProfiles entry when c did not narrow it.
+func (c galleryCase) profiles() []galleryProfile {
+	if c.narrowProfiles != nil {
+		return c.narrowProfiles
+	}
+	return galleryProfiles
+}
+
+// galleryCases is the whole sweep: the four placeholders sweep a
+// spartan and a standard rung (the acceptance criterion's own 80×24
+// and 100×30); Mail also sweeps the wide rung (150×26), the only
+// size that exercises PaneSplit's compositing path (degrade divider
+// vs. blank gutter), so that path lands in the gallery itself rather
+// than a second, separate golden mechanism. Floor and Short each pin
+// the one size that names their own layout state. MailLoaded is a
+// second mail state, realistic pinned counts rather than Mail's
+// empty ones, so the gallery still commits at least one rendered
+// "36,102"-style grouped count (decision 12); a profile variant on
+// an already-swept fixture doesn't need the full four-profile matrix
+// again, so it sweeps only truecolor dark and light.
+var galleryCases = []galleryCase{
+	{fixture: fixtures.Mail, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
+	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
+	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}}},
+	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}}},
+	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}}},
+	{fixture: fixtures.Floor, sizes: []gallerySize{{40, 10}}},
+	{fixture: fixtures.Short, sizes: []gallerySize{{100, 16}}},
 }
 
 // update is the gallery's own regeneration flag: internal/ui's test
@@ -79,7 +100,7 @@ func TestGallery(t *testing.T) {
 	expected := make(map[string]bool)
 	for _, c := range galleryCases {
 		for _, sz := range c.sizes {
-			for _, p := range galleryProfiles {
+			for _, p := range c.profiles() {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
 				expected[name+".txt"] = true
 				t.Run(name, func(t *testing.T) {

@@ -110,13 +110,13 @@ func TestGallery_TwoSweepsByteIdentical(t *testing.T) {
 	}
 }
 
-// sweepGallery renders every galleryCases × galleryProfiles point
+// sweepGallery renders every galleryCases × its own profiles point
 // once, keyed by the same name checkGallery persists under.
 func sweepGallery() map[string]string {
 	out := make(map[string]string)
 	for _, c := range galleryCases {
 		for _, sz := range c.sizes {
-			for _, p := range galleryProfiles {
+			for _, p := range c.profiles() {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
 				out[name] = galleryRender(c.fixture, sz, p.theme)
 			}
