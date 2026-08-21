@@ -26,10 +26,16 @@ func rungIndex(t *testing.T, w, h int) int {
 // guard, cmd/sketch's side of it: computeFrame's own output, for
 // every fixture sketch cycles at a representative rung, is exactly
 // what ui.ComposeView returns computed independently from the same
-// fixture, the same active/stack split sketchStackFixtures records.
-// Reverting computeFrame to call ui.Render directly (dropping
-// ComposeView, so FullRegion and the modal/help stack treatment)
-// fails every case here.
+// fixture, the same f.Stack-driven active/stack split. Reverting
+// computeFrame to call ui.Render directly (dropping ComposeView, so
+// FullRegion and the modal/help stack treatment) fails every case
+// here. It does not, on its own, prove f.Stack itself is right for
+// each fixture (both sides read the same field here, so a wrong
+// value agrees with itself);
+// TestComposeView_MatchesFixtureEquivalentAppState in
+// internal/ui/compose_guard_test.go is what catches that, since its
+// App-driven half reaches modal-confirm's and help's stacked state
+// through real key presses, never through f.Stack.
 func TestComputeFrame_MatchesComposeView(t *testing.T) {
 	p := sketchProfiles[0]
 
@@ -56,7 +62,7 @@ func TestComputeFrame_MatchesComposeView(t *testing.T) {
 
 			var active ui.Screen
 			var stack []ui.Screen
-			if sketchStackFixtures[f.Name] {
+			if f.Stack {
 				stack = []ui.Screen{scr}
 			} else {
 				active = scr

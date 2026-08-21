@@ -26,33 +26,8 @@ import (
 )
 
 // sketchFixtures is every named screen state internal/ui/fixtures
-// exports, in the same order the gallery sweeps them.
-var sketchFixtures = []fixtures.Fixture{
-	fixtures.Mail,
-	fixtures.MailLoaded,
-	fixtures.MailSyncing,
-	fixtures.MailOffline,
-	fixtures.MailBackingOff,
-	fixtures.MailToast,
-	fixtures.MailBanner,
-	fixtures.ModalConfirm,
-	fixtures.Help,
-	fixtures.Calendar,
-	fixtures.Contacts,
-	fixtures.Config,
-	fixtures.Floor,
-	fixtures.Short,
-}
-
-// sketchStackFixtures names the fixtures ComposeView takes onto its
-// stack argument rather than its active one: the modal-confirm and
-// help-overlay fixtures, the two screens App pushes rather than
-// switches to. Every other fixture is the active surface with an
-// empty stack.
-var sketchStackFixtures = map[string]bool{
-	fixtures.ModalConfirm.Name: true,
-	fixtures.Help.Name:         true,
-}
+// exports (fixtures.All), in the same order the gallery sweeps them.
+var sketchFixtures = fixtures.All
 
 // sketchProfile pairs a profile's label with the Theme it resolves
 // to. ANSI-16 and NO_COLOR pin dark, matching the gallery's narrowing
@@ -189,11 +164,12 @@ func (m sketchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // computeFrame builds m's current fixture at its current profile and
 // rung, through ui.ComposeView, the same function App.View calls, and
 // returns the rendered frame with sketch's status line appended, plus
-// whatever Cmd the screen's LayoutMsg Update returned. A stack fixture
-// (sketchStackFixtures) lands on ComposeView's stack argument, active
-// left nil since ComposeView never consults it once stack is
-// non-empty; every other fixture is the active argument, stack left
-// nil.
+// whatever Cmd the screen's LayoutMsg Update returned. f.Stack (the
+// single source cmd/sketch, the equality guard, and gallery_test.go
+// all read) decides whether f lands on ComposeView's stack argument
+// (the modal-confirm and help fixtures) or its active one (every
+// other fixture); the argument not used is left nil, since
+// ComposeView never consults active once stack is non-empty.
 func (m sketchModel) computeFrame() (string, tea.Cmd) {
 	f := sketchFixtures[m.fixture]
 	p := sketchProfiles[m.profile]
@@ -205,7 +181,7 @@ func (m sketchModel) computeFrame() (string, tea.Cmd) {
 
 	var active ui.Screen
 	var stack []ui.Screen
-	if sketchStackFixtures[f.Name] {
+	if f.Stack {
 		stack = []ui.Screen{scr}
 	} else {
 		active = scr

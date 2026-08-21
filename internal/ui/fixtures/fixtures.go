@@ -21,12 +21,20 @@ import (
 // the top bands alongside it. Status and Banner both default to their
 // zero values, SurfaceMail active and synced with no banner showing,
 // so every fixture that does not name either renders the same idle
-// band F1 pins.
+// band F1 pins. Stack is pass 2c's addition (task 2's fix round): the
+// single source for whether the fixture is a screen App would push
+// onto its stack (ComposeView's stack argument) rather than switch
+// its active surface to (ComposeView's active argument). It is true
+// only for the modal-confirm and help fixtures, the two screens App
+// pushes rather than switches to. cmd/sketch, the equality guard, and
+// gallery_test.go's classification all read this field rather than
+// each keeping their own copy of which fixtures belong on a stack.
 type Fixture struct {
 	Name   string
 	Build  func(th theme.Theme) ui.Screen
 	Status ui.StatusLine
 	Banner ui.Banner
+	Stack  bool
 }
 
 // The pass-2 screen-state fixtures: the four surface placeholders
@@ -44,14 +52,25 @@ var (
 	MailBackingOff = Fixture{Name: "mail-backing-off", Build: mailBuild, Status: backingOffStatus}
 	MailToast      = Fixture{Name: "mail-toast", Build: mailBuild, Status: toastStatus}
 	MailBanner     = Fixture{Name: "mail-banner", Build: mailBuild, Banner: bannerState}
-	ModalConfirm   = Fixture{Name: "modal-confirm", Build: confirmBuild}
-	Help           = Fixture{Name: "help", Build: helpBuild}
+	ModalConfirm   = Fixture{Name: "modal-confirm", Build: confirmBuild, Stack: true}
+	Help           = Fixture{Name: "help", Build: helpBuild, Stack: true}
 	Calendar       = Fixture{Name: "calendar", Build: calendarBuild, Status: ui.StatusLine{Active: ui.SurfaceCalendar}}
 	Contacts       = Fixture{Name: "contacts", Build: contactsBuild, Status: ui.StatusLine{Active: ui.SurfaceContacts}}
 	Config         = Fixture{Name: "config", Build: configBuild, Status: ui.StatusLine{Active: ui.SurfaceConfig}}
 	Floor          = Fixture{Name: "floor", Build: mailBuild}
 	Short          = Fixture{Name: "short", Build: mailBuild}
 )
+
+// All is every fixture this package pins, in the order cmd/sketch
+// cycles them and the equality guard (internal/ui/compose_guard_test.go)
+// iterates them: the one list both read, rather than each keeping its
+// own hand-copied slice that could drift from this package's actual
+// set.
+var All = []Fixture{
+	Mail, MailLoaded, MailSyncing, MailOffline, MailBackingOff,
+	MailToast, MailBanner, ModalConfirm, Help, Calendar, Contacts,
+	Config, Floor, Short,
+}
 
 // syncingStatus, offlineStatus, and backingOffStatus pin the sync
 // segment's three non-idle SY-5 states (Mail's zero-value Status

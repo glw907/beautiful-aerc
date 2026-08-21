@@ -257,6 +257,57 @@ func TestGalleryCoversRegisteredScreens(t *testing.T) {
 	}
 }
 
+// isGalleryPlaceholder reports whether scr is one of pass 2's four
+// surface placeholders, mirroring internal/ui's own unexported
+// isPlaceholderScreen (unreachable from this external test package):
+// the fact TestGalleryCasesAgreeWithFixtureStack needs to tell a
+// placeholder's FullRegion (unrelated to the stack) from help's
+// FullRegion (because it is the stack top).
+func isGalleryPlaceholder(scr ui.Screen) bool {
+	switch scr.(type) {
+	case ui.MailPlaceholder, ui.CalendarPlaceholder, ui.ContactsPlaceholder, ui.ConfigPlaceholder:
+		return true
+	default:
+		return false
+	}
+}
+
+// TestGalleryCasesAgreeWithFixtureStack cross-checks galleryCases'
+// hand-set stackTop and fullRegion fields against
+// fixtures.Fixture.Stack, the single source cmd/sketch and the
+// equality guard (internal/ui/compose_guard_test.go) also read (fix
+// round 1's finding): a stackTop case's fixture must be on the stack
+// and its built screen must actually be StateModal; every other
+// FullRegion case's fixture must be on the stack exactly when its
+// built screen is not one of the four surface placeholders (Help's
+// case: FullRegion because it is the stack top, never because it is
+// a placeholder). Floor sets neither field, since it bypasses
+// FullRegion and the stack entirely, so it carries no expectation
+// here. This does not restructure galleryRender's own compositing,
+// only proves stackTop/fullRegion and Stack never drift apart.
+func TestGalleryCasesAgreeWithFixtureStack(t *testing.T) {
+	th := galleryProfiles[0].theme
+	for _, c := range galleryCases {
+		t.Run(c.fixture.Name, func(t *testing.T) {
+			if c.stackTop {
+				if !c.fixture.Stack {
+					t.Errorf("case sets stackTop but fixture.Stack is false")
+				}
+				if c.fixture.Build(th).Entry().SwitchState != ui.StateModal {
+					t.Errorf("case sets stackTop but the built screen's SwitchState is not StateModal")
+				}
+				return
+			}
+			if !c.fullRegion {
+				return
+			}
+			if placeholder := isGalleryPlaceholder(c.fixture.Build(th)); placeholder == c.fixture.Stack {
+				t.Errorf("fixture.Stack = %v but the built screen's placeholder-ness (%v) says the opposite", c.fixture.Stack, placeholder)
+			}
+		})
+	}
+}
+
 // galleryRender renders c's fixture at sz through the seam,
 // themed th: ui.Render's ordinary chrome compositing, c.fullRegion set
 // for a non-modal stacked screen's compositing, or, when
