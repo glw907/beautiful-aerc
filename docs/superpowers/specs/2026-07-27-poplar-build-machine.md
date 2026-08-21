@@ -369,6 +369,22 @@ restored):
    pointer checklist item per screen pass (section 5); and the
    live-account tagged suite, never in CI.
 
+`scripts/kitty-shot` and `scripts/gate-captures` sit in this same
+tier, on the far end from goldens: a real kitty window, not a
+terminal emulator library, captured as a PNG and an ANSI text dump
+per named step, with pointer input (click, wheel) delivered the same
+way a real terminal reports it. Goldens and teatest check text;
+tmux-check checks a scripted flow; this is the only medium that
+checks what the terminal actually paints, and the pass 2 gate found
+defects (ground bleed past a reset, a phantom rail in `cmd/sketch`,
+an ANSI-16 contrast failure) no other tier caught. It runs by hand on
+the gate platform like tmux-check, never in CI; the method, the full
+capture matrix, and how to re-shoot it are recorded at
+`docs/poplar/design/2026-08-21-pass-2-gate-captures/README.md`, and
+the `tui-visual-verify` skill is the mandatory companion for grading
+what it captures, since a passing capture only proves a claim about
+the screen, never that the screen looks right.
+
 The QA-10 artifacts close the loop as pass-6 gate outputs:
 `internal/ui` package documentation, the README, and the
 architecture map at 1.0 — named here so no pass ends with them

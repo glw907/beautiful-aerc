@@ -25,6 +25,10 @@ set -euo pipefail
 # instance lock on the real store; FASTMAIL_API_TOKEN is forwarded from
 # the caller's environment. -t light sets kitty's colors to the slate
 # light ground so poplar's background query picks the light theme.
+# The window forces background_opacity=1.0 regardless of the operator's
+# own kitty.conf: the pass 2 gate ran under a 0.95 opacity and measured
+# the light base ground at 217,219,224 against poplar's ratified
+# 228,231,236, a composited artifact of the terminal, not the product.
 
 outdir="${KITTY_SHOT_OUT:-captures/kitty-shot}"
 theme=dark
@@ -61,7 +65,8 @@ fi
 kitty --title "$title" --listen-on "$sock" \
   -o allow_remote_control=yes -o remember_window_size=no \
   -o initial_window_width="${cols}c" -o initial_window_height="${rows}c" \
-  -o enable_audio_bell=no -o window_padding_width=0 "${colors[@]}" \
+  -o enable_audio_bell=no -o window_padding_width=0 \
+  -o background_opacity=1.0 "${colors[@]}" \
   bash -c "$cmd; echo \"[kitty-shot] command exited \$?\"; sleep 600" >"$outdir/kitty.log" 2>&1 &
 kpid=$!
 trap 'kill $kpid 2>/dev/null || true' EXIT

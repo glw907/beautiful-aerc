@@ -4,10 +4,16 @@ set -euo pipefail
 # gate-captures runs the pass-gate capture matrix through kitty-shot:
 # the live shell in both themes across the rung boundaries with the
 # pointer vocabulary exercised by hand-equivalent xdotool events, every
-# sketch fixture in all four capability profiles, and the ratified
-# exemplar painted by the same kitty as the reference image. Output is
-# OUTDIR/<group>/<name>.png plus .ansi, and OUTDIR/manifest.txt listing
-# every capture with the state it claims to show, for the graders.
+# sketch fixture in all four capability profiles plus the ANSI-16 and
+# NO_COLOR degrade profiles again on a light kitty ground, and the
+# ratified exemplar painted by the same kitty as the reference image.
+# Output is OUTDIR/<group>/<name>.png plus .ansi, and
+# OUTDIR/manifest.txt listing every capture with the state it claims
+# to show, for the graders. Each claim is checked against the
+# capture's own screen before the run reports success: a claim names
+# an active surface (mail, calendar, contacts, config), help over one,
+# the floor, or none for a capture with no poplar screen at all, and a
+# mismatch fails the run naming the capture.
 #
 #   scripts/gate-captures [OUTDIR]    (default captures/gate)
 
@@ -17,6 +23,16 @@ out="$(cd "$out" && pwd)"
 shot=scripts/kitty-shot
 manifest="$out/manifest.txt"
 : >"$manifest"
+
+# claim writes one manifest line for NAME and records LABEL, the state
+# verify_captures expects that capture's own screen to show. LABEL is
+# mail, calendar, contacts, config, or floor; help:SURFACE for help
+# open over SURFACE; none for a capture with no poplar screen (the
+# shell after quit); or sketch:FIXTURE:PROFILE for a sketch capture,
+# checked against sketch's own status line rather than a poplar
+# screen. A manifest line without a bracketed label (the reference
+# group) is descriptive only and carries no check.
+claim() { echo "$1 [$2]: $3" >>"$manifest"; }
 note() { echo "$*" >>"$manifest"; }
 
 [ -x ./poplar ] || go build -o poplar ./cmd/poplar
@@ -24,39 +40,48 @@ go build -o "$out/sketch-bin" ./cmd/sketch
 
 # Live shell, one theme at a time. Each run starts at the wide rung
 # (Geoff's 150x45), walks every surface and help, then resizes down
-# through each boundary pair and the floor.
+# through the rung boundaries design language section 9 actually
+# names (columns 60/59, 100/99, 140/139; rows 15/14, 20/19) and the
+# floor, then a short spartan window where help overflows the region
+# so a wheel notch is a falsifiable claim rather than a no-op.
 for theme in dark light; do
   d="$out/live-$theme"
   note "## live-$theme: ./poplar, real account, kitty theme $theme"
-  note "mail-150x45: F1 mail placeholder, wide rung, after 6s settle"
-  note "help-150x45: F6 help over mail, two columns"
-  note "help-wheel-150x45: help after one wheel-down notch at cell 40,10"
-  note "calendar-150x45 contacts-150x45 config-150x45: digits 2 3 4 from mail root"
-  note "click-digit-2: pointer click on the status-line digit 2 from mail (expect Calendar active)"
-  note "click-help: pointer click on the footer's '? help' (expect help over Calendar)"
-  note "esc-back: Esc from help (expect Calendar root)"
-  note "mail-140x26 mail-139x26: wide/standard boundary pair"
-  note "mail-100x30 mail-99x30: standard/compact boundary pair"
-  note "mail-80x24 mail-79x24: compact/spartan boundary pair"
-  note "mail-60x24 mail-59x24: spartan/floor boundary pair (59 shows the floor notice)"
-  note "mail-100x20 mail-100x19: short-height boundary pair"
-  note "mail-100x15 mail-100x14: floor-height boundary pair"
-  note "help-80x24: F5 help single column"
-  note "quit-q: after q at mail root with empty outbox (expect the shell gone, shell prompt)"
+  claim mail-150x45 mail "F1 mail placeholder, wide rung, after 6s settle"
+  claim help-150x45 help:mail "F6 help over mail, two columns"
+  claim calendar-150x45 calendar "digit 2 from mail root"
+  claim contacts-150x45 contacts "digit 3 from mail root"
+  claim config-150x45 config "digit 4 from mail root"
+  claim click-digit-2 calendar "pointer click on the status-line digit 2 from mail"
+  claim click-help help:calendar "pointer click on the footer's '? help' from Calendar"
+  claim esc-back calendar "Esc from help"
+  claim mail-140x26 mail "wide/standard boundary pair, 140"
+  claim mail-139x26 mail "wide/standard boundary pair, 139"
+  claim mail-100x30 mail "standard/spartan boundary pair, 100"
+  claim mail-99x30 mail "standard/spartan boundary pair, 99"
+  claim mail-60x24 mail "spartan/floor boundary pair, 60"
+  claim mail-59x24 floor "spartan/floor boundary pair, 59, floor notice"
+  claim mail-100x20 mail "short-height boundary pair, 20"
+  claim mail-100x19 mail "short-height boundary pair, 19, chrome compresses"
+  claim mail-100x15 mail "floor-height boundary pair, 15"
+  claim mail-100x14 floor "floor-height boundary pair, 14, floor notice"
+  claim help-70x15 help:mail "help over a short spartan window, help exceeds the region"
+  claim help-wheel-70x15 help:mail "help-70x15 after one wheel-down notch at 35,7, so the scroll actually moves something"
+  claim help-80x24 help:mail "F5 help single column, the classic default"
+  claim quit-q none "q at mail root with empty outbox, expect the shell gone"
   KITTY_SHOT_OUT="$d" $shot -o "$d" -t "$theme" -s 150x45 \
     sleep:6 shot:mail-150x45 \
-    key:? shot:help-150x45 \
-    click:40,10 wheel:down shot:help-wheel-150x45 key:escape \
+    key:? shot:help-150x45 key:escape \
     key:2 shot:calendar-150x45 key:3 shot:contacts-150x45 key:4 shot:config-150x45 key:1 \
     click:11,1 shot:click-digit-2 \
     click:146,45 shot:click-help \
     key:escape shot:esc-back key:1 \
     resize:140x26 shot:mail-140x26 resize:139x26 shot:mail-139x26 \
     resize:100x30 shot:mail-100x30 resize:99x30 shot:mail-99x30 \
-    resize:80x24 shot:mail-80x24 resize:79x24 shot:mail-79x24 \
     resize:60x24 shot:mail-60x24 resize:59x24 shot:mail-59x24 \
     resize:100x20 shot:mail-100x20 resize:100x19 shot:mail-100x19 \
     resize:100x15 shot:mail-100x15 resize:100x14 shot:mail-100x14 \
+    resize:70x15 key:? shot:help-70x15 click:35,7 wheel:down shot:help-wheel-70x15 key:escape \
     resize:80x24 key:? shot:help-80x24 key:escape \
     key:q sleep:1 shot:quit-q
 done
@@ -72,7 +97,7 @@ steps=(sleep:2 key:s key:s key:s key:s key:s)   # rung index 5 = 100x30
 for p in "${profiles[@]}"; do
   for f in "${fixtures[@]}"; do
     steps+=("shot:$f-$p" key:n)
-    note "$f-$p: fixture $f, profile $p, 100x30"
+    claim "$f-$p" "sketch:$f:$p" "fixture $f, profile $p, 100x30"
   done
   steps+=(key:p)
 done
@@ -83,13 +108,35 @@ done
 steps+=(key:s key:s key:s key:s key:s key:s key:s key:s)
 for _ in $(seq 12); do steps+=(key:n); done
 steps+=(shot:floor-40x10-truecolor-dark key:s key:n shot:short-100x16-truecolor-dark)
-note "floor-40x10-truecolor-dark: fixture floor at 40x10 (floor notice)"
-note "short-100x16-truecolor-dark: fixture short at 100x16 (banner demotion at short height)"
+claim floor-40x10-truecolor-dark sketch:floor:truecolor-dark "fixture floor at 40x10, floor notice"
+claim short-100x16-truecolor-dark sketch:short:truecolor-dark "fixture short at 100x16, banner demotion at short height"
 KITTY_SHOT_OUT="$d" $shot -o "$d" -s 150x45 -c "$out/sketch-bin" "${steps[@]}"
+
+# The light-ground degrade set: ANSI-16 and NO_COLOR painted on a
+# light kitty background rather than kitty's default dark one. The
+# sketch fixture set above pins both profiles to poplar's dark theme
+# (neither profile distinguishes light from dark at the app layer),
+# so it never exercised what the terminal's own light ground does
+# under a degraded palette, which the first gate pack lacked entirely.
+lightprofiles=(ansi16 nocolor)
+d="$out/sketch-light"
+note "## sketch-light: cmd/sketch fixtures, ANSI-16 and NO_COLOR on a light kitty ground, rung 100x30"
+steps=(sleep:2 key:s key:s key:s key:s key:s key:p key:p)   # rung index 5 = 100x30, profile index 2 = ansi16
+for p in "${lightprofiles[@]}"; do
+  for f in "${fixtures[@]}"; do
+    name="$f-$p-light"
+    steps+=("shot:$name" key:n)
+    claim "$name" "sketch:$f:$p" "fixture $f, profile $p, kitty light ground, 100x30"
+  done
+  steps+=(key:p)
+done
+KITTY_SHOT_OUT="$d" $shot -o "$d" -t light -s 150x45 -c "$out/sketch-bin" "${steps[@]}"
 
 # The exemplar, painted by kitty, as the reference image, in slices
 # that fit a 45-row window: the standard dark rung, the wide rung,
-# toast/banner/modal/spartan, and the light rung plus palettes.
+# toast/banner/modal/spartan, and the light rung plus palettes. This
+# is a static file dump, not a running screen, so it carries no
+# checked claim.
 d="$out/reference"
 ex="$(pwd)/docs/poplar/design/2026-08-19-shell-exemplar/render.ansi"
 note "## reference: the ratified exemplar render.ansi painted by kitty at 150 columns"
@@ -99,5 +146,67 @@ for range in 1,20 21,49 50,79 80,128; do
   note "exemplar-$i: render.ansi lines $range"
   KITTY_SHOT_OUT="$d" $shot -o "$d" -s 150x50 -c "sed -n '${range}p' $ex; sleep 600" sleep:2 "shot:exemplar-$i"
 done
+
+# screen_label reads back what a capture's own screen actually shows,
+# in the same vocabulary claim() writes: a sketch capture's status
+# line names its fixture and profile outright; a poplar screen with
+# "this window is" in its text is the floor notice; otherwise the
+# switch bar's first line names the active surface (the inactive
+# surfaces show only a digit, so at most one of Mail, Calendar,
+# People, Config appears there) and help's footer carries "esc back"
+# regardless of scroll position, so a mid-scroll capture still labels
+# as help.
+screen_label() {
+  local text last1 first1 surface=none
+  text="$(sed -E 's/\x1b\[[0-9:;]*[a-zA-Z]//g' "$1")"
+  last1="$(tail -1 <<<"$text")"
+  if [[ "$last1" == fixture\ * ]]; then
+    echo "sketch:$(sed -E 's/^fixture ([^ ]+).*/\1/' <<<"$last1"):$(sed -E 's/.*profile ([^ ]+).*/\1/' <<<"$last1")"
+    return
+  fi
+  if grep -q "this window is" <<<"$text"; then
+    echo floor
+    return
+  fi
+  first1="$(head -1 <<<"$text")"
+  case "$first1" in
+    *Mail*) surface=mail ;;
+    *Calendar*) surface=calendar ;;
+    *People*) surface=contacts ;;
+    *Config*) surface=config ;;
+  esac
+  if grep -q "esc back" <<<"$text"; then
+    echo "help:$surface"
+  else
+    echo "$surface"
+  fi
+}
+
+# verify_captures reads every claim() line back out of the manifest
+# and checks it against the .ansi dump(s) that capture name produced.
+# A live capture name recurs once per theme, so both are checked.
+verify_captures() {
+  local line name label files ansi actual fail=0
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([A-Za-z0-9_.-]+)\ \[([a-zA-Z0-9:_-]+)\]:\  ]] || continue
+    name="${BASH_REMATCH[1]}"
+    label="${BASH_REMATCH[2]}"
+    mapfile -t files < <(find "$out" -maxdepth 2 -name "$name.ansi")
+    if [ "${#files[@]}" = 0 ]; then
+      echo "gate-captures: $name claims [$label] but no such capture exists" >&2
+      fail=1
+      continue
+    fi
+    for ansi in "${files[@]}"; do
+      actual="$(screen_label "$ansi")"
+      if [ "$actual" != "$label" ]; then
+        echo "gate-captures: $ansi claims [$label] but the screen shows [$actual]" >&2
+        fail=1
+      fi
+    done
+  done <"$manifest"
+  [ "$fail" = 0 ] || { echo "gate-captures: manifest mismatch, see above" >&2; exit 1; }
+}
+verify_captures
 
 echo "captures in $out; manifest at $manifest"
