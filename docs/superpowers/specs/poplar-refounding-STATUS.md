@@ -28,12 +28,141 @@ it. Updating this STATUS is step one and is never optional.
    a load-bearing decision changed. The cursor lives here, not in
    memory.
 
-## Current state (2026-08-19)
+## Current state (2026-08-20)
 
 Phase 5 is in progress. Passes 1 (foundation), 1b (integration and
-hardening), and 1c (measurement and the driver decision) are done
-and 1c's gate is ruled; pass 2 (design language and shell) is the
-next action, below.
+hardening), 1c (measurement and the driver decision), and 2 (design
+language and shell) are done; pass 2's gate with Geoff is the next
+action, below. Pass 2b (onboarding and config) queues behind the
+gate per the approved split.
+
+Pass 2 outcomes (2026-08-20), commits df034ce through acd8297:
+- 45 commits, 276 files, 19,950 insertions. Twelve tasks (task 5
+  split into 5a/5b mid-pass), each dual-reviewed with fix rounds,
+  then a consolidation wave (simplify sweep, pass-wide voice trim,
+  styling-analyzer hardening) and a three-lens final fan-out with
+  one consolidated fix round. make check green at the close from a
+  captured exit code, repeatedly orchestrator-verified.
+- What exists: the compiled slate theme (internal/theme: four
+  grounds plus the sub-contrast border role, type roles, glyph
+  inventory with ASCII fallbacks, spacing roles, degrade tables,
+  the Canvas compositor seam); the capability resolver
+  (NO_COLOR/TERM/COLORTERM, dark/light); LayoutMode (three rungs
+  plus floor, boundary-pinned to the exemplar's literals); the
+  screen registry with the conformance regime (grammar, footer
+  prefix, pointer legality, switch table, help completeness, all
+  iterating Registered()); the pure render seam
+  (Render(RenderInput) Frame) with the committed gallery as the
+  design-review medium (159 files: renders across four capability
+  profiles, rung and boundary sizes, plus render-derived ground-map
+  sidecars); the shell chrome (status line with sync health and
+  outbox count, prioritized single-row footer, toast with undo
+  countdown, banner with short-height demotion, modal quit confirm,
+  registry-derived help overlay, floor notice); pointer dispatch
+  synthesizing keys through handleKey (left-button, span-gated,
+  state-coherent) and wheel coalescing in the model (ADR-0017
+  revision 3); cmd/poplar's TUI-default entry over the pass-1b
+  engines (alt screen, cell-motion mouse, engine bridge, uerr
+  temp-dir log fallback with truthful degradation banners,
+  --headless preserved); cmd/sketch; the teatest flow suite; and
+  scripts/tmux-check with capture-pane verification.
+- The pinned visual exemplar
+  (docs/poplar/design/2026-08-19-shell-exemplar/, ratified by Geoff
+  after two adversarial review rounds and six owner iterations) is
+  the design authority for every later screen; the design language
+  is at revision 3 carrying the pass's amendments (spacing roles,
+  glyph tokens, degrade substitutions, the section 4 footer
+  rewrite, the modal vocabulary entry). Requirements moved to
+  revision 6 (UX-2 prioritized footer) during the wireframe sitting.
+- Verification machinery this pass proved out: guards must be
+  falsifiable by experiment. The final fan-out's falsifiability
+  lens re-proved four guards unable to fail and they were fixed the
+  same day (unadvertised-key oracle, status width across active
+  surfaces, help two-column completeness, mechanical
+  no-advertised-no-op). Earlier rounds caught the same class in the
+  ground-map sidecar (rebuilt to derive from rendered SGR, not
+  layout), a TZ test guarding nothing (replaced by a no-clock
+  analyzer test), and a tautological offline-bridge test. The
+  styling analyzer now catches mutating style-method calls
+  (go/types, four evasion fixtures) and caught a live violation on
+  arrival.
+- Cross-task seam defects the whole-branch lenses found that no
+  per-task review could see: the TUI never entered the alt screen
+  (per-frame View field in bubbletea v2, every gate medium blind to
+  it by construction); three ratified behaviors never built while
+  comments and test names asserted them (the F4 floor notice, F3
+  banner demotion at short height, F1/F8 placeholder pane
+  composition); the offline outbox count; pointer/keyboard state
+  disagreement that would type "?" into future text fields. All
+  fixed and probe-verified this pass.
+- Incidents worth carrying: two false green-gate claims traced to a
+  mechanical hole (vale-comments skipped untracked files; fixed by
+  widening the scan, incident cited in the script); a 10-hour
+  wedged re-review agent that left an uncommitted perturbation
+  (revert-first discipline is now in every perturbing dispatch);
+  two parallel reviewers racing one worktree (perturbing reviews
+  now get the tree serially); and the possessive-own prose tic
+  surviving three instructed trims until a dedicated pass-wide
+  sweep (~404 fixes) — the durable fix is a Vale rule, a gate item.
+- deadcode at close: 46 entries, count and per-group justifications
+  recorded in the pass 2 plan's deadcode section (pass-1 intent
+  machinery awaiting pass 3's triage actions, the pass-3-routed
+  echo seam, registry conformance checkers consumed by tests by
+  design, test seams, ADR-0017's reserved double-click resolution,
+  jmap protocol surface for passes 3-4). No wiring gaps: everything
+  pass 2 composed into cmd/poplar is reached.
+- Budget note: roughly 4.9M subagent output tokens across ~25
+  dispatches plus the Fable main loop (exact figures from /cost at
+  the gate); Geoff interaction points mid-execution: zero since the
+  design sitting ended (the 2b split, dim-9s, and glyph rulings
+  were batched into one question there).
+- Routed forward: pass 3 takes the declared-pane-set layout
+  mechanism (BACKLOG #76), the offline outbox live poll (#75), the
+  Deps.Account refresh, digit single-pop, drop-machinery
+  make-load-bearing-or-retire, the clock-as-fixture-input TZ test
+  (when timestamps render), StoreChangedMsg gating, and the
+  analyzer method-list widening (Unset*/Max*/Border*). Pass 2b
+  takes onboarding, config, first-run, re-auth, and UX-8. BACKLOG
+  #71-#76 carry the rest.
+
+Pass 2 gate items (for Geoff at the gate, gathered pass-wide):
+1. The kitty demo: both themes, resize through every rung and the
+   floor, the manual pointer checklist (blocked all pass on
+   MouseMode, now live). The corrected placeholder frames
+   (FullRegion, no empty rail) get his eye specifically.
+2. The modal confirm wipes the whole shell (no dimmed backdrop) —
+   ruled to stand on exemplar authority; his eye rules for real.
+3. Chrome bands carry no non-color channel in ANSI-16/NO_COLOR —
+   extending the divider substitution costs rows; position-only is
+   the alternative.
+4. NO_COLOR= (empty) now enables color per no-color.org — a
+   behavior change from the legacy table row that read deliberate.
+5. codeBg's ground step measures 1.088/1.099 against decision 6's
+   perceptual-floor citation — kept faithful to ratified values;
+   eyeball on kitty.
+6. Profile conflates color depth with Unicode support (NO_COLOR
+   loses box-drawing and the round pill).
+7. readerContentCap=100 derives from section 9's ~100 cells, not
+   the earlier ~127 figure; engages at 195 columns.
+8. Sync copy sentence-cased across the five strings (ruled
+   mid-pass; may be overruled by eye).
+9. Help ground merging with the chrome bands (eyeball item from
+   task 9).
+10. The ratified F5 help copy is restored via a LongDesc seam and
+    the floor notice uses ASCII x for the size separator; the
+    placeholder count strings lost their pass numbers (decision 9
+    over F8's literals) — the reworded copy is his to taste.
+11. Proposal: a warning-level Vale rule for the possessive-own
+    pattern in the canonical glw907 overlay (~/.dotfiles), the
+    em-dash precedent applied to the pass's most persistent tell.
+12. Ratification list: the ~49 ledgered orchestrator rulings,
+    headline ones being the exemplar-wins conflicts (GapPin=6,
+    modal wipe), ConfirmAnsweredMsg as the modal pattern, wheel
+    coalescing in the model (ADR-0017 revision 3), ? toggles help,
+    Esc dismiss-on-visibility, FullRegion placeholders, the
+    decision-9-over-F8 copy rewording, and the guard-exceeds-doc
+    ruling on the no-op-hint test. Full trail in the pass ledger
+    (retained until the gate is ruled, then deleted).
 
 Pass 1c gate rulings (Geoff, 2026-08-19, at pass 2 start):
 - QA-5's storage bound re-ratified at 1.7x retained body bytes
@@ -553,56 +682,48 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: Phase 5 pass 2 (design language and shell)
+## Next: the pass 2 gate (Geoff), then pass 2b
 
-Pass 1c closed on 2026-08-19; its three gate items (the QA-5 storage
-ruling, the prefix-length-5 question, and the ratification list)
-were ruled at pass 2's start, recorded in the gate-rulings block
-above. Pass 2 is the spine's second
-numbered pass: the design language made real, and the application
-shell. It is the first screen pass, so the wireframe ritual binds: a
-text wireframe per screen per responsive class that changes its
-layout, pointer targets included, reviewed by Geoff before the
-screen's tasks dispatch.
+Pass 2 closed on 2026-08-20. The next action is the pass gate with
+Geoff: the shell demoed live in kitty (make build, both themes,
+resize through every rung and the floor, the manual pointer
+checklist by hand), then the twelve gate items in the outcomes block
+above, ruled in one sitting. The pass 2 ledger
+(.superpowers/sdd/2026-08-19-pass-2-design-language-and-shell/
+progress.md) holds the full ruling trail and is retained until the
+gate is ruled, then deleted per the standing instruction.
 
-What pass 2 builds, from the binding docs (the design language
-revision 2, ADR-0011 layout/registry, ADR-0012 keys, ADR-0017 mouse,
-requirements revision 4): the bubbletea root model and message
-routing, the three-rung responsive ladder plus floor state, the
-compiled theme, the keybinding registry with registry-derived help,
-mouse vocabulary, and the shell chrome (status bar, switch bar)
-against the headless engines pass 1b wired. Routed inputs waiting in
-this pass: ADR-0005's self-echo suppression lands with the first
-UI-driven mutation wiring; uerr's stderr fallback must be revisited
-before a full-screen TUI renders (dispositions doc, row 24); the
-contacts-sidebar micro-highlight stays post-1.0.
+After the gate, pass 2b (onboarding and config) runs next per the
+approved split: first-run, account setup, re-auth, the config
+surface, and UX-8, with its own wireframe sitting designing from
+the pinned exemplar. Pass 3 (mail read path) follows.
 
-Starter prompt (paste after /clear in ~/Projects/poplar, in a Fable
-session per the standing orchestration ruling):
+Starter prompt for pass 2b (paste after /clear in
+~/Projects/poplar, in a Fable session per the standing
+orchestration ruling, AFTER the pass 2 gate is ruled):
 
 ```
-Run poplar pass 2: design language and shell. Read
-docs/superpowers/specs/poplar-refounding-STATUS.md's pass 2 section
-and the pass 1c outcomes block first (the gate items may carry
-rulings that bind this pass), then the design language
-(docs/superpowers/specs/2026-07-27-poplar-design-language.md),
-ADR-0011, ADR-0012, ADR-0017, and requirements revision 4 sections
-on the shell. Author the pass 2 plan via superpowers:writing-plans:
-wireframes first (every screen, every responsive class, pointer
-targets), Geoff reviews them before any screen task dispatches; then
-execute via superpowers:subagent-driven-development.
+Run poplar pass 2b: onboarding and config. Read
+docs/superpowers/specs/poplar-refounding-STATUS.md's pass 2
+outcomes block first (its gate rulings bind this pass), then the
+design language revision 3, the pinned exemplar
+(docs/poplar/design/2026-08-19-shell-exemplar/), ADR-0011/0012/0017,
+and requirements revision 6 (UX-8, ST-1, ST-3, ST-5 are the 2b
+scope). Author the plan via superpowers:writing-plans: wireframes
+first, designed from the exemplar, every screen and responsive
+class, pointer targets, Geoff reviews before any screen task
+dispatches; then execute via superpowers:subagent-driven-development.
 
-Constraints that bind: elm-conventions and bubbletea-design are
-mandatory before any UI code; one poplar-implementer per task;
-poplar-reviewer and poplar-go-reviewer in parallel on each diff;
+Constraints that bind: elm-conventions and bubbletea-design before
+any UI code; every new screen registers and inherits the
+conformance regime (grammar, footer, pointer legality, help) by
+registration; the gallery gains each new screen's matrix cells with
+render-derived ground sidecars; one poplar-implementer per task;
+poplar-reviewer and poplar-go-reviewer in parallel per diff;
 reviewers attack each round's new guards first and prove
 revert-sensitivity by experiment; gate evidence is a captured exit
-code, never a tail. The perf suite runs behind the `perf` build tag
-via make perf only. Never let an agent set run_in_background; unique
-scratch names. Geoff is at the wireframe review and the pass gate.
-The pass 1c sdd workspace
-(.superpowers/sdd/2026-08-18-pass-1c-measurement-and-driver-decision/)
-is deletable once the 1c gate items are ruled.
+code, never a tail. The perf suite stays behind the perf build tag.
+Geoff is at the wireframe review and the pass gate.
 ```
 
 ## Superseded: Phase 5 pass 1c task list (closed 2026-08-19)
@@ -731,5 +852,6 @@ Geoff reads the verdict and sample renders and rules on the bet.
 (Charter Phases section.) 0 Founding reset [done] -> 1 Rendering bet
 [done] -> 2 Vision [done] -> 3 Requirements [done] ->
 4 Technical design [done] -> 5 Build machine + build [in progress:
-passes 1 foundation, 1b integration and hardening, and 1c measurement
-and driver decision done; pass 2 design language and shell next].
+passes 1 foundation, 1b integration and hardening, 1c measurement
+and driver decision, and 2 design language and shell done; the pass
+2 gate with Geoff next, then pass 2b onboarding and config].

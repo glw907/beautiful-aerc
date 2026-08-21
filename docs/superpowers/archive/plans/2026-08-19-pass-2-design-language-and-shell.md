@@ -1250,6 +1250,36 @@ function itself, so it stood with no production caller at all —
 ADR-0017's pane-focus row is unwired this pass. Pane focus, and
 `paneAt`'s real caller, arrives with pass 3's list.
 
+### Deadcode run (2026-08-20, pass close, HEAD acd8297)
+
+`deadcode ./cmd/poplar ./cmd/sketch` reports these unreachable
+groups, each justified and kept:
+
+- `internal/outbox` enqueue/undo surface (`Enqueue*`, `Undo`,
+  `annihilate`, `insertRow`, chunk helpers) and
+  `internal/store.DecodeFlags`: pass 1's intent machinery, built to
+  the requirements spine ahead of its consumers. Pass 3's triage
+  actions are the callers.
+- `internal/sync` `echoTracker.note` and `Worker.
+  NoteDispatchedState`: ADR-0005 self-echo suppression, routed to
+  the first UI-driven mutation (pass 3) by this plan's non-goals.
+- `internal/ui` `Registered`, `checkGrammar`, `checkPointerGrammar`,
+  `bindingsEqual`, `shortHelpWithinFullHelp`,
+  `footerPriorityWithinKeymap`, `validSwitchStates`,
+  `printableEntryScreens`: the registry conformance regime's
+  checkers, consumed by the conformance tests (deadcode does not
+  count test callers). Their test-side consumption is the design.
+- `internal/ui.WithProfileOverride`, `internal/uerr`
+  `RedirectForTest`/`SetLogFallbackForTest`,
+  `internal/theme.GroundHex`: test seams and test-consumed exports
+  (profile_test, uerrtest, the ground-map sidecar).
+- `internal/ui.resolveDoubleClick`: ADR-0017's reserved double-click
+  resolution, ledgered at task 10; the reader's open-message flow
+  (pass 3) is the caller.
+- `jmap` `BlobCopy.*`, `FilterOperator.MarshalJSON`,
+  `MailboxQueryChanges.Name`: protocol surface for compose
+  attachments (pass 4) and incremental sync, built with the client.
+
 ## Non-goals, restated as decisions
 
 - No mail list, reader, or any store-content screen beyond
