@@ -10,11 +10,11 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// Banner is App's own persistent notice state (design decision 2): at
+// Banner is App's persistent notice state (design decision 2): at
 // most one at a time, pushing the main band down one row while Active
-// (LayoutMode.BannerRow), dismissed by Esc, before Esc's own back
-// handling, or by its own dismiss glyph. It never steals focus:
-// App.handleKey lets a focused text-entry context's own Esc through
+// (LayoutMode.BannerRow), dismissed by Esc, before Esc's back
+// handling, or by its dismiss glyph. It never steals focus:
+// App.handleKey lets a focused text-entry context's Esc through
 // untouched instead of consuming it here.
 type Banner struct {
 	Active  bool
@@ -28,8 +28,8 @@ type BannerMsg struct {
 }
 
 // renderBanner renders banner's row exactly width cells wide: the
-// warn glyph and banner's own message on the left, "Esc dismiss" and
-// the dismiss glyph right-aligned (the ratified exemplar's own
+// warn glyph and banner's message on the left, "Esc dismiss" and
+// the dismiss glyph right-aligned (the ratified exemplar's
 // banner_strip composition). A message too long for width is
 // truncated with the ellipsis token, the same BACKLOG #61 discipline
 // every chrome band holds to. An inactive banner (task-8-findings-r1.md
@@ -65,12 +65,12 @@ func renderBanner(banner Banner, th theme.Theme, width int) string {
 	return out.String()
 }
 
-// BannerHitSpans returns the banner's own dismiss glyph HitSpan
+// BannerHitSpans returns the banner's dismiss glyph HitSpan
 // (ADR-0017's banner-dismiss row), positioned within bannerRow, when
-// banner is Active and state is one ADR-0017's own table
+// banner is Active and state is one ADR-0017's table
 // (pointerLegalStates) allows PointerBannerDismiss to fire in. The
-// glyph sits PadBand cells from the row's own right edge, the same
-// fixed inset renderBanner's own right segment always closes with,
+// glyph sits PadBand cells from the row's right edge, the same
+// fixed inset renderBanner's right segment always closes with,
 // so this never depends on having rendered first (StatusLineHitSpans's
 // own precedent).
 func BannerHitSpans(banner Banner, state StateClass, th theme.Theme, bannerRow image.Rectangle) []HitSpan {

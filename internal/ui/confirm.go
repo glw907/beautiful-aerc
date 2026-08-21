@@ -12,20 +12,20 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// confirmRows is the modal's own fixed row count (composition rule 5:
+// confirmRows is the modal's fixed row count (composition rule 5:
 // "natural sizes, not slopes"): top edge, a blank inset row, the
 // question, the consequence, a blank row, the y/n answer row, a
 // blank row, and the bottom edge.
 const confirmRows = 8
 
-// Confirm is poplar's generic modal-confirm component (UX-9's own
+// Confirm is poplar's generic modal-confirm component (UX-9's
 // vocabulary, "one question, named consequence"): Question is the
 // question itself, Consequence names what each answer does,
 // YesLabel/NoLabel are the y/n hint text ("quit"/"stay"), and
 // YesCmd/NoCmd are what each answer dispatches once App pops it off
 // the stack. n (No) is the ruled default, rendered on the selectedBg
 // pill (the ratified shell exemplar). Confirm implements Screen, so
-// App's own screen stack (task 5a's ruling) renders it directly: the
+// App's screen stack (task 5a's ruling) renders it directly: the
 // plain stack-top render that ruling settled, full terminal, clamped
 // and centered per composition rule 5, with no further chrome.
 type Confirm struct {
@@ -43,7 +43,7 @@ type Confirm struct {
 // Init implements Screen.
 func (c Confirm) Init() tea.Cmd { return nil }
 
-// ConfirmAnsweredMsg is Confirm's own answer signal (elm-conventions
+// ConfirmAnsweredMsg is Confirm's answer signal (elm-conventions
 // rule 4, children signal parents via Msg types; task-8-findings-r1.md
 // conventions ruling): Next is the Cmd the y/n/Esc key named. App's
 // own Update catches it, pops the stack, and runs Next: the template
@@ -54,11 +54,11 @@ type ConfirmAnsweredMsg struct {
 }
 
 // Update implements Screen: LayoutMsg and ThemeMsg, the two every
-// screen carries, plus Confirm's own y/n/Esc answer
+// screen carries, plus Confirm's y/n/Esc answer
 // (GrammarExemptModalConfirm: y is not yank here). A key that answers
 // emits ConfirmAnsweredMsg for App to catch; every other key,
 // including digits, is a no-op (UX-4's modal no-op rule), which
-// App.handleKey guarantees reaches here at all only once its own
+// App.handleKey guarantees reaches here at all only once its
 // Back/digit/quit precedence has found nothing else to do with it.
 func (c Confirm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -74,7 +74,7 @@ func (c Confirm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, nil
 }
 
-// answer reports the Cmd msg names under Confirm's own y/n/Esc
+// answer reports the Cmd msg names under Confirm's y/n/Esc
 // grammar and whether msg named an answer at all. Every other key,
 // digits included, names no answer.
 func (c Confirm) answer(msg tea.KeyPressMsg) (tea.Cmd, bool) {
@@ -96,7 +96,7 @@ func (c Confirm) noBinding() key.Binding {
 	return key.NewBinding(key.WithKeys("n"), key.WithHelp("n", c.NoLabel))
 }
 
-// confirmKeys is Confirm's own per-instance keymap.
+// confirmKeys is Confirm's per-instance keymap.
 type confirmKeys struct {
 	Yes, No key.Binding
 }
@@ -137,11 +137,11 @@ func init() {
 	Register[Confirm](confirmEntry())
 }
 
-// confirmGeometry is Confirm's own natural-size, clamped-and-centered
+// confirmGeometry is Confirm's natural-size, clamped-and-centered
 // box geometry (composition rule 5): a boxWidth×confirmRows box at
 // (x, y) within the terminal c.layout names. View and ConfirmHitSpans
 // both derive from geometry, so a hit span never depends on having
-// rendered first (StatusLineHitSpans's own precedent).
+// rendered first (StatusLineHitSpans's precedent).
 type confirmGeometry struct {
 	x, y, width int
 }
@@ -155,14 +155,14 @@ func (c Confirm) geometry() confirmGeometry {
 	}
 }
 
-// confirmPillInset is the default answer's own selectedBg pill inset
+// confirmPillInset is the default answer's selectedBg pill inset
 // (task-8-findings-r1.md F6): two cells before the key, two after the
 // label, named once rather than a raw "  " literal repeated at each
 // of its two call sites.
 const confirmPillInset = 2
 
-// confirmAnswerText is the answer row's own plain-text pieces: yes
-// ("y quit") and no ("  n stay  ", the selectedBg pill's own
+// confirmAnswerText is the answer row's plain-text pieces: yes
+// ("y quit") and no ("  n stay  ", the selectedBg pill's
 // confirmPillInset padding included), used both to size the box and
 // to compose the row.
 func confirmAnswerText(c Confirm) (yes, no string) {
@@ -170,7 +170,7 @@ func confirmAnswerText(c Confirm) (yes, no string) {
 	return "y " + c.YesLabel, inset + "n " + c.NoLabel + inset
 }
 
-// confirmBoxWidth returns the modal's own natural width, clamped
+// confirmBoxWidth returns the modal's natural width, clamped
 // against termWidth (composition rule 5): PadModalX insets both sides
 // of whichever is widest among the question, the consequence, and the
 // answer row, plus the two border columns.
@@ -195,7 +195,7 @@ func (c Confirm) View() tea.View {
 	return tea.NewView(canvas.Render())
 }
 
-// renderConfirmBox renders Confirm's own box, exactly width columns
+// renderConfirmBox renders Confirm's box, exactly width columns
 // by confirmRows rows, joined by newlines.
 func renderConfirmBox(c Confirm, width int) string {
 	th := c.theme
@@ -245,7 +245,7 @@ func confirmTextRow(th theme.Theme, left, right string, width int, text string, 
 	return out.String()
 }
 
-// confirmAnswerOffsets returns the column, relative to the box's own
+// confirmAnswerOffsets returns the column, relative to the box's
 // left edge (column 0 is the left border), of the y and n answer
 // keys' own characters within a boxWidth-wide answer row.
 // confirmAnswerRow and ConfirmHitSpans both derive from it, so a hit
@@ -256,12 +256,12 @@ func confirmAnswerOffsets(c Confirm, boxWidth int) (yesX, noX int) {
 	contentWidth := ansi.StringWidth(yes) + theme.GapControl + ansi.StringWidth(no)
 	leftPad := max(0, (interior-contentWidth)/2)
 	yesX = 1 + leftPad
-	noX = yesX + ansi.StringWidth(yes) + theme.GapControl + confirmPillInset // the pill's own inset precedes "n"
+	noX = yesX + ansi.StringWidth(yes) + theme.GapControl + confirmPillInset // the pill's inset precedes "n"
 	return yesX, noX
 }
 
 // confirmAnswerRow renders the y/n answer row: the default answer (n)
-// on its own selectedBg pill (decision 6, the ratified exemplar),
+// on its selectedBg pill (decision 6, the ratified exemplar),
 // centered within the box.
 func confirmAnswerRow(c Confirm, left, right string, width int) string {
 	th := c.theme
@@ -289,8 +289,8 @@ func confirmAnswerRow(c Confirm, left, right string, width int) string {
 
 // ConfirmHitSpans returns the y and n answer cells' own HitSpans
 // (ADR-0017's PointerModalAnswer, legal only at StateModal): each
-// span's Rect is the exact column its own key character occupies
-// within the modal's own answer row.
+// span's Rect is the exact column its key character occupies
+// within the modal's answer row.
 func ConfirmHitSpans(c Confirm) []HitSpan {
 	g := c.geometry()
 	yesX, noX := confirmAnswerOffsets(c, g.width)

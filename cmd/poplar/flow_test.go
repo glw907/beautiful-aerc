@@ -21,7 +21,7 @@ import (
 // This file is the teatest flow suite (task 12, survey amendment A's
 // closing requirement): every test here drives a real *tea.Program
 // end to end, deliberately kept small, five scripts total, and
-// nothing the render seam's own goldens or the gallery already cover
+// nothing the render seam's goldens or the gallery already cover
 // at the model level. The teatest swap path: charmbracelet's teatest
 // lives under the experimental x/exp path, so a bubbletea bump it has
 // not caught up with swaps for a hand-rolled harness over
@@ -33,7 +33,7 @@ import (
 // touches no golden.
 
 // waitForFirstFrame blocks until tm has rendered at least one frame:
-// teatest.NewTestModel sends its own initial tea.WindowSizeMsg
+// teatest.NewTestModel sends its initial tea.WindowSizeMsg
 // through Program.Send after starting Program.Run in a goroutine, so
 // a Type or Send issued immediately after NewTestModel returns can
 // race that size message. App.Update needs a WindowSizeMsg before
@@ -48,7 +48,7 @@ func waitForFirstFrame(t *testing.T, tm *teatest.TestModel) {
 }
 
 // TestST2_OfflineStartReachesTheInteractivePlaceholderWithStoreCounts
-// is ST-2's own acceptance case: a real *tea.Program built over
+// is ST-2's acceptance case: a real *tea.Program built over
 // ui.NewApp against a store fixture holding real messages and
 // mailboxes reaches an interactive frame naming both the store's
 // counts and, once told the connection never came up, "Offline" on
@@ -72,7 +72,7 @@ func TestST2_OfflineStartReachesTheInteractivePlaceholderWithStoreCounts(t *test
 		return strings.Contains(string(b), "3 messages in 1 folders")
 	}, teatest.WithDuration(3*time.Second))
 
-	// The bridge's own ST-2 send: a connect that never came up.
+	// The bridge's ST-2 send: a connect that never came up.
 	tm.Send(ui.SyncStateMsg{State: ui.SyncStateOffline})
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
@@ -86,16 +86,16 @@ func TestST2_OfflineStartReachesTheInteractivePlaceholderWithStoreCounts(t *test
 }
 
 // TestQuitPath_EmptyOutboxExitsCleanAndConfirmsWithQueuedIntents
-// scripts F7's own acceptance case end to end through a real
+// scripts F7's acceptance case end to end through a real
 // *tea.Program: q with an empty outbox and no undo window quits
 // straight through, and q with a queued outbox shows the modal
 // confirm and quits once y answers it. 'n' staying and 'y' discarding
 // the offer without invoking it are pinned precisely, Cmd by Cmd,
-// against App.Update directly in internal/ui's own
+// against App.Update directly in internal/ui's
 // TestApp_QuitWithOpenUndoWindowConfirms and
 // TestApp_ConfirmOnStack_AnswersYesNoAndPops; a diffing terminal
 // renderer's incremental output is the wrong medium to reprove a
-// disappearance against, so this test's own job is only what those
+// disappearance against, so this test's job is only what those
 // cannot cover: a real *tea.Program actually renders F7's text and
 // actually quits on y.
 func TestQuitPath_EmptyOutboxExitsCleanAndConfirmsWithQueuedIntents(t *testing.T) {
@@ -128,9 +128,9 @@ func TestQuitPath_EmptyOutboxExitsCleanAndConfirmsWithQueuedIntents(t *testing.T
 }
 
 // TestFlow_SurfaceSwitchRoundTrip is UX-4's round trip
-// (TestApp_DigitSurfaceSwitchRoundTrip's own model-level proof,
+// (TestApp_DigitSurfaceSwitchRoundTrip's model-level proof,
 // internal/ui/app_test.go) driven through a real *tea.Program: every
-// digit switches to its own surface's title text, and the 1->2->3->4->1
+// digit switches to its surface's title text, and the 1->2->3->4->1
 // cycle ends back on Mail.
 func TestFlow_SurfaceSwitchRoundTrip(t *testing.T) {
 	reads := storetest.OpenReadPool(t, store.DefaultWriterConfig())
@@ -167,11 +167,11 @@ func groundBackgroundSGR(isDark bool) string {
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
 }
 
-// TestFlow_NeverAnsweringTerminalStaysDark is task 2's own
+// TestFlow_NeverAnsweringTerminalStaysDark is task 2's
 // never-answering-terminal case, driven through a real *tea.Program
 // rather than the direct App.Update harness
 // TestRender_NeverAnsweringTerminalStaysDark already covers
-// (repaint_test.go, internal/ui): teatest's own virtual terminal
+// (repaint_test.go, internal/ui): teatest's virtual terminal
 // never answers App.Init's tea.RequestBackgroundColor query, so the
 // BackgroundColorWait this test sleeps past is the real timeout path
 // a live terminal that never replies takes, not a message this test
@@ -179,10 +179,11 @@ func groundBackgroundSGR(isDark bool) string {
 // BackgroundColorTimeoutMsg's correct handler repaints nothing
 // (app.go), so this reads the raw accumulated stream once, after the
 // sleep, rather than through waitForFirstFrame's "Mail" wait, which
-// would already have consumed the one frame carrying the dark
-// SGR (review round 1, finding 4: the prior version asserted nothing
-// about color, and passed even with the timeout branch mutated to
-// repaint light). tea.WithColorProfile(colorprofile.TrueColor) pins
+// would already have consumed the one frame carrying the dark SGR:
+// asserting nothing about color would still pass even with the
+// timeout branch mutated to repaint light, so the color check is
+// what makes this a real mutation guard rather than theatre.
+// tea.WithColorProfile(colorprofile.TrueColor) pins
 // the comparison against environment-dependent downsampling, the same
 // reason the ST-2 test above sets it.
 func TestFlow_NeverAnsweringTerminalStaysDark(t *testing.T) {

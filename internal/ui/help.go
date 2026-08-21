@@ -11,16 +11,16 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// helpScreenName is HelpScreen's own registered state name, the
-// switch table's own "help overlay" entry (design language section
+// helpScreenName is HelpScreen's registered state name, the
+// switch table's "help overlay" entry (design language section
 // 2's eleven-entry digits-switch authority list).
 const helpScreenName = "help overlay"
 
 // helpOpenEligible reports whether front may toggle the help overlay
 // (open it, or close it again when front already is the overlay):
-// StateDigitsSwitch only, mirroring App.undoEligible's own front gate
+// StateDigitsSwitch only, mirroring App.undoEligible's front gate
 // (app.go), so a StatePrintableEntry front, a search bar or a picker
-// filter field, keeps its own `?` character rather than surrendering
+// filter field, keeps its `?` character rather than surrendering
 // it to a global shortcut, and a StateModal front stays exempt too
 // (subsumed by the same check, since a modal is never
 // StateDigitsSwitch).
@@ -28,7 +28,7 @@ func helpOpenEligible(front ScreenEntry) bool {
 	return front.SwitchState == StateDigitsSwitch
 }
 
-// helpGlobalKeys is the Global section's own curated set of
+// helpGlobalKeys is the Global section's curated set of
 // GrammarKeys fields (UX-5, wireframe F5): the app-wide verbs every
 // screen honors, regardless of which screen help was opened over.
 // Every binding comes from GrammarKeys itself, never a re-typed key
@@ -39,21 +39,20 @@ var helpGlobalKeys = []key.Binding{
 	GrammarKeys.Undo, GrammarKeys.Help, GrammarKeys.Quit,
 }
 
-// helpSurfaceNamesDesc returns the sibling-surface-names row's own
+// helpSurfaceNamesDesc returns the sibling-surface-names row's
 // description: every surfaceNames entry (statusline.go, the same
-// array the status line's own cluster renders) joined by th's own
+// array the status line's cluster renders) joined by th's
 // separator glyph, so the row can never retype a surface's name or
-// drift from the cluster's own order (decision 1: the cluster shows
-// bare digits, so help is where sibling names live: the row this
-// package's own product was entirely missing until this fix round).
+// drift from the cluster's order (decision 1: the cluster shows
+// bare digits, so help is where sibling names live).
 func helpSurfaceNamesDesc(th theme.Theme) string {
 	return strings.Join(surfaceNames[:], " "+th.Glyphs().Separator+" ")
 }
 
-// helpGlobalDesc returns b's own Global-section row description:
-// SurfaceSwitch's own row names every sibling surface
+// helpGlobalDesc returns b's Global-section row description:
+// SurfaceSwitch's row names every sibling surface
 // (helpSurfaceNamesDesc) rather than rendering its generic "surface
-// switch" text; every other binding renders its own canonical
+// switch" text; every other binding renders its canonical
 // Help().Desc unchanged.
 func helpGlobalDesc(th theme.Theme, b key.Binding) string {
 	if b.Help().Desc == GrammarKeys.SurfaceSwitch.Help().Desc {
@@ -63,9 +62,9 @@ func helpGlobalDesc(th theme.Theme, b key.Binding) string {
 }
 
 // HelpScreen is poplar's registry-derived help overlay (UX-5,
-// wireframes F5/F6): a full-content-region takeover on App's own
+// wireframes F5/F6): a full-content-region takeover on App's
 // screen stack, its Global section built from helpGlobalKeys and its
-// This-screen section from Covered's own keymap (helpContent), so
+// This-screen section from Covered's keymap (helpContent), so
 // neither section can ever drift from the registry that also drives
 // the footer and the grammar checks. Covered is the entry help was
 // pushed over, carried once at push time; theme and layout arrive
@@ -83,12 +82,12 @@ func (h HelpScreen) Init() tea.Cmd { return nil }
 
 // Update implements Screen: LayoutMsg and ThemeMsg, the two every
 // screen carries, plus the navigation family (j/k, Space/b, Home/End)
-// scrolling the overlay's own body and a coalesced WheelMsg doing the
-// same (ADR-0017 row 8). Esc never reaches here: App's own Back branch
+// scrolling the overlay's body and a coalesced WheelMsg doing the
+// same (ADR-0017 row 8). Esc never reaches here: App's Back branch
 // pops the stack before forwarding a key at all, since HelpScreen's
-// SwitchState is StateDigitsSwitch, not StateModal (handleKey's own
-// doc). A key outside this screen's own keymap, digits and Enter
-// included, is a no-op: App's own precedence intercepts every one of
+// SwitchState is StateDigitsSwitch, not StateModal (handleKey's
+// doc). A key outside this screen's keymap, digits and Enter
+// included, is a no-op: App's precedence intercepts every one of
 // those before a key ever reaches here.
 func (h HelpScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -107,9 +106,9 @@ func (h HelpScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return h, nil
 }
 
-// applyKey returns h's own new scroll position for msg: Navigate
+// applyKey returns h's new scroll position for msg: Navigate
 // steps one line, Page steps one viewport, and Extremes jumps to
-// either end. A key matching none of the three (App's own precedence
+// either end. A key matching none of the three (App's precedence
 // already filters out everything this screen does not itself bind)
 // leaves the scroll position unchanged.
 func (h HelpScreen) applyKey(msg tea.KeyPressMsg) int {
@@ -134,7 +133,7 @@ func (h HelpScreen) applyKey(msg tea.KeyPressMsg) int {
 	}
 }
 
-// helpNavigateUp reports whether msg is the Navigate binding's own
+// helpNavigateUp reports whether msg is the Navigate binding's
 // "up" half (k, up) rather than its "down" half (j, down).
 func helpNavigateUp(msg tea.KeyPressMsg) bool {
 	switch msg.String() {
@@ -145,7 +144,7 @@ func helpNavigateUp(msg tea.KeyPressMsg) bool {
 	}
 }
 
-// helpPageBack reports whether msg is the Page binding's own "back"
+// helpPageBack reports whether msg is the Page binding's "back"
 // half (b, pgup) rather than its "forward" half (space, pgdown).
 func helpPageBack(msg tea.KeyPressMsg) bool {
 	switch msg.String() {
@@ -164,8 +163,8 @@ func clampScroll(scroll, lineCount, viewport int) int {
 	return min(max(scroll, 0), upper)
 }
 
-// viewportHeight returns h's own body height, the number of rows
-// visible at once within the whole Main band (FullRegion's own
+// viewportHeight returns h's body height, the number of rows
+// visible at once within the whole Main band (FullRegion's
 // rectangle, RenderInput's doc).
 func (h HelpScreen) viewportHeight() int {
 	return h.layout.Main.Rect.Dy()
@@ -179,7 +178,7 @@ func (h HelpScreen) twoColumn() bool {
 	return h.layout.Class >= WidthStandard
 }
 
-// lines returns h's own full, unscrolled body: one entry per rendered
+// lines returns h's full, unscrolled body: one entry per rendered
 // row, in column-mode-appropriate order. Update and View both call it,
 // so a line count driving a clamp and a line set driving a render can
 // never disagree with each other.
@@ -190,11 +189,11 @@ func (h HelpScreen) lines() [][]rowSeg {
 	return helpLinesOneColumn(h)
 }
 
-// helpBlankLine is one empty spacer row within the overlay's own body.
+// helpBlankLine is one empty spacer row within the overlay's body.
 var helpBlankLine = []rowSeg{}
 
-// helpTitleSegs returns the overlay's own title row: "Help ·
-// <covered's own state name>", covered.Name read directly rather than
+// helpTitleSegs returns the overlay's title row: "Help ·
+// <covered's state name>", covered.Name read directly rather than
 // re-typed or abbreviated (BACKLOG #62's defect class), so a screen's
 // own registered name is the only place the label can come from.
 func helpTitleSegs(th theme.Theme, covered ScreenEntry) []rowSeg {
@@ -202,9 +201,9 @@ func helpTitleSegs(th theme.Theme, covered ScreenEntry) []rowSeg {
 }
 
 // helpKeyColWidth returns the widest Help().Key text among bindings:
-// the column every row's own description aligns to within its own
+// the column every row's description aligns to within its own
 // section, Global and This-screen each aligning independently since
-// their own key sets differ.
+// their key sets differ.
 func helpKeyColWidth(bindings []key.Binding) int {
 	width := 0
 	for _, b := range bindings {
@@ -218,7 +217,7 @@ func helpKeyColWidth(bindings []key.Binding) int {
 // hintSegs renders for the footer, realigned to a shared column since
 // the overlay lists many rows at once rather than one hint among
 // neighbors). It takes plain strings, not a key.Binding, since the
-// Global section's own SurfaceSwitch row renders a description a
+// Global section's SurfaceSwitch row renders a description a
 // binding's Help() never carries (helpGlobalDesc).
 func helpKeyRowSegs(k, desc string, keyColWidth int) []rowSeg {
 	pad := keyColWidth - ansi.StringWidth(k) + theme.GapControl
@@ -229,11 +228,11 @@ func helpKeyRowSegs(k, desc string, keyColWidth int) []rowSeg {
 	}
 }
 
-// helpSectionLines returns one section's own lines: a bold header row
-// named title, then one row per binding, each rendering its own
+// helpSectionLines returns one section's lines: a bold header row
+// named title, then one row per binding, each rendering its
 // canonical Help(). The This-screen section is this function's only
-// caller; the Global section's own SurfaceSwitch row needs th to
-// build its description, so it has its own builder (helpGlobalLines).
+// caller; the Global section's SurfaceSwitch row needs th to
+// build its description, so it has its builder (helpGlobalLines).
 func helpSectionLines(title string, bindings []key.Binding) [][]rowSeg {
 	lines := [][]rowSeg{{{text: title, role: theme.RoleFg, bold: true}}}
 	keyColWidth := helpKeyColWidth(bindings)
@@ -243,10 +242,10 @@ func helpSectionLines(title string, bindings []key.Binding) [][]rowSeg {
 	return lines
 }
 
-// helpGlobalLines returns the Global section's own lines: a bold
-// header, then one row per helpGlobalKeys binding, its own key
-// aligned to the section's shared column and its own description from
-// helpGlobalDesc (the sibling-surface-names row, C1's own fix).
+// helpGlobalLines returns the Global section's lines: a bold
+// header, then one row per helpGlobalKeys binding, its key
+// aligned to the section's shared column and its description from
+// helpGlobalDesc (the sibling-surface-names row, C1's fix).
 func helpGlobalLines(th theme.Theme) [][]rowSeg {
 	lines := [][]rowSeg{{{text: "Global", role: theme.RoleFg, bold: true}}}
 	keyColWidth := helpKeyColWidth(helpGlobalKeys)
@@ -256,7 +255,7 @@ func helpGlobalLines(th theme.Theme) [][]rowSeg {
 	return lines
 }
 
-// helpLinesOneColumn composes h's own body for the spartan rung
+// helpLinesOneColumn composes h's body for the spartan rung
 // (wireframe F5): title, then the Global section, then the
 // This-screen section, each stacked in reading order.
 func helpLinesOneColumn(h HelpScreen) [][]rowSeg {
@@ -267,7 +266,7 @@ func helpLinesOneColumn(h HelpScreen) [][]rowSeg {
 	return lines
 }
 
-// helpLinesTwoColumn composes h's own body for the standard rung and
+// helpLinesTwoColumn composes h's body for the standard rung and
 // up (wireframe F6): title, then the Global and This-screen sections
 // side by side, the shorter section padded with blank rows so both
 // columns share the same row count.
@@ -285,7 +284,7 @@ func helpLinesTwoColumn(h HelpScreen) [][]rowSeg {
 }
 
 // helpLineAt returns lines[i], or helpBlankLine once i runs past its
-// end: the shorter section's own padding within the two-column body.
+// end: the shorter section's padding within the two-column body.
 func helpLineAt(lines [][]rowSeg, i int) []rowSeg {
 	if i < len(lines) {
 		return lines[i]
@@ -294,7 +293,7 @@ func helpLineAt(lines [][]rowSeg, i int) []rowSeg {
 }
 
 // joinHelpColumns returns one two-column row: left, truncated with
-// th's own ellipsis token (truncateLastSeg, decision 12) when it would
+// th's ellipsis token (truncateLastSeg, decision 12) when it would
 // overflow colWidth, padded out to colWidth plus a GapPane gutter,
 // then right.
 func joinHelpColumns(th theme.Theme, left, right []rowSeg, colWidth int) []rowSeg {
@@ -305,8 +304,8 @@ func joinHelpColumns(th theme.Theme, left, right []rowSeg, colWidth int) []rowSe
 }
 
 // renderHelpLine renders segs as one exactly-width-cells row, inset
-// PadBand from the pane's own left edge (a nil segs, past the end of
-// h's own body, renders as a blank inset row).
+// PadBand from the pane's left edge (a nil segs, past the end of
+// h's body, renders as a blank inset row).
 func renderHelpLine(th theme.Theme, segs []rowSeg, width int) string {
 	full := append([]rowSeg{{text: strings.Repeat(" ", theme.PadBand), role: theme.RoleFg}}, segs...)
 
@@ -318,7 +317,7 @@ func renderHelpLine(th theme.Theme, segs []rowSeg, width int) string {
 	return out.String()
 }
 
-// View implements Screen: h's own body, clamped to its current scroll
+// View implements Screen: h's body, clamped to its current scroll
 // position and painted across the whole content pane (decision 11:
 // the panel ground elevates the help overlay, the same chromeGround
 // the status line and footer already paint against).
@@ -340,9 +339,9 @@ func (h HelpScreen) View() tea.View {
 	return tea.NewView(strings.Join(rows, "\n"))
 }
 
-// helpKeys is HelpScreen's own operable keymap while it is showing:
-// the navigation family plus Esc (UX-5's own carried ruling). Esc's
-// help-context reading, "close," is the grammar's own Back verb
+// helpKeys is HelpScreen's operable keymap while it is showing:
+// the navigation family plus Esc (UX-5's carried ruling). Esc's
+// help-context reading, "close," is the grammar's Back verb
 // (GrammarKeys.Back), not a new one, so it is bound and rendered
 // exactly as Back rather than under a diverging description.
 type helpKeys struct {

@@ -188,7 +188,7 @@ func (m sketchModel) computeFrame() (string, tea.Cmd) {
 
 	lm := ui.ComputeLayout(sz.width, sz.height, f.Banner.Active)
 	updated, cmd := f.Build(p.theme).Update(ui.LayoutMsg{Layout: lm})
-	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
+	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's Update always returns a Screen; the assertion's panic is the message
 
 	frame := ui.Render(ui.RenderInput{Screen: scr, Layout: lm, Theme: p.theme, Status: f.Status, Banner: f.Banner})
 	status := fmt.Sprintf("fixture %s   profile %s   rung %s   ? help", f.Name, p.name, sz)

@@ -39,10 +39,9 @@ var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 // content spans the whole Main band rather than landing in the
 // narrower Content pane a surface's own sidebar reservation would
 // otherwise leave it squeezed against. The footer always follows
-// Screen.Entry() itself (task 9's own fix round: a caller sets Screen
-// to whichever screen is actually in front, App's stack top included,
-// so a separate Entry field would only ever restate what Screen
-// already answers).
+// Screen.Entry() itself: a caller sets Screen to whichever screen is
+// actually in front, App's stack top included, so a separate Entry
+// field would only ever restate what Screen already answers.
 type RenderInput struct {
 	Screen     Screen
 	FullRegion bool
@@ -72,9 +71,9 @@ type RenderInput struct {
 // rather than a blank fill. Task 7 stops treating Footer as a blank
 // fill too: it paints in.Screen.Entry()'s own registry-derived hints
 // instead. Task 8 grows a fifth, Banner, painted into LayoutMode's own
-// Banner band whenever in.Layout.BannerRow is set; its own fix round
-// folds all five into this struct ahead of a sixth parameter, which
-// task 9 adds as FullRegion.
+// Banner band whenever in.Layout.BannerRow is set, folding all five
+// into this struct ahead of a sixth parameter, which task 9 adds as
+// FullRegion.
 func Render(in RenderInput) Frame {
 	view := in.Screen.View()
 	lm, th := in.Layout, in.Theme

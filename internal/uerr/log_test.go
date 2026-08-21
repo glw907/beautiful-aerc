@@ -72,10 +72,10 @@ func resetLogFallbackState(t *testing.T) {
 }
 
 // TestLogFallsBackToTempDirWhenStateDirUnavailable proves row 24's
-// rework: when $XDG_STATE_HOME's own poplar.log can't be resolved,
-// openLogWriter falls back to a file in the process's own temp
+// rework: when $XDG_STATE_HOME's poplar.log can't be resolved,
+// openLogWriter falls back to a file in the process's temp
 // directory instead of stderr, LogFallbackPath reports it so a caller
-// can warn the operator (ER-3), and the fallback's own engagement
+// can warn the operator (ER-3), and the fallback's engagement
 // logs once through itself (C1), landing in the file it names rather
 // than wherever slog's process-wide default happens to point.
 func TestLogFallsBackToTempDirWhenStateDirUnavailable(t *testing.T) {
@@ -146,13 +146,13 @@ func TestLogFallsBackWhenStateDirIsUnwritable(t *testing.T) {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		t.Fatalf("create the state directory: %v", err)
 	}
-	// chmod after creation, not as MkdirAll's own mode: MkdirAll needs
+	// chmod after creation, not as MkdirAll's mode: MkdirAll needs
 	// write access into each level it creates, poplar/ included, so a
 	// 0500 mode has to land only once the directory already exists.
 	if err := os.Chmod(stateDir, 0o500); err != nil { //nolint:gosec // G302: stateDir is a directory, not a file; 0500 denies write while keeping the execute bit traversal needs, which G302's file-mode heuristic does not account for
 		t.Fatalf("deny write on the state directory: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(stateDir, 0o700) }) //nolint:gosec // G302: stateDir is a directory; restoring 0700 so t.TempDir's own cleanup can remove it
+	t.Cleanup(func() { _ = os.Chmod(stateDir, 0o700) }) //nolint:gosec // G302: stateDir is a directory; restoring 0700 so t.TempDir's cleanup can remove it
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_STATE_HOME", "")
 	xdg.Reload()
@@ -179,7 +179,7 @@ func TestLogFallsBackWhenStateDirIsUnwritable(t *testing.T) {
 // temp directory), openLogWriter never tries a third destination.
 // LogDegraded reports it, LogFallbackPath reports no usable path
 // rather than naming one that receives nothing (m1), and LogHealth
-// already shows the drop from the fallback's own trial write, with no
+// already shows the drop from the fallback's trial write, with no
 // further write needed to surface it.
 func TestLogDegradedWhenBothDestinationsFail(t *testing.T) {
 	resetLogFallbackState(t)
@@ -210,10 +210,10 @@ func TestLogDegradedWhenBothDestinationsFail(t *testing.T) {
 
 	dropped, err := LogHealth()
 	if err == nil {
-		t.Error("LogHealth() err = nil, want the trial write's own failure")
+		t.Error("LogHealth() err = nil, want the trial write's failure")
 	}
 	if dropped != 1 {
-		t.Errorf("LogHealth() dropped = %d, want 1 (the fallback's own trial write, not a second write on top of it)", dropped)
+		t.Errorf("LogHealth() dropped = %d, want 1 (the fallback's trial write, not a second write on top of it)", dropped)
 	}
 }
 

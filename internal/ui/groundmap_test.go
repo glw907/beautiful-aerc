@@ -52,8 +52,7 @@ func buildGroundHexIndex() map[string]byte {
 // the render itself, not a LayoutMode claim about what it should have
 // painted, is this map's source. A component that paints the wrong
 // ground moves this map; deriving it from ComputeLayout instead would
-// leave it agreeing with the very code that has the bug (review round
-// 1, finding 1).
+// leave it agreeing with the very code that has the bug.
 func galleryGroundMap(t *testing.T, c galleryCase, sz gallerySize) string {
 	t.Helper()
 	rendered := galleryRender(c, sz, groundTheme)

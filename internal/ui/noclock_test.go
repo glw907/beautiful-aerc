@@ -11,9 +11,9 @@ import (
 )
 
 // clockGuardDirs are the two package directories QA-7's TZ-and-locale
-// clause holds by construction (review round 1, finding 2): every
-// gallery render is a pure function of its arguments, never the
-// process's wall clock, because neither package reads one. Paths are
+// clause holds by construction: every gallery render is a pure
+// function of its arguments, never the process's wall clock, because
+// neither package reads one. Paths are
 // relative to this package's directory, the one `go test` itself runs
 // from; internal/ui/fixtures is deliberately not scanned, since a
 // fixture's clock input is exactly what a future date-bearing screen
@@ -26,10 +26,10 @@ var clockGuardDirs = []string{".", "../theme"}
 var bannedClockCalls = map[string]bool{"Now": true, "Local": true, "Since": true}
 
 // TestNoWallClockReferences replaces TestGallery_PinnedAgainstTZ
-// (deleted, review round 1, finding 2: t.Setenv("TZ", ...) cannot
-// move an already initialized time.Local, and no source this test
-// scans called it anyway, so the test could never fail). This guards
-// the property that is actually true, by construction, against a
+// (deleted: t.Setenv("TZ", ...) cannot move an already initialized
+// time.Local, and no source this test scans called it anyway, so the
+// test could never fail). This guards the property that is actually
+// true, by construction, against a
 // future regression: no non-test source in internal/ui or
 // internal/theme may reference time.Now, time.Local, or time.Since. A
 // pass-3 carry: once the first rendered timestamp lands, the clock

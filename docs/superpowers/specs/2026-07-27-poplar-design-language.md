@@ -211,7 +211,7 @@ reserve (`gapPin`, section 7, the pinned exemplar's own value), the
 constant pointer to the help overlay, which is
 the completeness surface: it lists every legal key regardless of
 what the footer's width-limited prefix shows. Width changes what
-the footer shows, never what is legal — the ladder principle applied
+the footer shows, never what is legal—the ladder principle applied
 to the footer's own row. The footer renders the current text-entry
 state when one is active, leading with the leave-field verb (`Esc
 commands`, section 3).

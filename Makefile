@@ -33,7 +33,7 @@ test:
 	go test ./...
 
 # gallery regenerates internal/ui/testdata/gallery/ (design decision
-# 10, pass 2 amendment B): the render seam's own committed sweep of
+# 10, pass 2 amendment B): the render seam's committed sweep of
 # every fixture × profile × size point, the review medium the design
 # language's prototyping loop runs on instead of an HTML mock. Plain
 # `go test ./internal/ui/...`, part of the test step above, already
@@ -52,7 +52,7 @@ test:
 # diff before committing it, the same as any other golden;
 # `git add -p` over testdata/gallery is the fast way to confirm every
 # changed file traces to the screen a commit actually touched. A
-# chrome task's own churn stays inside the screens it touched; a diff
+# chrome task's churn stays inside the screens it touched; a diff
 # that also moves an unrelated fixture's render is a bug in the task,
 # not a gallery to wave through. The pass-end reviewer reads gallery
 # churn explicitly for exactly this reason.
@@ -89,7 +89,7 @@ lint: build-golangci-lint
 
 # The analyzer tests run uncached: writecall's write-surface test
 # type-checks internal/store, which lives outside the tools module,
-# and the go test cache does not track files outside a test's own
+# and the go test cache does not track files outside a test's
 # module (cmd/go skips them). A cached pass over a store that has
 # since grown an export is the decay that test exists to catch.
 analyzers: build-poplarcheck
@@ -134,7 +134,7 @@ tagged-vet:
 
 # The second-server validation, run by hand and never by check: check
 # must pass on a machine with no container runtime at all. Stalwart
-# boots into a setup mode that serves nothing but its own
+# boots into a setup mode that serves nothing but its
 # configuration object, so the restart between the two provisioning
 # steps is the server leaving that mode. Teardown takes the anonymous
 # volumes with it, so a rerun starts from an empty account, and it runs
@@ -188,7 +188,7 @@ perf:
 
 # tmux-check drives the built binary through the tier-3 smoke flow
 # (task 12, survey amendment C): launch, switch all four surfaces,
-# open help, quit, keyboard only, poplar's own exit code captured. It
+# open help, quit, keyboard only, poplar's exit code captured. It
 # needs a real terminal and a real configured account, so it is a
 # gate-platform tool run by hand at a pass gate, never part of `make
 # check` or CI.

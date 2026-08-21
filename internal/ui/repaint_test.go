@@ -38,13 +38,13 @@ func newTestApp(t *testing.T) ui.App {
 func updateApp(t *testing.T, app ui.App, msg tea.Msg) ui.App {
 	t.Helper()
 	updated, cmd := app.Update(msg)
-	return runCmd(t, updated.(ui.App), cmd) //nolint:errcheck // App's own Update always returns an App; the assertion's panic is the message
+	return runCmd(t, updated.(ui.App), cmd) //nolint:errcheck // App's Update always returns an App; the assertion's panic is the message
 }
 
 // runCmd executes cmd and feeds every message it produces, including
 // each sub-command of a tea.BatchMsg recursively, back into
 // app.Update: a nil cmd is the recursion's base case. Draining the
-// batch this way is what actually lets App's own background-color
+// batch this way is what actually lets App's background-color
 // query time out for real inside TestRender_NeverAnsweringTerminalStaysDark
 // (BackgroundColorWait, no answer ever delivered), rather than this
 // test skipping the mechanism it claims to prove.
@@ -64,23 +64,22 @@ func runCmd(t *testing.T, app ui.App, cmd tea.Cmd) ui.App {
 }
 
 // TestRender_NeverAnsweringTerminalStaysDark is the carried
-// never-answering-terminal test (task 2's review, finding 3): a real
-// App, driven through its own Init and a WindowSizeMsg with no
-// tea.BackgroundColorMsg ever delivered, renders exactly the
-// gallery's own committed dark file for the mail fixture at the same
-// size: the terminal that never answers gets exactly the frame the
-// gallery already pins.
+// never-answering-terminal test: a real App, driven through its Init
+// and a WindowSizeMsg with no tea.BackgroundColorMsg ever delivered,
+// renders exactly the gallery's committed dark file for the mail
+// fixture at the same size: the terminal that never answers gets
+// exactly the frame the gallery already pins.
 func TestRender_NeverAnsweringTerminalStaysDark(t *testing.T) {
 	app := newTestApp(t)
 	assertMatchesGalleryFile(t, "mail-100x30-truecolor-dark", app.View().Content)
 }
 
 // TestRender_BackgroundColorRepaintGoldenPair is the carried golden
-// pair (task 2's review, finding 3), driven through a real App: the
-// pre-answer dark render matches the gallery's committed dark file,
-// and delivering a real tea.BackgroundColorMsg{Color: color.White}
-// through app.Update repaints App.View().Content to match the
-// gallery's committed light file, byte for byte.
+// pair, driven through a real App: the pre-answer dark render matches
+// the gallery's committed dark file, and delivering a real
+// tea.BackgroundColorMsg{Color: color.White} through app.Update
+// repaints App.View().Content to match the gallery's committed light
+// file, byte for byte.
 func TestRender_BackgroundColorRepaintGoldenPair(t *testing.T) {
 	app := newTestApp(t)
 	assertMatchesGalleryFile(t, "mail-100x30-truecolor-dark", app.View().Content)
@@ -89,7 +88,7 @@ func TestRender_BackgroundColorRepaintGoldenPair(t *testing.T) {
 	assertMatchesGalleryFile(t, "mail-100x30-truecolor-light", app.View().Content)
 }
 
-// TestGallery_TwoSweepsByteIdentical is QA-7's own assertion: two
+// TestGallery_TwoSweepsByteIdentical is QA-7's assertion: two
 // full in-process sweeps of the gallery matrix return byte-identical
 // output, case for case, independent of any committed file.
 func TestGallery_TwoSweepsByteIdentical(t *testing.T) {
@@ -110,7 +109,7 @@ func TestGallery_TwoSweepsByteIdentical(t *testing.T) {
 	}
 }
 
-// sweepGallery renders every galleryCases × its own profiles point
+// sweepGallery renders every galleryCases × its profiles point
 // once, keyed by the same name checkGallery persists under.
 func sweepGallery() map[string]string {
 	out := make(map[string]string)
@@ -126,7 +125,7 @@ func sweepGallery() map[string]string {
 }
 
 // assertMatchesGalleryFile asserts got, escaped the same way the
-// gallery escapes its own renders, equals the committed gallery file
+// gallery escapes its renders, equals the committed gallery file
 // name.txt.
 func assertMatchesGalleryFile(t *testing.T, name, got string) {
 	t.Helper()

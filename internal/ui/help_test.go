@@ -462,8 +462,7 @@ func TestJoinHelpColumns_TruncatesAWideLeftColumn(t *testing.T) {
 // TestHelpScreen_GlobalSectionNamesSiblingSurfaces is C1, CRITICAL:
 // the SurfaceSwitch row names every sibling surface, derived from
 // surfaceNames itself (the same array the status line's own cluster
-// renders), never a re-typed literal: the row this package's own
-// product was entirely missing before this fix round.
+// renders), never a re-typed literal.
 func TestHelpScreen_GlobalSectionNamesSiblingSurfaces(t *testing.T) {
 	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}
 	body := ansi.Strip(h.View().Content)

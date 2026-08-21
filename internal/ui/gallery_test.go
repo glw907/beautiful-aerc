@@ -47,14 +47,14 @@ var galleryProfiles = []galleryProfile{
 
 // galleryCase pairs one fixture with the size points it renders
 // distinctly at, and (rarely) a narrowed profile list: a nil
-// narrowProfiles means every galleryProfiles entry, this type's own
-// profiles method's default. stackTop renders the fixture's own
+// narrowProfiles means every galleryProfiles entry, this type's
+// profiles method's default. stackTop renders the fixture's
 // View() directly, bypassing ui.Render entirely: the same branch
 // App.View takes for a StateModal screen pushed onto its stack,
-// Confirm's own case, since a modal owns the whole terminal itself
+// Confirm's case, since a modal owns the whole terminal itself
 // rather than landing in a named LayoutMode pane. fullRegion instead
 // runs the fixture through ui.Render with RenderInput.FullRegion set:
-// the help overlay's own case, a non-modal stacked screen composed
+// the help overlay's case, a non-modal stacked screen composed
 // with the surrounding chrome but no sidebar or split of its own
 // (task 9).
 type galleryCase struct {
@@ -65,7 +65,7 @@ type galleryCase struct {
 	fullRegion     bool
 }
 
-// profiles returns c's own narrowed profile list, or every
+// profiles returns c's narrowed profile list, or every
 // galleryProfiles entry when c did not narrow it.
 func (c galleryCase) profiles() []galleryProfile {
 	if c.narrowProfiles != nil {
@@ -75,12 +75,12 @@ func (c galleryCase) profiles() []galleryProfile {
 }
 
 // galleryCases is the whole sweep: the four placeholders sweep a
-// spartan and a standard rung (the acceptance criterion's own 80×24
+// spartan and a standard rung (the acceptance criterion's 80×24
 // and 100×30); Mail also sweeps the wide rung (150×26), the only
 // size that exercises PaneSplit's compositing path (degrade divider
 // vs. blank gutter), so that path lands in the gallery itself rather
 // than a second, separate golden mechanism. Floor and Short each pin
-// the one size that names their own layout state. MailLoaded is a
+// the one size that names their layout state. MailLoaded is a
 // second mail state, realistic pinned counts rather than Mail's
 // empty ones, so the gallery still commits at least one rendered
 // "36,102"-style grouped count (decision 12); a profile variant on
@@ -97,8 +97,8 @@ var syncStateProfiles = []galleryProfile{galleryProfiles[0], galleryProfiles[3]}
 // truecolor dark and NO_COLOR, the same pairing syncStateProfiles
 // uses: the content pane beneath them never varies, and ANSI-16 adds
 // no distinct rendering path. ModalConfirm and Help do not use this
-// narrowing (review round 1, finding 3): unlike toast and banner,
-// the box and border glyphs they draw change per profile.
+// narrowing: unlike toast and banner, the box and border glyphs they
+// draw change per profile.
 var chromeStateProfiles = syncStateProfiles
 
 // mailBoundarySizes are the three remaining named boundary pairs
@@ -125,7 +125,7 @@ var mailBoundarySizes = []gallerySize{
 var galleryCases = []galleryCase{
 	{fixture: fixtures.Mail, sizes: append([]gallerySize{{80, 24}, {100, 30}, {150, 26}}, mailBoundarySizes...)},
 	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
-	// The second size point, 100×16, is HeightShort: F6's own gallery
+	// The second size point, 100×16, is HeightShort: F6's gallery
 	// proof that the sync segment drops its known total there
 	// (wireframe F3).
 	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}, {100, 16}}, narrowProfiles: syncStateProfiles},
@@ -133,10 +133,10 @@ var galleryCases = []galleryCase{
 	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.MailToast, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
 	{fixture: fixtures.MailBanner, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
-	// ModalConfirm and Help both sweep every profile (review round 1,
-	// finding 3): the chromeStateProfiles narrowing loses the degrade
-	// lane for a screen where a box and border glyphs, not a content
-	// pane beneath it, are what a profile actually changes.
+	// ModalConfirm and Help both sweep every profile: the
+	// chromeStateProfiles narrowing loses the degrade lane for a
+	// screen where a box and border glyphs, not a content pane
+	// beneath it, are what a profile actually changes.
 	{fixture: fixtures.ModalConfirm, sizes: []gallerySize{{80, 24}, {100, 30}}, stackTop: true},
 	// The help overlay sweeps F5 (80x24, one column), F6 (100x30, two
 	// columns), and the 99/100 boundary pair at a shared height, the
@@ -149,7 +149,7 @@ var galleryCases = []galleryCase{
 	{fixture: fixtures.Short, sizes: []gallerySize{{100, 16}}},
 }
 
-// update is the gallery's own regeneration flag: internal/ui's test
+// update is the gallery's regeneration flag: internal/ui's test
 // binary owns it directly (no other file in this package persists a
 // golden through a shared import), so `go test ./internal/ui/
 // -run '^TestGallery$' -update` is the whole regeneration contract.
@@ -196,8 +196,8 @@ func TestGallery(t *testing.T) {
 // for every ordinarily composited case: a component that paints the
 // wrong ground moves the render (and so galleryGroundMap) while
 // ComputeLayout's declared map stays put, so a mismatch here fails in
-// process, with no dependency on a committed file (review round 1,
-// finding 1). A stackTop or fullRegion case is skipped: the screen
+// process, with no dependency on a committed file. A stackTop or
+// fullRegion case is skipped: the screen
 // itself owns that whole region and is free to paint grounds
 // ComputeLayout's backdrop declaration never claimed (Confirm's box,
 // Help's panel background), which is exactly why Render bypasses
@@ -242,16 +242,16 @@ func TestGalleryCoversRegisteredScreens(t *testing.T) {
 	}
 }
 
-// galleryRender renders c's own fixture at sz through the seam,
+// galleryRender renders c's fixture at sz through the seam,
 // themed th: ui.Render's ordinary chrome compositing, c.fullRegion set
-// for a non-modal stacked screen's own compositing, or, when
-// c.stackTop is set, the fixture's own View() directly (the same
+// for a non-modal stacked screen's compositing, or, when
+// c.stackTop is set, the fixture's View() directly (the same
 // branch App.View takes for a StateModal stacked screen).
 func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
 	lm := ui.ComputeLayout(sz.width, sz.height, c.fixture.Banner.Active)
 	screen := c.fixture.Build(th)
 	updated, _ := screen.Update(ui.LayoutMsg{Layout: lm})
-	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's own Update always returns a Screen; the assertion's panic is the message
+	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's Update always returns a Screen; the assertion's panic is the message
 	if c.stackTop {
 		return scr.View().Content
 	}
@@ -260,7 +260,7 @@ func galleryRender(c galleryCase, sz gallerySize, th theme.Theme) string {
 }
 
 // checkGallery compares got against testdata/gallery/<name>.txt,
-// escaped the same way x/exp/golden escapes its own files (control
+// escaped the same way x/exp/golden escapes its files (control
 // codes quoted, one line at a time), so a committed render stays
 // plain, reviewable text. updateFile writes got as the new committed
 // file instead of comparing.

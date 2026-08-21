@@ -11,7 +11,7 @@ import (
 )
 
 // TestRenderStatusLine_ToastRidesTheRightSegment proves design
-// decision 1: a showing toast renders its own label and undo hint in
+// decision 1: a showing toast renders its label and undo hint in
 // the status line's right segment, and the sync state compresses to
 // its bare word beside it at widthStandardMin and up.
 func TestRenderStatusLine_ToastRidesTheRightSegment(t *testing.T) {
@@ -23,7 +23,7 @@ func TestRenderStatusLine_ToastRidesTheRightSegment(t *testing.T) {
 
 	got := plainStatusLine(sl, th)
 	if !strings.Contains(got, "3 messages archived") {
-		t.Errorf("renderStatusLine() = %q, want the toast's own label", got)
+		t.Errorf("renderStatusLine() = %q, want the toast's label", got)
 	}
 	if !strings.Contains(got, "u undo") {
 		t.Errorf("renderStatusLine() = %q, want the undo hint, derived from GrammarKeys.Undo", got)
@@ -37,7 +37,7 @@ func TestRenderStatusLine_ToastRidesTheRightSegment(t *testing.T) {
 }
 
 // TestRenderStatusLine_ToastYieldsSyncBelowStandardWidth proves the
-// dispatch's own ruling: below widthStandardMin the sync state yields
+// dispatch's ruling: below widthStandardMin the sync state yields
 // entirely rather than compressing, so the toast alone survives.
 func TestRenderStatusLine_ToastYieldsSyncBelowStandardWidth(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -62,7 +62,7 @@ func TestRenderStatusLine_ToastYieldsSyncBelowStandardWidth(t *testing.T) {
 
 // TestRenderStatusLine_ToastReservesGapAndCountdownSurvives is F1,
 // CRITICAL (task-8-findings-r1.md): at 60 columns with a label too
-// long to fit whole, the gap between the cluster and the toast's own
+// long to fit whole, the gap between the cluster and the toast's
 // content is never squeezed to zero (the cluster must not run into
 // the label), and truncation falls on the label: the countdown
 // survives.
@@ -91,7 +91,7 @@ func TestRenderStatusLine_ToastReservesGapAndCountdownSurvives(t *testing.T) {
 }
 
 // TestBareSyncWord_DropsProgressForEveryState proves every SY-5 state
-// compresses to its own bare label, with no count, spinner, or retry
+// compresses to its bare label, with no count, spinner, or retry
 // text riding along.
 func TestBareSyncWord_DropsProgressForEveryState(t *testing.T) {
 	tests := []struct {
@@ -113,7 +113,7 @@ func TestBareSyncWord_DropsProgressForEveryState(t *testing.T) {
 
 // TestApp_ToastMsg_NewestWins proves design decision 1: a second
 // ToastMsg while one is still showing replaces it outright, and bumps
-// the countdown's own gen so a tick from the replaced window is
+// the countdown's gen so a tick from the replaced window is
 // recognizable as stale.
 func TestApp_ToastMsg_NewestWins(t *testing.T) {
 	app := NewApp(testDeps(t))
@@ -125,17 +125,17 @@ func TestApp_ToastMsg_NewestWins(t *testing.T) {
 	app = mustApp(t, updated)
 
 	if app.statusLine().Toast.Label != "1 message deleted" {
-		t.Errorf("Toast.Label = %q after a second ToastMsg, want the newest offer's own label", app.statusLine().Toast.Label)
+		t.Errorf("Toast.Label = %q after a second ToastMsg, want the newest offer's label", app.statusLine().Toast.Label)
 	}
 	if app.toastGen == firstGen {
-		t.Error("toastGen unchanged across a second ToastMsg, want a fresh gen so the replaced window's own tick is stale")
+		t.Error("toastGen unchanged across a second ToastMsg, want a fresh gen so the replaced window's tick is stale")
 	}
 	if cmd == nil {
-		t.Fatal("ToastMsg armed no Cmd, want the countdown's own tick chain to start")
+		t.Fatal("ToastMsg armed no Cmd, want the countdown's tick chain to start")
 	}
 }
 
-// TestApp_ToastCountdown_TicksNineToZero is survey amendment E's own
+// TestApp_ToastCountdown_TicksNineToZero is survey amendment E's
 // discipline: the countdown's visible sequence, driven by injected
 // toastTickMsg values at the message layer, never a real timer.
 func TestApp_ToastCountdown_TicksNineToZero(t *testing.T) {
@@ -144,12 +144,12 @@ func TestApp_ToastCountdown_TicksNineToZero(t *testing.T) {
 	updated, cmd := app.Update(ToastMsg{Offer: UndoOffer{Label: "archived"}})
 	app = mustApp(t, updated)
 	if app.statusLine().Toast.Remaining != 9 {
-		t.Fatalf("Remaining after ToastMsg = %d, want 9 (the pinned exemplar's own dim \"9s\")", app.statusLine().Toast.Remaining)
+		t.Fatalf("Remaining after ToastMsg = %d, want 9 (the pinned exemplar's dim \"9s\")", app.statusLine().Toast.Remaining)
 	}
 	if cmd == nil {
-		t.Fatal("ToastMsg armed no Cmd, want the countdown's own tick chain to start")
+		t.Fatal("ToastMsg armed no Cmd, want the countdown's tick chain to start")
 	}
-	// gen comes from App's own field, never from invoking the armed
+	// gen comes from App's field, never from invoking the armed
 	// Cmd (a real tea.Tick(time.Second, ...) that would block this
 	// test for a second): survey amendment E asserts at the message
 	// layer only.
@@ -173,7 +173,7 @@ func TestApp_ToastCountdown_TicksNineToZero(t *testing.T) {
 	updated, cmd = app.tickToast(toastTickMsg{gen: gen})
 	app = mustApp(t, updated)
 	if app.statusLine().Toast.Active {
-		t.Error("Toast.Active still true after the countdown's own final tick, want the window closed")
+		t.Error("Toast.Active still true after the countdown's final tick, want the window closed")
 	}
 	if cmd != nil {
 		t.Error("tickToast after closing the window armed a Cmd, want none")
@@ -181,7 +181,7 @@ func TestApp_ToastCountdown_TicksNineToZero(t *testing.T) {
 }
 
 // TestApp_ToastTick_StaleGenIgnored mirrors
-// TestApp_SpinnerTicksOnlyWhileSyncingOrBackfilling's own stale-gen
+// TestApp_SpinnerTicksOnlyWhileSyncingOrBackfilling's stale-gen
 // case: a tick from a window a newer toast already replaced changes
 // nothing.
 func TestApp_ToastTick_StaleGenIgnored(t *testing.T) {
@@ -203,7 +203,7 @@ func TestApp_ToastTick_StaleGenIgnored(t *testing.T) {
 }
 
 // TestApp_UndoWithinWindowEmitsOfferCmd proves `u` inside the
-// countdown window emits the offer's own Undo Cmd and closes the
+// countdown window emits the offer's Undo Cmd and closes the
 // window.
 func TestApp_UndoWithinWindowEmitsOfferCmd(t *testing.T) {
 	app := NewApp(testDeps(t))
@@ -216,11 +216,11 @@ func TestApp_UndoWithinWindowEmitsOfferCmd(t *testing.T) {
 	app = mustApp(t, updated)
 
 	if cmd == nil {
-		t.Fatal("'u' within the window returned a nil Cmd, want the offer's own Undo")
+		t.Fatal("'u' within the window returned a nil Cmd, want the offer's Undo")
 	}
 	cmd()
 	if !fired {
-		t.Error("the returned Cmd did not invoke the offer's own Undo")
+		t.Error("the returned Cmd did not invoke the offer's Undo")
 	}
 	if app.statusLine().Toast.Active {
 		t.Error("Toast.Active still true after 'u' answered it, want the window closed")
@@ -252,17 +252,17 @@ func TestApp_UndoAfterExpiryIsNoop(t *testing.T) {
 		t.Error("'u' after expiry returned a non-nil Cmd, want a no-op")
 	}
 	if fired {
-		t.Error("'u' after expiry invoked the expired offer's own Undo")
+		t.Error("'u' after expiry invoked the expired offer's Undo")
 	}
 }
 
-// TestApp_QuitWithOpenUndoWindowConfirms proves UX-9's own lifecycle
+// TestApp_QuitWithOpenUndoWindowConfirms proves UX-9's lifecycle
 // rule, carried from task 8's review to task 11: the window does not
 // survive quit, and the toast says so. q at a surface root with an
 // open undo window and an empty outbox pushes F7's modal confirm
 // naming the offer rather than quitting straight through; 'n' leaves
 // the window open and invokes nothing; 'y' logs one debug line,
-// discards the window without invoking its own Undo, and quits.
+// discards the window without invoking its Undo, and quits.
 func TestApp_QuitWithOpenUndoWindowConfirms(t *testing.T) {
 	app := NewApp(testDeps(t))
 
@@ -298,13 +298,13 @@ func TestApp_QuitWithOpenUndoWindowConfirms(t *testing.T) {
 		t.Error("Toast.Active false after 'n', want the window still open")
 	}
 	if fired {
-		t.Error("'n' invoked the open offer's own Undo")
+		t.Error("'n' invoked the open offer's Undo")
 	}
 
-	// 'y' emits quitYesMsg; App's own case for it (not Confirm's YesCmd
+	// 'y' emits quitYesMsg; App's case for it (not Confirm's YesCmd
 	// itself) discards the window, logs once, and quits, so the answer
 	// is evaluated fresh rather than snapshotted back when q first
-	// pushed the modal (fix round 1 finding 5, m8).
+	// pushed the modal.
 	buf := captureDebugLog(t)
 	answered, cmd := answerConfirm(t, app, tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd == nil {
@@ -324,7 +324,7 @@ func TestApp_QuitWithOpenUndoWindowConfirms(t *testing.T) {
 		t.Errorf("quitYesMsg handling yielded %#v, want tea.QuitMsg", got)
 	}
 	if fired {
-		t.Error("'y' invoked the open offer's own Undo, want it merely discarded")
+		t.Error("'y' invoked the open offer's Undo, want it merely discarded")
 	}
 	if !strings.Contains(buf.String(), "quit discarded the open undo window") {
 		t.Errorf("log = %q, want the one discard line", buf.String())
@@ -395,7 +395,7 @@ func TestApp_QuitYesMsg_NoPhantomDiscardAfterTheWindowExpires(t *testing.T) {
 }
 
 // TestApp_QuitWithQueuedOutboxConfirms proves the outbox half of
-// CARRY 3: a nonzero outbox count at quit pushes F7's own modal
+// CARRY 3: a nonzero outbox count at quit pushes F7's modal
 // confirm ("Quit with N unsent messages?"), even with no undo window
 // open.
 func TestApp_QuitWithQueuedOutboxConfirms(t *testing.T) {
@@ -418,11 +418,11 @@ func TestApp_QuitWithQueuedOutboxConfirms(t *testing.T) {
 		t.Errorf("Question = %q, want it naming the queued count", confirm.Question)
 	}
 	if !strings.Contains(confirm.Consequence, "next time you open poplar") {
-		t.Errorf("Consequence = %q, want the outbox's own consequence line", confirm.Consequence)
+		t.Errorf("Consequence = %q, want the outbox's consequence line", confirm.Consequence)
 	}
 }
 
-// TestApp_ToastLogsOneLine is ER-1's own seam: every toast App
+// TestApp_ToastLogsOneLine is ER-1's seam: every toast App
 // absorbs produces exactly one log line, carrying the offer's label.
 func TestApp_ToastLogsOneLine(t *testing.T) {
 	buf := captureDebugLog(t)
@@ -435,7 +435,7 @@ func TestApp_ToastLogsOneLine(t *testing.T) {
 		t.Fatalf("log lines = %d, want exactly 1:\n%s", len(lines), buf.String())
 	}
 	if !strings.Contains(lines[0], "3 messages archived") {
-		t.Errorf("log line = %q, want it to carry the toast's own label", lines[0])
+		t.Errorf("log line = %q, want it to carry the toast's label", lines[0])
 	}
 }
 
@@ -465,9 +465,9 @@ func TestApp_UndoEligible_GatesOnStackAndSwitchState(t *testing.T) {
 	}
 }
 
-// TestApp_Undo_NoOpWithModalOnStack is F2's own end-to-end case: `u`
+// TestApp_Undo_NoOpWithModalOnStack is F2's end-to-end case: `u`
 // with an open undo window but a modal on the stack reaches the
-// modal's own Update (a no-op, since 'u' answers none of Confirm's
+// modal's Update (a no-op, since 'u' answers none of Confirm's
 // own y/n/Esc grammar) rather than the open offer's Undo.
 func TestApp_Undo_NoOpWithModalOnStack(t *testing.T) {
 	app := NewApp(testDeps(t))
@@ -483,7 +483,7 @@ func TestApp_Undo_NoOpWithModalOnStack(t *testing.T) {
 		t.Error("'u' with a modal on the stack returned a non-nil Cmd, want a no-op")
 	}
 	if fired {
-		t.Error("'u' with a modal on the stack fired the open offer's own Undo, want the gate to block it")
+		t.Error("'u' with a modal on the stack fired the open offer's Undo, want the gate to block it")
 	}
 	if !app.toastActive {
 		t.Error("toastActive cleared by 'u' with a modal on the stack, want the window left open")
@@ -492,7 +492,7 @@ func TestApp_Undo_NoOpWithModalOnStack(t *testing.T) {
 
 // TestApp_ToastTickMsg_ReachesUpdate is F12 (task-8-findings-r1.md):
 // at least one test drives toastTickMsg through App.Update itself,
-// not App.tickToast directly, so deleting Update's own switch case
+// not App.tickToast directly, so deleting Update's switch case
 // fails the suite.
 func TestApp_ToastTickMsg_ReachesUpdate(t *testing.T) {
 	app := NewApp(testDeps(t))

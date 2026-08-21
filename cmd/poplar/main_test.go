@@ -26,7 +26,7 @@ import (
 )
 
 // runMainEnvVar names the environment variable
-// TestMainReportsStorePathFailureThroughUerr sets to re-invoke its own
+// TestMainReportsStorePathFailureThroughUerr sets to re-invoke its
 // test binary as a subprocess running the real main, rather than the
 // test suite.
 const runMainEnvVar = "POPLAR_RUN_MAIN"
@@ -144,7 +144,7 @@ func TestMainReportsStorePathFailureThroughUerr(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, os.Args[0]) //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its own subprocess
+	cmd := exec.CommandContext(ctx, os.Args[0]) //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its subprocess
 	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_DATA_DIRS="+dataHome)
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {
@@ -181,7 +181,7 @@ func seedRunnableStore(t *testing.T, dataHome string) {
 // read-only home directory, or a filesystem at quota): the directory
 // resolves and already exists, exactly what xdg.StateFile itself
 // checks for, and only denies the write a trial open catches. A mode
-// occupying the log path with a directory (this suite's own prior
+// occupying the log path with a directory (this suite's prior
 // shape) is a rarer collision that happens to fail the same way, but
 // is not the common case row 24 names.
 func unwritableStateHome(t *testing.T, home string) string {
@@ -199,11 +199,11 @@ func unwritableStateHome(t *testing.T, home string) string {
 	if err := os.Chmod(statePoplar, 0o500); err != nil { //nolint:gosec // G302: statePoplar is a directory, not a file; 0500 denies write while keeping the execute bit traversal needs, which G302's file-mode heuristic does not account for
 		t.Fatalf("deny write on the state directory: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(statePoplar, 0o700) }) //nolint:gosec // G302: statePoplar is a directory; restoring 0700 so t.TempDir's own cleanup can remove it
+	t.Cleanup(func() { _ = os.Chmod(statePoplar, 0o700) }) //nolint:gosec // G302: statePoplar is a directory; restoring 0700 so t.TempDir's cleanup can remove it
 	return stateHome
 }
 
-// TestRunFallsBackWhenStateDirIsUnwritable proves C2/C3's own fix at
+// TestRunFallsBackWhenStateDirIsUnwritable proves C2/C3's fix at
 // the real entry point: an unwritable state directory (mode
 // 0500, not the rarer directory-occupies-the-log-path collision) no
 // longer drops every log line in silence until exit. With a writable
@@ -223,7 +223,7 @@ func TestRunFallsBackWhenStateDirIsUnwritable(t *testing.T) {
 
 	// --startup-trace runs the whole startup path and exits on its own,
 	// so the subprocess needs no signal to finish.
-	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its own subprocess
+	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its subprocess
 	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_STATE_HOME="+stateHome, "TMPDIR="+tmpDir)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -241,14 +241,14 @@ func TestRunFallsBackWhenStateDirIsUnwritable(t *testing.T) {
 		t.Fatalf("read the temp-dir fallback log: %v", err)
 	}
 	if !strings.Contains(string(fallback), "state directory unavailable") {
-		t.Errorf("fallback log = %q, want the engagement line and the run's own lines landed in it", fallback)
+		t.Errorf("fallback log = %q, want the engagement line and the run's lines landed in it", fallback)
 	}
 }
 
 // TestRunReportsAnUnwritableLogWhenBothDestinationsFail proves a
 // poplar whose log cannot be written anywhere still says so on a
 // channel that does not depend on the log. slog discards a handler's
-// write error, so with both the state directory and its own temp-dir
+// write error, so with both the state directory and its temp-dir
 // fallback unwritable, every error run reports afterward would be
 // dropped with no trace anywhere but for this channel (SY-8,
 // ADR-0013). The subprocess runs the real main with an
@@ -265,7 +265,7 @@ func TestRunReportsAnUnwritableLogWhenBothDestinationsFail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its own subprocess
+	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its subprocess
 	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_STATE_HOME="+stateHome,
 		"TMPDIR="+filepath.Join(home, "does-not-exist"))
 	var stdout, stderr bytes.Buffer
@@ -349,7 +349,7 @@ func seedStrandedDispatchingRow(t *testing.T, dbPath string) {
 }
 
 // seedAccountSQL is the one account row every startup fixture hangs
-// its own rows off, at id 1 so a fixture can name account_id 1
+// its rows off, at id 1 so a fixture can name account_id 1
 // literally.
 const seedAccountSQL = `INSERT INTO account (id, slug, backend_kind, address) VALUES (1, 'a', 'jmap', 'a@example.com')`
 
@@ -431,7 +431,7 @@ func TestRunStartupTraceEncodeFailureReachesUerr(t *testing.T) {
 	}
 }
 
-// TestRunRefusesSecondInstance proves run's own startup path surfaces
+// TestRunRefusesSecondInstance proves run's startup path surfaces
 // AcquireInstanceLock's refusal instead of swallowing it (SY-7).
 func TestRunRefusesSecondInstance(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
@@ -779,7 +779,7 @@ func TestRunFailsFastOnAFatalConnectError(t *testing.T) {
 		},
 		{
 			// uerr.New logs on construction, so this shape must be
-			// built inside the test case to land in that case's own
+			// built inside the test case to land in that case's
 			// captured buffer.
 			name: "a token poplar never found",
 			connectErr: func() error {
