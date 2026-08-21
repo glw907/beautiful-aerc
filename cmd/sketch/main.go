@@ -1,17 +1,16 @@
 // Command sketch is a thin interactive wrapper over internal/ui's
-// render seam (task 12): keys cycle a fixture, a capability profile,
-// and a terminal rung, and each frame is exactly what ui.Render
-// returns for that combination. It always renders through Render's
-// ordinary composed path; the modal-confirm and help-overlay special
-// cases gallery_test.go bypasses for (a stack-top screen rendered
-// directly, a full-region screen skipping the pane split) are the
-// gated gallery's concern, not this tool's. It sets no
-// tea.Program color-profile option, so the terminal's detected
-// capability governs what a truecolor fixture actually shows; the
-// gallery's committed renders are what prove a profile's exact bytes.
-// sketch verifies no pointer coordinate and no glyph's display width;
-// it is a developer's eye, never a gate, and is excluded from
-// `make install` and every release artifact.
+// composition seam (task 12, extended task 2 of pass 2c): keys cycle
+// a fixture, a capability profile, and a terminal rung, and each
+// frame is exactly what ui.ComposeView returns for that combination,
+// the same function App.View calls, so sketch's frame is painted
+// evidence for what the running product shows, banner, toast, modal,
+// offline and backing-off states included. It sets no tea.Program
+// color-profile option, so the terminal's detected capability governs
+// what a truecolor fixture actually shows; the gallery's committed
+// renders are what prove a profile's exact bytes. sketch verifies no
+// pointer coordinate and no glyph's display width; it is a
+// developer's eye, never a gate, and is excluded from `make install`
+// and every release artifact.
 package main
 
 import (
@@ -43,6 +42,16 @@ var sketchFixtures = []fixtures.Fixture{
 	fixtures.Config,
 	fixtures.Floor,
 	fixtures.Short,
+}
+
+// sketchStackFixtures names the fixtures ComposeView takes onto its
+// stack argument rather than its active one: the modal-confirm and
+// help-overlay fixtures, the two screens App pushes rather than
+// switches to. Every other fixture is the active surface with an
+// empty stack.
+var sketchStackFixtures = map[string]bool{
+	fixtures.ModalConfirm.Name: true,
+	fixtures.Help.Name:         true,
 }
 
 // sketchProfile pairs a profile's label with the Theme it resolves
@@ -178,9 +187,13 @@ func (m sketchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // computeFrame builds m's current fixture at its current profile and
-// rung, through ui.Render's ordinary composed path, and returns the
-// rendered frame with sketch's status line appended, plus whatever
-// Cmd the screen's LayoutMsg Update returned.
+// rung, through ui.ComposeView, the same function App.View calls, and
+// returns the rendered frame with sketch's status line appended, plus
+// whatever Cmd the screen's LayoutMsg Update returned. A stack fixture
+// (sketchStackFixtures) lands on ComposeView's stack argument, active
+// left nil since ComposeView never consults it once stack is
+// non-empty; every other fixture is the active argument, stack left
+// nil.
 func (m sketchModel) computeFrame() (string, tea.Cmd) {
 	f := sketchFixtures[m.fixture]
 	p := sketchProfiles[m.profile]
@@ -190,7 +203,15 @@ func (m sketchModel) computeFrame() (string, tea.Cmd) {
 	updated, cmd := f.Build(p.theme).Update(ui.LayoutMsg{Layout: lm})
 	scr := updated.(ui.Screen) //nolint:errcheck // a Screen's Update always returns a Screen; the assertion's panic is the message
 
-	frame := ui.Render(ui.RenderInput{Screen: scr, Layout: lm, Theme: p.theme, Status: f.Status, Banner: f.Banner})
+	var active ui.Screen
+	var stack []ui.Screen
+	if sketchStackFixtures[f.Name] {
+		stack = []ui.Screen{scr}
+	} else {
+		active = scr
+	}
+
+	frame := ui.ComposeView(lm, p.theme, f.Status, f.Banner, active, stack)
 	status := fmt.Sprintf("fixture %s   profile %s   rung %s   ? help", f.Name, p.name, sz)
 	return frame.Content + "\n" + status, cmd
 }
@@ -200,7 +221,10 @@ func (m sketchModel) computeFrame() (string, tea.Cmd) {
 const sketchHelp = `n/N next/previous fixture   p/P next/previous profile   s/S next/previous rung   ? toggle this help   q quit
 sketch does not verify pointer coordinates or a glyph's display width; the gallery (make gallery) is what gates on those.`
 
-// View implements tea.Model.
+// View implements tea.Model. AltScreen is set on every frame
+// (matching App.View's own declaration): without it a rung change
+// leaves the previous, larger frame's rows on screen behind the new,
+// smaller one rather than clearing them.
 func (m sketchModel) View() tea.View {
 	out := m.frame
 	if warn := m.narrowWarning(); warn != "" {
@@ -209,7 +233,9 @@ func (m sketchModel) View() tea.View {
 	if m.help {
 		out += "\n" + sketchHelp
 	}
-	return tea.NewView(out)
+	view := tea.NewView(out)
+	view.AltScreen = true
+	return view
 }
 
 // narrowWarning reports the line View appends when the chosen rung

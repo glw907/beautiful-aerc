@@ -92,3 +92,31 @@ script only checks that a capture shows the surface it claims, never
 whether that surface composes correctly, which is what the fresh-
 context vision graders are for. The sketch frames in this directory
 predate task 2's fix and show the phantom rail on purpose.
+
+## Task 2 re-shots
+
+Six `scripts/kitty-shot` captures (PNG plus `.ansi` beside each),
+`task2-`-prefixed, taken after task 2 of pass 2c put `cmd/sketch` on
+`ui.ComposeView`, the same composition path `App.View` calls: the
+`mail`, `help`, `modal-confirm`, and NO_COLOR `mail` fixtures the
+task brief named, re-shot through the fixed binary, plus a rung
+150x26 then 100x30 pair proving SK-3's frame-hygiene residue (a stale
+larger frame's rows left behind after a shrink) is gone.
+
+- `task2-mail.png`: fixture `mail`, truecolor-dark, 100x30. Full-width
+  status line and footer, centered placeholder, no rail and no
+  divider column anywhere in the frame.
+- `task2-help.png`: fixture `help`, truecolor-dark, 100x30. The
+  two-column overlay fills the whole content region edge to edge;
+  no rail or divider between the overlay and the frame edge.
+- `task2-modal-confirm.png`: fixture `modal-confirm`, truecolor-dark,
+  100x30. The status line and footer are both gone; the confirm box
+  sits alone on a blank ground, the full-shell wipe StateModal owns.
+- `task2-mail-nocolor.png`: fixture `mail`, NO_COLOR, 100x30. No
+  SGR background anywhere in the frame (decision 11); the content
+  reads as plain text against the terminal's own ground.
+- `task2-residue-150x26.png` then `task2-residue-100x30.png`: the
+  same fixture (`mail`, truecolor-dark) shot at 150x26, then again
+  after resizing down to 100x30. The second capture shows only the
+  100x30 frame; none of the wider or taller previous frame's rows
+  survive the shrink.

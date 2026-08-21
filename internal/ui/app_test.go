@@ -422,15 +422,14 @@ func TestApp_ViewRendersStackTopWhenPresent(t *testing.T) {
 }
 
 // TestApp_ViewRendersActiveSurfaceWhenStackEmpty is F5's other half:
-// an empty stack falls back to the active surface, rendered through
-// the same seam TestApp_ViewMatchesRenderSeam pins (FullRegion,
-// isPlaceholderScreen's ruling), never the placeholder's bare
-// unstyled View() alone.
+// an empty stack falls back to the active surface, composed through
+// the same ComposeView call TestApp_ViewMatchesRenderSeam pins, never
+// the placeholder's bare unstyled View() alone.
 func TestApp_ViewRendersActiveSurfaceWhenStackEmpty(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
 
-	want := Render(RenderInput{Screen: app.mail, FullRegion: true, Layout: app.layout, Theme: app.theme, Status: app.statusLine(), Banner: app.banner}).Content
+	want := ComposeView(app.layout, app.theme, app.statusLine(), app.banner, app.mail, nil).Content
 	if got := app.View().Content; got != want {
 		t.Errorf("View() with an empty stack = %q, want the active surface's own render %q", got, want)
 	}
@@ -464,7 +463,7 @@ func TestApp_ViewSetsMouseModeAndAltScreenOnEveryPath(t *testing.T) {
 }
 
 // TestApp_ViewMatchesRenderSeam is CR1: after a WindowSizeMsg, the
-// product's View().Content is exactly what Render produces from
+// product's View().Content is exactly what ComposeView produces from
 // the same active screen, layout, and theme App itself holds, so the
 // running program never drifts from what the gallery pins.
 func TestApp_ViewMatchesRenderSeam(t *testing.T) {
@@ -473,9 +472,9 @@ func TestApp_ViewMatchesRenderSeam(t *testing.T) {
 	app = mustApp(t, updated)
 
 	screen := app.activeScreen()
-	want := Render(RenderInput{Screen: screen, FullRegion: isPlaceholderScreen(screen), Layout: app.layout, Theme: app.theme, Status: app.statusLine(), Banner: app.banner}).Content
+	want := ComposeView(app.layout, app.theme, app.statusLine(), app.banner, screen, nil).Content
 	if got := app.View().Content; got != want {
-		t.Errorf("App.View().Content = %q, want Render(...)'s own content %q", got, want)
+		t.Errorf("App.View().Content = %q, want ComposeView(...)'s own content %q", got, want)
 	}
 }
 

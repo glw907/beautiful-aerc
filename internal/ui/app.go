@@ -179,75 +179,25 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a.updateChildren(msg)
 }
 
-// View implements tea.Model. Below the floor (width or height,
-// design language section 9) the centered notice renderFloorNotice
-// composes is the whole frame, selected before anything else runs:
-// a StateModal stack top (Confirm, most notably) would otherwise
-// render its box at a size confirmBoxWidth never promised to
-// tolerate, and the floor rung's chrome-free premise (mouse.go's
-// dispatchClick) would be a lie. Above the floor, a StateModal stack
-// top renders itself directly: a plain stack-top render, no dimmed
-// backdrop, since a modal owns the whole terminal itself rather than
-// landing in a named LayoutMode pane. Every other front, the active
-// surface with an empty stack or a non-modal screen pushed onto it
-// (the help overlay, first of its kind, task 9), runs through Render,
-// the same seam the gallery renders through, so the product never
-// drifts from what the gallery pins: a pushed screen's content fills
-// the whole Main band (RenderInput.FullRegion), the same treatment
-// this pass's four surface placeholders get (isPlaceholderScreen,
-// F1/F8's ruling: each owns no sidebar and no split), rather than the
-// narrower Content pane a surface's sidebar reservation would
-// otherwise squeeze either against. The footer follows whichever
-// Screen Render composes, the stack top's Entry included, since
-// Render always reaches for Screen.Entry() itself. Every returned
-// tea.View carries MouseMode (a per-frame declaration in bubbletea
-// v2, not a program-construction option, so no return path can
-// silently toggle reporting off) and AltScreen (bubbletea v2 removed
-// WithAltScreen; without this every path renders inline, scrollback
-// destroyed and a stale frame left behind after quit).
+// View implements tea.Model. The frame itself is ComposeView's
+// concern, the one composition path this and cmd/sketch both render
+// through (task 2, pass 2c): App.View supplies its current layout,
+// theme, status line, banner, active screen, and stack, and adds only
+// what ComposeView cannot know. The footer follows whichever screen
+// Render composes, the stack top's Entry included, since Render
+// always reaches for Screen.Entry() itself. Every returned tea.View
+// carries MouseMode (a per-frame declaration in bubbletea v2, not a
+// program-construction option, so no return path can silently toggle
+// reporting off) and AltScreen (bubbletea v2 removed WithAltScreen;
+// without this every path renders inline, scrollback destroyed and a
+// stale frame left behind after quit).
 func (a App) View() tea.View {
-	if a.layout.Class == WidthFloor || a.layout.HeightClass == HeightFloor {
-		view := tea.NewView(renderFloorNotice(a.theme, a.layout.Width, a.layout.Height))
-		view.MouseMode = tea.MouseModeCellMotion
-		view.AltScreen = true
-		return view
-	}
-
-	screen := a.activeScreen()
-	fullRegion := isPlaceholderScreen(screen)
-	if len(a.stack) > 0 {
-		top := a.stack[len(a.stack)-1]
-		if top.Entry().SwitchState == StateModal {
-			view := top.View()
-			view.MouseMode = tea.MouseModeCellMotion
-			view.AltScreen = true
-			return view
-		}
-		screen, fullRegion = top, true
-	}
-	frame := Render(RenderInput{Screen: screen, FullRegion: fullRegion, Layout: a.layout, Theme: a.theme, Status: a.statusLine(), Banner: a.banner})
+	frame := ComposeView(a.layout, a.theme, a.statusLine(), a.banner, a.activeScreen(), a.stack)
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
 	view.MouseMode = tea.MouseModeCellMotion
 	view.AltScreen = true
 	return view
-}
-
-// isPlaceholderScreen reports whether screen is one of pass 2's four
-// surface placeholders (F1/F8's ruling): each owns no sidebar and no
-// split, so App.View renders it FullRegion the same way a pushed
-// non-modal screen already is, rather than landing it in the
-// narrower Content pane a surface's sidebar reservation would
-// otherwise squeeze it against. The durable fix, a pane set each
-// ScreenEntry declares so ComputeLayout allocates only what a screen
-// actually asked for, is pass 3's carry (BACKLOG).
-func isPlaceholderScreen(screen Screen) bool {
-	switch screen.(type) {
-	case MailPlaceholder, CalendarPlaceholder, ContactsPlaceholder, ConfigPlaceholder:
-		return true
-	default:
-		return false
-	}
 }
 
 // statusLine builds the top band's render state from a's current
