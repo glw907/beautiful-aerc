@@ -12,7 +12,7 @@ import (
 )
 
 // renderTestScreen returns a loaded MailPlaceholder at lm, themed th:
-// render_test.go's own fixture, kept independent of the fixtures
+// render_test.go's fixture, kept independent of the fixtures
 // package (an outside importer of this one) the way placeholder_test.go
 // already builds MailPlaceholder by struct literal.
 func renderTestScreen(t *testing.T, th theme.Theme, lm LayoutMode) MailPlaceholder {
@@ -38,7 +38,7 @@ func TestRender_Purity(t *testing.T) {
 
 // TestRender_FloorStateReturnsScreenViewVerbatim proves the floor
 // state carries no chrome to compose (section 9): Render returns
-// screen.View()'s own content and cursor unchanged rather than
+// screen.View()'s content and cursor unchanged rather than
 // running it through the canvas.
 func TestRender_FloorStateReturnsScreenViewVerbatim(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -56,9 +56,9 @@ func TestRender_FloorStateReturnsScreenViewVerbatim(t *testing.T) {
 }
 
 // TestRender_CoversEveryRow proves the seam always emits exactly
-// LayoutMode's own row count, at every profile and with a banner row
+// LayoutMode's row count, at every profile and with a banner row
 // both present and absent: the geometric half of the coverage
-// invariant LayoutMode's own row-tiling test already proves
+// invariant LayoutMode's row-tiling test already proves
 // (TestComputeLayout_RowTiling). A row's rendered width is checked
 // separately, at ProfileTrueColor only
 // (TestRender_TrueColorRowsFillTheirWidth): a blank, uncolored row at
@@ -124,11 +124,11 @@ func columnAt(t *testing.T, row string, x int) rune {
 	return plain[x]
 }
 
-// TestRender_DividerDegradeSubstitution proves LayoutMode's own rule
+// TestRender_DividerDegradeSubstitution proves LayoutMode's rule
 // (Divider.Degrade): the wide rung's list/reader boundary draws a
 // glyph only under Theme.DrawsDividers (ANSI-16, NO_COLOR); at
-// ProfileTrueColor it stays a blank gutter, Main's own fill. It
-// checks the degrade divider's own column specifically, since the
+// ProfileTrueColor it stays a blank gutter, Main's fill. It
+// checks the degrade divider's column specifically, since the
 // rail divider (always drawn) shares the same glyph and would give a
 // false positive on a whole-row substring search.
 func TestRender_DividerDegradeSubstitution(t *testing.T) {
@@ -156,9 +156,9 @@ func TestRender_DividerDegradeSubstitution(t *testing.T) {
 }
 
 // fullRegionTestScreen is a minimal Screen whose View() reports
-// whatever content its own field carries: F9's own fixture, proving
+// whatever content its field carries: F9's fixture, proving
 // RenderInput.FullRegion against a screen with no sidebar or split
-// composition of its own, independent of HelpScreen's own body logic.
+// composition, independent of HelpScreen's body logic.
 type fullRegionTestScreen struct {
 	content string
 }
@@ -169,12 +169,12 @@ func (f fullRegionTestScreen) View() tea.View                      { return tea.
 func (f fullRegionTestScreen) Entry() ScreenEntry                  { return ScreenEntry{} }
 
 // TestRender_FullRegionSpansMainWithNoPanesOrDividers is F9: a
-// FullRegion render paints Screen's own content across the whole Main
-// band, covers exactly LayoutMode's own row count, and skips the
-// sidebar/split panes and their dividers a surface's own composition
+// FullRegion render paints Screen's content across the whole Main
+// band, covers exactly LayoutMode's row count, and skips the
+// sidebar/split panes and their dividers a surface's composition
 // would otherwise draw. The wide rung (150x26) normally carries a
-// rail divider, which a screen with no sidebar of its own never
-// composed. The ordinary, non-FullRegion branch this test's own
+// rail divider, which a screen with no sidebar never
+// composed. The ordinary, non-FullRegion branch this test's
 // sibling tests exercise (TestRender_DividerDegradeSubstitution among
 // them) is untouched by this addition.
 func TestRender_FullRegionSpansMainWithNoPanesOrDividers(t *testing.T) {

@@ -6,7 +6,7 @@
 // then hands off to the TUI (runInteractive, cmd/poplar/tui.go);
 // --headless keeps the engine-only loop the perf and QA harnesses and
 // the live suites run against (run, cmd/poplar/main.go), and
-// --startup-trace, QA-1's own harness flag, always runs headless
+// --startup-trace, QA-1's harness flag, always runs headless
 // regardless of --headless.
 package main
 
@@ -93,7 +93,7 @@ func main() {
 
 // headlessEntry reports whether f routes main to run's headless
 // engine loop instead of runInteractive's TUI: --headless, the
-// perf/QA harnesses' and the live suites' own flag, or --startup-trace,
+// perf/QA harnesses' and the live suites' flag, or --startup-trace,
 // which keeps its current headless semantics unchanged this pass
 // (QA-1's first-screenful-of-rows form arrives with pass 3's list) even
 // without --headless alongside it.
@@ -116,8 +116,8 @@ func reportStartupFailure(w io.Writer, err error) {
 }
 
 // startupState is what startup returns once the store is ready:
-// lock is the caller's to release (its own defer, so the lock outlives
-// startup's own return), and writer is open and migrated, its
+// lock is the caller's to release (its defer, so the lock outlives
+// startup's return), and writer is open and migrated, its
 // orphaned-intent sweep already run.
 type startupState struct {
 	lock   *platform.InstanceLock
@@ -169,7 +169,7 @@ func startup(ctx context.Context, dbPath string, f flags, out, errOut io.Writer)
 	// A log writer reports a failure only after something asks it to
 	// write, so this line is what gives the health check below
 	// anything to have failed on. Without it a session that logged
-	// nothing else would reach its own first error with the log
+	// nothing else would reach its first error with the log
 	// already broken and silent.
 	slog.Info("poplar: store ready", "path", dbPath)
 	reportLogHealth(errOut)
@@ -182,7 +182,7 @@ func startup(ctx context.Context, dbPath string, f flags, out, errOut io.Writer)
 // worker and outbox dispatcher (connect resolves the backend they run
 // against) and a clean shutdown once ctx is done. main reaches it
 // through --headless or --startup-trace; every other invocation runs
-// runInteractive (tui.go) instead. start is run's own entry time, the
+// runInteractive (tui.go) instead. start is run's entry time, the
 // in-process origin QA-1's --startup-trace measures against. Status
 // and trace output go to out; a log poplar cannot write is reported on
 // errOut, which --startup-trace's caller does not parse.
@@ -206,7 +206,7 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// startEnginesRetrying instead of aborting run, since SY-3
 	// requires poplar to run and stay usable with no network. The
 	// fatal branch is what constructs the uerr.Error for a dial
-	// failure: jmapsource.Dial classifies its own failures without
+	// failure: jmapsource.Dial classifies its failures without
 	// logging so a retry loop can dedup them (ADR-0013 revision 2),
 	// which leaves this exit the one surfacing event on a path that
 	// has no retry loop at all. A failure that arrives already
@@ -276,7 +276,7 @@ func reportLogHealth(w io.Writer) {
 }
 
 // startupTraceResult is the single JSON line --startup-trace prints to
-// stdout: QA-1's in-process phase timings from run's own entry to a
+// stdout: QA-1's in-process phase timings from run's entry to a
 // first mailbox-list page, in nanoseconds.
 type startupTraceResult struct {
 	OpenNS      int64 `json:"open_ns"`
@@ -349,7 +349,7 @@ func timeFirstPage(ctx context.Context, dbPath string, rev *store.RevisionCounte
 // prepareStore ensures the store at dbPath is migrated and, when one
 // is owed, passes its integrity check, offering a rebuild-from-local
 // recovery on either failure rather than running one unasked (SY-8).
-// It holds no connection open past its own return; store.Open reopens
+// It holds no connection open past its return; store.Open reopens
 // dbPath once prepareStore reports success.
 func prepareStore(ctx context.Context, dbPath string, f flags, out io.Writer) error {
 	db, err := store.OpenWriteConn(dbPath)

@@ -95,7 +95,7 @@ func TestPushCoalescing(t *testing.T) {
 // The transport owns the liveness check now, against the cadence the
 // server actually granted (JT-26); a second detector here, reading a
 // figure from local config, tears down connections the transport
-// considers healthy, which defeats JT-26 in production while its own
+// considers healthy, which defeats JT-26 in production while its
 // test still passes.
 func TestConsumePushHasNoStallDetector(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestRunPushBackoffsAfterAnImmediateStop(t *testing.T) {
 // the life of the process.
 //
 // A server refusing every connection is the 401-on-EventSource case
-// ADR-0005 revision 2 named as its own risk. A server opening a stream
+// ADR-0005 revision 2 named as its risk. A server opening a stream
 // and dropping it at once is the same outage with no error in it: every
 // Listen succeeds, so no failure is ever reported, and the run is
 // silent as well as dry unless the stops themselves are counted.
@@ -438,7 +438,7 @@ func TestSyncFlushStateSurfacesTransitions(t *testing.T) {
 
 // TestClassifyErr asserts classifyErr's three paths: an error never
 // classified upstream defaults to ClassConnection, and a uerr.Error or
-// a backend.Failure each yield their own class and their original
+// a backend.Failure each yield their class and their original
 // root cause (not the fixed per-class sentence Error() returns). The
 // backend.Failure row is what keeps a credential the server rejects on the
 // push transport from reaching the user as a connectivity problem,
@@ -615,7 +615,7 @@ func TestReconnectSurfacesARefusalOnceUnderItsOwnClass(t *testing.T) {
 // itself advances attempt the same way reconnect advances it after a
 // Listen failure, and proved is the only reset. The stop that ends the
 // very stream proved just fired for must not advance attempt again,
-// since otherwise a healthy stream's own routine close would still
+// since otherwise a healthy stream's routine close would still
 // nudge the schedule up, and the next reopen would draw from a higher
 // band than a stream that just proved the server is serving should
 // leave behind.
@@ -655,7 +655,7 @@ func TestPushStateStoppedAdvancesUntilProved(t *testing.T) {
 	}
 }
 
-// TestRunPushEscalatesOnAnUnprovedStop asserts RunPush's own wait
+// TestRunPushEscalatesOnAnUnprovedStop asserts RunPush's wait
 // against a stream that stops before ever proving itself rides
 // pushState's escalating schedule, the same curve reconnect runs
 // against a Listen failure, rather than reopening at the BackoffMin
@@ -722,7 +722,7 @@ func TestRunPushEscalatesOnAnUnprovedStop(t *testing.T) {
 			t.Fatalf("max gap between Listen calls = %v, want at least BackoffMin (%v): the schedule stayed at the floor", maxGap, cfg.BackoffMin)
 		}
 
-		// Each gap is also bounded above by the schedule's own curve:
+		// Each gap is also bounded above by the schedule's curve:
 		// full jitter draws it uniformly under min(BackoffMin<<i,
 		// BackoffMax) for the i-th gap, a hard ceiling a schedule that
 		// jumped straight to BackoffMax would blow on the very first one.

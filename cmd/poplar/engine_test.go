@@ -42,13 +42,13 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 }
 
 // TestClassifyConnect asserts classifyConnect's three paths: a
-// backend.Failure (jmapsource.Dial's own classified-but-unlogged
-// dial failure) yields its own class and cause; an error never
+// backend.Failure (jmapsource.Dial's classified-but-unlogged
+// dial failure) yields its class and cause; an error never
 // classified at all (Dial's raw JSON-decode failure against a
 // captive portal's HTTP 200 HTML body, most notably) defaults to
-// ClassConnection; and a uerr.Error (connectLiveJMAP's own
+// ClassConnection; and a uerr.Error (connectLiveJMAP's
 // keyring.Token failure, the one connect error still built through
-// uerr.New) yields its own class and its original root cause rather
+// uerr.New) yields its class and its original root cause rather
 // than the fixed per-class sentence uerr.Error.Error() returns.
 func TestClassifyConnect(t *testing.T) {
 	uerrtest.Capture(t)
@@ -211,7 +211,7 @@ func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 
 		notify <- backend.Notification{}
 		// The bulk lane's InteractiveQuiet subordination (ADR-0003
-		// revision 2) defers this apply behind the account row's own
+		// revision 2) defers this apply behind the account row's
 		// interactive-lane insert above; DefaultConfig's 1s window plus
 		// the 200ms coalesce window is what a bare synctest.Wait would
 		// otherwise report as durably blocked without ever completing.
@@ -372,7 +372,7 @@ func TestRunDispatchLoopHeadlessIssuesNoBridgeQuery(t *testing.T) {
 // starts) reports the real Syncing/Synced transition a pushed
 // notification drives, with StoreChangedMsg behind Synced and no
 // Offline message anywhere in this loop's traffic: initialSyncMsg is
-// runInteractive's own call (tui.go), not this loop's, and
+// runInteractive's call (tui.go), not this loop's, and
 // TestInitialSyncMsg (tui_test.go) covers it directly.
 func TestStartEnginesRetryingBridgesTheOfflineCase(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -436,7 +436,7 @@ func TestStartEnginesRetryingBridgesTheOfflineCase(t *testing.T) {
 
 // TestRunDispatchLoopSendsOutboxCount proves CARRY 5's wiring:
 // runDispatchLoop's outbox-count bridge rides the dispatch loop's
-// existing cadence, with no ticker of its own.
+// existing cadence, with no separate ticker.
 func TestRunDispatchLoopSendsOutboxCount(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())

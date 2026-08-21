@@ -46,7 +46,7 @@ func (c Confirm) Init() tea.Cmd { return nil }
 // ConfirmAnsweredMsg is Confirm's answer signal (elm-conventions
 // rule 4, children signal parents via Msg types; task-8-findings-r1.md
 // conventions ruling): Next is the Cmd the y/n/Esc key named. App's
-// own Update catches it, pops the stack, and runs Next: the template
+// Update catches it, pops the stack, and runs Next: the template
 // every future modal follows, rather than a concrete type assertion
 // in handleKey.
 type ConfirmAnsweredMsg struct {
@@ -247,7 +247,7 @@ func confirmTextRow(th theme.Theme, left, right string, width int, text string, 
 
 // confirmAnswerOffsets returns the column, relative to the box's
 // left edge (column 0 is the left border), of the y and n answer
-// keys' own characters within a boxWidth-wide answer row.
+// keys' characters within a boxWidth-wide answer row.
 // confirmAnswerRow and ConfirmHitSpans both derive from it, so a hit
 // span never depends on having rendered first.
 func confirmAnswerOffsets(c Confirm, boxWidth int) (yesX, noX int) {
@@ -287,7 +287,7 @@ func confirmAnswerRow(c Confirm, left, right string, width int) string {
 	return out.String()
 }
 
-// ConfirmHitSpans returns the y and n answer cells' own HitSpans
+// ConfirmHitSpans returns the y and n answer cells' HitSpans
 // (ADR-0017's PointerModalAnswer, legal only at StateModal): each
 // span's Rect is the exact column its key character occupies
 // within the modal's answer row.

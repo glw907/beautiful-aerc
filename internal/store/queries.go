@@ -22,7 +22,7 @@ const (
 
 	// queryOutboxEligible is the dispatcher's eligibility probe:
 	// whether one account holds any intent ready to dispatch. It reads
-	// the same rows the drainer's own claim selects, so a pass with
+	// the same rows the drainer's claim selects, so a pass with
 	// nothing to do learns that from a read connection instead of the
 	// writer's interactive lane. idx_outbox_dispatch covers the state
 	// and next_attempt_at conjuncts; account_id is checked per row,
@@ -83,9 +83,9 @@ const (
 	// total event count across every account the store holds.
 	queryEventCount = `SELECT COUNT(*) FROM event`
 
-	// queryOutboxQueuedCount is the status line's own live fact
+	// queryOutboxQueuedCount is the status line's live fact
 	// (decision 7's "2 queued"): the count of outbox rows still in
 	// 'queued' state, across every account the store holds, matching
-	// queryOutboxEligible's own state filter.
+	// queryOutboxEligible's state filter.
 	queryOutboxQueuedCount = `SELECT COUNT(*) FROM outbox WHERE state = 'queued'`
 )

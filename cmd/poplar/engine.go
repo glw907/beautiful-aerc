@@ -25,7 +25,7 @@ const fastmailSessionURL = "https://api.fastmail.com/jmap/session"
 // Dispatcher.DispatchOnce between ticks, on top of the immediate call
 // runDispatchLoop makes at start (what actually clears a startup
 // backlog without delay). ADR-0006 names no dispatch cadence; five
-// seconds keeps this loop's own contribution to end-to-end latency a
+// seconds keeps this loop's contribution to end-to-end latency a
 // minority of outbox.UndoWindow's ten-second hold, so a triage
 // action's wait is dominated by the undo window an operator can
 // already see, not by this loop's polling granularity.
@@ -72,22 +72,22 @@ func isFatalConnect(err error) bool {
 }
 
 // classifyConnect reports the uerr.Class and root cause a connect
-// failure carries, without having logged it. jmapsource.Dial's own
+// failure carries, without having logged it. jmapsource.Dial's
 // dial-path failures come back as a backend.Failure (a rejected
 // credential, a 404, a 5xx, a dead connection): Dial classifies
-// without calling uerr.New, since retryConnect's own backoff loop,
+// without calling uerr.New, since retryConnect's backoff loop,
 // not Dial, owns the surfacing decision (ADR-0013 revision 2). A
 // keyring.Token failure, the one connect error still built through
 // uerr.New (connectLiveJMAP fails before any network reach, so there
-// is no retry loop to defer to), keeps its own class and cause
+// is no retry loop to defer to), keeps its class and cause
 // through the same uerr.Classified peel. One jmapsource.Dial never
 // recognized at all falls back to uerr.ClassConnection, the same
-// default sync's own classifyErr uses for an unclassified push
+// default sync's classifyErr uses for an unclassified push
 // failure: Dial returns a raw error for a JSON decode failure, a
 // truncated body, or any status classifyStatusClass does not map, and
 // a captive portal's HTTP 200 login page is exactly that case. Every
 // connect failure classifies to something, which is what keeps
-// retryConnect's own uerr.New call from depending on a lower layer
+// retryConnect's uerr.New call from depending on a lower layer
 // having recognized the failure first.
 func classifyConnect(err error) (uerr.Class, error) {
 	return uerr.ClassifyErr(err, uerr.ClassConnection)
@@ -110,7 +110,7 @@ func surfaceFatalConnect(err error) uerr.Error {
 }
 
 // dialBackoffMin and dialBackoffMax bound retryConnect's delay: the
-// same range RunPush's own reconnect uses for a dropped push
+// same range RunPush's reconnect uses for a dropped push
 // connection (sync.DefaultConfig), so a network outage at startup
 // backs off on the same schedule as one after.
 var (
@@ -120,15 +120,15 @@ var (
 
 // retryConnect calls connect on syncengine.SleepBackoff's jittered
 // schedule until it succeeds or ctx ends, in the same shape
-// internal/sync's own reconnect uses for a dropped push connection
+// internal/sync's reconnect uses for a dropped push connection
 // (ADR-0013 revision 2): a failure surfaces through uerr.New once, on
 // the first failure or a class change, never once per attempt, and a
 // later success after a run of failures logs recovery. firstErr is
-// the failure run's own synchronous attempt already produced; it
+// the failure run's synchronous attempt already produced; it
 // seeds that first surfacing so an unclassified error still logs
 // exactly once rather than depending on connect's caller having
-// recognized it, and retryConnect sleeps before its own first retry
-// rather than dialing again within microseconds of firstErr's own
+// recognized it, and retryConnect sleeps before its first retry
+// rather than dialing again within microseconds of firstErr's
 // failure. ok is false when ctx ends first or connect ever reports a
 // fatal (isFatalConnect) failure: a credential the operator removed
 // or that the server started rejecting mid-run does not become valid
@@ -147,7 +147,7 @@ func retryConnect(ctx context.Context, connect backendConnector, firstErr error)
 			return be, key, true
 		}
 		if isFatalConnect(err) {
-			// Giving up is its own surfacing event, and the last one
+			// Giving up is a distinct surfacing event, and the last one
 			// this path has: run stays alive with no sync worker and no
 			// dispatcher behind it, so an unlogged exit here leaves mail
 			// quietly not arriving as the operator's only evidence.
@@ -170,7 +170,7 @@ func retryConnect(ctx context.Context, connect backendConnector, firstErr error)
 // SY-3's concern, and the store was already open and working before
 // any connect call ran); it is logged through the uerr call
 // ensureAccount already makes and the process simply never starts its
-// engines. bridge is startEngines' own parameter, threaded through
+// engines. bridge is startEngines' parameter, threaded through
 // unchanged; run passes nil.
 func startEnginesRetrying(ctx context.Context, writer *store.Writer, reads *store.ReadPool, connect backendConnector, firstErr error, bridge *engineBridge) *sync.WaitGroup {
 	var wg sync.WaitGroup
@@ -212,7 +212,7 @@ func (b *jmapBackend) Capabilities() backend.Capabilities {
 }
 
 // ensureAccount finds or creates the store's account row identified by
-// key, the backend's own account id rather than a config-supplied one,
+// key, the backend's account id rather than a config-supplied one,
 // and returns that row's store-local id, the identifier every store
 // table scopes its rows by. address is left empty rather than seeded
 // with key: pass 1b has no onboarding flow to collect the account's
@@ -250,9 +250,9 @@ func ensureAccount(ctx context.Context, writer *store.Writer, key string) (int64
 // once both have actually returned; run waits on it before closing the
 // store handles they still hold. bridge carries the worker's health
 // transitions and the dispatch loop's queued-outbox count to a
-// *tea.Program's own Update loop when one is attached (runInteractive);
+// *tea.Program's Update loop when one is attached (runInteractive);
 // run passes nil, and neither bridgeSyncHealth nor runDispatchLoop's
-// own bridge work runs at all in that case, the headless loop's
+// bridge work runs at all in that case, the headless loop's
 // original shape before either existed.
 func startEngines(ctx context.Context, accountID int64, be backend.Backend, writer *store.Writer, reads *store.ReadPool, bridge *engineBridge) *sync.WaitGroup {
 	worker := syncengine.NewWorker(accountID, be, writer, syncengine.DefaultConfig())
@@ -306,7 +306,7 @@ func runDispatchLoop(ctx context.Context, d *outbox.Dispatcher, reads *store.Rea
 }
 
 // dispatchOnce runs one DispatchOnce pass, surfacing a failure through
-// uerr unless it is ctx ending mid-pass: run's own shutdown stopping
+// uerr unless it is ctx ending mid-pass: run's shutdown stopping
 // the loop is not a server or store problem to report as one. Each
 // delivered or failed intent within a successful pass is already
 // logged by the outbox package itself.

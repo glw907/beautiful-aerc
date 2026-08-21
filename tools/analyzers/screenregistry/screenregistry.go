@@ -3,17 +3,17 @@
 // ui.Register: UX-1's acceptance criterion ("a reflection test fails
 // on any screen type in internal/ui/... that is unregistered"),
 // enforced by static analysis instead of a runtime test, since a
-// runtime test can only see the registrations that ran in its own
-// package's own test binary and a subpackage's screens never would.
+// runtime test can only see the registrations that ran in its
+// package's test binary and a subpackage's screens never would.
 //
-// Candidate types come from go/types' own Implements check against
+// Candidate types come from go/types' Implements check against
 // ui.Screen's method set, resolved locally when the analyzed package
 // is ui itself and through its imports otherwise, so a type reaches
 // Screen's shape by promotion (an embedded screen) exactly as the
 // Go compiler would see it, not by matching declared method syntax.
 //
 // Register is generic over the screen type: Register[MailScreen]
-// (entry). A registration is read from the call's own type argument
+// (entry). A registration is read from the call's type argument
 // (go/types' Instances info), resolved through TypesInfo.ObjectOf
 // regardless of the import alias, or the absence of one, that
 // reached Register at the call site.

@@ -45,7 +45,7 @@ test:
 # (a determinism check, not a file writer, that -update would not
 # change the behavior of anyway, but running it here is pure waste).
 # Scoped to the internal/ui package alone, not ./..., since -update
-# is a flag internal/ui/fixtures' own test binary does not register.
+# is a flag internal/ui/fixtures' test binary does not register.
 #
 # Churn policy (task 12, survey amendment G): this target is the only
 # way a committed render or its ground-map sidecar changes. Read the

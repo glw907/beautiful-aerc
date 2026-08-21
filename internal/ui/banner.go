@@ -72,7 +72,7 @@ func renderBanner(banner Banner, th theme.Theme, width int) string {
 // glyph sits PadBand cells from the row's right edge, the same
 // fixed inset renderBanner's right segment always closes with,
 // so this never depends on having rendered first (StatusLineHitSpans's
-// own precedent).
+// precedent).
 func BannerHitSpans(banner Banner, state StateClass, th theme.Theme, bannerRow image.Rectangle) []HitSpan {
 	if !banner.Active || !slices.Contains(pointerLegalStates[PointerBannerDismiss], state) {
 		return nil

@@ -23,7 +23,7 @@ import (
 // capture actually distinguishes a failed call from a successful one:
 // the property TestLiveRunnerFillsStoreAndDispatchesATriageIntent's
 // dispatchAndVerify* helpers depend on to catch exactly the failure
-// mode this file's own review found (a dispatched-and-failed intent
+// mode this file's review found (a dispatched-and-failed intent
 // looks identical to a dispatched-and-delivered one from the outbox
 // row's disappearance alone). It needs no network reach, so it always
 // runs under the live tag rather than only when a token is present.
@@ -50,7 +50,7 @@ func TestRecordingMailCapturesAServerFailure(t *testing.T) {
 // TestLiveRunnerFillsStoreAndDispatchesATriageIntent runs the
 // runner's real composition (connectLiveJMAP, ensureAccount,
 // startEngines) against Geoff's live Fastmail account
-// (FASTMAIL_API_TOKEN), gated the same way jmap's own live suite is:
+// (FASTMAIL_API_TOKEN), gated the same way jmap's live suite is:
 // never in CI or make check, skipped where the token was never
 // sourced. It proves mailboxes and messages land in the local store
 // through the sync worker's push path, then drives a mailbox
@@ -101,7 +101,7 @@ func TestLiveRunnerFillsStoreAndDispatchesATriageIntent(t *testing.T) {
 	waitForAMessage(t, w, accountID, 2*time.Minute)
 
 	// Half two: a triage intent enqueued locally reaches the server,
-	// proven against the server's own response, not the outbox row's
+	// proven against the server's response, not the outbox row's
 	// disappearance.
 	name := fmt.Sprintf("poplar-live-test-%d", time.Now().UnixNano())
 	serverID := dispatchAndVerifyCreate(t, ctx, w, accountID, rec, name)
@@ -386,7 +386,7 @@ func (r *recordingMail) lastCreate() (recordedCreate, bool) { return last(&r.mu,
 // allCreates returns every CreateMailbox call r has recorded so far,
 // not only the last: a dispatcher retry can call CreateMailbox twice
 // for the same intent (the server-side create landed but the outbox
-// row's own state never resolved before a retry fired), leaving two
+// row's state never resolved before a retry fired), leaving two
 // live mailboxes to clean up, not one.
 func (r *recordingMail) allCreates() []recordedCreate {
 	r.mu.Lock()

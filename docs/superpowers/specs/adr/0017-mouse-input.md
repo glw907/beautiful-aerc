@@ -91,13 +91,13 @@ which the grammar rule forbids.
   an unfiltered burst is one store round-trip per tick against
   QA-2's budget, and terminals disagree about ticks per detent.
 - Terminal-native selection: capturing the mouse takes the
-  terminal's own drag-to-copy behind its bypass modifier, and
+  terminal's drag-to-copy behind its bypass modifier, and
   the modifier is not universal — Shift on kitty, foot,
   alacritty, VTE, and Windows Terminal; Option on iTerm2; none
   on macOS Terminal.app short of disabling mouse reporting
   (review finding; C10 keeps macOS in scope). The help overlay
   therefore says "your terminal's mouse-reporting bypass"
-  without naming a key, and poplar's own yank path (RD-16,
+  without naming a key, and poplar's yank path (RD-16,
   OSC 52) stays the first-class copy story.
 
 **Testing.** Mouse coverage lives at the message layer: grammar
@@ -114,7 +114,7 @@ pointer item (machine design section 5).
 ## Alternatives considered
 
 - **bubblezone for hit-testing**: maintained and v2-tagged, but
-  its own README flags the lipgloss v2 compositor caveat, and
+  its README flags the lipgloss v2 compositor caveat, and
   crush (the largest v2 app) hand-tracks bounds instead. Poplar
   still hand-rolls the character-grain spans bubblezone would
   have provided; the trade is a small amount of owned, testable
@@ -142,7 +142,7 @@ as part of their render contract, which the component vocabulary
 (design language section 6) absorbs. The one honest cost:
 capturing the mouse moves the terminal's native drag-to-copy
 behind a per-terminal bypass, a trade every mouse-enabled TUI
-makes; poplar's answer is its own copy mode plus the help note.
+makes; poplar's answer is its copy mode plus the help note.
 If a future feature needs hover (all-motion), it must pass the
 grammar rule's accelerator test or supersede this record.
 
@@ -156,7 +156,7 @@ emitted only in reaction to a *later* tick. A gesture's tail, the
 ticks accumulated since the last emitted message, sits pending
 forever once scrolling stops with no further tick to trigger a
 flush; a single, isolated detent never scrolls at all, since nothing
-ever arrives after it to close its own sum. This was found during
+ever arrives after it to close its sum. This was found during
 task 5a's spec review over the implemented filter, not predicted at
 authoring time.
 
@@ -178,11 +178,11 @@ This keeps the coalescing state Rule-1-conformant (elm-conventions:
 all state in models) rather than Rule-2-exempt: the mutable window
 state that previously lived in the filter closure, the one recorded
 exception to "mutation only in Update", now lives in the root
-model's own fields and mutates only inside its Update, the ordinary
+model's fields and mutates only inside its Update, the ordinary
 case every other piece of App state already follows. The
 program-construction filter is no longer necessary for wheel input at
 all; `tea.MouseWheelMsg` reaches `Update` through the normal message
-path like everything else, and `Update`'s own dispatch is what "tags"
+path like everything else, and `Update`'s dispatch is what "tags"
 it into the gesture. A future coalescing need (motion sampling, most
 plausibly) may still want a `tea.WithFilter` seam, evaluated on its
-own evidence rather than by wheel's example.
+evidence rather than by wheel's example.

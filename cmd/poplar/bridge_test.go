@@ -19,7 +19,7 @@ import (
 )
 
 // msgLog collects tea.Msg values sent through a bridge under a mutex,
-// the headless runner's own stand-in for a running *tea.Program's
+// the headless runner's stand-in for a running *tea.Program's
 // Send: the bridge is exercised against a real engine, with nothing
 // terminal-shaped anywhere in the loop.
 type msgLog struct {
@@ -40,7 +40,7 @@ func (l *msgLog) snapshot() []tea.Msg {
 }
 
 // TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence is task
-// 6's own bridge test, scripted through a full stop -> recover ->
+// 6's bridge test, scripted through a full stop -> recover ->
 // quiet sequence (task-6-findings-r1.md F1): a scripted engine-state
 // transition sequence against a real sync.Worker produces exactly the
 // ui.Msg sequence the status line expects, a steady state between
@@ -73,8 +73,8 @@ func TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence(t *testing.T) {
 		cfg.BackoffMin = 100 * time.Millisecond
 		cfg.BackoffMax = time.Second
 		// InteractiveQuiet subordinates the bulk lane behind the
-		// account row's own interactive-lane insert above
-		// (ADR-0003 revision 2); shrunk so this test's own flush
+		// account row's interactive-lane insert above
+		// (ADR-0003 revision 2); shrunk so this test's flush
 		// cycle does not wait out the full production window.
 		cfg.InteractiveQuiet = time.Millisecond
 		worker := syncengine.NewWorker(accountID, &be, w, cfg)
@@ -124,7 +124,7 @@ func TestBridgeSyncHealth_ProducesExactlyTheTransitionSequence(t *testing.T) {
 			t.Fatalf("first message after the stop = %#v, want a ui.SyncStateMsg{State: SyncStateBackingOff} with a positive Retry", afterStop[len(want)])
 		}
 
-		// The backoff wait ends, second's own stream opens and stays
+		// The backoff wait ends, second's stream opens and stays
 		// open past BackoffMax: proved fires, clearing backing-off.
 		time.Sleep(2*cfg.BackoffMax + cfg.BackoffMin)
 		synctest.Wait()

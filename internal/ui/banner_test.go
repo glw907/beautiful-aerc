@@ -14,8 +14,8 @@ import (
 const bannerTestWidth = 100
 
 // TestRenderBanner_ShowsGlyphMessageAndDismissHint proves the
-// exemplar's own banner_strip composition: the warn glyph, the
-// banner's own message, and "Esc dismiss" plus the dismiss glyph
+// exemplar's banner_strip composition: the warn glyph, the
+// banner's message, and "Esc dismiss" plus the dismiss glyph
 // right-aligned.
 func TestRenderBanner_ShowsGlyphMessageAndDismissHint(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -36,7 +36,7 @@ func TestRenderBanner_ShowsGlyphMessageAndDismissHint(t *testing.T) {
 	}
 }
 
-// TestRenderBanner_ExactWidth mirrors the status line and footer's own
+// TestRenderBanner_ExactWidth mirrors the status line and footer's
 // width-invariant test: the rendered row's display width is exactly
 // width, a long message truncated with the ellipsis token rather than
 // overflowing.
@@ -54,7 +54,7 @@ func TestRenderBanner_ExactWidth(t *testing.T) {
 
 // TestBannerHitSpans_TargetsTheDismissGlyph proves ADR-0017's
 // character grain: the returned span's Rect lands exactly on the
-// dismiss glyph's own rendered column.
+// dismiss glyph's rendered column.
 func TestBannerHitSpans_TargetsTheDismissGlyph(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	banner := Banner{Active: true, Message: "No keyring found."}
@@ -93,7 +93,7 @@ func TestBannerHitSpans_NoneWhenInactive(t *testing.T) {
 }
 
 // TestApp_BannerMsgShowsBanner proves App absorbs BannerMsg into its
-// own model state and grows the layout a banner row (recomputeLayout).
+// model state and grows the layout a banner row (recomputeLayout).
 func TestApp_BannerMsgShowsBanner(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
@@ -133,14 +133,14 @@ func TestApp_EscDismissesBannerAtSurfaceRoot(t *testing.T) {
 // TestApp_EscDismissesAVisibleBannerUnderANonModalStackFront is C4,
 // amending task 8's F3 ruling: the banner-dismiss gate keys on
 // VISIBILITY, not stack emptiness, since a non-modal stack front (the
-// help overlay, and this test's own fakeScreen stand-in) composites
-// the banner alongside its own content now (RenderInput.FullRegion),
+// help overlay, and this test's fakeScreen stand-in) composites
+// the banner alongside its content now (RenderInput.FullRegion),
 // so the old premise, "a banner is invisible under any stack screen,"
 // no longer holds. Esc dismisses the visible banner first, consuming
 // that keypress without popping the stack front; a second Esc then
 // runs the ordinary pop. The StateModal case, where the banner stays
 // under a front that owns Esc itself, is
-// TestApp_EscDoesNotDismissABannerUnderAModalFront's own concern.
+// TestApp_EscDoesNotDismissABannerUnderAModalFront's concern.
 func TestApp_EscDismissesAVisibleBannerUnderANonModalStackFront(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
@@ -164,10 +164,10 @@ func TestApp_EscDismissesAVisibleBannerUnderANonModalStackFront(t *testing.T) {
 
 // TestApp_EscDoesNotDismissABannerUnderAModalFront proves C4's other
 // half: a StateModal front keeps owning Esc even while a banner shows.
-// The generic Back branch's own front.SwitchState != StateModal gate
+// The generic Back branch's front.SwitchState != StateModal gate
 // skips a modal front entirely, before the banner-dismiss check ever
-// runs, so the key reaches the modal's own Update untouched
-// (TestApp_EscForwardsToStateModalFront's own template).
+// runs, so the key reaches the modal's Update untouched
+// (TestApp_EscForwardsToStateModalFront's template).
 func TestApp_EscDoesNotDismissABannerUnderAModalFront(t *testing.T) {
 	resetRegistry(t)
 	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
@@ -193,7 +193,7 @@ func TestApp_EscDoesNotDismissABannerUnderAModalFront(t *testing.T) {
 }
 
 // fakeEntryScreen is a stubbed StatePrintableEntry Screen (the brief's
-// own "stubbed entry-state flag", since pass 2 registers no real
+// "stubbed entry-state flag", since pass 2 registers no real
 // text-entry screen yet): pushed onto the stack, it stands in for a
 // focused text-entry context.
 type fakeEntryScreen struct{}
@@ -209,7 +209,7 @@ func (f *fakeEntryScreen) Entry() ScreenEntry {
 }
 
 // TestApp_FocusedTextEntryConsumesNoBannerKeypress proves a focused
-// text-entry context's own Esc reaches its normal back handling
+// text-entry context's Esc reaches its normal back handling
 // untouched, rather than being consumed by the banner: the banner
 // stays showing, and the stack pops exactly as it would with no
 // banner active at all.

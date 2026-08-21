@@ -83,7 +83,7 @@ wireframe review (2026-08-19)**:
 - **Pass 2b (next plan): onboarding and config.** UX-8's text-entry
   model, the form component and focus helper, `internal/config` and
   the ST-3 surface, ST-1 first-run, ST-5 credential lifecycle.
-  Pass 2b's screens get their own wireframe review at its start.
+  Pass 2b's screens get their wireframe review at its start.
   Pass 3 requires 2b (it needs a configured, authenticated client),
   so the spine's ordering intent survives the cut.
 
@@ -145,7 +145,7 @@ implementer invents taste. Each cites its constraint.
 2. **Banners are a row directly under the status line.** Persistent,
    non-focus-stealing, push content down one row while present.
    `Esc` dismisses the topmost banner before acting as back (one
-   instinct, two depths, matching the design language's own Esc
+   instinct, two depths, matching the design language's Esc
    reasoning); the banner states its key inline. Pointer: click the
    banner's dismiss glyph.
 3. **Design-language amendments** (the doc allows amendment
@@ -179,8 +179,8 @@ implementer invents taste. Each cites its constraint.
    (4.5:1); `fgSubtle`, `focusedBorder`, `flag`, `diffAdd`,
    `diffDel`, and `calendarSlot[*]` are indicator roles (3:1).
 6. **The palette: cool slate, v3 values** (ruled by Geoff; the
-   adversarial review's contrast findings folded). Grounds are a
-   grammar of their own: base carries content, panel elevates
+   adversarial review's contrast findings folded). Grounds share a
+   grammar: base carries content, panel elevates
    chrome and cards, selection is accent-tinted, code insets on
    its ratified value. Every role below is verified at 4.5:1
    (text) / 3:1 (indicator) against ALL FOUR grounds, both
@@ -301,7 +301,7 @@ implementer invents taste. Each cites its constraint.
 One frame per screen per responsive class that changes its layout
 (design language section 9's rule). **The review lens is the
 standard rung first** (100-139 columns, 120 representative), per
-Geoff's ruling and the design language's own polish-center clause;
+Geoff's ruling and the design language's polish-center clause;
 spartan 80 is a completeness check, not the design center. Frames
 F9 and F10 carry representative pass-3 mail content, seeded from
 the legacy client's refined layout (its cursor gutter bar, dim-read
@@ -880,7 +880,7 @@ engine's and outbox's existing state surfaces into `p.Send` calls
 `cmd/poplar` bridge wiring. The bridge consumes engine surfaces
 that exist (sync's health/state, outbox counts); if a needed
 surface is missing, the task adds a minimal exported observer to
-the engine package with its own test, never a UI import into the
+the engine package with its test, never a UI import into the
 engine.
 
 **Produces:** `StatusLine` component consumed by `App.View`;
@@ -1138,7 +1138,7 @@ themes are committed for the design record (survey amendment F).
 
 The teatest swap path (survey amendment A's closing requirement,
 landed with this task): `charmbracelet/x/exp/teatest/v2` lives under
-the experimental `x/exp` path (ADR-0014 revision 2's own named
+the experimental `x/exp` path (ADR-0014 revision 2's named
 risk), so a bubbletea bump it has not caught up with swaps for a
 hand-rolled harness over `tea.WithInput`/`tea.WithOutput` piping
 keystrokes in and reading rendered frames back, the same
@@ -1193,7 +1193,7 @@ reads gallery churn explicitly.
 
 **Boundaries:** gallery files, `cmd/sketch`, the flow-suite test
 file, `scripts/`, Makefile targets. No component changes except
-defects the matrix exposes (each lands as its own fix commit).
+defects the matrix exposes (each lands as its fix commit).
 `cmd/sketch` is excluded from release artifacts and `make install`.
 
 **Produces:** the committed render baseline every later screen

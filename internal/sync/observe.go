@@ -7,14 +7,14 @@ import (
 	"github.com/glw907/poplar/internal/backend"
 )
 
-// State is Worker's own high-level condition (SY-5): the value the
-// UI's status line renders. Worker reports only what its own push/poll
+// State is Worker's high-level condition (SY-5): the value the
+// UI's status line renders. Worker reports only what its push/poll
 // loop can observe; Offline, the fourth SY-5 state, names a connection
 // that was never established at all and is a cmd/poplar concern (its
-// own connect-retry path), never Worker's.
+// connect-retry path), never Worker's.
 type State int
 
-// The three states Worker's own loop can report.
+// The three states Worker's loop can report.
 const (
 	StateSynced State = iota
 	StateSyncing
@@ -31,18 +31,18 @@ type Health struct {
 
 // Observer receives one Health value per state transition: a flush
 // cycle starting or ending, or a reopen wait about to begin, driven
-// entirely by RunPush's and pollKinds' own existing control flow.
+// entirely by RunPush's and pollKinds' existing control flow.
 // Nothing calls it on a timer, so a caller that never sees a Health
 // value has nothing to poll for either.
 type Observer func(Health)
 
-// SetObserver installs o as w's own Observer, replacing whatever was
+// SetObserver installs o as w's Observer, replacing whatever was
 // set before. A nil Observer, the zero value every Worker starts
 // with, disables reporting: w.emit and w.emitBackoff no-op rather
 // than requiring every call site to check first. SetObserver is not
 // safe to call concurrently with RunPush or pollKinds: a caller sets
 // it once, before starting either, the same one-time wiring
-// NewWorker's own caller already does for every other field.
+// NewWorker's caller already does for every other field.
 func (w *Worker) SetObserver(o Observer) {
 	w.observer = o
 }
@@ -55,7 +55,7 @@ func (w *Worker) emit(h Health) {
 }
 
 // emitBackoff reports a StateBackingOff transition carrying d, the
-// delay RunPush or reconnect is about to sleep: sleepBackoff's own
+// delay RunPush or reconnect is about to sleep: sleepBackoff's
 // onWait callback, so the reported duration is the exact one about to
 // run rather than a second, independently jittered computation of it.
 func (w *Worker) emitBackoff(d time.Duration) {

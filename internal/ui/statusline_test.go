@@ -44,7 +44,7 @@ func TestRenderStatusLine_ClusterNamesTheActiveSurface(t *testing.T) {
 // TestRenderStatusLine_SY5States proves all four SY-5 states render
 // distinct, decision-7-matching text in sentence case
 // (task-6-findings-r1.md F15): Synced dim, Syncing with a spinner and
-// known progress, Offline, and Backing off with its own retry
+// known progress, Offline, and Backing off with its retry
 // countdown.
 func TestRenderStatusLine_SY5States(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -76,8 +76,8 @@ func TestRenderStatusLine_SY5States(t *testing.T) {
 }
 
 // TestRenderStatusLine_SyncingShowsTheSpinnerFrame proves the spinner
-// glyph advances with StatusLine.Spinner, cycling through theme's own
-// frame set (never a literal glyph of the row's own).
+// glyph advances with StatusLine.Spinner, cycling through theme's
+// frame set (never a literal glyph of the row's).
 func TestRenderStatusLine_SyncingShowsTheSpinnerFrame(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	frames := th.Spinner()
@@ -92,7 +92,7 @@ func TestRenderStatusLine_SyncingShowsTheSpinnerFrame(t *testing.T) {
 }
 
 // TestRenderStatusLine_UnknownProgressRendersBareLabel proves F7:
-// Done==0 && Total==0 (the bridge's own honest starting value before
+// Done==0 && Total==0 (the bridge's honest starting value before
 // any progress is known) renders the label alone, never a misleading
 // "Syncing 0" that reads as a cycle stalled at zero.
 func TestRenderStatusLine_UnknownProgressRendersBareLabel(t *testing.T) {
@@ -108,9 +108,9 @@ func TestRenderStatusLine_UnknownProgressRendersBareLabel(t *testing.T) {
 }
 
 // TestRenderStatusLine_BackfillRidesTheSyncSegment proves decision
-// 7's backfill behavior: Active takes over the segment with its own
+// 7's backfill behavior: Active takes over the segment with its
 // "Bodies" progress text (sentence case, F15), and the underlying
-// synced state's own text is no longer shown, so a rate-limited
+// synced state's text is no longer shown, so a rate-limited
 // backfill never reads as a silent stall.
 func TestRenderStatusLine_BackfillRidesTheSyncSegment(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -236,8 +236,8 @@ func TestFitRightSegments_OutboxEvictsBeforeSyncState(t *testing.T) {
 
 // TestRenderStatusLine_NeverExceedsWidth is the property test BACKLOG
 // #61 owes: over a wide range of long sync-segment inputs at the 60-
-// column floor, the row's own display width is exactly 60, never
-// more, and the ellipsis token appears whenever the sync state's own
+// column floor, the row's display width is exactly 60, never
+// more, and the ellipsis token appears whenever the sync state's
 // text (F12: the segment that is truncated only as a last resort,
 // after the outbox count has already been evicted) would otherwise
 // have overflowed on its own.
@@ -281,8 +281,8 @@ func TestRenderStatusLine_NeverExceedsWidth(t *testing.T) {
 
 // TestStatusLineHitSpans_MatchesTheRenderedDigitColumns proves the
 // hit spans ADR-0017's character grain requires: each span's Rect
-// lands on the exact column the rendered string's own digit character
-// sits at, and that rune equals GrammarKeys.SurfaceSwitch's own bound
+// lands on the exact column the rendered string's digit character
+// sits at, and that rune equals GrammarKeys.SurfaceSwitch's bound
 // key for that position, never an independently hardcoded '1'-'4'
 // that binding could drift from (task-6-findings-r1.md F4).
 func TestStatusLineHitSpans_MatchesTheRenderedDigitColumns(t *testing.T) {
@@ -317,7 +317,7 @@ func TestStatusLineHitSpans_MatchesTheRenderedDigitColumns(t *testing.T) {
 }
 
 // TestStatusLineHitSpans_NoneOutsideDigitsSwitch proves F8/RULING: a
-// digit click is never offered in a state ADR-0017's own table
+// digit click is never offered in a state ADR-0017's table
 // (registry.go's pointerLegalStates) does not allow PointerSurfaceDigit
 // to fire in, a modal most notably, the same rule the keyboard digits
 // themselves already obey (matchDigit, app.go).

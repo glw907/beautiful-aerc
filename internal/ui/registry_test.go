@@ -111,7 +111,7 @@ func TestCheckGrammar(t *testing.T) {
 }
 
 // TestCheckGrammar_ComposedFromGrammarKeys proves M9's claim: a
-// screen that composes its own bindings directly from GrammarKeys,
+// screen that composes its bindings directly from GrammarKeys,
 // bundling several verbs under one screen keymap, never contradicts
 // itself.
 func TestCheckGrammar_ComposedFromGrammarKeys(t *testing.T) {
@@ -301,7 +301,7 @@ func TestRegisterAndRegistered(t *testing.T) {
 	}
 
 	// Registered returns a copy: mutating it must not reach back into
-	// the package's own registered slice.
+	// the package's registered slice.
 	got[0] = ScreenEntry{}
 	if Registered()[0].Type != want {
 		t.Error("Registered() returned a slice aliasing the internal registry")

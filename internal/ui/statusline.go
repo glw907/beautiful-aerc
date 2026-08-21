@@ -16,7 +16,7 @@ import (
 // click there accelerates (ADR-0017's character grain) and the
 // PointerTarget it stands in for: a chrome component registers one
 // per clickable cell at render time, and task 10's dispatcher
-// resolves a click coordinate against the set a screen's own render
+// resolves a click coordinate against the set a screen's render
 // produced.
 type HitSpan struct {
 	Target PointerTarget
@@ -24,11 +24,11 @@ type HitSpan struct {
 	Rect   image.Rectangle
 }
 
-// StatusLine is the top band's own render state (design decisions 1
+// StatusLine is the top band's render state (design decisions 1
 // and 7): the compact surface cluster (which surface is active) and
 // the sync segment (SY-5's four states, backfill progress riding the
 // same segment, and a queued-outbox count beside it). App.View builds
-// one from its own model state every frame and hands it to Render,
+// one from its model state every frame and hands it to Render,
 // which paints it into LayoutMode's StatusRow band; the gallery's
 // fixtures pin one directly, with no App or engine involved.
 type StatusLine struct {
@@ -41,13 +41,13 @@ type StatusLine struct {
 }
 
 // surfaceNames names each Surface's cluster label, in
-// GrammarKeys.SurfaceSwitch's own key order: index 0 pairs with that
-// binding's first key, and so on. "People" is wireframe F8's own
+// GrammarKeys.SurfaceSwitch's key order: index 0 pairs with that
+// binding's first key, and so on. "People" is wireframe F8's
 // reviewed copy for the contacts surface (task 5a).
 var surfaceNames = [...]string{"Mail", "Calendar", "People", "Config"}
 
 // rowSeg is one styled run within a status-row render: statusline.go's
-// own composition unit, plain text plus the single role and weight it
+// composition unit, plain text plus the single role and weight it
 // paints under (decision 7: one color per sync state, never a
 // per-word rainbow).
 type rowSeg struct {
@@ -62,12 +62,12 @@ type rowSeg struct {
 // declared GroundPanel constants into.
 const chromeGround = theme.GroundPanel
 
-// clusterSegs returns the surface cluster's own segments (decision
+// clusterSegs returns the surface cluster's segments (decision
 // 1): a leading padBand inset, then each surface's digit in order,
 // the active one named in accent+bold with a wider gap after it, every
 // sibling a bare dim digit with a narrow gap after it, and no gap
 // after the last. Every digit comes from GrammarKeys.SurfaceSwitch's
-// own bound keys, never a literal '1'-'4' that binding could drift
+// bound keys, never a literal '1'-'4' that binding could drift
 // from (task-6-findings-r1.md F4, BACKLOG #62).
 func clusterSegs(active Surface) []rowSeg {
 	digits := GrammarKeys.SurfaceSwitch.Keys()
@@ -89,8 +89,8 @@ func clusterSegs(active Surface) []rowSeg {
 }
 
 // clusterDigitX returns, for each surface in digit order, the column
-// (relative to the row's own origin) its digit character starts at:
-// the geometry clusterSegs's own construction produces, computed
+// (relative to the row's origin) its digit character starts at:
+// the geometry clusterSegs's construction produces, computed
 // independently so a hit span never depends on having rendered first.
 func clusterDigitX(active Surface) [len(surfaceNames)]int {
 	digits := GrammarKeys.SurfaceSwitch.Keys()
@@ -116,7 +116,7 @@ func clusterDigitX(active Surface) [len(surfaceNames)]int {
 
 // StatusLineHitSpans returns one HitSpan per surface digit cell
 // (ADR-0017 character grain), positioned within statusRow, when state
-// is one of the states ADR-0017's own table (registry.go's
+// is one of the states ADR-0017's table (registry.go's
 // pointerLegalStates) allows PointerSurfaceDigit to fire in. Every
 // other state, a modal most notably, returns none: a digit click is
 // never offered where the keyboard equivalent would be illegal too
@@ -144,7 +144,7 @@ func StatusLineHitSpans(active Surface, state StateClass, statusRow image.Rectan
 // progressText renders label plus done/total (decision 7): "of total"
 // when a total is known, done alone when only a count is known, and
 // the label alone when neither is (Done==0 && Total==0): the bridge's
-// own honest starting value until a later pass adds live progress
+// honest starting value until a later pass adds live progress
 // tracking to sync.Health (task-6-findings-r1.md F7). An unknown "0"
 // would read as a cycle stalled at zero rather than one that has not
 // reported a count yet.
@@ -159,9 +159,9 @@ func progressText(label string, done, total int64) string {
 	}
 }
 
-// syncWord returns state's own bare label and role (SY-5's four
+// syncWord returns state's bare label and role (SY-5's four
 // states): the one place the four copy strings live, shared by
-// syncStateSeg's own richer per-state text and bareSyncWord's
+// syncStateSeg's richer per-state text and bareSyncWord's
 // compressed form (task-8-findings-r1.md F5).
 func syncWord(state SyncState) (string, theme.Role) {
 	switch state {
@@ -176,18 +176,18 @@ func syncWord(state SyncState) (string, theme.Role) {
 	}
 }
 
-// backingOffText renders the backing-off state's own text (decision
+// backingOffText renders the backing-off state's text (decision
 // 7, sentence case per task-6-findings-r1.md F15): "Backing off ·
-// retry Ns", built from label rather than its own copy of the word
+// retry Ns", built from label rather than its copy of the word
 // (F5).
 func backingOffText(th theme.Theme, label string, retrySeconds int) string {
 	return label + " " + th.Glyphs().Separator + " retry " + strconv.Itoa(retrySeconds) + "s"
 }
 
-// syncStateSeg returns the sync segment's own single styled run for
+// syncStateSeg returns the sync segment's single styled run for
 // sl (decision 7, sentence case per F15): backfill progress takes
 // over the segment while Active, otherwise SY-5's four states each
-// render their own text and role. dropTotal drops a known total from
+// render their text and role. dropTotal drops a known total from
 // the progress text (F6: the short-height rung, per wireframe F3).
 func syncStateSeg(th theme.Theme, sl StatusLine, dropTotal bool) rowSeg {
 	if sl.Backfill.Active {
@@ -205,9 +205,9 @@ func syncStateSeg(th theme.Theme, sl StatusLine, dropTotal bool) rowSeg {
 	}
 }
 
-// backfillSeg returns the backfill progress state's own styled run: a
+// backfillSeg returns the backfill progress state's styled run: a
 // rate-limited backfill (Sync.State BackingOff or Offline while
-// Backfill.Active) still rides the underlying sync connection's own
+// Backfill.Active) still rides the underlying sync connection's
 // warn state and retry text, rather than painting calm while the
 // connection it depends on is degraded (task-6-findings-r1.md F2).
 func backfillSeg(th theme.Theme, sl StatusLine, dropTotal bool) rowSeg {
@@ -234,7 +234,7 @@ func syncTotal(total int64, dropTotal bool) int64 {
 	return total
 }
 
-// outboxSegment returns the queued-outbox count's own styled run
+// outboxSegment returns the queued-outbox count's styled run
 // (decision 7: "beside the sync state"), and whether sl has one to
 // show at all (Outbox <= 0 shows nothing).
 func outboxSegment(sl StatusLine) (rowSeg, bool) {
@@ -245,7 +245,7 @@ func outboxSegment(sl StatusLine) (rowSeg, bool) {
 	return rowSeg{text: text, role: theme.RoleFgMuted}, true
 }
 
-// fitRightSegments returns the sync segment's own display-ordered
+// fitRightSegments returns the sync segment's display-ordered
 // runs that fit within budget: the outbox count first when shown,
 // then the sync state. Truncation priority is the reverse of display
 // order (task-6-findings-r1.md F12, decision 7: the outbox count
@@ -268,8 +268,8 @@ func fitRightSegments(th theme.Theme, sl StatusLine, dropTotal bool, budget int)
 	return truncateLastSeg(th, []rowSeg{stateSeg}, budget)
 }
 
-// segsPlainText concatenates segs's own text, with no styling: the
-// width the whole run occupies, and truncateLastSeg's own input.
+// segsPlainText concatenates segs's text, with no styling: the
+// width the whole run occupies, and truncateLastSeg's input.
 func segsPlainText(segs []rowSeg) string {
 	var b strings.Builder
 	for _, s := range segs {
@@ -280,9 +280,9 @@ func segsPlainText(segs []rowSeg) string {
 
 // truncateLastSeg returns the prefix of segs that fits within
 // maxWidth, marking the cut with the theme's ellipsis token (BACKLOG
-// #61's overflow defect: the status line never renders past its own
+// #61's overflow defect: the status line never renders past its
 // width). A segment that does not fit at all is dropped rather than
-// rendered as a bare ellipsis with nothing of its own text left.
+// rendered as a bare ellipsis with none of its text left.
 func truncateLastSeg(th theme.Theme, segs []rowSeg, maxWidth int) []rowSeg {
 	if maxWidth <= 0 {
 		return nil
@@ -320,12 +320,12 @@ func writeSegs(out *strings.Builder, th theme.Theme, segs []rowSeg) {
 }
 
 // renderStatusLine renders sl as one styled row exactly width cells
-// wide (BACKLOG #61): the surface cluster at the row's own origin,
+// wide (BACKLOG #61): the surface cluster at the row's origin,
 // the sync segment right-aligned with a padBand margin. dropTotal
 // drops a known progress total (F6, the short-height rung). The
 // cluster is what orients every other chrome element (decision 1), so
 // a width too narrow for both truncates the sync segment first; only
-// the sync segment's own text is ever variable enough to overflow in
+// the sync segment's text is ever variable enough to overflow in
 // practice (BACKLOG #62: every word here comes from a Surface name,
 // a GrammarKeys binding, a theme glyph, or the message the bridge
 // delivered, never a literal that binding or state could drift from).

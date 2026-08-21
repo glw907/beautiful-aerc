@@ -22,9 +22,9 @@ func testConfirm(t *testing.T, yesCmd, noCmd tea.Cmd) Confirm {
 	}
 	th := theme.New(true, theme.ProfileTrueColor)
 	updated, _ := c.Update(ThemeMsg{Theme: th})
-	c = updated.(Confirm) //nolint:errcheck // Confirm's own Update always returns a Confirm
+	c = updated.(Confirm) //nolint:errcheck // Confirm's Update always returns a Confirm
 	updated, _ = c.Update(LayoutMsg{Layout: ComputeLayout(100, 30, false)})
-	return updated.(Confirm) //nolint:errcheck // Confirm's own Update always returns a Confirm
+	return updated.(Confirm) //nolint:errcheck // Confirm's Update always returns a Confirm
 }
 
 // TestConfirm_AnswerYesNoEsc proves y/n/Esc each answer, and every
@@ -79,9 +79,9 @@ func TestConfirm_AnswerYesNoEsc(t *testing.T) {
 }
 
 // answerConfirm drives msg through app.Update and, when the result
-// carries a ConfirmAnsweredMsg-yielding Cmd (Confirm's own
+// carries a ConfirmAnsweredMsg-yielding Cmd (Confirm's
 // elm-conventions rule-4 signal), feeds that Msg back through
-// app.Update too: the two-step protocol a running program's own event
+// app.Update too: the two-step protocol a running program's event
 // loop performs for free, reproduced here since no test in this
 // package runs one.
 func answerConfirm(t *testing.T, app App, msg tea.Msg) (App, tea.Cmd) {
@@ -171,10 +171,10 @@ func TestConfirmBoxWidth_ClampsAgainstTheTerminal(t *testing.T) {
 	}
 }
 
-// TestConfirm_View_NaturalSizeCenteredOnBase renders Confirm's own
-// View at 100×30 (the acceptance criterion's own natural size) and
+// TestConfirm_View_NaturalSizeCenteredOnBase renders Confirm's
+// View at 100×30 (the acceptance criterion's natural size) and
 // checks the box is present, centered, and carries both the question
-// and the default answer's own selectedBg pill.
+// and the default answer's selectedBg pill.
 func TestConfirm_View_NaturalSizeCenteredOnBase(t *testing.T) {
 	c := testConfirm(t, nil, nil)
 
@@ -199,7 +199,7 @@ func TestConfirm_View_NaturalSizeCenteredOnBase(t *testing.T) {
 }
 
 // TestConfirmHitSpans_TargetTheAnswerKeys proves ADR-0017's character
-// grain: each span's Rect lands on its own key character within the
+// grain: each span's Rect lands on its key character within the
 // rendered frame.
 func TestConfirmHitSpans_TargetTheAnswerKeys(t *testing.T) {
 	c := testConfirm(t, nil, nil)
@@ -225,7 +225,7 @@ func TestConfirmHitSpans_TargetTheAnswerKeys(t *testing.T) {
 
 // TestApp_ConfirmOnStack_ResizeFitsAndStaysCentered proves the F4
 // ruling (task-8-findings-r1.md, promoted): App.updateChildren now
-// forwards tea.WindowSizeMsg's own LayoutMsg to a.stack, so a pushed
+// forwards tea.WindowSizeMsg's LayoutMsg to a.stack, so a pushed
 // Confirm fits the new viewport and stays centered across a resize,
 // rather than staying sized to whatever terminal it was pushed onto.
 // Task 9 starts pushing screens routinely, so this could not wait.
@@ -252,7 +252,7 @@ func TestApp_ConfirmOnStack_ResizeFitsAndStaysCentered(t *testing.T) {
 
 // TestApp_ConfirmOnStack_ThemeRepaintReachesTheModal proves the same
 // F4 ruling's other half: delivering tea.BackgroundColorMsg rebuilds
-// a pushed Confirm's own theme too, not only the surface screens.
+// a pushed Confirm's theme too, not only the surface screens.
 func TestApp_ConfirmOnStack_ThemeRepaintReachesTheModal(t *testing.T) {
 	app := NewApp(testDeps(t))
 	before := app.theme

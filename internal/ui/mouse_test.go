@@ -82,7 +82,7 @@ func TestKeyPressForString(t *testing.T) {
 
 // TestKeyPressForString_ArrowKeysResolveThroughTheMap proves the
 // arrow/edit entries F3 added to specialKeyPresses resolve through
-// the map lookup: "up" synthesizes tea.KeyUp, never the string's own
+// the map lookup: "up" synthesizes tea.KeyUp, never the string's
 // first rune (the pre-fix bug the finding names) and never the
 // multi-rune fallback's tea.KeyExtended.
 func TestKeyPressForString_ArrowKeysResolveThroughTheMap(t *testing.T) {
@@ -97,7 +97,7 @@ func TestKeyPressForString_ArrowKeysResolveThroughTheMap(t *testing.T) {
 
 // TestKeyPressForString_MultiRuneFallback proves F3's total fallback:
 // a multi-character string absent from specialKeyPresses synthesizes
-// tea.KeyExtended (ultraviolet's own multi-rune code) with its own
+// tea.KeyExtended (ultraviolet's multi-rune code) with its
 // text, never the string's first rune alone.
 func TestKeyPressForString_MultiRuneFallback(t *testing.T) {
 	const s = "zzbogus"
@@ -138,7 +138,7 @@ func TestResolveDoubleClick_WithinWindowUpgrades(t *testing.T) {
 
 // TestResolveDoubleClick_OutsideWindowSelectsTwice proves a second
 // click on the same target arriving at or past doubleClickWindow does
-// not upgrade: two plain selects, each opening its own fresh window.
+// not upgrade: two plain selects, each opening its fresh window.
 func TestResolveDoubleClick_OutsideWindowSelectsTwice(t *testing.T) {
 	target := "row-1"
 	opened := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
@@ -205,8 +205,8 @@ func TestApp_DispatchClick_OnlyLeftButtonActs(t *testing.T) {
 
 // TestApp_ClickAtFloorRungResolvesNothing proves F2 (CRITICAL): the
 // floor rung (width or height) paints no chrome at all (render.go's
-// own early return), so dispatch resolves nothing there either,
-// regardless of what a click's own coordinates land on.
+// early return), so dispatch resolves nothing there either,
+// regardless of what a click's coordinates land on.
 func TestApp_ClickAtFloorRungResolvesNothing(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 40, Height: 10})))
@@ -266,10 +266,10 @@ func TestApp_ClickStatusDigit_NoOpsOverModal(t *testing.T) {
 }
 
 // TestApp_ClickOverModalNeverResolvesTheCoveredBanner proves F2
-// (CRITICAL): a StateModal front resolves only through its own
+// (CRITICAL): a StateModal front resolves only through its
 // HitSpans() (the F5 interface), never the status/footer/banner spans
 // a full-terminal modal render painted over, even a click at the
-// exact coordinate the banner's own dismiss glyph occupied before the
+// exact coordinate the banner's dismiss glyph occupied before the
 // modal covered it.
 func TestApp_ClickOverModalNeverResolvesTheCoveredBanner(t *testing.T) {
 	app := NewApp(testDeps(t))
@@ -294,7 +294,7 @@ func TestApp_ClickOverModalNeverResolvesTheCoveredBanner(t *testing.T) {
 
 // TestApp_ClickFooterHint_RunsItsVerb proves clicking a rendered
 // footer hint's cell fires exactly the Cmd pressing its key would:
-// the mail placeholder's own "q quit" hint dispatched to tea.Quit.
+// the mail placeholder's "q quit" hint dispatched to tea.Quit.
 func TestApp_ClickFooterHint_RunsItsVerb(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
@@ -318,7 +318,7 @@ func TestApp_ClickFooterHint_RunsItsVerb(t *testing.T) {
 
 // TestApp_ClickFooterNavigateHint_ScrollsDown proves RULING F6
 // (task-10-findings-r2.md): a multi-key hint's click synthesizes its
-// primary key, the forward direction: clicking help's own "j/k"
+// primary key, the forward direction: clicking help's "j/k"
 // footer hint scrolls down, never up.
 func TestApp_ClickFooterNavigateHint_ScrollsDown(t *testing.T) {
 	app := NewApp(testDeps(t))
@@ -372,7 +372,7 @@ func TestApp_ClickBannerDismiss_Dismisses(t *testing.T) {
 // y/n cell answers exactly as the key would, through the same
 // ConfirmAnsweredMsg round trip TestApp_ConfirmOnStack_AnswersYesNoAndPops
 // drives with a real keypress. F9: app itself takes a real
-// tea.WindowSizeMsg (not just the Confirm's own testConfirm layout),
+// tea.WindowSizeMsg (not just the Confirm's testConfirm layout),
 // since dispatchClick's F2 floor guard reads a.layout directly.
 func TestApp_ClickConfirmAnswer_Answers(t *testing.T) {
 	yesCalled := false
@@ -469,7 +469,7 @@ func TestApp_WheelOverBannerNoOps(t *testing.T) {
 }
 
 // TestApp_WheelOverModalNoOps proves a wheel gesture over a StateModal
-// front (PointerWheel's own illegal state, registry.go's
+// front (PointerWheel's illegal state, registry.go's
 // pointerLegalStates) is a no-op regardless of where its coordinates
 // land, exactly as the j/k keys already are at a modal confirm.
 func TestApp_WheelOverModalNoOps(t *testing.T) {
@@ -492,7 +492,7 @@ func TestApp_WheelOverModalNoOps(t *testing.T) {
 
 // fakeWheelScreen is a minimal Screen recording whether it saw a
 // WheelMsg, standing in for a stacked screen whose own registry entry
-// may or may not declare PointerWheel (F4's own fixture).
+// may or may not declare PointerWheel (F4's fixture).
 type fakeWheelScreen struct {
 	entry    ScreenEntry
 	sawWheel bool
@@ -553,7 +553,7 @@ func TestApp_WheelUnregisteredFrontNoOps(t *testing.T) {
 // rendered view byte-for-byte unchanged: pointer input changes state,
 // never rendering rules (ADR-0017's testing section). F9: the click
 // lands inside Main, a real hover-free miss, not merely past the
-// terminal's own bounds.
+// terminal's bounds.
 func TestApp_NoOpClickLeavesTheGoldenUnchanged(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))

@@ -80,7 +80,7 @@ var ansi16SlotLight = map[Role]int{
 
 // roleClass groups a Role by the contrast floor it must clear
 // (design decision 5): classText roles hold 4.5:1, classIndicator
-// roles 3:1, and classStructural is border's own contrast-exempt
+// roles 3:1, and classStructural is border's contrast-exempt
 // class.
 type roleClass int
 

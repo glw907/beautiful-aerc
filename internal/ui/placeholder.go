@@ -30,7 +30,7 @@ const (
 // LayoutMsg reports App's current LayoutMode to every surface screen,
 // recomputed once per tea.WindowSizeMsg (design language section 9):
 // the one struct every component consumes rather than deriving its
-// own chrome margins.
+// chrome margins.
 type LayoutMsg struct {
 	Layout LayoutMode
 }
@@ -46,9 +46,9 @@ type ThemeMsg struct {
 }
 
 // placeholderKeys is the keymap every surface placeholder shares
-// (wireframe F1): quit is the only legal key of the screen's own.
-// Help's hint is pinned by the footer itself, never a screen's own
-// FooterPriority, and the surface digits are App's own global
+// (wireframe F1): quit is the screen's only legal key.
+// Help's hint is pinned by the footer itself, never a screen's
+// FooterPriority, and the surface digits are App's global
 // concern, never a screen's.
 type placeholderKeys struct{}
 
@@ -88,7 +88,7 @@ type placeholderChrome struct {
 }
 
 // absorb applies msg to c when msg is LayoutMsg or ThemeMsg, reporting
-// whether it did: the one case every placeholder's own update switch
+// whether it did: the one case every placeholder's update switch
 // would otherwise repeat.
 func (c *placeholderChrome) absorb(msg tea.Msg) bool {
 	switch msg := msg.(type) {
@@ -142,8 +142,8 @@ func newMailPlaceholder(reads *store.ReadPool, th theme.Theme) MailPlaceholder {
 }
 
 // NewMailPlaceholder returns a MailPlaceholder already carrying
-// stats, as if its own store load had already returned. It is the
-// fixtures package's own entry point: a fixture has no
+// stats, as if its store load had already returned. It is the
+// fixtures package's entry point: a fixture has no
 // store.ReadPool to load from (amendment D's no-I/O rule), so it
 // pins its facts here instead of through Init's Cmd.
 func NewMailPlaceholder(th theme.Theme, stats store.MailStats) MailPlaceholder {
@@ -168,7 +168,7 @@ func (m MailPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// update absorbs a StoreChangedMsg by re-issuing Init's own load: the
+// update absorbs a StoreChangedMsg by re-issuing Init's load: the
 // engines' route back to a placeholder that already returned from
 // Init once, so a count a background sync just changed reaches the
 // view on its next paint rather than staying stuck at whatever Init
@@ -229,7 +229,7 @@ func newCalendarPlaceholder(reads *store.ReadPool, th theme.Theme) CalendarPlace
 }
 
 // NewCalendarPlaceholder mirrors NewMailPlaceholder for the calendar
-// surface's own fact.
+// surface's fact.
 func NewCalendarPlaceholder(th theme.Theme, events int64) CalendarPlaceholder {
 	return CalendarPlaceholder{placeholderChrome: placeholderChrome{theme: th}, events: events, loaded: true}
 }
@@ -253,7 +253,7 @@ func (c CalendarPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // update absorbs a StoreChangedMsg the same way MailPlaceholder does:
-// by re-issuing Init's own load.
+// by re-issuing Init's load.
 func (c CalendarPlaceholder) update(msg tea.Msg) (CalendarPlaceholder, tea.Cmd) {
 	if c.absorb(msg) {
 		return c, nil
@@ -314,14 +314,14 @@ func (c ContactsPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-//nolint:unparam // Cmd stays nil: this screen owns no store-backed state to reload (its own non-goal, above)
+//nolint:unparam // Cmd stays nil: this screen owns no store-backed state to reload (its non-goal, above)
 func (c ContactsPlaceholder) update(msg tea.Msg) (ContactsPlaceholder, tea.Cmd) {
 	c.absorb(msg)
 	return c, nil
 }
 
 func (c ContactsPlaceholder) View() tea.View {
-	// "People" is wireframe F8's own reviewed copy: the state name
+	// "People" is wireframe F8's reviewed copy: the state name
 	// ("contact list", ScreenEntry.Name below) and the display title
 	// are deliberately different fields.
 	return composePlaceholder(c.theme, c.layout, "People", "contacts sync lands with pass 5")

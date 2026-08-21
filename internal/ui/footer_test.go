@@ -23,12 +23,12 @@ import (
 //	"a archive message"  17 columns
 //
 // footerHelpHint ("? help") is 6 columns and theme.GapPin is 6 (F1's
-// ruling: the pinned exemplar's own reserve before the pinned help
+// ruling: the pinned exemplar's reserve before the pinned help
 // hint), so footerHints(entry, width) reserves 12 columns before it
 // ever spends any on a priority hint. The boundary widths below are
 // computed by hand from these fixed numbers, not from calling
 // ansi.StringWidth on the fixture strings at test time, so a bug in
-// footerHints's own arithmetic cannot cancel out against the same bug
+// footerHints's arithmetic cannot cancel out against the same bug
 // in the test.
 func footerFixture() ScreenEntry {
 	navigate := bind("j", "j/k", "navigate")
@@ -196,15 +196,15 @@ func TestFooterPriorityWithinKeymap_LiveRegistry(t *testing.T) {
 // footerCompletenessWidths is the width sweep UX-2 revision 6's
 // help-completeness tests exercise footerHints across
 // (task-7-findings-r1.md F2): narrow enough that nothing fits,
-// through the design language's own column rungs, to generous enough
+// through the design language's column rungs, to generous enough
 // that a modest priority list always shows in full.
 var footerCompletenessWidths = []int{0, 20, 60, 80, 120, 200}
 
 // TestFooterHints_LiveRegistry_EveryRenderedHintIsLegal and its
-// sibling below are UX-2 revision 6's own "only mechanical claims"
+// sibling below are UX-2 revision 6's "only mechanical claims"
 // (design language section 4), run against Registered() rather than
 // footerFixture: the footer is always a legal prefix of each
-// registered screen's own committed order.
+// registered screen's committed order.
 func TestFooterHints_LiveRegistry_EveryRenderedHintIsLegal(t *testing.T) {
 	for _, e := range Registered() {
 		legal := flattenKeys(e.Keys)
@@ -231,15 +231,15 @@ func TestFooterHints_LiveRegistry_IsAPrefixOfFooterPriority(t *testing.T) {
 
 // TestHelpContent_EqualsFullKeymap_LiveRegistry proves UX-2 revision
 // 6's completeness claim as an actual oracle rather than helpContent
-// compared against its own definition (task-7-findings-r1.md F2:
+// compared against its definition (task-7-findings-r1.md F2:
 // flattenKeys(x) == flattenKeys(x) can never fail). The subset half
 // runs against every registered screen: every hint footerHints ever
 // renders across footerCompletenessWidths is present in that screen's
-// own helpContent. Pass 2's currently registered screens are all
+// helpContent. Pass 2's currently registered screens are all
 // one-hint placeholder keymaps (placeholder.go), so footer and help
 // coincide exactly for every one of them today. The strictness half
 // (help carries something the footer never shows at any width) is
-// proved instead against footerFixture, this file's own fixture built
+// proved instead against footerFixture, this file's fixture built
 // with exactly that shape: its "quit" binding sits in Keys but never
 // in FooterPriority.
 func TestHelpContent_EqualsFullKeymap_LiveRegistry(t *testing.T) {
@@ -278,7 +278,7 @@ func TestFooterHelpHint_DerivesFromGrammarKeysHelp(t *testing.T) {
 	}
 }
 
-// TestHintSegs_RolesFollowTheAtom proves the hint atom's own contrast
+// TestHintSegs_RolesFollowTheAtom proves the hint atom's contrast
 // split (decision 8, the ratified shell exemplar): the key run plain
 // RoleFg, the description run RoleFgMuted with its single leading
 // space, and both derived from b.Help() rather than a literal.
@@ -314,10 +314,10 @@ func TestFooterLeftSegs_GapsBetweenHints(t *testing.T) {
 	}
 }
 
-// footerRowFields strips got's own styling and splits it on runs of
+// footerRowFields strips got's styling and splits it on runs of
 // two or more spaces (PadBand and GapHint both qualify; the hint
-// atom's own single space between key and description never does),
-// so the result is exactly the row's own ordered content: one entry
+// atom's single space between key and description never does),
+// so the result is exactly the row's ordered content: one entry
 // per rendered hint, plus the pinned help hint last.
 var footerFieldSplit = regexp.MustCompile(`\s{2,}`)
 
@@ -331,16 +331,16 @@ func footerRowFields(row string) []string {
 	return fields
 }
 
-// footerBoundaryWidths is the width sweep footerFixture's own boundary
+// footerBoundaryWidths is the width sweep footerFixture's boundary
 // crossings sit on (24/37/57, TestFooterHints_LiteralWidthBoundaries),
-// plus the design language's own column rungs: shared by the render-
+// plus the design language's column rungs: shared by the render-
 // and hit-span-layer tests below (task-7-findings-r1.md F4/F5), each
 // of which also ranges over Registered() so a real registered screen's
-// own (currently one-hint) priority list gets the same proof.
+// (currently one-hint) priority list gets the same proof.
 var footerBoundaryWidths = []int{25, 37, 57, 60, 80, 120, 200}
 
 // footerLoopEntries returns footerFixture, footerGrowthFixture, and
-// every currently registered screen's own entry: the shared input set
+// every currently registered screen's entry: the shared input set
 // F4 and F5 range the render- and hit-span-layer tests over.
 func footerLoopEntries() []ScreenEntry {
 	entries := []ScreenEntry{footerFixture(), footerGrowthFixture()}
@@ -348,10 +348,10 @@ func footerLoopEntries() []ScreenEntry {
 }
 
 // TestRenderFooter_ContainsComputedPrefixInOrder closes the loop
-// between footerHints's own computed prefix and what renderFooter
+// between footerHints's computed prefix and what renderFooter
 // actually paints (the plan's task 7 criterion): at every width, for
 // footerFixture, footerGrowthFixture, and every registered screen, the
-// row's own fields are exactly footerHints's rendered set, in order,
+// row's fields are exactly footerHints's rendered set, in order,
 // plus the pinned help hint last.
 func TestRenderFooter_ContainsComputedPrefixInOrder(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -379,7 +379,7 @@ func TestRenderFooter_ContainsComputedPrefixInOrder(t *testing.T) {
 // every width": the pinned help hint's fields end the row at every
 // tested width, including one (60, widthSpartanMin, layout.go) that
 // fits no priority hint at all. 60 replaces the original narrow case
-// of 9 (task-7-findings-r1.md F3): 9 exercised renderFooter's own
+// of 9 (task-7-findings-r1.md F3): 9 exercised renderFooter's
 // defensive clamp for a width no caller ever supplies, and renderFooter
 // no longer carries one, since its documented precondition is that
 // Render never calls it below the width floor.
@@ -416,7 +416,7 @@ func TestRenderFooter_MonotoneGrowth(t *testing.T) {
 	}
 }
 
-// TestRenderFooter_ExactWidth is the footer's own version of the
+// TestRenderFooter_ExactWidth is the footer's version of the
 // status band's width-invariant test: at every width a real terminal
 // reaches (the spartan floor of 60 upward), the rendered band's
 // display width is exactly width.
@@ -434,7 +434,7 @@ func TestRenderFooter_ExactWidth(t *testing.T) {
 
 // TestFooterHitSpans_MatchesTheRenderedColumns proves the hit spans
 // ADR-0017's character grain requires: each span's Rect lands exactly
-// on the columns the rendered row's own hint text occupies, one span
+// on the columns the rendered row's hint text occupies, one span
 // per rendered hint plus the pinned help hint last.
 func TestFooterHitSpans_MatchesTheRenderedColumns(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -467,8 +467,8 @@ func TestFooterHitSpans_MatchesTheRenderedColumns(t *testing.T) {
 				}
 			}
 
-			// The pin's own column: the last span is always the pinned
-			// help hint, and its Rect lands on the row's own trailing
+			// The pin's column: the last span is always the pinned
+			// help hint, and its Rect lands on the row's trailing
 			// "? help" text, not merely on some final span.
 			pin := spans[len(spans)-1]
 			if pin.Verb.Help().Desc != GrammarKeys.Help.Help().Desc {
@@ -485,7 +485,7 @@ func TestFooterHitSpans_MatchesTheRenderedColumns(t *testing.T) {
 // footerGrowthFixture is a ScreenEntry whose FooterPriority carries
 // 13 hints, each rendering at a uniform 9 columns (one key, one
 // space, a seven-letter description): TestRenderFooter_GrowsAcrossGoldenWidths's
-// own fixture, sized so the design language's own three golden column
+// fixture, sized so the design language's three golden column
 // rungs (spartan 80, standard 120, wide 150) each land on a different
 // hint count, and 150 (11 of 13) still truncates rather than showing
 // every hint whole (task-7-findings-r1.md F7).
@@ -508,12 +508,12 @@ func footerGrowthFixture() ScreenEntry {
 	}
 }
 
-// TestRenderFooter_GrowsAcrossGoldenWidths pins the footer's own
+// TestRenderFooter_GrowsAcrossGoldenWidths pins the footer's
 // growth goldens at the design language's three column rungs (spartan
 // 80, standard 120, wide 150), literal expected rows rather than a
-// field count (task-7-findings-r1.md F7's own golden: PadBand's
+// field count (task-7-findings-r1.md F7's golden: PadBand's
 // leading and trailing two cells, GapHint's three-cell inter-hint gap,
-// and GapPin's own six-cell-or-wider reserve before the pin all show
+// and GapPin's six-cell-or-wider reserve before the pin all show
 // in the exact text). 150 renders 11 of the fixture's 13 hints, so the
 // golden also proves the wide rung still truncates rather than always
 // showing everything whole.
@@ -537,10 +537,10 @@ func TestRenderFooter_GrowsAcrossGoldenWidths(t *testing.T) {
 	}
 }
 
-// exemplarFooterPriority transcribes the pinned shell exemplar's own
+// exemplarFooterPriority transcribes the pinned shell exemplar's
 // FOOTER_PRIORITY
 // (docs/poplar/design/2026-08-19-shell-exemplar/shell-exemplar.py),
-// in its own order: TestRenderFooter_MatchesPinnedExemplarAt80's own
+// in its order: TestRenderFooter_MatchesPinnedExemplarAt80's
 // fixture, so the byte-for-byte comparison below is against the exact
 // hint set the exemplar itself renders, never a hand-picked stand-in.
 func exemplarFooterPriority() []key.Binding {
@@ -565,14 +565,14 @@ func exemplarFooterPriority() []key.Binding {
 	return bindings
 }
 
-// exemplarRenderPath is the pinned shell exemplar's own committed
+// exemplarRenderPath is the pinned shell exemplar's committed
 // render, the source TestRenderFooter_MatchesPinnedExemplarAt80 reads
 // directly rather than transcribing a line of it as a literal, so the
 // pin cannot drift from what the exemplar itself renders.
 const exemplarRenderPath = "../../docs/poplar/design/2026-08-19-shell-exemplar/render.txt"
 
 // exemplarRenderLine returns line n (1-based) of exemplarRenderPath,
-// with show()'s own two-cell print indent stripped: that indent is
+// with show()'s two-cell print indent stripped: that indent is
 // never part of the row itself.
 func exemplarRenderLine(t *testing.T, n int) string {
 	t.Helper()
@@ -588,8 +588,8 @@ func exemplarRenderLine(t *testing.T, n int) string {
 }
 
 // TestRenderFooter_MatchesPinnedExemplarAt80 verifies the pin-reserve
-// ruling: rendering the exemplar's own FOOTER_PRIORITY at 80 columns
-// reproduces the exemplar's own "Spartan 80" row, line 78 of
+// ruling: rendering the exemplar's FOOTER_PRIORITY at 80 columns
+// reproduces the exemplar's "Spartan 80" row, line 78 of
 // exemplarRenderPath, byte for byte.
 func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
@@ -609,7 +609,7 @@ func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
 // TestFooterHitSpans_OfferedInEveryLegalState proves PointerFooterHint
 // is legal in every StateClass except StateModal (registry.go's
 // pointerLegalStates, corrected by task-10-findings-r2.md's F2
-// corollary ruling): a footer hint accelerates its own key, which is
+// corollary ruling): a footer hint accelerates its key, which is
 // itself legal in whatever state offers it, so spans are never
 // withheld the way a surface-digit click is outside StateDigitsSwitch;
 // StateModal is the one exception, since the modal renders

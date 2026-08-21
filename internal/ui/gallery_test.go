@@ -35,7 +35,7 @@ type galleryProfile struct {
 
 // galleryProfiles is the four profiles amendment B names: truecolor
 // dark and light, plus the two degrade profiles, each pinned dark
-// (ANSI-16 and NO_COLOR have no light/dark distinction of their own
+// (ANSI-16 and NO_COLOR have no light/dark distinction
 // to sweep, since decision 11's degrade grounds carry no color
 // either way).
 var galleryProfiles = []galleryProfile{
@@ -55,7 +55,7 @@ var galleryProfiles = []galleryProfile{
 // rather than landing in a named LayoutMode pane. fullRegion instead
 // runs the fixture through ui.Render with RenderInput.FullRegion set:
 // the help overlay's case, a non-modal stacked screen composed
-// with the surrounding chrome but no sidebar or split of its own
+// with the surrounding chrome but no sidebar or split
 // (task 9).
 type galleryCase struct {
 	fixture        fixtures.Fixture
@@ -90,7 +90,7 @@ func (c galleryCase) profiles() []galleryProfile {
 // dark and NO_COLOR (task 6's acceptance criterion: "golden per state
 // (truecolor + NO_COLOR profiles)"), since the content pane beneath
 // them never varies and ANSI-16 adds no distinct sync-segment
-// rendering path of its own.
+// rendering path.
 var syncStateProfiles = []galleryProfile{galleryProfiles[0], galleryProfiles[3]}
 
 // chromeStateProfiles narrows task 8's toast and banner fixtures to

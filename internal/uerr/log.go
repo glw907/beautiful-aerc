@@ -147,7 +147,7 @@ var logWriter *rotatingWriter
 var logFallbackPath string
 
 // logDegraded records that openLogWriter's fallback engaged but its
-// own trial write still failed: neither destination works, and there
+// trial write still failed: neither destination works, and there
 // is no path left to name (m1). LogDegraded reads it.
 var logDegraded bool
 

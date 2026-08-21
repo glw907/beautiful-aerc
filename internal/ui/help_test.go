@@ -13,7 +13,7 @@ import (
 
 func helpKey() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '?', Text: "?"} }
 
-// TestApp_HelpOpensFromEverySurface is UX-5's own acceptance criterion
+// TestApp_HelpOpensFromEverySurface is UX-5's acceptance criterion
 // and F6: it drives off the Surface enum itself (range over
 // Surface(len(surfaceNames)), never a hand-typed count), takes want
 // from the live app.activeScreen().Entry() rather than a
@@ -58,7 +58,7 @@ func TestApp_HelpOpensFromEverySurface(t *testing.T) {
 
 // TestApp_HelpDoesNotOpenOverAModal proves `?` is a no-op while a
 // StateModal front is showing, matching every other key a modal does
-// not itself bind (confirm.go's own "every other key is a no-op"
+// not itself bind (confirm.go's "every other key is a no-op"
 // rule): help never covers, or is covered by, a modal confirm.
 func TestApp_HelpDoesNotOpenOverAModal(t *testing.T) {
 	resetRegistry(t)
@@ -77,7 +77,7 @@ func TestApp_HelpDoesNotOpenOverAModal(t *testing.T) {
 	}
 }
 
-// TestApp_HelpTogglesOpenAndClosed is C3's own ruling: `?` is a
+// TestApp_HelpTogglesOpenAndClosed is C3's ruling: `?` is a
 // toggle (the mutt/aerc/less idiom), not a one-way open with a
 // re-entry guard. A second `?` while help is already the front pops
 // it, tested in both directions.
@@ -100,11 +100,11 @@ func TestApp_HelpTogglesOpenAndClosed(t *testing.T) {
 }
 
 // TestHelpOpenEligible_GatesOnSwitchState is C2, CRITICAL: the toggle
-// gate is StateDigitsSwitch only, mirroring undoEligible's own front
+// gate is StateDigitsSwitch only, mirroring undoEligible's front
 // gate (TestApp_UndoEligible_GatesOnStackAndSwitchState's shape).
 // A StatePrintableEntry front must disqualify `?` from opening help,
 // the same way it disqualifies `u` from answering an undo window, so
-// a search bar or a picker filter field keeps its own `?` character.
+// a search bar or a picker filter field keeps its `?` character.
 func TestHelpOpenEligible_GatesOnSwitchState(t *testing.T) {
 	if !helpOpenEligible(ScreenEntry{SwitchState: StateDigitsSwitch}) {
 		t.Error("helpOpenEligible() with a StateDigitsSwitch front = false, want true")
@@ -117,7 +117,7 @@ func TestHelpOpenEligible_GatesOnSwitchState(t *testing.T) {
 	}
 }
 
-// TestApp_HelpDoesNotInterceptAPrintableEntryQuestionMark is C2's own
+// TestApp_HelpDoesNotInterceptAPrintableEntryQuestionMark is C2's
 // end-to-end case: `?` reaches a StatePrintableEntry front's normal
 // Update untouched, rather than being intercepted as the help toggle.
 func TestApp_HelpDoesNotInterceptAPrintableEntryQuestionMark(t *testing.T) {
@@ -138,7 +138,7 @@ func TestApp_HelpDoesNotInterceptAPrintableEntryQuestionMark(t *testing.T) {
 	}
 }
 
-// TestApp_DigitPopsHelpAndSwitchesSurface is UX-5's own carried
+// TestApp_DigitPopsHelpAndSwitchesSurface is UX-5's carried
 // ruling: digits switch surfaces from help, and pop it, rather than
 // leaving the overlay stranded on top of the newly active surface.
 func TestApp_DigitPopsHelpAndSwitchesSurface(t *testing.T) {
@@ -156,7 +156,7 @@ func TestApp_DigitPopsHelpAndSwitchesSurface(t *testing.T) {
 	}
 }
 
-// TestApp_EscPopsHelp proves UX-5's own Esc acceptance criterion via
+// TestApp_EscPopsHelp proves UX-5's Esc acceptance criterion via
 // the ordinary Back branch, HelpScreen's SwitchState being
 // StateDigitsSwitch rather than StateModal.
 func TestApp_EscPopsHelp(t *testing.T) {
@@ -172,8 +172,8 @@ func TestApp_EscPopsHelp(t *testing.T) {
 }
 
 // TestApp_FooterFollowsHelpWhileStacked is the CARRY fix from task
-// 7's review: once help is open, the footer must show its own hints,
-// not the covered surface's, since the surface's own verbs are no
+// 7's review: once help is open, the footer must show its hints,
+// not the covered surface's, since the surface's verbs are no
 // longer legal (UX-2's no-advertised-no-op MUST).
 func TestApp_FooterFollowsHelpWhileStacked(t *testing.T) {
 	app := NewApp(testDeps(t))
@@ -194,7 +194,7 @@ func TestApp_FooterFollowsHelpWhileStacked(t *testing.T) {
 
 func helpTestTheme() theme.Theme { return theme.New(true, theme.ProfileTrueColor) }
 
-// TestHelpScreen_ContentDerivesFromCoveredEntry is UX-5's own
+// TestHelpScreen_ContentDerivesFromCoveredEntry is UX-5's
 // drift-impossibility acceptance criterion: mutating a fake covered
 // entry changes the rendered overlay, since the This-screen section
 // reads Covered live rather than through a copy taken at push time.
@@ -220,12 +220,12 @@ func TestHelpScreen_ContentDerivesFromCoveredEntry(t *testing.T) {
 }
 
 // TestHelpScreen_GlobalSectionDerivesFromGrammarKeys proves the
-// Global section's own rows come from GrammarKeys, never a re-typed
-// literal: every helpGlobalKeys binding's own key appears in the
-// rendered body, and so does its own description, except
+// Global section's rows come from GrammarKeys, never a re-typed
+// literal: every helpGlobalKeys binding's key appears in the
+// rendered body, and so does its description, except
 // SurfaceSwitch's, which TestHelpScreen_GlobalSectionNamesSiblingSurfaces
 // covers on its own (its row names every sibling surface instead of
-// rendering "surface switch" verbatim, C1's own fix).
+// rendering "surface switch" verbatim, C1's fix).
 func TestHelpScreen_GlobalSectionDerivesFromGrammarKeys(t *testing.T) {
 	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}
 	body := ansi.Strip(h.View().Content)
@@ -288,30 +288,30 @@ func lineHasOnly(lines []string, want string) bool {
 	return false
 }
 
-// TestHelpScreen_WheelScrolls is UX-5's own wheel acceptance
+// TestHelpScreen_WheelScrolls is UX-5's wheel acceptance
 // criterion: a coalesced WheelMsg (the typed message ADR-0017's
 // dispatcher produces) moves the scroll position, clamped to the
-// body's own bounds.
+// body's bounds.
 func TestHelpScreen_WheelScrolls(t *testing.T) {
 	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 15, false), Covered: MailPlaceholder{}.Entry()}
 
 	updated, _ := h.Update(WheelMsg{Delta: 1})
-	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
+	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's Update always returns a HelpScreen
 
 	if h.scroll != 1 {
 		t.Fatalf("scroll after WheelMsg{Delta: 1} = %d, want 1", h.scroll)
 	}
 
 	updated, _ = h.Update(WheelMsg{Delta: -100})
-	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
+	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's Update always returns a HelpScreen
 	if h.scroll != 0 {
 		t.Errorf("scroll after a large negative WheelMsg = %d, want clamped to 0", h.scroll)
 	}
 }
 
 // TestApp_WheelScrollsHelpWhileStacked proves the coalesced WheelMsg
-// App's own dispatchWheel routes to a stacked HelpScreen (task 10)
-// when the gesture's own coordinates land within the Main band the
+// App's dispatchWheel routes to a stacked HelpScreen (task 10)
+// when the gesture's coordinates land within the Main band the
 // overlay fills (FullRegion): the position-aware routing that
 // replaced the old coordinate-blind updateChildren broadcast
 // (task-8-findings-r1.md ruling F4).
@@ -332,39 +332,39 @@ func TestApp_WheelScrollsHelpWhileStacked(t *testing.T) {
 }
 
 // TestHelpScreen_NavigateAndPageKeysScroll proves the navigation
-// family's own two halves (j/k, Space/b) step the body by one line and
+// family's two halves (j/k, Space/b) step the body by one line and
 // one viewport respectively, and Home/End jump to either extreme.
 func TestHelpScreen_NavigateAndPageKeysScroll(t *testing.T) {
 	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 15, false), Covered: MailPlaceholder{}.Entry()}
 
 	updated, _ := h.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
+	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's Update always returns a HelpScreen
 	if h.scroll != 1 {
 		t.Fatalf("scroll after j = %d, want 1", h.scroll)
 	}
 
 	updated, _ = h.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
-	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
+	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's Update always returns a HelpScreen
 	if h.scroll != 0 {
 		t.Fatalf("scroll after k = %d, want 0", h.scroll)
 	}
 
 	updated, _ = h.Update(tea.KeyPressMsg{Code: tea.KeyEnd, Text: "end"})
-	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
+	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's Update always returns a HelpScreen
 	if h.scroll == 0 {
 		t.Fatal("scroll after End = 0, want the body's own bottom")
 	}
 
 	updated, _ = h.Update(tea.KeyPressMsg{Code: tea.KeyHome, Text: "home"})
-	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's own Update always returns a HelpScreen
+	h = updated.(HelpScreen) //nolint:errcheck // HelpScreen's Update always returns a HelpScreen
 	if h.scroll != 0 {
 		t.Errorf("scroll after Home = %d, want 0", h.scroll)
 	}
 }
 
 // keyPressNamed builds a tea.KeyPressMsg whose String() equals name,
-// for a name one of GrammarKeys' own bindings carries: a special
-// key's String() derives from Code (the decoder's own table), never
+// for a name one of GrammarKeys' bindings carries: a special
+// key's String() derives from Code (the decoder's table), never
 // Text, unlike a plain letter's, so this resolves each name to the
 // right one.
 func keyPressNamed(name string) tea.KeyPressMsg {
@@ -390,7 +390,7 @@ func keyPressNamed(name string) tea.KeyPressMsg {
 
 // TestHelpNavigateUpPartitionsNavigateKeys and
 // TestHelpPageBackPartitionsPageKeys are F7: the two helpers must
-// classify every one of GrammarKeys' own bound keys, and only those.
+// classify every one of GrammarKeys' bound keys, and only those.
 // A grammar amendment that adds, removes, or renames a key here must
 // fail this test loudly rather than leave applyKey silently
 // misreading a key it no longer recognizes.
@@ -428,9 +428,9 @@ func TestHelpPageBackPartitionsPageKeys(t *testing.T) {
 	}
 }
 
-// TestHelpScreen_HomeLiteralIsBoundToExtremes is F7's own third leg:
+// TestHelpScreen_HomeLiteralIsBoundToExtremes is F7's third leg:
 // applyKey's "home" literal, the jump-to-top branch, must actually
-// name one of GrammarKeys.Extremes' own bound keys, so a grammar
+// name one of GrammarKeys.Extremes' bound keys, so a grammar
 // amendment renaming it fails this test loudly rather than leaving
 // Home silently falling through to the jump-to-bottom branch.
 func TestHelpScreen_HomeLiteralIsBoundToExtremes(t *testing.T) {
@@ -440,8 +440,8 @@ func TestHelpScreen_HomeLiteralIsBoundToExtremes(t *testing.T) {
 }
 
 // TestJoinHelpColumns_TruncatesAWideLeftColumn is F8: a left column
-// wider than colWidth is truncated with th's own ellipsis token
-// (decision 12) rather than overflowing into the right column's own
+// wider than colWidth is truncated with th's ellipsis token
+// (decision 12) rather than overflowing into the right column's
 // gutter.
 func TestJoinHelpColumns_TruncatesAWideLeftColumn(t *testing.T) {
 	th := helpTestTheme()
@@ -461,7 +461,7 @@ func TestJoinHelpColumns_TruncatesAWideLeftColumn(t *testing.T) {
 
 // TestHelpScreen_GlobalSectionNamesSiblingSurfaces is C1, CRITICAL:
 // the SurfaceSwitch row names every sibling surface, derived from
-// surfaceNames itself (the same array the status line's own cluster
+// surfaceNames itself (the same array the status line's cluster
 // renders), never a re-typed literal.
 func TestHelpScreen_GlobalSectionNamesSiblingSurfaces(t *testing.T) {
 	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}

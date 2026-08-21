@@ -87,7 +87,7 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 	_, runErr := program.Run()
 	if errors.Is(runErr, tea.ErrInterrupted) {
 		// A SIGINT program.Run reports through ErrInterrupted (bubbletea's
-		// own default signal handler, left enabled) is an ordinary way to
+		// default signal handler, left enabled) is an ordinary way to
 		// stop a terminal program, not a failure to report and exit 1 on.
 		runErr = nil
 	}
@@ -100,7 +100,7 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 		loggedRunErr = uerr.New("main.tui", nil, uerr.ClassLocalIO, runErr)
 	}
 
-	// The engines' own goroutines (startEngines' RunPush and dispatch
+	// The engines' goroutines (startEngines' RunPush and dispatch
 	// loop) may still be mid-tick here, calling program.Send after
 	// program.Run has already returned: bubbletea v2.0.9's Send selects
 	// on the program's context, already done at this point, and returns
@@ -142,7 +142,7 @@ func logFallbackBanner() (ui.BannerMsg, bool) {
 // (installed on the worker before RunPush starts) takes over from
 // here with nothing to send; any other error is ST-2's offline
 // case, the state sync.State itself has no room for since Worker's
-// own loop always retries rather than giving up (bridge.go's
+// loop always retries rather than giving up (bridge.go's
 // bridgeSyncState), reported once since nothing about it changes
 // again until retryConnect actually reaches a live stream.
 func initialSyncMsg(connectErr error) tea.Msg {

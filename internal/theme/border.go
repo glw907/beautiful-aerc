@@ -18,7 +18,7 @@ const (
 // ProfileTrueColor the three kinds render distinct weights; at
 // ProfileANSI16 and ProfileNoColor every kind collapses to
 // lipgloss.ASCIIBorder, since box-drawing weight is not a channel
-// those profiles can render reliably. The focused state's own
+// those profiles can render reliably. The focused state's
 // degrade-table channel is the edge bar's glyph weight
 // (GlyphSet.EdgeBarFocused vs EdgeBarBlurred), not the border.
 func (t Theme) Border(kind BorderKind) lipgloss.Border {

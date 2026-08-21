@@ -131,7 +131,7 @@ func surfaceable(err error) bool {
 // default is an answer the transport could not make sense of, and on
 // the push path that is characteristically a middlebox: a captive
 // portal answering the event source with a login page is the shape
-// this default is for. The outbox's own default is ClassServer, for
+// this default is for. The outbox's default is ClassServer, for
 // the failure characteristic of its path, a method error inside an
 // otherwise fine response, and the two differ only over failures
 // neither engine can name.
@@ -178,13 +178,13 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 	flush := func() { w.runFlush(ctx, kinds, flushState) }
 
 	var push pushState
-	// proved wraps push's own proved mark with a Synced transition
-	// (task-6-findings-r1.md F1): proved is the schedule's own
+	// proved wraps push's proved mark with a Synced transition
+	// (task-6-findings-r1.md F1): proved is the schedule's
 	// evidence that the server is serving again (a stream that has
 	// stayed open past cfg.BackoffMax), so it is the seam a
 	// backing-off status line clears through, rather than every
 	// successful Listen (a stream that opens and stops again at once
-	// proves nothing, per pushState's own doc comment, and would
+	// proves nothing, per pushState's doc comment, and would
 	// flicker the status line between backing-off and recovered).
 	proved := func() {
 		push.proved()
@@ -232,7 +232,7 @@ func (w *Worker) RunPush(ctx context.Context, kinds []backend.ObjectKind) {
 //
 // A drop never reaches this schedule, because the transport reconnects
 // through it without closing the channel, so this and the transport's
-// own schedule govern disjoint failures and never compose on one. A
+// schedule govern disjoint failures and never compose on one. A
 // refusal and a stop that never proved the stream both do, since to the
 // user they are the same outage: mail stops arriving either way, and a
 // notification queued on connect (ADR-0018) is not proof, since a
@@ -292,7 +292,7 @@ var errStreamNeverProved = backend.Failure{
 
 // stopped records a stream ending. A stream that stopped without ever
 // proving itself (proved was never called for it) advances attempt by
-// one, the same increment reconnect's own loop applies after a Listen
+// one, the same increment reconnect's loop applies after a Listen
 // failure, so RunPush's tail wait rides the same escalating schedule a
 // run of refusals does: a stop with no failure behind it never reaches
 // reconnect to advance the schedule itself.
@@ -327,7 +327,7 @@ func (s *pushState) stopped() {
 // proved records that the stream currently open has stayed open long
 // enough to say the server is serving again: the failure run is over,
 // the reopen schedule starts from zero, and the mark it leaves keeps
-// this same stream's own eventual stop from advancing that schedule
+// this same stream's eventual stop from advancing that schedule
 // again.
 func (s *pushState) proved() {
 	if s.failing {
@@ -369,17 +369,17 @@ func (w *Worker) flush(ctx context.Context, kinds []backend.ObjectKind, state *s
 
 // reconnect calls push.Listen, retrying with jittered exponential
 // backoff until it succeeds or ctx ends. state carries the schedule
-// and the surfacing decision across calls, for the reasons its own doc
+// and the surfacing decision across calls, for the reasons its doc
 // comment gives; reconnect only ever advances them.
 //
 // poll runs on every tick of pollC that lands while the stream is
 // still refused, which is SY-2's fallback and the only thing pulling
 // Changes during a refusal. It rides the waits the schedule is already
-// taking rather than a schedule of its own, so one failure still backs
+// taking rather than a separate schedule, so one failure still backs
 // off in exactly one place. A nil pollC never fires, which is the
 // no-fallback case a caller drives when it only wants the retry.
 //
-// onWait, when non-nil, is sleepBackoff's own onWait: reconnect's
+// onWait, when non-nil, is sleepBackoff's onWait: reconnect's
 // caller finds out about a reopen wait through it rather than a second
 // call to backoffDelay, whose own jitter would draw a different value
 // than the one actually about to run.
@@ -451,7 +451,7 @@ func consumePush(ctx context.Context, ch <-chan backend.Notification, cfg Config
 // SleepBackoff sleeps a jittered exponential delay for attempt (0 for
 // the first retry) and reports whether it finished; false means ctx
 // ended first. It is exported so a caller outside this package
-// (cmd/poplar's own connect retry) can back off on the same schedule
+// (cmd/poplar's connect retry) can back off on the same schedule
 // as RunPush's reconnect, rather than a second, near-identical
 // implementation.
 func SleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration) bool {
@@ -460,10 +460,10 @@ func SleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Dura
 
 // sleepBackoff is SleepBackoff with reconnect's poll fallback folded
 // in: it runs poll on every tick of pollC that lands inside the delay,
-// so a refused stream's own wait is what the fallback rides. A nil
+// so a refused stream's wait is what the fallback rides. A nil
 // pollC never fires, which is SleepBackoff's plain sleep. onWait, when
 // non-nil, is called once with the exact delay about to be slept,
-// before the wait itself begins (Worker.emitBackoff's own report of
+// before the wait itself begins (Worker.emitBackoff's report of
 // the backing-off state); a nil onWait reports nothing.
 func sleepBackoff(ctx context.Context, attempt int, minDelay, maxDelay time.Duration, pollC <-chan time.Time, poll func(), onWait func(time.Duration)) bool {
 	d := backoffDelay(attempt, minDelay, maxDelay)

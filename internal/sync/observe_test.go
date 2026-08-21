@@ -16,7 +16,7 @@ import (
 )
 
 // observerLog collects Health values from an Observer under a mutex,
-// so a test goroutine can read them while RunPush's own goroutine is
+// so a test goroutine can read them while RunPush's goroutine is
 // still delivering to it.
 type observerLog struct {
 	mu   sync.Mutex
@@ -35,7 +35,7 @@ func (o *observerLog) snapshot() []Health {
 	return slices.Clone(o.logs)
 }
 
-// TestWorkerObserver_ReportsTransitionsOnly proves the bridge's own
+// TestWorkerObserver_ReportsTransitionsOnly proves the bridge's
 // no-polling contract end to end against a real Worker, scripted
 // through a full stop -> recover -> quiet sequence
 // (task-6-findings-r1.md F1): one flush cycle reports exactly Syncing
@@ -93,7 +93,7 @@ func TestWorkerObserver_ReportsTransitionsOnly(t *testing.T) {
 
 		// A quiet stretch under BackoffMax, stream still open: nothing
 		// further, since the stream has not yet proved itself and
-		// nothing here is driven by a timer of its own.
+		// nothing here is driven by a separate timer.
 		time.Sleep(cfg.BackoffMax / 2)
 		synctest.Wait()
 		if steady := log.snapshot(); len(steady) != len(afterFlush) {
@@ -111,7 +111,7 @@ func TestWorkerObserver_ReportsTransitionsOnly(t *testing.T) {
 			t.Errorf("BackingOff Retry = %v, want it within (0, %v]", afterStop[2].Retry, cfg.BackoffMax)
 		}
 
-		// The backoff wait ends (bounded by BackoffMax), second's own
+		// The backoff wait ends (bounded by BackoffMax), second's
 		// stream opens, and stays open past BackoffMax: proved fires,
 		// clearing backing-off.
 		time.Sleep(2*cfg.BackoffMax + cfg.BackoffMin)

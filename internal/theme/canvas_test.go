@@ -59,7 +59,7 @@ func TestCanvasPaintOrigin(t *testing.T) {
 
 // TestCanvasPaintOverwriteOrder proves a later Paint call draws over
 // an earlier one at the same position, the mechanism Render relies
-// on to overlay a named pane's content on top of Main's own blank
+// on to overlay a named pane's content on top of Main's blank
 // fill.
 func TestCanvasPaintOverwriteOrder(t *testing.T) {
 	c := NewCanvas(4, 1)
@@ -73,7 +73,7 @@ func TestCanvasPaintOverwriteOrder(t *testing.T) {
 }
 
 // TestCanvasRenderPreservesStyle proves Render carries a Paint call's
-// own styling through: a background painted via lipgloss survives
+// styling through: a background painted via lipgloss survives
 // into the composed output.
 func TestCanvasRenderPreservesStyle(t *testing.T) {
 	c := NewCanvas(3, 1)

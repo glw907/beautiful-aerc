@@ -87,7 +87,7 @@ type MailboxPage struct {
 
 // MailboxDetails is a MailboxRowDetails result: a MessageSummary per
 // requested id, plus the store revision the read saw. A caller pairs
-// this revision against a MailboxPage's own Revision to tell whether
+// this revision against a MailboxPage's Revision to tell whether
 // the two reads landed on the same store state.
 type MailboxDetails struct {
 	Summaries map[int64]MessageSummary
@@ -129,7 +129,7 @@ func (p *ReadPool) ListMailboxBackward(ctx context.Context, mailboxID int64, cur
 // listMailbox captures rev before running the query. A commit that
 // lands mid-query would otherwise let the stamped revision claim
 // freshness the returned rows never actually saw. Capturing it early
-// means a result can undercount its own freshness but can never
+// means a result can undercount its freshness but can never
 // overstate it.
 func (p *ReadPool) listMailbox(ctx context.Context, query string, mailboxID, receivedAt, messageID int64, limit int) (MailboxPage, error) {
 	rev := p.rev.Current()
@@ -199,7 +199,7 @@ func (p *ReadPool) EventCount(ctx context.Context) (int64, error) {
 }
 
 // OutboxQueuedCount returns the store's current count of outbox rows
-// still in 'queued' state: the status line's own live fact (decision
+// still in 'queued' state: the status line's live fact (decision
 // 7's "2 queued").
 func (p *ReadPool) OutboxQueuedCount(ctx context.Context) (int, error) {
 	var n int

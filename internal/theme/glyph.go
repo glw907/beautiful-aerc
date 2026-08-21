@@ -6,10 +6,10 @@ package theme
 // share one glyph and one RoleBorder styling: the structural
 // pane-separator line ANSI-16/NO_COLOR draw in place of a ground
 // step (DrawsDividers), and the reader's quote-bar prefix. WarnMarker
-// is pass 2 task 8's own addition (the banner's leading glyph), added
-// under decision 3's own allowance for a design-language token the
+// is pass 2 task 8's addition (the banner's leading glyph), added
+// under decision 3's allowance for a design-language token the
 // build discovers it needs; its fallback is "^", not "!", since "!"
-// collided with ErrorGutter's own fallback exactly where color cannot
+// collided with ErrorGutter's fallback exactly where color cannot
 // tell the two apart (task-8-findings-r1.md F9).
 type GlyphSet struct {
 	Unread         string

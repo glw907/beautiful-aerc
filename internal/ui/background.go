@@ -31,7 +31,7 @@ type BackgroundColorTimeoutMsg struct{}
 // theme.Theme with msg.IsDark() and its resolved profile; the
 // returned Update triggers the normal repaint. A bound with no
 // answer yet yields BackgroundColorTimeoutMsg instead, described on
-// its own type.
+// its type.
 func QueryBackgroundColor() tea.Cmd {
 	return tea.Batch(tea.RequestBackgroundColor, backgroundColorTimeout())
 }

@@ -92,7 +92,7 @@ func toastRightSegs(th theme.Theme, t Toast, budget int) []rowSeg {
 // bareSyncWord returns the sync segment's label alone, with no
 // progress count or spinner: the compressed form a toast's right
 // segment shows beside it at widthStandardMin and up (the dispatch's
-// own ruling: the sync state compresses to its bare word beside the
+// ruling: the sync state compresses to its bare word beside the
 // toast, and yields entirely below that width). syncWord is the one
 // place the four SY-5 copy strings live (task-8-findings-r1.md F5).
 func bareSyncWord(sl StatusLine) rowSeg {
@@ -104,7 +104,7 @@ func bareSyncWord(sl StatusLine) rowSeg {
 // fitRightSegments's ordinary sync/outbox pair, or, while a toast is
 // showing, the toast's content plus the sync state's bare word
 // beside it at widthStandardMin and up. The toast branch reserves its
-// own theme.GapControl off budget up front (F1, CRITICAL): the gap
+// theme.GapControl off budget up front (F1, CRITICAL): the gap
 // between the cluster and the toast's content is never squeezed
 // to zero the way an unreserved budget let it at narrow widths (the
 // probed 60-column case). The bare sync word is appended only when it

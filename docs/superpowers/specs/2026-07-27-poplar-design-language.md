@@ -186,10 +186,10 @@ to single presses, no operator-motion sequences (C8):
 
 Any printable key not in the table returns to entry by inserting.
 Message-level verbs (send, postpone, attach, identity switch)
-live in compose's own command state per UX-8, reached the same
+live in compose's command state per UX-8, reached the same
 way; the footer distinguishes the two command scopes. **The undo
 boundary (CO-12)**: `u` in Catkin's command state is the buffer's
-own undo, scoped to the compose session and independent of the
+undo, scoped to the compose session and independent of the
 global UX-9 undo; the global undo never reaches into buffer
 edits, and the buffer undo never reverses a message-level action.
 External mutations through Catkin's buffer-mutation API
@@ -202,17 +202,17 @@ one buffer-undo entry each.
 the same-day distribute-across-width ruling and the earlier
 two-row, advertise-everything form; requirements revision 6 amends
 UX-2 to match). Each screen's registry entry carries a committed
-hint priority order, derived from the screen's own keymap so it
+hint priority order, derived from the screen's keymap so it
 cannot drift; the footer renders the width-maximal prefix of that
 order, each hint as `key description` in two or three words, joined
 by a three-cell gap (`gapHint`, section 7). `? help` is pinned right
-at every width, held off the last shown hint by its own six-cell
-reserve (`gapPin`, section 7, the pinned exemplar's own value), the
+at every width, held off the last shown hint by its six-cell
+reserve (`gapPin`, section 7, the pinned exemplar's value), the
 constant pointer to the help overlay, which is
 the completeness surface: it lists every legal key regardless of
 what the footer's width-limited prefix shows. Width changes what
 the footer shows, never what is legal—the ladder principle applied
-to the footer's own row. The footer renders the current text-entry
+to the footer's row. The footer renders the current text-entry
 state when one is active, leading with the leave-field verb (`Esc
 commands`, section 3).
 
@@ -220,7 +220,7 @@ A screen's committed priority order naturally omits some legal keys
 at every width a real terminal reaches, and that is by design, not
 an exception list to close: the active surface digit is advertised
 permanently by the status line's compact cluster (section 6, amended
-by pass 2 decision 1), so a screen's own priority list has no reason
+by pass 2 decision 1), so a screen's priority list has no reason
 to spend a slot on `1`-`4`; `q` retains its root semantics and a
 non-root screen's priority list leads with `Esc` instead; the
 folder-jump capitals `I D S A J T` are taught by the goto picker
@@ -228,7 +228,7 @@ folder-jump capitals `I D S A J T` are taught by the goto picker
 capability-gated key (the remote-image load key when the terminal
 lacks graphics support, RD-6) is simply absent from the priority
 list on that terminal, since decision 8 already promises an absent
-key is never legal either. None of this needs its own registry rule:
+key is never legal either. None of this needs its registry rule:
 the UX-2 test's only mechanical claims are that the footer is always
 a legal prefix of the committed order, and that the help overlay's
 content is always the complete keymap.
@@ -368,7 +368,7 @@ render those steps legibly; the ladder is the truecolor expression
 of pane separation, never the only one. At those two profiles
 every border weight (single-line, rounded, heavy) also collapses
 to the same plain ASCII frame, since box-drawing weight is not a
-channel either profile carries reliably; the focused state's own
+channel either profile carries reliably; the focused state's
 channel stays the edge bar's glyph weight, never the border.
 
 **Glyph tokens**: every non-ASCII glyph the UI renders is a named
@@ -384,8 +384,8 @@ degrade profiles substitute for a ground step (above); the same
 token also serves the reader's quote-bar prefix, one glyph and one
 `border`-role styling for both uses rather than two tokens that
 would otherwise differ only in name. Task 8's fix round (findings
-r1) adds `warnMarker ▲` U+25B2 (`^`), the banner's own leading
-glyph; its first fallback, `!`, collided with `errorGutter`'s own
+r1) adds `warnMarker ▲` U+25B2 (`^`), the banner's leading
+glyph; its first fallback, `!`, collided with `errorGutter`'s
 fallback exactly where color cannot tell the two apart, so the
 fallback is `^` instead. Every fallback occupies the
 same terminal-cell width as its full glyph (`ellipsis …`'s
@@ -394,11 +394,11 @@ substitution never shifts a column budget decision 12 fixed at
 full color. Plain Unicode only, no private-use-area or
 patched-font glyphs. The analyzer rule is stated stronger than
 UX-3's block list, which misses several of these blocks, and at
-UX-3's own repo-wide scope: outside `internal/theme`, anywhere in
+UX-3's repo-wide scope: outside `internal/theme`, anywhere in
 the repo, **no rune or string literal containing any non-ASCII
 code point** that reaches rendered output, along with UX-3's
 lipgloss-constructor, ANSI-literal, and numeric-spacing rules. `internal/catkin` is the one recorded
-exemption: it defines its own style-parameter struct and poplar
+exemption: it defines its style-parameter struct and poplar
 injects theme-derived values (it cannot import the theme package
 by the spinoff rule), so the analyzer skips it and the injection
 contract is its gate. The gate is asked to ratify the stricter
@@ -419,11 +419,11 @@ role, not a locally reinvented literal. Task 4's fix round 1 adds
 hint), the same plan-defect class again (ruling CR5, same plan
 doc): the footer's hint-spacing arithmetic is a spacing role, not a
 locally reinvented literal. Task 7's fix round 1 adds `gapPin 6`
-(the footer's own reserve before the pinned help hint) and narrows
+(the footer's reserve before the pinned help hint) and narrows
 `gapHint`'s scope to the inter-hint gap alone: the pinned exemplar's
-own `PIN_GAP` won the conflict between the two values (ruling F1,
+`PIN_GAP` won the conflict between the two values (ruling F1,
 `docs/superpowers/plans/2026-08-19-pass-2-design-language-and-shell.md`),
-so `gapHint` no longer also governs the pinned hint's own gap.
+so `gapHint` no longer also governs the pinned hint's gap.
 Markup-level literals are forbidden by the analyzer; a screen
 reaches spacing only through roles.
 
@@ -474,7 +474,7 @@ there), the usage cluster is 100-140 columns (the polish
 center), splits make 60-100 columns routine, and the ultrawide
 tail is 2-3% of desktops, too small to justify a fourth
 capability rung, so capped reading measures are the wide rung's
-own behavior rather than a separate class.
+behavior rather than a separate class.
 
 | Class | Columns | What the space buys |
 |---|---|---|
@@ -541,7 +541,7 @@ This document pins the contracts; the build fills the values
 inside them, and only inside them:
 
 - Palette values for the color roles, both themes, passing the
-  contrast tests. The palette is poplar's own; cairn's Warm
+  contrast tests. The palette is poplar's; cairn's Warm
   Stone is the craft exemplar, not the hue source.
 - Exact glyph code points and border sets.
 - Per-screen keymaps and layouts, via text wireframes citing

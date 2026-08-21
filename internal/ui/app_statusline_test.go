@@ -7,8 +7,8 @@ import (
 )
 
 // TestApp_SyncStateMsgUpdatesStatusLine proves App absorbs
-// SyncStateMsg into its own model state, so a.statusLine() (App.View's
-// own input to Render) reflects it.
+// SyncStateMsg into its model state, so a.statusLine() (App.View's
+// input to Render) reflects it.
 func TestApp_SyncStateMsgUpdatesStatusLine(t *testing.T) {
 	app := NewApp(testDeps(t))
 
@@ -49,7 +49,7 @@ func TestApp_OutboxCountMsgUpdatesStatusLine(t *testing.T) {
 }
 
 // TestApp_StoreChangedMsgReloadsThePlaceholders proves StoreChangedMsg
-// reaches the mail and calendar placeholders' own update methods (via
+// reaches the mail and calendar placeholders' update methods (via
 // App's default updateChildren fallthrough) and re-issues their
 // store-count load, rather than leaving a stale count on the screen
 // once the bridge reports a write.
@@ -131,7 +131,7 @@ func TestApp_SpinnerTicksOnlyWhileSyncingOrBackfilling(t *testing.T) {
 	}
 
 	// Leaving the syncing state stops the chain: the in-flight tick
-	// (still carrying gen) is now stale by App's own spinnerTicking
+	// (still carrying gen) is now stale by App's spinnerTicking
 	// flag, so it must not rearm.
 	updated, cmd = app.Update(SyncStateMsg{State: SyncStateSynced})
 	app = mustApp(t, updated)

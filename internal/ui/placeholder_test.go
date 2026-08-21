@@ -77,7 +77,7 @@ func TestMailPlaceholder_ViewBeforeLoadOmitsFacts(t *testing.T) {
 }
 
 // TestCalendarPlaceholder_InitLoadsEventCount mirrors the mail
-// placeholder's Init-time load for the calendar surface's own fact.
+// placeholder's Init-time load for the calendar surface's fact.
 func TestCalendarPlaceholder_InitLoadsEventCount(t *testing.T) {
 	reads := storetest.OpenReadPool(t, store.DefaultWriterConfig())
 	c := newCalendarPlaceholder(reads, testTheme())
@@ -99,7 +99,7 @@ func TestCalendarPlaceholder_InitLoadsEventCount(t *testing.T) {
 }
 
 // TestContactsPlaceholder_StatesNoStoreSurfacePlainly proves the
-// contacts placeholder's own non-goal: it names the absence of a
+// contacts placeholder's non-goal: it names the absence of a
 // contacts read surface rather than growing one.
 func TestContactsPlaceholder_StatesNoStoreSurfacePlainly(t *testing.T) {
 	c := newContactsPlaceholder(testTheme())
@@ -115,7 +115,7 @@ func TestContactsPlaceholder_StatesNoStoreSurfacePlainly(t *testing.T) {
 }
 
 // TestConfigPlaceholder_NamesWhenItLands mirrors the contacts case for
-// the config surface's own 2b non-goal.
+// the config surface's 2b non-goal.
 func TestConfigPlaceholder_NamesWhenItLands(t *testing.T) {
 	c := newConfigPlaceholder(testTheme())
 	c, _ = c.update(testLayoutMsg())
@@ -191,7 +191,7 @@ func TestPlaceholderScreens_RegisteredWithTheirOwnSwitchState(t *testing.T) {
 }
 
 // TestScreen_TypeAssertion proves every placeholder type satisfies
-// the Screen interface, the registry's own registration contract.
+// the Screen interface, the registry's registration contract.
 func TestScreen_TypeAssertion(t *testing.T) {
 	var _ Screen = MailPlaceholder{}
 	var _ Screen = CalendarPlaceholder{}

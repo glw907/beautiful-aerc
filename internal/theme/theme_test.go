@@ -79,7 +79,7 @@ func TestStyleTrueColor(t *testing.T) {
 
 // TestEmphasizeRole proves the Bold-adding seam (task-6-findings-r1.md
 // F5): the same color/ground resolution Style itself produces, plus
-// Bold, so a caller never reaches for lipgloss's own Bold on a
+// Bold, so a caller never reaches for lipgloss's Bold on a
 // Style-returned value.
 func TestEmphasizeRole(t *testing.T) {
 	th := New(true, ProfileTrueColor)
@@ -131,7 +131,7 @@ func TestTypeStyle(t *testing.T) {
 // width×height blank block, resolved per profile the same way
 // paintGround resolves any other role's background (true color: an
 // explicit background; ANSI-16/NO_COLOR: reverse for GroundSelected
-// only, nothing otherwise), built independently of Blank's own
+// only, nothing otherwise), built independently of Blank's
 // implementation.
 func TestBlank(t *testing.T) {
 	tests := []struct {
@@ -221,7 +221,7 @@ func TestBorderKinds(t *testing.T) {
 // TestBorderCollapsesUnderDegrade asserts C3a: every BorderKind
 // returns lipgloss.ASCIIBorder at ProfileANSI16 and ProfileNoColor,
 // since box-drawing weight is not a channel those profiles carry
-// reliably (the focused state's own degrade channel is the edge
+// reliably (the focused state's degrade channel is the edge
 // bar's glyph weight, not the border).
 func TestBorderCollapsesUnderDegrade(t *testing.T) {
 	ascii := lipgloss.ASCIIBorder()

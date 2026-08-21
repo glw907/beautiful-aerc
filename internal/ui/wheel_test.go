@@ -45,7 +45,7 @@ func TestWheelSign(t *testing.T) {
 // revision 3's core guarantee over the filter design it replaces: an
 // isolated tick, with no follow-up tick ever arriving, still reaches
 // Update as one WheelMsg once its flush timer fires, at the tick's
-// own coordinates.
+// coordinates.
 func TestApp_WheelSingleDetentFlushesAfterWindow(t *testing.T) {
 	app := NewApp(testDeps(t))
 
@@ -128,7 +128,7 @@ func TestApp_WheelBurstCollapsesToOne(t *testing.T) {
 
 // TestApp_WheelDirectionFlipFlushesImmediately proves a
 // direction-reversing tick flushes the open gesture right away,
-// unmixed with the flip tick's own delta, and opens a fresh gesture
+// unmixed with the flip tick's delta, and opens a fresh gesture
 // carrying just the flip tick.
 func TestApp_WheelDirectionFlipFlushesImmediately(t *testing.T) {
 	app := NewApp(testDeps(t))

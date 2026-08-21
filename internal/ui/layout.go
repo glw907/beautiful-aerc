@@ -112,7 +112,7 @@ func (lm LayoutMode) Content() PaneRect {
 // theme.PadCard, by contrast, are spacing roles and are used
 // directly from the theme package below. That is the boundary this
 // file holds: a value that names a role in the design language's
-// spacing table comes from theme; a value that is this file's own
+// spacing table comes from theme; a value that is this file's
 // grid arithmetic is a local constant.
 const (
 	railWidth = 22                            // the rail pane's width
@@ -189,8 +189,8 @@ func ComputeLayout(width, height int, bannerRow bool) LayoutMode {
 
 	// The divider column and the clearance/gutter cells that flank it
 	// belong to Main alone (decision 11's grammar): Sidebar's rect
-	// stops at the rail's own width, and Content's rect (when a split
-	// follows it) stops at the list's own width, so a ground painted
+	// stops at the rail's width, and Content's rect (when a split
+	// follows it) stops at the list's width, so a ground painted
 	// across either rect never bleeds into the separating cells.
 	contentX0 := 0
 	if hasPane(kept, PaneSidebar) {

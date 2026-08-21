@@ -9,9 +9,9 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// Frame is Render's own result: the composed frame content, plus a
+// Frame is Render's result: the composed frame content, plus a
 // cursor translated into the frame's coordinate space when screen's
-// own View supplied one. Cursor is nil for every pass-2 screen (none
+// View supplied one. Cursor is nil for every pass-2 screen (none
 // accepts text entry yet); pass 4's first text-entry screen is the
 // first to set one, which is why the translation exists now rather
 // than as a signature break later.
@@ -21,23 +21,23 @@ type Frame struct {
 }
 
 // paneRenderOrder is the order Render composes LayoutMode's named
-// panes in, after Main's own ground has already painted the whole
-// band beneath them (LayoutMode.Main's own doc comment). Sidebar and
+// panes in, after Main's ground has already painted the whole
+// band beneath them (LayoutMode.Main's doc comment). Sidebar and
 // Split get a blank ground fill this pass, since no chrome component
 // reaches them until the chrome tasks that follow, while Content
-// gets the screen's own already-rendered View.
+// gets the screen's already-rendered View.
 var paneRenderOrder = []PaneID{PaneSidebar, PaneContent, PaneSplit}
 
-// RenderInput is Render's own parameter set (conventions ruling,
+// RenderInput is Render's parameter set (conventions ruling,
 // task-8-findings-r1.md: folded into a struct now rather than at a
 // sixth positional parameter). Screen, Layout, and Theme are every
-// screen's own three inputs; Status and Banner are the two chrome
-// bands' own render state, App's whole answer to "what the top band
-// and the banner row show this frame." FullRegion is task 9's own
-// addition: a screen pushed onto App's own stack (the help overlay,
-// first of its kind) owns no sidebar or split of its own, so its
+// screen's three inputs; Status and Banner are the two chrome
+// bands' render state, App's whole answer to "what the top band
+// and the banner row show this frame." FullRegion is task 9's
+// addition: a screen pushed onto App's stack (the help overlay,
+// first of its kind) owns no sidebar or split, so its
 // content spans the whole Main band rather than landing in the
-// narrower Content pane a surface's own sidebar reservation would
+// narrower Content pane a surface's sidebar reservation would
 // otherwise leave it squeezed against. The footer always follows
 // Screen.Entry() itself: a caller sets Screen to whichever screen is
 // actually in front, App's stack top included, so a separate Entry
@@ -52,12 +52,12 @@ type RenderInput struct {
 }
 
 // Render is poplar's pure render seam (survey amendment A): it
-// composes in.Screen's own View (already rendered against in.Layout
+// composes in.Screen's View (already rendered against in.Layout
 // and in.Theme, since a caller applies both via LayoutMsg and
 // ThemeMsg before calling Render) into the full frame in.Layout
-// describes, painting every band's own ground before a named pane's
+// describes, painting every band's ground before a named pane's
 // content overlays it, so every row LayoutMode allocates is accounted
-// for (LayoutMode's own row-tiling and pane-containment guarantees).
+// for (LayoutMode's row-tiling and pane-containment guarantees).
 // Below ProfileTrueColor a ground carries no distinguishing color
 // (decision 11), so a blank, uncolored row's trailing cells render as
 // trimmed whitespace rather than styled spaces. The coverage
@@ -67,10 +67,10 @@ type RenderInput struct {
 // it returns the same Frame for the same RenderInput every time
 // (QA-7's purity contract). The three-argument shape recorded in the
 // pass 2 plan's task 5b findings grew a fourth at task 6: Status,
-// App's own chrome state, is what the seam paints into StatusRow
+// App's chrome state, is what the seam paints into StatusRow
 // rather than a blank fill. Task 7 stops treating Footer as a blank
-// fill too: it paints in.Screen.Entry()'s own registry-derived hints
-// instead. Task 8 grows a fifth, Banner, painted into LayoutMode's own
+// fill too: it paints in.Screen.Entry()'s registry-derived hints
+// instead. Task 8 grows a fifth, Banner, painted into LayoutMode's
 // Banner band whenever in.Layout.BannerRow is set, folding all five
 // into this struct ahead of a sixth parameter, which task 9 adds as
 // FullRegion.
@@ -110,7 +110,7 @@ func Render(in RenderInput) Frame {
 
 		for _, d := range lm.Dividers {
 			if d.Degrade && !th.DrawsDividers() {
-				continue // a true-color gutter: Main's own blank fill already covers it
+				continue // a true-color gutter: Main's blank fill already covers it
 			}
 			rect := image.Rect(d.X, d.Y0, d.X+1, d.Y1)
 			canvas.Paint(rect, dividerColumn(th, rect.Dy()))
@@ -121,7 +121,7 @@ func Render(in RenderInput) Frame {
 }
 
 // translateCursor offsets c's position by origin, the content pane's
-// own top-left corner: a screen's View reports its cursor in its own
+// top-left corner: a screen's View reports its cursor in its
 // pane-relative coordinates, and Render's caller needs it in the
 // full frame's. Every other Cursor field carries over unchanged. A
 // nil c (every pass-2 screen) returns nil.
@@ -137,7 +137,7 @@ func translateCursor(c *tea.Cursor, origin image.Point) *tea.Cursor {
 // dividerColumn renders a rows-tall column of th's divider glyph,
 // one per line, styled RoleBorder over the base ground every
 // LayoutMode divider sits within (the rail/list line and the wide
-// rung's degrade-only list/reader line both fall inside Main's own
+// rung's degrade-only list/reader line both fall inside Main's
 // band).
 func dividerColumn(th theme.Theme, rows int) string {
 	glyph := th.Glyphs().Divider

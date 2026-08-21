@@ -28,7 +28,7 @@ import (
 // Config governs one Worker: the fixed push-coalescing window,
 // jittered backoff bounds for reopening a push transport that stopped,
 // and the bulk lane's yield window (ADR-0003 revision 2). The push
-// stream's own liveness cadence is not here. The transport negotiates
+// stream's liveness cadence is not here. The transport negotiates
 // that one with the server and keeps it (backend.Push).
 type Config struct {
 	CoalesceWindow   time.Duration
@@ -82,7 +82,7 @@ func NewWorker(accountID int64, be backend.Backend, writer *store.Writer, cfg Co
 // as kind's new server state, for the exact records named by ids
 // (ADR-0005 revision 2's self-echo suppression): the next
 // push-triggered sync cycle that resolves to this same token skips
-// re-applying only those records, so an outbox's own optimistic write
+// re-applying only those records, so an outbox's optimistic write
 // never round-trips into a redundant re-apply while a third-party
 // change batched into the same page still lands.
 //
@@ -193,12 +193,12 @@ func checkStateAdvanced(kind backend.ObjectKind, requested string, cs backend.Ch
 // reports a state reset (an expired or unrecognized token).
 //
 // A page's records commit bulkChunk at a time and its watermark
-// follows in a transaction of its own, so no single commit holds a
+// follows in a separate transaction, so no single commit holds a
 // whole page. A cycle that stops between the two re-runs the page
 // from the watermark it already had: an upsert is keyed by server id
 // and a destroy names one, so a re-applied page changes nothing.
 // echoTracker.consume has dropped this page's skip set by then, so
-// the retry also re-applies the dispatcher's own records from server
+// the retry also re-applies the dispatcher's records from server
 // truth, which is a redundant write rather than a divergent one.
 func (w *Worker) SyncKind(ctx context.Context, kind backend.ObjectKind) error {
 	wm, err := loadWatermark(ctx, w.writer, w.accountID, kind, mailCollection)

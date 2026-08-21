@@ -83,7 +83,7 @@ const (
 // PointerBinding binds a pointer target to the keyboard verb it
 // accelerates (ADR-0017): a click or wheel action reaches the same
 // grammar verb Key names, under the same state rules the key itself
-// obeys. Key should be one of the bindings the screen's own Keys
+// obeys. Key should be one of the bindings the screen's Keys
 // already advertises; the pointer-grammar test asserts exactly that.
 type PointerBinding struct {
 	Target PointerTarget
@@ -106,7 +106,7 @@ type PointerBinding struct {
 // (task-10-findings-r2.md's F2 corollary ruling): App.View renders a
 // StateModal front full-terminal, bypassing the footer and banner
 // bands entirely, so neither exists there for a click to land on,
-// the same render-composition fact PointerPane's own illegal-in-modal
+// the same render-composition fact PointerPane's illegal-in-modal
 // row already reflects.
 var pointerLegalStates = map[PointerTarget][]StateClass{
 	PointerRow:           {StateDigitsSwitch, StatePrintableEntry},
@@ -125,9 +125,9 @@ var pointerLegalStates = map[PointerTarget][]StateClass{
 // ScreenEntry is a screen's registration: its keymap, its pointer
 // targets, its UX-4 switch-table state, and the committed order the
 // footer renders its hints in (decision 8). Type identifies the
-// screen's own Go type; Register derives it from the type parameter
+// screen's Go type; Register derives it from the type parameter
 // passed to Register, so a ScreenEntry literal never sets it by hand.
-// Name is the entry's own state name from the design language section
+// Name is the entry's state name from the design language section
 // 2's switch table (e.g. "mail list", "config sections"); the
 // switch-table test cross-references it against the digits-switch and
 // printable-entry authority lists by SwitchState.
@@ -145,7 +145,7 @@ var registered []ScreenEntry
 
 // Register adds entry to poplar's package-level screen registry
 // (ADR-0011), for screen type S: a screen calls Register[MailScreen]
-// (entry) once, from its own init. The type parameter is what lets
+// (entry) once, from its init. The type parameter is what lets
 // the screenregistry analyzer (tools/analyzers/screenregistry) read
 // every registration statically from the instantiation itself,
 // rather than interpreting an arbitrary expression a caller could
@@ -225,10 +225,10 @@ func hintText(b key.Binding) string {
 	return segsPlainText(hintSegs(b))
 }
 
-// footerHelpHint is the pinned help hint's own rendered text, derived
+// footerHelpHint is the pinned help hint's rendered text, derived
 // from GrammarKeys.Help rather than a literal (BACKLOG #62's defect
 // class): every footer reserves space for it at every width (decision
-// 8), and it never comes from a screen's own FooterPriority.
+// 8), and it never comes from a screen's FooterPriority.
 var footerHelpHint = hintText(GrammarKeys.Help)
 
 // footerHints returns the width-maximal prefix of entry's committed
@@ -236,8 +236,8 @@ var footerHelpHint = hintText(GrammarKeys.Help)
 // pinned help hint (decision 8): each enabled hint costs its
 // rendered display width (ansi.StringWidth, never len, since a hint
 // carries no guarantee of staying single-byte-per-cell) plus
-// theme.GapHint from its neighbor, and the pinned help hint's own
-// width plus theme.GapPin (the pinned exemplar's own reserve, F1) is
+// theme.GapHint from its neighbor, and the pinned help hint's
+// width plus theme.GapPin (the pinned exemplar's reserve, F1) is
 // held back at every call so the returned prefix never crowds it
 // out. A disabled hint is skipped rather than stopping the scan,
 // matching UX-2's no-advertised-no-op MUST.
@@ -264,8 +264,8 @@ func footerHints(entry ScreenEntry, width int) []key.Binding {
 
 // footerPriorityWithinKeymap reports every entry whose
 // FooterPriority names a binding, by verb identity, absent from its
-// own Keys.FullHelp: the footer's priority list can only ever
-// promote a hint the screen's own keymap actually grants.
+// Keys.FullHelp: the footer's priority list can only ever
+// promote a hint the screen's keymap actually grants.
 func footerPriorityWithinKeymap(entries []ScreenEntry) []string {
 	var violations []string
 	for _, e := range entries {
@@ -310,7 +310,7 @@ func printableEntryScreens(entries []ScreenEntry) []reflect.Type {
 // values (design language, 2026-07-27, section 2): the global verb
 // table, the triage verb set (identical from list, thread view, and
 // reader per LT-2), the folder-jump capitals, calendar's `t`, and
-// thread fold/unfold. It is the source a screen's own KeyMap
+// thread fold/unfold. It is the source a screen's KeyMap
 // composes its bindings from, so the same key carries the same verb
 // by construction rather than by review; checkGrammar checks a
 // registered screen's bindings against it by verb identity
@@ -371,7 +371,7 @@ type grammarKeymap struct {
 	ThreadFold, ThreadUnfold key.Binding
 }
 
-// fields returns every field of GrammarKeys, in the struct's own
+// fields returns every field of GrammarKeys, in the struct's
 // declaration order.
 func (g grammarKeymap) fields() []key.Binding {
 	return []key.Binding{
@@ -386,7 +386,7 @@ func (g grammarKeymap) fields() []key.Binding {
 }
 
 // grammarKeyTable maps every physical key GrammarKeys binds to the
-// verb's own Binding, built once from GrammarKeys so checkGrammar
+// verb's Binding, built once from GrammarKeys so checkGrammar
 // and its test read the same data GrammarKeys itself commits to.
 var grammarKeyTable = buildGrammarKeyTable()
 
@@ -404,9 +404,9 @@ func buildGrammarKeyTable() map[string]key.Binding {
 // GrammarKeys, the design language's section 2 canonical key-to-verb
 // mapping: a non-exempt, in-scope screen binding one of its keys
 // must carry the same verb identity (Help().Desc), though it is
-// free to bundle synonym keys under its own Binding value however it
+// free to bundle synonym keys under its Binding value however it
 // likes. Entries whose SwitchState is StatePrintableEntry are out of
-// scope by the grammar's own scope rule (section 2: text-entry
+// scope by the grammar's scope rule (section 2: text-entry
 // states are governed by section 3 instead); entries whose
 // GrammarExempt names one of the two closed exemptions are skipped
 // entirely.
@@ -432,7 +432,7 @@ func checkGrammar(entries []ScreenEntry) []string {
 }
 
 // checkPointerGrammar reports every pointer binding in entries that
-// names a verb, by identity (Help().Desc), absent from its own
+// names a verb, by identity (Help().Desc), absent from its
 // screen's keymap, or that fires in a state ADR-0017's v1
 // vocabulary does not allow its target kind to fire in.
 func checkPointerGrammar(entries []ScreenEntry) []string {

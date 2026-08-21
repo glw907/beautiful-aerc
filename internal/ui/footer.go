@@ -11,7 +11,7 @@ import (
 	"github.com/glw907/poplar/internal/theme"
 )
 
-// hintSegs returns b's own footer hint atom (decision 8, the ratified
+// hintSegs returns b's footer hint atom (decision 8, the ratified
 // shell exemplar): its key in RoleFg, then its description in
 // RoleFgMuted with the atom's single separating space. Both runs
 // derive from b.Help(), never a literal, so a hint can never drift
@@ -23,7 +23,7 @@ func hintSegs(b key.Binding) []rowSeg {
 	}
 }
 
-// footerLeftSegs returns entry's own rendered footer hints at width
+// footerLeftSegs returns entry's rendered footer hints at width
 // content columns (footerHints's width-maximal prefix), each hint's
 // atom joined to its neighbor by a GapHint gap.
 func footerLeftSegs(entry ScreenEntry, contentWidth int) []rowSeg {
@@ -40,11 +40,11 @@ func footerLeftSegs(entry ScreenEntry, contentWidth int) []rowSeg {
 // renderFooter renders entry's footer band exactly width cells wide
 // (decision 8): the width-maximal prefix footerHints computes, inset
 // PadBand from each edge, and GrammarKeys.Help pinned right as the
-// constant pointer to the help overlay. footerHints's own reserve for
+// constant pointer to the help overlay. footerHints's reserve for
 // the pinned hint (footerHelpHint's width plus GapPin) is what
 // guarantees the gap between the last rendered hint and the pinned
 // one never falls below GapPin, so this never has to clamp for room.
-// width is renderFooter's own precondition: its only caller, Render,
+// width is renderFooter's precondition: its only caller, Render,
 // always passes lm.Footer.Rect.Dx(), and ComputeLayout (layout.go)
 // never allocates a Footer band narrower than widthSpartanMin, so
 // this never defends against a width no caller actually supplies.
@@ -69,14 +69,14 @@ func renderFooter(entry ScreenEntry, th theme.Theme, width int) string {
 }
 
 // FooterHitSpans returns one HitSpan per rendered footer hint,
-// entry's committed prefix at footerRow's own width plus the pinned
+// entry's committed prefix at footerRow's width plus the pinned
 // help hint (ADR-0017's character grain: each span covers exactly the
 // hint's rendered cells, from its key's first column through its
 // description's last), positioned within footerRow. state gates the
 // whole set through registry.go's pointerLegalStates the same way
 // StatusLineHitSpans does: PointerFooterHint is legal in every
 // StateClass except StateModal (task-10-findings-r2.md's F2 corollary
-// ruling: the modal renders full-terminal, App.View's own StateModal
+// ruling: the modal renders full-terminal, App.View's StateModal
 // branch, so no footer band exists there to click), and an empty
 // footerRow (the floor rung, which paints no chrome at all) also
 // returns none, belt-and-braces against a caller that resolves spans

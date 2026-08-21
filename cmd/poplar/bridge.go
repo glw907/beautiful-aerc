@@ -13,7 +13,7 @@ import (
 	"github.com/glw907/poplar/internal/ui"
 )
 
-// engineBridge carries the *tea.Program Send startEngines' own worker
+// engineBridge carries the *tea.Program Send startEngines' worker
 // and dispatch loop feed engine-state messages through. runInteractive
 // constructs one over its program's Send; run, the headless loop
 // with no *tea.Program to reach, passes a nil *engineBridge, and every
@@ -27,17 +27,17 @@ type engineBridge struct {
 
 // bridgeSyncHealth installs an Observer on worker translating every
 // sync.Health transition into the ui message the status line renders,
-// through send: task 11's own whole answer to "cmd/poplar grows a
-// bridge goroutine" for the sync half (the engine's own goroutine
+// through send: task 11's whole answer to "cmd/poplar grows a
+// bridge goroutine" for the sync half (the engine's goroutine
 // already drives the transitions; nothing here polls). A Synced
 // transition also sends a StoreChangedMsg, since a flush cycle
-// finishing is the store's own signal that a placeholder's stale
+// finishing is the store's signal that a placeholder's stale
 // count is worth rereading. That send fires on every cycle that
 // reaches Synced, whether or not it changed anything a placeholder
 // reads; narrowing it to real changes is carried to pass 3
 // (task-6-findings-r1.md's deferred list).
 //
-// Sync's own State carries no progress counts yet (SyncKind pages
+// Sync's State carries no progress counts yet (SyncKind pages
 // Changes without tracking a running total), so the SyncStateMsg this
 // sends always reports Done and Total zero; a later pass that adds
 // that tracking to sync.Health needs no change here to reach the
@@ -52,9 +52,9 @@ func bridgeSyncHealth(worker *syncengine.Worker, send func(tea.Msg)) {
 }
 
 // bridgeSyncState maps sync.State to its ui.SyncState counterpart.
-// sync.StateOffline does not exist: Worker's own loop always retries
+// sync.StateOffline does not exist: Worker's loop always retries
 // through backoff rather than giving up, so it never reaches a state
-// "offline" would describe; that state belongs to run's own
+// "offline" would describe; that state belongs to run's
 // connect-retry path instead (ST-2).
 func bridgeSyncState(s syncengine.State) ui.SyncState {
 	switch s {
@@ -77,8 +77,8 @@ func bridgeRetrySeconds(d time.Duration) int {
 // bridgeOutboxCount reads reads' current queued-outbox count and, if
 // it differs from last, sends the change through send: the outbox
 // half of the engine-state bridge. It is meant to be called once per
-// tick of the existing dispatch loop (task 11's own wiring), riding
-// that loop's cadence rather than a poll of its own, and returns the
+// tick of the existing dispatch loop (task 11's wiring), riding
+// that loop's cadence rather than a separate poll, and returns the
 // count observed so the caller's next call has a last to diff
 // against. A read failure logs and reports last unchanged, so one bad
 // read never sends a wrong count.

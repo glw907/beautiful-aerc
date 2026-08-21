@@ -38,7 +38,7 @@ func WithProfileOverride(p theme.Profile) Option {
 // ResolveProfile resolves the runtime capability profile from env's
 // NO_COLOR, TERM, and COLORTERM, in that precedence, and opts'
 // override seam. It also returns DefaultDark, the isDark policy the
-// first frame renders on before the terminal's own
+// first frame renders on before the terminal's
 // tea.BackgroundColorMsg answers (technical design section 12).
 //
 // env is a lookup function shaped like os.LookupEnv, so a caller at
@@ -51,7 +51,7 @@ func WithProfileOverride(p theme.Profile) Option {
 // non-empty; a variable exported but left empty does not count).
 // TERM unset or "dumb" also forces ProfileNoColor, since neither
 // promises any color support. COLORTERM of "truecolor" or "24bit",
-// matched case-insensitively as bubbletea's own detector does,
+// matched case-insensitively as bubbletea's detector does,
 // upgrades to ProfileTrueColor. Anything else resolves to
 // ProfileANSI16, the baseline poplar assumes for a named, non-dumb
 // terminal.
@@ -83,7 +83,7 @@ func ResolveProfile(env func(string) (string, bool), opts ...Option) (theme.Prof
 }
 
 // mapColorProfile maps profile onto the colorprofile.Profile
-// tea.WithColorProfile expects: NewProgram's own answer to "what
+// tea.WithColorProfile expects: NewProgram's answer to "what
 // color profile does the terminal actually get told to render at".
 func mapColorProfile(profile theme.Profile) colorprofile.Profile {
 	switch profile {

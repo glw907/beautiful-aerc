@@ -13,7 +13,7 @@ const (
 )
 
 // SyncStateMsg reports the sync engine's current condition to the
-// status line. Done and Total carry the syncing state's own progress;
+// status line. Done and Total carry the syncing state's progress;
 // Total zero means no total is known yet, and the segment shows Done
 // alone rather than a stalled-looking blank (decision 7). Retry
 // carries the backing-off state's countdown, in whole seconds
@@ -29,7 +29,7 @@ type SyncStateMsg struct {
 // takes over the segment while Active, so a rate-limited backfill
 // still reads through the same backing-off warn state rather than
 // stalling silently). Active false returns the segment to
-// SyncStateMsg's own state.
+// SyncStateMsg's state.
 type BackfillProgressMsg struct {
 	Active      bool
 	Done, Total int64
@@ -42,7 +42,7 @@ type OutboxCountMsg struct {
 }
 
 // StoreChangedMsg tells every screen that a store fact it read at
-// Init may now be stale, so it can re-issue its own load: the
+// Init may now be stale, so it can re-issue its load: the
 // engines' one route back to a screen that already returned from
 // Init, carrying no payload since every screen already knows what to
 // reread.

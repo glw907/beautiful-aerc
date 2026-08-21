@@ -195,7 +195,7 @@ var helpBlankLine = []rowSeg{}
 // helpTitleSegs returns the overlay's title row: "Help ·
 // <covered's state name>", covered.Name read directly rather than
 // re-typed or abbreviated (BACKLOG #62's defect class), so a screen's
-// own registered name is the only place the label can come from.
+// registered name is the only place the label can come from.
 func helpTitleSegs(th theme.Theme, covered ScreenEntry) []rowSeg {
 	return []rowSeg{{text: "Help " + th.Glyphs().Separator + " " + covered.Name, role: theme.RoleFg, bold: true}}
 }

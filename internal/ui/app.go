@@ -174,7 +174,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // drifts from what the gallery pins: a pushed screen's content
 // fills the whole Main band (RenderInput.FullRegion) rather than the
 // narrower Content pane a surface's sidebar reservation would
-// otherwise squeeze it against, since it owns no sidebar of its own.
+// otherwise squeeze it against, since it owns no sidebar.
 // The footer follows whichever Screen Render composes, the stack
 // top's Entry included, since Render always reaches for
 // Screen.Entry() itself. Every returned tea.View carries
@@ -354,9 +354,9 @@ func (a App) undoEligible(front ScreenEntry) bool {
 
 // undoWindowOpen reports whether a's open toast is actually an undo
 // window rather than a plain notification (task-8 F8, Toast.Undoable's
-// own split): a.toastActive alone answers "is a toast showing", which
+// split): a.toastActive alone answers "is a toast showing", which
 // a notification toast with no Undo Cmd also satisfies, and both q's
-// own quit gate and u's undo answer must agree with what
+// quit gate and u's undo answer must agree with what
 // Toast.Undoable already renders.
 func (a App) undoWindowOpen() bool {
 	return a.toastActive && a.toastOffer.Undo != nil
@@ -504,7 +504,7 @@ func (a App) push(s Screen) App {
 }
 
 // quitQuestion names what quitting would leave unsent (wireframe F7's
-// own "Quit with 2 unsent messages?"), or a bare "Quit now?" when the
+// "Quit with 2 unsent messages?"), or a bare "Quit now?" when the
 // outbox holds nothing and the confirm exists only for the open undo
 // window.
 func quitQuestion(outbox int) string {
@@ -545,7 +545,7 @@ func quitConsequence(outbox int, undoOpen bool, undoLabel string) string {
 type quitYesMsg struct{}
 
 // quitYesCmd is Confirm's YesCmd for the quit confirm: it names no
-// state of its own, so it never goes stale between push and answer.
+// state, so it never goes stale between push and answer.
 func quitYesCmd() tea.Msg { return quitYesMsg{} }
 
 // handleWheel folds msg into the open wheel gesture, or opens a new
@@ -654,7 +654,7 @@ func (a App) updateActive(msg tea.Msg) (tea.Model, tea.Cmd) {
 // across a resize and keep matching the live theme across a repaint,
 // the same contract every surface screen already holds to. Task 9
 // starts pushing screens routinely, so this cannot wait on task 9's
-// own dispatch.
+// dispatch.
 func (a App) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd

@@ -50,7 +50,7 @@ const (
 // (design language section 7; decision 6's palette). RoleLink,
 // RoleFlag, RoleDiffAdd, RoleDiffDel, and RoleFocusedBorder are
 // role aliases: each resolves to another role's palette entry
-// (decision 6) but keeps its own name so a caller states intent
+// (decision 6) but keeps its name so a caller states intent
 // rather than borrowing an unrelated role.
 type Role int
 
@@ -130,8 +130,8 @@ func (t Theme) Style(role Role, ground Ground) lipgloss.Style {
 
 // EmphasizeRole returns role's style resolved against ground with
 // Bold added, the seam a caller reaches for instead of calling
-// lipgloss's own Bold on a Style Style already returned (the UX-3
-// styling analyzer's own blind spot on a method call chained off a
+// lipgloss's Bold on a Style Style already returned (the UX-3
+// styling analyzer's blind spot on a method call chained off a
 // theme-returned value; this method is the honest route around it
 // rather than a caller taking the shortcut itself): the status line's
 // active-surface cluster label is its first caller
@@ -166,7 +166,7 @@ func hexColor(h string) color.Color {
 // Blank returns ground's background painted across width×height
 // blank cells: a chrome band or pane the render seam has no content
 // for yet (decision 11's grounds-tile-first rule: Main and its bands
-// paint before a pane's own content lands on top). It carries no
+// paint before a pane's content lands on top). It carries no
 // foreground role, since a ground alone never implies a text color.
 func (t Theme) Blank(ground Ground, width, height int) string {
 	return t.paintGround(lipgloss.NewStyle(), ground).Render(blankBlock(width, height))

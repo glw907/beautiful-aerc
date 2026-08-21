@@ -10,7 +10,7 @@ import (
 
 // TestResolveProfile is QA-7's env-combination table: profiles are
 // test inputs given as a literal lookup table, never sniffed from
-// the running process's own environment.
+// the running process's environment.
 func TestResolveProfile(t *testing.T) {
 	tests := []struct {
 		name string

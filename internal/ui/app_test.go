@@ -39,7 +39,7 @@ func mustApp(t *testing.T, model tea.Model) App {
 }
 
 // TestMatchDigit proves matchDigit's key.Matches dispatch: each digit
-// names its own Surface at StateDigitsSwitch, and the whole set
+// names its Surface at StateDigitsSwitch, and the whole set
 // disables (SetEnabled false, so key.Matches itself reports no match)
 // at any other state.
 func TestMatchDigit(t *testing.T) {
@@ -104,9 +104,9 @@ func TestApp_DigitSurfaceSwitchRoundTrip(t *testing.T) {
 
 // TestApp_ModalEatsDigits is UX-4's other acceptance criterion: a
 // screen on the stack whose SwitchState is StateModal absorbs a digit
-// as its own answer/no-op instead of switching surfaces.
+// as its answer/no-op instead of switching surfaces.
 func TestApp_ModalEatsDigits(t *testing.T) {
-	// fakeModal implements Screen (it is pushed onto App's own stack
+	// fakeModal implements Screen (it is pushed onto App's stack
 	// below), so the screenregistry analyzer requires a Register call
 	// naming it somewhere in this package; resetRegistry keeps that
 	// registration from leaking into another test's Registered() view.
@@ -163,7 +163,7 @@ func (m *fakeModal) Entry() ScreenEntry {
 // stack), and pops a non-modal stack entry, this pass. A StateModal
 // front owns Esc itself instead (TestApp_EscForwardsToStateModalFront,
 // the template task-8-findings-r1.md's conventions ruling
-// establishes), so it is no longer this test's own concern.
+// establishes), so it is no longer this test's concern.
 func TestApp_EscPopsStack(t *testing.T) {
 	app := NewApp(testDeps(t))
 
@@ -182,7 +182,7 @@ func TestApp_EscPopsStack(t *testing.T) {
 // TestApp_EscForwardsToStateModalFront proves a StateModal stack
 // front owns Esc itself now (task-8-findings-r1.md's conventions
 // ruling): App forwards the key rather than bare-popping, and a modal
-// that does not itself answer (fakeModal's own Update never does)
+// that does not itself answer (fakeModal's Update never does)
 // leaves the stack exactly as it found it.
 func TestApp_EscForwardsToStateModalFront(t *testing.T) {
 	resetRegistry(t)
@@ -296,7 +296,7 @@ func TestApp_BackgroundColorAnsweredThenTimeoutLogsNothing(t *testing.T) {
 
 // TestApp_OrdinaryKeyReachesActiveScreen is F4: a key that is neither
 // Esc, a legal surface digit, nor q at a surface root now reaches the
-// active screen's own Update (through updateActive) instead of being
+// active screen's Update (through updateActive) instead of being
 // silently dropped, which is what handleKey's fallthrough did before
 // this fix. Verified as a delegation contract, since no placeholder
 // yet reacts to a key differently from any other unhandled message:
@@ -372,7 +372,7 @@ func TestApp_ViewSetsMouseModeOnBothPaths(t *testing.T) {
 }
 
 // TestApp_ViewMatchesRenderSeam is CR1: after a WindowSizeMsg, the
-// product's own View().Content is exactly what Render produces from
+// product's View().Content is exactly what Render produces from
 // the same active screen, layout, and theme App itself holds, so the
 // running program never drifts from what the gallery pins.
 func TestApp_ViewMatchesRenderSeam(t *testing.T) {
@@ -387,7 +387,7 @@ func TestApp_ViewMatchesRenderSeam(t *testing.T) {
 }
 
 // TestNewProgram proves NewProgram returns a non-nil *tea.Program
-// wrapping app, with the caller's own options layered on top of it.
+// wrapping app, with the caller's options layered on top of it.
 func TestNewProgram(t *testing.T) {
 	app := NewApp(testDeps(t))
 	p := NewProgram(app, tea.WithInput(strings.NewReader("")))
@@ -426,7 +426,7 @@ func first(m tea.Model, _ tea.Cmd) tea.Model { return m }
 
 // captureDebugLog points slog's default logger at a buffer for t's
 // duration, at debug level, mirroring
-// internal/backend/jmapsource/push_test.go's own helper.
+// internal/backend/jmapsource/push_test.go's helper.
 func captureDebugLog(t *testing.T) *logBuffer {
 	t.Helper()
 

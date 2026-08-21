@@ -468,7 +468,7 @@ func TestApp_UndoEligible_GatesOnStackAndSwitchState(t *testing.T) {
 // TestApp_Undo_NoOpWithModalOnStack is F2's end-to-end case: `u`
 // with an open undo window but a modal on the stack reaches the
 // modal's Update (a no-op, since 'u' answers none of Confirm's
-// own y/n/Esc grammar) rather than the open offer's Undo.
+// y/n/Esc grammar) rather than the open offer's Undo.
 func TestApp_Undo_NoOpWithModalOnStack(t *testing.T) {
 	app := NewApp(testDeps(t))
 

@@ -122,10 +122,10 @@ func TestSwitchTableNamesMatch(t *testing.T) {
 
 // switchTableNamesMatch reports every entry, by Name, whose
 // SwitchState carries a named-list membership requirement (section
-// 2's own two lists) but whose Name is absent from it: the M10
+// 2's two lists) but whose Name is absent from it: the M10
 // remainder, cross-referencing a registered screen against the
 // authority lists above rather than merely checking SwitchState's
-// own validity (validSwitchStates's job). StateModal carries no
+// validity (validSwitchStates's job). StateModal carries no
 // named-list requirement (section 2 names neither modal by name), so
 // a modal entry is skipped.
 func switchTableNamesMatch(entries []ScreenEntry) []string {

@@ -40,7 +40,7 @@ func OpenStore(t *testing.T, cfg store.WriterConfig) (*store.Writer, *store.Read
 // returns only a read pool over it, closing it on cleanup. Its
 // signature carries no write capability, unlike OpenStore's, so a
 // package on the read-only side of ADR-0003's writer cast (internal/ui
-// most notably) can stand up a real store for its own tests without
+// most notably) can stand up a real store for its tests without
 // the write-call analyzer treating the call site as a write reach:
 // the write side that migrates the file lives entirely inside this
 // function.
