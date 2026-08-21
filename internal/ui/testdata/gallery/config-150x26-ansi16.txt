@@ -1,26 +1,26 @@
 \x1b[37m  \x1b[90;2m1\x1b[37;22m \x1b[90;2m2\x1b[37;22m \x1b[90;2m3\x1b[37;22m \x1b[94;1m4 Config\x1b[37;22m                                                                                                                              \x1b[90;2mSynced\x1b[37;22m  \x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                              \x1b[37;1mConfig\x1b[m                            \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m              \x1b[37mthe config surface lands with pass 2b\x1b[m             \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
-                      \x1b[90m|\x1b[m                                                                \x1b[90m|\x1b[m
+
+
+
+
+
+
+
+
+
+
+                                                                        \x1b[37;1mConfig\x1b[m
+
+                                                         \x1b[37mConfiguration is not available yet.\x1b[m
+
+
+
+
+
+
+
+
+
+
+
 \x1b[37m  q\x1b[90;2m quit\x1b[37;22m                                                                                                                                      ?\x1b[90;2m help\x1b[37;22m  \x1b[m

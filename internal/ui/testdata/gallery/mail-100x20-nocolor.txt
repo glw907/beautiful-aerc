@@ -1,20 +1,20 @@
   \x1b[1m1 Mail\x1b[m  \x1b[2m2\x1b[m \x1b[2m3\x1b[m \x1b[2m4\x1b[m                                                                             \x1b[2mSynced\x1b[m
-                      |
-                      |
-                      |
-                      |
-                      |
-                      |
-                      |
-                      |                                     \x1b[1mMail\x1b[m
-                      |
-                      |                            0 messages in 0 folders
-                      |
-                      |
-                      |
-                      |
-                      |
-                      |
-                      |
-                      |
+
+
+
+
+
+
+
+                                                \x1b[1mMail\x1b[m
+
+                                      0 messages in 0 folders
+
+
+
+
+
+
+
+
   q\x1b[2m quit\x1b[m                                                                                    ?\x1b[2m help\x1b[m

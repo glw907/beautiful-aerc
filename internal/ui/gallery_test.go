@@ -122,17 +122,32 @@ var mailBoundarySizes = []gallerySize{
 	{100, 20},
 }
 
+// Every surface placeholder fixture below sets fullRegion (F1/F8's
+// ruling, spec C3): a placeholder owns no sidebar and no split, so
+// App.View (isPlaceholderScreen) always renders it FullRegion, and
+// this field must agree so the gallery renders exactly what the
+// running product does. Floor is the one exception: the floor branch
+// bypasses FullRegion entirely regardless of this field's value (it
+// never reaches in.Screen.View() at all), so leaving it false keeps
+// TestGalleryGroundMapMatchesLayout's floor-branch cross-check
+// running against it.
 var galleryCases = []galleryCase{
-	{fixture: fixtures.Mail, sizes: append([]gallerySize{{80, 24}, {100, 30}, {150, 26}}, mailBoundarySizes...)},
-	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
+	{fixture: fixtures.Mail, sizes: append([]gallerySize{{80, 24}, {100, 30}, {150, 26}}, mailBoundarySizes...), fullRegion: true},
+	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2], fullRegion: true},
 	// The second size point, 100×16, is HeightShort: F6's gallery
 	// proof that the sync segment drops its known total there
 	// (wireframe F3).
-	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}, {100, 16}}, narrowProfiles: syncStateProfiles},
-	{fixture: fixtures.MailOffline, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
-	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
-	{fixture: fixtures.MailToast, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
-	{fixture: fixtures.MailBanner, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
+	{fixture: fixtures.MailSyncing, sizes: []gallerySize{{100, 30}, {100, 16}}, narrowProfiles: syncStateProfiles, fullRegion: true},
+	{fixture: fixtures.MailOffline, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles, fullRegion: true},
+	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles, fullRegion: true},
+	{fixture: fixtures.MailToast, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles, fullRegion: true},
+	// The second size point, 100×16, is HeightShort: 1.3's gallery
+	// proof that an active Banner never paints a strip there (§9:
+	// under HeightFull a banner demotes to a toast instead; App's own
+	// demotion to a real toast is a model-level concern the gallery's
+	// direct ui.Render call does not exercise, banner_test.go's own
+	// concern instead).
+	{fixture: fixtures.MailBanner, sizes: []gallerySize{{100, 30}, {100, 16}}, narrowProfiles: chromeStateProfiles, fullRegion: true},
 	// ModalConfirm and Help both sweep every profile: the
 	// chromeStateProfiles narrowing loses the degrade lane for a
 	// screen where a box and border glyphs, not a content pane
@@ -142,11 +157,11 @@ var galleryCases = []galleryCase{
 	// columns), and the 99/100 boundary pair at a shared height, the
 	// one layout boundary the overlay itself consumes.
 	{fixture: fixtures.Help, sizes: []gallerySize{{80, 24}, {99, 30}, {100, 30}}, fullRegion: true},
-	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
-	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
-	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
+	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}, fullRegion: true},
+	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}, fullRegion: true},
+	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}, fullRegion: true},
 	{fixture: fixtures.Floor, sizes: []gallerySize{{40, 10}}},
-	{fixture: fixtures.Short, sizes: []gallerySize{{100, 16}}},
+	{fixture: fixtures.Short, sizes: []gallerySize{{100, 16}}, fullRegion: true},
 }
 
 // update is the gallery's regeneration flag: internal/ui's test

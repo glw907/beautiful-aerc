@@ -130,9 +130,12 @@ func confirmBuild(th theme.Theme) ui.Screen {
 
 // helpBuild pins the help overlay fixture: opened over the mail
 // placeholder's registered entry, the pinned exemplar's
-// primary surface (decision 1).
+// primary surface (decision 1). Title pins wireframe F5's ratified
+// "Help · Mail" (spec M5): the surface's display name, App's own push
+// site sets it the same way (app.go's helpTitle), never the covered
+// entry's switch-table state name ("mail list").
 func helpBuild(th theme.Theme) ui.Screen {
-	return themed(ui.HelpScreen{Covered: ui.MailPlaceholder{}.Entry()}, th)
+	return themed(ui.HelpScreen{Covered: ui.MailPlaceholder{}.Entry(), Title: "Mail"}, th)
 }
 
 // themed applies a ThemeMsg to a placeholder that carries no facts,

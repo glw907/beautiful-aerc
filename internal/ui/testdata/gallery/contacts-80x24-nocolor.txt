@@ -10,7 +10,7 @@
 
                                      \x1b[1mPeople\x1b[m
 
-                        contacts sync lands with pass 5
+                       Contact sync is not available yet.
 
 
 

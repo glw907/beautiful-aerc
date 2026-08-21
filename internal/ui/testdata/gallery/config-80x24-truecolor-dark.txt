@@ -10,7 +10,7 @@
 \x1b[48;2;22;24;29m                                                                                \x1b[m
 \x1b[48;2;22;24;29m                                     \x1b[38;2;212;216;223;1mConfig\x1b[39;22m                                     \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
-\x1b[48;2;22;24;29m                     \x1b[38;2;212;216;223mthe config surface lands with pass 2b\x1b[39m                      \x1b[m
+\x1b[48;2;22;24;29m                      \x1b[38;2;212;216;223mConfiguration is not available yet.\x1b[39m                       \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m

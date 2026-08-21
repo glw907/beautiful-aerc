@@ -10,7 +10,7 @@
 
                                      \x1b[1mConfig\x1b[m
 
-                     the config surface lands with pass 2b
+                      Configuration is not available yet.
 
 
 

@@ -10,7 +10,7 @@
 \x1b[48;2;22;24;29m                                                                                \x1b[m
 \x1b[48;2;22;24;29m                                     \x1b[38;2;212;216;223;1mPeople\x1b[39;22m                                     \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
-\x1b[48;2;22;24;29m                        \x1b[38;2;212;216;223mcontacts sync lands with pass 5\x1b[39m                         \x1b[m
+\x1b[48;2;22;24;29m                       \x1b[38;2;212;216;223mContact sync is not available yet.\x1b[39m                       \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
 \x1b[48;2;22;24;29m                                                                                \x1b[m
