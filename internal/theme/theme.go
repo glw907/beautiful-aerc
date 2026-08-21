@@ -190,6 +190,16 @@ func (t Theme) Center(s lipgloss.Style) lipgloss.Style {
 	return s.Align(lipgloss.Center, lipgloss.Center)
 }
 
+// Sized returns s with width and height applied: the seam a caller
+// reaches for instead of calling lipgloss's Width and Height on a
+// Style already returned (the UX-3 styling analyzer's blind spot on
+// a method chained off a theme-returned value, EmphasizeRole's same
+// precedent), for a size a caller derives from the layout at render
+// time rather than a fixed token.
+func (t Theme) Sized(s lipgloss.Style, width, height int) lipgloss.Style {
+	return s.Width(width).Height(height)
+}
+
 // ansi16 returns the lipgloss ANSI-16 color for slot (0-15).
 func ansi16(slot int) color.Color {
 	return lipgloss.Color(strconv.Itoa(slot))

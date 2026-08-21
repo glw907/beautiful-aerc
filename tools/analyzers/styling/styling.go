@@ -1,26 +1,39 @@
 // Package styling reports UX-3's positional styling boundary:
 // outside internal/theme and internal/catkin, in non-test files, no
-// non-ASCII literal, no ANSI escape literal, and no direct lipgloss
-// call. Everything else styles through the theme's token API.
+// non-ASCII literal, no ANSI escape literal, no direct lipgloss
+// call, and no mutating call on a lipgloss.Style value. Everything
+// else styles through the theme's token API.
 //
-// The check is positional, not a taint analysis: it flags the
-// literal or call site itself, not whether the value it produces
-// reaches rendered output. A line carrying a `//poplar:allow-unicode
-// <reason>` comment exempts only a non-ASCII literal on that line (a
-// `/*poplar:allow-unicode <reason>*/` block comment works too, so the
-// directive can share a line with another trailing comment). It
-// never exempts an ANSI escape literal or a lipgloss call: those have
-// no legitimate non-theme use, so the directive stays narrow to what
-// its name promises. The reason is mandatory. An honored escape
-// reports no diagnostic, since multichecker.Main exits non-zero on
-// any diagnostic and a documented escape must not fail the gate; the
-// Analyzer's ResultType instead returns the escape count for a
-// pass-end reviewer to follow up with a source grep.
+// The literal and call checks are positional, not a taint analysis:
+// they flag the literal or call site itself, not whether the value
+// it produces reaches rendered output. A line carrying a
+// `//poplar:allow-unicode <reason>` comment exempts only a
+// non-ASCII literal on that line (a `/*poplar:allow-unicode
+// <reason>*/` block comment works too, so the directive can share a
+// line with another trailing comment). It never exempts an ANSI
+// escape literal, a lipgloss call, or a mutating Style method call:
+// those have no legitimate non-theme use, so the directive stays
+// narrow to what its name promises. The reason is mandatory. An
+// honored escape reports no diagnostic, since multichecker.Main
+// exits non-zero on any diagnostic and a documented escape must not
+// fail the gate; the Analyzer's ResultType instead returns the
+// escape count for a pass-end reviewer to follow up with a source
+// grep.
+//
+// The mutating-method check closes a blind spot the literal and
+// call checks miss: a call chained off a value the theme package
+// already handed out, such as `.Bold(true)` on a Style a theme
+// accessor returned, restyles outside the theme boundary without
+// constructing anything a positional AST match would catch. It
+// resolves each call's receiver through go/types instead, against
+// the method's declared receiver type, so an aliased import, an
+// intermediate variable, or a method chain cannot evade it.
 package styling
 
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -38,10 +51,15 @@ files:
   - a string or rune literal containing a non-ASCII code point
   - a string or rune literal containing an ANSI escape byte (0x1b)
   - a call into a lipgloss package
+  - a mutating attribute call on a lipgloss.Style value (Bold,
+    Foreground, Width, and their variants), resolved through
+    go/types regardless of import alias, intermediate variable, or
+    method chain
 
 A //poplar:allow-unicode <reason> comment on the same line exempts a
 non-ASCII literal finding; the reason is required. An ANSI escape
-literal or a lipgloss call is never exempt.`
+literal, a lipgloss call, or a mutating Style method call is never
+exempt.`
 
 // Analyzer reports styling-boundary violations and returns the
 // count of `//poplar:allow-unicode` escapes it honored.
@@ -79,6 +97,9 @@ func run(pass *analysis.Pass) (any, error) {
 			case *ast.CallExpr:
 				if callsLipgloss(n, lipglossAliases) {
 					escapes += report(pass, reasons, n.Pos(), false, "lipgloss call outside internal/theme and internal/catkin")
+				}
+				if method, pos, mutates := mutatingStyleCall(pass, n); mutates {
+					escapes += report(pass, reasons, pos, false, "mutating lipgloss.Style method %q outside internal/theme and internal/catkin", method)
 				}
 			}
 			return true
@@ -137,6 +158,72 @@ func lipglossAliases(f *ast.File) map[string]bool {
 		aliases[path[strings.LastIndex(path, "/")+1:]] = true
 	}
 	return aliases
+}
+
+// mutatingStyleBases are the lipgloss.Style attribute-setter names
+// UX-3 also forbids calling outside internal/theme and
+// internal/catkin: the shape task 6's review flagged (F5,
+// task-6-findings-r1.md), a mutating method chained off a
+// theme-returned Style value. A call name matches when it equals or
+// extends one of these bases (UnderlineStyle and UnderlineColor
+// extend Underline, PaddingLeft extends Padding, and so on), so a
+// same-family variant the design language later adds needs no
+// analyzer change.
+var mutatingStyleBases = []string{
+	"Bold", "Italic", "Underline", "Faint", "Blink", "Reverse",
+	"Foreground", "Background", "Width", "Height", "Padding",
+	"Margin", "Align",
+}
+
+// mutatingStyleCall reports whether call invokes a mutatingStyleBases
+// method on a value whose declared receiver type is lipgloss.Style,
+// resolved through the type checker's Selections rather than the
+// call's AST shape: an aliased import, an intermediate variable, or
+// a method chain all reach the same *types.Func, so none of them
+// evades it. It returns the method name and the position of the
+// method identifier for reporting.
+func mutatingStyleCall(pass *analysis.Pass, call *ast.CallExpr) (name string, pos token.Pos, mutates bool) {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || !mutatesStyleName(sel.Sel.Name) {
+		return "", 0, false
+	}
+	selection, ok := pass.TypesInfo.Selections[sel]
+	if !ok {
+		return "", 0, false
+	}
+	fn, ok := selection.Obj().(*types.Func)
+	if !ok {
+		return "", 0, false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return "", 0, false
+	}
+	recv := sig.Recv().Type()
+	if ptr, ok := recv.(*types.Pointer); ok {
+		recv = ptr.Elem()
+	}
+	named, ok := recv.(*types.Named)
+	if !ok {
+		return "", 0, false
+	}
+	obj := named.Obj()
+	if obj.Name() != "Style" || obj.Pkg() == nil || !strings.Contains(obj.Pkg().Path(), "lipgloss") {
+		return "", 0, false
+	}
+	return sel.Sel.Name, sel.Sel.Pos(), true
+}
+
+// mutatesStyleName reports whether name equals or extends one of
+// mutatingStyleBases (a prefix match, so GetBold and UnsetBold do
+// not match Bold: neither starts with it).
+func mutatesStyleName(name string) bool {
+	for _, base := range mutatingStyleBases {
+		if strings.HasPrefix(name, base) {
+			return true
+		}
+	}
+	return false
 }
 
 // lineReasons maps a source line to the poplar:allow-unicode reason

@@ -74,7 +74,7 @@ func composePlaceholder(th theme.Theme, layout LayoutMode, title, facts string) 
 		body += "\n\n" + th.TypeStyle(theme.TypeValue, theme.GroundBase).Render(facts)
 	}
 
-	block := th.Center(th.Style(theme.RoleFg, theme.GroundBase).Width(width).Height(height)).Render(body)
+	block := th.Center(th.Sized(th.Style(theme.RoleFg, theme.GroundBase), width, height)).Render(body)
 	return tea.NewView(block)
 }
 

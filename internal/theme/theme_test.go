@@ -194,6 +194,26 @@ func TestCenter(t *testing.T) {
 	}
 }
 
+// TestSized proves the Width/Height seam (this pass's closure of the
+// styling analyzer's blind spot): the placeholder composition's
+// layout-derived box size, applied without a caller reaching for
+// lipgloss's Width and Height on a Style-returned value.
+func TestSized(t *testing.T) {
+	th := New(true, ProfileTrueColor)
+	s := th.Style(RoleFg, GroundBase)
+
+	sized := th.Sized(s, 10, 3)
+	if got := sized.GetWidth(); got != 10 {
+		t.Errorf("GetWidth() = %d, want 10", got)
+	}
+	if got := sized.GetHeight(); got != 3 {
+		t.Errorf("GetHeight() = %d, want 3", got)
+	}
+	if !sameColor(sized.GetForeground(), s.GetForeground()) {
+		t.Errorf("Sized() foreground = %v, want the same as Style() %v", sized.GetForeground(), s.GetForeground())
+	}
+}
+
 func TestCalendarSlotCycles(t *testing.T) {
 	th := New(true, ProfileTrueColor)
 	first := th.CalendarSlot(0, GroundBase).GetForeground()
