@@ -12,7 +12,7 @@ import (
 
 // clockGuardDirs are the two package directories QA-7's TZ-and-locale
 // clause holds by construction (review round 1, finding 2): every
-// gallery render is a pure function of its own arguments, never the
+// gallery render is a pure function of its arguments, never the
 // process's wall clock, because neither package reads one. Paths are
 // relative to this package's directory, the one `go test` itself runs
 // from; internal/ui/fixtures is deliberately not scanned, since a
@@ -21,8 +21,8 @@ import (
 var clockGuardDirs = []string{".", "../theme"}
 
 // bannedClockCalls are the time package members that read the
-// process's own wall clock or local zone rather than a caller-
-// supplied instant.
+// process's wall clock or local zone rather than a caller-supplied
+// instant.
 var bannedClockCalls = map[string]bool{"Now": true, "Local": true, "Since": true}
 
 // TestNoWallClockReferences replaces TestGallery_PinnedAgainstTZ
