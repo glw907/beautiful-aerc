@@ -17,7 +17,7 @@ import (
 // already builds MailPlaceholder by struct literal.
 func renderTestScreen(t *testing.T, th theme.Theme, lm LayoutMode) MailPlaceholder {
 	t.Helper()
-	m := MailPlaceholder{theme: th, loaded: true, stats: store.MailStats{Messages: 36102, Mailboxes: 14}}
+	m := MailPlaceholder{placeholderChrome: placeholderChrome{theme: th}, loaded: true, stats: store.MailStats{Messages: 36102, Mailboxes: 14}}
 	m, _ = m.update(LayoutMsg{Layout: lm})
 	return m
 }

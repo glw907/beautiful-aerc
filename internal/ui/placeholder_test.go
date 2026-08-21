@@ -155,7 +155,7 @@ func TestFormatCount(t *testing.T) {
 // facts line renders through the shared formatter rather than a bare
 // fmt.Sprintf("%d", ...).
 func TestMailPlaceholder_ViewGroupsCounts(t *testing.T) {
-	m := MailPlaceholder{theme: testTheme(), loaded: true, stats: store.MailStats{Messages: 36102, Mailboxes: 14}}
+	m := MailPlaceholder{placeholderChrome: placeholderChrome{theme: testTheme()}, loaded: true, stats: store.MailStats{Messages: 36102, Mailboxes: 14}}
 	m, _ = m.update(testLayoutMsg())
 
 	got := m.View().Content

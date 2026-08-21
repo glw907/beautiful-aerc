@@ -115,34 +115,37 @@ func reportStartupFailure(w io.Writer, err error) {
 	}
 }
 
-// run drives poplar's headless engine loop against the store at
-// dbPath, no TUI attached: the instance lock, store preparation
-// (migration, integrity check, recovery), the writer, the
-// orphaned-intent sweep, the sync worker and outbox dispatcher
-// (connect resolves the backend they run against), and a clean
-// shutdown once ctx is done. main reaches it through --headless or
-// --startup-trace; every other invocation runs runInteractive
-// (tui.go) instead, which shares this same preamble. start is run's
-// own entry time, the in-process origin QA-1's --startup-trace
-// measures against. Status and trace output go to out; a log poplar
-// cannot write is reported on errOut, which --startup-trace's caller
-// does not parse.
-func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, connect backendConnector) error {
-	start := time.Now()
+// startupState is what startup returns once the store is ready:
+// lock is the caller's to release (its own defer, so the lock outlives
+// startup's own return), and writer is open and migrated, its
+// orphaned-intent sweep already run.
+type startupState struct {
+	lock   *platform.InstanceLock
+	writer *store.Writer
+}
 
+// startup runs the steps run's headless loop and runInteractive's TUI
+// entry both take before their paths diverge: acquire the instance
+// lock, prepare (migrate, integrity-check, recover) the store, open
+// the writer, reclaim whatever a previous run left mid-dispatch, and
+// rebuild the index when asked. Every failure past the lock releases
+// what it already opened before returning err, so a caller only owns
+// cleanup once startup has actually succeeded.
+func startup(ctx context.Context, dbPath string, f flags, out, errOut io.Writer) (startupState, error) {
 	lock, err := platform.AcquireInstanceLock(dbPath)
 	if err != nil {
-		return err
+		return startupState{}, err
 	}
-	defer func() { _ = lock.Release() }()
 
 	if err := prepareStore(ctx, dbPath, f, out); err != nil {
-		return err
+		_ = lock.Release()
+		return startupState{}, err
 	}
 
 	writer, err := store.Open(dbPath, store.DefaultWriterConfig())
 	if err != nil {
-		return err
+		_ = lock.Release()
+		return startupState{}, err
 	}
 
 	// The lock above is what makes this sweep unambiguous, and it runs
@@ -150,14 +153,16 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// check and triggers no recovery.
 	if err := outbox.ReclaimOrphaned(ctx, writer); err != nil {
 		_ = writer.Close()
-		return err
+		_ = lock.Release()
+		return startupState{}, err
 	}
 
 	if f.rebuildIndex {
 		_, _ = fmt.Fprintln(out, "rebuilding full-text index...")
 		if err := store.RebuildIndex(ctx, writer); err != nil {
 			_ = writer.Close()
-			return err
+			_ = lock.Release()
+			return startupState{}, err
 		}
 	}
 
@@ -168,6 +173,28 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// already broken and silent.
 	slog.Info("poplar: store ready", "path", dbPath)
 	reportLogHealth(errOut)
+
+	return startupState{lock: lock, writer: writer}, nil
+}
+
+// run drives poplar's headless engine loop against the store at
+// dbPath, no TUI attached: startup's shared preamble, then the sync
+// worker and outbox dispatcher (connect resolves the backend they run
+// against) and a clean shutdown once ctx is done. main reaches it
+// through --headless or --startup-trace; every other invocation runs
+// runInteractive (tui.go) instead. start is run's own entry time, the
+// in-process origin QA-1's --startup-trace measures against. Status
+// and trace output go to out; a log poplar cannot write is reported on
+// errOut, which --startup-trace's caller does not parse.
+func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, connect backendConnector) error {
+	start := time.Now()
+
+	st, err := startup(ctx, dbPath, f, out, errOut)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.lock.Release() }()
+	writer := st.writer
 
 	if f.startupTrace {
 		return runStartupTrace(ctx, dbPath, writer, start, out)
@@ -208,13 +235,13 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 			_ = writer.Close()
 			return err
 		}
-		wg = startEngines(ctx, accountID, be, writer, reads)
+		wg = startEngines(ctx, accountID, be, writer, reads, noopSend)
 	case isFatalConnect(err):
 		_ = reads.Close()
 		_ = writer.Close()
 		return surfaceFatalConnect(err)
 	default:
-		wg = startEnginesRetrying(ctx, writer, reads, connect, err)
+		wg = startEnginesRetrying(ctx, writer, reads, connect, err, noopSend)
 	}
 
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")

@@ -60,7 +60,6 @@ func (a App) dispatchClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			return a.fireVerb(span.Verb)
 		}
 	}
-	paneAt(a.layout, pt) // pane focus: wide-rung behavior, no consumer this pass
 	return a, nil
 }
 

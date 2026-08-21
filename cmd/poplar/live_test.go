@@ -86,7 +86,7 @@ func TestLiveRunnerFillsStoreAndDispatchesATriageIntent(t *testing.T) {
 		t.Fatalf("ensureAccount: %v", err)
 	}
 
-	wg := startEngines(ctx, accountID, be, w, reads)
+	wg := startEngines(ctx, accountID, be, w, reads, noopSend)
 	stop := func() {
 		cancel()
 		wg.Wait()

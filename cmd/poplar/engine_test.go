@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/backendtest"
@@ -18,6 +21,7 @@ import (
 	"github.com/glw907/poplar/internal/store/storetest"
 	"github.com/glw907/poplar/internal/uerr"
 	"github.com/glw907/poplar/internal/uerr/uerrtest"
+	"github.com/glw907/poplar/internal/ui"
 )
 
 // TestConnectLiveJMAPReportsBothTokenSources proves a missing token
@@ -47,6 +51,8 @@ func TestConnectLiveJMAPReportsBothTokenSources(t *testing.T) {
 // uerr.New) yields its own class and its original root cause rather
 // than the fixed per-class sentence uerr.Error.Error() returns.
 func TestClassifyConnect(t *testing.T) {
+	uerrtest.Capture(t)
+
 	dialCause := errors.New("dial tcp: connection refused")
 	dialErr := backend.Failure{Class: uerr.ClassConnection, Cause: dialCause}
 	if class, cause := classifyConnect(dialErr); class != uerr.ClassConnection || cause != dialCause {
@@ -201,7 +207,7 @@ func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEngines(ctx, accountID, &be, w, reads)
+		wg := startEngines(ctx, accountID, &be, w, reads, noopSend)
 
 		notify <- backend.Notification{}
 		// The bulk lane's InteractiveQuiet subordination (ADR-0003
@@ -244,7 +250,7 @@ func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEngines(ctx, accountID, &be, w, reads)
+		wg := startEngines(ctx, accountID, &be, w, reads, noopSend)
 
 		if _, _, err := outbox.EnqueueRenameMailbox(ctx, w, accountID, mailboxID, "New Name", time.Now()); err != nil {
 			t.Fatalf("EnqueueRenameMailbox: %v", err)
@@ -294,7 +300,7 @@ func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		dispatcher := outbox.NewDispatcher(accountID, &be, w, reads)
-		go runDispatchLoop(ctx, dispatcher)
+		go runDispatchLoop(ctx, dispatcher, reads, noopSend)
 
 		synctest.Wait()
 
@@ -305,6 +311,112 @@ func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 			}
 		default:
 			t.Fatal("runDispatchLoop never called RenameMailbox before its first tick, want an immediate DispatchOnce on entry")
+		}
+
+		cancel()
+	})
+}
+
+// TestStartEnginesRetryingBridgesTheOfflineCase proves ST-2's wiring
+// against real reconnect-then-sync traffic, not a seeded message this
+// test then finds in its log: connect fails once, then succeeds;
+// startEnginesRetrying's retryConnect loop reaches the live backend,
+// and its bridgeSyncHealth observer (set before RunPush's goroutine
+// starts) reports the real Syncing/Synced transition a pushed
+// notification drives, with StoreChangedMsg behind Synced and no
+// Offline message anywhere in this loop's traffic: initialSyncMsg is
+// runInteractive's own call (tui.go), not this loop's, and
+// TestInitialSyncMsg (tui_test.go) covers it directly.
+func TestStartEnginesRetryingBridgesTheOfflineCase(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
+
+		refused := errors.New("dial tcp: connection refused")
+		notify := make(chan backend.Notification, 1)
+		var attempts atomic.Int64
+		connect := func(context.Context) (backend.Backend, string, error) {
+			if attempts.Add(1) == 1 {
+				return nil, "", refused
+			}
+			var be backendtest.Fake
+			be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
+				return backend.ChangeSet{}, nil
+			}
+			be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+				return notify, nil
+			}}
+			return &be, "test-account", nil
+		}
+
+		var log msgLog
+		ctx, cancel := context.WithCancel(context.Background())
+		wg := startEnginesRetrying(ctx, w, reads, connect, refused, log.send)
+
+		// Past both dial backoffs: dialBackoffMin/Max are 500ms/30s,
+		// full jitter, so attempt 0's wait is at most 500ms and attempt
+		// 1's at most 1s; 2s clears both with room to spare.
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+
+		if got := attempts.Load(); got != 2 {
+			t.Fatalf("connect calls = %d, want 2 (one failure, one reconnect)", got)
+		}
+		if got := log.snapshot(); len(got) != 0 {
+			t.Fatalf("messages after reconnect alone = %#v, want none: a live stream with no traffic yet sends nothing", got)
+		}
+
+		notify <- backend.Notification{}
+		// Past CoalesceWindow (200ms) and InteractiveQuiet (1s):
+		// ensureAccount's insert, moments earlier, is itself an
+		// interactive-lane write the bulk lane's flush subordinates
+		// behind (ADR-0003 revision 2).
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+
+		want := []tea.Msg{
+			ui.SyncStateMsg{State: ui.SyncStateSyncing},
+			ui.SyncStateMsg{State: ui.SyncStateSynced},
+			ui.StoreChangedMsg{},
+		}
+		if got := log.snapshot(); !slices.Equal(got, want) {
+			t.Fatalf("messages = %#v, want %#v", got, want)
+		}
+
+		cancel()
+		wg.Wait()
+	})
+}
+
+// TestRunDispatchLoopSendsOutboxCount proves CARRY 5's wiring:
+// runDispatchLoop's outbox-count bridge rides the dispatch loop's
+// existing cadence, with no ticker of its own.
+func TestRunDispatchLoopSendsOutboxCount(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
+		accountID := storetest.Insert(t, w,
+			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
+		storetest.Insert(t, w,
+			`INSERT INTO outbox (account_id, kind, payload, state, created_at) VALUES (?, ?, ?, ?, ?)`,
+			accountID, "send", "{}", "queued", 1000)
+
+		var be backendtest.Fake
+		d := outbox.NewDispatcher(accountID, &be, w, reads)
+
+		var log msgLog
+		ctx, cancel := context.WithCancel(context.Background())
+		go runDispatchLoop(ctx, d, reads, log.send)
+
+		synctest.Wait()
+
+		want := ui.OutboxCountMsg{Queued: 1}
+		found := false
+		for _, msg := range log.snapshot() {
+			if msg == tea.Msg(want) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("messages = %#v, want an OutboxCountMsg{Queued: 1} among them", log.snapshot())
 		}
 
 		cancel()

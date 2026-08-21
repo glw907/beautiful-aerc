@@ -11,6 +11,8 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/colorprofile"
+
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -78,4 +80,18 @@ func ResolveProfile(env func(string) (string, bool), opts ...Option) (theme.Prof
 	}
 
 	return theme.ProfileANSI16, DefaultDark
+}
+
+// mapColorProfile maps profile onto the colorprofile.Profile
+// tea.WithColorProfile expects: NewProgram's own answer to "what
+// color profile does the terminal actually get told to render at".
+func mapColorProfile(profile theme.Profile) colorprofile.Profile {
+	switch profile {
+	case theme.ProfileTrueColor:
+		return colorprofile.TrueColor
+	case theme.ProfileNoColor:
+		return colorprofile.Ascii
+	default:
+		return colorprofile.ANSI
+	}
 }

@@ -3,6 +3,8 @@ package ui
 import (
 	"testing"
 
+	"github.com/charmbracelet/colorprofile"
+
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -88,5 +90,25 @@ func TestResolveProfile(t *testing.T) {
 				t.Errorf("ResolveProfile() isDark = %v, want DefaultDark (%v)", isDark, DefaultDark)
 			}
 		})
+	}
+}
+
+// TestMapColorProfile pins CARRY 1's mapping, all three cases: without
+// it, tea.WithColorProfile is never told what ResolveProfile already
+// resolved, and bubbletea's terminal auto-detection re-downsamples
+// the theme's explicit values.
+func TestMapColorProfile(t *testing.T) {
+	tests := []struct {
+		in   theme.Profile
+		want colorprofile.Profile
+	}{
+		{theme.ProfileTrueColor, colorprofile.TrueColor},
+		{theme.ProfileANSI16, colorprofile.ANSI},
+		{theme.ProfileNoColor, colorprofile.Ascii},
+	}
+	for _, tt := range tests {
+		if got := mapColorProfile(tt.in); got != tt.want {
+			t.Errorf("mapColorProfile(%v) = %v, want %v", tt.in, got, tt.want)
+		}
 	}
 }

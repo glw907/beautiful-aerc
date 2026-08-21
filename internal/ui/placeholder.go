@@ -78,6 +78,30 @@ func composePlaceholder(th theme.Theme, layout LayoutMode, title, facts string) 
 	return tea.NewView(block)
 }
 
+// placeholderChrome is the theme and layout state every surface
+// placeholder carries and absorbs the same way: embedded rather than
+// repeated field by field and switch case by switch case across the
+// four placeholders below.
+type placeholderChrome struct {
+	theme  theme.Theme
+	layout LayoutMode
+}
+
+// absorb applies msg to c when msg is LayoutMsg or ThemeMsg, reporting
+// whether it did: the one case every placeholder's own update switch
+// would otherwise repeat.
+func (c *placeholderChrome) absorb(msg tea.Msg) bool {
+	switch msg := msg.(type) {
+	case LayoutMsg:
+		c.layout = msg.Layout
+	case ThemeMsg:
+		c.theme = msg.Theme
+	default:
+		return false
+	}
+	return true
+}
+
 // formatCount renders n grouped by thousands ("36,102"): the one
 // formatter every screen that shows a raw store count uses (F11), so
 // a grouped count never drifts screen to screen. The wireframes
@@ -107,15 +131,14 @@ func formatCount(n int64) string {
 // through the store's read pool. Pass 3 replaces it with the real
 // mail list.
 type MailPlaceholder struct {
-	store  *store.ReadPool
-	theme  theme.Theme
-	layout LayoutMode
+	store *store.ReadPool
+	placeholderChrome
 	stats  store.MailStats
 	loaded bool
 }
 
 func newMailPlaceholder(reads *store.ReadPool, th theme.Theme) MailPlaceholder {
-	return MailPlaceholder{store: reads, theme: th}
+	return MailPlaceholder{store: reads, placeholderChrome: placeholderChrome{theme: th}}
 }
 
 // NewMailPlaceholder returns a MailPlaceholder already carrying
@@ -124,7 +147,7 @@ func newMailPlaceholder(reads *store.ReadPool, th theme.Theme) MailPlaceholder {
 // store.ReadPool to load from (amendment D's no-I/O rule), so it
 // pins its facts here instead of through Init's Cmd.
 func NewMailPlaceholder(th theme.Theme, stats store.MailStats) MailPlaceholder {
-	return MailPlaceholder{theme: th, stats: stats, loaded: true}
+	return MailPlaceholder{placeholderChrome: placeholderChrome{theme: th}, stats: stats, loaded: true}
 }
 
 type mailStatsMsg struct {
@@ -151,11 +174,10 @@ func (m MailPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // view on its next paint rather than staying stuck at whatever Init
 // first read.
 func (m MailPlaceholder) update(msg tea.Msg) (MailPlaceholder, tea.Cmd) {
+	if m.absorb(msg) {
+		return m, nil
+	}
 	switch msg := msg.(type) {
-	case LayoutMsg:
-		m.layout = msg.Layout
-	case ThemeMsg:
-		m.theme = msg.Theme
 	case mailStatsMsg:
 		if msg.err != nil {
 			slog.Warn("mail placeholder: load store counts", "error", msg.err)
@@ -196,21 +218,20 @@ func init() {
 // (wireframe F8): the surface name and the live event count, read
 // through the store's read pool.
 type CalendarPlaceholder struct {
-	store  *store.ReadPool
-	theme  theme.Theme
-	layout LayoutMode
+	store *store.ReadPool
+	placeholderChrome
 	events int64
 	loaded bool
 }
 
 func newCalendarPlaceholder(reads *store.ReadPool, th theme.Theme) CalendarPlaceholder {
-	return CalendarPlaceholder{store: reads, theme: th}
+	return CalendarPlaceholder{store: reads, placeholderChrome: placeholderChrome{theme: th}}
 }
 
 // NewCalendarPlaceholder mirrors NewMailPlaceholder for the calendar
 // surface's own fact.
 func NewCalendarPlaceholder(th theme.Theme, events int64) CalendarPlaceholder {
-	return CalendarPlaceholder{theme: th, events: events, loaded: true}
+	return CalendarPlaceholder{placeholderChrome: placeholderChrome{theme: th}, events: events, loaded: true}
 }
 
 type eventCountMsg struct {
@@ -234,11 +255,10 @@ func (c CalendarPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // update absorbs a StoreChangedMsg the same way MailPlaceholder does:
 // by re-issuing Init's own load.
 func (c CalendarPlaceholder) update(msg tea.Msg) (CalendarPlaceholder, tea.Cmd) {
+	if c.absorb(msg) {
+		return c, nil
+	}
 	switch msg := msg.(type) {
-	case LayoutMsg:
-		c.layout = msg.Layout
-	case ThemeMsg:
-		c.theme = msg.Theme
 	case eventCountMsg:
 		if msg.err != nil {
 			slog.Warn("calendar placeholder: load event count", "error", msg.err)
@@ -280,12 +300,11 @@ func init() {
 // surface exists yet (a plan non-goal) rather than growing one; pass
 // 5 wires the real store surface.
 type ContactsPlaceholder struct {
-	theme  theme.Theme
-	layout LayoutMode
+	placeholderChrome
 }
 
 func newContactsPlaceholder(th theme.Theme) ContactsPlaceholder {
-	return ContactsPlaceholder{theme: th}
+	return ContactsPlaceholder{placeholderChrome{theme: th}}
 }
 
 func (c ContactsPlaceholder) Init() tea.Cmd { return nil }
@@ -297,12 +316,7 @@ func (c ContactsPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 //nolint:unparam // Cmd stays nil: this screen owns no store-backed state to reload (its own non-goal, above)
 func (c ContactsPlaceholder) update(msg tea.Msg) (ContactsPlaceholder, tea.Cmd) {
-	switch msg := msg.(type) {
-	case LayoutMsg:
-		c.layout = msg.Layout
-	case ThemeMsg:
-		c.theme = msg.Theme
-	}
+	c.absorb(msg)
 	return c, nil
 }
 
@@ -333,12 +347,11 @@ func init() {
 // (wireframe F8). The real config surface (ST-3's alpine-style setup
 // screens) lands with pass 2b.
 type ConfigPlaceholder struct {
-	theme  theme.Theme
-	layout LayoutMode
+	placeholderChrome
 }
 
 func newConfigPlaceholder(th theme.Theme) ConfigPlaceholder {
-	return ConfigPlaceholder{theme: th}
+	return ConfigPlaceholder{placeholderChrome{theme: th}}
 }
 
 func (c ConfigPlaceholder) Init() tea.Cmd { return nil }
@@ -350,12 +363,7 @@ func (c ConfigPlaceholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 //nolint:unparam // Cmd stays nil: the config surface lands with pass 2b, so there is no store-backed state to reload yet
 func (c ConfigPlaceholder) update(msg tea.Msg) (ConfigPlaceholder, tea.Cmd) {
-	switch msg := msg.(type) {
-	case LayoutMsg:
-		c.layout = msg.Layout
-	case ThemeMsg:
-		c.theme = msg.Theme
-	}
+	c.absorb(msg)
 	return c, nil
 }
 

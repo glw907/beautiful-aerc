@@ -24,7 +24,7 @@ type Deps struct {
 	Account string
 }
 
-// wheelGesture is App's own open wheel-coalescing gesture (ADR-0017
+// wheelGesture is App's open wheel-coalescing gesture (ADR-0017
 // revision 3): the running signed sum, the coordinates of its opening
 // tick, and a generation counter that tells a stale flush timer (one
 // whose gesture a direction flip already closed) from the live one.
@@ -84,9 +84,17 @@ func NewApp(deps Deps) App {
 	}
 }
 
-// NewProgram returns a *tea.Program running app.
+// NewProgram returns a *tea.Program running app, its color profile set
+// from app's own theme.Profile (CARRY 1): without it, bubbletea's
+// terminal auto-detection re-downsamples the theme's already-resolved
+// values against whatever it independently guesses, discarding
+// ResolveProfile's NO_COLOR/TERM/COLORTERM precedence and the config
+// override seam layered on top of it. opts apply after, so a caller
+// that also passes tea.WithColorProfile overrides this default rather
+// than losing to it.
 func NewProgram(app App, opts ...tea.ProgramOption) *tea.Program {
-	return tea.NewProgram(app, opts...)
+	all := append([]tea.ProgramOption{tea.WithColorProfile(mapColorProfile(app.profile))}, opts...)
+	return tea.NewProgram(app, all...)
 }
 
 // Init implements tea.Model.
@@ -163,12 +171,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // surface with an empty stack or a non-modal screen pushed onto it
 // (the help overlay, first of its kind, task 9), runs through Render,
 // the same seam the gallery renders through, so the product never
-// drifts from what the gallery pins: a pushed screen's own content
+// drifts from what the gallery pins: a pushed screen's content
 // fills the whole Main band (RenderInput.FullRegion) rather than the
-// narrower Content pane a surface's own sidebar reservation would
+// narrower Content pane a surface's sidebar reservation would
 // otherwise squeeze it against, since it owns no sidebar of its own.
 // The footer follows whichever Screen Render composes, the stack
-// top's own Entry included, since Render always reaches for
+// top's Entry included, since Render always reaches for
 // Screen.Entry() itself. Every returned tea.View carries
 // MouseMode: mouse cell-motion reporting is a per-frame View
 // declaration in bubbletea v2, not a program-construction option, so
@@ -194,7 +202,7 @@ func (a App) View() tea.View {
 	return view
 }
 
-// statusLine builds the top band's own render state from a's current
+// statusLine builds the top band's render state from a's current
 // model state, App's whole answer to "StatusLine consumed by
 // App.View": every field View hands to Render.
 func (a App) statusLine() StatusLine {
@@ -208,9 +216,9 @@ func (a App) statusLine() StatusLine {
 	}
 }
 
-// toast builds the status line's own Toast value from a's undo-offer
+// toast builds the status line's Toast value from a's undo-offer
 // state: a zero Toast (Active false) once no offer is open, otherwise
-// its label and the countdown's own current remaining seconds.
+// its label and the countdown's current remaining seconds.
 // Undoable reports whether the open offer actually has an Undo Cmd to
 // run (task-8-findings-r1.md F8): a toast with none renders its label
 // alone, never a hint advertising a dead `u`.
@@ -226,7 +234,7 @@ func (a App) toast() Toast {
 	}
 }
 
-// recomputeLayout rebuilds a.layout from its own current Width/Height
+// recomputeLayout rebuilds a.layout from its current Width/Height
 // with a.banner's current Active state (ComputeLayout's bannerRow
 // input): the route back to a correct BannerRow after a banner shows
 // or dismisses between tea.WindowSizeMsg events, since ComputeLayout
@@ -237,7 +245,7 @@ func (a App) recomputeLayout() App {
 	return a
 }
 
-// statusSpinnerInterval is the sync segment's own spinner cadence:
+// statusSpinnerInterval is the sync segment's spinner cadence:
 // bubbles/spinner's braille "Dot" preset FPS, the same frame set
 // theme.Theme.Spinner returns.
 const statusSpinnerInterval = 100 * time.Millisecond
@@ -255,7 +263,7 @@ type statusSpinnerTickMsg struct {
 // or out of an active sync or backfill state: it only ever starts a
 // new tick chain on the false-to-true edge, never on every progress
 // message a run in progress delivers, so a burst of SyncStateMsg
-// updates cannot starve the spinner by repeatedly replacing its own
+// updates cannot starve the spinner by repeatedly replacing its
 // pending tick.
 func (a App) reconcileSpinner() (App, tea.Cmd) {
 	active := a.sync.State == SyncStateSyncing || a.backfill.Active
@@ -290,8 +298,8 @@ func armSpinnerTick(gen int) tea.Cmd {
 	})
 }
 
-// toastTickMsg is the toast countdown's own tick (UX-9), armed once
-// per open window and mirroring statusSpinnerTickMsg's own gen
+// toastTickMsg is the toast countdown's tick (UX-9), armed once
+// per open window and mirroring statusSpinnerTickMsg's gen
 // convention: gen names which window it belongs to, so a tick from a
 // window a newer toast already replaced, or quit already discarded,
 // is recognizable and ignored.
@@ -301,10 +309,10 @@ type toastTickMsg struct {
 
 // showToast absorbs a ToastMsg: newest wins over a toast already
 // showing (design decision 1), and every toast logs exactly one ER-1
-// line through the same seam app.go's own background-color timeout
+// line through the same seam app.go's background-color timeout
 // line reaches (a plain slog call, routed to uerr's destination once
 // cmd/poplar's startup path installs it as slog's default). The
-// countdown starts at undoWindowSeconds-1, the pinned exemplar's own
+// countdown starts at undoWindowSeconds-1, the pinned exemplar's
 // dim "9s".
 func (a App) showToast(msg ToastMsg) (App, tea.Cmd) {
 	slog.Info("toast shown", "label", msg.Offer.Label)
@@ -317,7 +325,7 @@ func (a App) showToast(msg ToastMsg) (App, tea.Cmd) {
 
 // tickToast absorbs one toastTickMsg: a stale tick (msg.gen no longer
 // matches a.toastGen) is silently ignored; otherwise the countdown
-// steps down one second, closing the window at zero (UX-9's own 10s
+// steps down one second, closing the window at zero (UX-9's 10s
 // visible countdown) rather than arming a further tick.
 func (a App) tickToast(msg toastTickMsg) (tea.Model, tea.Cmd) {
 	if !a.toastActive || msg.gen != a.toastGen {
@@ -337,7 +345,7 @@ func (a App) tickToast(msg toastTickMsg) (tea.Model, tea.Cmd) {
 // screen never sees a stray `u` reinterpreted as an answer), with
 // front in StateDigitsSwitch (the same gate the surface digits
 // themselves already hold to, matchDigit), and an undo window
-// actually open. Extracted as its own predicate so both of F2's probe
+// actually open. Extracted as its predicate so both of F2's probe
 // cases test it directly, without needing a StatePrintableEntry root
 // screen this pass registers none of.
 func (a App) undoEligible(front ScreenEntry) bool {
@@ -348,8 +356,8 @@ func (a App) undoEligible(front ScreenEntry) bool {
 // window rather than a plain notification (task-8 F8, Toast.Undoable's
 // own split): a.toastActive alone answers "is a toast showing", which
 // a notification toast with no Undo Cmd also satisfies, and both q's
-// own quit gate and u's own undo answer must agree with what
-// Toast.Undoable already renders (fix round 1 finding 5, M3).
+// own quit gate and u's undo answer must agree with what
+// Toast.Undoable already renders.
 func (a App) undoWindowOpen() bool {
 	return a.toastActive && a.toastOffer.Undo != nil
 }
@@ -365,10 +373,10 @@ func armToastTick(gen int) tea.Cmd {
 // handleKey applies the interaction grammar's back/help/undo/quit/
 // surface-switch precedence (design language section 2) before
 // anything else sees the key: a StateModal front (a modal confirm,
-// most notably) owns Esc itself as one of its own y/n/Esc answers, so
+// most notably) owns Esc itself as one of its y/n/Esc answers, so
 // the generic Back branch below skips it entirely and lets the final
-// fallback forward the key to the modal's own Update (Confirm.Update
-// emits ConfirmAnsweredMsg, App's own Update case pops the stack and
+// fallback forward the key to the modal's Update (Confirm.Update
+// emits ConfirmAnsweredMsg, App's Update case pops the stack and
 // runs the answer's Cmd: task-8-findings-r1.md's conventions ruling,
 // the template every future modal copies); every other front's Esc
 // dismisses a showing banner first (C4, amending task 8's F3 ruling:
@@ -379,7 +387,7 @@ func armToastTick(gen int) tea.Cmd {
 // pops the stack (or no-ops at a surface root, this pass); `?` toggles
 // the help overlay, gated to StateDigitsSwitch exactly like
 // undoEligible below (C2, subsuming the old modal check: a
-// StatePrintableEntry front, a search bar most notably, keeps its own
+// StatePrintableEntry front, a search bar most notably, keeps its
 // `?` character rather than surrendering it to a global shortcut),
 // opening it over whichever front is showing, or closing it again
 // when help is already that front (C3, the mutt/aerc/less toggle
@@ -388,7 +396,7 @@ func armToastTick(gen int) tea.Cmd {
 // gate the surface digits themselves already hold to, so a text-entry
 // or modal front never treats a stray `u` as an answer); a digit
 // switches surfaces only when the state currently in front (the
-// stack's top, or the active surface's own root state when the stack
+// stack's top, or the active surface's root state when the stack
 // is empty) is StateDigitsSwitch, so a modal on the stack eats a digit
 // instead (UX-4's acceptance criterion), and pops a non-modal stack
 // front along with the switch (task 9: digits switch surfaces from
@@ -396,9 +404,9 @@ func armToastTick(gen int) tea.Cmd {
 // when the outbox is empty and no undo window is open, otherwise
 // through F7's modal confirm naming what quitting costs (UX-9: the
 // window does not survive quit, and the toast says so; BACKLOG #71
-// tracks q's own missing StateDigitsSwitch gate; task 11 carried this
+// tracks q's missing StateDigitsSwitch gate; task 11 carried this
 // from task 8's review); anything else at a surface root reaches the
-// active screen's own Update.
+// active screen's Update.
 func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	front := a.frontEntry()
 
@@ -421,8 +429,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
-		a.stack = append(a.stack, HelpScreen{theme: a.theme, layout: a.layout, Covered: front})
-		return a, nil
+		return a.push(HelpScreen{Covered: front}), nil
 	}
 
 	if a.undoEligible(front) && key.Matches(msg, GrammarKeys.Undo) {
@@ -453,36 +460,47 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // undo window quits straight through, and otherwise pushes F7's modal
 // confirm naming whichever of the queued outbox and the open undo
 // window are in play, so quitting never discards either in silence
-// (UX-9's "the window does not survive quit, and the toast says so";
-// task 11 carried this from task 8's review, since task 8 built the
-// modal but not this wiring).
+// (UX-9's "the window does not survive quit, and the toast says so").
 func (a App) handleQuit() (tea.Model, tea.Cmd) {
 	if a.outbox == 0 && !a.undoWindowOpen() {
 		return a, tea.Quit
 	}
-	a.stack = append(a.stack, a.quitConfirm())
-	return a, nil
+	return a.push(a.quitConfirm()), nil
 }
 
 // quitConfirm returns F7's modal confirm for a quit handleQuit did not
-// answer directly, carrying a's own current theme and layout the same
-// way App's other stack pushes (HelpScreen, most notably) do: Confirm
-// gets neither from anywhere else, and pushing one without them
-// renders against a zero-size layout. YesCmd emits quitYesMsg rather
-// than baking a's own undoWindowOpen() into the answer here: an undo
-// window can expire while this very modal sits open, and quitYesMsg's
-// own App.Update case re-reads it fresh instead (fix round 1 finding
-// 5, m8).
+// answer directly. YesCmd emits quitYesMsg rather than baking a's
+// undoWindowOpen() into the answer here: an undo window can expire
+// while this very modal sits open, and quitYesMsg's own App.Update
+// case re-reads it fresh instead.
 func (a App) quitConfirm() Confirm {
 	return Confirm{
-		theme:       a.theme,
-		layout:      a.layout,
 		Question:    quitQuestion(a.outbox),
 		Consequence: quitConsequence(a.outbox, a.undoWindowOpen(), a.toastOffer.Label),
 		YesLabel:    "quit",
 		NoLabel:     "stay",
 		YesCmd:      quitYesCmd,
 	}
+}
+
+// push appends s onto a's screen stack, feeding it a's own current
+// LayoutMsg and ThemeMsg first, the same pair updateChildren forwards
+// to every stacked screen on a later resize or theme change: the one
+// route onto the stack, so a push site can never construct a screen
+// missing either field the way a bare append once let it. Every
+// Screen's own LayoutMsg/ThemeMsg case returns a nil Cmd, so push
+// discards both return Cmds rather than threading them nowhere useful.
+func (a App) push(s Screen) App {
+	updated, _ := s.Update(LayoutMsg{Layout: a.layout})
+	if scr, ok := updated.(Screen); ok {
+		s = scr
+	}
+	updated, _ = s.Update(ThemeMsg{Theme: a.theme})
+	if scr, ok := updated.(Screen); ok {
+		s = scr
+	}
+	a.stack = append(a.stack, s)
+	return a
 }
 
 // quitQuestion names what quitting would leave unsent (wireframe F7's
@@ -500,9 +518,9 @@ func quitQuestion(outbox int) string {
 	}
 }
 
-// quitConsequence names each cost quitting carries: the outbox's own
+// quitConsequence names each cost quitting carries: the outbox's
 // "they'll send the next time you open poplar" (wireframe F7) when it
-// holds work, and the open undo window's own label when one is open,
+// holds work, and the open undo window's label when one is open,
 // so an operator who only has one of the two never reads a sentence
 // about the other.
 func quitConsequence(outbox int, undoOpen bool, undoLabel string) string {
@@ -516,18 +534,17 @@ func quitConsequence(outbox int, undoOpen bool, undoLabel string) string {
 	return strings.Join(parts, " ")
 }
 
-// quitYesMsg is F7's own Yes answer signal: App.Update's own case for
+// quitYesMsg is F7's Yes answer signal: App.Update's case for
 // it, not Confirm's YesCmd itself, decides whether an open undo window
 // is what quitting discards. A background toastTickMsg keeps ticking
 // regardless of what sits on the stack, so the window can expire while
 // this very modal is showing; evaluating undoWindowOpen() here, when
 // the answer is actually handled, rather than baking a bool into the
 // Cmd back when q first pushed the modal, is what keeps the discard
-// log line and the confirm's own consequence truthful (fix round 1
-// finding 5, m8).
+// log line and the confirm's consequence truthful.
 type quitYesMsg struct{}
 
-// quitYesCmd is Confirm's own YesCmd for the quit confirm: it names no
+// quitYesCmd is Confirm's YesCmd for the quit confirm: it names no
 // state of its own, so it never goes stale between push and answer.
 func quitYesCmd() tea.Msg { return quitYesMsg{} }
 
@@ -539,7 +556,7 @@ func quitYesCmd() tea.Msg { return quitYesMsg{} }
 // same-direction tick within the window folds into the running sum;
 // an opposite-direction tick flushes the open gesture immediately as
 // a WheelMsg and opens a fresh one carrying the flipping tick,
-// batched with that gesture's own flush timer.
+// batched with that gesture's flush timer.
 func (a App) handleWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	delta := wheelDelta(msg.Button)
 	if delta == 0 {
@@ -565,7 +582,7 @@ func (a App) handleWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 // a.wheel's gesture opened. A stale timer, one whose gen no longer
 // matches a.wheel.gen because a direction flip already flushed and
 // replaced that gesture, is silently ignored; otherwise the gesture
-// flushes as one WheelMsg carrying its own opening tick's
+// flushes as one WheelMsg carrying its opening tick's
 // coordinates.
 func (a App) flushWheelTimer(msg wheelFlushMsg) (tea.Model, tea.Cmd) {
 	if !a.wheel.open || msg.gen != a.wheel.gen {
@@ -576,7 +593,7 @@ func (a App) flushWheelTimer(msg wheelFlushMsg) (tea.Model, tea.Cmd) {
 	return a, flush
 }
 
-// wheelFlushMsg is the flush timer's own tick, armed once per gesture
+// wheelFlushMsg is the flush timer's tick, armed once per gesture
 // at open time (ADR-0017 revision 3). gen names which gesture it
 // closes, so a stale timer from a gesture a direction flip already
 // flushed is recognizable and ignored.
@@ -602,7 +619,7 @@ func armWheelFlush(gen int) tea.Cmd {
 }
 
 // flushWheelCmd returns g's accumulated sum as one WheelMsg, at the
-// coordinates of g's own opening tick.
+// coordinates of g's opening tick.
 func flushWheelCmd(g wheelGesture) tea.Cmd {
 	return func() tea.Msg {
 		return WheelMsg{X: g.x, Y: g.y, Delta: g.sum}
@@ -685,7 +702,7 @@ func (a App) activeScreen() Screen {
 
 // matchDigit reports the Surface msg names, derived from
 // GrammarKeys.SurfaceSwitch itself rather than a parallel keymap that
-// could drift from the grammar's own binding: key.Matches gates
+// could drift from the grammar's binding: key.Matches gates
 // legality (state other than StateDigitsSwitch disables the whole
 // binding before matching runs), and surfaceForDigit resolves which
 // of the bundled keys actually matched.
