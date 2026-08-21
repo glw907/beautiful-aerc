@@ -54,6 +54,7 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 	program := ui.NewProgram(app)
 
 	engineCtx, cancelEngines := context.WithCancel(context.Background())
+	bridge := &engineBridge{send: program.Send}
 	var wg *sync.WaitGroup
 	switch connectErr {
 	case nil:
@@ -64,9 +65,9 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 			_ = writer.Close()
 			return aerr
 		}
-		wg = startEngines(engineCtx, accountID, be, writer, reads, program.Send)
+		wg = startEngines(engineCtx, accountID, be, writer, reads, bridge)
 	default:
-		wg = startEnginesRetrying(engineCtx, writer, reads, connect, connectErr, program.Send)
+		wg = startEnginesRetrying(engineCtx, writer, reads, connect, connectErr, bridge)
 	}
 
 	// Both sends below run on their goroutine because program's
@@ -95,7 +96,7 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 		// A program.Run failure is the binary's highest-visibility
 		// crash; wrapping it here is what reaches the log before
 		// reportStartupFailure's post-exit stderr report (BACKLOG #64's
-		// class, extended to the TUI's own case).
+		// class, extended to the TUI's case).
 		loggedRunErr = uerr.New("main.tui", nil, uerr.ClassLocalIO, runErr)
 	}
 

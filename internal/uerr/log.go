@@ -181,11 +181,11 @@ func LogDegraded() bool {
 }
 
 // SetLogFallbackForTest sets the state LogFallbackPath and LogDegraded
-// report and returns a restore func: uerr's own test seam for that
+// report and returns a restore func: uerr's test seam for that
 // pair, the same shape RedirectForTest already gives a caller outside
 // this package for the log destination itself, so a test can drive
 // logFallbackPath/logDegraded's two states without engineering a real
-// unwritable filesystem to trigger openLogWriter's own probes.
+// unwritable filesystem to trigger openLogWriter's probes.
 func SetLogFallbackForTest(path string, degraded bool) func() {
 	origPath, origDegraded := logFallbackPath, logDegraded
 	logFallbackPath, logDegraded = path, degraded

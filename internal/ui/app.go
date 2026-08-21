@@ -85,7 +85,7 @@ func NewApp(deps Deps) App {
 }
 
 // NewProgram returns a *tea.Program running app, its color profile set
-// from app's own theme.Profile (CARRY 1): without it, bubbletea's
+// from app's theme.Profile (CARRY 1): without it, bubbletea's
 // terminal auto-detection re-downsamples the theme's already-resolved
 // values against whatever it independently guesses, discarding
 // ResolveProfile's NO_COLOR/TERM/COLORTERM precedence and the config
@@ -471,7 +471,7 @@ func (a App) handleQuit() (tea.Model, tea.Cmd) {
 // quitConfirm returns F7's modal confirm for a quit handleQuit did not
 // answer directly. YesCmd emits quitYesMsg rather than baking a's
 // undoWindowOpen() into the answer here: an undo window can expire
-// while this very modal sits open, and quitYesMsg's own App.Update
+// while this very modal sits open, and quitYesMsg's App.Update
 // case re-reads it fresh instead.
 func (a App) quitConfirm() Confirm {
 	return Confirm{
@@ -483,12 +483,12 @@ func (a App) quitConfirm() Confirm {
 	}
 }
 
-// push appends s onto a's screen stack, feeding it a's own current
+// push appends s onto a's screen stack, feeding it a's current
 // LayoutMsg and ThemeMsg first, the same pair updateChildren forwards
 // to every stacked screen on a later resize or theme change: the one
 // route onto the stack, so a push site can never construct a screen
 // missing either field the way a bare append once let it. Every
-// Screen's own LayoutMsg/ThemeMsg case returns a nil Cmd, so push
+// Screen's LayoutMsg/ThemeMsg case returns a nil Cmd, so push
 // discards both return Cmds rather than threading them nowhere useful.
 func (a App) push(s Screen) App {
 	updated, _ := s.Update(LayoutMsg{Layout: a.layout})

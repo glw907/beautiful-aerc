@@ -207,7 +207,7 @@ func TestStartEnginesAppliesAPushedChange(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEngines(ctx, accountID, &be, w, reads, noopSend)
+		wg := startEngines(ctx, accountID, &be, w, reads, nil)
 
 		notify <- backend.Notification{}
 		// The bulk lane's InteractiveQuiet subordination (ADR-0003
@@ -250,7 +250,7 @@ func TestStartEnginesDispatchesAnEnqueuedIntent(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEngines(ctx, accountID, &be, w, reads, noopSend)
+		wg := startEngines(ctx, accountID, &be, w, reads, nil)
 
 		if _, _, err := outbox.EnqueueRenameMailbox(ctx, w, accountID, mailboxID, "New Name", time.Now()); err != nil {
 			t.Fatalf("EnqueueRenameMailbox: %v", err)
@@ -300,7 +300,7 @@ func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		dispatcher := outbox.NewDispatcher(accountID, &be, w, reads)
-		go runDispatchLoop(ctx, dispatcher, reads, noopSend)
+		go runDispatchLoop(ctx, dispatcher, reads, nil)
 
 		synctest.Wait()
 
@@ -311,6 +311,53 @@ func TestRunDispatchLoopCallsDispatchOnceImmediately(t *testing.T) {
 			}
 		default:
 			t.Fatal("runDispatchLoop never called RenameMailbox before its first tick, want an immediate DispatchOnce on entry")
+		}
+
+		cancel()
+	})
+}
+
+// TestRunDispatchLoopHeadlessIssuesNoBridgeQuery proves run's headless
+// loop (bridge nil) never touches the outbox-count bridge at all, not
+// even through a discarded send: reads passed to runDispatchLoop
+// itself is nil, decoupled from the dispatcher's real reads
+// (outbox.NewDispatcher still needs a working one to dispatch
+// against), so a regression that calls bridgeOutboxCount unconditionally
+// again would panic on OutboxQueuedCount's nil-receiver dereference
+// rather than passing silently against a real store. DispatchOnce
+// still fires on entry, unaffected by bridge being nil.
+func TestRunDispatchLoopHeadlessIssuesNoBridgeQuery(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
+		accountID := storetest.Insert(t, w,
+			`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
+		mailboxID := storetest.Insert(t, w,
+			`INSERT INTO mailbox (account_id, name, server_id) VALUES (?, ?, ?)`, accountID, "Old Name", "mb1")
+
+		var be backendtest.Fake
+		renamed := make(chan string, 1)
+		be.MailSource.RenameMailboxFunc = func(_ context.Context, id, name string) error {
+			renamed <- name
+			return nil
+		}
+
+		if _, _, err := outbox.EnqueueRenameMailbox(context.Background(), w, accountID, mailboxID, "New Name", time.Now()); err != nil {
+			t.Fatalf("EnqueueRenameMailbox: %v", err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		dispatcher := outbox.NewDispatcher(accountID, &be, w, reads)
+		go runDispatchLoop(ctx, dispatcher, nil, nil)
+
+		synctest.Wait()
+
+		select {
+		case name := <-renamed:
+			if name != "New Name" {
+				t.Fatalf("RenameMailbox name = %q, want %q", name, "New Name")
+			}
+		default:
+			t.Fatal("runDispatchLoop with a nil bridge never dispatched the queued intent")
 		}
 
 		cancel()
@@ -350,7 +397,7 @@ func TestStartEnginesRetryingBridgesTheOfflineCase(t *testing.T) {
 
 		var log msgLog
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := startEnginesRetrying(ctx, w, reads, connect, refused, log.send)
+		wg := startEnginesRetrying(ctx, w, reads, connect, refused, &engineBridge{send: log.send})
 
 		// Past both dial backoffs: dialBackoffMin/Max are 500ms/30s,
 		// full jitter, so attempt 0's wait is at most 500ms and attempt
@@ -404,7 +451,7 @@ func TestRunDispatchLoopSendsOutboxCount(t *testing.T) {
 
 		var log msgLog
 		ctx, cancel := context.WithCancel(context.Background())
-		go runDispatchLoop(ctx, d, reads, log.send)
+		go runDispatchLoop(ctx, d, reads, &engineBridge{send: log.send})
 
 		synctest.Wait()
 

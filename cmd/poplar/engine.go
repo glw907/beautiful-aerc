@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/glw907/poplar/internal/backend"
 	"github.com/glw907/poplar/internal/backend/jmapsource"
 	"github.com/glw907/poplar/internal/keyring"
@@ -18,13 +16,6 @@ import (
 	syncengine "github.com/glw907/poplar/internal/sync"
 	"github.com/glw907/poplar/internal/uerr"
 )
-
-// noopSend is run's own send for startEngines/startEnginesRetrying:
-// the headless loop has no *tea.Program to bridge engine state into,
-// so every message the sync/outbox bridge would otherwise emit is
-// simply discarded. runInteractive (tui.go) passes its program's own
-// Send instead.
-func noopSend(tea.Msg) {}
 
 // fastmailSessionURL is Fastmail's JMAP session discovery endpoint
 // (~/.claude/instructions/fastmail-api.md).
@@ -179,9 +170,9 @@ func retryConnect(ctx context.Context, connect backendConnector, firstErr error)
 // SY-3's concern, and the store was already open and working before
 // any connect call ran); it is logged through the uerr call
 // ensureAccount already makes and the process simply never starts its
-// engines. send carries engine state to a *tea.Program's own Update
-// loop when one is attached (runInteractive); run passes noopSend.
-func startEnginesRetrying(ctx context.Context, writer *store.Writer, reads *store.ReadPool, connect backendConnector, firstErr error, send func(tea.Msg)) *sync.WaitGroup {
+// engines. bridge is startEngines' own parameter, threaded through
+// unchanged; run passes nil.
+func startEnginesRetrying(ctx context.Context, writer *store.Writer, reads *store.ReadPool, connect backendConnector, firstErr error, bridge *engineBridge) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		be, key, ok := retryConnect(ctx, connect, firstErr)
@@ -192,7 +183,7 @@ func startEnginesRetrying(ctx context.Context, writer *store.Writer, reads *stor
 		if err != nil {
 			return
 		}
-		startEngines(ctx, accountID, be, writer, reads, send).Wait()
+		startEngines(ctx, accountID, be, writer, reads, bridge).Wait()
 	})
 	return &wg
 }
@@ -257,14 +248,17 @@ func ensureAccount(ctx context.Context, writer *store.Writer, key string) (int64
 // transport) and outbox dispatch loop against be, both driven by ctx
 // and both stopped by its cancellation. The returned WaitGroup is done
 // once both have actually returned; run waits on it before closing the
-// store handles they still hold. send carries the worker's health
+// store handles they still hold. bridge carries the worker's health
 // transitions and the dispatch loop's queued-outbox count to a
 // *tea.Program's own Update loop when one is attached (runInteractive);
-// run passes noopSend, so bridgeSyncHealth's Observer still installs
-// but has nothing live to reach.
-func startEngines(ctx context.Context, accountID int64, be backend.Backend, writer *store.Writer, reads *store.ReadPool, send func(tea.Msg)) *sync.WaitGroup {
+// run passes nil, and neither bridgeSyncHealth nor runDispatchLoop's
+// own bridge work runs at all in that case, the headless loop's
+// original shape before either existed.
+func startEngines(ctx context.Context, accountID int64, be backend.Backend, writer *store.Writer, reads *store.ReadPool, bridge *engineBridge) *sync.WaitGroup {
 	worker := syncengine.NewWorker(accountID, be, writer, syncengine.DefaultConfig())
-	bridgeSyncHealth(worker, send)
+	if bridge != nil {
+		bridgeSyncHealth(worker, bridge.send)
+	}
 	dispatcher := outbox.NewDispatcher(accountID, be, writer, reads)
 
 	var wg sync.WaitGroup
@@ -272,22 +266,29 @@ func startEngines(ctx context.Context, accountID int64, be backend.Backend, writ
 		worker.RunPush(ctx, []backend.ObjectKind{backend.ObjectKindMailbox, backend.ObjectKindMessage})
 	})
 	wg.Go(func() {
-		runDispatchLoop(ctx, dispatcher, reads, send)
+		runDispatchLoop(ctx, dispatcher, reads, bridge)
 	})
 	return &wg
 }
 
 // runDispatchLoop calls DispatchOnce once immediately, so a queued
 // intent does not wait out a full idle tick before its first attempt,
-// then again on dispatchInterval's cadence until ctx is done.
-// bridgeOutboxCount rides both the immediate call and every ticked one,
-// so a triage action's outbox count reaches send within one
-// dispatchInterval tick and never busier than that (QA-8's idle
-// posture).
-func runDispatchLoop(ctx context.Context, d *outbox.Dispatcher, reads *store.ReadPool, send func(tea.Msg)) {
-	last := bridgeOutboxCount(ctx, reads, 0, send)
+// then again on dispatchInterval's cadence until ctx is done. When
+// bridge is set, bridgeOutboxCount rides both the immediate call and
+// every ticked one, so a triage action's outbox count reaches
+// bridge.send within one dispatchInterval tick and never busier than
+// that (QA-8's idle posture); when bridge is nil (run's headless
+// loop), reads is never queried at all, not even through a discarded
+// send.
+func runDispatchLoop(ctx context.Context, d *outbox.Dispatcher, reads *store.ReadPool, bridge *engineBridge) {
+	var last int
+	if bridge != nil {
+		last = bridgeOutboxCount(ctx, reads, 0, bridge.send)
+	}
 	dispatchOnce(ctx, d)
-	last = bridgeOutboxCount(ctx, reads, last, send)
+	if bridge != nil {
+		last = bridgeOutboxCount(ctx, reads, last, bridge.send)
+	}
 
 	ticker := time.NewTicker(dispatchInterval)
 	defer ticker.Stop()
@@ -295,7 +296,9 @@ func runDispatchLoop(ctx context.Context, d *outbox.Dispatcher, reads *store.Rea
 		select {
 		case <-ticker.C:
 			dispatchOnce(ctx, d)
-			last = bridgeOutboxCount(ctx, reads, last, send)
+			if bridge != nil {
+				last = bridgeOutboxCount(ctx, reads, last, bridge.send)
+			}
 		case <-ctx.Done():
 			return
 		}

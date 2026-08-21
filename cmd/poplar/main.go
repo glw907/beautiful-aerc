@@ -235,13 +235,13 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 			_ = writer.Close()
 			return err
 		}
-		wg = startEngines(ctx, accountID, be, writer, reads, noopSend)
+		wg = startEngines(ctx, accountID, be, writer, reads, nil)
 	case isFatalConnect(err):
 		_ = reads.Close()
 		_ = writer.Close()
 		return surfaceFatalConnect(err)
 	default:
-		wg = startEnginesRetrying(ctx, writer, reads, connect, err, noopSend)
+		wg = startEnginesRetrying(ctx, writer, reads, connect, err, nil)
 	}
 
 	_, _ = fmt.Fprintln(out, "poplar is running; press Ctrl-C to stop")

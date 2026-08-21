@@ -65,7 +65,7 @@ func TestRunInteractiveRefusesSecondInstance(t *testing.T) {
 // TestLogFallbackBanner proves logFallbackBanner's two user-facing
 // message strings, the two dispositions row 24 owes an operator: a
 // working fallback names the path it engaged, and a fallback that
-// failed its own trial write too says logging is degraded rather than
+// failed its trial write too says logging is degraded rather than
 // naming a path nothing reaches. uerrtest.Capture keeps
 // LogFallbackPath/LogDegraded's first-ever call in this test binary
 // from actually opening the real state-dir log file.

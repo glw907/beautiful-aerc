@@ -13,6 +13,18 @@ import (
 	"github.com/glw907/poplar/internal/ui"
 )
 
+// engineBridge carries the *tea.Program Send startEngines' own worker
+// and dispatch loop feed engine-state messages through. runInteractive
+// constructs one over its program's Send; run, the headless loop
+// with no *tea.Program to reach, passes a nil *engineBridge, and every
+// call site below skips its bridge work entirely rather than
+// reaching a send that would just discard the message: bridgeOutboxCount
+// runs a real store query on every call, so a no-op send is not the
+// same as no call at all.
+type engineBridge struct {
+	send func(tea.Msg)
+}
+
 // bridgeSyncHealth installs an Observer on worker translating every
 // sync.Health transition into the ui message the status line renders,
 // through send: task 11's own whole answer to "cmd/poplar grows a
