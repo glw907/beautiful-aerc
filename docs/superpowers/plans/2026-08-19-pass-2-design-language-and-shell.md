@@ -261,7 +261,9 @@ implementer invents taste. Each cites its constraint.
    overlay, and modals; selection is the accent-tinted ground plus
    the edge bar. Pane separation is whitespace gutters and
    alignment, plus exactly one structural line (the rail/list
-   divider in fgSubtle). Focus is carried by edge-bar glyph
+   divider in the `border` role, not `fgSubtle`; corrected, spec
+   m9, pass 2 final fix round: matches §7, the exemplar, and
+   `render.go`'s `dividerColumn`). Focus is carried by edge-bar glyph
    weight (`▌` focused, `▏` unfocused), never by border color
    alone, and never two active-state signals of equal weight at
    once. In degrade profiles the ground steps substitute to
@@ -538,7 +540,11 @@ consumes). Within a column, rows never wrap.
 
 - One question, named consequence, `y`/`n`/`Esc` (grammar-exempt
   context 1). Rounded border set, padModal 2/1, clamped and
-  centered. The dimmed screen behind it stays rendered.
+  centered. ~~The dimmed screen behind it stays rendered.~~ Amended
+  (spec m15, pass 2 final fix round) by the design language's
+  modal-confirm vocabulary entry (§6): the screen behind it wipes to
+  the base ground instead, ruled by exemplar authority over this
+  wireframe's literal text (decision 13, the GapPin precedent).
 - Pointer targets: the answer cells. Everything else is a no-op,
   exactly as keys.
 
@@ -551,6 +557,12 @@ with pass 5` (contacts count once the store row exists) /
 registered screen so UX-4's round trip and the grammar test cover
 all four surfaces from this pass on. Layout identical at every
 rung; floor and short-height behavior inherited from the shell.
+
+Amended (spec m13, pass 2 final fix round): decision 9 (no roadmap
+talk in the product) outranks this wireframe's literal pass-number
+copy where the two conflict. The shipped strings are "Contact sync
+is not available yet." and "Configuration is not available yet.",
+with no `pass 5`/`pass 2b` literal in either.
 
 
 ## File structure
@@ -921,8 +933,10 @@ width; text-entry state display deferred to 2b.
   state; widening never removes a hint (monotone growth).
 - Help completeness: the UX-2 revision-6 test asserts the help
   overlay equals the full keymap for every registered screen.
-- Goldens: the footer at 80, 120, and 150 columns showing the
-  prefix growing.
+- Goldens: the footer at 80, 120, and 150 columns, pinning the
+  rendered layout at each width; the monotone-growth property itself
+  is carried by `TestFooterHints_MonotoneGrowthWithWidth`, not the
+  goldens (amended, spec m18, pass 2 final fix round).
 - Hit spans registered per hint; span text equals the rendered
   hint (character grain).
 
@@ -1130,11 +1144,17 @@ verify pointer coordinates or glyph widths). The teatest flow
 suite stays deliberately small: the quit path, the surface-switch
 round trip, task 2's never-answering-terminal case, and task 11's
 ST-2 startup, and nothing the seam or gallery already covers.
-The UX-7 degrade renders prove focused and error carry distinct
-non-color channels in ANSI-16 and NO_COLOR (unread and selected
-join with pass 3's list; task 1's token-level test already covers
-all four). freeze stills of the F1 and F2 gallery renders in both
-themes are committed for the design record (survey amendment F).
+The UX-7 degrade-channel proof is task 1's token-level test
+(`internal/theme/degrade_test.go`: focused and error carry distinct
+non-color channels in ANSI-16 and NO_COLOR; unread and selected join
+with pass 3's list), not a gallery render — the gallery pins a
+rung's geometry and copy, never a contrast guarantee (spec M7,
+pass 2 final fix round). Gallery-exact captures of the F1 and F2
+gallery renders, in both themes, unescaped back to raw bytes (not
+`charmbracelet/freeze`'s own CLI output, despite the "freeze stills"
+name this paragraph once used, spec m16) are committed for the
+design record (survey amendment F,
+`docs/poplar/design/2026-08-20-pass-2-freeze-stills/`).
 
 The teatest swap path (survey amendment A's closing requirement,
 landed with this task): `charmbracelet/x/exp/teatest/v2` lives under
@@ -1174,9 +1194,12 @@ reads gallery churn explicitly.
   a text-only lane would be blind to pane regressions (review
   finding). The spinner frame index is a fixture input, never
   wall-clock.
-- Two full in-process sweeps are byte-identical (QA-7), locale
-  and TZ pinned by the fixtures package, asserted by a test that
-  flips TZ and expects pinned output.
+- Two full in-process sweeps are byte-identical (QA-7),
+  `TestGallery_TwoSweepsByteIdentical`; locale and TZ are pinned by
+  the fixtures package and discharged by construction
+  (`TestNoWallClockReferences`), not by a subprocess TZ-flip test
+  (struck, spec m17, pass 2 final fix round: the outcome paragraph
+  above already retired that shape, review round 1 finding 2).
 - The teatest swap path is written into this plan's record as
   one paragraph when the suite lands: what replaces teatest if it
   lags a bubbletea bump, and exactly which tests are affected
@@ -1218,6 +1241,14 @@ deadcode run with justifications, STATUS outcomes block, plan
 archival, the manual pointer checklist on kitty, and the pass gate
 with Geoff: the shell demoed live on the gate terminal, both
 themes, resize through every rung, mouse vocabulary by hand.
+
+The final fix round (2026-08-20, spec m10) deleted `paneAt`
+(`internal/ui/mouse.go`) and its direct unit test: task 10's
+consolidation-simplify pass had already found `dispatchClick`'s only
+caller discarding its result and stopped short of removing the
+function itself, so it stood with no production caller at all —
+ADR-0017's pane-focus row is unwired this pass. Pane focus, and
+`paneAt`'s real caller, arrives with pass 3's list.
 
 ## Non-goals, restated as decisions
 

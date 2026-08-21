@@ -2,7 +2,12 @@
 
 **Date:** 2026-07-27
 **Status:** Revision 2, for the Phase 4 gate (revision 1 was
-adversarially reviewed; this revision folds the findings). This is
+adversarially reviewed; this revision folds the findings).
+**Revision 3** (2026-08-20, pass 2 final fix round, spec m14): amends
+the modal-confirm vocabulary entry (§6) with the full-shell wipe and
+the `?`-help exemption pass 2's build actually shipped, and the
+footer's testing clause (§4) with the mechanical no-advertised-no-op
+claim guard-falsifiability finding F4 added. This is
 the UX-3 artifact C5 requires before any screen is built. Every
 screen derives from it; the `internal/theme` package (Phase 5,
 build step 2) compiles its tokens as Go values; the UX-3 analyzer
@@ -229,9 +234,14 @@ capability-gated key (the remote-image load key when the terminal
 lacks graphics support, RD-6) is simply absent from the priority
 list on that terminal, since decision 8 already promises an absent
 key is never legal either. None of this needs its registry rule:
-the UX-2 test's only mechanical claims are that the footer is always
-a legal prefix of the committed order, and that the help overlay's
-content is always the complete keymap.
+the UX-2 test's mechanical claims are that the footer is always a
+legal prefix of the committed order, that the help overlay's content
+is always the complete keymap, and, added by the pass 2 final fix
+round (revision 3, guard-falsifiability finding F4, RULING: this
+exceeds rather than contradicts the narrowed claim above), that
+every hint the footer actually offers fires its verb — a non-nil Cmd
+or a changed View — when driven through `App.Update` the same way a
+click's `fireVerb` does, over every registered surface-root entry.
 
 ## 5. Undo presentation (UX-9)
 
@@ -289,7 +299,14 @@ cairn rule: a gap that forces improvisation is a defect).
 - **Modal confirm**: the y/n question box (permanent delete,
   folder delete with count, quit with pending outbox). One
   question, named consequence, `y`/`n`/`Esc`; a grammar-exempt
-  context (section 2).
+  context (section 2). Amended by the pass 2 final fix round
+  (2026-08-20, revision 3, exemplar authority per decision 13): the
+  screen behind it wipes to the base ground rather than rendering
+  dimmed, since no dimmed-backdrop rendering exists in the shipped
+  theme to compare against — a standing gate item for Geoff's eye,
+  the same open question the code half of spec M4 left; and `?`
+  never opens help while a modal is showing (the modal owns its own
+  fixed y/n/Esc grammar instead of the global toggle).
 - **Picker**: the type-ahead chooser (move-to-folder, goto,
   attach path, identity switch, date jump). One input line plus
   a filtered list; `Enter` accepts, `Esc` leaves; can
