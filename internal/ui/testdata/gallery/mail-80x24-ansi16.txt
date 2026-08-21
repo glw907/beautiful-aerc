@@ -1,4 +1,4 @@
-\x1b[37m  \x1b[94;1m1 Mail\x1b[37;22m  \x1b[90;2m2\x1b[37;22m \x1b[90;2m3\x1b[37;22m \x1b[90;2m4\x1b[37;22m                                                         \x1b[90;2mSynced\x1b[37;22m  \x1b[m
+\x1b[37m  \x1b[94;1m1 Mail\x1b[37;22m  \x1b[90m2\x1b[37m \x1b[90m3\x1b[37m \x1b[90m4\x1b[37m                                                         \x1b[90mSynced\x1b[37m  \x1b[m
 
 
 
@@ -21,4 +21,4 @@
 
 
 
-\x1b[37m  q\x1b[90;2m quit\x1b[37;22m                                                                ?\x1b[90;2m help\x1b[37;22m  \x1b[m
+\x1b[37m  q\x1b[90m quit\x1b[37m                                                                ?\x1b[90m help\x1b[37m  \x1b[m

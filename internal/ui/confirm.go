@@ -273,7 +273,11 @@ func confirmAnswerOffsets(c Confirm, boxWidth int) (yesX, noX int) {
 
 // confirmAnswerRow renders the y/n answer row: the default answer (n)
 // on its selectedBg pill (decision 6, the ratified exemplar),
-// centered within the box.
+// centered within the box. Where GroundSelected reverses (theme
+// pass 2 gate finding), the pill renders as one styled run under one
+// shared foreground, since two roles there would otherwise show as
+// two different reversed background patches rather than one plate;
+// elsewhere it keeps the key and label on their own roles, unchanged.
 func confirmAnswerRow(c Confirm, left, right string, width int) string {
 	th := c.theme
 	interior := width - 2
@@ -282,12 +286,19 @@ func confirmAnswerRow(c Confirm, left, right string, width int) string {
 	leftPad := max(0, (interior-contentWidth)/2)
 	rightPad := max(0, interior-contentWidth-leftPad)
 
-	inset := strings.Repeat(" ", confirmPillInset)
+	var pill string
+	if th.GroundReverses(theme.GroundSelected) {
+		pill = th.Style(theme.RoleFg, theme.GroundSelected).Render(no)
+	} else {
+		inset := strings.Repeat(" ", confirmPillInset)
+		pill = th.Style(theme.RoleFg, theme.GroundSelected).Render(inset+"n") +
+			th.Style(theme.RoleFgMuted, theme.GroundSelected).Render(" "+c.NoLabel+inset)
+	}
+
 	content := th.Style(theme.RoleFg, chromeGround).Render("y") +
 		th.Style(theme.RoleFgMuted, chromeGround).Render(" "+c.YesLabel) +
 		th.Style(theme.RoleFg, chromeGround).Render(strings.Repeat(" ", theme.GapControl)) +
-		th.Style(theme.RoleFg, theme.GroundSelected).Render(inset+"n") +
-		th.Style(theme.RoleFgMuted, theme.GroundSelected).Render(" "+c.NoLabel+inset)
+		pill
 
 	var out strings.Builder
 	out.WriteString(th.Style(theme.RoleBorder, chromeGround).Render(left))

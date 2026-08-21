@@ -86,23 +86,32 @@ func TestErrorGroundsDiffer(t *testing.T) {
 	}
 }
 
-// TestDegradeFaintOnMuted asserts pass 2 review finding I6: "dim"
-// (design language section 7's type roles) has no color-only
-// expression under ProfileNoColor, so RoleFgMuted and RoleFgSubtle
-// carry Faint at both degrade profiles; RoleFg never does, and
+// TestDegradeFaintOnMuted asserts pass 2 review finding I6, narrowed
+// by the pass 2 gate's real-terminal finding: "dim" (design language
+// section 7's type roles) has no color-only expression under
+// ProfileNoColor, so RoleFgMuted and RoleFgSubtle carry Faint there;
+// RoleFg never does. ProfileANSI16 does not carry Faint on those
+// roles: its slot 8 (bright black) already dims on its own, and
+// Faint stacked on top of it measured 1.29:1, invisible.
 // ProfileTrueColor expresses "dim" through the muted color alone.
 func TestDegradeFaintOnMuted(t *testing.T) {
-	for _, p := range []Profile{ProfileANSI16, ProfileNoColor} {
-		th := New(true, p)
-		if !th.Style(RoleFgMuted, GroundBase).GetFaint() {
-			t.Errorf("profile %v: fgMuted should be faint", p)
-		}
-		if !th.Style(RoleFgSubtle, GroundBase).GetFaint() {
-			t.Errorf("profile %v: fgSubtle should be faint", p)
-		}
-		if th.Style(RoleFg, GroundBase).GetFaint() {
-			t.Errorf("profile %v: fg should not be faint", p)
-		}
+	noColor := New(true, ProfileNoColor)
+	if !noColor.Style(RoleFgMuted, GroundBase).GetFaint() {
+		t.Error("nocolor: fgMuted should be faint")
+	}
+	if !noColor.Style(RoleFgSubtle, GroundBase).GetFaint() {
+		t.Error("nocolor: fgSubtle should be faint")
+	}
+	if noColor.Style(RoleFg, GroundBase).GetFaint() {
+		t.Error("nocolor: fg should not be faint")
+	}
+
+	ansi16 := New(true, ProfileANSI16)
+	if ansi16.Style(RoleFgMuted, GroundBase).GetFaint() {
+		t.Error("ansi16: fgMuted should not be faint, slot 8 already dims")
+	}
+	if ansi16.Style(RoleFgSubtle, GroundBase).GetFaint() {
+		t.Error("ansi16: fgSubtle should not be faint, slot 8 already dims")
 	}
 
 	th := New(true, ProfileTrueColor)

@@ -123,17 +123,35 @@ func (t Theme) DrawsDividers() bool {
 	return t.profile != ProfileTrueColor
 }
 
+// GroundReverses reports whether ground paints through reverse video
+// rather than an explicit background at t's profile (paintGround's
+// own branch): true for GroundSelected at ProfileANSI16 and
+// ProfileNoColor, false everywhere else. Reverse swaps each styled
+// run's own foreground into its displayed background, so two runs
+// painted onto the same ground from two different roles would show
+// as two different background patches rather than one shared plate;
+// a caller that paints adjacent runs onto a ground this reports true
+// for must resolve them to one shared foreground first (Confirm's
+// default-answer pill, pass 2 gate finding).
+func (t Theme) GroundReverses(ground Ground) bool {
+	return t.profile != ProfileTrueColor && ground == GroundSelected
+}
+
 // Style returns role's style resolved against ground. Role-intrinsic
 // channels apply regardless of profile: RoleUnread is bold, RoleQuote
 // is italic, RoleLink is underlined (decision 6's table). At
-// ProfileANSI16 and ProfileNoColor, RoleFgMuted and RoleFgSubtle also
-// gain Faint, the non-color expression of "dim" the design language's
-// type roles name. Foreground resolves per profile: a true hex color
-// at ProfileTrueColor, an explicit ANSI-16 slot at ProfileANSI16 (a
-// nearest-match downsample collapses distinct roles onto the same
-// slot, so the palette names one directly per role), and no color at
-// all at ProfileNoColor. Background and the selection/reverse channel
-// come from paintGround.
+// ProfileNoColor, RoleFgMuted and RoleFgSubtle also gain Faint, the
+// only channel that profile has to express "dim". ProfileANSI16
+// leaves Faint off those roles: its slot 8 (bright black) already
+// dims against every ground the design language verifies, and Faint
+// on top of it renders 1.29:1, invisible (pass 2 gate finding). Style
+// never combines the two dimming channels. Foreground resolves per
+// profile: a true hex color at ProfileTrueColor, an explicit ANSI-16
+// slot at ProfileANSI16 (a nearest-match downsample collapses
+// distinct roles onto the same slot, so the palette names one
+// directly per role), and no color at all at ProfileNoColor.
+// Background and the selection/reverse channel come from
+// paintGround.
 func (t Theme) Style(role Role, ground Ground) lipgloss.Style {
 	s := lipgloss.NewStyle()
 	switch role {
@@ -144,7 +162,7 @@ func (t Theme) Style(role Role, ground Ground) lipgloss.Style {
 	case RoleLink:
 		s = s.Underline(true)
 	}
-	if t.profile != ProfileTrueColor {
+	if t.profile == ProfileNoColor {
 		switch role {
 		case RoleFgMuted, RoleFgSubtle:
 			s = s.Faint(true)

@@ -1,0 +1,31 @@
+
+
+
+
+
+
+
+
+
+
+
+[m                         [90m+-----------------------------------------------+
+[m                         [90m|[37m                                               [90m|
+[m                         [90m|[37m  [22;1mQuit with 2 unsent messages?[22m                 [90m|
+[m                         [90m|[37m  [90mThey'll send the next time you open poplar.[37m  [90m|
+[m                         [90m|[37m                                               [90m|
+[m                         [90m|[37m              y[90m quit[37m  [7m  n stay  [27m               [90m|
+[m                         [90m|[37m                                               [90m|
+[m                         [90m+-----------------------------------------------+
+
+
+
+
+
+
+
+
+
+
+
+[mfixture modal-confirm   profile ansi16   rung 100x30   ? help

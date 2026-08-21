@@ -14,7 +14,7 @@
                          |  \x1b[1mQuit with 2 unsent messages?\x1b[m                 |
                          |  \x1b[2mThey'll send the next time you open poplar.\x1b[m  |
                          |                                               |
-                         |              y\x1b[2m quit\x1b[m  \x1b[7m  n\x1b[2m stay  \x1b[m               |
+                         |              y\x1b[2m quit\x1b[m  \x1b[7m  n stay  \x1b[m               |
                          |                                               |
                          +-----------------------------------------------+
 

@@ -2,6 +2,7 @@ package theme
 
 import (
 	"image/color"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -72,6 +73,74 @@ func TestStyleTrueColor(t *testing.T) {
 			}
 			if s.GetUnderline() != tt.wantUnder {
 				t.Errorf("underline = %v, want %v", s.GetUnderline(), tt.wantUnder)
+			}
+		})
+	}
+}
+
+// sgrFaint is the SGR faint/decreased-intensity parameter (ECMA-48).
+const sgrFaint = "2"
+
+// sgrCodes returns every standalone SGR attribute parameter a
+// rendered string's escape sequences carry: a 38 or 48 foreground/
+// background introducer and the RGB or palette-index parameters
+// that follow it (2;r;g;b or 5;n) are consumed as one color unit
+// and never reported as a bare attribute code, since an RGB
+// component can itself carry the digit 2, colliding with the faint
+// SGR parameter.
+func sgrCodes(rendered string) []string {
+	var codes []string
+	for _, seq := range sgrSeq.FindAllStringSubmatch(rendered, -1) {
+		if seq[1] == "" {
+			continue
+		}
+		parts := strings.Split(seq[1], ";")
+		for i := 0; i < len(parts); i++ {
+			if parts[i] != "38" && parts[i] != "48" {
+				codes = append(codes, parts[i])
+				continue
+			}
+			if i+1 < len(parts) && parts[i+1] == "2" {
+				i += 4 // 38/48;2;r;g;b
+			} else if i+1 < len(parts) && parts[i+1] == "5" {
+				i += 2 // 38/48;5;n
+			}
+		}
+	}
+	return codes
+}
+
+var sgrSeq = regexp.MustCompile("\x1b\\[([0-9;]*)m")
+
+// TestStyleMutedFaintPerProfile asserts the muted-role SGR degrade
+// channel per profile (pass 2 gate finding: RoleFgMuted's Faint
+// stacked on ANSI-16's slot 8, bright black, measured 1.29:1,
+// invisible). NO_COLOR carries no color channel at all, so Faint is
+// its only way to express "dim"; ANSI-16's slot 8 already dims on its
+// own, so Style no longer stacks Faint on top of it there.
+func TestStyleMutedFaintPerProfile(t *testing.T) {
+	tests := []struct {
+		name      string
+		profile   Profile
+		wantFaint bool
+	}{
+		{"truecolor carries no faint", ProfileTrueColor, false},
+		{"ansi16 carries no faint, slot 8 already dims", ProfileANSI16, false},
+		{"nocolor carries faint, its only dim channel", ProfileNoColor, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, role := range []Role{RoleFgMuted, RoleFgSubtle} {
+				rendered := New(true, tt.profile).Style(role, GroundBase).Render("x")
+				got := false
+				for _, code := range sgrCodes(rendered) {
+					if code == sgrFaint {
+						got = true
+					}
+				}
+				if got != tt.wantFaint {
+					t.Errorf("role %v profile %v: SGR carries faint = %v, want %v (rendered %q)", role, tt.profile, got, tt.wantFaint, rendered)
+				}
 			}
 		})
 	}

@@ -118,5 +118,22 @@ larger frame's rows left behind after a shrink) is gone.
 - `task2-residue-150x26.png` then `task2-residue-100x30.png`: the
   same fixture (`mail`, truecolor-dark) shot at 150x26, then again
   after resizing down to 100x30. The second capture shows only the
-  100x30 frame; none of the wider or taller previous frame's rows
+  100x30 frame; none of the wider and shorter previous frame's rows
   survive the shrink.
+
+## Task 3 re-shots
+
+Two `scripts/kitty-shot` captures (PNG plus `.ansi` beside each),
+`task3-`-prefixed, taken after task 3 of pass 2c fixed the two
+ANSI-16 degrade defects this gate found: muted text rendered Faint on
+top of the already-dim slot 8 (bright black), and the modal confirm's
+default-answer pill split in two by reverse video.
+
+- `task3-modal-confirm-ansi16.png`: fixture `modal-confirm`, ANSI-16,
+  100x30. The `n stay` pill is one uniform plate; no seam between
+  the key and the label.
+- `task3-mail-toast-ansi16.png`: fixture `mail-toast`, ANSI-16,
+  100x30. The surface cluster's `2 3 4` digits and the sync
+  segment's `u undo`, `9s`, and `Synced` are legible muted text
+  against the base ground, not the near-invisible Faint-on-slot-8
+  the gate found.

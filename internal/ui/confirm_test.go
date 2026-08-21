@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -269,5 +270,36 @@ func TestApp_ConfirmOnStack_ThemeRepaintReachesTheModal(t *testing.T) {
 	}
 	if c.theme != app.theme {
 		t.Errorf("the pushed Confirm's own theme = %v, want it to match App's own rebuilt theme %v", c.theme, app.theme)
+	}
+}
+
+// sgrRun is one lipgloss Render() call's output: an SGR open, its
+// literal text, and the SGR reset that closes it.
+var sgrRun = regexp.MustCompile(`\x1b\[[0-9;]+m([^\x1b]*)\x1b\[m`)
+
+// TestConfirmAnswerRow_DefaultPillIsOneStyledRun proves the pill
+// merge (pass 2 gate finding: reverse video at ANSI-16 rendered the
+// default answer's key and label as two separate Render() calls,
+// splitting the pill's reverse-video plate in two at the boundary
+// between them). The pill text must appear as exactly one SGR
+// open/close run, never split across two.
+func TestConfirmAnswerRow_DefaultPillIsOneStyledRun(t *testing.T) {
+	c := testConfirm(t, nil, nil)
+	updated, _ := c.Update(ThemeMsg{Theme: theme.New(true, theme.ProfileANSI16)})
+	c = updated.(Confirm) //nolint:errcheck // Confirm's Update always returns a Confirm
+
+	th := c.theme
+	b := th.Border(theme.BorderModal)
+	row := confirmAnswerRow(c, b.Left, b.Right, c.geometry().width)
+
+	const wantPill = "  n stay  "
+	var matches int
+	for _, m := range sgrRun.FindAllStringSubmatch(row, -1) {
+		if m[1] == wantPill {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Errorf("answer row carries the %q run as one SGR open/close pair %d times, want exactly 1\nrow: %q", wantPill, matches, row)
 	}
 }

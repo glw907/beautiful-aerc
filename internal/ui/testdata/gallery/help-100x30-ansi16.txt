@@ -1,16 +1,16 @@
-\x1b[37m  \x1b[94;1m1 Mail\x1b[37;22m  \x1b[90;2m2\x1b[37;22m \x1b[90;2m3\x1b[37;22m \x1b[90;2m4\x1b[37;22m                                                                             \x1b[90;2mSynced\x1b[37;22m  \x1b[m
+\x1b[37m  \x1b[94;1m1 Mail\x1b[37;22m  \x1b[90m2\x1b[37m \x1b[90m3\x1b[37m \x1b[90m4\x1b[37m                                                                             \x1b[90mSynced\x1b[37m  \x1b[m
 \x1b[37m  \x1b[1mHelp - Mail\x1b[22m                                                                                       \x1b[m
 \x1b[37m                                                                                                    \x1b[m
 \x1b[37m  \x1b[1mGlobal\x1b[22m                                           \x1b[1mThis screen\x1b[22m                                      \x1b[m
-\x1b[37m  j/k       \x1b[90;2mdown / up\x1b[37;22m                              q  \x1b[90;2mquit\x1b[37;22m                                          \x1b[m
-\x1b[37m  space/b   \x1b[90;2mpage forward / back\x1b[37;22m                                                                     \x1b[m
-\x1b[37m  home/end  \x1b[90;2mfirst / last (G works too)\x1b[37;22m                                                              \x1b[m
-\x1b[37m  enter     \x1b[90;2mopen\x1b[37;22m                                                                                    \x1b[m
-\x1b[37m  esc       \x1b[90;2mback - dismiss banner\x1b[37;22m                                                                   \x1b[m
-\x1b[37m  1-4       \x1b[90;2mMail - Calendar - People - Config\x1b[37;22m                                                       \x1b[m
-\x1b[37m  u         \x1b[90;2mundo\x1b[37;22m                                                                                    \x1b[m
-\x1b[37m  ?         \x1b[90;2mhelp\x1b[37;22m                                                                                    \x1b[m
-\x1b[37m  q         \x1b[90;2mquit\x1b[37;22m                                                                                    \x1b[m
+\x1b[37m  j/k       \x1b[90mdown / up\x1b[37m                              q  \x1b[90mquit\x1b[37m                                          \x1b[m
+\x1b[37m  space/b   \x1b[90mpage forward / back\x1b[37m                                                                     \x1b[m
+\x1b[37m  home/end  \x1b[90mfirst / last (G works too)\x1b[37m                                                              \x1b[m
+\x1b[37m  enter     \x1b[90mopen\x1b[37m                                                                                    \x1b[m
+\x1b[37m  esc       \x1b[90mback - dismiss banner\x1b[37m                                                                   \x1b[m
+\x1b[37m  1-4       \x1b[90mMail - Calendar - People - Config\x1b[37m                                                       \x1b[m
+\x1b[37m  u         \x1b[90mundo\x1b[37m                                                                                    \x1b[m
+\x1b[37m  ?         \x1b[90mhelp\x1b[37m                                                                                    \x1b[m
+\x1b[37m  q         \x1b[90mquit\x1b[37m                                                                                    \x1b[m
 \x1b[37m                                                                                                    \x1b[m
 \x1b[37m                                                                                                    \x1b[m
 \x1b[37m                                                                                                    \x1b[m
@@ -27,4 +27,4 @@
 \x1b[37m                                                                                                    \x1b[m
 \x1b[37m                                                                                                    \x1b[m
 \x1b[37m                                                                                                    \x1b[m
-\x1b[37m  j/k\x1b[90;2m navigate\x1b[37;22m   space/b\x1b[90;2m page\x1b[37;22m   esc\x1b[90;2m back\x1b[37;22m                                                    ?\x1b[90;2m help\x1b[37;22m  \x1b[m
+\x1b[37m  j/k\x1b[90m navigate\x1b[37m   space/b\x1b[90m page\x1b[37m   esc\x1b[90m back\x1b[37m                                                    ?\x1b[90m help\x1b[37m  \x1b[m
