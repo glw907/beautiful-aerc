@@ -33,8 +33,8 @@ it. Updating this STATUS is step one and is never optional.
 Phase 5 is in progress. Passes 1 (foundation), 1b (integration and
 hardening), 1c (measurement and the driver decision), and 2 (design
 language and shell) are done; pass 2c (real-terminal verification
-and the help screen) is planned and is the next action, below, and
-carries the pass 2 gate inside it. Pass 2b (onboarding and config)
+and the help screen) is mid-execution, tasks 1-3 landed, and
+carries the pass 2 gate inside it (see Next). Pass 2b (onboarding and config)
 queues behind it per the approved split.
 
 Pass 2 outcomes (2026-08-20), commits df034ce through acd8297:
@@ -703,9 +703,40 @@ and both gates close together. The pass 2 ledger
 (.superpowers/sdd/2026-08-19-pass-2-design-language-and-shell/progress.md)
 is retained until then.
 
-Starter prompt for pass 2c (paste after /clear in ~/Projects/poplar,
-in an Opus 5 session; the plan is authored and the rulings sitting
-comes first):
+Pass 2c is in progress (2026-08-21). Tasks 1-3 are complete and
+reviewed on master: the harness as a checked gate (63d02b1), one
+composition path for App.View and cmd/sketch with a single-source
+equality guard (1c2ebc7, 982e3a8), and the two ANSI-16 degrade fixes
+(32afa8f). Geoff ruled mid-sitting that help is a popover modal over a
+dimmed screen, not a full-region overlay; the ledger carries that
+ruling, the proposed dim (25-30% toward the base ground, extended to
+the quit confirm), and a draft popover wireframe. Tasks 4 and 5 wait
+on the 22 rulings plus that one and on the wireframe; task 6 follows.
+The review shape follows the 2026-08-21 "Conducting a pass" rule
+(diff-reviewer per task, domain reviewers at pass end).
+
+Resume prompt (paste after /clear in ~/Projects/poplar, in a Fable
+session per the standing orchestration ruling):
+
+```
+Resume poplar pass 2c. Read
+docs/superpowers/specs/poplar-refounding-STATUS.md, then the ledger at
+.superpowers/sdd/2026-08-21-pass-2c-real-terminal-verification/progress.md
+(its session-break section is the cursor), then the plan at
+docs/superpowers/plans/2026-08-21-pass-2c-real-terminal-verification.md.
+Tasks 1-3 are done; do not re-dispatch them. Put the open rulings
+(rulings-sitting.html in the ledger directory, items 1-23) and the
+task 4 wireframe draft (task-4-wireframe-draft.md there) to Geoff in
+one batch, record the answers in the ledger, then execute tasks 4-6
+per the conducting-a-pass rule: one poplar-implementer at a time,
+diff-reviewer per task, tui-visual-verify on every screen claim,
+gate evidence a captured exit code with an isolated
+GOLANGCI_LINT_CACHE. Task 6 re-runs the capture matrix and closes
+the pass 2 and 2c gates together.
+```
+
+The original pass 2c starter prompt, superseded by the resume prompt
+above:
 
 ```
 Run poplar pass 2c. Read
