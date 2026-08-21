@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image"
+	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -564,13 +565,32 @@ func exemplarFooterPriority() []key.Binding {
 	return bindings
 }
 
+// exemplarRenderPath is the pinned shell exemplar's own committed
+// render, the source TestRenderFooter_MatchesPinnedExemplarAt80 reads
+// directly rather than transcribing a line of it as a literal, so the
+// pin cannot drift from what the exemplar itself renders.
+const exemplarRenderPath = "../../docs/poplar/design/2026-08-19-shell-exemplar/render.txt"
+
+// exemplarRenderLine returns line n (1-based) of exemplarRenderPath,
+// with show()'s own two-cell print indent stripped: that indent is
+// never part of the row itself.
+func exemplarRenderLine(t *testing.T, n int) string {
+	t.Helper()
+	data, err := os.ReadFile(exemplarRenderPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", exemplarRenderPath, err)
+	}
+	lines := strings.Split(string(data), "\n")
+	if n < 1 || n > len(lines) {
+		t.Fatalf("%s has %d line(s), want line %d to exist", exemplarRenderPath, len(lines), n)
+	}
+	return strings.TrimPrefix(lines[n-1], "  ")
+}
+
 // TestRenderFooter_MatchesPinnedExemplarAt80 verifies the pin-reserve
-// ruling (task-7-findings-r1.md F1): rendering the exemplar's own
-// FOOTER_PRIORITY at 80 columns reproduces the exemplar's own
-// "Spartan 80" row
-// (docs/poplar/design/2026-08-19-shell-exemplar/render.txt, line 78)
-// byte for byte, once its own two-cell print indent is stripped
-// (show()'s own "  " prefix, never part of the row itself).
+// ruling: rendering the exemplar's own FOOTER_PRIORITY at 80 columns
+// reproduces the exemplar's own "Spartan 80" row, line 78 of
+// exemplarRenderPath, byte for byte.
 func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	bindings := exemplarFooterPriority()
@@ -580,7 +600,7 @@ func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
 		Keys:           flatKeyMap(bindings...),
 	}
 
-	want := "  Enter open   a archive   d delete   r reply   m compose               ? help  "
+	want := exemplarRenderLine(t, 78)
 	if got := ansi.Strip(renderFooter(entry, th, 80)); got != want {
 		t.Errorf("renderFooter(80) = %q, want the exemplar's own row %q", got, want)
 	}

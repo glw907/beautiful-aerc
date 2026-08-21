@@ -115,9 +115,9 @@ func (lm LayoutMode) Content() PaneRect {
 // spacing table comes from theme; a value that is this file's own
 // grid arithmetic is a local constant.
 const (
-	railWidth = 22 // the rail pane's width
-	paneX     = railWidth + 1 + theme.GapPane
-	listWidth = 62 // the wide rung's practical list width
+	railWidth = 22                            // the rail pane's width
+	paneX     = railWidth + 1 + theme.GapPane // the rail, its divider column, and the gutter before content
+	listWidth = 62                            // the wide rung's practical list width
 
 	cardGutter = theme.GapPane // list-to-reader gutter; a divider only under Theme.DrawsDividers
 
@@ -130,9 +130,9 @@ const (
 	heightShortMin = 15
 	heightFullMin  = 20
 
-	sidebarMin = paneX // dropping the sidebar frees exactly this much
-	contentMin = 30    // composition rule 3's preview-readable floor
-	splitMin   = theme.GapPane + 40
+	sidebarMin = paneX              // dropping the sidebar frees exactly this much
+	contentMin = 30                 // composition rule 3's preview-readable floor
+	splitMin   = theme.GapPane + 40 // the gutter before the split pane, plus a readable floor for the reader card
 
 	readerCardCap = readerContentCap + 2*theme.PadCard
 )
