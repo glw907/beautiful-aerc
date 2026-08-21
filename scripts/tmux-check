@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# tmux-check drives a real, built poplar through the tier-3 smoke flow
+# (task 12, survey amendment C's third tier): launch, switch through
+# every surface, open help, quit, keyboard only, poplar's own exit
+# code captured. It needs a real terminal and a real configured
+# account (the same assumption scripts/conformance and the live jmap
+# suites make), so it runs on the gate platform by hand, at a pass
+# gate, never in CI or `make check`.
+
+binary="${POPLAR_BINARY:-./poplar}"
+if [ ! -x "$binary" ]; then
+  echo "tmux-check: $binary not found or not executable; run \`make build\` first" >&2
+  exit 1
+fi
+
+session="poplar-tmux-check-$$"
+exit_file="$(mktemp)"
+trap 'tmux kill-session -t "$session" >/dev/null 2>&1 || true; rm -f "$exit_file"' EXIT
+
+tmux new-session -d -s "$session" -x 100 -y 30 \
+  "$binary; echo \$? > $exit_file"
+
+sleep 1
+for key in 2 3 4 1 '?'; do
+  tmux send-keys -t "$session" "$key"
+  sleep 0.3
+done
+# Esc closes the help overlay (it sits on App's own stack; q alone
+# does not quit off a non-empty stack, BACKLOG #71) before q reaches
+# a surface root and actually quits.
+tmux send-keys -t "$session" Escape
+sleep 0.3
+tmux send-keys -t "$session" q
+
+for _ in $(seq 1 20); do
+  [ -s "$exit_file" ] && break
+  sleep 0.5
+done
+
+if [ ! -s "$exit_file" ]; then
+  echo "tmux-check: poplar never exited after the quit key" >&2
+  exit 1
+fi
+
+code="$(cat "$exit_file")"
+echo "tmux-check: poplar exited $code"
+exit "$code"

@@ -110,6 +110,25 @@ func TestGallery_TwoSweepsByteIdentical(t *testing.T) {
 	}
 }
 
+// TestGallery_PinnedAgainstTZ proves the fixtures package's own
+// pinned TZ and Clock (fixtures.go), not the process environment,
+// govern the gallery: flipping $TZ changes what time.Local resolves
+// to, and the sweep's own output must not move (QA-7's
+// locale-and-TZ-pinned clause).
+func TestGallery_PinnedAgainstTZ(t *testing.T) {
+	t.Setenv("TZ", "America/Los_Angeles")
+	first := sweepGallery()
+
+	t.Setenv("TZ", "Asia/Tokyo")
+	second := sweepGallery()
+
+	for name, a := range first {
+		if b := second[name]; a != b {
+			t.Errorf("%s: gallery render moved when $TZ changed", name)
+		}
+	}
+}
+
 // sweepGallery renders every galleryCases × its own profiles point
 // once, keyed by the same name checkGallery persists under.
 func sweepGallery() map[string]string {

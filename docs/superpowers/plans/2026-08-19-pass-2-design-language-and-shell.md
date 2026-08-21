@@ -1136,6 +1136,19 @@ join with pass 3's list; task 1's token-level test already covers
 all four). freeze stills of the F1 and F2 gallery renders in both
 themes are committed for the design record (survey amendment F).
 
+The teatest swap path (survey amendment A's closing requirement,
+landed with this task): `charmbracelet/x/exp/teatest/v2` lives under
+the experimental `x/exp` path (ADR-0014 revision 2's own named
+risk), so a bubbletea bump it has not caught up with swaps for a
+hand-rolled harness over `tea.WithInput`/`tea.WithOutput` piping
+keystrokes in and reading rendered frames back, the same
+virtual-terminal shape teatest itself wraps. Only the five functions
+in `cmd/poplar/flow_test.go` move: the ST-2 offline-start test, both
+quit-path subtests, the surface-switch round trip, and the
+never-answering-terminal case. Nothing else in the module imports
+teatest, and every committed gallery file is plain text `ui.Render`
+itself produces, so a swap touches one file and no golden.
+
 **Acceptance criteria:**
 - The gallery check runs in `make check`'s test step and CI
   verbatim: a stray diff between committed renders and a fresh

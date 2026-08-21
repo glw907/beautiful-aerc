@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -128,7 +129,11 @@ var update = flag.Bool("update", false, "update committed gallery renders")
 // TestGallery sweeps every fixture × profile × size point through
 // the render seam (design decision 10, amendment B), then fails on
 // any committed file under galleryDir the sweep did not just produce
-// (an orphan left behind by a since-removed or renamed case). Run
+// (an orphan left behind by a since-removed or renamed case). Each
+// render commits with a ground-map sidecar, name+".ground.txt"
+// (task 12): one character per cell naming the theme.Ground
+// LayoutMode declares there, so a pane regression stays visible even
+// where the render itself is blank. Run
 // `go test ./internal/ui/ -run '^TestGallery$' -update` to accept a
 // deliberate change; without it, a stray diff or an orphan fails the
 // case.
@@ -136,17 +141,40 @@ func TestGallery(t *testing.T) {
 	expected := make(map[string]bool)
 	for _, c := range galleryCases {
 		for _, sz := range c.sizes {
+			ground := galleryGroundMap(c, sz)
 			for _, p := range c.profiles() {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
 				expected[name+".txt"] = true
+				expected[name+".ground.txt"] = true
 				t.Run(name, func(t *testing.T) {
 					got := galleryRender(c, sz, p.theme)
 					checkGallery(t, name, got, *update)
+				})
+				t.Run(name+"/ground", func(t *testing.T) {
+					checkGallery(t, name+".ground", ground, *update)
 				})
 			}
 		}
 	}
 	checkNoOrphans(t, expected)
+}
+
+// TestGalleryCoversRegisteredScreens proves every currently
+// registered screen type (ui.Registered, registry.go) appears among
+// the gallery's own fixtures: a screen that registers without also
+// gaining a galleryCases entry fails here, rather than the matrix
+// silently missing it (task 12's own registry-driven promise).
+func TestGalleryCoversRegisteredScreens(t *testing.T) {
+	th := galleryProfiles[0].theme
+	swept := make(map[reflect.Type]bool)
+	for _, c := range galleryCases {
+		swept[reflect.TypeOf(c.fixture.Build(th))] = true
+	}
+	for _, e := range ui.Registered() {
+		if !swept[e.Type] {
+			t.Errorf("%s is registered but no gallery case builds it", e.Type)
+		}
+	}
 }
 
 // galleryRender renders c's own fixture at sz through the seam,

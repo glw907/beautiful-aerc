@@ -10,7 +10,7 @@ POPLARCHECK := tools/bin/poplarcheck
 
 .PHONY: all build test install fmt check conformance \
 	tidy-check check-build fmt-check lint analyzers jmap-boundary tagged-vet vale-comments skipcheck hookcheck perf \
-	build-golangci-lint build-poplarcheck gallery
+	build-golangci-lint build-poplarcheck gallery tmux-check
 
 # The conformance suite's server. Podman leads because this is the
 # runtime the target is actually exercised against, and because
@@ -46,6 +46,16 @@ test:
 # change the behavior of anyway, but running it here is pure waste).
 # Scoped to the internal/ui package alone, not ./..., since -update
 # is a flag internal/ui/fixtures' own test binary does not register.
+#
+# Churn policy (task 12, survey amendment G): this target is the only
+# way a committed render or its ground-map sidecar changes. Read the
+# diff before committing it, the same as any other golden;
+# `git add -p` over testdata/gallery is the fast way to confirm every
+# changed file traces to the screen a commit actually touched. A
+# chrome task's own churn stays inside the screens it touched; a diff
+# that also moves an unrelated fixture's render is a bug in the task,
+# not a gallery to wave through. The pass-end reviewer reads gallery
+# churn explicitly for exactly this reason.
 gallery:
 	go test ./internal/ui/ -run '^TestGallery$$' -update -count=1
 
@@ -175,6 +185,15 @@ hookcheck:
 # coverage runs in CI instead (section 2).
 perf:
 	go test -tags perf -p 1 -run 'QA[123]' -count=1 ./...
+
+# tmux-check drives the built binary through the tier-3 smoke flow
+# (task 12, survey amendment C): launch, switch all four surfaces,
+# open help, quit, keyboard only, poplar's own exit code captured. It
+# needs a real terminal and a real configured account, so it is a
+# gate-platform tool run by hand at a pass gate, never part of `make
+# check` or CI.
+tmux-check: build
+	./scripts/tmux-check
 
 build-golangci-lint:
 	go build -C tools -o bin/golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
