@@ -17,9 +17,11 @@ import (
 
 // galleryDir is where the gallery's committed renders live (design
 // decision 10, amendment B): one file per fixture × profile × size
-// point, named <fixture>-<w>x<h>-<profile>.txt so a later sidecar
-// (task 12's ground map) can sit beside a render, same basename,
-// without a rename.
+// point, named <fixture>-<w>x<h>-<profile>.txt, plus one ground-map
+// sidecar per fixture × size point, named <fixture>-<w>x<h>.ground.txt
+// (task 12): the ground map is profile-invariant (ProfileTrueColor is
+// the only profile a background paints at all), so it carries no
+// profile suffix and is not duplicated per profile.
 const galleryDir = "testdata/gallery"
 
 type gallerySize struct{ width, height int }
@@ -91,14 +93,37 @@ func (c galleryCase) profiles() []galleryProfile {
 // rendering path of its own.
 var syncStateProfiles = []galleryProfile{galleryProfiles[0], galleryProfiles[3]}
 
-// chromeStateProfiles narrows task 8's own toast, banner, and modal
-// fixtures to truecolor dark and NO_COLOR, the same pairing
-// syncStateProfiles uses: the content pane beneath them never varies,
-// and ANSI-16 adds no distinct rendering path of its own.
+// chromeStateProfiles narrows task 8's toast and banner fixtures to
+// truecolor dark and NO_COLOR, the same pairing syncStateProfiles
+// uses: the content pane beneath them never varies, and ANSI-16 adds
+// no distinct rendering path. ModalConfirm and Help do not use this
+// narrowing (review round 1, finding 3): unlike toast and banner,
+// the box and border glyphs they draw change per profile.
 var chromeStateProfiles = syncStateProfiles
 
+// mailBoundarySizes are the three remaining named boundary pairs
+// (task 3's LayoutMode table; 99/100 already lands via the Help case
+// below), each at a comfortable height in the class the pair sits
+// inside: 59/60 is the width-floor/spartan boundary, where Mail drops
+// all chrome below it; 139/140 is the standard/wide boundary, where
+// PaneSplit and the reader card appear (150x26 exercises the same
+// path at a size past it); 14/15 is the height-floor/short boundary;
+// 19/20 is the short/full boundary, where a banner row becomes
+// possible. Mail changes distinctly at each, the same reasoning that
+// gave it 150x26.
+var mailBoundarySizes = []gallerySize{
+	{59, 24},
+	{60, 24},
+	{139, 26},
+	{140, 26},
+	{100, 14},
+	{100, 15},
+	{100, 19},
+	{100, 20},
+}
+
 var galleryCases = []galleryCase{
-	{fixture: fixtures.Mail, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
+	{fixture: fixtures.Mail, sizes: append([]gallerySize{{80, 24}, {100, 30}, {150, 26}}, mailBoundarySizes...)},
 	{fixture: fixtures.MailLoaded, sizes: []gallerySize{{100, 30}}, narrowProfiles: galleryProfiles[:2]},
 	// The second size point, 100×16, is HeightShort: F6's own gallery
 	// proof that the sync segment drops its known total there
@@ -108,14 +133,18 @@ var galleryCases = []galleryCase{
 	{fixture: fixtures.MailBackingOff, sizes: []gallerySize{{100, 30}}, narrowProfiles: syncStateProfiles},
 	{fixture: fixtures.MailToast, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
 	{fixture: fixtures.MailBanner, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles},
-	{fixture: fixtures.ModalConfirm, sizes: []gallerySize{{100, 30}}, narrowProfiles: chromeStateProfiles, stackTop: true},
+	// ModalConfirm and Help both sweep every profile (review round 1,
+	// finding 3): the chromeStateProfiles narrowing loses the degrade
+	// lane for a screen where a box and border glyphs, not a content
+	// pane beneath it, are what a profile actually changes.
+	{fixture: fixtures.ModalConfirm, sizes: []gallerySize{{80, 24}, {100, 30}}, stackTop: true},
 	// The help overlay sweeps F5 (80x24, one column), F6 (100x30, two
 	// columns), and the 99/100 boundary pair at a shared height, the
 	// one layout boundary the overlay itself consumes.
-	{fixture: fixtures.Help, sizes: []gallerySize{{80, 24}, {99, 30}, {100, 30}}, narrowProfiles: chromeStateProfiles, fullRegion: true},
-	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}}},
-	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}}},
-	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}}},
+	{fixture: fixtures.Help, sizes: []gallerySize{{80, 24}, {99, 30}, {100, 30}}, fullRegion: true},
+	{fixture: fixtures.Calendar, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
+	{fixture: fixtures.Contacts, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
+	{fixture: fixtures.Config, sizes: []gallerySize{{80, 24}, {100, 30}, {150, 26}}},
 	{fixture: fixtures.Floor, sizes: []gallerySize{{40, 10}}},
 	{fixture: fixtures.Short, sizes: []gallerySize{{100, 16}}},
 }
@@ -130,10 +159,11 @@ var update = flag.Bool("update", false, "update committed gallery renders")
 // the render seam (design decision 10, amendment B), then fails on
 // any committed file under galleryDir the sweep did not just produce
 // (an orphan left behind by a since-removed or renamed case). Each
-// render commits with a ground-map sidecar, name+".ground.txt"
-// (task 12): one character per cell naming the theme.Ground
-// LayoutMode declares there, so a pane regression stays visible even
-// where the render itself is blank. Run
+// fixture × size point also commits a ground-map sidecar,
+// name+".ground.txt" (task 12): one character per cell naming the
+// theme.Ground the rendered frame's SGR background resolves to
+// (galleryGroundMap), so a pane regression stays visible even where
+// the render itself is blank. Run
 // `go test ./internal/ui/ -run '^TestGallery$' -update` to accept a
 // deliberate change; without it, a stray diff or an orphan fails the
 // case.
@@ -141,17 +171,19 @@ func TestGallery(t *testing.T) {
 	expected := make(map[string]bool)
 	for _, c := range galleryCases {
 		for _, sz := range c.sizes {
-			ground := galleryGroundMap(c, sz)
+			groundName := c.fixture.Name + "-" + sz.String() + ".ground"
+			expected[groundName+".txt"] = true
+			t.Run(groundName, func(t *testing.T) {
+				got := galleryGroundMap(t, c, sz)
+				checkGallery(t, groundName, got, *update)
+			})
+
 			for _, p := range c.profiles() {
 				name := c.fixture.Name + "-" + sz.String() + "-" + p.name
 				expected[name+".txt"] = true
-				expected[name+".ground.txt"] = true
 				t.Run(name, func(t *testing.T) {
 					got := galleryRender(c, sz, p.theme)
 					checkGallery(t, name, got, *update)
-				})
-				t.Run(name+"/ground", func(t *testing.T) {
-					checkGallery(t, name+".ground", ground, *update)
 				})
 			}
 		}
@@ -159,11 +191,44 @@ func TestGallery(t *testing.T) {
 	checkNoOrphans(t, expected)
 }
 
+// TestGalleryGroundMapMatchesLayout cross-checks galleryGroundMap's
+// render-derived map against layoutGroundMap's ComputeLayout claim
+// for every ordinarily composited case: a component that paints the
+// wrong ground moves the render (and so galleryGroundMap) while
+// ComputeLayout's declared map stays put, so a mismatch here fails in
+// process, with no dependency on a committed file (review round 1,
+// finding 1). A stackTop or fullRegion case is skipped: the screen
+// itself owns that whole region and is free to paint grounds
+// ComputeLayout's backdrop declaration never claimed (Confirm's box,
+// Help's panel background), which is exactly why Render bypasses
+// per-pane compositing for them in the first place.
+func TestGalleryGroundMapMatchesLayout(t *testing.T) {
+	for _, c := range galleryCases {
+		if c.stackTop || c.fullRegion {
+			continue
+		}
+		for _, sz := range c.sizes {
+			name := c.fixture.Name + "-" + sz.String()
+			t.Run(name, func(t *testing.T) {
+				rendered := galleryGroundMap(t, c, sz)
+				declared := layoutGroundMap(c, sz)
+				if rendered != declared {
+					t.Errorf("ground map derived from the render disagrees with ComputeLayout's declaration:\nrendered:\n%s\ndeclared:\n%s", rendered, declared)
+				}
+			})
+		}
+	}
+}
+
 // TestGalleryCoversRegisteredScreens proves every currently
 // registered screen type (ui.Registered, registry.go) appears among
-// the gallery's own fixtures: a screen that registers without also
+// the gallery's fixtures: a screen that registers without also
 // gaining a galleryCases entry fails here, rather than the matrix
-// silently missing it (task 12's own registry-driven promise).
+// silently missing it (task 12's registry-driven promise). It proves
+// only that much: a registered screen with at least one fixture, not
+// that every rung or profile it renders distinctly at is swept (that
+// completeness is a human read of galleryCases against the design
+// language's rung table, not a mechanical check).
 func TestGalleryCoversRegisteredScreens(t *testing.T) {
 	th := galleryProfiles[0].theme
 	swept := make(map[reflect.Type]bool)

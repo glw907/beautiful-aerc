@@ -147,6 +147,16 @@ func groundHex(g Ground, isDark bool) string {
 	return groundLight[g]
 }
 
+// GroundHex returns g's background hex color at isDark, with no
+// leading "#": the same table paintGround resolves a Style's
+// background from. It exists for a caller outside this package that
+// needs to invert a rendered frame's SGR background back to the
+// Ground that painted it (internal/ui's gallery ground-map sidecar,
+// task 12 review round 1), rather than a second, hand-copied palette.
+func GroundHex(g Ground, isDark bool) string {
+	return groundHex(g, isDark)
+}
+
 func ansi16Slot(role Role, isDark bool) int {
 	role = baseRole(role)
 	if isDark {

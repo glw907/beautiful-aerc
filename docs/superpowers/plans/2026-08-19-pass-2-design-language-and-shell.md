@@ -1149,6 +1149,21 @@ never-answering-terminal case. Nothing else in the module imports
 teatest, and every committed gallery file is plain text `ui.Render`
 itself produces, so a swap touches one file and no golden.
 
+QA-7's TZ-and-locale clause is discharged by construction, not by a
+subprocess-TZ test (review round 1, finding 2: `t.Setenv("TZ", ...)`
+cannot move an already-initialized `time.Local`, and no source in
+`internal/ui` or `internal/theme` called it anyway): `internal/ui`'s
+`TestNoWallClockReferences` fails any non-test source in those two
+packages, `internal/ui/fixtures` exempted, that references
+`time.Now`, `time.Local`, or `time.Since`, so the by-construction
+claim stays enforced when pass 3 adds date-rendering pressure.
+
+Churn policy (survey amendment G): `make gallery` is the only way a
+committed render or its ground-map sidecar changes; the diff is read
+before committing, the same as any other golden; a chrome task's
+churn stays inside the screens it touched; the pass-end reviewer
+reads gallery churn explicitly.
+
 **Acceptance criteria:**
 - The gallery check runs in `make check`'s test step and CI
   verbatim: a stray diff between committed renders and a fresh

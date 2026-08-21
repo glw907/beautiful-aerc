@@ -1,0 +1,23 @@
+
+
+
+
+
+
+
+
+               \x1b[90m+-----------------------------------------------+\x1b[m
+               \x1b[90m|\x1b[37m                                               \x1b[90m|\x1b[m
+               \x1b[90m|\x1b[37m  \x1b[1mQuit with 2 unsent messages?\x1b[22m                 \x1b[90m|\x1b[m
+               \x1b[90m|\x1b[37m  \x1b[90;2mThey'll send the next time you open poplar.\x1b[37;22m  \x1b[90m|\x1b[m
+               \x1b[90m|\x1b[37m                                               \x1b[90m|\x1b[m
+               \x1b[90m|\x1b[37m              y\x1b[90;2m quit\x1b[37;22m  \x1b[7m  n\x1b[90;2m stay  \x1b[37;22;27m               \x1b[90m|\x1b[m
+               \x1b[90m|\x1b[37m                                               \x1b[90m|\x1b[m
+               \x1b[90m+-----------------------------------------------+\x1b[m
+
+
+
+
+
+
+

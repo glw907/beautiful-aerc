@@ -1,0 +1,26 @@
+  \x1b[2m1\x1b[m \x1b[2m2\x1b[m \x1b[2m3\x1b[m \x1b[1m4 Config\x1b[m                                                                                                                              \x1b[2mSynced\x1b[m
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                              \x1b[1mConfig\x1b[m                            |
+                      |                                                                |
+                      |              the config surface lands with pass 2b             |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+  q\x1b[2m quit\x1b[m                                                                                                                                      ?\x1b[2m help\x1b[m

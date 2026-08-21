@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -152,6 +155,18 @@ func TestFlow_SurfaceSwitchRoundTrip(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
+// groundBackgroundSGR is the exact standalone SGR sequence
+// theme.New(isDark, ProfileTrueColor)'s GroundBase paints
+// (theme.Blank, no foreground alongside it): a blank Main row, most
+// of any placeholder's frame, carries this sequence verbatim.
+func groundBackgroundSGR(isDark bool) string {
+	hex := theme.GroundHex(theme.GroundBase, isDark)
+	r, _ := strconv.ParseInt(hex[0:2], 16, 32)
+	g, _ := strconv.ParseInt(hex[2:4], 16, 32)
+	b, _ := strconv.ParseInt(hex[4:6], 16, 32)
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
+}
+
 // TestFlow_NeverAnsweringTerminalStaysDark is task 2's own
 // never-answering-terminal case, driven through a real *tea.Program
 // rather than the direct App.Update harness
@@ -160,18 +175,36 @@ func TestFlow_SurfaceSwitchRoundTrip(t *testing.T) {
 // never answers App.Init's tea.RequestBackgroundColor query, so the
 // BackgroundColorWait this test sleeps past is the real timeout path
 // a live terminal that never replies takes, not a message this test
-// injects itself. tm.Output() drains as each WaitFor reads it, so a
-// later frame identical to one already read leaves nothing new to
-// wait on; the program actually still answering a key past the
-// timeout is this test's own proof that BackgroundColorTimeoutMsg's
-// own Cmd neither hung nor panicked.
+// injects itself. tm.Output() drains destructively, and
+// BackgroundColorTimeoutMsg's correct handler repaints nothing
+// (app.go), so this reads the raw accumulated stream once, after the
+// sleep, rather than through waitForFirstFrame's "Mail" wait, which
+// would already have consumed the one frame carrying the dark
+// SGR (review round 1, finding 4: the prior version asserted nothing
+// about color, and passed even with the timeout branch mutated to
+// repaint light). tea.WithColorProfile(colorprofile.TrueColor) pins
+// the comparison against environment-dependent downsampling, the same
+// reason the ST-2 test above sets it.
 func TestFlow_NeverAnsweringTerminalStaysDark(t *testing.T) {
 	reads := storetest.OpenReadPool(t, store.DefaultWriterConfig())
 	app := ui.NewApp(ui.Deps{Store: reads, Theme: theme.New(true, theme.ProfileTrueColor), Profile: theme.ProfileTrueColor})
-	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(100, 30))
-	waitForFirstFrame(t, tm)
+	tm := teatest.NewTestModel(t, app,
+		teatest.WithInitialTermSize(100, 30),
+		teatest.WithProgramOptions(tea.WithColorProfile(colorprofile.TrueColor)))
 
 	time.Sleep(2 * ui.BackgroundColorWait)
+
+	out, err := io.ReadAll(tm.Output())
+	if err != nil {
+		t.Fatalf("read program output: %v", err)
+	}
+	dark, light := groundBackgroundSGR(true), groundBackgroundSGR(false)
+	if !strings.Contains(string(out), dark) {
+		t.Fatalf("no frame past BackgroundColorWait carried the dark ground's background SGR %q", dark)
+	}
+	if strings.Contains(string(out), light) {
+		t.Errorf("output carries the light ground's background SGR %q; an unanswered query must never repaint light", light)
+	}
 
 	tm.Type("q")
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))

@@ -10,21 +10,9 @@
 package fixtures
 
 import (
-	"time"
-
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/theme"
 	"github.com/glw907/poplar/internal/ui"
-)
-
-// TZ and Clock pin the fixed zone and instant a fixture builds
-// against. TZ is a fixed offset rather than a named IANA zone, so a
-// fixture never depends on the machine's own tzdata. No fixture this
-// pass renders a date, but a later date-bearing screen fixture pins
-// against these same two values rather than inventing its own.
-var (
-	TZ    = time.FixedZone("AKDT", -8*3600)
-	Clock = time.Date(2026, time.August, 19, 9, 41, 0, 0, TZ)
 )
 
 // Fixture is one named, deterministic screen: a Build closure over

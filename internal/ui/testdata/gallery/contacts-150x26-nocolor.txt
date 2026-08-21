@@ -1,0 +1,26 @@
+  \x1b[2m1\x1b[m \x1b[2m2\x1b[m \x1b[1m3 People\x1b[m  \x1b[2m4\x1b[m                                                                                                                             \x1b[2mSynced\x1b[m
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                              \x1b[1mPeople\x1b[m                            |
+                      |                                                                |
+                      |                 contacts sync lands with pass 5                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+                      |                                                                |
+  q\x1b[2m quit\x1b[m                                                                                                                                      ?\x1b[2m help\x1b[m

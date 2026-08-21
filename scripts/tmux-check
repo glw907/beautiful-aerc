@@ -3,11 +3,14 @@ set -euo pipefail
 
 # tmux-check drives a real, built poplar through the tier-3 smoke flow
 # (task 12, survey amendment C's third tier): launch, switch through
-# every surface, open help, quit, keyboard only, poplar's own exit
-# code captured. It needs a real terminal and a real configured
-# account (the same assumption scripts/conformance and the live jmap
-# suites make), so it runs on the gate platform by hand, at a pass
-# gate, never in CI or `make check`.
+# every surface, open help, quit, keyboard only, verifying each step's
+# status-line or overlay text actually changed (review round 1,
+# finding 5: an exit-code-only check cannot fail short of a crash or a
+# hang), and the exit code captured at the end. It needs a real
+# terminal and a real configured account (the same assumption
+# scripts/conformance and the live jmap suites make), so it runs on
+# the gate platform by hand, at a pass gate, never in CI or
+# `make check`.
 
 binary="${POPLAR_BINARY:-./poplar}"
 if [ ! -x "$binary" ]; then
@@ -22,14 +25,34 @@ trap 'tmux kill-session -t "$session" >/dev/null 2>&1 || true; rm -f "$exit_file
 tmux new-session -d -s "$session" -x 100 -y 30 \
   "$binary; echo \$? > $exit_file"
 
-sleep 1
-for key in 2 3 4 1 '?'; do
+# check sends key, then polls the captured pane for want (up to 5s),
+# printing the pane and failing loudly on a timeout: the smoke flow's
+# verification, not just a lack of a crash.
+check() {
+  local key="$1" want="$2"
   tmux send-keys -t "$session" "$key"
-  sleep 0.3
-done
-# Esc closes the help overlay (it sits on App's own stack; q alone
-# does not quit off a non-empty stack, BACKLOG #71) before q reaches
-# a surface root and actually quits.
+  for _ in $(seq 1 10); do
+    sleep 0.5
+    if tmux capture-pane -p -t "$session" | grep -qF "$want"; then
+      return 0
+    fi
+  done
+  echo "tmux-check: after key '$key', expected to see '$want'; pane was:" >&2
+  tmux capture-pane -p -t "$session" >&2
+  exit 1
+}
+
+sleep 1
+check 2 Calendar
+check 3 People
+check 4 Config
+check 1 Mail
+check '?' 'Help ·'
+# Esc pops the help overlay off App's stack; q quits only at a
+# surface root (app.go's handleKey gates the quit branch on an empty
+# stack), and the help entry advertises no q binding at all. This is
+# the interaction grammar, not a workaround for anything expected to
+# change.
 tmux send-keys -t "$session" Escape
 sleep 0.3
 tmux send-keys -t "$session" q
