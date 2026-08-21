@@ -239,8 +239,8 @@ legal prefix of the committed order, that the help overlay's content
 is always the complete keymap, and, added by the pass 2 final fix
 round (revision 3, guard-falsifiability finding F4, RULING: this
 exceeds rather than contradicts the narrowed claim above), that
-every hint the footer actually offers fires its verb — a non-nil Cmd
-or a changed View — when driven through `App.Update` the same way a
+every hint the footer actually offers fires its verb (a non-nil Cmd
+or a changed View) when driven through `App.Update` the same way a
 click's `fireVerb` does, over every registered surface-root entry.
 
 ## 5. Undo presentation (UX-9)
@@ -303,10 +303,11 @@ cairn rule: a gap that forces improvisation is a defect).
   (2026-08-20, revision 3, exemplar authority per decision 13): the
   screen behind it wipes to the base ground rather than rendering
   dimmed, since no dimmed-backdrop rendering exists in the shipped
-  theme to compare against — a standing gate item for Geoff's eye,
-  the same open question the code half of spec M4 left; and `?`
-  never opens help while a modal is showing (the modal owns its own
-  fixed y/n/Esc grammar instead of the global toggle).
+  theme to compare against. That wipe is a standing gate item for
+  Geoff's eye, the same open question the code half of spec M4
+  left. And `?` never opens help while a modal is showing (the
+  modal owns its fixed y/n/Esc grammar instead of the global
+  toggle).
 - **Picker**: the type-ahead chooser (move-to-folder, goto,
   attach path, identity switch, date jump). One input line plus
   a filtered list; `Enter` accepts, `Esc` leaves; can

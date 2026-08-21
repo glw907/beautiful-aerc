@@ -1147,7 +1147,7 @@ ST-2 startup, and nothing the seam or gallery already covers.
 The UX-7 degrade-channel proof is task 1's token-level test
 (`internal/theme/degrade_test.go`: focused and error carry distinct
 non-color channels in ANSI-16 and NO_COLOR; unread and selected join
-with pass 3's list), not a gallery render — the gallery pins a
+with pass 3's list), not a gallery render: the gallery pins a
 rung's geometry and copy, never a contrast guarantee (spec M7,
 pass 2 final fix round). Gallery-exact captures of the F1 and F2
 gallery renders, in both themes, unescaped back to raw bytes (not
