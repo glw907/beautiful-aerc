@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -20,6 +22,8 @@ import (
 	"github.com/glw907/poplar/internal/store"
 	"github.com/glw907/poplar/internal/store/storetest"
 	"github.com/glw907/poplar/internal/theme"
+	"github.com/glw907/poplar/internal/uerr"
+	"github.com/glw907/poplar/internal/uerr/uerrtest"
 	"github.com/glw907/poplar/internal/ui"
 )
 
@@ -97,55 +101,105 @@ func TestRunInteractiveRefusesSecondInstance(t *testing.T) {
 	defer func() { _ = lock.Release() }()
 
 	var out strings.Builder
-	if err := runInteractive(context.Background(), dbPath, flags{}, &out, io.Discard, noopConnector); err == nil {
+	err = runInteractive(context.Background(), dbPath, flags{}, &out, io.Discard, noopConnector)
+	if err == nil {
 		t.Fatal("runInteractive succeeded against a locked store, want refusal")
 	}
+	// Asserting err != nil alone would pass for any store failure at
+	// all; the actionable pid message SY-7 promises lives specifically
+	// behind ClassInstanceLocked (fix round 1 finding 9, m5).
+	_ = uerrtest.AssertClass(t, err, uerr.ClassInstanceLocked)
 }
 
 // TestStartEnginesRetryingInteractiveBridgesTheOfflineCase proves
-// ST-2's own wiring: a non-fatal first connect failure sends
-// ui.SyncStateMsg{State: SyncStateOffline} (runInteractive's own call,
-// before this loop starts), and once retryConnect reaches a live
-// connect, startEnginesInteractive's own bridgeSyncHealth observer
-// takes over and reports Syncing/Synced through the very same send,
-// with no further Offline message once recovered.
+// ST-2's own wiring against real reconnect-then-sync traffic, not a
+// seeded message this test then finds in its own log (fix round 1
+// finding 4, M1: the prior version pushed SyncStateMsg{Offline} into
+// its own log before calling the code under test, so the assertion
+// passed even with an empty function body). connect fails once, then
+// succeeds; startEnginesRetryingInteractive's own retryConnect loop
+// reaches the live backend, and its bridgeSyncHealth observer (set
+// before RunPush's goroutine starts) reports the real Syncing/Synced
+// transition a pushed notification drives, with StoreChangedMsg
+// behind Synced and no Offline message anywhere in this loop's own
+// traffic: initialSyncMsg is runInteractive's own call, not this
+// loop's, and TestInitialSyncMsg covers it directly.
 func TestStartEnginesRetryingInteractiveBridgesTheOfflineCase(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
 
 		refused := errors.New("dial tcp: connection refused")
-		var attempts int
+		notify := make(chan backend.Notification, 1)
+		var attempts atomic.Int64
 		connect := func(context.Context) (backend.Backend, string, error) {
-			attempts++
-			if attempts == 1 {
+			if attempts.Add(1) == 1 {
 				return nil, "", refused
 			}
 			var be backendtest.Fake
 			be.MailSource.ChangesFunc = func(context.Context, backend.ObjectKind, string, int) (backend.ChangeSet, error) {
 				return backend.ChangeSet{}, nil
 			}
+			be.PushSource = &backendtest.FakePush{ListenFunc: func(context.Context) (<-chan backend.Notification, error) {
+				return notify, nil
+			}}
 			return &be, "test-account", nil
 		}
 
 		var log msgLog
-		log.send(ui.SyncStateMsg{State: ui.SyncStateOffline}) // runInteractive's own send, reproduced here
-
 		ctx, cancel := context.WithCancel(context.Background())
 		wg := startEnginesRetryingInteractive(ctx, w, reads, connect, refused, log.send)
 
+		// Past both dial backoffs: engine.go's dialBackoffMin/Max are
+		// 500ms/30s, full jitter, so attempt 0's wait is at most 500ms
+		// and attempt 1's at most 1s; 2s clears both with room to
+		// spare.
+		time.Sleep(2 * time.Second)
 		synctest.Wait()
 
-		got := log.snapshot()
-		if len(got) == 0 {
-			t.Fatal("no messages sent, want at least the seeded Offline message")
+		if got := attempts.Load(); got != 2 {
+			t.Fatalf("connect calls = %d, want 2 (one failure, one reconnect)", got)
 		}
-		if got[0] != (ui.SyncStateMsg{State: ui.SyncStateOffline}) {
-			t.Fatalf("first message = %#v, want the Offline state", got[0])
+		if got := log.snapshot(); len(got) != 0 {
+			t.Fatalf("messages after reconnect alone = %#v, want none: a live stream with no traffic yet sends nothing", got)
+		}
+
+		notify <- backend.Notification{}
+		// Past CoalesceWindow (200ms) and InteractiveQuiet (1s):
+		// ensureAccount's own insert, moments earlier, is itself an
+		// interactive-lane write the bulk lane's flush subordinates
+		// behind (ADR-0003 revision 2).
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+
+		want := []tea.Msg{
+			ui.SyncStateMsg{State: ui.SyncStateSyncing},
+			ui.SyncStateMsg{State: ui.SyncStateSynced},
+			ui.StoreChangedMsg{},
+		}
+		if got := log.snapshot(); !slices.Equal(got, want) {
+			t.Fatalf("messages = %#v, want %#v", got, want)
 		}
 
 		cancel()
 		wg.Wait()
 	})
+}
+
+// TestInitialSyncMsg pins the seam finding 4 extracted: nil connectErr
+// (the first connect already succeeded) sends nothing, since
+// bridgeSyncHealth's own observer takes over from there; any other
+// error reports ST-2's own Offline state, the one sync.State itself
+// has no room for.
+func TestInitialSyncMsg(t *testing.T) {
+	if got := initialSyncMsg(nil); got != nil {
+		t.Errorf("initialSyncMsg(nil) = %#v, want nil", got)
+	}
+
+	err := errors.New("dial tcp: connection refused")
+	want := ui.SyncStateMsg{State: ui.SyncStateOffline}
+	if got := initialSyncMsg(err); got != want {
+		t.Errorf("initialSyncMsg(err) = %#v, want %#v", got, want)
+	}
 }
 
 // TestRunDispatchLoopBridgedSendsOutboxCount proves CARRY 5's own

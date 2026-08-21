@@ -162,28 +162,61 @@ func TestMainReportsStorePathFailureThroughUerr(t *testing.T) {
 	}
 }
 
-// TestRunReportsAnUnwritableLog proves a poplar whose log cannot be
-// written says so on a channel that does not depend on the log. slog
-// discards a handler's write error, so on a full disk or a read-only
-// state directory every error the run reports afterward is dropped
-// with no trace anywhere, which is the one failure the log itself
-// cannot report (SY-8, ADR-0013). The subprocess runs the real main
-// with the log path occupied by a directory: the state directory
-// resolves happily and no write can ever open it.
-func TestRunReportsAnUnwritableLog(t *testing.T) {
-	home := t.TempDir()
-	stateHome := filepath.Join(home, "state")
-	if err := os.MkdirAll(filepath.Join(stateHome, "poplar", "poplar.log"), 0o700); err != nil {
-		t.Fatalf("occupy the log path with a directory: %v", err)
-	}
-
-	dataHome := filepath.Join(home, "data")
+// seedRunnableStore migrates a fresh store under dataHome/poplar and
+// seeds it enough for a --startup-trace run to succeed, the shared
+// setup TestRunFallsBackWhenStateDirIsUnwritable and
+// TestRunReportsAnUnwritableLogWhenBothDestinationsFail both need.
+func seedRunnableStore(t *testing.T, dataHome string) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Join(dataHome, "poplar"), 0o750); err != nil {
 		t.Fatalf("create the data directory: %v", err)
 	}
 	seedStore(t, filepath.Join(dataHome, "poplar", "store.db"),
 		seedAccountSQL,
 		`INSERT INTO mailbox (id, account_id, name) VALUES (1, 1, 'Inbox')`)
+}
+
+// unwritableStateHome creates $XDG_STATE_HOME/poplar under home, mode
+// 0500, the realistic shape row 24's fallback rework targets (a
+// read-only home directory, or a filesystem at quota): the directory
+// resolves and already exists, exactly what xdg.StateFile itself
+// checks for, and only denies the write a trial open catches. A mode
+// occupying the log path with a directory (this suite's own prior
+// shape) is a rarer collision that happens to fail the same way, but
+// is not the common case row 24 names.
+func unwritableStateHome(t *testing.T, home string) string {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permission checks; this probe needs a real denial")
+	}
+	stateHome := filepath.Join(home, "state")
+	statePoplar := filepath.Join(stateHome, "poplar")
+	if err := os.MkdirAll(statePoplar, 0o700); err != nil {
+		t.Fatalf("create the state directory: %v", err)
+	}
+	// chmod after creation: MkdirAll needs write access into
+	// statePoplar to create it in the first place.
+	if err := os.Chmod(statePoplar, 0o500); err != nil { //nolint:gosec // G302: statePoplar is a directory, not a file; 0500 denies write while keeping the execute bit traversal needs, which G302's file-mode heuristic does not account for
+		t.Fatalf("deny write on the state directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(statePoplar, 0o700) }) //nolint:gosec // G302: statePoplar is a directory; restoring 0700 so t.TempDir's own cleanup can remove it
+	return stateHome
+}
+
+// TestRunFallsBackWhenStateDirIsUnwritable proves C2/C3's own fix at
+// the real entry point: an unwritable state directory (mode
+// 0500, not the rarer directory-occupies-the-log-path collision) no
+// longer drops every log line in silence until exit. With a writable
+// temp directory behind it, the fallback engages and startup succeeds
+// clean, with no "cannot write its log" report at all.
+func TestRunFallsBackWhenStateDirIsUnwritable(t *testing.T) {
+	home := t.TempDir()
+	stateHome := unwritableStateHome(t, home)
+
+	dataHome := filepath.Join(home, "data")
+	seedRunnableStore(t, dataHome)
+
+	tmpDir := t.TempDir()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -191,7 +224,50 @@ func TestRunReportsAnUnwritableLog(t *testing.T) {
 	// --startup-trace runs the whole startup path and exits on its own,
 	// so the subprocess needs no signal to finish.
 	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its own subprocess
-	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_STATE_HOME="+stateHome)
+	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_STATE_HOME="+stateHome, "TMPDIR="+tmpDir)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("startup-trace run: %v (stderr: %s)", err, stderr.String())
+	}
+
+	if strings.Contains(stderr.String(), "cannot write its log") {
+		t.Errorf("stderr = %q, want no drop report: the temp-dir fallback should have caught every line", stderr.String())
+	}
+
+	fallback, err := os.ReadFile(filepath.Join(tmpDir, "poplar.log"))
+	if err != nil {
+		t.Fatalf("read the temp-dir fallback log: %v", err)
+	}
+	if !strings.Contains(string(fallback), "state directory unavailable") {
+		t.Errorf("fallback log = %q, want the engagement line and the run's own lines landed in it", fallback)
+	}
+}
+
+// TestRunReportsAnUnwritableLogWhenBothDestinationsFail proves a
+// poplar whose log cannot be written anywhere still says so on a
+// channel that does not depend on the log. slog discards a handler's
+// write error, so with both the state directory and its own temp-dir
+// fallback unwritable, every error run reports afterward would be
+// dropped with no trace anywhere but for this channel (SY-8,
+// ADR-0013). The subprocess runs the real main with an
+// unwritable state directory (mode 0500) and a TMPDIR that does not
+// exist, so neither destination the fallback rework tries can ever
+// open.
+func TestRunReportsAnUnwritableLogWhenBothDestinationsFail(t *testing.T) {
+	home := t.TempDir()
+	stateHome := unwritableStateHome(t, home)
+
+	dataHome := filepath.Join(home, "data")
+	seedRunnableStore(t, dataHome)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "--startup-trace") //nolint:gosec // G204: os.Args[0] is this same test binary, re-invoked as its own subprocess
+	cmd.Env = append(os.Environ(), runMainEnvVar+"=1", "XDG_DATA_HOME="+dataHome, "XDG_STATE_HOME="+stateHome,
+		"TMPDIR="+filepath.Join(home, "does-not-exist"))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

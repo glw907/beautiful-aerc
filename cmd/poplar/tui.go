@@ -83,18 +83,9 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 		return surfaceFatalConnect(connectErr)
 	}
 
-	profile, _ := ui.ResolveProfile(os.LookupEnv)
-	app := ui.NewApp(ui.Deps{Store: reads, Theme: theme.New(ui.DefaultDark, profile), Profile: profile, Account: key})
+	profile, isDark := ui.ResolveProfile(os.LookupEnv)
+	app := ui.NewApp(ui.Deps{Store: reads, Theme: theme.New(isDark, profile), Profile: profile, Account: key})
 	program := ui.NewProgram(app, tea.WithColorProfile(mapColorProfile(profile)))
-
-	// Send blocks on program's own unbuffered message channel until
-	// its event loop starts reading, which has not happened yet at
-	// this point in runInteractive; both sends below run on their own
-	// goroutine so constructing them here cannot deadlock program.Run
-	// a few lines down.
-	if path, ok := uerr.LogFallbackPath(); ok {
-		go program.Send(ui.BannerMsg{Message: fmt.Sprintf("state directory unavailable; logging to %s instead", path)})
-	}
 
 	engineCtx, cancelEngines := context.WithCancel(context.Background())
 	var wg *sync.WaitGroup
@@ -109,14 +100,22 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 		}
 		wg = startEnginesInteractive(engineCtx, accountID, be, writer, reads, program.Send)
 	default:
-		// sync.State has no case for a connect that has not succeeded
-		// even once, since Worker's own loop always retries rather
-		// than giving up (bridge.go's bridgeSyncState); ST-2's offline
-		// state belongs here instead, one send since nothing about it
-		// changes again until retryConnect actually reaches a live
-		// stream and bridgeSyncHealth's own observer takes over.
-		go program.Send(ui.SyncStateMsg{State: ui.SyncStateOffline})
 		wg = startEnginesRetryingInteractive(engineCtx, writer, reads, connect, connectErr, program.Send)
+	}
+
+	// Both sends below run on their own goroutine because program's
+	// message channel is unbuffered and unread until program.Run's
+	// event loop starts a few lines down; both are placed here, after
+	// every pre-Run error path above has already returned, so a
+	// goroutine that blocks until Run starts reading can never outlive
+	// a runInteractive that returned without ever calling Run (finding
+	// 1, fix round 1: reproduced empirically against v2.0.9, whose Run
+	// holds the only p.cancel that would otherwise unblock Send).
+	if msg, ok := logFallbackBanner(); ok {
+		go program.Send(msg)
+	}
+	if msg := initialSyncMsg(connectErr); msg != nil {
+		go program.Send(msg)
 	}
 
 	_, runErr := program.Run()
@@ -125,6 +124,14 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 		// own default signal handler, left enabled) is an ordinary way to
 		// stop a terminal program, not a failure to report and exit 1 on.
 		runErr = nil
+	}
+	var loggedRunErr error
+	if runErr != nil {
+		// A program.Run failure is the binary's highest-visibility
+		// crash; wrapping it here is what reaches the log before
+		// reportStartupFailure's post-exit stderr report (BACKLOG #64's
+		// class, extended to the TUI's own case; fix round 1 finding 6).
+		loggedRunErr = uerr.New("main.tui", nil, uerr.ClassLocalIO, runErr)
 	}
 
 	// The engines' own goroutines (startEnginesInteractive's RunPush and
@@ -139,13 +146,45 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 
 	closeErr := reads.Close()
 	if err := writer.Close(); err != nil {
-		return errors.Join(closeErr, runErr, err)
+		return errors.Join(closeErr, loggedRunErr, err)
 	}
 	reportLogHealth(errOut)
-	if runErr != nil {
-		return errors.Join(closeErr, runErr)
+	if loggedRunErr != nil {
+		return errors.Join(closeErr, loggedRunErr)
 	}
 	return errors.Join(closeErr, store.MarkCleanShutdown(dbPath))
+}
+
+// logFallbackBanner returns the ER-3 banner runInteractive sends once
+// at startup when uerr's log destination is not its normal state-dir
+// home, and whether one is owed at all (dispositions row 24). A
+// working fallback names the path it engaged; a fallback that failed
+// its own trial write too says logging is degraded rather than naming
+// a path nothing reaches (fix round 1 finding 7, m1).
+func logFallbackBanner() (ui.BannerMsg, bool) {
+	if path, ok := uerr.LogFallbackPath(); ok {
+		return ui.BannerMsg{Message: fmt.Sprintf("state directory unavailable; logging to %s instead", path)}, true
+	}
+	if uerr.LogDegraded() {
+		return ui.BannerMsg{Message: "state directory unavailable and logging is degraded; some lines may be lost"}, true
+	}
+	return ui.BannerMsg{}, false
+}
+
+// initialSyncMsg reports the ui.Msg runInteractive sends immediately
+// before program.Run reflecting connectErr's own outcome: nil means
+// the first connect succeeded, and bridgeSyncHealth's own observer
+// (installed on the worker before RunPush starts) takes over from
+// here with nothing to send; any other error is ST-2's own offline
+// case, the state sync.State itself has no room for since Worker's
+// own loop always retries rather than giving up (bridge.go's
+// bridgeSyncState), reported once since nothing about it changes
+// again until retryConnect actually reaches a live stream.
+func initialSyncMsg(connectErr error) tea.Msg {
+	if connectErr == nil {
+		return nil
+	}
+	return ui.SyncStateMsg{State: ui.SyncStateOffline}
 }
 
 // mapColorProfile maps profile, ResolveProfile's own runtime

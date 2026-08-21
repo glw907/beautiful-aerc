@@ -60,15 +60,26 @@ func TestLogDefaultLocation(t *testing.T) {
 	}
 }
 
+// resetLogFallbackState saves uerr's fallback-tracking package vars
+// and returns a restore func, so a test that drives openLogWriter
+// directly (bypassing the process-wide logHandle singleton, exactly
+// as these tests already do) leaves none of that state behind for a
+// later test in this package to trip over.
+func resetLogFallbackState(t *testing.T) {
+	t.Helper()
+	origPath, origWriter, origDegraded := logFallbackPath, logWriter, logDegraded
+	t.Cleanup(func() { logFallbackPath, logWriter, logDegraded = origPath, origWriter, origDegraded })
+}
+
 // TestLogFallsBackToTempDirWhenStateDirUnavailable proves row 24's
 // rework: when $XDG_STATE_HOME's own poplar.log can't be resolved,
 // openLogWriter falls back to a file in the process's own temp
-// directory instead of stderr, and LogFallbackPath reports it, so a
-// caller can warn the operator (ER-3) rather than a JSON log line
-// landing on a terminal a TUI may already own.
+// directory instead of stderr, LogFallbackPath reports it so a caller
+// can warn the operator (ER-3), and the fallback's own engagement
+// logs once through itself (C1), landing in the file it names rather
+// than wherever slog's process-wide default happens to point.
 func TestLogFallsBackToTempDirWhenStateDirUnavailable(t *testing.T) {
-	origPath, origWriter := logFallbackPath, logWriter
-	t.Cleanup(func() { logFallbackPath, logWriter = origPath, origWriter })
+	resetLogFallbackState(t)
 
 	home := t.TempDir()
 	// A file where $XDG_STATE_HOME/poplar would need to be a
@@ -85,12 +96,13 @@ func TestLogFallsBackToTempDirWhenStateDirUnavailable(t *testing.T) {
 	xdg.Reload()
 	t.Cleanup(xdg.Reload)
 
+	wantPath := filepath.Join(os.TempDir(), "poplar.log")
+	t.Cleanup(func() { _ = os.Remove(wantPath) })
+
 	w, ok := openLogWriter().(*rotatingWriter)
 	if !ok {
 		t.Fatalf("openLogWriter() = %T, want *rotatingWriter", openLogWriter())
 	}
-
-	wantPath := filepath.Join(os.TempDir(), "poplar.log")
 	if w.path != wantPath {
 		t.Errorf("fallback log path = %q, want %q", w.path, wantPath)
 	}
@@ -99,22 +111,78 @@ func TestLogFallsBackToTempDirWhenStateDirUnavailable(t *testing.T) {
 	if !ok || path != wantPath {
 		t.Errorf("LogFallbackPath() = (%q, %v), want (%q, true)", path, ok, wantPath)
 	}
-
-	if _, err := w.Write([]byte(`{"msg":"probe"}` + "\n")); err != nil {
-		t.Fatalf("write to the temp-dir fallback: %v", err)
+	if LogDegraded() {
+		t.Error("LogDegraded() = true, want false: the fallback engaged and works")
 	}
-	t.Cleanup(func() { _ = os.Remove(wantPath) })
+	if dropped, err := LogHealth(); dropped != 0 || err != nil {
+		t.Errorf("LogHealth() = (%d, %v), want (0, nil): the engagement line is the only write so far, and it succeeded", dropped, err)
+	}
+
+	logged, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("read the fallback log: %v", err)
+	}
+	if !strings.Contains(string(logged), "state directory unavailable") {
+		t.Errorf("fallback log = %q, want the engagement line landed in it (C1)", logged)
+	}
 }
 
-// TestLogHealthReportsDropsWhenBothDestinationsFail proves row 24's
-// remaining half: when the temp-dir fallback itself can't be written
-// either (a bare TMPDIR that does not exist, standing in for a fully
-// unwritable temp directory), the write is never retried against a
-// third destination; it is only counted through LogHealth, exactly as
-// any other rotatingWriter write failure is.
-func TestLogHealthReportsDropsWhenBothDestinationsFail(t *testing.T) {
-	origPath, origWriter := logFallbackPath, logWriter
-	t.Cleanup(func() { logFallbackPath, logWriter = origPath, origWriter })
+// TestLogFallsBackWhenStateDirIsUnwritable proves C2: a state
+// directory that resolves (xdg.StateFile succeeds; nothing is missing
+// or a file where a directory belongs) but denies write, mode 0500
+// standing in for a read-only home or a filesystem at quota, still
+// falls back rather than silently dropping every line until an
+// operator notices at exit. xdg.StateFile alone cannot catch this: it
+// only resolves a path string and creates the containing directory if
+// missing, never proving the file itself is writable.
+func TestLogFallsBackWhenStateDirIsUnwritable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permission checks; this probe needs a real denial")
+	}
+	resetLogFallbackState(t)
+
+	home := t.TempDir()
+	stateDir := filepath.Join(home, ".local", "state", "poplar")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatalf("create the state directory: %v", err)
+	}
+	// chmod after creation, not as MkdirAll's own mode: MkdirAll needs
+	// write access into each level it creates, poplar/ included, so a
+	// 0500 mode has to land only once the directory already exists.
+	if err := os.Chmod(stateDir, 0o500); err != nil { //nolint:gosec // G302: stateDir is a directory, not a file; 0500 denies write while keeping the execute bit traversal needs, which G302's file-mode heuristic does not account for
+		t.Fatalf("deny write on the state directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(stateDir, 0o700) }) //nolint:gosec // G302: stateDir is a directory; restoring 0700 so t.TempDir's own cleanup can remove it
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+	xdg.Reload()
+	t.Cleanup(xdg.Reload)
+
+	wantPath := filepath.Join(os.TempDir(), "poplar.log")
+	t.Cleanup(func() { _ = os.Remove(wantPath) })
+
+	w, ok := openLogWriter().(*rotatingWriter)
+	if !ok {
+		t.Fatalf("openLogWriter() = %T, want *rotatingWriter", openLogWriter())
+	}
+	if w.path != wantPath {
+		t.Errorf("fallback log path = %q, want %q (a mode-0500 state directory must still fall back)", w.path, wantPath)
+	}
+	if path, ok := LogFallbackPath(); !ok || path != wantPath {
+		t.Errorf("LogFallbackPath() = (%q, %v), want (%q, true)", path, ok, wantPath)
+	}
+}
+
+// TestLogDegradedWhenBothDestinationsFail proves row 24's remaining
+// half: when the temp-dir fallback itself can't be written either (a
+// bare TMPDIR that does not exist, standing in for a fully unwritable
+// temp directory), openLogWriter never tries a third destination.
+// LogDegraded reports it, LogFallbackPath reports no usable path
+// rather than naming one that receives nothing (m1), and LogHealth
+// already shows the drop from the fallback's own trial write, with no
+// further write needed to surface it.
+func TestLogDegradedWhenBothDestinationsFail(t *testing.T) {
+	resetLogFallbackState(t)
 
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".local"), 0o750); err != nil {
@@ -129,22 +197,23 @@ func TestLogHealthReportsDropsWhenBothDestinationsFail(t *testing.T) {
 	xdg.Reload()
 	t.Cleanup(xdg.Reload)
 
-	w, ok := openLogWriter().(*rotatingWriter)
-	if !ok {
+	if _, ok := openLogWriter().(*rotatingWriter); !ok {
 		t.Fatalf("openLogWriter() = %T, want *rotatingWriter", openLogWriter())
 	}
-	logWriter = w
 
-	if _, err := w.Write([]byte(`{"msg":"probe"}` + "\n")); err == nil {
-		t.Fatal("Write against a temp-dir fallback with no parent directory succeeded, want an error")
+	if !LogDegraded() {
+		t.Error("LogDegraded() = false, want true: both destinations are unusable")
+	}
+	if path, ok := LogFallbackPath(); ok {
+		t.Errorf("LogFallbackPath() = (%q, true), want ok=false: nothing is actually receiving lines", path)
 	}
 
 	dropped, err := LogHealth()
 	if err == nil {
-		t.Error("LogHealth() err = nil, want the write failure both destinations left behind")
+		t.Error("LogHealth() err = nil, want the trial write's own failure")
 	}
 	if dropped != 1 {
-		t.Errorf("LogHealth() dropped = %d, want 1", dropped)
+		t.Errorf("LogHealth() dropped = %d, want 1 (the fallback's own trial write, not a second write on top of it)", dropped)
 	}
 }
 

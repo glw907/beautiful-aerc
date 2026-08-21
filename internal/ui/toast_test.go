@@ -301,14 +301,27 @@ func TestApp_QuitWithOpenUndoWindowConfirms(t *testing.T) {
 		t.Error("'n' invoked the open offer's own Undo")
 	}
 
-	// 'y' discards the window, logs once, and quits.
+	// 'y' emits quitYesMsg; App's own case for it (not Confirm's YesCmd
+	// itself) discards the window, logs once, and quits, so the answer
+	// is evaluated fresh rather than snapshotted back when q first
+	// pushed the modal (fix round 1 finding 5, m8).
 	buf := captureDebugLog(t)
-	_, cmd = answerConfirm(t, app, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	answered, cmd := answerConfirm(t, app, tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd == nil {
-		t.Fatal("'y' returned a nil Cmd, want tea.Quit")
+		t.Fatal("'y' returned a nil Cmd, want quitYesMsg")
 	}
-	if msg := cmd(); msg != (tea.QuitMsg{}) {
-		t.Errorf("'y' yielded %#v, want tea.QuitMsg", msg)
+	msg := cmd()
+	if _, ok := msg.(quitYesMsg); !ok {
+		t.Fatalf("'y' yielded %#v, want quitYesMsg", msg)
+	}
+
+	updated, quitCmd := answered.Update(msg)
+	answered = mustApp(t, updated)
+	if quitCmd == nil {
+		t.Fatal("quitYesMsg handling returned a nil Cmd, want tea.Quit")
+	}
+	if got := quitCmd(); got != (tea.QuitMsg{}) {
+		t.Errorf("quitYesMsg handling yielded %#v, want tea.QuitMsg", got)
 	}
 	if fired {
 		t.Error("'y' invoked the open offer's own Undo, want it merely discarded")
@@ -316,20 +329,68 @@ func TestApp_QuitWithOpenUndoWindowConfirms(t *testing.T) {
 	if !strings.Contains(buf.String(), "quit discarded the open undo window") {
 		t.Errorf("log = %q, want the one discard line", buf.String())
 	}
+	if answered.statusLine().Toast.Active {
+		t.Error("Toast.Active still true after quitYesMsg, want the window discarded")
+	}
 }
 
-// TestApp_QuitWithEmptyOutboxAndNoUndoQuitsStraightThrough proves
-// handleQuit's happy path stays a plain tea.Quit: no outbox work and
-// no open undo window means nothing to confirm.
-func TestApp_QuitWithEmptyOutboxAndNoUndoQuitsStraightThrough(t *testing.T) {
+// TestApp_QuitWithNotificationToastQuitsStraightThrough proves M3: a
+// plain notification toast (an offer with no Undo Cmd, Toast.Undoable
+// false) does not gate q the way an undo window does. q quits
+// straight through with no confirm, since there is no undo to lose.
+func TestApp_QuitWithNotificationToastQuitsStraightThrough(t *testing.T) {
 	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: UndoOffer{Label: "synced"}})))
+
+	if app.statusLine().Toast.Undoable {
+		t.Fatal("a notification offer with no Undo reported Undoable, want false (test setup)")
+	}
 
 	_, cmd := app.Update(digitKey("q"))
 	if cmd == nil {
-		t.Fatal("q with an empty outbox and no undo window returned a nil Cmd, want tea.Quit")
+		t.Fatal("q with a notification toast returned a nil Cmd, want tea.Quit")
 	}
 	if msg := cmd(); msg != (tea.QuitMsg{}) {
-		t.Errorf("q yielded %#v, want tea.QuitMsg", msg)
+		t.Errorf("q with a notification toast yielded %#v, want tea.QuitMsg", msg)
+	}
+}
+
+// TestApp_QuitYesMsg_NoPhantomDiscardAfterTheWindowExpires proves the
+// other half of m8: an undo window that expires while the quit
+// confirm sits open (toastTickMsg keeps ticking regardless of what is
+// on the stack) logs no discard line when y is finally answered,
+// since nothing was actually open by then.
+func TestApp_QuitYesMsg_NoPhantomDiscardAfterTheWindowExpires(t *testing.T) {
+	app := NewApp(testDeps(t))
+	offer := UndoOffer{Label: "archived", Undo: func() tea.Msg { return nil }}
+	app = mustApp(t, first(app.Update(ToastMsg{Offer: offer})))
+
+	app = mustApp(t, first(app.Update(digitKey("q"))))
+	if len(app.stack) != 1 {
+		t.Fatalf("stack length after q with an open undo window = %d, want 1", len(app.stack))
+	}
+
+	// Expire the window while the modal is still on the stack, exactly
+	// as a real countdown does: toastTickMsg is a top-level App.Update
+	// case, unconditional on what is showing.
+	for range undoWindowSeconds {
+		app = mustApp(t, first(app.Update(toastTickMsg{gen: app.toastGen})))
+	}
+	if app.statusLine().Toast.Active {
+		t.Fatal("toast still active after undoWindowSeconds ticks, want it expired (test setup)")
+	}
+
+	buf := captureDebugLog(t)
+	updated, quitCmd := app.Update(quitYesMsg{})
+	_ = mustApp(t, updated)
+	if quitCmd == nil {
+		t.Fatal("quitYesMsg handling returned a nil Cmd, want tea.Quit")
+	}
+	if got := quitCmd(); got != (tea.QuitMsg{}) {
+		t.Errorf("quitYesMsg handling yielded %#v, want tea.QuitMsg", got)
+	}
+	if buf.String() != "" {
+		t.Errorf("log = %q, want no discard line: the window had already expired", buf.String())
 	}
 }
 
@@ -386,6 +447,7 @@ func TestApp_ToastLogsOneLine(t *testing.T) {
 func TestApp_UndoEligible_GatesOnStackAndSwitchState(t *testing.T) {
 	app := NewApp(testDeps(t))
 	app.toastActive = true
+	app.toastOffer = UndoOffer{Undo: func() tea.Msg { return nil }}
 
 	digitsFront := ScreenEntry{SwitchState: StateDigitsSwitch}
 	if !app.undoEligible(digitsFront) {

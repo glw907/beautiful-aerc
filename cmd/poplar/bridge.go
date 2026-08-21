@@ -20,10 +20,10 @@ import (
 // already drives the transitions; nothing here polls). A Synced
 // transition also sends a StoreChangedMsg, since a flush cycle
 // finishing is the store's own signal that a placeholder's stale
-// count is worth rereading. That send fires on every flush cycle,
-// synced or not, with no check for whether the cycle actually changed
-// anything a placeholder reads; narrowing it to real changes is
-// carried to pass 3 (task-6-findings-r1.md's deferred list).
+// count is worth rereading. That send fires on every cycle that
+// reaches Synced, whether or not it changed anything a placeholder
+// reads; narrowing it to real changes is carried to pass 3
+// (task-6-findings-r1.md's deferred list).
 //
 // Sync's own State carries no progress counts yet (SyncKind pages
 // Changes without tracking a running total), so the SyncStateMsg this

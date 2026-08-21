@@ -146,6 +146,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.stack = a.stack[:len(a.stack)-1]
 		}
 		return a, msg.Next
+	case quitYesMsg:
+		if a.undoWindowOpen() {
+			slog.Debug("quit discarded the open undo window")
+		}
+		a.toastActive = false
+		return a, tea.Quit
 	}
 	return a.updateChildren(msg)
 }
@@ -335,7 +341,17 @@ func (a App) tickToast(msg toastTickMsg) (tea.Model, tea.Cmd) {
 // cases test it directly, without needing a StatePrintableEntry root
 // screen this pass registers none of.
 func (a App) undoEligible(front ScreenEntry) bool {
-	return len(a.stack) == 0 && front.SwitchState == StateDigitsSwitch && a.toastActive
+	return len(a.stack) == 0 && front.SwitchState == StateDigitsSwitch && a.undoWindowOpen()
+}
+
+// undoWindowOpen reports whether a's open toast is actually an undo
+// window rather than a plain notification (task-8 F8, Toast.Undoable's
+// own split): a.toastActive alone answers "is a toast showing", which
+// a notification toast with no Undo Cmd also satisfies, and both q's
+// own quit gate and u's own undo answer must agree with what
+// Toast.Undoable already renders (fix round 1 finding 5, M3).
+func (a App) undoWindowOpen() bool {
+	return a.toastActive && a.toastOffer.Undo != nil
 }
 
 // armToastTick returns the Cmd that ticks gen's countdown after one
@@ -441,7 +457,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // task 11 carried this from task 8's review, since task 8 built the
 // modal but not this wiring).
 func (a App) handleQuit() (tea.Model, tea.Cmd) {
-	if a.outbox == 0 && !a.toastActive {
+	if a.outbox == 0 && !a.undoWindowOpen() {
 		return a, tea.Quit
 	}
 	a.stack = append(a.stack, a.quitConfirm())
@@ -452,16 +468,20 @@ func (a App) handleQuit() (tea.Model, tea.Cmd) {
 // answer directly, carrying a's own current theme and layout the same
 // way App's other stack pushes (HelpScreen, most notably) do: Confirm
 // gets neither from anywhere else, and pushing one without them
-// renders against a zero-size layout.
+// renders against a zero-size layout. YesCmd emits quitYesMsg rather
+// than baking a's own undoWindowOpen() into the answer here: an undo
+// window can expire while this very modal sits open, and quitYesMsg's
+// own App.Update case re-reads it fresh instead (fix round 1 finding
+// 5, m8).
 func (a App) quitConfirm() Confirm {
 	return Confirm{
 		theme:       a.theme,
 		layout:      a.layout,
 		Question:    quitQuestion(a.outbox),
-		Consequence: quitConsequence(a.outbox, a.toastActive, a.toastOffer.Label),
+		Consequence: quitConsequence(a.outbox, a.undoWindowOpen(), a.toastOffer.Label),
 		YesLabel:    "quit",
 		NoLabel:     "stay",
-		YesCmd:      quitYesCmd(a.toastActive),
+		YesCmd:      quitYesCmd,
 	}
 }
 
@@ -496,18 +516,20 @@ func quitConsequence(outbox int, undoOpen bool, undoLabel string) string {
 	return strings.Join(parts, " ")
 }
 
-// quitYesCmd returns F7's own Yes answer: tea.Quit, preceded by one
-// debug log line when an open undo window is what quitting discards
-// (CARRY 3, task 11: the toast says so, in the log as well as the
-// confirm's own consequence line).
-func quitYesCmd(undoOpen bool) tea.Cmd {
-	return func() tea.Msg {
-		if undoOpen {
-			slog.Debug("quit discarded the open undo window")
-		}
-		return tea.Quit()
-	}
-}
+// quitYesMsg is F7's own Yes answer signal: App.Update's own case for
+// it, not Confirm's YesCmd itself, decides whether an open undo window
+// is what quitting discards. A background toastTickMsg keeps ticking
+// regardless of what sits on the stack, so the window can expire while
+// this very modal is showing; evaluating undoWindowOpen() here, when
+// the answer is actually handled, rather than baking a bool into the
+// Cmd back when q first pushed the modal, is what keeps the discard
+// log line and the confirm's own consequence truthful (fix round 1
+// finding 5, m8).
+type quitYesMsg struct{}
+
+// quitYesCmd is Confirm's own YesCmd for the quit confirm: it names no
+// state of its own, so it never goes stale between push and answer.
+func quitYesCmd() tea.Msg { return quitYesMsg{} }
 
 // handleWheel folds msg into the open wheel gesture, or opens a new
 // one (ADR-0017 revision 3): the coalescing decision lives on the

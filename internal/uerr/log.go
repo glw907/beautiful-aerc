@@ -80,42 +80,84 @@ func SetDefault() {
 
 // openLogWriter resolves ADR-0013's log destination,
 // $XDG_STATE_HOME/poplar/poplar.log (the existing
-// ~/.local/state/poplar/ home per ER-4). When the state directory
-// can't be resolved, the fallback is a file in the process's own temp
-// directory, never stderr (dispositions row 24): a bubbletea UI may
-// already own the terminal by the time this runs, and a JSON log line
-// scribbled into it is exactly the corruption row 24 declined to fix
-// while poplar shipped no screen. If the temp-dir file can't be
-// written either, rotatingWriter's own fail path counts the drop
-// through LogHealth rather than trying a third destination. It
-// records the writer so LogHealth can report a write failure later,
-// and the fallback path so a caller can warn about the degradation
-// once (LogFallbackPath, ER-3).
+// ~/.local/state/poplar/ home per ER-4). xdg.StateFile only resolves
+// a path string, creating the containing directory if it is missing;
+// it never proves the file itself is writable, so a state directory
+// that exists but denies write (mode 0500, a read-only home, a full
+// quota) resolves happily and only reveals itself the first time
+// something tries to write. tryOpen's own trial write is what catches
+// that before the fallback decision is made, not xdg.StateFile's
+// error alone (dispositions row 24, C2).
+//
+// When the state destination fails its trial, the fallback is a file
+// in the process's own temp directory, never stderr: a bubbletea UI
+// may already own the terminal by the time this runs, and a JSON log
+// line scribbled into it is exactly the corruption row 24 declined to
+// fix while poplar shipped no screen. The fallback's own engagement
+// logs once, through itself, so the line lands in the destination it
+// names (C1). If the temp-dir file fails its own trial too,
+// logFallbackPath stays unset rather than naming a path nothing
+// reaches (m1); logDegraded records that instead, and LogHealth
+// already carries the trial's own drop count with no further write
+// needed to surface it.
 func openLogWriter() io.Writer {
-	path, err := xdg.StateFile("poplar/poplar.log")
-	if err != nil {
-		path = filepath.Join(os.TempDir(), "poplar.log")
-		logFallbackPath = path
+	if primary, err := xdg.StateFile("poplar/poplar.log"); err == nil {
+		if w, ok := tryOpen(primary); ok {
+			logWriter = w
+			return w
+		}
 	}
-	w := &rotatingWriter{path: path, maxSize: 10 << 20, keep: 2}
+
+	fallback := filepath.Join(os.TempDir(), "poplar.log")
+	w, ok := tryOpen(fallback)
 	logWriter = w
+	if !ok {
+		logDegraded = true
+		return w
+	}
+
+	logFallbackPath = fallback
+	slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})).Warn(
+		"uerr: state directory unavailable, logging to the temp-dir fallback", "path", fallback)
 	return w
+}
+
+// tryOpen builds a rotatingWriter over path and proves it can
+// actually be written by driving a zero-byte probe through the same
+// Write path every real log line takes: a payload of nil never
+// triggers rotation and, on success, leaves w's own dropped count and
+// lastErr untouched, but a failure records both exactly as a real
+// line's failure would, so a caller that keeps a failed probe's own
+// writer (openLogWriter's fallback branch, never its primary one)
+// finds LogHealth already truthful with no further write required.
+func tryOpen(path string) (*rotatingWriter, bool) {
+	w := &rotatingWriter{path: path, maxSize: 10 << 20, keep: 2}
+	_, err := w.Write(nil)
+	return w, err == nil
 }
 
 // logWriter is the process's rotatingWriter, set by openLogWriter.
 // LogHealth reads it.
 var logWriter *rotatingWriter
 
-// logFallbackPath holds the temp-dir path openLogWriter chose when
-// $XDG_STATE_HOME's own poplar.log could not be resolved, or "" when
-// the log is at its normal state-dir home. LogFallbackPath reads it.
+// logFallbackPath holds the temp-dir path openLogWriter fell back to
+// and confirmed writable, or "" when the log is at its normal
+// state-dir home, or when the fallback itself failed its own trial
+// (logDegraded covers that case instead). LogFallbackPath reads it.
 var logFallbackPath string
 
+// logDegraded records that openLogWriter's fallback engaged but its
+// own trial write still failed: neither destination works, and there
+// is no path left to name (m1). LogDegraded reads it.
+var logDegraded bool
+
 // LogFallbackPath reports the temp-dir path uerr's log fell back to
-// when the state directory's own log file could not be resolved, and
-// whether that fallback is in effect (dispositions row 24, ER-3): a
-// caller uses this to warn the operator once, since the fallback
-// itself writes silently otherwise.
+// when the state directory's own log file could not be written, and
+// whether that fallback is in effect (dispositions row 24,
+// ER-3): a caller uses this to warn the operator once, since the
+// fallback itself writes silently otherwise. It reports false, not a
+// path nothing reaches, when the fallback itself is also unwritable;
+// LogDegraded is that case's own signal.
 //
 // LogFallbackPath forces logger's one-time build to run first, so its
 // read of logFallbackPath is ordered after openLogWriter's write to
@@ -123,6 +165,19 @@ var logFallbackPath string
 func LogFallbackPath() (path string, ok bool) {
 	logger()
 	return logFallbackPath, logFallbackPath != ""
+}
+
+// LogDegraded reports whether uerr's log destination failed both its
+// state-dir home and its temp-dir fallback's own trial write
+// (dispositions row 24, m1): a caller has nowhere true to point a
+// LogFallbackPath at, and should say logging is degraded rather than
+// naming a path nothing reaches.
+//
+// LogDegraded forces logger's one-time build to run first, the same
+// ordering guarantee LogFallbackPath and LogHealth rely on.
+func LogDegraded() bool {
+	logger()
+	return logDegraded
 }
 
 // LogHealth reports uerr's log writer's most recent write failure,
