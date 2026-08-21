@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# gate-captures runs the pass-gate capture matrix through kitty-shot:
+# the live shell in both themes across the rung boundaries with the
+# pointer vocabulary exercised by hand-equivalent xdotool events, every
+# sketch fixture in all four capability profiles, and the ratified
+# exemplar painted by the same kitty as the reference image. Output is
+# OUTDIR/<group>/<name>.png plus .ansi, and OUTDIR/manifest.txt listing
+# every capture with the state it claims to show, for the graders.
+#
+#   scripts/gate-captures [OUTDIR]    (default captures/gate)
+
+out="${1:-captures/gate}"
+mkdir -p "$out"
+out="$(cd "$out" && pwd)"
+shot=scripts/kitty-shot
+manifest="$out/manifest.txt"
+: >"$manifest"
+note() { echo "$*" >>"$manifest"; }
+
+[ -x ./poplar ] || go build -o poplar ./cmd/poplar
+go build -o "$out/sketch-bin" ./cmd/sketch
+
+# Live shell, one theme at a time. Each run starts at the wide rung
+# (Geoff's 150x45), walks every surface and help, then resizes down
+# through each boundary pair and the floor.
+for theme in dark light; do
+  d="$out/live-$theme"
+  note "## live-$theme: ./poplar, real account, kitty theme $theme"
+  note "mail-150x45: F1 mail placeholder, wide rung, after 6s settle"
+  note "help-150x45: F6 help over mail, two columns"
+  note "help-wheel-150x45: help after one wheel-down notch at cell 40,10"
+  note "calendar-150x45 contacts-150x45 config-150x45: digits 2 3 4 from mail root"
+  note "click-digit-2: pointer click on the status-line digit 2 from mail (expect Calendar active)"
+  note "click-help: pointer click on the footer's '? help' (expect help over Calendar)"
+  note "esc-back: Esc from help (expect Calendar root)"
+  note "mail-140x26 mail-139x26: wide/standard boundary pair"
+  note "mail-100x30 mail-99x30: standard/compact boundary pair"
+  note "mail-80x24 mail-79x24: compact/spartan boundary pair"
+  note "mail-60x24 mail-59x24: spartan/floor boundary pair (59 shows the floor notice)"
+  note "mail-100x20 mail-100x19: short-height boundary pair"
+  note "mail-100x15 mail-100x14: floor-height boundary pair"
+  note "help-80x24: F5 help single column"
+  note "quit-q: after q at mail root with empty outbox (expect the shell gone, shell prompt)"
+  KITTY_SHOT_OUT="$d" $shot -o "$d" -t "$theme" -s 150x45 \
+    sleep:6 shot:mail-150x45 \
+    key:? shot:help-150x45 \
+    click:40,10 wheel:down shot:help-wheel-150x45 key:escape \
+    key:2 shot:calendar-150x45 key:3 shot:contacts-150x45 key:4 shot:config-150x45 key:1 \
+    click:11,1 shot:click-digit-2 \
+    click:146,45 shot:click-help \
+    key:escape shot:esc-back key:1 \
+    resize:140x26 shot:mail-140x26 resize:139x26 shot:mail-139x26 \
+    resize:100x30 shot:mail-100x30 resize:99x30 shot:mail-99x30 \
+    resize:80x24 shot:mail-80x24 resize:79x24 shot:mail-79x24 \
+    resize:60x24 shot:mail-60x24 resize:59x24 shot:mail-59x24 \
+    resize:100x20 shot:mail-100x20 resize:100x19 shot:mail-100x19 \
+    resize:100x15 shot:mail-100x15 resize:100x14 shot:mail-100x14 \
+    resize:80x24 key:? shot:help-80x24 key:escape \
+    key:q sleep:1 shot:quit-q
+done
+
+# Sketch fixtures: 14 fixtures x 4 profiles at the sketch's own rung
+# list, rendered in a 150x45 window so every rung fits. The fixture
+# order and profile order are sketch's (cmd/sketch/main.go).
+fixtures=(mail mail-loaded mail-syncing mail-offline mail-backing-off mail-toast mail-banner modal-confirm help calendar contacts config floor short)
+profiles=(truecolor-dark truecolor-light ansi16 nocolor)
+d="$out/sketch"
+note "## sketch: cmd/sketch fixtures, rung 100x30 unless named, kitty dark"
+steps=(sleep:2 key:s key:s key:s key:s key:s)   # rung index 5 = 100x30
+for p in "${profiles[@]}"; do
+  for f in "${fixtures[@]}"; do
+    steps+=("shot:$f-$p" key:n)
+    note "$f-$p: fixture $f, profile $p, 100x30"
+  done
+  steps+=(key:p)
+done
+# After the loop sketch is back at truecolor-dark, fixture mail, rung
+# 100x30. The floor and short fixtures only mean something at their
+# own rungs: 40x10 (rung index 13, eight s presses) and 100x16 (index
+# 14, one more).
+steps+=(key:s key:s key:s key:s key:s key:s key:s key:s)
+for _ in $(seq 12); do steps+=(key:n); done
+steps+=(shot:floor-40x10-truecolor-dark key:s key:n shot:short-100x16-truecolor-dark)
+note "floor-40x10-truecolor-dark: fixture floor at 40x10 (floor notice)"
+note "short-100x16-truecolor-dark: fixture short at 100x16 (banner demotion at short height)"
+KITTY_SHOT_OUT="$d" $shot -o "$d" -s 150x45 -c "$out/sketch-bin" "${steps[@]}"
+
+# The exemplar, painted by kitty, as the reference image, in slices
+# that fit a 45-row window: the standard dark rung, the wide rung,
+# toast/banner/modal/spartan, and the light rung plus palettes.
+d="$out/reference"
+ex="$(pwd)/docs/poplar/design/2026-08-19-shell-exemplar/render.ansi"
+note "## reference: the ratified exemplar render.ansi painted by kitty at 150 columns"
+i=0
+for range in 1,20 21,49 50,79 80,128; do
+  i=$((i+1))
+  note "exemplar-$i: render.ansi lines $range"
+  KITTY_SHOT_OUT="$d" $shot -o "$d" -s 150x50 -c "sed -n '${range}p' $ex; sleep 600" sleep:2 "shot:exemplar-$i"
+done
+
+echo "captures in $out; manifest at $manifest"

@@ -43,6 +43,11 @@ Invoke the relevant skill before writing code, including spike code.
 - **`elm-conventions`**, mandatory before touching bubbletea UI code.
 - **`bubbletea-design`**, mandatory alongside `elm-conventions` for
   layout, alignment, icon, and theming work.
+- **`tui-visual-verify`**, mandatory before any claim that a screen,
+  theme, rung, or pointer behavior works, and at every pass gate:
+  the real-kitty capture harness (`scripts/kitty-shot`, the matrix in
+  `scripts/gate-captures`) plus fresh-context vision grading. Goldens
+  and teatest check text; only the painted terminal is evidence.
 - **`tui-design:tui-design`**, optional, an installed third-party
   plugin covering general TUI patterns, exemplar-app case studies,
   and testing recipes. Its keybinding defaults assume palettes,

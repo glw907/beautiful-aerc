@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# kitty-shot drives a real kitty window on the gate platform and captures
+# what it paints: a PNG per named step (ImageMagick import of the X
+# window) plus kitty's own ANSI text dump of the screen. It exists
+# because every other gate medium (goldens, the gallery, teatest, tmux
+# capture-pane) checks text, and the pass 2 gate found defects only the
+# painted terminal shows (ground bleed past a reset, bands that do not
+# read as bands). X11 only; it needs kitty, xdotool, and import on PATH.
+#
+#   scripts/kitty-shot [-o OUTDIR] [-t dark|light] [-s COLSxROWS] [-c CMD] STEP...
+#
+# Each STEP is one of
+#   key:KEY           send a key by kitty name (q, 2, escape, question, down)
+#   type:TEXT         type literal text
+#   resize:COLSxROWS  resize the OS window live, in cells
+#   sleep:SECONDS     settle
+#   shot:NAME         capture OUTDIR/NAME.png and OUTDIR/NAME.ansi
+#   click:COL,ROW     left-click a cell (1-based)
+#   wheel:up|down[@COL,ROW]  one wheel notch at a cell (default 40,10)
+#
+# CMD defaults to ./poplar run against a scratch XDG_DATA_HOME and
+# XDG_STATE_HOME beside OUTDIR, so a second poplar never fights the
+# instance lock on the real store; FASTMAIL_API_TOKEN is forwarded from
+# the caller's environment. -t light sets kitty's colors to the slate
+# light ground so poplar's background query picks the light theme.
+
+outdir="${KITTY_SHOT_OUT:-captures/kitty-shot}"
+theme=dark
+size=120x36
+cmd=""
+while getopts "o:t:s:c:" opt; do
+  case "$opt" in
+    o) outdir="$OPTARG" ;;
+    t) theme="$OPTARG" ;;
+    s) size="$OPTARG" ;;
+    c) cmd="$OPTARG" ;;
+    *) exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+mkdir -p "$outdir"
+outdir="$(cd "$outdir" && pwd)"
+
+if [ -z "$cmd" ]; then
+  export XDG_DATA_HOME="$outdir/../xdg/data" XDG_STATE_HOME="$outdir/../xdg/state"
+  mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME"
+  cmd="$(pwd)/poplar"
+fi
+
+cols="${size%x*}"
+rows="${size#*x}"
+title="kitty-shot-$$"
+sock="unix:@kitty-shot-$$"
+colors=()
+if [ "$theme" = light ]; then
+  colors=(-o background='#E4E7EC' -o foreground='#262B33')
+fi
+
+kitty --title "$title" --listen-on "$sock" \
+  -o allow_remote_control=yes -o remember_window_size=no \
+  -o initial_window_width="${cols}c" -o initial_window_height="${rows}c" \
+  -o enable_audio_bell=no -o window_padding_width=0 "${colors[@]}" \
+  bash -c "$cmd; echo \"[kitty-shot] command exited \$?\"; sleep 600" >"$outdir/kitty.log" 2>&1 &
+kpid=$!
+trap 'kill $kpid 2>/dev/null || true' EXIT
+
+wid=""
+for _ in $(seq 50); do
+  wid="$(xdotool search --name "^$title\$" 2>/dev/null | head -1 || true)"
+  [ -n "$wid" ] && break
+  sleep 0.2
+done
+[ -n "$wid" ] || { echo "kitty-shot: window never appeared" >&2; cat "$outdir/kitty.log" >&2; exit 1; }
+focus() { xdotool windowactivate --sync "$wid"; }
+focus
+sleep 2
+
+# actual reads the window's real cell grid back from kitty after a
+# resize, since the OS window can land a cell or two off the request.
+actual() {
+  kitten @ --to "$sock" ls | python3 -c '
+import json,sys
+w=json.load(sys.stdin)[0]["tabs"][0]["windows"][0]
+print(w["columns"], w["lines"])'
+}
+
+# Input goes through kitty's remote control straight into the window's
+# pty, never through X focus: an X-level keystroke that misses its
+# target lands in whoever has focus. A click is the SGR 1006 report a
+# real kitty emits for that cell (press then release), which the
+# kitty-shot calibration probe confirmed byte for byte, so the app
+# sees exactly what a pointer would deliver.
+send() { kitten @ --to "$sock" send-text "$@"; }
+mouse() { printf '\033[<%s;%s;%sM\033[<%s;%s;%sm' "$1" "$2" "$3" "$1" "$2" "$3"; }
+
+for step in "$@"; do
+  kind="${step%%:*}"
+  arg="${step#*:}"
+  case "$kind" in
+    key)
+      if [ "${#arg}" = 1 ]; then send "$arg"; else kitten @ --to "$sock" send-key "$arg"; fi
+      sleep 0.4 ;;
+    type) send "$arg"; sleep 0.4 ;;
+    sleep) sleep "$arg" ;;
+    resize)
+      kitten @ --to "$sock" resize-os-window --unit cells --width "${arg%x*}" --height "${arg#*x}"
+      sleep 1
+      read -r cols rows < <(actual)
+      [ "$cols" = "${arg%x*}" ] && [ "$rows" = "${arg#*x}" ] || echo "kitty-shot: asked $arg, got ${cols}x${rows}" >&2 ;;
+    click)
+      send "$(mouse 0 "${arg%,*}" "${arg#*,}")"; sleep 0.4 ;;
+    wheel)
+      # wheel:up|down[@COL,ROW], default cell 40,10
+      dir="${arg%%@*}"; at="${arg#*@}"; [ "$at" = "$arg" ] && at=40,10
+      b=65; [ "$dir" = up ] && b=64
+      send "$(printf '\033[<%s;%s;%sM' "$b" "${at%,*}" "${at#*,}")"; sleep 0.4 ;;
+    shot)
+      import -window "$wid" "$outdir/$arg.png"
+      kitten @ --to "$sock" get-text --extent screen --ansi >"$outdir/$arg.ansi"
+      echo "$arg $(actual | tr ' ' x)" >>"$outdir/sizes.txt"
+      echo "$outdir/$arg.png" ;;
+    *) echo "kitty-shot: unknown step $step" >&2; exit 2 ;;
+  esac
+done

@@ -1,0 +1,596 @@
+[
+ {
+  "id": "LD-1",
+  "capture": "mail-150x45.png (and all four placeholder surfaces)",
+  "device": "placeholder composition",
+  "class": "STRUCTURAL",
+  "expected": "F1 (plan lines ~440-450) draws the placeholder content block as three lines: the surface name, the count line, and a third line 'synced just now'. F8 carries the same idea inline for calendar ('Calendar \u2014 5,112 events, synced').",
+  "actual": "The shipped block is two lines only: 'Mail' and '0 messages in 0 folders'. No sync phrase appears anywhere in the content region on any of the four surfaces.",
+  "evidence": "mail-150x45.png shows text only at rows 21 and 23 of the content region; the .ansi confirms every other content row is empty. Same on calendar/contacts/config-150x45. Mitigation for triage: decision 9 states the rule as 'Surface name plus live store counts' (two elements), the sync state is already advertised in the status line's right segment, and STATUS gate item 10 explicitly puts the placeholder copy in Geoff's hands. This may be a deliberate application of decision 9 over F8's literal, in which case it is a wireframe-vs-decision bookkeeping gap rather than a build defect."
+ },
+ {
+  "id": "LD-2",
+  "capture": "mail-59x24.png, mail-100x14.png",
+  "device": "floor notice glyphs",
+  "class": "COSMETIC",
+  "expected": "F4 (plan) draws the floor notice as 'poplar needs at least 60\u00d715' / 'this window is 48\u00d712', with U+00D7 as the size separator.",
+  "actual": "The shipped notice reads 'poplar needs at least 60x15' / 'this window is 59x24', with ASCII lowercase x.",
+  "evidence": "mail-59x24.png rows 11-12 render 'x' at the same width as the surrounding monospace letters; the .ansi confirms the byte is 0x78. Already on record as STATUS gate item 10 ('the floor notice uses ASCII x for the size separator'), so this is a ruled item awaiting Geoff's eye, not an unnoticed miss."
+ },
+ {
+  "id": "LD-3",
+  "capture": "mail-150x45.png (all captures, both bands)",
+  "device": "status-line typography roles",
+  "class": "DESIGN-QUESTION",
+  "expected": "Design language section 6 and decision 1 say 'siblings as bare dim digits' without naming a token. Decision 5 lists fgSubtle as an indicator role (3:1 floor); decision 6 adds 'fgSubtle is an indicator role and never carries reading text: dates and tree connectors render in fgMuted; snippets are the one fgSubtle text use'.",
+  "actual": "The sibling digits render in fgSubtle #7A8290, which measures 3.66:1 against the bgPanel band #262B36 \u2014 above the 3:1 indicator floor, below the 4.5:1 text floor \u2014 and is a second fgSubtle text use beside snippets.",
+  "evidence": "The live bytes are identical to exemplar render.ansi:6 ('[38;2;122;130;144m  2 3 4'), so the shell is faithful to the ratified exemplar and is NOT at fault; the tension is inside the doc set. In mail-150x45.png the digits 2 3 4 read noticeably lighter than 'q quit' in the footer band. Since the digits are also pointer targets (F1: 'Pointer targets: the cluster's digit cells'), Geoff may want them at fgMuted, which would require amending the exemplar too."
+ },
+ {
+  "id": "LD-4",
+  "capture": "calendar-150x45.png, contacts-150x45.png",
+  "device": "status-line cluster spacing",
+  "class": "DESIGN-QUESTION",
+  "expected": "Both the exemplar (render.ansi:6) and F1/F2 only ever show the cluster with Mail active and first: '1 Mail  2 3 4' \u2014 one space between siblings, two after the named surface. The references are silent on what the gaps look like when the active surface sits mid-run.",
+  "actual": "The named surface keeps its two-space trailing gap but gets only a one-space leading gap: '1 2 Calendar  3 4' and '1 2 3 People  4'.",
+  "evidence": "calendar-150x45.png row 0: the gap between '1' and '2 Calendar' is visibly half the gap between 'Calendar' and '3'. The asymmetry makes the named surface look grouped with the digit on its left rather than separated from both sibling runs. Config (active last) has no trailing run so the question does not arise there. Reference is silent, so this is Geoff's call, not a failure."
+ },
+ {
+  "id": "LD-5",
+  "capture": "mail-100x30.png vs mail-99x30.png",
+  "device": "rung boundary behavior",
+  "class": "DESIGN-QUESTION",
+  "expected": "Design language section 9: standard (100-139) is '+ the sidebar (the one capability this boundary adds)', and 'each boundary changes exactly one obvious thing'. The FullRegion ruling (STATUS gate item 1 and the ratification list, 'FullRegion placeholders, no empty rail') overrides this for pass-2 placeholders.",
+  "actual": "The 100/99 pair is pixel-identical apart from the one-column width change: no rail, no divider, no change of any kind at the rung's defining boundary.",
+  "evidence": "mail-100x30.png and mail-99x30.png differ only in overall width (900 vs 891 px); the centered block sits at the same content rows with lead 48/47. This is the ruled outcome and is preferable to an empty rail, but it means pass 2 ships no visual proof of the standard rung's one capability, and the FullRegion ruling was explicitly reserved for Geoff's eye at the gate. Coverage note for the parent: the manifest labels mail-80x24/79x24 a 'compact/spartan boundary pair', but section 9's table has no boundary at 80 (spartan spans 60-99), so those two captures being identical proves nothing about rung behavior; the three boundaries that exist in this group's captures are 140/139, 100/99, and 60/59, and only 60/59 changes anything."
+ },
+ {
+  "id": "LD-6",
+  "capture": "mail-150x45.png, calendar-150x45.png",
+  "device": "placeholder typography hierarchy",
+  "class": "DESIGN-QUESTION",
+  "expected": "Section 7 type roles: emTitle (bold), emLabel (dim), emValue (normal). The exemplar's habit for a name-plus-count pair is to mute the count half: render.ansi:6 paints 'Inbox' in fg #D4D8DF and '12,406 messages' in fgMuted #969DA9.",
+  "actual": "The placeholder paints both lines at full fg #D4D8DF; only the bold weight on the title separates them. 'Mail' and '0 messages in 0 folders' carry the same color role.",
+  "evidence": "mail-150x45.png rows 21/23 read at the same brightness; the .ansi shows [22;1;38:2:212:216:223m for the title and [38:2:212:216:223m for the count, i.e. emTitle over emValue. That mapping is defensible under section 7 (a count IS a value), so this is not a rule violation \u2014 but against the exemplar's name/count precedent the block reads slightly flat, and the exemplar is what a new screen is told to imitate before consulting rules (decision 13). Related observation, functional rather than visual and already routed forward: all four surfaces show zero counts ('0 messages in 0 folders', '0 events') on a real 36k-message account after the manifest's 6-second settle, while the status line still reads 'Syncing' \u2014 consistent with StoreChangedMsg gating being routed to pass 3 in the STATUS, but it means the 'live store counts' half of decision 9 is unproven by this capture set."
+ },
+ {
+  "id": "H1",
+  "capture": "live-dark/help-150x45.png, help-80x24.png, click-help.png",
+  "device": "grounds/bands (help ground vs chrome bands)",
+  "class": "DESIGN-QUESTION",
+  "expected": "Decision 11 (ground grammar, v3): 'the panel ground elevates chrome bands, the reader card, the help overlay, and modals'. The exemplar (exemplar-1.png) paints the status row and footer row as visibly lighter panel strips against the base content ground, which is how a band reads as a band. STATUS gate item 9 pre-flags this: 'Help ground merging with the chrome bands (eyeball item from task 9).'",
+  "actual": "The help overlay and the chrome bands are assigned the SAME role, so where they abut there is no step at all: the entire screen paints as one flat #262B36 panel. The status line and footer stop reading as bands and merge into the overlay body; the frame loses its top and bottom edges entirely.",
+  "evidence": "help-150x45.ansi carries exactly one background SGR across all 13 painted rows: 48:2:38:43:54 (#262B36 bgPanel). mail-150x45.ansi at the same size carries two (48:2:22:24:29 = #16181D base for content, 48:2:38:43:54 for the bands). In the PNGs the difference is unmistakable: click-digit-2.png shows a lighter strip at row 1 and row 45; help-150x45.png shows a uniform field top to bottom with no band edge anywhere."
+ },
+ {
+  "id": "H2",
+  "capture": "live-dark/help-80x24.png, help-150x45.png",
+  "device": "help layout (title row separation)",
+  "class": "COSMETIC",
+  "expected": "F5 (plan lines ~500-505) puts a full-width rule between the status line and the title:\n` 1 Mail  2 3 4                                                            synced`\n`\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500`\n` Help \u00b7 Mail`\nDecision 11 retires full-width rules in favour of 'whitespace gutters and alignment'.",
+  "actual": "The rule was removed but no gutter row was substituted. 'Help \u00b7 Mail' sits on row 2, directly against the status line, both bold text on the identical ground (see H1), so the overlay title and the surface cluster collide as one two-line block.",
+  "evidence": "help-80x24.png rows 1-2 are adjacent with no intervening row; help-80x24.ansi line 1 is the status line and line 2 is 'Help \u00b7 Mail'. Contrast the gap F5 keeps below the title (blank row 3 before 'Global'), which IS present in the render."
+ },
+ {
+  "id": "H3",
+  "capture": "live-dark/help-80x24.png",
+  "device": "help layout (key column width / alignment)",
+  "class": "COSMETIC",
+  "expected": "F5 aligns every key column in the overlay on one axis, Global and This screen alike:\n`   j / k          down / up`\n\u2026 `   q              quit (at a surface root)`\n`\\n This screen`\n`   q              quit`\nBoth sections' descriptions start in the same column.",
+  "actual": "Each section sizes its key column from its own content. Global's key column is 10 cells wide (descriptions start at column 13); 'This screen' renders 'q  quit' with a 3-cell key column (description starts at column 6). At 80 the sections stack, so the two description columns are visibly ragged against each other. F5's key rows are also indented two cells under their section header; the shipped rows sit flush at the header's own column.",
+  "evidence": "help-80x24.ansi line 5 `  j/k       down / up` versus line 16 `  q  quit`. In help-80x24.png the 'quit' under 'This screen' starts roughly 7 cells left of every description above it."
+ },
+ {
+  "id": "H4",
+  "capture": "live-dark/help-150x45.png, help-80x24.png, click-help.png",
+  "device": "help copy (duplicate entry disambiguation)",
+  "class": "COSMETIC",
+  "expected": "F5's Global section carries the disambiguating parenthetical that makes the deliberate duplicate legible: `   q              quit (at a surface root)`, against This screen's plain `   q              quit`. STATUS gate item 10 claims 'The ratified F5 help copy is restored via a LongDesc seam.'",
+  "actual": "The Global q entry renders as bare 'quit'. The overlay therefore shows two literally identical rows, `q  quit` under Global and `q  quit` under This screen, with nothing to explain why the same key is listed twice. The duplication is the wireframe's intent; the copy that justified it is the piece that went missing.",
+  "evidence": "help-150x45.ansi Global block ends `q         quit` and the This-screen column reads `q  quit`; help-80x24.ansi lines 13 and 16 are the same pair. Every other F5 description survives verbatim ('first / last (G works too)', 'back \u00b7 dismiss banner'), so this is a single-line omission, not a wholesale copy divergence."
+ },
+ {
+  "id": "H5",
+  "capture": "live-dark/help-150x45.png, help-80x24.png",
+  "device": "typography roles / key-label vocabulary",
+  "class": "COSMETIC",
+  "expected": "F5 spells named keys with their proper capitalization: `j / k`, `Space / b`, `Home / End`, `Enter`, `Esc`, `1 2 3 4`, and the surface list lowercase as `mail \u00b7 calendar \u00b7 people \u00b7 config`. The pinned exemplar's hint atom (decision 13: 'its \u2026 hint atom \u2026 are the reference a new screen imitates') capitalizes named keys too: render.txt line 19 `Enter open`, line 48 `Tab unread`.",
+  "actual": "Named keys are lowercased throughout the overlay and its footer: 'space/b', 'home/end', 'enter', 'esc'. The digit row collapses to '1-4' rather than F5's '1 2 3 4'. The surface names are title-cased ('Mail \u00b7 Calendar \u00b7 People \u00b7 Config') where F5 has them lowercase \u2014 the two capitalization decisions are inverted from the reference on both axes.",
+  "evidence": "help-80x24.ansi lines 5-13 and line 24; visible in help-80x24.png and help-150x45.png. Compare exemplar-1.png's footer, where 'Enter open' carries the capital."
+ },
+ {
+  "id": "H6",
+  "capture": "live-dark/help-150x45.png, help-80x24.png",
+  "device": "footer (while help is front)",
+  "class": "COSMETIC",
+  "expected": "F5's help footer: ` j/k move   Space/b page   Esc close`.",
+  "actual": "Renders as 'j/k navigate   space/b page   esc back' (plus the pinned '? help', which is H8). Two of the three descriptions are reworded: 'navigate' for 'move', 'back' for 'close'. 'back' is the weaker of the two changes, since Esc here closes an overlay rather than navigating up a surface stack.",
+  "evidence": "help-80x24.ansi line 24; help-150x45.ansi final line. Both PNGs show the same three hints."
+ },
+ {
+  "id": "H7",
+  "capture": "live-dark/help-150x45.png, help-wheel-150x45.png, click-help.png",
+  "device": "help layout (This-screen column placement at 150)",
+  "class": "DESIGN-QUESTION",
+  "expected": "F6 says only: 'As F5 with the Global and This-screen sections side by side at 100 columns and up (the one layout boundary any pass-2 screen consumes). Within a column, rows never wrap.' The reference is SILENT on where the split falls and on whether a one-entry section earns a half-width column.",
+  "actual": "The second column is planted at a fixed halfway split, cell 76 of 150. Global's widest row ends at cell ~45, so 31 empty cells separate the two columns, and the single 7-cell entry 'q  quit' leaves the remaining ~68 cells of that row blank. Below both columns sit ~30 unused rows. The lone entry reads stranded mid-field rather than paired with Global, and the two-column split is buying horizontal space the overlay does not need while vertical space is abundant.",
+  "evidence": "help-150x45.png: 'This screen' begins at x\u2248686px of 1351 (cell 76); the widest Global row ('1-4  Mail \u00b7 Calendar \u00b7 People \u00b7 Config') ends at x\u2248405px (cell 45). help-150x45.ansi shows the same padding run. The 80-column single-column form (help-80x24.png) reads as the tighter composition of the two."
+ },
+ {
+  "id": "H8",
+  "capture": "live-dark/help-150x45.png, help-80x24.png",
+  "device": "footer (pinned help hint on the help screen itself)",
+  "class": "DESIGN-QUESTION",
+  "expected": "Two references disagree by omission. Design language \u00a74: '`? help` is pinned right at every width \u2026 the constant pointer to the help overlay.' F5's help footer shows no pinned '? help' at all: ` j/k move   Space/b page   Esc close`. Neither states what the pin should do on the help screen.",
+  "actual": "The pin is rendered while help is the front screen, so the overlay advertises a hint pointing at itself. With '? toggles help' ruled (STATUS gate item 12), '? help' is functionally a second close affordance sitting beside 'esc back', labelled as if it opened something.",
+  "evidence": "help-150x45.ansi final line ends `?  help` at the right edge; help-80x24.ansi line 24 the same. Visible bottom-right in both PNGs."
+ },
+ {
+  "id": "H9",
+  "capture": "live-dark/help-150x45.png, help-80x24.png, click-help.png",
+  "device": "help content (completeness vs legality)",
+  "class": "DESIGN-QUESTION",
+  "expected": "F5's Global block lists exactly this set, so the render FOLLOWS the reference. But F1 rules of the same placeholder state: 'The footer advertises exactly the placeholder's legal keys: q (surface root) and ?. Digits are exception 2; j/k and friends are not legal here (nothing scrolls).' Design language \u00a74 makes help 'the completeness surface: it lists every legal key regardless of what the footer's width-limited prefix shows.'",
+  "actual": "Over a pass-2 placeholder, help advertises j/k (down / up), space/b (page forward / back), home/end (first / last), and enter (open) \u2014 four entries with nothing to act on, on a screen F1 explicitly says they are not legal on. The completeness surface currently over-promises rather than matching the surface's legal keymap.",
+  "evidence": "help-150x45.ansi Global block; the underlying screen is the placeholder visible in click-digit-2.png (a centered title plus one count line, no list, nothing to scroll or open). Pass 3 makes the set legal, so this may be a state-of-the-pass artifact rather than a defect \u2014 flagged for Geoff's ruling, not for a fix."
+ },
+ {
+  "id": "FLOOR-1",
+  "capture": "live-dark/mail-59x24.png, live-dark/mail-100x14.png",
+  "device": "floor notice \u2014 size separator glyph",
+  "class": "DESIGN-QUESTION",
+  "expected": "F4 (plan lines ~500-510) renders the separator as the multiplication sign: \"          poplar needs at least 60\u00d715\" / \"             this window is 48\u00d712\".",
+  "actual": "Both captures paint ASCII `x`: \"poplar needs at least 60x15\" / \"this window is 59x24\" (and \"100x14\").",
+  "evidence": "PNG glyph is a lowercase x at x-height, baseline-aligned with the digits, not the raised centred \u00d7; the .ansi bytes are a bare 0x78 with no UTF-8 lead byte."
+ },
+ {
+  "id": "FLOOR-2",
+  "capture": "live-dark/mail-59x24.png",
+  "device": "floor notice \u2014 copy",
+  "class": "DESIGN-QUESTION",
+  "expected": "F4's worked example fails both dimensions at once (48\u00d712 against a 60\u00d715 minimum), so the reference never has to say which dimension is short.",
+  "actual": "At 59x24 only the width is short, and the notice states \"poplar needs at least 60x15 / this window is 59x24\" with nothing marking that the 24 is fine and the 59 is not.",
+  "evidence": "PNG line 2 reads \"this window is 59x24\" in the same fg (#D4D8DF) weight as line 1; both numbers carry identical emphasis, so the reader diffs them himself."
+ },
+ {
+  "id": "SHORT-1",
+  "capture": "live-dark/mail-100x20.png, live-dark/mail-100x19.png",
+  "device": "short-height compression \u2014 F3's three named behaviours",
+  "class": "DESIGN-QUESTION",
+  "expected": "F3 (plan lines ~470-480): \"Under 20 rows: the footer holds one row \u2026, banners demote to toasts, the sync segment drops its total.\"",
+  "actual": "None of the three is exercisable in this boundary pair: the placeholder's footer is already one row at 20 rows (its only hints are `q quit` and the pinned `? help`), no banner is raised, and the live store has no known total, so the sync segment reads bare `\u2839 Syncing` on both sides of the boundary. The pair therefore cannot falsify F3.",
+  "evidence": "The two PNGs are pixel-identical above the footer band except for the one content row 100x20 has and 100x19 does not; both status lines end in the same `\u2839 Syncing` with no numerals to drop."
+ },
+ {
+  "id": "SHORT-2",
+  "capture": "live-dark/mail-100x20.png (same in 60x24, 100x15, 100x19)",
+  "device": "placeholder composition \u2014 third line",
+  "class": "DESIGN-QUESTION",
+  "expected": "F1 composes the placeholder as three lines: \"Mail\" / \"36,102 messages in 14 folders\" / \"synced just now\".",
+  "actual": "Two lines only: \"Mail\" then \"0 messages in 0 folders\". No sync line inside the pane; the sync state lives solely in the status line's right segment. `composePlaceholder` in internal/ui/placeholder.go renders title plus one optional facts line and has no third slot, so this is by construction, not by state.",
+  "evidence": "PNG shows exactly two text rows in the content region (title row, blank row, facts row) at every size in this group; the pixel scan finds no third lit row above or below the block."
+ },
+ {
+  "id": "QUIT-1",
+  "capture": "live-dark/quit-q.png",
+  "device": "exit residue on the primary screen",
+  "class": "DESIGN-QUESTION",
+  "expected": "The pass-2 references are silent on what poplar leaves on the primary screen after a clean quit; F4/F1/\u00a79 cover only the alt-screen composition.",
+  "actual": "After exit the terminal carries poplar's store-recovery progress chatter \u2014 \"checking store integrity...\" and \"checking full-text index...\" \u2014 as the last thing on screen before the cursor. These come from internal/store/recovery.go's `report` calls, printed to stdout before the alt screen is entered, and survive the exit as scrollback.",
+  "evidence": "quit-q.png lines 1-2 render those two strings in the terminal's own default fg on kitty's #2B2F3B ground (not poplar's palette), above the harness's \"[kitty-shot] command exited 0\"; the .ansi holds the same three lines and nothing else."
+ },
+ {
+  "id": "LT-1",
+  "capture": "live-light/help-80x24.png, help-150x45.png, click-help.png",
+  "device": "grounds/bands (help overlay)",
+  "class": "DESIGN-QUESTION",
+  "expected": "F5 (plan lines ~522-545) draws the help screen with a rule under the status line and a rule above the footer: ' 1 Mail  2 3 4 ... synced' / '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2026' / ' Help \u00b7 Mail'. Decision 11 substitutes ground steps for those lines in truecolor ('Pane separation is whitespace gutters and alignment\u2026 In degrade profiles the ground steps substitute to single-line dividers'), and \u00a76 puts the help overlay on the panel ground.",
+  "actual": "The help overlay paints the whole window bgPanel #FFFFFF \u2014 status row, overlay body, and footer row all on the same ground \u2014 so there is no step left to carry the band boundary and no line either. 'Help \u00b7 Mail' sits directly under '1 Mail  2 3 4' with nothing between them, and the footer floats on the same white field.",
+  "evidence": "help-80x24.png is flat white from row 1 to row 24; the ANSI confirms every painted row carries 48:2:255:255:255. Compare mail-80x24.png in the same theme, where the white band over the #E4E7EC content region reads instantly. The two header rows read as one block in the PNG."
+ },
+ {
+  "id": "LT-2",
+  "capture": "live-light/help-80x24.png",
+  "device": "help layout",
+  "class": "COSMETIC",
+  "expected": "F5 aligns both sections on one key column: '   j / k          down / up' \u2026 '   q              quit' under 'This screen'.",
+  "actual": "Each section sizes its own key column, so 'This screen' renders '  q  quit' (description at col 6) three rows under Global's '  q         quit' (description at col 13). The same key with the same description appears twice at two different offsets.",
+  "evidence": "help-80x24.ansi rows 13 and 16; visible in the PNG as the 'q quit' pair stepping left below 'This screen'."
+ },
+ {
+  "id": "LT-3",
+  "capture": "live-light/help-80x24.png, help-150x45.png, click-help.png",
+  "device": "help layout (copy)",
+  "class": "COSMETIC",
+  "expected": "F5's key spellings: 'j / k', 'Space / b', 'Home / End', 'Enter', 'Esc', '1 2 3 4        mail \u00b7 calendar \u00b7 people \u00b7 config'. The ratified exemplar's hint atoms capitalize key names the same way ('Enter open', 'Esc dismiss \u2715', exemplar-3 banner row).",
+  "actual": "Keys render lowercase and compressed: 'j/k', 'space/b', 'home/end', 'enter', 'esc', and '1-4  Mail \u00b7 Calendar \u00b7 People \u00b7 Config'.",
+  "evidence": "help-80x24.ansi rows 5-13, legible in the PNG. Note the surface names are capitalized here while the key names are not, so the row mixes both conventions."
+ },
+ {
+  "id": "LT-4",
+  "capture": "live-light/help-80x24.png, help-150x45.png",
+  "device": "footer (help screen)",
+  "class": "COSMETIC",
+  "expected": "F5's help footer: ' j/k move   Space/b page   Esc close'.",
+  "actual": "' j/k navigate   space/b page   esc back'. Verbs are 'navigate' and 'back' rather than 'move' and 'close'.",
+  "evidence": "help-80x24.ansi row 24; same string at 150 in help-150x45.ansi."
+ },
+ {
+  "id": "LT-5",
+  "capture": "live-light/help-150x45.png, help-80x24.png, click-help.png",
+  "device": "footer (help screen)",
+  "class": "DESIGN-QUESTION",
+  "expected": "Two references disagree. \u00a74: '`? help` is pinned right at every width\u2026 the constant pointer to the help overlay, which is the completeness surface.' F5's help-screen footer omits it entirely and ends at 'Esc close'.",
+  "actual": "'? help' is pinned right while the help overlay is the thing on screen, so the permanent pointer points at what the reader is already looking at (and its label says 'help' where the key's actual effect here is close/toggle).",
+  "evidence": "help-80x24.ansi row 24: '  j/k navigate   space/b page   esc back                                ? help'; same in help-150x45.png and click-help.png."
+ },
+ {
+  "id": "LT-6",
+  "capture": "live-light/mail-150x45.png, mail-100x30.png, mail-80x24.png, calendar-150x45.png, click-digit-2.png",
+  "device": "placeholder composition",
+  "class": "COSMETIC",
+  "expected": "F1's content block is three lines: 'Mail' / '36,102 messages in 14 folders' / 'synced just now'.",
+  "actual": "Two lines only \u2014 title plus the count line ('Mail' / '24,700 messages in 14 folders'; 'Calendar' / '0 events'). The third, sync-state line is absent at every rung.",
+  "evidence": "mail-150x45.ansi paints only rows 22 and 24 in the content region; internal/ui/placeholder.go:195-200 composes title + facts with no third line. Nothing is actually lost from the frame \u2014 the status line carries the sync state, and decision 9 ('Surface name plus live store counts, centered') plus the gate brief both describe the two-line form \u2014 so this is a wireframe-literal miss, not an information miss."
+ },
+ {
+  "id": "LT-7",
+  "capture": "live-light/mail-59x24.png",
+  "device": "glyphs (floor notice)",
+  "class": "COSMETIC",
+  "expected": "F4 writes the dimensions with the multiplication sign: 'poplar needs at least 60\u00d715' / 'this window is 48\u00d712'.",
+  "actual": "ASCII 'x' in both lines: 'poplar needs at least 60x15' / 'this window is 59x24'.",
+  "evidence": "mail-59x24.ansi, both painted rows; readable in the PNG at the same size."
+ },
+ {
+  "id": "LT-8",
+  "capture": "live-light/calendar-150x45.png, click-digit-2.png, click-help.png",
+  "device": "status line (cluster spacing)",
+  "class": "COSMETIC",
+  "expected": "The reference shows the cluster only in its mail form: shell-exemplar.py:153 renders '  ' + '1 Mail' (accent bold) + '  2 3 4' (fgSubtle), i.e. a two-cell gap after the named surface. It is silent on where the named surface sits when it is not first.",
+  "actual": "'  1 2 Calendar  3 4' \u2014 one cell before the named surface, two after, so the active label reads as bound to the preceding sibling digit rather than sitting in its own gap.",
+  "evidence": "calendar-150x45.ansi row 1; in the PNG the '1' and the '2 Calendar' group visually as '1 2' before the bold name resolves."
+ },
+ {
+  "id": "LT-9",
+  "capture": "live-light/mail-150x45.png, mail-80x24.png, calendar-150x45.png",
+  "device": "typography roles",
+  "class": "DESIGN-QUESTION",
+  "expected": "Internal conflict in the references. Decision 6: 'fgSubtle is an indicator role and never carries reading text\u2026 snippets are the one fgSubtle text use.' The ratified exemplar paints the sibling digits in fgSubtle anyway (shell-exemplar.py:153), and decision 1 calls them 'bare dim digits'.",
+  "actual": "'2 3 4' render in fgSubtle #646D79, which exemplar-4's own table measures at 3.27:1 (indicator floor 3.0, text floor 4.5). On the white panel they are the faintest ink in the frame, and they are also the status line's pointer targets (ADR-0017 checklist, exercised in click-digit-2).",
+  "evidence": "mail-150x45.ansi row 1 (38:2:100:109:121 for each digit); in mail-150x45.png the digits sit at the visibility edge beside the bold accent '1 Mail'. Live matches the exemplar exactly, so this is a ruling for Geoff, not a build defect."
+ },
+ {
+  "id": "LT-10",
+  "capture": "live-light/help-150x45.png, click-help.png",
+  "device": "help layout (two-column)",
+  "class": "DESIGN-QUESTION",
+  "expected": "F6 says only 'As F5 with the Global and This-screen sections side by side at 100 columns and up'. It is silent on where the split falls.",
+  "actual": "The split is a fixed half width (column 2 starts at col 77 of 150), so at the wide rung a single two-word row ('q  quit') sits alone about 45 cells to the right of a Global column whose longest description ends at col 44, with white space in between and 30 empty rows below both.",
+  "evidence": "help-150x45.png: 'This screen / q quit' isolated at x\u2248685 with the rest of the frame empty; help-150x45.ansi row 4 shows 68 spaces between 'Global' and 'This screen'."
+ },
+ {
+  "id": "SK-1",
+  "capture": "sketch/mail-truecolor-dark.png (and every other 100x30 sketch capture in this group)",
+  "device": "placeholder composition / dividers / rung behavior - cmd/sketch tooling defect",
+  "class": "STRUCTURAL",
+  "expected": "The 100x30 frame should be what ui.Render produces: committed gallery internal/ui/testdata/gallery/mail-100x30-truecolor-dark.txt paints the whole Main band base ground with 'Mail' at cols 49-52 and no divider anywhere; STATUS gate item 1 says 'The corrected placeholder frames (FullRegion, no empty rail) get his eye specifically'.",
+  "actual": "The capture paints an empty 22-cell rail, a border-role \u2502 at column 23 (sampled #3A414D), and the whole content block displaced 25 columns right ('Mail' at cols 74-77, count line at cols 64-86), so the placeholder reads visibly off-centre inside a frame whose chrome (cluster at col 3, 'Synced' and '? help' ending at col 98) is correctly 100 wide.",
+  "evidence": "PNG: divider at x=201-202 in border colour, base ground either side, frame ends at x=899 (col 100); .ansi rows 2-29 are '22 spaces + \u2502'. Cross-check: the committed gallery render for the same fixture/profile/rung has no \u2502 (no gallery file contains U+2502 except the four modal-confirm ones) and centres the block; live-dark/mail-150x45.ansi likewise has no divider. Cause is visible in cmd/sketch/main.go computeFrame, which builds ui.RenderInput without FullRegion, the flag App.View sets for placeholder screens (internal/ui/app.go:228). Consequence: this group's placeholder-frame evidence is not product truth, and gate item 1 cannot be judged from these captures."
+ },
+ {
+  "id": "SK-2",
+  "capture": "sketch/modal-confirm-truecolor-dark.png",
+  "device": "modal wipe (gate item 2) - cmd/sketch tooling defect",
+  "class": "STRUCTURAL",
+  "expected": "Design language \u00a76 as amended: 'the screen behind it wipes to the base ground rather than rendering dimmed'; the committed gallery modal-confirm-100x30-truecolor-dark.txt has rows 1 and 30 empty, i.e. no status line and no footer, box centred at cols 26-72.",
+  "actual": "The capture still shows the status line at row 1 ('1 Mail  2 3 4 \u2026 Synced'), the SK-1 rail artefact behind, no footer row, and the box pushed to cols 51-97 by the same +25 offset.",
+  "evidence": "PNG shows the panel status band across the top and a stray footer-band fragment at x=0-224, y=548-568; .ansi row 1 carries the cluster and row 30 is blank. The modal's own anatomy is correct (see passed), but gate item 2's ruling cannot be verified from this capture - the exemplar and the gallery are the only evidence that the wipe is total."
+ },
+ {
+  "id": "SK-3",
+  "capture": "sketch/floor-40x10-truecolor-dark.png, sketch/short-100x16-truecolor-dark.png",
+  "device": "frame hygiene - stale larger frames behind the current one",
+  "class": "STRUCTURAL",
+  "expected": "One frame per capture: the named rung, nothing else on screen (the capture harness's contract; F4 also says the floor state shows 'Centered, nothing else, never garbled chrome').",
+  "actual": "Both captures stack three earlier, larger frames above the current one: floor-40x10 shows full-width status lines at rows 1, 5 and 17 plus rail fragments and a stray '0' before the real 40x10 floor frame at rows 34-43; short-100x16 shows status lines at rows 1, 13 and 29 with only the last belonging to the 100x16 frame.",
+  "evidence": "PNG floor-40x10: three '1 Mail  2 3 4 \u2026 Synced' bands at y=0, y=76, y=304, with the floor notice only at y=684-712; PNG short-100x16 the same shape. The .ansi dumps confirm the residue is painted, not a dump artefact. cmd/sketch never clears the screen when the chosen rung shrinks, so any shrink leaves the previous frame visible."
+ },
+ {
+  "id": "SK-4",
+  "capture": "sketch/short-100x16-truecolor-dark.png",
+  "device": "banner demotion at short height - coverage gap",
+  "class": "STRUCTURAL",
+  "expected": "manifest.txt: 'short-100x16-truecolor-dark: fixture short at 100x16 (banner demotion at short height)'; F3: 'Under 20 rows: \u2026 banners demote to toasts'.",
+  "actual": "The capture cannot show it: fixture `short` is plain mailBuild with no banner (internal/ui/fixtures/fixtures.go:53), and the frame shows neither a banner row nor a demoted toast - only 'Synced'. No capture in this group evidences F3's demotion rule.",
+  "evidence": "PNG bottom frame (rows 29-44) has a bare status line and a single footer row; .ansi rows 29-44 likewise. Cross-check for Geoff's eye: the one committed artefact that could show it, internal/ui/testdata/gallery/mail-banner-100x16-nocolor.txt, has neither a banner row nor any toast text in its status line, which reads as the banner being dropped rather than demoted."
+ },
+ {
+  "id": "P-1",
+  "capture": "sketch/mail-toast-truecolor-dark.png",
+  "device": "toast anatomy - gap before the undo key",
+  "class": "COSMETIC",
+  "expected": "Exemplar render.txt line 52: '3 messages archived   u undo  9s' - three cells (gapHint 3) between the label and the key atom, two before the countdown; F2's wireframe is identical.",
+  "actual": "Two cells between 'archived' and 'u undo'; the two before '9s' are right.",
+  "evidence": ".ansi row 1: '3 messages archived  u undo  9s  Synced'; PNG 'archived' ends x=702, 'u' starts x=720 (2 cells at 9px), against exemplar-3.png where the same gap measures 28px = 3 cells."
+ },
+ {
+  "id": "P-2",
+  "capture": "sketch/mail-toast-truecolor-dark.png",
+  "device": "toast placement relative to the sync segment",
+  "class": "DESIGN-QUESTION",
+  "expected": "F2 and exemplar render.txt line 52 end the status row with the toast ('\u2026 3 messages archived   u undo  9s'), the sync word absent at 120; F2's note says only that 'the sync state compresses to its bare word beside it', which does not say which side.",
+  "actual": "At 100 columns the toast sits inboard and 'Synced' keeps the right end, so the transient notice is not the row's rightmost element and the eye lands on the steady-state word first.",
+  "evidence": ".ansi row 1: '\u2026 3 messages archived  u undo  9s  Synced'; PNG shows 'Synced' at cols 93-98 outboard of the countdown. Reference is silent on the order; flagging for Geoff."
+ },
+ {
+  "id": "P-3",
+  "capture": "sketch/help-truecolor-dark.png",
+  "device": "help copy - key labels and footer verbs",
+  "class": "COSMETIC",
+  "expected": "F5's ratified copy: 'j / k', 'Space / b', 'Home / End', 'Enter', 'Esc', '1 2 3 4', 'q  quit (at a surface root)', footer 'j/k move   Space/b page   Esc close'. STATUS gate item 10 says the ratified F5 help copy was restored.",
+  "actual": "Descriptions are restored, but the key labels are lowercased and re-spelled ('j/k', 'space/b', 'home/end', 'enter', 'esc', '1-4'), 'q quit' loses '(at a surface root)', and the footer reads 'j/k navigate   space/b page   esc back'. The same build capitalises keys everywhere else - the banner in mail-banner renders 'Esc dismiss' and exemplar-1's footer reads 'Enter open' - so help is the one surface spelling them in lower case.",
+  "evidence": "PNG help body rows 5-13 and footer row 30; .ansi rows 5-13, 30. Compare sketch/mail-banner-truecolor-dark.png row 2 'Esc dismiss' and exemplar-1.png's footer."
+ },
+ {
+  "id": "P-4",
+  "capture": "sketch/help-truecolor-dark.png",
+  "device": "footer - pinned help hint on the help surface itself",
+  "class": "DESIGN-QUESTION",
+  "expected": "F5's help footer is 'j/k move   Space/b page   Esc close', with no pinned '? help'; decision 8 pins '? help' right 'at every width' as 'the constant pointer to the help overlay'.",
+  "actual": "The help overlay's own footer carries '? help' at cols 93-98, pointing at the surface already open (and, under the pass ruling '? toggles help', actually closing it).",
+  "evidence": "PNG footer row: 'j/k navigate   space/b page   esc back' left, '? help' right; same in the committed gallery help-100x30-truecolor-dark.txt row 30. The two references conflict, so this is Geoff's call."
+ },
+ {
+  "id": "P-5",
+  "capture": "sketch/help-truecolor-dark.png",
+  "device": "help ground versus the chrome bands (STATUS gate item 9)",
+  "class": "DESIGN-QUESTION",
+  "expected": "Decision 11: the panel ground elevates 'chrome bands, the reader card, the help overlay, and modals' - which puts the overlay and the two bands on the same value by design. Gate item 9 asks for the eyeball verdict.",
+  "actual": "At 100x30 the status band, the whole help body and the footer band are one uninterrupted #262B36 field: nothing marks where the status line ends or the footer begins except the text itself, so the help view loses the frame every other screen has.",
+  "evidence": "PNG: sampled (38,43,54) at the status row (600,8), the overlay body (600,300) and the footer (600,560); the row scan at y=300 shows panel ground running unbroken to the frame edge."
+ },
+ {
+  "id": "P-6",
+  "capture": "sketch/mail-loaded-truecolor-dark.png",
+  "device": "placeholder composition - third line",
+  "class": "COSMETIC",
+  "expected": "F1's content block is three lines: 'Mail' / '36,102 messages in 14 folders' / 'synced just now'.",
+  "actual": "Two lines: name and count only; the sync line is gone from every surface.",
+  "evidence": "PNG rows 14 and 16 only; .ansi likewise, and the same in live-dark/mail-150x45.ansi. Decision 9 ('Surface name plus live store counts, centered') reads as the later, narrower rule, so this is probably deliberate - recorded so the F1 delta is on the record rather than silently carried."
+ },
+ {
+  "id": "P-7",
+  "capture": "sketch/contacts-truecolor-dark.png, sketch/config-truecolor-dark.png",
+  "device": "placeholder copy register",
+  "class": "DESIGN-QUESTION",
+  "expected": "Decision 9: 'Placeholder surfaces state store facts, not apologies or roadmap talk'; F8 as amended ships 'Contact sync is not available yet.' and 'Configuration is not available yet.', with gate item 10 handing the reworded copy to Geoff's taste.",
+  "actual": "Two of the four surfaces state a fact ('0 messages in 0 folders', '42 events'), and two state an unavailability in a full sentence with a period. The four placeholders therefore read in two different registers side by side.",
+  "evidence": "PNG contacts row 16 'Contact sync is not available yet.', config row 16 'Configuration is not available yet.', against calendar row 16 '42 events'."
+ },
+ {
+  "id": "P-8",
+  "capture": "sketch/calendar-truecolor-dark.png, sketch/contacts-truecolor-dark.png",
+  "device": "status-line cluster spacing",
+  "class": "DESIGN-QUESTION",
+  "expected": "Decision 1 fixes only the anatomy (active named in accent+bold, siblings bare dim digits); F1, F2 and the exemplar all show Mail active, i.e. the atom first, so the reference is silent on the gaps around a mid-run active surface.",
+  "actual": "One cell before the active atom and two after: '1 2 Calendar  3 4', '1 2 3 People  4', '1 2 3 4 Config'. The named surface sits tight against the digit on its left and loose on its right, so the cluster reads lopsided on three of the four surfaces.",
+  "evidence": ".ansi row 1 of calendar, contacts and config; PNG calendar shows '1' at col 3 and '2 Calendar' starting col 5, '3 4' from col 16."
+ },
+ {
+  "id": "P-9",
+  "capture": "sketch/mail-syncing-truecolor-dark.png",
+  "device": "spinner glyph legibility",
+  "class": "DESIGN-QUESTION",
+  "expected": "Decision 7 renders syncing as '\u2839 syncing 4,312/36,102' with braille spinner frames (decision 4); the exemplar shows the same braille frame in its status row, so the build follows the reference.",
+  "actual": "At Monaspace Neon 11pt the braille frame is a barely visible speck ahead of the word - the only motion cue in the progress state carries almost no ink.",
+  "evidence": "PNG: the glyph cell at x=657-666 holds a handful of muted pixels against the band; exemplar-1.png and exemplar-3.png show the same faintness, so this is a property of the ratified choice rather than a regression."
+ },
+ {
+  "id": "L1",
+  "capture": "mail-loaded-truecolor-light.png (identical in mail-toast, mail-banner, mail-offline, mail-backing-off, calendar truecolor-light)",
+  "device": "placeholder composition / centering",
+  "class": "STRUCTURAL",
+  "expected": "F1: the placeholder block is centered in the content region (wireframe line 431-437 puts `Mail` and the count line on the pane's centre axis); F8: \"Layout identical at every rung\"; the shipped composePlaceholder's own contract, internal/ui/placeholder.go:63-69, \"centers title and facts within layout's whole Main band ... a placeholder owns no sidebar and no split\".",
+  "actual": "The block is centred against the full 100-cell terminal width and then inset by 25 cells, so it lands on no axis at all: `Mail` occupies cols 73-76 and `36,102 messages in 14 folders` cols 60-88, versus col 48 (frame centre) or col 61 (pane centre). It sits ~25 cells right of the frame's centre and ~12 right of the pane's centre.",
+  "evidence": "In the PNG the frame spans x=0-900 (9 px/cell) and the pane spans x=212-900; `Mail` renders at x=657-693, visibly right of both centres, with the whole left half of the pane empty. Arithmetic confirms the double offset: (100-4)/2+25 = 73 and (100-29)/2+25 = 60, exactly the rendered columns. Cross-check: mail-truecolor-dark.ansi puts `Mail` at col 73 too, so this is build-wide, not light-only."
+ },
+ {
+  "id": "L2",
+  "capture": "mail-loaded-truecolor-light.png, help-truecolor-light.png (all eight captures show the column)",
+  "device": "dividers / rung behaviour",
+  "class": "STRUCTURAL",
+  "expected": "Decision 1 and \u00a76: the cluster's segment divider \"aligns exactly with the sidebar's divider column whenever a sidebar is present, and is dropped when none is\"; \u00a711: \"exactly one structural line (the rail/list divider)\"; F1: \"With no sidebar present (placeholder, and any spartan screen), the top bar drops the segment divider\"; F8: \"Layout identical at every rung\".",
+  "actual": "A sidebar divider is painted at col 22 for the full content height on every placeholder and on the help overlay, with 22 cells of empty base ground to its left, while the status line correctly drops its segment divider. The two halves of the same rule disagree: the top bar says \"no sidebar\", the content region draws the sidebar's divider and reserves its rail.",
+  "evidence": "Pixel probe on mail-loaded-truecolor-light.png and modal-confirm-truecolor-light.png returns the border role #B4BCC9 at x=201-202 on every content row (y=100, 300, 450); the region left of it is uniformly base #E4E7EC with no content in any capture. In help-truecolor-light.png the white overlay panel starts at x=225 (col 25) rather than at the frame's left edge, so the empty rail eats 25 cells of the overlay too."
+ },
+ {
+  "id": "L3",
+  "capture": "modal-confirm-truecolor-light.png",
+  "device": "modal placement",
+  "class": "STRUCTURAL",
+  "expected": "Design language \u00a79 composition rule 5: \"Modals and pickers clamp against the terminal and center\"; F7: \"Rounded border set, padModal 2/1, clamped and centered\"; exemplar-3.png's modal is centred in its 120-cell frame (box x=355-762, box centre 558 = frame centre 558).",
+  "actual": "The 49-cell box occupies cols 50-98 of a 100-cell frame: 50 cells of margin on the left, 1 on the right. It is centred against the full width and then shifted by the same 25-cell rail inset as L1 ((100-49)/2 + 25 = 50).",
+  "evidence": "In the PNG the box borders sit at x=450 and x=886 inside a frame ending at x=900, so the card visibly hugs the right edge with the whole left half empty. modal-confirm-truecolor-dark.ansi puts the top-left corner glyph at col 50 as well, so the defect is not light-only."
+ },
+ {
+  "id": "L4",
+  "capture": "modal-confirm-truecolor-light.png",
+  "device": "footer during a modal / modal wipe",
+  "class": "STRUCTURAL",
+  "expected": "\u00a79 composition rule 1: \"Content outranks chrome; the footer and status line survive to the floor\"; \u00a76's modal amendment: \"the screen behind it wipes to the base ground\" (the screen, with the chrome bands intact, as the status line here demonstrates).",
+  "actual": "The footer row renders as a 25-cell-wide empty panel stub (cols 0-24) with no hints, and the remaining 75 cells of that row fall back to the base ground, so the bottom band is both blank and truncated. Meanwhile the status line keeps its full content and the sidebar divider still paints through the wipe at every row.",
+  "evidence": "Pixel row y=560 in the PNG is #FFFFFF from x=0 to x=224 and #E4E7EC from x=225 to x=899; the .ansi's row 29 carries no text at all (compare mail-toast row 29, `q quit ... ? help`). The half-width white stub reads as an unfinished element rather than a decision."
+ },
+ {
+  "id": "L5",
+  "capture": "mail-loaded-truecolor-light.png, calendar-truecolor-light.png",
+  "device": "placeholder composition (copy)",
+  "class": "STRUCTURAL",
+  "expected": "F1 (plan lines 429-437) composes three lines: title, `36,102 messages in 14 folders`, and `synced just now`; F8 gives the sibling form `Calendar \u2014 5,112 events, synced`. No amendment retires the sync line (the m13 amendment only rewrote the contacts and config strings).",
+  "actual": "Every placeholder renders two lines only: title and count. The sync line is absent on all four surfaces.",
+  "evidence": "mail-loaded-truecolor-light.png shows `Mail` (row 13) and `36,102 messages in 14 folders` (row 15) with rows 16-28 empty; calendar-truecolor-light.png shows `Calendar` / `42 events`. The sync state does appear in the status line (`Synced`), so this may be a deliberate de-duplication, but it departs from the wireframe Geoff reviewed and should be ratified rather than assumed."
+ },
+ {
+  "id": "L6",
+  "capture": "help-truecolor-light.png (versus mail-banner-truecolor-light.png in the same build)",
+  "device": "help layout / copy register",
+  "class": "COSMETIC",
+  "expected": "F5 lists named keys capitalised as typed: `Space / b`, `Home / End`, `Enter`, `Esc            back \u00b7 dismiss banner`; the exemplar does the same in chrome (`Enter open   a archive`, render.txt line 17; `Enter details   Esc dismiss`, line 53).",
+  "actual": "The help rows and the help footer lowercase named keys (`space/b`, `home/end`, `enter`, `esc`, and `esc back` in the footer), while the banner in the same build renders `Esc dismiss` capitalised. One build spells the same key two ways.",
+  "evidence": "help-truecolor-light.png rows 4-12 read `j/k`, `space/b`, `home/end`, `enter`, `esc`, `1-4`; its footer reads `esc back`. mail-banner-truecolor-light.png row 1 reads `Esc dismiss`."
+ },
+ {
+  "id": "L7",
+  "capture": "mail-toast-truecolor-light.png",
+  "device": "toast spacing",
+  "class": "COSMETIC",
+  "expected": "The ratified exemplar's toast atom, render.txt line 52: `3 messages archived   u undo  9s` - three cells between the message and the `u undo` hint (gapHint 3), two before the countdown.",
+  "actual": "Two cells between the message and `u undo`: the message ends at col 77 and `u undo` starts at col 80.",
+  "evidence": "The .ansi row 0 expands to `... 3 messages archived  u undo  9s  Synced  `; in the PNG the message-to-hint gap is visibly tighter than the exemplar's in exemplar-3.png."
+ },
+ {
+  "id": "L8",
+  "capture": "mail-toast-truecolor-light.png",
+  "device": "toast / sync-state ordering in the right segment",
+  "class": "DESIGN-QUESTION",
+  "expected": "F2 says only that with a toast showing \"the sync state compresses to its bare word beside it and yields entirely below 100 columns\"; the exemplar at 120 (render.txt line 52) shows the toast pinned to the right edge with no sync word beside it. Neither settles which of the two holds the right edge at exactly 100 columns.",
+  "actual": "`Synced` holds the right edge (cols 92-97) and the toast sits to its left (cols 59-89), so the transient notice is the interior element and the steady-state word is the outermost.",
+  "evidence": "Status row of the PNG reads `3 messages archived  u undo  9s  Synced`. The reference is silent on the order; flagged for Geoff because the exemplar's only rendered example puts the toast outermost."
+ },
+ {
+  "id": "L9",
+  "capture": "mail-offline-truecolor-light.png, mail-backing-off-truecolor-light.png, mail-banner-truecolor-light.png",
+  "device": "warn role legibility on the light grounds",
+  "class": "DESIGN-QUESTION",
+  "expected": "exemplar-4.png's ratified light palette table gives warn #6A4E0A at 4.84:1 worst-case, and the swatches there render the same dark olive; the build follows the reference exactly.",
+  "actual": "At Monaspace Neon 11pt the warn role reads as dark brown/olive rather than a caution colour: `Offline` and `Backing off \u00b7 retry 12s` separate from the muted grey `Synced` only by a subtle hue shift, and the banner's `\u25b2` marker at one cell reads nearly as fg-coloured ink. The state distinction that is unmistakable in dark (#D4B36A gold, exemplar-3.png) is carried on light mostly by the glyph and the wording.",
+  "evidence": "4x zoom of the sync segment in both captures shows a low-chroma brown; the 2.5x zoom of the banner row shows the `\u25b2` as a small dark mark that does not read as a warning at 1x. Contrast is not the issue (7.8:1 measured against the panel ground) - chroma is."
+ },
+ {
+  "id": "DG-1",
+  "capture": "sketch/help-ansi16.png (same defect in mail-ansi16, mail-toast-ansi16, mail-banner-ansi16, mail-offline-ansi16, calendar-ansi16, modal-confirm-ansi16)",
+  "device": "typography roles / fgMuted+fgSubtle in ANSI-16",
+  "class": "STRUCTURAL",
+  "expected": "Pass-2 plan decision 5: \"`fg`, `fgMuted`, `unread`, `error`, `warn`, `success`, `link`, `quote`, `accent` are text roles (4.5:1)\"; design language \u00a77: \"text roles hold 4.5:1 against all four grounds ... indicator roles 3:1 against the same four (UX-7 ...), `border` exempted\". Whatever slot ANSI-16 picks for the muted tier, it has to stay readable.",
+  "actual": "ANSI-16 renders every muted role as SGR 2 (dim) layered on SGR 90 (bright black). Measured ink rgb(59,66,82) against the kitty dark ground rgb(44,49,61) = 1.29:1. Both halves darken: 90 alone measures rgb(76,86,106) = 1.76:1, and the dim attribute halves it again. NO_COLOR's dim on the same ground measures 4.32:1, so the defect is ANSI-16's colour slot, not the dim attribute.",
+  "evidence": "help-ansi16.png: the entire right-hand description column (`down / up`, `page forward / back`, `first / last (G works too)`, `open`, `back - dismiss banner`, `Mail - Calendar - People - Config`, `undo`, `help`, `quit`, and `quit` under This screen) is a ghost against the ground; help-nocolor.png at the same crop shows the identical text plainly. Same crop measured: ansi16 1.29:1 vs nocolor 4.32:1. The help overlay is DL decision 8's \"completeness surface\", and in ANSI-16 half of every row of it is gone."
+ },
+ {
+  "id": "DG-2",
+  "capture": "sketch/mail-ansi16.png, sketch/calendar-ansi16.png",
+  "device": "status line / surface cluster siblings",
+  "class": "STRUCTURAL",
+  "expected": "Pass-2 plan decision 1: \"the active surface named in accent + bold (`1 Mail`), siblings as bare dim digits (`2 3 4`)\", and footer exception 2's restated reason, \"digits advertised by the cluster; names in help and on visit\". The cluster is the only advertised route to the other three surfaces.",
+  "actual": "The sibling digits are dim+90 at 1.29:1. In mail-ansi16 `2 3 4` is barely a smudge; in calendar-ansi16 the leading `1` beside `2 Calendar` is gone entirely, so the cluster reads as a bare surface name with no siblings and no visible switching affordance.",
+  "evidence": "calendar-ansi16.png, top-left: `2 Calendar` is clearly blue-accented, the `1` in front of it measures rgb(59,66,82) = 1.29:1 and cannot be picked out. calendar-nocolor.png at the same position shows `1 2 Calendar  3 4` fully legible. Direct A/B of the two PNGs makes the loss unmistakable."
+ },
+ {
+  "id": "DG-3",
+  "capture": "sketch/mail-toast-ansi16.png",
+  "device": "toast",
+  "class": "STRUCTURAL",
+  "expected": "Wireframe F2: \"the toast occupies the status line's right segment for its 10 s window, countdown visible (UX-9)\"; pass-2 plan decision 13 pin ruling: \"the toast keeps the dim `9s` countdown, which satisfies UX-9's visible-countdown MUST as written\".",
+  "actual": "The undo label and the countdown both carry the muted role, so in ANSI-16 `undo` and `9s` render at 1.29:1 and vanish. What remains readable is `3 messages archived  u` \u2014 the verb the key performs and the countdown UX-9 mandates are both invisible.",
+  "evidence": "mail-toast-ansi16.png status row: `3 messages archived` and the `u` key cap are bright (10.69:1); `undo` and `9s` measure rgb(59,66,82) = 1.29:1. mail-toast-nocolor.png shows the same row with `undo` and `9s` plainly readable at 4.32:1. UX-9's visible-countdown MUST is not satisfied at this profile."
+ },
+ {
+  "id": "DG-4",
+  "capture": "sketch/modal-confirm-ansi16.png",
+  "device": "modal confirm / default-answer selection channel",
+  "class": "STRUCTURAL",
+  "expected": "Design language \u00a77, as amended by ruling I1: \"reverse video is selection's exclusive channel\"; \u00a77 degrade table, \"selected = reverse video\". A reverse-video answer pill must read as one selected target.",
+  "actual": "The pill emits reverse video and then sets fg to dim+90 mid-run, which under SGR 7 flips 90 into the background. The result is a two-tone pill: the `  n` half is a light plate rgb(229,233,240), the ` stay  ` half is a dark slate plate rgb(76,86,106) with pale text. It does not read as one selected control, and the word `stay` is close to unreadable.",
+  "evidence": "modal-confirm-ansi16.png answer row: pixel histogram over the pill span is dominated by rgb(76,86,106) (1005px) with rgb(229,233,240) (456px) confined to the `n` cell. modal-confirm-nocolor.png over the same span is a single uniform rgb(216,222,233) plate (1455px). The .ansi confirms the cause: `^[[7m  n^[[22;2;90m stay  ^[[22;27;37m`."
+ },
+ {
+  "id": "DG-5",
+  "capture": "sketch/modal-confirm-ansi16.png",
+  "device": "modal frame + modal ground",
+  "class": "STRUCTURAL",
+  "expected": "Design language \u00a76 modal-confirm and \u00a77: the modal is a framed, elevated surface (decision 11: \"the panel ground elevates chrome bands, the reader card, the help overlay, and modals\"), with the frame collapsing to plain ASCII in the degrade profiles. Something has to carry the elevation once the ground step is gone.",
+  "actual": "In ANSI-16 the modal has neither channel. Its interior is the same ground as the wiped screen behind it (no bg emitted at all), and the ASCII frame is drawn in SGR 90 measuring 1.76:1 \u2014 below even the 3:1 indicator floor. The only thing that reads as a modal is the bold question line floating in space.",
+  "evidence": "modal-confirm-ansi16.png: the `+-----+` box is a faint outline barely separable from the ground; measured frame ink rgb(76,86,106) = 1.76:1. modal-confirm-nocolor.png draws the identical frame at rgb(216,222,233) = 9.63:1 and reads as a real box. The truecolor control (modal-confirm-truecolor-dark.ansi) sets `48:2:38:43:54` bgPanel across every interior cell; neither degrade profile emits any background."
+ },
+ {
+  "id": "DG-6",
+  "capture": "sketch/mail-ansi16.png, mail-nocolor.png (and all twelve other captures in the group)",
+  "device": "chrome bands / grounds",
+  "class": "DESIGN-QUESTION",
+  "expected": "This is STATUS pass-2 gate item 3, verbatim: \"Chrome bands carry no non-color channel in ANSI-16/NO_COLOR \u2014 extending the divider substitution costs rows; position-only is the alternative.\" Design language decision 11: \"the panel ground elevates chrome bands\". Reference is silent on what replaces it.",
+  "actual": "Confirmed and it is worse than 'no channel' \u2014 the truecolor status line and footer carry `48:2:38:43:54` bgPanel across their full width; both degrade profiles emit no background at all, so the two bands are simply lines of text at the top and bottom of an otherwise empty field. Nothing marks where chrome ends and content begins. How bad: on a two-line-of-content placeholder it is survivable because position alone disambiguates; on the banner fixture it is not (see DG-7), and on the help fixture it is not (see DG-8).",
+  "evidence": "mail-ansi16.png / mail-nocolor.png: the whole 100x30 frame is one flat kitty ground, top to bottom. Compare mail-truecolor-dark.png, where the status row and footer are visibly raised plates. The .ansi confirms: truecolor row 1 opens `^[[38:2:212:216:223;48:2:38:43:54m`, ansi16 row 1 opens `^[[m^[[37m` with no SGR 4x background."
+ },
+ {
+  "id": "DG-7",
+  "capture": "sketch/mail-banner-nocolor.png (and mail-banner-ansi16.png)",
+  "device": "banner",
+  "class": "STRUCTURAL",
+  "expected": "Pass-2 plan decision 2 / wireframe F2: the banner is \"a row directly under the status line\" with a \"warn `!` gutter, message, key hint, dismiss glyph\", a distinct persistent notice. Exemplar render.txt line 53 shows it as a second panel-ground band under the status line.",
+  "actual": "With no ground on either band (DG-6), rows 1 and 2 collapse into two undifferentiated lines of text. In NO_COLOR the banner carries no weight, no dim, no reverse \u2014 its sole cue is a bare `^` at column 3, which reads as a stray caret rather than a warning marker. The banner is typographically identical to a line of body content.",
+  "evidence": "mail-banner-nocolor.png rows 1-2: `1 Mail  2 3 4 ... Synced` and `^ No keyring found, so your token is stored in a plain file. ... Esc dismiss  x` are the same colour and the same weight; measured banner marker rgb(216,222,233) and message text rgb(216,222,233), identical. Compare mail-banner-truecolor-dark.ansi, where both rows carry bgPanel and the `\u25b2` is `38:2:212:179:106` warn. In mail-banner-ansi16.png the marker at least survives (93, 8.33:1) but `dismiss` and the `x` fall to 1.29:1, so the dismiss affordance is gone."
+ },
+ {
+  "id": "DG-8",
+  "capture": "sketch/help-ansi16.png, sketch/help-nocolor.png",
+  "device": "help overlay ground",
+  "class": "STRUCTURAL",
+  "expected": "Wireframes F5/F6: help is \"A full-content-region overlay on the screen stack (Esc pops)\". Design language decision 11 puts the help overlay on the panel ground so it reads as an overlay. This also touches STATUS gate item 9 (help ground merging with the chrome bands).",
+  "actual": "In both degrade profiles the help overlay emits no background, so it has neither a ground step nor a frame \u2014 it is bare text laid over the base field. It does not read as an overlay at all; it reads as if the mail surface had been replaced by a keymap. Worse, the rail divider column keeps painting straight down through the overlay region at column 23 while the overlay's own content starts at column 26, so a structural line runs through a surface that has no panes.",
+  "evidence": "help-nocolor.png: the `|` column runs the full height at x=202px, at 9.63:1, with the help text starting to its right and nothing to its left. help-truecolor-dark.ansi shows the overlay opening `^[[38:2:212:216:223;48:2:38:43:54m` bgPanel on every content row; help-ansi16.ansi and help-nocolor.ansi open the same rows with no background SGR."
+ },
+ {
+  "id": "DG-9",
+  "capture": "sketch/mail-nocolor.png, calendar-nocolor.png, modal-confirm-nocolor.png, help-nocolor.png",
+  "device": "dividers",
+  "class": "STRUCTURAL",
+  "expected": "Design language decision 11: \"Pane separation is whitespace gutters and alignment, plus exactly one structural line (the rail/list divider in the `border` role ...)\", and \u00a77: `border` is \"deliberately sub-contrast\". Decision 3 substitutes the drawn `divider \u2502` for the ground steps in the degrade profiles, but the role is still `border`.",
+  "actual": "NO_COLOR promotes the substituted divider to the default foreground: rgb(216,222,233) = 9.63:1, the same weight as reading text and the single most prominent mark on every NO_COLOR screen. Because the pass-2 placeholders centre their title on the full width (FullRegion) with nothing in the left 23 columns, NO_COLOR draws a full-height, high-contrast line dividing a region that has no rail. A sub-contrast structural role has become the loudest element on the screen.",
+  "evidence": "calendar-nocolor.png: the `|` column at x=202px measures identical ink to the `Calendar` title and to the body text (all rgb(216,222,233)), and the left 23 columns it separates are empty; the title sits at x=675px, centred on the full width, not on the region right of the line. calendar-truecolor-dark.ansi draws the same column as `38:2:58:65:77` on `48:2:22:24:29` \u2014 nearly invisible. The degrade substitution amplifies a truecolor near-non-event into a dominant line."
+ },
+ {
+  "id": "DG-10",
+  "capture": "sketch/mail-ansi16.png vs sketch/mail-nocolor.png",
+  "device": "dividers (cross-profile consistency)",
+  "class": "STRUCTURAL",
+  "expected": "Design language \u00a77 decision 3 treats ANSI-16 and NO_COLOR as one substitution rule: both \"substitute a drawn single-line divider, the `divider \u2502` glyph token, for the ground-color steps that separate panes at full color\". One rule implies one legibility outcome.",
+  "actual": "The same structural line lands at 1.76:1 in ANSI-16 and 9.63:1 in NO_COLOR \u2014 a factor of five apart, and on opposite sides of the 3:1 indicator floor. ANSI-16, the profile that still has colour, carries pane separation worse than the profile that has none.",
+  "evidence": "mail-ansi16.png divider ink rgb(76,86,106) = 1.76:1; mail-nocolor.png divider ink rgb(216,222,233) = 9.63:1, same column, same fixture, same kitty ground. Side by side the ANSI-16 rail line is a whisper and the NO_COLOR one is a bar."
+ },
+ {
+  "id": "DG-11",
+  "capture": "sketch/modal-confirm-nocolor.png, mail-nocolor.png, mail-banner-nocolor.png (and the ansi16 twins)",
+  "device": "glyph fallbacks (rendered quality)",
+  "class": "DESIGN-QUESTION",
+  "expected": "This is STATUS pass-2 gate item 6: \"Profile conflates color depth with Unicode support (NO_COLOR loses box-drawing and the round pill)\" \u2014 report what the modal frame and the toast look like. The fallbacks themselves are correct per \u00a77: `divider \u2502` U+2502 (`|`), the rounded set collapsing to \"the same plain ASCII frame\".",
+  "actual": "The fallbacks are the named ones, but in Monaspace Neon 11pt they render poorly. The `|` divider is a broken dashed column \u2014 each cell's stroke stops short of the cell edge, so the rail reads as a dotted line rather than a rule, where `\u2502` joins cleanly. The modal frame is a `+-----+` box whose `-` run has a visible gap at every cell boundary and whose `|` sides do not meet the `+` corners; it reads as 1990s ASCII art beside the rest of the UI. The toast has no pill at either profile and needs none \u2014 the exemplar (render.txt line 52) renders it as inline text in the status band too, so gate item 6's \"round pill\" is the modal's rounded frame, not the toast. The `dismiss \u2715`->`x` fallback reads as a lowercase letter at the end of the banner rather than a close control.",
+  "evidence": "modal-confirm-nocolor.png: the frame's horizontal runs at y=236px and y=370px are visibly dashed, the verticals at x=453px/x=886px are broken strokes with corner gaps. mail-nocolor.png: the rail column at x=202px shows a gap between every row. Compare mail-truecolor-dark.png, where `\u2502` draws a continuous unbroken rule. Both are faithful to the token table; the question is whether ANSI-16 should be dropping Unicode at all, since a 16-colour TERM on a modern emulator still has box-drawing."
+ },
+ {
+  "id": "DG-12",
+  "capture": "sketch/help-ansi16.png, sketch/help-nocolor.png",
+  "device": "glyph fallback collision (separator)",
+  "class": "COSMETIC",
+  "expected": "Design language \u00a77 names the fallback `separator \u00b7` U+00B7 (`-`), and elsewhere in the same section treats a fallback collision as a defect to fix: task 8's fix round moved `warnMarker`'s fallback off `!` because \"its first fallback, `!`, collided with `errorGutter`'s fallback exactly where color cannot tell the two apart\".",
+  "actual": "The same collision class is live and unaddressed. In the help overlay's surface row the key label is the literal `1-4` and the description is `Mail - Calendar - People - Config`, so one hyphen means 'range' and the next three mean 'separator', in one row, at both degrade profiles. `Help - Mail` and `back - dismiss banner` read as hyphenated compounds rather than separated phrases.",
+  "evidence": "help-ansi16.png / help-nocolor.png row 9: `1-4       Mail - Calendar - People - Config`. help-truecolor-dark.ansi shows the same row as `1-4       Mail M-BM-7 Calendar M-BM-7 People M-BM-7 Config`, where the middot is unambiguous against the key label's hyphen."
+ },
+ {
+  "id": "DG-13",
+  "capture": "sketch/mail-offline-nocolor.png vs sketch/mail-nocolor.png",
+  "device": "sync state (SY-5) non-colour channel",
+  "class": "DESIGN-QUESTION",
+  "expected": "Design language \u00a77's degrade table assigns a distinct non-colour channel to unread, selected, focused and error only. Pass-2 plan decision 7 renders SY-5's four states with colour alone: \"`synced` (dim, fgMuted) ... `offline` (warn), `backing off \u00b7 retry 12s` (warn)\". The reference is silent on what carries offline once warn's colour is gone.",
+  "actual": "In NO_COLOR the whole distinction reduces to dim-versus-normal weight: `Synced` is SGR 2, `Offline` is plain. It is a real difference, but only by comparison against a state the user cannot see at the same time, and there is no absolute cue. Offline is arguably the most consequential state in the shell and it gets less signal than error's dedicated `!` gutter. ANSI-16 is fine here \u2014 SGR 93 at 8.33:1 is emphatic.",
+  "evidence": "mail-offline-nocolor.png status row right: `Offline` ink rgb(216,222,233) = 9.63:1, normal weight. mail-nocolor.png same position: `Synced` ink rgb(144,149,158) = 4.32:1, dim. Nothing else differs \u2014 no marker, no reverse, no bold. mail-offline-truecolor-dark.ansi carries `38:2:212:179:106` warn, which is the entire signal at full colour."
+ },
+ {
+  "id": "DG-14",
+  "capture": "coverage gap across the whole sketch group",
+  "device": "degrade-table channel coverage / light ground",
+  "class": "DESIGN-QUESTION",
+  "expected": "The grading brief asks whether ANSI-16 \"maps roles to sane slots on both grounds\", and design language \u00a77's degrade table names four channels: \"unread = the `\u25cf` marker, selected = reverse video, focused = the edge bar's glyph weight (`\u258c` focused, `\u258f` unfocused ...), error = the `!` gutter marker alone. The UX-7 golden asserts no two states share a marker.\"",
+  "actual": "Two coverage holes, neither a defect in what shipped but both limits on what this gate can certify. (1) There is no ANSI-16 or NO_COLOR capture on a light ground \u2014 the manifest declares the whole sketch group \"kitty dark\", and sizes.txt lists light variants for truecolor only. DG-1's failure mode is specific to bright-black-on-dark and would likely invert on a light ground, so ANSI-16's light behaviour is untested in both directions. (2) Three of the degrade table's four channels are unexercised by pass 2: no capture in any profile contains `\u25cf`, `\u258c`, `\u258f` or an `!` gutter, because the shell has no list rows and no error state. Only selection (the modal's answer pill) and the ground-step substitution are actually exercised here.",
+  "evidence": "grep for `\u258c`, `\u258f` and `\u25cf` across every truecolor sketch .ansi returns nothing; the only selected element in the group is `  n stay  ` in modal-confirm. sizes.txt has mail-truecolor-light through short-truecolor-light but no *-ansi16-light or *-nocolor-light rows. The UX-7 golden's no-two-states-share-a-marker claim therefore rests on the golden, with no painted evidence at this gate."
+ }
+]

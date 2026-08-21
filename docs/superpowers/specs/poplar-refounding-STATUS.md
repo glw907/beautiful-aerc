@@ -28,13 +28,14 @@ it. Updating this STATUS is step one and is never optional.
    a load-bearing decision changed. The cursor lives here, not in
    memory.
 
-## Current state (2026-08-20)
+## Current state (2026-08-21)
 
 Phase 5 is in progress. Passes 1 (foundation), 1b (integration and
 hardening), 1c (measurement and the driver decision), and 2 (design
-language and shell) are done; pass 2's gate with Geoff is the next
-action, below. Pass 2b (onboarding and config) queues behind the
-gate per the approved split.
+language and shell) are done; pass 2c (real-terminal verification
+and the help screen) is planned and is the next action, below, and
+carries the pass 2 gate inside it. Pass 2b (onboarding and config)
+queues behind it per the approved split.
 
 Pass 2 outcomes (2026-08-20), commits df034ce through acd8297:
 - 45 commits, 276 files, 19,950 insertions. Twelve tasks (task 5
@@ -682,21 +683,50 @@ Phase 0 outcomes:
   none is actively wrong, and Phase 5 redesigns the build machine
   against the settled architecture.
 
-## Next: the pass 2 gate (Geoff), then pass 2b
+## Next: pass 2c (real-terminal verification), then the pass 2 gate, then pass 2b
 
-Pass 2 closed on 2026-08-20. The next action is the pass gate with
-Geoff: the shell demoed live in kitty (make build, both themes,
-resize through every rung and the floor, the manual pointer
-checklist by hand), then the twelve gate items in the outcomes block
-above, ruled in one sitting. The pass 2 ledger
-(.superpowers/sdd/2026-08-19-pass-2-design-language-and-shell/
-progress.md) holds the full ruling trail and is retained until the
-gate is ruled, then deleted per the standing instruction.
+Pass 2 closed on 2026-08-20. On 2026-08-21 the gate's first minute in
+Geoff's kitty found the help screen uncomposed, and a spike built the
+real-kitty capture harness (`scripts/kitty-shot`,
+`scripts/gate-captures`), shot 108 captures, and graded them through a
+fresh-context workflow. The evidence is banked at
+`docs/poplar/design/2026-08-21-pass-2-gate-captures/` (read
+`audit.md` first). The live shell is right; help, two ANSI-16
+degrade defects, and `cmd/sketch`'s composition are not.
 
-After the gate, pass 2b (onboarding and config) runs next per the
-approved split: first-run, account setup, re-auth, the config
-surface, and UX-8, with its own wireframe sitting designing from
-the pinned exemplar. Pass 3 (mail read path) follows.
+The immediate next action is pass 2c, planned at
+`docs/superpowers/plans/2026-08-21-pass-2c-real-terminal-verification.md`:
+six tasks, three Geoff interaction points (the 22-item ruling
+sitting, the help wireframe review, the gate sitting). The pass 2
+gate is ruled inside pass 2c's task 6 on re-shot painted evidence,
+and both gates close together. The pass 2 ledger
+(.superpowers/sdd/2026-08-19-pass-2-design-language-and-shell/progress.md)
+is retained until then.
+
+Starter prompt for pass 2c (paste after /clear in ~/Projects/poplar,
+in an Opus 5 session; the plan is authored and the rulings sitting
+comes first):
+
+```
+Run poplar pass 2c. Read
+docs/superpowers/specs/poplar-refounding-STATUS.md, then the plan at
+docs/superpowers/plans/2026-08-21-pass-2c-real-terminal-verification.md
+and the evidence it cites (docs/poplar/design/2026-08-21-pass-2-gate-captures/audit.md).
+Task 1 needs no ruling and dispatches first. Then put the plan's 22
+rulings to Geoff in one sitting with the banked PNGs open, record the
+answers in the pass ledger, and execute tasks 2-6 via
+superpowers:subagent-driven-development: one poplar-implementer per
+task, poplar-reviewer and poplar-go-reviewer in parallel per diff,
+reviewers attack each round's new guards first and prove
+revert-sensitivity by experiment, gate evidence is a captured exit
+code. tui-visual-verify binds every claim that a screen works. Task
+4's wireframe goes to Geoff before its code. Task 6 re-runs the
+capture matrix and the grading workflow and closes the pass 2 and
+2c gates together.
+```
+
+After pass 2c, pass 2b (onboarding and config) runs per the approved
+split. Pass 3 (mail read path) follows.
 
 Starter prompt for pass 2b (paste after /clear in
 ~/Projects/poplar, in a Fable session per the standing
