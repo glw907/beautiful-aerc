@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -83,12 +84,20 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 	if msg := initialSyncMsg(connectErr); msg != nil {
 		go program.Send(msg)
 	}
+	if msg, ok := initialOutboxMsg(ctx, reads); ok {
+		go program.Send(msg)
+	}
 
 	_, runErr := program.Run()
 	if errors.Is(runErr, tea.ErrInterrupted) {
-		// A SIGINT program.Run reports through ErrInterrupted (bubbletea's
-		// default signal handler, left enabled) is an ordinary way to
-		// stop a terminal program, not a failure to report and exit 1 on.
+		// A live terminal's raw mode disables the signal-generating
+		// characters, so an interactive Ctrl-C arrives as an ordinary
+		// key (q and the quit confirm are the ordinary stop path), not
+		// a SIGINT. ErrInterrupted's SIGINT branch (bubbletea's default
+		// signal handler, left enabled) is defense for non-interactive
+		// input instead, a piped or non-TTY invocation where no raw
+		// mode ever engaged to swallow the signal; either way it is not
+		// a failure to report and exit 1 on.
 		runErr = nil
 	}
 	var loggedRunErr error
@@ -110,10 +119,10 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 	wg.Wait()
 
 	closeErr := reads.Close()
+	reportLogHealth(errOut)
 	if err := writer.Close(); err != nil {
 		return errors.Join(closeErr, loggedRunErr, err)
 	}
-	reportLogHealth(errOut)
 	if loggedRunErr != nil {
 		return errors.Join(closeErr, loggedRunErr)
 	}
@@ -128,10 +137,10 @@ func runInteractive(ctx context.Context, dbPath string, f flags, out, errOut io.
 // a path nothing reaches.
 func logFallbackBanner() (ui.BannerMsg, bool) {
 	if path, ok := uerr.LogFallbackPath(); ok {
-		return ui.BannerMsg{Message: fmt.Sprintf("state directory unavailable; logging to %s instead", path)}, true
+		return ui.BannerMsg{Message: fmt.Sprintf("State directory unavailable; logging to %s instead.", path)}, true
 	}
 	if uerr.LogDegraded() {
-		return ui.BannerMsg{Message: "state directory unavailable and logging is degraded; some lines may be lost"}, true
+		return ui.BannerMsg{Message: "State directory unavailable and logging is degraded; some lines may be lost."}, true
 	}
 	return ui.BannerMsg{}, false
 }
@@ -150,4 +159,24 @@ func initialSyncMsg(connectErr error) tea.Msg {
 		return nil
 	}
 	return ui.SyncStateMsg{State: ui.SyncStateOffline}
+}
+
+// initialOutboxMsg reads reads' queued-outbox count once at startup
+// and reports the ui.OutboxCountMsg runInteractive sends immediately
+// before program.Run (correctness M2, RULED): the only other
+// OutboxCountMsg producer, runDispatchLoop's bridgeOutboxCount, runs
+// post-connect, so an ST-2 offline session would otherwise show 0
+// queued and F7's quit gate would lie about rows a previous run
+// already left queued in the store. ok is false only on a read
+// failure, which logs and sends nothing rather than reporting a wrong
+// count; the live-poll-while-retrying half (nothing can change the
+// queue while offline until pass 3's mutations exist) is that pass's
+// carry.
+func initialOutboxMsg(ctx context.Context, reads *store.ReadPool) (ui.OutboxCountMsg, bool) {
+	n, err := reads.OutboxQueuedCount(ctx)
+	if err != nil {
+		slog.Warn("startup: read outbox queued count", "error", err)
+		return ui.OutboxCountMsg{}, false
+	}
+	return ui.OutboxCountMsg{Queued: n}, true
 }

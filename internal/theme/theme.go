@@ -8,6 +8,7 @@
 package theme
 
 import (
+	"fmt"
 	"image/color"
 	"strconv"
 	"strings"
@@ -46,6 +47,20 @@ const (
 	GroundCode
 )
 
+// groundNames names every Ground, in declaration order: String's
+// table, and the guard-falsifiability fix (F6) that names a failing
+// contrast-test cell by its ground rather than an unlabeled int.
+var groundNames = [...]string{"GroundBase", "GroundPanel", "GroundSelected", "GroundCode"}
+
+// String returns g's identifier name, or a numbered fallback for a
+// value outside the declared vocabulary.
+func (g Ground) String() string {
+	if int(g) < 0 || int(g) >= len(groundNames) {
+		return fmt.Sprintf("Ground(%d)", int(g))
+	}
+	return groundNames[g]
+}
+
 // Role is a color role in the design language's token vocabulary
 // (design language section 7; decision 6's palette). RoleLink,
 // RoleFlag, RoleDiffAdd, RoleDiffDel, and RoleFocusedBorder are
@@ -72,6 +87,22 @@ const (
 	RoleBorder
 	RoleFocusedBorder
 )
+
+// roleNames names every Role, in declaration order: String's table.
+var roleNames = [...]string{
+	"RoleFg", "RoleFgMuted", "RoleFgSubtle", "RoleAccent", "RoleUnread",
+	"RoleError", "RoleWarn", "RoleSuccess", "RoleLink", "RoleQuote",
+	"RoleFlag", "RoleDiffAdd", "RoleDiffDel", "RoleBorder", "RoleFocusedBorder",
+}
+
+// String returns r's identifier name, or a numbered fallback for a
+// value outside the declared vocabulary.
+func (r Role) String() string {
+	if int(r) < 0 || int(r) >= len(roleNames) {
+		return fmt.Sprintf("Role(%d)", int(r))
+	}
+	return roleNames[r]
+}
 
 // Theme is poplar's compiled token set for one isDark/Profile pair.
 type Theme struct {

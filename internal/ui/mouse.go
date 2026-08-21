@@ -139,18 +139,6 @@ func hitSpanAt(spans []HitSpan, pt image.Point) (HitSpan, bool) {
 	return HitSpan{}, false
 }
 
-// paneAt reports which of lm's named panes contains pt, and whether
-// one does: ADR-0017's pane grain, resolved against LayoutMode's
-// rectangles rather than a zone library (ADR-0011 revision 3).
-func paneAt(lm LayoutMode, pt image.Point) (PaneID, bool) {
-	for id, pane := range lm.Panes {
-		if pt.In(pane.Rect) {
-			return id, true
-		}
-	}
-	return 0, false
-}
-
 // statusDigitKeyAt reports the physical key StatusLineHitSpans's
 // digit-ordered spans name at pt, and whether pt lands on one at all.
 // Every span StatusLineHitSpans returns shares one Verb, the whole

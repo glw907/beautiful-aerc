@@ -80,6 +80,25 @@ const (
 	PointerDragSelect
 )
 
+// pointerTargetNames names every PointerTarget, in declaration order:
+// String's table, and the guard-falsifiability fix (F6) that named a
+// failing conformance-test cell by its target rather than
+// "pointer target 1".
+var pointerTargetNames = [...]string{
+	"PointerRow", "PointerRowOpen", "PointerSidebarEntry", "PointerPane",
+	"PointerSurfaceDigit", "PointerFooterHint", "PointerBannerDismiss",
+	"PointerWheel", "PointerFieldCursor", "PointerModalAnswer", "PointerDragSelect",
+}
+
+// String returns t's identifier name, or a numbered fallback for a
+// value outside the declared vocabulary.
+func (t PointerTarget) String() string {
+	if int(t) < 0 || int(t) >= len(pointerTargetNames) {
+		return fmt.Sprintf("PointerTarget(%d)", int(t))
+	}
+	return pointerTargetNames[t]
+}
+
 // PointerBinding binds a pointer target to the keyboard verb it
 // accelerates (ADR-0017): a click or wheel action reaches the same
 // grammar verb Key names, under the same state rules the key itself
@@ -107,15 +126,23 @@ type PointerBinding struct {
 // StateModal front full-terminal, bypassing the footer and banner
 // bands entirely, so neither exists there for a click to land on,
 // the same render-composition fact PointerPane's illegal-in-modal
-// row already reflects.
+// row already reflects. PointerFooterHint and PointerBannerDismiss
+// both also drop StatePrintableEntry (correctness M3, pass 2 final
+// fix round): the pinned help span's verb (`?`) and the banner-
+// dismiss span's verb (Esc) both mean something else in a text-entry
+// context (a literal character, the leave-field verb), so a click
+// firing either key there would run the wrong action rather than a
+// legal no-op; helpOpenEligible and handleKey's own banner-dismiss
+// condition already refuse both keys in StatePrintableEntry, and this
+// table now agrees with them.
 var pointerLegalStates = map[PointerTarget][]StateClass{
 	PointerRow:           {StateDigitsSwitch, StatePrintableEntry},
 	PointerRowOpen:       {StateDigitsSwitch},
 	PointerSidebarEntry:  {StateDigitsSwitch},
 	PointerPane:          {StateDigitsSwitch, StatePrintableEntry},
 	PointerSurfaceDigit:  {StateDigitsSwitch},
-	PointerFooterHint:    {StateDigitsSwitch, StatePrintableEntry},
-	PointerBannerDismiss: {StateDigitsSwitch, StatePrintableEntry},
+	PointerFooterHint:    {StateDigitsSwitch},
+	PointerBannerDismiss: {StateDigitsSwitch},
 	PointerWheel:         {StateDigitsSwitch, StatePrintableEntry},
 	PointerFieldCursor:   {StatePrintableEntry},
 	PointerModalAnswer:   {StateModal},
@@ -357,6 +384,22 @@ var GrammarKeys = grammarKeymap{
 
 	ThreadFold:   key.NewBinding(key.WithKeys("h"), key.WithHelp("h/l", "thread fold")),
 	ThreadUnfold: key.NewBinding(key.WithKeys("l"), key.WithHelp("h/l", "thread unfold")),
+
+	// LongDesc holds the Global section's teachable long-form
+	// description for a verb whose footer hint stays terse (wireframe
+	// F5, spec M5): keyed by the binding's own short Help().Desc
+	// identity, so helpGlobalDesc can look one up without a second,
+	// independently-typed table drifting from GrammarKeys itself. A
+	// verb absent here (Open, Undo, Help, Quit) renders its short
+	// Help().Desc unchanged in both places; SurfaceSwitch and Back
+	// each need a glyph or a live-name join truecolor and degrade
+	// theme apart, so helpGlobalDesc composes those two directly
+	// rather than storing a themed literal.
+	LongDesc: map[string]string{
+		"navigate": "down / up",
+		"page":     "page forward / back",
+		"extremes": "first / last (G works too)",
+	},
 }
 
 // grammarKeymap is GrammarKeys's type: every field is a verb from
@@ -369,6 +412,8 @@ type grammarKeymap struct {
 	GotoInbox, GotoDrafts, GotoSent, GotoArchive, GotoJunk, GotoTrash,
 	Today,
 	ThreadFold, ThreadUnfold key.Binding
+
+	LongDesc map[string]string
 }
 
 // fields returns every field of GrammarKeys, in the struct's

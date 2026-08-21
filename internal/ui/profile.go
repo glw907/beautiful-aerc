@@ -1,11 +1,3 @@
-// Package ui is poplar's bubbletea v2 UI layer (technical design
-// section 12), built out across pass 2. So far it holds the runtime
-// capability-profile resolver, the background-color query pieces a
-// root model's Init and Update absorb, the root model itself, and the
-// four surface placeholders. Logging runs through plain log/slog
-// calls against the uerr-installed process-wide default (cmd/poplar's
-// startup path calls uerr.SetDefault before anything in this package
-// can log); internal/ui never imports internal/uerr itself.
 package ui
 
 import (

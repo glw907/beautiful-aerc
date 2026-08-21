@@ -74,13 +74,19 @@ func renderFooter(entry ScreenEntry, th theme.Theme, width int) string {
 // hint's rendered cells, from its key's first column through its
 // description's last), positioned within footerRow. state gates the
 // whole set through registry.go's pointerLegalStates the same way
-// StatusLineHitSpans does: PointerFooterHint is legal in every
-// StateClass except StateModal (task-10-findings-r2.md's F2 corollary
-// ruling: the modal renders full-terminal, App.View's StateModal
-// branch, so no footer band exists there to click), and an empty
-// footerRow (the floor rung, which paints no chrome at all) also
-// returns none, belt-and-braces against a caller that resolves spans
-// without checking the rung first.
+// StatusLineHitSpans does: PointerFooterHint is legal only in
+// StateDigitsSwitch (task-10-findings-r2.md's F2 corollary ruling
+// drops StateModal, the modal renders full-terminal so no footer band
+// exists there to click; correctness M3, pass 2 final fix round, also
+// drops StatePrintableEntry, where a screen's own FooterPriority
+// hints have no legal keyboard equivalent left to accelerate), and an
+// empty footerRow (the floor rung, which paints no chrome at all)
+// also returns none, belt-and-braces against a caller that resolves
+// spans without checking the rung first. The
+// pinned help span specifically is offered only when state is
+// eligible to open help (helpOpenEligible; M3's other half): `?`
+// means help only in StateDigitsSwitch, so the span never fires a key
+// that state's front would refuse.
 func FooterHitSpans(entry ScreenEntry, state StateClass, footerRow image.Rectangle) []HitSpan {
 	if footerRow.Empty() || !slices.Contains(pointerLegalStates[PointerFooterHint], state) {
 		return nil
@@ -105,12 +111,14 @@ func FooterHitSpans(entry ScreenEntry, state StateClass, footerRow image.Rectang
 		x += w + theme.GapHint
 	}
 
-	helpWidth := ansi.StringWidth(hintText(GrammarKeys.Help))
-	helpX := origin.X + width - theme.PadBand - helpWidth
-	spans = append(spans, HitSpan{
-		Target: PointerFooterHint,
-		Verb:   GrammarKeys.Help,
-		Rect:   image.Rect(helpX, y0, helpX+helpWidth, y1),
-	})
+	if helpOpenEligible(ScreenEntry{SwitchState: state}) {
+		helpWidth := ansi.StringWidth(hintText(GrammarKeys.Help))
+		helpX := origin.X + width - theme.PadBand - helpWidth
+		spans = append(spans, HitSpan{
+			Target: PointerFooterHint,
+			Verb:   GrammarKeys.Help,
+			Rect:   image.Rect(helpX, y0, helpX+helpWidth, y1),
+		})
+	}
 	return spans
 }

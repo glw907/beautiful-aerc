@@ -49,14 +49,31 @@ func helpSurfaceNamesDesc(th theme.Theme) string {
 	return strings.Join(surfaceNames[:], " "+th.Glyphs().Separator+" ")
 }
 
-// helpGlobalDesc returns b's Global-section row description:
-// SurfaceSwitch's row names every sibling surface
+// helpBackDesc returns Back's Global-section long-form description
+// (wireframe F5): "back", plus the banner-dismiss teaching clause,
+// joined by th's separator glyph rather than a hardcoded middle dot
+// (helpSurfaceNamesDesc's precedent for a themed, degrade-aware
+// join).
+func helpBackDesc(th theme.Theme) string {
+	return "back " + th.Glyphs().Separator + " dismiss banner"
+}
+
+// helpGlobalDesc returns b's Global-section row description (spec
+// M5): SurfaceSwitch's row names every sibling surface
 // (helpSurfaceNamesDesc) rather than rendering its generic "surface
-// switch" text; every other binding renders its canonical
-// Help().Desc unchanged.
+// switch" text; Back's row is helpBackDesc's themed long form;
+// GrammarKeys.LongDesc's other teachable long forms (wireframe F5)
+// take over next; every remaining binding renders its canonical
+// Help().Desc unchanged, the same text the footer's short hint shows.
 func helpGlobalDesc(th theme.Theme, b key.Binding) string {
-	if b.Help().Desc == GrammarKeys.SurfaceSwitch.Help().Desc {
+	switch b.Help().Desc {
+	case GrammarKeys.SurfaceSwitch.Help().Desc:
 		return helpSurfaceNamesDesc(th)
+	case GrammarKeys.Back.Help().Desc:
+		return helpBackDesc(th)
+	}
+	if long, ok := GrammarKeys.LongDesc[b.Help().Desc]; ok {
+		return long
 	}
 	return b.Help().Desc
 }
@@ -75,6 +92,26 @@ type HelpScreen struct {
 	scroll int
 
 	Covered ScreenEntry
+
+	// Title is the overlay's header name (wireframe F5's "Help ·
+	// Mail"): a surface's display name (statusline.go's
+	// surfaceNames), never its switch-table state name
+	// (Covered.Name, "mail list"), which BACKLOG #62's defect class
+	// is why helpTitleSegs never re-types it by hand. App's push
+	// site sets it from the active surface when help opens over a
+	// surface root; displayTitle falls back to Covered.Name when it
+	// is empty, so a help push that predates a future non-surface
+	// StateDigitsSwitch screen still names something real.
+	Title string
+}
+
+// displayTitle returns h's header title: Title when the push site set
+// one, or Covered's own registered state name otherwise.
+func (h HelpScreen) displayTitle() string {
+	if h.Title != "" {
+		return h.Title
+	}
+	return h.Covered.Name
 }
 
 // Init implements Screen.
@@ -192,12 +229,13 @@ func (h HelpScreen) lines() [][]rowSeg {
 // helpBlankLine is one empty spacer row within the overlay's body.
 var helpBlankLine = []rowSeg{}
 
-// helpTitleSegs returns the overlay's title row: "Help ·
-// <covered's state name>", covered.Name read directly rather than
-// re-typed or abbreviated (BACKLOG #62's defect class), so a screen's
-// registered name is the only place the label can come from.
-func helpTitleSegs(th theme.Theme, covered ScreenEntry) []rowSeg {
-	return []rowSeg{{text: "Help " + th.Glyphs().Separator + " " + covered.Name, role: theme.RoleFg, bold: true}}
+// helpTitleSegs returns the overlay's title row: "Help · " plus
+// title (HelpScreen.displayTitle), so a screen's registered name or
+// its surface's display name is the only place the label can come
+// from, never a re-typed or abbreviated literal (BACKLOG #62's
+// defect class).
+func helpTitleSegs(th theme.Theme, title string) []rowSeg {
+	return []rowSeg{{text: "Help " + th.Glyphs().Separator + " " + title, role: theme.RoleFg, bold: true}}
 }
 
 // helpKeyColWidth returns the widest Help().Key text among bindings:
@@ -259,7 +297,7 @@ func helpGlobalLines(th theme.Theme) [][]rowSeg {
 // (wireframe F5): title, then the Global section, then the
 // This-screen section, each stacked in reading order.
 func helpLinesOneColumn(h HelpScreen) [][]rowSeg {
-	lines := [][]rowSeg{helpTitleSegs(h.theme, h.Covered), helpBlankLine}
+	lines := [][]rowSeg{helpTitleSegs(h.theme, h.displayTitle()), helpBlankLine}
 	lines = append(lines, helpGlobalLines(h.theme)...)
 	lines = append(lines, helpBlankLine)
 	lines = append(lines, helpSectionLines("This screen", helpContent(h.Covered))...)
@@ -276,7 +314,7 @@ func helpLinesTwoColumn(h HelpScreen) [][]rowSeg {
 	colWidth := (h.layout.Main.Rect.Dx() - 2*theme.PadBand - theme.GapPane) / 2
 
 	rows := max(len(global), len(screen))
-	lines := [][]rowSeg{helpTitleSegs(h.theme, h.Covered), helpBlankLine}
+	lines := [][]rowSeg{helpTitleSegs(h.theme, h.displayTitle()), helpBlankLine}
 	for i := range rows {
 		lines = append(lines, joinHelpColumns(h.theme, helpLineAt(global, i), helpLineAt(screen, i), colWidth))
 	}

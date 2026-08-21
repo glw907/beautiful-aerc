@@ -27,6 +27,16 @@ type BannerMsg struct {
 	Message string
 }
 
+// bannerDismissEligible reports whether front's Esc dismisses a
+// showing banner (design decision 2: a banner never steals focus),
+// extracted as its own predicate, mirroring helpOpenEligible and
+// undoEligible, so pointerLegalStates[PointerBannerDismiss] can be
+// checked against the same gate handleKey's Back branch actually
+// applies (correctness M3) rather than restating it independently.
+func bannerDismissEligible(front ScreenEntry) bool {
+	return front.SwitchState != StatePrintableEntry
+}
+
 // renderBanner renders banner's row exactly width cells wide: the
 // warn glyph and banner's message on the left, "Esc dismiss" and
 // the dismiss glyph right-aligned (the ratified exemplar's

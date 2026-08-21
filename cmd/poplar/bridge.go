@@ -80,12 +80,16 @@ func bridgeRetrySeconds(d time.Duration) int {
 // tick of the existing dispatch loop (task 11's wiring), riding
 // that loop's cadence rather than a separate poll, and returns the
 // count observed so the caller's next call has a last to diff
-// against. A read failure logs and reports last unchanged, so one bad
-// read never sends a wrong count.
+// against. A read failure reports last unchanged so one bad read
+// never sends a wrong count, and logs unless it is ctx ending mid-read
+// (mirroring dispatchOnce): run's shutdown stopping the loop is not a
+// store problem to report as one.
 func bridgeOutboxCount(ctx context.Context, reads *store.ReadPool, last int, send func(tea.Msg)) int {
 	n, err := reads.OutboxQueuedCount(ctx)
 	if err != nil {
-		slog.Warn("bridge: read outbox queued count", "error", err)
+		if ctx.Err() == nil {
+			slog.Warn("bridge: read outbox queued count", "error", err)
+		}
 		return last
 	}
 	if n != last {

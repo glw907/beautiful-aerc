@@ -170,6 +170,17 @@ func confirmAnswerText(c Confirm) (yes, no string) {
 	return "y " + c.YesLabel, inset + "n " + c.NoLabel + inset
 }
 
+// confirmFloorWidth is confirmBoxWidth's defensive floor
+// (correctness m7): App.View's own floor bypass, ahead of the modal
+// branch, already keeps a modal from ever rendering below the width
+// floor, so this never actually engages in the running product; it
+// exists only so a future caller that reaches Confirm.View() with a
+// termWidth this narrow cannot panic strings.Repeat(mid, width-2) at
+// a negative count. 4 cells is two border columns plus a two-cell
+// interior, the smallest width renderConfirmBox's row builders never
+// go negative against.
+const confirmFloorWidth = 4
+
 // confirmBoxWidth returns the modal's natural width, clamped
 // against termWidth (composition rule 5): PadModalX insets both sides
 // of whichever is widest among the question, the consequence, and the
@@ -179,7 +190,7 @@ func confirmBoxWidth(c Confirm, termWidth int) int {
 	answerWidth := ansi.StringWidth(yes) + theme.GapControl + ansi.StringWidth(no)
 	content := max(ansi.StringWidth(c.Question), ansi.StringWidth(c.Consequence), answerWidth)
 	natural := content + 2*theme.PadModalX + 2
-	return min(natural, termWidth)
+	return max(min(natural, termWidth), confirmFloorWidth)
 }
 
 // View implements Screen: the whole terminal, base ground, with the

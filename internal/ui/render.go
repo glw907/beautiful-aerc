@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image"
 	"strings"
 
@@ -73,15 +74,19 @@ type RenderInput struct {
 // instead. Task 8 grows a fifth, Banner, painted into LayoutMode's
 // Banner band whenever in.Layout.BannerRow is set, folding all five
 // into this struct ahead of a sixth parameter, which task 9 adds as
-// FullRegion.
+// FullRegion. Below the floor, in.Screen never renders at all: the
+// centered notice renderFloorNotice composes is the whole frame
+// (design language section 9, wireframe F4), checked ahead of
+// in.Screen.View() so a screen that would panic or garble below the
+// floor never runs there.
 func Render(in RenderInput) Frame {
-	view := in.Screen.View()
 	lm, th := in.Layout, in.Theme
 
 	if lm.Class == WidthFloor || lm.HeightClass == HeightFloor {
-		return Frame{Content: view.Content, Cursor: view.Cursor}
+		return Frame{Content: renderFloorNotice(th, lm.Width, lm.Height)}
 	}
 
+	view := in.Screen.View()
 	canvas := theme.NewCanvas(lm.Width, lm.Height)
 	dropTotal := lm.HeightClass != HeightFull
 	canvas.Paint(lm.StatusRow.Rect, renderStatusLine(in.Status, th, lm.StatusRow.Rect.Dx(), dropTotal))
@@ -146,4 +151,24 @@ func dividerColumn(th theme.Theme, rows int) string {
 		lines[i] = glyph
 	}
 	return th.Style(theme.RoleBorder, theme.GroundBase).Render(strings.Join(lines, "\n"))
+}
+
+// renderFloorNotice composes the floor state's whole frame (design
+// language section 9, wireframe F4): centered, nothing else, naming
+// both the minimum size poplar needs (widthSpartanMin, heightShortMin,
+// the same constants ComputeLayout's own floor branch tests against)
+// and the live width×height that fell under it. It is the one place
+// that copy is composed, reached both by Render's floor branch (the
+// gallery's route) and by App.View's own floor bypass ahead of the
+// modal branch, so the two paths can never drift. The "x" separator
+// matches gallerySize.String()'s existing ASCII convention rather
+// than a typographic multiplication sign, which the styling analyzer
+// would flag as a non-theme literal outside internal/theme.
+func renderFloorNotice(th theme.Theme, width, height int) string {
+	need := fmt.Sprintf("poplar needs at least %dx%d", widthSpartanMin, heightShortMin)
+	got := fmt.Sprintf("this window is %dx%d", width, height)
+	body := need + "\n" + got
+
+	style := th.Center(th.Sized(th.Style(theme.RoleFg, theme.GroundBase), width, height))
+	return style.Render(body)
 }

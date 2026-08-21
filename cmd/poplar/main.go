@@ -255,10 +255,10 @@ func run(ctx context.Context, dbPath string, f flags, out, errOut io.Writer, con
 	// the clean-shutdown marker whose absence costs the next start a
 	// full integrity check.
 	closeErr := reads.Close()
+	reportLogHealth(errOut)
 	if err := writer.Close(); err != nil {
 		return errors.Join(closeErr, err)
 	}
-	reportLogHealth(errOut)
 	return errors.Join(closeErr, store.MarkCleanShutdown(dbPath))
 }
 

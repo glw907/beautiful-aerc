@@ -60,13 +60,15 @@ func (placeholderKeys) FullHelp() [][]key.Binding { return [][]key.Binding{{Gram
 // the eternally pinned "? help".
 var placeholderFooterPriority = []key.Binding{GrammarKeys.Quit}
 
-// composePlaceholder centers title and facts within layout's content
-// pane, on the base ground (decision 11: base carries every content
-// pane). facts is empty while a load Cmd has not yet returned, or on
-// a surface with no facts to show. Every surface placeholder shares
-// this composition (wireframe F1/F8).
+// composePlaceholder centers title and facts within layout's whole
+// Main band, on the base ground (decision 11: base carries every
+// content pane), sized to match App.View's FullRegion composition
+// (F1/F8's ruling: a placeholder owns no sidebar and no split, the
+// same rectangle HelpScreen's own body sizes against). facts is empty
+// while a load Cmd has not yet returned, or on a surface with no
+// facts to show. Every surface placeholder shares this composition.
 func composePlaceholder(th theme.Theme, layout LayoutMode, title, facts string) tea.View {
-	rect := layout.Content().Rect
+	rect := layout.Main.Rect
 	width, height := rect.Dx(), rect.Dy()
 
 	body := th.TypeStyle(theme.TypeTitle, theme.GroundBase).Render(title)
@@ -323,8 +325,11 @@ func (c ContactsPlaceholder) update(msg tea.Msg) (ContactsPlaceholder, tea.Cmd) 
 func (c ContactsPlaceholder) View() tea.View {
 	// "People" is wireframe F8's reviewed copy: the state name
 	// ("contact list", ScreenEntry.Name below) and the display title
-	// are deliberately different fields.
-	return composePlaceholder(c.theme, c.layout, "People", "contacts sync lands with pass 5")
+	// are deliberately different fields. "Contact sync is not
+	// available yet." replaces F8's literal pass number (spec m13,
+	// decision 9: no roadmap talk in the product outranks F8's
+	// literal text where the two conflict).
+	return composePlaceholder(c.theme, c.layout, "People", "Contact sync is not available yet.")
 }
 
 // Entry implements Screen.
@@ -368,7 +373,10 @@ func (c ConfigPlaceholder) update(msg tea.Msg) (ConfigPlaceholder, tea.Cmd) {
 }
 
 func (c ConfigPlaceholder) View() tea.View {
-	return composePlaceholder(c.theme, c.layout, "Config", "the config surface lands with pass 2b")
+	// "Configuration is not available yet." replaces F8's literal
+	// pass number (spec m13, decision 9: no roadmap talk in the
+	// product outranks F8's literal text where the two conflict).
+	return composePlaceholder(c.theme, c.layout, "Config", "Configuration is not available yet.")
 }
 
 // Entry implements Screen.

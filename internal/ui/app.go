@@ -21,6 +21,12 @@ type Deps struct {
 	Store   *store.ReadPool
 	Theme   theme.Theme
 	Profile theme.Profile
+
+	// Account is cmd/poplar's first successful connect result: pass 2
+	// wires exactly one account for the process's whole life, so
+	// nothing here refreshes it once NewApp has been called. A live
+	// account switch, or a second account added mid-session, is
+	// pass 3's carry.
 	Account string
 }
 
@@ -106,8 +112,13 @@ func (a App) Init() tea.Cmd {
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		var demoteCmd tea.Cmd
+		if a.banner.Active && classifyHeight(msg.Height) != HeightFull {
+			a, demoteCmd = a.demoteBanner(a.banner.Message)
+		}
 		a.layout = ComputeLayout(msg.Width, msg.Height, a.banner.Active)
-		return a.updateChildren(LayoutMsg{Layout: a.layout})
+		model, cmd := a.updateChildren(LayoutMsg{Layout: a.layout})
+		return model, tea.Batch(demoteCmd, cmd)
 	case BackgroundColorTimeoutMsg:
 		// DefaultDark already governs every frame rendered so far; an
 		// answer that arrived first (a.bgAnswered) means this timeout
@@ -146,6 +157,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toastTickMsg:
 		return a.tickToast(msg)
 	case BannerMsg:
+		if a.layout.HeightClass != HeightFull {
+			return a.demoteBanner(msg.Message)
+		}
+		slog.Warn("banner shown", "message", msg.Message)
 		a.banner = Banner{Active: true, Message: msg.Message}
 		a = a.recomputeLayout()
 		return a.updateChildren(LayoutMsg{Layout: a.layout})
@@ -164,33 +179,48 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a.updateChildren(msg)
 }
 
-// View implements tea.Model. A StateModal stack top (Confirm, the 5a
-// ruling) renders itself directly: a plain stack-top render, no dimmed
+// View implements tea.Model. Below the floor (width or height,
+// design language section 9) the centered notice renderFloorNotice
+// composes is the whole frame, selected before anything else runs:
+// a StateModal stack top (Confirm, most notably) would otherwise
+// render its box at a size confirmBoxWidth never promised to
+// tolerate, and the floor rung's chrome-free premise (mouse.go's
+// dispatchClick) would be a lie. Above the floor, a StateModal stack
+// top renders itself directly: a plain stack-top render, no dimmed
 // backdrop, since a modal owns the whole terminal itself rather than
 // landing in a named LayoutMode pane. Every other front, the active
 // surface with an empty stack or a non-modal screen pushed onto it
 // (the help overlay, first of its kind, task 9), runs through Render,
 // the same seam the gallery renders through, so the product never
-// drifts from what the gallery pins: a pushed screen's content
-// fills the whole Main band (RenderInput.FullRegion) rather than the
+// drifts from what the gallery pins: a pushed screen's content fills
+// the whole Main band (RenderInput.FullRegion), the same treatment
+// this pass's four surface placeholders get (isPlaceholderScreen,
+// F1/F8's ruling: each owns no sidebar and no split), rather than the
 // narrower Content pane a surface's sidebar reservation would
-// otherwise squeeze it against, since it owns no sidebar.
-// The footer follows whichever Screen Render composes, the stack
-// top's Entry included, since Render always reaches for
-// Screen.Entry() itself. Every returned tea.View carries
-// MouseMode: mouse cell-motion reporting is a per-frame View
-// declaration in bubbletea v2, not a program-construction option, so
-// both return paths set it (task 11's carried review finding: the
-// modal path missing it would toggle reporting off whenever a modal
-// shows).
+// otherwise squeeze either against. The footer follows whichever
+// Screen Render composes, the stack top's Entry included, since
+// Render always reaches for Screen.Entry() itself. Every returned
+// tea.View carries MouseMode (a per-frame declaration in bubbletea
+// v2, not a program-construction option, so no return path can
+// silently toggle reporting off) and AltScreen (bubbletea v2 removed
+// WithAltScreen; without this every path renders inline, scrollback
+// destroyed and a stale frame left behind after quit).
 func (a App) View() tea.View {
+	if a.layout.Class == WidthFloor || a.layout.HeightClass == HeightFloor {
+		view := tea.NewView(renderFloorNotice(a.theme, a.layout.Width, a.layout.Height))
+		view.MouseMode = tea.MouseModeCellMotion
+		view.AltScreen = true
+		return view
+	}
+
 	screen := a.activeScreen()
-	fullRegion := false
+	fullRegion := isPlaceholderScreen(screen)
 	if len(a.stack) > 0 {
 		top := a.stack[len(a.stack)-1]
 		if top.Entry().SwitchState == StateModal {
 			view := top.View()
 			view.MouseMode = tea.MouseModeCellMotion
+			view.AltScreen = true
 			return view
 		}
 		screen, fullRegion = top, true
@@ -199,7 +229,25 @@ func (a App) View() tea.View {
 	view := tea.NewView(frame.Content)
 	view.Cursor = frame.Cursor
 	view.MouseMode = tea.MouseModeCellMotion
+	view.AltScreen = true
 	return view
+}
+
+// isPlaceholderScreen reports whether screen is one of pass 2's four
+// surface placeholders (F1/F8's ruling): each owns no sidebar and no
+// split, so App.View renders it FullRegion the same way a pushed
+// non-modal screen already is, rather than landing it in the
+// narrower Content pane a surface's sidebar reservation would
+// otherwise squeeze it against. The durable fix, a pane set each
+// ScreenEntry declares so ComputeLayout allocates only what a screen
+// actually asked for, is pass 3's carry (BACKLOG).
+func isPlaceholderScreen(screen Screen) bool {
+	switch screen.(type) {
+	case MailPlaceholder, CalendarPlaceholder, ContactsPlaceholder, ConfigPlaceholder:
+		return true
+	default:
+		return false
+	}
 }
 
 // statusLine builds the top band's render state from a's current
@@ -243,6 +291,18 @@ func (a App) toast() Toast {
 func (a App) recomputeLayout() App {
 	a.layout = ComputeLayout(a.layout.Width, a.layout.Height, a.banner.Active)
 	return a
+}
+
+// demoteBanner routes message through showToast instead of a.banner
+// (design language section 9: under HeightFull a banner demotes to a
+// toast, ER-3's window included, since a short rung grants no row for
+// it): a.banner clears first, so a later resize back above HeightFull
+// never resurrects a banner that was never actually shown. showToast
+// already logs, which is the demoted path's whole answer to spec
+// m11's logging seam.
+func (a App) demoteBanner(message string) (App, tea.Cmd) {
+	a.banner = Banner{}
+	return a.showToast(ToastMsg{Offer: UndoOffer{Label: message}})
 }
 
 // statusSpinnerInterval is the sync segment's spinner cadence:
@@ -411,7 +471,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	front := a.frontEntry()
 
 	if key.Matches(msg, GrammarKeys.Back) && front.SwitchState != StateModal {
-		if a.banner.Active && front.SwitchState != StatePrintableEntry {
+		if a.banner.Active && bannerDismissEligible(front) {
 			a.banner.Active = false
 			a = a.recomputeLayout()
 			return a.updateChildren(LayoutMsg{Layout: a.layout})
@@ -429,7 +489,7 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
-		return a.push(HelpScreen{Covered: front}), nil
+		return a.push(HelpScreen{Covered: front, Title: a.helpTitle()}), nil
 	}
 
 	if a.undoEligible(front) && key.Matches(msg, GrammarKeys.Undo) {
@@ -481,6 +541,20 @@ func (a App) quitConfirm() Confirm {
 		NoLabel:     "stay",
 		YesCmd:      quitYesCmd,
 	}
+}
+
+// helpTitle returns the display name a help push names in its header
+// (HelpScreen.Title, wireframe F5's "Help · Mail"): the active
+// surface's display name (surfaceNames) when help opens over a
+// surface root (an empty stack), or "" otherwise, so
+// HelpScreen.displayTitle falls back to the covered entry's own
+// registered name for a future non-surface StateDigitsSwitch screen
+// this pass never pushes help over.
+func (a App) helpTitle() string {
+	if len(a.stack) == 0 {
+		return surfaceNames[a.activeSurface()]
+	}
+	return ""
 }
 
 // push appends s onto a's screen stack, feeding it a's current
@@ -589,7 +663,7 @@ func (a App) flushWheelTimer(msg wheelFlushMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	flush := flushWheelCmd(a.wheel)
-	a.wheel = wheelGesture{}
+	a.wheel = wheelGesture{gen: a.wheel.gen}
 	return a, flush
 }
 
