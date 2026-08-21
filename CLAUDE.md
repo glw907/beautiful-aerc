@@ -54,6 +54,14 @@ Invoke the relevant skill before writing code, including spike code.
   leader keys, and multi-key sequences; poplar's bindings are
   modifier-free single keys (ADR-0012), so skip that section.
 
+## Conducting a pass
+
+The global CLAUDE.md "Conducting a pass" rule applies here. The conductor
+dispatches `poplar-implementer` (Sonnet) per task. The `diff-reviewer` agent
+(Opus) reads each diff against the task's acceptance criteria before the
+next dispatch. `poplar-reviewer` and `poplar-go-reviewer` (both Opus) run at
+pass end as today. The gate is `make check`.
+
 ## Human voice
 
 Code must read as if one experienced Go developer wrote it. Comments
