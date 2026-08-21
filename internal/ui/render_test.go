@@ -23,35 +23,57 @@ func renderTestScreen(t *testing.T, th theme.Theme, lm LayoutMode) MailPlacehold
 }
 
 // TestRender_Purity proves QA-7's core contract: two calls with the
-// same fixture, LayoutMode, and theme return a byte-identical Frame.
+// same fixture, LayoutMode, and theme return a byte-identical Frame,
+// checked across the same size/profile/banner sweep
+// TestRender_CoversEveryRow uses (F5, MINOR: the guard previously ran
+// at one input point, 100x30 truecolor with no banner, alone) plus
+// the floor rung, where purity is renderFloorNotice's own contract.
 func TestRender_Purity(t *testing.T) {
-	th := theme.New(true, theme.ProfileTrueColor)
-	lm := ComputeLayout(100, 30, false)
-	m := renderTestScreen(t, th, lm)
+	sizes := []struct{ w, h int }{{40, 10}, {80, 24}, {100, 30}, {150, 26}}
+	profiles := []theme.Profile{theme.ProfileTrueColor, theme.ProfileANSI16, theme.ProfileNoColor}
 
-	a := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
-	b := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
-	if a != b {
-		t.Error("Render is not pure: two calls with identical inputs diverged")
+	for _, sz := range sizes {
+		for _, banner := range []bool{false, true} {
+			for _, p := range profiles {
+				th := theme.New(true, p)
+				lm := ComputeLayout(sz.w, sz.h, banner)
+				m := renderTestScreen(t, th, lm)
+				in := RenderInput{
+					Screen: m, Layout: lm, Theme: th,
+					Status: StatusLine{},
+					Banner: Banner{Active: banner, Message: "No keyring found."},
+				}
+
+				a := Render(in)
+				b := Render(in)
+				if a != b {
+					t.Errorf("%dx%d banner=%v profile=%v: Render is not pure, two calls with identical inputs diverged", sz.w, sz.h, banner, p)
+				}
+			}
+		}
 	}
 }
 
-// TestRender_FloorStateReturnsScreenViewVerbatim proves the floor
-// state carries no chrome to compose (section 9): Render returns
-// screen.View()'s content and cursor unchanged rather than
-// running it through the canvas.
-func TestRender_FloorStateReturnsScreenViewVerbatim(t *testing.T) {
+// TestRender_FloorStateRendersTheNotice proves the floor state (C1's
+// ordering fix, spec C1) composes renderFloorNotice, not the covered
+// screen's own View: nothing else is reachable below the floor, so a
+// screen can never render, or panic, there. It carries no cursor,
+// since the notice takes no text entry.
+func TestRender_FloorStateRendersTheNotice(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
 	lm := ComputeLayout(40, 10, false)
 	m := renderTestScreen(t, th, lm)
 
 	got := Render(RenderInput{Screen: m, Layout: lm, Theme: th})
-	view := m.View()
-	if got.Content != view.Content {
-		t.Errorf("floor render content = %q, want screen.View().Content verbatim %q", got.Content, view.Content)
+	want := renderFloorNotice(th, lm.Width, lm.Height)
+	if got.Content != want {
+		t.Errorf("floor render content = %q, want renderFloorNotice's own output %q", got.Content, want)
 	}
-	if got.Cursor != view.Cursor {
-		t.Errorf("floor render cursor = %v, want screen.View().Cursor verbatim %v", got.Cursor, view.Cursor)
+	if got.Cursor != nil {
+		t.Errorf("floor render cursor = %v, want nil", got.Cursor)
+	}
+	if plain := ansi.Strip(got.Content); !strings.Contains(plain, "40x10") {
+		t.Errorf("floor render = %q, want the live size named", plain)
 	}
 }
 

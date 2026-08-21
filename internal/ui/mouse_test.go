@@ -29,22 +29,6 @@ func TestHitSpanAt(t *testing.T) {
 	}
 }
 
-// TestPaneAt proves paneAt resolves a point against LayoutMode's pane
-// rectangles (ADR-0017's pane grain), and reports false for a point
-// outside every pane (a chrome band, most notably).
-func TestPaneAt(t *testing.T) {
-	lm := ComputeLayout(140, 30, false)
-
-	pt := lm.Content().Rect.Min
-	if id, ok := paneAt(lm, pt); !ok || id != PaneContent {
-		t.Errorf("paneAt(content origin) = (%v, %v), want (PaneContent, true)", id, ok)
-	}
-
-	if _, ok := paneAt(lm, image.Pt(0, 0)); ok {
-		t.Error("paneAt(status row) matched a pane, want none (chrome bands are not panes)")
-	}
-}
-
 // TestStatusDigitKeyAt proves statusDigitKeyAt resolves a click at a
 // given digit span back to that digit's physical key, index for index
 // against GrammarKeys.SurfaceSwitch.Keys(), not the shared
@@ -313,6 +297,41 @@ func TestApp_ClickFooterHint_RunsItsVerb(t *testing.T) {
 	}
 	if msg := cmd(); msg != (tea.QuitMsg{}) {
 		t.Errorf("clicking the quit hint yielded %#v, want tea.QuitMsg", msg)
+	}
+}
+
+// TestApp_EveryFooterHintRunsItsVerb generalizes
+// TestApp_ClickFooterHint_RunsItsVerb over the whole registry (F4,
+// MAJOR, guard-falsifiability, RULING: this exceeds the design
+// language's deliberately narrowed mechanical UX-2 claim rather than
+// contradicting it; section 4's testing clause is amended alongside
+// this guard to name it). For every Registered() surface-root entry
+// reachable as a's own active surface, for every binding
+// footerHints(e, 200) offers at a generous width, the verb fires
+// through App.Update the same way dispatchClick's fireVerb does, and
+// must produce either a non-nil Cmd or a changed View: the
+// no-advertised-no-op contract UX-2 promises, checked mechanically
+// rather than by the one hand-picked instance
+// TestApp_ClickFooterHint_RunsItsVerb proves on its own.
+func TestApp_EveryFooterHintRunsItsVerb(t *testing.T) {
+	for s := range Surface(len(surfaceNames)) {
+		app := NewApp(testDeps(t))
+		app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+		app.active.Set(app.account, s)
+
+		front := app.activeScreen().Entry()
+		if front.SwitchState != StateDigitsSwitch {
+			continue
+		}
+		before := app.View().Content
+
+		for _, b := range footerHints(front, 200) {
+			updated, cmd := app.Update(keyPressForString(b.Keys()[0]))
+			after := mustApp(t, updated).View().Content
+			if cmd == nil && after == before {
+				t.Errorf("surface %v: footer hint %v produced neither a Cmd nor a View change, want the no-advertised-no-op contract held", s, b.Help())
+			}
+		}
 	}
 }
 

@@ -104,3 +104,32 @@ func TestCheckPointerGrammar_LiveRegistry(t *testing.T) {
 		t.Errorf("checkPointerGrammar(Registered()) = %v, want none", got)
 	}
 }
+
+// TestPointerLegalStates_FooterHelpSpanMatchesHelpEligibility is
+// correctness M3's guard: every state pointerLegalStates lets
+// PointerFooterHint's pinned help span fire in must also be a state
+// helpOpenEligible recognizes, so the table never advertises a click
+// that fires a key handleKey's own help-toggle gate refuses. Proven
+// by perturbation: StatePrintableEntry once sat in this row while
+// helpOpenEligible already excluded it, and this assertion is exactly
+// what would have failed against that table.
+func TestPointerLegalStates_FooterHelpSpanMatchesHelpEligibility(t *testing.T) {
+	for _, state := range pointerLegalStates[PointerFooterHint] {
+		if !helpOpenEligible(ScreenEntry{SwitchState: state}) {
+			t.Errorf("pointerLegalStates[PointerFooterHint] allows state %v, where helpOpenEligible is false: the pinned help span would fire a key handleKey refuses", state)
+		}
+	}
+}
+
+// TestPointerLegalStates_BannerDismissMatchesBackDismissGate proves
+// the same coherence for PointerBannerDismiss against
+// bannerDismissEligible, the predicate handleKey's own Back branch
+// applies: every state the table allows the dismiss span to fire in
+// must be one a showing banner actually dismisses in.
+func TestPointerLegalStates_BannerDismissMatchesBackDismissGate(t *testing.T) {
+	for _, state := range pointerLegalStates[PointerBannerDismiss] {
+		if !bannerDismissEligible(ScreenEntry{SwitchState: state}) {
+			t.Errorf("pointerLegalStates[PointerBannerDismiss] allows state %v, where bannerDismissEligible is false: the dismiss span would fire a key handleKey refuses", state)
+		}
+	}
+}

@@ -90,6 +90,26 @@ func TestRenderStatusLine_ToastReservesGapAndCountdownSurvives(t *testing.T) {
 	}
 }
 
+// TestRenderStatusLine_ToastWithWideGlyphsStaysExactWidth is F7,
+// MINOR: a toast label carrying CJK and emoji glyphs (a mailbox or
+// folder name can be any Unicode text) still renders at exactly the
+// requested display width at every width in the sweep, truncated
+// with the ellipsis token rather than a raw byte- or rune-count slice
+// that would split a wide glyph's own cells. That regression is what
+// this pins against, since every other toast fixture in this file's
+// own suite is plain ASCII.
+func TestRenderStatusLine_ToastWithWideGlyphsStaysExactWidth(t *testing.T) {
+	th := theme.New(true, theme.ProfileTrueColor)
+	sl := StatusLine{Toast: Toast{Active: true, Label: "已存档 12 封邮件 🎉🎉🎉🎉🎉🎉", Remaining: 9, Undoable: true}}
+
+	for _, width := range []int{60, 80, 100} {
+		got := ansi.StringWidth(ansi.Strip(renderStatusLine(sl, th, width, false)))
+		if got != width {
+			t.Errorf("renderStatusLine(width=%d) with a wide-glyph toast label display width = %d, want exactly %d", width, got, width)
+		}
+	}
+}
+
 // TestBareSyncWord_DropsProgressForEveryState proves every SY-5 state
 // compresses to its bare label, with no count, spinner, or retry
 // text riding along.

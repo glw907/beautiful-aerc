@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"charm.land/bubbles/v2/key"
+
 	"github.com/glw907/poplar/internal/theme"
 )
 
@@ -222,12 +224,15 @@ func TestHelpScreen_ContentDerivesFromCoveredEntry(t *testing.T) {
 // TestHelpScreen_GlobalSectionDerivesFromGrammarKeys proves the
 // Global section's rows come from GrammarKeys, never a re-typed
 // literal: every helpGlobalKeys binding's key appears in the
-// rendered body, and so does its description, except
+// rendered body, and so does its description as helpGlobalDesc
+// renders it (spec M5's LongDesc for Navigate/Page/Extremes/Back,
+// GrammarKeys' own Help().Desc for everything else), except
 // SurfaceSwitch's, which TestHelpScreen_GlobalSectionNamesSiblingSurfaces
 // covers on its own (its row names every sibling surface instead of
 // rendering "surface switch" verbatim, C1's fix).
 func TestHelpScreen_GlobalSectionDerivesFromGrammarKeys(t *testing.T) {
-	h := HelpScreen{theme: helpTestTheme(), layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}
+	th := helpTestTheme()
+	h := HelpScreen{theme: th, layout: ComputeLayout(80, 24, false), Covered: MailPlaceholder{}.Entry()}
 	body := ansi.Strip(h.View().Content)
 
 	for _, b := range helpGlobalKeys {
@@ -237,8 +242,8 @@ func TestHelpScreen_GlobalSectionDerivesFromGrammarKeys(t *testing.T) {
 		if b.Help().Desc == GrammarKeys.SurfaceSwitch.Help().Desc {
 			continue
 		}
-		if !strings.Contains(body, b.Help().Desc) {
-			t.Errorf("help body missing Global row's description for %v", b.Help())
+		if !strings.Contains(body, helpGlobalDesc(th, b)) {
+			t.Errorf("help body missing Global row's description for %v, want %q", b.Help(), helpGlobalDesc(th, b))
 		}
 	}
 }
@@ -456,6 +461,101 @@ func TestJoinHelpColumns_TruncatesAWideLeftColumn(t *testing.T) {
 	}
 	if !strings.HasSuffix(plain, "y") {
 		t.Errorf("joinHelpColumns = %q, want the right column intact after the truncated left one", plain)
+	}
+}
+
+// TestHelpGlobalDesc_RestoresF5sTeachableCopy pins spec M5's exact
+// restored strings, wireframe F5's ratified Global-section copy: the
+// terse footer Help().Desc is not what the overlay shows for these
+// four verbs. "quit" needs no LongDesc entry (it is already F5's bare
+// form; the "(at a surface root)" qualifier stays dropped per the
+// task 9 ruling and BACKLOG #74), so it is checked against
+// GrammarKeys.Quit's own Help().Desc directly instead.
+func TestHelpGlobalDesc_RestoresF5sTeachableCopy(t *testing.T) {
+	th := helpTestTheme()
+	tests := []struct {
+		b    key.Binding
+		want string
+	}{
+		{GrammarKeys.Navigate, "down / up"},
+		{GrammarKeys.Page, "page forward / back"},
+		{GrammarKeys.Extremes, "first / last (G works too)"},
+		{GrammarKeys.Back, "back " + th.Glyphs().Separator + " dismiss banner"},
+	}
+	for _, tt := range tests {
+		if got := helpGlobalDesc(th, tt.b); got != tt.want {
+			t.Errorf("helpGlobalDesc(%v) = %q, want %q", tt.b.Help(), got, tt.want)
+		}
+	}
+	if got := helpGlobalDesc(th, GrammarKeys.Quit); got != GrammarKeys.Quit.Help().Desc {
+		t.Errorf("helpGlobalDesc(Quit) = %q, want its own bare Help().Desc %q, not the dropped qualifier", got, GrammarKeys.Quit.Help().Desc)
+	}
+	if strings.Contains(helpGlobalDesc(th, GrammarKeys.Quit), "at a surface root") {
+		t.Error("helpGlobalDesc(Quit) restored the dropped qualifier, want it to stay dropped (task 9 ruling, BACKLOG #74)")
+	}
+}
+
+// TestApp_HelpTitleNamesTheSurfaceDisplayName is spec M5's other
+// half: help opened over a surface root names the active surface's
+// display name (surfaceNames), "Help · Mail", never the switch
+// table's state name ("Help · mail list").
+func TestApp_HelpTitleNamesTheSurfaceDisplayName(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+
+	app = mustApp(t, first(app.Update(helpKey())))
+
+	content := ansi.Strip(app.View().Content)
+	if !strings.Contains(content, "Help "+app.theme.Glyphs().Separator+" Mail") {
+		t.Errorf("help content = %q, want the title \"Help %s Mail\"", content, app.theme.Glyphs().Separator)
+	}
+	if strings.Contains(content, "Help "+app.theme.Glyphs().Separator+" mail list") {
+		t.Error("help content carries the switch-table state name in the title, want the surface display name instead")
+	}
+}
+
+// TestHelpScreen_CoversEveryRegisteredEntryAtBothColumnRungs is F3,
+// MAJOR (guard-falsifiability): every prior help assertion ran at 80
+// columns (one column) alone, so a truncateLastSeg regression inside
+// helpLinesTwoColumn's join (joinHelpColumns) that silently dropped a
+// row's text would have survived every test but a gallery golden. For
+// every Registered() entry, at both the one-column rung (80x24, F5)
+// and the two-column rung (120x30, F6), every one of that entry's
+// helpContent bindings' Help().Key and Help().Desc, and every
+// helpGlobalKeys binding's key and helpGlobalDesc description
+// (coordinating with spec M5's LongDesc: the overlay asserts the
+// long form where one exists, not the short Help().Desc the footer
+// shows), must appear in the stripped rendered body.
+func TestHelpScreen_CoversEveryRegisteredEntryAtBothColumnRungs(t *testing.T) {
+	th := helpTestTheme()
+	layouts := []LayoutMode{ComputeLayout(80, 24, false), ComputeLayout(120, 30, false)}
+
+	for _, e := range Registered() {
+		if e.Name == helpScreenName {
+			continue // help does not cover itself
+		}
+		for _, lm := range layouts {
+			h := HelpScreen{theme: th, layout: lm, Covered: e}
+			body := ansi.Strip(h.View().Content)
+
+			for _, b := range helpContent(e) {
+				if !strings.Contains(body, b.Help().Key) {
+					t.Errorf("entry %q at %dx%d: help body missing This-screen key %q", e.Name, lm.Width, lm.Height, b.Help().Key)
+				}
+				if !strings.Contains(body, b.Help().Desc) {
+					t.Errorf("entry %q at %dx%d: help body missing This-screen desc %q", e.Name, lm.Width, lm.Height, b.Help().Desc)
+				}
+			}
+			for _, b := range helpGlobalKeys {
+				if !strings.Contains(body, b.Help().Key) {
+					t.Errorf("entry %q at %dx%d: help body missing Global key %q", e.Name, lm.Width, lm.Height, b.Help().Key)
+				}
+				want := helpGlobalDesc(th, b)
+				if !strings.Contains(body, want) {
+					t.Errorf("entry %q at %dx%d: help body missing Global desc %q", e.Name, lm.Width, lm.Height, want)
+				}
+			}
+		}
 	}
 }
 

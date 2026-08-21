@@ -109,6 +109,72 @@ func TestApp_BannerMsgShowsBanner(t *testing.T) {
 	}
 }
 
+// TestApp_BannerLogsWhenShown is spec m11's guard: BannerMsg's tall
+// (HeightFull) path logs exactly once, mirroring ToastMsg's existing
+// seam (TestApp_ToastLogsOneLine), so an ER-3 banner reaches the log
+// the same way a toast already does.
+func TestApp_BannerLogsWhenShown(t *testing.T) {
+	buf := captureDebugLog(t)
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+
+	_, _ = app.Update(BannerMsg{Message: "No keyring found."})
+
+	if !strings.Contains(buf.String(), "No keyring found.") {
+		t.Errorf("log = %q, want it to carry the banner's message", buf.String())
+	}
+}
+
+// TestApp_BannerDemotesToToastAtShortHeight is spec C2's guard
+// (task 11's ER-3 fix round): under HeightFull, a BannerMsg demotes
+// to a toast instead of setting a.banner, so the two ER-3 notices
+// this pass ships never silently vanish at a short rung (design
+// language section 9, wireframe F3). showToast's own log line is the
+// demoted path's answer to spec m11's logging seam.
+func TestApp_BannerDemotesToToastAtShortHeight(t *testing.T) {
+	buf := captureDebugLog(t)
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 16})))
+
+	app = mustApp(t, first(app.Update(BannerMsg{Message: "No keyring found."})))
+
+	if app.banner.Active {
+		t.Error("banner Active at short height, want it demoted to a toast instead")
+	}
+	if !app.toastActive || app.toastOffer.Label != "No keyring found." {
+		t.Errorf("toast active=%v label=%q, want an active toast carrying the demoted banner's message", app.toastActive, app.toastOffer.Label)
+	}
+	if !strings.Contains(buf.String(), "No keyring found.") {
+		t.Errorf("log = %q, want the demoted toast's own log line", buf.String())
+	}
+}
+
+// TestApp_ResizeDownDemotesAnActiveBanner proves the second half of
+// the same fix: a banner already showing at HeightFull demotes to a
+// toast on a resize that drops below it, rather than a layout that
+// silently withholds a banner row a's model state still claims is
+// active.
+func TestApp_ResizeDownDemotesAnActiveBanner(t *testing.T) {
+	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+	app = mustApp(t, first(app.Update(BannerMsg{Message: "No keyring found."})))
+	if !app.banner.Active {
+		t.Fatal("banner not active before the resize, want it showing first")
+	}
+
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 16})))
+
+	if app.banner.Active {
+		t.Error("banner still Active after resizing below HeightFull, want it demoted")
+	}
+	if !app.toastActive || app.toastOffer.Label != "No keyring found." {
+		t.Errorf("toast active=%v label=%q, want an active toast carrying the demoted banner's message", app.toastActive, app.toastOffer.Label)
+	}
+	if app.layout.BannerRow {
+		t.Error("layout.BannerRow = true after the resize, want no banner row once it demoted")
+	}
+}
+
 // TestApp_EscDismissesBannerAtSurfaceRoot proves design decision 2's
 // surface-root case: Esc dismisses a showing banner before it would
 // otherwise no-op; a second Esc then no-ops normally (an empty

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/glw907/poplar/internal/platform"
+	"github.com/glw907/poplar/internal/store"
+	"github.com/glw907/poplar/internal/store/storetest"
 	"github.com/glw907/poplar/internal/uerr"
 	"github.com/glw907/poplar/internal/uerr/uerrtest"
 	"github.com/glw907/poplar/internal/ui"
@@ -80,7 +82,7 @@ func TestLogFallbackBanner(t *testing.T) {
 		if !ok {
 			t.Fatal("logFallbackBanner() ok = false, want true")
 		}
-		want := "state directory unavailable; logging to /tmp/poplar.log instead"
+		want := "State directory unavailable; logging to /tmp/poplar.log instead."
 		if msg.Message != want {
 			t.Errorf("Message = %q, want %q", msg.Message, want)
 		}
@@ -94,7 +96,7 @@ func TestLogFallbackBanner(t *testing.T) {
 		if !ok {
 			t.Fatal("logFallbackBanner() ok = false, want true")
 		}
-		want := "state directory unavailable and logging is degraded; some lines may be lost"
+		want := "State directory unavailable and logging is degraded; some lines may be lost."
 		if msg.Message != want {
 			t.Errorf("Message = %q, want %q", msg.Message, want)
 		}
@@ -124,5 +126,27 @@ func TestInitialSyncMsg(t *testing.T) {
 	want := ui.SyncStateMsg{State: ui.SyncStateOffline}
 	if got := initialSyncMsg(err); got != want {
 		t.Errorf("initialSyncMsg(err) = %#v, want %#v", got, want)
+	}
+}
+
+// TestInitialOutboxMsg is correctness M2's RULING, the ST-2 flow/unit
+// path: a queued outbox row a previous run left in the store reaches
+// the initial ui.OutboxCountMsg runInteractive sends before program.Run,
+// so an offline session's quit gate (F7) never lies about rows the
+// store already holds while startEnginesRetrying's own bridge send
+// still waits on a connection that has not come up yet.
+func TestInitialOutboxMsg(t *testing.T) {
+	w, reads := storetest.OpenStore(t, store.DefaultWriterConfig())
+	accountID := storetest.Insert(t, w,
+		`INSERT INTO account (slug, backend_kind, address) VALUES (?, ?, ?)`, "a", "jmap", "a@example.com")
+	storetest.Insert(t, w, `INSERT INTO outbox (account_id, kind, payload, state, created_at) VALUES
+		(?, 'send', '{}', 'queued', 1000), (?, 'send', '{}', 'queued', 2000)`, accountID, accountID)
+
+	msg, ok := initialOutboxMsg(context.Background(), reads)
+	if !ok {
+		t.Fatal("initialOutboxMsg() ok = false, want true")
+	}
+	if want := (ui.OutboxCountMsg{Queued: 2}); msg != want {
+		t.Errorf("initialOutboxMsg() = %#v, want %#v", msg, want)
 	}
 }

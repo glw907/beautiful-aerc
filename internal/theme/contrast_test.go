@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"testing"
@@ -27,17 +28,17 @@ func TestContrastFloors(t *testing.T) {
 
 	for _, isDark := range []bool{true, false} {
 		for _, role := range textRoles {
-			check(t, "text role", roleHex(role, isDark), isDark, 4.5)
+			check(t, "text role "+role.String(), roleHex(role, isDark), isDark, 4.5)
 		}
 		for _, role := range indicatorRoles {
-			check(t, "indicator role", roleHex(role, isDark), isDark, 3.0)
+			check(t, "indicator role "+role.String(), roleHex(role, isDark), isDark, 3.0)
 		}
 		for slot := range 8 {
 			row := 0
 			if !isDark {
 				row = 1
 			}
-			check(t, "calendarSlot", calendarSlotHex[row][slot], isDark, 3.0)
+			check(t, fmt.Sprintf("calendarSlot[%d]", slot), calendarSlotHex[row][slot], isDark, 3.0)
 		}
 	}
 }

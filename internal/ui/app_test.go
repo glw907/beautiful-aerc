@@ -325,6 +325,86 @@ func TestApp_OrdinaryKeyReachesActiveScreen(t *testing.T) {
 	}
 }
 
+// unadvertisedAlphabet is F1's fixed key alphabet (guard-falsifiability,
+// MAJOR): every lowercase and uppercase letter, every digit, and the
+// named specials mouse.go's keyPressForString already resolves,
+// filtered down to whatever claimed does not already claim (a
+// front's own flattened keymap plus GrammarKeys' whole field set):
+// TestApp_UnadvertisedKeysAreNoOpsAtEverySurfaceRoot's whole input.
+func unadvertisedAlphabet(claimed map[string]bool) []string {
+	var out []string
+	for c := 'a'; c <= 'z'; c++ {
+		out = append(out, string(c))
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		out = append(out, string(c))
+	}
+	for c := '0'; c <= '9'; c++ {
+		out = append(out, string(c))
+	}
+	out = append(out, "esc", "enter", "tab", "space", "home", "end",
+		"pgup", "pgdown", "up", "down", "left", "right", "backspace", "delete", "insert")
+
+	var filtered []string
+	for _, k := range out {
+		if !claimed[k] {
+			filtered = append(filtered, k)
+		}
+	}
+	return filtered
+}
+
+// claimedKeys returns every physical key entry's own keymap or the
+// global grammar binds, the set unadvertisedAlphabet excludes: a key
+// claimed by either is legitimately meant to do something, so driving
+// it proves nothing about an undocumented handler.
+func claimedKeys(entry ScreenEntry) map[string]bool {
+	claimed := make(map[string]bool)
+	for _, b := range flattenKeys(entry.Keys) {
+		for _, k := range b.Keys() {
+			claimed[k] = true
+		}
+	}
+	for _, b := range GrammarKeys.fields() {
+		for _, k := range b.Keys() {
+			claimed[k] = true
+		}
+	}
+	return claimed
+}
+
+// TestApp_UnadvertisedKeysAreNoOpsAtEverySurfaceRoot is F1's live
+// registry oracle (MAJOR, guard-falsifiability): a screen Update
+// honoring a key no registry entry advertises must not pass silently
+// (proven by perturbation: a live "z" handler added to
+// MailPlaceholder's update passed the whole tree and the analyzers
+// before this guard existed). For each surface root, every key in
+// unadvertisedAlphabet not claimed by that front's own keymap or the
+// global grammar drives App.Update directly against the live app
+// (never a mock), and must return a nil Cmd and leave the rendered
+// View unchanged.
+func TestApp_UnadvertisedKeysAreNoOpsAtEverySurfaceRoot(t *testing.T) {
+	for s := range Surface(len(surfaceNames)) {
+		app := NewApp(testDeps(t))
+		app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+		app.active.Set(app.account, s)
+
+		front := app.activeScreen().Entry()
+		before := app.View().Content
+
+		for _, k := range unadvertisedAlphabet(claimedKeys(front)) {
+			updated, cmd := app.Update(keyPressForString(k))
+			if cmd != nil {
+				t.Errorf("surface %v: key %q returned a non-nil Cmd, want nil (unadvertised)", s, k)
+			}
+			got := mustApp(t, updated).View().Content
+			if got != before {
+				t.Errorf("surface %v: key %q changed the View, want it unchanged (unadvertised)", s, k)
+			}
+		}
+	}
+}
+
 // TestApp_ViewRendersStackTopWhenPresent is F5: View renders the top
 // of the screen stack when one is pushed, not the active surface
 // underneath it.
@@ -333,6 +413,7 @@ func TestApp_ViewRendersStackTopWhenPresent(t *testing.T) {
 	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
 
 	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
 	app.stack = append(app.stack, &fakeModal{})
 
 	if got := app.View().Content; got != "modal" {
@@ -341,33 +422,44 @@ func TestApp_ViewRendersStackTopWhenPresent(t *testing.T) {
 }
 
 // TestApp_ViewRendersActiveSurfaceWhenStackEmpty is F5's other half:
-// an empty stack falls back to the active surface.
+// an empty stack falls back to the active surface, rendered through
+// the same seam TestApp_ViewMatchesRenderSeam pins (FullRegion,
+// isPlaceholderScreen's ruling), never the placeholder's bare
+// unstyled View() alone.
 func TestApp_ViewRendersActiveSurfaceWhenStackEmpty(t *testing.T) {
 	app := NewApp(testDeps(t))
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
 
-	got := app.View().Content
-	want := app.mail.View().Content
-	if got != want {
-		t.Errorf("View() with an empty stack = %q, want the active surface's own view %q", got, want)
+	want := Render(RenderInput{Screen: app.mail, FullRegion: true, Layout: app.layout, Theme: app.theme, Status: app.statusLine(), Banner: app.banner}).Content
+	if got := app.View().Content; got != want {
+		t.Errorf("View() with an empty stack = %q, want the active surface's own render %q", got, want)
 	}
 }
 
-// TestApp_ViewSetsMouseModeOnBothPaths proves task 11's carried review
-// finding: mouse cell-motion reporting is a per-frame tea.View
-// declaration, and both of View's return paths (the StateModal stack
-// top, and the ordinary Render seam) set it, so a modal never
-// silently toggles mouse reporting off.
-func TestApp_ViewSetsMouseModeOnBothPaths(t *testing.T) {
+// TestApp_ViewSetsMouseModeAndAltScreenOnEveryPath proves task 11's
+// carried review finding, extended to AltScreen (correctness C1, pass
+// 2 final fix round): mouse cell-motion reporting and the alt-screen
+// declaration are both per-frame tea.View fields, and all three of
+// View's return paths (below the floor, the StateModal stack top, and
+// the ordinary Render seam) set both, so neither a modal nor the
+// floor rung can silently toggle either off.
+func TestApp_ViewSetsMouseModeAndAltScreenOnEveryPath(t *testing.T) {
 	app := NewApp(testDeps(t))
-	if got := app.View().MouseMode; got != tea.MouseModeCellMotion {
-		t.Errorf("View() with an empty stack MouseMode = %v, want MouseModeCellMotion", got)
+	app = mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})))
+	if view := app.View(); view.MouseMode != tea.MouseModeCellMotion || !view.AltScreen {
+		t.Errorf("View() with an empty stack MouseMode=%v AltScreen=%v, want MouseModeCellMotion and true", view.MouseMode, view.AltScreen)
 	}
 
 	resetRegistry(t)
 	Register[*fakeModal](ScreenEntry{SwitchState: StateModal})
 	app.stack = append(app.stack, &fakeModal{})
-	if got := app.View().MouseMode; got != tea.MouseModeCellMotion {
-		t.Errorf("View() with a StateModal stack top MouseMode = %v, want MouseModeCellMotion", got)
+	if view := app.View(); view.MouseMode != tea.MouseModeCellMotion || !view.AltScreen {
+		t.Errorf("View() with a StateModal stack top MouseMode=%v AltScreen=%v, want MouseModeCellMotion and true", view.MouseMode, view.AltScreen)
+	}
+
+	floor := mustApp(t, first(app.Update(tea.WindowSizeMsg{Width: 40, Height: 10})))
+	if view := floor.View(); view.MouseMode != tea.MouseModeCellMotion || !view.AltScreen {
+		t.Errorf("View() below the floor MouseMode=%v AltScreen=%v, want MouseModeCellMotion and true", view.MouseMode, view.AltScreen)
 	}
 }
 
@@ -380,7 +472,8 @@ func TestApp_ViewMatchesRenderSeam(t *testing.T) {
 	updated, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app = mustApp(t, updated)
 
-	want := Render(RenderInput{Screen: app.activeScreen(), Layout: app.layout, Theme: app.theme, Status: app.statusLine(), Banner: app.banner}).Content
+	screen := app.activeScreen()
+	want := Render(RenderInput{Screen: screen, FullRegion: isPlaceholderScreen(screen), Layout: app.layout, Theme: app.theme, Status: app.statusLine(), Banner: app.banner}).Content
 	if got := app.View().Content; got != want {
 		t.Errorf("App.View().Content = %q, want Render(...)'s own content %q", got, want)
 	}

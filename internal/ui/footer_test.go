@@ -606,24 +606,25 @@ func TestRenderFooter_MatchesPinnedExemplarAt80(t *testing.T) {
 	}
 }
 
-// TestFooterHitSpans_OfferedInEveryLegalState proves PointerFooterHint
-// is legal in every StateClass except StateModal (registry.go's
+// TestFooterHitSpans_OfferedOnlyInStateDigitsSwitch proves
+// PointerFooterHint is legal only in StateDigitsSwitch (registry.go's
 // pointerLegalStates, corrected by task-10-findings-r2.md's F2
-// corollary ruling): a footer hint accelerates its key, which is
-// itself legal in whatever state offers it, so spans are never
-// withheld the way a surface-digit click is outside StateDigitsSwitch;
-// StateModal is the one exception, since the modal renders
-// full-terminal and no footer band exists there to click.
-func TestFooterHitSpans_OfferedInEveryLegalState(t *testing.T) {
+// corollary ruling and correctness M3, pass 2 final fix round):
+// StateModal never gets a footer band to click (the modal renders
+// full-terminal), and StatePrintableEntry's own keys mean something
+// else there (a literal character, the leave-field verb), so a
+// footer-hint click would run the wrong action rather than a legal
+// no-op.
+func TestFooterHitSpans_OfferedOnlyInStateDigitsSwitch(t *testing.T) {
 	entry := footerFixture()
 	footerRow := image.Rect(0, 0, 80, 1)
 
-	for _, state := range []StateClass{StateDigitsSwitch, StatePrintableEntry} {
-		if got := FooterHitSpans(entry, state, footerRow); len(got) == 0 {
-			t.Errorf("FooterHitSpans(state=%v) returned none, want spans", state)
-		}
+	if got := FooterHitSpans(entry, StateDigitsSwitch, footerRow); len(got) == 0 {
+		t.Error("FooterHitSpans(StateDigitsSwitch) returned none, want spans")
 	}
-	if got := FooterHitSpans(entry, StateModal, footerRow); got != nil {
-		t.Errorf("FooterHitSpans(StateModal) = %v, want none (the modal renders full-terminal)", got)
+	for _, state := range []StateClass{StatePrintableEntry, StateModal} {
+		if got := FooterHitSpans(entry, state, footerRow); got != nil {
+			t.Errorf("FooterHitSpans(state=%v) = %v, want none", state, got)
+		}
 	}
 }

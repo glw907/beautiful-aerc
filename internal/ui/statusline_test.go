@@ -235,15 +235,20 @@ func TestFitRightSegments_OutboxEvictsBeforeSyncState(t *testing.T) {
 }
 
 // TestRenderStatusLine_NeverExceedsWidth is the property test BACKLOG
-// #61 owes: over a wide range of long sync-segment inputs at the 60-
-// column floor, the row's display width is exactly 60, never
-// more, and the ellipsis token appears whenever the sync state's
-// text (F12: the segment that is truncated only as a last resort,
-// after the outbox count has already been evicted) would otherwise
-// have overflowed on its own.
+// #61 owes: over a wide range of long sync-segment inputs at several
+// narrow widths, the row's display width is exactly the requested
+// width, never more, and the ellipsis token appears whenever the
+// sync state's text (F12: the segment that is truncated only as a
+// last resort, after the outbox count has already been evicted)
+// would otherwise have overflowed on its own. F2, MAJOR (pass 2 final
+// fix round): the sweep varies Active over all four surfaces, not
+// zero-value SurfaceMail alone, since a defect assuming the Mail
+// cluster's narrower width (Mail is the shortest surface name) fits
+// budgets computed for a wider cluster (Calendar's 8-letter name,
+// most notably) would otherwise pass unnoticed.
 func TestRenderStatusLine_NeverExceedsWidth(t *testing.T) {
 	th := theme.New(true, theme.ProfileTrueColor)
-	const width = 60
+	widths := []int{60, 61, 80}
 	ellipsis := th.Glyphs().Ellipsis
 
 	long := []SyncStateMsg{
@@ -254,22 +259,26 @@ func TestRenderStatusLine_NeverExceedsWidth(t *testing.T) {
 		{State: SyncStateOffline},
 	}
 	truncated := 0
-	for _, sync := range long {
-		for outbox := range 3 {
-			sl := StatusLine{Sync: sync, Outbox: outbox}
-			row := renderStatusLine(sl, th, width, false)
-			plain := ansi.Strip(row)
-			if got := ansi.StringWidth(plain); got != width {
-				t.Fatalf("renderStatusLine(%+v, outbox=%d) display width = %d, want exactly %d\nrow: %q", sync, outbox, got, width, plain)
-			}
+	for _, width := range widths {
+		for active := SurfaceMail; active <= SurfaceConfig; active++ {
+			for _, sync := range long {
+				for outbox := range 3 {
+					sl := StatusLine{Active: active, Sync: sync, Outbox: outbox}
+					row := renderStatusLine(sl, th, width, false)
+					plain := ansi.Strip(row)
+					if got := ansi.StringWidth(plain); got != width {
+						t.Fatalf("renderStatusLine(active=%v, %+v, outbox=%d, width=%d) display width = %d, want exactly %d\nrow: %q", active, sync, outbox, width, got, width, plain)
+					}
 
-			leftWidth := ansi.StringWidth(segsPlainText(clusterSegs(sl.Active)))
-			budget := width - leftWidth - theme.PadBand
-			stateWidth := ansi.StringWidth(syncStateSeg(th, sl, false).text)
-			if stateWidth > budget {
-				truncated++
-				if !strings.Contains(plain, ellipsis) {
-					t.Errorf("renderStatusLine(%+v, outbox=%d) sync-state width %d > budget %d with no ellipsis marker: %q", sync, outbox, stateWidth, budget, plain)
+					leftWidth := ansi.StringWidth(segsPlainText(clusterSegs(sl.Active)))
+					budget := width - leftWidth - theme.PadBand
+					stateWidth := ansi.StringWidth(syncStateSeg(th, sl, false).text)
+					if stateWidth > budget {
+						truncated++
+						if !strings.Contains(plain, ellipsis) {
+							t.Errorf("renderStatusLine(active=%v, %+v, outbox=%d, width=%d) sync-state width %d > budget %d with no ellipsis marker: %q", active, sync, outbox, width, stateWidth, budget, plain)
+						}
+					}
 				}
 			}
 		}

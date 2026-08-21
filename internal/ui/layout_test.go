@@ -3,7 +3,10 @@ package ui
 import (
 	"image"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/glw907/poplar/internal/theme"
 )
@@ -125,17 +128,17 @@ func TestComputeLayout_HeightBoundaries(t *testing.T) {
 		if short.HeightClass != HeightShort {
 			t.Errorf("height 15: HeightClass = %v, want HeightShort", short.HeightClass)
 		}
-		// Below the height floor: nothing but the notice, the one
-		// capability this boundary changes (C1).
-		if floor.FooterRows != 0 || floor.StatusRow.Rect != (image.Rectangle{}) {
-			t.Errorf("height 14: chrome present at the floor: %+v", floor)
+		// Below the height floor: the centered notice is the whole
+		// frame (C1, wireframe F4), asserted against its rendered copy
+		// rather than rectangles (TestComputeLayout_HeightFloor and
+		// assertFloorState already pin the geometry).
+		th := theme.New(true, theme.ProfileTrueColor)
+		got := ansi.Strip(renderFloorNotice(th, floor.Width, floor.Height))
+		if !strings.Contains(got, "poplar needs at least 60x15") {
+			t.Errorf("floor notice = %q, want the minimum-size line", got)
 		}
-		want := image.Rect(0, 0, 100, 14)
-		if floor.Main.Rect != want || floor.Content().Rect != want {
-			t.Errorf("height 14: Main/Content = %v, want the full terminal %v", floor.Main.Rect, want)
-		}
-		if len(floor.Panes) != 1 {
-			t.Errorf("height 14: Panes = %v, want exactly PaneContent", floor.Panes)
+		if !strings.Contains(got, "this window is 100x14") {
+			t.Errorf("floor notice = %q, want the live-size line", got)
 		}
 		// Above it: full chrome returns.
 		if short.FooterRows != 1 || short.StatusRow.Rect == (image.Rectangle{}) {

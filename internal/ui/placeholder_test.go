@@ -109,14 +109,14 @@ func TestContactsPlaceholder_StatesNoStoreSurfacePlainly(t *testing.T) {
 	if !strings.Contains(got, "People") {
 		t.Errorf("view = %q, want it to contain wireframe F8's own display title %q", got, "People")
 	}
-	if !strings.Contains(got, "pass 5") {
-		t.Errorf("view = %q, want it to name when contacts sync lands", got)
+	if !strings.Contains(got, "Contact sync is not available yet.") {
+		t.Errorf("view = %q, want it to state contact sync's unavailability plainly, with no pass number (decision 9, spec m13)", got)
 	}
 }
 
-// TestConfigPlaceholder_NamesWhenItLands mirrors the contacts case for
-// the config surface's 2b non-goal.
-func TestConfigPlaceholder_NamesWhenItLands(t *testing.T) {
+// TestConfigPlaceholder_StatesUnavailabilityPlainly mirrors the
+// contacts case for the config surface's non-goal.
+func TestConfigPlaceholder_StatesUnavailabilityPlainly(t *testing.T) {
 	c := newConfigPlaceholder(testTheme())
 	c, _ = c.update(testLayoutMsg())
 
@@ -124,8 +124,8 @@ func TestConfigPlaceholder_NamesWhenItLands(t *testing.T) {
 	if !strings.Contains(got, "Config") {
 		t.Errorf("view = %q, want it to contain the surface name %q", got, "Config")
 	}
-	if !strings.Contains(got, "pass 2b") {
-		t.Errorf("view = %q, want it to name when the config surface lands", got)
+	if !strings.Contains(got, "Configuration is not available yet.") {
+		t.Errorf("view = %q, want it to state configuration's unavailability plainly, with no pass number (decision 9, spec m13)", got)
 	}
 }
 
